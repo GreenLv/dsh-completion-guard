@@ -1,5 +1,6 @@
 import { sanitizeUrl, sha256 } from './canonicalize.js'
-import type { EvidenceOutcome, GuardEvidence } from './types.js'
+import { parsePwshCommand, parseShellCommand } from './shell-parse.js'
+import type { EvidenceOutcome, GuardEvidence, GuardOperation } from './types.js'
 
 export interface ToolCallInput {
   callId: string
@@ -65,18 +66,95 @@ function argsPaths(args: Record<string, unknown>): string[] {
   return []
 }
 
-function extractBashSubjects(command: string, workdir: unknown): string[] {
-  const cwd = typeof workdir === 'string' ? [workdir] : []
-  const paths = command.match(/(?:^|\s)([./~][^\s'"`]+)/g)?.map((value) => value.trim()) ?? []
-  return [...cwd, ...paths]
+/** Resolve a relative command path reference against the command workdir. */
+function resolveCommandPath(reference: string, cwd: string | undefined): string {
+  if (!cwd) return reference
+  if (/^[A-Za-z]:[\\/]/.test(reference) || reference.startsWith('//') || reference.startsWith('\\\\') || reference.startsWith('/') || reference.startsWith('\\')) return reference
+  return `${cwd.replace(/[\\/]+$/, '')}/${reference}`
 }
 
-function extractExitCode(textContent: string): number | undefined {
-  // Only the LAST marker counts: a leading fake marker (e.g. echoed text)
-  // must never mask a real trailing nonzero exit.
-  const matches = [...textContent.matchAll(/\[exit code:\s*(\d+)\]/g)]
-  const match = matches.at(-1)
-  return match ? Number(match[1]) : undefined
+interface ToolOperation {
+  op: GuardOperation
+  path?: string
+}
+
+interface CommandAnalysis {
+  status: 'supported' | 'unsupported' | 'malformed'
+  reason?: string
+  executables: string[]
+  operations: ToolOperation[]
+  subjects: string[]
+}
+
+/**
+ * Analyze a shell/pwsh command against the v0.1 supported surface. Only a
+ * fully supported command produces executables/operations; unsupported or
+ * malformed syntax yields EMPTY executables and operations (fail-closed), so a
+ * partially understood command can never certify an operation.
+ */
+function analyzeCommand(command: string, workdir: unknown, toolName: string): CommandAnalysis {
+  const cwd = typeof workdir === 'string' ? workdir : undefined
+  const parsed = toolName === 'pwsh'
+    ? parsePwshCommand(command)
+    : parseShellCommand(command)
+  if (parsed.status !== 'supported') {
+    return {
+      status: parsed.status,
+      reason: parsed.reason,
+      executables: [],
+      operations: [],
+      subjects: cwd ? [cwd] : [],
+    }
+  }
+  const operations = parsed.operations.map((entry) => ({
+    op: entry.op,
+    ...(entry.path !== undefined ? { path: resolveCommandPath(entry.path, cwd) } : {}),
+  }))
+  const subjects = unique([...(cwd ? [cwd] : []), ...operations
+    .map((entry) => entry.path)
+    .filter((path): path is string => path !== undefined)])
+  return {
+    status: parsed.status,
+    reason: parsed.reason,
+    executables: parsed.executables,
+    operations,
+    subjects,
+  }
+}
+
+/**
+ * Terminal markers are only recognized as INDEPENDENT COMPLETE LINES at the end
+ * of the rendered result (the DSH rendering protocol). A marker-like substring
+ * in ordinary stdout — `documentation says [timed out after 1000ms] but command
+ * succeeded` — is not a terminal fact.
+ */
+interface TerminalFacts {
+  exitCode?: number
+  negative: boolean
+}
+
+function extractTerminalFacts(textContent: string): TerminalFacts {
+  const lines = textContent.split(/\r?\n/)
+  let index = lines.length - 1
+  while (index >= 0 && lines[index].trim() === '') index -= 1
+  let exitCode: number | undefined
+  let negative = false
+  while (index >= 0) {
+    const line = lines[index].trim()
+    const exitMatch = line.match(/^\[exit code:\s*(\d+)\]$/)
+    const negativeLine = /^\[(?:timed out|sandbox[^\]]*|killed by signal[^\]]*|interrupted[^\]]*)[^\]]*\]$/i.test(line)
+    if (exitMatch) {
+      // The last terminal exit marker is authoritative. Earlier adjacent
+      // markers may be retained only as context, never as an override.
+      if (exitCode === undefined) exitCode = Number(exitMatch[1])
+    } else if (negativeLine) {
+      negative = true
+    } else {
+      break
+    }
+    index -= 1
+  }
+  return { exitCode, negative }
 }
 
 function metaUrls(meta: unknown): string[] {
@@ -140,6 +218,8 @@ export interface ToolSubject {
   subjects: string[]
   surfaces: Array<'artifact' | 'ui' | 'visual' | 'scope'>
   outcome?: EvidenceOutcome
+  executables?: string[]
+  operations?: ToolOperation[]
 }
 
 function unique(values: string[]): string[] {
@@ -150,40 +230,61 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput)
   const args = parseArguments(call.arguments)
   switch (call.name) {
     case 'read':
-    case 'read_file':
+    case 'read_file': {
+      const subjects = unique([...metaPaths(result.meta), ...argsPaths(args)])
       return {
         capabilities: ['filesystem-read'],
-        subjects: unique([...metaPaths(result.meta), ...argsPaths(args)]),
+        subjects,
         surfaces: ['artifact'],
+        operations: subjects.map((path) => ({ op: 'read', path })),
       }
+    }
     case 'write':
-    case 'write_file':
+    case 'write_file': {
+      const subjects = unique([...metaPaths(result.meta), ...argsPaths(args)])
       return {
         capabilities: ['filesystem-write'],
-        subjects: unique([...metaPaths(result.meta), ...argsPaths(args)]),
+        subjects,
         surfaces: ['artifact'],
+        operations: subjects.map((path) => ({ op: 'create', path })),
       }
+    }
     case 'edit':
-    case 'edit_file':
+    case 'edit_file': {
+      const subjects = unique([...metaPaths(result.meta), ...argsPaths(args)])
       return {
         capabilities: ['filesystem-edit'],
-        subjects: unique([...metaPaths(result.meta), ...argsPaths(args)]),
+        subjects,
         surfaces: ['artifact'],
+        operations: subjects.map((path) => ({ op: 'modify', path })),
       }
+    }
     case 'bash':
-    case 'shell': {
+    case 'shell':
+    case 'pwsh': {
       const command = typeof args.command === 'string' ? args.command : ''
-      const exitCode = extractExitCode(result.textContent)
+      const terminal = extractTerminalFacts(result.textContent)
       const backgrounded = args.run_in_background === true
-      const deterministic = !backgrounded && isDeterministicCheck(command)
-      const outcome: EvidenceOutcome = backgrounded || exitCode === undefined
+      const commandDetails = analyzeCommand(command, args.workdir, call.name)
+      const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)
+      // Negative terminal facts (timeout, sandbox denial, kill, interruption)
+      // and a non-zero exit marker are rejected before the clean-success
+      // fallback: a denied, timed-out or failed operation is never successful
+      // evidence.
+      const outcome: EvidenceOutcome = backgrounded
         ? 'unknown'
-        : exitCode === 0 ? 'success' : 'failure'
+        : result.error || terminal.negative
+          ? 'failure'
+          : terminal.exitCode === undefined
+            ? (call.name === 'pwsh' ? 'success' : 'unknown')
+            : terminal.exitCode === 0 ? 'success' : 'failure'
       return {
         capabilities: ['shell', ...(deterministic ? ['deterministic-check'] : [])],
-        subjects: unique(extractBashSubjects(command, args.workdir)),
+        subjects: unique(commandDetails.subjects),
         surfaces: ['scope'],
         outcome,
+        executables: commandDetails.executables,
+        operations: commandDetails.operations,
       }
     }
     case 'web_search':
@@ -219,6 +320,8 @@ export function evidenceFromPersistedToolResult(
     subjects: subject.subjects,
     surfaces: subject.surfaces,
     boundedSummarySha256: sha256(boundedSummary(result.textContent)),
+    ...(subject.executables?.length ? { executables: subject.executables } : {}),
+    ...(subject.operations?.length ? { operations: subject.operations } : {}),
   }
 }
 

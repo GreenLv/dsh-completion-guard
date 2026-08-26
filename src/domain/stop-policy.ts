@@ -40,8 +40,49 @@ export function isWholeTaskCompletionClaim(text: string): boolean {
   // conditional, partial step) is not — and must not fall through to the
   // full-text patterns that could re-match a summary's own "已经完成".
   const firstLine = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0] ?? ''
-  if (BARE_COMPLETION.test(firstLine)) return leadingBareCompletionClaim(text)
+  if (BARE_COMPLETION.test(normalizeTitleLine(firstLine))) return leadingBareCompletionClaim(text)
   return BARE_COMPLETION.test(normalized) || WHOLE_COMPLETION_EN.test(normalized) || WHOLE_COMPLETION_ZH.test(normalized)
+}
+
+// A leading run of presentation decoration (emoji, checkmarks, bullets, dash
+// glyphs) that may precede a bare completion title. Variation selectors and the
+// zero-width joiner are kept as separate alternation branches (not inside the
+// character class) so they are not treated as misleading combining sequences.
+const DECORATION_LEAD = /^\s*(?:[\p{Extended_Pictographic}\u2764\u2705\u2714\u2716\u2728\u274C\u26A0\u2611\u2612\u2713\u2717\u274E\u2B50\u2B55\u2022\u00B7\u25E6\u25AA\u25AB\u25CF\u25CB\u25A0\u25A1\u2013\u2014-]|\uFE0F|\uFE0E|\u200D)+/u
+
+/** Strip a leading run of decorative glyphs from a title line. */
+function stripDecorationPrefix(text: string): string {
+  let value = text
+  let previous = ''
+  while (value !== previous) {
+    previous = value
+    value = value.replace(DECORATION_LEAD, '')
+  }
+  return value.replace(/^\s+/, '')
+}
+
+/**
+ * Normalize a title line for the bare-completion test. Markdown heading markers,
+ * fully-wrapping emphasis (`**…**`, `__…__`, `*…*`, `_…_`), and a leading run of
+ * decorative glyphs are removed ITERATIVELY until stable, because stripping one
+ * layer may expose another (`## ✅ **完成。**`). Blockquotes (`>`), quoted
+ * titles, and examples are left untouched so they still fail closed.
+ */
+function normalizeTitleLine(line: string): string {
+  let value = line.trim()
+  if (value.startsWith('>')) return value
+  let previous = ''
+  while (value !== previous) {
+    previous = value
+    value = value
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/^\*\*(.+?)\*\*$/, '$1')
+      .replace(/^__(.+?)__$/, '$1')
+      .replace(/^\*(.+?)\*$/, '$1')
+      .replace(/^_(.+?)_$/, '$1')
+    value = stripDecorationPrefix(value)
+  }
+  return value
 }
 
 /**
@@ -53,7 +94,7 @@ export function isWholeTaskCompletionClaim(text: string): boolean {
 function leadingBareCompletionClaim(text: string): boolean {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   const first = lines[0]
-  if (!first || !BARE_COMPLETION.test(first)) return false
+  if (!first || !BARE_COMPLETION.test(normalizeTitleLine(first))) return false
   const rest = normalizeClause(lines.slice(1).join('\n'))
   if (!rest) return true
   if (CONTINUATION.test(rest)) return false

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
-  captureClause, certifyCheckpoint, classifyCompletionClaim, createProjection, decideTurnStopping, segmentClauses,
-  deriveProjection, evidenceFromPersistedToolResult, goalCompletionDenial, isDeterministicCheck,
-  isWholeTaskCompletionClaim, latestAssistantText, normalizeClause, renderRecoveryPacket, sha256,
+  canonicalizePath, captureClause, certifyCheckpoint, classifyCompletionClaim, createProjection, decideTurnStopping, segmentClauses,
+  deriveProjection, evidenceFromPersistedToolResult, extractOperation, goalCompletionDenial, isDeterministicCheck,
+  isWholeTaskCompletionClaim, latestAssistantText, normalizeClause, parsePwshCommand, parseShellCommand, renderRecoveryPacket, sha256,
   sanitizeClauseText, sanitizeUrl, withDurability,
 } from '../../src/domain/index.js'
 
@@ -335,6 +335,102 @@ describe('domain core', () => {
     expect(derived.projection.enabled).toBe(true)
     expect(derived.projection.epoch).toBe(1)
   })
+
+  it('uses only the final exit marker as authoritative', () => {
+    const cases: Array<[string, 'success' | 'failure']> = [
+      ['[exit code: 0]\n[exit code: 1]', 'failure'],
+      ['[exit code: 1]\n[exit code: 0]', 'success'],
+      ['ordinary output [exit code: 1]\n[exit code: 0]', 'success'],
+      ['[exit code: 0]\n[timed out after 1000ms]\n[exit code: 0]', 'failure'],
+    ]
+    for (const [text, outcome] of cases) {
+      const evidence = evidenceFromPersistedToolResult(
+        { callId: `marker-${text.length}`, name: 'bash', arguments: JSON.stringify({ command: 'echo ok' }) },
+        { seq: 20, textContent: text }, 1, `E-${text.length}`,
+      )
+      expect(evidence.outcome, text).toBe(outcome)
+    }
+    expect(evidenceFromPersistedToolResult(
+      { callId: 'marker-unknown', name: 'bash', arguments: JSON.stringify({ command: 'echo ok' }) },
+      { seq: 21, textContent: 'ok' }, 1, 'E-unknown',
+    ).outcome).toBe('unknown')
+  })
+
+  it('does not let unsupported shell syntax certify deterministic acceptance', () => {
+    const projection = createProjection()
+    projection.epoch = 1
+    projection.contractRevision = 1
+    const item = captureClause('验收：确认项目测试通过', 'm1', 'A001', 1, { cwd: '/work' })
+    projection.items.set(item.id, item)
+    const evidence = evidenceFromPersistedToolResult(
+      { callId: 'compound', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test && true', workdir: '/work' }) },
+      { seq: 2, textContent: '[exit code: 0]' }, 1, 'E-compound',
+    )
+    expect(evidence.capabilities).not.toContain('deterministic-check')
+    expect(certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: [evidence.id] }], 'C-compound').status).toBe('incomplete')
+  })
+
+  it('rejects newline boundaries and file-descriptor redirects as whole commands', () => {
+    for (const command of ['printf x > target.txt\nrm other.txt', 'printf x > target.txt\r\nrm other.txt', 'echo err 2>guard-demo.txt', 'echo err 1>guard-demo.txt', 'echo err 0>>guard-demo.txt']) {
+      const parsed = parseShellCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
+    expect(parseShellCommand('printf x > target.txt').status).toBe('supported')
+    expect(parseShellCommand('printf "line\\ntext" > target.txt').status).toBe('supported')
+  })
+
+  it('rejects PowerShell no-op and interaction switches as effects', () => {
+    for (const command of [
+      'Set-Content -Path target.txt -Value x -WhatIf',
+      'Set-Content -Path target.txt -Value x -Confirm',
+      'New-Item -Path target.txt -WhatIf',
+      'Out-File -FilePath target.txt -WhatIf',
+      'Add-Content -Path target.txt -Value x -WhatIf',
+    ]) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
+  })
+
+  it('requires independent same-subject state verification for create/write/modify', () => {
+    const makeProjection = () => {
+      const projection = createProjection()
+      projection.epoch = 1
+      projection.contractRevision = 1
+      const item = captureClause('使用 edit 修改 /work/demo.txt', 'm1', 'A001', 1)
+      projection.items.set(item.id, item)
+      return { projection, item }
+    }
+    const edit = evidenceFromPersistedToolResult(
+      { callId: 'edit', name: 'edit', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 1, meta: { path: '/work/demo.txt' }, textContent: 'updated' }, 1, 'E-edit',
+    )
+    const sameRead = evidenceFromPersistedToolResult(
+      { callId: 'read-same', name: 'read', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 2, meta: { path: '/work/demo.txt' }, textContent: 'updated' }, 1, 'E-read-same',
+    )
+    const otherRead = evidenceFromPersistedToolResult(
+      { callId: 'read-other', name: 'read', arguments: JSON.stringify({ file_path: '/work/other.txt' }) },
+      { seq: 3, meta: { path: '/work/other.txt' }, textContent: 'other' }, 1, 'E-read-other',
+    )
+    const editAgain = evidenceFromPersistedToolResult(
+      { callId: 'edit-again', name: 'edit', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 4, meta: { path: '/work/demo.txt' }, textContent: 'updated again' }, 1, 'E-edit-again',
+    )
+    const certify = (ids: string[], evidence: ReturnType<typeof evidenceFromPersistedToolResult>[]) => {
+      const { projection, item } = makeProjection()
+      for (const value of evidence) projection.evidence.set(value.id, value)
+      return certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: ids }], `C-${ids.join('-')}`).status
+    }
+    expect(certify([edit.id], [edit])).toBe('incomplete')
+    expect(certify([edit.id, sameRead.id], [edit, sameRead])).toBe('certified')
+    expect(certify([edit.id, otherRead.id], [edit, otherRead])).toBe('incomplete')
+    expect(certify([edit.id, editAgain.id], [edit, editAgain])).toBe('incomplete')
+  })
 })
 
   it('never promotes a persisted incomplete checkpoint to a certificate', () => {
@@ -540,4 +636,665 @@ describe('domain core', () => {
     expect(isWholeTaskCompletionClaim('完成。\n接下来做第二步')).toBe(false)
     expect(isWholeTaskCompletionClaim('完成。\n如果用户同意再继续')).toBe(false)
     expect(isWholeTaskCompletionClaim('完成。\n第一步已经完成')).toBe(false)
+  })
+
+  it('recognizes a decorated bare completion title followed by a results summary (P0-1)', () => {
+    expect(isWholeTaskCompletionClaim('✅ 完成。\n\n- 使用 read 验证\n- 未修改其他文件。')).toBe(true)
+    expect(isWholeTaskCompletionClaim('✔ Done.\n\n- built the artifact')).toBe(true)
+    expect(isWholeTaskCompletionClaim('⚠️ 完成。\n- ran the tests.')).toBe(true)
+    // Exclusions still hold with a decorated title.
+    expect(isWholeTaskCompletionClaim('✅ 完成。\n接下来做第二步')).toBe(false)
+    expect(isWholeTaskCompletionClaim('✔ Done.\n如果用户同意再继续')).toBe(false)
+  })
+
+  it('recognizes the full real Windows reply (P0-1 regression)', () => {
+    const realReply = `✅ 完成。
+
+**验收结果**：使用 read 工具读取 \`guard-demo.txt\`，内容为 \`guard-test\`（第 1 行，无多余字符），符合要求。未修改其他任何文件。
+
+**方法说明（重要偏差）**：您要求使用 bash，但本环境中 bash 不可用，原因如下：
+1. \`bash\` 不在 PATH 中（命令未找到）；
+2. 找到的 Git Bash（\`C:\\Program Files\\Git\\bin\\bash.exe\`）在当前沙箱（workspace-write 受限模式）下无法创建其启动所需的信号管道（\`couldn't create signal pipe, Win32 error 5\`，访问被拒绝）；
+3. 已尝试将同一命令升级为 \`danger-full-access\` 重试，但升级需要审批且当前无可用审批通道，升级被拒绝（该命令的沙箱拒绝为最终结果）；
+4. WSL 未安装（\`wsl.exe --status\` 提示需先安装）。
+
+因此改用环境内可用的 PowerShell 创建了该文件（\`.NET WriteAllText\` 写入，UTF-8 无 BOM、无末尾换行），确保文件内容严格为 \`guard-test\` 以满足验收标准。`
+    expect(isWholeTaskCompletionClaim(realReply)).toBe(true)
+  })
+
+  it('canonicalizes Windows and POSIX subject paths for matching (P0-2)', () => {
+    expect(canonicalizePath('C:\\work/guard-demo.txt')).toBe('c:\\work\\guard-demo.txt')
+    expect(canonicalizePath('c:/Work/../work/guard-demo.TXT')).toBe('c:\\work\\guard-demo.txt')
+    expect(canonicalizePath('\\\\server\\share\\a\\..\\b')).toBe('\\\\server\\share\\b')
+    expect(canonicalizePath('\\\\server\\share\\a\\..\\b')).toBe(canonicalizePath('\\\\SERVER\\Share\\b'))
+    // Forward-slash UNC spellings are Windows-style too (P1-2).
+    expect(canonicalizePath('//SERVER/Share/a/../b')).toBe('\\\\server\\share\\b')
+    expect(canonicalizePath('//SERVER/Share/a/../b')).toBe(canonicalizePath('\\\\server\\share\\b'))
+    // Relative paths are resolved per their own separator style.
+    expect(canonicalizePath('a/./b/../c.txt')).toBe('a/c.txt')
+    expect(canonicalizePath('a\\b\\..\\c.txt')).toBe('a\\c.txt')
+    expect(canonicalizePath('/work/guard-demo.txt')).toBe('/work/guard-demo.txt')
+    expect(canonicalizePath('/work/Guard.txt')).toBe('/work/Guard.txt')
+  })
+
+  it('matches a Windows contract subject to a differently-cased evidence subject (P0-2)', () => {
+    const projection = createProjection()
+    projection.enabled = true
+    projection.epoch = 1
+    projection.contractRevision = 1
+    const item = captureClause('verify guard-demo.txt', 'm1', 'A001', 1)
+    item.verification = { enforced: true, subject: 'C:\\work/guard-demo.txt', surface: 'artifact' }
+    projection.items.set(item.id, item)
+    projection.evidence.set('E0001', {
+      id: 'E0001', epoch: 1, callId: 'c1', rootCallId: 'c1', toolName: 'read', toolResultSeq: 4,
+      outcome: 'success', capabilities: ['filesystem-read'], subjects: ['c:\\WORK\\guard-demo.txt'], surfaces: ['artifact'], boundedSummarySha256: sha256('x'),
+    })
+    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C001').status).toBe('certified')
+  })
+
+  it('keeps POSIX subject matching case-sensitive (P0-2)', () => {
+    const projection = createProjection()
+    projection.enabled = true
+    projection.epoch = 1
+    projection.contractRevision = 1
+    const item = captureClause('verify Guard.txt', 'm1', 'A001', 1)
+    item.verification = { enforced: true, subject: '/work/Guard.txt', surface: 'artifact' }
+    projection.items.set(item.id, item)
+    projection.evidence.set('E0001', {
+      id: 'E0001', epoch: 1, callId: 'c1', rootCallId: 'c1', toolName: 'read', toolResultSeq: 4,
+      outcome: 'success', capabilities: ['filesystem-read'], subjects: ['/work/guard.txt'], surfaces: ['artifact'], boundedSummarySha256: sha256('x'),
+    })
+    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C001').status).toBe('incomplete')
+  })
+
+  it('captures an explicit tool method into the verification contract (P0-3)', () => {
+    const item = captureClause('使用 bash 创建 guard-demo.txt', 'm1', 'R001', 1, { cwd: 'C:\\work' })
+    expect(item.verification.method).toBe('bash')
+    expect(item.verification.subject).toBe('guard-demo.txt')
+    expect(item.verification.surface).toBe('artifact')
+    expect(captureClause('使用 read 工具读取 guard-demo.txt', 'm2', 'A001', 1, { cwd: '/work' }).verification.method).toBe('read')
+    expect(captureClause('确认文件内容', 'm3', 'A002', 1).verification.method).toBeUndefined()
+  })
+
+  it('does not let pwsh create + read close a bash-required artifact (P0-3 negative)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: '{}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('bash')
+    expect(item?.verification.subject).toBe('C:\\work/guard-demo.txt')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('incomplete')
+  })
+
+  it('certifies a bash-required artifact with bash + read evidence (P0-3 positive)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"printf \\"%s\\" \\"guard-test\\" > guard-demo.txt","workdir":"C:\\\\work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('bash')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('certified')
+    expect(derived.projection.items.get(item!.id)?.status).toBe('passed')
+  })
+
+  it('rejects an unrelated bash call as method evidence for an artifact (P0-1 negative)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"pwd","workdir":"C:\\\\work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'pwsh', arguments: JSON.stringify({ command: '[System.IO.File]::WriteAllText((Join-Path (Get-Location) "guard-demo.txt"), "guard-test")', workdir: 'C:\\work' }) } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 6, type: 'tool/call', data: { turn: 1, step: 3, callId: 'c3', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
+      { seq: 7, type: 'tool/result', data: { turn: 1, step: 3, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c3', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c3' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('bash')
+    expect(item?.verification.subject).toBe('C:\\work/guard-demo.txt')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0003'] }], 'C001')
+    expect(result.status).toBe('incomplete')
+  })
+
+  it('satisfies an executable method from a shell command (P1-1)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 pnpm 运行测试' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{ "command": "pnpm test", "workdir": "/work" }' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('pnpm')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+    expect(result.status).toBe('certified')
+  })
+
+  it('recognizes Markdown heading and emphasis completion titles (P0-2)', () => {
+    expect(isWholeTaskCompletionClaim('## ✅ 完成。\n- 已验证')).toBe(true)
+    expect(isWholeTaskCompletionClaim('**完成。**\n- 已验证')).toBe(true)
+    expect(isWholeTaskCompletionClaim('### Done.\n- built the artifact')).toBe(true)
+    expect(isWholeTaskCompletionClaim('*完成。*\n- 已完成说明')).toBe(true)
+    // Blockquotes, quoted titles and examples still fail closed.
+    expect(isWholeTaskCompletionClaim('> 完成。\n- 已验证')).toBe(false)
+    expect(isWholeTaskCompletionClaim('“完成。”\n- 已验证')).toBe(false)
+    expect(isWholeTaskCompletionClaim('**完成。**\n接下来做第二步')).toBe(false)
+  })
+
+  it('iterates heading/emphasis/decoration until stable (P0-3)', () => {
+    expect(isWholeTaskCompletionClaim('## ✅ **完成。**\n- 已验证')).toBe(true)
+    expect(isWholeTaskCompletionClaim('✅ **完成。**\n- 已验证')).toBe(true)
+    expect(isWholeTaskCompletionClaim('## **✅ 完成。**\n- 已验证')).toBe(true)
+    // Blockquotes still fail closed even when decorated.
+    expect(isWholeTaskCompletionClaim('> **完成。**\n- 已验证')).toBe(false)
+    expect(isWholeTaskCompletionClaim('✅ **完成。**\n接下来做第二步')).toBe(false)
+  })
+
+  it('parses shell commands quote-aware (P0-2 / P1-2)', () => {
+    // Quoted text must not invent executables.
+    expect(parseShellCommand('echo "ignored; pnpm test"').executables).toEqual(['echo'])
+    expect(parseShellCommand('echo "ignored; pnpm test && npm run build"').executables).toEqual(['echo'])
+    // Assignments resolve the real executable; wrappers are not in the v0.1
+    // subset and fail closed.
+    expect(parseShellCommand('CI=1 pnpm test').executables).toContain('pnpm')
+    const wrapped = parseShellCommand('env CI=1 pnpm test')
+    expect(wrapped.status).toBe('unsupported')
+    expect(wrapped.executables).toEqual([])
+    // Quoted redirect targets are recovered; bare mention yields no
+    // create/read operation (a run is still attributed).
+    expect(parseShellCommand('printf x > "guard-demo.txt"').operations).toContainEqual({ op: 'create', path: 'guard-demo.txt' })
+    expect(parseShellCommand('echo guard-demo.txt').operations.some((operation) => operation.op === 'create' || operation.op === 'read')).toBe(false)
+    // Unclosed quotes fail closed.
+    expect(parseShellCommand('printf "abc').malformed).toBe(true)
+    expect(parseShellCommand('printf "abc').executables).toEqual([])
+  })
+
+  it('does not let echo-only bash close a create requirement (P0-1 negative)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"echo guard-demo.txt","workdir":"C:\\\\work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'pwsh', arguments: JSON.stringify({ command: '[System.IO.File]::WriteAllText((Join-Path (Get-Location) "guard-demo.txt"), "guard-test")', workdir: 'C:\\work' }) } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 6, type: 'tool/call', data: { turn: 1, step: 3, callId: 'c3', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
+      { seq: 7, type: 'tool/result', data: { turn: 1, step: 3, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c3', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c3' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('bash')
+    expect(item?.verification.operation).toBe('create')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0003'] }], 'C001')
+    expect(result.status).toBe('incomplete')
+  })
+
+  it('does not let quoted text invent an executable method (P0-2 negative)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 pnpm 运行测试' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"echo \\"ignored; pnpm test\\"","workdir":"/work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.operation).toBe('run')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+    expect(result.status).toBe('incomplete')
+  })
+
+  it('records clean pwsh success without an exit marker (P1-1)', () => {
+    const evidence = evidenceFromPersistedToolResult(
+      { callId: 'call-1', name: 'pwsh', arguments: JSON.stringify({ command: 'Write-Output ok' }) },
+      { seq: 9, textContent: 'ok' },
+      1,
+      'E0001',
+    )
+    expect(evidence.outcome).toBe('success')
+    const failure = evidenceFromPersistedToolResult(
+      { callId: 'call-2', name: 'pwsh', arguments: JSON.stringify({ command: 'throw' }) },
+      { seq: 10, error: { code: 'EXIT_NONZERO' }, textContent: 'boom' },
+      1,
+      'E0002',
+    )
+    expect(failure.outcome).toBe('failure')
+  })
+
+  it('certifies an explicit pwsh create with pwsh + read evidence (P1-1)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 PowerShell 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: '{"command":"Set-Content -LiteralPath guard-demo.txt -Value \'guard-test\'","workdir":"C:\\\\work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('pwsh')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('certified')
+  })
+
+  it('derives a create operation for a bash create requirement (P0-1 contract)', () => {
+    const item = captureClause('使用 bash 创建 guard-demo.txt', 'm1', 'R001', 1, { cwd: 'C:\\work' })
+    expect(item.verification.method).toBe('bash')
+    expect(item.verification.operation).toBe('create')
+    expect(item.verification.subject).toBe('guard-demo.txt')
+    expect(extractOperation('使用 read 工具读取 guard-demo.txt')).toBe('read')
+    expect(extractOperation('使用 pnpm 运行测试')).toBe('run')
+    expect(extractOperation('修改 src/a.ts')).toBe('modify')
+  })
+
+  it('parses English operations case-insensitively with word boundaries (P0-2)', () => {
+    expect(extractOperation('Use bash to Create guard-demo.txt')).toBe('create')
+    expect(extractOperation('Use bash to RUN the tests')).toBe('run')
+    expect(extractOperation('Use read to Read the file')).toBe('read')
+    // Whole-token matching: internal words must not match.
+    expect(extractOperation('already done')).toBeUndefined()
+    expect(extractOperation('runtime check')).toBeUndefined()
+    expect(extractOperation('predicted output')).toBeUndefined()
+    // An explicit method with no parsable operation fails closed in matching.
+    const item = captureClause('使用 bash 处理 guard-demo.txt', 'm1', 'R001', 1, { cwd: '/work' })
+    expect(item.verification.method).toBe('bash')
+    expect(item.verification.operation).toBeUndefined()
+  })
+
+  it('fails closed when an explicit method has no parsable operation (P0-2)', () => {
+    const projection = createProjection()
+    projection.enabled = true
+    projection.epoch = 1
+    projection.contractRevision = 1
+    const item = captureClause('使用 bash 处理 guard-demo.txt', 'm1', 'R001', 1, { cwd: '/work' })
+    item.verification = { enforced: true, subject: '/work/guard-demo.txt', surface: 'artifact', method: 'bash', operation: undefined }
+    projection.items.set(item.id, item)
+    projection.evidence.set('E0001', {
+      id: 'E0001', epoch: 1, callId: 'c1', rootCallId: 'c1', toolName: 'bash', toolResultSeq: 1,
+      outcome: 'success', capabilities: ['shell'], subjects: ['/work/guard-demo.txt'], surfaces: ['scope'], boundedSummarySha256: sha256('x'),
+    })
+    projection.evidence.set('E0002', {
+      id: 'E0002', epoch: 1, callId: 'c2', rootCallId: 'c2', toolName: 'read', toolResultSeq: 2,
+      outcome: 'success', capabilities: ['filesystem-read'], subjects: ['/work/guard-demo.txt'], surfaces: ['artifact'], boundedSummarySha256: sha256('y'),
+    })
+    expect(certifyCheckpoint(projection, [{ itemId: 'R001', evidenceIds: ['E0001', 'E0002'] }], 'C001').status).toBe('incomplete')
+  })
+
+  it('does not treat quoted pwsh strings as commands (P0-1)', () => {
+    const parsed = parsePwshCommand('Write-Output "Set-Content C:\\work\\guard-demo.txt now"')
+    expect(parsed.operations).toEqual([])
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 PowerShell 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: '{"command":"Write-Output \\"Set-Content C:\\\\work\\\\guard-demo.txt now\\""}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Set-Content C:\\work\\guard-demo.txt now' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('pwsh')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('incomplete')
+  })
+
+  it('rejects negative pwsh terminal markers before the clean-success fallback (P0-3)', () => {
+    const timeout = evidenceFromPersistedToolResult(
+      { callId: 'call-1', name: 'pwsh', arguments: JSON.stringify({ command: 'Get-ChildItem' }) },
+      { seq: 9, textContent: '[timed out after 1000ms]' },
+      1,
+      'E0001',
+    )
+    expect(timeout.outcome).toBe('failure')
+    const denied = evidenceFromPersistedToolResult(
+      { callId: 'call-2', name: 'pwsh', arguments: JSON.stringify({ command: 'Copy-Item' }) },
+      { seq: 10, textContent: '[sandbox: file access denied under workspace-write mode]' },
+      1,
+      'E0002',
+    )
+    expect(denied.outcome).toBe('failure')
+    const killed = evidenceFromPersistedToolResult(
+      { callId: 'call-3', name: 'bash', arguments: JSON.stringify({ command: 'sleep 10' }) },
+      { seq: 11, textContent: '[killed by signal: SIGTERM]' },
+      1,
+      'E0003',
+    )
+    expect(killed.outcome).toBe('failure')
+  })
+
+  it('attaches run operations to any effective executable (P1-1)', () => {
+    expect(parseShellCommand('node script.js').operations).toContainEqual({ op: 'run', path: 'script.js' })
+    expect(parseShellCommand('python tool.py').operations).toContainEqual({ op: 'run', path: 'tool.py' })
+    expect(parseShellCommand('echo hello').operations).toContainEqual({ op: 'run' })
+    expect(parseShellCommand('pnpm test').operations).toContainEqual({ op: 'run' })
+    // The running of an arbitrary executable is NOT part of the v0.1 subset and
+    // fails closed.
+    const arbitrary = parseShellCommand('bash echo hello')
+    expect(arbitrary.status).toBe('unsupported')
+    expect(arbitrary.executables).toEqual([])
+  })
+
+  it('certifies a node-run artifact with run + read evidence (P1-1)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 node 运行 script.js' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"node script.js","workdir":"/work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"/work/script.js"}' } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: '/work/script.js' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.method).toBe('node')
+    expect(item?.verification.operation).toBe('run')
+    expect(item?.verification.subject).toBe('/work/script.js')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('certified')
+  })
+
+  it('keeps quoted PowerShell paths as one subject (P1-2)', () => {
+    const parsed = parsePwshCommand('Set-Content -LiteralPath "C:\\Program Files\\demo.txt" -Value x')
+    expect(parsed.operations).toContainEqual({ op: 'create', path: 'C:\\Program Files\\demo.txt' })
+    expect(parsed.operations).toHaveLength(1)
+  })
+
+  it('v0.1 invariant: quoted string content never produces extra operations', () => {
+    const cases: Array<[string, string]> = [
+      ['echo "node script.js"', 'node'],
+      ['echo "touch guard-demo.txt"', 'touch'],
+      ['node "cat data.txt; rm -rf /"', 'cat'],
+      ['echo "pnpm test && npm run build"', 'pnpm'],
+    ]
+    for (const [command, forbidden] of cases) {
+      const parsed = parseShellCommand(command)
+      expect(parsed.status, command).toBe('supported')
+      expect(parsed.executables, command).not.toContain(forbidden)
+      expect(parsed.operations.filter((op) => op.op === 'create' || op.op === 'read'), command).toEqual([])
+    }
+    const pwsh = parsePwshCommand('Set-Content -Path "target.txt" -Value "cp x y; curl evil"')
+    expect(pwsh.operations).toEqual([{ op: 'create', path: 'target.txt' }])
+  })
+
+  it('v0.1 invariant: appended compound syntax fails the whole command', () => {
+    const base = 'printf x > target.txt'
+    for (const suffix of ['; echo y', '| cat', '&& cat target.txt', '&', '|| true', '>> append.txt']) {
+      const parsed = parseShellCommand(`${base} ${suffix}`)
+      expect(parsed.status, `${base} ${suffix}`).toBe('unsupported')
+      expect(parsed.executables, `${base} ${suffix}`).toEqual([])
+      expect(parsed.operations, `${base} ${suffix}`).toEqual([])
+      expect(parsed.reason, `${base} ${suffix}`).toBeTruthy()
+    }
+    for (const command of ['Set-Content -Path a.txt -Value x; Write-Output "b.txt"', 'Set-Content -Path a.txt -Value x | Write-Output "b.txt"', '& "Set-Content" -Path target.txt']) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.operations, command).toEqual([])
+    }
+  })
+
+  it('v0.1 invariant: PowerShell value parameters never contribute subjects', () => {
+    const parsed = parsePwshCommand('Set-Content -Path "work\\target.txt" -Value "work\\decoy.txt"')
+    expect(parsed.operations).toEqual([{ op: 'create', path: 'work\\target.txt' }])
+  })
+
+  it('v0.1 invariant: quoted spaced PowerShell path stays one token', () => {
+    const parsed = parsePwshCommand('Set-Content -LiteralPath "C:\\Program Files\\demo.txt" -Value x')
+    expect(parsed.operations).toEqual([{ op: 'create', path: 'C:\\Program Files\\demo.txt' }])
+  })
+
+  it('v0.1 invariant: a run method evidence alone closes a run contract', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 node 运行 script.js' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"node script.js","workdir":"/work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification.operation).toBe('run')
+    // No read evidence at all — the run method evidence alone must close it.
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+    expect(result.status).toBe('certified')
+  })
+
+  it('v0.1 invariant: create requires both method and state verification evidence', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"printf \\"%s\\" \\"guard-test\\" > guard-demo.txt","workdir":"C:\\\\work"}' } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    // Method evidence alone is NOT enough for create.
+    const alone = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+    expect(alone.status).toBe('incomplete')
+  })
+
+  it('v0.1 invariant: marker-like text in ordinary output does not affect outcome', () => {
+    const pwsh = evidenceFromPersistedToolResult(
+      { callId: 'call-1', name: 'pwsh', arguments: JSON.stringify({ command: 'Write-Output ok' }) },
+      { seq: 9, textContent: 'documentation says [timed out after 1000ms] but command succeeded' },
+      1,
+      'E0001',
+    )
+    expect(pwsh.outcome).toBe('success')
+    const bash = evidenceFromPersistedToolResult(
+      { callId: 'call-2', name: 'bash', arguments: JSON.stringify({ command: 'echo hi' }) },
+      { seq: 10, textContent: 'note [exit code: 1] is not the real one\n[exit code: 0]' },
+      1,
+      'E0002',
+    )
+    expect(bash.outcome).toBe('success')
+  })
+
+  it('v0.1 invariant: malformed and unsupported parses are empty with a reason', () => {
+    const malformed = parseShellCommand('printf "abc')
+    expect(malformed.status).toBe('malformed')
+    expect(malformed.malformed).toBe(true)
+    expect(malformed.executables).toEqual([])
+    expect(malformed.operations).toEqual([])
+    expect(malformed.reason).toBeTruthy()
+    const unsupportedCommands = [
+      'touch a; rm b',
+      'cat f | grep x',
+      'node $script',
+      'eval pnpm test',
+      '(touch a)',
+      'echo "ignored" && echo y',
+      'printf "x" > "$HOME/f"',
+      'printf x > a > b',
+    ]
+    for (const command of unsupportedCommands) {
+      const parsed = parseShellCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+      expect(parsed.reason, command).toBeTruthy()
+    }
+  })
+
+  it('uses an independent effect facet for artifact mutations', () => {
+    const makeProjection = (text: string) => {
+      const projection = createProjection()
+      projection.epoch = 1
+      projection.contractRevision = 1
+      const item = captureClause(text, 'm1', 'A001', 1)
+      projection.items.set(item.id, item)
+      return { projection, item }
+    }
+    const write = evidenceFromPersistedToolResult(
+      { callId: 'write', name: 'write', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 1, meta: { path: '/work/demo.txt' }, textContent: 'ok' }, 1, 'E-write',
+    )
+    const readSame = evidenceFromPersistedToolResult(
+      { callId: 'read-same', name: 'read', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 2, meta: { path: '/work/demo.txt' }, textContent: 'ok' }, 1, 'E-read-same',
+    )
+    const readOther = evidenceFromPersistedToolResult(
+      { callId: 'read-other', name: 'read', arguments: JSON.stringify({ file_path: '/work/other.txt' }) },
+      { seq: 3, meta: { path: '/work/other.txt' }, textContent: 'ok' }, 1, 'E-read-other',
+    )
+    const certify = (text: string, ids: string[], evidence: ReturnType<typeof evidenceFromPersistedToolResult>[]) => {
+      const { projection, item } = makeProjection(text)
+      for (const value of evidence) projection.evidence.set(value.id, value)
+      return certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: ids }], `C-${ids.join('-')}`).status
+    }
+    expect(certify('创建 /work/demo.txt', [write.id, readSame.id], [write, readSame])).toBe('certified')
+    expect(certify('创建 /work/demo.txt', [write.id], [write])).toBe('incomplete')
+    expect(certify('创建 /work/demo.txt', [write.id, readOther.id], [write, readOther])).toBe('incomplete')
+    const edit = evidenceFromPersistedToolResult(
+      { callId: 'edit', name: 'edit', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 4, meta: { path: '/work/demo.txt' }, textContent: 'ok' }, 1, 'E-edit',
+    )
+    expect(certify('使用 edit 修改 /work/demo.txt', [edit.id, readSame.id], [edit, readSame])).toBe('certified')
+  })
+
+  it('requires the explicit method on the effect evidence itself', () => {
+    const projection = createProjection()
+    projection.epoch = 1
+    projection.contractRevision = 1
+    const item = captureClause('使用 bash 创建 /work/demo.txt', 'm1', 'A001', 1)
+    projection.items.set(item.id, item)
+    const pwsh = evidenceFromPersistedToolResult(
+      { callId: 'pwsh', name: 'pwsh', arguments: JSON.stringify({ command: 'Set-Content -Path /work/demo.txt -Value x' }) },
+      { seq: 1, textContent: 'created' }, 1, 'E-pwsh',
+    )
+    const read = evidenceFromPersistedToolResult(
+      { callId: 'read', name: 'read', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
+      { seq: 2, meta: { path: '/work/demo.txt' }, textContent: 'x' }, 1, 'E-read',
+    )
+    projection.evidence.set(pwsh.id, pwsh)
+    projection.evidence.set(read.id, read)
+    expect(certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: [pwsh.id, read.id] }], 'C-method').status).toBe('incomplete')
+  })
+
+  it('rejects PowerShell outer newlines but preserves quoted literal newlines', () => {
+    for (const command of [
+      'Set-Content -Path a.txt\n-Value x',
+      'Get-Content -Path a.txt\r\n-Raw',
+      'Set-Content -Path a.txt -Value x\nGet-Content -Path a.txt',
+    ]) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
+    const quoted = parsePwshCommand('Set-Content -Path a.txt -Value "line\ntext"')
+    expect(quoted.status).toBe('supported')
+    expect(quoted.operations).toEqual([{ op: 'create', path: 'a.txt' }])
+  })
+
+  it('binds verify method, capability, and subject to one evidence', () => {
+    const makeEvidence = (callId: string, name: string, args: Record<string, unknown>, meta?: Record<string, unknown>) =>
+      evidenceFromPersistedToolResult(
+        { callId, name, arguments: JSON.stringify(args) },
+        { seq: Number(callId.replace(/\\D/g, '')) || 1, meta, textContent: name === 'bash' ? '[exit code: 0]' : 'ok' },
+        1,
+        `E-${callId}`,
+      )
+    const certify = (text: string, evidence: ReturnType<typeof makeEvidence>[]) => {
+      const projection = createProjection()
+      projection.epoch = 1
+      projection.contractRevision = 1
+      const item = captureClause(text, 'm1', 'A001', 1)
+      projection.items.set(item.id, item)
+      for (const value of evidence) projection.evidence.set(value.id, value)
+      return certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: evidence.map((value) => value.id) }], 'C-verify').status
+    }
+    const bashUnrelated = makeEvidence('bash-1', 'bash', { command: 'echo hi', workdir: '/work' })
+    const readSame = makeEvidence('read-2', 'read', { file_path: '/work/demo.txt' }, { path: '/work/demo.txt' })
+    const readOther = makeEvidence('read-3', 'read', { file_path: '/work/other.txt' }, { path: '/work/other.txt' })
+    const bashVerify = makeEvidence('bash-4', 'bash', { command: 'cat /work/demo.txt', workdir: '/work' })
+    expect(certify('使用 bash 验证 /work/demo.txt', [bashUnrelated, readSame])).toBe('incomplete')
+    expect(certify('使用 read 验证 /work/demo.txt', [readSame])).toBe('certified')
+    expect(certify('验证 /work/demo.txt', [readSame])).toBe('certified')
+    expect(certify('使用 bash 验证 /work/demo.txt', [bashVerify, readOther])).toBe('incomplete')
+    expect(certify('使用 bash 处理 /work/demo.txt', [bashVerify, readSame])).toBe('incomplete')
+  })
+
+  it('keeps the PowerShell v0.1 schema exact for every cmdlet', () => {
+    const supportedPwshCases = [
+      'Set-Content -Path target.txt -Value x',
+      'Set-Content -LiteralPath target.txt -Value x -Encoding utf8 -NoNewline',
+      'Add-Content -Path target.txt -Value x -Encoding utf8 -NoNewline',
+      'New-Item -Path target.txt -Value x -ItemType File',
+      'Out-File -FilePath target.txt -Encoding utf8 -NoNewline',
+      'Out-File -LiteralPath target.txt -Encoding utf8',
+      'Get-Content -Path target.txt -Encoding utf8 -Raw',
+      'Get-Content -LiteralPath target.txt -Raw',
+    ]
+    for (const command of supportedPwshCases) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('supported')
+      expect(parsed.executables, command).toHaveLength(1)
+      expect(parsed.operations, command).not.toEqual([])
+    }
+
+    const rejectedPwshParameters: Record<string, string[]> = {
+      'set-content': ['-erroraction SilentlyContinue', '-noclobber', '-stream hidden', '-filter *.txt', '-content x', '-passthru', '-force', '-whatif', '-confirm'],
+      'add-content': ['-erroraction SilentlyContinue', '-noclobber', '-stream hidden', '-filter *.txt', '-content x', '-passthru', '-force', '-whatif', '-confirm'],
+      'new-item': ['-literalpath other.txt', '-name target.txt', '-force', '-erroraction SilentlyContinue', '-whatif', '-confirm'],
+      'out-file': ['-noclobber', '-erroraction SilentlyContinue', '-whatif', '-confirm', '-force', '-append'],
+      'get-content': ['-notypeinformation', '-erroraction SilentlyContinue', '-filter *.txt', '-stream hidden', '-whatif', '-confirm', '-force'],
+    }
+    const baseByCmdlet: Record<string, string> = {
+      'set-content': 'Set-Content -Path target.txt -Value x',
+      'add-content': 'Add-Content -Path target.txt -Value x',
+      'new-item': 'New-Item -Path target.txt',
+      'out-file': 'Out-File -FilePath target.txt',
+      'get-content': 'Get-Content -Path target.txt',
+    }
+    for (const [cmdlet, parameters] of Object.entries(rejectedPwshParameters)) {
+      for (const parameter of parameters) {
+        const parsed = parsePwshCommand(`${baseByCmdlet[cmdlet]} ${parameter}`)
+        expect(parsed.status, `${cmdlet} ${parameter}`).toBe('unsupported')
+        expect(parsed.executables, `${cmdlet} ${parameter}`).toEqual([])
+        expect(parsed.operations, `${cmdlet} ${parameter}`).toEqual([])
+        expect(parsed.reason, `${cmdlet} ${parameter}`).toBeTruthy()
+      }
+    }
+  })
+
+  it('rejects PowerShell newlines outside quoted strings', () => {
+    const rejected = [
+      'Set-Content -Path a.txt\n-Value x',
+      'Get-Content -Path a.txt\r\n-Raw',
+      'Set-Content -Path a.txt -Value x\nGet-Content -Path a.txt',
+    ]
+    for (const command of rejected) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
+    const quoted = parsePwshCommand('Set-Content -Path a.txt -Value "line\ntext"')
+    expect(quoted.status).toBe('supported')
+    expect(quoted.operations).toEqual([{ op: 'create', path: 'a.txt' }])
+  })
+
+  it('rejects unsafe PowerShell parameters across the supported cmdlets', () => {
+    const cases = [
+      'Get-Content -Path C:\\missing.txt -ErrorAction SilentlyContinue',
+      'Set-Content -Path C:\\target.txt -Value x -ErrorAction SilentlyContinue',
+      'Out-File -FilePath C:\\target.txt -NoClobber',
+      'Set-Content -Path C:\\target.txt -Stream hidden -Value x',
+      'New-Item -Path C:\\work -Name target.txt',
+    ]
+    for (const command of cases) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
   })

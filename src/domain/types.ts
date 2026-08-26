@@ -2,11 +2,20 @@ export type GuardItemKind = 'requirement' | 'acceptance' | 'prohibition'
 export type GuardItemStatus = 'pending' | 'passed' | 'superseded'
 export type GuardIntegrity = 'valid' | 'unknown' | 'corrupt'
 export type EvidenceOutcome = 'success' | 'failure' | 'unknown'
+export type GuardOperation = 'create' | 'write' | 'modify' | 'read' | 'run' | 'verify'
 
 export interface VerificationContract {
   subject?: string
   surface?: 'artifact' | 'ui' | 'visual' | 'scope'
   enforced: boolean
+  /** Explicitly-required tool/method (e.g. 'bash'); when set, a successful
+   * evidence from that tool must be present in addition to artifact/scope
+   * coverage before the item can close. */
+  method?: string
+  /** Explicitly-required operation/effect (e.g. 'create', 'read'). When set
+   * alongside `method`, the method evidence must have performed that operation
+   * on the same canonical subject — mentioning the file is not enough. */
+  operation?: GuardOperation
 }
 
 export interface GuardItem {
@@ -33,6 +42,14 @@ export interface GuardEvidence {
   subjects: string[]
   surfaces: Array<'artifact' | 'ui' | 'visual' | 'scope'>
   boundedSummarySha256: string
+  /** Executables invoked by a shell-tool command (e.g. 'pnpm', 'git'); present
+   * only for command evidence, so an executable-method constraint ("使用 pnpm")
+   * can be verified against the command that actually ran. */
+  executables?: string[]
+  /** Operations with their paths, parsed from the evidence's command or tool
+   * payload (quote-aware). A subject mention alone proves nothing; the evidence
+   * must show the requested operation on the target. */
+  operations?: Array<{ op: GuardOperation; path?: string }>
 }
 
 export interface EvidenceBinding {

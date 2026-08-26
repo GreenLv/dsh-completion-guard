@@ -1,4 +1,4 @@
-import { captureItem, segmentClauses } from './capture.js'
+import { captureItem, extractMethod, extractOperation, segmentClauses } from './capture.js'
 import { certifyCheckpoint } from './checkpoint.js'
 import { evidenceFromPersistedToolResult, extractTextContent, withDurability } from './evidence.js'
 import { supersedeItem } from './supersession.js'
@@ -81,7 +81,9 @@ function insert(
 ): void {
   const revision = projection.contractRevision + 1
   const id = nextId(projection.items, kind)
-  const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface)
+  const method = extractMethod(body)
+  const operation = extractOperation(body)
+  const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation)
   const duplicate = [...projection.items.values()].find(
     (existing) => existing.kind === kind
       && existing.status === 'pending'

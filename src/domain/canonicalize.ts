@@ -1,7 +1,31 @@
 import { createHash } from 'node:crypto'
+import * as path from 'node:path'
 
 export function normalizeClause(text: string): string {
   return text.trim().replace(/\s+/g, ' ')
+}
+
+// A path is Windows-style when it carries a drive letter, a UNC prefix (in
+// either separator spelling), or any backslash separator; everything else is
+// treated as POSIX-style.
+function isWindowsStylePath(value: string): boolean {
+  return /^[A-Za-z]:/.test(value) || value.startsWith('\\\\') || value.startsWith('//') || value.includes('\\')
+}
+
+/**
+ * Canonicalize a filesystem path for subject matching. Windows-style paths are
+ * normalized (drive letter, both separator kinds, `.`/`..`, duplicate
+ * separators) and case-folded, because Windows paths compare case-insensitively
+ * and treat `/` and `\` as equivalent. POSIX-style paths are normalized but
+ * keep their case, so a case-sensitive filesystem is never made insensitive.
+ * Exactly one canonicalizer is shared by contract capture and evidence
+ * extraction so a Windows contract subject and a Windows evidence subject match.
+ */
+export function canonicalizePath(value: string): string {
+  if (!value) return value
+  return isWindowsStylePath(value)
+    ? path.win32.normalize(value).toLowerCase()
+    : path.posix.normalize(value)
 }
 
 export function sha256(text: string): string {

@@ -1,5 +1,5 @@
 import { digestStrings, sha256 } from './canonicalize.js'
-import { evidenceMatchesItem } from './matching.js'
+import { bindingSatisfies } from './matching.js'
 import type { EvidenceBinding, GuardCheckpoint, GuardProjection } from './types.js'
 
 export interface CheckpointResult {
@@ -25,11 +25,9 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
       rejectedBindings.push({ itemId: binding.itemId, reason: 'no evidence cited' })
       continue
     }
-    for (const evidenceId of binding.evidenceIds) {
-      const evidence = projection.evidence.get(evidenceId)
-      if (!evidence || evidence.epoch !== projection.epoch || !evidenceMatchesItem(item, evidence)) {
-        rejectedBindings.push({ itemId: binding.itemId, reason: `evidence ${evidenceId} does not match the current verification contract` })
-      }
+    if (!bindingSatisfies(projection, item, binding.evidenceIds)) {
+      rejectedBindings.push({ itemId: binding.itemId, reason: 'evidence does not match the current verification contract' })
+      continue
     }
   }
   const open = openItems(projection).filter((itemId) => !bindings.some((binding) => binding.itemId === itemId))

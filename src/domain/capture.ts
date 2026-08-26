@@ -1,5 +1,5 @@
 import { normalizeClause, sanitizeClauseText, sha256 } from './canonicalize.js'
-import type { GuardItem, GuardItemKind } from './types.js'
+import type { GuardItem, GuardItemKind, GuardOperation } from './types.js'
 
 const CLAUSE_PATTERNS: Array<[GuardItemKind, RegExp]> = [
   ['prohibition', /^(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得)\s*(.+)$/i],
@@ -18,6 +18,50 @@ export function classifyClause(text: string): ClassifiedClause {
     if (match) return { kind, body: normalizeClause(match[1].replace(/^[:：,，\s]+/, '')) }
   }
   return { kind: 'requirement', body: normalizedText }
+}
+
+const METHOD_TOOL = '(?:bash|shell|powershell|pwsh|git|read|write|edit|node|python|python3|npm|pnpm|tsc|vitest)'
+const METHOD_ALIASES: Record<string, string> = { powershell: 'pwsh', python3: 'python' }
+const METHOD_PATTERNS = [
+  new RegExp(`(?:用|使用|通过|借助|利用|以)\\s*(${METHOD_TOOL})\\b`, 'i'),
+  new RegExp(`\\b(?:via|using|use|with)\\s+(?:the\\s+)?(${METHOD_TOOL})\\b`, 'i'),
+  new RegExp(`\\b(${METHOD_TOOL})\\s+(?:创建|写入|生成|修改|执行|运行|rename|create|write|modify)\\b`, 'i'),
+]
+
+/**
+ * Detect an explicitly named tool/method in a clause ("使用 bash 创建",
+ * "via bash", "bash to create"). Returns the canonical tool id (e.g. 'bash')
+ * or undefined when no explicit method is named.
+ */
+export function extractMethod(text: string): string | undefined {
+  for (const pattern of METHOD_PATTERNS) {
+    const match = text.match(pattern)
+    if (match) {
+      const raw = match[1].toLowerCase()
+      return METHOD_ALIASES[raw] ?? raw
+    }
+  }
+  return undefined
+}
+
+const OPERATION_PATTERNS: Array<[GuardOperation, RegExp]> = [
+  ['create', /创建|生成|新建|touch|\bcreates?\b|\bcreated\b|\bcreating\b|\bwrite\b|写入/i],
+  ['modify', /修改|编辑|更改|modif(?:y|ies|ied|ying)|\bedit\b|改/i],
+  ['read', /读取|阅读|打开|读(?![A-Za-z0-9])|\bread\b/i],
+  ['verify', /验证|确认|确保|检查|verif(?:y|ies|ied|ying)|\bconfirm\b|\bconfirms\b|\bconfirmed\b|\bensure\b/i],
+  ['run', /运行|执行|\brun\b|execute(?:d)?/i],
+]
+
+/**
+ * Detect an explicit operation/effect in a clause ("创建" → create,
+ * "读取" → read, "运行" → run). Returns the first operation named, or undefined
+ * when the clause requests no specific effect.
+ */
+export function extractOperation(text: string): GuardOperation | undefined {
+  for (const [operation, pattern] of OPERATION_PATTERNS) {
+    if (pattern.test(text)) return operation
+  }
+  return undefined
 }
 
 export interface CaptureScope {
@@ -91,6 +135,8 @@ export function captureItem(
   revision: number,
   subject: string,
   surface: 'artifact' | 'scope',
+  method?: string,
+  operation?: GuardOperation,
 ): GuardItem {
   const sanitized = sanitizeClauseText(body)
   return {
@@ -103,7 +149,7 @@ export function captureItem(
     status: 'pending',
     verification: kind === 'prohibition'
       ? { enforced: false, surface, subject }
-      : { enforced: true, surface, subject },
+      : { enforced: true, surface, subject, method, operation },
   }
 }
 
@@ -123,5 +169,7 @@ export function captureClause(
   const path = extractArtifactPaths(sanitizeClauseText(body))[0] ?? ''
   const surface = path ? 'artifact' as const : 'scope' as const
   const subject = path || scope.cwd || 'scope'
-  return captureItem(kind, body, sourceMessageId, id, revision, subject, surface)
+  const method = extractMethod(body)
+  const operation = extractOperation(body)
+  return captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation)
 }
