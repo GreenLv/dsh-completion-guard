@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The project is
 pre-1.0; release versions track the plugin lifecycle, not stabilised API
 promises.
 
-## 0.1.0 - unreleased
+## 0.1.0 - 2026-08-27
 
 Initial task-contract and completion-certification plugin for DeepSeek
 Harness.

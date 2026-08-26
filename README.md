@@ -8,7 +8,7 @@ It is not a Goal, Todo, Memory, Compaction replacement, token-pruning tool, secu
 
 ## Status
 
-Pre-1.0 development. The core loop is implemented and covered by 41 tests: contract capture (always with a concrete subject/surface), evidence extraction and strict matching, fail-closed completion certification (empty evidence bindings and unrelated evidence are rejected), certification re-verification on rebuild, the Goal-completion gate, the turn-stopping gate, recovery injection, and durability handling. The plugin loads in a real DSH headless profile; full task execution in a live DSH web profile and Windows acceptance are not yet verified.
+Version 0.1.0 implements the core loop with 104 tests (85 domain/core): contract capture with concrete subjects and surfaces, conservative command-effect parsing, strict evidence matching, fail-closed completion certification, certificate re-verification on rebuild, Goal and turn-stopping gates, recovery injection, and durability handling. Native isolated real-model acceptance on macOS and Windows verified that a supported shell or PowerShell write plus an independent read can certify the matching contract before task completion.
 
 Target: DSH `0.1.1-rc.2`.
 
@@ -33,4 +33,4 @@ pnpm run build
 pnpm pack --dry-run --json
 ```
 
-No remote publication or market registration is implied by local development.
+The source repository is public. Package and marketplace availability are verified separately from source and native acceptance.

@@ -24,7 +24,7 @@ Runtime packages are host-provided and declared as peer dependencies: `@deepseek
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real headless boot loads the plugin (apply, `ctx.sessions` access, and listener registration succeed) and only stops at missing provider credentials.
 
-Full task execution in a live DSH web profile (with model credentials) and Windows native acceptance are not yet verified; the slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. The domain/core loop (capture, matching, certification, gates) is covered by 85 unit tests; the full project suite contains 104 tests. The fail-closed invariants below are asserted as regressions.
+The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Isolated native real-model closed loops pass on macOS and Windows: the persisted sessions show a supported write effect, an independent read of the same artifact, a certified checkpoint bound to real evidence IDs, and task completion only after certification. The domain/core loop (capture, matching, certification, gates) is covered by 85 unit tests; the full project suite contains 104 tests. The fail-closed invariants below are asserted as regressions.
 
 ## v0.1 certifiable command subset
 

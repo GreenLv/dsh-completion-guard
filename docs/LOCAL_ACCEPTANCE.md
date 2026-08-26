@@ -37,6 +37,16 @@ A real headless boot loads the plugin and advances to the model call; it stops a
   read it back as durable evidence, rejected an incomplete first binding, then
   certified the complete requirement and acceptance set before `turn/end`.
 
-## Not yet verified
+## Native platform acceptance
 
-- Windows acceptance.
+- macOS: an isolated real-model headless task used a supported POSIX shell
+  write and an independent read, then persisted a certified checkpoint before
+  the completed turn.
+- Windows: an isolated real-model task used
+  `pwsh Set-Content -LiteralPath` and an independent read, then persisted a
+  certified checkpoint before the completed turn.
+
+Both final-SHA runs used clean public checkouts and isolated `DSH_HOME`
+directories. They establish native behavior for the bounded v0.1 command
+subset; they do not claim support for shell or PowerShell syntax outside the
+subset documented in `COMPATIBILITY.md`.
