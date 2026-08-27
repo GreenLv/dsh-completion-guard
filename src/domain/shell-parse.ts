@@ -1,4 +1,5 @@
 import type { GuardOperation } from './types.js'
+import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
 
 /**
  * v0.1 certifiable command subset parser.
@@ -132,16 +133,11 @@ function isLiteralPath(value: string): boolean {
   return value.length > 0 && !DYNAMIC_PATH.test(value)
 }
 
-/** v0.1 whitelist: single foreground simple commands only. */
-const SHELL_FILE_TOOLS = new Set(['printf', 'echo', 'touch', 'cat'])
+/** v0.1 whitelist: single foreground simple commands only (manifest-driven). */
+const SHELL_FILE_TOOLS = new Set(COMMAND_SURFACE_MANIFEST.fileTools)
 /** Read-only inspection tools: every pathish argument counts as a read effect. */
-const SHELL_READ_TOOLS = new Set(['cat', 'grep', 'rg', 'head', 'tail', 'wc', 'sed'])
-const SHELL_RUN_EXECUTABLES = new Set([
-  'node', 'python', 'python3', 'pnpm', 'npm', 'yarn', 'bun',
-  'pytest', 'vitest', 'jest', 'tsc', 'eslint', 'mypy', 'ruff', 'prettier',
-  'go', 'cargo', 'make', 'cmake', 'git', 'mvn', 'gradle', 'tox', 'nox',
-  'dsh',
-])
+const SHELL_READ_TOOLS = new Set(COMMAND_SURFACE_MANIFEST.readTools)
+const SHELL_RUN_EXECUTABLES = new Set(COMMAND_SURFACE_MANIFEST.runExecutables)
 
 /**
  * Whether an executable carries run semantics (as opposed to the tiny
@@ -399,12 +395,7 @@ function readPwshUnsupported(command: string): { unsupported: boolean; reason?: 
 }
 
 /** PowerShell v0.2 subset: external executables with literal arguments. */
-const PWSH_EXTERNAL_EXECUTABLES = new Set([
-  'node', 'python', 'python3', 'pnpm', 'npm', 'yarn', 'bun',
-  'pytest', 'vitest', 'jest', 'tsc', 'eslint', 'mypy', 'ruff', 'prettier',
-  'go', 'cargo', 'make', 'cmake', 'git', 'mvn', 'gradle', 'tox', 'nox',
-  'dsh',
-])
+const PWSH_EXTERNAL_EXECUTABLES = new Set(COMMAND_SURFACE_MANIFEST.pwshExternalExecutables)
 
 /**
  * Parse one PowerShell command against the v0.2 subset: a single, directly

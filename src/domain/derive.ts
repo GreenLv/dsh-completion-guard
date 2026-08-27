@@ -1,4 +1,4 @@
-import { captureItem, extractMethod, extractOperation, segmentClauses } from './capture.js'
+import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses } from './capture.js'
 import { certifyCheckpoint } from './checkpoint.js'
 import { evidenceFromPersistedToolResult, extractTextContent, withDurability } from './evidence.js'
 import { supersedeItem } from './supersession.js'
@@ -146,6 +146,9 @@ export function deriveProjection(
         const content = (data?.content as unknown[] | undefined) ?? []
         const text = extractTextContent(content)
         if (!text.trim()) break
+        // Informational reports (acceptance receipts, pasted summaries/logs)
+        // are not task instructions and never become contract items.
+        if (isInformationalMessage(text)) break
         insertItems(projection, text, `m${event.seq}`, scope)
         break
       }

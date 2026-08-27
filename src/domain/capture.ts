@@ -1,4 +1,5 @@
 import { normalizeClause, sanitizeClauseText, sha256 } from './canonicalize.js'
+import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
 import type { GuardItem, GuardItemKind, GuardOperation } from './types.js'
 
 const CLAUSE_PATTERNS: Array<[GuardItemKind, RegExp]> = [
@@ -44,17 +45,32 @@ export function extractMethod(text: string): string | undefined {
   return undefined
 }
 
-const OPERATION_PATTERNS: Array<[GuardOperation, RegExp]> = [
-  ['create', /创建|生成|新建|touch|\bcreates?\b|\bcreated\b|\bcreating\b|\bwrite\b|写入/i],
-  ['modify', /修改|编辑|更改|modif(?:y|ies|ied|ying)|\bedit\b|改/i],
-  ['read', /读取|阅读|打开|读(?![A-Za-z0-9])|\bread\b/i],
-  ['verify', /验证|确认|确保|检查|verif(?:y|ies|ied|ying)|\bconfirm\b|\bconfirms\b|\bconfirmed\b|\bensure\b/i],
-  // The v0.2 process-verb set: task-level actions the agent performs through a
-  // shell run (pull/sync/update/commit/push/install/restart/...) map to the
-  // run operation so their completion evidence — a successful run in scope —
-  // can close them.
-  ['run', /运行|执行|拉取|获取|同步|更新|下载|安装|部署|上传|提交|推送|发布|升级|重启|重新启动|重载|\brun\b|execute(?:d)?|\bpull\b|\bfetch\b|\bclone\b|\bsync\b|\bupdate\b|\binstall\b|\bdeploy\b|\bcommit\b|\bpush\b|\brelease\b|\bdownload\b|\bupload\b|\brestart\b|\breload\b|\breboot\b/i],
-]
+const OPERATION_PATTERNS: Array<[GuardOperation, RegExp]> = COMMAND_SURFACE_MANIFEST.operationVerbs.map((entry) => [entry.op, new RegExp(entry.pattern, 'i')])
+
+/**
+ * Whether a whole user message reads as an informational report (acceptance
+ * receipt, progress summary, pasted log) rather than a task instruction.
+ * Evaluation is deliberately conservative: reports are detected only when the
+ * shape is clearly report-like (markdown headings, bold key/value lines, list
+ * or table rows, evidence terms) AND no sentence opens with an imperative, and
+ * any question mark keeps the message a task. False positives here would drop
+ * real instructions, so plain short sentences are never treated as reports.
+ */
+export function isInformationalMessage(text: string): boolean {
+  if (!text.trim()) return false
+  if (/[？?]|是否|是不是/.test(text)) return false
+  const lines = text.split(/\r?\n/)
+  const titledLines = lines.filter((line) => /^\s{0,3}#{1,6}\s+/.test(line)).length
+  const evidenceLines = lines.filter((line) => /^\s*(?:[-*|]\s{0,2}|\*\*.+?\*\*)/.test(line)).length
+  const evidenceTerms = (text.match(/\b(?:commit|passed|failed|exit\s+code|checkpoint|verify|回执|汇总|状态|通过|全绿|验收|读回|回读)\b|✓|\b[0-9a-f]{40}\b/g) ?? []).length
+  const reportShape = (titledLines >= 1 && evidenceTerms >= 2)
+    || (evidenceLines >= 2 && evidenceTerms >= 2)
+    || evidenceTerms >= 4
+  if (!reportShape) return false
+  const imperativeLead = /^(?:请|请你|麻烦|帮我|需要你|你看看|看一下|检查一下|分析|列出|回顾|修复|推送|安装|确认|验证|能否|能不能)/i
+  const sentences = text.split(/(?<=[。！？；\n])|(?<=[.!?])(?=\s|$)/)
+  return !sentences.some((sentence) => imperativeLead.test(sentence.trim()))
+}
 
 /**
  * Detect an explicit operation/effect in a clause ("创建" → create,

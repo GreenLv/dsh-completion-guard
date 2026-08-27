@@ -235,7 +235,7 @@ const NON_RUNNING_PREFIXES = [
 ]
 
 /** Discovery/version/inspection commands, not verification runs. */
-const INSPECTION_COMMANDS = /\b(?:which|where|whereis|type|command\s+-v|grep|rg|cat|less|head|tail|find|ls|dir)\b|\s(?:--version|-V|-v)\s*$|\s--version\b/i
+const INSPECTION_COMMANDS = /\b(?:which|where|whereis|type|command\s+-v|grep|rg|cat|less|head|tail|find|ls|dir)\b|\s(?:--version|-V|-v|--help|-h)\s*$|\s(?:--version|--help)\b/i
 
 /** Shell constructs that mask the real exit status or detach the check. */
 const MASKING_CONSTRUCTS = [

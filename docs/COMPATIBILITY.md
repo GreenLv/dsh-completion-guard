@@ -48,12 +48,19 @@ The slash command renders in the Web command directory and its on/off/status/dia
 
 ## Certifiable command subset
 
-Context Guard v0.1 is **not** a general Bash or PowerShell static analyzer. Only
+Context Guard v0.2 is **not** a general Bash or PowerShell static analyzer. Only
 the small, auditable grammar below can produce `executable`, `operation` and
 `subject`; any other command parses as `unsupported` (unterminated quotes parse
 as `malformed`) with EMPTY executables and operations, so unrecognized syntax
 can never certify an operation. False negatives are preferred over false
 positives: an uncertain command keeps its item incomplete.
+
+The enumerations that define this surface (tools, executables, clause verbs)
+are declared once in `src/domain/manifest.ts`; the parsers and the contract
+capture read from that single data source, which test-time validation keeps
+non-empty and duplicate-free with the documented verb priority order. The
+manifest ships with the package and is not runtime-writable: widening the
+surface lowers the evidence bar, so it changes only through a release.
 
 ### Supported POSIX shell (single foreground simple command)
 

@@ -7,6 +7,10 @@ export interface RecoveryOptions {
 }
 
 export const DEFAULT_RECOVERY_CHAR_BUDGET = 4000
+const MAX_RECOVERY_ITEMS = 8
+const MAX_RECOVERY_EVIDENCE = 20
+const MORE_ITEMS_RULE = (remaining: number) => `…(${remaining} more open items; the full list is in the checkpoint tool response)`
+const MORE_EVIDENCE_RULE = (remaining: number) => `…(${remaining} more evidence rows)`
 const COMPLETION_RULE = 'Obtain a Context Guard checkpoint from matching durable evidence before claiming completion.'
 
 /**
@@ -63,22 +67,40 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
   }
 
   const items = openItems(projection)
-  for (const item of items.filter((item) => item.kind === 'requirement')) {
-    if (!push(`[${item.id}] ${item.normalizedText}`)) return finalize()
+  const listedIds = new Set<string>()
+  const pushItems = (list: GuardItem[], render: (item: GuardItem) => string): boolean => {
+    let count = 0
+    for (const item of list) {
+      if (count >= MAX_RECOVERY_ITEMS) {
+        // Best-effort fold notice; evidence rows that follow stay valuable.
+        push(MORE_ITEMS_RULE(list.length - count))
+        return true
+      }
+      if (!push(render(item))) return false
+      listedIds.add(item.id)
+      count += 1
+    }
+    return true
   }
-  for (const item of items.filter((item) => item.kind === 'prohibition')) {
-    if (!push(`[${item.id}] DO NOT ${item.normalizedText}`)) return finalize()
-  }
-  for (const item of items.filter((item) => item.kind === 'acceptance')) {
-    if (!push(`[${item.id}] VERIFY ${item.normalizedText}`)) return finalize()
-  }
+  const requirementItems = items.filter((item) => item.kind === 'requirement')
+  if (!pushItems(requirementItems, (item) => `[${item.id}] ${item.normalizedText}`)) return finalize()
+  const prohibitionItems = items.filter((item) => item.kind === 'prohibition')
+  if (!pushItems(prohibitionItems, (item) => `[${item.id}] DO NOT ${item.normalizedText}`)) return finalize()
+  const acceptanceItems = items.filter((item) => item.kind === 'acceptance')
+  if (!pushItems(acceptanceItems, (item) => `[${item.id}] VERIFY ${item.normalizedText}`)) return finalize()
   // Surface the real evidence IDs the model may cite, so a checkpoint attempt
   // can bind actual evidence instead of guessing identifiers.
   const citableEvidence = [...projection.evidence.values()]
     .filter((evidence) => evidence.epoch === projection.epoch && evidence.outcome === 'success')
     .sort((a, b) => (a.id < b.id ? -1 : 1))
+  let evidenceCount = 0
   for (const evidence of citableEvidence) {
+    if (evidenceCount >= MAX_RECOVERY_EVIDENCE) {
+      push(MORE_EVIDENCE_RULE(citableEvidence.length - evidenceCount))
+      break
+    }
     if (!push(`evidence ${evidence.id} ${evidence.toolName} ${evidence.subjects.join(',') || '-'} ${evidence.surfaces.join(',')}`)) return finalize()
+    evidenceCount += 1
   }
   for (const item of [...projection.items.values()].filter((item) => item.status === 'superseded')) {
     if (item.supersededBy && !push(`[${item.id} -> ${item.supersededBy}]`)) return finalize()
@@ -86,10 +108,11 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
   for (const binding of options.rejectedBindings ?? []) {
     if (!push(`rejected ${binding.itemId}: ${binding.reason}`)) return finalize()
   }
-  // Best-effort actionable hints: they never displace the prioritized item and
-  // evidence lines when the budget is tight.
+  // Best-effort actionable hints for the LISTED items only: folded items never
+  // leak back through the hint lines, and hints never displace the prioritized
+  // item and evidence lines when the budget is tight.
   for (const item of items) {
-    if (item.kind === 'prohibition') continue
+    if (item.kind === 'prohibition' || !listedIds.has(item.id)) continue
     push(`closing hint [${item.id}]: ${closingHint(projection, item)}`)
   }
   push(COMPLETION_RULE)

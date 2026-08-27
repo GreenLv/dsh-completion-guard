@@ -46,6 +46,8 @@ export function createCheckpointTool(
                 tool: { type: 'string' },
                 subjects: { type: 'array', items: { type: 'string' } },
                 surfaces: { type: 'array', items: { type: 'string' } },
+                outcome: { type: 'string' },
+                capabilities: { type: 'array', items: { type: 'string' } },
               },
             },
           },
@@ -69,7 +71,7 @@ export function createCheckpointTool(
       status: 'certified' | 'incomplete' | 'unknown'
       contract_revision: number
       open_items: string[]
-      available_evidence: Array<{ id: string; tool: string; subjects: string[]; surfaces: string[] }>
+      available_evidence: Array<{ id: string; tool: string; subjects: string[]; surfaces: string[]; outcome: string; capabilities: string[] }>
       rejected_bindings: Array<{ item_id: string; reason: string; hint?: string }>
     }> {
       const projection = getProjection()
@@ -90,6 +92,8 @@ export function createCheckpointTool(
           tool: evidence.toolName,
           subjects: evidence.subjects,
           surfaces: evidence.surfaces,
+          outcome: evidence.outcome,
+          capabilities: evidence.capabilities,
         }))
       return {
         status: result.status,

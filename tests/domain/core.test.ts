@@ -4,7 +4,7 @@ import {
   canonicalizePath, captureClause, certifyCheckpoint, classifyCompletionClaim, createProjection, decideTurnStopping, segmentClauses,
   deriveProjection, evidenceFromPersistedToolResult, extractOperation, goalCompletionDenial, isDeterministicCheck,
   isWholeTaskCompletionClaim, latestAssistantText, normalizeClause, parsePwshCommand, parseShellCommand, renderRecoveryPacket, sha256,
-  sanitizeClauseText, sanitizeUrl, withDurability,
+  sanitizeClauseText, sanitizeUrl, withDurability, COMMAND_SURFACE_MANIFEST, isInformationalMessage, validateManifest,
 } from '../../src/domain/index.js'
 
 const OPT_IN = { activation: 'opt-in' as const }
@@ -1511,7 +1511,10 @@ describe('domain core', () => {
     expect(isDeterministicCheck('python -m unittest discover -s tests')).toBe(true)
     expect(isDeterministicCheck('python3 -m pytest tests/domain')).toBe(true)
     expect(isDeterministicCheck('python -m unittest -v 2>&1')).toBe(true)
-    expect(isDeterministicCheck('python -m unittest --help')).toBe(true)
+    // Help/version flags are inspection, never verification runs.
+    expect(isDeterministicCheck('python -m unittest --help')).toBe(false)
+    expect(isDeterministicCheck('python -m unittest -h')).toBe(false)
+    expect(isDeterministicCheck('pnpm test --help')).toBe(false)
     const evidence = evidenceFromPersistedToolResult(
       { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'python -m unittest 2>&1' }) },
       { seq: 5, textContent: 'Ran 8 tests OK' },
@@ -1685,4 +1688,73 @@ describe('domain core', () => {
     expect(isDeterministicCheck('dsh --version')).toBe(false)
     // `grep`/`cat` reads remain inspection: never deterministic checks either.
     expect(isDeterministicCheck('grep -n dsh-dream-skin config/dsh/plugins.toml')).toBe(false)
+  })
+
+  it('v0.2: the command-surface manifest validates and drives the parsers', () => {
+    expect(validateManifest()).toEqual([])
+    const broken = validateManifest({
+      ...COMMAND_SURFACE_MANIFEST,
+      fileTools: [],
+      runExecutables: ['git'],
+      pwshExternalExecutables: [],
+      operationVerbs: [
+        { op: 'run', pattern: '\\brun\\b' },
+        { op: 'create', pattern: '创建' },
+      ],
+    })
+    expect(broken.length).toBeGreaterThanOrEqual(3)
+    expect(broken.map((issue) => issue.path).sort()).toEqual(
+      expect.arrayContaining(['fileTools', 'pwshExternalExecutables', 'operationVerbs']),
+    )
+    // The manifest drives parsing: git and dsh come from the data source.
+    expect(parseShellCommand('git pull --ff-only').executables).toEqual(['git'])
+    expect(parsePwshCommand('dsh plugin list').executables).toEqual(['dsh'])
+  })
+
+  it('v0.2: informational reports are not captured as contract items', () => {
+    const receipt = '# dsh-context-guard 0.1.2 发布与验收闭环 — 汇总回执\n\n## 三个面向的最终状态（2026-08-27 终验读回）\n\n| 面向 | 状态 | 证据 |\n|---|---|---|\n| npm | `0.1.2` = **latest** | commitment `dd402fbaa5d37dd246056d8ecd66430e5f75f412` |\n- 阶段 1 全绿；`pnpm test` -> 107 passed；exit 0\n'
+    expect(isInformationalMessage(receipt)).toBe(true)
+    const pastedLog = '## 阶段 1（仓库级验收）— 全绿\n- pnpm test → 5 文件 / 107 passed\n- 回执：xxx commit ce457cc 已推送 ✓'
+    expect(isInformationalMessage(pastedLog)).toBe(true)
+    for (const task of [
+      '回顾会话 @更新插件与检查皮肤，看下这个bug是否需要单独发版解决（比如发布新版本0.1.2）。',
+      'macOS上好像遇到了类似的问题，你看看是不是 bug，以及是不是同样的原因，是不是需要修复？',
+      '我在想要不把F1直接与F2/F3合并做成0.2？这次你先别打tag了。',
+      '请帮我安装 dsh-dream-skin 换肤插件，重启 DSH',
+      '需要我在 macOS 上验证一下吗？',
+      '我不懂这些术语，通俗一点解释。',
+    ]) {
+      expect(isInformationalMessage(task), task).toBe(false)
+    }
+    // A report-shaped message that ends with an imperative stays a task.
+    expect(isInformationalMessage('# 状态汇报\n\n## 进度\n- 已完成 3 项。\n请修复剩余问题。')).toBe(false)
+    // Message-level integration: a receipt pasted after real tasks adds no items.
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: receipt }], source: { kind: 'user' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    expect(derived.projection.items.size).toBe(0)
+  })
+
+  it('v0.2: recovery packets fold oversized item and evidence lists', () => {
+    const projection = createProjection()
+    projection.epoch = 1
+    projection.contractRevision = 1
+    const addItem = (id: string) => {
+      const item = captureClause(`替换一下第 ${id} 个文件并记录`, 'm1', id, 1, { cwd: '/work' })
+      projection.items.set(id, item)
+    }
+    for (let i = 1; i <= 12; i += 1) addItem(`R${String(i).padStart(3, '0')}`)
+    projection.evidence.set('E0001', {
+      id: 'E0001', epoch: 1, callId: 'c1', rootCallId: 'c1', toolName: 'bash', toolResultSeq: 1,
+      outcome: 'success', capabilities: ['shell'], subjects: ['/work'], surfaces: ['scope'], boundedSummarySha256: sha256('x'),
+    })
+    const packet = renderRecoveryPacket(projection)
+    expect(packet).toContain('[R001]')
+    expect(packet).toContain('more open items')
+    expect(packet).not.toContain('[R012]')
+    expect(packet).toContain('evidence E0001')
+    const small = renderRecoveryPacket(projection, { charBudget: 120 })
+    expect(small.length).toBeLessThanOrEqual(120)
   })
