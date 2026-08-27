@@ -9,7 +9,7 @@ A task-contract and completion-certification plugin for DeepSeek Harness (DSH). 
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.1.1
+dsh plugin --profile web add dsh-context-guard@0.2.0
 ```
 
 Restart DSH Web, open a session, and enable the guard:
@@ -53,11 +53,11 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## Status and compatibility
 
-Version 0.1.1 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.1). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
+Version 0.2.0 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.0). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
-The 0.1.1 release suite contains 106 tests (86 domain/core). Native acceptance covers the clean foreground Bash-result compatibility fix on macOS and the existing bounded PowerShell model on Windows. The published 0.1.0 npm package was separately installed and loaded in a real macOS Web profile; that historical package check does not establish a public-package runtime check for 0.1.1 or Windows.
+The 0.2.0 release suite contains 124 tests (104 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result; Windows 0.2.0 native acceptance is still pending.
 
-Context Guard v0.1 intentionally recognizes only a small, auditable shell and PowerShell command subset. Unsupported or ambiguous syntax stays incomplete instead of being partially trusted. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact grammar and platform evidence.
+Context Guard recognizes only a small, auditable shell and PowerShell command subset. Unsupported or ambiguous syntax stays incomplete instead of being partially trusted. Compound commands, variables, non-whitelisted executables, file-target redirects, and in-place `sed` remain outside the certifiable surface. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact grammar and platform evidence.
 
 ## Boundaries
 

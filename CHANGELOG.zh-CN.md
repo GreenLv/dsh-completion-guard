@@ -6,21 +6,16 @@
 
 ### 新增
 
-- **以会话 cwd 为基准的 subject 解析（F1）。** 证据 artifact subject 优先按调用 `workdir` 解析；当 shell 工具不携带 workdir（macOS 的 persistent bash/pwsh 工具仅暴露 `command`）时，缺省使用会话 scope cwd。相对路径的 `read`/`write`/`edit`/shell subject 现在能与同一 cwd 派生的契约 subject 匹配，白名单可执行文件的无路径 `run` 也会归因到该 cwd。这消除了 macOS 上 scope 契约永远无法满足的死点，且不降低任何 fail-closed 边界。
-- **可认证命令面扩展（F2）。** POSIX shell 接受 `N>&M` 诊断流复制（`2>&1`）；PowerShell 中未加引号的 `N>&M` 会被剥离；POSIX 侧新增只读检查工具（`grep`、`rg`、`head`、`tail`、`wc`、无 in-place 标志的 `sed`）并产生 read 效果；PowerShell 接受白名单外部可执行文件（`git`、`pnpm`、`npm`、`node`、`python`、`tsc`、`vitest`、`pytest`、`dsh` 等，与 POSIX run 白名单一致，`dsh` 用于插件市场 CLI 执行）且参数必须全为字面值。复合语法、文件目标 fd 重定向、in-place `sed`、变量和非白名单可执行文件仍然 fail-closed。
-- **过程动词的契约映射（F3）。** 任务级动作——拉取/获取/同步/更新/下载/安装/部署/上传/提交/推送/发布/升级/重启/重新启动/重载，以及 `pull`/`fetch`/`clone`/`sync`/`update`/`install`/`deploy`/`commit`/`push`/`release`/`download`/`upload`/`restart`/`reload`/`reboot`——现在把捕获到的条款映射为 `run` 操作，因此 scope 内一次成功的执行即可封闭它们（此前无操作动词的条款默认走状态验证判定面，无法由工作证据本身封闭）。`python -m unittest|doctest|pytest` 现计为确定性检查。
-- **可操作的认证提示。** 被拒的 checkpoint 绑定现在携带 `hint`，指明缺失的判定面并给出贴近现实的证据形态（例如无管道/`;` 的白名单可执行命令）；恢复包为每个未结项追加尽力而为的 `closing hint` 行。这让 fail-closed 的原因可被发现，而无需逆向插件本身，且绝不降低契约强度。
-- **结构化 meta 终端事实（防御性）。** 当 tool/result 的 `meta` 携带 `exitCode`/`exit_code`/`signal` 时，结构化事实优先于文本标记扫描；文本扫描仍为兜底，因此未来把运行状态结构化暴露的上游会被直接信任。
-- **真实工作流 fail-closed 锚点。** 从 2026-08-27 两次 macOS 会话逐字摘录的命令形态（复合 `&&`/`;`/管道检查、`for` 循环、管道 config dump）被固化为回归锚点：命令面扩展绝不能打开它们。
-- **清单驱动的命令面。** 全部枚举（文件/只读工具、run 可执行文件、PowerShell 外部命令、条款动词映射）现在集中在 `src/domain/manifest.ts` 单一数据源，并带自校验测试套件（非空、无重复、POSIX/PowerShell 对齐、动词优先级顺序、正则可编译）。新增工具或动词只是数据变更；清单随包发布且有意不可运行时修改——因为扩宽命令面等于降低证据门槛。
-- **信息性报告不再成为契约项。** 粘贴的验收回执、汇总、日志（markdown 标题、加粗键值行、列表/表格行、证据术语）不再被逐句捕获为 requirement；任何问号或祈使句开头都会让消息保持为任务，因此真实指令绝不会被漏掉。
-- **帮助旗标属于检查类。** `--help`/`-h` 不再计为确定性检查（`python -m unittest --help` 此前会被当作验证——一个误路径修复）。
-- **恢复包折叠。** 超长未结项/证据列表折叠为前 8 项 / 前 20 行证据并带"见 checkpoint 工具"提示；closing hint 只作用于已列出的项，不会通过提示行复活被折叠项。
-- **checkpoint 证据元数据。** `available_evidence` 现在包含 `outcome` 与 `capabilities`，agent 无需猜测即可挑选可认证证据。
+- **按会话 cwd 归因证据。** 当 shell 工具未提供 `workdir` 时，证据会归因到会话 cwd，使相对路径操作和无路径检查能够匹配实际运行所在的仓库。
+- **在不扩大信任边界的前提下支持更多检查。** 字面量 `2>&1`、选定的只读检查命令和白名单 PowerShell 外部命令现在可以产生可认证证据；复合命令、变量、文件目标重定向、in-place `sed` 和非白名单可执行文件仍不支持。
+- **过程动作和诊断结果可认证。** 拉取、安装、提交、推送、发布和重启等动作映射到 run 证据；`python -m unittest`、`doctest` 和 `pytest` 的确定性检查会被识别。被拒的 checkpoint 绑定现在提供可执行提示；DSH 提供结构化退出信息时，Guard 会优先使用这些信息。
+- **长会话恢复更清晰。** 信息性回执不再变成意外任务，`--help` 被视为检查说明而不是通过的验证，超长恢复包会安全折叠，同时暴露证据的 `outcome` 和 `capabilities`。
 
 ### 变更
 
-- `parseShellCommand`/`parsePwshCommand` 保持同一条 fail-closed 原则：无法完整识别的命令仍然产出空的 executables 与 operations。
+- 命令面集中由一个随包发布的 manifest 定义并自校验，并针对真实复合 shell 工作流保留回归测试。解析继续 fail-closed：无法支持或只能部分理解的语法不会产生可认证的 executable 或 operation。
+
+支持语法见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)，发布证据和平台边界见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 ## 0.1.2 - 2026-08-27
 
