@@ -1499,8 +1499,52 @@ describe('domain core', () => {
   it('v0.2: process verbs map scope tasks to run contracts', () => {
     expect(extractOperation('拉取远端最近的两个更新，同步更新插件')).toBe('run')
     expect(extractOperation('我已手动重启，请你收尾，完善文档记录，之后提交并推送。')).toBe('run')
+    expect(extractOperation('重启 DSH 使新皮肤生效')).toBe('run')
+    expect(extractOperation('安装插件后重启 DSH')).toBe('run')
+    expect(extractOperation('restart the DSH web app')).toBe('run')
     expect(extractOperation('确认项目测试通过')).toBe('verify')
     expect(extractOperation('runtime check')).toBeUndefined()
+  })
+
+  it('v0.2: python -m unittest is a deterministic check', () => {
+    expect(isDeterministicCheck('python -m unittest')).toBe(true)
+    expect(isDeterministicCheck('python -m unittest discover -s tests')).toBe(true)
+    expect(isDeterministicCheck('python3 -m pytest tests/domain')).toBe(true)
+    expect(isDeterministicCheck('python -m unittest -v 2>&1')).toBe(true)
+    expect(isDeterministicCheck('python -m unittest --help')).toBe(true)
+    const evidence = evidenceFromPersistedToolResult(
+      { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'python -m unittest 2>&1' }) },
+      { seq: 5, textContent: 'Ran 8 tests OK' },
+      1,
+      'E0001',
+      '/work',
+    )
+    expect(evidence.capabilities).toContain('deterministic-check')
+    expect(evidence.subjects).toContain('/work')
+    // A piped doctor-style check is still not a deterministic check.
+    expect(isDeterministicCheck('python -m unittest 2>&1 | tail -6')).toBe(false)
+  })
+
+  it('v0.2: an install-and-restart task certifies with a shell run and a clean unittest', () => {
+    const cwd = '/Users/lgr59/Documents/Github/codex-sync'
+    const make = (command: string, callId: string) => ([
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件，重启 DSH' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId, name: 'bash', arguments: JSON.stringify({ command }) } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId } } } },
+    ])
+    const derived = deriveProjection(make('python scripts/apply-dsh-plugins.py --apply 2>&1', 'c1'), OPT_IN, { cwd }, true)
+    const items = [...derived.projection.items.values()].filter((i) => i.kind === 'requirement')
+    // 安装 + 重启 share one clause (comma does not segment): one run contract.
+    expect(items.length).toBe(1)
+    expect(items[0].verification.operation).toBe('run')
+    const run = certifyCheckpoint(derived.projection, [{ itemId: items[0].id, evidenceIds: ['E0001'] }], 'C001')
+    expect(run.status).toBe('certified')
+    // And a clean unittest evidence alone closes a verify-style remainder:
+    const derived2 = deriveProjection(make('python -m unittest', 'c2'), OPT_IN, { cwd }, true)
+    const item2 = [...derived2.projection.items.values()].find((i) => i.kind === 'requirement')
+    const verify = certifyCheckpoint(derived2.projection, [{ itemId: item2!.id, evidenceIds: ['E0001'] }], 'C002')
+    expect(verify.status).toBe('certified')
   })
 
   it('v0.2: a macOS-style pull/apply task certifies with run evidence alone', () => {

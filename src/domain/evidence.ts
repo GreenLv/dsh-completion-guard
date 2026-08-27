@@ -206,6 +206,7 @@ const DETERMINISTIC_CHECK_PATTERNS = [
   /\b(?:pnpm|npm|yarn|bun)\s+(?:test|tst|lint|check|typecheck|build)\b/,
   /\b(?:cargo|go|make|cmake|pytest|vitest|jest|eslint|tsc|mypy|ruff|prettier)\b/,
   /\b(?:mvn|gradle)\s+(?:test|check)\b/,
+  /\bpython(?:3)?\s+-m\s+(?:unittest|doctest|pytest)\b/,
 ]
 
 /** Prefixes that only quote or print a command without running a check. */
