@@ -57,6 +57,7 @@ export function createCheckpointTool(
               properties: {
                 item_id: { type: 'string' },
                 reason: { type: 'string' },
+                hint: { type: 'string' },
               },
             },
           },
@@ -69,7 +70,7 @@ export function createCheckpointTool(
       contract_revision: number
       open_items: string[]
       available_evidence: Array<{ id: string; tool: string; subjects: string[]; surfaces: string[] }>
-      rejected_bindings: Array<{ item_id: string; reason: string }>
+      rejected_bindings: Array<{ item_id: string; reason: string; hint?: string }>
     }> {
       const projection = getProjection()
       if (!projection) {
@@ -95,7 +96,11 @@ export function createCheckpointTool(
         contract_revision: result.contractRevision,
         open_items: result.openItems,
         available_evidence,
-        rejected_bindings: result.rejectedBindings.map((binding) => ({ item_id: binding.itemId, reason: binding.reason })),
+        rejected_bindings: result.rejectedBindings.map((binding) => ({
+          item_id: binding.itemId,
+          reason: binding.reason,
+          ...(binding.hint !== undefined ? { hint: binding.hint } : {}),
+        })),
       }
     },
   })

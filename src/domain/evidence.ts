@@ -157,6 +157,25 @@ interface TerminalFacts {
 const PERSISTENT_RESET_LINE = /^The persistent (?:bash|pwsh) shell was reset;/
 const PERSISTENT_TIMEOUT_INTRO = /^Your command timed out after \d+ seconds or experienced an OOM error\. Below is partial output:$/
 
+/**
+ * Structured terminal facts from the tool/result meta (defensive): the pinned
+ * shell renderers currently emit text markers only, but the underlying run
+ * result carries exitCode/signal, so a future harness that surfaces them in
+ * `meta` is trusted directly. Absent structured facts, text scanning remains
+ * the fallback.
+ */
+function structuredTerminalFacts(meta: unknown): TerminalFacts | undefined {
+  const record = asRecord(meta)
+  if (!record) return undefined
+  const rawExit = record.exitCode ?? record.exit_code
+  const rawSignal = record.signal
+  if (rawSignal !== undefined && rawSignal !== null) {
+    return { exitCode: typeof rawExit === 'number' ? rawExit : undefined, negative: true }
+  }
+  if (typeof rawExit === 'number') return { exitCode: rawExit, negative: false }
+  return undefined
+}
+
 function extractTerminalFacts(textContent: string): TerminalFacts {
   const lines = textContent.split(/\r?\n/)
   let index = lines.length - 1
@@ -301,7 +320,7 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput,
     case 'shell':
     case 'pwsh': {
       const command = typeof args.command === 'string' ? args.command : ''
-      const terminal = extractTerminalFacts(result.textContent)
+      const terminal = structuredTerminalFacts(result.meta) ?? extractTerminalFacts(result.textContent)
       const backgrounded = args.run_in_background === true
       const commandDetails = analyzeCommand(command, typeof args.workdir === 'string' ? args.workdir : defaultCwd, call.name)
       const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)

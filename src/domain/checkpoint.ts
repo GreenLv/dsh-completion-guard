@@ -1,12 +1,19 @@
 import { digestStrings, sha256 } from './canonicalize.js'
 import { bindingSatisfies } from './matching.js'
+import { closingHint } from './recovery.js'
 import type { EvidenceBinding, GuardCheckpoint, GuardProjection } from './types.js'
+
+export interface RejectedBinding {
+  itemId: string
+  reason: string
+  hint?: string
+}
 
 export interface CheckpointResult {
   status: GuardCheckpoint['result']
   contractRevision: number
   openItems: string[]
-  rejectedBindings: Array<{ itemId: string; reason: string }>
+  rejectedBindings: RejectedBinding[]
   checkpoint?: GuardCheckpoint
 }
 
@@ -14,7 +21,7 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
   if (projection.integrity !== 'valid') {
     return { status: 'unknown', contractRevision: projection.contractRevision, openItems: openItems(projection), rejectedBindings: [] }
   }
-  const rejectedBindings: Array<{ itemId: string; reason: string }> = []
+  const rejectedBindings: RejectedBinding[] = []
   for (const binding of bindings) {
     const item = projection.items.get(binding.itemId)
     if (!item || item.status === 'superseded') {
@@ -22,11 +29,15 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
       continue
     }
     if (!binding.evidenceIds.length) {
-      rejectedBindings.push({ itemId: binding.itemId, reason: 'no evidence cited' })
+      rejectedBindings.push({ itemId: binding.itemId, reason: 'no evidence cited', hint: closingHint(projection, item) })
       continue
     }
     if (!bindingSatisfies(projection, item, binding.evidenceIds)) {
-      rejectedBindings.push({ itemId: binding.itemId, reason: 'evidence does not match the current verification contract' })
+      rejectedBindings.push({
+        itemId: binding.itemId,
+        reason: 'evidence does not match the current verification contract',
+        hint: closingHint(projection, item, binding.evidenceIds),
+      })
       continue
     }
   }

@@ -9,6 +9,9 @@
 - **以会话 cwd 为基准的 subject 解析（F1）。** 证据 artifact subject 优先按调用 `workdir` 解析；当 shell 工具不携带 workdir（macOS 的 persistent bash/pwsh 工具仅暴露 `command`）时，缺省使用会话 scope cwd。相对路径的 `read`/`write`/`edit`/shell subject 现在能与同一 cwd 派生的契约 subject 匹配，白名单可执行文件的无路径 `run` 也会归因到该 cwd。这消除了 macOS 上 scope 契约永远无法满足的死点，且不降低任何 fail-closed 边界。
 - **可认证命令面扩展（F2）。** POSIX shell 接受 `N>&M` 诊断流复制（`2>&1`）；PowerShell 中未加引号的 `N>&M` 会被剥离；POSIX 侧新增只读检查工具（`grep`、`rg`、`head`、`tail`、`wc`、无 in-place 标志的 `sed`）并产生 read 效果；PowerShell 接受白名单外部可执行文件（`git`、`pnpm`、`npm`、`node`、`python`、`tsc`、`vitest`、`pytest`、`dsh` 等，与 POSIX run 白名单一致，`dsh` 用于插件市场 CLI 执行）且参数必须全为字面值。复合语法、文件目标 fd 重定向、in-place `sed`、变量和非白名单可执行文件仍然 fail-closed。
 - **过程动词的契约映射（F3）。** 任务级动作——拉取/获取/同步/更新/下载/安装/部署/上传/提交/推送/发布/升级/重启/重新启动/重载，以及 `pull`/`fetch`/`clone`/`sync`/`update`/`install`/`deploy`/`commit`/`push`/`release`/`download`/`upload`/`restart`/`reload`/`reboot`——现在把捕获到的条款映射为 `run` 操作，因此 scope 内一次成功的执行即可封闭它们（此前无操作动词的条款默认走状态验证判定面，无法由工作证据本身封闭）。`python -m unittest|doctest|pytest` 现计为确定性检查。
+- **可操作的认证提示。** 被拒的 checkpoint 绑定现在携带 `hint`，指明缺失的判定面并给出贴近现实的证据形态（例如无管道/`;` 的白名单可执行命令）；恢复包为每个未结项追加尽力而为的 `closing hint` 行。这让 fail-closed 的原因可被发现，而无需逆向插件本身，且绝不降低契约强度。
+- **结构化 meta 终端事实（防御性）。** 当 tool/result 的 `meta` 携带 `exitCode`/`exit_code`/`signal` 时，结构化事实优先于文本标记扫描；文本扫描仍为兜底，因此未来把运行状态结构化暴露的上游会被直接信任。
+- **真实工作流 fail-closed 锚点。** 从 2026-08-27 两次 macOS 会话逐字摘录的命令形态（复合 `&&`/`;`/管道检查、`for` 循环、管道 config dump）被固化为回归锚点：命令面扩展绝不能打开它们。
 
 ### 变更
 

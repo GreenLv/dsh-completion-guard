@@ -1613,3 +1613,76 @@ describe('domain core', () => {
     expect(piped.status).toBe('unsupported')
     expect(piped.operations).toEqual([])
   })
+
+  it('v0.2: structured meta terminal facts win over text, else text falls back', () => {
+    const structured = evidenceFromPersistedToolResult(
+      { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test' }) },
+      { seq: 5, meta: { exitCode: 1 }, textContent: '' },
+      1,
+      'E0001',
+    )
+    expect(structured.outcome).toBe('failure')
+    const structuredZero = evidenceFromPersistedToolResult(
+      { callId: 'c2', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test' }) },
+      { seq: 6, meta: { exit_code: 0 }, textContent: 'no marker text' },
+      1,
+      'E0002',
+    )
+    expect(structuredZero.outcome).toBe('success')
+    const signal = evidenceFromPersistedToolResult(
+      { callId: 'c3', name: 'bash', arguments: JSON.stringify({ command: 'sleep 1' }) },
+      { seq: 7, meta: { signal: 'SIGTERM' }, textContent: '' },
+      1,
+      'E0003',
+    )
+    expect(signal.outcome).toBe('failure')
+    const fallback = evidenceFromPersistedToolResult(
+      { callId: 'c4', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test' }) },
+      { seq: 8, meta: { path: '/work/archive' }, textContent: '[timed out after 1000ms]' },
+      1,
+      'E0004',
+    )
+    expect(fallback.outcome).toBe('failure')
+  })
+
+  it('v0.2: rejected bindings and recovery packets carry actionable closing hints', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: '/work/other.txt' }) } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c1' } }, meta: { path: '/work/other.txt' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+    expect(result.status).toBe('incomplete')
+    expect(result.rejectedBindings).toHaveLength(1)
+    expect(result.rejectedBindings[0].hint).toContain('scope run effect')
+    const packet = renderRecoveryPacket(derived.projection)
+    expect(packet).toContain('closing hint [R001]:')
+    expect(packet).toContain('scope run effect')
+  })
+
+  it('v0.2: real-workflow fail-closed anchors (sessions 2026-08-27) stay rejected', () => {
+    // Commands taken verbatim from the two real macOS sessions (plugin-refresh
+    // session-316b36c9 and the dsh-dream-skin install session): the surface
+    // growth must never open these compound/inspection forms.
+    const rejectedCommands = [
+      'git status --short 2>&1 && echo "---HEAD---" && git log --oneline -3 2>&1',
+      'git push origin main 2>&1; echo "exit=$?"',
+      'for p in dshmarket "@liustack/modlens" "@linxin666/dsh-client-ui-skin-center"; do f="$HOME/.dsh/profiles/web/node_modules/$p/package.json"; done',
+      'cat "$HOME/.dsh/..." 2>&1 | sed -n \'1,200p\'',
+      './dsh dump-config 2>&1 | grep dsh-dream-skin',
+      'python -m unittest 2>&1 | tail -6',
+    ]
+    for (const command of rejectedCommands) {
+      const parsed = parseShellCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
+    // `dsh --version` parses but is inspection-only, never a deterministic check.
+    expect(isDeterministicCheck('dsh --version')).toBe(false)
+    // `grep`/`cat` reads remain inspection: never deterministic checks either.
+    expect(isDeterministicCheck('grep -n dsh-dream-skin config/dsh/plugins.toml')).toBe(false)
+  })

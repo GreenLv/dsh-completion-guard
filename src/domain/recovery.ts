@@ -1,4 +1,5 @@
 import type { GuardItem, GuardProjection } from './types.js'
+import { evidenceCoverage } from './matching.js'
 
 export interface RecoveryOptions {
   rejectedBindings?: Array<{ itemId: string; reason: string }>
@@ -7,6 +8,42 @@ export interface RecoveryOptions {
 
 export const DEFAULT_RECOVERY_CHAR_BUDGET = 4000
 const COMPLETION_RULE = 'Obtain a Context Guard checkpoint from matching durable evidence before claiming completion.'
+
+/**
+ * An actionable one-line hint for how an open item's verification contract can
+ * be closed. It never weakens the contract; it only names the missing facet so
+ * the agent can produce the right evidence shape instead of reverse-engineering
+ * the guard. When `evidenceIds` is given, the hint accounts for what those
+ * evidence already cover.
+ */
+export function closingHint(projection: GuardProjection, item: GuardItem, evidenceIds?: string[]): string {
+  const verification = item.verification
+  const parts: string[] = []
+  if (evidenceIds?.length) {
+    const coverage = evidenceIds
+      .map((id) => projection.evidence.get(id))
+      .filter((value) => value !== undefined)
+      .map((value) => evidenceCoverage(item, value!))
+    const any = coverage.some((facet) => facet.artifact || facet.effect || facet.method || facet.verify || facet.run)
+    if (!any) parts.push('cited evidence matches no facet')
+  }
+  if (verification.method) parts.push(`method '${verification.method}'`)
+  if (verification.subject && verification.surface === 'artifact') parts.push(`subject '${verification.subject}'`)
+  if (verification.subject && verification.surface === 'scope') parts.push('in the scope directory')
+  const operation = verification.operation
+  if (operation === 'run') {
+    parts.push('needs a scope run effect: a whitelisted executable (git/pnpm/python/dsh/...) without pipes, `;` or `&&`, e.g. `python -m unittest`')
+  } else if (operation === 'create' || operation === 'write' || operation === 'modify') {
+    parts.push('needs an effect evidence AND an independent same-subject state verification (read tool or a deterministic check)')
+  } else if (operation === 'verify') {
+    parts.push('needs a read or deterministic-check evidence on the contract subject')
+  } else if (operation === 'read') {
+    parts.push('needs a read evidence on the contract subject')
+  } else {
+    parts.push('needs a state-verification evidence (read tool, or a deterministic check run in scope) matching the subject')
+  }
+  return parts.join('; ')
+}
 
 export function openItems(projection: GuardProjection): GuardItem[] {
   return [...projection.items.values()]
@@ -48,6 +85,12 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
   }
   for (const binding of options.rejectedBindings ?? []) {
     if (!push(`rejected ${binding.itemId}: ${binding.reason}`)) return finalize()
+  }
+  // Best-effort actionable hints: they never displace the prioritized item and
+  // evidence lines when the budget is tight.
+  for (const item of items) {
+    if (item.kind === 'prohibition') continue
+    push(`closing hint [${item.id}]: ${closingHint(projection, item)}`)
   }
   push(COMPLETION_RULE)
   return finalize()
