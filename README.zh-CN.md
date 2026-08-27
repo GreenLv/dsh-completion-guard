@@ -19,7 +19,27 @@ dsh plugin --profile web add dsh-context-guard@0.1.0
 /context-guard status
 ```
 
-默认采用 opt-in，不会自动保护已有会话。`status` 会返回启用状态、当前 epoch 和合同修订、待完成与已通过条目数量、证据数量及完整性状态；`off` 停止本会话的捕获和门禁，但保留已有历史；`diagnose` 返回有界的诊断信息。
+默认采用 opt-in。`status` 会返回启用状态、当前 epoch 和合同修订、待完成与已通过条目数量、证据数量及完整性状态；`off` 停止本会话的捕获和门禁，但保留已有历史；`diagnose` 返回有界的诊断信息。
+
+### 启用模式
+
+`activation` 支持两个值：
+
+| 值 | 行为 |
+| --- | --- |
+| `opt-in` | 默认值。只有本会话记录了 `/context-guard on` 后才开始保护。 |
+| `always` | 在重放会话日志前就进入启用状态。`/context-guard off` 会关闭本会话的 Guard，直到后续再次执行 `/context-guard on`。 |
+
+如需让 Context Guard 在某个 DSH profile 中自动启用，请在该 profile 的 `cordis.patch.yml` 中按插件 ID 增加配置覆盖。macOS 或 Linux 默认 Web profile 的文件通常位于 `~/.dsh/profiles/web/cordis.patch.yml`：
+
+```yaml
+- id: context-guard
+  name: dsh-context-guard
+  config:
+    activation: always
+```
+
+修改后重启对应的 DSH profile，再在会话中执行 `/context-guard status`，确认 Guard 已启用。由于 `always` 会在日志重放前启用 Guard，把已有 profile 改为该模式后，已有会话在重建日志时也可能捕获更早的用户消息。如果只希望从明确的逐会话命令开始保护，请保留 `opt-in`。
 
 启用后，Context Guard 从用户直接给出的要求和验收条件建立合同。工具结果只有在 DSH 持久化后才会成为可引用证据。模型在声称整个任务完成前，必须调用注入的 `context_guard_checkpoint` 工具并绑定匹配的证据 ID；不完整、过期或对象不匹配的绑定不能签发证书。
 
@@ -35,7 +55,7 @@ dsh plugin --profile web add dsh-context-guard@0.1.0
 
 0.1.0 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.0)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
-0.1.0 源码测试共 104 项，其中 domain/core 85 项。macOS 与 Windows 的隔离真实模型验收均已确认：受支持的 shell 或 PowerShell 写入配合独立 read，可以在任务完成声明前为匹配合同签发证书。公开 npm 包还在真实 macOS Web profile 中完成了安装和加载验证；这里不声称 Windows 已再次从公开包执行同一轮验收。
+已发布的 0.1.0 版本测试共 104 项，其中 domain/core 85 项。macOS 与 Windows 的隔离真实模型验收均已确认：受支持的 shell 或 PowerShell 写入配合独立 read，可以在任务完成声明前为匹配合同签发证书。公开 npm 包还在真实 macOS Web profile 中完成了安装和加载验证；这里不声称 Windows 已再次从公开包执行同一轮验收。
 
 Context Guard v0.1 只识别一小组可审计的 shell 与 PowerShell 命令。无法支持或存在歧义的语法会保持 incomplete，而不会被部分信任。精确语法和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 

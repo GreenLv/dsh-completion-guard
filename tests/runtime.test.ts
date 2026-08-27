@@ -75,6 +75,22 @@ describe('runtime derivation', () => {
     expect(runtime.projection.enabled).toBe(true)
   })
 
+  it('replays existing messages under always while honoring later off and on commands', () => {
+    const session = Session.create(SessionId('derive-always-replay-session'))
+    userText(session, 'ship before.txt')
+    enableCommand(session, 'off')
+    userText(session, 'ship ignored.txt')
+    enableCommand(session, 'on')
+    userText(session, 'ship after.txt')
+
+    const runtime = createRuntime(fakeAgent(session), ALWAYS)
+    const clauses = [...runtime.projection.items.values()].map((item) => item.normalizedText)
+    expect(runtime.projection.enabled).toBe(true)
+    expect(clauses).toContain('ship before.txt')
+    expect(clauses).not.toContain('ship ignored.txt')
+    expect(clauses).toContain('ship after.txt')
+  })
+
   it('marks recovery needed after a compaction summary', () => {
     const session = Session.create(SessionId('recovery-session'))
     enableCommand(session, 'on')

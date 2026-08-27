@@ -15,13 +15,14 @@ Context Guard does not own Goal, Todo, Compaction, or continuation. It intervene
 
 ## Durable state model
 
-The DSH Session append-only log is the source of truth. Context Guard **appends no custom session event types**: the persisted event vocabulary is harness-owned and the current persistence layer refuses unknown event types, so every piece of guard state is derived purely from the natively persisted events DSH already writes:
+The effective plugin configuration and the DSH Session append-only log are the inputs to the rebuildable Guard projection. Context Guard **appends no custom session event types**: the persisted event vocabulary is harness-owned and the current persistence layer refuses unknown event types. The `activation` configuration supplies the initial enablement state, while all later session state is derived from the natively persisted events DSH already writes:
 
-- `command/run` — enablement (`/context-guard on|off`) and epoch transitions;
+- effective plugin configuration — initial enablement (`opt-in` starts disabled; `always` starts enabled before log replay);
+- `command/run` — later enablement (`/context-guard on|off`) and epoch transitions;
 - `user/message` — captured contract clauses;
 - `tool/call` + `tool/result` — bounded evidence and completion-certificate attempts.
 
-The in-memory `GuardProjection` is a rebuildable cache: `deriveProjection` replays that native log deterministically, recomputes every contract, evidence, and certificate, and flags `corrupt` when a recorded certificate no longer re-derives from the evidence in the log. Captured contracts always carry a concrete subject/surface, so no unrelated evidence can close a requirement.
+The in-memory `GuardProjection` is a rebuildable cache: `deriveProjection` applies the effective activation configuration, replays the native log deterministically, recomputes every contract, evidence, and certificate, and flags `corrupt` when a recorded certificate no longer re-derives from the evidence in the log. Under `always`, replay begins enabled; changing an existing profile from `opt-in` to `always` can therefore bring earlier persisted user messages into the derived contract. A recorded `/context-guard off` disables capture from that point until a later `on`. Captured contracts always carry a concrete subject/surface, so no unrelated evidence can close a requirement.
 
 ## Synchronization
 

@@ -21,6 +21,26 @@ Restart DSH Web, open a session, and enable the guard:
 
 Activation is opt-in by default. `status` reports whether the guard is enabled, the current epoch and contract revision, pending and passed item counts, the evidence count, and integrity state. `off` stops capture and gating for the session while preserving its prior history; `diagnose` returns a bounded diagnostic view.
 
+### Activation modes
+
+`activation` accepts two values:
+
+| Value | Behavior |
+| --- | --- |
+| `opt-in` | Default. A session remains unprotected until `/context-guard on` is recorded in that session. |
+| `always` | Starts enabled before the session log is replayed. `/context-guard off` disables the guard for that session until a later `/context-guard on`. |
+
+To start Context Guard automatically for sessions in a DSH profile, add an ID-targeted override to that profile's `cordis.patch.yml`. For the default Web profile on macOS or Linux, this file is normally `~/.dsh/profiles/web/cordis.patch.yml`:
+
+```yaml
+- id: context-guard
+  name: dsh-context-guard
+  config:
+    activation: always
+```
+
+Restart that DSH profile after changing the configuration, then run `/context-guard status` in a session to confirm that the guard is enabled. Because `always` enables the guard before replay, applying it to a profile that already has persisted sessions can cause earlier user messages in those sessions to be captured when their logs are rebuilt. Use `opt-in` when protection should begin only after an explicit per-session command.
+
 Once enabled, Context Guard captures direct user requirements and acceptance criteria. Tool results become citable evidence only after DSH persists them. Before the model claims the whole task is complete, it must call the injected `context_guard_checkpoint` tool with matching evidence IDs; an incomplete or stale binding cannot certify completion.
 
 ## What it protects
@@ -35,7 +55,7 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 Version 0.1.0 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.0). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
-The 0.1.0 source suite contains 104 tests (85 domain/core). Native isolated real-model acceptance on macOS and Windows verified that a supported shell or PowerShell write plus an independent read can certify the matching contract before task completion. The public npm package has also been installed and loaded in a real macOS Web profile; this does not claim a second public-package run on Windows.
+The published 0.1.0 release suite contains 104 tests (85 domain/core). Native isolated real-model acceptance on macOS and Windows verified that a supported shell or PowerShell write plus an independent read can certify the matching contract before task completion. The public npm package has also been installed and loaded in a real macOS Web profile; this does not claim a second public-package run on Windows.
 
 Context Guard v0.1 intentionally recognizes only a small, auditable shell and PowerShell command subset. Unsupported or ambiguous syntax stays incomplete instead of being partially trusted. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact grammar and platform evidence.
 
