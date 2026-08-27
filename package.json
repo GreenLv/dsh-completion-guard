@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-guard",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A task-contract and completion-certification layer for DeepSeek Harness.",
   "type": "module",
   "main": "dist/index.js",

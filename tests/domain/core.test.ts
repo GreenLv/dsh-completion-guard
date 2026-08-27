@@ -166,6 +166,33 @@ describe('domain core', () => {
     }
   })
 
+  it('recognizes persistent shell exit reports as terminal facts', () => {
+    const bashReset = 'The persistent bash shell was reset; the next bash call starts from the workspace with a fresh current directory and environment.'
+    const pwshReset = 'The persistent pwsh shell was reset; the next pwsh call starts from the workspace with a fresh current directory and environment.'
+    const cases: Array<[string, string, 'success' | 'failure']> = [
+      [`[shell exited: code 1]\n${bashReset}`, 'bash', 'failure'],
+      [`[shell killed by signal: SIGTERM]\n${bashReset}`, 'bash', 'failure'],
+      [`[shell exited]\n${bashReset}`, 'bash', 'failure'],
+      [`Your command timed out after 30 seconds or experienced an OOM error. Below is partial output:\npartial output here\n${bashReset}`, 'bash', 'failure'],
+      [`[shell exited: code 1]\n${pwshReset}`, 'pwsh', 'failure'],
+      [`[shell exited: code 0]\n${bashReset}`, 'bash', 'success'],
+      // Marker shapes without the prose wrapper are still terminal facts.
+      ['[shell exited: code 1]', 'bash', 'failure'],
+      // A clean result that merely echoes the reset prose is not a terminal
+      // fact: without any marker it stays a clean success.
+      [`output ends with reset prose\n${bashReset}`, 'bash', 'success'],
+    ]
+    for (const [index, [textContent, name, expected]] of cases.entries()) {
+      const evidence = evidenceFromPersistedToolResult(
+        { callId: `c-persistent-${index}`, name, arguments: JSON.stringify({ command: 'pnpm test' }) },
+        { seq: 20 + index, textContent },
+        1,
+        `E-persistent-${index}`,
+      )
+      expect(evidence.outcome, `${name}: ${textContent}`).toBe(expected)
+    }
+  })
+
   it('uses the last recorded exit code so a fake leading marker cannot mask a trailing failure', () => {
     const fake = evidenceFromPersistedToolResult(
       { callId: 'call-1', name: 'bash', arguments: JSON.stringify({ command: 'echo "[exit code: 0]" && false' }) },

@@ -127,22 +127,47 @@ function analyzeCommand(command: string, workdir: unknown, toolName: string): Co
  * of the rendered result (the DSH rendering protocol). A marker-like substring
  * in ordinary stdout — `documentation says [timed out after 1000ms] but command
  * succeeded` — is not a terminal fact.
+ *
+ * Two renderer families exist. The session shell tools (`dsh-tool-bash` /
+ * `dsh-tool-pwsh`) append `[exit code: N]` (non-zero only), `[killed by
+ * signal: S]`, `[sandbox: ...]`, and `[timed out after Nms]` as trailing
+ * lines. The persistent shell tools (`dsh-tool-bash-persistent` /
+ * `dsh-tool-pwsh-persistent`) use a non-zero-only `[exit code: N]` for the
+ * normal path but render timeout and shell-session-exit reports as
+ * `[shell exited: code N]` / `[shell killed by signal: S]` / `[shell exited]`
+ * (or a prose timeout intro at the head) followed by a prose reset line
+ * (`The persistent bash shell was reset; ...`). The reset prose is not a
+ * terminal marker itself, so the scan strips a trailing reset line first and
+ * treats the timeout intro as a negative fact only when a reset line
+ * confirms the report came from the persistent renderer — a clean result
+ * that merely echoes such prose must stay a clean success.
  */
 interface TerminalFacts {
   exitCode?: number
   negative: boolean
 }
 
+const PERSISTENT_RESET_LINE = /^The persistent (?:bash|pwsh) shell was reset;/
+const PERSISTENT_TIMEOUT_INTRO = /^Your command timed out after \d+ seconds or experienced an OOM error\. Below is partial output:$/
+
 function extractTerminalFacts(textContent: string): TerminalFacts {
   const lines = textContent.split(/\r?\n/)
   let index = lines.length - 1
   while (index >= 0 && lines[index].trim() === '') index -= 1
+  // The persistent renderers append a prose reset line after every marker;
+  // skip it so the marker scan below can see the terminal facts above it.
+  const resetStripped = index >= 0 && PERSISTENT_RESET_LINE.test(lines[index].trim())
+  if (resetStripped) {
+    index -= 1
+    while (index >= 0 && lines[index].trim() === '') index -= 1
+  }
+  const timeoutIntroAtHead = resetStripped && lines.length > 0 && PERSISTENT_TIMEOUT_INTRO.test(lines[0].trim())
   let exitCode: number | undefined
-  let negative = false
+  let negative = timeoutIntroAtHead
   while (index >= 0) {
     const line = lines[index].trim()
-    const exitMatch = line.match(/^\[exit code:\s*(\d+)\]$/)
-    const negativeLine = /^\[(?:timed out|sandbox[^\]]*|killed by signal[^\]]*|interrupted[^\]]*)[^\]]*\]$/i.test(line)
+    const exitMatch = line.match(/^\[(?:exit code|shell exited: code)\s*:?\s*(\d+)\]$/)
+    const negativeLine = /^\[(?:timed out|sandbox[^\]]*|killed by signal[^\]]*|shell killed by signal[^\]]*|shell exited|interrupted[^\]]*)[^\]]*\]$/i.test(line)
     if (exitMatch) {
       // The last terminal exit marker is authoritative. Earlier adjacent
       // markers may be retained only as context, never as an override.
