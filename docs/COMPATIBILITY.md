@@ -44,7 +44,7 @@ when the host execution itself succeeded.
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real headless boot loads the plugin (apply, `ctx.sessions` access, and listener registration succeed) and only stops at missing provider credentials.
 
-The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.0 (unreleased) has 94 domain/core tests and 114 tests overall. Its native candidate acceptance covers the clean foreground Bash-result compatibility fix on macOS and the existing bounded PowerShell model on Windows; the exact evidence boundary is recorded in `LOCAL_ACCEPTANCE.md`. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
+The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.0 has 104 domain/core tests and 124 tests overall. Its macOS live acceptance includes a real Web `pnpm test` run with 5 test files and 124 tests passed, followed by a certified checkpoint at contract revision 4; the complete evidence boundary and known gaps are recorded in `LOCAL_ACCEPTANCE.md`. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
 
 ## Certifiable command subset
 

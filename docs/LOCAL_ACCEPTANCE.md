@@ -2,6 +2,40 @@
 
 Deterministic checks and an isolated DSH_HOME composition smoke. These establish source correctness and load correctness, not full runtime behavior.
 
+## macOS v0.2.0 acceptance (2026-08-28)
+
+Verified source commit: `c107cd8ead97988f6a71cab8182edb16b23b086b`, on `main`, with a clean worktree and `main == origin/main` at the release preflight. Node v25.1.0 and pnpm 11.22.0 were used on macOS.
+
+Repository gates passed before publication:
+
+- `pnpm install --frozen-lockfile` -> 0.
+- `pnpm test` -> 0; 5 test files, 124 tests passed.
+- `pnpm run typecheck` -> 0.
+- `pnpm run lint` -> 0 errors / 0 warnings.
+- `pnpm run build` -> 0.
+- `pnpm run pack:check` -> 0.
+- `validateManifest()` returned no errors. The semantic checks covered informational receipt filtering, deterministic-check classification, `2>&1` support, and rejection of compound `&&` syntax.
+
+Live Web acceptance after installing `dsh-context-guard@0.2.0` into the managed `web` profile and restarting DSH:
+
+- The live profile reads installed version `0.2.0`; `dsh --profile web --dump-config` includes the `context-guard` bundle.
+- A real Web session in this repository executed one foreground Bash `pnpm test` call. The persisted result reported 5 test files and 124 tests passed.
+- The next checkpoint bound the successful evidence (`E0001`) to the two current session items. The checkpoint returned `status: certified`, `contract_revision: 4`, with `rejected_bindings: []` and `open_items: []`.
+
+Publication and consumer readback:
+
+- `npm view dsh-context-guard dist-tags.latest` -> `0.2.0`.
+- npm `gitHead` for `0.2.0` -> `c107cd8ead97988f6a71cab8182edb16b23b086b`.
+- The official `dsh-context-guard-0.2.0.tgz` unpacks to version `0.2.0`; all six packaged `dist/` files are byte-identical to the local build by md5. The local-only `dist/.DS_Store` is not part of the npm package and is excluded from this comparison.
+- Annotated tag `v0.2.0` was pushed. Remote readback returned tag object `dc1b13e00b2e1adadacb2c8de0a533ec8f51ac22` peeling to commit `c107cd8ead97988f6a71cab8182edb16b23b086b`.
+- codex-sync update discovery reported exactly `dsh-context-guard 0.1.2 -> 0.2.0`; the dry run planned one update, apply succeeded, the installed profile package reads `0.2.0`, the bundle contains `context-guard`, and the follow-up dry run returned `No DSH plugin changes needed`.
+
+Evidence boundaries:
+
+- The live 0.2.0 checkpoint certifies the real `pnpm test` workflow and its bound session items. It does not certify every release requirement in the recovered handoff contract.
+- The rejected compound-command case with an actionable `rejected_bindings[].hint`, and informational receipt filtering, are covered by the 0.2.0 semantic/regression checks and earlier real-session evidence; they were not re-created as additional live Web calls in this acceptance run.
+- Windows native acceptance remains the documented 0.1.x bounded PowerShell result; no Windows 0.2.0 run is claimed here.
+
 ## 0.1.1 release candidate (2026-08-27)
 
 The candidate was built on macOS from branch
