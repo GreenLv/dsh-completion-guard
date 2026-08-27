@@ -116,3 +116,26 @@ subset documented in `COMPATIBILITY.md`.
 On macOS, the published `dsh-context-guard@0.1.0` npm package was installed into a real DSH Web profile through the pinned `codex-sync` plugin reconciler. A second dry run was a strict no-op; direct package and bundle readback reported version `0.1.0`; `dsh --profile web --dump-config` included the `context-guard` bundle; and the restarted Web command directory exposed `/context-guard`, whose `status` subcommand returned a valid projection summary.
 
 This verifies public-package consumption and real-profile loading on macOS. It does not replace the isolated model-task evidence above and does not claim a second Windows run from the public npm package.
+
+## macOS v0.1.2 acceptance (2026-08-27)
+
+Verified commit: `dd402fbaa5d37dd246056d8ecd66430e5f75f412` (annotated tag `v0.1.2`, clean checkout, `main` fast-forwarded to the tag). macOS, Node v25.1.0, pnpm 11.22.0.
+
+Gate run (exit codes and summary):
+
+- `pnpm install --frozen-lockfile` → 0.
+- `pnpm test` → 0; 5 test files, 107 tests passed.
+- `pnpm run typecheck` → 0.
+- `pnpm run lint` → 0 errors / 0 warnings (23 files, 96 rules).
+- `pnpm run build` → 0; 6 files, 123.60 kB total (`dist/index.js`, `dist/domain/index.js`, `dist/domain-CJulh_RZ.js`, `dist/index.d.ts`, `dist/domain/index.d.ts`, `dist/index-CA7Z-W_A.d.ts`).
+- `pnpm run pack:check` → 0.
+
+Artifact check: `shell exited: code` is present in `dist/`. The literal string `persistent bash shell was reset` cannot appear in any build of commit dd402fb, because the implementation parameterizes the reset line as `/^The persistent (?:bash|pwsh) shell was reset;/` to cover both persistent renderers (`src/domain/evidence.ts` `PERSISTENT_RESET_LINE`). Equivalent checks pass: the regex is present in `dist/domain-CJulh_RZ.js` (line 1059), it matches the rendered Bash and pwsh prose lines (run through `RegExp.test`), and the built `dist` module replays all eight 0.1.2 cases (`[shell exited: code 1]`, `[shell killed by signal: SIGTERM]`, `[shell exited]`, timeout intro — each with and without the reset prose; plus `[shell exited: code 0]` → success and reset-prose-only → success) with the expected outcomes.
+
+Publication readback: `npm view dsh-context-guard dist-tags.latest` = `0.1.2`; registry `gitHead` = `dd402fbaa5d37dd246056d8ecd66430e5f75f412`; the official tarball `dsh-context-guard-0.1.2.tgz` unpacks to version `0.1.2` with both artifacts above, and all six `dist/` files are byte-identical (md5) to the local build — the published artifact matches the gate-run build.
+
+Installed state (macOS, real `~/.dsh`, `codex-sync` managed): pin raised `0.1.1` → `0.1.2` in `config/dsh/plugins.toml`; `--check-updates` reported the pin current; the pre-apply dry run planned exactly one UPDATE; `--apply` ran the single `dsh plugin --profile web add dsh-context-guard@0.1.2` pass; `~/.dsh/profiles/web/node_modules/dsh-context-guard/package.json` reads `0.1.2`, the installed `dist/` carries both vocabulary markers, the package stays in `dsh.profile.bundles`, and a follow-up dry run is a no-op (`No DSH plugin changes needed`). DSH was restarted (process started 23:41:05, after the 23:39:17 install) so the live instance loads 0.1.2.
+
+Smoke (in the live guarded session, 0.1.2 loaded): a clean foreground `pnpm test` in this repository completed with 5 files / 107 tests passed and produced no terminal marker; the guard-derived evidence (`E0065`, bash, repo scope) carries outcome `success`, and the checkpoint binding `{R042, [E0065]}` was accepted with no rejected bindings — the clean foreground bash result both scores `success` and certifies its matching item, confirming the 0.1.1 clean-success contract still holds under 0.1.2 (the 0.1.1 → 0.1.2 core regression point). One earlier binding was properly rejected and is recorded, not hidden: the first smoke attempt wrapped the command in `2>&1 | tail -6; echo ...`, which the guard classifies as non-deterministic with no supported operations; the binding `{R041, [E0058]}` failed the run contract, and no binding rule was changed for it. A subsequent clean run was used for the accepted binding.
+
+This section records the live-profile acceptance of v0.1.2 on macOS. It does not claim completion of the session's full 55-item contract, which was not part of this smoke; it does not re-claim any Windows result.
