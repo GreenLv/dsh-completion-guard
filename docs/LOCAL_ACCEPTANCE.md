@@ -25,16 +25,41 @@ Verified for this candidate:
   `pnpm typecheck` result contained ordinary stderr output and no
   `[exit code: 0]` marker; replay derived successful scope evidence and issued a
   certificate for all four matching open items with no rejected bindings.
+- A clean Windows checkout of commit
+  `16ea9e7a5d088ce6b7e09617f15acd771f57ff40` passed the frozen install,
+  typecheck, lint, all 106 tests, build, and package-content validation with
+  DSH `0.1.1-rc.2`. The candidate package was
+  `dsh-context-guard@0.1.1` with SHA-256
+  `6c0aed77a9fc7f43f6d8bc11e4355d465d1146c81fe10276ad3e523f0abd8a83`.
+  Fresh isolated Web and headless profiles both read back version `0.1.1`; a
+  second identical installation was a strict no-op with unchanged lockfile
+  hashes.
+- A separate minimal Windows real-model session loaded that candidate with
+  `activation: always`. One supported foreground `pwsh Set-Content
+  -LiteralPath ... -Encoding ascii -NoNewline` call created
+  `D:\dsh-pwsh-acceptance\pwsh-acceptance.txt`, and an independent `read`
+  returned `guard-test`. The persisted create evidence and read evidence were
+  bound to the single current contract; the checkpoint returned `certified`
+  at contract revision 1 with no open items or rejected bindings.
 
 Evidence boundary:
 
 - The macOS Web result is a candidate-runtime replay of a genuine closed Web
   log, combined with isolated Web composition. It is not a claim that the
   unpublished candidate was installed into the user's live Web profile.
-- No native Windows 0.1.1 real-model run has been performed. The published
-  0.1.0 PowerShell acceptance below remains historical evidence and does not
-  establish 0.1.1 Windows acceptance. The 0.1.1 release gate therefore remains
-  open until that Windows run is completed.
+- The Windows certificate covers only the documented PowerShell subset and the
+  exact candidate identity above. The first workspace-confined write attempt
+  was rejected because the target was outside the checkout; the same single
+  command succeeded only after an explicitly approved elevated retry. The
+  rejected call was not available for certification. This run does not expand
+  the Windows Bash claim or certify compound PowerShell commands.
+- An earlier Windows session completed its model turn without a certificate,
+  and a later diagnostic session produced only scope evidence for compound
+  PowerShell calls. Neither is counted as acceptance. The successful result is
+  the fresh revision-1 session whose supported write and independent read
+  produced artifact-matching evidence.
+- Version `0.1.1` remains an unpublished source candidate. These native results
+  do not establish CI, an npm publication, a tag, or a GitHub Release.
 
 ## Deterministic checks
 
