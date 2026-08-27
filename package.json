@@ -22,7 +22,8 @@
     "README.zh-CN.md",
     "LICENSE",
     "docs",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "CHANGELOG.zh-CN.md"
   ],
   "license": "Apache-2.0",
   "dsh": {

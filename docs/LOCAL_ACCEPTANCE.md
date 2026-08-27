@@ -50,3 +50,9 @@ Both final-SHA runs used clean public checkouts and isolated `DSH_HOME`
 directories. They establish native behavior for the bounded v0.1 command
 subset; they do not claim support for shell or PowerShell syntax outside the
 subset documented in `COMPATIBILITY.md`.
+
+## Public-package profile readback
+
+On macOS, the published `dsh-context-guard@0.1.0` npm package was installed into a real DSH Web profile through the pinned `codex-sync` plugin reconciler. A second dry run was a strict no-op; direct package and bundle readback reported version `0.1.0`; `dsh --profile web --dump-config` included the `context-guard` bundle; and the restarted Web command directory exposed `/context-guard`, whose `status` subcommand returned a valid projection summary.
+
+This verifies public-package consumption and real-profile loading on macOS. It does not replace the isolated model-task evidence above and does not claim a second Windows run from the public npm package.

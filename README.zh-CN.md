@@ -1,23 +1,78 @@
 # dsh-context-guard
 
-面向 DeepSeek Harness（DSH）的任务合同与完成认证层。
+[English](README.md)
 
-Context Guard 保存 requirements、prohibitions、acceptance criteria、后续修订和有界证据，只有当前合同对应的成功证据存在时才签发完成认证。
+面向 DeepSeek Harness（DSH）的任务合同与完成认证插件。它保存需求、禁止项、验收条件、后续修订和有界证据，只有当前成功证据与当前合同匹配时，任务才能获得完成认证。
 
-它不是 Goal、Todo、Memory、Compaction 替代品，也不是 token pruning 工具、安全沙箱或语义证明系统。
+## 快速开始
 
-## 当前状态
+将已发布插件安装到 DSH Web profile：
 
-0.1.0 已实现核心回路，并有 104 个测试（其中 domain/core 85 个）覆盖：带具体 subject/surface 的合同捕获、保守的命令 effect 解析、严格证据匹配、fail-closed 完成认证、重建时的证书重新验证、Goal 与回合停止门禁、恢复注入和持久化处理。macOS 与 Windows 的隔离真实模型验收均已确认：受支持的 shell 或 PowerShell 写入配合独立 read，可以在任务完成声明之前为匹配合同签发证书。
+```sh
+dsh plugin --profile web add dsh-context-guard@0.1.0
+```
+
+重启 DSH Web，打开一个会话并启用 Guard：
+
+```text
+/context-guard on
+/context-guard status
+```
+
+默认采用 opt-in，不会自动保护已有会话。`status` 会返回启用状态、当前 epoch 和合同修订、待完成与已通过条目数量、证据数量及完整性状态；`off` 停止本会话的捕获和门禁，但保留已有历史；`diagnose` 返回有界的诊断信息。
+
+启用后，Context Guard 从用户直接给出的要求和验收条件建立合同。工具结果只有在 DSH 持久化后才会成为可引用证据。模型在声称整个任务完成前，必须调用注入的 `context_guard_checkpoint` 工具并绑定匹配的证据 ID；不完整、过期或对象不匹配的绑定不能签发证书。
+
+## 它保护什么
+
+- 以稳定 ID 捕获 requirement、acceptance 和 prohibition，并通过 append-only supersession 保存后续修订。
+- 只从 DSH 已持久化的工具调用与结果派生有界、脱敏的证据。
+- 当合同明确指定时，同时匹配方法、操作、对象、surface 和结果状态。
+- 在会话重建或恢复时重新验证证书，完整性丢失时 fail-closed。
+- 启用期间，如果没有当前有效证书，就阻止 Goal 完成和整任务完成声明。
+
+## 状态与兼容性
+
+0.1.0 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.0)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+
+0.1.0 源码测试共 104 项，其中 domain/core 85 项。macOS 与 Windows 的隔离真实模型验收均已确认：受支持的 shell 或 PowerShell 写入配合独立 read，可以在任务完成声明前为匹配合同签发证书。公开 npm 包还在真实 macOS Web profile 中完成了安装和加载验证；这里不声称 Windows 已再次从公开包执行同一轮验收。
+
+Context Guard v0.1 只识别一小组可审计的 shell 与 PowerShell 命令。无法支持或存在歧义的语法会保持 incomplete，而不会被部分信任。精确语法和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+
+## 边界
+
+Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权限和工具执行仍由 DSH 管理。它不是安全沙箱、语义证明系统、token pruning 工具，也不替代这些 DSH 能力。
+
+证据采用有界存储和脱敏处理。Guard 不保存完整 prompt、stdout、文件内容、凭证、Authorization header、URL query value、图片字节或原始 transcript。详见 [`docs/PRIVACY.md`](docs/PRIVACY.md)。
+
+## 与 Codex Context Guard 的关系
+
+本项目从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) 迁移确定性行为，以 v0.8.8 作为语义基线，但两者服务于不同运行时：
+
+- `codex-context-guard` 是面向 Codex Hook 的 Python 实现，负责 Codex 插件缓存和 Hook 生命周期接入。
+- `dsh-context-guard` 是独立的 TypeScript 实现，基于 DSH 原生 Session 事件、命令、工具和 Agent 生命周期工作。
+
+两个项目不共享运行时状态、安装器、缓存或发布历史。修复应先进入拥有对应运行时的仓库；只有同一行为确实适用于两侧时，才显式迁移。具体复用与替换边界见 [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) 和 [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md)。
+
+## 文档
+
+- [`CHANGELOG.zh-CN.md`](CHANGELOG.zh-CN.md) — 面向使用者的版本变化。
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 所有权、持久状态和认证管线。
+- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) — 支持的 DSH 版本和可认证命令子集。
+- [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) — 确定性、隔离环境、原生平台和公开包验证范围。
+- [`docs/PRIVACY.md`](docs/PRIVACY.md) — 保存的事实、禁止数据和失败行为。
+- [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) — 语义基线与仓库权威边界。
+- [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) — 从 Codex 保留的行为和 DSH 专属替换。
 
 ## 开发
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
+pnpm run typecheck
 pnpm test
 pnpm run lint
 pnpm run build
-pnpm pack --dry-run --json
+pnpm run pack:check
 ```
 
-源码仓库已公开；npm 包与市场可用性仍需与源码及原生验收分别核验。
+这些命令验证源码和待打包内容。CI、原生平台验收、npm 发布、GitHub Release 身份和真实 profile 安装仍是相互独立的证据范围。
