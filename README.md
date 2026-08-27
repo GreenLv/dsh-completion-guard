@@ -9,7 +9,7 @@ A task-contract and completion-certification plugin for DeepSeek Harness (DSH). 
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.1.0
+dsh plugin --profile web add dsh-context-guard@0.1.1
 ```
 
 Restart DSH Web, open a session, and enable the guard:
@@ -53,9 +53,9 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## Status and compatibility
 
-Version 0.1.0 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.0). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
+Version 0.1.1 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.1). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
-The published 0.1.0 release suite contains 104 tests (85 domain/core). Native isolated real-model acceptance on macOS and Windows verified that a supported shell or PowerShell write plus an independent read can certify the matching contract before task completion. The public npm package has also been installed and loaded in a real macOS Web profile; this does not claim a second public-package run on Windows.
+The 0.1.1 release suite contains 106 tests (86 domain/core). Native acceptance covers the clean foreground Bash-result compatibility fix on macOS and the existing bounded PowerShell model on Windows. The published 0.1.0 npm package was separately installed and loaded in a real macOS Web profile; that historical package check does not establish a public-package runtime check for 0.1.1 or Windows.
 
 Context Guard v0.1 intentionally recognizes only a small, auditable shell and PowerShell command subset. Unsupported or ambiguous syntax stays incomplete instead of being partially trusted. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact grammar and platform evidence.
 

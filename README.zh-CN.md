@@ -9,7 +9,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.1.0
+dsh plugin --profile web add dsh-context-guard@0.1.1
 ```
 
 重启 DSH Web，打开一个会话并启用 Guard：
@@ -53,9 +53,9 @@ dsh plugin --profile web add dsh-context-guard@0.1.0
 
 ## 状态与兼容性
 
-0.1.0 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.0)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+0.1.1 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.1.1)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
-已发布的 0.1.0 版本测试共 104 项，其中 domain/core 85 项。macOS 与 Windows 的隔离真实模型验收均已确认：受支持的 shell 或 PowerShell 写入配合独立 read，可以在任务完成声明前为匹配合同签发证书。公开 npm 包还在真实 macOS Web profile 中完成了安装和加载验证；这里不声称 Windows 已再次从公开包执行同一轮验收。
+0.1.1 版本测试共 106 项，其中 domain/core 86 项。macOS 原生验收覆盖了前台 Bash 成功结果兼容修复，Windows 原生验收确认既有的受限 PowerShell 模型无回归。已发布的 0.1.0 npm 包曾另行在真实 macOS Web profile 中完成安装和加载验证；该历史包验证不代表 0.1.1 或 Windows 已完成公开包运行验证。
 
 Context Guard v0.1 只识别一小组可审计的 shell 与 PowerShell 命令。无法支持或存在歧义的语法会保持 incomplete，而不会被部分信任。精确语法和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 

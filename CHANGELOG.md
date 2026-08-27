@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.1.1 - Unreleased
+## 0.1.1 - 2026-08-27
 
 ### Fixed
 

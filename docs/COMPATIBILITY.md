@@ -44,7 +44,7 @@ when the host execution itself succeeded.
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real headless boot loads the plugin (apply, `ctx.sessions` access, and listener registration succeed) and only stops at missing provider credentials.
 
-The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. The published 0.1.0 release passed isolated native real-model closed loops on macOS and Windows: the persisted sessions show a supported write effect, an independent read of the same artifact, a certified checkpoint bound to real evidence IDs, and task completion only after certification. Its domain/core loop is covered by 85 unit tests and its full suite contains 104 tests. The Unreleased 0.1.1 source candidate has 86 domain/core tests and 106 tests overall; its candidate-specific native boundary is recorded in `LOCAL_ACCEPTANCE.md`. The fail-closed invariants below are asserted as regressions.
+The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.1.1 has 86 domain/core tests and 106 tests overall. Its native candidate acceptance covers the clean foreground Bash-result compatibility fix on macOS and the existing bounded PowerShell model on Windows; the exact evidence boundary is recorded in `LOCAL_ACCEPTANCE.md`. The published 0.1.0 release retains separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
 
 ## v0.1 certifiable command subset
 

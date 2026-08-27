@@ -2,7 +2,7 @@
 
 Deterministic checks and an isolated DSH_HOME composition smoke. These establish source correctness and load correctness, not full runtime behavior.
 
-## 0.1.1 source candidate (2026-08-27, Unreleased)
+## 0.1.1 release candidate (2026-08-27)
 
 The candidate was built on macOS from branch
 `codex/0.1.1-bash-success-evidence`. The tested runtime domain bundle is
@@ -58,8 +58,9 @@ Evidence boundary:
   PowerShell calls. Neither is counted as acceptance. The successful result is
   the fresh revision-1 session whose supported write and independent read
   produced artifact-matching evidence.
-- Version `0.1.1` remains an unpublished source candidate. These native results
-  do not establish CI, an npm publication, a tag, or a GitHub Release.
+- These pre-release native results do not by themselves establish CI, an npm
+  publication, a tag, or a GitHub Release; those publication identities require
+  separate readback.
 
 ## Deterministic checks
 
