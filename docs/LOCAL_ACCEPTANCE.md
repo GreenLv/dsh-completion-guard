@@ -131,14 +131,43 @@ A real headless boot loads the plugin and advances to the model call; it stops a
   read it back as durable evidence, rejected an incomplete first binding, then
   certified the complete requirement and acceptance set before `turn/end`.
 
+## v0.2.0 Windows acceptance status
+
+The GitHub tag `v0.2.0` resolves to release commit `c107cd8`. The GitHub
+Release is published at
+https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.0.
+
+Windows 0.2.0 native runtime acceptance completed in the separate live DSH
+Web session. The loaded package version was `0.2.0`. The supported PowerShell
+command
+
+`Set-Content -LiteralPath 'D:\dsh-pwsh-acceptance\pwsh-acceptance-020.txt' -Value 'guard-test' -Encoding ascii -NoNewline`
+
+created the artifact successfully after the documented permission-boundary
+retry. An independent `read` returned exactly `guard-test` with no trailing
+newline. The durable evidence IDs from that session were `E0009` for the
+successful PowerShell write and `E0011` for the independent read.
+
+The session's checkpoint attempt was `incomplete`, and a follow-up session
+also rejected `E0009` and `E0011` because those IDs are not present in its
+current session projection. Context Guard currently derives evidence from the
+active DSH event log only; it has no cross-session evidence import or lookup
+contract. The runtime actions and their outputs are therefore recorded as
+completed runtime acceptance, but the v0.2.0 checkpoint remains `incomplete`
+in this later session by design. To obtain a certificate, the commands and
+checkpoint must be performed in one session. The Windows scope is limited to
+the documented PowerShell subset and does not expand to Windows Bash or
+compound PowerShell syntax.
+
 ## Native platform acceptance
 
 - macOS: an isolated real-model headless task used a supported POSIX shell
   write and an independent read, then persisted a certified checkpoint before
   the completed turn.
-- Windows: an isolated real-model task used
-  `pwsh Set-Content -LiteralPath` and an independent read, then persisted a
-  certified checkpoint before the completed turn.
+- Windows: the v0.1.1 candidate had an isolated real-model task using
+  `pwsh Set-Content -LiteralPath` and an independent read, with a certified
+  checkpoint. The v0.2.0 runtime actions are recorded in the dedicated status
+  section above, but their cross-session checkpoint repair remains incomplete.
 
 Both final-SHA runs used clean public checkouts and isolated `DSH_HOME`
 directories. They establish native behavior for the bounded v0.1 command

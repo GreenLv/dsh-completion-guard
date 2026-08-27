@@ -44,6 +44,21 @@ describe('domain core', () => {
     expect(result.rejectedBindings[0]?.reason).toContain('does not match')
   })
 
+  it('rejects evidence ids that are not in the current session projection', () => {
+    const projection = createProjection()
+    projection.enabled = true
+    projection.epoch = 1
+    projection.contractRevision = 1
+    projection.items.set('A001', captureClause('Verify the generated file acceptance.txt', 'm1', 'A001', 1))
+
+    const result = certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0009', 'E0011'] }], 'C001')
+
+    expect(result.status).toBe('incomplete')
+    expect(result.openItems).toEqual(['A001'])
+    expect(result.rejectedBindings).toHaveLength(1)
+    expect(result.rejectedBindings[0]?.reason).toContain('does not match')
+  })
+
   it('rejects bindings that cite no evidence (fail-open regression)', () => {
     const projection = createProjection()
     projection.enabled = true
