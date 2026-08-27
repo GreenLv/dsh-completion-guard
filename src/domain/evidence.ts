@@ -267,16 +267,17 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput)
       const backgrounded = args.run_in_background === true
       const commandDetails = analyzeCommand(command, args.workdir, call.name)
       const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)
-      // Negative terminal facts (timeout, sandbox denial, kill, interruption)
-      // and a non-zero exit marker are rejected before the clean-success
-      // fallback: a denied, timed-out or failed operation is never successful
-      // evidence.
+      // The pinned DSH bash/pwsh renderers append markers only for negative
+      // terminal facts or non-zero exits. A completed foreground result with
+      // no such marker is therefore a clean success for those two registered
+      // tools. The generic `shell` alias has no verified renderer contract and
+      // remains fail-closed when no explicit exit marker is present.
       const outcome: EvidenceOutcome = backgrounded
         ? 'unknown'
         : result.error || terminal.negative
           ? 'failure'
           : terminal.exitCode === undefined
-            ? (call.name === 'pwsh' ? 'success' : 'unknown')
+            ? (call.name === 'bash' || call.name === 'pwsh' ? 'success' : 'unknown')
             : terminal.exitCode === 0 ? 'success' : 'failure'
       return {
         capabilities: ['shell', ...(deterministic ? ['deterministic-check'] : [])],

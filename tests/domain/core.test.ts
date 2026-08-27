@@ -8,6 +8,7 @@ import {
 } from '../../src/domain/index.js'
 
 const OPT_IN = { activation: 'opt-in' as const }
+const ALWAYS = { activation: 'always' as const }
 
 describe('domain core', () => {
   it('canonicalizes whitespace and hashes clauses', () => {
@@ -120,7 +121,7 @@ describe('domain core', () => {
     expect(isDeterministicCheck('cd /work && pnpm test')).toBe(true)
   })
 
-  it('does not grant deterministic success to backgrounded or unmarked bash calls', () => {
+  it('uses the verified clean-success contract only for foreground bash', () => {
     const backgrounded = evidenceFromPersistedToolResult(
       { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test', run_in_background: true }) },
       { seq: 4, textContent: '' },
@@ -129,14 +130,40 @@ describe('domain core', () => {
     )
     expect(backgrounded.capabilities).not.toContain('deterministic-check')
     expect(backgrounded.outcome).toBe('unknown')
-    const unmarked = evidenceFromPersistedToolResult(
-      { callId: 'c2', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test' }) },
-      { seq: 5, textContent: '' },
+    for (const [index, textContent] of ['', '(no output)', 'tests passed', '[stderr]\nwarning only'].entries()) {
+      const clean = evidenceFromPersistedToolResult(
+        { callId: `c-clean-${index}`, name: 'bash', arguments: JSON.stringify({ command: 'pnpm test' }) },
+        { seq: 5 + index, textContent },
+        1,
+        `E-clean-${index}`,
+      )
+      expect(clean.capabilities).toContain('deterministic-check')
+      expect(clean.outcome, textContent).toBe('success')
+    }
+    const unverifiedAlias = evidenceFromPersistedToolResult(
+      { callId: 'c-shell', name: 'shell', arguments: JSON.stringify({ command: 'pnpm test' }) },
+      { seq: 9, textContent: 'tests passed' },
       1,
-      'E0002',
+      'E-shell',
     )
-    expect(unmarked.capabilities).toContain('deterministic-check')
-    expect(unmarked.outcome).toBe('unknown')
+    expect(unverifiedAlias.capabilities).toContain('deterministic-check')
+    expect(unverifiedAlias.outcome).toBe('unknown')
+
+    const negativeMarkers = [
+      '[timed out after 1000ms]',
+      '[sandbox: file access denied under workspace-write mode]',
+      '[killed by signal: SIGTERM]',
+      '[interrupted by user]',
+    ]
+    for (const [index, textContent] of negativeMarkers.entries()) {
+      const failed = evidenceFromPersistedToolResult(
+        { callId: `c-failed-${index}`, name: 'bash', arguments: JSON.stringify({ command: 'pnpm test' }) },
+        { seq: 10 + index, textContent },
+        1,
+        `E-failed-${index}`,
+      )
+      expect(failed.outcome, textContent).toBe('failure')
+    }
   })
 
   it('uses the last recorded exit code so a fake leading marker cannot mask a trailing failure', () => {
@@ -167,6 +194,15 @@ describe('domain core', () => {
     expect(evidence.outcome).toBe('success')
     expect(withDurability(evidence, false).outcome).toBe('unknown')
     expect(withDurability(evidence, true).outcome).toBe('success')
+
+    const cleanBash = evidenceFromPersistedToolResult(
+      { callId: 'call-bash', name: 'bash', arguments: JSON.stringify({ command: 'pnpm typecheck' }) },
+      { seq: 5, textContent: '$ tsc --noEmit' },
+      1,
+      'E-bash',
+    )
+    expect(cleanBash.outcome).toBe('success')
+    expect(withDurability(cleanBash, false).outcome).toBe('unknown')
   })
 
   it('failed durable tool results cannot become successful evidence', () => {
@@ -336,6 +372,23 @@ describe('domain core', () => {
     expect(derived.projection.epoch).toBe(1)
   })
 
+  it('replays always-active durable clean bash evidence into a scope certificate', () => {
+    const events = [
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '验收：确认项目测试通过' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'pnpm typecheck', workdir: '/work' }) } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Done in 1.2s' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+    ]
+    const derived = deriveProjection(events, ALWAYS, { cwd: '/work' }, true)
+    expect(derived.projection.enabled).toBe(true)
+    expect(derived.projection.epoch).toBe(0)
+    expect(derived.projection.evidence.get('E0001')).toMatchObject({
+      outcome: 'success', capabilities: ['shell', 'deterministic-check'], subjects: ['/work'], surfaces: ['scope'],
+    })
+    const item = [...derived.projection.items.values()].find((candidate) => candidate.kind === 'acceptance')
+    expect(item?.verification).toMatchObject({ subject: '/work', surface: 'scope' })
+    expect(certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001').status).toBe('certified')
+  })
+
   it('uses only the final exit marker as authoritative', () => {
     const cases: Array<[string, 'success' | 'failure']> = [
       ['[exit code: 0]\n[exit code: 1]', 'failure'],
@@ -351,9 +404,9 @@ describe('domain core', () => {
       expect(evidence.outcome, text).toBe(outcome)
     }
     expect(evidenceFromPersistedToolResult(
-      { callId: 'marker-unknown', name: 'bash', arguments: JSON.stringify({ command: 'echo ok' }) },
-      { seq: 21, textContent: 'ok' }, 1, 'E-unknown',
-    ).outcome).toBe('unknown')
+      { callId: 'marker-clean', name: 'bash', arguments: JSON.stringify({ command: 'echo ok' }) },
+      { seq: 21, textContent: 'ok' }, 1, 'E-clean',
+    ).outcome).toBe('success')
   })
 
   it('does not let unsupported shell syntax certify deterministic acceptance', () => {
@@ -364,10 +417,24 @@ describe('domain core', () => {
     projection.items.set(item.id, item)
     const evidence = evidenceFromPersistedToolResult(
       { callId: 'compound', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test && true', workdir: '/work' }) },
-      { seq: 2, textContent: '[exit code: 0]' }, 1, 'E-compound',
+      { seq: 2, textContent: 'tests passed' }, 1, 'E-compound',
     )
+    expect(evidence.outcome).toBe('success')
     expect(evidence.capabilities).not.toContain('deterministic-check')
     expect(certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: [evidence.id] }], 'C-compound').status).toBe('incomplete')
+
+    const malformed = evidenceFromPersistedToolResult(
+      { callId: 'malformed', name: 'bash', arguments: JSON.stringify({ command: 'printf "abc', workdir: '/work' }) },
+      { seq: 3, textContent: 'host returned cleanly' }, 1, 'E-malformed',
+    )
+    expect(malformed.outcome).toBe('success')
+    expect(malformed.executables).toBeUndefined()
+    expect(malformed.operations).toBeUndefined()
+    // The cwd remains descriptive scope metadata, but without a parsed
+    // operation or deterministic-check capability it is not certifying.
+    expect(malformed.subjects).toEqual(['/work'])
+    expect(malformed.capabilities).not.toContain('deterministic-check')
+    expect(certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: [malformed.id] }], 'C-malformed').status).toBe('incomplete')
   })
 
   it('rejects newline boundaries and file-descriptor redirects as whole commands', () => {
