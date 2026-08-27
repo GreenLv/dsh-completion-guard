@@ -64,7 +64,8 @@ positives: an uncertain command keeps its item incomplete.
   `sed` without in-place flags): every pathish argument counts as a read effect
   (v0.2)
 - one whitelisted executable run directly, e.g. `node script.js`,
-  `python tool.py`, `pnpm test`, `git pull`
+  `python tool.py`, `pnpm test`, `git pull`,
+  `dsh plugin --profile web add dsh-dream-skin@0.3.1`
 - a leading simple environment-assignment prefix, e.g. `CI=1 pnpm test`
   (wrappers such as `env`, `nohup`, `time`, `command` are not supported)
 - diagnostic stream duplication (`2>&1`, `1>&2`, `N>&M`) in any position

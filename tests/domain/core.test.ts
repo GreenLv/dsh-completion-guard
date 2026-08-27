@@ -1535,3 +1535,37 @@ describe('domain core', () => {
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
     expect(result.status).toBe('certified')
   })
+
+  it('v0.2: the dsh CLI is a certifiable run executable in both shells', () => {
+    const bash = parseShellCommand('dsh plugin --profile web add dsh-dream-skin@0.3.1 2>&1')
+    expect(bash.status).toBe('supported')
+    expect(bash.executables).toEqual(['dsh'])
+    expect(bash.operations).toContainEqual({ op: 'run', path: 'dsh-dream-skin@0.3.1' })
+    const pwsh = parsePwshCommand('dsh plugin --profile web add dsh-dream-skin@0.3.1 2>&1')
+    expect(pwsh.status).toBe('supported')
+    expect(pwsh.executables).toEqual(['dsh'])
+    expect(pwsh.operations).toEqual([{ op: 'run', path: 'dsh-dream-skin@0.3.1' }])
+    const background = parseShellCommand('dsh plugin list 2>&1 &')
+    expect(background.status).toBe('unsupported')
+  })
+
+  it('v0.2: an install task closes with a dsh CLI run or a clean state check', () => {
+    const cwd = '/Users/lgr59/Documents/Github/codex-sync'
+    const make = (command: string, callId: string) => ([
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId, name: 'bash', arguments: JSON.stringify({ command }) } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId } } } },
+    ])
+    for (const command of ['dsh plugin --profile web add dsh-dream-skin@0.3.1 2>&1', 'grep -n dsh-dream-skin config/dsh/plugins.toml']) {
+      const derived = deriveProjection(make(command, 'c1'), OPT_IN, { cwd }, true)
+      const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+      expect(item?.verification).toMatchObject({ operation: 'run', surface: 'scope' })
+      const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+      expect(result.status, command).toBe('certified')
+    }
+    // The piped config-dump form the original session used stays fail-closed.
+    const piped = parseShellCommand('./dsh dump-config 2>&1 | grep dsh-dream-skin')
+    expect(piped.status).toBe('unsupported')
+    expect(piped.operations).toEqual([])
+  })

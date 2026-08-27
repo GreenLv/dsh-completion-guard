@@ -140,6 +140,7 @@ const SHELL_RUN_EXECUTABLES = new Set([
   'node', 'python', 'python3', 'pnpm', 'npm', 'yarn', 'bun',
   'pytest', 'vitest', 'jest', 'tsc', 'eslint', 'mypy', 'ruff', 'prettier',
   'go', 'cargo', 'make', 'cmake', 'git', 'mvn', 'gradle', 'tox', 'nox',
+  'dsh',
 ])
 
 /**
@@ -402,6 +403,7 @@ const PWSH_EXTERNAL_EXECUTABLES = new Set([
   'node', 'python', 'python3', 'pnpm', 'npm', 'yarn', 'bun',
   'pytest', 'vitest', 'jest', 'tsc', 'eslint', 'mypy', 'ruff', 'prettier',
   'go', 'cargo', 'make', 'cmake', 'git', 'mvn', 'gradle', 'tox', 'nox',
+  'dsh',
 ])
 
 /**
