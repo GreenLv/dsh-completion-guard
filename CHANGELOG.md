@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.2.0 - Unreleased
+
+### Added
+
+- **Cwd-attributed subject resolution (F1).** Evidence artifact subjects are resolved against the call `workdir`; when the shell tool carries none (the macOS persistent bash/pwsh tools expose only `command`), the session scope cwd is used as the default. Relative `read`/`write`/`edit`/shell paths now match the contract subject derived from the same cwd, and a pathless `run` of a whitelisted executable is attributed to that cwd. This closes the macOS dead-end where a scope contract could never be satisfied, without lowering any fail-closed boundary.
+- **Certifiable command-surface growth (F2).** `N>&M` diagnostic stream duplication (`2>&1`) is accepted in the POSIX shell and stripped unquoted in PowerShell; read-only inspection tools (`grep`, `rg`, `head`, `tail`, `wc`, `sed` without in-place flags) produce read effects in the POSIX shell; PowerShell accepts whitelisted external executables (`git`, `pnpm`, `npm`, `node`, `python`, `tsc`, `vitest`, `pytest`, …) with all-literal arguments, mirroring the POSIX run-executable set. Compound syntax, file-target fd redirects, in-place `sed`, variables and non-whitelisted executables remain fail-closed.
+- **Process-verb contract mapping (F3).** Task-level actions — 拉取/获取/同步/更新/下载/安装/部署/上传/提交/推送/发布/升级 and `pull`/`fetch`/`clone`/`sync`/`update`/`install`/`deploy`/`commit`/`push`/`release`/`download`/`upload` — now map captured clauses to the `run` operation, so a successful run in scope closes them (previously an operation-less clause defaulted to the state-verification facet and could not be closed by the work evidence itself).
+
+### Changed
+
+- `parseShellCommand`/`parsePwshCommand` keep the same fail-closed philosophy: an unrecognized or partially understood command still yields EMPTY executables and operations.
+
 ## 0.1.2 - 2026-08-27
 
 ### Fixed

@@ -49,7 +49,10 @@ const OPERATION_PATTERNS: Array<[GuardOperation, RegExp]> = [
   ['modify', /修改|编辑|更改|modif(?:y|ies|ied|ying)|\bedit\b|改/i],
   ['read', /读取|阅读|打开|读(?![A-Za-z0-9])|\bread\b/i],
   ['verify', /验证|确认|确保|检查|verif(?:y|ies|ied|ying)|\bconfirm\b|\bconfirms\b|\bconfirmed\b|\bensure\b/i],
-  ['run', /运行|执行|\brun\b|execute(?:d)?/i],
+  // The v0.2 process-verb set: task-level actions the agent performs through a
+  // shell run (pull/sync/update/commit/push/...) map to the run operation so
+  // their completion evidence — a successful run in scope — can close them.
+  ['run', /运行|执行|拉取|获取|同步|更新|下载|安装|部署|上传|提交|推送|发布|升级|\brun\b|execute(?:d)?|\bpull\b|\bfetch\b|\bclone\b|\bsync\b|\bupdate\b|\binstall\b|\bdeploy\b|\bcommit\b|\bpush\b|\brelease\b|\bdownload\b|\bupload\b/i],
 ]
 
 /**

@@ -1392,3 +1392,146 @@ describe('domain core', () => {
       expect(parsed.operations, command).toEqual([])
     }
   })
+
+  it('v0.2: diagnostic stream duplication is allowed in bash commands', () => {
+    const pull = parseShellCommand('git pull --ff-only 2>&1')
+    expect(pull.status).toBe('supported')
+    expect(pull.executables).toEqual(['git'])
+    expect(pull.operations).toContainEqual({ op: 'run' })
+    const apply = parseShellCommand('python scripts/apply-dsh-plugins.py --apply 2>&1')
+    expect(apply.status).toBe('supported')
+    expect(apply.operations).toContainEqual({ op: 'run', path: 'scripts/apply-dsh-plugins.py' })
+    const withRedirect = parseShellCommand('printf x > target.txt 2>&1')
+    expect(withRedirect.status).toBe('supported')
+    expect(withRedirect.operations).toContainEqual({ op: 'create', path: 'target.txt' })
+    // File-target fd redirects, compound syntax and non-whitelisted executables stay fail-closed.
+    for (const command of [
+      'git status 2>&1 && echo ok',
+      'git status 2> err.log',
+      'git status 2>/dev/null',
+      'git status 1>&2 && echo ok',
+      'noexec x 2>&1',
+    ]) {
+      const parsed = parseShellCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.executables, command).toEqual([])
+      expect(parsed.operations, command).toEqual([])
+    }
+  })
+
+  it('v0.2: read-only inspection tools produce read operations in bash', () => {
+    const grep = parseShellCommand('grep -n pattern src/feature.ts')
+    expect(grep.status).toBe('supported')
+    expect(grep.executables).toEqual(['grep'])
+    expect(grep.operations).toContainEqual({ op: 'read', path: 'src/feature.ts' })
+    expect(parseShellCommand('head -5 logs/out.log').operations).toContainEqual({ op: 'read', path: 'logs/out.log' })
+    expect(parseShellCommand('sed s/x/y/g file.txt').operations).toContainEqual({ op: 'read', path: 'file.txt' })
+    const inPlace = parseShellCommand('sed -i s/x/y/g file.txt')
+    expect(inPlace.status).toBe('unsupported')
+    expect(inPlace.operations).toEqual([])
+    const chained = parseShellCommand('grep -n pattern src/feature.ts | head -3')
+    expect(chained.status).toBe('unsupported')
+    expect(chained.operations).toEqual([])
+  })
+
+  it('v0.2: pwsh external executables and stream duplication are supported', () => {
+    const commit = parsePwshCommand('git commit -m "msg" 2>&1')
+    expect(commit.status).toBe('supported')
+    expect(commit.executables).toEqual(['git'])
+    expect(commit.operations).toEqual([{ op: 'run' }])
+    const add = parsePwshCommand('pnpm add dsh-context-guard@0.1.2')
+    expect(add.status).toBe('supported')
+    expect(add.executables).toEqual(['pnpm'])
+    expect(add.operations).toEqual([{ op: 'run', path: 'dsh-context-guard@0.1.2' }])
+    const script = parsePwshCommand('python scripts/apply-dsh-plugins.py --apply 2>&1')
+    expect(script.status).toBe('supported')
+    expect(script.operations).toEqual([{ op: 'run', path: 'scripts/apply-dsh-plugins.py' }])
+    const cmdlet = parsePwshCommand('Get-Content -Path docs/README.md -Raw 2>&1')
+    expect(cmdlet.status).toBe('supported')
+    expect(cmdlet.operations).toEqual([{ op: 'read', path: 'docs/README.md' }])
+    // A quoted "2>&1" value stays a value, not a redirect.
+    const quotedValue = parsePwshCommand('Set-Content -Path target.txt -Value "2>&1"')
+    expect(quotedValue.status).toBe('supported')
+    expect(quotedValue.operations).toEqual([{ op: 'create', path: 'target.txt' }])
+    for (const command of [
+      'git commit -m "msg"; Write-Output done',
+      'git push origin main 2>&1; echo "exit=$?"',
+      'npm install $PKG',
+      'node script.js | Out-File out.txt',
+    ]) {
+      const parsed = parsePwshCommand(command)
+      expect(parsed.status, command).toBe('unsupported')
+      expect(parsed.operations, command).toEqual([])
+    }
+  })
+
+  it('v0.2: subject resolution falls back to the session cwd for shell evidence', () => {
+    const pull = evidenceFromPersistedToolResult(
+      { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'git pull --ff-only 2>&1' }) },
+      { seq: 5, textContent: 'Updating..' },
+      1,
+      'E0001',
+      '/Users/lgr59/Documents/Github/codex-sync',
+    )
+    expect(pull.outcome).toBe('success')
+    expect(pull.subjects).toContain('/Users/lgr59/Documents/Github/codex-sync')
+    expect(pull.operations).toContainEqual({ op: 'run', path: '/Users/lgr59/Documents/Github/codex-sync' })
+    expect(pull.executables).toEqual(['git'])
+    const readFile = evidenceFromPersistedToolResult(
+      { callId: 'c2', name: 'read', arguments: JSON.stringify({ file_path: 'src/feature.ts' }) },
+      { seq: 6, textContent: 'ok' },
+      1,
+      'E0002',
+      '/work',
+    )
+    expect(readFile.subjects).toEqual(['/work/src/feature.ts'])
+    // A shell builtin is a run without a subject-carrying path.
+    const echo = evidenceFromPersistedToolResult(
+      { callId: 'c3', name: 'bash', arguments: JSON.stringify({ command: 'echo ok', workdir: '/work' }) },
+      { seq: 7, textContent: 'ok' },
+      1,
+      'E0003',
+    )
+    expect(echo.operations).toEqual([{ op: 'run' }])
+    expect(echo.subjects).toEqual(['/work'])
+  })
+
+  it('v0.2: process verbs map scope tasks to run contracts', () => {
+    expect(extractOperation('拉取远端最近的两个更新，同步更新插件')).toBe('run')
+    expect(extractOperation('我已手动重启，请你收尾，完善文档记录，之后提交并推送。')).toBe('run')
+    expect(extractOperation('确认项目测试通过')).toBe('verify')
+    expect(extractOperation('runtime check')).toBeUndefined()
+  })
+
+  it('v0.2: a macOS-style pull/apply task certifies with run evidence alone', () => {
+    const cwd = '/Users/lgr59/Documents/Github/codex-sync'
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '拉取远端最近的两个更新，同步更新插件' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'git pull --ff-only 2>&1' }) } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Updating..' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'bash', arguments: JSON.stringify({ command: 'python scripts/apply-dsh-plugins.py --apply 2>&1' }) } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification).toMatchObject({ operation: 'run', subject: cwd, surface: 'scope' })
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('certified')
+  })
+
+  it('v0.2: a Windows-style pwsh push task certifies with method identity', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 pwsh 提交并推送本地变更' }], source: { kind: 'user' } } },
+      { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: JSON.stringify({ command: 'git commit -am "wrap" 2>&1', workdir: 'C:\\work' }) } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'committed' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'pwsh', arguments: JSON.stringify({ command: 'git push origin main 2>&1', workdir: 'C:\\work' }) } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'pushed' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
+    const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
+    expect(item?.verification).toMatchObject({ operation: 'run', method: 'pwsh', surface: 'scope' })
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
+    expect(result.status).toBe('certified')
+  })

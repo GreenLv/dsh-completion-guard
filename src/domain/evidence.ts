@@ -1,5 +1,5 @@
 import { sanitizeUrl, sha256 } from './canonicalize.js'
-import { parsePwshCommand, parseShellCommand } from './shell-parse.js'
+import { parsePwshCommand, parseShellCommand, isRunExecutable } from './shell-parse.js'
 import type { EvidenceOutcome, GuardEvidence, GuardOperation } from './types.js'
 
 export interface ToolCallInput {
@@ -106,10 +106,17 @@ function analyzeCommand(command: string, workdir: unknown, toolName: string): Co
       subjects: cwd ? [cwd] : [],
     }
   }
-  const operations = parsed.operations.map((entry) => ({
-    op: entry.op,
-    ...(entry.path !== undefined ? { path: resolveCommandPath(entry.path, cwd) } : {}),
-  }))
+  const operations = parsed.operations.map((entry) => {
+    let path = entry.path !== undefined ? resolveCommandPath(entry.path, cwd) : undefined
+    // Scope-run attribution: a pathless run of a real whitelisted executable is
+    // attributed to the command cwd, so a run contract on the scope directory
+    // can be closed by the command that actually ran there.
+    if (path === undefined && entry.op === 'run' && cwd !== undefined &&
+      parsed.executables.some((executable) => isRunExecutable(executable))) {
+      path = cwd
+    }
+    return { op: entry.op, ...(path !== undefined ? { path } : {}) }
+  })
   const subjects = unique([...(cwd ? [cwd] : []), ...operations
     .map((entry) => entry.path)
     .filter((path): path is string => path !== undefined)])
@@ -251,12 +258,17 @@ function unique(values: string[]): string[] {
   return [...new Set(values)]
 }
 
-export function extractToolSubject(call: ToolCallInput, result: ToolResultInput): ToolSubject {
+/** Resolve relative artifact subjects against the session scope cwd. */
+function resolveSubjectPaths(values: string[], cwd: string | undefined): string[] {
+  return cwd ? values.map((value) => resolveCommandPath(value, cwd)) : values
+}
+
+export function extractToolSubject(call: ToolCallInput, result: ToolResultInput, defaultCwd?: string): ToolSubject {
   const args = parseArguments(call.arguments)
   switch (call.name) {
     case 'read':
     case 'read_file': {
-      const subjects = unique([...metaPaths(result.meta), ...argsPaths(args)])
+      const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
       return {
         capabilities: ['filesystem-read'],
         subjects,
@@ -266,7 +278,7 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput)
     }
     case 'write':
     case 'write_file': {
-      const subjects = unique([...metaPaths(result.meta), ...argsPaths(args)])
+      const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
       return {
         capabilities: ['filesystem-write'],
         subjects,
@@ -276,7 +288,7 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput)
     }
     case 'edit':
     case 'edit_file': {
-      const subjects = unique([...metaPaths(result.meta), ...argsPaths(args)])
+      const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
       return {
         capabilities: ['filesystem-edit'],
         subjects,
@@ -290,7 +302,7 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput)
       const command = typeof args.command === 'string' ? args.command : ''
       const terminal = extractTerminalFacts(result.textContent)
       const backgrounded = args.run_in_background === true
-      const commandDetails = analyzeCommand(command, args.workdir, call.name)
+      const commandDetails = analyzeCommand(command, typeof args.workdir === 'string' ? args.workdir : defaultCwd, call.name)
       const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)
       // The pinned DSH bash/pwsh renderers append markers only for negative
       // terminal facts or non-zero exits. A completed foreground result with
@@ -331,8 +343,9 @@ export function evidenceFromPersistedToolResult(
   result: ToolResultInput,
   epoch: number,
   evidenceId: string,
+  defaultCwd?: string,
 ): GuardEvidence {
-  const subject = extractToolSubject(call, result)
+  const subject = extractToolSubject(call, result, defaultCwd)
   const outcome: EvidenceOutcome = result.error ? 'failure' : (subject.outcome ?? 'success')
   return {
     id: evidenceId,

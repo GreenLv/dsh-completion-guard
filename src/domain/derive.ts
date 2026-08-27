@@ -220,6 +220,7 @@ export function deriveProjection(
           { seq: event.seq, error: data?.error ?? (isDispatch && data?.isError ? { name: 'code', code: 'DISPATCH_ERROR' } : undefined), meta: data?.meta, textContent },
           epoch,
           `E${String(evidenceCounter).padStart(4, '0')}`,
+          scope.cwd || undefined,
         ), durableConfirmed)
         projection.evidence.set(evidence.id, evidence)
         break

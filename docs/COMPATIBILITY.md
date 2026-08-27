@@ -44,9 +44,9 @@ when the host execution itself succeeded.
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real headless boot loads the plugin (apply, `ctx.sessions` access, and listener registration succeed) and only stops at missing provider credentials.
 
-The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.1.1 has 86 domain/core tests and 106 tests overall. Its native candidate acceptance covers the clean foreground Bash-result compatibility fix on macOS and the existing bounded PowerShell model on Windows; the exact evidence boundary is recorded in `LOCAL_ACCEPTANCE.md`. The published 0.1.0 release retains separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
+The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.0 (unreleased) has 94 domain/core tests and 114 tests overall. Its native candidate acceptance covers the clean foreground Bash-result compatibility fix on macOS and the existing bounded PowerShell model on Windows; the exact evidence boundary is recorded in `LOCAL_ACCEPTANCE.md`. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
 
-## v0.1 certifiable command subset
+## Certifiable command subset
 
 Context Guard v0.1 is **not** a general Bash or PowerShell static analyzer. Only
 the small, auditable grammar below can produce `executable`, `operation` and
@@ -60,11 +60,15 @@ positives: an uncertain command keeps its item incomplete.
 - `printf … > literal-path`
 - `echo … > literal-path`
 - `touch literal-path`
-- `cat literal-path`
+- read-only inspection tools (`cat`, `grep`, `rg`, `head`, `tail`, `wc`,
+  `sed` without in-place flags): every pathish argument counts as a read effect
+  (v0.2)
 - one whitelisted executable run directly, e.g. `node script.js`,
-  `python tool.py`, `pnpm test`
+  `python tool.py`, `pnpm test`, `git pull`
 - a leading simple environment-assignment prefix, e.g. `CI=1 pnpm test`
   (wrappers such as `env`, `nohup`, `time`, `command` are not supported)
+- diagnostic stream duplication (`2>&1`, `1>&2`, `N>&M`) in any position
+  (v0.2); it is a pure fd copy with no filesystem effect
 
 Literal paths only: no variables, globs, `~` expansion or command substitution.
 
@@ -74,26 +78,43 @@ Literal paths only: no variables, globs, `~` expansion or command substitution.
 - `$(…)`, backtick command substitution, heredoc/here-string (`<<`, `<<<`)
 - unterminated quotes, dynamic `eval`/`source`/`.`-sourcing
 - non-literal (variable/glob) redirect targets or arguments
-- `>>`, `<`, `2>` and all other redirections beyond a single `>`
-- executables outside the v0.1 whitelist
+- `>>`, `<`, file-target fd redirects (`2>`, `2>>`) and all other redirections
+  beyond a single `>` or an `N>&M` stream copy
+- in-place `sed -i`/`sed --in-place` editing
+- executables outside the v0.2 whitelist
 
-### Supported PowerShell (single directly invoked whitelisted cmdlet)
+### Supported PowerShell (single directly invoked command)
 
-- `Set-Content -Path/-LiteralPath <literal> [-Value <literal>] [-Encoding <literal>] [-NoNewline]`
-- `Add-Content -Path/-LiteralPath <literal> [-Value <literal>] [-Encoding <literal>] [-NoNewline]`
-- `New-Item -Path <literal> [-Value <literal>] [-ItemType <literal>]`
-- `Out-File -FilePath/-LiteralPath <literal> [-Encoding <literal>] [-NoNewline]`
-- `Get-Content -Path/-LiteralPath <literal> [-Encoding <literal>] [-Raw]`
+- the v0.1 cmdlet set: `Set-Content`, `Add-Content`, `New-Item`, `Out-File`,
+  `Get-Content` with the exact documented parameters
+- v0.2: a whitelisted external executable (`git`, `pnpm`, `npm`, `node`,
+  `python`, `tsc`, `vitest`, `pytest`, … – the same run-executable set as the
+  POSIX side) invoked directly with all-literal arguments, e.g.
+  `git push origin main`, `pnpm add pkg@1.0.0`; its run effect carries the
+  first pathish argument
+- v0.2: unquoted `N>&M` stream duplication is stripped everywhere (a quoted
+  `"2>&1"` remains an ordinary value)
 
-Requirements: the cmdlet must be unquoted at the command position; the path must
-come from the explicit named path parameter; a quoted path is one token (spaces
-allowed); permitted value parameters (`-Value`, `-Encoding`, and `-ItemType`
+Requirements: the command must be unquoted at the command position; the path
+must come from the explicit named path parameter (cmdlets) or be a literal
+argument (external executables); a quoted path is one token (spaces allowed);
+permitted value parameters (`-Value`, `-Encoding`, and `-ItemType`
 where listed above) never contribute subjects;
 `-WhatIf` and `-Confirm` are unsupported because they can avoid or defer the
 claimed effect; positional paths, variables, expressions, `Join-Path`,
 subexpressions, pipelines, `;`, script blocks, `&`, dot sourcing, `Copy-Item`,
 `Move-Item`, `Rename-Item` and `.NET WriteAllText` are unsupported and fail the
 WHOLE command.
+
+### Subject resolution (v0.2)
+
+Evidence artifact subjects are resolved against the call's `workdir`; when the
+shell tool carries none (the macOS persistent bash/pwsh tools expose only
+`command`), the session scope cwd is used as the default, so relative paths and
+scope-run attribution match the contract subject derived from the same cwd. A
+pathless `run` operation of a whitelisted executable is attributed to that cwd,
+which is what closes a scope `run` contract; builtins (`echo`, `cat`, …) never
+become a subject-carrying run.
 
 ### Binding invariants
 
