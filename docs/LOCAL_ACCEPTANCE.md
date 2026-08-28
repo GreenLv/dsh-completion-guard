@@ -36,6 +36,139 @@ Evidence boundaries:
 - The rejected compound-command case with an actionable `rejected_bindings[].hint`, and informational receipt filtering, are covered by the 0.2.0 semantic/regression checks and earlier real-session evidence; they were not re-created as additional live Web calls in this acceptance run.
 - Windows native acceptance remains the documented 0.1.x bounded PowerShell result; no Windows 0.2.0 run is claimed here.
 
+## macOS v0.2.1 acceptance (2026-08-28)
+
+Verified source commit: `ba8f05dc6a922b8a12f4dc211d9a888d2ece526a` (= annotated tag
+`v0.2.1`, tag object `5bccac9dd77549a929137befd808dc1701d77093`). Repository gates
+and package verification ran on a clean worktree at that commit; the npm
+publication ran from `806aa863234a064b5c42391fa1288998abfc846e` as recorded
+below. Node v25.1.0, pnpm 11.22.0, npm 11.17.0 on macOS 26.6.2 (arm64). The
+pre-publish artifact `dsh-context-guard-0.2.1.tgz` had SHA-256
+`ea2b6a0bc1db82150af9d88494b6c9d2a1e0243d33ed21df48d3c23d7c52a895`.
+
+Repository gates passed at `ba8f05d` (each exit code recorded at run time; the
+untracked `docs/PROBLEM_REPORT_v0.2.1.md` was moved out of the worktree for the
+pack steps and restored afterwards):
+
+- `pnpm install --frozen-lockfile` -> 0.
+- `pnpm run typecheck` -> 0.
+- `pnpm test` -> 0; 6 test files, 138 tests passed (`tests/domain/conversation.test.ts`
+  is the new v0.2.1 conversational-capture matrix with 7 tests).
+- `pnpm run lint` -> 0; 0 warnings / 0 errors (26 files, 96 rules).
+- `pnpm run build` -> 0; 6 files, 151.33 kB total.
+- `pnpm run pack:check` -> 0; `dsh-context-guard-0.2.1.tgz`, 19 files, and the
+  untracked problem report is not part of the package.
+
+Installed-state verification: the tgz above was added to the real `web` profile
+(`dsh plugin --profile web add file:...`) and to the `headless` profile; both
+installed packages read `0.2.1`, `dsh --profile web --dump-config` still composes
+the `context-guard` bundle, and DSH web was restarted after the install (new
+process PID 97136 started 09:55, listening on 127.0.0.1:3080, after the 09:53
+install) so the live instance loads 0.2.1.
+
+### Live multi-turn Web session (one guarded session, all steps)
+
+A brand-new guarded session in the real Web UI (workspace `dsh-context-guard`,
+DeepSeek-V4-Flash-Vision-Exp, workspace-write), driven through a dedicated
+Chrome instance over the Chrome DevTools Protocol — the same browser-automation
+lane this DSH install uses for its own browser skill (`chrome-devtools-mcp`).
+User messages were submitted with CDP-trusted pointer events on the composer's
+send control; every acceptance observable below was double-checked against the
+server-side session log
+(`~/.dsh/sessions/…/session-6dcd1274-d4bb-430f-a07c-bcddda8a3bca/session.jsonl.zstd`).
+The profile's managed patch layer already sets `context-guard` to
+`activation: always`, so the session was guarded from its first event.
+
+1. Baseline: `/context-guard status` -> `{"enabled":true,"epoch":0,
+   "contract_revision":0,"pending":0,"passed":0,"evidence":0,
+   "integrity":"valid"}`.
+2. Change 1, clarifying message: `这个收尾具体要做什么` was sent; the model
+   answered (and explored the repository, producing 32 evidence entries). The
+   next `/context-guard status` returned `pending:0`, `contract_revision:0` —
+   the clarifying question was not captured as a contract item.
+3. Change 1, progression phrase: `继续` was sent; the model continued its
+   analysis. `/context-guard status` again returned `pending:0` (evidence 37) —
+   the progression phrase was not captured.
+4. Evidence production and certified checkpoint: the single-clause task
+   "在本仓库前台单一命令运行 pnpm test 且不得使用管道分号或重定向，然后用本次运行产生
+   的证据调用 context_guard_checkpoint 绑定全部开放项完成认证" was captured as
+   `R001` (checkpoint with empty bindings returned `incomplete`,
+   `open_items:["R001"]`); the model executed a clean foreground `pnpm test`
+   (single command, no pipes or redirects; 6 files / 138 tests passed), which
+   produced durable evidence `E0038` (bash, scope, outcome success, shell +
+   deterministic-check), and the binding `{"item_id":"R001",
+   "evidence_ids":["E0038"]}` returned `{"status":"certified",
+   "contract_revision":1,"open_items":[],"rejected_bindings":[]}`. Both raw
+   tool results are persisted in the session log.
+5. Pre-clear goal-gate denial (fail-closed evidence): a verification message
+   was itself captured as `R002` (revision 1 -> 2); the model's empty-binding
+   checkpoint returned `incomplete, open_items:["R002"]`, and
+   `update_goal(action=complete)` was denied with "Context Guard requires a
+   current completion certificate before Goal completion." — the gate denies
+   before checking whether a goal exists (`get_goal` returned `{"goal":null}`).
+6. Clear remediation: `/context-guard clear` returned "Context Guard contract
+   cleared: 1 requirement/acceptance item(s) superseded; 0 pending remain
+   (prohibitions retained)." A follow-up verification (phrased as a question,
+   which the conversational filter does not capture) re-ran both tools:
+   the empty-binding checkpoint returned `{"status":"certified",
+   "contract_revision":8,"open_items":[],"rejected_bindings":[]}`, and
+   `update_goal(action=complete)` was no longer blocked by the guard — it
+   reached the goal tool's own argument validation (`goal_id` placeholder
+   rejected) because this session has no active goal. The final
+   `/context-guard status` read `{"enabled":true,"epoch":0,
+   "contract_revision":8,"pending":0,"passed":1,"evidence":43,
+   "integrity":"valid"}` — the guard stayed enabled across the clear.
+
+Headless cross-checks (fresh guarded session per run, `--patch` overlay with
+`activation: always`, real model turns; server logs under `~/.dsh/sessions/`):
+
+- Compound-command rejection: `pnpm test 2>&1 | tee …; echo …` produced
+  scope-only evidence and the binding attempt was rejected with `incomplete`
+  and per-item hints ("needs a scope run effect: a whitelisted executable …
+  without pipes, `;` or `&&`"). No binding rule was changed for it.
+- Recovery-injection dedup: across three headless sessions, six
+  `context_guard_checkpoint` rejections (nonexistent evidence `E9999`, both
+  missing-item and evidence-mismatch reasons) produced exactly one
+  "Open task requirements (recovered after compaction or resume):" plugin
+  notice per session — no duplicate recovery packet was ever injected live.
+  The step-separated identical-rejection scenario is covered deterministically
+  by `tests/runtime.test.ts` ("recovery injection dedup (v0.2.1)").
+
+Evidence boundaries:
+
+- The live Web session covers the work order's steps 1-5 (status baseline,
+  clarifying message, progression phrase, supported-task evidence with a
+  certified checkpoint, and clear -> empty-binding certified -> goal-gate
+  release with the guard still enabled). The `update_goal` leg ends at the
+  goal tool's own argument validation because the acceptance session had no
+  active goal; the gate's release is nonetheless demonstrated, and the denial
+  path was captured live pre-clear.
+- Evidence remains session-scoped by design; cross-session evidence IDs are
+  rejected and no cross-session import exists. Windows native behavior is not
+  re-claimed here; the 0.2.0 Windows records stand.
+
+### Publication and consumer readback
+
+The npm publication was authorized and executed from
+`806aa863234a064b5c42391fa1288998abfc846e` ("docs: update READMEs to v0.2.1"),
+a post-release README follow-up commit that was already on local `main` (not
+pushed at the time) when the release was approved. Per the maintainer's
+explicit choice, the registry `gitHead` therefore points at `806aa86…` rather
+than the tag commit `ba8f05d…`; the annotated tag `v0.2.1` itself was not
+moved and still peels to `ba8f05d…`.
+
+- `npm publish` -> `+ dsh-context-guard@0.2.1` (19 files, package size
+  70.5 kB, shasum `2a32ce46fd00fd87d144011653bd99fe2c5a9bd5`). The account's
+  npm token had expired and the publish required npm's EOTP web
+  authentication, completed in the browser.
+- `npm view dsh-context-guard dist-tags.latest` -> `0.2.1`; versions sequence
+  `0.1.2, 0.2.0, 0.2.1`.
+- `npm view dsh-context-guard@0.2.1 gitHead` -> `806aa863234a064b5c42391fa1288998abfc846e`.
+- The official `dsh-context-guard-0.2.1.tgz` unpacks to version `0.2.1`; all
+  six packaged `dist/` files are byte-identical (md5) to the `ba8f05d`
+  gate-run build, and both README files are byte-identical to the `806aa86`
+  content. No `docs/PROBLEM_REPORT_v0.2.1.md` is part of the package.
+
 ## 0.1.1 release candidate (2026-08-27)
 
 The candidate was built on macOS from branch
