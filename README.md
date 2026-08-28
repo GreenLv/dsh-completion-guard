@@ -9,7 +9,7 @@ A task-contract and completion-certification plugin for DeepSeek Harness (DSH). 
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.2.0
+dsh plugin --profile web add dsh-context-guard@0.2.1
 ```
 
 Restart DSH Web, open a session, and enable the guard:
@@ -19,7 +19,7 @@ Restart DSH Web, open a session, and enable the guard:
 /context-guard status
 ```
 
-Activation is opt-in by default. `status` reports whether the guard is enabled, the current epoch and contract revision, pending and passed item counts, the evidence count, and integrity state. `off` stops capture and gating for the session while preserving its prior history; `diagnose` returns a bounded diagnostic view.
+Activation is opt-in by default. `status` reports whether the guard is enabled, the current epoch and contract revision, pending and passed item counts, the evidence count, and integrity state. `off` stops capture and gating for the session while preserving its prior history; `clear` supersedes every pending requirement/acceptance under a `CLEAR:` sentinel (prohibitions retained) so an empty-binding checkpoint can certify while the guard stays on; `diagnose` returns a bounded diagnostic view.
 
 ### Activation modes
 
@@ -53,9 +53,9 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## Status and compatibility
 
-Version 0.2.0 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.0). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
+Version 0.2.1 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.1). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
-The 0.2.0 release suite contains 124 tests (104 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result; Windows 0.2.0 native acceptance is still pending.
+The 0.2.1 release suite contains 138 tests (105 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. 0.2.1 adds a session-layer capture filter so clarification questions, meta comments, and bare progression phrases (`继续`, `continue`) never become contract items; de-duplicates repeated recovery notifications; adds `/context-guard clear`; and documents how a goal completes when the guard is disabled or blocked. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result; Windows 0.2.1 native acceptance is still pending.
 
 Context Guard recognizes only a small, auditable shell and PowerShell command subset. Unsupported or ambiguous syntax stays incomplete instead of being partially trusted. Compound commands, variables, non-whitelisted executables, file-target redirects, and in-place `sed` remain outside the certifiable surface. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact grammar and platform evidence.
 

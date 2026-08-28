@@ -9,7 +9,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.2.0
+dsh plugin --profile web add dsh-context-guard@0.2.1
 ```
 
 重启 DSH Web，打开一个会话并启用 Guard：
@@ -19,7 +19,7 @@ dsh plugin --profile web add dsh-context-guard@0.2.0
 /context-guard status
 ```
 
-默认采用 opt-in。`status` 会返回启用状态、当前 epoch 和合同修订、待完成与已通过条目数量、证据数量及完整性状态；`off` 停止本会话的捕获和门禁，但保留已有历史；`diagnose` 返回有界的诊断信息。
+默认采用 opt-in。`status` 会返回启用状态、当前 epoch 和合同修订、待完成与已通过条目数量、证据数量及完整性状态；`off` 停止本会话的捕获和门禁，但保留已有历史；`clear` 在 `CLEAR:` 哨兵下使所有待完成的 requirement/acceptance 成为 superseded（保留 prohibition），从而让空绑定 checkpoint 也能在 Guard 保持开启的情况下签发证书；`diagnose` 返回有界的诊断信息。
 
 ### 启用模式
 
@@ -53,9 +53,9 @@ dsh plugin --profile web add dsh-context-guard@0.2.0
 
 ## 状态与兼容性
 
-0.2.0 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.0)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+0.2.1 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.1)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
-0.2.0 版本测试共 124 项，其中 domain/core 104 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果；Windows 0.2.0 原生验收仍待完成。
+0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果；Windows 0.2.1 原生验收仍待完成。
 
 Context Guard 只识别一小组可审计的 shell 与 PowerShell 命令。无法支持或存在歧义的语法会保持 incomplete，而不会被部分信任。复合命令、变量、非白名单可执行文件、文件目标重定向和 in-place `sed` 仍不在可认证范围内。精确语法和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
