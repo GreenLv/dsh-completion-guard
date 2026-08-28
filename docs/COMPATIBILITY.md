@@ -44,7 +44,33 @@ when the host execution itself succeeded.
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real headless boot loads the plugin (apply, `ctx.sessions` access, and listener registration succeed) and only stops at missing provider credentials.
 
-The slash command renders in the Web command directory and its on/off/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.0 has 104 domain/core tests and 124 tests overall. Its macOS live acceptance includes a real Web `pnpm test` run with 5 test files and 124 tests passed, followed by a certified checkpoint at contract revision 4; the complete evidence boundary and known gaps are recorded in `LOCAL_ACCEPTANCE.md`. Evidence and certificates are session-scoped: a later DSH session cannot import or certify evidence IDs from an earlier session, so a workflow requiring a certificate must produce its evidence and checkpoint in one session. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
+The slash command renders in the Web command directory and its on/off/clear/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.1 has 105 domain/core tests and 138 tests overall. The 0.2.0 macOS live acceptance includes a real Web `pnpm test` run with 5 test files and 124 tests passed, followed by a certified checkpoint at contract revision 4; the complete evidence boundary and known gaps are recorded in `LOCAL_ACCEPTANCE.md`. Evidence and certificates are session-scoped: a later DSH session cannot import or certify evidence IDs from an earlier session, so a workflow requiring a certificate must produce its evidence and checkpoint in one session. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
+
+## Session-layer capture filter and goal completion (v0.2.1)
+
+Not every direct user message becomes a contract item. Informational reports
+(receipts, pasted summaries) were already excluded; v0.2.1 additionally drops
+session-layer utterances: bare progression/acknowledgement phrases (`继续`,
+`好的`, `continue`), meta questions (`这个收尾具体要做什么`, `是不是bug`),
+and meta comments or objections without a task feature. The filter also runs
+per clause, so a conversational opener inside an otherwise actionable message
+(`好的。请修改 src/a.ts`) no longer adds a phantom scope requirement. The
+classifier fails closed: an artifact path, an explicit method, or a
+non-negated operation verb always keeps the message captured, and uncertain
+phrasing stays a captured requirement. Old sessions replay unchanged — a
+contract already polluted by such messages remains historical state and is
+remediated explicitly (below), not by re-derivation.
+
+`update_goal(action=complete)` stays denied while the guard is enabled without
+a current completion certificate. The remediation routes are explicit:
+`/context-guard off` disables gating (use only after the user confirms the
+work is actually done), `/context-guard clear` supersedes pending
+requirements/acceptances under a `CLEAR:<revision>` sentinel (prohibitions are
+retained) so an empty-binding checkpoint can certify while the guard stays
+enabled, and `update_goal(action=blocked)` records the blocker truthfully.
+Recovery packet injection is content-deduplicated: an unchanged packet is
+injected once per re-arm, while resume, compaction, an enablement transition,
+new evidence, or a new contract revision always re-remind.
 
 ## Certifiable command subset
 

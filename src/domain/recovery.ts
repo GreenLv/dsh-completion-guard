@@ -1,4 +1,5 @@
 import type { GuardItem, GuardProjection } from './types.js'
+import { sha256 } from './canonicalize.js'
 import { evidenceCoverage } from './matching.js'
 
 export interface RecoveryOptions {
@@ -53,6 +54,16 @@ export function openItems(projection: GuardProjection): GuardItem[] {
   return [...projection.items.values()]
     .filter((item) => item.status === 'pending')
     .sort((a, b) => (a.revision - b.revision) || (a.id < b.id ? -1 : 1))
+}
+
+/**
+ * Content identity of a rendered recovery packet, bound to the contract
+ * revision and epoch it was rendered from. The runtime compares digests before
+ * re-injecting, so a repeatedly re-armed recovery with unchanged content is
+ * injected once instead of looping (v0.2.1).
+ */
+export function recoveryDigest(packet: string, projection: GuardProjection): string {
+  return sha256(JSON.stringify({ packet, revision: projection.contractRevision, epoch: projection.epoch }))
 }
 
 export function renderRecoveryPacket(projection: GuardProjection, options: RecoveryOptions = {}): string {

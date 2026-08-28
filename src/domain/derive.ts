@@ -1,5 +1,6 @@
 import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses } from './capture.js'
 import { certifyCheckpoint } from './checkpoint.js'
+import { classifyUserInteraction } from './conversation.js'
 import { evidenceFromPersistedToolResult, extractTextContent, withDurability } from './evidence.js'
 import { supersedeItem } from './supersession.js'
 import { createProjection, type GuardProjection, type EvidenceBinding, type GuardItemKind } from './types.js'
@@ -60,6 +61,9 @@ function resolveArtifact(path: string, scope: DeriveScope): string {
  */
 function insertItems(projection: GuardProjection, text: string, sourceMessageId: string, scope: DeriveScope): void {
   for (const segment of segmentClauses(text)) {
+    // Session-layer clauses (progression phrases, meta questions) inside an
+    // otherwise actionable message never become contract items.
+    if (classifyUserInteraction(segment.body) === 'conversational') continue
     if (segment.kind === 'requirement' && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue
     if (segment.kind === 'prohibition' || segment.paths.length === 0) {
       insert(projection, segment.kind, segment.body, sourceMessageId, scope.cwd || 'scope', 'scope')
@@ -131,6 +135,18 @@ export function deriveProjection(
           projection.epoch = epoch
         } else if (subcommand === 'off') {
           enabled = false
+        } else if (subcommand === 'clear') {
+          // Explicit remediation: supersede every pending requirement and
+          // acceptance under a CLEAR sentinel (prohibitions are retained) and
+          // bump the revision, so a fresh empty-binding checkpoint can certify
+          // while the guard stays enabled. Replayable from the logged command.
+          const revision = projection.contractRevision + 1
+          for (const item of projection.items.values()) {
+            if (item.kind === 'prohibition' || item.status !== 'pending') continue
+            item.status = 'superseded'
+            item.supersededBy = `CLEAR:${revision}`
+          }
+          projection.contractRevision = revision
         }
         break
       }
@@ -149,6 +165,9 @@ export function deriveProjection(
         // Informational reports (acceptance receipts, pasted summaries/logs)
         // are not task instructions and never become contract items.
         if (isInformationalMessage(text)) break
+        // Session-layer talk (progression phrases, meta questions, meta
+        // comments) is not a task requirement either (v0.2.1).
+        if (classifyUserInteraction(text) === 'conversational') break
         insertItems(projection, text, `m${event.seq}`, scope)
         break
       }

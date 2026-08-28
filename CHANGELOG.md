@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.2.1 - 2026-08-28
+
+### Fixed
+
+- **Clarifications and session talk no longer pollute the contract.** Bare progression phrases (`继续`, `continue`), meta questions (`这个收尾具体要做什么`, `是不是bug`), and meta comments/objections are classified as session-layer talk and never become contract items — including as clauses inside otherwise actionable messages. Real instructions, prohibitions, and task titles are captured exactly as before; the classifier fails closed on uncertain phrasing.
+- **Rejected checkpoints no longer re-inject the same recovery packet.** Recovery injection is content-deduplicated through a digest bound to the packet content, contract revision, and epoch. Resume, compaction, enablement transitions, new evidence, or a new contract revision still always re-remind.
+
+### Added
+
+- **`/context-guard clear`.** Supersedes every pending requirement and acceptance under a `CLEAR:<revision>` sentinel (prohibitions are retained) and bumps the contract revision, so an empty-binding checkpoint can certify and Goal completion can proceed while the guard stays enabled. The command is replayed from the log like all other state.
+
+### Changed
+
+- The Goal-completion gate is unchanged (no current certificate, no completion) and is now documented with its explicit remediation routes: `/context-guard off` after the user confirms completion, `/context-guard clear`, or a truthful `update_goal(action=blocked)`.
+
+See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the supported grammar and [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) for release evidence and platform limits.
+
 ## 0.2.0 - 2026-08-28
 
 ### Added

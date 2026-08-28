@@ -99,7 +99,7 @@ function isArtifactCandidate(value: string): boolean {
 /** Wrapped path spellings: backticks, double/single quotes, and parentheses. */
 const WRAPPED_PATH = /`([^`]+)`|"([^"]+)"|'([^']+)'|\(([^()]+)\)/g
 
-function extractArtifactPaths(text: string): string[] {
+export function extractArtifactPaths(text: string): string[] {
   const found = new Set<string>()
   const push = (candidate: string) => {
     const trimmed = candidate.trim()

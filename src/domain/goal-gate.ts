@@ -8,6 +8,22 @@ export function hasCurrentCertificate(projection: GuardProjection): boolean {
     && checkpoint.contractRevision === projection.contractRevision
 }
 
+/**
+ * Denies `update_goal(action=complete)` while the guard is enabled and no
+ * current completion certificate exists. The gate itself has no bypass; a
+ * workflow that genuinely finished but cannot certify (for example a contract
+ * polluted by session-layer talk, or evidence that lives in another session)
+ * has three explicit remediation routes:
+ *
+ * 1. `/context-guard off` disables the guard, so completion is no longer
+ *    gated. Use only after the user confirms the work is actually done.
+ * 2. `/context-guard clear` supersedes every pending requirement and
+ *    acceptance under a `CLEAR:<revision>` sentinel (prohibitions are
+ *    retained) and bumps the contract revision; an empty-binding checkpoint
+ *    can then certify while the guard stays enabled.
+ * 3. `update_goal(action=blocked)` records the blocker truthfully, which is
+ *    never denied by this gate.
+ */
 export function goalCompletionDenial(
   projection: GuardProjection,
   toolName: string,

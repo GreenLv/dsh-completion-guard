@@ -1,6 +1,7 @@
 export * from './canonicalize.js'
 export * from './capture.js'
 export * from './checkpoint.js'
+export * from './conversation.js'
 export * from './derive.js'
 export * from './evidence.js'
 export * from './goal-gate.js'

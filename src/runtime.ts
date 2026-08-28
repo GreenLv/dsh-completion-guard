@@ -6,7 +6,7 @@ import { createProjection, type GuardProjection } from './domain/types.js'
 import { deriveProjection } from './domain/derive.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
 import { decideTurnStopping, latestAssistantText } from './domain/stop-policy.js'
-import { renderRecoveryPacket } from './domain/recovery.js'
+import { recoveryDigest, renderRecoveryPacket } from './domain/recovery.js'
 import { createCheckpointTool } from './tools/checkpoint.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
@@ -45,6 +45,10 @@ export function createRuntime(agent: Agent, config: ResolvedConfig): GuardRuntim
 
   const rebuild = () => {
     const header = session.header as { cwd?: unknown } | undefined
+    // The recovery digest is runtime-owned liveness state like the per-turn
+    // attempt cap; Object.assign would otherwise flush it with the fresh
+    // projection's undefined.
+    const priorRecoveryDigest = projection.lastRecoveryDigest
     const derived = deriveProjection(
       session.events as unknown as Parameters<typeof deriveProjection>[0],
       { activation: config.activation },
@@ -55,9 +59,15 @@ export function createRuntime(agent: Agent, config: ResolvedConfig): GuardRuntim
     // Liveness state must survive rebuilds: the per-turn attempt cap and the
     // one-shot recovery arm are owned by the runtime, not the projection.
     projection.continuationAttempts = continuationAttempts
+    projection.lastRecoveryDigest = priorRecoveryDigest
     // A newly observed epoch means enablement transitioned since the last
-    // rebuild; the first rebuild only records the baseline.
-    if (observedEpoch >= 0 && derived.projection.epoch > observedEpoch) pendingRecovery = true
+    // rebuild; the first rebuild only records the baseline. Recovery re-arms
+    // and the content dedup forgets the last packet, so the first reminder
+    // after a transition is always injected.
+    if (observedEpoch >= 0 && derived.projection.epoch > observedEpoch) {
+      pendingRecovery = true
+      projection.lastRecoveryDigest = undefined
+    }
     observedEpoch = derived.projection.epoch
     // Compaction summaries stay in the historical log forever, so only re-arm
     // recovery when a NEW summary is observed, keyed by its sequence.
@@ -111,12 +121,19 @@ export function apply(ctx: Context, rawConfig: { activation?: unknown } = {}): v
   ctx.commands.register(createContextGuardCommand(
     (agent) => ensure(agent).projection,
     (agent, enabled) => ensure(agent).setEnabled(enabled),
+    (agent) => ensure(agent).sync(),
   ))
 
   ctx.on('agent/session-start', ({ agent, source }) => {
     const runtime = ensure(agent)
     runtime.sync()
-    if (source === 'resume' || source === 'compact') runtime.markRecoveryNeeded()
+    if (source === 'resume' || source === 'compact') {
+      // Forgetting the last injected digest guarantees the post-resume or
+      // post-compaction reminder is injected at least once, even when the
+      // packet content is unchanged.
+      runtime.projection.lastRecoveryDigest = undefined
+      runtime.markRecoveryNeeded()
+    }
     agent.ctx.tools.register(createCheckpointTool(
       () => runtime.projection,
       () => runtime.markRecoveryNeeded(),
@@ -135,7 +152,12 @@ export function apply(ctx: Context, rawConfig: { activation?: unknown } = {}): v
     const decision = await next()
     if (decision.kind === 'enter' && runtime.projection.enabled && runtime.consumeRecovery()) {
       const recovery = renderRecoveryPacket(runtime.projection, { charBudget: 4000 })
-      if (recovery) {
+      const digest = recovery ? recoveryDigest(recovery, runtime.projection) : undefined
+      if (recovery && digest !== runtime.projection.lastRecoveryDigest) {
+        // Content dedup (v0.2.1): a rejection loop with an unchanged packet
+        // injects once; new evidence or a new contract changes the digest and
+        // is reminded again.
+        runtime.projection.lastRecoveryDigest = digest
         decision.messages = [...decision.messages, createUserMessage({
           content: [{ type: 'text', text: `Open task requirements (recovered after compaction or resume):\n${recovery}` }],
           source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recovering open task requirements') },

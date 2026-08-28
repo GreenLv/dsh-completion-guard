@@ -2,6 +2,23 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
+## 0.2.1 - 2026-08-28
+
+### 修复
+
+- **澄清提问与会话推进语不再污染合同。** 纯推进语（`继续`、`continue`）、元问题（`这个收尾具体要做什么`、`是不是bug`）与元评论/质疑被归类为会话层话语，不再成为合同条目——混合消息中的会话层分句同样被剔除。真实指令、禁止项与任务标题的捕获行为完全不变；措辞拿不准时分类器保守 fail-closed。
+- **被拒的 checkpoint 不再重复注入同一恢复包。** 恢复注入按内容去重：摘要绑定恢复包内容、合同修订与 epoch。resume、压缩、启用切换、新证据或新合同修订仍必然再次提醒。
+
+### 新增
+
+- **`/context-guard clear`。** 将当前所有 pending 的 requirement/acceptance 以 `CLEAR:<revision>` 哨兵标记为 superseded（prohibition 保留）并递增合同修订，使空绑定 checkpoint 可以通过认证、Goal completion 在守卫保持开启的情况下放行。该命令与其他状态一样从日志重放。
+
+### 变更
+
+- Goal 完成门禁语义不变（无当前证书不放行），并补充文档化的三条善后路线：用户确认完成后 `/context-guard off`、`/context-guard clear`、如实记录 `update_goal(action=blocked)`。
+
+支持语法见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)，发布证据和平台边界见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+
 ## 0.2.0 - 2026-08-28
 
 ### 新增
