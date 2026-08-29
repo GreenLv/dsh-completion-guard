@@ -2,4 +2,4 @@
 # The host loads the named Cordis plugin from the package root.
 - insert:
     - id: context-guard
-      name: 'dsh-context-guard'
+      name: 'dsh-completion-guard'

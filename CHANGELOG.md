@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## Unreleased
+
+### Changed
+
+- **Package renamed from `dsh-context-guard` to `dsh-completion-guard`.** An unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning) already uses the name; the rename removes the collision for name-keyed registries and lists. The internal Cordis bundle id stays `context-guard`, so installed profiles keep their runtime identity. The previous npm package `dsh-context-guard` will be deprecated once `dsh-completion-guard` is published.
+
 ## 0.2.1 - 2026-08-28
 
 ### Fixed

@@ -1,4 +1,4 @@
-# dsh-context-guard
+# dsh-completion-guard
 
 [English](README.md)
 
@@ -9,7 +9,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.2.1
+dsh plugin --profile web add dsh-completion-guard@0.2.1
 ```
 
 重启 DSH Web，打开一个会话并启用 Guard：
@@ -34,7 +34,7 @@ dsh plugin --profile web add dsh-context-guard@0.2.1
 
 ```yaml
 - id: context-guard
-  name: dsh-context-guard
+  name: dsh-completion-guard
   config:
     activation: always
 ```
@@ -53,7 +53,9 @@ dsh plugin --profile web add dsh-context-guard@0.2.1
 
 ## 状态与兼容性
 
-0.2.1 已发布到 [npm](https://www.npmjs.com/package/dsh-context-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.1)。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+0.2.1 已发布到 [npm](https://www.npmjs.com/package/dsh-completion-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1)。
+
+> 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`,以避免与无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)撞名。内部 Cordis bundle id 保持 `context-guard` 不变;原 npm 包 `dsh-context-guard` 将被 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
 0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果；Windows 0.2.1 原生验收仍待完成。
 
@@ -70,7 +72,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 本项目从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) 迁移确定性行为，以 v0.8.8 作为语义基线，但两者服务于不同运行时：
 
 - `codex-context-guard` 是面向 Codex Hook 的 Python 实现，负责 Codex 插件缓存和 Hook 生命周期接入。
-- `dsh-context-guard` 是独立的 TypeScript 实现，基于 DSH 原生 Session 事件、命令、工具和 Agent 生命周期工作。
+- `dsh-completion-guard` 是独立的 TypeScript 实现，基于 DSH 原生 Session 事件、命令、工具和 Agent 生命周期工作。
 
 两个项目不共享运行时状态、安装器、缓存或发布历史。修复应先进入拥有对应运行时的仓库；只有同一行为确实适用于两侧时，才显式迁移。具体复用与替换边界见 [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) 和 [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md)。
 

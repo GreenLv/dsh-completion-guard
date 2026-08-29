@@ -2,6 +2,12 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
+## 未发布
+
+### 变更
+
+- **包名由 `dsh-context-guard` 更名为 `dsh-completion-guard`。** 无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)已占用该名称;更名消除按名字建索引的注册面与列表上的冲突。内部 Cordis bundle id 保持 `context-guard` 不变,已安装 profile 的运行时身份不受影响。`dsh-completion-guard` 发布后,原 npm 包 `dsh-context-guard` 将被 deprecate。
+
 ## 0.2.1 - 2026-08-28
 
 ### 修复

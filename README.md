@@ -1,4 +1,4 @@
-# dsh-context-guard
+# dsh-completion-guard
 
 [简体中文](README.zh-CN.md)
 
@@ -9,7 +9,7 @@ A task-contract and completion-certification plugin for DeepSeek Harness (DSH). 
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-context-guard@0.2.1
+dsh plugin --profile web add dsh-completion-guard@0.2.1
 ```
 
 Restart DSH Web, open a session, and enable the guard:
@@ -34,7 +34,7 @@ To start Context Guard automatically for sessions in a DSH profile, add an ID-ta
 
 ```yaml
 - id: context-guard
-  name: dsh-context-guard
+  name: dsh-completion-guard
   config:
     activation: always
 ```
@@ -53,7 +53,9 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## Status and compatibility
 
-Version 0.2.1 is available from [npm](https://www.npmjs.com/package/dsh-context-guard) and the [GitHub release](https://github.com/GreenLv/dsh-context-guard/releases/tag/v0.2.1). It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
+Version 0.2.1 is available from [npm](https://www.npmjs.com/package/dsh-completion-guard) and the [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1).
+
+> The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision with an unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning). The internal Cordis bundle id stays `context-guard`, and the previous npm package `dsh-context-guard` will be deprecated in favor of this package. It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
 The 0.2.1 release suite contains 138 tests (105 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. 0.2.1 adds a session-layer capture filter so clarification questions, meta comments, and bare progression phrases (`继续`, `continue`) never become contract items; de-duplicates repeated recovery notifications; adds `/context-guard clear`; and documents how a goal completes when the guard is disabled or blocked. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result; Windows 0.2.1 native acceptance is still pending.
 
@@ -70,7 +72,7 @@ Evidence is bounded and redacted. Complete prompts, stdout, file contents, crede
 This project ports deterministic behavior from [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard), with v0.8.8 as its semantic baseline. The two repositories serve different runtimes:
 
 - `codex-context-guard` is the Codex Hook/Python implementation with Codex plugin-cache and Hook lifecycle integration.
-- `dsh-context-guard` is an independent TypeScript implementation over native DSH Session events, commands, tools, and agent lifecycle.
+- `dsh-completion-guard` is an independent TypeScript implementation over native DSH Session events, commands, tools, and agent lifecycle.
 
 They do not share runtime state, installers, caches, or release histories. Fixes are contributed to the repository that owns the affected runtime and are ported deliberately when the same behavior belongs in both products. See [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) and [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) for the exact reused and replaced boundaries.
 
