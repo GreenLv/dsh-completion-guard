@@ -82,6 +82,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 所有权、持久状态和认证管线。
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) — 支持的 DSH 版本和可认证命令子集。
 - [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) — 确定性、隔离环境、原生平台和公开包验证范围。
+- [`docs/distribution.md`](docs/distribution.md) — 已验证的公开分发去向与更名说明。
 - [`docs/PRIVACY.md`](docs/PRIVACY.md) — 保存的事实、禁止数据和失败行为。
 - [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) — 语义基线与仓库权威边界。
 - [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) — 从 Codex 保留的行为和 DSH 专属替换。
