@@ -4,6 +4,8 @@
 
 面向 DeepSeek Harness（DSH）的任务合同与完成认证插件。它保存需求、禁止项、验收条件、后续修订和有界证据，只有当前成功证据与当前合同匹配时，任务才能获得完成认证。
 
+![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
+
 ## 快速开始
 
 将已发布插件安装到 DSH Web profile：

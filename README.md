@@ -4,6 +4,8 @@
 
 A task-contract and completion-certification plugin for DeepSeek Harness (DSH). It preserves requirements, prohibitions, acceptance criteria, later corrections, and bounded evidence so a task can be certified only when current successful evidence matches the current contract.
 
+![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
+
 ## Quick start
 
 Install the published plugin into a DSH Web profile:
