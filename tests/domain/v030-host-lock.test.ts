@@ -223,6 +223,32 @@ describe('v0.3 host graph and live capability binding', () => {
     })
     const dsh = { executable: 'dsh' as const, realpath: '/opt/dsh/bin/dsh', version: '0.1.1-rc.2' }
     expect(bindExecutableIdentity(dsh, { ...dsh })).toMatchObject({ status: 'supported', identity: dsh })
+    const windowsDsh = {
+      executable: 'dsh' as const,
+      realpath: 'C:\\tools\\dsh.cmd',
+      version: '0.1.1-rc.2',
+      interpreterRealpath: 'C:\\Windows\\System32\\cmd.exe',
+      interpreterVersion: 'Microsoft Windows [Version 10.0.26100.1]',
+    }
+    expect(bindExecutableIdentity(windowsDsh, { ...windowsDsh })).toMatchObject({
+      status: 'supported', identity: windowsDsh,
+    })
+    expect(bindExecutableIdentity(windowsDsh, {
+      ...windowsDsh,
+      interpreterRealpath: 'C:\\tmp\\cmd.exe',
+    })).toMatchObject({ status: 'unsupported', reasonCode: 'executable_identity_drift' })
+    expect(bindExecutableIdentity(windowsDsh, {
+      ...windowsDsh,
+      interpreterVersion: 'Microsoft Windows [Version 10.0.99999.1]',
+    })).toMatchObject({ status: 'unsupported', reasonCode: 'executable_identity_drift' })
+    expect(bindExecutableIdentity(
+      { ...windowsDsh, interpreterVersion: undefined },
+      { ...windowsDsh, interpreterVersion: undefined },
+    )).toMatchObject({ status: 'unavailable', reasonCode: 'executable_realpath_invalid' })
+    expect(bindExecutableIdentity(
+      { ...windowsDsh, interpreterRealpath: undefined },
+      { ...windowsDsh, interpreterRealpath: undefined },
+    )).toMatchObject({ status: 'unavailable', reasonCode: 'executable_realpath_invalid' })
     expect(bindExecutableIdentity(
       { executable: 'pnpm', realpath: 'node_modules/.bin/pnpm', version: '9.15.9' },
       { executable: 'pnpm', realpath: 'node_modules/.bin/pnpm', version: '9.15.9' },

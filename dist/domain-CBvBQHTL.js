@@ -3487,7 +3487,9 @@ function validExecutableIdentity(identity) {
 		"dsh"
 	].includes(identity.executable)) return false;
 	if (!identity.version || /[\r\n\0]/.test(identity.version)) return false;
-	return (identity.realpath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(identity.realpath)) && !/[\r\n\0]/.test(identity.realpath);
+	if (!(identity.realpath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(identity.realpath)) || /[\r\n\0]/.test(identity.realpath)) return false;
+	if ([identity.interpreterRealpath, identity.interpreterVersion].every((value) => value === void 0)) return true;
+	return typeof identity.interpreterRealpath === "string" && /^[A-Za-z]:[\\/]/.test(identity.interpreterRealpath) && !/[\r\n\0]/.test(identity.interpreterRealpath) && typeof identity.interpreterVersion === "string" && identity.interpreterVersion.length > 0 && !/[\r\n\0]/.test(identity.interpreterVersion);
 }
 /** Bind resolution and effect to the exact same canonical executable tuple. */
 function bindExecutableIdentity(resolution, effect) {
@@ -3501,7 +3503,7 @@ function bindExecutableIdentity(resolution, effect) {
 		digest: executableDigest(resolution),
 		reasonCode: "executable_realpath_invalid"
 	};
-	if (resolution.executable !== effect.executable || resolution.realpath !== effect.realpath || resolution.version !== effect.version) return {
+	if (resolution.executable !== effect.executable || resolution.realpath !== effect.realpath || resolution.version !== effect.version || resolution.interpreterRealpath !== effect.interpreterRealpath || resolution.interpreterVersion !== effect.interpreterVersion) return {
 		status: "unsupported",
 		digest: executableDigest(resolution),
 		reasonCode: "executable_identity_drift"

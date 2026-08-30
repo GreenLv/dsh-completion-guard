@@ -408,6 +408,8 @@ export interface ExecutableIdentity {
   executable: AuditedExecutable
   realpath: string
   version: string
+  interpreterRealpath?: string
+  interpreterVersion?: string
 }
 
 export interface ExecutableIdentityBinding {
@@ -427,8 +429,16 @@ function executableDigest(identity: ExecutableIdentity | undefined): string {
 function validExecutableIdentity(identity: ExecutableIdentity | undefined): identity is ExecutableIdentity {
   if (!identity || !['git', 'npm', 'pnpm', 'dsh'].includes(identity.executable)) return false
   if (!identity.version || /[\r\n\0]/.test(identity.version)) return false
-  return (identity.realpath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(identity.realpath))
-    && !/[\r\n\0]/.test(identity.realpath)
+  if (!(identity.realpath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(identity.realpath))
+    || /[\r\n\0]/.test(identity.realpath)) return false
+  const interpreterFields = [identity.interpreterRealpath, identity.interpreterVersion]
+  if (interpreterFields.every((value) => value === undefined)) return true
+  return typeof identity.interpreterRealpath === 'string'
+    && /^[A-Za-z]:[\\/]/.test(identity.interpreterRealpath)
+    && !/[\r\n\0]/.test(identity.interpreterRealpath)
+    && typeof identity.interpreterVersion === 'string'
+    && identity.interpreterVersion.length > 0
+    && !/[\r\n\0]/.test(identity.interpreterVersion)
 }
 
 /** Bind resolution and effect to the exact same canonical executable tuple. */
@@ -444,7 +454,9 @@ export function bindExecutableIdentity(
   }
   if (resolution.executable !== effect.executable
     || resolution.realpath !== effect.realpath
-    || resolution.version !== effect.version) {
+    || resolution.version !== effect.version
+    || resolution.interpreterRealpath !== effect.interpreterRealpath
+    || resolution.interpreterVersion !== effect.interpreterVersion) {
     return { status: 'unsupported', digest: executableDigest(resolution), reasonCode: 'executable_identity_drift' }
   }
   return { status: 'supported', digest: executableDigest(resolution), identity: { ...resolution } }

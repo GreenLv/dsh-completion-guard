@@ -1,4 +1,4 @@
-import { $ as classifyUserInteraction, A as extractToolSubject, At as STOP_PROTOCOL_VERSION, B as DEFAULT_HOST_LOCK, Bt as COMMAND_SURFACE_MANIFEST, C as latestAssistantText, Ct as canonicalRegistryBase, D as supersedeItem, Dt as CERTIFICATE_VERSION, E as deriveProjection, Et as ACTION_MANIFEST_VERSION, F as parsePwshCommand, Ft as requestedTargetMatchesResolved, G as bindExecutableIdentity, Gt as sanitizeClauseText, H as GOAL_HOST_PACKAGES, Ht as canonicalizePath, I as parseShellCommand, It as semanticActionFromCommand, J as evaluateHostCapability, Jt as createProjection, K as bindLiveGoalCapability, Kt as sanitizeUrl, L as goalCompletionDenial, Lt as semanticActionFromText, M as withDurability, Mt as actionCompatible, N as canonicalArgvFromCommand, Nt as isStatefulAction, O as evidenceFromPersistedToolResult, Ot as SEMANTIC_ACTIONS, P as isRunExecutable, Pt as requestedTargetAuthorizesMutation, Q as segmentAuthorityBlocks, R as hasCurrentCertificate, Rt as validateActionManifest, S as isWholeTaskCompletionClaim, St as segmentClauses, T as PROTOCOL_V3_NOTICE, Tt as ACTION_MANIFEST, U as HOST_CAPABILITY_PACKAGE_GROUPS, Ut as digestStrings, V as EXPECTED_HOST_PACKAGES, Vt as validateManifest, W as SUPPORTED_HOST_MANIFEST, Wt as normalizeClause, X as evaluateToolSurfaceCapability, Y as evaluateHostLock, Z as authorityCaptureCounts, _ as revalidateGitPrestate, _t as classifyClause, a as packageRowsFromActiveGraph, at as DEFAULT_RECOVERY_CHAR_BUDGET, b as decideTurnBoundary, bt as extractOperation, c as resolveInstalledHostLock, ct as recoveryDigest, d as commitIndexSnapshotDigest, dt as evidenceCoverage, et as availableBoundaryQualifications, f as commitTreeSnapshotDigest, ft as evidenceMatchesItem, g as parseGitCommandManifest, gt as captureItem, h as gitCommandMatchesTarget, ht as captureClause, i as injectActiveProfileHostLock, it as certifyCheckpoint, j as isDeterministicCheck, jt as SUPPORTED_EVIDENCE_ADAPTERS, k as extractTextContent, kt as STATEFUL_ACTIONS, l as verifyComposedHostLockDump, lt as renderRecoveryPacket, m as executeRevalidatedGitEffect, mt as currentContractDigest, n as hostLockContextFromComposedDump, nt as isCurrentAcceptedBoundary, o as packageRowsFromPnpmLock, ot as closingHint, p as createGitPrestateEnvelope, pt as isVerifyingCapability, q as evaluateExternalWaitCapability, qt as sha256, r as hostLockRowsFromComposedDump, rt as qualifyBoundary, s as resolveActiveProfileHostLock, st as openItems, t as HostProfileError, tt as effectuateBoundary, u as GIT_COMMAND_MANIFEST_IDS, ut as bindingSatisfies, v as verifiedLinearCommitReadback, vt as extractArtifactPaths, w as observeAssistantOutcome, wt as npmEscapedPackageName, x as decideTurnStopping, xt as isInformationalMessage, y as classifyCompletionClaim, yt as extractMethod, z as BASE_HOST_PACKAGES, zt as validateActionTarget } from "./domain-C-jXDin7.js";
+import { $ as classifyUserInteraction, A as extractToolSubject, At as STOP_PROTOCOL_VERSION, B as DEFAULT_HOST_LOCK, Bt as COMMAND_SURFACE_MANIFEST, C as latestAssistantText, Ct as canonicalRegistryBase, D as supersedeItem, Dt as CERTIFICATE_VERSION, E as deriveProjection, Et as ACTION_MANIFEST_VERSION, F as parsePwshCommand, Ft as requestedTargetMatchesResolved, G as bindExecutableIdentity, Gt as sanitizeClauseText, H as GOAL_HOST_PACKAGES, Ht as canonicalizePath, I as parseShellCommand, It as semanticActionFromCommand, J as evaluateHostCapability, Jt as createProjection, K as bindLiveGoalCapability, Kt as sanitizeUrl, L as goalCompletionDenial, Lt as semanticActionFromText, M as withDurability, Mt as actionCompatible, N as canonicalArgvFromCommand, Nt as isStatefulAction, O as evidenceFromPersistedToolResult, Ot as SEMANTIC_ACTIONS, P as isRunExecutable, Pt as requestedTargetAuthorizesMutation, Q as segmentAuthorityBlocks, R as hasCurrentCertificate, Rt as validateActionManifest, S as isWholeTaskCompletionClaim, St as segmentClauses, T as PROTOCOL_V3_NOTICE, Tt as ACTION_MANIFEST, U as HOST_CAPABILITY_PACKAGE_GROUPS, Ut as digestStrings, V as EXPECTED_HOST_PACKAGES, Vt as validateManifest, W as SUPPORTED_HOST_MANIFEST, Wt as normalizeClause, X as evaluateToolSurfaceCapability, Y as evaluateHostLock, Z as authorityCaptureCounts, _ as revalidateGitPrestate, _t as classifyClause, a as packageRowsFromActiveGraph, at as DEFAULT_RECOVERY_CHAR_BUDGET, b as decideTurnBoundary, bt as extractOperation, c as resolveInstalledHostLock, ct as recoveryDigest, d as commitIndexSnapshotDigest, dt as evidenceCoverage, et as availableBoundaryQualifications, f as commitTreeSnapshotDigest, ft as evidenceMatchesItem, g as parseGitCommandManifest, gt as captureItem, h as gitCommandMatchesTarget, ht as captureClause, i as injectActiveProfileHostLock, it as certifyCheckpoint, j as isDeterministicCheck, jt as SUPPORTED_EVIDENCE_ADAPTERS, k as extractTextContent, kt as STATEFUL_ACTIONS, l as verifyComposedHostLockDump, lt as renderRecoveryPacket, m as executeRevalidatedGitEffect, mt as currentContractDigest, n as hostLockContextFromComposedDump, nt as isCurrentAcceptedBoundary, o as packageRowsFromPnpmLock, ot as closingHint, p as createGitPrestateEnvelope, pt as isVerifyingCapability, q as evaluateExternalWaitCapability, qt as sha256, r as hostLockRowsFromComposedDump, rt as qualifyBoundary, s as resolveActiveProfileHostLock, st as openItems, t as HostProfileError, tt as effectuateBoundary, u as GIT_COMMAND_MANIFEST_IDS, ut as bindingSatisfies, v as verifiedLinearCommitReadback, vt as extractArtifactPaths, w as observeAssistantOutcome, wt as npmEscapedPackageName, x as decideTurnStopping, xt as isInformationalMessage, y as classifyCompletionClaim, yt as extractMethod, z as BASE_HOST_PACKAGES, zt as validateActionTarget } from "./domain-CBvBQHTL.js";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -727,7 +727,8 @@ function findResolution(events, callId, action) {
 		const expectedParameters$1 = record(rawExpected?.parameters);
 		const expectedTransition = rawExpected && typeof rawExpected.predicateId === "string" && rawExpected.version === 1 && rawExpected.predParamsKind === "inline" && expectedParameters$1 ? rawExpected : void 0;
 		const expectedTransitionDigest = typeof meta.expectedTransitionDigest === "string" ? meta.expectedTransitionDigest : void 0;
-		const executableIdentity$1 = rawExecutable && typeof rawExecutable.executable === "string" && typeof rawExecutable.realpath === "string" && typeof rawExecutable.version === "string" ? rawExecutable : void 0;
+		const interpreterIdentityValid = rawExecutable && (rawExecutable.interpreterRealpath === void 0 && rawExecutable.interpreterVersion === void 0 || typeof rawExecutable.interpreterRealpath === "string" && typeof rawExecutable.interpreterVersion === "string");
+		const executableIdentity$1 = rawExecutable && typeof rawExecutable.executable === "string" && typeof rawExecutable.realpath === "string" && typeof rawExecutable.version === "string" && interpreterIdentityValid ? rawExecutable : void 0;
 		const gitBinding = rawManifest && rawPrestate && rawEnvelope ? {
 			manifest: rawManifest,
 			prestate: Object.fromEntries(Object.entries(rawPrestate).filter((entry) => typeof entry[1] === "string")),
@@ -966,16 +967,74 @@ async function registryIntegrity(registry, packageId, version, roots, signal) {
 	const dist = record(release?.dist);
 	return value?.name === packageId && release?.name === packageId && release.version === version && typeof dist?.integrity === "string" ? dist.integrity : void 0;
 }
-async function runCommand(roots, file, args, cwd, signal) {
-	if (roots.commandRunner) return roots.commandRunner(file, args, cwd, signal);
-	await execFileAsync(file, args, {
+function windowsBatchCommand(file, args) {
+	const values = [file, ...args];
+	if (values.some((value) => /[\0\r\n"%!^&|<>]/.test(value))) return void 0;
+	return values.map((value) => `"${value}"`).join(" ");
+}
+async function windowsCommandInterpreter(signal) {
+	const configured = process.env.ComSpec;
+	const systemRoot = process.env.SystemRoot;
+	if (!configured || !systemRoot || !isAbsolute(configured) || !isAbsolute(systemRoot) || basename(configured).toLowerCase() !== "cmd.exe" || /[\0\r\n"%!^&|<>]/.test(configured) || /[\0\r\n"%!^&|<>]/.test(systemRoot)) return void 0;
+	try {
+		const interpreterRealpath = await realpath(configured);
+		const systemInterpreter = await realpath(resolve(systemRoot, "System32", "cmd.exe"));
+		if (basename(interpreterRealpath).toLowerCase() !== "cmd.exe" || interpreterRealpath.toLowerCase() !== systemInterpreter.toLowerCase()) return void 0;
+		const { stdout, stderr } = await execFileAsync(interpreterRealpath, [
+			"/d",
+			"/v:off",
+			"/c",
+			"ver"
+		], {
+			encoding: "utf8",
+			signal,
+			windowsHide: true
+		});
+		const interpreterVersion = `${stdout}${stderr}`.trim();
+		return interpreterVersion && !/[\0\r\n]/.test(interpreterVersion) ? {
+			interpreterRealpath,
+			interpreterVersion
+		} : void 0;
+	} catch {
+		return;
+	}
+}
+async function execAuditedFile(file, args, options, interpreter) {
+	if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(file)) {
+		const command = windowsBatchCommand(file, args);
+		if (!command || !interpreter) throw new Error("unsafe Windows batch invocation");
+		return execFileAsync(interpreter.interpreterRealpath, [
+			"/d",
+			"/v:off",
+			"/s",
+			"/c",
+			`"${command}"`
+		], {
+			...options,
+			encoding: "utf8",
+			windowsHide: true,
+			windowsVerbatimArguments: true
+		});
+	}
+	return execFileAsync(file, args, {
+		...options,
+		encoding: "utf8"
+	});
+}
+async function runCommand(roots, identity, args, cwd, signal) {
+	if (roots.commandRunner) return roots.commandRunner(identity.executable, args, cwd, signal);
+	const interpreter = identity.interpreterRealpath && identity.interpreterVersion ? {
+		interpreterRealpath: identity.interpreterRealpath,
+		interpreterVersion: identity.interpreterVersion
+	} : void 0;
+	await execAuditedFile(identity.realpath, args, {
 		...cwd ? { cwd } : {},
 		signal,
 		env: {
 			...process.env,
 			npm_config_cache: join(tmpdir(), "dsh-completion-guard-npm-cache")
 		}
-	});
+	}, interpreter);
 }
 function executableFor(action) {
 	if ([
@@ -994,26 +1053,26 @@ async function executableIdentity(executable, signal) {
 		try {
 			await access(candidate, constants.X_OK);
 			const canonical = await realpath(candidate);
-			const { stdout, stderr } = await execFileAsync(canonical, executable === "dsh" ? ["--version"] : ["--version"], {
-				encoding: "utf8",
-				signal
-			});
+			const interpreter = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(canonical) ? await windowsCommandInterpreter(signal) : void 0;
+			if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(canonical) && !interpreter) continue;
+			const { stdout, stderr } = await execAuditedFile(canonical, ["--version"], { signal }, interpreter);
 			const version = `${stdout}${stderr}`.trim();
 			if (version && !version.includes("\n") && !version.includes("\r")) return {
 				executable,
 				realpath: canonical,
-				version
+				version,
+				...interpreter
 			};
 		} catch {}
 	}
 }
-async function executeGuardAction(action, resolution, roots, signal, resolutionCallId, agent) {
+async function executeGuardAction(action, resolution, roots, signal, executableIdentity$1, resolutionCallId, agent) {
 	const target = resolution.target;
 	if (action === "install" || action === "apply") {
 		const tgzPath = requireString(resolution.commandManifest, "tgz_path");
 		const identity = tgzPath ? await tgzIdentity(tgzPath) : void 0;
-		if (!tgzPath || !identity || identity.name !== target.package_id || identity.version !== target.version || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return "unavailable";
-		await runCommand(roots, "dsh", [
+		if (!executableIdentity$1 || !tgzPath || !identity || identity.name !== target.package_id || identity.version !== target.version || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return "unavailable";
+		await runCommand(roots, executableIdentity$1, [
 			"plugin",
 			"--profile",
 			roots.profile.name,
@@ -1026,8 +1085,8 @@ async function executeGuardAction(action, resolution, roots, signal, resolutionC
 		const tgzPath = requireString(resolution.commandManifest, "tgz_path");
 		const identity = tgzPath ? await tgzIdentity(tgzPath) : void 0;
 		const registry = typeof target.registry === "string" ? canonicalRegistryBase(target.registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry }) : void 0;
-		if (!tgzPath || !identity || identity.name !== target.artifact_id || identity.version !== target.version || identity.integrity !== target.integrity_digest || !registry || registry !== target.registry) return "unavailable";
-		await runCommand(roots, "npm", [
+		if (!executableIdentity$1 || !tgzPath || !identity || identity.name !== target.artifact_id || identity.version !== target.version || identity.integrity !== target.integrity_digest || !registry || registry !== target.registry) return "unavailable";
+		await runCommand(roots, executableIdentity$1, [
 			"publish",
 			tgzPath,
 			"--registry",
@@ -1063,15 +1122,15 @@ async function executeGuardAction(action, resolution, roots, signal, resolutionC
 	if (action === "commit" || action === "push" || action === "pull" || action === "fetch") {
 		const binding = resolution.gitBinding;
 		const repository = requireString(resolution.target, "repository");
-		if (!binding || !repository) return "unavailable";
+		if (!executableIdentity$1 || !binding || !repository) return "unavailable";
 		const targetIdentity = {
 			repository,
 			...typeof resolution.target.remote === "string" ? { remote: resolution.target.remote } : {},
 			...typeof resolution.target.refspec === "string" ? { refspec: resolution.target.refspec } : {}
 		};
-		const current = await gitPrestate(binding.manifest, repository, signal);
+		const current = await gitPrestate(binding.manifest, repository, signal, executableIdentity$1.realpath);
 		if (!current) return "unavailable";
-		if ((await executeRevalidatedGitEffect(binding.envelope, binding.manifest, targetIdentity, current, async (_file, argv, workingDirectory) => runCommand(roots, "git", argv, workingDirectory, signal))).status !== "executed") return "unavailable";
+		if ((await executeRevalidatedGitEffect(binding.envelope, binding.manifest, targetIdentity, current, async (_file, argv, workingDirectory) => runCommand(roots, executableIdentity$1, argv, workingDirectory, signal))).status !== "executed") return "unavailable";
 		if (action === "commit") {
 			const commit = verifiedLinearCommitReadback(await gitBytes(repository, [
 				"rev-list",
@@ -1079,16 +1138,16 @@ async function executeGuardAction(action, resolution, roots, signal, resolutionC
 				"-n",
 				"1",
 				"HEAD"
-			], signal), String(resolution.target.pre_head_oid ?? ""));
+			], signal, executableIdentity$1.realpath), String(resolution.target.pre_head_oid ?? ""));
 			const postTree = commit ? commitTreeSnapshotDigest(await gitBytes(repository, [
 				"ls-tree",
 				"-r",
 				"-z",
 				commit.postHeadOid
-			], signal)) : void 0;
+			], signal, executableIdentity$1.realpath)) : void 0;
 			if (!commit || postTree !== resolution.target.change_set_digest) return "unavailable";
 		} else if (action === "push") {
-			const remoteOid = binding.manifest.remote && binding.manifest.destinationRef ? await exactRemoteOid(repository, binding.manifest.remote, binding.manifest.destinationRef, signal) : void 0;
+			const remoteOid = binding.manifest.remote && binding.manifest.destinationRef ? await exactRemoteOid(repository, binding.manifest.remote, binding.manifest.destinationRef, signal, executableIdentity$1.realpath) : void 0;
 			if (!remoteOid || remoteOid !== resolution.target.local_oid) return "unavailable";
 		} else {
 			const upstream = String(resolution.target.upstream_oid ?? "");
@@ -1097,17 +1156,17 @@ async function executeGuardAction(action, resolution, roots, signal, resolutionC
 				"rev-parse",
 				"--verify",
 				trackingRef
-			], signal)) : void 0;
+			], signal, executableIdentity$1.realpath)) : void 0;
 			if (!tracking || tracking !== upstream) return "unavailable";
-			if (action === "pull" && oid(await git(repository, ["rev-parse", "HEAD"], signal)) !== upstream) return "unavailable";
-			if (action === "fetch" && oid(await git(repository, ["rev-parse", "HEAD"], signal)) !== resolution.target.pre_head_oid) return "unavailable";
+			if (action === "pull" && oid(await git(repository, ["rev-parse", "HEAD"], signal, executableIdentity$1.realpath)) !== upstream) return "unavailable";
+			if (action === "fetch" && oid(await git(repository, ["rev-parse", "HEAD"], signal, executableIdentity$1.realpath)) !== resolution.target.pre_head_oid) return "unavailable";
 		}
 		return "completed";
 	}
 	return "unavailable";
 }
-async function gitBytes(repository, args, signal) {
-	const { stdout } = await execFileAsync("git", args, {
+async function gitBytes(repository, args, signal, file = "git") {
+	const { stdout } = await execFileAsync(file, args, {
 		cwd: repository,
 		encoding: "buffer",
 		signal,
@@ -1118,13 +1177,13 @@ async function gitBytes(repository, args, signal) {
 	});
 	return Buffer.from(stdout);
 }
-async function git(repository, args, signal) {
-	return (await gitBytes(repository, args, signal)).toString("utf8").replace(/[\r\n]+$/, "");
+async function git(repository, args, signal, file = "git") {
+	return (await gitBytes(repository, args, signal, file)).toString("utf8").replace(/[\r\n]+$/, "");
 }
 function oid(value) {
 	return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(value) ? value.toLowerCase() : void 0;
 }
-async function exactRemoteOid(repository, remote, ref, signal) {
+async function exactRemoteOid(repository, remote, ref, signal, file = "git") {
 	try {
 		const line = await git(repository, [
 			"ls-remote",
@@ -1132,26 +1191,26 @@ async function exactRemoteOid(repository, remote, ref, signal) {
 			"--refs",
 			remote,
 			ref
-		], signal);
+		], signal, file);
 		const match = /^([0-9a-f]{40}(?:[0-9a-f]{24})?)\t([^\r\n]+)$/i.exec(line);
 		return match && match[2] === ref ? match[1].toLowerCase() : void 0;
 	} catch {
 		return;
 	}
 }
-async function gitPrestate(manifest, repository, signal) {
+async function gitPrestate(manifest, repository, signal, file = "git") {
 	if (manifest.action === "commit") {
-		const head = oid(await git(repository, ["rev-parse", "HEAD"], signal));
+		const head = oid(await git(repository, ["rev-parse", "HEAD"], signal, file));
 		const branch = await git(repository, [
 			"symbolic-ref",
 			"--quiet",
 			"HEAD"
-		], signal);
+		], signal, file);
 		const index = commitIndexSnapshotDigest(await gitBytes(repository, [
 			"ls-files",
 			"--stage",
 			"-z"
-		], signal));
+		], signal, file));
 		return head && branch.startsWith("refs/heads/") && index ? {
 			pre_head_oid: head,
 			branch,
@@ -1159,7 +1218,7 @@ async function gitPrestate(manifest, repository, signal) {
 		} : void 0;
 	}
 	if (!manifest.remote || !manifest.sourceRef) return void 0;
-	const upstream = await exactRemoteOid(repository, manifest.remote, manifest.sourceRef, signal);
+	const upstream = await exactRemoteOid(repository, manifest.remote, manifest.sourceRef, signal, file);
 	if (!upstream) return void 0;
 	if (manifest.action === "push") {
 		if (!manifest.destinationRef) return void 0;
@@ -1167,8 +1226,8 @@ async function gitPrestate(manifest, repository, signal) {
 			"rev-parse",
 			"--verify",
 			manifest.sourceRef
-		], signal));
-		const destination = await exactRemoteOid(repository, manifest.remote, manifest.destinationRef, signal);
+		], signal, file));
+		const destination = await exactRemoteOid(repository, manifest.remote, manifest.destinationRef, signal, file);
 		return source && destination ? {
 			source_oid: source,
 			destination_oid: destination
@@ -1176,14 +1235,14 @@ async function gitPrestate(manifest, repository, signal) {
 	}
 	if (manifest.action === "fetch") {
 		if (!manifest.trackingRef) return void 0;
-		const head = oid(await git(repository, ["rev-parse", "HEAD"], signal));
+		const head = oid(await git(repository, ["rev-parse", "HEAD"], signal, file));
 		let tracking = "absent";
 		try {
 			tracking = oid(await git(repository, [
 				"rev-parse",
 				"--verify",
 				manifest.trackingRef
-			], signal)) ?? "absent";
+			], signal, file)) ?? "absent";
 		} catch {}
 		return head ? {
 			upstream_oid: upstream,
@@ -1192,7 +1251,7 @@ async function gitPrestate(manifest, repository, signal) {
 		} : void 0;
 	}
 	if (manifest.action === "pull") {
-		const head = oid(await git(repository, ["rev-parse", "HEAD"], signal));
+		const head = oid(await git(repository, ["rev-parse", "HEAD"], signal, file));
 		const trackingRef = `refs/remotes/${manifest.remote}/${manifest.sourceRef.slice(11)}`;
 		let tracking = "absent";
 		try {
@@ -1200,7 +1259,7 @@ async function gitPrestate(manifest, repository, signal) {
 				"rev-parse",
 				"--verify",
 				trackingRef
-			], signal)) ?? "absent";
+			], signal, file)) ?? "absent";
 		} catch {}
 		return head ? {
 			upstream_oid: upstream,
@@ -1282,7 +1341,7 @@ async function expectedTransitionForResolution(action, target, commandManifest) 
 		parameters
 	};
 }
-async function resolveTarget(action, selector, commandManifest, cwd, roots, signal) {
+async function resolveTarget(action, selector, commandManifest, cwd, roots, signal, executableIdentity$1) {
 	if (!selectorHasOnlyCanonicalKeys(action, selector)) return void 0;
 	const planned = plannedEffectDigest(commandManifest);
 	const plannedCall = plannedEffect(commandManifest);
@@ -1351,7 +1410,7 @@ async function resolveTarget(action, selector, commandManifest, cwd, roots, sign
 		} };
 	}
 	const repository = requireString(selector, "repository");
-	if (!repository || repository !== cwd && !isAbsolute(repository) || !plannedCall || !hasExactKeys(commandManifest, ["planned_tool", "planned_arguments"])) return void 0;
+	if (!repository || repository !== cwd && !isAbsolute(repository) || !plannedCall || !hasExactKeys(commandManifest, ["planned_tool", "planned_arguments"]) || executableIdentity$1?.executable !== "git") return void 0;
 	const manifest = plannedGitManifest(action, selector, plannedCall);
 	if (!manifest || !ACTION_MANIFEST.actions[action].commandManifestIds.includes(manifest.manifestId)) return void 0;
 	const targetIdentity = {
@@ -1359,7 +1418,7 @@ async function resolveTarget(action, selector, commandManifest, cwd, roots, sign
 		...manifest.remote ? { remote: manifest.remote } : {},
 		...requireString(selector, "refspec") ? { refspec: requireString(selector, "refspec") } : {}
 	};
-	const prestate = await gitPrestate(manifest, repository, signal);
+	const prestate = await gitPrestate(manifest, repository, signal, executableIdentity$1.realpath);
 	if (!prestate) return void 0;
 	const envelope = createGitPrestateEnvelope(manifest, targetIdentity, prestate);
 	if (action === "commit") {
@@ -1439,7 +1498,7 @@ function effectMatches(action, resolution, effect) {
 	if (effectDigest(effect) !== plannedEffectDigest(resolution.commandManifest)) return false;
 	return true;
 }
-async function readback(action, target, roots, signal) {
+async function readback(action, target, roots, signal, executableIdentity$1) {
 	if (action === "install" || action === "apply") {
 		const packageId = typeof target.package_id === "string" ? target.package_id : void 0;
 		const profile = typeof target.profile === "string" ? target.profile : void 0;
@@ -1481,7 +1540,7 @@ async function readback(action, target, roots, signal) {
 		return post === "absent" ? void 0 : { post_digest: post };
 	}
 	const repository = typeof target.repository === "string" ? target.repository : void 0;
-	if (!repository) return void 0;
+	if (!repository || executableIdentity$1?.executable !== "git") return void 0;
 	if (action === "commit") {
 		const commit = verifiedLinearCommitReadback(await gitBytes(repository, [
 			"rev-list",
@@ -1489,13 +1548,13 @@ async function readback(action, target, roots, signal) {
 			"-n",
 			"1",
 			"HEAD"
-		], signal), String(target.pre_head_oid ?? ""));
+		], signal, executableIdentity$1.realpath), String(target.pre_head_oid ?? ""));
 		const tree = commit ? commitTreeSnapshotDigest(await gitBytes(repository, [
 			"ls-tree",
 			"-r",
 			"-z",
 			commit.postHeadOid
-		], signal)) : void 0;
+		], signal, executableIdentity$1.realpath)) : void 0;
 		return commit && tree === target.change_set_digest ? {
 			post_head_oid: commit.postHeadOid,
 			pre_head_oid: commit.preHeadOid
@@ -1505,7 +1564,7 @@ async function readback(action, target, roots, signal) {
 	const parsed = String(target.refspec ?? "").split(":");
 	if (action === "push") {
 		if (parsed.length !== 2) return void 0;
-		const remoteOid = await exactRemoteOid(repository, remote, parsed[1], signal);
+		const remoteOid = await exactRemoteOid(repository, remote, parsed[1], signal, executableIdentity$1.realpath);
 		return remoteOid ? { remote_oid: remoteOid } : void 0;
 	}
 	const sourceRef = parsed[0];
@@ -1515,9 +1574,9 @@ async function readback(action, target, roots, signal) {
 		"rev-parse",
 		"--verify",
 		trackingRef
-	], signal));
+	], signal, executableIdentity$1.realpath));
 	if (!tracking) return void 0;
-	const postHead = oid(await git(repository, ["rev-parse", "HEAD"], signal));
+	const postHead = oid(await git(repository, ["rev-parse", "HEAD"], signal, executableIdentity$1.realpath));
 	if (action === "fetch") return postHead ? {
 		tracking_ref_oid: tracking,
 		post_head_oid: postHead
@@ -1702,16 +1761,17 @@ function createActionTool(options = {}) {
 				...identity
 			};
 			const executable = executableFor(action);
+			let currentExecutable;
 			if (executable) {
-				const current = await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal);
-				if (bindExecutableIdentity(resolution.executableIdentity, current).status !== "supported") return {
+				currentExecutable = await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal);
+				if (bindExecutableIdentity(resolution.executableIdentity, currentExecutable).status !== "supported") return {
 					status: "unavailable",
 					reason_code: "executable_identity_drift",
 					...identity
 				};
 			}
 			try {
-				const status = await executeGuardAction(action, resolution, roots, exec.signal, args.resolution_call_id, agent);
+				const status = await executeGuardAction(action, resolution, roots, exec.signal, currentExecutable, args.resolution_call_id, agent);
 				return {
 					status,
 					reason_code: status === "completed" ? "action_completed" : status === "handoff_pending" ? "restart_handoff_pending" : "action_execution_failed",
@@ -1895,7 +1955,9 @@ function createEvidenceTool(options = {}) {
 							version: {
 								type: "string",
 								required: true
-							}
+							},
+							interpreterRealpath: { type: "string" },
+							interpreterVersion: { type: "string" }
 						}
 					}
 				}
@@ -1936,11 +1998,11 @@ function createEvidenceTool(options = {}) {
 			if (!agent) return unavailable(action, role, "producer_agent_unavailable");
 			try {
 				if (role === "resolution") {
-					const resolved = await resolveTarget(action, record(args.selector) ?? {}, record(args.command_manifest) ?? {}, cwdOf(agent), roots, exec.signal);
-					if (!resolved) return unavailable(action, role, "resolution_unavailable");
 					const executable$1 = executableFor(action);
 					const executableBinding = executable$1 ? await (roots.readExecutableIdentity ?? executableIdentity)(executable$1, exec.signal) : void 0;
 					if (executable$1 && !executableBinding) return unavailable(action, role, "executable_identity_unavailable");
+					const resolved = await resolveTarget(action, record(args.selector) ?? {}, record(args.command_manifest) ?? {}, cwdOf(agent), roots, exec.signal, executableBinding);
+					if (!resolved) return unavailable(action, role, "resolution_unavailable");
 					const gitBinding = resolved.gitBinding ? JSON.parse(JSON.stringify(resolved.gitBinding)) : void 0;
 					const commandManifest = record(args.command_manifest) ?? {};
 					const expectedTransition = await expectedTransitionForResolution(action, resolved.target, commandManifest);
@@ -1976,7 +2038,7 @@ function createEvidenceTool(options = {}) {
 					if (!effect || !effectMatches(action, resolution, effect)) return unavailable(action, role, "persisted_effect_mismatch");
 					if (role === "effect") return supported(action, role, resolution.target, {}, resolution.commandManifest, void 0, currentExecutable);
 				}
-				const observed = await readback(action, resolution.target, roots, exec.signal);
+				const observed = await readback(action, resolution.target, roots, exec.signal, currentExecutable);
 				return observed ? supported(action, role, resolution.target, observed, resolution.commandManifest, void 0, currentExecutable) : unavailable(action, role, "independent_readback_unavailable");
 			} catch {
 				return unavailable(action, role, "adapter_readback_failed");

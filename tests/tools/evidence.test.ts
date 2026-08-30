@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
@@ -10,10 +10,79 @@ import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm
 import { certifyCheckpoint } from '../../src/domain/checkpoint.js'
 import { deriveProjection } from '../../src/domain/derive.js'
 import { authorizeMutationFromProjection } from '../../src/runtime.js'
-import { createActionTool, createEvidenceTool, evidenceTargetDigest, expectedTransitionForResolution, RESTART_INTENT_PREFIX, type EvidenceToolRoots } from '../../src/tools/evidence.js'
+import { createActionTool, createEvidenceTool, evidenceTargetDigest, executableIdentity, executeAuditedCommand, expectedTransitionForResolution, RESTART_INTENT_PREFIX, windowsBatchCommand, type EvidenceToolRoots } from '../../src/tools/evidence.js'
 import { validateActionTarget } from '../../src/domain/protocol-manifest.js'
 
 const execFileAsync = promisify(execFile)
+const GIT_ROUNDTRIP_TIMEOUT_MS = process.platform === 'win32' ? 20_000 : 5_000
+
+describe('Windows batch invocation encoding', () => {
+  it('quotes fixed argv and rejects values subject to cmd expansion', () => {
+    expect(windowsBatchCommand('C:\\Program Files (x86)\\dsh.cmd', ['--version']))
+      .toBe('"C:\\Program Files (x86)\\dsh.cmd" "--version"')
+    expect(windowsBatchCommand('C:\\tools\\dsh.cmd', ['space literal']))
+      .toBe('"C:\\tools\\dsh.cmd" "space literal"')
+    expect(windowsBatchCommand('C:\\%TEMP%\\dsh.cmd', ['--version'])).toBeUndefined()
+    expect(windowsBatchCommand('C:\\tools\\dsh.cmd', ['bad&tail'])).toBeUndefined()
+    expect(windowsBatchCommand('C:\\tools\\dsh.cmd', ['bad!tail'])).toBeUndefined()
+    expect(windowsBatchCommand('C:\\tools\\dsh.cmd', ['bad"quote'])).toBeUndefined()
+    expect(windowsBatchCommand('C:\\tools\\dsh.cmd', ['bad\nline'])).toBeUndefined()
+  })
+
+  it.skipIf(process.platform !== 'win32')('probes and executes one exact cmd shim without a PATH relookup', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-windows-shim-'))
+    const fakeBin = join(root, 'shim (space)')
+    const swappedBin = join(root, 'swapped')
+    const record = join(root, 'record (space).txt')
+    await mkdir(fakeBin)
+    await mkdir(swappedBin)
+    await writeFile(join(fakeBin, 'dsh.cmd'), [
+      '@echo off',
+      'if "%~1"=="--version" (',
+      '  echo dsh 0.3.0-test',
+      '  exit /b 0',
+      ')',
+      'if "%~1"=="--record" (',
+      '  > "%~2" echo %~3',
+      '  exit /b 0',
+      ')',
+      'exit /b 2',
+      '',
+    ].join('\r\n'))
+    await writeFile(join(swappedBin, 'dsh.cmd'), '@echo off\r\nexit /b 9\r\n')
+    const originalPath = process.env.PATH
+    const originalPathExt = process.env.PATHEXT
+    const originalComSpec = process.env.ComSpec
+    process.env.PATH = `${fakeBin}${delimiter}${originalPath ?? ''}`
+    process.env.PATHEXT = '.EXE;.CMD;.BAT'
+    try {
+      const signal = new AbortController().signal
+      const identity = await executableIdentity('dsh', signal)
+      expect(identity).toMatchObject({
+        executable: 'dsh',
+        version: 'dsh 0.3.0-test',
+        interpreterRealpath: expect.stringMatching(/cmd\.exe$/i),
+        interpreterVersion: expect.any(String),
+      })
+      expect(identity?.interpreterVersion).not.toBe('')
+      process.env.PATH = `${swappedBin}${delimiter}${originalPath ?? ''}`
+      process.env.ComSpec = join(swappedBin, 'cmd.exe')
+      await executeAuditedCommand(identity!, ['--record', record, 'space value'], undefined, signal)
+      expect((await readFile(record, 'utf8')).trim()).toBe('space value')
+      await expect(executeAuditedCommand(identity!, ['--record', record, '%TEMP%'], undefined, signal))
+        .rejects.toThrow('unsafe Windows batch invocation')
+      process.env.PATH = `${fakeBin}${delimiter}${originalPath ?? ''}`
+      expect(await executableIdentity('dsh', signal)).toBeUndefined()
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH
+      else process.env.PATH = originalPath
+      if (originalPathExt === undefined) delete process.env.PATHEXT
+      else process.env.PATHEXT = originalPathExt
+      if (originalComSpec === undefined) delete process.env.ComSpec
+      else process.env.ComSpec = originalComSpec
+    }
+  })
+})
 
 function append(session: Session, type: string, data: unknown, options?: unknown): void {
   ;(session as unknown as { append(type: string, data: unknown, options?: unknown): void }).append(type, data, options)
@@ -875,5 +944,5 @@ describe('trusted stateful evidence producer', () => {
       semantic_action: 'push', evidence_role: 'resolution', selector: { repository: work, remote: 'origin', refspec },
       command_manifest: { planned_tool: 'bash', planned_arguments: { command: `git push origin ${refspec}`, workdir: work }, tgz_path: '/tmp/forbidden.tgz' },
     })).toMatchObject({ status: 'unavailable', reason_code: 'resolution_unavailable' })
-  })
+  }, GIT_ROUNDTRIP_TIMEOUT_MS)
 })

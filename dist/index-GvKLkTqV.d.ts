@@ -526,6 +526,8 @@ interface ExecutableIdentity {
   executable: AuditedExecutable;
   realpath: string;
   version: string;
+  interpreterRealpath?: string;
+  interpreterVersion?: string;
 }
 interface ExecutableIdentityBinding {
   status: HostLockStatus;

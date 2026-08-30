@@ -16,6 +16,7 @@
 - 未知、缺失或漂移的宿主身份一律 fail-closed。Guard 自己注册并守卫的 `update_goal(action=complete)` 路径在 mutation 前检查；可信进程内直接写 Goal/session 的旁路只记录 integrity violation，不声称能够阻止。
 - 活动 host identity 会在 certificate replay 前传入；managed host-lock injection 保持幂等；DSH folded-YAML SRI 输出会被精确解析，新 profile 唯一的顶层 `[]` sentinel 会在追加 managed list 前安全替换。
 - Publish 现在会在捕获、npm argv 与标准 packument readback 之间冻结同一个 canonical HTTPS registry，并显式使用 `--ignore-scripts`；create/modify 在 resolution 阶段冻结预期 post-effect 字节，不再把 observed digest 回填为谓词，且 modify 会按冻结 pre-digest 拒绝源字节漂移。
+- Windows 有状态动作现在通过封闭调用解析并探测已审计 `.cmd`/`.bat` shim 的版本，其中解释器固定为 canonical `SystemRoot\\System32\\cmd.exe` realpath 与版本。resolution/effect 同时绑定 shim 与解释器身份，执行时复用经重校验的路径，不再二次搜索 `PATH` 或信任已变化的 `ComSpec`；shell 控制字符与展开字符继续 fail-closed。
 
 ### 变更
 

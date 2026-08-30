@@ -16,6 +16,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Unknown, missing, or drifted host identities fail closed. The Guard-owned `update_goal(action=complete)` path is checked before mutation; trusted in-process direct Goal/session writes are detected as integrity violations but are not claimed to be preventable.
 - Active host identity is supplied before certificate replay, managed host-lock injection is idempotent, DSH folded-YAML SRI output is parsed exactly, and a fresh profile's sole top-level `[]` sentinel is safely replaced before the managed list is appended.
 - Publish now freezes one canonical HTTPS registry across capture, npm argv, and standard packument readback, with `--ignore-scripts`; create/modify freeze their expected post-effect bytes at resolution time instead of copying the observed digest into the predicate, and modify rejects source-byte drift against its frozen pre-digest.
+- Windows stateful actions now resolve and version-probe audited `.cmd`/`.bat` shims through a closed invocation whose interpreter is pinned to the canonical `SystemRoot\\System32\\cmd.exe` realpath and version. Resolution and effect bind both identities, then execute the same revalidated paths instead of searching `PATH` or trusting a changed `ComSpec`; shell-control and expansion characters remain fail-closed.
 
 ### Changed
 
