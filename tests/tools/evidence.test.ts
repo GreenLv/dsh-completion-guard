@@ -339,6 +339,11 @@ describe('trusted stateful evidence producer', () => {
     const root = await mkdtemp(join(tmpdir(), `dsh-cg-${action}-`))
     const profile = join(root, 'web')
     await mkdir(profile, { recursive: true })
+    const dshIdentity = {
+      executable: 'dsh' as const,
+      realpath: join(root, 'bin', 'dsh'),
+      version: 'dsh 0.3.0-test',
+    }
     const name = `fixture-${action}`
     const version = '2.0.0'
     const tgz = await packFixture(root, name, version)
@@ -352,6 +357,10 @@ describe('trusted stateful evidence producer', () => {
     let mutations = 0
     const roots: EvidenceToolRoots = {
       profile: { name: 'web', path: profile },
+      readExecutableIdentity: async (executable) => {
+        expect(executable).toBe('dsh')
+        return dshIdentity
+      },
       commandRunner: async (file, args) => {
         mutations += 1
         expect([file, ...args]).toEqual(['dsh', 'plugin', '--profile', 'web', 'add', `file:${tgz}`])
