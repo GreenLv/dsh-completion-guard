@@ -34,6 +34,7 @@ installed profiles keep their runtime identity. The previous npm package
 
 | Channel | Entry | Status | Evidence |
 |---|---|---|---|
+| [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) | `GreenLv/dsh-completion-guard` (category `security`) | Listed | Added via [PR #3693](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3693) (merge commit `299f0b5c`, 2026-08-29); read back live the same day from the generated `README.md` (line 2469, security-category section) and `README.zh.md`, the committed `data/plugins/GreenLv__dsh-completion-guard.yml`, and the published catalog at [`awesome-dsh-plugin.com/plugins.json`](https://awesome-dsh-plugin.com/plugins.json), which exposes the storefront page [`awesome-dsh-plugin.com/p/GreenLv/dsh-completion-guard/`](https://awesome-dsh-plugin.com/p/GreenLv/dsh-completion-guard/). Screenshots registration (`data/screenshots.json`) is an optional follow-up. |
 | [Awesome DeepSeek Harness](https://github.com/Dominic789654/awesome-deepseek-harness#security--permissions) | `GreenLv/dsh-completion-guard` | Listed | Rows merged via [PR #332](https://github.com/Dominic789654/awesome-deepseek-harness/pull/332) (merge commit `ba414c4`, 2026-08-29) and read back live the same day from both generated READMEs (`README.md` line 940, `README.zh-CN.md` line 946), under **Security & Permissions** alongside the other fail-closed gates and verifier plugins. |
 
 ## Update route
