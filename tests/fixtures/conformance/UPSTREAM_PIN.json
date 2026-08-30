@@ -1,0 +1,34 @@
+{
+  "pinVersion": "1",
+  "description": "Byte-mirror pin for the Context Guard portable conformance fixtures. The canonical copies live in codex-context-guard; this file records the exact upstream state the mirrors were taken from. Refresh the pin (commit, hashes, mirroredAt) whenever the mirrors are re-synced from a landed upstream commit.",
+  "upstream": {
+    "product": "codex-context-guard",
+    "repository": "https://github.com/GreenLv/codex-context-guard",
+    "headAtMirror": "b59fcfe",
+    "canonicalCommit": "b59fcfe1aaf8ead3f0438bc67dc7f725c869a473",
+    "canonicalCommitNote": "The canonical fixture files are committed at canonicalCommit. Push and publication are separate states and are not implied by this pin."
+  },
+  "mirroredAt": "2026-08-30",
+  "files": [
+    {
+      "path": "digest_v3/cases.json",
+      "sha256": "4c91806620cd5be56ded6b9a2b55c80d14fd03b3a6b4baf015f6c8ed0a78869c",
+      "role": "29 machine-readable digest v3 golden vector inputs"
+    },
+    {
+      "path": "digest_v3/expected.json",
+      "sha256": "1355290b8bdf5d10c9bf818c03c69299a4afafded5121edcf0fbd2b7dcaeb854",
+      "role": "encoder-generated expected digests for the 29 vectors"
+    },
+    {
+      "path": "context_guard_semantics_v1.json",
+      "sha256": "b10f22187c139627389e26a44162c94bdcfac08352af67b65771a5741749be11",
+      "role": "portable conformance case set (canonical semantics fixture)"
+    },
+    {
+      "path": "context_guard_semantics_v1.schema.json",
+      "sha256": "2ca429e02fcb0f1bc4f56acc182694f37293287c8f5bfebc1da7ce417999a1cb",
+      "role": "JSON Schema for the portable conformance fixture"
+    }
+  ]
+}
