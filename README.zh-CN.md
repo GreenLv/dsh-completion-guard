@@ -106,6 +106,12 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 两个项目不共享运行时状态、安装器、缓存或发布历史。修复应先进入拥有对应运行时的仓库；只有同一行为确实适用于两侧时，才显式迁移。具体复用与替换边界见 [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) 和 [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md)。
 
+## npm 下载量历史
+
+![dsh-context-guard 与 dsh-completion-guard 的合计累计 npm 下载量增长](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.zh-CN.svg)
+
+该累计图分别展示新旧 npm 包的总量，以竖线标记 2026-08-29 更名，并且只在项目增长曲线中合并两者。npm 下载量统计的是 registry 请求次数，不等于独立用户数或已确认的真实安装人数。工作流每天运行，也支持手动触发。
+
 ## 文档
 
 - [`CHANGELOG.zh-CN.md`](CHANGELOG.zh-CN.md) — 面向使用者的版本变化。

@@ -65,6 +65,7 @@
     "build": "tsdown",
     "lint": "oxlint src tests",
     "test": "vitest run",
+    "test:stats": "node --test tests/npm-download-stats.node.mjs",
     "typecheck": "tsc --noEmit",
     "pack:check": "pnpm pack --dry-run --json"
   },

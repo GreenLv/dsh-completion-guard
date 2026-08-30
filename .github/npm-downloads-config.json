@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "title": "dsh-completion-guard npm download history",
+  "project": "dsh-completion-guard",
+  "rename": {
+    "date": "2026-08-29",
+    "label": "renamed to dsh-completion-guard"
+  },
+  "packages": [
+    {
+      "package": "dsh-context-guard",
+      "label": "dsh-context-guard (previous name)",
+      "color": "#f59e0b",
+      "start": "2026-08-26"
+    },
+    {
+      "package": "dsh-completion-guard",
+      "label": "dsh-completion-guard",
+      "color": "#2563eb",
+      "start": "2026-08-29"
+    }
+  ]
+}

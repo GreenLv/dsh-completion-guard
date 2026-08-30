@@ -106,6 +106,12 @@ This project ports deterministic behavior from [`GreenLv/codex-context-guard`](h
 
 They do not share runtime state, installers, caches, or release histories. Fixes are contributed to the repository that owns the affected runtime and are ported deliberately when the same behavior belongs in both products. See [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) and [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) for the exact reused and replaced boundaries.
 
+## npm download history
+
+![Combined cumulative npm download growth across dsh-context-guard and dsh-completion-guard](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.svg)
+
+The cumulative chart keeps the old and new npm package totals visibly separate, marks the 2026-08-29 rename, and combines them only for the project growth line. npm download counts measure registry requests; they are not counts of unique users or confirmed installations. The workflow runs daily and can also be triggered manually.
+
 ## Documentation
 
 - [`CHANGELOG.md`](CHANGELOG.md) — versioned user-visible changes.
