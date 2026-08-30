@@ -1,6 +1,43 @@
 # Local Acceptance
 
-Deterministic checks and an isolated DSH_HOME composition smoke. These establish source correctness and load correctness, not full runtime behavior.
+Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
+
+## v0.3.0 release gates (2026-08-31)
+
+Release preparation froze one canonical pre-release package from commit
+`a33b69326eb46fbefc56affc55e2a486695f545c`. The 26-file, 170158-byte tgz
+had SHA-256
+`72d848e313a0e35e06fd1f493215cc0338b86a79a8001a4f07156e782157fe08`.
+The same bytes passed isolated Web and Headless installation, strict second
+no-op, package-file parity, host-lock inspect/inject/dump/verify, plugin load,
+real dshmarket restart, HTTP recovery, process cleanup, and the intentional
+Headless `MISSING_CREDENTIAL` boundary on native macOS and Windows. The
+Windows source run passed all 352 tests without skips; macOS passed 351 with
+the Windows-only command-shim test capability-skipped.
+
+GitHub Actions run 33320743166 passed that exact commit on Ubuntu, macOS, and
+Windows with Node.js 22 and 24. The four mirrored conformance files remained
+byte-identical to their upstream pin, all 37 portable semantic cases ran
+without skips, and all 29 digest-v3 vectors re-derived successfully.
+
+A separate credentialed model-session gate used that exact package. A real
+test result produced an accepted evidence binding with no rejected binding,
+and a persisted typed `user_wait` boundary was accepted; independent
+post-hook observation read back the same Goal as disarmed. An intentionally
+over-broad prompt captured additional non-certifiable clauses, so its
+checkpoint remained incomplete and no completion certificate was issued.
+This proves the bounded evidence, boundary, and disarm paths without claiming
+that arbitrary model instructions are semantically certifiable.
+
+The release-state documentation in this commit is itself packaged and thus
+changes the tgz bytes from the pre-release artifact above. The final release
+gate therefore packs the documentation-inclusive commit once, installs and
+reads back those exact bytes separately on native macOS and Windows, and
+publishes that frozen tgz without repacking. Public identity is accepted only
+when the annotated `v0.3.0` tag, npm `gitHead` and integrity, GitHub Release
+target, published checksum, and registry package readback agree. These
+publication identities do not derive from source tests or from the earlier
+pre-release hash.
 
 ## Windows exact-source readback (2026-08-30)
 

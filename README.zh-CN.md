@@ -11,7 +11,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.2.1
+dsh plugin --profile web add dsh-completion-guard@0.3.0
 ```
 
 重启 DSH Web，打开一个会话并启用 Guard：
@@ -55,21 +55,23 @@ dsh plugin --profile web add dsh-completion-guard@0.2.1
 
 ## 状态与兼容性
 
-0.2.1 已发布到 [npm](https://www.npmjs.com/package/dsh-completion-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1)。
+0.3.0 已发布到 [npm](https://www.npmjs.com/package/dsh-completion-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.0)。
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`,以避免与无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)撞名。内部 Cordis bundle id 保持 `context-guard` 不变;原 npm 包 `dsh-context-guard` 将被 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+
+### 早期 v0.2.x 证据
 
 0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果。
 
 Windows TEMP 读回现已确认 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 的源码矩阵，以及 exact-source tarball → 隔离安装 → dump-config → Web 启动日志与清理链。HTTP 200 只出现在首轮 stdout，未持久化且复核时没有重跑，因此 HTTP 响应本身不能写成“独立复核已确认”。真实模型会话 smoke 仍未运行。
 
-### v0.3.0 源码候选
+### v0.3.0
 
-v0.3.0 运行时候选已在 `codex/v0.3.0-sequence-2` 分支提交 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 上完成验收。19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 则 352 项全部通过且无跳过；两平台各自从精确源码生成的 tarball 还通过了隔离 Web/Headless 安装、host-lock 读回、dshmarket 重启、HTTP 恢复与清理。后续统计展示提交会改变随包分发的 README 和 package metadata，但没有改变已验收的运行时路径，因此先前 tarball 不能作为最终候选工件。这些结果不代表 canonical release artifact、CI、tag、npm/GitHub 发布或带凭据的真实模型 Goal round 已完成；精确证据和边界见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+v0.3.0 增加语义 action/target 绑定、有状态动作的独立状态读回、typed boundary、digest-v3 证书、精确活动宿主身份，以及成对 optional Goal 集成。19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 则 352 项全部通过且无跳过。随后，同一份 canonical 预发布 tarball 以逐字节一致方式在两个原生平台完成安装与读回；CI 还覆盖 Ubuntu、macOS、Windows 的 Node.js 22/24。带凭据的真实模型会话验证了有效 evidence binding 与持久化 typed-boundary/disarm 流程；一个刻意过宽的提示词保持 incomplete，且未被错误签发证书。[`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) 分别记录源码、工件、CI、模型会话与发布证据边界。
 
-该候选使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
+该版本使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
 
-把候选安装到 profile 后，使用随包提供的 CLI 生成并回读活动身份。请把下列路径替换为实际 DSH 安装的绝对路径；dump 只是检查产物，不是配置来源：
+把该版本安装到 profile 后，使用随包提供的 CLI 生成并回读活动身份。请把下列路径替换为实际 DSH 安装的绝对路径；dump 只是检查产物，不是配置来源：
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -83,7 +85,7 @@ dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
 "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
 ```
 
-`inspect` 与 `inject` 会拒绝缺失、重复、多版本或漂移的关键包；`verify-dump` 再证明 DSH compose 出的有界 tuple 与活动 graph 读回一致。每次 DSH/profile/package 升级后都应重跑。流程未通过前，证书、依赖 Goal 的完成路径及受影响 action capability 均保持 unavailable。该候选只提交在验收分支，尚未发布，也未覆盖安装到用户 profile。
+`inspect` 与 `inject` 会拒绝缺失、重复、多版本或漂移的关键包；`verify-dump` 再证明 DSH compose 出的有界 tuple 与活动 graph 读回一致。每次 DSH/profile/package 升级后都应重跑。流程未通过前，证书、依赖 Goal 的完成路径及受影响 action capability 均保持 unavailable。发布验收使用全新隔离 profile，未覆盖用户现有 DSH profile。
 
 `context_guard_evidence` 只读：负责 target resolution、已持久 effect 验证和独立 state readback。install/apply/restart/publish 以及精确 Git commit/push/pull/fetch mutation 使用单独命名的 `context_guard_action`。resolution 本身不授予 mutation 权限：调用方必须给出精确的 pending 根用户 requirement 及修订、复述已持久 target digest，并逐字段匹配动作所需身份；prohibition 与 acceptance 条目绝不授权 mutation。v0.3 的 package/apply/publish 只接受精确版本授权，Git 授权必须给出 remote 与 canonical 完整 ref/refspec。这些检查在任何 executable、HTTP 请求或 restart intent 之前完成。审批/展示面会在执行前呈现 canonical target 和 command-manifest digest。
 
@@ -135,4 +137,4 @@ pnpm run build
 pnpm run pack:check
 ```
 
-这些命令验证源码和待打包内容。CI、原生平台验收、npm 发布、GitHub Release 身份和真实 profile 安装仍是相互独立的证据范围。
+这些命令验证本地源码树与包。CI、原生平台验收、npm 发布、GitHub Release 身份和真实 profile 安装仍是相互独立的证据范围。

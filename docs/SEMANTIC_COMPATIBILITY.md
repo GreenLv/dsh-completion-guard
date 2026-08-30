@@ -63,7 +63,7 @@ DSH-side facts:
   (`python scripts/reference_digest_encoder.py --check ...`) stays the
   canonical check; the mirrored fixtures make both implementations answer to
   the same bytes.
-- The v0.3 candidate wires the module into checkpoint creation/replay and the
+- Version 0.3 wires the module into checkpoint creation/replay and the
   Guard-owned Goal-complete gate. Certificates freeze the full versioned field
   table, including session and host identity, and are authoritative only after
   the tool result persists and re-derives exactly.
@@ -81,7 +81,7 @@ result contract; it does not translate a missing capability into a pass.
 
 ## Current alignment status (honest boundaries)
 
-Implemented in the local v0.3 candidate:
+Implemented in v0.3.0:
 
 - Digest v3 derivation, byte-mirror pinning, and 29-vector agreement.
 - All-case portable semantic fixture runner implemented as a thin adapter over production derive/checkpoint/boundary/Goal/stop functions, without fixture-ID rewrites or skipped cases.
@@ -94,12 +94,14 @@ Implemented in the local v0.3 candidate:
   the Guard-owned `update_goal(action=complete)` path.
 - Legacy generic-run and unprovable-authority fail-closed migration behavior.
 
-This is not a release or full product-parity claim. It does not copy the Codex
-private ledger, Hook lifecycle, cache, or installer, and it cannot prevent all
-trusted in-process Goal/session bypasses. Exact-source isolated Web/Headless
-install, host-lock readback, Web restart lifecycle, and Headless load have been
-run on macOS; a real model-session Goal round, native Windows v0.3 execution,
-CI, publication, and release identity remain separate gates.
+This is not a full product-parity claim. It does not copy the Codex private
+ledger, Hook lifecycle, cache, or installer, and it cannot prevent all trusted
+in-process Goal/session bypasses. Exact-artifact isolated Web/Headless install,
+host-lock readback, Web restart lifecycle, and Headless load were exercised on
+native macOS and Windows, with cross-platform CI and a bounded credentialed
+model-session evidence/boundary round. Source, native-platform, model-session,
+registry, tag, and GitHub Release evidence remain separate scopes; see
+`LOCAL_ACCEPTANCE.md`.
 
 ## Validation boundaries
 

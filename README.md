@@ -11,7 +11,7 @@ A task-contract and completion-certification plugin for DeepSeek Harness (DSH). 
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.2.1
+dsh plugin --profile web add dsh-completion-guard@0.3.0
 ```
 
 Restart DSH Web, open a session, and enable the guard:
@@ -55,21 +55,23 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## Status and compatibility
 
-Version 0.2.1 is available from [npm](https://www.npmjs.com/package/dsh-completion-guard) and the [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1).
+Version 0.3.0 is available from [npm](https://www.npmjs.com/package/dsh-completion-guard) and the [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.0).
 
 > The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision with an unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning). The internal Cordis bundle id stays `context-guard`, and the previous npm package `dsh-context-guard` will be deprecated in favor of this package. It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
+
+### Earlier v0.2.x evidence
 
 The 0.2.1 release suite contains 138 tests (105 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. 0.2.1 adds a session-layer capture filter so clarification questions, meta comments, and bare progression phrases (`继续`, `continue`) never become contract items; de-duplicates repeated recovery notifications; adds `/context-guard clear`; and documents how a goal completes when the guard is disabled or blocked. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result.
 
 The Windows TEMP readback verifies the `b75868e9e73d29f50530ddaba15cfaef82e03ece` source matrix and the exact-source tarball → isolated installation → dump-config → Web startup log and cleanup chain. HTTP 200 appeared only in the first-run stdout, was not persisted, and was not rerun during readback, so the HTTP response itself is not independently confirmed. A real model-session smoke remains not run.
 
-### v0.3.0 source candidate
+### v0.3.0
 
-The v0.3.0 runtime candidate is validated at commit `4f079499509822425c80e0b5ab98d1ebc58da9d5` on `codex/v0.3.0-sequence-2`. Its 19-file suite passed 351 tests with one Windows-only capability skip on macOS and all 352 tests without skips on native Windows. Platform-local exact-source tarballs also passed isolated Web/Headless installation, host-lock readback, dshmarket restart, HTTP recovery, and cleanup on both platforms. Later reporting commits change packaged README and package metadata without changing the validated runtime paths, so those earlier tarballs are not artifacts for the final candidate. These results do not claim a canonical release artifact, CI, tag, npm/GitHub publication, or a credentialed model-session Goal round; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) for exact evidence and limits.
+Version 0.3.0 adds semantic action/target binding, independent state readback for stateful actions, typed boundaries, digest-v3 certificates, exact active-host identity, and paired optional Goal integration. The 19-file deterministic suite passed 351 tests with one Windows-only capability skip on macOS and all 352 tests without skips on native Windows. One canonical pre-release tarball was then installed and read back byte-for-byte on both native platforms, while CI covered Ubuntu, macOS, and Windows on Node.js 22 and 24. A credentialed model session verified a valid evidence binding and persisted typed-boundary/disarm flow; an intentionally over-broad prompt stayed incomplete and received no false certificate. [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) separates these source, artifact, CI, model-session, and publication evidence scopes.
 
-The candidate uses [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json), [`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json), and [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json). Goal integration requires the exact optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` and `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` together. It fails closed unless the active DSH runtime/profile graph injects the exact `hostLockPackages`, platform, and profile identity. A nearest lockfile is not accepted because DSH core and profile plugins use separate package graphs. The default bundled patch deliberately contains no fabricated lock.
+The release uses [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json), [`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json), and [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json). Goal integration requires the exact optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` and `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` together. It fails closed unless the active DSH runtime/profile graph injects the exact `hostLockPackages`, platform, and profile identity. A nearest lockfile is not accepted because DSH core and profile plugins use separate package graphs. The default bundled patch deliberately contains no fabricated lock.
 
-After installing the candidate into a profile, generate and verify its active identity with the packaged CLI. Use absolute paths for the actual DSH installation; the dump is an inspection artifact, not a configuration source:
+After installing the release into a profile, generate and verify its active identity with the packaged CLI. Use absolute paths for the actual DSH installation; the dump is an inspection artifact, not a configuration source:
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -83,7 +85,7 @@ dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
 "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
 ```
 
-`inspect` and `inject` reject missing, duplicate, multi-version, or drifted critical packages. `verify-dump` then proves that DSH composed the same bounded tuple that was read from the active graphs. Repeat the flow after any DSH/profile/package upgrade. Until it succeeds, certification, Goal-dependent completion, and affected action capabilities remain unavailable. The candidate is committed only on its validation branch; it has not been published or installed over a user profile.
+`inspect` and `inject` reject missing, duplicate, multi-version, or drifted critical packages. `verify-dump` then proves that DSH composed the same bounded tuple that was read from the active graphs. Repeat the flow after any DSH/profile/package upgrade. Until it succeeds, certification, Goal-dependent completion, and affected action capabilities remain unavailable. Release validation used fresh isolated profiles and did not overwrite the user's existing DSH profiles.
 
 `context_guard_evidence` is read-only: it resolves targets, validates persisted effects, and performs independent state readback. Mutating install/apply/restart/publish and exact Git commit/push/pull/fetch operations use the separately named `context_guard_action` tool. A resolution is not mutation authority: the caller must identify the exact pending root-owned requirement and revision, repeat the persisted target digest, and match every action-specific identity field before any executable, HTTP request, or restart intent runs. Prohibitions and acceptance clauses never authorize mutation. Package/apply/publish authority is exact-version-only in v0.3; Git authority requires an explicit remote and canonical full ref/refspec. The presentation surface shows the canonical target and command-manifest digest before execution.
 
@@ -135,4 +137,4 @@ pnpm run build
 pnpm run pack:check
 ```
 
-These commands validate the source and package candidate. CI, native-platform acceptance, npm publication, GitHub release identity, and runtime-profile installation remain separate evidence scopes.
+These commands validate a local source tree and package. CI, native-platform acceptance, npm publication, GitHub release identity, and runtime-profile installation remain separate evidence scopes.

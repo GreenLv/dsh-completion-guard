@@ -2,11 +2,11 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
-## 未发布
+## 0.3.0 - 2026-08-31
 
 ### 新增
 
-- **v0.3 语义完成门禁候选。** 增加 Goal state/tool 成对精确 optional peers、显式注入的 exact version/integrity action/platform 宿主锁、版本化 action/Git/supported-host manifests、按权威分段的合同捕获、typed boundary、结构化 checkpoint 诊断，以及绑定 session、host、contract、evidence、binding、expected transition 与可选 Goal 身份的 digest-v3 证书。
+- **v0.3 语义完成门禁。** 增加 Goal state/tool 成对精确 optional peers、显式注入的 exact version/integrity action/platform 宿主锁、版本化 action/Git/supported-host manifests、按权威分段的合同捕获、typed boundary、结构化 checkpoint 诊断，以及绑定 session、host、contract、evidence、binding、expected transition 与可选 Goal 身份的 digest-v3 证书。
 - **有状态动作独立读回。** `install`、`apply`、`create`、`modify`、`restart`、`commit`、`push`、`publish`、`pull`、`fetch` 必须提供不同 ID 的 resolution、effect 与独立 state evidence，并完成同目标 role 闭合。generic-run 证据不能授权 v0.3 用户级完成；旧 generic-run 证书只保留为审计历史。
 - **显式只读/变更工具。** `context_guard_evidence` 永不执行 mutation；`context_guard_action` 仅在精确的 pending 根用户 requirement/修订、完整动作身份、target digest、宿主身份、可执行文件身份和 live prestate 全部匹配后，才执行 exact-tgz package/registry effect、两阶段 dshmarket restart 或精确 Git effect。prohibition/acceptance 不得授权 effect；v0.3 package 版本与 Git ref 仅支持 exact。
 - **双语 npm 下载量历史。** 每日累计图分别保留更名前的 `dsh-context-guard` 与当前 `dsh-completion-guard` 包总量，同时呈现一条项目增长曲线。采集器会先核对 npm range 与 point 响应，再发布英文和简体中文 SVG。
@@ -26,9 +26,10 @@
 
 ### 验证
 
-- 源码候选 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 的 19 文件确定性测试在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 通过全部 352 项且无跳过；其中包含 37 个 portable semantic case 和 29 个 digest vector。
-- 两平台各自的 exact-source tarball 均通过隔离 Web/Headless 安装、host-lock 读回、真实 dshmarket 重启、HTTP 恢复与清理。canonical release artifact、CI、tag、npm/GitHub 发布及带凭据的真实模型 Goal round 仍待完成。
-- npm 统计套件的 8 项聚焦测试覆盖日期切块、响应规范化与核对、scope 包 URL、上游失败以及失败时保留上一组输出。图表集成会改变随包分发的文档与 metadata，因此先前的两份平台本地 tarball 不能作为最终候选工件。
+- 运行时源码提交 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 的 19 文件确定性测试在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 通过全部 352 项且无跳过；其中包含 37 个 portable semantic case 和 29 个 digest vector。
+- 提交 `a33b69326eb46fbefc56affc55e2a486695f545c` 生成的 canonical 预发布工件 `72d848e313a0e35e06fd1f493215cc0338b86a79a8001a4f07156e782157fe08`，以同一字节在 macOS 与原生 Windows 通过隔离 Web/Headless 安装、host-lock 读回、真实 dshmarket 重启、HTTP 恢复与清理。CI run 33320743166 在 Ubuntu、macOS、Windows 的 Node.js 22/24 组合上通过该精确提交。
+- 带凭据的真实模型会话产生了有效 evidence binding，并验证持久化 typed boundary 接受与同一 Goal 的 disarm 读回。一个刻意过宽的提示词保持 incomplete，且未被错误签发完成证书；该有界结果不表示任意模型指令都能获得语义认证。
+- npm 统计套件的 8 项聚焦测试覆盖日期切块、响应规范化与核对、scope 包 URL、上游失败以及失败时保留上一组输出。发布打包会冻结一份包含文档的 tarball，供原生平台验证与 registry 发布；公开 checksum 与 registry integrity 标识这份精确字节。
 
 ## 0.2.1 - 2026-08-28
 
