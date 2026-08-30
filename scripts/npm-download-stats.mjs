@@ -260,7 +260,7 @@ export function renderSvg(document, locale = "en") {
     const markerX = x(index);
     const markerAnchor = markerX > width - right - 180 ? "end" : "start";
     const markerLabelX = markerAnchor === "end" ? markerX - 10 : markerX + 10;
-    renameMarker = `<line x1="${markerX}" y1="${plotTop}" x2="${markerX}" y2="${plotBottom}" class="rename"/><text x="${markerLabelX}" y="${plotTop + 18}" text-anchor="${markerAnchor}" class="rename-label">${xml(copy.renamed)} · ${xml(document.rename.date)}</text>`;
+    renameMarker = `<line x1="${markerX}" y1="${plotTop}" x2="${markerX}" y2="${plotBottom}" class="rename"/><text x="${markerLabelX}" y="${plotTop + 38}" text-anchor="${markerAnchor}" class="rename-label">${xml(copy.renamed)} · ${xml(document.rename.date)}</text>`;
   }
   const project = document.project ?? document.title;
   const title = copy.title(project);
@@ -293,7 +293,7 @@ export function renderSvg(document, locale = "en") {
     .package-name { font-size: 12px; fill: #334155; }
     .package-total { font-size: 13px; fill: #172033; font-weight: 720; }
     .rename { stroke: #8b5cf6; stroke-width: 1.5; stroke-dasharray: 5 5; }
-    .rename-label { font-size: 11px; fill: #6d28d9; font-weight: 650; }
+    .rename-label { font-size: 11px; fill: #6d28d9; font-weight: 650; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
     .endpoint { font-size: 12px; fill: #0f766e; font-weight: 740; }
   </style>
   <rect width="100%" height="100%" rx="18" fill="#f8fafc"/>
