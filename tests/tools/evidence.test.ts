@@ -15,6 +15,7 @@ import { validateActionTarget } from '../../src/domain/protocol-manifest.js'
 
 const execFileAsync = promisify(execFile)
 const GIT_ROUNDTRIP_TIMEOUT_MS = process.platform === 'win32' ? 20_000 : 5_000
+const PACKAGE_ACTION_TIMEOUT_MS = process.platform === 'win32' ? 20_000 : 5_000
 
 describe('Windows batch invocation encoding', () => {
   it('quotes fixed argv and rejects values subject to cmd expansion', () => {
@@ -384,7 +385,7 @@ describe('trusted stateful evidence producer', () => {
     }, roots)
     expect(mutations).toBe(1)
     expect(certifyStateful(session, action).status).toBe('certified')
-  })
+  }, PACKAGE_ACTION_TIMEOUT_MS)
 
   it('rejects install-over-existing, apply-over-absent, and apply-without a version/integrity transition', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-cg-package-precondition-'))
