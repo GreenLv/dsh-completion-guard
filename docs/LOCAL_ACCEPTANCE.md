@@ -2,6 +2,47 @@
 
 Deterministic checks and an isolated DSH_HOME composition smoke. These establish source correctness and load correctness, not full runtime behavior.
 
+## Windows exact-source acceptance (2026-08-30)
+
+Verified source commit: `b75868e9e73d29f50530ddaba15cfaef82e03ece`
+(`origin/main` at checkout time), using a fresh isolated checkout on Windows 11
+with Windows PowerShell 5.1, Python 3.12.10, Node.js 24.18.0, pnpm 11.22.0,
+and effective `core.autocrlf=true`.
+
+Repository and conformance gates passed at that exact source:
+
+- `pnpm test` -> 0; 7 test files, 170 tests passed.
+- `pnpm run typecheck` -> 0.
+- `pnpm run lint` -> 0.
+- `pnpm run build` -> 0.
+- `pnpm run pack:check` -> 0.
+- `git diff --check` -> 0.
+- The raw SHA-256 values of all four mirrored conformance fixture files matched
+  their entries in `tests/fixtures/conformance/UPSTREAM_PIN.json`.
+
+Exact-source artifact and load checks used a tarball built from that checkout
+and a fresh isolated `DSH_HOME`:
+
+- All six tracked `dist/` files matched across the HEAD blobs, local build,
+  tarball, and isolated installation.
+- `dsh --profile web --dump-config` read back the `context-guard` bundle, and a
+  Node import smoke loaded the installed package.
+- The isolated Web process returned HTTP 200 for a GET request and was then
+  stopped; process cleanup completed.
+
+With effective `core.autocrlf=true`, the build made all six tracked `dist/`
+paths appear as `M` even though `git hash-object` matched the corresponding
+HEAD blob for 6/6 files and `git diff` contained no content changes. This was
+an EOL status phantom, not an artifact mismatch; `dist/** text eol=lf` now
+pins the generated files to LF while preserving the existing conformance
+fixture LF rule.
+
+Evidence boundary: no real model-session smoke was run on Windows for this
+source. These results establish deterministic source checks, exact-source
+artifact parity, isolated package composition/import, and Web HTTP load only;
+they do not establish model-level task-contract or completion behavior, an npm
+publication, a tag, or a GitHub Release.
+
 ## macOS v0.2.0 acceptance (2026-08-28)
 
 Verified source commit: `c107cd8ead97988f6a71cab8182edb16b23b086b`, on `main`, with a clean worktree and `main == origin/main` at the release preflight. Node v25.1.0 and pnpm 11.22.0 were used on macOS.

@@ -59,7 +59,7 @@ dsh plugin --profile web add dsh-completion-guard@0.2.1
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`,以避免与无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)撞名。内部 Cordis bundle id 保持 `context-guard` 不变;原 npm 包 `dsh-context-guard` 将被 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
-0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果；Windows 0.2.1 原生验收仍待完成。
+0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果。Windows 11 上的精确源码 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 已通过 170 项源码门禁，以及从该源码构建的 tarball 隔离安装、Web bundle 加载、Node import 和 HTTP 200 smoke。该 Windows 源码尚未执行真实模型会话 smoke，因此模型层任务合同与完成行为仍未验证；这些结果也不是 npm、tag 或 GitHub Release 证据。
 
 Context Guard 只识别一小组可审计的 shell 与 PowerShell 命令。无法支持或存在歧义的语法会保持 incomplete，而不会被部分信任。复合命令、变量、非白名单可执行文件、文件目标重定向和 in-place `sed` 仍不在可认证范围内。精确语法和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
