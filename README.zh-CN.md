@@ -65,7 +65,7 @@ Windows TEMP 读回现已确认 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 的�
 
 ### v0.3.0 源码候选
 
-尚未发布的 v0.3.0 源码候选已在 `codex/v0.3.0-sequence-2` 分支提交 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 上完成验收。19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 则 352 项全部通过且无跳过；两平台各自从精确源码生成的 tarball 还通过了隔离 Web/Headless 安装、host-lock 读回、dshmarket 重启、HTTP 恢复与清理。这些结果不代表 canonical release artifact、CI、tag、npm/GitHub 发布或带凭据的真实模型 Goal round 已完成；精确证据和边界见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+v0.3.0 运行时候选已在 `codex/v0.3.0-sequence-2` 分支提交 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 上完成验收。19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 则 352 项全部通过且无跳过；两平台各自从精确源码生成的 tarball 还通过了隔离 Web/Headless 安装、host-lock 读回、dshmarket 重启、HTTP 恢复与清理。后续统计展示提交会改变随包分发的 README 和 package metadata，但没有改变已验收的运行时路径，因此先前 tarball 不能作为最终候选工件。这些结果不代表 canonical release artifact、CI、tag、npm/GitHub 发布或带凭据的真实模型 Goal round 已完成；精确证据和边界见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 该候选使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
 
@@ -127,6 +127,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm run test:stats
 pnpm run typecheck
 pnpm test
 pnpm run lint

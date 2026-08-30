@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - **v0.3 semantic completion candidate.** Adds exact paired optional Goal state/tool peers, an injected exact-version/integrity action/platform host lock, versioned action/Git/supported-host manifests, authority-aware contract segmentation, typed boundaries, structured checkpoint diagnostics, and digest-v3 certificates bound to session, host, contract, evidence, binding, expected transition, and optional Goal identity.
 - **Stateful action readback.** `install`, `apply`, `create`, `modify`, `restart`, `commit`, `push`, `publish`, `pull`, and `fetch` require distinct resolution, effect, and independent state evidence with same-target role closure. Generic-run evidence cannot authorize a v0.3 user-level completion; legacy generic-run certificates remain audit history only.
 - **Explicit read-only and mutation tools.** `context_guard_evidence` never mutates; `context_guard_action` owns exact-tgz package/registry effects, two-phase dshmarket restart, and exact Git effects only after an exact pending root requirement/revision, complete action-specific requested identity, target digest, host identity, executable identity, and live prestate all match. Prohibitions/acceptances cannot authorize effects; v0.3 package versions and Git refs are exact-only.
+- **Bilingual npm download history.** A daily cumulative chart keeps the renamed `dsh-context-guard` and current `dsh-completion-guard` package totals separate while presenting one project-growth line. Collection reconciles npm range and point responses before publishing English and Simplified Chinese SVGs.
 
 ### Fixed
 
@@ -17,6 +18,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Active host identity is supplied before certificate replay, managed host-lock injection is idempotent, DSH folded-YAML SRI output is parsed exactly, and a fresh profile's sole top-level `[]` sentinel is safely replaced before the managed list is appended.
 - Publish now freezes one canonical HTTPS registry across capture, npm argv, and standard packument readback, with `--ignore-scripts`; create/modify freeze their expected post-effect bytes at resolution time instead of copying the observed digest into the predicate, and modify rejects source-byte drift against its frozen pre-digest.
 - Windows stateful actions now resolve and version-probe audited `.cmd`/`.bat` shims through a closed invocation whose interpreter is pinned to the canonical `SystemRoot\\System32\\cmd.exe` realpath and version. Resolution and effect bind both identities, then execute the same revalidated paths instead of searching `PATH` or trusting a changed `ComSpec`; shell-control and expansion characters remain fail-closed.
+- The npm statistics publisher now rejects non-default refs before checkout, isolates read-only collection from the write-capable publication job, does not persist credentials during collection, and pins all official Actions to immutable commits.
 
 ### Changed
 
@@ -26,6 +28,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 - Source candidate `4f079499509822425c80e0b5ab98d1ebc58da9d5` passed the 19-file deterministic suite on macOS (351 passed, one Windows-only capability skip) and native Windows (352 passed, no skips), including all 37 portable semantic cases and 29 digest vectors.
 - Platform-local exact-source tarballs passed isolated Web/Headless install, host-lock readback, real dshmarket restart, HTTP recovery, and cleanup on both platforms. A canonical release artifact, CI, tag, npm/GitHub publication, and a credentialed model-session Goal round remain pending.
+- The npm statistics suite passes 8 focused tests covering date chunking, response normalization and reconciliation, scoped package URLs, upstream failures, and preservation of the previous output set. The chart integration changes packaged documentation and metadata, so the earlier platform-local tarballs are not artifacts for the final candidate.
 
 ## 0.2.1 - 2026-08-28
 

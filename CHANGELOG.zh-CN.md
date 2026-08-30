@@ -9,6 +9,7 @@
 - **v0.3 语义完成门禁候选。** 增加 Goal state/tool 成对精确 optional peers、显式注入的 exact version/integrity action/platform 宿主锁、版本化 action/Git/supported-host manifests、按权威分段的合同捕获、typed boundary、结构化 checkpoint 诊断，以及绑定 session、host、contract、evidence、binding、expected transition 与可选 Goal 身份的 digest-v3 证书。
 - **有状态动作独立读回。** `install`、`apply`、`create`、`modify`、`restart`、`commit`、`push`、`publish`、`pull`、`fetch` 必须提供不同 ID 的 resolution、effect 与独立 state evidence，并完成同目标 role 闭合。generic-run 证据不能授权 v0.3 用户级完成；旧 generic-run 证书只保留为审计历史。
 - **显式只读/变更工具。** `context_guard_evidence` 永不执行 mutation；`context_guard_action` 仅在精确的 pending 根用户 requirement/修订、完整动作身份、target digest、宿主身份、可执行文件身份和 live prestate 全部匹配后，才执行 exact-tgz package/registry effect、两阶段 dshmarket restart 或精确 Git effect。prohibition/acceptance 不得授权 effect；v0.3 package 版本与 Git ref 仅支持 exact。
+- **双语 npm 下载量历史。** 每日累计图分别保留更名前的 `dsh-context-guard` 与当前 `dsh-completion-guard` 包总量，同时呈现一条项目增长曲线。采集器会先核对 npm range 与 point 响应，再发布英文和简体中文 SVG。
 
 ### 修复
 
@@ -17,6 +18,7 @@
 - 活动 host identity 会在 certificate replay 前传入；managed host-lock injection 保持幂等；DSH folded-YAML SRI 输出会被精确解析，新 profile 唯一的顶层 `[]` sentinel 会在追加 managed list 前安全替换。
 - Publish 现在会在捕获、npm argv 与标准 packument readback 之间冻结同一个 canonical HTTPS registry，并显式使用 `--ignore-scripts`；create/modify 在 resolution 阶段冻结预期 post-effect 字节，不再把 observed digest 回填为谓词，且 modify 会按冻结 pre-digest 拒绝源字节漂移。
 - Windows 有状态动作现在通过封闭调用解析并探测已审计 `.cmd`/`.bat` shim 的版本，其中解释器固定为 canonical `SystemRoot\\System32\\cmd.exe` realpath 与版本。resolution/effect 同时绑定 shim 与解释器身份，执行时复用经重校验的路径，不再二次搜索 `PATH` 或信任已变化的 `ComSpec`；shell 控制字符与展开字符继续 fail-closed。
+- npm 统计发布器现在会在 checkout 前拒绝非默认 ref，把只读采集与具有写权限的发布 job 隔离，采集阶段不持久化凭据，并把全部官方 Action 固定到不可变提交。
 
 ### 变更
 
@@ -26,6 +28,7 @@
 
 - 源码候选 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 的 19 文件确定性测试在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 通过全部 352 项且无跳过；其中包含 37 个 portable semantic case 和 29 个 digest vector。
 - 两平台各自的 exact-source tarball 均通过隔离 Web/Headless 安装、host-lock 读回、真实 dshmarket 重启、HTTP 恢复与清理。canonical release artifact、CI、tag、npm/GitHub 发布及带凭据的真实模型 Goal round 仍待完成。
+- npm 统计套件的 8 项聚焦测试覆盖日期切块、响应规范化与核对、scope 包 URL、上游失败以及失败时保留上一组输出。图表集成会改变随包分发的文档与 metadata，因此先前的两份平台本地 tarball 不能作为最终候选工件。
 
 ## 0.2.1 - 2026-08-28
 

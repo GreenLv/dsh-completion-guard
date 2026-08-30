@@ -126,6 +126,36 @@ model-session Goal/checkpoint/boundary round. CI, a canonical release artifact,
 npm/GitHub publication, tag identity, and a real model-session smoke remain
 independent pending release gates.
 
+### npm statistics integration boundary (2026-08-30)
+
+The validation branch later integrated the bilingual npm download chart in
+`131b2db7f7ee555e6e4794395a8aa5118275fa80` and hardened its collector and
+publication workflow in `0ebda88312bf226869543c65de70159fe0abdaca`.
+The collector's 8 focused tests pass on macOS and cover leap-year date chunks,
+missing and unordered days, duplicate/out-of-range/negative rows, range/point
+reconciliation, scoped package URL encoding, HTTP and JSON failures, and
+preservation of the previous output set when collection fails. The fixed-date
+2026-08-29 render reconciled 780 requests for `dsh-context-guard` and 140 for
+`dsh-completion-guard` into a 920-request project line. Both 960 x 540 SVGs
+parsed as XML, retained `<title>` and `<desc>` accessibility text, rendered
+without invalid numeric tokens, and were visually inspected in English and
+Simplified Chinese.
+
+Publication is fail-closed to the repository default branch before checkout.
+The collection job has read-only contents permission and does not retain Git
+credentials; only the downstream publication job receives contents write
+permission. The four official Actions used by the workflow are pinned to
+immutable commits. No `stats` branch or chart asset was published during this
+candidate integration.
+
+Evidence boundary: the runtime source paths, `dist/`, CLI, manifests, and lock
+file remain unchanged from the native-platform candidate above. The chart
+integration does change packaged README and package metadata, and this
+acceptance document is itself shipped in the package. The earlier macOS and
+Windows tarball hashes therefore cannot be inherited by the final candidate.
+One canonical tarball must be built from the final exact commit and the same
+bytes installed and read back on macOS and native Windows before release.
+
 ## macOS v0.2.0 acceptance (2026-08-28)
 
 Verified source commit: `c107cd8ead97988f6a71cab8182edb16b23b086b`, on `main`, with a clean worktree and `main == origin/main` at the release preflight. Node v25.1.0 and pnpm 11.22.0 were used on macOS.

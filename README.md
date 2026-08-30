@@ -65,7 +65,7 @@ The Windows TEMP readback verifies the `b75868e9e73d29f50530ddaba15cfaef82e03ece
 
 ### v0.3.0 source candidate
 
-The unpublished v0.3.0 source candidate is validated at commit `4f079499509822425c80e0b5ab98d1ebc58da9d5` on `codex/v0.3.0-sequence-2`. Its 19-file suite passed 351 tests with one Windows-only capability skip on macOS and all 352 tests without skips on native Windows. Platform-local exact-source tarballs also passed isolated Web/Headless installation, host-lock readback, dshmarket restart, HTTP recovery, and cleanup on both platforms. These results do not claim a canonical release artifact, CI, tag, npm/GitHub publication, or a credentialed model-session Goal round; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) for exact evidence and limits.
+The v0.3.0 runtime candidate is validated at commit `4f079499509822425c80e0b5ab98d1ebc58da9d5` on `codex/v0.3.0-sequence-2`. Its 19-file suite passed 351 tests with one Windows-only capability skip on macOS and all 352 tests without skips on native Windows. Platform-local exact-source tarballs also passed isolated Web/Headless installation, host-lock readback, dshmarket restart, HTTP recovery, and cleanup on both platforms. Later reporting commits change packaged README and package metadata without changing the validated runtime paths, so those earlier tarballs are not artifacts for the final candidate. These results do not claim a canonical release artifact, CI, tag, npm/GitHub publication, or a credentialed model-session Goal round; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) for exact evidence and limits.
 
 The candidate uses [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json), [`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json), and [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json). Goal integration requires the exact optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` and `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` together. It fails closed unless the active DSH runtime/profile graph injects the exact `hostLockPackages`, platform, and profile identity. A nearest lockfile is not accepted because DSH core and profile plugins use separate package graphs. The default bundled patch deliberately contains no fabricated lock.
 
@@ -127,6 +127,7 @@ The cumulative chart keeps the old and new npm package totals visibly separate, 
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm run test:stats
 pnpm run typecheck
 pnpm test
 pnpm run lint
