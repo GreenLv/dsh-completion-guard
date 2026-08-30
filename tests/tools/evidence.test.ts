@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -87,7 +87,11 @@ async function packFixture(root: string, name: string, version: string): Promise
   await mkdir(output, { recursive: true })
   await writeFile(join(source, 'package.json'), JSON.stringify({ name, version, files: ['index.js'] }))
   await writeFile(join(source, 'index.js'), 'export {}\n')
-  const { stdout } = await execFileAsync('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', output], {
+  const npmCommand = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'npm'
+  const npmArgs = process.platform === 'win32'
+    ? ['/d', '/s', '/c', 'npm', 'pack', '--json', '--ignore-scripts', '--pack-destination', output]
+    : ['pack', '--json', '--ignore-scripts', '--pack-destination', output]
+  const { stdout } = await execFileAsync(npmCommand, npmArgs, {
     cwd: source,
     env: { ...process.env, npm_config_cache: join(root, 'npm-cache'), npm_config_ignore_scripts: 'true' },
   })
@@ -716,10 +720,13 @@ describe('trusted stateful evidence producer', () => {
 
     const fakeBin = join(root, 'fake-bin')
     await mkdir(fakeBin)
-    await writeFile(join(fakeBin, 'git'), '#!/bin/sh\necho "git version 2.50.1"\n')
-    await chmod(join(fakeBin, 'git'), 0o755)
+    const fakeGit = join(fakeBin, process.platform === 'win32' ? 'git.cmd' : 'git')
+    await writeFile(fakeGit, process.platform === 'win32'
+      ? '@echo off\r\necho git version 2.50.1\r\n'
+      : '#!/bin/sh\necho "git version 2.50.1"\n')
+    if (process.platform !== 'win32') await chmod(fakeGit, 0o755)
     const originalPath = process.env.PATH
-    process.env.PATH = `${fakeBin}:${originalPath ?? ''}`
+    process.env.PATH = `${fakeBin}${delimiter}${originalPath ?? ''}`
     try {
       expect(await runAction(session, 'git-action-executable-swap', { semantic_action: 'push', resolution_call_id: 'git-resolution' })).toMatchObject({
         status: 'unavailable', reason_code: 'executable_identity_drift',

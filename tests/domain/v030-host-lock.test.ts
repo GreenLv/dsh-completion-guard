@@ -314,7 +314,8 @@ describe('active profile graph injection and composed readback', () => {
     const once = readFileSync(join(fixture.profileRoot, 'cordis.patch.yml'), 'utf8')
     expect(once).toContain('# existing user patch is preserved')
     expect(once).toContain('activation: "always"')
-    expect(once).toContain('hostLockPlatform: "posix"')
+    const expectedPlatform = process.platform === 'win32' ? 'windows' : 'posix'
+    expect(once).toContain(`hostLockPlatform: "${expectedPlatform}"`)
     expect(once).toContain('hostLockProfile: "web"')
     expect(once).toContain('@deepseek-ai/dsh-tool-goal')
     expect(once).toContain('dshmarket')
@@ -324,7 +325,7 @@ describe('active profile graph injection and composed readback', () => {
     const managed = once.slice(once.indexOf('# >>> BEGIN')).split(/\r?\n/)
       .filter((line) => !line.startsWith('# >>>') && !line.startsWith('# <<<')).join('\n')
     expect(hostLockRowsFromComposedDump(managed)).toEqual(active.evaluation.packages)
-    expect(hostLockContextFromComposedDump(managed)).toEqual({ platform: 'posix', profileKind: 'web' })
+    expect(hostLockContextFromComposedDump(managed)).toEqual({ platform: expectedPlatform, profileKind: 'web' })
     expect(verifyComposedHostLockDump(managed, active.evaluation).digest).toBe(active.evaluation.digest)
     expect(() => verifyComposedHostLockDump(managed.replace('0.1.1-rc.2', '0.1.1-rc.3'), active.evaluation))
       .toThrowError(new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph'))
