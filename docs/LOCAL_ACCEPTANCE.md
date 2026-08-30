@@ -46,17 +46,22 @@ cleanup chain are verified. A real model-session smoke was not run, and the
 HTTP response lacks independently persisted/read-back evidence. This does not
 establish v0.3 runtime behavior, npm publication, a tag, or a GitHub Release.
 
-## v0.3.0 local candidate source gates (2026-08-30)
+## v0.3.0 source candidate gates (2026-08-30)
 
-The unpublished local candidate over prerequisite commit
-`55f694d2534147b7fb2aac1d5b795ae5b7ead50f` passed the macOS deterministic
-source matrix:
+Source commit `4f079499509822425c80e0b5ab98d1ebc58da9d5` on
+`codex/v0.3.0-sequence-2` passed the deterministic source matrix on macOS and
+native Windows. The commit remains an unpublished source candidate; it is not
+a tag, npm artifact, GitHub Release, or public-package readback.
+
+The macOS source matrix used Node.js 25.1.0 and pnpm 11.22.0:
 
 - `pnpm install --frozen-lockfile` -> 0.
 - `pnpm run typecheck` -> 0.
-- `pnpm test` -> 0; 19 test files, 346 tests passed.
-- `pnpm run lint` -> 0 with no warnings after cleanup.
-- `pnpm run build` -> 0.
+- `pnpm test` -> 0; 19 test files, 351 tests passed and the one Windows-only
+  command-shim test was capability-skipped.
+- `pnpm run lint` -> 0 with no warnings.
+- `pnpm run build` -> 0; a second build produced the same generated file names
+  and SHA-256 values.
 - `pnpm run pack:check` -> 0; package identity is
   `dsh-completion-guard@0.3.0`, and the action, Git command, and supported-host
   manifests plus the host-lock CLI are included.
@@ -64,31 +69,62 @@ source matrix:
 - The DSH digest runner re-derived all 29 digest-v3 vectors; the four mirror
   file SHA-256 values remain identical to `UPSTREAM_PIN.json`.
 
-The exact-source candidate tarball was also installed into fresh isolated Web
-and Headless profiles without modifying the user profile. For both profiles,
-the packaged host-lock CLI completed `inspect -> inject -> inject (idempotence)
--> dsh --dump-config -> verify-dump` against the active runtime/profile graphs.
-The Web tuple contained 34 exact package rows with Web control available; the
-Headless tuple contained 33 rows with Web control unavailable by profile while
-the other applicable capabilities remained supported. This exercise found and
-fixed three real readback/injection defects before the final pass: DSH
-serializes SRI as a folded YAML scalar, a profile without a pre-existing
-activation override must still permit a second managed injection, and the
-fresh-profile top-level `[]` sentinel must be replaced (while preserving its
-comments) before appending the managed YAML list.
+The native Windows matrix used a fresh Windows 11 checkout, Windows PowerShell
+5.1, Python 3.12.10, Node.js 24.18.0, pnpm 11.22.0, Git 2.53.0.windows.2, and
+effective `core.autocrlf=true`:
 
-The isolated Web profile then bound a temporary loopback port. A real
-`dshmarket@1.36.0` capabilities GET returned the audited schema and an initial
-boot ID. Its restart POST terminated the old process and launched a new process
-on another temporary port; a second capabilities readback returned a different
-boot ID. The new process was explicitly stopped and connection failure was
-read back as cleanup evidence. The isolated Headless profile loaded the plugin
-and advanced to the expected `MISSING_CREDENTIAL` provider boundary with the
-API key explicitly empty. Together with the runtime integration tests, this
-proves package composition, host-lock readback, load, and the real Web restart
-lifecycle. It is not a credentialed model-session Goal/checkpoint/boundary
-round. Native Windows v0.3 execution, CI, npm/GitHub publication, tag identity,
-and a real model-session smoke remain independent release gates.
+- The focused host-lock/evidence suite passed 33/33 tests with no skips. It
+  executed a `.cmd` shim from a path containing spaces and parentheses, bound
+  both the shim and canonical `SystemRoot\\System32\\cmd.exe` identities,
+  ignored later `PATH`/`ComSpec` substitution, rejected expansion characters,
+  detected a fake `git.cmd` identity swap, and completed the real Git
+  commit/push/fetch/pull round trip within its Windows timeout.
+- `pnpm test` -> 0; all 19 test files and all 352 tests passed with no skips.
+- Typecheck, lint, build, package dry-run, documentation audit, documentation
+  unit tests, `git diff --check`, generated-`dist` parity, and final clean-tree
+  readback passed.
+- All 37 portable semantic cases, all 29 digest-v3 vectors, the four pinned
+  mirror hashes, and cross-repository fixture byte equality passed.
+
+Each platform built and recorded its own local exact-source tarball. The macOS
+artifact SHA-256 is
+`d613d88edbc44ccc020ad48dff6d180e79c04ed5bcabb73d7fae09d449500890`;
+the Windows artifact SHA-256 is
+`397975f720f0c6d734e7faf7279fab3feee1f92433ff457122755d9296adb19f`.
+These raw archive hashes are platform-local build provenance, not a requirement
+that independently packed gzip/tar containers be byte-identical. Both were
+built from a clean checkout of the exact commit, reported the same package
+identity and 26-file package list, retained build-to-`dist` parity, and were
+installed from the artifact that was hashed on that platform. A future release
+must instead freeze one canonical tarball, bind it to the release commit, tag,
+npm `gitHead`, and registry integrity, and verify that same artifact on every
+required native platform.
+
+Both platform-local exact-source artifacts were installed into fresh isolated
+Web and Headless profiles without modifying the user profile. For both
+profiles, the packaged host-lock CLI completed `inspect -> inject -> inject
+(idempotence) -> dsh --dump-config -> verify-dump` against the active
+runtime/profile graphs. The Web tuple contained 34 exact package rows with Web
+control available; the Headless tuple contained 33 rows with Web control
+unavailable by profile while the other applicable capabilities remained
+supported.
+
+On both macOS and Windows, an isolated Web profile loaded real
+`dshmarket@1.36.0`, returned HTTP 200, accepted the correct restart request
+with HTTP 202, replaced the process, and returned a different boot ID after
+restart. The Windows run also verified that a wrong restart origin was rejected.
+Each replacement process returned HTTP 200 before teardown; the temporary
+listener, helper, and profile processes were then read back as stopped. Each
+isolated Headless profile loaded the plugin and advanced to the expected
+`MISSING_CREDENTIAL` boundary with `DEEPSEEK_API_KEY` removed from the child
+environment.
+
+This establishes deterministic source behavior plus native macOS and Windows
+package composition, host-lock readback, load, and Web restart lifecycle for
+commit `4f079499509822425c80e0b5ab98d1ebc58da9d5`. It is not a credentialed
+model-session Goal/checkpoint/boundary round. CI, a canonical release artifact,
+npm/GitHub publication, tag identity, and a real model-session smoke remain
+independent pending release gates.
 
 ## macOS v0.2.0 acceptance (2026-08-28)
 

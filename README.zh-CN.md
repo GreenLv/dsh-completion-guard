@@ -63,9 +63,11 @@ dsh plugin --profile web add dsh-completion-guard@0.2.1
 
 Windows TEMP 读回现已确认 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 的源码矩阵，以及 exact-source tarball → 隔离安装 → dump-config → Web 启动日志与清理链。HTTP 200 只出现在首轮 stdout，未持久化且复核时没有重跑，因此 HTTP 响应本身不能写成“独立复核已确认”。真实模型会话 smoke 仍未运行。
 
-### v0.3.0 本地候选
+### v0.3.0 源码候选
 
-当前 worktree 可能包含尚未发布的 v0.3.0 候选。它使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
+尚未发布的 v0.3.0 源码候选已在 `codex/v0.3.0-sequence-2` 分支提交 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 上完成验收。19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 则 352 项全部通过且无跳过；两平台各自从精确源码生成的 tarball 还通过了隔离 Web/Headless 安装、host-lock 读回、dshmarket 重启、HTTP 恢复与清理。这些结果不代表 canonical release artifact、CI、tag、npm/GitHub 发布或带凭据的真实模型 Goal round 已完成；精确证据和边界见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+
+该候选使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
 
 把候选安装到 profile 后，使用随包提供的 CLI 生成并回读活动身份。请把下列路径替换为实际 DSH 安装的绝对路径；dump 只是检查产物，不是配置来源：
 
@@ -81,7 +83,7 @@ dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
 "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
 ```
 
-`inspect` 与 `inject` 会拒绝缺失、重复、多版本或漂移的关键包；`verify-dump` 再证明 DSH compose 出的有界 tuple 与活动 graph 读回一致。每次 DSH/profile/package 升级后都应重跑。流程未通过前，证书、依赖 Goal 的完成路径及受影响 action capability 均保持 unavailable。该候选尚未 commit、发布，也未覆盖安装到用户 profile。
+`inspect` 与 `inject` 会拒绝缺失、重复、多版本或漂移的关键包；`verify-dump` 再证明 DSH compose 出的有界 tuple 与活动 graph 读回一致。每次 DSH/profile/package 升级后都应重跑。流程未通过前，证书、依赖 Goal 的完成路径及受影响 action capability 均保持 unavailable。该候选只提交在验收分支，尚未发布，也未覆盖安装到用户 profile。
 
 `context_guard_evidence` 只读：负责 target resolution、已持久 effect 验证和独立 state readback。install/apply/restart/publish 以及精确 Git commit/push/pull/fetch mutation 使用单独命名的 `context_guard_action`。resolution 本身不授予 mutation 权限：调用方必须给出精确的 pending 根用户 requirement 及修订、复述已持久 target digest，并逐字段匹配动作所需身份；prohibition 与 acceptance 条目绝不授权 mutation。v0.3 的 package/apply/publish 只接受精确版本授权，Git 授权必须给出 remote 与 canonical 完整 ref/refspec。这些检查在任何 executable、HTTP 请求或 restart intent 之前完成。审批/展示面会在执行前呈现 canonical target 和 command-manifest digest。
 

@@ -22,6 +22,11 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 - **Package renamed from `dsh-context-guard` to `dsh-completion-guard`.** An unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning) already uses the name; the rename removes the collision for name-keyed registries and lists. The internal Cordis bundle id stays `context-guard`, so installed profiles keep their runtime identity. The previous npm package `dsh-context-guard` will be deprecated once `dsh-completion-guard` is published.
 
+### Validation
+
+- Source candidate `4f079499509822425c80e0b5ab98d1ebc58da9d5` passed the 19-file deterministic suite on macOS (351 passed, one Windows-only capability skip) and native Windows (352 passed, no skips), including all 37 portable semantic cases and 29 digest vectors.
+- Platform-local exact-source tarballs passed isolated Web/Headless install, host-lock readback, real dshmarket restart, HTTP recovery, and cleanup on both platforms. A canonical release artifact, CI, tag, npm/GitHub publication, and a credentialed model-session Goal round remain pending.
+
 ## 0.2.1 - 2026-08-28
 
 ### Fixed

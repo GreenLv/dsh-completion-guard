@@ -22,6 +22,11 @@
 
 - **包名由 `dsh-context-guard` 更名为 `dsh-completion-guard`。** 无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)已占用该名称;更名消除按名字建索引的注册面与列表上的冲突。内部 Cordis bundle id 保持 `context-guard` 不变,已安装 profile 的运行时身份不受影响。`dsh-completion-guard` 发布后,原 npm 包 `dsh-context-guard` 将被 deprecate。
 
+### 验证
+
+- 源码候选 `4f079499509822425c80e0b5ab98d1ebc58da9d5` 的 19 文件确定性测试在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 通过全部 352 项且无跳过；其中包含 37 个 portable semantic case 和 29 个 digest vector。
+- 两平台各自的 exact-source tarball 均通过隔离 Web/Headless 安装、host-lock 读回、真实 dshmarket 重启、HTTP 恢复与清理。canonical release artifact、CI、tag、npm/GitHub 发布及带凭据的真实模型 Goal round 仍待完成。
+
 ## 0.2.1 - 2026-08-28
 
 ### 修复
