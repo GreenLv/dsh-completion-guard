@@ -1,9 +1,10 @@
 import type { GuardItem, GuardProjection } from './types.js'
 import { sha256 } from './canonicalize.js'
 import { evidenceCoverage } from './matching.js'
+import { ACTION_MANIFEST, isStatefulAction } from './protocol-manifest.js'
 
 export interface RecoveryOptions {
-  rejectedBindings?: Array<{ itemId: string; reason: string }>
+  rejectedBindings?: Array<{ itemId: string; reason: string; reasonCode?: string; offendingEvidenceIds?: string[] }>
   charBudget?: number
 }
 
@@ -36,7 +37,9 @@ export function closingHint(projection: GuardProjection, item: GuardItem, eviden
   if (verification.subject && verification.surface === 'artifact') parts.push(`subject '${verification.subject}'`)
   if (verification.subject && verification.surface === 'scope') parts.push('in the scope directory')
   const operation = verification.operation
-  if (operation === 'run') {
+  if (item.semanticAction && isStatefulAction(item.semanticAction)) {
+    parts.push(`needs ${item.semanticAction} resolution + effect + independent state readback with the same resolved target`)
+  } else if (operation === 'run') {
     parts.push('needs a scope run effect: a whitelisted executable (git/pnpm/python/dsh/...) without pipes, `;` or `&&`, e.g. `python -m unittest`')
   } else if (operation === 'create' || operation === 'write' || operation === 'modify') {
     parts.push('needs an effect evidence AND an independent same-subject state verification (read tool or a deterministic check)')
@@ -94,11 +97,18 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
     return true
   }
   const requirementItems = items.filter((item) => item.kind === 'requirement')
-  if (!pushItems(requirementItems, (item) => `[${item.id}] ${item.normalizedText}`)) return finalize()
+  const compact = budget < 512
+  const itemDiagnostic = (item: GuardItem) => {
+    if (compact) return `[${item.id}] ${item.normalizedText}`
+    const action = item.semanticAction ?? 'generic_run'
+    const spec = ACTION_MANIFEST.actions[action]
+    return `[${item.id}] ${item.normalizedText} action=${action} requested=${JSON.stringify(item.requestedTarget ?? {})} predicate=${spec.predicateId}@1 params=inline(resolved:${spec.resolvedTargetKeys.join(',') || '-'};observed:${spec.observedStateKeys.join(',') || '-'})`
+  }
+  if (!pushItems(requirementItems, itemDiagnostic)) return finalize()
   const prohibitionItems = items.filter((item) => item.kind === 'prohibition')
   if (!pushItems(prohibitionItems, (item) => `[${item.id}] DO NOT ${item.normalizedText}`)) return finalize()
   const acceptanceItems = items.filter((item) => item.kind === 'acceptance')
-  if (!pushItems(acceptanceItems, (item) => `[${item.id}] VERIFY ${item.normalizedText}`)) return finalize()
+  if (!pushItems(acceptanceItems, (item) => `VERIFY ${itemDiagnostic(item)}`)) return finalize()
   // Surface the real evidence IDs the model may cite, so a checkpoint attempt
   // can bind actual evidence instead of guessing identifiers.
   const citableEvidence = [...projection.evidence.values()]
@@ -110,14 +120,28 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
       push(MORE_EVIDENCE_RULE(citableEvidence.length - evidenceCount))
       break
     }
-    if (!push(`evidence ${evidence.id} ${evidence.toolName} ${evidence.subjects.join(',') || '-'} ${evidence.surfaces.join(',')}`)) return finalize()
+    const summary = [
+      `evidence ${evidence.id}`,
+      `tool=${evidence.toolName}`,
+      `action=${evidence.semanticAction ?? 'generic_run'}`,
+      `role=${evidence.evidenceRole ?? 'effect'}`,
+      `resolved=${JSON.stringify(evidence.resolvedTarget ?? {})}`,
+      `observed=${JSON.stringify(evidence.observedState ?? {})}`,
+      `adapter=${evidence.adapterId ?? '-'}@${evidence.adapterVersion ?? '-'}`,
+      `ops=${(evidence.operations ?? []).map((entry) => entry.op).join(',') || '-'}`,
+      `executables=${(evidence.executables ?? []).join(',') || '-'}`,
+      `parse=${evidence.parseStatus ?? 'adapter_unavailable'}`,
+    ].join(' ')
+    if (!push(summary)) return finalize()
     evidenceCount += 1
   }
   for (const item of [...projection.items.values()].filter((item) => item.status === 'superseded')) {
     if (item.supersededBy && !push(`[${item.id} -> ${item.supersededBy}]`)) return finalize()
   }
   for (const binding of options.rejectedBindings ?? []) {
-    if (!push(`rejected ${binding.itemId}: ${binding.reason}`)) return finalize()
+    const offending = binding.offendingEvidenceIds?.length ? ` offending=${binding.offendingEvidenceIds.join(',')}` : ''
+    const reason = binding.reasonCode ? binding.reasonCode : binding.reason
+    if (!push(`rejected ${binding.itemId}: ${reason}${offending}`)) return finalize()
   }
   // Best-effort actionable hints for the LISTED items only: folded items never
   // leak back through the hint lines, and hints never displace the prioritized

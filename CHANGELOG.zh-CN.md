@@ -4,6 +4,19 @@
 
 ## 未发布
 
+### 新增
+
+- **v0.3 语义完成门禁候选。** 增加 Goal state/tool 成对精确 optional peers、显式注入的 exact version/integrity action/platform 宿主锁、版本化 action/Git/supported-host manifests、按权威分段的合同捕获、typed boundary、结构化 checkpoint 诊断，以及绑定 session、host、contract、evidence、binding、expected transition 与可选 Goal 身份的 digest-v3 证书。
+- **有状态动作独立读回。** `install`、`apply`、`create`、`modify`、`restart`、`commit`、`push`、`publish`、`pull`、`fetch` 必须提供不同 ID 的 resolution、effect 与独立 state evidence，并完成同目标 role 闭合。generic-run 证据不能授权 v0.3 用户级完成；旧 generic-run 证书只保留为审计历史。
+- **显式只读/变更工具。** `context_guard_evidence` 永不执行 mutation；`context_guard_action` 仅在精确的 pending 根用户 requirement/修订、完整动作身份、target digest、宿主身份、可执行文件身份和 live prestate 全部匹配后，才执行 exact-tgz package/registry effect、两阶段 dshmarket restart 或精确 Git effect。prohibition/acceptance 不得授权 effect；v0.3 package 版本与 Git ref 仅支持 exact。
+
+### 修复
+
+- assistant 散文不再控制 turn stopping。正常 Goal 续行仍只由 Goal Round Driver 调度；只有已持久化且资格成立的 typed boundary 才能在提交后触发同 Goal ref 的 disarm 双读回。
+- 未知、缺失或漂移的宿主身份一律 fail-closed。Guard 自己注册并守卫的 `update_goal(action=complete)` 路径在 mutation 前检查；可信进程内直接写 Goal/session 的旁路只记录 integrity violation，不声称能够阻止。
+- 活动 host identity 会在 certificate replay 前传入；managed host-lock injection 保持幂等；DSH folded-YAML SRI 输出会被精确解析，新 profile 唯一的顶层 `[]` sentinel 会在追加 managed list 前安全替换。
+- Publish 现在会在捕获、npm argv 与标准 packument readback 之间冻结同一个 canonical HTTPS registry，并显式使用 `--ignore-scripts`；create/modify 在 resolution 阶段冻结预期 post-effect 字节，不再把 observed digest 回填为谓词，且 modify 会按冻结 pre-digest 拒绝源字节漂移。
+
 ### 变更
 
 - **包名由 `dsh-context-guard` 更名为 `dsh-completion-guard`。** 无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)已占用该名称;更名消除按名字建索引的注册面与列表上的冲突。内部 Cordis bundle id 保持 `context-guard` 不变,已安装 profile 的运行时身份不受影响。`dsh-completion-guard` 发布后,原 npm 包 `dsh-context-guard` 将被 deprecate。

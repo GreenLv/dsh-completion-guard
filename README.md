@@ -51,7 +51,7 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 - Derives bounded, redacted evidence from persisted DSH tool calls and results.
 - Requires method, operation, subject, surface, and outcome to match where the contract makes them explicit.
 - Re-verifies certificates when a session is rebuilt or resumed and fails closed on integrity loss.
-- Blocks Goal completion and whole-task completion claims while enabled unless a current certificate exists.
+- Blocks the Guard-owned model-tool Goal completion path while enabled unless a current certificate exists; trusted in-process direct Goal/session writes are detected as integrity violations, not universally prevented.
 
 ## Status and compatibility
 
@@ -59,7 +59,33 @@ Version 0.2.1 is available from [npm](https://www.npmjs.com/package/dsh-completi
 
 > The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision with an unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning). The internal Cordis bundle id stays `context-guard`, and the previous npm package `dsh-context-guard` will be deprecated in favor of this package. It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
-The 0.2.1 release suite contains 138 tests (105 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. 0.2.1 adds a session-layer capture filter so clarification questions, meta comments, and bare progression phrases (`继续`, `continue`) never become contract items; de-duplicates repeated recovery notifications; adds `/context-guard clear`; and documents how a goal completes when the guard is disabled or blocked. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result. On Windows 11, exact source `b75868e9e73d29f50530ddaba15cfaef82e03ece` passed the 170-test source gates plus isolated exact-source tarball installation, Web bundle loading, Node import, and HTTP 200 smoke. No real model-session smoke was run for that Windows source, so model-level task-contract and completion behavior remains unverified; this is not npm, tag, or GitHub Release evidence.
+The 0.2.1 release suite contains 138 tests (105 domain/core). It attributes shell evidence to the session cwd when the tool omits `workdir`, supports literal `2>&1` diagnostics and read-only inspection commands, maps process verbs to run evidence, and exposes actionable hints when a checkpoint binding is rejected. 0.2.1 adds a session-layer capture filter so clarification questions, meta comments, and bare progression phrases (`继续`, `continue`) never become contract items; de-duplicates repeated recovery notifications; adds `/context-guard clear`; and documents how a goal completes when the guard is disabled or blocked. A macOS live Web run loaded the published profile package and certified a real `pnpm test` result.
+
+The Windows TEMP readback verifies the `b75868e9e73d29f50530ddaba15cfaef82e03ece` source matrix and the exact-source tarball → isolated installation → dump-config → Web startup log and cleanup chain. HTTP 200 appeared only in the first-run stdout, was not persisted, and was not rerun during readback, so the HTTP response itself is not independently confirmed. A real model-session smoke remains not run.
+
+### v0.3.0 local candidate
+
+The worktree may contain an unpublished v0.3.0 candidate. It uses [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json), [`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json), and [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json). Goal integration requires the exact optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` and `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` together. It fails closed unless the active DSH runtime/profile graph injects the exact `hostLockPackages`, platform, and profile identity. A nearest lockfile is not accepted because DSH core and profile plugins use separate package graphs. The default bundled patch deliberately contains no fabricated lock.
+
+After installing the candidate into a profile, generate and verify its active identity with the packaged CLI. Use absolute paths for the actual DSH installation; the dump is an inspection artifact, not a configuration source:
+
+```sh
+DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
+DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
+DSH_COMPOSED_DUMP=/tmp/dsh-web-composed.yml
+GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-lock"
+
+"$GUARD_HOST_LOCK" inspect --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
+"$GUARD_HOST_LOCK" inject --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
+dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
+"$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
+```
+
+`inspect` and `inject` reject missing, duplicate, multi-version, or drifted critical packages. `verify-dump` then proves that DSH composed the same bounded tuple that was read from the active graphs. Repeat the flow after any DSH/profile/package upgrade. Until it succeeds, certification, Goal-dependent completion, and affected action capabilities remain unavailable. This candidate has not been committed, published, or installed over a user profile.
+
+`context_guard_evidence` is read-only: it resolves targets, validates persisted effects, and performs independent state readback. Mutating install/apply/restart/publish and exact Git commit/push/pull/fetch operations use the separately named `context_guard_action` tool. A resolution is not mutation authority: the caller must identify the exact pending root-owned requirement and revision, repeat the persisted target digest, and match every action-specific identity field before any executable, HTTP request, or restart intent runs. Prohibitions and acceptance clauses never authorize mutation. Package/apply/publish authority is exact-version-only in v0.3; Git authority requires an explicit remote and canonical full ref/refspec. The presentation surface shows the canonical target and command-manifest digest before execution.
+
+Publish targets use one canonical HTTPS registry base with no credentials, query, fragment, ambiguous path, or control characters; the same base is frozen in the root contract, npm argv, and registry readback. Create and modify resolutions freeze the expected post-write digest before effect; modify re-hashes the source bytes against the frozen pre-digest before applying the pinned unique UTF-8 replacement semantics, so either prestate drift or different post-effect bytes fail closed.
 
 Context Guard recognizes only a small, auditable shell and PowerShell command subset. Unsupported or ambiguous syntax stays incomplete instead of being partially trusted. Compound commands, variables, non-whitelisted executables, file-target redirects, and in-place `sed` remain outside the certifiable surface. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the exact grammar and platform evidence.
 

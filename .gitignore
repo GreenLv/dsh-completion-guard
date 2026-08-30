@@ -1,3 +1,5 @@
 node_modules/
+.pnpm-store/
+__pycache__/
 *.tgz
 .DS_Store

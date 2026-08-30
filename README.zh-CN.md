@@ -51,7 +51,7 @@ dsh plugin --profile web add dsh-completion-guard@0.2.1
 - 只从 DSH 已持久化的工具调用与结果派生有界、脱敏的证据。
 - 当合同明确指定时，同时匹配方法、操作、对象、surface 和结果状态。
 - 在会话重建或恢复时重新验证证书，完整性丢失时 fail-closed。
-- 启用期间，如果没有当前有效证书，就阻止 Goal 完成和整任务完成声明。
+- 启用期间，如果没有当前有效证书，就在 mutation 前阻止 Guard 自己守卫的模型工具 Goal 完成路径；可信进程内直接写 Goal/session 的旁路只检测为 integrity violation，不声称能普遍阻止。
 
 ## 状态与兼容性
 
@@ -59,7 +59,33 @@ dsh plugin --profile web add dsh-completion-guard@0.2.1
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`,以避免与无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)撞名。内部 Cordis bundle id 保持 `context-guard` 不变;原 npm 包 `dsh-context-guard` 将被 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
-0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果。Windows 11 上的精确源码 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 已通过 170 项源码门禁，以及从该源码构建的 tarball 隔离安装、Web bundle 加载、Node import 和 HTTP 200 smoke。该 Windows 源码尚未执行真实模型会话 smoke，因此模型层任务合同与完成行为仍未验证；这些结果也不是 npm、tag 或 GitHub Release 证据。
+0.2.1 版本测试共 138 项，其中 domain/core 105 项。它会在 shell 工具未提供 `workdir` 时使用会话 cwd 归因证据，支持字面量 `2>&1` 和只读检查命令，把过程动词映射为 run 证据，并在 checkpoint 绑定被拒时提供可执行提示。0.2.1 新增会话层捕获过滤，使澄清提问、元评论和纯推进语（`继续`、`continue`）不再成为合同条目；对重复恢复通知做内容去重；新增 `/context-guard clear`；并文档化在 Guard 关闭或阻塞时 goal 如何完成。macOS 真实 Web 会话已加载公开 profile 包并认证 `pnpm test` 结果。
+
+Windows TEMP 读回现已确认 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 的源码矩阵，以及 exact-source tarball → 隔离安装 → dump-config → Web 启动日志与清理链。HTTP 200 只出现在首轮 stdout，未持久化且复核时没有重跑，因此 HTTP 响应本身不能写成“独立复核已确认”。真实模型会话 smoke 仍未运行。
+
+### v0.3.0 本地候选
+
+当前 worktree 可能包含尚未发布的 v0.3.0 候选。它使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
+
+把候选安装到 profile 后，使用随包提供的 CLI 生成并回读活动身份。请把下列路径替换为实际 DSH 安装的绝对路径；dump 只是检查产物，不是配置来源：
+
+```sh
+DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
+DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
+DSH_COMPOSED_DUMP=/tmp/dsh-web-composed.yml
+GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-lock"
+
+"$GUARD_HOST_LOCK" inspect --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
+"$GUARD_HOST_LOCK" inject --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
+dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
+"$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
+```
+
+`inspect` 与 `inject` 会拒绝缺失、重复、多版本或漂移的关键包；`verify-dump` 再证明 DSH compose 出的有界 tuple 与活动 graph 读回一致。每次 DSH/profile/package 升级后都应重跑。流程未通过前，证书、依赖 Goal 的完成路径及受影响 action capability 均保持 unavailable。该候选尚未 commit、发布，也未覆盖安装到用户 profile。
+
+`context_guard_evidence` 只读：负责 target resolution、已持久 effect 验证和独立 state readback。install/apply/restart/publish 以及精确 Git commit/push/pull/fetch mutation 使用单独命名的 `context_guard_action`。resolution 本身不授予 mutation 权限：调用方必须给出精确的 pending 根用户 requirement 及修订、复述已持久 target digest，并逐字段匹配动作所需身份；prohibition 与 acceptance 条目绝不授权 mutation。v0.3 的 package/apply/publish 只接受精确版本授权，Git 授权必须给出 remote 与 canonical 完整 ref/refspec。这些检查在任何 executable、HTTP 请求或 restart intent 之前完成。审批/展示面会在执行前呈现 canonical target 和 command-manifest digest。
+
+Publish target 只接受不含凭证、query、fragment、歧义路径或控制字符的 canonical HTTPS registry base；根合同、npm argv 与 registry readback 冻结同一值。Create/modify resolution 会在 effect 前冻结预期写入后的 digest；modify 还会先把源字节重新散列并与冻结的 pre-digest 比较，再按 pinned、唯一 UTF-8 replacement 语义推导 post-digest，因此 prestate 漂移或不同的实际文件字节都会 fail closed。
 
 Context Guard 只识别一小组可审计的 shell 与 PowerShell 命令。无法支持或存在歧义的语法会保持 incomplete，而不会被部分信任。复合命令、变量、非白名单可执行文件、文件目标重定向和 in-place `sed` 仍不在可认证范围内。精确语法和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 

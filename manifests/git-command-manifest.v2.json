@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "adapterId": "context-guard.git.v1",
+  "parser": "production-shell-parser-canonical-argv",
+  "globalProhibitions": [
+    "git_global_C",
+    "git_global_c",
+    "alias_subcommand",
+    "force",
+    "wildcard_refspec",
+    "delete_refspec",
+    "implicit_ref",
+    "implicit_HEAD"
+  ],
+  "commands": {
+    "git.ls_remote_exact.v2": {
+      "action": "inspect_remote_updates",
+      "argv": ["git", "ls-remote", "--exit-code", "--refs", "<remote-name>", "<source-ref>"],
+      "sourceRefKind": "refs/heads"
+    },
+    "git.pull_ff_only_explicit.v2": {
+      "action": "pull",
+      "argv": ["git", "pull", "--ff-only", "--no-tags", "<remote-name>", "<source-ref>"],
+      "sourceRefKind": "refs/heads"
+    },
+    "git.fetch_tracking_explicit.v2": {
+      "action": "fetch",
+      "argv": ["git", "fetch", "--no-tags", "<remote-name>", "<source-ref>:<tracking-ref>"],
+      "sourceRefKind": "refs/heads",
+      "trackingRefKind": "refs/remotes/<remote-name>",
+      "readback": "git rev-parse --verify <tracking-ref>"
+    },
+    "git.commit_index_tree.v2": {
+      "action": "commit",
+      "argv": ["git", "commit", "-m|--message", "<literal-message>"],
+      "prestate": ["git rev-parse HEAD", "git write-tree", "git ls-files --stage -z"],
+      "tupleEncoding": "sha256-length-prefixed-raw-bytes"
+    },
+    "git.push_explicit_refs.v2": {
+      "action": "push",
+      "argv": ["git", "push", "<remote-name>", "<source-ref>:<destination-ref>"],
+      "sourceRefKind": "refs/heads",
+      "destinationRefKind": "refs/heads",
+      "prestate": ["source-ref-oid", "exact-destination-ref-oid"],
+      "readback": "git ls-remote --exit-code --refs <remote-name> <destination-ref>"
+    }
+  },
+  "effectGate": {
+    "envelopeVersion": "git.prestate.v1",
+    "rule": "recompute target identity and prestate tuple immediately before exact argv execution"
+  }
+}

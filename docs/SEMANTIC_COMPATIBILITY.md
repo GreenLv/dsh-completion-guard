@@ -18,6 +18,8 @@ tests/fixtures/conformance/context_guard_semantics_v1.schema.json
 tests/fixtures/conformance/digest_v3/cases.json
 tests/fixtures/conformance/digest_v3/expected.json
 src/domain/digest.ts
+manifests/action-manifest.v1.json
+manifests/supported-host.v1.json
 ```
 
 Authority rules:
@@ -61,36 +63,43 @@ DSH-side facts:
   (`python scripts/reference_digest_encoder.py --check ...`) stays the
   canonical check; the mirrored fixtures make both implementations answer to
   the same bytes.
-- The module is not yet wired into the runtime projection, checkpoint, or
-  Goal complete paths. Wiring it into the certificate flow is v0.3.0 work and
-  will follow the repository's versioning contract.
+- The v0.3 candidate wires the module into checkpoint creation/replay and the
+  Guard-owned Goal-complete gate. Certificates freeze the full versioned field
+  table, including session and host identity, and are authoritative only after
+  the tool result persists and re-derives exactly.
 
 ## Portable conformance fixture
 
-`context_guard_semantics_v1.json` holds platform-neutral cases built from the
+`context_guard_semantics_v1.json` holds 37 platform-neutral cases built from the
 event vocabulary `root_message`, `delegated_message`, `tool_result`,
 `checkpoint_request`, `boundary_request`, `completion_request`, `compact`,
 `resume`, and `goal_change`, with bounded expectations (`completed`,
 `completion_allowed`, `force_continue`, `pending_preserved`, `boundary`,
-`integrity`, `reason_codes`). All content is synthetic. DSH currently mirrors
-the fixture; a DSH-side interpreter that replays the cases against the DSH
-runtime is part of the v0.3.0 work and must not report skipped capabilities
-as passes.
+`integrity`, `reason_codes`). All content is synthetic. The DSH-side portable
+runner executes every mirrored case without skips and compares the bounded
+result contract; it does not translate a missing capability into a pass.
 
 ## Current alignment status (honest boundaries)
 
-Implemented on the DSH side today:
+Implemented in the local v0.3 candidate:
 
-- Digest v3 derivation and golden-vector agreement (deterministic tests).
-- Byte-mirror integrity against `UPSTREAM_PIN.json`.
+- Digest v3 derivation, byte-mirror pinning, and 29-vector agreement.
+- All-case portable semantic fixture runner implemented as a thin adapter over production derive/checkpoint/boundary/Goal/stop functions, without fixture-ID rewrites or skipped cases.
+- Assistant-prose diagnostic-only stop decisions and typed boundary
+  qualification/effectuation with phase-specific fault results.
+- Exact semantic action/target binding, explainable checkpoint rejection, and
+  resolution/effect/state role closure for all ten stateful actions.
+- Exact paired optional Goal state/tool peers, supported-host/action manifests, injected active
+  graph identity, unknown-host fail-closed behavior, and pre-mutation gating of
+  the Guard-owned `update_goal(action=complete)` path.
+- Legacy generic-run and unprovable-authority fail-closed migration behavior.
 
-Planned for v0.3.0 and recorded as `not-implemented` in the delta ledger:
-stop policy split (assistant prose diagnostic-only, safe-yield), the
-`context_guard_boundary` tool with post-commit disarm, checkpoint evidence
-diagnostics, semantic action and target binding with minimal state readback,
-Goal capability gating with the supported-version manifest, and command
-permission hardening. These are alignment targets, not shipped behavior; no
-completion or parity claim covers them yet.
+This is not a release or full product-parity claim. It does not copy the Codex
+private ledger, Hook lifecycle, cache, or installer, and it cannot prevent all
+trusted in-process Goal/session bypasses. Exact-source isolated Web/Headless
+install, host-lock readback, Web restart lifecycle, and Headless load have been
+run on macOS; a real model-session Goal round, native Windows v0.3 execution,
+CI, publication, and release identity remain separate gates.
 
 ## Validation boundaries
 

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "semanticActions": ["inspect_remote_updates", "install", "apply", "create", "modify", "test", "verify", "pull", "fetch", "commit", "push", "restart", "publish", "generic_run"],
+  "statefulActions": ["install", "apply", "create", "modify", "restart", "commit", "push", "publish", "pull", "fetch"],
+  "evidenceAdapters": {
+    "context-guard.git.v1": "1.0.0",
+    "context-guard.package.v1": "1.0.0",
+    "context-guard.artifact.v1": "1.0.0",
+    "context-guard.service.v1": "1.0.0",
+    "context-guard.registry.v1": "1.0.0"
+  },
+  "actions": {
+    "inspect_remote_updates": {"stateful": false, "evidenceProducer": "supported", "resolvedTargetKeys": ["repository", "version", "remote"], "observedStateKeys": ["upstream_oid"], "predicateId": "pred.inspect_remote_updates.v1", "commandManifestIds": ["git.ls_remote_exact.v2"]},
+    "install": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["package_id", "version", "integrity_digest", "profile"], "observedStateKeys": ["package_id", "version", "integrity_digest", "profile"], "predicateId": "pred.install.v1", "commandManifestIds": ["dsh.plugin_add_tgz.install.v1"]},
+    "apply": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["package_id", "version", "integrity_digest", "profile"], "observedStateKeys": ["package_id", "version", "integrity_digest", "profile"], "predicateId": "pred.apply.v1", "commandManifestIds": ["dsh.plugin_add_tgz.apply.v1"]},
+    "create": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["artifact_id", "scope", "pre_digest", "change_set_digest"], "observedStateKeys": ["post_digest"], "predicateId": "pred.create.v1", "commandManifestIds": ["artifact.create.v1"]},
+    "modify": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["artifact_id", "scope", "pre_digest", "change_set_digest"], "observedStateKeys": ["post_digest"], "predicateId": "pred.modify.v1", "commandManifestIds": ["artifact.modify.v1"]},
+    "test": {"stateful": false, "evidenceProducer": "supported", "resolvedTargetKeys": ["scope", "executable"], "observedStateKeys": [], "predicateId": "pred.test.outcome", "commandManifestIds": ["python.unittest.v1", "package.test.v1", "test.runner.v1"]},
+    "verify": {"stateful": false, "evidenceProducer": "supported", "resolvedTargetKeys": ["scope"], "observedStateKeys": [], "predicateId": "pred.verify.outcome", "commandManifestIds": ["deterministic.verify.v1"]},
+    "pull": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["repository", "remote", "refspec", "upstream_oid", "pre_head_oid", "pull_mode"], "observedStateKeys": ["post_head_oid", "tracking_ref_oid"], "predicateId": "pred.pull.v1", "commandManifestIds": ["git.pull_ff_only_explicit.v2"]},
+    "fetch": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["repository", "remote", "refspec", "upstream_oid", "pre_head_oid"], "observedStateKeys": ["tracking_ref_oid", "post_head_oid"], "predicateId": "pred.fetch.v1", "commandManifestIds": ["git.fetch_tracking_explicit.v2"]},
+    "commit": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["repository", "branch", "change_set_digest", "pre_head_oid"], "observedStateKeys": ["post_head_oid", "pre_head_oid"], "predicateId": "pred.commit.v1", "commandManifestIds": ["git.commit_index_tree.v2"]},
+    "push": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["repository", "remote", "refspec", "local_oid"], "observedStateKeys": ["remote_oid"], "predicateId": "pred.push.v1", "commandManifestIds": ["git.push_explicit_refs.v2"]},
+    "restart": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["service_id", "pre_generation"], "observedStateKeys": ["new_generation", "health"], "predicateId": "pred.restart.v1", "commandManifestIds": ["dshmarket.restart.v1"]},
+    "publish": {"stateful": true, "evidenceProducer": "supported", "resolvedTargetKeys": ["artifact_id", "version", "registry", "integrity_digest"], "observedStateKeys": ["artifact_id", "version", "registry", "integrity_digest"], "predicateId": "pred.publish.v1", "commandManifestIds": ["npm.publish_tgz.v1"]},
+    "generic_run": {"stateful": false, "evidenceProducer": "supported", "resolvedTargetKeys": ["scope", "executable"], "observedStateKeys": [], "predicateId": "pred.generic_run.outcome", "commandManifestIds": ["generic.run.v1"]}
+  },
+  "compatibility": {
+    "inspect_remote_updates": ["inspect_remote_updates"], "install": ["install"], "apply": ["apply"], "create": ["create"], "modify": ["modify"],
+    "test": ["test", "verify"], "verify": ["verify", "test"], "pull": ["pull"], "fetch": ["fetch"], "commit": ["commit"], "push": ["push"],
+    "restart": ["restart"], "publish": ["publish"], "generic_run": ["generic_run"]
+  }
+}

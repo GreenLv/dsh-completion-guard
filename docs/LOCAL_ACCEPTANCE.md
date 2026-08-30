@@ -2,14 +2,15 @@
 
 Deterministic checks and an isolated DSH_HOME composition smoke. These establish source correctness and load correctness, not full runtime behavior.
 
-## Windows exact-source acceptance (2026-08-30)
+## Windows exact-source readback (2026-08-30)
 
-Verified source commit: `b75868e9e73d29f50530ddaba15cfaef82e03ece`
-(`origin/main` at checkout time), using a fresh isolated checkout on Windows 11
-with Windows PowerShell 5.1, Python 3.12.10, Node.js 24.18.0, pnpm 11.22.0,
-and effective `core.autocrlf=true`.
+Direct readback of the isolated Windows TEMP acceptance evidence verifies
+source commit `b75868e9e73d29f50530ddaba15cfaef82e03ece` (`origin/main` at checkout
+time), tested in a fresh Windows 11 checkout with Windows PowerShell 5.1,
+Python 3.12.10, Node.js 24.18.0, pnpm 11.22.0, and effective
+`core.autocrlf=true`.
 
-Repository and conformance gates passed at that exact source:
+The source and conformance matrix is verified:
 
 - `pnpm test` -> 0; 7 test files, 170 tests passed.
 - `pnpm run typecheck` -> 0.
@@ -20,15 +21,18 @@ Repository and conformance gates passed at that exact source:
 - The raw SHA-256 values of all four mirrored conformance fixture files matched
   their entries in `tests/fixtures/conformance/UPSTREAM_PIN.json`.
 
-Exact-source artifact and load checks used a tarball built from that checkout
-and a fresh isolated `DSH_HOME`:
+The exact-source artifact and load chain is also verified from the TEMP
+clone/log evidence. It used a tarball built from that checkout and a fresh
+isolated `DSH_HOME`:
 
 - All six tracked `dist/` files matched across the HEAD blobs, local build,
   tarball, and isolated installation.
 - `dsh --profile web --dump-config` read back the `context-guard` bundle, and a
   Node import smoke loaded the installed package.
-- The isolated Web process returned HTTP 200 for a GET request and was then
-  stopped; process cleanup completed.
+- `dsh --profile web --dump-config`, Web startup logging, process stop, and
+  cleanup completed. An HTTP 200 appeared only in the first-run stdout; that
+  response was not persisted and the readback did not rerun the GET, so HTTP
+  200 itself is not independently confirmed.
 
 With effective `core.autocrlf=true`, the build made all six tracked `dist/`
 paths appear as `M` even though `git hash-object` matched the corresponding
@@ -37,11 +41,54 @@ an EOL status phantom, not an artifact mismatch; `dist/** text eol=lf` now
 pins the generated files to LF while preserving the existing conformance
 fixture LF rule.
 
-Evidence boundary: no real model-session smoke was run on Windows for this
-source. These results establish deterministic source checks, exact-source
-artifact parity, isolated package composition/import, and Web HTTP load only;
-they do not establish model-level task-contract or completion behavior, an npm
-publication, a tag, or a GitHub Release.
+Evidence boundary: source checks and the exact-source install/load/startup and
+cleanup chain are verified. A real model-session smoke was not run, and the
+HTTP response lacks independently persisted/read-back evidence. This does not
+establish v0.3 runtime behavior, npm publication, a tag, or a GitHub Release.
+
+## v0.3.0 local candidate source gates (2026-08-30)
+
+The unpublished local candidate over prerequisite commit
+`55f694d2534147b7fb2aac1d5b795ae5b7ead50f` passed the macOS deterministic
+source matrix:
+
+- `pnpm install --frozen-lockfile` -> 0.
+- `pnpm run typecheck` -> 0.
+- `pnpm test` -> 0; 19 test files, 346 tests passed.
+- `pnpm run lint` -> 0 with no warnings after cleanup.
+- `pnpm run build` -> 0.
+- `pnpm run pack:check` -> 0; package identity is
+  `dsh-completion-guard@0.3.0`, and the action, Git command, and supported-host
+  manifests plus the host-lock CLI are included.
+- The portable runner executed all 37 mirrored semantic cases without skips.
+- The DSH digest runner re-derived all 29 digest-v3 vectors; the four mirror
+  file SHA-256 values remain identical to `UPSTREAM_PIN.json`.
+
+The exact-source candidate tarball was also installed into fresh isolated Web
+and Headless profiles without modifying the user profile. For both profiles,
+the packaged host-lock CLI completed `inspect -> inject -> inject (idempotence)
+-> dsh --dump-config -> verify-dump` against the active runtime/profile graphs.
+The Web tuple contained 34 exact package rows with Web control available; the
+Headless tuple contained 33 rows with Web control unavailable by profile while
+the other applicable capabilities remained supported. This exercise found and
+fixed three real readback/injection defects before the final pass: DSH
+serializes SRI as a folded YAML scalar, a profile without a pre-existing
+activation override must still permit a second managed injection, and the
+fresh-profile top-level `[]` sentinel must be replaced (while preserving its
+comments) before appending the managed YAML list.
+
+The isolated Web profile then bound a temporary loopback port. A real
+`dshmarket@1.36.0` capabilities GET returned the audited schema and an initial
+boot ID. Its restart POST terminated the old process and launched a new process
+on another temporary port; a second capabilities readback returned a different
+boot ID. The new process was explicitly stopped and connection failure was
+read back as cleanup evidence. The isolated Headless profile loaded the plugin
+and advanced to the expected `MISSING_CREDENTIAL` provider boundary with the
+API key explicitly empty. Together with the runtime integration tests, this
+proves package composition, host-lock readback, load, and the real Web restart
+lifecycle. It is not a credentialed model-session Goal/checkpoint/boundary
+round. Native Windows v0.3 execution, CI, npm/GitHub publication, tag identity,
+and a real model-session smoke remain independent release gates.
 
 ## macOS v0.2.0 acceptance (2026-08-28)
 

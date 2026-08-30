@@ -1,6 +1,8 @@
 import { sanitizeUrl, sha256 } from './canonicalize.js'
+import { evaluateToolSurfaceCapability, type HostLockEvaluation, type HostToolSurface } from './host-lock.js'
 import { parsePwshCommand, parseShellCommand, isRunExecutable } from './shell-parse.js'
-import type { EvidenceOutcome, GuardEvidence, GuardOperation } from './types.js'
+import { SEMANTIC_ACTIONS, SUPPORTED_EVIDENCE_ADAPTERS, semanticActionFromCommand, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
+import type { EvidenceOutcome, EvidenceParseStatus, EvidenceRole, ExpectedTransition, GuardEvidence, GuardOperation, TargetTuple } from './types.js'
 
 export interface ToolCallInput {
   callId: string
@@ -84,6 +86,90 @@ interface CommandAnalysis {
   executables: string[]
   operations: ToolOperation[]
   subjects: string[]
+}
+
+interface StructuredGuardMeta {
+  adapterId: string
+  adapterVersion: string
+  semanticAction: SemanticAction
+  evidenceRole: EvidenceRole
+  resolvedTarget: TargetTuple
+  observedState?: TargetTuple
+  expectedTransition?: ExpectedTransition
+  expectedTransitionDigest?: string
+}
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+function structuredGuardMeta(meta: unknown, toolName: string): StructuredGuardMeta | undefined {
+  // Only the Guard-owned producer may mint role-bearing facts. Other tools can
+  // carry arbitrary presentation metadata, but it is never certification authority.
+  if (toolName !== 'context_guard_evidence') return undefined
+  const outer = asRecord(meta)
+  const value = asRecord(outer?.contextGuard ?? outer?.context_guard)
+  if (!value) return undefined
+  const action = value.semanticAction ?? value.semantic_action
+  const role = value.evidenceRole ?? value.evidence_role
+  const resolved = asRecord(value.resolvedTarget ?? value.resolved_target)
+  const observed = asRecord(value.observedState ?? value.observed_state)
+  const rawExpected = asRecord(value.expectedTransition)
+  const expectedParameters = asRecord(rawExpected?.parameters)
+  const expectedDigest = value.expectedTransitionDigest
+  const expectedTransition = rawExpected
+    && typeof rawExpected.predicateId === 'string'
+    && rawExpected.version === 1
+    && rawExpected.predParamsKind === 'inline'
+    && expectedParameters
+    && typeof expectedDigest === 'string'
+    && expectedDigest === sha256(stable(rawExpected))
+    ? rawExpected as unknown as ExpectedTransition
+    : undefined
+  if (typeof value.adapterId !== 'string' || typeof value.adapterVersion !== 'string') return undefined
+  if (SUPPORTED_EVIDENCE_ADAPTERS[value.adapterId] !== value.adapterVersion) return undefined
+  if (typeof action !== 'string' || typeof role !== 'string' || !resolved) return undefined
+  if (!(SEMANTIC_ACTIONS as readonly string[]).includes(action)) return undefined
+  if (!['resolution', 'effect', 'state'].includes(role)) return undefined
+  if (role === 'state' && !observed) return undefined
+  return {
+    adapterId: value.adapterId,
+    adapterVersion: value.adapterVersion,
+    semanticAction: action as SemanticAction,
+    evidenceRole: role as EvidenceRole,
+    resolvedTarget: resolved as TargetTuple,
+    ...(observed ? { observedState: observed as TargetTuple } : {}),
+    ...(expectedTransition ? {
+      expectedTransition,
+      expectedTransitionDigest: expectedDigest as string,
+    } : {}),
+  }
+}
+
+function parseStatus(details: CommandAnalysis): { parseStatus: EvidenceParseStatus; reasonCode?: string } {
+  if (details.status === 'supported') return { parseStatus: 'supported' }
+  if (details.status === 'malformed') return { parseStatus: 'malformed_quote', reasonCode: 'malformed_quote' }
+  if (details.reason?.includes('statement operator') || details.reason?.includes('compound')) {
+    return { parseStatus: 'unsupported_statement_operator', reasonCode: 'unsupported_statement_operator' }
+  }
+  return { parseStatus: 'unsupported_command', reasonCode: 'unsupported_command' }
+}
+
+function weakResolvedTarget(action: SemanticAction, cwd: string | undefined, executables: readonly string[]): TargetTuple {
+  if (action === 'verify') return cwd ? { scope: cwd } : {}
+  if (action === 'test' || action === 'generic_run') {
+    return { ...(cwd ? { scope: cwd } : {}), ...(executables[0] ? { executable: executables[0].toLowerCase() } : {}) }
+  }
+  if (['pull', 'fetch', 'commit', 'push', 'inspect_remote_updates'].includes(action)) {
+    return cwd ? { repository: cwd } : {}
+  }
+  return cwd ? { scope: cwd } : {}
 }
 
 /**
@@ -272,6 +358,39 @@ export interface ToolSubject {
   outcome?: EvidenceOutcome
   executables?: string[]
   operations?: ToolOperation[]
+  semanticAction?: SemanticAction
+  evidenceRole?: EvidenceRole
+  resolvedTarget?: TargetTuple
+  observedState?: TargetTuple
+  expectedTransition?: ExpectedTransition
+  expectedTransitionDigest?: string
+  parseStatus?: EvidenceParseStatus
+  reasonCode?: string
+  adapterId?: string
+  adapterVersion?: string
+  externalOperationRef?: import('./types.js').ExternalOperation
+}
+
+function capabilityGatedSubject(
+  subject: ToolSubject,
+  surface: HostToolSurface,
+  hostLock: HostLockEvaluation | undefined,
+): ToolSubject {
+  if (!hostLock) return subject
+  const capability = evaluateToolSurfaceCapability(hostLock, surface)
+  if (capability.status === 'supported') return subject
+  const reasonCode = capability.reasonCode === 'host_capability_request_unsupported'
+    ? 'host_tool_platform_mismatch'
+    : capability.reasonCode === 'host_capability_context_missing'
+      ? 'host_tool_platform_context_missing'
+      : `host_${surface === 'filesystem' ? 'filesystem' : 'terminal'}_capability_${(capability.reasonCode ?? 'unavailable').replace(/^host_capability_/, '')}`
+  return {
+    ...subject,
+    capabilities: [],
+    outcome: 'unknown',
+    parseStatus: 'adapter_unavailable',
+    reasonCode,
+  }
 }
 
 function unique(values: string[]): string[] {
@@ -283,38 +402,114 @@ function resolveSubjectPaths(values: string[], cwd: string | undefined): string[
   return cwd ? values.map((value) => resolveCommandPath(value, cwd)) : values
 }
 
-export function extractToolSubject(call: ToolCallInput, result: ToolResultInput, defaultCwd?: string): ToolSubject {
+export function extractToolSubject(
+  call: ToolCallInput,
+  result: ToolResultInput,
+  defaultCwd?: string,
+  hostLock?: HostLockEvaluation,
+): ToolSubject {
   const args = parseArguments(call.arguments)
+  if (call.name === 'context_guard_external_operation') {
+    const external = asRecord(asRecord(result.meta)?.contextGuardExternalOperation)
+    const status = external?.status
+    if (typeof external?.id === 'string' && typeof external.adapterId === 'string'
+      && (status === 'running' || status === 'pending' || status === 'completed' || status === 'failed' || status === 'unknown')) {
+      return {
+        capabilities: ['external-operation-readback'], subjects: [], surfaces: [], outcome: status === 'unknown' ? 'unknown' : 'success',
+        semanticAction: 'verify', evidenceRole: 'effect', resolvedTarget: { operation_id: external.id },
+        parseStatus: 'supported', adapterId: 'context-guard.external-operation.v1', adapterVersion: '1.0.0',
+        externalOperationRef: { id: external.id, epoch: 0, adapterId: external.adapterId, status },
+      }
+    }
+    return { capabilities: ['external-operation-readback'], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'external_operation_unavailable' }
+  }
+  const structured = structuredGuardMeta(result.meta, call.name)
+  if (call.name === 'context_guard_evidence' && !structured) {
+    const disposition = asRecord(asRecord(result.meta)?.contextGuardDisposition)
+    return {
+      capabilities: ['guard-state-readback'], subjects: [], surfaces: [], outcome: 'unknown',
+      semanticAction: typeof args.semantic_action === 'string' && (SEMANTIC_ACTIONS as readonly string[]).includes(args.semantic_action)
+        ? args.semantic_action as SemanticAction : 'generic_run',
+      evidenceRole: typeof args.evidence_role === 'string' && ['resolution', 'effect', 'state'].includes(args.evidence_role)
+        ? args.evidence_role as EvidenceRole : 'effect',
+      resolvedTarget: {}, parseStatus: 'adapter_unavailable',
+      reasonCode: typeof disposition?.reasonCode === 'string' ? disposition.reasonCode : 'adapter_unavailable',
+      adapterId: 'context-guard.unavailable.v1', adapterVersion: '1.0.0',
+    }
+  }
+  const structuredFields = structured ? {
+    semanticAction: structured.semanticAction,
+    evidenceRole: structured.evidenceRole,
+    resolvedTarget: structured.resolvedTarget,
+    ...(structured.observedState ? { observedState: structured.observedState } : {}),
+    ...(structured.expectedTransition ? {
+      expectedTransition: structured.expectedTransition,
+      expectedTransitionDigest: structured.expectedTransitionDigest,
+    } : {}),
+    parseStatus: 'supported' as const,
+    adapterId: structured.adapterId,
+    adapterVersion: structured.adapterVersion,
+  } : {}
+  if (call.name === 'context_guard_evidence' && structured) {
+    const artifact = typeof structured.resolvedTarget.artifact_id === 'string' ? structured.resolvedTarget.artifact_id : undefined
+    const scope = typeof structured.resolvedTarget.repository === 'string' ? structured.resolvedTarget.repository
+      : typeof structured.resolvedTarget.profile === 'string' ? structured.resolvedTarget.profile
+        : typeof structured.resolvedTarget.service_id === 'string' ? structured.resolvedTarget.service_id
+          : typeof structured.resolvedTarget.registry === 'string' ? structured.resolvedTarget.registry : defaultCwd
+    const subject = artifact ?? scope
+    const surface = artifact ? 'artifact' as const : 'scope' as const
+    return {
+      capabilities: [structured.evidenceRole === 'state' ? 'independent-state-readback' : 'guard-stateful-observation'],
+      subjects: subject ? [subject] : [surface], surfaces: [surface],
+      operations: [{ op: structured.evidenceRole === 'effect' ? 'run' : 'read', ...(subject ? { path: subject } : {}) }],
+      ...structuredFields,
+    }
+  }
   switch (call.name) {
     case 'read':
     case 'read_file': {
       const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
-      return {
+      return capabilityGatedSubject({
         capabilities: ['filesystem-read'],
         subjects,
         surfaces: ['artifact'],
         operations: subjects.map((path) => ({ op: 'read', path })),
-      }
+        semanticAction: structured?.semanticAction ?? 'verify',
+        evidenceRole: structured?.evidenceRole ?? 'effect',
+        // The artifact identity remains in the bounded subject/operation tuple.
+        // The non-stateful verify command manifest is deliberately closed to
+        // its canonical target key (`scope`) so callers cannot smuggle an
+        // ignored cross-branch artifact field into the binding record.
+        resolvedTarget: structured?.resolvedTarget ?? { scope: defaultCwd ?? 'scope' },
+        ...(structured?.observedState ? { observedState: structured.observedState } : {}),
+        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.read.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
+      }, 'filesystem', hostLock)
     }
     case 'write':
     case 'write_file': {
       const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
-      return {
+      return capabilityGatedSubject({
         capabilities: ['filesystem-write'],
         subjects,
         surfaces: ['artifact'],
         operations: subjects.map((path) => ({ op: 'create', path })),
-      }
+        semanticAction: structured?.semanticAction ?? 'create', evidenceRole: structured?.evidenceRole ?? 'effect',
+        resolvedTarget: structured?.resolvedTarget ?? { ...(subjects[0] ? { artifact_id: subjects[0] } : {}), scope: defaultCwd ?? 'scope' },
+        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.write.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
+      }, 'filesystem', hostLock)
     }
     case 'edit':
     case 'edit_file': {
       const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
-      return {
+      return capabilityGatedSubject({
         capabilities: ['filesystem-edit'],
         subjects,
         surfaces: ['artifact'],
         operations: subjects.map((path) => ({ op: 'modify', path })),
-      }
+        semanticAction: structured?.semanticAction ?? 'modify', evidenceRole: structured?.evidenceRole ?? 'effect',
+        resolvedTarget: structured?.resolvedTarget ?? { ...(subjects[0] ? { artifact_id: subjects[0] } : {}), scope: defaultCwd ?? 'scope' },
+        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.edit.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
+      }, 'filesystem', hostLock)
     }
     case 'bash':
     case 'shell':
@@ -323,6 +518,8 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput,
       const terminal = structuredTerminalFacts(result.meta) ?? extractTerminalFacts(result.textContent)
       const backgrounded = args.run_in_background === true
       const commandDetails = analyzeCommand(command, typeof args.workdir === 'string' ? args.workdir : defaultCwd, call.name)
+      const commandCwd = typeof args.workdir === 'string' ? args.workdir : defaultCwd
+      const action = structured?.semanticAction ?? semanticActionFromCommand(command)
       const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)
       // The pinned DSH bash/pwsh renderers append markers only for negative
       // terminal facts or non-zero exits. A completed foreground result with
@@ -336,14 +533,24 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput,
           : terminal.exitCode === undefined
             ? (call.name === 'bash' || call.name === 'pwsh' ? 'success' : 'unknown')
             : terminal.exitCode === 0 ? 'success' : 'failure'
-      return {
+      const subject: ToolSubject = {
         capabilities: ['shell', ...(deterministic ? ['deterministic-check'] : [])],
         subjects: unique(commandDetails.subjects),
         surfaces: ['scope'],
         outcome,
         executables: commandDetails.executables,
         operations: commandDetails.operations,
+        semanticAction: action,
+        evidenceRole: structured?.evidenceRole ?? 'effect',
+        resolvedTarget: structured?.resolvedTarget ?? weakResolvedTarget(action, commandCwd, commandDetails.executables),
+        ...(structured?.observedState ? { observedState: structured.observedState } : {}),
+        ...parseStatus(commandDetails),
+        adapterId: structured?.adapterId ?? `dsh.${call.name}.v1`,
+        adapterVersion: structured?.adapterVersion ?? '1.0.0',
       }
+      return call.name === 'bash' || call.name === 'pwsh'
+        ? capabilityGatedSubject(subject, call.name, hostLock)
+        : subject
     }
     case 'web_search':
     case 'web_fetch':
@@ -352,9 +559,14 @@ export function extractToolSubject(call: ToolCallInput, result: ToolResultInput,
         capabilities: ['web-fetch'],
         subjects: unique([...metaUrls(result.meta), ...(typeof args.url === 'string' ? [sanitizeUrl(args.url)] : [])]),
         surfaces: ['ui'],
+        semanticAction: structured?.semanticAction ?? semanticActionFromText(call.name),
+        evidenceRole: structured?.evidenceRole ?? 'effect',
+        resolvedTarget: structured?.resolvedTarget ?? { scope: 'web' },
+        ...(structured?.observedState ? { observedState: structured.observedState } : {}),
+        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.web.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
       }
     default:
-      return { capabilities: ['generic'], subjects: [], surfaces: [] }
+      return { capabilities: ['generic'], subjects: [], surfaces: [], ...structuredFields }
   }
 }
 
@@ -364,8 +576,9 @@ export function evidenceFromPersistedToolResult(
   epoch: number,
   evidenceId: string,
   defaultCwd?: string,
+  hostLock?: HostLockEvaluation,
 ): GuardEvidence {
-  const subject = extractToolSubject(call, result, defaultCwd)
+  const subject = extractToolSubject(call, result, defaultCwd, hostLock)
   const outcome: EvidenceOutcome = result.error ? 'failure' : (subject.outcome ?? 'success')
   return {
     id: evidenceId,
@@ -381,10 +594,21 @@ export function evidenceFromPersistedToolResult(
     boundedSummarySha256: sha256(boundedSummary(result.textContent)),
     ...(subject.executables?.length ? { executables: subject.executables } : {}),
     ...(subject.operations?.length ? { operations: subject.operations } : {}),
+    ...(subject.semanticAction ? { semanticAction: subject.semanticAction } : {}),
+    ...(subject.evidenceRole ? { evidenceRole: subject.evidenceRole } : {}),
+    ...(subject.resolvedTarget ? { resolvedTarget: subject.resolvedTarget } : {}),
+    ...(subject.observedState ? { observedState: subject.observedState } : {}),
+    ...(subject.expectedTransition ? { expectedTransition: subject.expectedTransition } : {}),
+    ...(subject.expectedTransitionDigest ? { expectedTransitionDigest: subject.expectedTransitionDigest } : {}),
+    ...(subject.parseStatus ? { parseStatus: subject.parseStatus } : {}),
+    ...(subject.reasonCode ? { reasonCode: subject.reasonCode } : {}),
+    ...(subject.adapterId ? { adapterId: subject.adapterId } : {}),
+    ...(subject.adapterVersion ? { adapterVersion: subject.adapterVersion } : {}),
+    ...(subject.externalOperationRef ? { externalOperationRef: { ...subject.externalOperationRef, epoch } } : {}),
   }
 }
 
 export function withDurability(evidence: GuardEvidence, confirmed: boolean): GuardEvidence {
   if (confirmed) return evidence
-  return { ...evidence, outcome: 'unknown' }
+  return { ...evidence, outcome: 'durability-unknown' }
 }

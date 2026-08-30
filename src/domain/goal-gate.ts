@@ -2,10 +2,19 @@ import type { GuardProjection } from './types.js'
 
 export function hasCurrentCertificate(projection: GuardProjection): boolean {
   const checkpoint = projection.checkpoints.at(-1)
-  return projection.integrity === 'valid'
-    && checkpoint?.result === 'certified'
-    && checkpoint.epoch === projection.epoch
-    && checkpoint.contractRevision === projection.contractRevision
+  let reason: string | undefined
+  if (projection.integrity !== 'valid') reason = 'integrity_invalid'
+  else if (projection.hostStatus !== 'supported') reason = 'host_lock_unsupported'
+  else if (!checkpoint || checkpoint.result !== 'certified') reason = 'certificate_missing'
+  else if (checkpoint.epoch !== projection.epoch) reason = 'stale_epoch'
+  else if (checkpoint.sessionRefDigest !== projection.sessionRefDigest) reason = 'foreign_session'
+  else if (checkpoint.hostLockDigest !== projection.hostLockDigest) reason = 'stale_host_lock'
+  else if (checkpoint.contractRevision !== projection.contractRevision) reason = 'stale_contract_revision'
+  else if (projection.currentGoalRef
+    ? checkpoint.goalRef?.id !== projection.currentGoalRef.id || checkpoint.goalRef.revision !== projection.currentGoalRef.revision
+    : checkpoint.goalRef !== undefined) reason = 'stale_goal_ref'
+  projection.certificateStatusReason = reason
+  return reason === undefined
 }
 
 /**
@@ -34,8 +43,22 @@ export function goalCompletionDenial(
   const action = (argumentsValue as { action?: unknown }).action
   if (action !== 'complete') return undefined
   if (!projection.enabled) return undefined
+  const args = argumentsValue as { goal_id?: unknown; revision?: unknown }
+  if (projection.hostStatus !== 'supported') {
+    return `Context Guard denial [stale_host]: host lock is unsupported or unavailable (${projection.hostReasonCode ?? 'unknown_host'}).`
+  }
+  if (!projection.currentGoalRef) return 'Context Guard denial [no_goal]: no current Goal reference is available.'
+  if (args.goal_id !== projection.currentGoalRef.id || args.revision !== projection.currentGoalRef.revision) {
+    return 'Context Guard denial [stale_goal_ref]: update_goal must use the exact current goal_id and revision.'
+  }
   if (hasCurrentCertificate(projection)) return undefined
+  if (projection.certificateStatusReason === 'stale_host_lock') {
+    return 'Context Guard denial [stale_host]: the completion certificate belongs to a different host identity.'
+  }
+  if (projection.certificateStatusReason === 'stale_goal_ref') {
+    return 'Context Guard denial [stale_goal_ref]: the completion certificate belongs to a different Goal reference.'
+  }
   return projection.integrity === 'valid'
-    ? 'Context Guard requires a current completion certificate before Goal completion.'
-    : 'Context Guard integrity is unknown or corrupt; Goal completion is denied.'
+    ? 'Context Guard denial [certificate_missing]: a current completion certificate is required.'
+    : 'Context Guard denial [certificate_missing]: integrity is unknown or corrupt, so no current certificate is usable.'
 }

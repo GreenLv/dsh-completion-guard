@@ -118,19 +118,58 @@ export interface TurnStoppingDecision {
   reason?: string
 }
 
+export interface AssistantOutcomeObservation {
+  kind: 'completion_claim' | 'user_wait_claim' | 'external_wait_claim' | 'report'
+  reasonCode: string
+}
+
+/** Assistant prose is retained only as a bounded diagnostic observation. */
+export function observeAssistantOutcome(text: string): AssistantOutcomeObservation {
+  const disposition = classifyCompletionClaim(text)
+  if (disposition === 'complete') return { kind: 'completion_claim', reasonCode: 'assistant_completion_claim_observed' }
+  if (disposition === 'user_wait') return { kind: 'user_wait_claim', reasonCode: 'assistant_user_wait_claim_observed' }
+  if (disposition === 'external_wait') return { kind: 'external_wait_claim', reasonCode: 'assistant_external_wait_claim_observed' }
+  return { kind: 'report', reasonCode: 'assistant_report_observed' }
+}
+
+/**
+ * Stop Protocol 2.0 decision. This function deliberately has no assistant-text
+ * parameter: completion wording, quotation, negation and translation cannot
+ * steer the protocol. A structured root persistence authorization may request
+ * one fallback correction; subsequent attempts safe-yield. An active, armed
+ * Goal remains exclusively owned by the host Goal Round Driver.
+ */
+export function decideTurnBoundary(projection: GuardProjection): TurnStoppingDecision {
+  if (!projection.enabled) return { action: 'stop', reason: 'guard_disabled' }
+  if (projection.integrity !== 'valid') return { action: 'stop', reason: 'integrity_invalid_safe_yield' }
+  if (hasCurrentCertificate(projection)) return { action: 'stop', reason: 'current_certificate' }
+  const boundary = projection.boundaries.at(-1)
+  if (boundary?.persistedResult === 'accepted'
+    && boundary.epoch === projection.epoch
+    && boundary.contractRevision === projection.contractRevision) {
+    return { action: 'stop', reason: 'accepted_boundary_pending_effectuation' }
+  }
+  if (projection.currentGoalPhase === 'active' && projection.currentGoalActivation === 'armed') {
+    return { action: 'stop', reason: 'goal_round_driver_owns_continuation' }
+  }
+  if ([...projection.items.values()].some((item) => item.status === 'pending' && item.persistenceAuthorization)) {
+    const key = `${projection.epoch}:${projection.contractRevision}`
+    const attempts = projection.persistenceCorrectionAttempts.get(key) ?? 0
+    if (attempts < 1) {
+      projection.persistenceCorrectionAttempts.set(key, attempts + 1)
+      return { action: 'continue', reason: 'protocol_correction_steer' }
+    }
+  }
+  return { action: 'stop', reason: 'safe_yield_pending_preserved' }
+}
+
 export function decideTurnStopping(
   projection: GuardProjection,
-  assistantText: string,
-  turn: number,
-  maxAttempts: number,
+  _assistantText: string,
+  _turn: number,
+  _maxAttempts: number,
 ): TurnStoppingDecision {
-  if (!projection.enabled) return { action: 'stop' }
-  if (!isWholeTaskCompletionClaim(assistantText)) return { action: 'stop' }
-  if (hasCurrentCertificate(projection)) return { action: 'stop' }
-  const attempts = projection.continuationAttempts.get(turn) ?? 0
-  if (attempts >= maxAttempts) return { action: 'stop', reason: 'continuation attempt limit reached' }
-  projection.continuationAttempts.set(turn, attempts + 1)
-  return { action: 'continue', reason: 'whole-task completion claimed without a current certificate' }
+  return decideTurnBoundary(projection)
 }
 
 export function latestAssistantText(events: readonly { type: string; data: unknown }[]): string {

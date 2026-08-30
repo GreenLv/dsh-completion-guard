@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ## Unreleased
 
+### Added
+
+- **v0.3 semantic completion candidate.** Adds exact paired optional Goal state/tool peers, an injected exact-version/integrity action/platform host lock, versioned action/Git/supported-host manifests, authority-aware contract segmentation, typed boundaries, structured checkpoint diagnostics, and digest-v3 certificates bound to session, host, contract, evidence, binding, expected transition, and optional Goal identity.
+- **Stateful action readback.** `install`, `apply`, `create`, `modify`, `restart`, `commit`, `push`, `publish`, `pull`, and `fetch` require distinct resolution, effect, and independent state evidence with same-target role closure. Generic-run evidence cannot authorize a v0.3 user-level completion; legacy generic-run certificates remain audit history only.
+- **Explicit read-only and mutation tools.** `context_guard_evidence` never mutates; `context_guard_action` owns exact-tgz package/registry effects, two-phase dshmarket restart, and exact Git effects only after an exact pending root requirement/revision, complete action-specific requested identity, target digest, host identity, executable identity, and live prestate all match. Prohibitions/acceptances cannot authorize effects; v0.3 package versions and Git refs are exact-only.
+
+### Fixed
+
+- Assistant prose no longer controls turn stopping. Goal continuation remains owned by the Goal Round Driver; only persisted, qualified typed boundaries can trigger post-commit same-ref disarm readback.
+- Unknown, missing, or drifted host identities fail closed. The Guard-owned `update_goal(action=complete)` path is checked before mutation; trusted in-process direct Goal/session writes are detected as integrity violations but are not claimed to be preventable.
+- Active host identity is supplied before certificate replay, managed host-lock injection is idempotent, DSH folded-YAML SRI output is parsed exactly, and a fresh profile's sole top-level `[]` sentinel is safely replaced before the managed list is appended.
+- Publish now freezes one canonical HTTPS registry across capture, npm argv, and standard packument readback, with `--ignore-scripts`; create/modify freeze their expected post-effect bytes at resolution time instead of copying the observed digest into the predicate, and modify rejects source-byte drift against its frozen pre-digest.
+
 ### Changed
 
 - **Package renamed from `dsh-context-guard` to `dsh-completion-guard`.** An unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning) already uses the name; the rename removes the collision for name-keyed registries and lists. The internal Cordis bundle id stays `context-guard`, so installed profiles keep their runtime identity. The previous npm package `dsh-context-guard` will be deprecated once `dsh-completion-guard` is published.

@@ -17,9 +17,11 @@ The package exposes a named `apply(ctx)` function and a named `inject` array (`[
 
 The plugin accepts an `activation` configuration value of `opt-in` or `always`. The default is `opt-in`; `always` initializes the projection as enabled before the persisted session log is replayed. Invalid values fail during plugin configuration instead of silently falling back. A DSH profile can select `always` with an ID-targeted `config` override in its `cordis.patch.yml`; see the README quick start for the complete example and the replay implications for existing sessions.
 
+The v0.3 candidate additionally accepts `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile`, generated from the active DSH runtime and profile graphs. Each critical row carries the exact resolved version and registry tarball integrity. Missing, duplicate, multi-version, or drifted identity is not inferred from a nearby lockfile and fails closed. Capabilities are evaluated separately for base/Goal, agent loop, POSIX or Windows terminal, filesystem tools, DSH CLI, plugin inventory, Web control, and jobs; a missing platform- or action-specific group disables only the dependent path. The filesystem group freezes pinned `read`/`write`/`edit` registration, closed result and presentation shapes, the `ctx.fs` local/sandbox implementation, read-before-mutation observation policy, sandbox policy, and approval provider. Consequently a missing or drifted filesystem row disables only `create`/`modify` and ordinary filesystem facts, while a valid terminal or jobs capability remains usable. The audited identity is [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). The packaged `dsh-completion-guard-host-lock inspect|inject|verify-dump` flow in the README is the supported generation and readback path; the default patch has no `hostLockPackages` and therefore fails closed until that flow succeeds.
+
 ## Peer dependencies
 
-Runtime packages are host-provided and declared as peer dependencies: `@deepseek-ai/cordis`, `@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-commands`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-tools`.
+Runtime packages are host-provided and declared as peer dependencies: `@deepseek-ai/cordis`, `@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-commands`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-tools`. Goal uses two exact optional peers as one capability: `@deepseek-ai/dsh-goal@0.1.1-rc.2` owns state, and `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` owns the audited `update_goal` name/schema/arguments. Both graph rows and the live Goal service/tool must agree. Profiles without this complete capability still load, but Goal-dependent integration is inactive. The other peer ranges remain compatible package declarations, while runtime acceptance is constrained by the exact injected host lock.
 
 ## Terminal outcome contract
 
@@ -39,12 +41,20 @@ unsupported or malformed syntax produces no executable or operation facts and
 no certifying subject/capability combination, so it cannot close a contract even
 when the host execution itself succeeded.
 
+Replay also binds the ordinary tool name to the active host surface: `bash`
+requires the exact POSIX terminal group and `pwsh` the exact Windows group.
+The opposite-platform name is `adapter_unavailable`, not a portable alias.
+Likewise, ordinary `read`, `write`, and `edit` results require the exact
+filesystem capability group. Base-lock support alone is insufficient; the
+bounded fact retains an explicit host-capability reason code, carries no
+certifying capability, and has unknown outcome.
+
 ## Verified surfaces
 
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real headless boot loads the plugin (apply, `ctx.sessions` access, and listener registration succeed) and only stops at missing provider credentials.
 
-The slash command renders in the Web command directory and its on/off/clear/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.1 has 105 domain/core tests and 138 tests overall. The 0.2.0 macOS live acceptance includes a real Web `pnpm test` run with 5 test files and 124 tests passed, followed by a certified checkpoint at contract revision 4; the complete evidence boundary and known gaps are recorded in `LOCAL_ACCEPTANCE.md`. Evidence and certificates are session-scoped: a later DSH session cannot import or certify evidence IDs from an earlier session, so a workflow requiring a certificate must produce its evidence and checkpoint in one session. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
+The slash command renders in the Web command directory and its on/off/clear/status/diagnose subcommands produce the expected `command/run`/`command/done`. Version 0.2.1 has 105 domain/core tests and 138 tests overall. The local v0.3 candidate currently exercises 346 deterministic tests in 19 files, including all 37 mirrored portable semantic cases and all 29 digest vectors. Exact-source isolated Web/Headless install plus host-lock inspect/inject/dump/verify pass; Web also passed a real dshmarket restart lifecycle readback, and Headless loaded to the intentional missing-credential boundary. No v0.3 model-session Goal round or release gate is claimed. The 0.2.0 macOS live acceptance includes a real Web `pnpm test` run with 5 test files and 124 tests passed, followed by a certified checkpoint at contract revision 4; the complete evidence boundary and known gaps are recorded in `LOCAL_ACCEPTANCE.md`. Evidence and certificates are session-scoped: a later DSH session cannot import or certify evidence IDs from an earlier session, so a workflow requiring a certificate must produce its evidence and checkpoint in one session. The published 0.1.0/0.1.1 releases retain separate historical public-package and native-platform evidence. The fail-closed invariants below are asserted as regressions.
 
 ## Session-layer capture filter and goal completion (v0.2.1)
 
@@ -72,7 +82,17 @@ Recovery packet injection is content-deduplicated: an unchanged packet is
 injected once per re-arm, while resume, compaction, an enablement transition,
 new evidence, or a new contract revision always re-remind.
 
-## Certifiable command subset
+## v0.3 semantic action and binding contract
+
+[`../manifests/action-manifest.v1.json`](../manifests/action-manifest.v1.json) freezes the action vocabulary, compatibility matrix, required target/state keys, expected-transition predicates, and accepted structured evidence adapter versions. `generic_run` is not a wildcard and cannot certify another semantic action.
+
+The full `STATEFUL_ACTIONS` set is `install | apply | create | modify | restart | commit | push | publish | pull | fetch`. Each requires distinct resolution/effect/state evidence IDs, exact same-target closure, independent state readback, and a versioned expected-transition payload. An effect-only success is incomplete. Old v0.2 scope-run certificates are retained as `legacy_generic_run` audit facts and do not become current v0.3 authority; unprovable legacy authority is also non-certifiable.
+
+`context_guard_evidence` is a read-only producer for resolution, persisted-effect validation, and state readback. `context_guard_action` is the explicitly mutating surface for exact-tgz install/apply/publish, two-phase dshmarket restart, and exact Git commit/push/pull/fetch. It first flushes and replays the resolution/contract chain, then requires the exact target digest and id/revision of one current pending `root_instruction` or `root_adoption` requirement whose action and complete requested identity match this resolution; a matching pending root prohibition denies the mutation regardless of message order, while prohibitions and acceptance clauses never grant authority. Install/apply require exact package id, version, and profile; publish requires exact artifact id, version, and canonical registry (v0.3 does not authorize `latest` or ranges); push/pull/fetch require repository, remote, and canonical explicit full ref/refspec; restart requires the exact service id. Disabled, integrity-unknown, stale-host, missing, passed, superseded, clarification-required, incomplete-target, action-swapped, target-swapped, and unrebound legacy paths are rejected before executable inspection, command execution, HTTP, or intent persistence. Unknown selector, command-manifest, or Git argument keys are rejected. `install` requires package absence, while `apply` requires an existing package and a changed version/integrity. Publish executes the exact resolved tgz with `--ignore-scripts`; its registry is a canonical HTTPS base shared by capture, argv, and standard packument readback, with credentials, query, fragment, encoded separators, control characters, and ambiguous path segments rejected. Modify re-hashes the source bytes against the frozen pre-digest before deriving the unique UTF-8 replacement post-digest. Restart persists an intent before POST and closes only after a restored process observes a changed boot ID. Git operations reject aliases, implicit/delete/wildcard/force refs, target substitution, and prestate drift. Commit certification additionally rejects root, merge, or substituted-parent commits; fetch certification requires its resolved pre-HEAD, post-HEAD readback, and predicate parameter to be equal. Pre-execute revalidation is a correctness gate rather than isolation from same-user concurrent tampering; any divergent post-action readback is not certified.
+
+Every stateful resolution freezes its expected transition before effect and binds a stable digest of that payload. Checkpoint diagnostics copy this immutable payload from the resolution fact; callers cannot construct create/modify predicates from post-effect state. Create hashes the exact UTF-8 content from the closed write manifest. Modify first reads the original bytes, requires valid UTF-8 and exactly one `old_string` match, applies the pinned single replacement in memory, and hashes the resulting bytes. Restart freezes `health=healthy` as a manifest constant. A later successful effect whose independent state differs from these values remains incomplete.
+
+## Legacy v0.2 command parsing subset
 
 Context Guard v0.2 is **not** a general Bash or PowerShell static analyzer. Only
 the small, auditable grammar below can produce `executable`, `operation` and

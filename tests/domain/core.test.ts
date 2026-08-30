@@ -5,10 +5,17 @@ import {
   deriveProjection, evidenceFromPersistedToolResult, extractOperation, goalCompletionDenial, isDeterministicCheck,
   isWholeTaskCompletionClaim, latestAssistantText, normalizeClause, parsePwshCommand, parseShellCommand, renderRecoveryPacket, sha256,
   sanitizeClauseText, sanitizeUrl, withDurability, COMMAND_SURFACE_MANIFEST, isInformationalMessage, validateManifest,
+  BASE_HOST_PACKAGES, EXPECTED_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, evaluateHostLock,
 } from '../../src/domain/index.js'
 
 const OPT_IN = { activation: 'opt-in' as const }
 const ALWAYS = { activation: 'always' as const }
+const hostFor = (group: keyof typeof HOST_CAPABILITY_PACKAGE_GROUPS) => {
+  const names = new Set([...BASE_HOST_PACKAGES, ...HOST_CAPABILITY_PACKAGE_GROUPS.agent_loop, ...HOST_CAPABILITY_PACKAGE_GROUPS[group]])
+  return evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => names.has(row.name)), { platform: 'posix', profileKind: 'headless' })
+}
+const POSIX_TERMINAL_HOST = hostFor('terminal_posix')
+const POSIX_FILESYSTEM_HOST = hostFor('filesystem')
 
 describe('domain core', () => {
   it('canonicalizes whitespace and hashes clauses', () => {
@@ -41,7 +48,7 @@ describe('domain core', () => {
     projection.items.set('R001', captureClause('ship the artifact', 'm1', 'R001', 1, { cwd: '/work' }))
     const result = certifyCheckpoint(projection, [{ itemId: 'R001', evidenceIds: ['E0001'] }], 'C001')
     expect(result.status).toBe('incomplete')
-    expect(result.rejectedBindings[0]?.reason).toContain('does not match')
+    expect(result.rejectedBindings[0]?.reasonCode).toBe('evidence_missing')
   })
 
   it('rejects evidence ids that are not in the current session projection', () => {
@@ -56,7 +63,7 @@ describe('domain core', () => {
     expect(result.status).toBe('incomplete')
     expect(result.openItems).toEqual(['A001'])
     expect(result.rejectedBindings).toHaveLength(1)
-    expect(result.rejectedBindings[0]?.reason).toContain('does not match')
+    expect(result.rejectedBindings[0]?.reasonCode).toBe('evidence_missing')
   })
 
   it('rejects bindings that cite no evidence (fail-open regression)', () => {
@@ -82,7 +89,7 @@ describe('domain core', () => {
     })
     expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C001').status).toBe('incomplete')
     projection.evidence.get('E0001')!.subjects = ['src/app.ts']
-    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C002').status).toBe('certified')
+    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C002').status).toBe('incomplete')
   })
 
   it('extracts structured subject from read tool meta', () => {
@@ -234,7 +241,7 @@ describe('domain core', () => {
       'E0001',
     )
     expect(evidence.outcome).toBe('success')
-    expect(withDurability(evidence, false).outcome).toBe('unknown')
+    expect(withDurability(evidence, false).outcome).toBe('durability-unknown')
     expect(withDurability(evidence, true).outcome).toBe('success')
 
     const cleanBash = evidenceFromPersistedToolResult(
@@ -244,7 +251,7 @@ describe('domain core', () => {
       'E-bash',
     )
     expect(cleanBash.outcome).toBe('success')
-    expect(withDurability(cleanBash, false).outcome).toBe('unknown')
+    expect(withDurability(cleanBash, false).outcome).toBe('durability-unknown')
   })
 
   it('failed durable tool results cannot become successful evidence', () => {
@@ -284,7 +291,7 @@ describe('domain core', () => {
     })
     expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C001').status).toBe('incomplete')
     projection.evidence.get('E0001')!.subjects = ['src/app.ts']
-    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C002').status).toBe('certified')
+    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C002').status).toBe('incomplete')
   })
 
   it('denies Goal completion only while enabled and uncertified', () => {
@@ -294,7 +301,7 @@ describe('domain core', () => {
     projection.integrity = 'valid'
     expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete' })).toBeUndefined()
     projection.enabled = true
-    expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete' })).toContain('requires a current')
+    expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete' })).toContain('[no_goal]')
     expect(goalCompletionDenial(projection, 'update_goal', { action: 'continue' })).toBeUndefined()
   })
 
@@ -303,10 +310,17 @@ describe('domain core', () => {
     projection.enabled = true
     projection.epoch = 1
     projection.contractRevision = 1
-    projection.checkpoints.push({ id: 'C001', epoch: 1, contractRevision: 1, openDigest: sha256(''), bindingDigest: sha256('binding'), bindings: [], result: 'certified' })
-    expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete' })).toBeUndefined()
+    projection.currentGoalRef = { id: 'goal-1', revision: 7 }
+    projection.checkpoints.push({
+      id: 'C001', stopProtocolVersion: '2.0.0', certificateVersion: '1', epoch: 1,
+      sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+      contractRevision: 1, contractSha256: sha256('contract'), openDigest: sha256(''),
+      evidenceSha256: sha256('evidence'), bindingDigest: sha256('binding'), bindings: [],
+      goalRef: { id: 'goal-1', revision: 7 }, certificationDigest: sha256('certificate'), result: 'certified',
+    })
+    expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete', goal_id: 'goal-1', revision: 7 })).toBeUndefined()
     projection.contractRevision = 2
-    expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete' })).toContain('requires a current')
+    expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete', goal_id: 'goal-1', revision: 7 })).toContain('[certificate_missing]')
   })
 
   it('classifies whole-task completion conservatively', () => {
@@ -331,9 +345,9 @@ describe('domain core', () => {
     expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('stop') // not enabled
     projection.enabled = true
     projection.epoch = 1
-    expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('continue')
-    expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('continue')
-    expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('stop') // limit reached
+    expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('stop')
+    expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('stop')
+    expect(decideTurnStopping(projection, 'The task is complete.', 1, 2).action).toBe('stop')
     expect(decideTurnStopping(projection, 'Step 1 is done.', 2, 2).action).toBe('stop') // partial report
   })
 
@@ -402,8 +416,8 @@ describe('domain core', () => {
       surfaces: ['scope'], boundedSummarySha256: sha256('build ok'),
     })
     const result = certifyCheckpoint(projection, [{ itemId: 'R001', evidenceIds: ['E0001'] }], 'C001')
-    expect(result.status).toBe('certified')
-    expect(projection.items.get('R001')?.status).toBe('passed')
+    expect(result.status).toBe('incomplete')
+    expect(projection.items.get('R001')?.status).toBe('pending')
   })
 
   it('round-trips a real Session log through derivation', () => {
@@ -420,7 +434,7 @@ describe('domain core', () => {
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'pnpm typecheck', workdir: '/work' }) } },
       { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Done in 1.2s' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
-    const derived = deriveProjection(events, ALWAYS, { cwd: '/work' }, true)
+    const derived = deriveProjection(events, ALWAYS, { cwd: '/work' }, true, POSIX_TERMINAL_HOST)
     expect(derived.projection.enabled).toBe(true)
     expect(derived.projection.epoch).toBe(0)
     expect(derived.projection.evidence.get('E0001')).toMatchObject({
@@ -428,7 +442,7 @@ describe('domain core', () => {
     })
     const item = [...derived.projection.items.values()].find((candidate) => candidate.kind === 'acceptance')
     expect(item?.verification).toMatchObject({ subject: '/work', surface: 'scope' })
-    expect(certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001').status).toBe('certified')
+    expect(certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001').status).toBe('incomplete')
   })
 
   it('uses only the final exit marker as authoritative', () => {
@@ -536,7 +550,7 @@ describe('domain core', () => {
       return certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: ids }], `C-${ids.join('-')}`).status
     }
     expect(certify([edit.id], [edit])).toBe('incomplete')
-    expect(certify([edit.id, sameRead.id], [edit, sameRead])).toBe('certified')
+    expect(certify([edit.id, sameRead.id], [edit, sameRead])).toBe('incomplete')
     expect(certify([edit.id, otherRead.id], [edit, otherRead])).toBe('incomplete')
     expect(certify([edit.id, editAgain.id], [edit, editAgain])).toBe('incomplete')
   })
@@ -730,7 +744,7 @@ describe('domain core', () => {
       outcome: 'success', capabilities: ['filesystem-read'], subjects: ['/work/artifact'], surfaces: ['artifact'], boundedSummarySha256: sha256('x'),
     })
     const packet = renderRecoveryPacket(projection, { charBudget: 4000 })
-    expect(packet).toContain('evidence E0001 read /work/artifact artifact')
+    expect(packet).toContain('evidence E0001 tool=read action=generic_run')
   })
 
   it('recognizes a bare completion title followed by a results summary', () => {
@@ -798,7 +812,7 @@ describe('domain core', () => {
       id: 'E0001', epoch: 1, callId: 'c1', rootCallId: 'c1', toolName: 'read', toolResultSeq: 4,
       outcome: 'success', capabilities: ['filesystem-read'], subjects: ['c:\\WORK\\guard-demo.txt'], surfaces: ['artifact'], boundedSummarySha256: sha256('x'),
     })
-    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C001').status).toBe('certified')
+    expect(certifyCheckpoint(projection, [{ itemId: 'A001', evidenceIds: ['E0001'] }], 'C001').status).toBe('incomplete')
   })
 
   it('keeps POSIX subject matching case-sensitive (P0-2)', () => {
@@ -855,8 +869,8 @@ describe('domain core', () => {
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
     expect(item?.verification.method).toBe('bash')
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
-    expect(result.status).toBe('certified')
-    expect(derived.projection.items.get(item!.id)?.status).toBe('passed')
+    expect(result.status).toBe('incomplete')
+    expect(derived.projection.items.get(item!.id)?.status).toBe('pending')
   })
 
   it('rejects an unrelated bash call as method evidence for an artifact (P0-1 negative)', () => {
@@ -889,7 +903,7 @@ describe('domain core', () => {
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
     expect(item?.verification.method).toBe('pnpm')
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
-    expect(result.status).toBe('certified')
+    expect(result.status).toBe('incomplete')
   })
 
   it('recognizes Markdown heading and emphasis completion titles (P0-2)', () => {
@@ -994,7 +1008,7 @@ describe('domain core', () => {
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
     expect(item?.verification.method).toBe('pwsh')
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
-    expect(result.status).toBe('certified')
+    expect(result.status).toBe('incomplete')
   })
 
   it('derives a create operation for a bash create requirement (P0-1 contract)', () => {
@@ -1109,7 +1123,7 @@ describe('domain core', () => {
     expect(item?.verification.operation).toBe('run')
     expect(item?.verification.subject).toBe('/work/script.js')
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
-    expect(result.status).toBe('certified')
+    expect(result.status).toBe('incomplete')
   })
 
   it('keeps quoted PowerShell paths as one subject (P1-2)', () => {
@@ -1161,19 +1175,19 @@ describe('domain core', () => {
     expect(parsed.operations).toEqual([{ op: 'create', path: 'C:\\Program Files\\demo.txt' }])
   })
 
-  it('v0.1 invariant: a run method evidence alone closes a run contract', () => {
+  it('v0.3 migration: a legacy generic run cannot close a user-level contract', () => {
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 node 运行 script.js' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"node script.js","workdir":"/work"}' } },
       { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
-    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true, POSIX_TERMINAL_HOST)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
     expect(item?.verification.operation).toBe('run')
-    // No read evidence at all — the run method evidence alone must close it.
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
-    expect(result.status).toBe('certified')
+    expect(result.status).toBe('incomplete')
+    expect(result.rejectedBindings[0]?.reasonCode).toBe('generic_run_non_certifiable')
   })
 
   it('v0.1 invariant: create requires both method and state verification evidence', () => {
@@ -1259,14 +1273,14 @@ describe('domain core', () => {
       for (const value of evidence) projection.evidence.set(value.id, value)
       return certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: ids }], `C-${ids.join('-')}`).status
     }
-    expect(certify('创建 /work/demo.txt', [write.id, readSame.id], [write, readSame])).toBe('certified')
+    expect(certify('创建 /work/demo.txt', [write.id, readSame.id], [write, readSame])).toBe('incomplete')
     expect(certify('创建 /work/demo.txt', [write.id], [write])).toBe('incomplete')
     expect(certify('创建 /work/demo.txt', [write.id, readOther.id], [write, readOther])).toBe('incomplete')
     const edit = evidenceFromPersistedToolResult(
       { callId: 'edit', name: 'edit', arguments: JSON.stringify({ file_path: '/work/demo.txt' }) },
       { seq: 4, meta: { path: '/work/demo.txt' }, textContent: 'ok' }, 1, 'E-edit',
     )
-    expect(certify('使用 edit 修改 /work/demo.txt', [edit.id, readSame.id], [edit, readSame])).toBe('certified')
+    expect(certify('使用 edit 修改 /work/demo.txt', [edit.id, readSame.id], [edit, readSame])).toBe('incomplete')
   })
 
   it('requires the explicit method on the effect evidence itself', () => {
@@ -1319,7 +1333,16 @@ describe('domain core', () => {
       const item = captureClause(text, 'm1', 'A001', 1)
       projection.items.set(item.id, item)
       for (const value of evidence) projection.evidence.set(value.id, value)
-      return certifyCheckpoint(projection, [{ itemId: item.id, evidenceIds: evidence.map((value) => value.id) }], 'C-verify').status
+      const effect = evidence[evidence.length - 1]
+      return certifyCheckpoint(projection, [{
+        itemId: item.id, evidenceIds: evidence.map((value) => value.id), semanticAction: item.semanticAction,
+        requestedTarget: item.requestedTarget, resolvedTarget: effect.resolvedTarget, observedState: effect.observedState ?? {},
+        expectedTransition: {
+          predicateId: 'pred.verify.outcome', version: 1, predParamsKind: 'inline',
+          parameters: { expected_outcome: { k: 'e', v: 'success' }, min_matches: 1 },
+        },
+        effectEvidenceId: effect.id,
+      }], 'C-verify').status
     }
     const bashUnrelated = makeEvidence('bash-1', 'bash', { command: 'echo hi', workdir: '/work' })
     const readSame = makeEvidence('read-2', 'read', { file_path: '/work/demo.txt' }, { path: '/work/demo.txt' })
@@ -1557,12 +1580,12 @@ describe('domain core', () => {
     expect(items.length).toBe(1)
     expect(items[0].verification.operation).toBe('run')
     const run = certifyCheckpoint(derived.projection, [{ itemId: items[0].id, evidenceIds: ['E0001'] }], 'C001')
-    expect(run.status).toBe('certified')
+    expect(run.status).toBe('incomplete')
     // And a clean unittest evidence alone closes a verify-style remainder:
     const derived2 = deriveProjection(make('python -m unittest', 'c2'), OPT_IN, { cwd }, true)
     const item2 = [...derived2.projection.items.values()].find((i) => i.kind === 'requirement')
     const verify = certifyCheckpoint(derived2.projection, [{ itemId: item2!.id, evidenceIds: ['E0001'] }], 'C002')
-    expect(verify.status).toBe('certified')
+    expect(verify.status).toBe('incomplete')
   })
 
   it('v0.2: a macOS-style pull/apply task certifies with run evidence alone', () => {
@@ -1579,7 +1602,7 @@ describe('domain core', () => {
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
     expect(item?.verification).toMatchObject({ operation: 'run', subject: cwd, surface: 'scope' })
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
-    expect(result.status).toBe('certified')
+    expect(result.status).toBe('incomplete')
   })
 
   it('v0.2: a Windows-style pwsh push task certifies with method identity', () => {
@@ -1595,7 +1618,7 @@ describe('domain core', () => {
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
     expect(item?.verification).toMatchObject({ operation: 'run', method: 'pwsh', surface: 'scope' })
     const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001', 'E0002'] }], 'C001')
-    expect(result.status).toBe('certified')
+    expect(result.status).toBe('incomplete')
   })
 
   it('v0.2: the dsh CLI is a certifiable run executable in both shells', () => {
@@ -1615,7 +1638,7 @@ describe('domain core', () => {
     const cwd = '/Users/lgr59/Documents/Github/codex-sync'
     const make = (command: string, callId: string) => ([
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件' }], source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: 'Install package fixture@1.0.0 in profile web.' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId, name: 'bash', arguments: JSON.stringify({ command }) } },
       { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId } } } },
     ])
@@ -1624,7 +1647,7 @@ describe('domain core', () => {
       const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
       expect(item?.verification).toMatchObject({ operation: 'run', surface: 'scope' })
       const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
-      expect(result.status, command).toBe('certified')
+      expect(result.status, command).toBe('incomplete')
     }
     // The piped config-dump form the original session used stays fail-closed.
     const piped = parseShellCommand('./dsh dump-config 2>&1 | grep dsh-dream-skin')
@@ -1670,15 +1693,16 @@ describe('domain core', () => {
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: '/work/other.txt' }) } },
       { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c1' } }, meta: { path: '/work/other.txt' } } },
     ]
-    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true, POSIX_FILESYSTEM_HOST)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
-    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: ['E0001'] }], 'C001')
+    const evidenceId = [...derived.projection.evidence.keys()][0]!
+    const result = certifyCheckpoint(derived.projection, [{ itemId: item!.id, evidenceIds: [evidenceId] }], 'C001')
     expect(result.status).toBe('incomplete')
     expect(result.rejectedBindings).toHaveLength(1)
-    expect(result.rejectedBindings[0].hint).toContain('scope run effect')
+    expect(result.rejectedBindings[0]).toMatchObject({ reasonCode: 'semantic_action_mismatch' })
     const packet = renderRecoveryPacket(derived.projection)
     expect(packet).toContain('closing hint [R001]:')
-    expect(packet).toContain('scope run effect')
+    expect(packet).toContain('install resolution + effect + independent state readback')
   })
 
   it('v0.2: real-workflow fail-closed anchors (sessions 2026-08-27) stay rejected', () => {

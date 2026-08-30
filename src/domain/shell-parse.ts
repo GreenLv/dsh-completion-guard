@@ -23,6 +23,15 @@ export interface ParsedShell {
   malformed: boolean
 }
 
+export type CanonicalCommandSurface = 'bash' | 'pwsh'
+
+export interface CanonicalArgv {
+  status: ShellParseStatus
+  reason?: string
+  argv: string[]
+  malformed: boolean
+}
+
 interface ShellToken {
   kind: 'word' | 'op'
   value: string
@@ -155,6 +164,10 @@ function isPathish(value: string): boolean {
 
 function unsupported(reason: string): ParsedShell {
   return { status: 'unsupported', reason, executables: [], operations: [], malformed: false }
+}
+
+function unsupportedArgv(reason: string): CanonicalArgv {
+  return { status: 'unsupported', reason, argv: [], malformed: false }
 }
 
 /**
@@ -474,4 +487,39 @@ export function parsePwshCommand(command: string): ParsedShell {
   const operations: Array<{ op: GuardOperation; path?: string }> = []
   for (const path of paths) operations.push({ op: spec.op, path })
   return { status: 'supported', executables: [cmdletRaw], operations, malformed: false }
+}
+
+/**
+ * Return canonical argv for the same literal, single-command grammar used by
+ * the production capture parser. This is intentionally stricter than the
+ * operation parser: environment prefixes and redirects are rejected because
+ * a stateful command manifest must bind the executable and every argument
+ * directly. Callers must still validate the executable-specific argv shape.
+ */
+export function canonicalArgvFromCommand(command: string, surface: CanonicalCommandSurface): CanonicalArgv {
+  if (surface === 'bash') {
+    const parsed = parseShellCommand(command)
+    if (parsed.status !== 'supported') {
+      return { status: parsed.status, ...(parsed.reason ? { reason: parsed.reason } : {}), argv: [], malformed: parsed.malformed }
+    }
+    const tokenized = tokenizeShell(command)
+    if (tokenized.malformed) return { status: 'malformed', reason: 'unterminated quote', argv: [], malformed: true }
+    if (tokenized.tokens.some((token) => token.kind === 'op')) return unsupportedArgv('redirects and shell operators are not allowed in a command manifest')
+    const words = tokenized.tokens.filter((token): token is ShellToken & { kind: 'word' } => token.kind === 'word')
+    if (words.some((word) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word.value))) {
+      return unsupportedArgv('environment assignment prefixes are not allowed in a command manifest')
+    }
+    return { status: 'supported', argv: words.map((word) => word.value), malformed: false }
+  }
+
+  const parsed = parsePwshCommand(command)
+  if (parsed.status !== 'supported') {
+    return { status: parsed.status, ...(parsed.reason ? { reason: parsed.reason } : {}), argv: [], malformed: parsed.malformed }
+  }
+  const dynamic = readPwshUnsupported(command)
+  if (dynamic.unsupported) return unsupportedArgv(`dynamic or compound PowerShell syntax (${dynamic.reason ?? 'unknown'})`)
+  const tokenized = tokenizePwsh(command)
+  if (tokenized.malformed) return { status: 'malformed', reason: 'unterminated quote or escape', argv: [], malformed: true }
+  const words = tokenized.words.filter((word) => !(word.quoted === false && /^[0-9]*>&[0-9]+$/.test(word.value)))
+  return { status: 'supported', argv: words.map((word) => word.value), malformed: false }
 }
