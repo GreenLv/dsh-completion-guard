@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-面向 DeepSeek Harness（DSH）的任务合同与完成认证插件。它保存需求、禁止项、验收条件、后续修订和有界证据，只有当前成功证据与当前合同匹配时，任务才能获得完成认证。
+面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
@@ -21,7 +21,7 @@ dsh plugin --profile web add dsh-completion-guard@0.3.1
 /context-guard status
 ```
 
-默认采用 opt-in。`status` 会返回启用状态、当前 epoch 和合同修订、待完成与已通过条目数量、证据数量及完整性状态；`off` 停止本会话的捕获和门禁，但保留已有历史；`clear` 在 `CLEAR:` 哨兵下使所有待完成的 requirement/acceptance 成为 superseded（保留 prohibition），从而让空绑定 checkpoint 也能在 Guard 保持开启的情况下签发证书；`diagnose` 返回有界的诊断信息。
+默认采用 opt-in。`status` 显示 Guard 是否开启，以及还有多少检查项和证据。`off` 停止保护当前会话，但不删除历史。`clear` 关闭当前待办，同时保留禁止项。`diagnose` 说明完成检查为什么通过或失败。
 
 ### 启用模式
 
@@ -47,19 +47,21 @@ dsh plugin --profile web add dsh-completion-guard@0.3.1
 
 ## 它保护什么
 
-- 以稳定 ID 捕获 requirement、acceptance 和 prohibition，并通过 append-only supersession 保存后续修订。
-- 只从 DSH 已持久化的工具调用与结果派生有界、脱敏的证据。
-- 当合同明确指定时，同时匹配方法、操作、对象、surface 和结果状态。
-- 在会话重建或恢复时重新验证证书，完整性丢失时 fail-closed。
-- 启用期间，如果没有当前有效证书，就在 mutation 前阻止 Guard 自己守卫的模型工具 Goal 完成路径；可信进程内直接写 Goal/session 的旁路只检测为 integrity violation，不声称能普遍阻止。
+- 保存需求、验收条件、禁止项和后续修正，不覆盖旧记录。
+- 只使用 DSH 已保存的工具调用和结果，并保存脱敏摘要而不是完整输出。
+- 只有动作和结果对应指定命令、文件或其他目标时，证据才有效。
+- 会话重建或恢复后重新检查完成状态；记录损坏时拒绝签发证书。
+- 没有当前证书时，阻止 Guard 自己守卫的 Goal 完成工具。进程内部直接写入只能报告为完整性问题，无法保证全部阻止。
 
 ## 状态与兼容性
 
-0.3.1 是当前 release line。只有 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) 记录的精确工件公开读回闭合时，其 [npm 包](https://www.npmjs.com/package/dsh-completion-guard) 与 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) 才构成权威发布身份；安装前请核对这些链接身份。
+0.3.1 是当前已发布版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) 和精确的公开检查记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
-`0.3.0` npm 工件已通过原生平台同字节验收，但由于发布的是预构建 tgz，npm 没有写入合同要求的 `gitHead`。该版本身份不能复用，也不会为 `v0.3.0` 创建 GitHub Release；npm 版本仍保留供审计安装，但已带有改用 `0.3.1` 的弃用提示。`0.3.1` 保留其运行时行为并修复发布溯源路径。
+0.3.2 是未发布的源码候选，可识别两套精确的 DSH 环境：`0.1.1-rc.2` + dshmarket `1.36.0`，以及 `0.1.2-alpha.2` + dshmarket `1.38.1`。所有必需包必须完整匹配其中一套；缺包、混装、重复或未知包都会让 Guard 保持不可用，不会只启用一部分。alpha.2 目前只在 macOS 检查过，因此在 Windows 上仍不可用；切换环境也会使旧完成证书失效。完整包清单见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)，待完成检查见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
-> 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，以避免与无关的 DSH 插件（kpl0111/dsh-context-guard，工具结果剪裁）撞名。内部 Cordis bundle id 保持 `context-guard` 不变；原 npm 包 `dsh-context-guard` 的所有已发布版本均已 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.1；运行行为不变，发布记录已修复。
+
+> 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，因为另一个无关插件已经使用旧名称。内部 bundle id 仍为 `context-guard`，旧 npm 包会引导用户使用本包。支持的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)；需要 Node.js `>=22` 和 pnpm `>=11`。
 
 ### 早期 v0.2.x 证据
 

@@ -44,10 +44,8 @@ export const PORTABLE_PRODUCTION: PortableProduction = {
 const WORKDIR = '/synthetic/workspace'
 const X1 = '11'.repeat(32)
 const X2 = '22'.repeat(32)
-const PORTABLE_HOST_LOCK = evaluateHostLock(
-  EXPECTED_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh-goal' && row.name !== '@deepseek-ai/dsh-tool-goal'),
-  { platform: 'posix', profileKind: 'web' },
-)
+// CG-DSH-001: the audited cohort is one indivisible whole-graph contract.
+const PORTABLE_HOST_LOCK = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}

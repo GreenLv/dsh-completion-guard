@@ -2,6 +2,28 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## v0.3.2 source candidate gates (2026-08-31, in progress)
+
+Version 0.3.2 lets the Guard recognize either of two complete DSH package sets. It never combines packages from different sets, and a missing or mismatched package leaves the whole host unavailable. The checks below were run on macOS from a working tree based on `844b62848c1e2685e0574b660dc4546b6bf6dbac`, which was `origin/main` when implementation began. They cover the source candidate, not a release artifact.
+
+Package sets checked:
+
+- The `dsh-0.1.1-rc.2` set has the same 34 package rows used by 0.3.1 and already checked on macOS and Windows.
+- The `dsh-0.1.2-alpha.2` set contains 34 exact package name, version, and integrity rows extracted from the active macOS runtime and Web profile with dshmarket `1.38.1`. Tests confirm that the TypeScript and JSON copies match.
+- A source comparison found no change in the session events, Goal calls, tool definitions, or terminal results that the Guard uses. Internal DSH changes outside those inputs are not treated as compatibility evidence.
+
+Verified source gates (macOS, Node.js 25.1.0, pnpm 11.x):
+
+- Type checking, lint, build, and `git diff --check` pass. The 20-file suite passes 359 tests and skips one Windows-only test on macOS.
+- `pnpm run pack:check` lists the expected 26 package files. `pnpm run test:release-pack` passes exact-commit binding, repeatable package output, and dirty-tree rejection tests; it does not create the final release package from this dirty tree.
+- Read-only checking against the daily macOS Web profile reports `dsh-0.1.2-alpha.2` as supported with all 34 rows, Web control, and Goal support. The installed 0.2.1 plugin still rejects a generator-version mismatch as expected.
+
+Pending gates (each requires its own authorization and evidence):
+
+- Native Windows extraction of the alpha.2 package set; until then alpha.2 stays unavailable on Windows and rc.2 remains the only Windows-audited path.
+- A frozen package from a clean committed tree, followed by isolated Web and Headless install, no-op, package comparison, host check, restart, cleanup, and native macOS/Windows acceptance of those same bytes.
+- CI, release readback, tag, npm publication, GitHub Release, and consumer pin updates.
+
 ## v0.3.1 release-repair gates
 
 Version 0.3.1 preserves the v0.3 runtime and digest behavior while repairing

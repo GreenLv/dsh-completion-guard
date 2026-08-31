@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-A task-contract and completion-certification plugin for DeepSeek Harness (DSH). It preserves requirements, prohibitions, acceptance criteria, later corrections, and bounded evidence so a task can be certified only when current successful evidence matches the current contract.
+An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
@@ -21,7 +21,7 @@ Restart DSH Web, open a session, and enable the guard:
 /context-guard status
 ```
 
-Activation is opt-in by default. `status` reports whether the guard is enabled, the current epoch and contract revision, pending and passed item counts, the evidence count, and integrity state. `off` stops capture and gating for the session while preserving its prior history; `clear` supersedes every pending requirement/acceptance under a `CLEAR:` sentinel (prohibitions retained) so an empty-binding checkpoint can certify while the guard stays on; `diagnose` returns a bounded diagnostic view.
+Activation is opt-in by default. `status` shows whether the guard is on and how many items and evidence records remain. `off` stops protection for the current session without deleting its history. `clear` closes the current pending checklist while keeping prohibitions. `diagnose` explains why a completion check passed or failed.
 
 ### Activation modes
 
@@ -47,19 +47,21 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## What it protects
 
-- Captures requirement, acceptance, and prohibition clauses with stable identities and append-only supersession.
-- Derives bounded, redacted evidence from persisted DSH tool calls and results.
-- Requires method, operation, subject, surface, and outcome to match where the contract makes them explicit.
-- Re-verifies certificates when a session is rebuilt or resumed and fails closed on integrity loss.
-- Blocks the Guard-owned model-tool Goal completion path while enabled unless a current certificate exists; trusted in-process direct Goal/session writes are detected as integrity violations, not universally prevented.
+- Saves requirements, acceptance checks, prohibitions, and later corrections without overwriting history.
+- Uses only tool calls and results that DSH has saved, and stores a redacted summary rather than full output.
+- Accepts evidence only when the action and result match the requested command, file, or other target.
+- Rechecks completion after a session is rebuilt or resumed, and refuses to certify damaged state.
+- Stops the Guard-owned Goal completion tool when no current certificate exists. Direct internal writes can be reported as integrity problems but cannot always be blocked.
 
 ## Status and compatibility
 
-Version 0.3.1 is the current release line. Its [npm package](https://www.npmjs.com/package/dsh-completion-guard) and [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) are authoritative only when the exact-artifact public readback recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) is complete. Verify those linked identities before installing.
+Version 0.3.1 is the current published release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) and exact public checks are recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
-The `0.3.0` npm artifact passed same-byte native validation, but npm omitted its required `gitHead` metadata because a prebuilt tgz was published. Its version identity cannot be reused, and no GitHub Release is created for `v0.3.0`; the npm version remains installable for audit history but is deprecated with a migration warning to use `0.3.1`. Version `0.3.1` preserves the runtime behavior while repairing the release provenance path.
+Version 0.3.2 is an unreleased source candidate that recognizes two exact DSH setups: `0.1.1-rc.2` with dshmarket `1.36.0`, and `0.1.2-alpha.2` with dshmarket `1.38.1`. Every required package must match one complete setup. Missing, mixed, duplicate, or unknown packages leave the Guard unavailable instead of partly enabled. The alpha.2 setup has been checked on macOS only, so it remains unavailable on Windows. Switching setups also invalidates earlier completion certificates. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the package list and [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) for pending checks.
 
-> The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision with an unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning). The internal Cordis bundle id stays `context-guard`, and every published version of the previous npm package `dsh-context-guard` is deprecated in favor of this package. It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
+Version 0.3.0 is not recommended. Its package passed native checks, but npm did not record the required source commit, so the version cannot be repaired in place and has no GitHub Release. Use 0.3.1, which keeps the same runtime behavior and fixes that release record.
+
+> The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 because an unrelated plugin already used the old name. The internal bundle id remains `context-guard`, and the old npm package points users to this one. Supported DSH setups are listed in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md); Node.js `>=22` and pnpm `>=11` are required.
 
 ### Earlier v0.2.x evidence
 

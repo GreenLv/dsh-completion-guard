@@ -2931,74 +2931,97 @@ function authorityCaptureCounts(blocks) {
 
 //#endregion
 //#region src/domain/host-lock.ts
-const SUPPORTED_HOST_MANIFEST = {
-	manifestVersion: 1,
-	supportedGoalVersions: ["0.1.1-rc.2"],
-	capabilities: [
-		{
-			name: "goal_complete_precommit_guard",
-			value: {
-				k: "s",
-				v: "required"
-			}
-		},
-		{
-			name: "goal_disarm_readback",
-			value: {
-				k: "s",
-				v: "required"
-			}
-		},
-		{
-			name: "session_flush_before_control",
-			value: {
-				k: "s",
-				v: "required"
-			}
-		},
-		{
-			name: "tool_guard_monotonic",
-			value: {
-				k: "s",
-				v: "required"
-			}
-		},
-		{
-			name: "host_capability_model",
-			value: {
-				k: "s",
-				v: "action-platform-v1"
-			}
-		},
-		{
-			name: "external_wait_jobs_readback",
-			value: {
-				k: "s",
-				v: "dsh.jobs.v1"
-			}
-		},
-		{
-			name: "filesystem_tool_contract",
-			value: {
-				k: "s",
-				v: "dsh.fs-tools.v1"
-			}
-		},
-		...SEMANTIC_ACTIONS.map((action) => ({
-			name: "supported_action",
-			value: {
-				k: "s",
-				v: action
-			}
-		}))
-	]
-};
 /**
-* Audited package identities. This is a catalogue, not one indivisible lock:
-* evaluateHostLock requires only BASE_HOST_PACKAGES globally and evaluates the
-* remaining action/platform groups independently.
+* Capability expectations shared by every audited host cohort. The rc.2 ->
+* alpha.2 source audit found no Guard-consumed contract change (session event
+* vocabulary, flush contract, Goal disarm, `update_goal` gating, tool
+* definition, renderer terminal markers), so the rows are identical; a future
+* cohort that changes any of them must declare its own rows instead.
 */
-const EXPECTED_HOST_PACKAGES = [
+const AUDITED_CAPABILITY_ROWS = [
+	{
+		name: "goal_complete_precommit_guard",
+		value: {
+			k: "s",
+			v: "required"
+		}
+	},
+	{
+		name: "goal_disarm_readback",
+		value: {
+			k: "s",
+			v: "required"
+		}
+	},
+	{
+		name: "session_flush_before_control",
+		value: {
+			k: "s",
+			v: "required"
+		}
+	},
+	{
+		name: "tool_guard_monotonic",
+		value: {
+			k: "s",
+			v: "required"
+		}
+	},
+	{
+		name: "host_capability_model",
+		value: {
+			k: "s",
+			v: "action-platform-v1"
+		}
+	},
+	{
+		name: "external_wait_jobs_readback",
+		value: {
+			k: "s",
+			v: "dsh.jobs.v1"
+		}
+	},
+	{
+		name: "filesystem_tool_contract",
+		value: {
+			k: "s",
+			v: "dsh.fs-tools.v1"
+		}
+	},
+	...SEMANTIC_ACTIONS.map((action) => ({
+		name: "supported_action",
+		value: {
+			k: "s",
+			v: action
+		}
+	}))
+];
+function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages) {
+	return {
+		id,
+		manifestVersion: 1,
+		supportedGoalVersions,
+		auditedPlatforms,
+		packages,
+		capabilities: [{
+			name: "host_cohort",
+			value: {
+				k: "s",
+				v: id
+			}
+		}, ...AUDITED_CAPABILITY_ROWS]
+	};
+}
+/**
+* Audited host cohort registry. The rc.2 cohort keeps the exact identities
+* audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
+* exact package graph extracted from a native macOS DSH `0.1.2-alpha.2` /
+* dshmarket `1.38.1` runtime; its Windows registration is pending a native
+* Windows extraction, so it is audited for posix only and fails closed
+* elsewhere. Graphs that mix cohorts, lack rows, duplicate rows, or use
+* versions outside both cohorts fail closed.
+*/
+const HOST_COHORTS = [defineCohort("dsh-0.1.1-rc.2", ["0.1.1-rc.2"], ["posix", "windows"], [
 	{
 		name: "@deepseek-ai/cordis",
 		version: "4.0.1",
@@ -3169,7 +3192,186 @@ const EXPECTED_HOST_PACKAGES = [
 		version: "0.1.1-rc.2",
 		integrity: "sha512-on4hjAlYI5uX9q7Sf95YkMMBVe6heywtA/H50ksrIMUub8U2B98hO9iQpHhjwIO1F1vu+5pLcPvRr6yUGGmtXQ=="
 	}
-];
+]), defineCohort("dsh-0.1.2-alpha.2", ["0.1.2-alpha.2"], ["posix"], [
+	{
+		name: "@deepseek-ai/cordis",
+		version: "4.0.2",
+		integrity: "sha512-asOnXP1TzFSFQlHb1iegDZp0z/8WD1c7YNrwJR/Tx2bzNuMXfcekE/I67Iv6SQXeLB4csxqCngzQKANP7gdw0g=="
+	},
+	{
+		name: "@deepseek-ai/dsh",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-4TvTC5kRKlgtSU2UTBv+cID9a2Z+6+m6mpvjXWJfVzuTkflCff6s4MsQpFJTCmwFh/k7zNWe7qFXcLYMV/5VvA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-agent",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-K7B5XSQ7byB/IoNGj7n+lBgHCpVPJqEPvpGoHKc1dBS8fPo2yYp/ALFag4YOfrXVP3jQ9A8di20BbvIlp79SoA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-agent-loop",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-UU1i+rTuQV3Q5PGY4qFlojJ0Gbthib22pida5elZlg28dd8gtY2d1U5V9q2+rKK/469CO29rkz6TWMWk0g93Jg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-attachment",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-+e+zQCbBi94Jnyfpq/M+/J2R/66GbMh5zqr7yVdCjvAJp8d2hxQsZ0O/oaSV+iZQIMgJz+BcwvrS1VU+XmzQWg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-bash-sandbox",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-y5NZT7OkKi23N2fF+x9oo1QZH8LPfTU+llL86r+iETSSk5jzh91Hp2cP5Iq5S/L3BAQDaEw2J4Dg8VjF+fnnkg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-commands",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-KkyNkD5V80h+xXsByGdXH8uvKo/5uflb1CSY8O8IrciuptaJdneSAmTFsjmCKAjqCTGgigk2VDw6mqPwux2JYg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-fs",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-wx5n0QS5rfZ2LPVocMNfuOUh0RYH/QuLoCEy+qI8U3nKmSZ8GSTASURLg+0pVxckHpLElo38U+S/lkLxRK1rpQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-fs-local",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-IIpZAxGw8wr+xpZQhvuHB9JtUeE6V03e45njfFah1eRl0miaHV5CxCRlFwkMLrow5I2zCCsCPPmdEaouGxTGSA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-fs-observation-policy",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-oMDSB1NTnj4rIGy5JXCtbzTFDwKkU/38KIKrVs3u6b65Y5spq3kjc1ITpjqo3Ze4H8umc8wJqGke2o/ms8eIEQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-fs-sandbox",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-jTnGZUov95e9OANKG+uoWAczdGlzy24aXJ+z4N4J+rMvThfj5awV3ucsmX9S4YW2peHoTV9D7BNGgBQ84LxB+w=="
+	},
+	{
+		name: "@deepseek-ai/dsh-goal",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-6E+QfBezGsQ2RI0KLZc8llRpukV9ujLjCcQ2UAboYJS7FPQMs7f/QfSrfTubwpB4lrnOok0H26JT2jHUhJeQbQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-host-plugin-inventory",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-qWD+fTYTq8YoNa1TbYXy/Qk7bjjS4URJMgMa3m1vnyZ+xdwtRBF47dUa7wVAVX7oGg03bl7TD1Eo7GcKP/eajA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-host-webserver",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-cvsfM/cm5hZk/RqdIsardfqBIVpemdmUrP4M6UgdqhJy2nG5VnokLBg7k0bc8Yi11q0vIETfQK4xiDOSOMnu7Q=="
+	},
+	{
+		name: "@deepseek-ai/dsh-jobs",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-yPNlYX/ZKphjzRY7oMf5uLgfSlJ8qBp49W6qNqzhmn8moXgJcPUCNqeOkT0C3a6GQ286mmmo09eyfDLGX7+lMQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-jobs-local",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-nrK4ujL6QRS6GAysgBR08vaHub4vh7/iuGtmMvcg4Bp3hZeQ4rjWnpQAuItg9E9G3OUrvfjwzwENEM1TyVcbWw=="
+	},
+	{
+		name: "@deepseek-ai/dsh-llm",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-ip6yMxwHugxQm4VCbwX/FDnlTeeBM9VBkIn0+74ityQy7Z3yKREJ1Ov8Z04l4G3duRzeGRsQ4ztOFZ01oNfKIw=="
+	},
+	{
+		name: "@deepseek-ai/dsh-pwsh-sandbox",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-j/gUmv+nWYzg8o+oEEIK9FKeb6L24n2u7xjpIm7DcL5YjQlRDR6FgDvR2hpUK/d4Wk+zvnaPqZaEaXfUtOzEKQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-sandbox",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-InfHYn5B0MxF5QLz0AjbwPS5W0G9VtIvjEFl5o/049KzH6khGKhjqOAVZtu1Z46f1+K/dbjF50VkTdnX3pgIJA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-sandbox-policy",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-Af7DWZTEjF/70YWSiN0jfbZli1XRk6Bo9W61QHxfShS79I8//mOPrItEPtJRWL/RCmGNfudFglNFyyGKdaqBIg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-session",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-RfikXscYTDXDr7CD7C/8oGJZaH8Egclj7pmXRtd90QcB5L8RIQ7069xrHZjds8OjNrFo69qQwNK3gYLUVZy9PA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-shell",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-i16e+OrCJ7GZ1XDnPds081NgVs/xzIVMLECzmLnXgVDKeePgWpdEgR//PgMqKPwoBoJ8z7DTzwKiOISAtOpNzA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-shell-env",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-OCf1iaPC5Qg6/DMLzvq5flGVSKP2uxAhgKs+8vrRuUiKc2UXXUE4uKayzZU7S18EysLZOVjMKKyUnHFXCVRQxg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-subprocess-local",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-IFneyTRqvbF/1Jm9h0WwBBxwlAd3vRh3SE/sZo2DTy9lzkRUMEBmWTiJZhVCMZ7hDLE0ALnjLLnLFLkA7bCP9Q=="
+	},
+	{
+		name: "@deepseek-ai/dsh-system-prompt",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-qT9PZEVMAbszsg1UVUvuovfWFS5unjy08KV0rnOc89TJCgkb2CnlknSyIQs0lXc/UiqT6ZQ59i4ClAFrXhxfxQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-tool-bash",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-Vt70FCPSE3Y7++2i9dKCNrsXTqhDpeJwqo44/GZow1xJ5acY9iNkjmjfq0UrTvacLLOEVnrMMBa9LojXi2WZUA=="
+	},
+	{
+		name: "@deepseek-ai/dsh-tool-fs",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-zQ+zxunJ9BXFR/kAw0Z/LO5TEy87uf1X2giE1AmM9fqbev28vd4pzLq3y8F9b0E64461ANrfD1q2wx8Gy1w47g=="
+	},
+	{
+		name: "@deepseek-ai/dsh-tool-goal",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-lvp60s3JKuTzncrlKCyS3qM/jYMLZSTMXJ/xQ8A0EIDvfPp7x1C3NNez66IJXPJ5YMtW9QYsqx2YmnUKhPOrow=="
+	},
+	{
+		name: "@deepseek-ai/dsh-tool-jobs",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-QYq4almnoKNDu/ncrpGLTfkT5sIdqvRTyLd61VNJTFl4rNT2G/JCoEIhDgf50Rkwcchvvk/bNNdekjlENqZjKg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-tool-pwsh",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-sRGAmLWxxb+gglsqoftLojnFY1HaKMcwV9itkvv7JeACn5vkZuXTI0I/gNxjvt+g/b6sXT37hmQ7bmyo3dFHuQ=="
+	},
+	{
+		name: "@deepseek-ai/dsh-tools",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-trk0fkmCDp64pqdcr8u7rCcRrwNi+93FKuznTnCD+YsPGFygcSG/6n+Wsh4+9A6oI1fM4/Ecq6Baa9vq1sNhJg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-user-approval",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-CcV3hf2Q0NYxRbnlE+IysaUkq/hvmjlvS9OGiHpARZVY4VlidlZRmsy5g5L17vDoxirX+WBJ9Cc5VcJMcjPrUg=="
+	},
+	{
+		name: "@deepseek-ai/dsh-web-app",
+		version: "0.1.2-alpha.2",
+		integrity: "sha512-+SKilM9fCCCoYr3fKT7CxNiozGsNHgvvTGhL63tKXM7/3M96dyj7zhT5ztoTgIDW9b9m8J/CaJUa4KlSeUJGFQ=="
+	},
+	{
+		name: "dshmarket",
+		version: "1.38.1",
+		integrity: "sha512-Z9VleLtCXwk5OlbSJKayWtbMaKACL8JUMyb/JHpErS4N3q//GJS+cgOhhxNkZYmXxB8/lv9IbhX1CBzlMhJeJg=="
+	}
+])];
+/**
+* rc.2 audited package identities (first registry cohort). The audited
+* cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
+* duplicated, unknown-version, unbound, OR MISSING row fails the whole lock
+* closed (`host_lock_missing`); no capability inherits independence from a
+* partially present graph.
+*/
+const EXPECTED_HOST_PACKAGES = HOST_COHORTS[0].packages;
 const packageNames = (...names) => new Set(names);
 const BASE_HOST_PACKAGES = packageNames("@deepseek-ai/cordis", "@deepseek-ai/dsh-agent", "@deepseek-ai/dsh-commands", "@deepseek-ai/dsh-llm", "@deepseek-ai/dsh-session", "@deepseek-ai/dsh-tools");
 const GOAL_HOST_PACKAGES = packageNames("@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal");
@@ -3183,16 +3385,76 @@ const HOST_CAPABILITY_PACKAGE_GROUPS = {
 	jobs: packageNames("@deepseek-ai/dsh-jobs", "@deepseek-ai/dsh-jobs-local", "@deepseek-ai/dsh-tool-jobs"),
 	filesystem: packageNames("@deepseek-ai/dsh-tool-fs", "@deepseek-ai/dsh-fs", "@deepseek-ai/dsh-fs-local", "@deepseek-ai/dsh-fs-sandbox", "@deepseek-ai/dsh-fs-observation-policy", "@deepseek-ai/dsh-sandbox", "@deepseek-ai/dsh-sandbox-policy", "@deepseek-ai/dsh-user-approval", "@deepseek-ai/dsh-attachment", "@deepseek-ai/dsh-system-prompt")
 };
+/**
+* Atomically select the audited cohort for one supplied package graph. A
+* graph matches a cohort only when every row carries version and integrity,
+* each exactly equals that cohort's audited row, and the graph covers the
+* complete audited cohort (missing packages fail closed); graphs that mix
+* rows from different cohorts, use versions unknown to the registry, or
+* target a platform the cohort was never audited on never select
+* consistently.
+*/
+function selectHostCohort(rows, platform) {
+	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)));
+	if (rows.some((row) => !registryNames.has(row.name))) return {
+		cohort: HOST_COHORTS[0],
+		consistent: false,
+		reasonCode: "host_cohort_unknown_package"
+	};
+	if (rows.length === 0) return {
+		cohort: HOST_COHORTS[0],
+		consistent: false,
+		reasonCode: "host_cohort_unbound_identity"
+	};
+	const bound = rows.filter((row) => row.version !== void 0 && row.integrity !== void 0);
+	const unboundCount = rows.length - bound.length;
+	const versionMatches = bound.map((row) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version)));
+	const identityMatches = bound.map((row, index) => versionMatches[index].filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)));
+	const consistentCohort = HOST_COHORTS.find((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
+	if (consistentCohort !== void 0 && unboundCount === 0) {
+		if (platform && !consistentCohort.auditedPlatforms.includes(platform)) return {
+			cohort: consistentCohort,
+			consistent: false,
+			reasonCode: "host_cohort_platform_not_audited"
+		};
+		const suppliedCounts = /* @__PURE__ */ new Map();
+		for (const row of rows) suppliedCounts.set(row.name, (suppliedCounts.get(row.name) ?? 0) + 1);
+		if (!(consistentCohort.packages.every((row) => (suppliedCounts.get(row.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
+			cohort: consistentCohort,
+			consistent: false,
+			reasonCode: "host_cohort_incomplete_graph"
+		};
+		return {
+			cohort: consistentCohort,
+			consistent: true
+		};
+	}
+	const matchingIndices = identityMatches.flatMap((matches, index) => matches.length > 0 ? [index] : []);
+	const mixtureCovered = HOST_COHORTS.filter((cohort) => matchingIndices.every((index) => identityMatches[index].includes(cohort)));
+	let reasonCode;
+	if (matchingIndices.length > 0 && mixtureCovered.length === 0) reasonCode = "host_cohort_mixed_graph";
+	else if (bound.length > 0 && versionMatches.some((matches) => matches.length === 0)) reasonCode = "host_cohort_version_mismatch";
+	else if (bound.length > 0 && identityMatches.some((matches) => matches.length === 0)) reasonCode = "host_cohort_integrity_mismatch";
+	else reasonCode = "host_cohort_unbound_identity";
+	return {
+		cohort: [...HOST_COHORTS].sort((a, b) => {
+			const scoreOf = (cohort) => identityMatches.filter((matches) => matches.includes(cohort)).length;
+			return scoreOf(b) - scoreOf(a) || HOST_COHORTS.indexOf(a) - HOST_COHORTS.indexOf(b);
+		})[0],
+		consistent: false,
+		reasonCode
+	};
+}
 function stableRows(rows) {
 	return [...rows].map((row) => ({ ...row })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
 }
-function statusForPackages(id, rows, requiredNames) {
+function statusForPackages(id, rows, requiredNames, cohort) {
 	const requiredPackages = [...requiredNames].sort();
 	const relevant = rows.filter((row) => requiredNames.has(row.name));
 	const counts = /* @__PURE__ */ new Map();
 	for (const row of relevant) counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
 	const missingPackages = requiredPackages.filter((name) => !counts.has(name));
-	const digest = safeHostLockDigest(relevant, { capabilityId: id });
+	const digest = safeHostLockDigest(relevant, { capabilityId: id }, cohort);
 	if ([...counts.values()].some((count) => count > 1)) return {
 		id,
 		status: "unavailable",
@@ -3209,7 +3471,7 @@ function statusForPackages(id, rows, requiredNames) {
 		missingPackages,
 		reasonCode: "host_capability_missing"
 	};
-	const expected = new Map(EXPECTED_HOST_PACKAGES.map((row) => [row.name, row]));
+	const expected = new Map(cohort.packages.map((row) => [row.name, row]));
 	for (const row of relevant) {
 		const pinned = expected.get(row.name);
 		if (!row.version || !row.integrity) return {
@@ -3245,27 +3507,33 @@ function statusForPackages(id, rows, requiredNames) {
 		missingPackages
 	};
 }
-function capabilityEvaluations(rows) {
-	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages]) => [id, statusForPackages(id, rows, packages)]));
+function capabilityEvaluations(rows, cohort) {
+	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages]) => [id, statusForPackages(id, rows, packages, cohort)]));
+}
+function cohortForEvaluation(evaluation) {
+	return HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
 }
 function evaluateHostLock(rows, context = {}) {
 	const supplied = stableRows(rows);
-	const capabilities = capabilityEvaluations(supplied);
+	const selection = selectHostCohort(supplied, context.platform);
+	const cohort = selection.cohort;
+	const capabilities = capabilityEvaluations(supplied, cohort);
 	const counts = /* @__PURE__ */ new Map();
 	for (const row of supplied) counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
 	const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name));
 	const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size;
-	const digest = safeHostLockDigest(supplied, context);
-	const base = statusForPackages("base", supplied, BASE_HOST_PACKAGES);
-	const baseDuplicate = supplied.find((row) => BASE_HOST_PACKAGES.has(row.name) && (counts.get(row.name) ?? 0) > 1);
-	const goalDuplicate = supplied.find((row) => GOAL_HOST_PACKAGES.has(row.name) && (counts.get(row.name) ?? 0) > 1);
-	const expectedNames = new Set(EXPECTED_HOST_PACKAGES.map((row) => row.name));
-	const unknown = supplied.find((row) => !expectedNames.has(row.name));
+	const digest = safeHostLockDigest(supplied, context, cohort);
+	const base = statusForPackages("base", supplied, BASE_HOST_PACKAGES, cohort);
+	const missingPackages = cohort.packages.map((row) => row.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
+	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row) => row.name)));
+	const unknown = supplied.find((row) => !registryNames.has(row.name));
 	const baseResult = {
 		digest,
 		goalAvailable,
 		packages: supplied,
 		capabilities,
+		cohortId: cohort.id,
+		missingPackages,
 		...context.platform ? { platform: context.platform } : {},
 		...context.profileKind ? { profileKind: context.profileKind } : {}
 	};
@@ -3274,7 +3542,7 @@ function evaluateHostLock(rows, context = {}) {
 		status: "unsupported",
 		reasonCode: "host_lock_unknown_package"
 	};
-	if (baseDuplicate || goalDuplicate) return {
+	if (supplied.some((row) => (counts.get(row.name) ?? 0) > 1)) return {
 		...baseResult,
 		status: "unavailable",
 		goalAvailable: false,
@@ -3295,12 +3563,50 @@ function evaluateHostLock(rows, context = {}) {
 		};
 	}
 	if (goalAvailable) {
-		const goal = statusForPackages("goal", supplied, GOAL_HOST_PACKAGES);
+		const goal = statusForPackages("goal", supplied, GOAL_HOST_PACKAGES, cohort);
 		if (goal.status !== "supported") return {
 			...baseResult,
 			status: goal.status,
 			goalAvailable: false,
 			reasonCode: goal.reasonCode === "host_capability_version_mismatch" ? "host_lock_version_mismatch" : goal.reasonCode === "host_capability_integrity_mismatch" ? "host_lock_integrity_mismatch" : "host_lock_missing"
+		};
+	}
+	if (!selection.consistent) {
+		const failure = {
+			host_cohort_unknown_package: {
+				status: "unsupported",
+				reasonCode: "host_lock_unknown_package"
+			},
+			host_cohort_version_mismatch: {
+				status: "unsupported",
+				reasonCode: "host_lock_version_mismatch"
+			},
+			host_cohort_integrity_mismatch: {
+				status: "unsupported",
+				reasonCode: "host_lock_integrity_mismatch"
+			},
+			host_cohort_mixed_graph: {
+				status: "unsupported",
+				reasonCode: "host_lock_cohort_mixed_graph"
+			},
+			host_cohort_incomplete_graph: {
+				status: "unavailable",
+				reasonCode: "host_lock_missing"
+			},
+			host_cohort_unbound_identity: {
+				status: "unsupported",
+				reasonCode: "host_lock_cohort_unbound_identity"
+			},
+			host_cohort_platform_not_audited: {
+				status: "unsupported",
+				reasonCode: "host_lock_cohort_platform_not_audited"
+			}
+		}[selection.reasonCode ?? "host_cohort_unbound_identity"];
+		return {
+			...baseResult,
+			status: failure.status,
+			goalAvailable: false,
+			reasonCode: failure.reasonCode
 		};
 	}
 	return {
@@ -3351,7 +3657,7 @@ function evaluateHostCapability(evaluation, request) {
 	};
 	const required = new Set(BASE_HOST_PACKAGES);
 	for (const group of groups) for (const name of HOST_CAPABILITY_PACKAGE_GROUPS[group]) required.add(name);
-	const result = statusForPackages(`action.${request.action}.${platform ?? "native"}.${profileKind ?? "unknown"}`, evaluation.packages, required);
+	const result = statusForPackages(`action.${request.action}.${platform ?? "native"}.${profileKind ?? "unknown"}`, evaluation.packages, required, cohortForEvaluation(evaluation));
 	if (evaluation.status !== "supported") return {
 		...result,
 		status: evaluation.status,
@@ -3368,7 +3674,7 @@ function evaluateHostCapability(evaluation, request) {
 function evaluateExternalWaitCapability(evaluation) {
 	const required = new Set(BASE_HOST_PACKAGES);
 	for (const name of HOST_CAPABILITY_PACKAGE_GROUPS.jobs) required.add(name);
-	const result = statusForPackages("boundary.external_wait.jobs", evaluation.packages, required);
+	const result = statusForPackages("boundary.external_wait.jobs", evaluation.packages, required, cohortForEvaluation(evaluation));
 	if (evaluation.status !== "supported") return {
 		...result,
 		status: evaluation.status,
@@ -3406,7 +3712,7 @@ function evaluateToolSurfaceCapability(evaluation, surface) {
 	if (surface === "pwsh") groups.push("terminal_windows");
 	const required = new Set(BASE_HOST_PACKAGES);
 	for (const group of groups) for (const name of HOST_CAPABILITY_PACKAGE_GROUPS[group]) required.add(name);
-	const result = statusForPackages(`tool.${surface}.${platform ?? "native"}`, evaluation.packages, required);
+	const result = statusForPackages(`tool.${surface}.${platform ?? "native"}`, evaluation.packages, required, cohortForEvaluation(evaluation));
 	if (evaluation.status !== "supported") return {
 		...result,
 		status: evaluation.status,
@@ -3414,10 +3720,10 @@ function evaluateToolSurfaceCapability(evaluation, surface) {
 	};
 	return result;
 }
-function safeHostLockDigest(packages, context = {}) {
+function safeHostLockDigest(packages, context = {}, cohort) {
 	try {
 		const capabilities = [
-			...SUPPORTED_HOST_MANIFEST.capabilities ?? [],
+			...cohort.capabilities,
 			...context.platform ? [{
 				name: "active_platform",
 				value: {
@@ -3441,7 +3747,8 @@ function safeHostLockDigest(packages, context = {}) {
 			}] : []
 		];
 		return hostLockDigest({
-			...SUPPORTED_HOST_MANIFEST,
+			manifestVersion: cohort.manifestVersion,
+			supportedGoalVersions: [...cohort.supportedGoalVersions],
 			capabilities,
 			packages: [...packages]
 		});
@@ -3514,7 +3821,7 @@ function bindExecutableIdentity(resolution, effect) {
 		identity: { ...resolution }
 	};
 }
-const DEFAULT_HOST_LOCK = evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => BASE_HOST_PACKAGES.has(row.name)));
+const DEFAULT_HOST_LOCK = evaluateHostLock(EXPECTED_HOST_PACKAGES);
 
 //#endregion
 //#region src/domain/goal-gate.ts
@@ -5459,7 +5766,8 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 
 //#endregion
 //#region src/domain/host-resolver.ts
-const CRITICAL_NAMES = EXPECTED_HOST_PACKAGES.map((row) => row.name);
+/** Names audited in any registered cohort; rows outside the union are unknown. */
+const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)))];
 const HOST_LOCK_MARKER_BEGIN = "# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>";
 const HOST_LOCK_MARKER_END = "# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<";
 var HostProfileError = class extends Error {
@@ -5825,4 +6133,4 @@ function verifyComposedHostLockDump(text, expected) {
 }
 
 //#endregion
-export { classifyUserInteraction as $, extractToolSubject as A, STOP_PROTOCOL_VERSION as At, DEFAULT_HOST_LOCK as B, COMMAND_SURFACE_MANIFEST as Bt, latestAssistantText as C, canonicalRegistryBase as Ct, supersedeItem as D, CERTIFICATE_VERSION as Dt, deriveProjection as E, ACTION_MANIFEST_VERSION as Et, parsePwshCommand as F, requestedTargetMatchesResolved as Ft, bindExecutableIdentity as G, sanitizeClauseText as Gt, GOAL_HOST_PACKAGES as H, canonicalizePath as Ht, parseShellCommand as I, semanticActionFromCommand as It, evaluateHostCapability as J, createProjection as Jt, bindLiveGoalCapability as K, sanitizeUrl as Kt, goalCompletionDenial as L, semanticActionFromText as Lt, withDurability as M, actionCompatible as Mt, canonicalArgvFromCommand as N, isStatefulAction as Nt, evidenceFromPersistedToolResult as O, SEMANTIC_ACTIONS as Ot, isRunExecutable as P, requestedTargetAuthorizesMutation as Pt, segmentAuthorityBlocks as Q, hasCurrentCertificate as R, validateActionManifest as Rt, isWholeTaskCompletionClaim as S, segmentClauses as St, PROTOCOL_V3_NOTICE as T, ACTION_MANIFEST as Tt, HOST_CAPABILITY_PACKAGE_GROUPS as U, digestStrings as Ut, EXPECTED_HOST_PACKAGES as V, validateManifest as Vt, SUPPORTED_HOST_MANIFEST as W, normalizeClause as Wt, evaluateToolSurfaceCapability as X, evaluateHostLock as Y, authorityCaptureCounts as Z, revalidateGitPrestate as _, classifyClause as _t, packageRowsFromActiveGraph as a, DEFAULT_RECOVERY_CHAR_BUDGET as at, decideTurnBoundary as b, extractOperation as bt, resolveInstalledHostLock as c, recoveryDigest as ct, commitIndexSnapshotDigest as d, evidenceCoverage as dt, availableBoundaryQualifications as et, commitTreeSnapshotDigest as f, evidenceMatchesItem as ft, parseGitCommandManifest as g, captureItem as gt, gitCommandMatchesTarget as h, captureClause as ht, injectActiveProfileHostLock as i, certifyCheckpoint as it, isDeterministicCheck as j, SUPPORTED_EVIDENCE_ADAPTERS as jt, extractTextContent as k, STATEFUL_ACTIONS as kt, verifyComposedHostLockDump as l, renderRecoveryPacket as lt, executeRevalidatedGitEffect as m, currentContractDigest as mt, hostLockContextFromComposedDump as n, isCurrentAcceptedBoundary as nt, packageRowsFromPnpmLock as o, closingHint as ot, createGitPrestateEnvelope as p, isVerifyingCapability as pt, evaluateExternalWaitCapability as q, sha256 as qt, hostLockRowsFromComposedDump as r, qualifyBoundary as rt, resolveActiveProfileHostLock as s, openItems$1 as st, HostProfileError as t, effectuateBoundary as tt, GIT_COMMAND_MANIFEST_IDS as u, bindingSatisfies as ut, verifiedLinearCommitReadback as v, extractArtifactPaths as vt, observeAssistantOutcome as w, npmEscapedPackageName as wt, decideTurnStopping as x, isInformationalMessage as xt, classifyCompletionClaim as y, extractMethod as yt, BASE_HOST_PACKAGES as z, validateActionTarget as zt };
+export { segmentAuthorityBlocks as $, extractToolSubject as A, STATEFUL_ACTIONS as At, DEFAULT_HOST_LOCK as B, validateActionTarget as Bt, latestAssistantText as C, segmentClauses as Ct, supersedeItem as D, ACTION_MANIFEST_VERSION as Dt, deriveProjection as E, ACTION_MANIFEST as Et, parsePwshCommand as F, requestedTargetAuthorizesMutation as Ft, bindExecutableIdentity as G, normalizeClause as Gt, GOAL_HOST_PACKAGES as H, validateManifest as Ht, parseShellCommand as I, requestedTargetMatchesResolved as It, evaluateHostCapability as J, sha256 as Jt, bindLiveGoalCapability as K, sanitizeClauseText as Kt, goalCompletionDenial as L, semanticActionFromCommand as Lt, withDurability as M, SUPPORTED_EVIDENCE_ADAPTERS as Mt, canonicalArgvFromCommand as N, actionCompatible as Nt, evidenceFromPersistedToolResult as O, CERTIFICATE_VERSION as Ot, isRunExecutable as P, isStatefulAction as Pt, authorityCaptureCounts as Q, hasCurrentCertificate as R, semanticActionFromText as Rt, isWholeTaskCompletionClaim as S, isInformationalMessage as St, PROTOCOL_V3_NOTICE as T, npmEscapedPackageName as Tt, HOST_CAPABILITY_PACKAGE_GROUPS as U, canonicalizePath as Ut, EXPECTED_HOST_PACKAGES as V, COMMAND_SURFACE_MANIFEST as Vt, HOST_COHORTS as W, digestStrings as Wt, evaluateToolSurfaceCapability as X, evaluateHostLock as Y, createProjection as Yt, selectHostCohort as Z, revalidateGitPrestate as _, captureItem as _t, packageRowsFromActiveGraph as a, certifyCheckpoint as at, decideTurnBoundary as b, extractMethod as bt, resolveInstalledHostLock as c, openItems$1 as ct, commitIndexSnapshotDigest as d, bindingSatisfies as dt, classifyUserInteraction as et, commitTreeSnapshotDigest as f, evidenceCoverage as ft, parseGitCommandManifest as g, captureClause as gt, gitCommandMatchesTarget as h, currentContractDigest as ht, injectActiveProfileHostLock as i, qualifyBoundary as it, isDeterministicCheck as j, STOP_PROTOCOL_VERSION as jt, extractTextContent as k, SEMANTIC_ACTIONS as kt, verifyComposedHostLockDump as l, recoveryDigest as lt, executeRevalidatedGitEffect as m, isVerifyingCapability as mt, hostLockContextFromComposedDump as n, effectuateBoundary as nt, packageRowsFromPnpmLock as o, DEFAULT_RECOVERY_CHAR_BUDGET as ot, createGitPrestateEnvelope as p, evidenceMatchesItem as pt, evaluateExternalWaitCapability as q, sanitizeUrl as qt, hostLockRowsFromComposedDump as r, isCurrentAcceptedBoundary as rt, resolveActiveProfileHostLock as s, closingHint as st, HostProfileError as t, availableBoundaryQualifications as tt, GIT_COMMAND_MANIFEST_IDS as u, renderRecoveryPacket as ut, verifiedLinearCommitReadback as v, classifyClause as vt, observeAssistantOutcome as w, canonicalRegistryBase as wt, decideTurnStopping as x, extractOperation as xt, classifyCompletionClaim as y, extractArtifactPaths as yt, BASE_HOST_PACKAGES as z, validateActionManifest as zt };

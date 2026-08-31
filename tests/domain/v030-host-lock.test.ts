@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  BASE_HOST_PACKAGES,
   bindExecutableIdentity,
   bindLiveGoalCapability,
   EXPECTED_HOST_PACKAGES,
@@ -39,10 +38,6 @@ function auditedRows(...names: string[]) {
   return EXPECTED_HOST_PACKAGES.filter((row) => selected.has(row.name))
 }
 
-function baseRows() {
-  return EXPECTED_HOST_PACKAGES.filter((row) => BASE_HOST_PACKAGES.has(row.name))
-}
-
 describe('v0.3 host graph and live capability binding', () => {
   it('locks the real update_goal provider and treats the Goal graph as a pair', () => {
     expect(EXPECTED_HOST_PACKAGES).toContainEqual({
@@ -50,7 +45,12 @@ describe('v0.3 host graph and live capability binding', () => {
       version: '0.1.1-rc.2',
       integrity: 'sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA==',
     })
-    expect(evaluateHostLock(withoutGoal()).status).toBe('supported')
+    // CG-DSH-001: a graph missing the whole Goal pair fails closed as an
+    // incomplete audited graph; a partial Goal pair still names its own gap.
+    const withoutGoalLock = evaluateHostLock(withoutGoal())
+    expect(withoutGoalLock.status).toBe('unavailable')
+    expect(withoutGoalLock.reasonCode).toBe('host_lock_missing')
+    expect(withoutGoalLock.missingPackages).toEqual(['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'])
     for (const omitted of ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal']) {
       const partial = evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => row.name !== omitted))
       expect(partial.status).toBe('unavailable')
@@ -71,114 +71,113 @@ describe('v0.3 host graph and live capability binding', () => {
   })
 
   it('evaluates POSIX and Windows terminal capabilities independently', () => {
-    const posixOnly = evaluateHostLock([
-      ...baseRows(),
-      ...auditedRows(
-        '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-tool-bash', '@deepseek-ai/dsh-shell',
-        '@deepseek-ai/dsh-subprocess-local', '@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-shell-env',
-      ),
-    ], { platform: 'posix', profileKind: 'headless' })
-    expect(posixOnly.status).toBe('supported')
-    expect(evaluateHostCapability(posixOnly, { action: 'commit' })).toMatchObject({ status: 'supported' })
-    expect(evaluateHostCapability(posixOnly, { action: 'commit', platform: 'windows' })).toMatchObject({
-      status: 'unavailable',
-      reasonCode: 'host_capability_missing',
+    // The audited graph is complete: both terminal stacks are installed, and
+    // the active platform selects which surface replay trusts.
+    const posixLock = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
+    expect(posixLock.status).toBe('supported')
+    expect(evaluateHostCapability(posixLock, { action: 'commit' })).toMatchObject({ status: 'supported' })
+    expect(evaluateHostCapability(posixLock, { action: 'commit', platform: 'windows' })).toMatchObject({ status: 'supported' })
+    expect(posixLock.capabilities.terminal_windows.status).toBe('supported')
+    expect(posixLock.capabilities.terminal_posix.status).toBe('supported')
+    // A pwsh result can never be evidence from the active posix surface.
+    expect(evaluateToolSurfaceCapability(posixLock, 'pwsh')).toMatchObject({
+      status: 'unsupported',
+      reasonCode: 'host_capability_request_unsupported',
     })
-    expect(posixOnly.capabilities.terminal_windows.status).toBe('unavailable')
-    expect(posixOnly.capabilities.terminal_posix.status).toBe('supported')
-    expect(evaluateHostCapability(posixOnly, { action: 'create' }).digest)
-      .not.toBe(evaluateHostCapability(posixOnly, { action: 'modify' }).digest)
+    expect(evaluateToolSurfaceCapability(posixLock, 'bash')).toMatchObject({ status: 'supported' })
+    expect(evaluateHostCapability(posixLock, { action: 'create' }).digest)
+      .not.toBe(evaluateHostCapability(posixLock, { action: 'modify' }).digest)
 
-    const windowsDrift = evaluateHostLock([
-      ...posixOnly.packages,
-      ...auditedRows('@deepseek-ai/dsh-tool-pwsh', '@deepseek-ai/dsh-pwsh-sandbox')
-        .map((row) => row.name === '@deepseek-ai/dsh-tool-pwsh' ? { ...row, integrity: 'sha512-drift' } : row),
-    ], { platform: 'posix', profileKind: 'headless' })
-    expect(windowsDrift.status).toBe('supported')
-    expect(evaluateHostCapability(windowsDrift, { action: 'commit' }).status).toBe('supported')
+    const windowsDrift = evaluateHostLock(
+      EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-tool-pwsh' ? { ...row, integrity: 'sha512-drift' } : row),
+      { platform: 'posix', profileKind: 'headless' },
+    )
+    // CG-DSH-001: an integrity-drifted optional row fails the whole lock
+    // closed, and every capability inherits the failed lock.
+    expect(windowsDrift.status).toBe('unsupported')
+    expect(windowsDrift.reasonCode).toBe('host_lock_integrity_mismatch')
+    expect(evaluateHostCapability(windowsDrift, { action: 'commit' }).status).toBe('unsupported')
     expect(evaluateHostCapability(windowsDrift, { action: 'commit', platform: 'windows' })).toMatchObject({
       status: 'unsupported',
       reasonCode: 'host_capability_integrity_mismatch',
     })
   })
 
-  it('layers install, apply, and Web control requirements without poisoning the base identity', () => {
-    const terminal = auditedRows(
-      '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-tool-bash', '@deepseek-ai/dsh-shell',
-      '@deepseek-ai/dsh-subprocess-local', '@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-shell-env',
-    )
-    const minimal = evaluateHostLock([...baseRows(), ...terminal], { platform: 'posix', profileKind: 'headless' })
-    expect(minimal.status).toBe('supported')
-    expect(evaluateHostCapability(minimal, { action: 'install' })).toMatchObject({ status: 'unavailable' })
-    const install = evaluateHostLock([
-      ...baseRows(), ...terminal, ...auditedRows('@deepseek-ai/dsh'),
-    ], { platform: 'posix', profileKind: 'headless' })
-    expect(evaluateHostCapability(install, { action: 'install' }).status).toBe('supported')
-    expect(evaluateHostCapability(install, { action: 'apply' })).toMatchObject({ status: 'unavailable' })
-    const apply = evaluateHostLock([
-      ...install.packages, ...auditedRows('@deepseek-ai/dsh-host-plugin-inventory'),
-    ], { platform: 'posix', profileKind: 'headless' })
-    expect(evaluateHostCapability(apply, { action: 'apply' }).status).toBe('supported')
-    expect(evaluateHostCapability(apply, { action: 'restart' })).toMatchObject({
+  it('supports the layered install/apply/Web requirements on the complete audited graph and fails closed on a missing controller', () => {
+    const full = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
+    expect(full.status).toBe('supported')
+    expect(evaluateHostCapability(full, { action: 'install' }).status).toBe('supported')
+    expect(evaluateHostCapability(full, { action: 'apply' }).status).toBe('supported')
+    expect(evaluateHostCapability(full, { action: 'restart' })).toMatchObject({
       status: 'unavailable',
       reasonCode: 'host_capability_request_unsupported',
     })
-    const webWithoutMarket = evaluateHostLock([
-      ...apply.packages,
-      ...auditedRows('@deepseek-ai/dsh-host-webserver', '@deepseek-ai/dsh-web-app'),
-    ], { platform: 'posix', profileKind: 'web' })
-    expect(webWithoutMarket.status).toBe('supported')
-    expect(evaluateHostCapability(webWithoutMarket, { action: 'apply' })).toMatchObject({
-      status: 'unavailable',
-      missingPackages: ['dshmarket'],
-    })
-    expect(evaluateHostCapability(webWithoutMarket, { action: 'restart' })).toMatchObject({ status: 'unavailable' })
-    const web = evaluateHostLock([
-      ...webWithoutMarket.packages, ...auditedRows('dshmarket'),
-    ], { platform: 'posix', profileKind: 'web' })
+    const web = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluateHostCapability(web, { action: 'apply' }).status).toBe('supported')
     expect(evaluateHostCapability(web, { action: 'restart' }).status).toBe('supported')
+    // CG-DSH-001: a graph missing the dshmarket controller row fails the
+    // whole lock closed and every capability inherits the failure.
+    const missingMarket = evaluateHostLock(
+      EXPECTED_HOST_PACKAGES.filter((row) => row.name !== 'dshmarket'),
+      { platform: 'posix', profileKind: 'web' },
+    )
+    expect(missingMarket.status).toBe('unavailable')
+    expect(missingMarket.reasonCode).toBe('host_lock_missing')
+    expect(missingMarket.missingPackages).toEqual(['dshmarket'])
+    expect(evaluateHostCapability(missingMarket, { action: 'apply' })).toMatchObject({
+      status: 'unavailable',
+      reasonCode: 'host_capability_missing',
+    })
+    expect(evaluateHostCapability(missingMarket, { action: 'commit' }).status).toBe('unavailable')
   })
 
   it('locks the filesystem registration/provider/sandbox chain without poisoning terminal actions', () => {
-    const terminalRows = auditedRows(
-      '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-tool-bash', '@deepseek-ai/dsh-shell',
-      '@deepseek-ai/dsh-subprocess-local', '@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-shell-env',
+    // CG-DSH-001: a graph missing the filesystem chain fails the whole lock
+    // closed (missing audited rows), so no action can certify from it.
+    const withoutFilesystem = evaluateHostLock(
+      EXPECTED_HOST_PACKAGES.filter((row) => !HOST_CAPABILITY_PACKAGE_GROUPS.filesystem.has(row.name)),
+      { platform: 'posix', profileKind: 'headless' },
     )
-    const withoutFilesystem = evaluateHostLock([...baseRows(), ...terminalRows], { platform: 'posix', profileKind: 'headless' })
-    expect(evaluateHostCapability(withoutFilesystem, { action: 'create' })).toMatchObject({
-      status: 'unavailable',
-      missingPackages: [...HOST_CAPABILITY_PACKAGE_GROUPS.filesystem].sort(),
-    })
+    expect(withoutFilesystem.status).toBe('unavailable')
+    expect(withoutFilesystem.reasonCode).toBe('host_lock_missing')
+    expect(withoutFilesystem.missingPackages).toEqual([...HOST_CAPABILITY_PACKAGE_GROUPS.filesystem].sort())
+    expect(evaluateHostCapability(withoutFilesystem, { action: 'create' }).status).toBe('unavailable')
     expect(evaluateHostCapability(withoutFilesystem, { action: 'modify' }).status).toBe('unavailable')
     expect(evaluateToolSurfaceCapability(withoutFilesystem, 'filesystem').status).toBe('unavailable')
-    expect(evaluateToolSurfaceCapability(withoutFilesystem, 'bash').status).toBe('supported')
+    expect(evaluateToolSurfaceCapability(withoutFilesystem, 'bash').status).toBe('unavailable')
 
-    const supported = evaluateHostLock([
-      ...withoutFilesystem.packages,
-      ...auditedRows(...HOST_CAPABILITY_PACKAGE_GROUPS.filesystem),
-    ], { platform: 'posix', profileKind: 'headless' })
+    const supported = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
     expect(evaluateHostCapability(supported, { action: 'create' }).status).toBe('supported')
     expect(evaluateHostCapability(supported, { action: 'modify' }).status).toBe('supported')
     expect(evaluateToolSurfaceCapability(supported, 'filesystem').status).toBe('supported')
 
-    const drifted = evaluateHostLock(supported.packages.map((row) => row.name === '@deepseek-ai/dsh-tool-fs'
+    const drifted = evaluateHostLock(EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-tool-fs'
       ? { ...row, integrity: 'sha512-drift' }
       : row), { platform: 'posix', profileKind: 'headless' })
-    expect(drifted.status).toBe('supported')
+    // CG-DSH-001: a drifted optional row fails the whole lock closed.
+    expect(drifted.status).toBe('unsupported')
+    expect(drifted.reasonCode).toBe('host_lock_integrity_mismatch')
     expect(evaluateHostCapability(drifted, { action: 'create' })).toMatchObject({
       status: 'unsupported', reasonCode: 'host_capability_integrity_mismatch',
     })
     expect(evaluateHostCapability(drifted, { action: 'modify' }).status).toBe('unsupported')
-    expect(evaluateHostCapability(drifted, { action: 'commit' }).status).toBe('supported')
-    expect(evaluateToolSurfaceCapability(drifted, 'bash').status).toBe('supported')
+    expect(evaluateHostCapability(drifted, { action: 'commit' }).status).toBe('unsupported')
+    expect(evaluateToolSurfaceCapability(drifted, 'bash').status).toBe('unsupported')
   })
 
   it('locks external_wait jobs API/provider/controller as an independent capability', () => {
-    const minimal = evaluateHostLock([
-      ...baseRows(), ...auditedRows('@deepseek-ai/dsh-agent-loop', ...HOST_CAPABILITY_PACKAGE_GROUPS.filesystem),
-    ], { platform: 'posix', profileKind: 'headless' })
-    expect(minimal.status).toBe('supported')
+    // CG-DSH-001: a graph missing the jobs trio fails the whole lock closed.
+    const minimal = evaluateHostLock(
+      EXPECTED_HOST_PACKAGES.filter((row) => !['@deepseek-ai/dsh-jobs', '@deepseek-ai/dsh-jobs-local', '@deepseek-ai/dsh-tool-jobs'].includes(row.name)),
+      { platform: 'posix', profileKind: 'headless' },
+    )
+    expect(minimal.status).toBe('unavailable')
+    expect(minimal.reasonCode).toBe('host_lock_missing')
+    expect(minimal.missingPackages).toEqual([
+      '@deepseek-ai/dsh-jobs',
+      '@deepseek-ai/dsh-jobs-local',
+      '@deepseek-ai/dsh-tool-jobs',
+    ])
     expect(evaluateExternalWaitCapability(minimal)).toMatchObject({
       status: 'unavailable',
       missingPackages: [
@@ -188,28 +187,26 @@ describe('v0.3 host graph and live capability binding', () => {
       ],
     })
 
-    const jobsRows = auditedRows(
-      '@deepseek-ai/dsh-jobs', '@deepseek-ai/dsh-jobs-local', '@deepseek-ai/dsh-tool-jobs',
-    )
-    const supported = evaluateHostLock([...minimal.packages, ...jobsRows], { platform: 'posix', profileKind: 'headless' })
+    const supported = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
     expect(evaluateExternalWaitCapability(supported)).toMatchObject({
       status: 'supported',
       id: 'boundary.external_wait.jobs',
     })
-    // A drifted jobs provider closes only external_wait; the base identity and
-    // unrelated action capability remain usable.
-    const drifted = evaluateHostLock([
-      ...minimal.packages,
-      ...jobsRows.map((row) => row.name === '@deepseek-ai/dsh-jobs-local'
+    // A version-drifted jobs provider fails the whole lock closed (CG-DSH-001);
+    // external_wait and every other capability inherit the failed lock.
+    const drifted = evaluateHostLock(
+      EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-jobs-local'
         ? { ...row, version: '0.1.1-rc.3' }
         : row),
-    ], { platform: 'posix', profileKind: 'headless' })
-    expect(drifted.status).toBe('supported')
+      { platform: 'posix', profileKind: 'headless' },
+    )
+    expect(drifted.status).toBe('unsupported')
+    expect(drifted.reasonCode).toBe('host_lock_version_mismatch')
     expect(evaluateExternalWaitCapability(drifted)).toMatchObject({
       status: 'unsupported',
       reasonCode: 'host_capability_version_mismatch',
     })
-    expect(evaluateHostCapability(drifted, { action: 'create' }).status).toBe('supported')
+    expect(evaluateHostCapability(drifted, { action: 'create' }).status).toBe('unsupported')
   })
 
   it('binds git/npm/pnpm/dsh realpath and version across resolution and effect', () => {
@@ -256,18 +253,20 @@ describe('v0.3 host graph and live capability binding', () => {
   })
 
   it('rejects both injected-graph/live-Goal capability inconsistencies', () => {
-    expect(bindLiveGoalCapability(evaluateHostLock(withoutGoal()), true)).toMatchObject({
-      status: 'unavailable',
-      reasonCode: 'host_lock_goal_capability_mismatch',
-      liveGoalAvailable: true,
-    })
+    // The complete audited graph carries the Goal pair, so a missing live
+    // Goal peer fails the liveness binding.
     expect(bindLiveGoalCapability(evaluateHostLock(EXPECTED_HOST_PACKAGES), false)).toMatchObject({
       status: 'unavailable',
       reasonCode: 'host_lock_goal_capability_mismatch',
       liveGoalAvailable: false,
     })
-    expect(bindLiveGoalCapability(evaluateHostLock(withoutGoal()), false).status).toBe('supported')
     expect(bindLiveGoalCapability(evaluateHostLock(EXPECTED_HOST_PACKAGES), true).status).toBe('supported')
+    // A graph missing the Goal pair cannot bind live Goal state at all: the
+    // lock is already unavailable and the binding keeps that status.
+    const missing = bindLiveGoalCapability(evaluateHostLock(withoutGoal()), true)
+    expect(missing.status).toBe('unavailable')
+    expect(missing.reasonCode).toBe('host_lock_missing')
+    expect(missing.liveGoalAvailable).toBe(true)
   })
 })
 

@@ -5,15 +5,15 @@ import {
   deriveProjection, evidenceFromPersistedToolResult, extractOperation, goalCompletionDenial, isDeterministicCheck,
   isWholeTaskCompletionClaim, latestAssistantText, normalizeClause, parsePwshCommand, parseShellCommand, renderRecoveryPacket, sha256,
   sanitizeClauseText, sanitizeUrl, withDurability, COMMAND_SURFACE_MANIFEST, isInformationalMessage, validateManifest,
-  BASE_HOST_PACKAGES, EXPECTED_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, evaluateHostLock,
+  EXPECTED_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, evaluateHostLock,
 } from '../../src/domain/index.js'
 
 const OPT_IN = { activation: 'opt-in' as const }
 const ALWAYS = { activation: 'always' as const }
-const hostFor = (group: keyof typeof HOST_CAPABILITY_PACKAGE_GROUPS) => {
-  const names = new Set([...BASE_HOST_PACKAGES, ...HOST_CAPABILITY_PACKAGE_GROUPS.agent_loop, ...HOST_CAPABILITY_PACKAGE_GROUPS[group]])
-  return evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => names.has(row.name)), { platform: 'posix', profileKind: 'headless' })
-}
+// CG-DSH-001: locks are the complete audited graph; per-group gating happens
+// through capability requests, not by omitting rows from the host lock.
+const hostFor = (_group: keyof typeof HOST_CAPABILITY_PACKAGE_GROUPS) =>
+  evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
 const POSIX_TERMINAL_HOST = hostFor('terminal_posix')
 const POSIX_FILESYSTEM_HOST = hostFor('filesystem')
 

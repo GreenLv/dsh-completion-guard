@@ -2,7 +2,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  EXPECTED_HOST_PACKAGES,
+  HOST_COHORTS,
   evaluateHostLock,
   type HostLockEvaluation,
   type HostPlatform,
@@ -10,7 +10,8 @@ import {
 } from './host-lock.js'
 import type { PackageRow } from './digest.js'
 
-const CRITICAL_NAMES: readonly string[] = EXPECTED_HOST_PACKAGES.map((row) => row.name)
+/** Names audited in any registered cohort; rows outside the union are unknown. */
+const CRITICAL_NAMES: readonly string[] = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)))]
 const HOST_LOCK_MARKER_BEGIN = '# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>'
 const HOST_LOCK_MARKER_END = '# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<'
 

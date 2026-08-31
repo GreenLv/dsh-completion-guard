@@ -78,12 +78,6 @@ interface PackageRow {
   version?: string;
   integrity?: string;
 }
-interface HostLockManifest {
-  manifestVersion: number;
-  supportedGoalVersions: string[];
-  capabilities?: CapabilityRow[];
-  packages?: PackageRow[];
-}
 //#endregion
 //#region src/domain/types.d.ts
 type GuardItemKind = "requirement" | "acceptance" | "prohibition";
@@ -461,11 +455,36 @@ declare function currentContractDigest(projection: GuardProjection): string;
 type HostLockStatus = "supported" | "unsupported" | "unavailable";
 type HostPlatform = "posix" | "windows";
 type HostProfileKind = "headless" | "web";
-declare const SUPPORTED_HOST_MANIFEST: HostLockManifest;
+interface HostCohort {
+  /** Stable cohort identity; bound into every hostLockDigest via `host_cohort`. */
+  id: string;
+  manifestVersion: number;
+  supportedGoalVersions: string[];
+  /**
+  * Platforms where this cohort's exact package graph was extracted from a
+  * native host and audited. Other platforms fail closed; integrity must not
+  * be inferred across platforms.
+  */
+  auditedPlatforms: readonly HostPlatform[];
+  packages: PackageRow[];
+  capabilities: CapabilityRow[];
+}
 /**
-* Audited package identities. This is a catalogue, not one indivisible lock:
-* evaluateHostLock requires only BASE_HOST_PACKAGES globally and evaluates the
-* remaining action/platform groups independently.
+* Audited host cohort registry. The rc.2 cohort keeps the exact identities
+* audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
+* exact package graph extracted from a native macOS DSH `0.1.2-alpha.2` /
+* dshmarket `1.38.1` runtime; its Windows registration is pending a native
+* Windows extraction, so it is audited for posix only and fails closed
+* elsewhere. Graphs that mix cohorts, lack rows, duplicate rows, or use
+* versions outside both cohorts fail closed.
+*/
+declare const HOST_COHORTS: readonly HostCohort[];
+/**
+* rc.2 audited package identities (first registry cohort). The audited
+* cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
+* duplicated, unknown-version, unbound, OR MISSING row fails the whole lock
+* closed (`host_lock_missing`); no capability inherits independence from a
+* partially present graph.
 */
 declare const EXPECTED_HOST_PACKAGES: PackageRow[];
 declare const BASE_HOST_PACKAGES: ReadonlySet<string>;
@@ -484,18 +503,50 @@ interface HostLockEvaluation {
   status: HostLockStatus;
   digest: string;
   goalAvailable: boolean;
-  reasonCode?: "host_lock_missing" | "host_lock_version_mismatch" | "host_lock_integrity_mismatch" | "host_lock_unknown_package" | "host_lock_duplicate_package" | "host_lock_goal_graph_incomplete" | "host_lock_goal_capability_mismatch";
+  reasonCode?: "host_lock_missing" | "host_lock_version_mismatch" | "host_lock_integrity_mismatch" | "host_lock_unknown_package" | "host_lock_duplicate_package" | "host_lock_goal_graph_incomplete" | "host_lock_goal_capability_mismatch" | "host_lock_cohort_mixed_graph" | "host_lock_cohort_unbound_identity" | "host_lock_cohort_platform_not_audited";
   packages: PackageRow[];
   capabilities: Record<HostCapabilityId, HostCapabilityEvaluation>;
   platform?: HostPlatform;
   profileKind?: HostProfileKind;
   liveGoalAvailable?: boolean;
+  /** Readback of the audited cohort the supplied graph was evaluated against. */
+  cohortId?: string;
+  /** Audited cohort rows absent from the supplied graph (diagnostic). */
+  missingPackages?: string[];
 }
 interface HostLockContext {
   platform?: HostPlatform;
   profileKind?: HostProfileKind;
   capabilityId?: string;
 }
+type HostCohortSelectionReason = "host_cohort_unknown_package" | "host_cohort_version_mismatch" | "host_cohort_integrity_mismatch" | "host_cohort_mixed_graph" | "host_cohort_incomplete_graph" | "host_cohort_unbound_identity" | "host_cohort_platform_not_audited";
+interface HostCohortSelection {
+  /**
+  * Cohort used for expected-row lookups and digest identity. When the graph
+  * does not consistently match one cohort this is the deterministic
+  * closest-cohort fallback (most exact row matches, then registry order) and
+  * `consistent` is false, so evaluation fails closed downstream.
+  */
+  cohort: HostCohort;
+  /**
+  * True only when every supplied row exactly matches the selected cohort
+  * AND every audited cohort row is present: the audited cohort is an atomic
+  * whole-graph contract, so a graph missing audited rows (missing packages)
+  * never selects consistently.
+  */
+  consistent: boolean;
+  reasonCode?: HostCohortSelectionReason;
+}
+/**
+* Atomically select the audited cohort for one supplied package graph. A
+* graph matches a cohort only when every row carries version and integrity,
+* each exactly equals that cohort's audited row, and the graph covers the
+* complete audited cohort (missing packages fail closed); graphs that mix
+* rows from different cohorts, use versions unknown to the registry, or
+* target a platform the cohort was never audited on never select
+* consistently.
+*/
+declare function selectHostCohort(rows: readonly PackageRow[], platform?: HostPlatform): HostCohortSelection;
 declare function evaluateHostLock(rows: readonly PackageRow[], context?: HostLockContext): HostLockEvaluation;
 interface HostCapabilityRequest {
   action: SemanticAction;
@@ -954,4 +1005,4 @@ declare function latestAssistantText(events: readonly {
 //#region src/domain/supersession.d.ts
 declare function supersedeItem(items: Map<string, GuardItem>, oldId: string, replacement: GuardItem): boolean;
 //#endregion
-export { gitCommandMatchesTarget as $, VerificationContract as $n, UserInteractionKind as $t, hostLockRowsFromComposedDump as A, DerivedEnvelope as An, HOST_CAPABILITY_PACKAGE_GROUPS as At, GitCommandManifest as B, GuardEvidence as Bn, SUPPORTED_HOST_MANIFEST as Bt, CommandSurfaceManifest as C, qualifyBoundary as Cn, digestStrings as Cr, AuditedExecutable as Ct, ActiveProfileHostLock as D, DeriveConfig as Dn, sha256 as Dr, ExecutableIdentity as Dt, validateManifest as E, DeferAuthorization as En, sanitizeUrl as Er, EXPECTED_HOST_PACKAGES as Et, resolveInstalledHostLock as F, ExpectedTransition as Fn, HostLockEvaluation as Ft, GitPrestateCheck as G, GuardOperation as Gn, evaluateHostLock as Gt, GitCommandRejected as H, GuardItem as Hn, bindLiveGoalCapability as Ht, verifyComposedHostLockDump as I, ExternalOperation as In, HostLockStatus as It, LinearCommitReadback as J, PersistenceAuthorization as Jn, AuthorityBlock as Jt, GitPrestateEnvelope as K, GuardProjection as Kn, evaluateToolSurfaceCapability as Kt, GIT_COMMAND_MANIFEST_IDS as L, GoalRef as Ln, HostPlatform as Lt, packageRowsFromActiveGraph as M, EvidenceOutcome as Mn, HostCapabilityId as Mt, packageRowsFromPnpmLock as N, EvidenceParseStatus as Nn, HostCapabilityRequest as Nt, HostProfileError as O, DeriveResult as On, ExecutableIdentityBinding as Ot, resolveActiveProfileHostLock as P, EvidenceRole as Pn, HostLockContext as Pt, executeRevalidatedGitEffect as Q, TargetValue as Qn, segmentAuthorityBlocks as Qt, GitAdapterAction as R, GuardBoundary as Rn, HostProfileKind as Rt, COMMAND_SURFACE_MANIFEST as S, isCurrentAcceptedBoundary as Sn, canonicalizePath as Sr, deriveProjection as St, OperationVerbEntry as T, BoundaryQualificationKind as Tn, sanitizeClauseText as Tr, DEFAULT_HOST_LOCK as Tt, GitEffectExecution as U, GuardItemKind as Un, evaluateExternalWaitCapability as Ut, GitCommandParseResult as V, GuardIntegrity as Vn, bindExecutableIdentity as Vt, GitEffectRunner as W, GuardItemStatus as Wn, evaluateHostCapability as Wt, commitTreeSnapshotDigest as X, TargetCaptureStatus as Xn, AuthorityKind as Xt, commitIndexSnapshotDigest as Y, TargetCaptureReasonCode as Yn, AuthorityBlockKind as Yt, createGitPrestateEnvelope as Z, TargetTuple as Zn, authorityCaptureCounts as Zt, EvidenceFacetCoverage as _, BoundaryRequest as _n, requestedTargetMatchesResolved as _r, extractTextContent as _t, classifyCompletionClaim as a, ClassifiedClause as an, ActionManifest as ar, ParsedShell as at, evidenceMatchesItem as b, availableBoundaryQualifications as bn, validateActionManifest as br, withDurability as bt, isWholeTaskCompletionClaim as c, captureItem as cn, SEMANTIC_ACTIONS as cr, isRunExecutable as ct, DEFAULT_RECOVERY_CHAR_BUDGET as d, extractMethod as dn, SUPPORTED_EVIDENCE_ADAPTERS as dr, goalCompletionDenial as dt, classifyUserInteraction as en, WaitAuthorization as er, parseGitCommandManifest as et, RecoveryOptions as f, extractOperation as fn, SemanticAction as fr, hasCurrentCertificate as ft, renderRecoveryPacket as g, BoundaryQualification as gn, requestedTargetAuthorizesMutation as gr, evidenceFromPersistedToolResult as gt, recoveryDigest as h, BoundaryEffectuation as hn, isStatefulAction as hr, ToolSubject as ht, TurnStoppingDecision as i, CaptureScope as in, ACTION_MANIFEST_VERSION as ir, CanonicalCommandSurface as it, injectActiveProfileHostLock as j, EvidenceBinding as jn, HostCapabilityEvaluation as jt, hostLockContextFromComposedDump as k, DeriveScope as kn, GOAL_HOST_PACKAGES as kt, latestAssistantText as l, classifyClause as ln, STATEFUL_ACTIONS as lr, parsePwshCommand as lt, openItems as m, segmentClauses as mn, actionCompatible as mr, ToolResultInput as mt, AssistantOutcomeObservation as n, RejectedBinding as nn, PackageRow as nr, verifiedLinearCommitReadback as nt, decideTurnBoundary as o, ClauseSegment as on, ActionSpec as or, ShellParseStatus as ot, closingHint as p, isInformationalMessage as pn, StatefulAction as pr, ToolCallInput as pt, GitTargetIdentity as q, HostStatus as qn, currentContractDigest as qt, CompletionDisposition as r, certifyCheckpoint as rn, ACTION_MANIFEST as rr, CanonicalArgv as rt, decideTurnStopping as s, captureClause as sn, CERTIFICATE_VERSION as sr, canonicalArgvFromCommand as st, supersedeItem as t, CheckpointResult as tn, createProjection as tr, revalidateGitPrestate as tt, observeAssistantOutcome as u, extractArtifactPaths as un, STOP_PROTOCOL_VERSION as ur, parseShellCommand as ut, bindingSatisfies as v, GoalActivationState as vn, semanticActionFromCommand as vr, extractToolSubject as vt, ManifestIssue as w, BoundaryDisposition as wn, normalizeClause as wr, BASE_HOST_PACKAGES as wt, isVerifyingCapability as x, effectuateBoundary as xn, validateActionTarget as xr, PROTOCOL_V3_NOTICE as xt, evidenceCoverage as y, GoalBoundaryAccess as yn, semanticActionFromText as yr, isDeterministicCheck as yt, GitCommandAccepted as z, GuardCheckpoint as zn, HostToolSurface as zt };
+export { gitCommandMatchesTarget as $, TargetCaptureReasonCode as $n, AuthorityBlockKind as $t, hostLockRowsFromComposedDump as A, DeferAuthorization as An, sanitizeUrl as Ar, HOST_CAPABILITY_PACKAGE_GROUPS as At, GitCommandManifest as B, ExternalOperation as Bn, HostLockStatus as Bt, CommandSurfaceManifest as C, GoalBoundaryAccess as Cn, semanticActionFromText as Cr, AuditedExecutable as Ct, ActiveProfileHostLock as D, qualifyBoundary as Dn, digestStrings as Dr, ExecutableIdentity as Dt, validateManifest as E, isCurrentAcceptedBoundary as En, canonicalizePath as Er, EXPECTED_HOST_PACKAGES as Et, resolveInstalledHostLock as F, EvidenceBinding as Fn, HostCohort as Ft, GitPrestateCheck as G, GuardIntegrity as Gn, bindLiveGoalCapability as Gt, GitCommandRejected as H, GuardBoundary as Hn, HostProfileKind as Ht, verifyComposedHostLockDump as I, EvidenceOutcome as In, HostCohortSelection as It, LinearCommitReadback as J, GuardItemStatus as Jn, evaluateHostLock as Jt, GitPrestateEnvelope as K, GuardItem as Kn, evaluateExternalWaitCapability as Kt, GIT_COMMAND_MANIFEST_IDS as L, EvidenceParseStatus as Ln, HostCohortSelectionReason as Lt, packageRowsFromActiveGraph as M, DeriveResult as Mn, HostCapabilityEvaluation as Mt, packageRowsFromPnpmLock as N, DeriveScope as Nn, HostCapabilityId as Nt, HostProfileError as O, BoundaryDisposition as On, normalizeClause as Or, ExecutableIdentityBinding as Ot, resolveActiveProfileHostLock as P, DerivedEnvelope as Pn, HostCapabilityRequest as Pt, executeRevalidatedGitEffect as Q, PersistenceAuthorization as Qn, AuthorityBlock as Qt, GitAdapterAction as R, EvidenceRole as Rn, HostLockContext as Rt, COMMAND_SURFACE_MANIFEST as S, GoalActivationState as Sn, semanticActionFromCommand as Sr, deriveProjection as St, OperationVerbEntry as T, effectuateBoundary as Tn, validateActionTarget as Tr, DEFAULT_HOST_LOCK as Tt, GitEffectExecution as U, GuardCheckpoint as Un, HostToolSurface as Ut, GitCommandParseResult as V, GoalRef as Vn, HostPlatform as Vt, GitEffectRunner as W, GuardEvidence as Wn, bindExecutableIdentity as Wt, commitTreeSnapshotDigest as X, GuardProjection as Xn, selectHostCohort as Xt, commitIndexSnapshotDigest as Y, GuardOperation as Yn, evaluateToolSurfaceCapability as Yt, createGitPrestateEnvelope as Z, HostStatus as Zn, currentContractDigest as Zt, EvidenceFacetCoverage as _, isInformationalMessage as _n, StatefulAction as _r, extractTextContent as _t, classifyCompletionClaim as a, CheckpointResult as an, createProjection as ar, ParsedShell as at, evidenceMatchesItem as b, BoundaryQualification as bn, requestedTargetAuthorizesMutation as br, withDurability as bt, isWholeTaskCompletionClaim as c, CaptureScope as cn, ACTION_MANIFEST_VERSION as cr, isRunExecutable as ct, DEFAULT_RECOVERY_CHAR_BUDGET as d, captureClause as dn, CERTIFICATE_VERSION as dr, goalCompletionDenial as dt, AuthorityKind as en, TargetCaptureStatus as er, parseGitCommandManifest as et, RecoveryOptions as f, captureItem as fn, SEMANTIC_ACTIONS as fr, hasCurrentCertificate as ft, renderRecoveryPacket as g, extractOperation as gn, SemanticAction as gr, evidenceFromPersistedToolResult as gt, recoveryDigest as h, extractMethod as hn, SUPPORTED_EVIDENCE_ADAPTERS as hr, ToolSubject as ht, TurnStoppingDecision as i, classifyUserInteraction as in, WaitAuthorization as ir, CanonicalCommandSurface as it, injectActiveProfileHostLock as j, DeriveConfig as jn, sha256 as jr, HOST_COHORTS as jt, hostLockContextFromComposedDump as k, BoundaryQualificationKind as kn, sanitizeClauseText as kr, GOAL_HOST_PACKAGES as kt, latestAssistantText as l, ClassifiedClause as ln, ActionManifest as lr, parsePwshCommand as lt, openItems as m, extractArtifactPaths as mn, STOP_PROTOCOL_VERSION as mr, ToolResultInput as mt, AssistantOutcomeObservation as n, segmentAuthorityBlocks as nn, TargetValue as nr, verifiedLinearCommitReadback as nt, decideTurnBoundary as o, RejectedBinding as on, PackageRow as or, ShellParseStatus as ot, closingHint as p, classifyClause as pn, STATEFUL_ACTIONS as pr, ToolCallInput as pt, GitTargetIdentity as q, GuardItemKind as qn, evaluateHostCapability as qt, CompletionDisposition as r, UserInteractionKind as rn, VerificationContract as rr, CanonicalArgv as rt, decideTurnStopping as s, certifyCheckpoint as sn, ACTION_MANIFEST as sr, canonicalArgvFromCommand as st, supersedeItem as t, authorityCaptureCounts as tn, TargetTuple as tr, revalidateGitPrestate as tt, observeAssistantOutcome as u, ClauseSegment as un, ActionSpec as ur, parseShellCommand as ut, bindingSatisfies as v, segmentClauses as vn, actionCompatible as vr, extractToolSubject as vt, ManifestIssue as w, availableBoundaryQualifications as wn, validateActionManifest as wr, BASE_HOST_PACKAGES as wt, isVerifyingCapability as x, BoundaryRequest as xn, requestedTargetMatchesResolved as xr, PROTOCOL_V3_NOTICE as xt, evidenceCoverage as y, BoundaryEffectuation as yn, isStatefulAction as yr, isDeterministicCheck as yt, GitCommandAccepted as z, ExpectedTransition as zn, HostLockEvaluation as zt };

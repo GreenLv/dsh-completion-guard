@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.3.2 - Unreleased (source candidate)
+
+### Added
+
+- **Two exact DSH setups are recognized.** The existing `0.1.1-rc.2` + dshmarket `1.36.0` setup remains supported on macOS and Windows. A second setup adds `0.1.2-alpha.2` + dshmarket `1.38.1`, checked on macOS only; it remains unavailable on Windows until a native Windows package list is recorded.
+- **The whole package set must match.** Every required package must appear once with the expected version and integrity. Missing, mixed, duplicate, unidentified, or unknown packages make the entire host unavailable instead of leaving part of the Guard enabled. Status now lists missing packages, and the selected setup is included in the host-lock digest, so changing setups invalidates earlier certificates.
+
+### Changed
+
+- Peer dependencies accept only the two checked version sets (`0.1.1-rc.2 || 0.1.2-alpha.2`, Cordis `4.0.1 || 4.0.2`). A source comparison found no change in the DSH events, Goal calls, tool definitions, or terminal results that the Guard uses.
+
+### Validation
+
+- The complete 20-file suite passes 359 tests with one Windows-only skip on macOS. The daily macOS web profile reports the alpha.2 setup as supported, including Web control and Goal support. Package dry-run reports the expected 26 files, and the release-pack tests cover exact commit binding, repeatable output, and dirty-tree rejection.
+- Still pending: a frozen package from the committed tree, isolated Web and Headless installation, native macOS and Windows checks of that exact package, CI, tag, npm publication, GitHub Release, and public readback. The rc.2 setup remains the only Windows-audited path.
+
 ## 0.3.1 - 2026-08-31
 
 ### Fixed

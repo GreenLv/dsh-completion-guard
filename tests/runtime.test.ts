@@ -33,7 +33,9 @@ function rawAppend(session: Session): (type: string, data: unknown, opts?: unkno
 
 const OPT_IN = { activation: 'opt-in' as const }
 const ALWAYS = { activation: 'always' as const }
-const TEST_HOST_ROWS = EXPECTED_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh-goal' && row.name !== '@deepseek-ai/dsh-tool-goal')
+// CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
+// test locks carry the complete audited rc.2 graph.
+const TEST_HOST_ROWS = EXPECTED_HOST_PACKAGES
 const TEST_HOST_LOCK = evaluateHostLock(TEST_HOST_ROWS, { platform: 'posix', profileKind: 'web' })
 
 function enableCommand(session: Session, subcommand = 'on') {
@@ -671,6 +673,26 @@ function fakeCtx() {
   }
 }
 
+// CG-DSH-001: test locks carry the complete audited graph, whose Goal rows
+// make goalAvailable true — so the harness binds a matching live Goal peer
+// and the pinned update_goal tool the liveness consistency check requires.
+const PINNED_UPDATE_GOAL_TOOL = {
+  name: 'update_goal',
+  execute: () => undefined,
+  parameters: {
+    type: 'object',
+    required: ['goal_id', 'revision', 'action'],
+    properties: {
+      goal_id: { type: 'string' },
+      revision: { type: 'number' },
+      action: { type: 'string', enum: ['edit', 'pause', 'resume', 'complete', 'blocked'] },
+      objective: { type: 'string' },
+      max_goal_rounds: { type: 'number' },
+      blocked_reason: { type: 'string' },
+    },
+  },
+}
+
 function guardedAgent(session: Session) {
   const registered: CheckpointTool[] = []
   const steered: unknown[] = []
@@ -681,7 +703,11 @@ function guardedAgent(session: Session) {
       tools: {
         register: (tool: CheckpointTool) => registered.push(tool),
         guard: () => {},
+        get: (name: string) => (name === 'update_goal' ? PINNED_UPDATE_GOAL_TOOL : undefined),
       },
+      get: (name: string) => (name === 'goals'
+        ? { get: () => undefined, disarm: async () => undefined }
+        : undefined),
     },
   }
   return { agent: agent as unknown as Agent, registered, steered }

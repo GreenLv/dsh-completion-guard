@@ -17,11 +17,10 @@ function rows(...names: Iterable<string>[]) {
   return EXPECTED_HOST_PACKAGES.filter((row) => selected.has(row.name))
 }
 
-function hostWith(...groups: Array<keyof typeof HOST_CAPABILITY_PACKAGE_GROUPS>) {
-  return evaluateHostLock(rows(
-    BASE_HOST_PACKAGES,
-    ...groups.map((group) => HOST_CAPABILITY_PACKAGE_GROUPS[group]),
-  ), { platform: 'posix', profileKind: 'headless' })
+// CG-DSH-001: locks are the complete audited graph; per-group gating happens
+// through capability requests and surface contexts, not by omitting rows.
+function hostWith(..._groups: Array<keyof typeof HOST_CAPABILITY_PACKAGE_GROUPS>) {
+  return evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
 }
 
 function toolEvents(name: string, args: Record<string, unknown>, meta: Record<string, unknown> = {}) {
@@ -129,11 +128,7 @@ describe('v0.3 pinned filesystem tool capability', () => {
       parseStatus: 'adapter_unavailable', reasonCode: 'host_terminal_capability_missing', outcome: 'unknown', capabilities: [],
     })
 
-    const windows = evaluateHostLock(rows(
-      BASE_HOST_PACKAGES,
-      HOST_CAPABILITY_PACKAGE_GROUPS.agent_loop,
-      HOST_CAPABILITY_PACKAGE_GROUPS.terminal_windows,
-    ), { platform: 'windows', profileKind: 'headless' })
+    const windows = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'windows', profileKind: 'headless' })
     const pwsh = deriveProjection(toolEvents('pwsh', { command: 'pnpm test', workdir: 'C:\\bounded-workspace' }),
       { activation: 'opt-in' }, { cwd: 'C:\\bounded-workspace' }, true, windows).projection.evidence.get('E0001')!
     const wrongWindowsTool = deriveProjection(toolEvents('bash', { command: 'pnpm test', workdir: 'C:\\bounded-workspace' }),
@@ -143,17 +138,22 @@ describe('v0.3 pinned filesystem tool capability', () => {
       parseStatus: 'adapter_unavailable', reasonCode: 'host_tool_platform_mismatch', outcome: 'unknown', capabilities: [],
     })
 
-    const filesystemDrift = evaluateHostLock([
-      ...posix.packages,
-      ...rows(HOST_CAPABILITY_PACKAGE_GROUPS.filesystem).map((row) => row.name === '@deepseek-ai/dsh-fs-sandbox'
+    const filesystemDrift = evaluateHostLock(
+      EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-fs-sandbox'
         ? { ...row, version: '0.1.1-rc.3' }
         : row),
-    ], { platform: 'posix', profileKind: 'headless' })
+      { platform: 'posix', profileKind: 'headless' },
+    )
     const stillBash = deriveProjection(toolEvents('bash', { command: 'pnpm test', workdir: '/bounded-workspace' }),
       { activation: 'opt-in' }, { cwd: '/bounded-workspace' }, true, filesystemDrift).projection.evidence.get('E0001')!
     const blockedWrite = deriveProjection(toolEvents('edit', { file_path: 'a.txt', old_string: 'a', new_string: 'b' }),
       { activation: 'opt-in' }, { cwd: '/bounded-workspace' }, true, filesystemDrift).projection.evidence.get('E0001')!
-    expect(stillBash).toMatchObject({ parseStatus: 'supported', outcome: 'success' })
+    // CG-DSH-001: a version-drifted optional filesystem row fails the whole
+    // lock closed, so bash gating inherits the failed lock as well.
+    expect(stillBash).toMatchObject({
+      parseStatus: 'adapter_unavailable', reasonCode: 'host_terminal_capability_unavailable', outcome: 'unknown',
+      capabilities: [],
+    })
     expect(blockedWrite).toMatchObject({
       parseStatus: 'adapter_unavailable', reasonCode: 'host_filesystem_capability_version_mismatch', outcome: 'unknown',
     })

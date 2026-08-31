@@ -1,66 +1,491 @@
 {
-  "manifestVersion": 1,
-  "supportedGoalVersions": ["0.1.1-rc.2"],
-  "capabilities": {
-    "goal_complete_precommit_guard": "required",
-    "goal_disarm_readback": "required",
-    "session_flush_before_control": "required",
-    "tool_guard_monotonic": "required",
-    "host_capability_model": "action-platform-v1",
-    "external_wait_jobs_readback": "dsh.jobs.v1",
-    "filesystem_tool_contract": "dsh.fs-tools.v1",
-    "packageGroups": {
-      "base": ["@deepseek-ai/cordis", "@deepseek-ai/dsh-agent", "@deepseek-ai/dsh-commands", "@deepseek-ai/dsh-llm", "@deepseek-ai/dsh-session", "@deepseek-ai/dsh-tools"],
-      "goal": ["@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal"],
-      "agent_loop": ["@deepseek-ai/dsh-agent-loop"],
-      "terminal_posix": ["@deepseek-ai/dsh-tool-bash", "@deepseek-ai/dsh-shell", "@deepseek-ai/dsh-subprocess-local", "@deepseek-ai/dsh-bash-sandbox", "@deepseek-ai/dsh-shell-env"],
-      "terminal_windows": ["@deepseek-ai/dsh-tool-pwsh", "@deepseek-ai/dsh-shell", "@deepseek-ai/dsh-subprocess-local", "@deepseek-ai/dsh-pwsh-sandbox", "@deepseek-ai/dsh-shell-env"],
-      "dsh_cli": ["@deepseek-ai/dsh"],
-      "plugin_inventory": ["@deepseek-ai/dsh-host-plugin-inventory"],
-      "web_control": ["dshmarket", "@deepseek-ai/dsh-host-webserver", "@deepseek-ai/dsh-web-app"],
-      "jobs": ["@deepseek-ai/dsh-jobs", "@deepseek-ai/dsh-jobs-local", "@deepseek-ai/dsh-tool-jobs"],
-      "filesystem": ["@deepseek-ai/dsh-tool-fs", "@deepseek-ai/dsh-fs", "@deepseek-ai/dsh-fs-local", "@deepseek-ai/dsh-fs-sandbox", "@deepseek-ai/dsh-fs-observation-policy", "@deepseek-ai/dsh-sandbox", "@deepseek-ai/dsh-sandbox-policy", "@deepseek-ai/dsh-user-approval", "@deepseek-ai/dsh-attachment", "@deepseek-ai/dsh-system-prompt"]
-    }
+  "registryVersion": 1,
+  "description": "Audited host cohort registry. Each cohort is one exactly extracted package graph; a runtime graph must atomically match one cohort. Mixed, missing, duplicate, or unknown rows fail closed.",
+  "packageGroups": {
+    "base": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/dsh-agent",
+      "@deepseek-ai/dsh-commands",
+      "@deepseek-ai/dsh-llm",
+      "@deepseek-ai/dsh-session",
+      "@deepseek-ai/dsh-tools"
+    ],
+    "goal": [
+      "@deepseek-ai/dsh-goal",
+      "@deepseek-ai/dsh-tool-goal"
+    ],
+    "agent_loop": [
+      "@deepseek-ai/dsh-agent-loop"
+    ],
+    "terminal_posix": [
+      "@deepseek-ai/dsh-tool-bash",
+      "@deepseek-ai/dsh-shell",
+      "@deepseek-ai/dsh-subprocess-local",
+      "@deepseek-ai/dsh-bash-sandbox",
+      "@deepseek-ai/dsh-shell-env"
+    ],
+    "terminal_windows": [
+      "@deepseek-ai/dsh-tool-pwsh",
+      "@deepseek-ai/dsh-shell",
+      "@deepseek-ai/dsh-subprocess-local",
+      "@deepseek-ai/dsh-pwsh-sandbox",
+      "@deepseek-ai/dsh-shell-env"
+    ],
+    "dsh_cli": [
+      "@deepseek-ai/dsh"
+    ],
+    "plugin_inventory": [
+      "@deepseek-ai/dsh-host-plugin-inventory"
+    ],
+    "web_control": [
+      "dshmarket",
+      "@deepseek-ai/dsh-host-webserver",
+      "@deepseek-ai/dsh-web-app"
+    ],
+    "jobs": [
+      "@deepseek-ai/dsh-jobs",
+      "@deepseek-ai/dsh-jobs-local",
+      "@deepseek-ai/dsh-tool-jobs"
+    ],
+    "filesystem": [
+      "@deepseek-ai/dsh-tool-fs",
+      "@deepseek-ai/dsh-fs",
+      "@deepseek-ai/dsh-fs-local",
+      "@deepseek-ai/dsh-fs-sandbox",
+      "@deepseek-ai/dsh-fs-observation-policy",
+      "@deepseek-ai/dsh-sandbox",
+      "@deepseek-ai/dsh-sandbox-policy",
+      "@deepseek-ai/dsh-user-approval",
+      "@deepseek-ai/dsh-attachment",
+      "@deepseek-ai/dsh-system-prompt"
+    ]
   },
-  "packages": [
-    {"name": "@deepseek-ai/cordis", "version": "4.0.1", "integrity": "sha512-YBdskTU2Po1kru3GgcUWUbkTsPMA9LkSQDAY8rBkFJeajdgcQad3QPJZE26JyK99Xb6HaASvoXg2DSUTeN/0Nw=="},
-    {"name": "@deepseek-ai/dsh-agent", "version": "0.1.1-rc.2", "integrity": "sha512-cC7lnJe7JgPFcreNXxcxLMxQd78LnpVO9ZXROjZsGRQN1zGH6i/DduI892F1am85IfzzO+XTxMwwUHmfwamb0g=="},
-    {"name": "@deepseek-ai/dsh-commands", "version": "0.1.1-rc.2", "integrity": "sha512-BOIe4Sht9rmMv1a6b3GWjWBbeWr7PtHlAy41vgpaymvUUuzOapOIA648ZMGCI/crRIt72Umev2FHtSwCNSbYZg=="},
-    {"name": "@deepseek-ai/dsh-goal", "version": "0.1.1-rc.2", "integrity": "sha512-lSHTh4vfS6eRb9to/y+bjRf2+0QkNpY3tHJ29HMTewR9fJYZsEVVu4Hc+GPhPEjF7RpiD35/sKx+akijtDasyg=="},
-    {"name": "@deepseek-ai/dsh-llm", "version": "0.1.1-rc.2", "integrity": "sha512-ASJfjIdZbIXvLwi3rGo+eZb/GxMVV/WO5/XVD3B96mT8EIzrlw3+nMR6/CvmJVzcycKQ2XN0wj7jD6TasPRySA=="},
-    {"name": "@deepseek-ai/dsh-session", "version": "0.1.1-rc.2", "integrity": "sha512-4/cv6X9HPhm47eyRhCu/WZwzrtJKegk5J+0xaxcZ9i8S0smdxP57tqy8a0jkSshLQn7BzMFxneQrlYExrLrDhQ=="},
-    {"name": "@deepseek-ai/dsh-tools", "version": "0.1.1-rc.2", "integrity": "sha512-0GGL4D55MwYDepzZMOI3L0ycu5b2qr96GL0Y7snwhAnpK2Di61rbX3fJE+PB3ZrovGX0csIRdt9n3iJZDVtDrw=="},
-    {"name": "@deepseek-ai/dsh-tool-goal", "version": "0.1.1-rc.2", "integrity": "sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA=="},
-    {"name": "@deepseek-ai/dsh-agent-loop", "version": "0.1.1-rc.2", "integrity": "sha512-2uJZ6kjJ3IYLRGn6/NhiZgD576ABcbERB/nkReR9TEUMO2zWkz6OuKtVwLyFCFSni2T25Jv+clKQWt7D4MhU3A=="},
-    {"name": "@deepseek-ai/dsh-tool-bash", "version": "0.1.1-rc.2", "integrity": "sha512-YNmrKmBanj5EQn1zejjbo4UUFtg2/h3s9y0lY3vBu+dezNz4HdUlSkSZACbNUAZywyLomdhlt4rJdtdnrqyS7Q=="},
-    {"name": "@deepseek-ai/dsh-tool-pwsh", "version": "0.1.1-rc.2", "integrity": "sha512-Gr0F4VWCIIR25qWVv4mMEJnewXILHLCkZwrLfbHA2OOI7DNvvdB5wjJxhuo+ZQa8/3KJ/byQGtEBqCY9mb10Zg=="},
-    {"name": "@deepseek-ai/dsh-shell", "version": "0.1.1-rc.2", "integrity": "sha512-gEqPUxKOpOV66wvM4o8Z5FEuWmsEvYzD9OQy3cyo/kjzlx+2+KUWi22cl/YWtBs/zUtRJbdG5UqMnh8GUeO8Hg=="},
-    {"name": "@deepseek-ai/dsh-subprocess-local", "version": "0.1.1-rc.2", "integrity": "sha512-I4pyzpohZEVRQQbuEpMP0t8oKsf+XIlRo64aJVKGXI2eMcg9f9gbfhKQNYNqRGbegQL1HYpSLU6Rzyibldgwaw=="},
-    {"name": "@deepseek-ai/dsh-bash-sandbox", "version": "0.1.1-rc.2", "integrity": "sha512-bagZDMZ73C1dVDBjFCn1flNZ8aOEel4dsmDJTfmagqeYPXfIJDFKPhDc3lWjc+o6jMNfmumeUJ62dwhHkjJHKA=="},
-    {"name": "@deepseek-ai/dsh-pwsh-sandbox", "version": "0.1.1-rc.2", "integrity": "sha512-hBUTg5p8TTQifZrfstbimVlBFyUOb7JhNkWKc+n6UpTzoFRSkPAvrjGeXKDmFI6jXpL4nXzLJoaIssfYnRg7bw=="},
-    {"name": "@deepseek-ai/dsh-shell-env", "version": "0.1.1-rc.2", "integrity": "sha512-dDKKqsxsbklUpxX5ornd/SKJ2yfr/SOHOWDgeJkYvx3SMSXq8EvhCK/VEvHswXQ25rRLFWM4/Mr3htk1hn/GPA=="},
-    {"name": "@deepseek-ai/dsh", "version": "0.1.1-rc.2", "integrity": "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="},
-    {"name": "@deepseek-ai/dsh-host-plugin-inventory", "version": "0.1.1-rc.2", "integrity": "sha512-Hud9ezW0bexWfhX7C+c5rdUDX1xzbEGDzj1lGQyj/QxdrxHYHjGrJq3tLRyvN6K4FSmEdG2IBKdQGCOLVrIthA=="},
-    {"name": "dshmarket", "version": "1.36.0", "integrity": "sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g=="},
-    {"name": "@deepseek-ai/dsh-host-webserver", "version": "0.1.1-rc.2", "integrity": "sha512-t9MrjC65QHiiWhG9V8UZxgfE/aWYhJHHrIM0kbTvtXxg4tLGIKo/upHp7iiag65F3HTkVLrH/DUyPMi4v2ZA7g=="},
-    {"name": "@deepseek-ai/dsh-web-app", "version": "0.1.1-rc.2", "integrity": "sha512-1zGHY7qwBVlVJrzIWu+86SuBZXaVUxe2JRfffsuRvKXq2QcR/K4CoJJfZ43cDoWKu9xPvvxz7w2ezV+EdXgg1A=="},
-    {"name": "@deepseek-ai/dsh-jobs", "version": "0.1.1-rc.2", "integrity": "sha512-SXvDJMvcUrGrlzIyE7j8/lI4Pj1nDe/UOR8C05Zagp+/0R8p46n6KylySvZdPAFENV5t8WX3Fw3eOaS4No0+wQ=="},
-    {"name": "@deepseek-ai/dsh-jobs-local", "version": "0.1.1-rc.2", "integrity": "sha512-26lg7mi9RKnu8IP8SWLbY+uZenbqF2AkAZvgZaLDlw1z58NtBsbgKgh6FNC8JXEyknAwYc6auQQKF+nLTlEjCw=="},
-    {"name": "@deepseek-ai/dsh-tool-jobs", "version": "0.1.1-rc.2", "integrity": "sha512-wCU7mo2uoQcAtz7de4ZXP2es9lALsmz6XzC+KAlS2e7/yTBi9a5LL2vdSr6XhExVAuhu/6f9eM/w4EQBOxtKlw=="},
-    {"name": "@deepseek-ai/dsh-tool-fs", "version": "0.1.1-rc.2", "integrity": "sha512-llX8AWbaI3CGme/a2eeTSfy5atk8u3iJeOFzmZV/KZ0v0hMhKZIK1xQInWwC9OmSDJ/StStJe0hDPVLWbB7hVg=="},
-    {"name": "@deepseek-ai/dsh-fs", "version": "0.1.1-rc.2", "integrity": "sha512-8j+6MffvCHATLQrhAVfc9rKyunKu/O7mjjJzmdsUSdID7V4iUYMwqPamhlAyI+tfohZu/vcforKzCRIZGmCYug=="},
-    {"name": "@deepseek-ai/dsh-fs-local", "version": "0.1.1-rc.2", "integrity": "sha512-jvn1MsAMqCmt5SjRNkPjmpc+RIWrZQrBVtf/OpmKr2PaBEGqSbCkPApWDE9iSMhcuQg6k5evScOXwAsduzKOLA=="},
-    {"name": "@deepseek-ai/dsh-fs-sandbox", "version": "0.1.1-rc.2", "integrity": "sha512-PI65uLZ3ARkfVV/PXvACS1HEXggoOaXgYQzXQFdLOfm7AiHOdZWZccUAXBetpZhcNYIOKsVoLnfZkXcHByqecQ=="},
-    {"name": "@deepseek-ai/dsh-fs-observation-policy", "version": "0.1.1-rc.2", "integrity": "sha512-rlq7yu4xavkKK1Oa1/aNCOeUW7t/3OXJJOfOcZXuUgJn5f8G0AbpTDpp2CeuL1cHlKpbunGhEkKQ2N/dv7ZR9w=="},
-    {"name": "@deepseek-ai/dsh-sandbox", "version": "0.1.1-rc.2", "integrity": "sha512-rnO2RqZ+ycpwrXrXlMcrhWAICdui3ZVTjNQ8eZrOPE18hAbX3tw0nLFq26sBjMSnBfDQHNZ4VaFpt0p8qhkPWQ=="},
-    {"name": "@deepseek-ai/dsh-sandbox-policy", "version": "0.1.1-rc.2", "integrity": "sha512-cpoIUxCzpZJDTMXVt9gS+qgWEDAWf6rIe715uY1NF0ROoiEXPlmToLsHLF+4pXTW3wWWzpGVswO0bPYEKrQr3g=="},
-    {"name": "@deepseek-ai/dsh-user-approval", "version": "0.1.1-rc.2", "integrity": "sha512-SdsO4Rs+NeJFoertkVilXBACREOLfkKPJJznYKqDhJxeRo38RJ56dtj0Xd0/6rERmsQiMck4Bwdrzg1ubUqPNA=="},
-    {"name": "@deepseek-ai/dsh-attachment", "version": "0.1.1-rc.2", "integrity": "sha512-rCYAt8QsawP1yfDCU7XxNwYT/XWvyFsxYrkwhLLkdfW83QVD0CQHizSkTQE7RFX74nKUD1z3sTLfnLr7xneArw=="},
-    {"name": "@deepseek-ai/dsh-system-prompt", "version": "0.1.1-rc.2", "integrity": "sha512-on4hjAlYI5uX9q7Sf95YkMMBVe6heywtA/H50ksrIMUub8U2B98hO9iQpHhjwIO1F1vu+5pLcPvRr6yUGGmtXQ=="}
+  "cohorts": [
+    {
+      "id": "dsh-0.1.1-rc.2",
+      "manifestVersion": 1,
+      "supportedGoalVersions": [
+        "0.1.1-rc.2"
+      ],
+      "auditedPlatforms": [
+        "posix",
+        "windows"
+      ],
+      "capabilityExpectations": {
+        "goal_complete_precommit_guard": "required",
+        "goal_disarm_readback": "required",
+        "session_flush_before_control": "required",
+        "tool_guard_monotonic": "required",
+        "host_capability_model": "action-platform-v1",
+        "external_wait_jobs_readback": "dsh.jobs.v1",
+        "filesystem_tool_contract": "dsh.fs-tools.v1"
+      },
+      "supportedActions": [
+        "inspect_remote_updates",
+        "install",
+        "apply",
+        "create",
+        "modify",
+        "test",
+        "verify",
+        "pull",
+        "fetch",
+        "commit",
+        "push",
+        "restart",
+        "publish",
+        "generic_run"
+      ],
+      "packages": [
+        {
+          "name": "@deepseek-ai/cordis",
+          "version": "4.0.1",
+          "integrity": "sha512-YBdskTU2Po1kru3GgcUWUbkTsPMA9LkSQDAY8rBkFJeajdgcQad3QPJZE26JyK99Xb6HaASvoXg2DSUTeN/0Nw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-agent",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-cC7lnJe7JgPFcreNXxcxLMxQd78LnpVO9ZXROjZsGRQN1zGH6i/DduI892F1am85IfzzO+XTxMwwUHmfwamb0g=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-commands",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-BOIe4Sht9rmMv1a6b3GWjWBbeWr7PtHlAy41vgpaymvUUuzOapOIA648ZMGCI/crRIt72Umev2FHtSwCNSbYZg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-goal",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-lSHTh4vfS6eRb9to/y+bjRf2+0QkNpY3tHJ29HMTewR9fJYZsEVVu4Hc+GPhPEjF7RpiD35/sKx+akijtDasyg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-llm",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-ASJfjIdZbIXvLwi3rGo+eZb/GxMVV/WO5/XVD3B96mT8EIzrlw3+nMR6/CvmJVzcycKQ2XN0wj7jD6TasPRySA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-session",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-4/cv6X9HPhm47eyRhCu/WZwzrtJKegk5J+0xaxcZ9i8S0smdxP57tqy8a0jkSshLQn7BzMFxneQrlYExrLrDhQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tools",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-0GGL4D55MwYDepzZMOI3L0ycu5b2qr96GL0Y7snwhAnpK2Di61rbX3fJE+PB3ZrovGX0csIRdt9n3iJZDVtDrw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-goal",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-agent-loop",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-2uJZ6kjJ3IYLRGn6/NhiZgD576ABcbERB/nkReR9TEUMO2zWkz6OuKtVwLyFCFSni2T25Jv+clKQWt7D4MhU3A=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-bash",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-YNmrKmBanj5EQn1zejjbo4UUFtg2/h3s9y0lY3vBu+dezNz4HdUlSkSZACbNUAZywyLomdhlt4rJdtdnrqyS7Q=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-pwsh",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-Gr0F4VWCIIR25qWVv4mMEJnewXILHLCkZwrLfbHA2OOI7DNvvdB5wjJxhuo+ZQa8/3KJ/byQGtEBqCY9mb10Zg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-shell",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-gEqPUxKOpOV66wvM4o8Z5FEuWmsEvYzD9OQy3cyo/kjzlx+2+KUWi22cl/YWtBs/zUtRJbdG5UqMnh8GUeO8Hg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-subprocess-local",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-I4pyzpohZEVRQQbuEpMP0t8oKsf+XIlRo64aJVKGXI2eMcg9f9gbfhKQNYNqRGbegQL1HYpSLU6Rzyibldgwaw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-bash-sandbox",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-bagZDMZ73C1dVDBjFCn1flNZ8aOEel4dsmDJTfmagqeYPXfIJDFKPhDc3lWjc+o6jMNfmumeUJ62dwhHkjJHKA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-pwsh-sandbox",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-hBUTg5p8TTQifZrfstbimVlBFyUOb7JhNkWKc+n6UpTzoFRSkPAvrjGeXKDmFI6jXpL4nXzLJoaIssfYnRg7bw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-shell-env",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-dDKKqsxsbklUpxX5ornd/SKJ2yfr/SOHOWDgeJkYvx3SMSXq8EvhCK/VEvHswXQ25rRLFWM4/Mr3htk1hn/GPA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-host-plugin-inventory",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-Hud9ezW0bexWfhX7C+c5rdUDX1xzbEGDzj1lGQyj/QxdrxHYHjGrJq3tLRyvN6K4FSmEdG2IBKdQGCOLVrIthA=="
+        },
+        {
+          "name": "dshmarket",
+          "version": "1.36.0",
+          "integrity": "sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-host-webserver",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-t9MrjC65QHiiWhG9V8UZxgfE/aWYhJHHrIM0kbTvtXxg4tLGIKo/upHp7iiag65F3HTkVLrH/DUyPMi4v2ZA7g=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-web-app",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-1zGHY7qwBVlVJrzIWu+86SuBZXaVUxe2JRfffsuRvKXq2QcR/K4CoJJfZ43cDoWKu9xPvvxz7w2ezV+EdXgg1A=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-jobs",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-SXvDJMvcUrGrlzIyE7j8/lI4Pj1nDe/UOR8C05Zagp+/0R8p46n6KylySvZdPAFENV5t8WX3Fw3eOaS4No0+wQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-jobs-local",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-26lg7mi9RKnu8IP8SWLbY+uZenbqF2AkAZvgZaLDlw1z58NtBsbgKgh6FNC8JXEyknAwYc6auQQKF+nLTlEjCw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-jobs",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-wCU7mo2uoQcAtz7de4ZXP2es9lALsmz6XzC+KAlS2e7/yTBi9a5LL2vdSr6XhExVAuhu/6f9eM/w4EQBOxtKlw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-fs",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-llX8AWbaI3CGme/a2eeTSfy5atk8u3iJeOFzmZV/KZ0v0hMhKZIK1xQInWwC9OmSDJ/StStJe0hDPVLWbB7hVg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-8j+6MffvCHATLQrhAVfc9rKyunKu/O7mjjJzmdsUSdID7V4iUYMwqPamhlAyI+tfohZu/vcforKzCRIZGmCYug=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs-local",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-jvn1MsAMqCmt5SjRNkPjmpc+RIWrZQrBVtf/OpmKr2PaBEGqSbCkPApWDE9iSMhcuQg6k5evScOXwAsduzKOLA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs-sandbox",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-PI65uLZ3ARkfVV/PXvACS1HEXggoOaXgYQzXQFdLOfm7AiHOdZWZccUAXBetpZhcNYIOKsVoLnfZkXcHByqecQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs-observation-policy",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-rlq7yu4xavkKK1Oa1/aNCOeUW7t/3OXJJOfOcZXuUgJn5f8G0AbpTDpp2CeuL1cHlKpbunGhEkKQ2N/dv7ZR9w=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-sandbox",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-rnO2RqZ+ycpwrXrXlMcrhWAICdui3ZVTjNQ8eZrOPE18hAbX3tw0nLFq26sBjMSnBfDQHNZ4VaFpt0p8qhkPWQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-sandbox-policy",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-cpoIUxCzpZJDTMXVt9gS+qgWEDAWf6rIe715uY1NF0ROoiEXPlmToLsHLF+4pXTW3wWWzpGVswO0bPYEKrQr3g=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-user-approval",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-SdsO4Rs+NeJFoertkVilXBACREOLfkKPJJznYKqDhJxeRo38RJ56dtj0Xd0/6rERmsQiMck4Bwdrzg1ubUqPNA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-attachment",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-rCYAt8QsawP1yfDCU7XxNwYT/XWvyFsxYrkwhLLkdfW83QVD0CQHizSkTQE7RFX74nKUD1z3sTLfnLr7xneArw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-system-prompt",
+          "version": "0.1.1-rc.2",
+          "integrity": "sha512-on4hjAlYI5uX9q7Sf95YkMMBVe6heywtA/H50ksrIMUub8U2B98hO9iQpHhjwIO1F1vu+5pLcPvRr6yUGGmtXQ=="
+        }
+      ]
+    },
+    {
+      "id": "dsh-0.1.2-alpha.2",
+      "manifestVersion": 1,
+      "supportedGoalVersions": [
+        "0.1.2-alpha.2"
+      ],
+      "auditedPlatforms": [
+        "posix"
+      ],
+      "platformAuditNote": "Exact graph extracted from a native macOS DSH 0.1.2-alpha.2 / dshmarket 1.38.1 runtime. Windows registration is pending native Windows extraction; the alpha.2 cohort fails closed on windows until that cohort row is audited.",
+      "capabilityExpectations": {
+        "goal_complete_precommit_guard": "required",
+        "goal_disarm_readback": "required",
+        "session_flush_before_control": "required",
+        "tool_guard_monotonic": "required",
+        "host_capability_model": "action-platform-v1",
+        "external_wait_jobs_readback": "dsh.jobs.v1",
+        "filesystem_tool_contract": "dsh.fs-tools.v1"
+      },
+      "supportedActions": [
+        "inspect_remote_updates",
+        "install",
+        "apply",
+        "create",
+        "modify",
+        "test",
+        "verify",
+        "pull",
+        "fetch",
+        "commit",
+        "push",
+        "restart",
+        "publish",
+        "generic_run"
+      ],
+      "packages": [
+        {
+          "name": "@deepseek-ai/cordis",
+          "version": "4.0.2",
+          "integrity": "sha512-asOnXP1TzFSFQlHb1iegDZp0z/8WD1c7YNrwJR/Tx2bzNuMXfcekE/I67Iv6SQXeLB4csxqCngzQKANP7gdw0g=="
+        },
+        {
+          "name": "@deepseek-ai/dsh",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-4TvTC5kRKlgtSU2UTBv+cID9a2Z+6+m6mpvjXWJfVzuTkflCff6s4MsQpFJTCmwFh/k7zNWe7qFXcLYMV/5VvA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-agent",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-K7B5XSQ7byB/IoNGj7n+lBgHCpVPJqEPvpGoHKc1dBS8fPo2yYp/ALFag4YOfrXVP3jQ9A8di20BbvIlp79SoA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-agent-loop",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-UU1i+rTuQV3Q5PGY4qFlojJ0Gbthib22pida5elZlg28dd8gtY2d1U5V9q2+rKK/469CO29rkz6TWMWk0g93Jg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-attachment",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-+e+zQCbBi94Jnyfpq/M+/J2R/66GbMh5zqr7yVdCjvAJp8d2hxQsZ0O/oaSV+iZQIMgJz+BcwvrS1VU+XmzQWg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-bash-sandbox",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-y5NZT7OkKi23N2fF+x9oo1QZH8LPfTU+llL86r+iETSSk5jzh91Hp2cP5Iq5S/L3BAQDaEw2J4Dg8VjF+fnnkg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-commands",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-KkyNkD5V80h+xXsByGdXH8uvKo/5uflb1CSY8O8IrciuptaJdneSAmTFsjmCKAjqCTGgigk2VDw6mqPwux2JYg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-wx5n0QS5rfZ2LPVocMNfuOUh0RYH/QuLoCEy+qI8U3nKmSZ8GSTASURLg+0pVxckHpLElo38U+S/lkLxRK1rpQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs-local",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-IIpZAxGw8wr+xpZQhvuHB9JtUeE6V03e45njfFah1eRl0miaHV5CxCRlFwkMLrow5I2zCCsCPPmdEaouGxTGSA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs-observation-policy",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-oMDSB1NTnj4rIGy5JXCtbzTFDwKkU/38KIKrVs3u6b65Y5spq3kjc1ITpjqo3Ze4H8umc8wJqGke2o/ms8eIEQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-fs-sandbox",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-jTnGZUov95e9OANKG+uoWAczdGlzy24aXJ+z4N4J+rMvThfj5awV3ucsmX9S4YW2peHoTV9D7BNGgBQ84LxB+w=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-goal",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-6E+QfBezGsQ2RI0KLZc8llRpukV9ujLjCcQ2UAboYJS7FPQMs7f/QfSrfTubwpB4lrnOok0H26JT2jHUhJeQbQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-host-plugin-inventory",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-qWD+fTYTq8YoNa1TbYXy/Qk7bjjS4URJMgMa3m1vnyZ+xdwtRBF47dUa7wVAVX7oGg03bl7TD1Eo7GcKP/eajA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-host-webserver",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-cvsfM/cm5hZk/RqdIsardfqBIVpemdmUrP4M6UgdqhJy2nG5VnokLBg7k0bc8Yi11q0vIETfQK4xiDOSOMnu7Q=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-jobs",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-yPNlYX/ZKphjzRY7oMf5uLgfSlJ8qBp49W6qNqzhmn8moXgJcPUCNqeOkT0C3a6GQ286mmmo09eyfDLGX7+lMQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-jobs-local",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-nrK4ujL6QRS6GAysgBR08vaHub4vh7/iuGtmMvcg4Bp3hZeQ4rjWnpQAuItg9E9G3OUrvfjwzwENEM1TyVcbWw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-llm",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-ip6yMxwHugxQm4VCbwX/FDnlTeeBM9VBkIn0+74ityQy7Z3yKREJ1Ov8Z04l4G3duRzeGRsQ4ztOFZ01oNfKIw=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-pwsh-sandbox",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-j/gUmv+nWYzg8o+oEEIK9FKeb6L24n2u7xjpIm7DcL5YjQlRDR6FgDvR2hpUK/d4Wk+zvnaPqZaEaXfUtOzEKQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-sandbox",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-InfHYn5B0MxF5QLz0AjbwPS5W0G9VtIvjEFl5o/049KzH6khGKhjqOAVZtu1Z46f1+K/dbjF50VkTdnX3pgIJA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-sandbox-policy",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-Af7DWZTEjF/70YWSiN0jfbZli1XRk6Bo9W61QHxfShS79I8//mOPrItEPtJRWL/RCmGNfudFglNFyyGKdaqBIg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-session",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-RfikXscYTDXDr7CD7C/8oGJZaH8Egclj7pmXRtd90QcB5L8RIQ7069xrHZjds8OjNrFo69qQwNK3gYLUVZy9PA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-shell",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-i16e+OrCJ7GZ1XDnPds081NgVs/xzIVMLECzmLnXgVDKeePgWpdEgR//PgMqKPwoBoJ8z7DTzwKiOISAtOpNzA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-shell-env",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-OCf1iaPC5Qg6/DMLzvq5flGVSKP2uxAhgKs+8vrRuUiKc2UXXUE4uKayzZU7S18EysLZOVjMKKyUnHFXCVRQxg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-subprocess-local",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-IFneyTRqvbF/1Jm9h0WwBBxwlAd3vRh3SE/sZo2DTy9lzkRUMEBmWTiJZhVCMZ7hDLE0ALnjLLnLFLkA7bCP9Q=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-system-prompt",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-qT9PZEVMAbszsg1UVUvuovfWFS5unjy08KV0rnOc89TJCgkb2CnlknSyIQs0lXc/UiqT6ZQ59i4ClAFrXhxfxQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-bash",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-Vt70FCPSE3Y7++2i9dKCNrsXTqhDpeJwqo44/GZow1xJ5acY9iNkjmjfq0UrTvacLLOEVnrMMBa9LojXi2WZUA=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-fs",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-zQ+zxunJ9BXFR/kAw0Z/LO5TEy87uf1X2giE1AmM9fqbev28vd4pzLq3y8F9b0E64461ANrfD1q2wx8Gy1w47g=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-goal",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-lvp60s3JKuTzncrlKCyS3qM/jYMLZSTMXJ/xQ8A0EIDvfPp7x1C3NNez66IJXPJ5YMtW9QYsqx2YmnUKhPOrow=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-jobs",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-QYq4almnoKNDu/ncrpGLTfkT5sIdqvRTyLd61VNJTFl4rNT2G/JCoEIhDgf50Rkwcchvvk/bNNdekjlENqZjKg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tool-pwsh",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-sRGAmLWxxb+gglsqoftLojnFY1HaKMcwV9itkvv7JeACn5vkZuXTI0I/gNxjvt+g/b6sXT37hmQ7bmyo3dFHuQ=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-tools",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-trk0fkmCDp64pqdcr8u7rCcRrwNi+93FKuznTnCD+YsPGFygcSG/6n+Wsh4+9A6oI1fM4/Ecq6Baa9vq1sNhJg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-user-approval",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-CcV3hf2Q0NYxRbnlE+IysaUkq/hvmjlvS9OGiHpARZVY4VlidlZRmsy5g5L17vDoxirX+WBJ9Cc5VcJMcjPrUg=="
+        },
+        {
+          "name": "@deepseek-ai/dsh-web-app",
+          "version": "0.1.2-alpha.2",
+          "integrity": "sha512-+SKilM9fCCCoYr3fKT7CxNiozGsNHgvvTGhL63tKXM7/3M96dyj7zhT5ztoTgIDW9b9m8J/CaJUa4KlSeUJGFQ=="
+        },
+        {
+          "name": "dshmarket",
+          "version": "1.38.1",
+          "integrity": "sha512-Z9VleLtCXwk5OlbSJKayWtbMaKACL8JUMyb/JHpErS4N3q//GJS+cgOhhxNkZYmXxB8/lv9IbhX1CBzlMhJeJg=="
+        }
+      ]
+    }
   ],
   "runtimeIdentity": {
     "source": "active-profile-package-graph",
-    "injectionConfigKeys": ["hostLockPackages", "hostLockPlatform", "hostLockProfile"],
-    "missingBehavior": "fail-closed"
+    "injectionConfigKeys": [
+      "hostLockPackages",
+      "hostLockPlatform",
+      "hostLockProfile"
+    ],
+    "missingBehavior": "fail-closed",
+    "cohortDigestBinding": "host_cohort capability row in hostLockDigest v3"
   }
 }
