@@ -86,7 +86,7 @@ export async function buildReleasePackage({ source, outputDir }) {
 
     const seed = pack(root, seedDir, cacheDir);
     const seedPath = join(seedDir, seed.filename);
-    run("tar", ["-xzf", seedPath, "-C", unpackDir], root);
+    run("tar", ["-xzf", seed.filename, "-C", "../unpack"], seedDir);
     const stagedRoot = join(unpackDir, "package");
     const stagedManifestPath = join(stagedRoot, "package.json");
     const stagedManifest = JSON.parse(await readFile(stagedManifestPath, "utf8"));
@@ -109,7 +109,7 @@ export async function buildReleasePackage({ source, outputDir }) {
 
     const verifyDir = join(scratch, "verify");
     await mkdir(verifyDir);
-    run("tar", ["-xzf", firstPath, "-C", verifyDir], root);
+    run("tar", ["-xzf", first.filename, "-C", "../verify"], firstDir);
     const publishedManifest = JSON.parse(await readFile(join(verifyDir, "package", "package.json"), "utf8"));
     assert(publishedManifest.name === sourceManifest.name, "release package name mismatch");
     assert(publishedManifest.version === sourceManifest.version, "release package version mismatch");
