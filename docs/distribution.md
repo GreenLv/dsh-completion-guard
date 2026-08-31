@@ -21,8 +21,9 @@ installed profiles keep their runtime identity. The previous npm package
 passed same-byte native macOS and Windows validation. The registry metadata
 omits the release contract's required `gitHead`, however, so `v0.3.0` is not
 listed as a completed destination and has no GitHub Release. The immutable npm
-version and annotated tag are retained for audit history. Version 0.3.1 repairs
-the provenance-bearing frozen-package workflow.
+version and annotated tag are retained for audit history; the npm version is
+deprecated with `Release metadata incomplete; use dsh-completion-guard@0.3.1.`
+Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
 
 ## Published v0.3.1 destinations
 

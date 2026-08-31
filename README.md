@@ -57,7 +57,7 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 Version 0.3.1 is the current release line. Its [npm package](https://www.npmjs.com/package/dsh-completion-guard) and [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) are authoritative only when the exact-artifact public readback recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) is complete. Verify those linked identities before installing.
 
-The `0.3.0` npm artifact passed same-byte native validation, but npm omitted its required `gitHead` metadata because a prebuilt tgz was published. Its version identity cannot be reused, and no GitHub Release is created for `v0.3.0`; `0.3.1` preserves the runtime behavior while repairing the release provenance path.
+The `0.3.0` npm artifact passed same-byte native validation, but npm omitted its required `gitHead` metadata because a prebuilt tgz was published. Its version identity cannot be reused, and no GitHub Release is created for `v0.3.0`; the npm version remains installable for audit history but is deprecated with a migration warning to use `0.3.1`. Version `0.3.1` preserves the runtime behavior while repairing the release provenance path.
 
 > The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision with an unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning). The internal Cordis bundle id stays `context-guard`, and every published version of the previous npm package `dsh-context-guard` is deprecated in favor of this package. It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
