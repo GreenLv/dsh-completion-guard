@@ -1,7 +1,7 @@
 {
   "ledgerVersion": "1",
   "description": "Delta ledger tracking how dsh-completion-guard adapts codex-context-guard protocol capabilities. Each entry separates the source fact from plan status, implementation status, deterministic tests, native platform acceptance, and release readback. A disposition of adapted/adopted with implementationStatus not-implemented is a planned alignment, not a shipped one.",
-  "snapshotBoundary": "Pre-release planning snapshot retained for historical traceability. Candidate labels and empty release readbacks describe the planning state when each row was recorded, not the current package status. Use CHANGELOG.md and docs/LOCAL_ACCEPTANCE.md for v0.3.0 release and validation state.",
+  "snapshotBoundary": "Pre-release planning snapshot retained for historical traceability. Candidate labels and empty release readbacks describe the planning state when each row was recorded, not the current package status. Use CHANGELOG.md and docs/LOCAL_ACCEPTANCE.md for the v0.3.0 publication attempt and v0.3.1 release-repair state.",
   "source": {
     "product": "codex-context-guard",
     "version": "v0.9.4",

@@ -15,6 +15,15 @@ installed profiles keep their runtime identity. The previous npm package
 `dsh-context-guard` is deprecated across all published versions (0.1.0 –
 0.2.1) with a pointer to this package.
 
+## Incomplete v0.3.0 identity
+
+`dsh-completion-guard@0.3.0` is publicly readable from npm and its tarball
+passed same-byte native macOS and Windows validation. The registry metadata
+omits the release contract's required `gitHead`, however, so `v0.3.0` is not
+listed as a completed destination and has no GitHub Release. The immutable npm
+version and annotated tag are retained for audit history. Version 0.3.1 repairs
+the provenance-bearing frozen-package workflow.
+
 ## Published v0.2.1 destinations
 
 1. [GitHub Release `v0.2.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1)

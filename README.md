@@ -11,7 +11,7 @@ A task-contract and completion-certification plugin for DeepSeek Harness (DSH). 
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.3.0
+dsh plugin --profile web add dsh-completion-guard@0.3.1
 ```
 
 Restart DSH Web, open a session, and enable the guard:
@@ -55,7 +55,9 @@ Once enabled, Context Guard captures direct user requirements and acceptance cri
 
 ## Status and compatibility
 
-Version 0.3.0 is available from [npm](https://www.npmjs.com/package/dsh-completion-guard) and the [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.0).
+Version 0.3.1 is the current release line. Its [npm package](https://www.npmjs.com/package/dsh-completion-guard) and [GitHub release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) are authoritative only when the exact-artifact public readback recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) is complete. Verify those linked identities before installing.
+
+The `0.3.0` npm artifact passed same-byte native validation, but npm omitted its required `gitHead` metadata because a prebuilt tgz was published. Its version identity cannot be reused, and no GitHub Release is created for `v0.3.0`; `0.3.1` preserves the runtime behavior while repairing the release provenance path.
 
 > The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision with an unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning). The internal Cordis bundle id stays `context-guard`, and the previous npm package `dsh-context-guard` will be deprecated in favor of this package. It targets DSH `0.1.1-rc.2`, Node.js `>=22`, and pnpm `>=11`.
 
@@ -65,9 +67,9 @@ The 0.2.1 release suite contains 138 tests (105 domain/core). It attributes shel
 
 The Windows TEMP readback verifies the `b75868e9e73d29f50530ddaba15cfaef82e03ece` source matrix and the exact-source tarball → isolated installation → dump-config → Web startup log and cleanup chain. HTTP 200 appeared only in the first-run stdout, was not persisted, and was not rerun during readback, so the HTTP response itself is not independently confirmed. A real model-session smoke remains not run.
 
-### v0.3.0
+### v0.3.1
 
-Version 0.3.0 adds semantic action/target binding, independent state readback for stateful actions, typed boundaries, digest-v3 certificates, exact active-host identity, and paired optional Goal integration. The 19-file deterministic suite passed 351 tests with one Windows-only capability skip on macOS and all 352 tests without skips on native Windows. One canonical pre-release tarball was then installed and read back byte-for-byte on both native platforms, while CI covered Ubuntu, macOS, and Windows on Node.js 22 and 24. A credentialed model session verified a valid evidence binding and persisted typed-boundary/disarm flow; an intentionally over-broad prompt stayed incomplete and received no false certificate. [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) separates these source, artifact, CI, model-session, and publication evidence scopes.
+Version 0.3.1 carries the v0.3 semantic action/target binding, independent state readback for stateful actions, typed boundaries, digest-v3 certificates, exact active-host identity, and paired optional Goal integration introduced in 0.3.0. It adds a deterministic release packer that binds the full Git HEAD inside the frozen tgz before native-platform acceptance and registry publication. The 19-file deterministic suite passed 351 tests with one Windows-only capability skip on macOS and all 352 tests without skips on native Windows for the unchanged runtime baseline. [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) keeps source, artifact, CI, model-session, and publication evidence scopes separate.
 
 The release uses [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json), [`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json), and [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json). Goal integration requires the exact optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` and `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` together. It fails closed unless the active DSH runtime/profile graph injects the exact `hostLockPackages`, platform, and profile identity. A nearest lockfile is not accepted because DSH core and profile plugins use separate package graphs. The default bundled patch deliberately contains no fabricated lock.
 

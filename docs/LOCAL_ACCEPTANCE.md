@@ -2,7 +2,27 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
-## v0.3.0 release gates (2026-08-31)
+## v0.3.1 release-repair gates
+
+Version 0.3.1 preserves the v0.3 runtime and digest behavior while repairing
+the public provenance path. `scripts/release-pack.mjs` requires a clean Git
+root, resolves the full 40-character HEAD, stages the exact npm file set,
+injects that HEAD as `gitHead` only in the staged package manifest, and packs
+the staged package twice. It fails unless both tgz outputs are byte-identical
+and retain the same file count, then emits the single frozen tgz,
+`SHA256SUMS.txt`, and `release-artifact.json`. Publishing must use that tgz
+without repacking. The registry manifest, downloaded registry tgz, annotated
+tag, GitHub Release target, and checksum must all read back to the same commit
+and bytes.
+
+The focused Node test covers exact-HEAD injection, repeated-pack byte identity,
+checksum and artifact-record output, and dirty-tree rejection. Acceptance of
+the final tgz requires the full isolated Web/Headless install, no-op, package parity,
+host-lock, real restart, HTTP recovery, and cleanup lifecycle on native macOS
+and Windows before publication. CI, native-platform evidence, registry
+publication, tag identity, and GitHub Release remain separate gates.
+
+## v0.3.0 incomplete publication (2026-08-31)
 
 Release preparation froze one canonical pre-release package from commit
 `a33b69326eb46fbefc56affc55e2a486695f545c`. The 26-file, 170158-byte tgz
@@ -29,15 +49,24 @@ checkpoint remained incomplete and no completion certificate was issued.
 This proves the bounded evidence, boundary, and disarm paths without claiming
 that arbitrary model instructions are semantically certifiable.
 
-The release-state documentation in this commit is itself packaged and thus
-changes the tgz bytes from the pre-release artifact above. The final release
-gate therefore packs the documentation-inclusive commit once, installs and
-reads back those exact bytes separately on native macOS and Windows, and
-publishes that frozen tgz without repacking. Public identity is accepted only
-when the annotated `v0.3.0` tag, npm `gitHead` and integrity, GitHub Release
-target, published checksum, and registry package readback agree. These
-publication identities do not derive from source tests or from the earlier
-pre-release hash.
+The final documentation-inclusive source was commit
+`12e8411537b7f843aed267bc150a9403ddbb04c9`. Its frozen 26-file,
+171419-byte tgz had SHA-256
+`416b3539d38c13ea0e01b2154f342d911d4c14b81cc90d71f99e8b9bd6d6de45`
+and passed the same isolated lifecycle and same-byte package readback on native
+macOS and Windows. Main CI run 33347875843 and tag CI run 33347976931 passed
+Ubuntu, macOS, and Windows with Node.js 22 and 24. Annotated tag `v0.3.0`
+peels to that commit.
+
+The exact tgz was published as `dsh-completion-guard@0.3.0`; registry shasum
+`4c881b83b6046833229d5f54a062bfa2eea5be6f` and integrity
+`sha512-WSxbxD5N/79SJ/6UW0/XonCUlmckUhMHtj4LhUpa9u3XGC+MFZ/GUX935Y4Aqp8HJmxnj2gdHmAYmk8pcccykg==`
+identify the validated bytes. However, npm did not populate registry
+`gitHead` when publishing the prebuilt tgz. That fails this release's frozen
+public-identity gate. The version and tag remain immutable historical facts,
+but no GitHub Release is created for `v0.3.0`, and 0.3.0 is not claimed as a
+completed release. Version 0.3.1 repairs the packaging path instead of moving
+the tag, reusing the npm version, or weakening the gate after publication.
 
 ## Windows exact-source readback (2026-08-30)
 

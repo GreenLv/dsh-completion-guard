@@ -11,7 +11,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.3.0
+dsh plugin --profile web add dsh-completion-guard@0.3.1
 ```
 
 重启 DSH Web，打开一个会话并启用 Guard：
@@ -55,7 +55,9 @@ dsh plugin --profile web add dsh-completion-guard@0.3.0
 
 ## 状态与兼容性
 
-0.3.0 已发布到 [npm](https://www.npmjs.com/package/dsh-completion-guard) 和 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.0)。
+0.3.1 是当前 release line。只有 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) 记录的精确工件公开读回闭合时，其 [npm 包](https://www.npmjs.com/package/dsh-completion-guard) 与 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) 才构成权威发布身份；安装前请核对这些链接身份。
+
+`0.3.0` npm 工件已通过原生平台同字节验收，但由于发布的是预构建 tgz，npm 没有写入合同要求的 `gitHead`。该版本身份不能复用，也不会为 `v0.3.0` 创建 GitHub Release；`0.3.1` 保留其运行时行为并修复发布溯源路径。
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`,以避免与无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)撞名。内部 Cordis bundle id 保持 `context-guard` 不变;原 npm 包 `dsh-context-guard` 将被 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
@@ -65,9 +67,9 @@ dsh plugin --profile web add dsh-completion-guard@0.3.0
 
 Windows TEMP 读回现已确认 `b75868e9e73d29f50530ddaba15cfaef82e03ece` 的源码矩阵，以及 exact-source tarball → 隔离安装 → dump-config → Web 启动日志与清理链。HTTP 200 只出现在首轮 stdout，未持久化且复核时没有重跑，因此 HTTP 响应本身不能写成“独立复核已确认”。真实模型会话 smoke 仍未运行。
 
-### v0.3.0
+### v0.3.1
 
-v0.3.0 增加语义 action/target 绑定、有状态动作的独立状态读回、typed boundary、digest-v3 证书、精确活动宿主身份，以及成对 optional Goal 集成。19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 则 352 项全部通过且无跳过。随后，同一份 canonical 预发布 tarball 以逐字节一致方式在两个原生平台完成安装与读回；CI 还覆盖 Ubuntu、macOS、Windows 的 Node.js 22/24。带凭据的真实模型会话验证了有效 evidence binding 与持久化 typed-boundary/disarm 流程；一个刻意过宽的提示词保持 incomplete，且未被错误签发证书。[`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) 分别记录源码、工件、CI、模型会话与发布证据边界。
+v0.3.1 承载 0.3.0 引入的语义 action/target 绑定、有状态动作独立读回、typed boundary、digest-v3 证书、精确活动宿主身份和成对 optional Goal 集成，并增加确定性 release packer，在原生平台验收与 registry 发布前把完整 Git HEAD 绑定进冻结 tgz。对于未变化的运行时基线，19 个测试文件在 macOS 通过 351 项并按能力跳过 1 项 Windows-only 测试，在原生 Windows 通过全部 352 项且无跳过。[`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) 分别记录源码、工件、CI、模型会话与 publication 证据边界。
 
 该版本使用 [`manifests/action-manifest.v1.json`](manifests/action-manifest.v1.json)、[`manifests/git-command-manifest.v2.json`](manifests/git-command-manifest.v2.json) 与 [`manifests/supported-host.v1.json`](manifests/supported-host.v1.json)。Goal 集成要求精确 optional peers `@deepseek-ai/dsh-goal@0.1.1-rc.2` 和 `@deepseek-ai/dsh-tool-goal@0.1.1-rc.2` 同时存在。活动 DSH runtime/profile graph 未显式注入精确 `hostLockPackages`、platform 与 profile 身份时一律 fail-closed。由于 DSH 核心与 profile 插件使用不同 package graph，运行时不接受“向上找到的最近 lockfile”替代活动宿主身份；默认 bundle patch 也不会伪造这份锁。
 

@@ -2,6 +2,17 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
+## 0.3.1 - 2026-08-31
+
+### 修复
+
+- **冻结 npm 工件现在携带精确源码提交。** release packer 会先构造 npm 文件集，在 staging 包 manifest 中注入完整 40 字符 Git HEAD，再重复打包两次；只有两个 tgz 逐字节一致才通过。registry mutation 前还会生成 SHA-256 校验文件与机器可读工件记录。
+- **不把未闭合的 0.3.0 publication 提升为完整 release。** 其 npm 工件仍可安装，并已通过原生平台同字节验收，但 registry 缺少 `gitHead`；因此不为 `v0.3.0` 创建 GitHub Release。0.3.1 在不移动旧 tag、不尝试复用旧 npm 身份的前提下取代该已消费版本。
+
+### 验证
+
+- 聚焦 release-pack 测试覆盖精确 HEAD 注入、重复打包字节一致、checksum/record 输出以及脏工作树拒绝。除此之外，v0.3 runtime 与 digest 字节不变；最终 0.3.1 tgz 在发布前须完成 macOS 与原生 Windows 的同一字节验收。
+
 ## 0.3.0 - 2026-08-31
 
 ### 新增

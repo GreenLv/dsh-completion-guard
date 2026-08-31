@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.3.1 - 2026-08-31
+
+### Fixed
+
+- **Frozen npm artifacts now carry their exact source commit.** The release packer stages the npm file set, injects the full 40-character Git HEAD into the staged package manifest, packs twice, and fails unless both tgz files are byte-identical. It also emits a SHA-256 checksum and a machine-readable artifact record before any registry mutation.
+- **The incomplete 0.3.0 publication is not promoted as a complete release.** Its npm artifact remains installable and passed native same-byte validation, but the registry omitted `gitHead`; no GitHub Release is created for `v0.3.0`. Version 0.3.1 supersedes that consumed version without moving its tag or attempting to reuse its npm identity.
+
+### Validation
+
+- Focused release-pack tests cover exact-HEAD injection, repeated-pack byte identity, checksum/record output, and dirty-tree rejection. The 0.3 runtime and digest bytes are otherwise unchanged; the final 0.3.1 tgz requires exact-byte macOS and native Windows acceptance before publication.
+
 ## 0.3.0 - 2026-08-31
 
 ### Added

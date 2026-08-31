@@ -1,6 +1,6 @@
 {
   "name": "dsh-completion-guard",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A task-contract and completion-certification layer for DeepSeek Harness.",
   "repository": {
     "type": "git",
@@ -65,6 +65,7 @@
     "build": "tsdown",
     "lint": "oxlint src tests",
     "test": "vitest run",
+    "test:release-pack": "node --test tests/release-pack.node.mjs",
     "test:stats": "node --test tests/npm-download-stats.node.mjs",
     "typecheck": "tsc --noEmit",
     "pack:check": "pnpm pack --dry-run --json"
