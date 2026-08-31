@@ -22,6 +22,61 @@ host-lock, real restart, HTTP recovery, and cleanup lifecycle on native macOS
 and Windows before publication. CI, native-platform evidence, registry
 publication, tag identity, and GitHub Release remain separate gates.
 
+### v0.3.1 completed public release (2026-08-31)
+
+The release commit is
+`00ed5c6456e15f0859c1ef7731157d07a3903af9`. Candidate CI run
+33349603269, main CI run 33351918318, and tag CI run 33352017747 each
+passed the six Ubuntu, macOS, and Windows combinations for Node.js 22 and
+24. Public `main` readback returned the same commit. Annotated tag `v0.3.1`
+has tag-object SHA `88e6842b289a0bf0df68fcc25d09e5358d7f457d` and peels to that release
+commit.
+
+The frozen `dsh-completion-guard-0.3.1.tgz` contains 26 files and is 172923
+bytes. Its identities are:
+
+- SHA-256
+  `df3c0cae29fdfa0014d5cfdb6ade72c42386555779f9f4d8b59e37a2557c5d7e`;
+- npm shasum `b09f3844de9d957b5e15aa432833baf978483c55`;
+- npm integrity
+  `sha512-TgCFFzIoj4tpDKIGr3QrgVjUq+nPySEFWS3f9RJR9VuNqBiWUvOBZrzS5QSd4+jXp3ug7uq91fPgdh44yVROcw==`;
+- staged manifest `gitHead`
+  `00ed5c6456e15f0859c1ef7731157d07a3903af9`.
+
+That exact tgz passed isolated Web and Headless installation, strict second
+Web-install no-op, 26-of-26 package-byte parity, commit-blob parity, host-lock
+inspection/injection/dump verification, package import, intentional Headless
+`MISSING_CREDENTIAL`, fixed-port restart, HTTP recovery, and scoped cleanup on
+native macOS. Native Windows repeated the same exact-artifact lifecycle under
+an isolated supported DSH `0.1.1-rc.2` runtime after the daily runtime had
+advanced to an unsupported alpha cohort; the fail-closed version mismatch and
+the isolated rerun are both recorded in the Windows annex. The reported annex
+is 45531 bytes with SHA-256
+`5b46cac12973c287dd72445f7d0b118d91a9329d77fae1ad56e756f24a99365c`.
+The raw Windows annex remains on the Windows host, so this repository records
+its immutable identity and bounded result rather than claiming an independent
+macOS read of that file.
+
+The exact tgz was published as
+[`dsh-completion-guard@0.3.1`](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.1).
+Anonymous registry readback returned `latest=0.3.1`, the exact `gitHead`,
+shasum, integrity, 26-file count, and tarball URL. A fresh public-registry
+download had the expected SHA-256 and was byte-identical to the frozen tgz.
+
+The non-draft, non-prerelease
+[`v0.3.1` GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1)
+was published at `2026-08-31T03:04:09Z` and is the repository's latest public
+Release. Its only assets are the 172923-byte frozen tgz and the 97-byte
+`SHA256SUMS.txt`. Anonymous downloads of both assets were byte-identical to
+the frozen local files; the GitHub asset digests are respectively
+`sha256:df3c0cae29fdfa0014d5cfdb6ade72c42386555779f9f4d8b59e37a2557c5d7e`
+and
+`sha256:699764cfe8887f2a3abbaa35028abea18d6105794ea85983dff768d87239152f`.
+The release is therefore closed across source commit, annotated tag, CI,
+native-platform acceptance, npm metadata and bytes, GitHub metadata, and both
+public assets. These facts do not make the separate 0.3.0 npm publication a
+completed release and do not move or reuse its immutable identity.
+
 ## v0.3.0 incomplete publication (2026-08-31)
 
 Release preparation froze one canonical pre-release package from commit
