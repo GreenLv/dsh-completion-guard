@@ -59,7 +59,7 @@ dsh plugin --profile web add dsh-completion-guard@0.3.1
 
 `0.3.0` npm 工件已通过原生平台同字节验收，但由于发布的是预构建 tgz，npm 没有写入合同要求的 `gitHead`。该版本身份不能复用，也不会为 `v0.3.0` 创建 GitHub Release；`0.3.1` 保留其运行时行为并修复发布溯源路径。
 
-> 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`,以避免与无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)撞名。内部 Cordis bundle id 保持 `context-guard` 不变;原 npm 包 `dsh-context-guard` 将被 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
+> 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，以避免与无关的 DSH 插件（kpl0111/dsh-context-guard，工具结果剪裁）撞名。内部 Cordis bundle id 保持 `context-guard` 不变；原 npm 包 `dsh-context-guard` 的所有已发布版本均已 deprecate 并指向本包。目标环境为 DSH `0.1.1-rc.2`、Node.js `>=22`、pnpm `>=11`。
 
 ### 早期 v0.2.x 证据
 

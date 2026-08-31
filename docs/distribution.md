@@ -24,20 +24,28 @@ listed as a completed destination and has no GitHub Release. The immutable npm
 version and annotated tag are retained for audit history. Version 0.3.1 repairs
 the provenance-bearing frozen-package workflow.
 
-## Published v0.2.1 destinations
+## Published v0.3.1 destinations
 
-1. [GitHub Release `v0.2.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1)
-   is published as a non-draft, non-prerelease release; the repository was
-   renamed after tagging and the release URL follows the rename (old URLs
-   301-redirect). The tag points at commit `ba8f05d`; the published npm
-   artifact was built from `8497300`, whose dist is byte-identical to the
-   gate build.
-2. [`dsh-completion-guard@0.2.1` on npm](https://www.npmjs.com/package/dsh-completion-guard)
-   is published and `latest` resolves to `0.2.1`. The registry packument
-   `gitHead` equals the rename commit `8497300`, maintainer `greenlv`.
-3. The committed `dist/` tree is byte-identical to the published npm tarball
-   (verified 2026-08-29 by diffing the registry tarball against the local
-   build; only `.DS_Store` is excluded and git-ignored).
+1. [GitHub Release `v0.3.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1)
+   is published as a non-draft, non-prerelease release. Its annotated tag
+   peels to release commit `00ed5c6456e15f0859c1ef7731157d07a3903af9`.
+   The attached frozen tgz has SHA-256
+   `df3c0cae29fdfa0014d5cfdb6ade72c42386555779f9f4d8b59e37a2557c5d7e`;
+   the separate `SHA256SUMS.txt` asset binds the same bytes.
+2. [`dsh-completion-guard@0.3.1` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.1)
+   is published and `latest` resolves to `0.3.1`. The registry packument
+   `gitHead` equals the release commit above, and a fresh registry download is
+   byte-identical to the frozen release tgz.
+3. Source commit, tag, CI, native macOS and Windows acceptance, npm metadata
+   and bytes, and both GitHub assets are reconciled in
+   [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
+
+## Earlier v0.2.1 destinations
+
+The [v0.2.1 GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1)
+and [`dsh-completion-guard@0.2.1`](https://www.npmjs.com/package/dsh-completion-guard/v/0.2.1)
+remain publicly readable as historical identities. They are not the current
+install target.
 
 ## Community indexes
 
