@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-31T03:32:27.526Z",
+  "generated_at": "2026-08-31T11:06:09.695Z",
   "data_through": "2026-08-30",
   "period": {
     "start": "2026-08-26",
@@ -18,7 +18,7 @@
       "label": "dsh-context-guard (previous name)",
       "color": "#f59e0b",
       "start": "2026-08-26",
-      "total": 780,
+      "total": 808,
       "downloads": [
         {
           "day": "2026-08-26",
@@ -42,8 +42,8 @@
         },
         {
           "day": "2026-08-30",
-          "downloads": 0,
-          "cumulative": 780
+          "downloads": 28,
+          "cumulative": 808
         }
       ]
     },
@@ -52,7 +52,7 @@
       "label": "dsh-completion-guard",
       "color": "#2563eb",
       "start": "2026-08-29",
-      "total": 140,
+      "total": 149,
       "downloads": [
         {
           "day": "2026-08-29",
@@ -61,8 +61,8 @@
         },
         {
           "day": "2026-08-30",
-          "downloads": 0,
-          "cumulative": 140
+          "downloads": 9,
+          "cumulative": 149
         }
       ]
     }
@@ -90,8 +90,8 @@
     },
     {
       "day": "2026-08-30",
-      "downloads": 0,
-      "cumulative": 920
+      "downloads": 37,
+      "cumulative": 957
     }
   ],
   "sources": [
