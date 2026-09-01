@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
+import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -150,23 +151,42 @@ async function runProducer(session: Session, callId: string, args: Record<string
   return value as Record<string, unknown>
 }
 
-async function packFixture(root: string, name: string, version: string): Promise<string> {
-  const source = join(root, `${name.replace(/[^a-z0-9]+/gi, '-')}-source`)
+function tarHeader(name: string, size: number): Buffer {
+  const header = Buffer.alloc(512)
+  const octal = (offset: number, length: number, value: number) => {
+    header.write(`${value.toString(8).padStart(length - 1, '0')}\0`, offset, length, 'ascii')
+  }
+  header.write(name, 0, 100, 'utf8')
+  octal(100, 8, 0o644)
+  octal(108, 8, 0)
+  octal(116, 8, 0)
+  octal(124, 12, size)
+  octal(136, 12, 0)
+  header.fill(0x20, 148, 156)
+  header.write('0', 156, 1, 'ascii')
+  header.write('ustar\0', 257, 6, 'ascii')
+  header.write('00', 263, 2, 'ascii')
+  const checksum = header.reduce((sum, byte) => sum + byte, 0)
+  header.write(checksum.toString(8).padStart(6, '0'), 148, 6, 'ascii')
+  header[154] = 0
+  header[155] = 0x20
+  return header
+}
+
+async function packFixture(
+  root: string,
+  name: string,
+  version: string,
+  manifestPath = 'package/package.json',
+): Promise<string> {
   const output = join(root, 'packs')
-  await mkdir(source, { recursive: true })
   await mkdir(output, { recursive: true })
-  await writeFile(join(source, 'package.json'), JSON.stringify({ name, version, files: ['index.js'] }))
-  await writeFile(join(source, 'index.js'), 'export {}\n')
-  const npmCommand = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'npm'
-  const npmArgs = process.platform === 'win32'
-    ? ['/d', '/s', '/c', 'npm', 'pack', '--json', '--ignore-scripts', '--pack-destination', output]
-    : ['pack', '--json', '--ignore-scripts', '--pack-destination', output]
-  const { stdout } = await execFileAsync(npmCommand, npmArgs, {
-    cwd: source,
-    env: { ...process.env, npm_config_cache: join(root, 'npm-cache'), npm_config_ignore_scripts: 'true' },
-  })
-  const row = (JSON.parse(stdout) as Array<{ filename: string }>)[0]
-  return join(output, row.filename)
+  const manifest = Buffer.from(JSON.stringify({ name, version, files: ['index.js'] }), 'utf8')
+  const padding = Buffer.alloc((512 - (manifest.length % 512)) % 512)
+  const tar = Buffer.concat([tarHeader(manifestPath, manifest.length), manifest, padding, Buffer.alloc(1024)])
+  const path = join(output, `${name.replace(/[^a-z0-9]+/gi, '-')}-${version}.tgz`)
+  await writeFile(path, gzipSync(tar, { level: 9 }))
+  return path
 }
 
 async function writeInstalledPackage(profile: string, name: string, version: string, integrity: string, locator = `file:${name}-${version}.tgz`): Promise<void> {
@@ -336,55 +356,74 @@ describe('trusted stateful evidence producer', () => {
     expect(evidence.observedState).toBeUndefined()
   })
 
+  it('rejects a tgz whose manifest is outside the canonical npm package root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-invalid-tgz-'))
+    try {
+      const tgz = await packFixture(root, 'fixture-invalid', '1.0.0', 'package/not-package.json')
+      const session = Session.create(SessionId('invalid-tgz-session'))
+      expect(await runProducer(session, 'invalid-tgz-resolution', {
+        semantic_action: 'install', evidence_role: 'resolution',
+        selector: { package_id: 'fixture-invalid', version: '1.0.0', profile: 'web' },
+        command_manifest: { manifest_id: 'dsh.plugin_add_tgz.install.v1', tgz_path: tgz },
+      }, { profile: { name: 'web', path: join(root, 'web') } })).toMatchObject({ status: 'unavailable' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it.each(['install', 'apply'] as const)('%s binds one tgz through precondition, exact DSH argv, profile lock locator, and independent readback', async (action) => {
     const root = await mkdtemp(join(tmpdir(), `dsh-cg-${action}-`))
-    const profile = join(root, 'web')
-    await mkdir(profile, { recursive: true })
-    const dshIdentity = {
-      executable: 'dsh' as const,
-      realpath: join(root, 'bin', 'dsh'),
-      version: 'dsh 0.3.0-test',
+    try {
+      const profile = join(root, 'web')
+      await mkdir(profile, { recursive: true })
+      const dshIdentity = {
+        executable: 'dsh' as const,
+        realpath: join(root, 'bin', 'dsh'),
+        version: 'dsh 0.3.0-test',
+      }
+      const name = `fixture-${action}`
+      const version = '2.0.0'
+      const tgz = await packFixture(root, name, version)
+      if (action === 'apply') await writeInstalledPackage(profile, name, '1.0.0', 'sha512-b2xk')
+      const session = Session.create(SessionId(`producer-${action}-session`), undefined, {
+        version: 0, id: SessionId(`producer-${action}-session`), createdAt: 1, cwd: root,
+      })
+      enable(session)
+      user(session, `${action} package ${name}@${version} in profile web.`)
+      let expectedIntegrity = ''
+      let mutations = 0
+      const roots: EvidenceToolRoots = {
+        profile: { name: 'web', path: profile },
+        readExecutableIdentity: async (executable) => {
+          expect(executable).toBe('dsh')
+          return dshIdentity
+        },
+        commandRunner: async (file, args) => {
+          mutations += 1
+          expect([file, ...args]).toEqual(['dsh', 'plugin', '--profile', 'web', 'add', `file:${tgz}`])
+          await writeInstalledPackage(profile, name, version, expectedIntegrity, `file:${tgz}`)
+        },
+      }
+      const resolution = await runProducer(session, `${action}-resolution`, {
+        semantic_action: action, evidence_role: 'resolution', selector: { package_id: name, version, profile: 'web' },
+        command_manifest: { manifest_id: `dsh.plugin_add_tgz.${action}.v1`, tgz_path: tgz },
+      }, roots)
+      expect(resolution.status).toBe('supported')
+      expect(mutations).toBe(0)
+      expectedIntegrity = (resolution.resolved_target as Record<string, string>).integrity_digest
+      await runAction(session, `${action}-effect`, { semantic_action: action, resolution_call_id: `${action}-resolution` }, roots)
+      expect(mutations).toBe(1)
+      await runProducer(session, `${action}-effect-fact`, {
+        semantic_action: action, evidence_role: 'effect', resolution_call_id: `${action}-resolution`, effect_call_id: `${action}-effect`,
+      }, roots)
+      await runProducer(session, `${action}-state`, {
+        semantic_action: action, evidence_role: 'state', resolution_call_id: `${action}-resolution`, effect_call_id: `${action}-effect`,
+      }, roots)
+      expect(mutations).toBe(1)
+      expect(certifyStateful(session, action).status).toBe('certified')
+    } finally {
+      await rm(root, { recursive: true, force: true })
     }
-    const name = `fixture-${action}`
-    const version = '2.0.0'
-    const tgz = await packFixture(root, name, version)
-    if (action === 'apply') await writeInstalledPackage(profile, name, '1.0.0', 'sha512-b2xk')
-    const session = Session.create(SessionId(`producer-${action}-session`), undefined, {
-      version: 0, id: SessionId(`producer-${action}-session`), createdAt: 1, cwd: root,
-    })
-    enable(session)
-    user(session, `${action} package ${name}@${version} in profile web.`)
-    let expectedIntegrity = ''
-    let mutations = 0
-    const roots: EvidenceToolRoots = {
-      profile: { name: 'web', path: profile },
-      readExecutableIdentity: async (executable) => {
-        expect(executable).toBe('dsh')
-        return dshIdentity
-      },
-      commandRunner: async (file, args) => {
-        mutations += 1
-        expect([file, ...args]).toEqual(['dsh', 'plugin', '--profile', 'web', 'add', `file:${tgz}`])
-        await writeInstalledPackage(profile, name, version, expectedIntegrity, `file:${tgz}`)
-      },
-    }
-    const resolution = await runProducer(session, `${action}-resolution`, {
-      semantic_action: action, evidence_role: 'resolution', selector: { package_id: name, version, profile: 'web' },
-      command_manifest: { manifest_id: `dsh.plugin_add_tgz.${action}.v1`, tgz_path: tgz },
-    }, roots)
-    expect(resolution.status).toBe('supported')
-    expect(mutations).toBe(0)
-    expectedIntegrity = (resolution.resolved_target as Record<string, string>).integrity_digest
-    await runAction(session, `${action}-effect`, { semantic_action: action, resolution_call_id: `${action}-resolution` }, roots)
-    expect(mutations).toBe(1)
-    await runProducer(session, `${action}-effect-fact`, {
-      semantic_action: action, evidence_role: 'effect', resolution_call_id: `${action}-resolution`, effect_call_id: `${action}-effect`,
-    }, roots)
-    await runProducer(session, `${action}-state`, {
-      semantic_action: action, evidence_role: 'state', resolution_call_id: `${action}-resolution`, effect_call_id: `${action}-effect`,
-    }, roots)
-    expect(mutations).toBe(1)
-    expect(certifyStateful(session, action).status).toBe('certified')
   }, PACKAGE_ACTION_TIMEOUT_MS)
 
   it('rejects install-over-existing, apply-over-absent, and apply-without a version/integrity transition', async () => {
