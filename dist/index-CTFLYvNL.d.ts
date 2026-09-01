@@ -472,10 +472,9 @@ interface HostCohort {
 /**
 * Audited host cohort registry. The rc.2 cohort keeps the exact identities
 * audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
-* exact package graph extracted from a native macOS DSH `0.1.2-alpha.2` /
-* dshmarket `1.38.1` runtime; its Windows registration is pending a native
-* Windows extraction, so it is audited for posix only and fails closed
-* elsewhere. Graphs that mix cohorts, lack rows, duplicate rows, or use
+* exact package graph extracted from native macOS and Windows DSH
+* `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. Graphs that mix cohorts,
+* lack rows, duplicate rows, or use
 * versions outside both cohorts fail closed.
 */
 declare const HOST_COHORTS: readonly HostCohort[];

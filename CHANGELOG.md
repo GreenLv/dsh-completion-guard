@@ -6,17 +6,21 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Added
 
-- **Two exact DSH setups are recognized.** The existing `0.1.1-rc.2` + dshmarket `1.36.0` setup remains supported on macOS and Windows. A second setup adds `0.1.2-alpha.2` + dshmarket `1.38.1`, checked on macOS only; it remains unavailable on Windows until a native Windows package list is recorded.
-- **The whole package set must match.** Every required package must appear once with the expected version and integrity. Missing, mixed, duplicate, unidentified, or unknown packages make the entire host unavailable instead of leaving part of the Guard enabled. Status now lists missing packages, and the selected setup is included in the host-lock digest, so changing setups invalidates earlier certificates.
+- **Two exact DSH setups are recognized.** The `0.1.1-rc.2` + dshmarket `1.36.0` and `0.1.2-alpha.2` + dshmarket `1.38.1` package sets are both checked on macOS and Windows.
+- **The whole package set must match.** Every required package must appear once with the expected version and integrity. Missing, mixed, duplicate, unidentified, or unknown packages make the entire host unavailable instead of leaving part of the Guard enabled. Status now lists missing packages, and switching setups invalidates earlier completion certificates.
 
 ### Changed
 
 - Peer dependencies accept only the two checked version sets (`0.1.1-rc.2 || 0.1.2-alpha.2`, Cordis `4.0.1 || 4.0.2`). A source comparison found no change in the DSH events, Goal calls, tool definitions, or terminal results that the Guard uses.
 
+### Fixed
+
+- **Release packaging now works with Windows tar.** Archive extraction uses paths relative to the temporary working directory instead of passing absolute archive paths, without changing the files placed in the package.
+
 ### Validation
 
-- The complete 20-file suite passes 359 tests with one Windows-only skip on macOS. The daily macOS web profile reports the alpha.2 setup as supported, including Web control and Goal support. Package dry-run reports the expected 26 files, and the release-pack tests cover exact commit binding, repeatable output, and dirty-tree rejection.
-- Still pending: a frozen package from the committed tree, isolated Web and Headless installation, native macOS and Windows checks of that exact package, CI, tag, npm publication, GitHub Release, and public readback. The rc.2 setup remains the only Windows-audited path.
+- The complete 20-file suite passes 359 tests with one Windows-only skip on macOS. Native Windows matched all 34 alpha.2 package rows with no missing, extra, or duplicate entries. The packaging portability fix at `a3e77de` passed the six-job Ubuntu, macOS, and Windows CI matrix on Node.js 22 and 24.
+- Still pending: a clean committed candidate containing the Windows registration and final documentation, isolated Web and Headless installation, native macOS and Windows checks of those exact package bytes, final candidate CI, tag, npm publication, GitHub Release, and public readback.
 
 ## 0.3.1 - 2026-08-31
 
@@ -27,29 +31,29 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Validation
 
-- Focused release-pack tests cover exact-HEAD injection, repeated-pack byte identity, checksum/record output, and dirty-tree rejection. The 0.3 runtime and digest bytes are otherwise unchanged; the final 0.3.1 tgz requires exact-byte macOS and native Windows acceptance before publication.
+- The frozen 0.3.1 package passed native macOS and Windows lifecycle checks, was published to npm, and has a matching GitHub Release. Exact artifact and public readback evidence is recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.3.0 - 2026-08-31
 
 ### Added
 
-- **v0.3 semantic completion gates.** Adds exact paired optional Goal state/tool peers, an injected exact-version/integrity action/platform host lock, versioned action/Git/supported-host manifests, authority-aware contract segmentation, typed boundaries, structured checkpoint diagnostics, and digest-v3 certificates bound to session, host, contract, evidence, binding, expected transition, and optional Goal identity.
-- **Stateful action readback.** `install`, `apply`, `create`, `modify`, `restart`, `commit`, `push`, `publish`, `pull`, and `fetch` require distinct resolution, effect, and independent state evidence with same-target role closure. Generic-run evidence cannot authorize a v0.3 user-level completion; legacy generic-run certificates remain audit history only.
-- **Explicit read-only and mutation tools.** `context_guard_evidence` never mutates; `context_guard_action` owns exact-tgz package/registry effects, two-phase dshmarket restart, and exact Git effects only after an exact pending root requirement/revision, complete action-specific requested identity, target digest, host identity, executable identity, and live prestate all match. Prohibitions/acceptances cannot authorize effects; v0.3 package versions and Git refs are exact-only.
+- **High-impact changes must match the user's exact request.** Package, file, service, and Git operations are tied to one target and an expected result. A generic successful command cannot certify a different action.
+- **Changes require independent readback.** Install, apply, file editing, restart, Git, and publish operations must show both the intended effect and the resulting saved state before they can close a requirement.
+- **Read-only checks and mutations use separate tools.** Looking up a target never grants permission to change it. Mutations require a current, matching root-user instruction; prohibitions and acceptance checks cannot provide that authority.
 - **Bilingual npm download history.** A daily cumulative chart keeps the renamed `dsh-context-guard` and current `dsh-completion-guard` package totals separate while presenting one project-growth line. Collection reconciles npm range and point responses before publishing English and Simplified Chinese SVGs.
 
 ### Fixed
 
-- Assistant prose no longer controls turn stopping. Goal continuation remains owned by the Goal Round Driver; only persisted, qualified typed boundaries can trigger post-commit same-ref disarm readback.
-- Unknown, missing, or drifted host identities fail closed. The Guard-owned `update_goal(action=complete)` path is checked before mutation; trusted in-process direct Goal/session writes are detected as integrity violations but are not claimed to be preventable.
-- Active host identity is supplied before certificate replay, managed host-lock injection is idempotent, DSH folded-YAML SRI output is parsed exactly, and a fresh profile's sole top-level `[]` sentinel is safely replaced before the managed list is appended.
-- Publish now freezes one canonical HTTPS registry across capture, npm argv, and standard packument readback, with `--ignore-scripts`; create/modify freeze their expected post-effect bytes at resolution time instead of copying the observed digest into the predicate, and modify rejects source-byte drift against its frozen pre-digest.
-- Windows stateful actions now resolve and version-probe audited `.cmd`/`.bat` shims through a closed invocation whose interpreter is pinned to the canonical `SystemRoot\\System32\\cmd.exe` realpath and version. Resolution and effect bind both identities, then execute the same revalidated paths instead of searching `PATH` or trusting a changed `ComSpec`; shell-control and expansion characters remain fail-closed.
+- Assistant wording no longer controls whether DSH continues a task. Only a saved wait or deferral state can end the current round without claiming completion.
+- Missing, unknown, or changed DSH package identities keep the affected Guard capabilities unavailable. Direct internal Goal or session writes are reported as integrity problems but are not claimed to be preventable.
+- Host-lock injection is repeatable, folded YAML integrity values are read correctly, and a fresh empty profile can be updated safely.
+- Package publishing and file edits bind the expected destination before making a change and reject changed input or different resulting bytes.
+- Windows actions pin both the command wrapper and the system command interpreter, then reuse those checked paths instead of searching again at execution time.
 - The npm statistics publisher now rejects non-default refs before checkout, isolates read-only collection from the write-capable publication job, does not persist credentials during collection, and pins all official Actions to immutable commits.
 
 ### Changed
 
-- **Package renamed from `dsh-context-guard` to `dsh-completion-guard`.** An unrelated DSH plugin (kpl0111/dsh-context-guard, tool-result pruning) already uses the name; the rename removes the collision for name-keyed registries and lists. The internal Cordis bundle id stays `context-guard`, so installed profiles keep their runtime identity. The previous npm package `dsh-context-guard` will be deprecated once `dsh-completion-guard` is published.
+- **Package renamed from `dsh-context-guard` to `dsh-completion-guard`.** An unrelated DSH plugin already uses the old name. The internal Cordis bundle id stays `context-guard`, so installed profiles keep their runtime identity; all published versions of the previous npm package are deprecated and point readers to the new package.
 
 ### Validation
 

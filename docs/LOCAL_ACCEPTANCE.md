@@ -4,25 +4,31 @@ Each section names its evidence boundary. Deterministic checks, isolated DSH_HOM
 
 ## v0.3.2 source candidate gates (2026-08-31, in progress)
 
-Version 0.3.2 lets the Guard recognize either of two complete DSH package sets. It never combines packages from different sets, and a missing or mismatched package leaves the whole host unavailable. The checks below were run on macOS from a working tree based on `844b62848c1e2685e0574b660dc4546b6bf6dbac`, which was `origin/main` when implementation began. They cover the source candidate, not a release artifact.
+Version 0.3.2 lets the Guard recognize either of two complete DSH package sets. It never combines packages from different sets, and a missing or mismatched package leaves the whole host unavailable. The initial host-cohort checks below were run on macOS from a working tree based on `844b62848c1e2685e0574b660dc4546b6bf6dbac`, which was `origin/main` when implementation began. They cover source behavior, not a release artifact.
+
+A later native Windows release-pack run exposed an archive-extraction portability defect: the packer passed absolute archive paths to tar. Commit `a3e77de6d8260f16f0723491495cacab57b9f62d` now runs tar from the temporary package directory with relative archive and output paths. GitHub Actions run `33413968461` passed that exact fix on Ubuntu, macOS, and Windows with Node.js 22 and 24. This is CI evidence for the packaging fix, not native alpha.2 host acceptance or final documentation-inclusive artifact evidence.
 
 Package sets checked:
 
 - The `dsh-0.1.1-rc.2` set has the same 34 package rows used by 0.3.1 and already checked on macOS and Windows.
-- The `dsh-0.1.2-alpha.2` set contains 34 exact package name, version, and integrity rows extracted from the active macOS runtime and Web profile with dshmarket `1.38.1`. Tests confirm that the TypeScript and JSON copies match.
+- The `dsh-0.1.2-alpha.2` set contains 34 exact package name, version, and integrity rows originally extracted from the active macOS runtime and Web profile with dshmarket `1.38.1`, then matched in full on native Windows. Tests confirm that the TypeScript and JSON copies match.
 - A source comparison found no change in the session events, Goal calls, tool definitions, or terminal results that the Guard uses. Internal DSH changes outside those inputs are not treated as compatibility evidence.
 
 Verified source gates (macOS, Node.js 25.1.0, pnpm 11.x):
 
 - Type checking, lint, build, and `git diff --check` pass. The 20-file suite passes 359 tests and skips one Windows-only test on macOS.
-- `pnpm run pack:check` lists the expected 26 package files. `pnpm run test:release-pack` passes exact-commit binding, repeatable package output, and dirty-tree rejection tests; it does not create the final release package from this dirty tree.
+- `pnpm run pack:check` lists the expected 26 package files. `pnpm run test:release-pack` passes exact-commit binding, repeatable package output, dirty-tree rejection, and the portable relative-path extraction flow; it does not establish a final release artifact from the current documentation-inclusive tree.
 - Read-only checking against the daily macOS Web profile reports `dsh-0.1.2-alpha.2` as supported with all 34 rows, Web control, and Goal support. The installed 0.2.1 plugin still rejects a generator-version mismatch as expected.
+
+Native Windows source evidence (2026-09-01, PowerShell 5.1):
+
+- Fresh checkout `a3e77de6d8260f16f0723491495cacab57b9f62d` passed install, build, release-pack (2/2), and `git diff --check`.
+- The active DSH `0.1.2-alpha.2` / dshmarket `1.38.1` graph matched all 34 candidate rows; missing, extra, and duplicate counts were zero. This authorizes the Windows cohort registration, but it is source/host evidence rather than final package evidence.
 
 Pending gates (each requires its own authorization and evidence):
 
-- Native Windows extraction of the alpha.2 package set; until then alpha.2 stays unavailable on Windows and rc.2 remains the only Windows-audited path.
 - A frozen package from a clean committed tree, followed by isolated Web and Headless install, no-op, package comparison, host check, restart, cleanup, and native macOS/Windows acceptance of those same bytes.
-- CI, release readback, tag, npm publication, GitHub Release, and consumer pin updates.
+- Final documentation-inclusive candidate CI, release readback, tag, npm publication, GitHub Release, and consumer pin updates.
 
 ## v0.3.1 release-repair gates
 

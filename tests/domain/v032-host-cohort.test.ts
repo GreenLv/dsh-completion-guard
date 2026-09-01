@@ -21,7 +21,7 @@ describe('v0.3.2 audited host cohort registry', () => {
       expect(cohort.capabilities[0]).toEqual({ name: 'host_cohort', value: { k: 's', v: cohort.id } })
     }
     expect(rc2Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
-    expect(alpha2Cohort.auditedPlatforms).toEqual(['posix'])
+    expect(alpha2Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
     // Both cohorts audit the same package-name universe; only identities differ.
     expect(rc2Cohort.packages.map((row) => row.name).sort()).toEqual(alpha2Cohort.packages.map((row) => row.name).sort())
     const alphaVersions = new Set(alpha2Cohort.packages.map((row) => row.version))
@@ -71,13 +71,14 @@ describe('v0.3.2 audited host cohort registry', () => {
     expect(selectHostCohort(mixedAndDrifted, 'posix').reasonCode).toBe('host_cohort_mixed_graph')
   })
 
-  it('fails closed when the only matching cohort was never audited on the active platform', () => {
+  it('accepts the exact alpha.2 graph on its audited Windows platform', () => {
     const windowsAlpha = evaluateHostLock(alpha2Cohort.packages, { platform: 'windows', profileKind: 'web' })
-    expect(windowsAlpha.status).toBe('unsupported')
-    expect(windowsAlpha.reasonCode).toBe('host_lock_cohort_platform_not_audited')
+    expect(windowsAlpha.status).toBe('supported')
+    expect(windowsAlpha.reasonCode).toBeUndefined()
     expect(windowsAlpha.cohortId).toBe('dsh-0.1.2-alpha.2')
     const selection = selectHostCohort(alpha2Cohort.packages, 'windows')
-    expect(selection.reasonCode).toBe('host_cohort_platform_not_audited')
+    expect(selection.consistent).toBe(true)
+    expect(selection.reasonCode).toBeUndefined()
   })
 
   it('fails the whole lock closed on single-cohort optional-row drift and duplicates', () => {

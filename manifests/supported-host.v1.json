@@ -276,9 +276,10 @@
         "0.1.2-alpha.2"
       ],
       "auditedPlatforms": [
-        "posix"
+        "posix",
+        "windows"
       ],
-      "platformAuditNote": "Exact graph extracted from a native macOS DSH 0.1.2-alpha.2 / dshmarket 1.38.1 runtime. Windows registration is pending native Windows extraction; the alpha.2 cohort fails closed on windows until that cohort row is audited.",
+      "platformAuditNote": "Exact graph extracted and matched on native macOS and Windows DSH 0.1.2-alpha.2 / dshmarket 1.38.1 runtimes.",
       "capabilityExpectations": {
         "goal_complete_precommit_guard": "required",
         "goal_disarm_readback": "required",

@@ -6,17 +6,21 @@
 
 ### 新增
 
-- **可识别两套精确的 DSH 环境。** 现有 `0.1.1-rc.2` + dshmarket `1.36.0` 继续支持 macOS 和 Windows。新增 `0.1.2-alpha.2` + dshmarket `1.38.1`，目前只在 macOS 检查过；原生 Windows 包清单登记前，该环境在 Windows 上保持不可用。
-- **必须完整匹配整套包。** 每个必需包都必须恰好出现一次，并具有预期版本和完整性值。缺包、混装、重复、缺少身份或未知包都会让整个宿主保持不可用，不会只启用部分 Guard。状态会列出缺少的包；所选环境也会写入 host-lock digest，因此切换环境会使旧证书失效。
+- **可识别两套精确的 DSH 环境。** `0.1.1-rc.2` + dshmarket `1.36.0` 与 `0.1.2-alpha.2` + dshmarket `1.38.1` 两套包集合均已在 macOS 和 Windows 检查。
+- **必须完整匹配整套包。** 每个必需包都必须恰好出现一次，并具有预期版本和完整性值。缺包、混装、重复、缺少身份或未知包都会让整个宿主保持不可用，不会只启用部分 Guard。状态会列出缺少的包，切换环境也会使旧完成证书失效。
 
 ### 变更
 
 - peer dependencies 只接受两套已检查版本（`0.1.1-rc.2 || 0.1.2-alpha.2`，Cordis `4.0.1 || 4.0.2`）。源码对比未发现 Guard 使用的 DSH 事件、Goal 调用、工具定义或终端结果发生变化。
 
+### 修复
+
+- **发布打包现在兼容 Windows tar。** 解包时改用相对于临时工作目录的路径，不再把归档绝对路径传给 tar；包内文件不变。
+
 ### 验证
 
-- 20 个测试文件全量通过 359 项，macOS 跳过 1 项仅适用于 Windows 的测试。日常 macOS Web profile 报告 alpha.2 环境受支持，Web 控制和 Goal 支持均可用。打包预检列出预期的 26 个文件，release-pack 测试覆盖精确提交绑定、重复输出一致和脏工作树拒绝。
-- 尚待完成：从已提交干净工作树冻结正式候选包、隔离 Web/Headless 安装、该同一包的原生 macOS/Windows 验收、CI、tag、npm 发布、GitHub Release 和公开读回。rc.2 仍是唯一经过 Windows 审计的环境。
+- 20 个测试文件全量通过 359 项，macOS 跳过 1 项仅适用于 Windows 的测试。Windows 原生核对 alpha.2 的 34 行包清单全部匹配，没有缺失、额外或重复项。打包兼容性修复提交 `a3e77de` 已通过 Ubuntu、macOS、Windows 和 Node.js 22/24 的六项 CI 矩阵。
+- 尚待完成：提交包含 Windows 注册和最终文档的干净候选、隔离 Web/Headless 安装、对该同一包的原生 macOS/Windows 验收、最终候选 CI、tag、npm 发布、GitHub Release 和公开读回。
 
 ## 0.3.1 - 2026-08-31
 
@@ -27,29 +31,29 @@
 
 ### 验证
 
-- 聚焦 release-pack 测试覆盖精确 HEAD 注入、重复打包字节一致、checksum/record 输出以及脏工作树拒绝。除此之外，v0.3 runtime 与 digest 字节不变；最终 0.3.1 tgz 在发布前须完成 macOS 与原生 Windows 的同一字节验收。
+- 冻结的 0.3.1 包已通过 macOS 和 Windows 原生生命周期检查，并已发布到 npm 和对应 GitHub Release。精确工件与公开读回证据见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 ## 0.3.0 - 2026-08-31
 
 ### 新增
 
-- **v0.3 语义完成门禁。** 增加 Goal state/tool 成对精确 optional peers、显式注入的 exact version/integrity action/platform 宿主锁、版本化 action/Git/supported-host manifests、按权威分段的合同捕获、typed boundary、结构化 checkpoint 诊断，以及绑定 session、host、contract、evidence、binding、expected transition 与可选 Goal 身份的 digest-v3 证书。
-- **有状态动作独立读回。** `install`、`apply`、`create`、`modify`、`restart`、`commit`、`push`、`publish`、`pull`、`fetch` 必须提供不同 ID 的 resolution、effect 与独立 state evidence，并完成同目标 role 闭合。generic-run 证据不能授权 v0.3 用户级完成；旧 generic-run 证书只保留为审计历史。
-- **显式只读/变更工具。** `context_guard_evidence` 永不执行 mutation；`context_guard_action` 仅在精确的 pending 根用户 requirement/修订、完整动作身份、target digest、宿主身份、可执行文件身份和 live prestate 全部匹配后，才执行 exact-tgz package/registry effect、两阶段 dshmarket restart 或精确 Git effect。prohibition/acceptance 不得授权 effect；v0.3 package 版本与 Git ref 仅支持 exact。
+- **高影响变更必须匹配用户的精确要求。** 包、文件、服务和 Git 操作会绑定到一个目标和预期结果；普通命令成功不能替代另一个动作的完成证据。
+- **变更后必须独立读回。** 安装、更新、文件修改、重启、Git 和发布操作需要同时证明预期动作与最终保存状态，才能关闭要求。
+- **只读检查和实际变更使用不同工具。** 查询目标不会自动产生修改权限。变更必须对应当前根用户要求；禁止项和验收条件不能提供这份授权。
 - **双语 npm 下载量历史。** 每日累计图分别保留更名前的 `dsh-context-guard` 与当前 `dsh-completion-guard` 包总量，同时呈现一条项目增长曲线。采集器会先核对 npm range 与 point 响应，再发布英文和简体中文 SVG。
 
 ### 修复
 
-- assistant 散文不再控制 turn stopping。正常 Goal 续行仍只由 Goal Round Driver 调度；只有已持久化且资格成立的 typed boundary 才能在提交后触发同 Goal ref 的 disarm 双读回。
-- 未知、缺失或漂移的宿主身份一律 fail-closed。Guard 自己注册并守卫的 `update_goal(action=complete)` 路径在 mutation 前检查；可信进程内直接写 Goal/session 的旁路只记录 integrity violation，不声称能够阻止。
-- 活动 host identity 会在 certificate replay 前传入；managed host-lock injection 保持幂等；DSH folded-YAML SRI 输出会被精确解析，新 profile 唯一的顶层 `[]` sentinel 会在追加 managed list 前安全替换。
-- Publish 现在会在捕获、npm argv 与标准 packument readback 之间冻结同一个 canonical HTTPS registry，并显式使用 `--ignore-scripts`；create/modify 在 resolution 阶段冻结预期 post-effect 字节，不再把 observed digest 回填为谓词，且 modify 会按冻结 pre-digest 拒绝源字节漂移。
-- Windows 有状态动作现在通过封闭调用解析并探测已审计 `.cmd`/`.bat` shim 的版本，其中解释器固定为 canonical `SystemRoot\\System32\\cmd.exe` realpath 与版本。resolution/effect 同时绑定 shim 与解释器身份，执行时复用经重校验的路径，不再二次搜索 `PATH` 或信任已变化的 `ComSpec`；shell 控制字符与展开字符继续 fail-closed。
+- 助手措辞不再决定 DSH 是否继续任务。只有已保存的等待或延期状态才能结束当前轮次，同时保留未完成要求。
+- DSH 包身份缺失、未知或发生变化时，受影响的 Guard 能力保持不可用。进程内部直接写 Goal/session 会被报告为完整性问题，但不声称一定能够阻止。
+- 宿主身份注入可重复执行，折叠 YAML 中的完整性值可以正确读取，新建空 profile 也能安全更新。
+- 包发布和文件修改会在操作前绑定预期目标，并拒绝已变化的输入或不同的最终字节。
+- Windows 操作会固定命令包装器和系统命令解释器，执行时复用已检查路径，不再重新搜索。
 - npm 统计发布器现在会在 checkout 前拒绝非默认 ref，把只读采集与具有写权限的发布 job 隔离，采集阶段不持久化凭据，并把全部官方 Action 固定到不可变提交。
 
 ### 变更
 
-- **包名由 `dsh-context-guard` 更名为 `dsh-completion-guard`。** 无关的 DSH 插件(kpl0111/dsh-context-guard,工具结果剪裁)已占用该名称;更名消除按名字建索引的注册面与列表上的冲突。内部 Cordis bundle id 保持 `context-guard` 不变,已安装 profile 的运行时身份不受影响。`dsh-completion-guard` 发布后,原 npm 包 `dsh-context-guard` 将被 deprecate。
+- **包名由 `dsh-context-guard` 更名为 `dsh-completion-guard`。** 另一个无关 DSH 插件已经使用旧名称。内部 Cordis bundle id 仍为 `context-guard`，已安装 profile 的运行时身份不受影响；旧 npm 包的所有已发布版本均已标为弃用，并引导读者使用新包。
 
 ### 验证
 
