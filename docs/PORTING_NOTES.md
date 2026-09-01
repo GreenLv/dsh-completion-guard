@@ -1,6 +1,9 @@
 # Porting Notes
 
-The DSH implementation ports deterministic Context Guard semantics from `GreenLv/codex-context-guard` v0.8.8 while replacing the platform layer.
+The DSH implementation started from `GreenLv/codex-context-guard` v0.8.8 and
+replaced the Codex platform layer. That version is provenance, not the current
+compatibility claim. Shared behavior now advances through pinned conformance
+fixtures and an explicit delta ledger.
 
 | Area | Treatment |
 | --- | --- |
@@ -9,6 +12,13 @@ The DSH implementation ports deterministic Context Guard semantics from `GreenLv
 | evidence and proof binding | Adapt to DSH durable tool-result events |
 | recovery and stop policy | Adapt to DSH agent lifecycle |
 | Codex hooks, cache manager, Python runtime | Delete from DSH runtime |
-| multimodal assets, subagent provenance, rollover | Defer beyond 0.1.0 |
+| portable protocol and digest fixtures | Mirror exact upstream bytes and verify their hashes |
+| product-specific or newer Codex behavior | Record explicitly in the delta ledger before porting |
 
-The DSH port derives all guard state from natively persisted DSH session events (`command/run`, `user/message`, `tool/call`, `tool/result`, `tool/code-dispatch*`) instead of the removed custom event vocabulary, wires the completion gate to Goal interception and agent scoping, and enforces fail-closed certification. Native isolated real-model acceptance has passed on macOS and Windows, and the public npm package has been loaded and exercised in a real macOS Web profile. These results cover the bounded v0.1 command subset; they do not broaden it into general shell or PowerShell analysis or claim a second Windows run from the public package.
+The DSH port derives guard state from native DSH session events, connects the
+completion gate to Goal handling, and fails closed when it cannot verify the
+host or evidence. Version 0.3.2 has passed same-package Web and Headless
+lifecycle checks on macOS and Windows. This does not make the two products
+interchangeable or imply full parity with Codex 0.9.5; current gaps are listed
+in [`SEMANTIC_COMPATIBILITY.md`](SEMANTIC_COMPATIBILITY.md) and
+[`upstream-deltas.json`](upstream-deltas.json).

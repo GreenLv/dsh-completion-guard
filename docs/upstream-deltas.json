@@ -199,11 +199,11 @@
     },
     {
       "capability": "surface-intent-and-capability-binding",
-      "sourceFact": "Codex v0.9.4 carries the deterministic proof contract surface classifier whose substring misclassification and capability adaptation gaps are scheduled for repair in v0.9.5/v0.10.0 (canonical locator, capability trust root, clause-level surface intent).",
+      "sourceFact": "Published Codex v0.9.5 narrows UI wording detection and binds task, file, Windows-path, and capability evidence to the exact item that was read.",
       "disposition": "deferred",
       "targetRelease": "dsh-completion-guard v0.4.0",
-      "rationale": "DSH Layer B reuses the Codex canonical locator, capability priority, and clause-derived surface tuple semantics via portable fixtures after the Codex repair lands; DSH must not fork its own binding rules.",
-      "planStatus": "deferred until Codex v0.9.5/v0.10.0 semantics freeze",
+      "rationale": "DSH should port the published Codex locator, capability priority, and clause-level binding rules through shared fixtures instead of creating different rules.",
+      "planStatus": "Codex v0.9.5 semantics are published; DSH implementation remains deferred to v0.4.0",
       "implementationStatus": "not-implemented",
       "tests": [],
       "plannedTests": [

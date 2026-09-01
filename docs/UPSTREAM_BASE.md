@@ -2,7 +2,7 @@
 
 This repository ports deterministic semantics from an existing Codex product; it is a new, independently owned repository with a fresh history.
 
-## Semantic baseline
+## Historical starting point
 
 - Repository: `https://github.com/GreenLv/codex-context-guard`
 - Version: `v0.8.8`
@@ -10,6 +10,13 @@ This repository ports deterministic semantics from an existing Codex product; it
 - Peeled source commit: `e661370442183913b717ec2535609377bbb8664a`
 - License: Apache-2.0
 - Key contracts: private state schema 7, Proof protocol 1.0.0, Stop protocol 1.1.0
+
+These values identify the source used for the first DSH port. They do not say
+that current DSH behavior stops at Codex v0.8.8 or fully matches a later Codex
+release. Current shared behavior and remaining gaps are tracked in
+[`SEMANTIC_COMPATIBILITY.md`](SEMANTIC_COMPATIBILITY.md),
+[`upstream-deltas.json`](upstream-deltas.json), and the pinned conformance
+fixtures.
 
 ## Reused vs replaced
 

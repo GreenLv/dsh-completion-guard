@@ -82,7 +82,11 @@ Evidence is bounded and redacted. Complete prompts, stdout, file contents, crede
 
 ## Relationship to Codex Context Guard
 
-This project ports deterministic behavior from [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard), with v0.8.8 as its semantic baseline. The two repositories serve different runtimes:
+This project began as a DSH port of deterministic behavior from [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8. That version is the historical starting point, not the current compatibility level.
+
+Current shared behavior is tracked by pinned conformance fixtures and an explicit delta ledger. Version 0.3.2 includes the shared Stop 2.0, digest v3, and conformance work from the Codex 0.9.4 line. It does not claim every Codex 0.9.5 behavior; some stricter task, path, and capability binding remains planned for DSH 0.4.0.
+
+The two repositories serve different runtimes:
 
 - `codex-context-guard` is the Codex Hook/Python implementation with Codex plugin-cache and Hook lifecycle integration.
 - `dsh-completion-guard` is an independent TypeScript implementation over native DSH Session events, commands, tools, and agent lifecycle.
@@ -97,7 +101,8 @@ They do not share runtime state, installers, caches, or release histories. Fixes
 - [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) — deterministic, isolated, native, and public-package validation scopes.
 - [`docs/distribution.md`](docs/distribution.md) — verified public distribution destinations and the rename note.
 - [`docs/PRIVACY.md`](docs/PRIVACY.md) — stored facts, prohibited data, and failure behavior.
-- [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) — semantic baseline and repository authority boundary.
+- [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) — historical starting point and repository authority boundary.
+- [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md) — current shared behavior and known gaps.
 - [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) — behavior retained from Codex and DSH-specific replacements.
 
 ## Development

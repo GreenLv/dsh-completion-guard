@@ -29,15 +29,15 @@ Authority rules:
   values are pinned in `tests/fixtures/conformance/UPSTREAM_PIN.json`; the
   vitest suite fails when any mirror drifts from its pinned hash.
 - `UPSTREAM_PIN.json` records the upstream head at mirror time, the mirror
-  date, and per-file hashes. The canonical files were created in an upstream
-  working tree pending commit, so `canonicalCommit` is `pending` until the
-  upstream commit that lands them exists; refresh the pin when re-syncing.
+  date, and per-file hashes. Its current `canonicalCommit` is the landed
+  upstream commit `b59fcfe1aaf8ead3f0438bc67dc7f725c869a473`; refresh the pin
+  whenever the mirrors are re-synced.
 - New protocol cases discovered on the DSH side are turned into
   platform-neutral fixture cases upstream first; host-specific expectations
   never enter the shared fixture.
-- `docs/UPSTREAM_BASE.md` records the historical v0.1.0 baseline. It is a
-  historical fact, not a claim that DSH implements Codex protocol versions;
-  current alignment status lives in this document and the delta ledger.
+- `docs/UPSTREAM_BASE.md` records the Codex v0.8.8 source used for the first
+  DSH v0.1.0 port. It is a historical fact, not the current alignment claim;
+  current status lives in this document and the delta ledger.
 
 ## Digest v3
 

@@ -82,7 +82,11 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 ## 与 Codex Context Guard 的关系
 
-本项目从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) 迁移确定性行为，以 v0.8.8 作为语义基线，但两者服务于不同运行时：
+本项目最初从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8 移植确定性行为。这个版本只是历史起点，不代表当前兼容程度。
+
+现在双方共享到哪里，由固定的兼容性测试数据和差异台账记录。0.3.2 已包含 Codex 0.9.4 系列的 Stop 2.0、digest v3 和共享兼容性测试，但不声称覆盖 Codex 0.9.5 的全部行为；更严格的任务、路径和能力绑定仍计划在 DSH 0.4.0 完成。
+
+两个项目服务于不同运行时：
 
 - `codex-context-guard` 是面向 Codex Hook 的 Python 实现，负责 Codex 插件缓存和 Hook 生命周期接入。
 - `dsh-completion-guard` 是独立的 TypeScript 实现，基于 DSH 原生 Session 事件、命令、工具和 Agent 生命周期工作。
@@ -97,7 +101,8 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 - [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) — 确定性、隔离环境、原生平台和公开包验证范围。
 - [`docs/distribution.md`](docs/distribution.md) — 已验证的公开分发去向与更名说明。
 - [`docs/PRIVACY.md`](docs/PRIVACY.md) — 保存的事实、禁止数据和失败行为。
-- [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) — 语义基线与仓库权威边界。
+- [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) — 历史起点与仓库权威边界。
+- [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md) — 当前共享行为和已知差异。
 - [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) — 从 Codex 保留的行为和 DSH 专属替换。
 
 ## 开发
