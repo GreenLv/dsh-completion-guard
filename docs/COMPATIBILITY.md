@@ -4,12 +4,12 @@ The current development target is pinned, not a floating claim.
 
 ## Target
 
-- DeepSeek Harness: `0.1.1-rc.2` with dshmarket `1.36.0`, or `0.1.2-alpha.2` with dshmarket `1.38.1` (both checked on macOS and Windows)
-- Cordis: `4.0.1` (rc.2 cohort) / `4.0.2` (alpha.2 cohort)
+- DeepSeek Harness: `0.1.1-rc.2` with dshmarket `1.36.0`, `0.1.2-alpha.2` with dshmarket `1.38.1`, `0.1.2-alpha.2` with dshmarket `1.39.0` (the upgraded-Windows combination, registered as its own audited cohort), or `0.1.2-alpha.3` with dshmarket `1.39.0` (rc.2 and alpha.2+1.38.1 checked natively on macOS and Windows; the alpha.2+1.39.0 and alpha.3 graphs are rebuilt from the audited 2026-09-01 annex and their native acceptance is pending)
+- Cordis: `4.0.1` (rc.2 cohort) / `4.0.2` (alpha.2, alpha.2+dshmarket-1.39.0, and alpha.3 cohorts)
 - Node: `>= 22`
 - pnpm: `>= 11`
 
-DSH is still a developer preview and may make breaking changes. Compatibility is therefore limited to two audited host sets in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). A host set is the complete list of required packages and their exact versions. Every row must match one set; missing, mixed, duplicate, unidentified, or unknown packages leave the Guard unavailable. The selected set is part of the host-lock digest, so changing sets invalidates earlier certificates. Platform support is registered only after the complete set is checked natively on that platform.
+DSH is still a developer preview and may make breaking changes. Compatibility is therefore limited to the four audited host sets in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). A host set is the complete list of required packages and their exact versions. Every row must match one set; missing, mixed, duplicate, unidentified, or unknown packages leave the Guard unavailable. dshmarket is an authoritative input of each audited set: the alpha.2 runtime with dshmarket 1.39.0 is supported through its own registered cohort, while substitutions matching no registered cohort — alpha.3 rows with dshmarket 1.38.1, rc.2 rows with dshmarket 1.38.1, alpha.2 rows with dshmarket 1.36.0 — fail closed as mixed graphs, and skin-center is not a Guard lock input. The selected set is part of the host-lock digest, so changing sets invalidates earlier certificates. Platform support is registered only after the complete set is checked natively on that platform.
 
 ## Loader contract
 
@@ -21,7 +21,7 @@ Version 0.3 additionally accepts `hostLockPackages`, `hostLockPlatform`, and `ho
 
 ## Peer dependencies
 
-Runtime packages are host-provided and declared as peer dependencies: `@deepseek-ai/cordis`, `@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-commands`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-tools`. Goal uses two exact optional peers as one capability: `@deepseek-ai/dsh-goal` owns state, and `@deepseek-ai/dsh-tool-goal` owns the audited `update_goal` name/schema/arguments. Both graph rows and the live Goal service/tool must agree. Profiles without this complete capability still load, but Goal-dependent integration is inactive. Peer ranges accept exactly the two audited cohort sets (`0.1.1-rc.2 || 0.1.2-alpha.2`; Cordis `4.0.1 || 4.0.2`) — never a floating range — while runtime acceptance is constrained by the exact injected host lock and its atomic cohort selection.
+Runtime packages are host-provided and declared as peer dependencies: `@deepseek-ai/cordis`, `@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-commands`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-tools`. Goal uses two exact optional peers as one capability: `@deepseek-ai/dsh-goal` owns state, and `@deepseek-ai/dsh-tool-goal` owns the audited `update_goal` name/schema/arguments. Both graph rows and the live Goal service/tool must agree. Profiles without this complete capability still load, but Goal-dependent integration is inactive. Peer ranges accept exactly the three audited cohort sets (`0.1.1-rc.2 || 0.1.2-alpha.2 || 0.1.2-alpha.3`; Cordis `4.0.1 || 4.0.2`) — never a floating range — while runtime acceptance is constrained by the exact injected host lock and its atomic cohort selection.
 
 ## Terminal outcome contract
 

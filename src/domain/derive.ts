@@ -216,6 +216,7 @@ export function deriveProjection(
   projection.hostLockDigest = hostLock.digest
   projection.hostStatus = hostLock.status
   projection.hostReasonCode = hostLock.reasonCode
+  projection.hostCohortId = hostLock.cohortId
   let enabled = config.activation === 'always'
   let epoch = 0
   let evidenceCounter = 0

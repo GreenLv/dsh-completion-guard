@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.4.0 - 2026-09-02
+
+### Added
+
+- **The audited alpha.3 host cohort is available.** The complete 34-row DSH 0.1.2-alpha.3 graph with Cordis 4.0.2 and dshmarket 1.39.0 is selected atomically alongside the retained cohorts. Missing, duplicate, unknown, or integrity-drifted graphs fail closed; skin-center is not a Guard lock input.
+- **The upgraded-Windows combination is now supported.** `0.1.2-alpha.2` with dshmarket `1.39.0` — the exact graph whose rejection was Guard 0.3.2's real `web_control` failure — is registered as its own audited whole-graph cohort with a supported web-control projection on Windows. dshmarket stays the authoritative audit input of every cohort, and substitutions matching no registered cohort (for example alpha.3 + dshmarket 1.38.1) still fail closed as mixed graphs.
+- **Proof 0.4.0 contracts bind to replayed state.** Canonical projections, bounded subject-readback, scope-coverage, and state-verification obligations, and replayable sessionQuery state are versioned. A proof only yields a usable query result when its obligations name pending items and its evidence ids exist in the projection and satisfy kind/surface/subject/outcome constraints; tampered asset-set digests, divergent expected/observed scope digests, empty subject sets, and foreign evidence all fail closed. Raw private logs and asset bytes are excluded.
+- **Stage disposition.** The stopped 0.3.3 compatibility candidate is recorded as `superseded_before_candidate`; no 0.3.3 source, artifact, installation, native acceptance, commit, tag, or release existed.
+
+### Validation
+
+- Source implementation only. Native profile installation, restart, artifact, tag, npm, and GitHub Release evidence remain separate and are not claimed by this change.
+
 ## 0.3.2 - 2026-09-01
 
 ### Added

@@ -943,14 +943,14 @@ function captureClause(text, sourceMessageId, id, revision, scope = {}) {
 
 //#endregion
 //#region src/domain/contract-digest.ts
-function stable$2(value) {
-	if (Array.isArray(value)) return `[${value.map(stable$2).join(",")}]`;
-	if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => `${JSON.stringify(key)}:${stable$2(entry)}`).join(",")}}`;
+function stable$3(value) {
+	if (Array.isArray(value)) return `[${value.map(stable$3).join(",")}]`;
+	if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => `${JSON.stringify(key)}:${stable$3(entry)}`).join(",")}}`;
 	return JSON.stringify(value);
 }
 /** One authoritative contract identity shared by checkpoints and boundaries. */
 function currentContractDigest(projection) {
-	return sha256(stable$2([...projection.items.values()].sort((a, b) => a.id.localeCompare(b.id)).map((item) => [
+	return sha256(stable$3([...projection.items.values()].sort((a, b) => a.id.localeCompare(b.id)).map((item) => [
 		item.id,
 		item.revision,
 		item.kind,
@@ -1950,16 +1950,16 @@ function renderRecoveryPacket(projection, options = {}) {
 
 //#endregion
 //#region src/domain/checkpoint.ts
-function stable$1(value) {
-	if (Array.isArray(value)) return `[${value.map(stable$1).join(",")}]`;
-	if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => `${JSON.stringify(key)}:${stable$1(entry)}`).join(",")}}`;
+function stable$2(value) {
+	if (Array.isArray(value)) return `[${value.map(stable$2).join(",")}]`;
+	if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => `${JSON.stringify(key)}:${stable$2(entry)}`).join(",")}}`;
 	return JSON.stringify(value);
 }
 function tuplesEqual(left, right) {
-	return stable$1(left ?? {}) === stable$1(right ?? {});
+	return stable$2(left ?? {}) === stable$2(right ?? {});
 }
 function transitionsEqual(left, right) {
-	return stable$1(left) === stable$1(right);
+	return stable$2(left) === stable$2(right);
 }
 function transitionIsSelfConsistent(action, transition) {
 	if (!transition?.parameters || transition.predicateId !== ACTION_MANIFEST.actions[action].predicateId || transition.version !== 1 || transition.predParamsKind !== "inline") return false;
@@ -2051,14 +2051,14 @@ function expectedTransitionMatches(action, transition, resolved, observed) {
 			"version",
 			"integrity_digest",
 			...action === "publish" ? ["registry"] : ["profile"]
-		].every((key) => stable$1(observed[key]) === stable$1(resolved[key]) && stable$1(params[key]) === stable$1(resolved[key]));
+		].every((key) => stable$2(observed[key]) === stable$2(resolved[key]) && stable$2(params[key]) === stable$2(resolved[key]));
 		case "create":
-		case "modify": return stable$1(observed.post_digest) === stable$1(params.post_digest);
-		case "restart": return stable$1(params.pre_generation) === stable$1(resolved.pre_generation) && stable$1(observed.new_generation) !== stable$1(resolved.pre_generation) && stable$1(observed.health) === stable$1(params.health);
-		case "commit": return stable$1(params.pre_head_oid) === stable$1(resolved.pre_head_oid) && stable$1(params.change_set_digest) === stable$1(resolved.change_set_digest) && stable$1(observed.pre_head_oid) === stable$1(resolved.pre_head_oid) && stable$1(observed.post_head_oid) !== stable$1(resolved.pre_head_oid);
-		case "push": return stable$1(observed.remote_oid) === stable$1(resolved.local_oid) && stable$1(params.local_oid) === stable$1(resolved.local_oid);
-		case "pull": return stable$1(resolved.pull_mode) === stable$1("ff-only") && stable$1(params.pull_mode) === stable$1("ff-only") && stable$1(params.upstream_oid) === stable$1(resolved.upstream_oid) && stable$1(params.pre_head_oid) === stable$1(resolved.pre_head_oid) && stable$1(observed.post_head_oid) === stable$1(resolved.upstream_oid) && stable$1(observed.tracking_ref_oid) === stable$1(resolved.upstream_oid);
-		case "fetch": return stable$1(params.upstream_oid) === stable$1(resolved.upstream_oid) && stable$1(params.pre_head_oid) === stable$1(resolved.pre_head_oid) && stable$1(observed.tracking_ref_oid) === stable$1(resolved.upstream_oid) && stable$1(observed.post_head_oid) === stable$1(resolved.pre_head_oid);
+		case "modify": return stable$2(observed.post_digest) === stable$2(params.post_digest);
+		case "restart": return stable$2(params.pre_generation) === stable$2(resolved.pre_generation) && stable$2(observed.new_generation) !== stable$2(resolved.pre_generation) && stable$2(observed.health) === stable$2(params.health);
+		case "commit": return stable$2(params.pre_head_oid) === stable$2(resolved.pre_head_oid) && stable$2(params.change_set_digest) === stable$2(resolved.change_set_digest) && stable$2(observed.pre_head_oid) === stable$2(resolved.pre_head_oid) && stable$2(observed.post_head_oid) !== stable$2(resolved.pre_head_oid);
+		case "push": return stable$2(observed.remote_oid) === stable$2(resolved.local_oid) && stable$2(params.local_oid) === stable$2(resolved.local_oid);
+		case "pull": return stable$2(resolved.pull_mode) === stable$2("ff-only") && stable$2(params.pull_mode) === stable$2("ff-only") && stable$2(params.upstream_oid) === stable$2(resolved.upstream_oid) && stable$2(params.pre_head_oid) === stable$2(resolved.pre_head_oid) && stable$2(observed.post_head_oid) === stable$2(resolved.upstream_oid) && stable$2(observed.tracking_ref_oid) === stable$2(resolved.upstream_oid);
+		case "fetch": return stable$2(params.upstream_oid) === stable$2(resolved.upstream_oid) && stable$2(params.pre_head_oid) === stable$2(resolved.pre_head_oid) && stable$2(observed.tracking_ref_oid) === stable$2(resolved.upstream_oid) && stable$2(observed.post_head_oid) === stable$2(resolved.pre_head_oid);
 		default: return true;
 	}
 }
@@ -2067,8 +2067,8 @@ function nonStatefulTransitionMatches(action, transition, resolved, observed) {
 	const params = transition.parameters;
 	const recomputed = predParamsDigest(params, resolveAllowlist("product"));
 	if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false;
-	if (action === "inspect_remote_updates") return ["remote", "version"].every((key) => stable$1(params[key]) === stable$1(resolved[key])) && stable$1(params.upstream_oid) === stable$1(observed.upstream_oid);
-	return stable$1(params) === stable$1({
+	if (action === "inspect_remote_updates") return ["remote", "version"].every((key) => stable$2(params[key]) === stable$2(resolved[key])) && stable$2(params.upstream_oid) === stable$2(observed.upstream_oid);
+	return stable$2(params) === stable$2({
 		expected_outcome: {
 			k: "e",
 			v: "success"
@@ -2175,7 +2175,7 @@ function richStatefulRecord(projection, item, binding) {
 		reason: "resolution fact does not bind an expected transition digest",
 		reasonCode: "resolution_expected_transition_digest_missing"
 	} };
-	if (resolution.expectedTransitionDigest !== sha256(stable$1(resolution.expectedTransition))) return { rejected: {
+	if (resolution.expectedTransitionDigest !== sha256(stable$2(resolution.expectedTransition))) return { rejected: {
 		itemId: item.id,
 		reason: "resolution expected transition digest does not match its stable payload",
 		reasonCode: "resolution_expected_transition_digest_mismatch"
@@ -2270,7 +2270,7 @@ function simpleRecord(projection, item, binding) {
 	const effectAction = effect.semanticAction ?? "generic_run";
 	const effectTarget = effect.resolvedTarget ?? {};
 	const effectObserved = effect.observedState ?? {};
-	if (!(Object.entries(binding.resolvedTarget ?? {}).every(([key, value]) => Object.hasOwn(effectTarget, key) && stable$1(value) === stable$1(effectTarget[key])) && Object.entries(binding.observedState ?? {}).every(([key, value]) => Object.hasOwn(effectObserved, key) && stable$1(value) === stable$1(effectObserved[key]))) || effectAction === action && (!tuplesEqual(binding.resolvedTarget, effectTarget) || !tuplesEqual(binding.observedState, effectObserved))) return { rejected: {
+	if (!(Object.entries(binding.resolvedTarget ?? {}).every(([key, value]) => Object.hasOwn(effectTarget, key) && stable$2(value) === stable$2(effectTarget[key])) && Object.entries(binding.observedState ?? {}).every(([key, value]) => Object.hasOwn(effectObserved, key) && stable$2(value) === stable$2(effectObserved[key]))) || effectAction === action && (!tuplesEqual(binding.resolvedTarget, effectTarget) || !tuplesEqual(binding.observedState, effectObserved))) return { rejected: {
 		itemId: item.id,
 		reason: "binding target does not match the cited effect evidence",
 		reasonCode: "binding_state_cross_pairing"
@@ -2930,6 +2930,186 @@ function authorityCaptureCounts(blocks) {
 }
 
 //#endregion
+//#region src/domain/alpha3-host.ts
+/** Exact 34-row alpha.3 runtime/web graph from the 2026-09-01 annex audit. */
+const ALPHA3_HOST_PACKAGES = [
+	[
+		"@deepseek-ai/cordis",
+		"4.0.2",
+		"sha512-asOnXP1TzFSFQlHb1iegDZp0z/8WD1c7YNrwJR/Tx2bzNuMXfcekE/I67Iv6SQXeLB4csxqCngzQKANP7gdw0g=="
+	],
+	[
+		"@deepseek-ai/dsh",
+		"0.1.2-alpha.3",
+		"sha512-VvATzYmQ4LMJREJ9e2POKksSHRfqP3y9pghplLBaQBuw2BqfbC0mQUVsaPwxe4wlcpj+riEgn8OJB01YnpF+3A=="
+	],
+	[
+		"@deepseek-ai/dsh-agent",
+		"0.1.2-alpha.3",
+		"sha512-K1Pj9wqXmXjbMv4//wbPEPzaRBIYGluLzgnym2NPZFr9uS5h1soowUWVmI0lb3iU5FIUKuCg7YYEOrGSwPtRhQ=="
+	],
+	[
+		"@deepseek-ai/dsh-agent-loop",
+		"0.1.2-alpha.3",
+		"sha512-SXA7eKvcpYjexnkY3MLUbJOPaLGXrCCPI/eA1ohhYFiuRsu4y4Lt5C0CchtXWqIxlKDdW3lWapj81OpeYHTi2A=="
+	],
+	[
+		"@deepseek-ai/dsh-attachment",
+		"0.1.2-alpha.3",
+		"sha512-KiJy3esEEthj2alvZLqGN6YH7Ncmia+lzJW9VWf8J9EThlmUrX9xcG6k8v/paLMyrAv2w4JKxvZCIuWZK5mIwA=="
+	],
+	[
+		"@deepseek-ai/dsh-bash-sandbox",
+		"0.1.2-alpha.3",
+		"sha512-U3U6ageI0VPs9TmIqtZtztJRBCwGszSbNLHe24h1kPKDAy3UveGNUDdq89OgINJH7U1Ce213uucRcqY8tjkPfw=="
+	],
+	[
+		"@deepseek-ai/dsh-commands",
+		"0.1.2-alpha.3",
+		"sha512-lXB+f7B5a1gDatCtpww5AvM2TCltb95xkHZMkAmwleBJJgx5iqtKtEelObigXZu14HtZpLdO6v/0Fvm/akOyIg=="
+	],
+	[
+		"@deepseek-ai/dsh-fs",
+		"0.1.2-alpha.3",
+		"sha512-qOaZ7JRFNJYtdG2EkHpXs4yzypRZX5YHOjZ7RLe571T/eLegg9nCJIEr4gFr1LvPn2nuLdJmwTB2x4ckZkXIuw=="
+	],
+	[
+		"@deepseek-ai/dsh-fs-local",
+		"0.1.2-alpha.3",
+		"sha512-QzLTaj92cJ4RrE5NTx9NaV5ZhlC0mgSLHK3Z6ePXyHFcgAPGh3dJ6pw4q3r2dC7vlDTKyBIHHCb6MLwSUU8+BA=="
+	],
+	[
+		"@deepseek-ai/dsh-fs-observation-policy",
+		"0.1.2-alpha.3",
+		"sha512-HDbTSazpoRIyPwmfip5k0nT4FfboaiViJqQplAUulCDxRK0QykuMQPUdkzANEXkvMBR2meTYurR6OPE0NZKuWw=="
+	],
+	[
+		"@deepseek-ai/dsh-fs-sandbox",
+		"0.1.2-alpha.3",
+		"sha512-Ady8S/1NJcVv2SHgzOWHmhFcfmfidUBN1F5d5KFywHwYzYChtjldiieJvxU7dH7opH/sdX8kxOgFoDqauE4g8w=="
+	],
+	[
+		"@deepseek-ai/dsh-goal",
+		"0.1.2-alpha.3",
+		"sha512-mExFFbFDupDTwbVagDbHVGJ0jYvGiFYFocAwfGYxPQGxZRcU8d4BgFir60GhbHsKtoSLDc48IlWscTZ6CXD3CA=="
+	],
+	[
+		"@deepseek-ai/dsh-host-plugin-inventory",
+		"0.1.2-alpha.3",
+		"sha512-NagByjrXyIQRLaTGFmkqZ50HpgkEKuNHvwLskMGgu5ej8ucAQKOvJ2B+iyAlbtXj4Pkr84HKIX6smqjbGJNDxA=="
+	],
+	[
+		"@deepseek-ai/dsh-host-webserver",
+		"0.1.2-alpha.3",
+		"sha512-VSlbioqJZ8JSQmFnjYXr7U/R7NCfL8fo9ztiYpRTAoqrSoodaabA6hH79Mueb+gAVHOtzpNRLK8dWDkqczmDVA=="
+	],
+	[
+		"@deepseek-ai/dsh-jobs",
+		"0.1.2-alpha.3",
+		"sha512-P5jS3kqNrnPktvSQLBWsAnf5Dpa20EzVo9giUQQKE6WKgPV9Z3tnRVybV2TFTU6MqGClNAqZmY8tnEMABzgA9g=="
+	],
+	[
+		"@deepseek-ai/dsh-jobs-local",
+		"0.1.2-alpha.3",
+		"sha512-d77W8jURnp9pVxnU0fuYt8lDmmiJcR9FWzNwPqvk/uwjx9zwtMtkCU0WtBcyxVqVGpEmG2pU2upln1m0eCfVBA=="
+	],
+	[
+		"@deepseek-ai/dsh-llm",
+		"0.1.2-alpha.3",
+		"sha512-xGedBtvxb1HJWCmVO9v3fhHqoZ1iMDQU1x7fqAhhDfjKjmLTljWC1/RdZqUFI/1a/CM1iGPSaDuPZDCMu45AtA=="
+	],
+	[
+		"@deepseek-ai/dsh-pwsh-sandbox",
+		"0.1.2-alpha.3",
+		"sha512-nVYijWMJilFWGF/nJLieNyM1c4PY1CdMN0QmHQGMiE9kyL5+MR8xzqlgxQ3I3GzX9zzbN1NjLbm+t+QHaDlLUQ=="
+	],
+	[
+		"@deepseek-ai/dsh-sandbox",
+		"0.1.2-alpha.3",
+		"sha512-lKM+jhpxvfY48Se+J2sewIY2QP+eGCeSAazlvOsW3VMkzoVSA7RVIJFh6/xn3t1N9wrOXawii5Ex/vGVJ44HBQ=="
+	],
+	[
+		"@deepseek-ai/dsh-sandbox-policy",
+		"0.1.2-alpha.3",
+		"sha512-Lj75///rZ/5x60aM5fds3u8S4o1QTiy2/TKvqLUr+xT9CJRfk6v81LxV/SYc6DmP2pN0TKwL/50/kL44wbxzvw=="
+	],
+	[
+		"@deepseek-ai/dsh-session",
+		"0.1.2-alpha.3",
+		"sha512-iwWs0FdShoiCLLVk6lSZL18vKlFuliQXqy6gnu4U34B8K3uPb+QYWHjB3PrTXcK8ZVmb0zdWeyZ9osmANWWKnw=="
+	],
+	[
+		"@deepseek-ai/dsh-shell",
+		"0.1.2-alpha.3",
+		"sha512-UM+ZObnmKVEy+/d2hKUNAIctpLojpbs7isOyZ3LoWtcVnIK2kjPCPDHBeUj/3DMSzxYR7Ak9QRnNxnG5cXgvDg=="
+	],
+	[
+		"@deepseek-ai/dsh-shell-env",
+		"0.1.2-alpha.3",
+		"sha512-Phgv3Zuao0jKlS++uyUlQw+7x2Zk3DFcG2qOb86JwP3WpzqgdzoKoplcc3wev3J8+RX5TkNq7Dl92UKPvynGTw=="
+	],
+	[
+		"@deepseek-ai/dsh-subprocess-local",
+		"0.1.2-alpha.3",
+		"sha512-T2HPtqL17ODH5AS7E6cQKtiulJSGv7HEQmYbQKiSaR2CCiLHlXosUPuGis+yuCfBZ8GZOjwn18abkDraKOOFCg=="
+	],
+	[
+		"@deepseek-ai/dsh-system-prompt",
+		"0.1.2-alpha.3",
+		"sha512-R+VVDew/0DdTypypAjkgTygh3M2yNYXNFO+DvMfdX98jgD7MSluw2iYaCFR/ax9bBNHXXHQ7eXHsIYI1a0FrPg=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-bash",
+		"0.1.2-alpha.3",
+		"sha512-eQ3IQ+Jz0CI2e24gx8Q8xg1MyYcE48UP/asWEBfSuM0ycmexbGLPPip/H137NbxBXx1O4Ewok8ipVLyHYx7QjQ=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-fs",
+		"0.1.2-alpha.3",
+		"sha512-YiY/hxBh11Lu3wKjtGxhDFYHf2ACWpUlhTM1JopJhiEdrIAsZ7wXeRHfLzvMaHJG30+vgIekbY/zY8EOGkOsww=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-goal",
+		"0.1.2-alpha.3",
+		"sha512-YQ1JwXIGiIDkATlrqV6CV1sbHFd95tbmNPlbsuwjKXETMcGO09iTtOoYCONBT8aIx9TSqcloM37TjDGgpEXFYQ=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-jobs",
+		"0.1.2-alpha.3",
+		"sha512-tsBJslgxjlv92/8guVjUEOPkr+JlC83BGiJJpHAponyPBdCF/mVy8zBO6V89yEgmjW/nRWTUwv2dZnnHtOCptQ=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-pwsh",
+		"0.1.2-alpha.3",
+		"sha512-QxCPtD9EcjoKuo1MZid/fkbsXHDKRpF3s1iXUuFIMsjBZs7ip/qoieL/bTpqiyHJcuhHjWver8hKkEdL/nqBdA=="
+	],
+	[
+		"@deepseek-ai/dsh-tools",
+		"0.1.2-alpha.3",
+		"sha512-ffcpryQgwqAHIkN326CKqH3kueCMKXgbRU4D0Lp+Kwql97NVZrmRxI8ExERJtTju1adtowwVOXIdPjD4XyB44w=="
+	],
+	[
+		"@deepseek-ai/dsh-user-approval",
+		"0.1.2-alpha.3",
+		"sha512-ulp0zA1JnzrjJVyg4DbKMR6Vxz66+ltbIXKhDQcrPgYE93woI0U2VoWiQPuvlozcWqpEvDsmsmdM3rMTxQrB0A=="
+	],
+	[
+		"@deepseek-ai/dsh-web-app",
+		"0.1.2-alpha.3",
+		"sha512-ntOJ9WOU+KPOuWBRxTibM89BxiAYN20bKcp3ozn0M5A5+IHG/7QFUxcZUZCq03eVpNR59l/EgGrHdxy7r+ON9g=="
+	],
+	[
+		"dshmarket",
+		"1.39.0",
+		"sha512-URuXIuuNRfX6k0Flo7CJxeA7EVLhLGYDm3Lk4BoEXW1Qlg+boX/LI8wCE8hGC0FMBftFr9j8D/ulGNTdFM67nQ=="
+	]
+].map(([name, version, integrity]) => ({
+	name,
+	version,
+	integrity
+}));
+
+//#endregion
 //#region src/domain/host-lock.ts
 /**
 * Capability expectations shared by every audited host cohort. The rc.2 ->
@@ -3013,185 +3193,11 @@ function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages) {
 	};
 }
 /**
-* Audited host cohort registry. The rc.2 cohort keeps the exact identities
-* audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
-* exact package graph extracted from native macOS and Windows DSH
-* `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. Graphs that mix cohorts,
-* lack rows, duplicate rows, or use
-* versions outside both cohorts fail closed.
+* alpha.2 audited package identities (second registry cohort), hoisted so the
+* alpha.2 + dshmarket 1.39.0 cohort can reuse the exact natively audited rows
+* with only the dshmarket identity substituted.
 */
-const HOST_COHORTS = [defineCohort("dsh-0.1.1-rc.2", ["0.1.1-rc.2"], ["posix", "windows"], [
-	{
-		name: "@deepseek-ai/cordis",
-		version: "4.0.1",
-		integrity: "sha512-YBdskTU2Po1kru3GgcUWUbkTsPMA9LkSQDAY8rBkFJeajdgcQad3QPJZE26JyK99Xb6HaASvoXg2DSUTeN/0Nw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-agent",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-cC7lnJe7JgPFcreNXxcxLMxQd78LnpVO9ZXROjZsGRQN1zGH6i/DduI892F1am85IfzzO+XTxMwwUHmfwamb0g=="
-	},
-	{
-		name: "@deepseek-ai/dsh-commands",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-BOIe4Sht9rmMv1a6b3GWjWBbeWr7PtHlAy41vgpaymvUUuzOapOIA648ZMGCI/crRIt72Umev2FHtSwCNSbYZg=="
-	},
-	{
-		name: "@deepseek-ai/dsh-goal",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-lSHTh4vfS6eRb9to/y+bjRf2+0QkNpY3tHJ29HMTewR9fJYZsEVVu4Hc+GPhPEjF7RpiD35/sKx+akijtDasyg=="
-	},
-	{
-		name: "@deepseek-ai/dsh-llm",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-ASJfjIdZbIXvLwi3rGo+eZb/GxMVV/WO5/XVD3B96mT8EIzrlw3+nMR6/CvmJVzcycKQ2XN0wj7jD6TasPRySA=="
-	},
-	{
-		name: "@deepseek-ai/dsh-session",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-4/cv6X9HPhm47eyRhCu/WZwzrtJKegk5J+0xaxcZ9i8S0smdxP57tqy8a0jkSshLQn7BzMFxneQrlYExrLrDhQ=="
-	},
-	{
-		name: "@deepseek-ai/dsh-tools",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-0GGL4D55MwYDepzZMOI3L0ycu5b2qr96GL0Y7snwhAnpK2Di61rbX3fJE+PB3ZrovGX0csIRdt9n3iJZDVtDrw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-tool-goal",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA=="
-	},
-	{
-		name: "@deepseek-ai/dsh-agent-loop",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-2uJZ6kjJ3IYLRGn6/NhiZgD576ABcbERB/nkReR9TEUMO2zWkz6OuKtVwLyFCFSni2T25Jv+clKQWt7D4MhU3A=="
-	},
-	{
-		name: "@deepseek-ai/dsh-tool-bash",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-YNmrKmBanj5EQn1zejjbo4UUFtg2/h3s9y0lY3vBu+dezNz4HdUlSkSZACbNUAZywyLomdhlt4rJdtdnrqyS7Q=="
-	},
-	{
-		name: "@deepseek-ai/dsh-tool-pwsh",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-Gr0F4VWCIIR25qWVv4mMEJnewXILHLCkZwrLfbHA2OOI7DNvvdB5wjJxhuo+ZQa8/3KJ/byQGtEBqCY9mb10Zg=="
-	},
-	{
-		name: "@deepseek-ai/dsh-shell",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-gEqPUxKOpOV66wvM4o8Z5FEuWmsEvYzD9OQy3cyo/kjzlx+2+KUWi22cl/YWtBs/zUtRJbdG5UqMnh8GUeO8Hg=="
-	},
-	{
-		name: "@deepseek-ai/dsh-subprocess-local",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-I4pyzpohZEVRQQbuEpMP0t8oKsf+XIlRo64aJVKGXI2eMcg9f9gbfhKQNYNqRGbegQL1HYpSLU6Rzyibldgwaw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-bash-sandbox",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-bagZDMZ73C1dVDBjFCn1flNZ8aOEel4dsmDJTfmagqeYPXfIJDFKPhDc3lWjc+o6jMNfmumeUJ62dwhHkjJHKA=="
-	},
-	{
-		name: "@deepseek-ai/dsh-pwsh-sandbox",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-hBUTg5p8TTQifZrfstbimVlBFyUOb7JhNkWKc+n6UpTzoFRSkPAvrjGeXKDmFI6jXpL4nXzLJoaIssfYnRg7bw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-shell-env",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-dDKKqsxsbklUpxX5ornd/SKJ2yfr/SOHOWDgeJkYvx3SMSXq8EvhCK/VEvHswXQ25rRLFWM4/Mr3htk1hn/GPA=="
-	},
-	{
-		name: "@deepseek-ai/dsh",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
-	},
-	{
-		name: "@deepseek-ai/dsh-host-plugin-inventory",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-Hud9ezW0bexWfhX7C+c5rdUDX1xzbEGDzj1lGQyj/QxdrxHYHjGrJq3tLRyvN6K4FSmEdG2IBKdQGCOLVrIthA=="
-	},
-	{
-		name: "dshmarket",
-		version: "1.36.0",
-		integrity: "sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g=="
-	},
-	{
-		name: "@deepseek-ai/dsh-host-webserver",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-t9MrjC65QHiiWhG9V8UZxgfE/aWYhJHHrIM0kbTvtXxg4tLGIKo/upHp7iiag65F3HTkVLrH/DUyPMi4v2ZA7g=="
-	},
-	{
-		name: "@deepseek-ai/dsh-web-app",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-1zGHY7qwBVlVJrzIWu+86SuBZXaVUxe2JRfffsuRvKXq2QcR/K4CoJJfZ43cDoWKu9xPvvxz7w2ezV+EdXgg1A=="
-	},
-	{
-		name: "@deepseek-ai/dsh-jobs",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-SXvDJMvcUrGrlzIyE7j8/lI4Pj1nDe/UOR8C05Zagp+/0R8p46n6KylySvZdPAFENV5t8WX3Fw3eOaS4No0+wQ=="
-	},
-	{
-		name: "@deepseek-ai/dsh-jobs-local",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-26lg7mi9RKnu8IP8SWLbY+uZenbqF2AkAZvgZaLDlw1z58NtBsbgKgh6FNC8JXEyknAwYc6auQQKF+nLTlEjCw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-tool-jobs",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-wCU7mo2uoQcAtz7de4ZXP2es9lALsmz6XzC+KAlS2e7/yTBi9a5LL2vdSr6XhExVAuhu/6f9eM/w4EQBOxtKlw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-tool-fs",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-llX8AWbaI3CGme/a2eeTSfy5atk8u3iJeOFzmZV/KZ0v0hMhKZIK1xQInWwC9OmSDJ/StStJe0hDPVLWbB7hVg=="
-	},
-	{
-		name: "@deepseek-ai/dsh-fs",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-8j+6MffvCHATLQrhAVfc9rKyunKu/O7mjjJzmdsUSdID7V4iUYMwqPamhlAyI+tfohZu/vcforKzCRIZGmCYug=="
-	},
-	{
-		name: "@deepseek-ai/dsh-fs-local",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-jvn1MsAMqCmt5SjRNkPjmpc+RIWrZQrBVtf/OpmKr2PaBEGqSbCkPApWDE9iSMhcuQg6k5evScOXwAsduzKOLA=="
-	},
-	{
-		name: "@deepseek-ai/dsh-fs-sandbox",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-PI65uLZ3ARkfVV/PXvACS1HEXggoOaXgYQzXQFdLOfm7AiHOdZWZccUAXBetpZhcNYIOKsVoLnfZkXcHByqecQ=="
-	},
-	{
-		name: "@deepseek-ai/dsh-fs-observation-policy",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-rlq7yu4xavkKK1Oa1/aNCOeUW7t/3OXJJOfOcZXuUgJn5f8G0AbpTDpp2CeuL1cHlKpbunGhEkKQ2N/dv7ZR9w=="
-	},
-	{
-		name: "@deepseek-ai/dsh-sandbox",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-rnO2RqZ+ycpwrXrXlMcrhWAICdui3ZVTjNQ8eZrOPE18hAbX3tw0nLFq26sBjMSnBfDQHNZ4VaFpt0p8qhkPWQ=="
-	},
-	{
-		name: "@deepseek-ai/dsh-sandbox-policy",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-cpoIUxCzpZJDTMXVt9gS+qgWEDAWf6rIe715uY1NF0ROoiEXPlmToLsHLF+4pXTW3wWWzpGVswO0bPYEKrQr3g=="
-	},
-	{
-		name: "@deepseek-ai/dsh-user-approval",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-SdsO4Rs+NeJFoertkVilXBACREOLfkKPJJznYKqDhJxeRo38RJ56dtj0Xd0/6rERmsQiMck4Bwdrzg1ubUqPNA=="
-	},
-	{
-		name: "@deepseek-ai/dsh-attachment",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-rCYAt8QsawP1yfDCU7XxNwYT/XWvyFsxYrkwhLLkdfW83QVD0CQHizSkTQE7RFX74nKUD1z3sTLfnLr7xneArw=="
-	},
-	{
-		name: "@deepseek-ai/dsh-system-prompt",
-		version: "0.1.1-rc.2",
-		integrity: "sha512-on4hjAlYI5uX9q7Sf95YkMMBVe6heywtA/H50ksrIMUub8U2B98hO9iQpHhjwIO1F1vu+5pLcPvRr6yUGGmtXQ=="
-	}
-]), defineCohort("dsh-0.1.2-alpha.2", ["0.1.2-alpha.2"], ["posix", "windows"], [
+const ALPHA2_HOST_PACKAGES = [
 	{
 		name: "@deepseek-ai/cordis",
 		version: "4.0.2",
@@ -3362,7 +3368,207 @@ const HOST_COHORTS = [defineCohort("dsh-0.1.1-rc.2", ["0.1.1-rc.2"], ["posix", "
 		version: "1.38.1",
 		integrity: "sha512-Z9VleLtCXwk5OlbSJKayWtbMaKACL8JUMyb/JHpErS4N3q//GJS+cgOhhxNkZYmXxB8/lv9IbhX1CBzlMhJeJg=="
 	}
-])];
+];
+/**
+* The exact graph the Windows daily runtime realized when it upgraded
+* dshmarket to 1.39.0 on an otherwise alpha.2 install — the combination whose
+* rejection was Guard 0.3.2's real web_control failure. It is one audited
+* whole-graph cohort: alpha.2 rows keep their native macOS/Windows audit
+* identities and the dshmarket 1.39.0 identity is the authoritative row from
+* the 2026-09-01 alpha.3 annex audit. Guard 0.4.0 supports this combination.
+*/
+const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row) => row.name === "dshmarket" ? {
+	name: "dshmarket",
+	version: "1.39.0",
+	integrity: ALPHA3_HOST_PACKAGES.find((entry) => entry.name === "dshmarket").integrity
+} : row);
+/**
+* Audited host cohort registry. The rc.2 cohort keeps the exact identities
+* audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
+* exact package graph extracted from native macOS and Windows DSH
+* `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
+* cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
+* the graph audited in the 2026-09-01 annex. Graphs that mix cohorts, lack
+* rows, duplicate rows, or use identities outside every registered cohort
+* fail closed.
+*/
+const HOST_COHORTS = [
+	defineCohort("dsh-0.1.1-rc.2", ["0.1.1-rc.2"], ["posix", "windows"], [
+		{
+			name: "@deepseek-ai/cordis",
+			version: "4.0.1",
+			integrity: "sha512-YBdskTU2Po1kru3GgcUWUbkTsPMA9LkSQDAY8rBkFJeajdgcQad3QPJZE26JyK99Xb6HaASvoXg2DSUTeN/0Nw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-agent",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-cC7lnJe7JgPFcreNXxcxLMxQd78LnpVO9ZXROjZsGRQN1zGH6i/DduI892F1am85IfzzO+XTxMwwUHmfwamb0g=="
+		},
+		{
+			name: "@deepseek-ai/dsh-commands",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-BOIe4Sht9rmMv1a6b3GWjWBbeWr7PtHlAy41vgpaymvUUuzOapOIA648ZMGCI/crRIt72Umev2FHtSwCNSbYZg=="
+		},
+		{
+			name: "@deepseek-ai/dsh-goal",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-lSHTh4vfS6eRb9to/y+bjRf2+0QkNpY3tHJ29HMTewR9fJYZsEVVu4Hc+GPhPEjF7RpiD35/sKx+akijtDasyg=="
+		},
+		{
+			name: "@deepseek-ai/dsh-llm",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-ASJfjIdZbIXvLwi3rGo+eZb/GxMVV/WO5/XVD3B96mT8EIzrlw3+nMR6/CvmJVzcycKQ2XN0wj7jD6TasPRySA=="
+		},
+		{
+			name: "@deepseek-ai/dsh-session",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-4/cv6X9HPhm47eyRhCu/WZwzrtJKegk5J+0xaxcZ9i8S0smdxP57tqy8a0jkSshLQn7BzMFxneQrlYExrLrDhQ=="
+		},
+		{
+			name: "@deepseek-ai/dsh-tools",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-0GGL4D55MwYDepzZMOI3L0ycu5b2qr96GL0Y7snwhAnpK2Di61rbX3fJE+PB3ZrovGX0csIRdt9n3iJZDVtDrw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-tool-goal",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA=="
+		},
+		{
+			name: "@deepseek-ai/dsh-agent-loop",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-2uJZ6kjJ3IYLRGn6/NhiZgD576ABcbERB/nkReR9TEUMO2zWkz6OuKtVwLyFCFSni2T25Jv+clKQWt7D4MhU3A=="
+		},
+		{
+			name: "@deepseek-ai/dsh-tool-bash",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-YNmrKmBanj5EQn1zejjbo4UUFtg2/h3s9y0lY3vBu+dezNz4HdUlSkSZACbNUAZywyLomdhlt4rJdtdnrqyS7Q=="
+		},
+		{
+			name: "@deepseek-ai/dsh-tool-pwsh",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-Gr0F4VWCIIR25qWVv4mMEJnewXILHLCkZwrLfbHA2OOI7DNvvdB5wjJxhuo+ZQa8/3KJ/byQGtEBqCY9mb10Zg=="
+		},
+		{
+			name: "@deepseek-ai/dsh-shell",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-gEqPUxKOpOV66wvM4o8Z5FEuWmsEvYzD9OQy3cyo/kjzlx+2+KUWi22cl/YWtBs/zUtRJbdG5UqMnh8GUeO8Hg=="
+		},
+		{
+			name: "@deepseek-ai/dsh-subprocess-local",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-I4pyzpohZEVRQQbuEpMP0t8oKsf+XIlRo64aJVKGXI2eMcg9f9gbfhKQNYNqRGbegQL1HYpSLU6Rzyibldgwaw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-bash-sandbox",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-bagZDMZ73C1dVDBjFCn1flNZ8aOEel4dsmDJTfmagqeYPXfIJDFKPhDc3lWjc+o6jMNfmumeUJ62dwhHkjJHKA=="
+		},
+		{
+			name: "@deepseek-ai/dsh-pwsh-sandbox",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-hBUTg5p8TTQifZrfstbimVlBFyUOb7JhNkWKc+n6UpTzoFRSkPAvrjGeXKDmFI6jXpL4nXzLJoaIssfYnRg7bw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-shell-env",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-dDKKqsxsbklUpxX5ornd/SKJ2yfr/SOHOWDgeJkYvx3SMSXq8EvhCK/VEvHswXQ25rRLFWM4/Mr3htk1hn/GPA=="
+		},
+		{
+			name: "@deepseek-ai/dsh",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
+		},
+		{
+			name: "@deepseek-ai/dsh-host-plugin-inventory",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-Hud9ezW0bexWfhX7C+c5rdUDX1xzbEGDzj1lGQyj/QxdrxHYHjGrJq3tLRyvN6K4FSmEdG2IBKdQGCOLVrIthA=="
+		},
+		{
+			name: "dshmarket",
+			version: "1.36.0",
+			integrity: "sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g=="
+		},
+		{
+			name: "@deepseek-ai/dsh-host-webserver",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-t9MrjC65QHiiWhG9V8UZxgfE/aWYhJHHrIM0kbTvtXxg4tLGIKo/upHp7iiag65F3HTkVLrH/DUyPMi4v2ZA7g=="
+		},
+		{
+			name: "@deepseek-ai/dsh-web-app",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-1zGHY7qwBVlVJrzIWu+86SuBZXaVUxe2JRfffsuRvKXq2QcR/K4CoJJfZ43cDoWKu9xPvvxz7w2ezV+EdXgg1A=="
+		},
+		{
+			name: "@deepseek-ai/dsh-jobs",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-SXvDJMvcUrGrlzIyE7j8/lI4Pj1nDe/UOR8C05Zagp+/0R8p46n6KylySvZdPAFENV5t8WX3Fw3eOaS4No0+wQ=="
+		},
+		{
+			name: "@deepseek-ai/dsh-jobs-local",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-26lg7mi9RKnu8IP8SWLbY+uZenbqF2AkAZvgZaLDlw1z58NtBsbgKgh6FNC8JXEyknAwYc6auQQKF+nLTlEjCw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-tool-jobs",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-wCU7mo2uoQcAtz7de4ZXP2es9lALsmz6XzC+KAlS2e7/yTBi9a5LL2vdSr6XhExVAuhu/6f9eM/w4EQBOxtKlw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-tool-fs",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-llX8AWbaI3CGme/a2eeTSfy5atk8u3iJeOFzmZV/KZ0v0hMhKZIK1xQInWwC9OmSDJ/StStJe0hDPVLWbB7hVg=="
+		},
+		{
+			name: "@deepseek-ai/dsh-fs",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-8j+6MffvCHATLQrhAVfc9rKyunKu/O7mjjJzmdsUSdID7V4iUYMwqPamhlAyI+tfohZu/vcforKzCRIZGmCYug=="
+		},
+		{
+			name: "@deepseek-ai/dsh-fs-local",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-jvn1MsAMqCmt5SjRNkPjmpc+RIWrZQrBVtf/OpmKr2PaBEGqSbCkPApWDE9iSMhcuQg6k5evScOXwAsduzKOLA=="
+		},
+		{
+			name: "@deepseek-ai/dsh-fs-sandbox",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-PI65uLZ3ARkfVV/PXvACS1HEXggoOaXgYQzXQFdLOfm7AiHOdZWZccUAXBetpZhcNYIOKsVoLnfZkXcHByqecQ=="
+		},
+		{
+			name: "@deepseek-ai/dsh-fs-observation-policy",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-rlq7yu4xavkKK1Oa1/aNCOeUW7t/3OXJJOfOcZXuUgJn5f8G0AbpTDpp2CeuL1cHlKpbunGhEkKQ2N/dv7ZR9w=="
+		},
+		{
+			name: "@deepseek-ai/dsh-sandbox",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-rnO2RqZ+ycpwrXrXlMcrhWAICdui3ZVTjNQ8eZrOPE18hAbX3tw0nLFq26sBjMSnBfDQHNZ4VaFpt0p8qhkPWQ=="
+		},
+		{
+			name: "@deepseek-ai/dsh-sandbox-policy",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-cpoIUxCzpZJDTMXVt9gS+qgWEDAWf6rIe715uY1NF0ROoiEXPlmToLsHLF+4pXTW3wWWzpGVswO0bPYEKrQr3g=="
+		},
+		{
+			name: "@deepseek-ai/dsh-user-approval",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-SdsO4Rs+NeJFoertkVilXBACREOLfkKPJJznYKqDhJxeRo38RJ56dtj0Xd0/6rERmsQiMck4Bwdrzg1ubUqPNA=="
+		},
+		{
+			name: "@deepseek-ai/dsh-attachment",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-rCYAt8QsawP1yfDCU7XxNwYT/XWvyFsxYrkwhLLkdfW83QVD0CQHizSkTQE7RFX74nKUD1z3sTLfnLr7xneArw=="
+		},
+		{
+			name: "@deepseek-ai/dsh-system-prompt",
+			version: "0.1.1-rc.2",
+			integrity: "sha512-on4hjAlYI5uX9q7Sf95YkMMBVe6heywtA/H50ksrIMUub8U2B98hO9iQpHhjwIO1F1vu+5pLcPvRr6yUGGmtXQ=="
+		}
+	]),
+	defineCohort("dsh-0.1.2-alpha.2", ["0.1.2-alpha.2"], ["posix", "windows"], ALPHA2_HOST_PACKAGES),
+	defineCohort("dsh-0.1.2-alpha.2-dshmarket-1.39.0", ["0.1.2-alpha.2"], ["posix", "windows"], ALPHA2_DSHMARKET_139_HOST_PACKAGES),
+	defineCohort("dsh-0.1.2-alpha.3", ["0.1.2-alpha.3"], ["posix", "windows"], ALPHA3_HOST_PACKAGES)
+];
 /**
 * rc.2 audited package identities (first registry cohort). The audited
 * cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
@@ -3453,11 +3659,11 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 	const counts = /* @__PURE__ */ new Map();
 	for (const row of relevant) counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
 	const missingPackages = requiredPackages.filter((name) => !counts.has(name));
-	const digest = safeHostLockDigest(relevant, { capabilityId: id }, cohort);
+	const digest$1 = safeHostLockDigest(relevant, { capabilityId: id }, cohort);
 	if ([...counts.values()].some((count) => count > 1)) return {
 		id,
 		status: "unavailable",
-		digest,
+		digest: digest$1,
 		requiredPackages,
 		missingPackages,
 		reasonCode: "host_capability_duplicate_package"
@@ -3465,7 +3671,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 	if (missingPackages.length > 0) return {
 		id,
 		status: "unavailable",
-		digest,
+		digest: digest$1,
 		requiredPackages,
 		missingPackages,
 		reasonCode: "host_capability_missing"
@@ -3476,7 +3682,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		if (!row.version || !row.integrity) return {
 			id,
 			status: "unavailable",
-			digest,
+			digest: digest$1,
 			requiredPackages,
 			missingPackages,
 			reasonCode: "host_capability_missing"
@@ -3484,7 +3690,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		if (row.version !== pinned.version) return {
 			id,
 			status: "unsupported",
-			digest,
+			digest: digest$1,
 			requiredPackages,
 			missingPackages,
 			reasonCode: "host_capability_version_mismatch"
@@ -3492,7 +3698,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		if (row.integrity !== pinned.integrity) return {
 			id,
 			status: "unsupported",
-			digest,
+			digest: digest$1,
 			requiredPackages,
 			missingPackages,
 			reasonCode: "host_capability_integrity_mismatch"
@@ -3501,7 +3707,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 	return {
 		id,
 		status: "supported",
-		digest,
+		digest: digest$1,
 		requiredPackages,
 		missingPackages
 	};
@@ -3521,13 +3727,13 @@ function evaluateHostLock(rows, context = {}) {
 	for (const row of supplied) counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
 	const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name));
 	const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size;
-	const digest = safeHostLockDigest(supplied, context, cohort);
+	const digest$1 = safeHostLockDigest(supplied, context, cohort);
 	const base = statusForPackages("base", supplied, BASE_HOST_PACKAGES, cohort);
 	const missingPackages = cohort.packages.map((row) => row.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
 	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row) => row.name)));
 	const unknown = supplied.find((row) => !registryNames.has(row.name));
 	const baseResult = {
-		digest,
+		digest: digest$1,
 		goalAvailable,
 		packages: supplied,
 		capabilities,
@@ -4485,9 +4691,9 @@ function resolveCommandPath(reference, cwd) {
 	if (/^[A-Za-z]:[\\/]/.test(reference) || reference.startsWith("//") || reference.startsWith("\\\\") || reference.startsWith("/") || reference.startsWith("\\")) return reference;
 	return `${cwd.replace(/[\\/]+$/, "")}/${reference}`;
 }
-function stable(value) {
-	if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-	if (value && typeof value === "object") return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`).join(",")}}`;
+function stable$1(value) {
+	if (Array.isArray(value)) return `[${value.map(stable$1).join(",")}]`;
+	if (value && typeof value === "object") return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${stable$1(entry)}`).join(",")}}`;
 	return JSON.stringify(value);
 }
 function structuredGuardMeta(meta, toolName) {
@@ -4502,7 +4708,7 @@ function structuredGuardMeta(meta, toolName) {
 	const rawExpected = asRecord$1(value.expectedTransition);
 	const expectedParameters = asRecord$1(rawExpected?.parameters);
 	const expectedDigest = value.expectedTransitionDigest;
-	const expectedTransition = rawExpected && typeof rawExpected.predicateId === "string" && rawExpected.version === 1 && rawExpected.predParamsKind === "inline" && expectedParameters && typeof expectedDigest === "string" && expectedDigest === sha256(stable(rawExpected)) ? rawExpected : void 0;
+	const expectedTransition = rawExpected && typeof rawExpected.predicateId === "string" && rawExpected.version === 1 && rawExpected.predParamsKind === "inline" && expectedParameters && typeof expectedDigest === "string" && expectedDigest === sha256(stable$1(rawExpected)) ? rawExpected : void 0;
 	if (typeof value.adapterId !== "string" || typeof value.adapterVersion !== "string") return void 0;
 	if (SUPPORTED_EVIDENCE_ADAPTERS[value.adapterId] !== value.adapterVersion) return void 0;
 	if (typeof action !== "string" || typeof role !== "string" || !resolved) return void 0;
@@ -5108,6 +5314,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	projection.hostLockDigest = hostLock.digest;
 	projection.hostStatus = hostLock.status;
 	projection.hostReasonCode = hostLock.reasonCode;
+	projection.hostCohortId = hostLock.cohortId;
 	let enabled = config.activation === "always";
 	let epoch = 0;
 	let evidenceCounter = 0;
@@ -6132,4 +6339,214 @@ function verifyComposedHostLockDump(text, expected) {
 }
 
 //#endregion
-export { segmentAuthorityBlocks as $, extractToolSubject as A, STATEFUL_ACTIONS as At, DEFAULT_HOST_LOCK as B, validateActionTarget as Bt, latestAssistantText as C, segmentClauses as Ct, supersedeItem as D, ACTION_MANIFEST_VERSION as Dt, deriveProjection as E, ACTION_MANIFEST as Et, parsePwshCommand as F, requestedTargetAuthorizesMutation as Ft, bindExecutableIdentity as G, normalizeClause as Gt, GOAL_HOST_PACKAGES as H, validateManifest as Ht, parseShellCommand as I, requestedTargetMatchesResolved as It, evaluateHostCapability as J, sha256 as Jt, bindLiveGoalCapability as K, sanitizeClauseText as Kt, goalCompletionDenial as L, semanticActionFromCommand as Lt, withDurability as M, SUPPORTED_EVIDENCE_ADAPTERS as Mt, canonicalArgvFromCommand as N, actionCompatible as Nt, evidenceFromPersistedToolResult as O, CERTIFICATE_VERSION as Ot, isRunExecutable as P, isStatefulAction as Pt, authorityCaptureCounts as Q, hasCurrentCertificate as R, semanticActionFromText as Rt, isWholeTaskCompletionClaim as S, isInformationalMessage as St, PROTOCOL_V3_NOTICE as T, npmEscapedPackageName as Tt, HOST_CAPABILITY_PACKAGE_GROUPS as U, canonicalizePath as Ut, EXPECTED_HOST_PACKAGES as V, COMMAND_SURFACE_MANIFEST as Vt, HOST_COHORTS as W, digestStrings as Wt, evaluateToolSurfaceCapability as X, evaluateHostLock as Y, createProjection as Yt, selectHostCohort as Z, revalidateGitPrestate as _, captureItem as _t, packageRowsFromActiveGraph as a, certifyCheckpoint as at, decideTurnBoundary as b, extractMethod as bt, resolveInstalledHostLock as c, openItems$1 as ct, commitIndexSnapshotDigest as d, bindingSatisfies as dt, classifyUserInteraction as et, commitTreeSnapshotDigest as f, evidenceCoverage as ft, parseGitCommandManifest as g, captureClause as gt, gitCommandMatchesTarget as h, currentContractDigest as ht, injectActiveProfileHostLock as i, qualifyBoundary as it, isDeterministicCheck as j, STOP_PROTOCOL_VERSION as jt, extractTextContent as k, SEMANTIC_ACTIONS as kt, verifyComposedHostLockDump as l, recoveryDigest as lt, executeRevalidatedGitEffect as m, isVerifyingCapability as mt, hostLockContextFromComposedDump as n, effectuateBoundary as nt, packageRowsFromPnpmLock as o, DEFAULT_RECOVERY_CHAR_BUDGET as ot, createGitPrestateEnvelope as p, evidenceMatchesItem as pt, evaluateExternalWaitCapability as q, sanitizeUrl as qt, hostLockRowsFromComposedDump as r, isCurrentAcceptedBoundary as rt, resolveActiveProfileHostLock as s, closingHint as st, HostProfileError as t, availableBoundaryQualifications as tt, GIT_COMMAND_MANIFEST_IDS as u, renderRecoveryPacket as ut, verifiedLinearCommitReadback as v, classifyClause as vt, observeAssistantOutcome as w, canonicalRegistryBase as wt, decideTurnStopping as x, extractOperation as xt, classifyCompletionClaim as y, extractArtifactPaths as yt, BASE_HOST_PACKAGES as z, validateActionManifest as zt };
+//#region src/domain/proof.ts
+const PROOF_PROTOCOL_VERSION = "0.4.0";
+const PROOF_KINDS = [
+	"subject_readback",
+	"scope_coverage",
+	"state_verification"
+];
+function stable(value) {
+	if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+	if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
+	return JSON.stringify(value);
+}
+function digest(value) {
+	return createHash("sha256").update("ccg.proofManifest.v1\n", "utf8").update(stable(value), "utf8").digest("hex");
+}
+function validDigest(value) {
+	return /^[0-9a-f]{64}$/.test(value);
+}
+/**
+* The manifest digest root includes every integrity-bearing field, so a
+* tampered asset-set digest is exactly as detectable as a tampered obligation.
+*/
+function proofDigest(obligations, assetSetSha256) {
+	return digest({
+		proofProtocolVersion: PROOF_PROTOCOL_VERSION,
+		obligations: [...obligations],
+		...assetSetSha256 !== void 0 ? { assetSetSha256 } : {}
+	});
+}
+function validateProofManifest(manifest) {
+	const errors = [];
+	if (!manifest || typeof manifest !== "object") return ["proof_manifest_invalid"];
+	const value = manifest;
+	if (value.proofProtocolVersion !== PROOF_PROTOCOL_VERSION) errors.push("proof_protocol_version_mismatch");
+	if (!Array.isArray(value.obligations)) errors.push("proof_obligations_missing");
+	if (value.assetSetSha256 !== void 0 && (typeof value.assetSetSha256 !== "string" || !validDigest(value.assetSetSha256))) errors.push("proof_asset_set_digest_invalid");
+	if (typeof value.proofSha256 !== "string" || !validDigest(value.proofSha256)) errors.push("proof_digest_invalid");
+	const obligations = Array.isArray(value.obligations) ? value.obligations : [];
+	const ids = /* @__PURE__ */ new Set();
+	for (const raw of obligations) {
+		if (!raw || typeof raw !== "object") {
+			errors.push("proof_obligation_invalid");
+			continue;
+		}
+		const obligation = raw;
+		if (typeof obligation.obligationId !== "string" || ids.has(obligation.obligationId)) errors.push("proof_obligation_id_duplicate_or_invalid");
+		if (typeof obligation.obligationId === "string") ids.add(obligation.obligationId);
+		if (!PROOF_KINDS.includes(obligation.kind)) errors.push("proof_kind_unsupported");
+		if (![
+			"artifact",
+			"ui",
+			"visual",
+			"scope"
+		].includes(String(obligation.surface))) errors.push("proof_surface_unsupported");
+		if (!Array.isArray(obligation.subjectIds) || obligation.subjectIds.length === 0 || obligation.subjectIds.some((id) => typeof id !== "string" || id.startsWith("codex:unsupported/"))) errors.push("proof_subject_invalid");
+		if (!Array.isArray(obligation.evidenceIds) || obligation.evidenceIds.length === 0 || new Set(obligation.evidenceIds).size !== obligation.evidenceIds.length) errors.push("proof_evidence_invalid");
+		const expected = obligation.expectedScopeDigest;
+		const observed = obligation.observedScopeDigest;
+		for (const digestValue of [expected, observed]) if (digestValue !== void 0 && (typeof digestValue !== "string" || !validDigest(digestValue))) errors.push("proof_scope_digest_invalid");
+		if (expected !== void 0 && observed !== expected) errors.push("proof_scope_digest_mismatch");
+		if (expected === void 0 && observed !== void 0) errors.push("proof_scope_digest_mismatch");
+	}
+	if (errors.length === 0) {
+		const assetSet = typeof value.assetSetSha256 === "string" ? value.assetSetSha256 : void 0;
+		if (value.proofSha256 !== proofDigest(obligations, assetSet)) errors.push("proof_digest_mismatch");
+	}
+	return [...new Set(errors)];
+}
+function createProofManifest(obligations, assetSetSha256) {
+	const normalized = obligations.map((obligation) => ({
+		obligationId: obligation.obligationId,
+		kind: obligation.kind,
+		surface: obligation.surface,
+		subjectIds: [...obligation.subjectIds].sort(),
+		evidenceIds: [...obligation.evidenceIds].sort(),
+		...obligation.expectedScopeDigest ? { expectedScopeDigest: obligation.expectedScopeDigest } : {},
+		...obligation.observedScopeDigest ? { observedScopeDigest: obligation.observedScopeDigest } : {}
+	})).sort((a, b) => a.obligationId.localeCompare(b.obligationId));
+	const manifest = {
+		proofProtocolVersion: PROOF_PROTOCOL_VERSION,
+		obligations: normalized,
+		...assetSetSha256 !== void 0 ? { assetSetSha256 } : {},
+		proofSha256: proofDigest(normalized, assetSetSha256)
+	};
+	const errors = validateProofManifest(manifest);
+	if (errors.length) throw new Error(`proof manifest rejected: ${errors.join(",")}`);
+	return manifest;
+}
+/**
+* Bind a structurally valid proof to the actual replayed projection: every
+* obligation must name a pending item, every evidence id must exist in the
+* projection, and every bound evidence must satisfy the obligation's kind,
+* surface, subject, and outcome constraints. An empty projection therefore
+* rejects any proof, and cross-item or foreign evidence can never bind.
+*/
+function bindProofToProjection(projection, proof) {
+	const errors = [];
+	const items = projection.items;
+	const evidence = projection.evidence;
+	for (const obligation of proof.obligations) {
+		const item = items.get(obligation.obligationId);
+		if (!item) {
+			errors.push("proof_obligation_unbound");
+			continue;
+		}
+		if (item.status !== "pending") {
+			errors.push("proof_obligation_not_pending");
+			continue;
+		}
+		if (item.verification.surface !== void 0 && item.verification.surface !== obligation.surface) errors.push("proof_surface_unbound");
+		const seen = /* @__PURE__ */ new Set();
+		for (const evidenceId of obligation.evidenceIds) {
+			const record = evidence.get(evidenceId);
+			if (!record) {
+				errors.push("proof_evidence_unknown");
+				continue;
+			}
+			if (!seen.has(evidenceId)) seen.add(evidenceId);
+			if (record.outcome !== "success") {
+				errors.push("proof_evidence_outcome_invalid");
+				continue;
+			}
+			if (!proofEvidenceConstraints(record, obligation)) errors.push("proof_evidence_constraint_failed");
+		}
+		if (obligation.kind === "scope_coverage") {
+			const itemScope = item.requestedTarget?.scope;
+			const itemSubject = item.verification.subject;
+			if (!obligation.subjectIds.every((subject) => subject === itemScope || subject === itemSubject)) errors.push("proof_scope_subject_unbound");
+		}
+	}
+	return [...new Set(errors)];
+}
+function canonicalProjection(projection) {
+	return {
+		epoch: projection.epoch,
+		contractRevision: projection.contractRevision,
+		sessionRefDigest: projection.sessionRefDigest,
+		hostLockDigest: projection.hostLockDigest,
+		hostStatus: projection.hostStatus,
+		hostCohortId: projection.hostCohortId,
+		integrity: projection.integrity,
+		items: [...projection.items.values()].map(({ id, revision, kind, status, semanticAction, requestedTarget, verification }) => ({
+			id,
+			revision,
+			kind,
+			status,
+			semanticAction,
+			requestedTarget,
+			verification
+		})).sort((a, b) => a.id.localeCompare(b.id)),
+		evidence: [...projection.evidence.values()].map(({ id, epoch, toolName, outcome, capabilities, subjects, surfaces, operations, semanticAction, evidenceRole, resolvedTarget, observedState }) => ({
+			id,
+			epoch,
+			toolName,
+			outcome,
+			capabilities,
+			subjects,
+			surfaces,
+			operations,
+			semanticAction,
+			evidenceRole,
+			resolvedTarget,
+			observedState
+		})).sort((a, b) => a.id.localeCompare(b.id)),
+		checkpoints: projection.checkpoints.map(({ id, certificationDigest: certificationDigest$1, result }) => ({
+			id,
+			certificationDigest: certificationDigest$1,
+			result
+		}))
+	};
+}
+function sessionQuery(projection, proof) {
+	if (proof) {
+		if (validateProofManifest(proof).length) return {
+			sessionRefDigest: projection.sessionRefDigest,
+			epoch: projection.epoch,
+			contractRevision: projection.contractRevision,
+			state: "corrupt",
+			reasonCode: "proof_invalid",
+			cohortId: projection.hostCohortId
+		};
+		if (bindProofToProjection(projection, proof).length) return {
+			sessionRefDigest: projection.sessionRefDigest,
+			epoch: projection.epoch,
+			contractRevision: projection.contractRevision,
+			state: "corrupt",
+			reasonCode: "proof_unbound",
+			cohortId: projection.hostCohortId
+		};
+	}
+	const state = projection.integrity === "valid" ? projection.hostStatus === "supported" ? "valid" : "unknown" : projection.integrity;
+	return {
+		sessionRefDigest: projection.sessionRefDigest,
+		epoch: projection.epoch,
+		contractRevision: projection.contractRevision,
+		state,
+		...proof ? { proof } : {},
+		cohortId: projection.hostCohortId
+	};
+}
+function proofEvidenceConstraints(evidence, obligation) {
+	if (evidence.outcome !== "success" || evidence.surfaces.length !== 1 || evidence.surfaces[0] !== obligation.surface) return false;
+	if (!obligation.subjectIds.every((subject) => evidence.subjects.includes(subject))) return false;
+	if (obligation.kind === "subject_readback" && !(evidence.operations ?? []).some(({ op }) => op === "read" || op === "verify")) return false;
+	if (obligation.kind === "scope_coverage" && !(evidence.operations ?? []).some(({ op }) => op === "run" || op === "verify")) return false;
+	if (obligation.kind === "state_verification" && evidence.evidenceRole !== "state") return false;
+	return true;
+}
+
+//#endregion
+export { GOAL_HOST_PACKAGES as $, COMMAND_SURFACE_MANIFEST as $t, decideTurnStopping as A, classifyClause as At, isDeterministicCheck as B, CERTIFICATE_VERSION as Bt, executeRevalidatedGitEffect as C, bindingSatisfies as Ct, verifiedLinearCommitReadback as D, currentContractDigest as Dt, revalidateGitPrestate as E, isVerifyingCapability as Et, deriveProjection as F, segmentClauses as Ft, parseShellCommand as G, actionCompatible as Gt, canonicalArgvFromCommand as H, STATEFUL_ACTIONS as Ht, supersedeItem as I, canonicalRegistryBase as It, ALPHA2_DSHMARKET_139_HOST_PACKAGES as J, requestedTargetMatchesResolved as Jt, goalCompletionDenial as K, isStatefulAction as Kt, evidenceFromPersistedToolResult as L, npmEscapedPackageName as Lt, latestAssistantText as M, extractMethod as Mt, observeAssistantOutcome as N, extractOperation as Nt, classifyCompletionClaim as O, captureClause as Ot, PROTOCOL_V3_NOTICE as P, isInformationalMessage as Pt, EXPECTED_HOST_PACKAGES as Q, validateActionTarget as Qt, extractTextContent as R, ACTION_MANIFEST as Rt, createGitPrestateEnvelope as S, renderRecoveryPacket as St, parseGitCommandManifest as T, evidenceMatchesItem as Tt, isRunExecutable as U, STOP_PROTOCOL_VERSION as Ut, withDurability as V, SEMANTIC_ACTIONS as Vt, parsePwshCommand as W, SUPPORTED_EVIDENCE_ADAPTERS as Wt, BASE_HOST_PACKAGES as X, semanticActionFromText as Xt, ALPHA2_HOST_PACKAGES as Y, semanticActionFromCommand as Yt, DEFAULT_HOST_LOCK as Z, validateActionManifest as Zt, resolveInstalledHostLock as _, certifyCheckpoint as _t, createProofManifest as a, sanitizeUrl as an, evaluateHostCapability as at, commitIndexSnapshotDigest as b, openItems$1 as bt, sessionQuery as c, selectHostCohort as ct, hostLockContextFromComposedDump as d, segmentAuthorityBlocks as dt, validateManifest as en, HOST_CAPABILITY_PACKAGE_GROUPS as et, hostLockRowsFromComposedDump as f, classifyUserInteraction as ft, resolveActiveProfileHostLock as g, qualifyBoundary as gt, packageRowsFromPnpmLock as h, isCurrentAcceptedBoundary as ht, canonicalProjection as i, sanitizeClauseText as in, evaluateExternalWaitCapability as it, isWholeTaskCompletionClaim as j, extractArtifactPaths as jt, decideTurnBoundary as k, captureItem as kt, validateProofManifest as l, ALPHA3_HOST_PACKAGES as lt, packageRowsFromActiveGraph as m, effectuateBoundary as mt, PROOF_PROTOCOL_VERSION as n, digestStrings as nn, bindExecutableIdentity as nt, proofDigest as o, sha256 as on, evaluateHostLock as ot, injectActiveProfileHostLock as p, availableBoundaryQualifications as pt, hasCurrentCertificate as q, requestedTargetAuthorizesMutation as qt, bindProofToProjection as r, normalizeClause as rn, bindLiveGoalCapability as rt, proofEvidenceConstraints as s, createProjection as sn, evaluateToolSurfaceCapability as st, PROOF_KINDS as t, canonicalizePath as tn, HOST_COHORTS as tt, HostProfileError as u, authorityCaptureCounts as ut, verifyComposedHostLockDump as v, DEFAULT_RECOVERY_CHAR_BUDGET as vt, gitCommandMatchesTarget as w, evidenceCoverage as wt, commitTreeSnapshotDigest as x, recoveryDigest as xt, GIT_COMMAND_MANIFEST_IDS as y, closingHint as yt, extractToolSubject as z, ACTION_MANIFEST_VERSION as zt };

@@ -184,6 +184,8 @@ export interface GuardProjection {
   hostLockDigest: string
   hostStatus: HostStatus
   hostReasonCode?: string
+  /** Readback of the audited cohort bound into `hostLockDigest`. */
+  hostCohortId?: string
   currentGoalRef?: GoalRef
   currentGoalPhase?: 'active' | 'paused' | 'blocked' | 'complete'
   currentGoalActivation?: 'armed' | 'disarmed'
