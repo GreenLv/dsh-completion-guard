@@ -1,0 +1,138 @@
+{
+  "schema": "change-scoped-validation-map/v1",
+  "full_gate": "full_candidate",
+  "default": {
+    "gates": ["full_candidate"],
+    "invalidates": ["artifact", "candidate_matrix", "native_artifact", "native_runtime"]
+  },
+  "rules": [
+    {
+      "id": "packaged_docs",
+      "paths": ["CHANGELOG*.md", "LICENSE", "README*.md", "docs/**"],
+      "gates": ["artifact_identity", "docs_contract", "package_tests"],
+      "invalidates": ["artifact", "documentation", "native_artifact", "publication_identity"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "non_packaged_docs",
+      "paths": ["AGENTS.md", "assets/**", "screenshots.json"],
+      "gates": ["docs_contract"],
+      "invalidates": ["documentation"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "tests",
+      "paths": ["tests/**"],
+      "gates": ["focused_tests"],
+      "invalidates": ["candidate_matrix"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "shared_conformance",
+      "paths": ["docs/SEMANTIC_COMPATIBILITY.md", "docs/UPSTREAM_BASE.md", "docs/upstream-deltas.json", "tests/fixtures/conformance/**"],
+      "gates": ["contract_tests", "focused_tests"],
+      "invalidates": ["candidate_matrix", "cross_repository_contract"],
+      "contracts": ["context_guard_semantics_v1", "digest_v3"],
+      "peer_gates": {"codex_context_guard": ["contract_tests"]}
+    },
+    {
+      "id": "conformance_tests",
+      "paths": ["tests/domain/digest-v3.test.ts", "tests/domain/portable-semantics.test.ts", "tests/helpers/portable-conformance.ts"],
+      "gates": ["contract_tests", "focused_tests"],
+      "invalidates": ["candidate_matrix"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "runtime",
+      "paths": ["src/**"],
+      "gates": ["build", "focused_tests", "lint", "package_tests", "typecheck"],
+      "invalidates": ["artifact", "candidate_matrix", "native_runtime"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "generated_runtime",
+      "paths": ["bin/**", "dist/**"],
+      "gates": ["artifact_identity", "build", "package_tests"],
+      "invalidates": ["artifact", "native_artifact", "publication_identity"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "host_lock",
+      "paths": ["bin/dsh-completion-guard-host-lock.mjs", "cordis.patch.yml", "manifests/supported-host.v1.json", "src/domain/host-lock.ts", "src/domain/host-resolver.ts"],
+      "gates": ["contract_tests", "host_lock_tests"],
+      "invalidates": ["candidate_matrix", "native_artifact", "native_runtime"],
+      "contracts": ["dsh_host_lock_v1"],
+      "peer_gates": {}
+    },
+    {
+      "id": "host_lock_tests",
+      "paths": ["tests/domain/v030-host-lock.test.ts", "tests/domain/v032-host-cohort.test.ts"],
+      "gates": ["contract_tests", "focused_tests", "host_lock_tests"],
+      "invalidates": ["candidate_matrix"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "packaging",
+      "paths": ["cordis.patch.yml", "manifests/**", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "scripts/release-pack.mjs", "tsconfig.json", "tsdown.config.ts"],
+      "gates": ["artifact_identity", "build", "package_tests", "typecheck"],
+      "invalidates": ["artifact", "native_artifact", "publication_identity"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "package_tests",
+      "paths": ["tests/release-pack.node.mjs"],
+      "gates": ["focused_tests", "package_tests"],
+      "invalidates": ["candidate_matrix"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "stats",
+      "paths": [".github/npm-downloads-config.json", ".github/workflows/npm-download-stats.yml", "scripts/npm-download-stats.mjs", "tests/npm-download-stats.node.mjs"],
+      "gates": ["stats_tests"],
+      "invalidates": ["documentation"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "repository_documentation_tools",
+      "paths": ["scripts/audit_repository_documentation.py", "tests/audit_repository_documentation_test.py"],
+      "gates": ["docs_contract"],
+      "invalidates": ["documentation"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "repository_identity",
+      "paths": [".gitattributes"],
+      "gates": ["full_candidate"],
+      "invalidates": ["artifact", "candidate_matrix", "native_artifact"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "repository_metadata",
+      "paths": [".gitignore"],
+      "gates": ["docs_contract"],
+      "invalidates": [],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "validation_infrastructure",
+      "paths": [".github/workflows/ci.yml", ".github/workflows/validation-shadow.yml", "scripts/select_validation.py", "scripts/verify_required_jobs.py", "tests/required_jobs_test.py", "tests/validation_selection_test.py", "validation-map.json"],
+      "gates": ["full_candidate"],
+      "invalidates": ["candidate_matrix"],
+      "contracts": [],
+      "peer_gates": {}
+    }
+  ]
+}
