@@ -2,7 +2,39 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
-## v0.3.2 source candidate gates (2026-08-31, in progress)
+## v0.3.2 frozen-artifact gates (2026-09-01, native acceptance passed)
+
+The release candidate is commit
+`22cde6106cdca511265bb4103375a263a0762b9c`. Its frozen
+`dsh-completion-guard-0.3.2.tgz` contains 26 files, is 181157 bytes, and has
+SHA-256
+`feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`.
+The package manifest carries the same full commit as `gitHead`. Candidate CI
+run 33461879125 passed Ubuntu, macOS, and Windows on Node.js 22 and 24.
+
+Those exact package bytes passed the required isolated Web and Headless
+lifecycle on native Windows and macOS: artifact and commit parity, clean
+install, strict Web reinstall no-op, installed-file parity, complete 34-row
+host checks, plugin load and configuration readback, real Web restart with
+403 rejection and 202 acceptance, changed boot ID, HTTP recovery, intentional
+Headless `MISSING_CREDENTIAL`, and scoped cleanup. The platform-specific host
+digests differ because platform identity is part of the lock; both match their
+own complete checked package graph. The optional credentialed model-session
+gate was not run and is not claimed.
+
+`inspect` and `verify-dump` answer different questions. `inspect` reports
+whether the active runtime and profile package graph is a supported complete
+set, so it can correctly return `supported` before injection. The pre-injection
+fail-closed check comes from reading the composed config and from
+`verify-dump`, which rejects missing or mismatched injected host-lock data.
+
+This section is a post-candidate evidence record. It does not belong to or
+change the accepted tgz. If the package bytes or the release commit change,
+the artifact and native-platform gates must be rerun. Still pending are the
+annotated tag, publishing this exact tgz to npm, the GitHub Release, public
+readback, and separately authorized consumer pin updates.
+
+### Earlier source and host-cohort gates
 
 Version 0.3.2 lets the Guard recognize either of two complete DSH package sets. It never combines packages from different sets, and a missing or mismatched package leaves the whole host unavailable. The initial host-cohort checks below were run on macOS from a working tree based on `844b62848c1e2685e0574b660dc4546b6bf6dbac`, which was `origin/main` when implementation began. They cover source behavior, not a release artifact.
 
@@ -25,10 +57,8 @@ Native Windows source evidence (2026-09-01, PowerShell 5.1):
 - Fresh checkout `a3e77de6d8260f16f0723491495cacab57b9f62d` passed install, build, release-pack (2/2), and `git diff --check`.
 - The active DSH `0.1.2-alpha.2` / dshmarket `1.38.1` graph matched all 34 candidate rows; missing, extra, and duplicate counts were zero. This authorizes the Windows cohort registration, but it is source/host evidence rather than final package evidence.
 
-Pending gates (each requires its own authorization and evidence):
-
-- A frozen package from a clean committed tree, followed by isolated Web and Headless install, no-op, package comparison, host check, restart, cleanup, and native macOS/Windows acceptance of those same bytes.
-- Final documentation-inclusive candidate CI, release readback, tag, npm publication, GitHub Release, and consumer pin updates.
+The frozen artifact above closes the package and native-platform lifecycle
+gates. Release mutation and public readback remain separate.
 
 ## v0.3.1 release-repair gates
 

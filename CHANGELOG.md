@@ -19,8 +19,8 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Validation
 
-- The complete 20-file suite passes 359 tests with one Windows-only skip on macOS. Native Windows matched all 34 alpha.2 package rows with no missing, extra, or duplicate entries. The packaging portability fix at `a3e77de` passed the six-job Ubuntu, macOS, and Windows CI matrix on Node.js 22 and 24.
-- Still pending: a clean committed candidate containing the Windows registration and final documentation, isolated Web and Headless installation, native macOS and Windows checks of those exact package bytes, final candidate CI, tag, npm publication, GitHub Release, and public readback.
+- Candidate commit `22cde610` passed the six-job Ubuntu, macOS, and Windows CI matrix on Node.js 22 and 24. The complete 20-file suite passes 359 tests with one Windows-only skip on macOS, and native Windows matched all 34 alpha.2 package rows with no missing, extra, or duplicate entries.
+- The frozen 26-file package (181157 bytes, SHA-256 `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`) passed the same-byte isolated Web and Headless lifecycle on native macOS and Windows. Tagging, npm publication, the GitHub Release, public readback, and consumer pin updates remain pending; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.3.1 - 2026-08-31
 

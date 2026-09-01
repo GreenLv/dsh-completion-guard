@@ -51,7 +51,7 @@ Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.
 
 0.3.1 是当前已发布版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) 和精确的公开检查记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
-0.3.2 是未发布的源码候选，可识别已在 macOS 和 Windows 检查过的 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.2` 精确包集合。包集合见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)，剩余发布检查见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+0.3.2 是未发布候选。它的冻结包已用同一份字节在 macOS 和 Windows 完成 Web 与 Headless 生命周期验收；tag、npm 发布、GitHub Release 和公开读回仍未执行。已检查的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)，精确工件记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.1；运行行为不变，发布记录已修复。
 
