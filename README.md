@@ -11,7 +11,7 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.3.1
+dsh plugin --profile web add dsh-completion-guard@0.3.2
 ```
 
 Before restarting DSH, record and verify the active runtime and profile. Replace the example paths with the absolute paths on your machine:
@@ -49,11 +49,9 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 ## Status and compatibility
 
-Version 0.3.1 is the current published release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) and exact public checks are recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
+Version 0.3.2 is the current published release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2) and exact public checks are recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md). It supports the checked DSH `0.1.1-rc.2` and `0.1.2-alpha.2` setups listed in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-Version 0.3.2 is an unreleased candidate. Its frozen package has passed the same-byte Web and Headless lifecycle on macOS and Windows. Tagging, npm publication, the GitHub Release, and public readback are still pending. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the checked DSH setups and [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md) for the exact artifact record.
-
-Version 0.3.0 is not recommended. Its package passed native checks, but npm did not record the required source commit, so the version cannot be repaired in place and has no GitHub Release. Use 0.3.1, which keeps the same runtime behavior and fixes that release record.
+Version 0.3.0 is not recommended. Its package passed native checks, but npm did not record the required source commit, so the version cannot be repaired in place and has no GitHub Release. Use 0.3.2.
 
 > The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 because an unrelated plugin already used the old name. The internal bundle id remains `context-guard`, and the old npm package points users to this one. Supported DSH setups are listed in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md); Node.js `>=22` and pnpm `>=11` are required.
 

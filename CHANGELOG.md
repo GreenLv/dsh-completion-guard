@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.3.2 - Unreleased (source candidate)
+## 0.3.2 - 2026-09-01
 
 ### Added
 
@@ -20,7 +20,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 ### Validation
 
 - Candidate commit `22cde610` passed the six-job Ubuntu, macOS, and Windows CI matrix on Node.js 22 and 24. The complete 20-file suite passes 359 tests with one Windows-only skip on macOS, and native Windows matched all 34 alpha.2 package rows with no missing, extra, or duplicate entries.
-- The frozen 26-file package (181157 bytes, SHA-256 `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`) passed the same-byte isolated Web and Headless lifecycle on native macOS and Windows. Tagging, npm publication, the GitHub Release, public readback, and consumer pin updates remain pending; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
+- The frozen 26-file package (181157 bytes, SHA-256 `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`) passed the same-byte isolated Web and Headless lifecycle on native macOS and Windows. The annotated tag, npm package, GitHub Release, and downloaded public bytes all resolve to the same commit and artifact; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.3.1 - 2026-08-31
 

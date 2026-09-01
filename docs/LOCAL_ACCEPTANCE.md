@@ -2,7 +2,7 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
-## v0.3.2 frozen-artifact gates (2026-09-01, native acceptance passed)
+## v0.3.2 release gates (2026-09-01, passed)
 
 The release candidate is commit
 `22cde6106cdca511265bb4103375a263a0762b9c`. Its frozen
@@ -28,11 +28,27 @@ set, so it can correctly return `supported` before injection. The pre-injection
 fail-closed check comes from reading the composed config and from
 `verify-dump`, which rejects missing or mismatched injected host-lock data.
 
-This section is a post-candidate evidence record. It does not belong to or
-change the accepted tgz. If the package bytes or the release commit change,
-the artifact and native-platform gates must be rerun. Still pending are the
-annotated tag, publishing this exact tgz to npm, the GitHub Release, public
-readback, and separately authorized consumer pin updates.
+The annotated `v0.3.2` tag has tag-object SHA
+`753fd9625c58c03de2660464c7f7c86462a42eb1` and peels to the release commit
+above. Tag CI run 33474979019 passed the same six Ubuntu, macOS, and Windows
+Node.js 22/24 combinations. npm published this exact tgz at
+`2026-09-01T05:54:28.309Z`; anonymous registry readback returned
+`latest=0.3.2`, the expected `gitHead`, shasum and integrity, and a fresh
+download was byte-identical to the frozen file.
+
+The non-draft, non-prerelease
+[`v0.3.2` GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2)
+was published at `2026-09-01T05:56:24Z`. Its 181157-byte tgz and 97-byte
+`SHA256SUMS.txt` have GitHub asset digests
+`sha256:feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`
+and
+`sha256:82f839d3ccf5f429b10ae18cc54350379097f0f59b01a462ed222a869886a451`.
+Anonymous downloads of both assets were byte-identical to the frozen files.
+
+This section is a post-candidate evidence record and is not part of the
+accepted tgz. Changing the package bytes or release commit would still require
+new artifact and native-platform acceptance. Consumer pin and managed runtime
+installation remain separate actions.
 
 ### Earlier source and host-cohort gates
 

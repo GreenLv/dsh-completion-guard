@@ -25,7 +25,23 @@ version and annotated tag are retained for audit history; the npm version is
 deprecated with `Release metadata incomplete; use dsh-completion-guard@0.3.1.`
 Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
 
-## Published v0.3.1 destinations
+## Published v0.3.2 destinations
+
+1. [GitHub Release `v0.3.2`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2)
+   is the latest non-draft, non-prerelease release. Its annotated tag peels to
+   release commit `22cde6106cdca511265bb4103375a263a0762b9c`. The attached
+   frozen tgz has SHA-256
+   `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`;
+   the separate `SHA256SUMS.txt` asset binds the same bytes.
+2. [`dsh-completion-guard@0.3.2` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.2)
+   is published and `latest` resolves to `0.3.2`. The registry `gitHead`
+   equals the release commit, and a fresh registry download is byte-identical
+   to the frozen release tgz.
+3. Source commit, tag, CI, native macOS and Windows acceptance, npm metadata
+   and bytes, and both GitHub assets are reconciled in
+   [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
+
+## Earlier v0.3.1 destinations
 
 1. [GitHub Release `v0.3.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1)
    is published as a non-draft, non-prerelease release. Its annotated tag

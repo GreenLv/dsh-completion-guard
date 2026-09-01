@@ -11,7 +11,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.3.1
+dsh plugin --profile web add dsh-completion-guard@0.3.2
 ```
 
 重启 DSH 前，先记录并验证当前 runtime 和 profile。请把示例路径替换为本机绝对路径：
@@ -49,11 +49,9 @@ Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.
 
 ## 状态与兼容性
 
-0.3.1 是当前已发布版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1) 和精确的公开检查记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+0.3.2 是当前已发布版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2) 和精确的公开检查记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。它支持 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 列出的 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.2` 环境。
 
-0.3.2 是未发布候选。它的冻结包已用同一份字节在 macOS 和 Windows 完成 Web 与 Headless 生命周期验收；tag、npm 发布、GitHub Release 和公开读回仍未执行。已检查的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)，精确工件记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
-
-不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.1；运行行为不变，发布记录已修复。
+不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.2。
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，因为另一个无关插件已经使用旧名称。内部 bundle id 仍为 `context-guard`，旧 npm 包会引导用户使用本包。支持的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)；需要 Node.js `>=22` 和 pnpm `>=11`。
 

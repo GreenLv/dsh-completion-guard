@@ -2,7 +2,7 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
-## 0.3.2 - 未发布（源码候选）
+## 0.3.2 - 2026-09-01
 
 ### 新增
 
@@ -20,7 +20,7 @@
 ### 验证
 
 - 候选提交 `22cde610` 已通过 Ubuntu、macOS、Windows 和 Node.js 22/24 的六项 CI 矩阵。20 个测试文件全量通过 359 项，macOS 跳过 1 项仅适用于 Windows 的测试；Windows 原生核对 alpha.2 的 34 行包清单全部匹配，没有缺失、额外或重复项。
-- 冻结的 26 文件包（181157 字节，SHA-256 `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`）已用同一份字节在原生 macOS 和 Windows 完成隔离 Web 与 Headless 生命周期验收。tag、npm 发布、GitHub Release、公开读回和消费方 pin 更新仍待执行；详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+- 冻结的 26 文件包（181157 字节，SHA-256 `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`）已用同一份字节在原生 macOS 和 Windows 完成隔离 Web 与 Headless 生命周期验收。annotated tag、npm 包、GitHub Release 和重新下载的公开文件均指向同一提交与工件；详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 ## 0.3.1 - 2026-08-31
 
