@@ -171,6 +171,7 @@ function linePoints(values, xForIndex, yForValue) {
 }
 
 function tickIndexes(length) {
+  if (length <= 7) return Array.from({ length }, (_, index) => index);
   const indexes = new Set([0, Math.max(0, length - 1)]);
   for (let step = 1; step < 4; step += 1) indexes.add(Math.round(((length - 1) * step) / 4));
   return [...indexes].sort((a, b) => a - b);

@@ -53,6 +53,20 @@ test("calculates per-package and combined cumulative downloads across the rename
   assert.doesNotMatch(chinese, /每日 npm 下载量/);
 });
 
+test("shows every x-axis date for periods of seven days or fewer", () => {
+  const document = buildStatsDocument(config, collected, "2026-09-01T04:37:00.000Z", "2026-08-31");
+  const svg = renderSvg(document, "en");
+  const labels = [...svg.matchAll(/class="axis">(\d{4}-\d{2}-\d{2})<\/text>/g)].map((match) => match[1]);
+  assert.deepEqual(labels, [
+    "2026-08-26",
+    "2026-08-27",
+    "2026-08-28",
+    "2026-08-29",
+    "2026-08-30",
+    "2026-08-31",
+  ]);
+});
+
 test("rejects a rename date outside the rendered period", () => {
   const document = buildStatsDocument({ ...config, rename: { date: "2026-08-30", label: "bad" } }, collected, "2026-08-30T04:37:00.000Z", "2026-08-29");
   assert.throws(() => renderSvg(document), /rename date is outside/);
