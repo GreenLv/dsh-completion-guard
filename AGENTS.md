@@ -15,9 +15,10 @@ change the installed plugin runtime or grant release authority.
 - Preserve fail-closed behavior for authority, evidence, target identity,
   executable identity, expected transitions, host locks, boundaries, and
   completion certificates.
-- Preserve unrelated work and keep one mutation owner per branch, tag, package
-  version, and release. Other agents may perform independent read-only review
-  or platform-owned validation.
+- Preserve unrelated work and keep one mutation owner per candidate
+  worktree/branch, shared remote ref, tag, package version, and release.
+  Disjoint worktrees may progress independently. Other agents may perform
+  independent read-only review or platform-owned validation.
 
 ## Change-driven validation
 
@@ -34,12 +35,26 @@ change the installed plugin runtime or grant release authority.
   `pnpm run build`, `pnpm run pack:check`, the repository documentation audit,
   its unit test, and `git diff --check`. Require `git diff --exit-code -- dist`
   after build when generated runtime bytes are expected to be current.
-- Use GitHub CI as the Ubuntu/macOS/Windows and Node.js 22/24 portability screen
-  before spending a native-platform slot. CI never substitutes for native Web,
+- Use the required PR validation summary for mapped fast checks. Candidate CI
+  runs the Ubuntu/macOS/Windows and Node.js 22/24 portability screen once on
+  exact `main` candidates or manual dispatch; a tag does not rerun that matrix.
+  Static, package, build, and documentation contracts run once outside the six
+  independent test lanes so a failed lane can be rerun without recreating a
+  matrix group.
+- Use GitHub candidate CI as the portability screen before spending a
+  native-platform slot. CI never substitutes for native Web,
   Headless, shell-shim, restart, credential, or application acceptance.
 - Reuse evidence only when its exact commit or artifact subject and all relevant
   inputs remain unchanged. Rerun the failed gate and downstream invalidated
   gates, not unrelated successful gates.
+- npm artifact identity follows the `package.json` package inventory: `bin/`,
+  `dist/`, `cordis.patch.yml`, packaged README/LICENSE/changelog/docs, and
+  `manifests/` plus npm's mandatory manifest files. Changes under `.github/`,
+  `scripts/`, `tests/`, `AGENTS.md`, or `validation-map.json` are repository/CI
+  changes and do not change the package payload inventory. However, the
+  canonical packer injects the exact `gitHead`, so repacking from any different
+  commit still creates a new artifact identity. Changing `package.json`,
+  generated runtime, or any listed package byte changes the payload itself.
 
 ## Candidate and artifact freeze
 
@@ -61,6 +76,10 @@ node scripts/release-pack.mjs --source . --output-dir <outside-repository-dir>
   separately establish install, strict second no-op, package parity, host-lock
   readback, required Web/Headless lifecycle, cleanup, and any explicitly
   required real-model boundary. Keep capability skips visible.
+- Invoke the repository-owned versioned native-acceptance entrypoint for
+  portable or host-bound runs. It emits a redacted annex bound to the source
+  commit and artifact digest; a handwritten command transcript is not an
+  equivalent interface.
 
 ## Release identity and authorization
 

@@ -1,38 +1,205 @@
-name: ci
+name: Candidate CI
 
 on:
   push:
-  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        node: ['22', '24']
-    runs-on: ${{ matrix.os }}
+  classify:
+    name: Classify candidate bytes
+    runs-on: ubuntu-latest
+    outputs:
+      invalidates: ${{ steps.select.outputs.invalidates }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - id: select
+        env:
+          EVENT_BASE_SHA: ${{ github.event.before }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base_sha="$EVENT_BASE_SHA"
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+            base_sha="$(git hash-object -t tree /dev/null)"
+          fi
+          python scripts/select_validation.py --repo-root . --base "$base_sha" --head "$EVENT_HEAD_SHA" --github-output "$GITHUB_OUTPUT"
+
+  static:
+    name: Static, package, and repository contracts
+    needs: classify
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_sha256: ${{ steps.artifact.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "22"
           cache: pnpm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
       - run: pnpm run lint
-      - run: pnpm test
       - run: pnpm run test:release-pack
       - run: pnpm run test:stats
       - run: pnpm run build
+      - name: Verify committed runtime is current
+        run: git diff --exit-code -- dist
       - run: pnpm run pack:check
+      - run: python scripts/audit_repository_documentation.py .
+      - run: python -m unittest tests/audit_repository_documentation_test.py tests/validation_selection_test.py tests/required_jobs_test.py tests/selected_validation_test.py tests/native_acceptance_test.py tests/workflow_contract_test.py
+      - name: Check candidate commit whitespace
+        run: git diff-tree --check --root -r HEAD
+      - name: Freeze one canonical candidate artifact
+        if: github.event_name == 'workflow_dispatch' || contains(needs.classify.outputs.invalidates, 'artifact') || contains(needs.classify.outputs.invalidates, 'native_artifact') || contains(needs.classify.outputs.invalidates, 'native_runtime')
+        id: artifact
+        run: |
+          set -euo pipefail
+          output_dir="$RUNNER_TEMP/release"
+          node scripts/release-pack.mjs --source . --output-dir "$output_dir"
+          artifact_path="$(find "$output_dir" -maxdepth 1 -name '*.tgz' -type f -print -quit)"
+          test -n "$artifact_path"
+          echo "sha256=$(sha256sum "$artifact_path" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Escrow canonical candidate artifact
+        if: steps.artifact.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+          retention-days: 7
+
+  ubuntu_node22:
+    name: Ubuntu / Node 22
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: ubuntu-latest
+      node-version: "22"
+
+  ubuntu_node24:
+    name: Ubuntu / Node 24
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: ubuntu-latest
+      node-version: "24"
+
+  macos_node22:
+    name: macOS / Node 22
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: macos-latest
+      node-version: "22"
+
+  macos_node24:
+    name: macOS / Node 24
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: macos-latest
+      node-version: "24"
+
+  windows_node22:
+    name: Windows / Node 22
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: windows-latest
+      node-version: "22"
+
+  windows_node24:
+    name: Windows / Node 24
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      runner: windows-latest
+      node-version: "24"
+
+  portable_windows:
+    name: Windows portable exact-artifact acceptance
+    needs: [classify, static]
+    if: github.event_name == 'workflow_dispatch' || contains(needs.classify.outputs.invalidates, 'native_artifact') || contains(needs.classify.outputs.invalidates, 'native_runtime')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/release
+      - name: Run versioned portable acceptance entrypoint
+        shell: pwsh
+        env:
+          ARTIFACT_SHA256: ${{ needs.static.outputs.artifact_sha256 }}
+        run: |
+          $artifact = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/release" -Filter *.tgz -File | Select-Object -First 1
+          if (-not $artifact) { throw "candidate artifact is missing" }
+          python scripts/native_acceptance.py `
+            --artifact $artifact.FullName `
+            --artifact-sha256 $env:ARTIFACT_SHA256 `
+            --source-commit "${{ github.sha }}" `
+            --output "$env:RUNNER_TEMP/native-acceptance-windows.json" `
+            --transfer-receipt "$env:RUNNER_TEMP/artifact-transfer-windows.json" `
+            --transport-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" `
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-acceptance-windows-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/native-acceptance-windows.json
+            ${{ runner.temp }}/artifact-transfer-windows.json
+          if-no-files-found: error
+          retention-days: 30
+
+  required:
+    name: Candidate CI required
+    if: always()
+    needs:
+      - static
+      - classify
+      - ubuntu_node22
+      - ubuntu_node24
+      - macos_node22
+      - macos_node24
+      - windows_node22
+      - windows_node24
+      - portable_windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fail closed over every required lane
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          UBUNTU_22_RESULT: ${{ needs.ubuntu_node22.result }}
+          UBUNTU_24_RESULT: ${{ needs.ubuntu_node24.result }}
+          MACOS_22_RESULT: ${{ needs.macos_node22.result }}
+          MACOS_24_RESULT: ${{ needs.macos_node24.result }}
+          WINDOWS_22_RESULT: ${{ needs.windows_node22.result }}
+          WINDOWS_24_RESULT: ${{ needs.windows_node24.result }}
+          PORTABLE_RESULT: ${{ needs.portable_windows.result }}
+          PORTABLE_REQUIRED: ${{ github.event_name == 'workflow_dispatch' || contains(needs.classify.outputs.invalidates, 'native_artifact') || contains(needs.classify.outputs.invalidates, 'native_runtime') }}
+        run: |
+          set -euo pipefail
+          if [[ "$PORTABLE_REQUIRED" == "true" ]]; then
+            printf '%s\n' '["classify","static","ubuntu_node22","ubuntu_node24","macos_node22","macos_node24","windows_node22","windows_node24","portable_windows"]' > "$RUNNER_TEMP/required.json"
+          else
+            printf '%s\n' '["classify","static","ubuntu_node22","ubuntu_node24","macos_node22","macos_node24","windows_node22","windows_node24"]' > "$RUNNER_TEMP/required.json"
+          fi
+          printf '{"classify":"%s","static":"%s","ubuntu_node22":"%s","ubuntu_node24":"%s","macos_node22":"%s","macos_node24":"%s","windows_node22":"%s","windows_node24":"%s","portable_windows":"%s"}\n' \
+            "$CLASSIFY_RESULT" "$STATIC_RESULT" "$UBUNTU_22_RESULT" "$UBUNTU_24_RESULT" "$MACOS_22_RESULT" "$MACOS_24_RESULT" "$WINDOWS_22_RESULT" "$WINDOWS_24_RESULT" "$PORTABLE_RESULT" > "$RUNNER_TEMP/observed.json"
+          python scripts/verify_required_jobs.py --required "$RUNNER_TEMP/required.json" --observed "$RUNNER_TEMP/observed.json"

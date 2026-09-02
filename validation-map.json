@@ -127,8 +127,16 @@
       "peer_gates": {}
     },
     {
+      "id": "native_acceptance_infrastructure",
+      "paths": ["scripts/native_acceptance.py", "tests/native_acceptance_test.py"],
+      "gates": ["full_candidate"],
+      "invalidates": ["native_artifact"],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
       "id": "validation_infrastructure",
-      "paths": [".github/workflows/ci.yml", ".github/workflows/validation-shadow.yml", "scripts/select_validation.py", "scripts/verify_required_jobs.py", "tests/required_jobs_test.py", "tests/validation_selection_test.py", "validation-map.json"],
+      "paths": [".github/workflows/ci*.yml", ".github/workflows/validation-shadow.yml", "scripts/run_selected_validation.py", "scripts/select_validation.py", "scripts/verify_required_jobs.py", "tests/required_jobs_test.py", "tests/selected_validation_test.py", "tests/validation_selection_test.py", "tests/workflow_contract_test.py", "validation-map.json"],
       "gates": ["full_candidate"],
       "invalidates": ["candidate_matrix"],
       "contracts": [],
