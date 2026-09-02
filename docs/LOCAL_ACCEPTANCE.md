@@ -2,7 +2,7 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
-## v0.4.0 release contract and pre-release history (2026-09-02)
+## v0.4.0 release gates (2026-09-02, passed)
 
 Version 0.4.0 targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`. The repository does not place a candidate's own commit, checksum, or public status inside that candidate's packaged documentation: those facts are generated after the package bytes are frozen and are attached to the GitHub Release.
 
@@ -13,6 +13,46 @@ Version 0.4.0 targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.
 | Native macOS and Windows | the same tgz on both platforms; separate machine-readable annexes covering isolated Web and Headless lifecycle, host-lock, restart, daily-profile preservation, and cleanup |
 | Tag, npm, and GitHub Release | annotated tag, npm manifest and downloaded package, Release target and assets, and anonymous public readback all resolve to the same commit and bytes |
 | Daily-profile upgrade | separate from release acceptance; never implied by a passing artifact run |
+
+The release commit is
+`d5cd0ca17833d05bfdf41457ae203864bde8056b`. Candidate CI run
+33626069583, main CI run 33633570436, and tag CI run 33633866279 each
+passed Ubuntu, macOS, and Windows on Node.js 22 and 24. The annotated
+`v0.4.0` tag has tag-object SHA
+`6130d53bdede2399b01f05e75a91bf3fadecb34e` and peels to the release
+commit.
+
+The frozen `dsh-completion-guard-0.4.0.tgz` contains 26 files, is 196166
+bytes, and has SHA-256
+`71ce205dedeffe72566ad399e001f0b337d057cede297e1d2249acec67cde1f2`.
+The package manifest carries the release commit as `gitHead`. These exact
+bytes passed isolated Web and Headless acceptance on native macOS and
+Windows. Both platforms checked installed-file parity, strict Web reinstall
+no-op, the alpha.3 host lock, injection and dump readback, a real Web restart
+with wrong-origin rejection and same-origin acceptance, changed boot ID and
+listener PID, intentional Headless `MISSING_CREDENTIAL`, preservation of the
+daily profiles, and cleanup. The attached macOS annex records 11 required
+gates; the Windows R5 annex records 24. The macOS Web run used Chokidar's
+polling mode after the host hit its file-watcher limit; the annex keeps that
+environment detail visible.
+
+npm published this exact tgz at `2026-09-02T13:18:57.245Z`. Anonymous
+registry readback returned `latest=0.4.0`, the release commit as `gitHead`,
+shasum `0980d44fa21b1f6bc225c96a4c52dcf1c6b3834a`, and the expected
+integrity. A fresh registry download was byte-identical to the frozen file.
+
+The non-draft, non-prerelease
+[`v0.4.0` GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0)
+was published at `2026-09-02T13:21:09Z`. Its five assets are the frozen tgz,
+`SHA256SUMS.txt`, `release-artifact.json`, and the macOS and Windows native
+annexes. Anonymous Release readback returned the expected target commit and
+asset digests; a fresh Release tgz download was byte-identical to the frozen
+and npm files.
+
+This is a post-candidate evidence record and is not part of the accepted tgz.
+Changing the package bytes or release commit would require new artifact and
+native-platform acceptance. No daily Web or Headless profile was upgraded,
+and no real model request was made; those remain separate actions.
 
 ### Superseded pre-release artifacts
 
