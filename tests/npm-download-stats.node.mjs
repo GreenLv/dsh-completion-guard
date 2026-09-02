@@ -6,10 +6,10 @@ import test from "node:test";
 import {
   buildStatsDocument,
   collectPackageSeries,
+  latestCompleteUtcDay,
   normalizeRangePayload,
   reconcilePointPayload,
   renderSvg,
-  resolveLatestCompleteDay,
   run,
   splitDateRange,
 } from "../scripts/npm-download-stats.mjs";
@@ -72,11 +72,11 @@ test("shows every x-axis date when all labels fit", () => {
   ]);
 });
 
-test("adapts x-axis tick density for long periods while preserving endpoints", () => {
+test("adapts x-axis tick density for long periods without crowding endpoints", () => {
   const document = buildStatsDocument(config, collected, "2026-10-02T04:37:00.000Z", "2026-10-01");
   const svg = renderSvg(document, "en");
   const labels = [...svg.matchAll(/class="axis">(\d{4}-\d{2}-\d{2})<\/text>/g)].map((match) => match[1]);
-  assert.ok(labels.length > 5 && labels.length <= 11);
+  assert.ok(labels.length > 5 && labels.length <= 8);
   assert.equal(labels[0], "2026-08-26");
   assert.equal(labels.at(-1), "2026-10-01");
 });
@@ -148,28 +148,10 @@ test("collects a scoped package through encoded range and point URLs", async () 
   assert.ok(urls.every((url) => url.endsWith("/%40scope%2Ffixture")));
 });
 
-test("uses the earliest last available day shared by every package", async () => {
-  const specs = [
-    { package: "old-package", start: "2026-08-26" },
-    { package: "new-package", start: "2026-08-29" },
-  ];
-  const fetchImpl = async (url) => {
-    const packageName = url.endsWith("/old-package") ? "old-package" : "new-package";
-    const day = packageName === "old-package" ? "2026-08-31" : "2026-08-30";
-    return new Response(JSON.stringify({ package: packageName, start: day, end: day, downloads: 1 }), { status: 200 });
-  };
-  assert.equal(await resolveLatestCompleteDay(specs, fetchImpl), "2026-08-30");
-});
-
-test("rejects malformed last-day metadata instead of publishing a partial period", async () => {
-  const specs = [{ package: "fixture-package", start: "2026-08-29" }];
-  const fetchImpl = async () => new Response(JSON.stringify({
-    package: "wrong-package",
-    start: "2026-08-30",
-    end: "2026-08-30",
-    downloads: 1,
-  }), { status: 200 });
-  await assert.rejects(() => resolveLatestCompleteDay(specs, fetchImpl), /package mismatch/);
+test("uses the previous UTC calendar day as the default data end", () => {
+  assert.equal(latestCompleteUtcDay("2026-09-02T11:10:51.000Z"), "2026-09-01");
+  assert.equal(latestCompleteUtcDay("2026-09-02T00:30:00+08:00"), "2026-08-31");
+  assert.throws(() => latestCompleteUtcDay("not-a-timestamp"), /generatedAt must be an ISO timestamp/);
 });
 
 test("rejects HTTP, JSON, and range-point failures", async () => {
