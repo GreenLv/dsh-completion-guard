@@ -9,6 +9,7 @@ import {
   normalizeRangePayload,
   reconcilePointPayload,
   renderSvg,
+  resolveLatestCompleteDay,
   run,
   splitDateRange,
 } from "../scripts/npm-download-stats.mjs";
@@ -49,6 +50,8 @@ test("calculates per-package and combined cumulative downloads across the rename
   }
   assert.match(english, /Cumulative downloads/);
   assert.match(chinese, /累计下载量/);
+  assert.match(english, /All available history · 2026-08-26 → 2026-08-29/);
+  assert.match(chinese, /全量历史 · 2026-08-26 → 2026-08-29/);
   assert.doesNotMatch(english, /Daily npm downloads/);
   assert.doesNotMatch(chinese, /每日 npm 下载量/);
 });
@@ -132,6 +135,30 @@ test("collects a scoped package through encoded range and point URLs", async () 
   assert.equal(result.downloads[0].downloads, 7);
   assert.equal(urls.length, 2);
   assert.ok(urls.every((url) => url.endsWith("/%40scope%2Ffixture")));
+});
+
+test("uses the earliest last available day shared by every package", async () => {
+  const specs = [
+    { package: "old-package", start: "2026-08-26" },
+    { package: "new-package", start: "2026-08-29" },
+  ];
+  const fetchImpl = async (url) => {
+    const packageName = url.endsWith("/old-package") ? "old-package" : "new-package";
+    const day = packageName === "old-package" ? "2026-08-31" : "2026-08-30";
+    return new Response(JSON.stringify({ package: packageName, start: day, end: day, downloads: 1 }), { status: 200 });
+  };
+  assert.equal(await resolveLatestCompleteDay(specs, fetchImpl), "2026-08-30");
+});
+
+test("rejects malformed last-day metadata instead of publishing a partial period", async () => {
+  const specs = [{ package: "fixture-package", start: "2026-08-29" }];
+  const fetchImpl = async () => new Response(JSON.stringify({
+    package: "wrong-package",
+    start: "2026-08-30",
+    end: "2026-08-30",
+    downloads: 1,
+  }), { status: 200 });
+  await assert.rejects(() => resolveLatestCompleteDay(specs, fetchImpl), /package mismatch/);
 });
 
 test("rejects HTTP, JSON, and range-point failures", async () => {
