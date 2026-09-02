@@ -8,13 +8,13 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-Install the published plugin into a DSH Web profile:
+Install the published plugin into the DSH Web environment:
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.4.0
 ```
 
-Before restarting DSH, record and verify the active runtime and profile. Replace the example paths with the absolute paths on your machine:
+Before restarting DSH, record and verify the DSH program directory and the Web settings directory. Replace the example paths with the absolute paths on your machine:
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -28,7 +28,7 @@ dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
 "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
 ```
 
-On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the profile's `node_modules\.bin` directory and use Windows absolute paths. Repeat this check after a DSH, profile, or package upgrade. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
+On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. Repeat this check after upgrading DSH, its Web or Headless settings, or the package. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
 
 Restart DSH Web, open a session, and enable the Guard:
 
@@ -63,7 +63,12 @@ Version 0.3.0 is not recommended. Its package passed native checks, but npm did 
 
 ## Activation modes
 
-The default `opt-in` mode protects a session only after `/context-guard on`. To enable the Guard automatically for a DSH profile, add this override to that profile's `cordis.patch.yml`:
+Context Guard has two activation modes:
+
+- `opt-in` (default): protection is off when a session starts. Run `/context-guard on` in that session to turn it on, and `/context-guard off` to turn it off again. This changes only the current session.
+- `always`: DSH sessions are protected automatically. Running `/context-guard off` turns protection off only for that session; other sessions start with protection on.
+
+To make DSH sessions start with protection on, add this entry to the `cordis.patch.yml` used by the way you start DSH:
 
 ```yaml
 - id: context-guard
@@ -72,7 +77,22 @@ The default `opt-in` mode protects a session only after `/context-guard on`. To 
     activation: always
 ```
 
-Restart the profile, then run `/context-guard status`. In `always` mode, rebuilding an existing session can also capture earlier user messages from its saved log. Keep `opt-in` if protection should start only after an explicit command.
+DSH can run with a **Web** interface in a browser, or **Headless** without a browser interface from a terminal or an automated task. These two ways of running DSH use separate settings files. Edit the file for the one you use, or edit both if you use both:
+
+| System | How you use DSH | Default path |
+| --- | --- | --- |
+| macOS / Linux | Web | `$HOME/.dsh/profiles/web/cordis.patch.yml` |
+| macOS / Linux | Headless | `$HOME/.dsh/profiles/headless/cordis.patch.yml` |
+| Windows | Web | `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` |
+| Windows | Headless | `%USERPROFILE%\.dsh\profiles\headless\cordis.patch.yml` |
+
+If you set a custom `DSH_HOME`, use that directory instead of `$HOME/.dsh` or `%USERPROFILE%\.dsh`.
+
+You can also paste this prompt into DSH and let it make the change:
+
+> Set `dsh-completion-guard` to `always` mode. Find the `cordis.patch.yml` used by the way I am currently running DSH (Web interface or Headless), back it up first, and only set `activation: always` on the entry with `id: context-guard`. Do not change any other settings or restart DSH. When finished, show me the file path and the exact diff.
+
+After the change, restart DSH.
 
 ## How completion is checked
 
@@ -129,4 +149,4 @@ pnpm run build
 pnpm run pack:check
 ```
 
-These commands validate a local source tree and package. CI, native-platform acceptance, npm publication, GitHub release identity, and runtime-profile installation remain separate evidence scopes.
+These commands validate a local source tree and package. CI, native-platform acceptance, npm publication, GitHub release identity, and installation in a live DSH environment remain separate evidence scopes.

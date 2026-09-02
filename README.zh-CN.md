@@ -8,13 +8,13 @@
 
 ## 快速开始
 
-将已发布插件安装到 DSH Web profile：
+将已发布插件安装到 DSH 的 Web 运行环境：
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.4.0
 ```
 
-重启 DSH 前，先记录并验证当前 runtime 和 profile。请把示例路径替换为本机绝对路径：
+重启 DSH 前，先记录并验证 DSH 程序目录和 Web 配置目录。请把示例路径替换为本机绝对路径：
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -28,7 +28,7 @@ dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
 "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
 ```
 
-Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。DSH、profile 或包升级后需要重新检查。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。DSH、Web/Headless 配置或包升级后需要重新检查。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -63,7 +63,12 @@ Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.
 
 ## 启用模式
 
-默认 `opt-in` 模式只在会话执行 `/context-guard on` 后开始保护。如需让某个 DSH profile 自动启用 Guard，请在该 profile 的 `cordis.patch.yml` 中增加：
+Context Guard 有两种启用模式：
+
+- `opt-in`（默认）：打开会话时不会自动保护。你需要在这个会话中执行 `/context-guard on` 才会启用；执行 `/context-guard off` 可以再次关闭。开关只影响当前会话。
+- `always`：DSH 会话会自动启用保护。如果你在某个会话中执行 `/context-guard off`，只会关闭这个会话；其他会话会自动开启保护。
+
+如果希望 DSH 会话自动启用保护，请在当前 DSH 启动方式使用的 `cordis.patch.yml` 中增加：
 
 ```yaml
 - id: context-guard
@@ -72,7 +77,22 @@ Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.
     activation: always
 ```
 
-重启 profile 后执行 `/context-guard status`。`always` 会在日志重放前启用 Guard，因此重建已有会话时也可能捕获日志中的早期用户消息。如果只希望从显式命令开始保护，请保留 `opt-in`。
+DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH；**Headless** 是不打开网页界面，通常从终端或自动化任务运行 DSH。两种方式使用不同的配置文件。你用哪一种就修改哪一个；两种都用时需要分别修改：
+
+| 系统 | 你怎么使用 DSH | 默认路径 |
+| --- | --- | --- |
+| macOS / Linux | Web | `$HOME/.dsh/profiles/web/cordis.patch.yml` |
+| macOS / Linux | Headless | `$HOME/.dsh/profiles/headless/cordis.patch.yml` |
+| Windows | Web | `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` |
+| Windows | Headless | `%USERPROFILE%\.dsh\profiles\headless\cordis.patch.yml` |
+
+如果你设置过自定义 `DSH_HOME`，请用该目录替换路径开头的 `$HOME/.dsh` 或 `%USERPROFILE%\.dsh`。
+
+不想手动改文件，也可以把下面这段话直接发给 DSH：
+
+> 请把 `dsh-completion-guard` 设为 `always` 模式。根据我当前使用 DSH 的方式（网页界面或无网页界面），自动找到对应的 `cordis.patch.yml`，先备份该文件，只把 `id: context-guard` 这一项的 `activation` 设为 `always`，不要修改其他配置，也不要替我重启 DSH。完成后告诉我文件的绝对路径，并显示准确的修改内容。
+
+修改完成后，重启 DSH。
 
 ## 如何检查完成状态
 
@@ -129,4 +149,4 @@ pnpm run build
 pnpm run pack:check
 ```
 
-这些命令验证本地源码树与包。CI、原生平台验收、npm 发布、GitHub Release 身份和真实 profile 安装仍是相互独立的证据范围。
+这些命令验证本地源码树与包。CI、原生平台验收、npm 发布、GitHub Release 身份和真实 DSH 环境安装仍是相互独立的证据范围。
