@@ -57,7 +57,7 @@ test("calculates per-package and combined cumulative downloads across the rename
 });
 
 test("shows every x-axis date when all labels fit", () => {
-  const document = buildStatsDocument(config, collected, "2026-09-03T04:37:00.000Z", "2026-09-02");
+  const document = buildStatsDocument(config, collected, "2026-09-06T04:37:00.000Z", "2026-09-05");
   const svg = renderSvg(document, "en");
   const labels = [...svg.matchAll(/class="axis">(\d{4}-\d{2}-\d{2})<\/text>/g)].map((match) => match[1]);
   assert.deepEqual(labels, [
@@ -69,6 +69,9 @@ test("shows every x-axis date when all labels fit", () => {
     "2026-08-31",
     "2026-09-01",
     "2026-09-02",
+    "2026-09-03",
+    "2026-09-04",
+    "2026-09-05",
   ]);
 });
 
