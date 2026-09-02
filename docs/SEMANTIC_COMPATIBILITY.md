@@ -79,9 +79,18 @@ event vocabulary `root_message`, `delegated_message`, `tool_result`,
 runner executes every mirrored case without skips and compares the bounded
 result contract; it does not translate a missing capability into a pass.
 
-## Current alignment status (honest boundaries)
+## Current 0.4.0 alignment status
 
-Implemented in v0.3.0:
+The semantic implementation described here is present in the DSH `0.4.0` implementation baseline `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The seven package-shipped documentation files for the 0.4.0 candidate have passed their local gates. Their exact containing commit is bound by the post-commit candidate handoff rather than by this document. The shared-contract reference is the Codex `0.10.0` source at `e4fccf690bcbc2be79d0b8d42a1a269f87072120`; this covers only the named contracts, not full product parity.
+
+The 0.4.0 implementation baseline keeps the v0.3 digest and conformance work and adds:
+
+- Proof obligations that must name a current pending item and use evidence matching the requested kind, surface, subject, operation, and outcome.
+- Bounded subject readback, scope coverage, state verification, and replayable `sessionQuery` state.
+- Fail-closed rejection for tampered asset or scope digests, empty subject sets, and evidence imported from another session.
+- The alpha.3 host cohort as the implementation baseline: DSH `0.1.2-alpha.3`, dshmarket `1.39.0`, and Cordis `4.0.2`.
+
+Retained from v0.3.0:
 
 - Digest v3 derivation, byte-mirror pinning, and 29-vector agreement.
 - All-case portable semantic fixture runner implemented as a thin adapter over production derive/checkpoint/boundary/Goal/stop functions, without fixture-ID rewrites or skipped cases.
@@ -94,14 +103,11 @@ Implemented in v0.3.0:
   the Guard-owned `update_goal(action=complete)` path.
 - Legacy generic-run and unprovable-authority fail-closed migration behavior.
 
-This is not a full product-parity claim. It does not copy the Codex private
-ledger, Hook lifecycle, cache, or installer, and it cannot prevent all trusted
-in-process Goal/session bypasses. Exact-artifact isolated Web/Headless install,
-host-lock readback, Web restart lifecycle, and Headless load were exercised on
-native macOS and Windows, with cross-platform CI and a bounded credentialed
-model-session evidence/boundary round. Source, native-platform, model-session,
-registry, tag, and GitHub Release evidence remain separate scopes; see
-`LOCAL_ACCEPTANCE.md`.
+This is not a full product-parity claim. It does not copy the Codex private ledger, Hook lifecycle, cache, or installer, and it cannot prevent all trusted in-process Goal/session bypasses.
+
+Main CI run `33540907051` passed the DSH implementation baseline. The old alpha.3 tgz from that commit remains historical exact-byte evidence: native macOS Web and Headless passed, while native Windows is `blocked` because Web did not prove a changed boot ID and Headless was not run after the stop rule applied.
+
+The finalized documentation changes packaged bytes and supersedes the old alpha.3 tgz. The next canonical tgz must be generated from a candidate commit that contains this documentation and accepted natively as a new exact artifact; the candidate handoff binds its exact commit, and no result from the old SHA transfers. Tag, npm, GitHub Release, and public readback remain incomplete or not authorized. Historical v0.3 native and publication evidence remains valid only for its recorded versions; see [`LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
 
 ## Validation boundaries
 

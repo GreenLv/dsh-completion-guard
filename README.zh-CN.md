@@ -51,6 +51,12 @@ Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.
 
 0.3.2 是当前已发布版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2) 和精确的公开检查记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。它支持 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 列出的 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.2` 环境。
 
+0.4.0 尚未发布，目标环境是 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`；实现代码及其 CI 检查已经通过。精确的源码与 CI 身份见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+
+0.4.0 的兼容基线继续冻结在这套 alpha.3 环境。alpha.4 及此后的 alpha 版本不作为新的适配目标；兼容性适配将在上游发布 alpha.3 之后的第一版 RC 时恢复。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。
+
+较早的一份测试包已经通过 macOS 原生 Web 与 Headless 生命周期。Windows Web 在重启后 boot ID 没有变化，因此结果为 `blocked`，并且没有继续运行 Headless。此后 README、更新日志和 docs 又有修改，而这些文件都会进入安装包，所以旧测试包已不是最终包。只有按最终文档重新打包，并用这同一份安装包完成 macOS 和 Windows 原生验收后，0.4.0 才能进入发布流程；详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+
 不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.2。
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，因为另一个无关插件已经使用旧名称。内部 bundle id 仍为 `context-guard`，旧 npm 包会引导用户使用本包。支持的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)；需要 Node.js `>=22` 和 pnpm `>=11`。
@@ -84,7 +90,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 本项目最初从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8 移植确定性行为。这个版本只是历史起点，不代表当前兼容程度。
 
-现在双方共享到哪里，由固定的兼容性测试数据和差异台账记录。0.3.2 已包含 Codex 0.9.4 系列的 Stop 2.0、digest v3 和共享兼容性测试，但不声称覆盖 Codex 0.9.5 的全部行为；更严格的任务、路径和能力绑定仍计划在 DSH 0.4.0 完成。
+双方当前共享到哪里，由固定的兼容性测试数据和差异台账记录。0.3.2 已包含 Codex 0.9.4 系列的 Stop 2.0、digest v3 和共享兼容性测试。未发布的 0.4.0 候选又加入了更严格的任务、路径、能力和证明绑定，具体范围见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)；这里描述的是有明确边界的语义对齐，不代表两个产品完全一致。
 
 两个项目服务于不同运行时：
 

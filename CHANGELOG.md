@@ -2,18 +2,23 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.4.0 - 2026-09-02
+## 0.4.0 - Unreleased
 
 ### Added
 
-- **The audited alpha.3 host cohort is available.** The complete 34-row DSH 0.1.2-alpha.3 graph with Cordis 4.0.2 and dshmarket 1.39.0 is selected atomically alongside the retained cohorts. Missing, duplicate, unknown, or integrity-drifted graphs fail closed; skin-center is not a Guard lock input.
-- **The upgraded-Windows combination is now supported.** `0.1.2-alpha.2` with dshmarket `1.39.0` — the exact graph whose rejection was Guard 0.3.2's real `web_control` failure — is registered as its own audited whole-graph cohort with a supported web-control projection on Windows. dshmarket stays the authoritative audit input of every cohort, and substitutions matching no registered cohort (for example alpha.3 + dshmarket 1.38.1) still fail closed as mixed graphs.
-- **Proof 0.4.0 contracts bind to replayed state.** Canonical projections, bounded subject-readback, scope-coverage, and state-verification obligations, and replayable sessionQuery state are versioned. A proof only yields a usable query result when its obligations name pending items and its evidence ids exist in the projection and satisfy kind/surface/subject/outcome constraints; tampered asset-set digests, divergent expected/observed scope digests, empty subject sets, and foreign evidence all fail closed. Raw private logs and asset bytes are excluded.
+- **DSH alpha.3 is the 0.4.0 implementation baseline.** The unreleased 0.4.0 candidate targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
+- **A proof must refer to the work that is still pending and to evidence for the action the user actually requested.** A read or verification result for another target cannot close the item. Empty subject sets, evidence imported from another session, and evidence with the wrong kind, surface, subject, or outcome are rejected.
+- **Damaged proof state fails closed.** Changing the recorded asset set or scope digest makes the proof unusable. The technical contract versions canonical projections, bounded subject readback, scope coverage, state verification, and replayable `sessionQuery` state while excluding raw private logs and asset bytes.
 - **Stage disposition.** The stopped 0.3.3 compatibility candidate is recorded as `superseded_before_candidate`; no 0.3.3 source, artifact, installation, native acceptance, commit, tag, or release existed.
+
+### Changed
+
+- **Compatibility adaptation pauses after alpha.3.** Version 0.4.0 stays frozen on the DSH alpha.3 setup. Alpha.4 and later alpha releases are not new adaptation targets; work resumes with the first upstream RC published after alpha.3. Upstream milestones are listed on the [DeepSeek Harness tags page](https://github.com/deepseek-ai/deepseek-harness/tags).
 
 ### Validation
 
-- Source implementation only. Native profile installation, restart, artifact, tag, npm, and GitHub Release evidence remain separate and are not claimed by this change.
+- Main CI run `33540907051` passed implementation commit `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The packaged documentation for the 0.4.0 candidate has passed its local gates; its exact containing commit is bound by the post-commit candidate handoff rather than by these packaged files.
+- The old 26-file tgz from the implementation baseline remains historical evidence: native macOS Web and Headless passed, while native Windows is `blocked` because Web did not prove a changed boot ID and Headless was not run after the stop rule applied. That tgz does not contain the finalized packaged documentation and is superseded. The next canonical tgz must be generated from a candidate commit that contains this documentation and must then pass exact-artifact native acceptance; tag, npm, GitHub Release, and public readback remain incomplete or unauthorized. See [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.3.2 - 2026-09-01
 

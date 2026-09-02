@@ -2,18 +2,23 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
-## 0.4.0 - 2026-09-02
+## 0.4.0 - 未发布
 
 ### 新增
 
-- **加入已审计的 alpha.3 宿主 cohort。** 完整 34 行 DSH 0.1.2-alpha.3、Cordis 4.0.2 与 dshmarket 1.39.0 图谱与保留的各 cohort 原子选择。缺失、重复、未知或完整性漂移均 fail-closed；skin-center 不属于 Guard 锁输入。
-- **Windows 曾升级的组合现已受支持。** `0.1.2-alpha.2` + dshmarket `1.39.0`——正是曾被 Guard 0.3.2 的 `web_control` 审计拒绝、导致 Windows 回退的那张图——作为独立的已审计整图 cohort 注册，Windows 上 web_control 投影可用。dshmarket 仍是每个 cohort 的权威审计输入，未注册的跨组替换（例如 alpha.3 + dshmarket 1.38.1）仍按混装图 fail-closed。
-- **Proof 0.4.0 合同绑定到重放状态。** canonical projection、有限的 subject-readback、scope-coverage、state-verification obligation 与可重放 sessionQuery 状态均已版本化。只有当 proof 的 obligation 指向 pending 项、其 evidence id 真实存在并满足 kind/surface/subject/outcome 约束时，查询结果才可用；篡改 asset-set digest、expected/observed scope digest 不一致、空 subject 集与外来证据全部 fail-closed。不保存原始私有日志或资产字节。
+- **DSH alpha.3 成为 0.4.0 的实现基线。** 未发布的 0.4.0 候选面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
+- **证明必须对应仍在待办中的工作，也必须对应用户实际要求的操作。** 读取或验证了另一个对象，不能关闭当前事项。对象集合为空、从其他会话带入证据，或证据的类型、表面、对象、结果不匹配时，都会被拒绝。
+- **证明状态被篡改时保持失败关闭。** 资产集合或范围摘要一旦被改动，这份证明就不能再使用。技术层面会版本化 canonical projection、有限 subject readback、scope coverage、state verification 和可重放的 `sessionQuery` 状态，但不保存原始私有日志或资产字节。
 - **阶段处置记录。** 已停止的 0.3.3 兼容候选明确记为 `superseded_before_candidate`；该阶段不存在 0.3.3 源码、工件、安装、原生验收、提交、tag 或 release。
+
+### 变更
+
+- **alpha.3 之后暂停兼容性适配。** 0.4.0 继续冻结在 DSH alpha.3 环境。alpha.4 及此后的 alpha 版本不作为新的适配目标；上游发布 alpha.3 之后的第一版 RC 时再恢复适配。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。
 
 ### 验证
 
-- 仅声明源码实现。原生 profile 安装、重启、工件、tag、npm 和 GitHub Release 证据仍是独立门禁，本次不宣称。
+- 实现提交 `ffc6fe9e1246a815f0bb630943c59d14b6505716` 已通过 main CI run `33540907051`。本次随包发布的 0.4.0 文档已通过本地门禁；包含这些文档的精确提交由提交后的候选交接记录绑定，不在这些随包文件中自我声明。
+- 实现基线生成的旧 26 文件 tgz 只保留为历史证据：macOS 原生 Web 与 Headless 已通过；Windows 原生结果是 `blocked`，因为 Web 没有证明 boot ID 已变化，停止规则触发后也未运行 Headless。旧 tgz 不包含最终的随包文档，因此已被取代。下一份 canonical tgz 必须从包含这些文档的候选提交生成，并用同一份精确工件完成原生验收；tag、npm、GitHub Release 和公开读回仍未完成或未获授权。详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 ## 0.3.2 - 2026-09-01
 

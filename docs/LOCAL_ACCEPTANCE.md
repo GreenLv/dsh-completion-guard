@@ -2,6 +2,33 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## v0.4.0 candidate and historical-artifact status (2026-09-02)
+
+Version 0.4.0 is unreleased. Its implementation baseline targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`. The seven package-shipped documentation files for the 0.4.0 candidate have passed their local gates and supersede the documentation in the old tgz. Their exact containing commit is bound by the post-commit candidate handoff rather than recorded inside these packaged files.
+
+| Gate | Status | Exact evidence and limit |
+| --- | --- | --- |
+| Implementation baseline | passed CI | `ffc6fe9e1246a815f0bb630943c59d14b6505716`; main run `33540907051` passed this exact implementation commit |
+| Packaged documentation | passed local gates | seven package-shipped documentation files form the 0.4.0 documentation update; the post-commit candidate handoff binds their exact containing commit |
+| Old artifact | historical only | `dsh-completion-guard-0.4.0.tgz`, SHA-256 `33757ce11633ac167fa9c5a6fdb7a8938578fcb871edd9afdb2f89dcb51b4316`, 193441 bytes, 26 files, embedded `gitHead` equal to the implementation baseline |
+| Old artifact on native macOS | passed | the exact old tgz passed isolated alpha.3 Web and Headless install, host-lock, lifecycle, and cleanup acceptance |
+| Old artifact on native Windows | blocked | Web did not prove the required boot ID change; Headless was not run after the stop rule applied |
+| New canonical artifact | not created | generate it from a candidate commit that contains this documentation, bind that exact commit in the candidate handoff, and run exact-artifact native acceptance on those new bytes |
+| Tag | pending / not authorized | no 0.4.0 tag is claimed |
+| npm publication | pending / not authorized | 0.3.2 remains the published npm version |
+| GitHub Release and public readback | pending / not authorized | no 0.4.0 Release or public-byte readback is claimed |
+| Windows daily-profile upgrade | not performed / not authorized | no daily profile was upgraded by the old-artifact run |
+
+### Old artifact Windows blocked record
+
+The Windows Web run used the exact old tgz above. It passed the host lock, two idempotent `inject` runs, composed dump and `verify-dump`, HTTP 200 recovery, wrong-Origin 403 rejection, same-origin restart 202 acceptance, and bounded cleanup.
+
+The run did not close the restart lifecycle. Every allowed retry still read the original boot ID, so a boot ID change was not proved. The stop rule then prevented the Headless phase from running. The result for this old artifact is therefore `blocked`, not `pending` and not passed.
+
+The isolated Web installation used the user's pnpm content store. It did not modify the daily Codex Home, DSH Home, or daily profile, but this evidence cannot support a broader claim that every daily cache was untouched.
+
+README, both changelogs, and `docs/` are included by `package.json`. This documentation update passed its local gates and changes package bytes. The old tgz does not contain the finalized documentation and is superseded; it remains evidence only for its exact SHA, and none of its native results transfer to a future tgz. The next canonical tgz must come from a candidate commit containing this documentation, with the exact commit bound by the post-commit candidate handoff.
+
 ## v0.3.2 release gates (2026-09-01, passed)
 
 The release candidate is commit
