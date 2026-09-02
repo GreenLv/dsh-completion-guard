@@ -50,9 +50,8 @@ Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
    `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`;
    the separate `SHA256SUMS.txt` asset binds the same bytes.
 2. [`dsh-completion-guard@0.3.2` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.2)
-   is published and `latest` resolves to `0.3.2`. The registry `gitHead`
-   equals the release commit, and a fresh registry download is byte-identical
-   to the frozen release tgz.
+   remains published. The registry `gitHead` equals the release commit, and a
+   registry download is byte-identical to the frozen release tgz.
 3. Source commit, tag, CI, native macOS and Windows acceptance, npm metadata
    and bytes, and both GitHub assets are reconciled in
    [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
@@ -66,9 +65,9 @@ Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
    `df3c0cae29fdfa0014d5cfdb6ade72c42386555779f9f4d8b59e37a2557c5d7e`;
    the separate `SHA256SUMS.txt` asset binds the same bytes.
 2. [`dsh-completion-guard@0.3.1` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.1)
-   is published and `latest` resolves to `0.3.1`. The registry packument
-   `gitHead` equals the release commit above, and a fresh registry download is
-   byte-identical to the frozen release tgz.
+   remains published. The registry packument `gitHead` equals the release
+   commit above, and a registry download is byte-identical to the frozen
+   release tgz.
 3. Source commit, tag, CI, native macOS and Windows acceptance, npm metadata
    and bytes, and both GitHub assets are reconciled in
    [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
