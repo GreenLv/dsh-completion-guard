@@ -56,8 +56,8 @@ test("calculates per-package and combined cumulative downloads across the rename
   assert.doesNotMatch(chinese, /每日 npm 下载量/);
 });
 
-test("shows every x-axis date for periods of seven days or fewer", () => {
-  const document = buildStatsDocument(config, collected, "2026-09-01T04:37:00.000Z", "2026-08-31");
+test("shows every x-axis date when all labels fit", () => {
+  const document = buildStatsDocument(config, collected, "2026-09-03T04:37:00.000Z", "2026-09-02");
   const svg = renderSvg(document, "en");
   const labels = [...svg.matchAll(/class="axis">(\d{4}-\d{2}-\d{2})<\/text>/g)].map((match) => match[1]);
   assert.deepEqual(labels, [
@@ -67,7 +67,18 @@ test("shows every x-axis date for periods of seven days or fewer", () => {
     "2026-08-29",
     "2026-08-30",
     "2026-08-31",
+    "2026-09-01",
+    "2026-09-02",
   ]);
+});
+
+test("adapts x-axis tick density for long periods while preserving endpoints", () => {
+  const document = buildStatsDocument(config, collected, "2026-10-02T04:37:00.000Z", "2026-10-01");
+  const svg = renderSvg(document, "en");
+  const labels = [...svg.matchAll(/class="axis">(\d{4}-\d{2}-\d{2})<\/text>/g)].map((match) => match[1]);
+  assert.ok(labels.length > 5 && labels.length <= 11);
+  assert.equal(labels[0], "2026-08-26");
+  assert.equal(labels.at(-1), "2026-10-01");
 });
 
 test("rejects a rename date outside the rendered period", () => {
