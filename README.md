@@ -11,7 +11,7 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 Install the published plugin into a DSH Web profile:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.3.2
+dsh plugin --profile web add dsh-completion-guard@0.4.0
 ```
 
 Before restarting DSH, record and verify the active runtime and profile. Replace the example paths with the absolute paths on your machine:
@@ -49,13 +49,13 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 ## Status and compatibility
 
-Version 0.3.2 is the current published release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2) and exact public checks are recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md). It supports the checked DSH `0.1.1-rc.2` and `0.1.2-alpha.2` setups listed in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+Version 0.4.0 is the current release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) carries the exact package checksum and native macOS and Windows acceptance records. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
 
-Version 0.4.0 is not published yet. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`; the implementation code and its CI checks have passed. Exact source and CI identities are recorded in [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
+Version 0.3.2 remains available for the checked DSH `0.1.1-rc.2` and `0.1.2-alpha.2` setups. Do not combine packages from different checked setups; the Guard fails closed when the active package set does not match one complete cohort in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 Version 0.4.0 remains frozen on this alpha.3 setup. Alpha.4 and later alpha releases are not new adaptation targets; compatibility work resumes with the first upstream RC published after alpha.3. Track that milestone on the [DeepSeek Harness tags page](https://github.com/deepseek-ai/deepseek-harness/tags).
 
-An earlier test package passed the native macOS Web and Headless lifecycle. On Windows, the Web run was blocked because the boot ID did not change after restart, and Headless was not run. README, changelog, and docs have since changed and are included in the package, so that test package is no longer final. Version 0.4.0 can move toward publication only after the final documentation is repacked and that exact package passes native acceptance on macOS and Windows; see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+Release packages are built once from a clean commit and published only after those exact bytes pass native macOS and Windows Web and Headless checks. CI, native lifecycle checks, package publication, and public readback remain separate evidence scopes; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
 Version 0.3.0 is not recommended. Its package passed native checks, but npm did not record the required source commit, so the version cannot be repaired in place and has no GitHub Release. Use 0.3.2.
 
@@ -90,7 +90,7 @@ Evidence is bounded and redacted. Complete prompts, stdout, file contents, crede
 
 This project began as a DSH port of deterministic behavior from [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8. That version is the historical starting point, not the current compatibility level.
 
-Current shared behavior is tracked by pinned conformance fixtures and an explicit delta ledger. Version 0.3.2 includes the shared Stop 2.0, digest v3, and conformance work from the Codex 0.9.4 line. The unreleased 0.4.0 candidate adds the stricter task, path, capability, and proof bindings documented in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md); this is a bounded semantic alignment claim, not full product parity.
+Current shared behavior is tracked by pinned conformance fixtures and an explicit delta ledger. Version 0.3.2 includes the shared Stop 2.0, digest v3, and conformance work from the Codex 0.9.4 line. Version 0.4.0 adds the stricter task, path, capability, and proof bindings documented in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md); this is a bounded semantic alignment claim, not full product parity.
 
 The two repositories serve different runtimes:
 

@@ -11,7 +11,7 @@
 将已发布插件安装到 DSH Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.3.2
+dsh plugin --profile web add dsh-completion-guard@0.4.0
 ```
 
 重启 DSH 前，先记录并验证当前 runtime 和 profile。请把示例路径替换为本机绝对路径：
@@ -49,13 +49,13 @@ Windows 请通过 profile 的 `node_modules\.bin\dsh-completion-guard-host-lock.
 
 ## 状态与兼容性
 
-0.3.2 是当前已发布版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2) 和精确的公开检查记录见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。它支持 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 列出的 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.2` 环境。
+0.4.0 是当前版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
 
-0.4.0 尚未发布，目标环境是 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`；实现代码及其 CI 检查已经通过。精确的源码与 CI 身份见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+0.3.2 继续支持已经检查过的 DSH `0.1.1-rc.2` 和 `0.1.2-alpha.2` 环境。不要混用不同环境的包；只有当前包集合完整匹配 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 中的一套记录时，Guard 才会启用。
 
 0.4.0 的兼容基线继续冻结在这套 alpha.3 环境。alpha.4 及此后的 alpha 版本不作为新的适配目标；兼容性适配将在上游发布 alpha.3 之后的第一版 RC 时恢复。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。
 
-较早的一份测试包已经通过 macOS 原生 Web 与 Headless 生命周期。Windows Web 在重启后 boot ID 没有变化，因此结果为 `blocked`，并且没有继续运行 Headless。此后 README、更新日志和 docs 又有修改，而这些文件都会进入安装包，所以旧测试包已不是最终包。只有按最终文档重新打包，并用这同一份安装包完成 macOS 和 Windows 原生验收后，0.4.0 才能进入发布流程；详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+发布包只从干净提交生成一次；同一份包在 macOS 和 Windows 上完成 Web、Headless 原生检查后才会发布。CI、原生生命周期、包发布和公开读回是四类独立证据，详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.2。
 
@@ -90,7 +90,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 本项目最初从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8 移植确定性行为。这个版本只是历史起点，不代表当前兼容程度。
 
-双方当前共享到哪里，由固定的兼容性测试数据和差异台账记录。0.3.2 已包含 Codex 0.9.4 系列的 Stop 2.0、digest v3 和共享兼容性测试。未发布的 0.4.0 候选又加入了更严格的任务、路径、能力和证明绑定，具体范围见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)；这里描述的是有明确边界的语义对齐，不代表两个产品完全一致。
+双方当前共享到哪里，由固定的兼容性测试数据和差异台账记录。0.3.2 已包含 Codex 0.9.4 系列的 Stop 2.0、digest v3 和共享兼容性测试。0.4.0 又加入了更严格的任务、路径、能力和证明绑定，具体范围见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)；这里描述的是有明确边界的语义对齐，不代表两个产品完全一致。
 
 两个项目服务于不同运行时：
 

@@ -2,11 +2,11 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.4.0 - Unreleased
+## 0.4.0 - 2026-09-02
 
 ### Added
 
-- **DSH alpha.3 is the 0.4.0 implementation baseline.** The unreleased 0.4.0 candidate targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
+- **DSH alpha.3 is the 0.4.0 implementation baseline.** Version 0.4.0 targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
 - **A proof must refer to the work that is still pending and to evidence for the action the user actually requested.** A read or verification result for another target cannot close the item. Empty subject sets, evidence imported from another session, and evidence with the wrong kind, surface, subject, or outcome are rejected.
 - **Damaged proof state fails closed.** Changing the recorded asset set or scope digest makes the proof unusable. The technical contract versions canonical projections, bounded subject readback, scope coverage, state verification, and replayable `sessionQuery` state while excluding raw private logs and asset bytes.
 - **Stage disposition.** The stopped 0.3.3 compatibility candidate is recorded as `superseded_before_candidate`; no 0.3.3 source, artifact, installation, native acceptance, commit, tag, or release existed.
@@ -17,8 +17,8 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Validation
 
-- Main CI run `33540907051` passed implementation commit `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The packaged documentation for the 0.4.0 candidate has passed its local gates; its exact containing commit is bound by the post-commit candidate handoff rather than by these packaged files.
-- The old 26-file tgz from the implementation baseline remains historical evidence: native macOS Web and Headless passed, while native Windows is `blocked` because Web did not prove a changed boot ID and Headless was not run after the stop rule applied. That tgz does not contain the finalized packaged documentation and is superseded. The next canonical tgz must be generated from a candidate commit that contains this documentation and must then pass exact-artifact native acceptance; tag, npm, GitHub Release, and public readback remain incomplete or unauthorized. See [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
+- The release commit passes the repository matrix and CI on Ubuntu, macOS, and Windows with Node.js 22 and 24. One frozen 26-file tgz is used for native macOS and Windows acceptance and npm publication; the GitHub Release carries its checksum and platform annexes.
+- Earlier 0.4.0 candidate packages remain historical evidence only. Results never transfer to changed package bytes; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.3.2 - 2026-09-01
 

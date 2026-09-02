@@ -2,9 +2,9 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## Current 0.4.0 candidate baseline
+## Current 0.4.0 release baseline
 
-- Plugin: `dsh-completion-guard` `0.4.0` (unreleased)
+- Plugin: `dsh-completion-guard` `0.4.0`
 - DeepSeek Harness: `0.1.2-alpha.3`
 - dshmarket: `1.39.0`
 - Cordis: `4.0.2`
@@ -17,15 +17,13 @@ DSH is still a developer preview and may make breaking changes. Version 0.4.0 th
 
 Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumes with the first DeepSeek Harness RC published after alpha.3; follow the upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) for that milestone.
 
-## Platform and release status
+## Platform and release evidence
 
-- **Implementation baseline:** commit `ffc6fe9e1246a815f0bb630943c59d14b6505716` passed main CI run `33540907051`.
-- **Packaged documentation:** the seven package-shipped documentation files for the 0.4.0 candidate have passed their local gates. Their exact containing commit is bound by the post-commit candidate handoff rather than recorded inside the packaged files.
-- **Historical artifact:** the old 26-file tgz is 193441 bytes with SHA-256 `33757ce11633ac167fa9c5a6fdb7a8938578fcb871edd9afdb2f89dcb51b4316`. Its embedded `gitHead` is the implementation baseline above.
-- **Historical macOS result:** those old bytes passed the native alpha.3 Web and Headless lifecycle.
-- **Historical Windows result:** `blocked` for those old bytes. Web passed host-lock, two idempotent injections, dump verification, HTTP and Origin checks, restart acceptance, and scoped cleanup, but the allowed retries still returned the original boot ID. Headless was not run after the stop rule applied.
-- **Next artifact:** the next canonical tgz must be generated from a candidate commit that contains this documentation and must pass exact-artifact native acceptance on those bytes. The candidate handoff binds the exact commit; results from the old SHA do not transfer.
-- **Publication:** tag, npm, GitHub Release, public readback, and the Windows daily-profile upgrade are incomplete or not authorized.
+- **Source and CI:** the release commit must pass the repository matrix and the Ubuntu, macOS, and Windows Node.js 22/24 CI jobs.
+- **Exact package:** the repository packer emits one deterministic 26-file tgz with its full source commit in `gitHead`. That same SHA-256 must be used on both native platforms and published to npm without repacking.
+- **Native scope:** macOS and Windows acceptance separately cover isolated Web and Headless installation, complete host-lock readback, repeated injection, Web restart and recovery, intentional Headless credential failure, daily-profile preservation, and scoped cleanup.
+- **Public identity:** the annotated tag, npm manifest and downloaded tgz, GitHub Release target, checksum, and platform annexes must all resolve to the same release commit and package bytes.
+- **Daily profiles:** upgrading a user's daily DSH profile is a separate action and is not implied by release acceptance.
 
 ## Historical compatibility cohorts
 

@@ -81,7 +81,7 @@ result contract; it does not translate a missing capability into a pass.
 
 ## Current 0.4.0 alignment status
 
-The semantic implementation described here is present in the DSH `0.4.0` implementation baseline `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The seven package-shipped documentation files for the 0.4.0 candidate have passed their local gates. Their exact containing commit is bound by the post-commit candidate handoff rather than by this document. The shared-contract reference is the Codex `0.10.0` source at `e4fccf690bcbc2be79d0b8d42a1a269f87072120`; this covers only the named contracts, not full product parity.
+The semantic implementation described here entered the DSH `0.4.0` line from implementation baseline `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The shared-contract reference is the Codex `0.10.0` source at `e4fccf690bcbc2be79d0b8d42a1a269f87072120`; this covers only the named contracts, not full product parity. Exact release commit, artifact, native-platform, and publication identities are recorded outside this semantic document because each is a separate evidence scope.
 
 The 0.4.0 implementation baseline keeps the v0.3 digest and conformance work and adds:
 
@@ -105,9 +105,7 @@ Retained from v0.3.0:
 
 This is not a full product-parity claim. It does not copy the Codex private ledger, Hook lifecycle, cache, or installer, and it cannot prevent all trusted in-process Goal/session bypasses.
 
-Main CI run `33540907051` passed the DSH implementation baseline. The old alpha.3 tgz from that commit remains historical exact-byte evidence: native macOS Web and Headless passed, while native Windows is `blocked` because Web did not prove a changed boot ID and Headless was not run after the stop rule applied.
-
-The finalized documentation changes packaged bytes and supersedes the old alpha.3 tgz. The next canonical tgz must be generated from a candidate commit that contains this documentation and accepted natively as a new exact artifact; the candidate handoff binds its exact commit, and no result from the old SHA transfers. Tag, npm, GitHub Release, and public readback remain incomplete or not authorized. Historical v0.3 native and publication evidence remains valid only for its recorded versions; see [`LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
+Main CI run `33540907051` passed the implementation baseline. The release commit adds the packaged documentation and must pass its own CI; its deterministic tgz must then pass same-byte native macOS and Windows acceptance before publication. Historical candidate results remain bound to their recorded SHA-256 values and never transfer to changed bytes; see [`LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
 
 ## Validation boundaries
 

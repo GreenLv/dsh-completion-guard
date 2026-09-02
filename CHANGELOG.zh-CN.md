@@ -2,11 +2,11 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
-## 0.4.0 - 未发布
+## 0.4.0 - 2026-09-02
 
 ### 新增
 
-- **DSH alpha.3 成为 0.4.0 的实现基线。** 未发布的 0.4.0 候选面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
+- **DSH alpha.3 成为 0.4.0 的实现基线。** 0.4.0 面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
 - **证明必须对应仍在待办中的工作，也必须对应用户实际要求的操作。** 读取或验证了另一个对象，不能关闭当前事项。对象集合为空、从其他会话带入证据，或证据的类型、表面、对象、结果不匹配时，都会被拒绝。
 - **证明状态被篡改时保持失败关闭。** 资产集合或范围摘要一旦被改动，这份证明就不能再使用。技术层面会版本化 canonical projection、有限 subject readback、scope coverage、state verification 和可重放的 `sessionQuery` 状态，但不保存原始私有日志或资产字节。
 - **阶段处置记录。** 已停止的 0.3.3 兼容候选明确记为 `superseded_before_candidate`；该阶段不存在 0.3.3 源码、工件、安装、原生验收、提交、tag 或 release。
@@ -17,8 +17,8 @@
 
 ### 验证
 
-- 实现提交 `ffc6fe9e1246a815f0bb630943c59d14b6505716` 已通过 main CI run `33540907051`。本次随包发布的 0.4.0 文档已通过本地门禁；包含这些文档的精确提交由提交后的候选交接记录绑定，不在这些随包文件中自我声明。
-- 实现基线生成的旧 26 文件 tgz 只保留为历史证据：macOS 原生 Web 与 Headless 已通过；Windows 原生结果是 `blocked`，因为 Web 没有证明 boot ID 已变化，停止规则触发后也未运行 Headless。旧 tgz 不包含最终的随包文档，因此已被取代。下一份 canonical tgz 必须从包含这些文档的候选提交生成，并用同一份精确工件完成原生验收；tag、npm、GitHub Release 和公开读回仍未完成或未获授权。详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
+- 发布提交通过仓库矩阵，以及 Ubuntu、macOS、Windows 上的 Node.js 22/24 CI。同一份 26 文件 tgz 用于 macOS、Windows 原生验收和 npm 发布；GitHub Release 附带校验和与平台验收记录。
+- 更早的 0.4.0 候选包只保留为历史证据。包字节变化后，旧结果不会迁移到新包；详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
 ## 0.3.2 - 2026-09-01
 
