@@ -51,6 +51,8 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 0.4.0 是当前版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
 
+源码树可能包含面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0`、尚未发布的本地 `0.4.1-rc.1` 候选。该 rc.1 宿主队列目前只具有原生 macOS 证据；Windows 在获得独立证据前仍失败关闭。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。这不表示已经发布到 npm 或 GitHub Release。
+
 0.3.2 继续支持已经检查过的 DSH `0.1.1-rc.2` 和 `0.1.2-alpha.2` 环境。不要混用不同环境的包；只有当前包集合完整匹配 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 中的一套记录时，Guard 才会启用。
 
 0.4.0 的兼容基线继续冻结在这套 alpha.3 环境。alpha.4 及此后的 alpha 版本不作为新的适配目标；兼容性适配将在上游发布 alpha.3 之后的第一版 RC 时恢复。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。

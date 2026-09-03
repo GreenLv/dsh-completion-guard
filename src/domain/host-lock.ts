@@ -2,17 +2,18 @@ import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
 import { ALPHA3_HOST_PACKAGES } from './alpha3-host.js'
+import { RC1_HOST_PACKAGES } from './rc1-host.js'
 
 export type HostLockStatus = 'supported' | 'unsupported' | 'unavailable'
 export type HostPlatform = 'posix' | 'windows'
 export type HostProfileKind = 'headless' | 'web'
 
 /**
- * Capability expectations shared by every audited host cohort. The rc.2 ->
- * alpha.2 source audit found no Guard-consumed contract change (session event
- * vocabulary, flush contract, Goal disarm, `update_goal` gating, tool
- * definition, renderer terminal markers), so the rows are identical; a future
- * cohort that changes any of them must declare its own rows instead.
+ * Capability expectations shared by every audited host cohort. The rc.1 audit
+ * found one host API change: Session event reads moved from `events` to
+ * `snapshotEvents()`. Guard adapts that API locally while the event vocabulary,
+ * flush contract, Goal disarm, `update_goal` gating, tool definition, and
+ * renderer terminal markers remain compatible.
  */
 const AUDITED_CAPABILITY_ROWS: readonly CapabilityRow[] = [
   { name: 'goal_complete_precommit_guard', value: { k: 's', v: 'required' } },
@@ -120,7 +121,9 @@ export const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[] = ALPHA2_HOST_PACK
  * exact package graph extracted from native macOS and Windows DSH
  * `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
  * cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
- * the graph audited in the 2026-09-01 annex. Graphs that mix cohorts, lack
+ * the graph audited in the 2026-09-01 annex. The rc.1 cohort carries the exact
+ * runtime plus dshmarket 1.41.0 graph audited natively on macOS; Windows remains
+ * fail-closed until separate native evidence exists. Graphs that mix cohorts, lack
  * rows, duplicate rows, or use identities outside every registered cohort
  * fail closed.
  */
@@ -164,6 +167,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   defineCohort('dsh-0.1.2-alpha.2', ['0.1.2-alpha.2'], ['posix', 'windows'], ALPHA2_HOST_PACKAGES),
   defineCohort('dsh-0.1.2-alpha.2-dshmarket-1.39.0', ['0.1.2-alpha.2'], ['posix', 'windows'], ALPHA2_DSHMARKET_139_HOST_PACKAGES),
   defineCohort('dsh-0.1.2-alpha.3', ['0.1.2-alpha.3'], ['posix', 'windows'], ALPHA3_HOST_PACKAGES),
+  defineCohort('dsh-0.1.2-rc.1', ['0.1.2-rc.1'], ['posix'], RC1_HOST_PACKAGES),
 ]
 
 /**

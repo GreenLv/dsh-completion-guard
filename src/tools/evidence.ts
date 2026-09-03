@@ -26,6 +26,7 @@ import {
   type GitTargetIdentity,
 } from '../domain/git-adapter.js'
 import { bindExecutableIdentity, type AuditedExecutable, type ExecutableIdentity } from '../domain/host-lock.js'
+import { snapshotSessionEvents } from '../domain/session-events.js'
 
 const execFileAsync = promisify(execFile)
 const PRODUCER_VERSION = '1.0.0'
@@ -679,9 +680,9 @@ async function executeGuardAction(
     const capabilities = await marketCapabilities(roots, signal)
     if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return 'unavailable'
     if (capabilities.bootId !== target.pre_generation) {
-      return restartIntent(agent.session.events, resolutionCallId, target) ? 'completed' : 'unavailable'
+      return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? 'completed' : 'unavailable'
     }
-    if (restartIntent(agent.session.events, resolutionCallId, target)) return 'handoff_pending'
+    if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return 'handoff_pending'
     if (!roots.persistRestartIntent || !await roots.persistRestartIntent(agent, {
       resolutionCallId,
       serviceId: String(target.service_id),
@@ -1135,7 +1136,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       if (!durable) {
         return { status: 'unavailable' as const, reason_code: 'mutation_durability_unavailable', ...empty }
       }
-      const resolution = findResolution(agent.session.events, args.resolution_call_id, action)
+      const resolution = findResolution(snapshotSessionEvents(agent.session), args.resolution_call_id, action)
       if (!resolution) return { status: 'unavailable' as const, reason_code: 'resolution_evidence_missing', ...empty }
       const targetDigest = digest(resolution.target)
       const manifestDigest = digest(resolution.commandManifest)
@@ -1295,7 +1296,7 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
           return supported(action, role, resolved.target, {}, commandManifest, gitBinding, executableBinding, expectedTransition)
         }
         if (!args.resolution_call_id) return unavailable(action, role, 'producer_reference_missing')
-        const resolution = findResolution(agent.session.events, args.resolution_call_id, action)
+        const resolution = findResolution(snapshotSessionEvents(agent.session), args.resolution_call_id, action)
         if (!resolution) return unavailable(action, role, 'persisted_effect_mismatch')
         const executable = executableFor(action)
         let currentExecutable: ExecutableIdentity | undefined
@@ -1308,17 +1309,18 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
         const ownedEffect = ['install', 'apply', 'restart', 'publish', 'commit', 'push', 'pull', 'fetch'].includes(action)
         if (!args.effect_call_id) return unavailable(action, role, 'producer_reference_missing')
         if (ownedEffect) {
-          const actionCall = actionCallMatches(agent.session.events, args.effect_call_id, action, args.resolution_call_id, resolution.target)
+          const events = snapshotSessionEvents(agent.session)
+          const actionCall = actionCallMatches(events, args.effect_call_id, action, args.resolution_call_id, resolution.target)
           const completed = action === 'restart'
-            ? actionCall && restartIntent(agent.session.events, args.resolution_call_id, resolution.target)
+            ? actionCall && restartIntent(events, args.resolution_call_id, resolution.target)
               && (await marketCapabilities(roots, exec.signal))?.bootId !== resolution.target.pre_generation
-            : actionCall && actionResultCompleted(agent.session.events, args.effect_call_id)
+            : actionCall && actionResultCompleted(events, args.effect_call_id)
           if (!completed) {
             return unavailable(action, role, 'persisted_effect_mismatch')
           }
           if (role === 'effect') return supported(action, role, resolution.target, {}, resolution.commandManifest, undefined, currentExecutable)
         } else {
-          const effect = findEffect(agent.session.events, args.effect_call_id)
+          const effect = findEffect(snapshotSessionEvents(agent.session), args.effect_call_id)
           if (!effect || !effectMatches(action, resolution, effect)) return unavailable(action, role, 'persisted_effect_mismatch')
           if (role === 'effect') return supported(action, role, resolution.target, {}, resolution.commandManifest, undefined, currentExecutable)
         }

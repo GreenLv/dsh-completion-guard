@@ -51,6 +51,8 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 Version 0.4.0 is the current release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) carries the exact package checksum and native macOS and Windows acceptance records. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
 
+The source tree may carry an unpublished `0.4.1-rc.1` local candidate for DSH `0.1.2-rc.1` with dshmarket `1.41.0`. Its rc.1 host cohort is native-macOS-only until separate Windows evidence exists; see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md). This is not an npm or GitHub Release claim.
+
 Version 0.3.2 remains available for the checked DSH `0.1.1-rc.2` and `0.1.2-alpha.2` setups. Do not combine packages from different checked setups; the Guard fails closed when the active package set does not match one complete cohort in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 Version 0.4.0 remains frozen on this alpha.3 setup. Alpha.4 and later alpha releases are not new adaptation targets; compatibility work resumes with the first upstream RC published after alpha.3. Track that milestone on the [DeepSeek Harness tags page](https://github.com/deepseek-ai/deepseek-harness/tags).

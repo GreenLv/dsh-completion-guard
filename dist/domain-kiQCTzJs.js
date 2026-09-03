@@ -3110,13 +3110,193 @@ const ALPHA3_HOST_PACKAGES = [
 }));
 
 //#endregion
+//#region src/domain/rc1-host.ts
+/** Exact 34-row rc.1 runtime/web graph from the 2026-09-03 native macOS audit. */
+const RC1_HOST_PACKAGES = [
+	[
+		"@deepseek-ai/cordis",
+		"4.0.2",
+		"sha512-asOnXP1TzFSFQlHb1iegDZp0z/8WD1c7YNrwJR/Tx2bzNuMXfcekE/I67Iv6SQXeLB4csxqCngzQKANP7gdw0g=="
+	],
+	[
+		"@deepseek-ai/dsh-agent",
+		"0.1.2-rc.1",
+		"sha512-lfaqN34vUCWvbn1kJVHrhfJ6Dvt1HDHCm33ZCpmKkl07/5q6FxWqVv6rOdVX5QnM/9xz/uYiN0nQwUtBg4+Skg=="
+	],
+	[
+		"@deepseek-ai/dsh-commands",
+		"0.1.2-rc.1",
+		"sha512-uBh4JTX7pOkFhmbWjXjVLnOQOawyccC7+DazbHrLRN6/wy4OgTRH+DaW0+ibLq+XRAO19OvBTtuoh3x/KkJx1Q=="
+	],
+	[
+		"@deepseek-ai/dsh-goal",
+		"0.1.2-rc.1",
+		"sha512-djzY1oNZV5RwnOFXmDeWFbyswInV9RVWAD0qryxMznQtEDF31PUJ8BQfqs9tVrTV36V3a0neYrZP0DDvRP8ZCA=="
+	],
+	[
+		"@deepseek-ai/dsh-llm",
+		"0.1.2-rc.1",
+		"sha512-7VYsha5AXsVLnsAwYJffWXz9bwUbElw8i5N8tlTSdai9Bupk3sMbsotzPf8ZbsuGAxQYErahMwQwgGEu4qZO6g=="
+	],
+	[
+		"@deepseek-ai/dsh-session",
+		"0.1.2-rc.1",
+		"sha512-jRGNPTbQcvIx1F2MVmmkoiHLgpC3Btqo1wkl/3JDLlOWRVWKOuaC+5fQiMrFPOYfno6YiX/c2UvmA0td8qB92w=="
+	],
+	[
+		"@deepseek-ai/dsh-tools",
+		"0.1.2-rc.1",
+		"sha512-W9kUio00s7WbM8kEwniyd4hfb3CeUxVczsjXbOcKtakfiTywNLeyRWkpx2fvwRAH2rBfg3qCgczVfS0DOw1csg=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-goal",
+		"0.1.2-rc.1",
+		"sha512-ooHKN6Eqy3owNS/oCDO7mR+UalEE4AxJMXou29waahIdSQsFAlk4pPApvhrwg1lpchF5CKwBPOtsVmjq2HfBKQ=="
+	],
+	[
+		"@deepseek-ai/dsh-agent-loop",
+		"0.1.2-rc.1",
+		"sha512-4h16Gn/5oXLTFeorehdlKe5xmDKscR/eRsUu3cs6clKgaTrn6YvnWNB0XkYEg+AXiXbsyfl5MW5Bs4576t7vZw=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-bash",
+		"0.1.2-rc.1",
+		"sha512-xKc4oXVDBwM/PaicpjGdWEaJ1N14B7KPmOzdpQ7ynE4gKUnvGU/eTg18EHamdyDOidh5ox0fNUnxk0rQjVo2+Q=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-pwsh",
+		"0.1.2-rc.1",
+		"sha512-LaImOCdizIGkQnxzzkoaqzRWGZLsuDuqqF2adgJ3zeG0nDwan4Sz+1wYz4YSp0Gg6mJ79CYacsbYmGhYYyKY/g=="
+	],
+	[
+		"@deepseek-ai/dsh-shell",
+		"0.1.2-rc.1",
+		"sha512-uFrSY0nNKzh5orGl2B0B4RfK7wTdIlwhPQc7aLA44jyjioLlqhF7PUek/NWtye2scwp3YHOw158XeOQUD8qTFg=="
+	],
+	[
+		"@deepseek-ai/dsh-subprocess-local",
+		"0.1.2-rc.1",
+		"sha512-Spc/IXWvjEteGysifGr6JvCokcH8T88z0mdxIGcu9SFdgDyY8HKR+h5yq73+rbo4RYzT7+TBE43TIZy5LfmzgQ=="
+	],
+	[
+		"@deepseek-ai/dsh-bash-sandbox",
+		"0.1.2-rc.1",
+		"sha512-dF9PfBWus80Juj3VjUmndbGw1/6cT1BY7BLFuXUi7SDMV1fA4iwA2c7HuvezYFGvpE/8QRZ+c5ZiRfxbWGYktw=="
+	],
+	[
+		"@deepseek-ai/dsh-pwsh-sandbox",
+		"0.1.2-rc.1",
+		"sha512-QjJzrM/tJDkgvtVzYz2bmCxBzdSUo/YwI/rPBJeTwLbWBuehyhX6BueCwU6Ja1Bsdm9crz2D7rVc/DU/xrFttw=="
+	],
+	[
+		"@deepseek-ai/dsh-shell-env",
+		"0.1.2-rc.1",
+		"sha512-o1VqxyHp1OrMB8aHnzYAPwuU4giUErCxBg0yr035r6f3Le36viS0sUHsnjcAsMdbaQJf/XvzbaokYDVrdVHE4A=="
+	],
+	[
+		"@deepseek-ai/dsh",
+		"0.1.2-rc.1",
+		"sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA=="
+	],
+	[
+		"@deepseek-ai/dsh-host-plugin-inventory",
+		"0.1.2-rc.1",
+		"sha512-MyLA5XncFdfk9btv29FZSg+ojFOOsHEiPkGWAQiRw+EG/2HlVUEm/9KqPxh2jxB5eFge9GahTg2e7x3Veziadw=="
+	],
+	[
+		"@deepseek-ai/dsh-host-webserver",
+		"0.1.2-rc.1",
+		"sha512-QVcaf4qnIa1t215Y8TRiRhqkEz4Lu5/F+KqvWT+4sHOiyWmZr8g1JndqlwP6MBnMQEPmp0I/EKYJ7PWMV32gkA=="
+	],
+	[
+		"@deepseek-ai/dsh-web-app",
+		"0.1.2-rc.1",
+		"sha512-QGh+XWRgrsVktKD3YHw+cY/knwBESq+2TtyOGNc+V7GU3LG9qL6EPB0M8pIDjxF1jLls+M71LIVbevuFx3oZ6Q=="
+	],
+	[
+		"@deepseek-ai/dsh-jobs",
+		"0.1.2-rc.1",
+		"sha512-VuNPXosjgRbEg0tp+GXsdAqkicwSk5Ynl2AezUQheJgpmw5cvWy3rLEg79B686xGc72tIA6pCW6eBbZGnKOmIg=="
+	],
+	[
+		"@deepseek-ai/dsh-jobs-local",
+		"0.1.2-rc.1",
+		"sha512-bfNV6IJRG7vPWg+Rp3siRCA0BVK8rB1aqn0BG2nPKzCIA2coKqeJ8uPbEm+GuyW/naMR4uCOrrCVLyrwBuMwzg=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-jobs",
+		"0.1.2-rc.1",
+		"sha512-ya7E6zToAdJ+GvNeZFPx8jNx0CfI52tlp0NCGzXHeB0S74haGWCV0iFe1nyoDJg7SDiN1xc1d2nV9klOqWtd5g=="
+	],
+	[
+		"@deepseek-ai/dsh-tool-fs",
+		"0.1.2-rc.1",
+		"sha512-9a1lcPGD4Z3p7OLTMkkCdwN0w7Gl96Jlypq6qopUA0WMkKai83VfeLZvramPnTJo6ezpuPXcLFWGm/2UDSlbcA=="
+	],
+	[
+		"@deepseek-ai/dsh-fs",
+		"0.1.2-rc.1",
+		"sha512-BSIB2j8WvATQ1mf7wUIpHPftDwbzz246qp6aUpLGSzBWGmLBdX3O1oDhyNV1YhgPmDQlwovac2odcAb62tuDdw=="
+	],
+	[
+		"@deepseek-ai/dsh-fs-local",
+		"0.1.2-rc.1",
+		"sha512-tFHHKtD11tIk3FpkWF0vBKdX05zKbwqXQW9LhreA5hErCKEsulUsQLamf+kF1D8fuKqa8Yb+yWQIfYS93cy39w=="
+	],
+	[
+		"@deepseek-ai/dsh-fs-sandbox",
+		"0.1.2-rc.1",
+		"sha512-nnZnsOYLWrN2AnoB0qvQBLhh2VdU4A39AqOgWwsxnT3JrScGpvBcBMCt4fpLP9l5VjOY1qhIbLf6xd5p93C/6Q=="
+	],
+	[
+		"@deepseek-ai/dsh-fs-observation-policy",
+		"0.1.2-rc.1",
+		"sha512-Uw3ErcPwQZUvXylLSf+CDjzfAza5ZVNOMkG4hIJjvgG4WBg3tqoCOY2OQk4O1DGTie4EzL4mHpAe5auwoV4JTw=="
+	],
+	[
+		"@deepseek-ai/dsh-sandbox",
+		"0.1.2-rc.1",
+		"sha512-nTO350NlVo9cvKzbeILcPIRIk9ijidrv29snRjTOx7kP5aO/BI2b4KxsRCYoXg8WGAMbIkGbsmZKUD4qz7hyXQ=="
+	],
+	[
+		"@deepseek-ai/dsh-sandbox-policy",
+		"0.1.2-rc.1",
+		"sha512-nLARL84X6K4DCUJsqRWINg3+1EVxsw70hbP+Yl92W/PsquQVs/UJQc55gnhYGmIMf6eJ0vQv39fziNSnAxdx5A=="
+	],
+	[
+		"@deepseek-ai/dsh-user-approval",
+		"0.1.2-rc.1",
+		"sha512-oYkLE4a/TwqVNi299pUf/QP1Yku6KScdUCTUyYbjaRBcN+/pXPpHikl2aoE2thH9D0uT/Kj6T2kz+wDDcFd9Xg=="
+	],
+	[
+		"@deepseek-ai/dsh-attachment",
+		"0.1.2-rc.1",
+		"sha512-QISKUjEITusLvAkqPLRn70xDUt+GjjY41pISjtPKYcZ4EGmayzhgZ3VJNYEcC+rbaF44hs2o/0VhOwHA7lyxjw=="
+	],
+	[
+		"@deepseek-ai/dsh-system-prompt",
+		"0.1.2-rc.1",
+		"sha512-7W93PZKIk4CHvjZGgLIxrrEKpk+6t8nQXje1vKR5vG73dfXH0t1MJ5WWH/fngadYc7c6KzM84ihQ66tJqJqyNQ=="
+	],
+	[
+		"dshmarket",
+		"1.41.0",
+		"sha512-uGhNo85g7i/+kVuFybPMjCOD1nn2ssATDSktm9Zd851qgRv39Gz8l+smpDtpBcfhlobAD3CG6l9caYkLHu4BFw=="
+	]
+].map(([name, version, integrity]) => ({
+	name,
+	version,
+	integrity
+}));
+
+//#endregion
 //#region src/domain/host-lock.ts
 /**
-* Capability expectations shared by every audited host cohort. The rc.2 ->
-* alpha.2 source audit found no Guard-consumed contract change (session event
-* vocabulary, flush contract, Goal disarm, `update_goal` gating, tool
-* definition, renderer terminal markers), so the rows are identical; a future
-* cohort that changes any of them must declare its own rows instead.
+* Capability expectations shared by every audited host cohort. The rc.1 audit
+* found one host API change: Session event reads moved from `events` to
+* `snapshotEvents()`. Guard adapts that API locally while the event vocabulary,
+* flush contract, Goal disarm, `update_goal` gating, tool definition, and
+* renderer terminal markers remain compatible.
 */
 const AUDITED_CAPABILITY_ROWS = [
 	{
@@ -3388,7 +3568,9 @@ const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row) => row
 * exact package graph extracted from native macOS and Windows DSH
 * `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
 * cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
-* the graph audited in the 2026-09-01 annex. Graphs that mix cohorts, lack
+* the graph audited in the 2026-09-01 annex. The rc.1 cohort carries the exact
+* runtime plus dshmarket 1.41.0 graph audited natively on macOS; Windows remains
+* fail-closed until separate native evidence exists. Graphs that mix cohorts, lack
 * rows, duplicate rows, or use identities outside every registered cohort
 * fail closed.
 */
@@ -3567,7 +3749,8 @@ const HOST_COHORTS = [
 	]),
 	defineCohort("dsh-0.1.2-alpha.2", ["0.1.2-alpha.2"], ["posix", "windows"], ALPHA2_HOST_PACKAGES),
 	defineCohort("dsh-0.1.2-alpha.2-dshmarket-1.39.0", ["0.1.2-alpha.2"], ["posix", "windows"], ALPHA2_DSHMARKET_139_HOST_PACKAGES),
-	defineCohort("dsh-0.1.2-alpha.3", ["0.1.2-alpha.3"], ["posix", "windows"], ALPHA3_HOST_PACKAGES)
+	defineCohort("dsh-0.1.2-alpha.3", ["0.1.2-alpha.3"], ["posix", "windows"], ALPHA3_HOST_PACKAGES),
+	defineCohort("dsh-0.1.2-rc.1", ["0.1.2-rc.1"], ["posix"], RC1_HOST_PACKAGES)
 ];
 /**
 * rc.2 audited package identities (first registry cohort). The audited
@@ -5971,6 +6154,24 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 }
 
 //#endregion
+//#region src/domain/session-events.ts
+/**
+* Read a stable snapshot from both legacy DSH Sessions and the rc.1 Session
+* API. rc.1 replaced the public `events` getter with `snapshotEvents()`; the
+* structural adapter keeps older audited cohorts working without widening the
+* accepted event contract.
+*/
+function snapshotSessionEvents(session) {
+	if (!session || typeof session !== "object") return [];
+	const source = session;
+	if (typeof source.snapshotEvents === "function") {
+		const events = source.snapshotEvents.call(session);
+		return Array.isArray(events) ? events : [];
+	}
+	return Array.isArray(source.events) ? source.events : [];
+}
+
+//#endregion
 //#region src/domain/host-resolver.ts
 /** Names audited in any registered cohort; rows outside the union are unknown. */
 const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)))];
@@ -6549,4 +6750,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { GOAL_HOST_PACKAGES as $, COMMAND_SURFACE_MANIFEST as $t, decideTurnStopping as A, classifyClause as At, isDeterministicCheck as B, CERTIFICATE_VERSION as Bt, executeRevalidatedGitEffect as C, bindingSatisfies as Ct, verifiedLinearCommitReadback as D, currentContractDigest as Dt, revalidateGitPrestate as E, isVerifyingCapability as Et, deriveProjection as F, segmentClauses as Ft, parseShellCommand as G, actionCompatible as Gt, canonicalArgvFromCommand as H, STATEFUL_ACTIONS as Ht, supersedeItem as I, canonicalRegistryBase as It, ALPHA2_DSHMARKET_139_HOST_PACKAGES as J, requestedTargetMatchesResolved as Jt, goalCompletionDenial as K, isStatefulAction as Kt, evidenceFromPersistedToolResult as L, npmEscapedPackageName as Lt, latestAssistantText as M, extractMethod as Mt, observeAssistantOutcome as N, extractOperation as Nt, classifyCompletionClaim as O, captureClause as Ot, PROTOCOL_V3_NOTICE as P, isInformationalMessage as Pt, EXPECTED_HOST_PACKAGES as Q, validateActionTarget as Qt, extractTextContent as R, ACTION_MANIFEST as Rt, createGitPrestateEnvelope as S, renderRecoveryPacket as St, parseGitCommandManifest as T, evidenceMatchesItem as Tt, isRunExecutable as U, STOP_PROTOCOL_VERSION as Ut, withDurability as V, SEMANTIC_ACTIONS as Vt, parsePwshCommand as W, SUPPORTED_EVIDENCE_ADAPTERS as Wt, BASE_HOST_PACKAGES as X, semanticActionFromText as Xt, ALPHA2_HOST_PACKAGES as Y, semanticActionFromCommand as Yt, DEFAULT_HOST_LOCK as Z, validateActionManifest as Zt, resolveInstalledHostLock as _, certifyCheckpoint as _t, createProofManifest as a, sanitizeUrl as an, evaluateHostCapability as at, commitIndexSnapshotDigest as b, openItems$1 as bt, sessionQuery as c, selectHostCohort as ct, hostLockContextFromComposedDump as d, segmentAuthorityBlocks as dt, validateManifest as en, HOST_CAPABILITY_PACKAGE_GROUPS as et, hostLockRowsFromComposedDump as f, classifyUserInteraction as ft, resolveActiveProfileHostLock as g, qualifyBoundary as gt, packageRowsFromPnpmLock as h, isCurrentAcceptedBoundary as ht, canonicalProjection as i, sanitizeClauseText as in, evaluateExternalWaitCapability as it, isWholeTaskCompletionClaim as j, extractArtifactPaths as jt, decideTurnBoundary as k, captureItem as kt, validateProofManifest as l, ALPHA3_HOST_PACKAGES as lt, packageRowsFromActiveGraph as m, effectuateBoundary as mt, PROOF_PROTOCOL_VERSION as n, digestStrings as nn, bindExecutableIdentity as nt, proofDigest as o, sha256 as on, evaluateHostLock as ot, injectActiveProfileHostLock as p, availableBoundaryQualifications as pt, hasCurrentCertificate as q, requestedTargetAuthorizesMutation as qt, bindProofToProjection as r, normalizeClause as rn, bindLiveGoalCapability as rt, proofEvidenceConstraints as s, createProjection as sn, evaluateToolSurfaceCapability as st, PROOF_KINDS as t, canonicalizePath as tn, HOST_COHORTS as tt, HostProfileError as u, authorityCaptureCounts as ut, verifyComposedHostLockDump as v, DEFAULT_RECOVERY_CHAR_BUDGET as vt, gitCommandMatchesTarget as w, evidenceCoverage as wt, commitTreeSnapshotDigest as x, recoveryDigest as xt, GIT_COMMAND_MANIFEST_IDS as y, closingHint as yt, extractToolSubject as z, ACTION_MANIFEST_VERSION as zt };
+export { EXPECTED_HOST_PACKAGES as $, validateActionManifest as $t, decideTurnBoundary as A, captureClause as At, extractToolSubject as B, ACTION_MANIFEST as Bt, createGitPrestateEnvelope as C, recoveryDigest as Ct, revalidateGitPrestate as D, evidenceMatchesItem as Dt, parseGitCommandManifest as E, evidenceCoverage as Et, PROTOCOL_V3_NOTICE as F, extractOperation as Ft, parsePwshCommand as G, STOP_PROTOCOL_VERSION as Gt, withDurability as H, CERTIFICATE_VERSION as Ht, deriveProjection as I, isInformationalMessage as It, hasCurrentCertificate as J, isStatefulAction as Jt, parseShellCommand as K, SUPPORTED_EVIDENCE_ADAPTERS as Kt, supersedeItem as L, segmentClauses as Lt, isWholeTaskCompletionClaim as M, classifyClause as Mt, latestAssistantText as N, extractArtifactPaths as Nt, verifiedLinearCommitReadback as O, isVerifyingCapability as Ot, observeAssistantOutcome as P, extractMethod as Pt, DEFAULT_HOST_LOCK as Q, semanticActionFromText as Qt, evidenceFromPersistedToolResult as R, canonicalRegistryBase as Rt, commitTreeSnapshotDigest as S, openItems$1 as St, gitCommandMatchesTarget as T, bindingSatisfies as Tt, canonicalArgvFromCommand as U, SEMANTIC_ACTIONS as Ut, isDeterministicCheck as V, ACTION_MANIFEST_VERSION as Vt, isRunExecutable as W, STATEFUL_ACTIONS as Wt, ALPHA2_HOST_PACKAGES as X, requestedTargetMatchesResolved as Xt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Y, requestedTargetAuthorizesMutation as Yt, BASE_HOST_PACKAGES as Z, semanticActionFromCommand as Zt, resolveInstalledHostLock as _, isCurrentAcceptedBoundary as _t, createProofManifest as a, normalizeClause as an, evaluateExternalWaitCapability as at, GIT_COMMAND_MANIFEST_IDS as b, DEFAULT_RECOVERY_CHAR_BUDGET as bt, sessionQuery as c, sha256 as cn, evaluateToolSurfaceCapability as ct, hostLockContextFromComposedDump as d, ALPHA3_HOST_PACKAGES as dt, validateActionTarget as en, GOAL_HOST_PACKAGES as et, hostLockRowsFromComposedDump as f, authorityCaptureCounts as ft, resolveActiveProfileHostLock as g, effectuateBoundary as gt, packageRowsFromPnpmLock as h, availableBoundaryQualifications as ht, canonicalProjection as i, digestStrings as in, bindLiveGoalCapability as it, decideTurnStopping as j, captureItem as jt, classifyCompletionClaim as k, currentContractDigest as kt, validateProofManifest as l, createProjection as ln, selectHostCohort as lt, packageRowsFromActiveGraph as m, classifyUserInteraction as mt, PROOF_PROTOCOL_VERSION as n, validateManifest as nn, HOST_COHORTS as nt, proofDigest as o, sanitizeClauseText as on, evaluateHostCapability as ot, injectActiveProfileHostLock as p, segmentAuthorityBlocks as pt, goalCompletionDenial as q, actionCompatible as qt, bindProofToProjection as r, canonicalizePath as rn, bindExecutableIdentity as rt, proofEvidenceConstraints as s, sanitizeUrl as sn, evaluateHostLock as st, PROOF_KINDS as t, COMMAND_SURFACE_MANIFEST as tn, HOST_CAPABILITY_PACKAGE_GROUPS as tt, HostProfileError as u, RC1_HOST_PACKAGES as ut, verifyComposedHostLockDump as v, qualifyBoundary as vt, executeRevalidatedGitEffect as w, renderRecoveryPacket as wt, commitIndexSnapshotDigest as x, closingHint as xt, snapshotSessionEvents as y, certifyCheckpoint as yt, extractTextContent as z, npmEscapedPackageName as zt };

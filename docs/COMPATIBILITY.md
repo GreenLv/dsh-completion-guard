@@ -13,6 +13,16 @@ Compatibility is pinned to exact host package sets. A nearby version or a partia
 
 DSH is still a developer preview and may make breaking changes. Version 0.4.0 therefore makes no floating alpha compatibility claim.
 
+## Unpublished 0.4.1-rc.1 macOS candidate
+
+- Plugin: local `dsh-completion-guard` `0.4.1-rc.1` candidate
+- DeepSeek Harness: `0.1.2-rc.1`
+- dshmarket: `1.41.0`
+- Cordis: `4.0.2`
+- Audited platform: native macOS/posix only; Windows fails closed
+
+DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and `eventAt()`. The candidate uses `snapshotEvents()` when present and retains `events` only for older registered cohorts. The underlying Guard-consumed event vocabulary, flush path, Goal disarm, and `update_goal` contract remain unchanged by the focused upstream source audit.
+
 ## Upstream adaptation policy
 
 Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumes with the first DeepSeek Harness RC published after alpha.3; follow the upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) for that milestone.
@@ -33,7 +43,7 @@ Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha
 
 ## Rejection rules
 
-The four exact host sets are recorded in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). Each set is a complete list of required packages and versions. Every row must match one set.
+The five exact host sets are recorded in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). Each set is a complete list of required packages and versions. Every row must match one set.
 
 Missing, mixed, duplicate, unidentified, unknown, or integrity-drifted rows leave the Guard unavailable. Unregistered substitutions such as alpha.3 with dshmarket `1.38.1` are rejected as mixed graphs. dshmarket is an authoritative lock input; skin-center is not.
 
@@ -87,7 +97,7 @@ The ordinary runtime packages are host-provided peers:
 
 Goal support uses two exact optional peers as one capability. `@deepseek-ai/dsh-goal` owns Goal state, while `@deepseek-ai/dsh-tool-goal` owns the audited `update_goal` name, schema, and arguments. Both host-graph rows and the live Goal service and tool must agree. A profile without this complete pair can still load, but Goal-dependent integration stays inactive.
 
-Peer ranges accept only the registered DSH version lines: `0.1.1-rc.2 || 0.1.2-alpha.2 || 0.1.2-alpha.3`, with Cordis `4.0.1 || 4.0.2`. These are not floating support claims. Runtime acceptance still requires an exact injected host lock and atomic selection of one complete cohort.
+Peer ranges accept only the registered DSH version lines: `0.1.1-rc.2 || 0.1.2-alpha.2 || 0.1.2-alpha.3 || 0.1.2-rc.1`, with Cordis `4.0.1 || 4.0.2`. These are not floating support claims. Runtime acceptance still requires an exact injected host lock and atomic selection of one complete cohort.
 
 ## Terminal outcome contract
 

@@ -41,6 +41,7 @@ import {
 import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type StatefulAction } from './domain/protocol-manifest.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
+import { snapshotSessionEvents } from './domain/session-events.js'
 
 export const name = 'context-guard'
 export const inject = ['sessions', 'commands'] as const
@@ -208,7 +209,7 @@ export function createRuntime(
     // projection's undefined.
     const priorRecoveryDigest = projection.lastRecoveryDigest
     const derived = deriveProjection(
-      session.events as unknown as Parameters<typeof deriveProjection>[0],
+      snapshotSessionEvents(session) as Parameters<typeof deriveProjection>[0],
       { activation: config.activation },
       { cwd: typeof header?.cwd === 'string' ? header.cwd : '', sessionHeader: sessionHeaderForDigest(session) },
       durabilityConfirmed,
@@ -467,7 +468,7 @@ function optionalMarketOrigin(ctx: Context, agent: Agent): string | undefined {
 }
 
 function ensureProtocolBoundary(agent: Agent): void {
-  const events = agent.session.events as unknown as Array<{ type?: unknown; data?: unknown }>
+  const events = snapshotSessionEvents(agent.session) as Array<{ type?: unknown; data?: unknown }>
   const found = events.some((event) => {
     if (event.type !== 'user/message' || !event.data || typeof event.data !== 'object') return false
     const data = event.data as Record<string, unknown>

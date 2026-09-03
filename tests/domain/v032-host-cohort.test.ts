@@ -9,20 +9,23 @@ import {
   selectHostCohort,
 } from '../../src/domain/host-lock.js'
 import { ALPHA3_HOST_PACKAGES } from '../../src/domain/alpha3-host.js'
+import { RC1_HOST_PACKAGES } from '../../src/domain/rc1-host.js'
 import { ALPHA2_HOST_PACKAGES, ALPHA2_DSHMARKET_139_HOST_PACKAGES } from '../../src/domain/host-lock.js'
 
 const rc2Cohort = HOST_COHORTS.find((cohort) => cohort.id === 'dsh-0.1.1-rc.2')!
 const alpha2Cohort = HOST_COHORTS.find((cohort) => cohort.id === 'dsh-0.1.2-alpha.2')!
 const alpha2Market139Cohort = HOST_COHORTS.find((cohort) => cohort.id === 'dsh-0.1.2-alpha.2-dshmarket-1.39.0')!
 const alpha3Cohort = HOST_COHORTS.find((cohort) => cohort.id === 'dsh-0.1.2-alpha.3')!
+const rc1Cohort = HOST_COHORTS.find((cohort) => cohort.id === 'dsh-0.1.2-rc.1')!
 
-describe('v0.4.0 audited host cohort registry', () => {
-  it('registers exactly the four audited cohorts with disjoint audited graphs', () => {
+describe('audited host cohort registry', () => {
+  it('registers exactly the five audited cohorts with disjoint audited graphs', () => {
     expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual([
       'dsh-0.1.1-rc.2',
       'dsh-0.1.2-alpha.2',
       'dsh-0.1.2-alpha.2-dshmarket-1.39.0',
       'dsh-0.1.2-alpha.3',
+      'dsh-0.1.2-rc.1',
     ])
     for (const cohort of HOST_COHORTS) {
       expect(cohort.packages).toHaveLength(34)
@@ -34,11 +37,15 @@ describe('v0.4.0 audited host cohort registry', () => {
     expect(alpha2Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
     expect(alpha2Market139Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
     expect(alpha3Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
+    expect(rc1Cohort.auditedPlatforms).toEqual(['posix'])
     // All audited cohorts use one complete package-name universe.
     expect(rc2Cohort.packages.map((row) => row.name).sort()).toEqual(alpha2Cohort.packages.map((row) => row.name).sort())
     expect(alpha3Cohort.packages.map((row) => row.name).sort()).toEqual(alpha2Cohort.packages.map((row) => row.name).sort())
+    expect(rc1Cohort.packages.map((row) => row.name).sort()).toEqual(alpha2Cohort.packages.map((row) => row.name).sort())
     expect(alpha3Cohort.packages.find((row) => row.name === 'dshmarket')?.version).toBe('1.39.0')
     expect(alpha3Cohort.packages.some((row) => row.name.includes('skin-center'))).toBe(false)
+    expect(rc1Cohort.packages.find((row) => row.name === 'dshmarket')?.version).toBe('1.41.0')
+    expect(rc1Cohort.packages.some((row) => row.name.includes('skin-center'))).toBe(false)
     const alphaVersions = new Set(alpha2Cohort.packages.map((row) => row.version))
     expect(alphaVersions).toEqual(new Set(['0.1.2-alpha.2', '4.0.2', '1.38.1']))
     expect(alpha2Cohort.packages.find((row) => row.name === '@deepseek-ai/cordis')?.version).toBe('4.0.2')
@@ -70,6 +77,9 @@ describe('v0.4.0 audited host cohort registry', () => {
     const alpha3 = evaluateHostLock(alpha3Cohort.packages, { platform: 'posix', profileKind: 'web' })
     expect(alpha3).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-alpha.3' })
     expect(alpha3.capabilities.web_control.status).toBe('supported')
+    const rc1 = evaluateHostLock(rc1Cohort.packages, { platform: 'posix', profileKind: 'web' })
+    expect(rc1).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-rc.1' })
+    expect(rc1.capabilities.web_control.status).toBe('supported')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows never selects consistently.
     const baseOnly = selectHostCohort(EXPECTED_HOST_PACKAGES.filter((row) => BASE_HOST_PACKAGES.has(row.name)))
@@ -112,6 +122,17 @@ describe('v0.4.0 audited host cohort registry', () => {
     const selection = selectHostCohort(alpha2Cohort.packages, 'windows')
     expect(selection.consistent).toBe(true)
     expect(selection.reasonCode).toBeUndefined()
+  })
+
+  it('keeps rc.1 fail-closed on Windows until native Windows evidence exists', () => {
+    expect(selectHostCohort(RC1_HOST_PACKAGES, 'windows')).toMatchObject({
+      consistent: false,
+      reasonCode: 'host_cohort_platform_not_audited',
+    })
+    expect(evaluateHostLock(RC1_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).toMatchObject({
+      status: 'unsupported',
+      reasonCode: 'host_lock_cohort_platform_not_audited',
+    })
   })
 
   it('fails the whole lock closed on single-cohort optional-row drift and duplicates', () => {
@@ -177,26 +198,28 @@ describe('v0.4.0 audited host cohort registry', () => {
     const alpha2 = evaluateHostLock(alpha2Cohort.packages, { platform: 'posix' })
     const alpha2Market139 = evaluateHostLock(ALPHA2_DSHMARKET_139_HOST_PACKAGES, { platform: 'posix' })
     const alpha3 = evaluateHostLock(ALPHA3_HOST_PACKAGES, { platform: 'posix' })
+    const rc1 = evaluateHostLock(RC1_HOST_PACKAGES, { platform: 'posix' })
     expect(rc2.status).toBe('supported')
     expect(alpha2.status).toBe('supported')
     expect(alpha2Market139.status).toBe('supported')
     expect(alpha3.status).toBe('supported')
+    expect(rc1.status).toBe('supported')
     // The `host_cohort` row and per-cohort supportedGoalVersions feed digest
     // v3, so audited cohorts can never share a hostLockDigest and a
     // certificate frozen under one cohort cannot re-derive under another.
-    expect(new Set([rc2.digest, alpha2.digest, alpha2Market139.digest, alpha3.digest]).size).toBe(4)
+    expect(new Set([rc2.digest, alpha2.digest, alpha2Market139.digest, alpha3.digest, rc1.digest]).size).toBe(5)
     expect(rc2.digest).toMatch(/^[0-9a-f]{64}$/)
     // The same rows evaluated for a different capability keep the cohort root.
     const rc2Again = evaluateHostLock(EXPECTED_HOST_PACKAGES)
     expect(rc2Again.digest).toBe(rc2.digest)
   })
 
-  it('accepts peer dependency ranges covering all four audited cohorts', () => {
+  it('accepts peer dependency ranges covering all five audited cohorts', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as Record<string, Record<string, string>>
     const peers = manifest.peerDependencies
     expect(peers['@deepseek-ai/cordis']).toBe('4.0.1 || 4.0.2')
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
-      expect(peers[name]).toBe('0.1.1-rc.2 || 0.1.2-alpha.2 || 0.1.2-alpha.3')
+      expect(peers[name]).toBe('0.1.1-rc.2 || 0.1.2-alpha.2 || 0.1.2-alpha.3 || 0.1.2-rc.1')
     }
     // No floating ranges: compatibility must never widen beyond the audited sets.
     for (const range of Object.values(peers)) {
@@ -228,6 +251,13 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     })
   }
 
+  it('locks the native macOS rc.1 + dshmarket 1.41.0 graph as supported', () => {
+    const evaluation = evaluateHostLock(rc1Cohort.packages, { platform: 'posix', profileKind: 'web' })
+    expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-rc.1' })
+    expect(evaluation.capabilities.web_control.status).toBe('supported')
+    expect(evaluateHostCapability(evaluation, { action: 'apply', platform: 'posix', profileKind: 'web' }).status).toBe('supported')
+  })
+
   // Windows 1.39.0 regression closed: the daily Windows runtime once upgraded
   // dshmarket to 1.39.0 while every other package stayed alpha.2, and Guard
   // 0.3.2 rejected that exact graph. Guard 0.4.0 selects it atomically as its
@@ -251,6 +281,8 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     { label: 'alpha.3 rows with dshmarket 1.38.1', base: alpha3Cohort, market: alpha2Cohort },
     { label: 'rc.2 rows with dshmarket 1.38.1', base: rc2Cohort, market: alpha2Cohort },
     { label: 'alpha.2 rows with dshmarket 1.36.0', base: alpha2Cohort, market: rc2Cohort },
+    { label: 'alpha.3 rows with dshmarket 1.41.0', base: alpha3Cohort, market: rc1Cohort },
+    { label: 'rc.1 rows with dshmarket 1.39.0', base: rc1Cohort, market: alpha3Cohort },
   ] as const
   for (const combination of mixedCombinations) {
     it(`rejects the unregistered mixed graph: ${combination.label}`, () => {
