@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-02T11:38:59.544Z",
-  "data_through": "2026-09-01",
+  "generated_at": "2026-09-03T09:09:04.458Z",
+  "data_through": "2026-09-02",
   "period": {
     "start": "2026-08-26",
-    "end": "2026-09-01"
+    "end": "2026-09-02"
   },
   "title": "dsh-completion-guard npm download history",
   "project": "dsh-completion-guard",
@@ -18,7 +18,7 @@
       "label": "dsh-context-guard (previous name)",
       "color": "#f59e0b",
       "start": "2026-08-26",
-      "total": 850,
+      "total": 873,
       "downloads": [
         {
           "day": "2026-08-26",
@@ -52,8 +52,13 @@
         },
         {
           "day": "2026-09-01",
+          "downloads": 23,
+          "cumulative": 873
+        },
+        {
+          "day": "2026-09-02",
           "downloads": 0,
-          "cumulative": 850
+          "cumulative": 873
         }
       ]
     },
@@ -62,7 +67,7 @@
       "label": "dsh-completion-guard",
       "color": "#2563eb",
       "start": "2026-08-29",
-      "total": 149,
+      "total": 326,
       "downloads": [
         {
           "day": "2026-08-29",
@@ -81,8 +86,13 @@
         },
         {
           "day": "2026-09-01",
+          "downloads": 177,
+          "cumulative": 326
+        },
+        {
+          "day": "2026-09-02",
           "downloads": 0,
-          "cumulative": 149
+          "cumulative": 326
         }
       ]
     }
@@ -120,24 +130,29 @@
     },
     {
       "day": "2026-09-01",
+      "downloads": 200,
+      "cumulative": 1199
+    },
+    {
+      "day": "2026-09-02",
       "downloads": 0,
-      "cumulative": 999
+      "cumulative": 1199
     }
   ],
   "sources": [
     {
       "package": "dsh-context-guard",
       "start": "2026-08-26",
-      "end": "2026-09-01",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-09-01/dsh-context-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-09-01/dsh-context-guard"
+      "end": "2026-09-02",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-09-02/dsh-context-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-09-02/dsh-context-guard"
     },
     {
       "package": "dsh-completion-guard",
       "start": "2026-08-29",
-      "end": "2026-09-01",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-09-01/dsh-completion-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-09-01/dsh-completion-guard"
+      "end": "2026-09-02",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-09-02/dsh-completion-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-09-02/dsh-completion-guard"
     }
   ],
   "note": "npm downloads are requests, not unique installs or users"
