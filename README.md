@@ -110,7 +110,9 @@ Evidence is bounded and redacted. Complete prompts, stdout, file contents, crede
 
 This project began as a DSH port of deterministic behavior from [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8. That version is the historical starting point, not the current compatibility level.
 
-Current shared behavior is tracked by pinned conformance fixtures and an explicit delta ledger. Version 0.3.2 includes the shared Stop 2.0, digest v3, and conformance work from the Codex 0.9.4 line. Version 0.4.0 adds the stricter task, path, capability, and proof bindings documented in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md); this is a bounded semantic alignment claim, not full product parity.
+Version 0.4.0 was deliberately aligned with the shared evidence rules in Codex Context Guard 0.10.0: proof must belong to work that is still open and must show the operation, target, and result the user actually requested. This is a limited behavior-level alignment, not a claim that the two products have the same features.
+
+Codex Context Guard 0.11.0 was released afterward. DSH 0.4.0 already has native checks for exact mutation targets, typed waits, and quoted text, but it does not yet include the full 0.11.0 authorization-ticket, work-unit, supersession, or incident-benchmark changes. The plain-language comparison and current delta ledger are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
 
 The two repositories serve different runtimes:
 

@@ -7,8 +7,8 @@ All notable changes to this project are documented here. The project is pre-1.0;
 ### Added
 
 - **DSH alpha.3 is the 0.4.0 implementation baseline.** Version 0.4.0 targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
-- **A proof must refer to the work that is still pending and to evidence for the action the user actually requested.** A read or verification result for another target cannot close the item. Empty subject sets, evidence imported from another session, and evidence with the wrong kind, surface, subject, or outcome are rejected.
-- **Damaged proof state fails closed.** Changing the recorded asset set or scope digest makes the proof unusable. The technical contract versions canonical projections, bounded subject readback, scope coverage, state verification, and replayable `sessionQuery` state while excluding raw private logs and asset bytes.
+- **Evidence must prove the unfinished work the user actually requested.** Reading or checking another target cannot close the item. Evidence from another session, evidence for the wrong action or target, and evidence that does not show the required result are rejected.
+- **Changed or damaged proof records cannot be reused.** If the recorded files, task scope, or saved state no longer match, the proof becomes invalid and the work stays open. The Guard keeps only the bounded facts needed for this check, not raw private logs or file contents.
 - **Stage disposition.** The stopped 0.3.3 compatibility candidate is recorded as `superseded_before_candidate`; no 0.3.3 source, artifact, installation, native acceptance, commit, tag, or release existed.
 
 ### Changed

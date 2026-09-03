@@ -83,6 +83,19 @@ result contract; it does not translate a missing capability into a pass.
 
 The semantic implementation described here entered the DSH `0.4.0` line from implementation baseline `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The shared-contract reference is the Codex `0.10.0` source at `e4fccf690bcbc2be79d0b8d42a1a269f87072120`; this covers only the named contracts, not full product parity. Exact release commit, artifact, native-platform, and publication identities are recorded outside this semantic document because each is a separate evidence scope.
 
+In plain language, 0.4.0 aligned the rule that evidence must prove the exact unfinished operation and target. It did not copy every Codex feature, and it did not include changes introduced later in Codex 0.11.0.
+
+| Behavior | DSH 0.4.0 status |
+| --- | --- |
+| Evidence proves the requested operation, target, and result for a current open item | aligned with Codex 0.10.0 |
+| Waiting or deferral must have a saved, typed reason | implemented in the DSH boundary model; live external work is rechecked before yielding |
+| Quoted or reference text must not create executable requirements | implemented; Codex 0.11.0's more specific correction-target rules still need a separate regression review |
+| A mutation needs a current root-user instruction naming the action and exact target | implemented through DSH's native `context_guard_action` path |
+| A high-risk publication needs a one-shot ticket bound to the exact candidate | not implemented |
+| Cleanup and completion stay inside an explicit work unit | not implemented |
+| The four new 0.11.0 incident families and protocol-specific benchmark runners | not implemented; DSH currently consumes the reviewed portable fixture layer only |
+| Codex Hook cache, `PreToolUse` wiring, and installer recovery | not applicable to the DSH host; equivalent behavior must use DSH-native tools and lifecycle events |
+
 The 0.4.0 implementation baseline keeps the v0.3 digest and conformance work and adds:
 
 - Proof obligations that must name a current pending item and use evidence matching the requested kind, surface, subject, operation, and outcome.
@@ -105,7 +118,13 @@ Retained from v0.3.0:
 
 This is not a full product-parity claim. It does not copy the Codex private ledger, Hook lifecycle, cache, or installer, and it cannot prevent all trusted in-process Goal/session bypasses.
 
-Main CI run `33540907051` passed the implementation baseline. The release commit adds the packaged documentation and must pass its own CI; its deterministic tgz must then pass same-byte native macOS and Windows acceptance before publication. Historical candidate results remain bound to their recorded SHA-256 values and never transfer to changed bytes; see [`LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
+Main CI run `33540907051` passed the implementation baseline. The exact 0.4.0 package later passed same-byte native macOS and Windows acceptance and was published from annotated tag `v0.4.0`; exact release and public-readback identities are recorded in [`LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md). Historical candidate results remain bound to their recorded SHA-256 values and never transfer to changed bytes.
+
+## Codex 0.11.0 follow-up
+
+DSH needs a deliberate follow-up, not a line-for-line port. The highest-value shared gap is execution-time authorization for public release identities. DSH already routes supported mutations through `context_guard_action`, so the next design should extend that native path with a one-shot authorization record bound to the exact candidate and input instead of copying the Codex `PreToolUse` Hook.
+
+Work-unit scope and correction attribution are also shared semantic gaps and should gain portable regression cases before implementation. Stop-disposition handling is partly equivalent already, so it should be compared with the 0.11.0 cases before code is changed. Codex cache repair, Hook trust, and plugin installation remain Codex-only. Incident-corpus tooling may remain owned by Codex, while reviewed platform-neutral cases continue to be mirrored here.
 
 ## Validation boundaries
 

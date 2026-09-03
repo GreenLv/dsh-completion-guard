@@ -110,7 +110,9 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 本项目最初从 [`GreenLv/codex-context-guard`](https://github.com/GreenLv/codex-context-guard) v0.8.8 移植确定性行为。这个版本只是历史起点，不代表当前兼容程度。
 
-双方当前共享到哪里，由固定的兼容性测试数据和差异台账记录。0.3.2 已包含 Codex 0.9.4 系列的 Stop 2.0、digest v3 和共享兼容性测试。0.4.0 又加入了更严格的任务、路径、能力和证明绑定，具体范围见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)；这里描述的是有明确边界的语义对齐，不代表两个产品完全一致。
+0.4.0 明确对齐了 Codex Context Guard 0.10.0 的共享证据规则：证据必须对应仍未完成的工作，并证明用户实际要求的操作、目标和结果。这只是有边界的行为对齐，不表示两个产品拥有相同功能。
+
+Codex Context Guard 0.11.0 在此后发布。DSH 0.4.0 已经能按自己的宿主机制核对精确变更目标、等待状态和引用文字，但还没有完整同步 0.11.0 的一次性授权票据、工作单元、需求替代归因和事故 benchmark。通俗对照表与当前差异台账见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
 
 两个项目服务于不同运行时：
 
