@@ -903,9 +903,10 @@
         "0.1.2-rc.1"
       ],
       "auditedPlatforms": [
-        "posix"
+        "posix",
+        "windows"
       ],
-      "platformAuditNote": "Exact graph extracted from the isolated 2026-09-03 native macOS rc.1 runtime with dshmarket 1.41.0. The Guard adapts the Session snapshotEvents API; Windows is intentionally unaudited and fails closed.",
+      "platformAuditNote": "posix: exact graph extracted from the isolated 2026-09-03 native macOS rc.1 runtime with dshmarket 1.41.0. windows: exact graph extracted from the 2026-09-04 native Windows rc.1 runtime with dshmarket 1.41.0 and verified row-for-row identical (name, version, registry integrity) to the posix extraction; audited on the live Windows host via host-lock inspect/inject, composed-config verify-dump, and a cold Web boot. The Guard adapts the Session snapshotEvents API; unlisted host cohorts still fail closed.",
       "capabilityExpectations": {
         "goal_complete_precommit_guard": "required",
         "goal_disarm_readback": "required",

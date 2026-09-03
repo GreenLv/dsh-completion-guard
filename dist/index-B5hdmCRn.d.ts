@@ -493,8 +493,11 @@ declare const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[];
 * `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
 * cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
 * the graph audited in the 2026-09-01 annex. The rc.1 cohort carries the exact
-* runtime plus dshmarket 1.41.0 graph audited natively on macOS; Windows remains
-* fail-closed until separate native evidence exists. Graphs that mix cohorts, lack
+* runtime plus dshmarket 1.41.0 graph audited natively on macOS, then confirmed
+* on Windows: the 2026-09-04 native Windows rc.1 runtime graph (dshmarket
+* 1.41.0) was extracted from the runtime lockfile and verified row-for-row
+* identical (name, version, registry integrity) to the posix extraction before
+* this cohort was widened. Graphs that mix cohorts, lack
 * rows, duplicate rows, or use identities outside every registered cohort
 * fail closed.
 */

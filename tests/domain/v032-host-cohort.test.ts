@@ -37,7 +37,7 @@ describe('audited host cohort registry', () => {
     expect(alpha2Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
     expect(alpha2Market139Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
     expect(alpha3Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
-    expect(rc1Cohort.auditedPlatforms).toEqual(['posix'])
+    expect(rc1Cohort.auditedPlatforms).toEqual(['posix', 'windows'])
     // All audited cohorts use one complete package-name universe.
     expect(rc2Cohort.packages.map((row) => row.name).sort()).toEqual(alpha2Cohort.packages.map((row) => row.name).sort())
     expect(alpha3Cohort.packages.map((row) => row.name).sort()).toEqual(alpha2Cohort.packages.map((row) => row.name).sort())
@@ -124,14 +124,20 @@ describe('audited host cohort registry', () => {
     expect(selection.reasonCode).toBeUndefined()
   })
 
-  it('keeps rc.1 fail-closed on Windows until native Windows evidence exists', () => {
+  it('selects rc.1 consistently on Windows after the 2026-09-04 native Windows audit', () => {
+    // CG-DSH-001: the windows platform joined the rc.1 cohort only after the
+    // live Windows rc.1 graph was extracted and verified row-for-row identical
+    // to the posix rows; unlisted host cohorts still fail closed.
     expect(selectHostCohort(RC1_HOST_PACKAGES, 'windows')).toMatchObject({
-      consistent: false,
-      reasonCode: 'host_cohort_platform_not_audited',
+      consistent: true,
     })
     expect(evaluateHostLock(RC1_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).toMatchObject({
-      status: 'unsupported',
-      reasonCode: 'host_lock_cohort_platform_not_audited',
+      status: 'supported',
+      cohortId: 'dsh-0.1.2-rc.1',
+    })
+    expect(selectHostCohort(RC1_HOST_PACKAGES, 'posix')).toMatchObject({
+      consistent: true,
+      cohort: { id: 'dsh-0.1.2-rc.1' },
     })
   })
 
