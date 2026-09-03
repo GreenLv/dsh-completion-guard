@@ -82,13 +82,13 @@ test("settles the dual-package history only after unchanged separated observatio
   assert.equal(settledThrough(changed), "2026-08-31");
 });
 
-test("renders the rename chart from zero with every current compact date contained", () => {
+test("renders a zero-based y axis and aligns every point and marker with its date", () => {
   const document = buildStatsDocument(config, collected("2026-09-02"), "2026-09-03T04:37:00.000Z", "2026-09-02");
   assert.deepEqual(document.project_cumulative.map((item) => item.cumulative), [1, 2, 3, 5, 7, 9, 11, 13]);
   const english = renderSvg(document, "en");
   const chinese = renderSvg(document, "zh-CN");
   for (const svg of [english, chinese]) {
-    assert.match(svg, /<polyline points="84\.00,436\.00 /);
+    assert.match(svg, /y1="436"[^>]+class="grid"\/><text[^>]+class="axis">0<\/text>/);
     assert.match(svg, /data-renderer-version="2"/);
     assert.match(svg, /x="84\.00" y="464" text-anchor="start" class="axis x-axis-tick" data-day="2026-08-26"/);
     assert.match(svg, /x="924\.00" y="464" text-anchor="end" class="axis x-axis-tick" data-day="2026-09-02"/);
@@ -104,6 +104,13 @@ test("renders the rename chart from zero with every current compact date contain
     const labels = [...svg.matchAll(/class="axis x-axis-tick" data-day="([^"]+)">([^<]+)<\/text>/g)];
     assert.equal(labels.length, 8);
     assert.deepEqual(labels.map((match) => match[1]), enumerateDays("2026-08-26", "2026-09-02"));
+    const tickXs = [...svg.matchAll(/<text x="([^"]+)" y="464"[^>]+data-day="([^"]+)"/g)];
+    const points = svg.match(/<polyline points="([^"]+)"/)[1].split(" ").map((point) => point.split(",").map(Number));
+    assert.equal(points.length, tickXs.length);
+    assert.ok(points[0][1] < 436, "the first real daily value must not be replaced by a synthetic zero point");
+    assert.deepEqual(points.map((point) => point[0]), tickXs.map((match) => Number(match[1])));
+    const renameX = Number(svg.match(/<line x1="([^"]+)" y1="176"[^>]+class="rename"/)[1]);
+    assert.equal(renameX, Number(tickXs.find((match) => match[2] === "2026-08-29")[1]));
   }
   assert.match(english, /All available daily history · 2026-08-26 → 2026-09-02 · 8 daily points/);
   assert.match(chinese, /全量每日历史 · 2026-08-26 → 2026-09-02 · 8 个每日数据点/);
