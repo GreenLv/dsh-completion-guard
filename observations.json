@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "renderer_version": 2,
-  "observed_at": "2026-09-03T12:41:59.849Z",
-  "candidate_through": "2026-09-02",
+  "observed_at": "2026-09-04T09:00:39.217Z",
+  "candidate_through": "2026-09-03",
   "packages": [
     {
       "package": "dsh-context-guard",
@@ -11,50 +11,56 @@
         {
           "day": "2026-08-26",
           "downloads": 95,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-27",
           "downloads": 405,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-28",
           "downloads": 205,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-29",
           "downloads": 75,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-30",
           "downloads": 28,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-31",
           "downloads": 42,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-01",
           "downloads": 23,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-02",
           "downloads": 14,
-          "stable_observations": 1,
+          "stable_observations": 2,
           "stable_since": "2026-09-03T12:41:59.849Z"
+        },
+        {
+          "day": "2026-09-03",
+          "downloads": 0,
+          "stable_observations": 1,
+          "stable_since": "2026-09-04T09:00:39.217Z"
         }
       ]
     },
@@ -65,32 +71,38 @@
         {
           "day": "2026-08-29",
           "downloads": 140,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-30",
           "downloads": 9,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-31",
           "downloads": 0,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-01",
           "downloads": 177,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-02",
           "downloads": 0,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-09-03T09:09:04.458Z"
+        },
+        {
+          "day": "2026-09-03",
+          "downloads": 0,
+          "stable_observations": 1,
+          "stable_since": "2026-09-04T09:00:39.217Z"
         }
       ]
     }
