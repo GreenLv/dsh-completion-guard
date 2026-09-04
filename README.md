@@ -51,7 +51,7 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 Version 0.4.0 is the current release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) carries the exact package checksum and native macOS and Windows acceptance records. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
 
-The source tree may carry an unpublished `0.4.1-rc.1` local candidate for DSH `0.1.2-rc.1` with dshmarket `1.41.0`. Its rc.1 host cohort is native-macOS-only until separate Windows evidence exists; see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md). This is not an npm or GitHub Release claim.
+Version `0.4.1-rc.1` is a prerelease candidate for DSH `0.1.2-rc.1` with dshmarket `1.41.0`. Its host cohort is audited on native macOS/posix and against the native Windows rc.1 host graph; host-graph audits do not replace the cross-platform exact-artifact acceptance of one frozen package. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 Version 0.3.2 remains available for the checked DSH `0.1.1-rc.2` and `0.1.2-alpha.2` setups. Do not combine packages from different checked setups; the Guard fails closed when the active package set does not match one complete cohort in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
@@ -69,6 +69,8 @@ Context Guard has two activation modes:
 
 - `opt-in` (default): protection is off when a session starts. Run `/context-guard on` in that session to turn it on, and `/context-guard off` to turn it off again. This changes only the current session.
 - `always`: DSH sessions are protected automatically. Running `/context-guard off` turns protection off only for that session; other sessions start with protection on.
+
+These modes only control Guard protection. They are not the DSH session mode (for example, the standard or minimal mode) that a session starts with. With `always`, the Guard loads before each DSH session starts. DSH currently cannot switch a session's mode after the session has started, so a session protected this way keeps the DSH session mode it started with. `/context-guard on` and `/context-guard off` turn Guard protection on or off; they never change the DSH session mode.
 
 To make DSH sessions start with protection on, add this entry to the `cordis.patch.yml` used by the way you start DSH:
 

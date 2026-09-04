@@ -2,11 +2,10 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.4.1-rc.1 - Unreleased local candidate
+## 0.4.1-rc.1 - 2026-09-04
 
-- Add the exact native macOS DSH `0.1.2-rc.1` + dshmarket `1.41.0` host cohort. Windows remains fail-closed pending separate native evidence.
+- Add the exact DSH `0.1.2-rc.1` + dshmarket `1.41.0` host cohort for macOS/posix and Windows. The Windows host graph was audited on the native Windows rc.1 runtime; host-graph audits do not replace the cross-platform exact-artifact acceptance of one frozen package.
 - Read session history through the rc.1 `snapshotEvents()` API while retaining the legacy `events` path for previously audited DSH cohorts.
-- Keep publication separate: this development candidate is intended for isolated and daily-profile acceptance and is not an npm or GitHub Release claim.
 
 ## 0.4.0 - 2026-09-02
 

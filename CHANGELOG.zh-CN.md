@@ -2,11 +2,10 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
-## 0.4.1-rc.1 - 未发布的本地候选
+## 0.4.1-rc.1 - 2026-09-04
 
-- 新增经过原生 macOS 审计的 DSH `0.1.2-rc.1` + dshmarket `1.41.0` 精确宿主队列；Windows 在取得独立原生证据前继续失败关闭。
+- 新增精确的 DSH `0.1.2-rc.1` + dshmarket `1.41.0` 宿主队列，覆盖 macOS/posix 与 Windows。Windows 宿主图谱已在原生 Windows rc.1 运行时上审计；宿主图谱审计不能替代同一冻结包的跨平台 exact-artifact acceptance。
 - 通过 rc.1 的 `snapshotEvents()` API 读取会话历史，同时保留此前已审计 DSH 队列使用的旧版 `events` 路径。
-- 发布状态保持独立：该开发候选只用于隔离环境和日用 profile 验收，不表示已经发布到 npm 或 GitHub Release。
 
 ## 0.4.0 - 2026-09-02
 

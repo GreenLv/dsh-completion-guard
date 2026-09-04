@@ -13,13 +13,14 @@ Compatibility is pinned to exact host package sets. A nearby version or a partia
 
 DSH is still a developer preview and may make breaking changes. Version 0.4.0 therefore makes no floating alpha compatibility claim.
 
-## Unpublished 0.4.1-rc.1 macOS candidate
+## 0.4.1-rc.1 prerelease candidate
 
-- Plugin: local `dsh-completion-guard` `0.4.1-rc.1` candidate
+- Plugin: `dsh-completion-guard` `0.4.1-rc.1` prerelease candidate
 - DeepSeek Harness: `0.1.2-rc.1`
 - dshmarket: `1.41.0`
 - Cordis: `4.0.2`
-- Audited platform: native macOS/posix only; Windows fails closed
+- Audited platforms: native macOS/posix runtime, plus the native Windows rc.1 host graph verified on the live Windows host (host-lock inspect/inject, composed-config verify-dump, cold Web boot)
+- Evidence boundary: host-graph audits are source/runtime-level evidence and do not replace the cross-platform exact-artifact acceptance of one frozen package; unregistered host cohorts keep failing closed
 
 DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and `eventAt()`. The candidate uses `snapshotEvents()` when present and retains `events` only for older registered cohorts. The underlying Guard-consumed event vocabulary, flush path, Goal disarm, and `update_goal` contract remain unchanged by the focused upstream source audit.
 

@@ -51,7 +51,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 0.4.0 是当前版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
 
-源码树可能包含面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0`、尚未发布的本地 `0.4.1-rc.1` 候选。该 rc.1 宿主队列目前只具有原生 macOS 证据；Windows 在获得独立证据前仍失败关闭。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。这不表示已经发布到 npm 或 GitHub Release。
+版本 `0.4.1-rc.1` 是面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0` 的预发布候选。其宿主队列已在原生 macOS/posix 上审计，并核对过原生 Windows rc.1 运行时的宿主图谱；宿主图谱审计不能替代同一冻结包的跨平台 exact-artifact acceptance。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
 0.3.2 继续支持已经检查过的 DSH `0.1.1-rc.2` 和 `0.1.2-alpha.2` 环境。不要混用不同环境的包；只有当前包集合完整匹配 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 中的一套记录时，Guard 才会启用。
 
@@ -69,6 +69,8 @@ Context Guard 有两种启用模式：
 
 - `opt-in`（默认）：打开会话时不会自动保护。你需要在这个会话中执行 `/context-guard on` 才会启用；执行 `/context-guard off` 可以再次关闭。开关只影响当前会话。
 - `always`：DSH 会话会自动启用保护。如果你在某个会话中执行 `/context-guard off`，只会关闭这个会话；其他会话会自动开启保护。
+
+启用模式只控制 Guard 是否保护会话，不是 DSH 的会话模式（例如会话开始时所选的标准模式、极简模式）。选择 `always` 后，Guard 会在每个 DSH 会话开始前自动加载。DSH 当前不支持在会话开始后切换会话模式，因此受这样保护的会话会一直使用它开始时的 DSH 会话模式。`/context-guard on` 和 `/context-guard off` 只负责开启或关闭 Guard 保护，不会改变 DSH 会话模式。
 
 如果希望 DSH 会话自动启用保护，请在当前 DSH 启动方式使用的 `cordis.patch.yml` 中增加：
 
