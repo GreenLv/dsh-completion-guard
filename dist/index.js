@@ -3416,7 +3416,7 @@ function sessionHeaderForDigest(session) {
 		...typeof raw.seedLength === "number" ? { seedLength: raw.seedLength } : {},
 		...typeof raw.agentPreset === "string" ? { agentPreset: raw.agentPreset } : {},
 		...typeof raw.origin === "string" ? { origin: raw.origin } : {},
-		...typeof raw.delegationDepth === "number" ? { delegationDepth: raw.delegationDepth } : {}
+		delegationDepth: typeof raw.delegationDepth === "number" ? raw.delegationDepth : 0
 	};
 }
 function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalState) {

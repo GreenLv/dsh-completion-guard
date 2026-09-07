@@ -195,7 +195,9 @@ function sessionHeaderForDigest(session: Session): SessionHeader | undefined {
     ...(typeof raw.seedLength === 'number' ? { seedLength: raw.seedLength } : {}),
     ...(typeof raw.agentPreset === 'string' ? { agentPreset: raw.agentPreset } : {}),
     ...(typeof raw.origin === 'string' ? { origin: raw.origin } : {}),
-    ...(typeof raw.delegationDepth === 'number' ? { delegationDepth: raw.delegationDepth } : {}),
+    // DSH JSONL persistence materializes an omitted root depth as zero.
+    // Hash that same persisted identity before and after a resume.
+    delegationDepth: typeof raw.delegationDepth === 'number' ? raw.delegationDepth : 0,
   }
 }
 

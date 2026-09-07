@@ -421,6 +421,25 @@ describe('runtime derivation', () => {
     expect(runtime.projection.hostLockDigest).toBe(hostA.digest)
     expect(hasCurrentCertificate(runtime.projection)).toBe(true)
 
+    // The audited JSONL persistence writes omitted root depth as zero.
+    // Its roundtrip must preserve a nonempty certificate's session identity.
+    const persistedSession = {
+      header: { ...session.header, delegationDepth: 0 },
+      events: session.events,
+    } as unknown as Session
+    const resumed = createRuntime(fakeAgent(persistedSession), OPT_IN, hostA)
+    resumed.setDurability(true)
+    resumed.sync()
+    expect(resumed.projection.integrity).toBe('valid')
+    expect(hasCurrentCertificate(resumed.projection)).toBe(true)
+    const delegatedSession = {
+      header: { ...session.header, delegationDepth: 1 }, events: session.events,
+    } as unknown as Session
+    const delegated = createRuntime(fakeAgent(delegatedSession), OPT_IN, hostA)
+    delegated.setDurability(true)
+    delegated.sync()
+    expect(hasCurrentCertificate(delegated.projection)).toBe(false)
+
     const hostB: HostLockEvaluation = { ...hostA, digest: 'b'.repeat(64), profileKind: 'headless' }
     const changed = createRuntime(fakeAgent(session), OPT_IN, hostB)
     changed.setDurability(true)
