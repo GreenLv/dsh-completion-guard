@@ -296,14 +296,21 @@ function stripManagedPatch(text: string): { base: string; prior?: string } {
 function activationFromPatch(text: string): string | undefined {
   const lines = text.split(/\r?\n/)
   const starts = lines.flatMap((line, index) => /^- id:\s*["']?context-guard["']?\s*$/.test(line) ? [index] : [])
-  if (starts.length > 1) throw new HostProfileError('profile_patch_duplicate_target', 'multiple unmanaged context-guard patches are ambiguous')
-  if (starts.length === 0) return undefined
-  const start = starts[0]
-  let end = lines.length
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (lines[index].startsWith('- ')) { end = index; break }
-  }
-  const entry = lines.slice(start + 1, end).join('\n')
+  const entries = starts.map((start) => {
+    let end = lines.length
+    for (let index = start + 1; index < lines.length; index += 1) {
+      if (lines[index].startsWith('- ')) { end = index; break }
+    }
+    return lines.slice(start + 1, end).join('\n')
+  }).filter((entry) => {
+    // A separate disabled-only override cannot change activation or host-lock
+    // identity. Preserve it byte-for-byte in the base patch, including order.
+    const fields = entry.split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith('#'))
+    return !(fields.length === 1 && /^ {2}disabled:\s*(?:true|false)\s*(?:#.*)?$/.test(fields[0]))
+  })
+  if (entries.length > 1) throw new HostProfileError('profile_patch_duplicate_target', 'multiple unmanaged context-guard configurations are ambiguous')
+  if (entries.length === 0) return undefined
+  const entry = entries[0]
   const name = entry.match(/^\s{2}name:\s*(.+?)\s*$/m)?.[1]?.replace(/^['"]|['"]$/g, '')
   if (name && name !== 'dsh-completion-guard') throw new HostProfileError('profile_patch_name_mismatch', 'context-guard patch targets a different package')
   if (/^\s{4}hostLockPackages:\s*$/m.test(entry)) {

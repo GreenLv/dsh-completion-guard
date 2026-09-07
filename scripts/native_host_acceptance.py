@@ -1,4 +1,4 @@
-"""Host-bound exact-artifact acceptance; never reads or modifies a daily profile.
+"""Host-bound exact-artifact acceptance; supplied daily targets are read-only.
 
 The entrypoint creates both profiles below one new temporary DSH_HOME. A
 versioned Cordis probe drives real host services without requesting a model.

@@ -398,6 +398,25 @@ describe('active profile graph injection and composed readback', () => {
     expect(readFileSync(join(fixture.profileRoot, 'cordis.patch.yml'), 'utf8')).toBe(once)
   })
 
+  it('preserves a separate disabled-only override while rejecting conflicting configurations', () => {
+    const fixture = makeActiveRoots()
+    const patch = join(fixture.profileRoot, 'cordis.patch.yml')
+    const base = '- id: context-guard\n  name: dsh-completion-guard\n  config:\n    activation: always\n- id: context-guard\n  disabled: true\n'
+    writeFileSync(patch, base)
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    injectActiveProfileHostLock(active)
+    const once = readFileSync(patch, 'utf8')
+    expect(once.startsWith(base.trimEnd())).toBe(true)
+    expect(once).toContain('activation: "always"')
+    expect(once.match(/disabled: true/g)).toHaveLength(1)
+    injectActiveProfileHostLock(active)
+    expect(readFileSync(patch, 'utf8')).toBe(once)
+    const conflicting = `${base}  config:\n    activation: opt-in\n`
+    writeFileSync(patch, conflicting)
+    expect(() => injectActiveProfileHostLock(active)).toThrow(/ambiguous/)
+    expect(readFileSync(patch, 'utf8')).toBe(conflicting)
+  })
+
   it('replaces the fresh-profile empty sequence sentinel without corrupting YAML', () => {
     const fixture = makeActiveRoots()
     writeFileSync(join(fixture.profileRoot, 'cordis.patch.yml'), [
