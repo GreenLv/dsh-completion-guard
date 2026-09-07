@@ -71,12 +71,14 @@ export function apply(ctx, config) {
         proposalId = prior.proposal_id
         await check('persisted_restart_resume', async () => {
           handle = await ctx.agents.resume({ resumeSessionId: sessionId })
+          await handle.agent.whenIdle()
           assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
           assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
         })
         return
       }
       handle = await ctx.agents.create({ sessionId, meta: { cwd: config.workRoot } })
+      await handle.agent.whenIdle()
       await check('nonempty_test_certificate', async () => {
         await root('Run pnpm test.')
         await call(process.platform === 'win32' ? 'pwsh' : 'bash', { command: 'pnpm test' })
@@ -147,6 +149,7 @@ export function apply(ctx, config) {
         assert.equal(await ctx.sessions.flush(handle.agent.session), true)
         await handle.dispose()
         handle = await ctx.agents.resume({ resumeSessionId: sessionId })
+        await handle.agent.whenIdle()
         assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
         assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       })
