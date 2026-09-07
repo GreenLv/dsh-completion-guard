@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import tempfile
 import unittest
@@ -112,6 +113,34 @@ class HostBoundEntrypointTests(unittest.TestCase):
         self.assertFalse(self.host.validate_probe(receipt, "nonce", "b" * 64))
         self.assertFalse(self.host.validate_probe({**receipt, "cases": []}, "nonce", "a" * 64))
         self.assertFalse(self.host.validate_probe({**receipt, "cases": receipt["cases"][:-1]}, "nonce", "a" * 64))
+
+    def test_probe_resolves_dependencies_from_real_pnpm_package_location(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "store" / "node_modules" / "@deepseek-ai" / "dsh"
+            package.mkdir(parents=True)
+            (package / "package.json").write_text('{"name":"@deepseek-ai/dsh"}')
+            dependency = root / "store" / "node_modules" / "fixture-dependency"
+            dependency.mkdir()
+            (dependency / "index.js").write_text('module.exports = 42')
+            link = root / "runtime" / "node_modules" / "@deepseek-ai" / "dsh"
+            link.parent.mkdir(parents=True)
+            try:
+                link.symlink_to(package, target_is_directory=True)
+            except OSError:
+                self.skipTest("directory symlink creation unavailable on this host")
+            probe = SCRIPT.with_name("native_host_probe.mjs").resolve().as_uri()
+            code = f"import {{ runtimeRequire }} from {json.dumps(probe)}; process.stdout.write(String(runtimeRequire(process.argv[1])('fixture-dependency')))"
+            value = subprocess.check_output(["node", "--input-type=module", "-e", code, str(root / "runtime")], text=True)
+            self.assertEqual(value, "42")
+
+    def test_restart_probe_requires_persisted_resume_without_repeating_update(self):
+        receipt = {"schema": "dsh-native-host-probe/v1", "nonce": "nonce", "driver_sha256": "a" * 64,
+                   "mode": "restart", "status": "passed", "pid": 100, "real_model_request": False,
+                   "cases": [{"id": "persisted_restart_resume", "status": "passed"}]}
+        self.assertTrue(self.host.validate_probe(receipt, "nonce", "a" * 64, restart=True))
+        self.assertFalse(self.host.validate_probe(receipt, "nonce", "a" * 64))
+        self.assertFalse(self.host.validate_probe({**receipt, "cases": []}, "nonce", "a" * 64, restart=True))
 
     def test_failed_portable_gate_never_starts_a_host(self):
         result = {"status": "failed", "gates": []}

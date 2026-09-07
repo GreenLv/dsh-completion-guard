@@ -70,14 +70,16 @@ def package_fixture(root: Path, version: str) -> Path:
     return path
 
 
-def validate_probe(value: Any, nonce: str, driver_digest: str) -> bool:
+def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = False) -> bool:
+    expected = {'persisted_restart_resume'} if restart else PROBE_CASES
     return (isinstance(value, dict) and value.get("schema") == "dsh-native-host-probe/v1"
             and value.get("nonce") == nonce and value.get("driver_sha256") == driver_digest
+            and value.get("mode", "initial") == ("restart" if restart else "initial")
             and value.get("status") == "passed" and value.get("real_model_request") is False
             and isinstance(value.get("pid"), int) and value["pid"] > 0
             and isinstance(value.get("cases"), list)
-            and len(value["cases"]) == len(PROBE_CASES)
-            and {row.get("id") for row in value["cases"]} == PROBE_CASES
+            and len(value["cases"]) == len(expected)
+            and {row.get("id") for row in value["cases"]} == expected
             and all(row.get("status") == "passed" for row in value["cases"]))
 
 
@@ -236,7 +238,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     value = json.loads(path.read_text(encoding="utf-8"))
                     if exclude and value.get("pid") in exclude:
                         continue
-                    if not validate_probe(value, nonce, driver_digest):
+                    if not validate_probe(value, nonce, driver_digest, restart=bool(exclude)):
+                        result["host_probe_failures"] = [{"id": row.get("id"), "status": row.get("status"), "error_code": row.get("error_code")} for row in value.get("cases", []) if row.get("status") != "passed"]
                         raise RuntimeError("real host probe failed or returned an incomplete case set")
                     extra_pids[value["pid"]] = overlay
                     return value

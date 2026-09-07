@@ -3,22 +3,32 @@
  * a model request. It is not a synthetic replacement for those services. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, realpathSync, existsSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
 export const name = 'completion-guard-native-probe'
 export const inject = ['agents', 'sessions', 'tools', 'sessionPersistence']
 
+export function runtimeRequire(runtimeRoot) {
+  return createRequire(realpathSync(join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')))
+}
+
 export function apply(ctx, config) {
   ctx.on('ready', async () => {
     const rows = []
     let handle
-    const check = (id, fn) => fn().then(() => rows.push({ id, status: 'passed' }))
-    const runtime = createRequire(join(config.runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
-    const { createUserMessage, createToolResultMessage } = await import(runtime.resolve('@deepseek-ai/dsh-llm'))
-    const { SessionId } = await import(runtime.resolve('@deepseek-ai/dsh-session'))
-    const sessionId = SessionId(`guard-native-${config.nonce}-${process.pid}`)
+    let failedCase = 'initialize_runtime'
+    let mode = 'initial'
+    let createUserMessage, createToolResultMessage, sessionId
+    let proposalId
+    const driverDigest = createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex')
+    const check = async (id, fn) => {
+      failedCase = id
+      await fn()
+      rows.push({ id, status: 'passed' })
+    }
     let ordinal = 0
     const root = async text => {
       handle.agent.session.append('user/message', createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), { surfaceOp: 'append' })
@@ -26,7 +36,7 @@ export function apply(ctx, config) {
     }
     const call = async (name, args) => {
       const agent = handle.agent
-      const callId = `native-${++ordinal}`
+      const callId = `native-${process.pid}-${++ordinal}`
       agent.session.append('tool/call', { turn: 1, step: ordinal, callId, name, arguments: JSON.stringify(args) })
       const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
       agent.session.append('tool/result', {
@@ -40,6 +50,23 @@ export function apply(ctx, config) {
       return result.value
     }
     try {
+      const runtime = runtimeRequire(config.runtimeRoot)
+      ;({ createUserMessage, createToolResultMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
+      const { SessionId } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href)
+      sessionId = SessionId(`guard-native-${config.nonce}`)
+      if (existsSync(`${config.output}.complete`)) {
+        mode = 'restart'
+        const prior = JSON.parse(readFileSync(`${config.output}.complete`, 'utf8'))
+        assert.equal(prior.nonce, config.nonce)
+        assert.equal(prior.driver_sha256, driverDigest)
+        proposalId = prior.proposal_id
+        await check('persisted_restart_resume', async () => {
+          handle = await ctx.agents.resume({ resumeSessionId: sessionId })
+          assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
+          assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
+        })
+        return
+      }
       handle = await ctx.agents.create({ sessionId, meta: { cwd: config.workRoot } })
       await check('nonempty_test_certificate', async () => {
         await root('Run pnpm test.')
@@ -67,12 +94,12 @@ export function apply(ctx, config) {
           selector: { package_id: 'guard-acceptance-fixture', version: '2.0.0', profile: config.profile },
           command_manifest: { manifest_id: 'dsh.plugin_add_tgz.apply.v1', tgz_path: config.fixtureTgz } })
         assert.equal(resolution.status, 'supported')
-        const resolutionCall = `native-${ordinal}`
+        const resolutionCall = `native-${process.pid}-${ordinal}`
         const effect = await call('context_guard_action', { semantic_action: 'apply', resolution_call_id: resolutionCall,
           contract_item_id: clarified.id, contract_item_revision: clarified.revision,
           target_digest: resolution.target_digest })
         assert.equal(effect.status, 'completed')
-        const effectCall = `native-${ordinal}`
+        const effectCall = `native-${process.pid}-${ordinal}`
         for (const evidence_role of ['effect', 'state']) {
           assert.equal((await call('context_guard_evidence', { semantic_action: 'apply', evidence_role,
             resolution_call_id: resolutionCall, effect_call_id: effectCall })).status, 'supported')
@@ -82,7 +109,6 @@ export function apply(ctx, config) {
         assert.ok(binding)
         assert.equal((await call('context_guard_checkpoint', { bindings: [binding] })).status, 'certified')
       })
-      let proposalId
       await check('generic_pending_and_rebind_roundtrip', async () => {
         await root('更新演示插件并检查 GUI 效果')
         const pending = await call('context_guard_checkpoint', { bindings: [] })
@@ -121,16 +147,17 @@ export function apply(ctx, config) {
         assert.equal(boundary.status, 'accepted')
         assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       })
-    } catch {
-      rows.push({ id: 'host_probe', status: 'failed' })
+    } catch (error) {
+      rows.push({ id: failedCase, status: 'failed', error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })
     } finally {
       if (handle) {
         try { await handle.dispose() } catch { rows.push({ id: 'agent_cleanup', status: 'failed' }) }
       }
       const result = { schema: 'dsh-native-host-probe/v1', nonce: config.nonce, pid: process.pid,
-        driver_sha256: createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex'),
-        status: rows.length === 6 && rows.every(row => row.status === 'passed') ? 'passed' : 'failed',
+        mode, driver_sha256: driverDigest,
+        status: rows.length === (mode === 'initial' ? 6 : 1) && rows.every(row => row.status === 'passed') ? 'passed' : 'failed',
         cases: rows, real_model_request: false }
+      if (mode === 'initial' && result.status === 'passed') writeFileSync(`${config.output}.complete`, JSON.stringify({ nonce: config.nonce, driver_sha256: driverDigest, proposal_id: proposalId }))
       const output = `${config.output}.${process.pid}.json`
       writeFileSync(`${output}.tmp`, JSON.stringify(result))
       renameSync(`${output}.tmp`, output)
