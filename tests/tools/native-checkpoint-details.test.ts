@@ -4,6 +4,19 @@ import { it, expect } from 'vitest'
 import { deriveProjection } from '../../src/domain/derive.js'
 import { createCheckpointTool } from '../../src/tools/checkpoint.js'
 const probeModule = new URL('../../scripts/native_host_probe.mjs', import.meta.url).href
+
+it('requires a completed successful foreground command before requesting a test certificate', async () => {
+ const { assertTestCommandSucceeded, shellTerminalFacts } = await import(probeModule)
+ const success = { kind: 'foreground', exitCode: 0, timedOut: false, aborted: false }
+ expect(() => assertTestCommandSucceeded(success)).not.toThrow()
+ for (const value of [undefined, {}, { ...success, exitCode: 1 }, { ...success, exitCode: undefined },
+  { ...success, kind: 'background' }, { ...success, timedOut: true }, { ...success, aborted: true }]) {
+  expect(() => assertTestCommandSucceeded(value)).toThrow()
+ }
+ expect(shellTerminalFacts({ ...success, exitCode: 1, stdout: { text: 'private output' }, stderr: { text: 'private path' } }))
+  .toEqual({ kind: 'foreground', exit_code: 1, timed_out: false, aborted: false })
+})
+
 it.each(['short', 'long'])('retrieves a %s Windows test template through the native driver and certifies it', async length => {
  const { readProbeTestBinding } = await import(probeModule)
  const cwd = 'C:\\Users\\green\\AppData\\Local\\Temp\\' + (length === 'long' ? 'isolated-home-'.repeat(18) : '') + 'dsh-guard-host-abcdefgh\\work'

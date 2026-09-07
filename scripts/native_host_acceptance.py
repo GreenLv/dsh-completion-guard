@@ -30,6 +30,29 @@ PROBE_CASES = {
 }
 
 
+def host_temporary_root() -> Path:
+    """Create a disposable root using the host's normal directory ACL policy.
+
+    Python 3.12.4+ implements Windows mkdir(0o700), used by mkdtemp(), with
+    a protected OWNER RIGHTS DACL. A DSH restricted token cannot traverse
+    that root: even its own private temp and workspace become inaccessible.
+    On Windows inherit the existing temp parent's ACL, as native directory
+    creation does. Do not edit an ACL or change the sandbox's grants/mode.
+    POSIX retains mkdtemp's owner-only mode.
+    """
+    if platform.system() != "Windows":
+        return Path(tempfile.mkdtemp(prefix="dsh-guard-host-"))
+    parent = Path(tempfile.gettempdir())
+    for _ in range(10):
+        path = parent / f"dsh-guard-host-{secrets.token_hex(12)}"
+        try:
+            path.mkdir()
+        except FileExistsError:
+            continue
+        return path
+    raise RuntimeError("cannot allocate a unique host temporary root")
+
+
 def isolated_environment(root: Path) -> dict[str, str]:
     # Deliberate allowlist: inherited API tokens, NODE_OPTIONS and provider
     # overrides never enter this credential-free acceptance driver.
@@ -53,6 +76,25 @@ def isolated_environment(root: Path) -> dict[str, str]:
     for key in ("DSH_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "npm_config_cache", "PNPM_HOME", "APPDATA", "LOCALAPPDATA", "TMPDIR"):
         Path(env[key]).mkdir(parents=True, exist_ok=True)
     return env
+
+
+def run_host_command(work: Path, environment: dict[str, str], *args: str) -> str:
+    """Decode Node/DSH output strictly, independently of Python's console locale."""
+    executed = subprocess.run(list(args), cwd=work, env=environment, capture_output=True,
+                              text=False, timeout=120, check=False)
+    if executed.returncode:
+        raise RuntimeError(f"host command exited with code {executed.returncode}")
+    # Decode in the calling thread. text=True's Windows reader thread can lose
+    # stdout on a GBK decode error and leave a misleading later None TypeError.
+    output = executed.stdout.decode("utf-8", errors="strict")
+    executed.stderr.decode("utf-8", errors="strict")
+    return output
+
+
+def write_test_fixture(work: Path) -> None:
+    (work / "package.json").write_text(json.dumps({"name": "guard-native-fixture", "private": True,
+                                                   "scripts": {"test": "node fixture.cjs"}}), encoding="utf-8")
+    (work / "fixture.cjs").write_bytes(b"require('node:assert/strict').equal(2 + 2, 4)\n")
 
 
 def package_fixture(root: Path, version: str) -> Path:
@@ -173,13 +215,11 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     result["capability_skips"] = ["real_model_request"]
     if result["status"] != "passed":
         return result
-    temporary = Path(tempfile.mkdtemp(prefix="dsh-guard-host-"))
+    temporary = host_temporary_root()
     environment = isolated_environment(temporary)
     work = temporary / "work"
     work.mkdir()
-    (work / "package.json").write_text(json.dumps({"name": "guard-native-fixture", "private": True,
-                                                   "scripts": {"test": "node fixture.cjs"}}), encoding="utf-8")
-    (work / "fixture.cjs").write_text("require('node:assert/strict').equal(2 + 2, 4)\n", encoding="utf-8")
+    write_test_fixture(work)
     fixture_old = package_fixture(temporary, "1.0.0")
     fixture_new = package_fixture(temporary, "2.0.0")
     cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
@@ -193,12 +233,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     overlays: list[Path] = []
 
     def command(*args: str) -> str:
-        # No shell evaluation, no inherited secrets, and a finite deadline.
-        executed = subprocess.run(list(args), cwd=work, env=environment, capture_output=True,
-                                  text=True, timeout=120, check=False)
-        if executed.returncode:
-            raise RuntimeError("host command failed; raw output retained only in temporary execution")
-        return executed.stdout
+        return run_host_command(work, environment, *args)
 
     def passed(id: str) -> None:
         gates.append(api.gate(id, digest, passed=True))
@@ -246,7 +281,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             passed(f"{profile}_host_lock_readback")
             if profile == "headless":
                 missing = subprocess.run(["node", str(cli), "--profile", "headless", "Report the isolated acceptance status."],
-                                         cwd=work, env=environment, capture_output=True, text=True, timeout=60, check=False)
+                                         cwd=work, env=environment, capture_output=True, text=True,
+                                         encoding="utf-8", errors="strict", timeout=60, check=False)
                 if missing.returncode == 0 or "MISSING_CREDENTIAL" not in missing.stdout + missing.stderr:
                     raise RuntimeError("normal Headless missing-credential boundary not observed")
                 passed("headless_missing_credential_boundary")

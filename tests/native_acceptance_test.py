@@ -7,7 +7,7 @@ import json
 import subprocess
 import tempfile
 import unittest
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "native_acceptance.py"
@@ -87,6 +87,71 @@ class HostBoundEntrypointTests(unittest.TestCase):
         assert spec and spec.loader
         cls.host = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.host)
+
+    def test_windows_temp_root_inherits_parent_acl_without_posix_mode(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(self.host.platform, "system", return_value="Windows"), \
+                mock.patch.object(self.host.tempfile, "gettempdir", return_value=directory), \
+                mock.patch.object(self.host.tempfile, "mkdtemp") as posix_temp, \
+                mock.patch.object(self.host.secrets, "token_hex", return_value="unique"):
+            with mock.patch.object(Path, "mkdir", autospec=True) as mkdir:
+                root = self.host.host_temporary_root()
+            self.assertEqual(root, Path(directory) / "dsh-guard-host-unique")
+            # No explicit 0o700 (Windows OWNER RIGHTS DACL), chmod or ACL edits.
+            mkdir.assert_called_once_with(root)
+            posix_temp.assert_not_called()
+
+    def test_windows_temp_collision_does_not_reuse_existing_directory(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(self.host.platform, "system", return_value="Windows"), \
+                mock.patch.object(self.host.tempfile, "gettempdir", return_value=directory), \
+                mock.patch.object(self.host.secrets, "token_hex", side_effect=["taken", "new"]):
+            existing = Path(directory) / "dsh-guard-host-taken"
+            existing.mkdir()
+            sentinel = existing / "unrelated.txt"
+            sentinel.write_bytes(b"keep")
+            root = self.host.host_temporary_root()
+            self.assertEqual(root.name, "dsh-guard-host-new")
+            self.assertTrue(root.is_dir())
+            self.assertEqual(sentinel.read_bytes(), b"keep")
+
+    def test_windows_temp_creation_permission_error_does_not_retry(self):
+        with mock.patch.object(self.host.platform, "system", return_value="Windows"), \
+                mock.patch.object(Path, "mkdir", side_effect=PermissionError("denied")) as mkdir:
+            with self.assertRaises(PermissionError):
+                self.host.host_temporary_root()
+            self.assertEqual(mkdir.call_count, 1)
+
+    def test_posix_temp_root_retains_private_mkdtemp(self):
+        with mock.patch.object(self.host.platform, "system", return_value="Linux"), \
+                mock.patch.object(self.host.tempfile, "mkdtemp", return_value="private-root") as allocate:
+            self.assertEqual(self.host.host_temporary_root(), Path("private-root"))
+            allocate.assert_called_once_with(prefix="dsh-guard-host-")
+
+    def test_host_command_decodes_utf8_in_calling_thread(self):
+        output = "路径和证书".encode("utf-8")
+        completed = subprocess.CompletedProcess(["node"], 0, output, b"")
+        with mock.patch.object(self.host.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(self.host.run_host_command(Path("."), {}, "node"), "路径和证书")
+            self.assertFalse(run.call_args.kwargs["text"])
+
+    def test_host_command_rejects_invalid_utf8_and_nonzero_exit(self):
+        completed = subprocess.CompletedProcess(["node"], 0, b"\xff", b"")
+        with mock.patch.object(self.host.subprocess, "run", return_value=completed):
+            with self.assertRaises(UnicodeDecodeError):
+                self.host.run_host_command(Path("."), {}, "node")
+        completed = subprocess.CompletedProcess(["node"], 7, b"\xff", b"\xff")
+        with mock.patch.object(self.host.subprocess, "run", return_value=completed):
+            with self.assertRaisesRegex(RuntimeError, "code 7"):
+                self.host.run_host_command(Path("."), {}, "node")
+
+    def test_fixture_has_exact_portable_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.host.write_test_fixture(root)
+            self.assertEqual((root / "fixture.cjs").read_bytes(), b"require('node:assert/strict').equal(2 + 2, 4)\n")
+            package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+            self.assertEqual(package["scripts"]["test"], "node fixture.cjs")
 
     def test_isolated_environment_drops_credentials_and_node_injection(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(self.host.os.environ, {
@@ -217,13 +282,13 @@ class HostBoundEntrypointTests(unittest.TestCase):
             self.assertEqual(value, 'loaded')
 
     def test_restart_cleanup_discovers_only_exact_owned_patch_argv(self):
-        cli, overlay = Path('/runtime/dsh/bin.js'), Path('/tmp/isolated profile/probe.yml')
+        cli, overlay = PurePosixPath('/runtime/dsh/bin.js'), PurePosixPath('/tmp/isolated profile/probe.yml')
         command = 'node /runtime/dsh/bin.js --profile web --patch "/tmp/isolated profile/probe.yml"'
         self.assertTrue(self.host.owns_host_command(command, cli, overlay))
         self.assertFalse(self.host.owns_host_command(command + '.other', cli, overlay))
         self.assertFalse(self.host.owns_host_command(command.replace('--patch', '--other'), cli, overlay))
         self.assertFalse(self.host.owns_host_command(command.replace('/runtime/dsh/bin.js', '/other/bin.js'), cli, overlay))
-        windows_cli, windows_overlay = Path(r'C:\Runtime\bin.js'), Path(r'C:\Temp\probe root\probe.yml')
+        windows_cli, windows_overlay = PureWindowsPath(r'C:\Runtime\bin.js'), PureWindowsPath(r'C:\Temp\probe root\probe.yml')
         self.assertTrue(self.host.owns_host_command('node "C:\\Runtime\\bin.js" --patch "C:\\Temp\\probe root\\probe.yml"', windows_cli, windows_overlay, True))
         process_rows = f'101 {command}\n102 node /runtime/dsh/bin.js --patch /tmp/other.yml\n'
         with mock.patch.object(self.host.platform, 'system', return_value='Darwin'), mock.patch.object(self.host.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, process_rows)):

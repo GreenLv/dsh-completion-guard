@@ -60,6 +60,22 @@ export async function readProbeTestBinding(call, page) {
   return undefined
 }
 
+/** Terminal success is independent of ToolRuntime.isError and checkpoint state. */
+export function shellTerminalFacts(value) {
+  return {
+    kind: ['foreground', 'background'].includes(value?.kind) ? value.kind : null,
+    exit_code: Number.isInteger(value?.exitCode) ? value.exitCode : null,
+    timed_out: typeof value?.timedOut === 'boolean' ? value.timedOut : null,
+    aborted: typeof value?.aborted === 'boolean' ? value.aborted : null,
+  }
+}
+
+export function assertTestCommandSucceeded(value) {
+  assert.deepEqual(shellTerminalFacts(value), {
+    kind: 'foreground', exit_code: 0, timed_out: false, aborted: false,
+  })
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const rows = []
@@ -90,6 +106,7 @@ export function apply(ctx, config) {
       const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
       const code = value => typeof value === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(value) ? value : null
       lastTool = { name, is_error: result.isError, status: code(result.value?.status), reason_code: code(result.value?.reason_code), error_code: code(result.error?.info?.code),
+        ...(['pwsh', 'bash'].includes(name) ? { terminal: shellTerminalFacts(result.value) } : {}),
         blockers: result.value?.open_items?.map(row => code(row.reason_code)).filter(Boolean).slice(0, 8) ?? [],
         rejections: result.value?.rejected_bindings?.map(row => code(row.reason_code ?? row.reason)).filter(Boolean).slice(0, 8) ?? [],
         item_shapes: result.value?.open_items?.slice(0, 8).map(row => ({ omitted: row.omitted === true, has_detail: typeof row.detail_id === 'string', has_template: !!row.binding_template, action: code(row.semantic_action) })) ?? [],
@@ -129,7 +146,9 @@ export function apply(ctx, config) {
         await root('Run pnpm test.')
         const shell = process.platform === 'win32' ? 'pwsh' : 'bash'
         const fields = handle.agent.ctx.tools.get(shell, handle.agent)?.parameters?.properties ?? {}
-        await call(shell, { command: 'pnpm test', ...(fields.description ? { description: 'Run isolated deterministic acceptance test' } : {}) })
+        const terminal = await call(shell, { command: 'pnpm test', ...(fields.description ? { description: 'Run isolated deterministic acceptance test' } : {}) })
+        operation = 'test_command_success'
+        assertTestCommandSucceeded(terminal)
         const pending = await call('context_guard_checkpoint', { bindings: [] })
         operation = 'checkpoint_incomplete'
         assert.equal(pending.status, 'incomplete')
