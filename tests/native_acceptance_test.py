@@ -7,7 +7,7 @@ import json
 import subprocess
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "native_acceptance.py"
@@ -201,6 +201,20 @@ class HostBoundEntrypointTests(unittest.TestCase):
         """
         value = subprocess.check_output(["node", "--input-type=module", "-e", code], text=True)
         self.assertEqual(value, 'detail_roundtrip_passed')
+
+    def test_probe_overlay_uses_importable_file_urls_on_both_platforms(self):
+        windows = self.host.native_probe_patch(PureWindowsPath(r'C:\native tests\中文#probe.mjs'), {"nonce": "fixture"})
+        row = windows['insert'][0]
+        self.assertEqual(row['name'], 'file:///C:/native%20tests/%E4%B8%AD%E6%96%87%23probe.mjs')
+        self.assertEqual(row['config'], {"nonce": "fixture"})
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / '中文 #probe.mjs'
+            probe.write_text('export const result = "loaded";', encoding='utf-8')
+            patch = self.host.native_probe_patch(probe.resolve(), {})
+            value = subprocess.check_output(['node', '--input-type=module', '-e',
+                'const patch = JSON.parse(process.argv[1]); const module = await import(patch.insert[0].name); process.stdout.write(module.result);',
+                json.dumps(patch)], text=True)
+            self.assertEqual(value, 'loaded')
 
     def test_restart_cleanup_discovers_only_exact_owned_patch_argv(self):
         cli, overlay = Path('/runtime/dsh/bin.js'), Path('/tmp/isolated profile/probe.yml')

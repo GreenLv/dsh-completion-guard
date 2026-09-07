@@ -161,6 +161,12 @@ def discover_owned_hosts(cli: Path, overlays: list[Path]) -> dict[int, Path]:
             for overlay in overlays if owns_host_command(command, cli, overlay, windows)}
 
 
+def native_probe_patch(probe: Path, config: dict[str, Any]) -> dict[str, Any]:
+    # Node ESM treats a Windows drive letter as a URL scheme. File URLs also
+    # preserve spaces, non-ASCII names and literal # characters on both hosts.
+    return {"insert": [{"id": "native-guard-probe", "name": probe.as_uri(), "config": config}]}
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any]) -> dict[str, Any]:
     result["gate_profile"] = "host_bound"
@@ -254,7 +260,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             patches = [{"id": "context-guard", "config": {"activation": "always",
                          "hostLockPackages": packages, "hostLockPlatform": "windows" if platform.system() == "Windows" else "posix",
                          "hostLockProfile": profile}},
-                       {"insert": [{"id": "native-guard-probe", "name": str(probe), "config": config}]}]
+                       native_probe_patch(probe, config)]
             if profile == "headless":
                 patches.extend([{"id": "headless-runner", "disabled": True}, {"id": "headless-startup", "disabled": True}])
             overlay.write_text(json.dumps(patches), encoding="utf-8")
