@@ -209,9 +209,42 @@ def native_probe_patch(probe: Path, config: dict[str, Any]) -> dict[str, Any]:
     return {"insert": [{"id": "native-guard-probe", "name": probe.as_uri(), "config": config}]}
 
 
+def select_target_cohorts(cohorts: list[dict[str, Any]], runtime_version: str,
+                          targets: dict[str, str]) -> dict[str, dict[str, Any]]:
+    """Select exact, explicit targets; runtime version alone is ambiguous."""
+    if set(targets) != {"web", "headless"}:
+        raise RuntimeError("explicit Web and Headless cohort targets are required")
+    selected = {}
+    for profile, identity in targets.items():
+        matches = [row for row in cohorts if row["id"] == identity]
+        if len(matches) != 1:
+            raise RuntimeError(f"unknown or ambiguous {profile} cohort: {identity}")
+        cohort = matches[0]
+        host = [row for row in cohort["packages"] if row["name"] == "@deepseek-ai/dsh"]
+        if len(host) != 1 or host[0]["version"] != runtime_version:
+            raise RuntimeError(f"{profile} cohort runtime version mismatch")
+        selected[profile] = cohort
+    return selected
+
+
+def verify_target_graph(actual: list[dict[str, str]], expected: list[dict[str, str]], profile: str) -> None:
+    def keys(rows):
+        return sorted((row.get("name", ""), row.get("version", ""), row.get("integrity", "")) for row in rows)
+    if keys(actual) != keys(expected):
+        different = sorted({row.get("name", "") for row in actual + expected
+                            if keys([row])[0] not in set(keys(actual)).intersection(keys(expected))})
+        raise RuntimeError(f"{profile} target graph mismatch: {', '.join(different)}")
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
-                    result: dict[str, Any]) -> dict[str, Any]:
-    result["gate_profile"] = "host_bound"
+                    result: dict[str, Any], targets: dict[str, str] | None = None,
+                    target_profiles: dict[str, Path] | None = None,
+                    web_market_version: str | None = None) -> dict[str, Any]:
+    result["gate_profile"] = "host_bound_core"
+    result["host_lock_policy"] = "dsh-core/v1"
+    result["market_interface"] = {"status": "not_requested" if web_market_version is None else "unavailable",
+                                  "target_version": web_market_version, "api_schema": None, "api_version": None,
+                                  "advertised_restart": None, "loaded_instance_verified": False}
     result["capability_skips"] = ["real_model_request"]
     if result["status"] != "passed":
         return result
@@ -243,9 +276,21 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             raise RuntimeError("runtime root has no DSH launcher")
         runtime_manifest = json.loads((cli.parent.parent / "package.json").read_text(encoding="utf-8"))
         cohorts = json.loads((root / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))["cohorts"]
-        cohort = next(row for row in cohorts if row["id"] == f"dsh-{runtime_manifest['version']}")
-        packages = cohort["packages"]
-        market = next(row for row in packages if row["name"] == "dshmarket")
+        selected = select_target_cohorts(cohorts, runtime_manifest["version"], targets or {})
+        # Optional daily targets are read-only inputs, never destinations.
+        # A caller supplying one must supply both; no silent fixture fallback.
+        if target_profiles and set(target_profiles) != {"web", "headless"}:
+            raise RuntimeError("both target profile paths are required")
+        for profile, profile_path in (target_profiles or {}).items():
+            graph = json.loads(command("node", str(root / "bin" / "dsh-completion-guard-host-lock.mjs"),
+                                       "inspect-graph", "--runtime-root", str(runtime_root),
+                                       "--profile-root", str(profile_path)))
+            verify_target_graph(graph["packages"], selected[profile]["packages"], profile)
+            market_path = profile_path / "node_modules" / "dshmarket" / "package.json"
+            installed_market = json.loads(market_path.read_text(encoding="utf-8")) if market_path.is_file() else None
+            expected_market = web_market_version if profile == "web" else None
+            if (installed_market or {}).get("version") != expected_market:
+                raise RuntimeError(f"{profile} target dshmarket version mismatch")
         result["platform"]["toolchain"]["dsh"] = runtime_manifest["version"]
         result["host_driver_sha256"] = driver_digest
         result["host_lock_digests"] = {}
@@ -254,9 +299,13 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         command("tar", "-xf", str(artifact), "-C", str(extracted))
         artifact_tree = api.tree_digest(extracted / "package")
         for profile in ("web", "headless"):
+            packages = selected[profile]["packages"]
+            market_version = web_market_version if profile == "web" else None
             profile_root = temporary / "dsh" / "profiles" / profile
             install = ["node", str(cli), "plugin", "--profile", profile, "add", "--ignore-scripts",
-                       "--config.auto-install-peers=false", str(artifact), f"dshmarket@{market['version']}", str(fixture_old)]
+                       "--config.auto-install-peers=false", str(artifact), str(fixture_old)]
+            if market_version:
+                install.append(f"dshmarket@{market_version}")
             command(*install)
             installed = profile_root / "node_modules" / "dsh-completion-guard"
             if api.tree_digest(installed) != artifact_tree:
@@ -272,7 +321,9 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             locker = installed / "bin" / "dsh-completion-guard-host-lock.mjs"
             lock_args = ["--runtime-root", str(runtime_root), "--profile-root", str(profile_root)]
             readback = json.loads(command("node", str(locker), "inject", *lock_args))
-            if readback.get("status") != "supported" or readback.get("package_count", 0) <= 0:
+            if (readback.get("status") != "supported"
+                    or readback.get("cohort_id") != selected[profile]["id"]
+                    or readback.get("package_count") != len(packages)):
                 raise RuntimeError("host lock unsupported")
             result["host_lock_digests"][profile] = readback["host_lock_digest"]
             composed = profile_root / "composed.yml"
@@ -330,22 +381,39 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 passed(f"{profile}_{row['id']}")
             if port is not None:
                 origin = f"http://127.0.0.1:{port}"
-                _, capabilities = http_json(origin, "/dsh-market/api/v1/capabilities")
-                boot = capabilities.get("bootId")
-                if (not boot or capabilities.get("schema") != "dsh-market/update-api/v1"
-                    or capabilities.get("profile") != "web" or capabilities.get("marketVersion") != market["version"]):
-                    raise RuntimeError("web boot identity missing")
-                code, _ = http_json(origin, "/dsh-market/api/v1/restart", "POST", "http://invalid.example")
-                if code != 403:
-                    raise RuntimeError("wrong-origin restart was not denied")
-                code, _ = http_json(origin, "/dsh-market/api/v1/restart", "POST", origin)
-                if code != 202:
-                    raise RuntimeError("same-origin restart was not accepted")
-                wait_until(lambda: http_json(origin, "/dsh-market/api/v1/capabilities")[1].get("bootId") not in (None, boot))
+                # An optional protocol observation cannot decide core acceptance.
+                # It is not a loaded-provider identity or Guard restart certificate.
+                if web_market_version:
+                    try:
+                        code, capabilities = http_json(origin, "/dsh-market/api/v1/capabilities")
+                        if (code == 200 and capabilities.get("schema") == "dsh-market/update-api/v1"
+                                and capabilities.get("apiVersion") == 1 and capabilities.get("profile") == "web"
+                                and capabilities.get("marketVersion") == web_market_version):
+                            result["market_interface"] = {"status": "observed", "target_version": web_market_version,
+                                "api_schema": "dsh-market/update-api/v1", "api_version": 1,
+                                "advertised_restart": capabilities.get("features", {}).get("restart") is True,
+                                "loaded_instance_verified": False}
+                    except (OSError, ValueError, urllib.error.URLError):
+                        pass
+                # Restart only this driver's owned host; no optional plugin API.
+                if platform.system() == "Windows":
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                   capture_output=True, timeout=15, check=True)
+                else:
+                    os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=15)
+                def stopped_listener():
+                    with socket.socket() as connection:
+                        connection.settimeout(0.2)
+                        return connection.connect_ex(("127.0.0.1", port)) != 0
+                wait_until(stopped_listener, timeout=15)
+                process = subprocess.Popen(argv, cwd=work, env=environment, stdout=log, stderr=log,
+                                           start_new_session=platform.system() != "Windows")
+                processes.append(process)
                 second = wait_until(lambda: probe_result({first["pid"]}))
                 if second["pid"] == first["pid"]:
                     raise RuntimeError("restart did not change host process")
-                passed("web_restart_changed_boot_and_process")
+                passed("web_owned_restart_and_persisted_resume")
             # Exercise the installed launcher shim, with the same isolated env.
             shim = runtime_root / "node_modules" / ".bin" / ("dsh.cmd" if platform.system() == "Windows" else "dsh")
             if runtime_manifest["version"] not in command(str(shim), "--version"):

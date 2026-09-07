@@ -265,6 +265,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-url")
     parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound"), default="portable_artifact")
     parser.add_argument("--runtime-root", type=Path)
+    parser.add_argument("--web-cohort")
+    parser.add_argument("--web-market-version", help="exact target version, or none")
+    parser.add_argument("--headless-cohort")
+    parser.add_argument("--target-web-profile", type=Path)
+    parser.add_argument("--target-headless-profile", type=Path)
     parser.add_argument("--transfer-receipt", type=Path)
     parser.add_argument("--transport-url")
     args = parser.parse_args(argv)
@@ -272,6 +277,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("artifact SHA-256 and source commit must be full lowercase digests")
     if args.gate_profile == "host_bound" and args.runtime_root is None:
         parser.error("host_bound requires --runtime-root pointing to the audited DSH installation")
+    if args.gate_profile == "host_bound" and not (args.web_cohort and args.headless_cohort):
+        parser.error("host_bound requires explicit --web-cohort and --headless-cohort")
+    if args.gate_profile == "host_bound" and (not args.web_market_version or
+            (args.web_market_version != "none" and not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", args.web_market_version))):
+        parser.error("host_bound requires --web-market-version VERSION (or none)")
+    if bool(args.target_web_profile) != bool(args.target_headless_profile):
+        parser.error("supply both target profile paths, or neither for standalone isolated acceptance")
     result = portable_acceptance(
         args.repo_root.resolve(), args.artifact.resolve(), args.artifact_sha256,
         args.source_commit, args.run_url,
@@ -287,7 +299,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         from types import SimpleNamespace
         api = SimpleNamespace(gate=gate, sha256=sha256, tree_digest=tree_digest, timestamp=timestamp)
         result = module.host_acceptance(api, args.repo_root.resolve(), args.artifact.resolve(),
-                                        args.artifact_sha256, args.runtime_root.resolve(), result)
+                                        args.artifact_sha256, args.runtime_root.resolve(), result,
+                                        {"web": args.web_cohort, "headless": args.headless_cohort},
+                                        {"web": args.target_web_profile.resolve(),
+                                         "headless": args.target_headless_profile.resolve()}
+                                        if args.target_web_profile else None,
+                                        None if args.web_market_version == "none" else args.web_market_version)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if args.transfer_receipt:
         if not args.transport_url or result["artifact"]["sha256"] != args.artifact_sha256:

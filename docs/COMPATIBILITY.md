@@ -2,11 +2,11 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## 0.4.2 source candidate (unreleased)
+## 0.4.3 core-lock policy
 
-The repair candidate retains the existing five audited host cohorts and peer dependency ranges. It does not change the Codex upstream pin, host package identities, or digest-v3 fixtures. The package version is `0.4.2`; no CI, frozen-package, native-platform or publication result is implied by that version field.
+`dsh-core/v1` uses manifest version 2 and four exact 33-package DSH core graphs, retaining the previously audited DSH and Cordis versions. Market is not a core row. Its transitive dependencies remain part of active-graph traversal, so replacing or duplicating a core dependency still blocks certification. No floating DSH version range is introduced.
 
-For old pending requirements, use the new proposal/confirmation flow rather than editing the session log. Old events remain under their recorded capture version. Checkpoint output is paged and byte-bounded; clients must follow each list's cursor or query an ID instead of assuming that `open_items` or `available_evidence` on the first page is exhaustive. `bindings` and the top-level `certified|incomplete|unknown` meanings are unchanged. Generic execution and GUI/visual checks still cannot certify user-level completion. See the [architecture](ARCHITECTURE.md) for the schema and the [acceptance record](LOCAL_ACCEPTANCE.md) for remaining gates.
+The package keeps the same Codex semantic fixtures and digest-v3 encoder. The new manifest/cohort/policy values create a different host identity; an old injected lock requires fresh inspection and injection, and an old certificate stays historical. See [migration](HOST_LOCK_UPGRADE.md). Package version alone does not establish CI, native acceptance or publication.
 
 ## Recorded 0.4.0 release baseline
 
@@ -32,12 +32,12 @@ DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and
 
 ## Upstream adaptation policy
 
-Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumed with DSH `0.1.2-rc.1`; that cohort is included in the published `0.4.1-rc.1` prerelease and retained by the 0.4.2 candidate. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases; a newer tag does not establish support.
+Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumed with DSH `0.1.2-rc.1`; that cohort is included in the published `0.4.1-rc.1` prerelease and retained by the 0.4.2 release. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases; a newer tag does not establish support.
 
 ## Platform and release evidence
 
 - **Source and CI:** the release commit must pass the repository matrix and the Ubuntu, macOS, and Windows Node.js 22/24 CI jobs.
-- **Exact package:** the repository packer emits one deterministic 26-file tgz with its full source commit in `gitHead`. That same SHA-256 must be used on both native platforms and published to npm without repacking.
+- **Exact package:** the repository packer emits one deterministic tgz with the declared package inventory with its full source commit in `gitHead`. That same SHA-256 must be used on both native platforms and published to npm without repacking.
 - **Native scope:** macOS and Windows acceptance separately cover isolated Web and Headless installation, complete host-lock readback, repeated injection, Web restart and recovery, intentional Headless credential failure, daily-profile preservation, and scoped cleanup.
 - **Public identity:** the annotated tag, npm manifest and downloaded tgz, GitHub Release target, checksum, and platform annexes must all resolve to the same release commit and package bytes.
 - **Daily profiles:** upgrading a user's daily DSH profile is a separate action and is not implied by release acceptance.
@@ -50,11 +50,9 @@ Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha
 
 ## Rejection rules
 
-The five exact host sets are recorded in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). Each set is a complete list of required packages and versions. Every row must match one set.
+Current core graphs and original historical cohorts are recorded separately in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). All core rows must match one complete graph. Missing, mixed, duplicate, unknown or integrity-drifted core rows reject certification.
 
-Missing, mixed, duplicate, unidentified, unknown, or integrity-drifted rows leave the Guard unavailable. Unregistered substitutions such as alpha.3 with dshmarket `1.38.1` are rejected as mixed graphs. dshmarket is an authoritative lock input; skin-center is not.
-
-The selected set is part of the host-lock digest. Changing sets invalidates earlier certificates, and a platform is marked supported only after its complete set passes native checks there.
+Market versions do not select a core cohort. Market restart has its own protocol and loaded-instance checks; an unavailable adapter does not disable the core or erase pending restart work. Changing the actual core graph changes its digest and invalidates earlier certificates.
 
 ## Evidence links
 
@@ -72,7 +70,7 @@ The plugin accepts an `activation` configuration value of `opt-in` or `always`. 
 
 Before the Guard can certify work, generate and verify the host lock from the active DSH runtime and profile. Use the packaged `dsh-completion-guard-host-lock inspect|inject|verify-dump` flow in the README. The default patch has no `hostLockPackages`, so the Guard fails closed until this flow succeeds.
 
-Version 0.3 accepts the generated `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile` values. Each critical package row records the exact resolved version and registry tarball integrity. The Guard does not infer a missing identity from a nearby lockfile: missing, duplicate, multi-version, or drifted rows fail closed. The audited identities are defined in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json).
+Version 0.4.3 injects `hostLockPolicy: dsh-core/v1`, the runtime/profile source roots, `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile` together. Replay rechecks those actual graph sources; legacy configuration without the policy and roots reports `host_lock_migration_required`. Each critical package row records the exact resolved version and registry tarball integrity. The Guard does not infer a missing identity from a nearby lockfile: missing, duplicate, multi-version, or drifted rows fail closed. The audited identities are defined in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json).
 
 ### Capability groups
 
@@ -87,9 +85,9 @@ The host lock evaluates these groups independently:
 - Web control; and
 - jobs.
 
-A missing platform- or action-specific group disables only the path that depends on it. For example, a valid terminal or jobs group remains usable when the filesystem group is unavailable.
+Action-specific checks select their required groups only after the complete core graph is valid. An invalid core graph blocks certification; a missing optional market adapter blocks only its dependent operation.
 
-The filesystem group has a narrower contract of its own. It freezes the registered `read`, `write`, and `edit` tools; their closed result and presentation shapes; the local or sandbox `ctx.fs` implementation; the read-before-mutation observation policy; the sandbox policy; and the approval provider. A missing or drifted filesystem row disables `create`, `modify`, and ordinary filesystem facts without disabling unrelated capability groups.
+The filesystem group has a narrower contract of its own. It freezes the registered `read`, `write`, and `edit` tools; their closed result and presentation shapes; the local or sandbox `ctx.fs` implementation; the read-before-mutation observation policy; the sandbox policy; and the approval provider. A missing or drifted filesystem core row keeps the core lock unavailable.
 
 ## Peer dependencies
 
@@ -134,7 +132,9 @@ certifying capability, and has unknown outcome.
 
 ## Verified surfaces
 
-### Current visible behavior
+### Previously verified runtime behavior
+
+These observations belong to the historical native records linked below. Each new core-lock artifact requires fresh native acceptance.
 
 - `dsh --profile web --dump-config` and `--profile headless --dump-config` both include `context-guard`.
 - A real Headless boot loads the plugin: `apply`, `ctx.sessions` access, and listener registration succeed before the run reaches the intentional missing-provider-credentials boundary.
@@ -203,7 +203,7 @@ The action is rejected before executable inspection, command execution, HTTP, or
 ### Package operations
 
 - `install` requires the exact package id, version, and profile, and the package must be absent.
-- `apply` requires the exact package id, version, and profile, plus an existing package with a changed version or integrity.
+- `apply` requires the exact package id, version, and profile, plus an existing package with a changed version or integrity. It executes through the DSH CLI and verifies disk package identity. It does not prove a live process, UI or restart outcome; those requirements remain separate.
 - `publish` requires the exact artifact id, version, and canonical registry. Version 0.3 does not authorize `latest` or a version range.
 
 Publish executes the exact resolved tgz with `--ignore-scripts`. Capture, argv, and standard packument readback use the same canonical HTTPS registry base. Registries containing credentials, a query, fragment, encoded separator, control character, or ambiguous path segment are rejected.
@@ -222,7 +222,9 @@ Create and modify bind to the frozen target and expected transition described be
 
 ### Restart
 
-Restart requires the exact service id. It persists an intent before POST and closes only after the restored process reports a changed boot ID.
+Restart requires an exact service, compatible protocol and a trusted binding from the host to the loaded provider, profile, loopback origin, package identity and process generation. HTTP capability claims and disk manifests alone do not establish that binding. Current DSH provides no production verifier, so the market restart adapter is unavailable even when the core lock is supported.
+
+The version-2 service adapter binds provider and instance digests into its generation string. A persisted intent permits the intended new instance only for the same provider; arbitrary process drift, provider replacement and old version-1 credentials cannot close the action. This pre-execute check is not isolation against a concurrently malicious same-user process. Native direct market restart checks are not evidence that Guard can certify a market restart.
 
 ### Windows command shims
 

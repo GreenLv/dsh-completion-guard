@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import {
   BASE_HOST_PACKAGES,
   EXPECTED_HOST_PACKAGES,
-  HOST_COHORTS,
+  HOST_COHORTS as CORE_HOST_COHORTS,
+  LEGACY_HOST_COHORTS as HOST_COHORTS,
   evaluateHostCapability,
   evaluateHostLock,
   selectHostCohort,
@@ -70,29 +71,29 @@ describe('audited host cohort registry', () => {
   it('selects each audited cohort atomically from its exact package graph', () => {
     const rc2 = selectHostCohort(EXPECTED_HOST_PACKAGES)
     expect(rc2.consistent).toBe(true)
-    expect(rc2.cohort.id).toBe('dsh-0.1.1-rc.2')
+    expect(rc2.cohort.id).toBe('dsh-0.1.1-rc.2-core-v1')
     const alpha2 = selectHostCohort(alpha2Cohort.packages, 'posix')
     expect(alpha2.consistent).toBe(true)
-    expect(alpha2.cohort.id).toBe('dsh-0.1.2-alpha.2')
+    expect(alpha2.cohort.id).toBe('dsh-0.1.2-alpha.2-core-v1')
     const alpha3 = evaluateHostLock(alpha3Cohort.packages, { platform: 'posix', profileKind: 'web' })
-    expect(alpha3).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-alpha.3' })
+    expect(alpha3).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-alpha.3-core-v1' })
     expect(alpha3.capabilities.web_control.status).toBe('supported')
     const rc1 = evaluateHostLock(rc1Cohort.packages, { platform: 'posix', profileKind: 'web' })
-    expect(rc1).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-rc.1' })
+    expect(rc1).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-rc.1-core-v1' })
     expect(rc1.capabilities.web_control.status).toBe('supported')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows never selects consistently.
     const baseOnly = selectHostCohort(EXPECTED_HOST_PACKAGES.filter((row) => BASE_HOST_PACKAGES.has(row.name)))
     expect(baseOnly.consistent).toBe(false)
-    expect(baseOnly.cohort.id).toBe('dsh-0.1.1-rc.2')
+    expect(baseOnly.cohort.id).toBe('dsh-0.1.1-rc.2-core-v1')
     expect(baseOnly.reasonCode).toBe('host_cohort_incomplete_graph')
     const missingMarket = evaluateHostLock(
       EXPECTED_HOST_PACKAGES.filter((row) => row.name !== 'dshmarket'),
       { platform: 'posix', profileKind: 'headless' },
     )
-    expect(missingMarket.status).toBe('unavailable')
-    expect(missingMarket.reasonCode).toBe('host_lock_missing')
-    expect(missingMarket.missingPackages).toEqual(['dshmarket'])
+    expect(missingMarket.status).toBe('supported')
+    expect(missingMarket.reasonCode).toBeUndefined()
+    expect(missingMarket.missingPackages).toEqual([])
   })
 
   it('fails closed on mixed cohort graphs, and the mixture wins over unrelated drift', () => {
@@ -109,7 +110,7 @@ describe('audited host cohort registry', () => {
     // A drifted row on top of a mixture must not hide the mixture.
     const mixedAndDrifted = [
       ...mixed,
-      { ...EXPECTED_HOST_PACKAGES.find((row) => row.name === 'dshmarket')!, integrity: 'sha512-drift' },
+      { name: 'dshmarket', version: '99.0.0', integrity: 'sha512-drift' },
     ]
     expect(selectHostCohort(mixedAndDrifted, 'posix').reasonCode).toBe('host_cohort_mixed_graph')
   })
@@ -118,7 +119,7 @@ describe('audited host cohort registry', () => {
     const windowsAlpha = evaluateHostLock(alpha2Cohort.packages, { platform: 'windows', profileKind: 'web' })
     expect(windowsAlpha.status).toBe('supported')
     expect(windowsAlpha.reasonCode).toBeUndefined()
-    expect(windowsAlpha.cohortId).toBe('dsh-0.1.2-alpha.2')
+    expect(windowsAlpha.cohortId).toBe('dsh-0.1.2-alpha.2-core-v1')
     const selection = selectHostCohort(alpha2Cohort.packages, 'windows')
     expect(selection.consistent).toBe(true)
     expect(selection.reasonCode).toBeUndefined()
@@ -133,46 +134,30 @@ describe('audited host cohort registry', () => {
     })
     expect(evaluateHostLock(RC1_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).toMatchObject({
       status: 'supported',
-      cohortId: 'dsh-0.1.2-rc.1',
+      cohortId: 'dsh-0.1.2-rc.1-core-v1',
     })
     expect(selectHostCohort(RC1_HOST_PACKAGES, 'posix')).toMatchObject({
       consistent: true,
-      cohort: { id: 'dsh-0.1.2-rc.1' },
+      cohort: { id: 'dsh-0.1.2-rc.1-core-v1' },
     })
   })
 
-  it('fails the whole lock closed on single-cohort optional-row drift and duplicates', () => {
-    const driftedMarket = EXPECTED_HOST_PACKAGES.map((row) => row.name === 'dshmarket'
-      ? { ...row, integrity: 'sha512-drift' }
-      : row)
-    const evaluation = evaluateHostLock(driftedMarket, { platform: 'posix', profileKind: 'headless' })
-    // CG-DSH-001: the audited cohort is an atomic whole-graph contract. An
-    // integrity-drifted optional row fails the entire lock closed — it can
-    // never leave the lock `supported` while only closing its own group.
-    expect(evaluation.status).toBe('unsupported')
-    expect(evaluation.reasonCode).toBe('host_lock_integrity_mismatch')
-    expect(evaluation.cohortId).toBe('dsh-0.1.1-rc.2')
-    const driftedBase = EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session'
-      ? { ...row, integrity: 'sha512-drift' }
-      : row)
-    expect(evaluateHostLock(driftedBase).status).toBe('unsupported')
-    expect(evaluateHostLock(driftedBase).reasonCode).toBe('host_lock_integrity_mismatch')
-    // A duplicated optional row is equally uncertifiable: whole-lock failure.
-    const duplicatedOptional = [
-      ...EXPECTED_HOST_PACKAGES,
-      ...EXPECTED_HOST_PACKAGES.filter((row) => row.name === 'dshmarket'),
-    ]
-    const duplicateEvaluation = evaluateHostLock(duplicatedOptional, { platform: 'posix', profileKind: 'headless' })
-    expect(duplicateEvaluation.status).toBe('unavailable')
-    expect(duplicateEvaluation.reasonCode).toBe('host_lock_duplicate_package')
-    // An optional row without a bound identity fails closed as well.
-    const unboundOptional = EXPECTED_HOST_PACKAGES.map((row) => row.name === 'dshmarket'
-      ? { name: row.name }
-      : row)
-    expect(evaluateHostLock(unboundOptional, { platform: 'posix' })).toMatchObject({
-      status: 'unsupported',
-      reasonCode: 'host_lock_cohort_unbound_identity',
-    })
+  it('isolates market drift while core duplicates, missing identities and integrity changes fail closed', () => {
+    const base = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
+    for (const optionalRows of [
+      [{ name: 'dshmarket', version: '99.0.0', integrity: 'sha512-drift' }],
+      [{ name: 'dshmarket' }],
+      [{ name: 'dshmarket' }, { name: 'dshmarket' }],
+    ]) {
+      const current = evaluateHostLock([...EXPECTED_HOST_PACKAGES, ...optionalRows], { platform: 'posix', profileKind: 'headless' })
+      expect(current.status).toBe('supported')
+      expect(current.digest).toBe(base.digest)
+    }
+    const drift = EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session' ? { ...row, integrity: 'sha512-drift' } : row)
+    expect(evaluateHostLock(drift).reasonCode).toBe('host_lock_integrity_mismatch')
+    expect(evaluateHostLock([...EXPECTED_HOST_PACKAGES, EXPECTED_HOST_PACKAGES[0]]).reasonCode).toBe('host_lock_duplicate_package')
+    const unbound = EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session' ? { name: row.name } : row)
+    expect(evaluateHostLock(unbound).status).not.toBe('supported')
   })
 
   it('classifies unknown names, unknown versions, and unbound identities fail-closed', () => {
@@ -213,7 +198,7 @@ describe('audited host cohort registry', () => {
     // The `host_cohort` row and per-cohort supportedGoalVersions feed digest
     // v3, so audited cohorts can never share a hostLockDigest and a
     // certificate frozen under one cohort cannot re-derive under another.
-    expect(new Set([rc2.digest, alpha2.digest, alpha2Market139.digest, alpha3.digest, rc1.digest]).size).toBe(5)
+    expect(new Set([rc2.digest, alpha2.digest, alpha2Market139.digest, alpha3.digest, rc1.digest]).size).toBe(4)
     expect(rc2.digest).toMatch(/^[0-9a-f]{64}$/)
     // The same rows evaluated for a different capability keep the cohort root.
     const rc2Again = evaluateHostLock(EXPECTED_HOST_PACKAGES)
@@ -249,7 +234,7 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     it(`locks supported with working web_control: ${combination.label}`, () => {
       expect(combination.rows.find((row) => row.name === 'dshmarket')?.version).toBe(combination.dshmarket)
       const evaluation = evaluateHostLock(combination.rows, { platform: 'posix', profileKind: 'web' })
-      expect(evaluation).toMatchObject({ status: 'supported', cohortId: combination.cohort })
+      expect(evaluation).toMatchObject({ status: 'supported', cohortId: combination.cohort.split('-dshmarket-')[0] + '-core-v1' })
       expect(evaluation.capabilities.web_control.status).toBe('supported')
       const windows = evaluateHostLock(combination.rows, { platform: 'windows', profileKind: 'web' })
       expect(windows.status).toBe('supported')
@@ -259,7 +244,7 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
 
   it('locks the native macOS rc.1 + dshmarket 1.41.0 graph as supported', () => {
     const evaluation = evaluateHostLock(rc1Cohort.packages, { platform: 'posix', profileKind: 'web' })
-    expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-rc.1' })
+    expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-rc.1-core-v1' })
     expect(evaluation.capabilities.web_control.status).toBe('supported')
     expect(evaluateHostCapability(evaluation, { action: 'apply', platform: 'posix', profileKind: 'web' }).status).toBe('supported')
   })
@@ -274,9 +259,9 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
       : row)
     const selection = selectHostCohort(windowsUpgraded, 'windows')
     expect(selection.consistent).toBe(true)
-    expect(selection.cohort.id).toBe('dsh-0.1.2-alpha.2-dshmarket-1.39.0')
+    expect(selection.cohort.id).toBe('dsh-0.1.2-alpha.2-core-v1')
     const evaluation = evaluateHostLock(windowsUpgraded, { platform: 'windows', profileKind: 'web' })
-    expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-alpha.2-dshmarket-1.39.0' })
+    expect(evaluation).toMatchObject({ status: 'supported', cohortId: 'dsh-0.1.2-alpha.2-core-v1' })
     expect(evaluation.capabilities.web_control.status).toBe('supported')
     expect(evaluateHostCapability(evaluation, { action: 'apply', platform: 'windows', profileKind: 'web' }).status).toBe('supported')
   })
@@ -291,12 +276,12 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     { label: 'rc.1 rows with dshmarket 1.39.0', base: rc1Cohort, market: alpha3Cohort },
   ] as const
   for (const combination of mixedCombinations) {
-    it(`rejects the unregistered mixed graph: ${combination.label}`, () => {
+    it(`keeps the same core across market substitutions: ${combination.label}`, () => {
       const marketRow = combination.market.packages.find((row) => row.name === 'dshmarket')!
       const mixed = combination.base.packages.map((row) => row.name === 'dshmarket' ? marketRow : row)
       const evaluation = evaluateHostLock(mixed, { platform: 'posix', profileKind: 'web' })
-      expect(evaluation.status).toBe('unsupported')
-      expect(evaluation.reasonCode).toBe('host_lock_cohort_mixed_graph')
+      expect(evaluation.status).toBe('supported')
+      expect(evaluation.reasonCode).toBeUndefined()
     })
   }
 
@@ -316,11 +301,23 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     const missing = evaluateHostLock(withoutWebApp, { platform: 'posix', profileKind: 'web' })
     expect(missing.status).toBe('unavailable')
     expect(missing.reasonCode).toBe('host_lock_missing')
-    const drifted = alpha3Cohort.packages.map((row) => row.name === 'dshmarket'
+    const drifted = alpha3Cohort.packages.map((row) => row.name === '@deepseek-ai/dsh-web-app'
       ? { ...row, integrity: 'sha512-drift' }
       : row)
     const driftedEvaluation = evaluateHostLock(drifted, { platform: 'posix', profileKind: 'web' })
     expect(driftedEvaluation.status).toBe('unsupported')
     expect(driftedEvaluation.capabilities.web_control.status).not.toBe('supported')
+  })
+})
+
+ describe('core lock policy identity', () => {
+  it('exports only unique exact DSH cores with an explicit new manifest policy', () => {
+    expect(CORE_HOST_COHORTS).toHaveLength(4)
+    for (const core of CORE_HOST_COHORTS) {
+      expect(core.manifestVersion).toBe(2)
+      expect(core.packages).toHaveLength(33)
+      expect(core.packages.some((row) => row.name === 'dshmarket')).toBe(false)
+      expect(core.capabilities).toContainEqual({ name: 'host_lock_policy', value: { k: 's', v: 'dsh-core/v1' } })
+    }
   })
 })

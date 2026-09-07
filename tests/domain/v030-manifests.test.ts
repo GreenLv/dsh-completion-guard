@@ -76,10 +76,10 @@ describe('v0.3 versioned manifests', () => {
       expect(entry.packages).toEqual(cohort.packages)
     }
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
-      name: 'host_cohort', value: { k: 's', v: 'dsh-0.1.1-rc.2' },
+      name: 'host_cohort', value: { k: 's', v: 'dsh-0.1.1-rc.2-core-v1' },
     })
     expect(HOST_COHORTS[1].capabilities).toContainEqual({
-      name: 'host_cohort', value: { k: 's', v: 'dsh-0.1.2-alpha.2' },
+      name: 'host_cohort', value: { k: 's', v: 'dsh-0.1.2-alpha.2-core-v1' },
     })
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
       name: 'external_wait_jobs_readback', value: { k: 's', v: 'dsh.jobs.v1' },
@@ -133,7 +133,7 @@ describe('v0.3 versioned manifests', () => {
     const withGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES)
     expect(withGoal.status).toBe('supported')
     expect(withGoal.goalAvailable).toBe(true)
-    expect(withGoal.cohortId).toBe('dsh-0.1.1-rc.2')
+    expect(withGoal.cohortId).toBe('dsh-0.1.1-rc.2-core-v1')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows (Goal rows included) fails closed.
     const withoutGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => !['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(row.name)))

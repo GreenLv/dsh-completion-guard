@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import {
   injectActiveProfileHostLock,
+  readActiveHostGraph,
+  evaluateHostLock,
   resolveActiveProfileHostLock,
   verifyComposedHostLockDump,
 } from '../dist/domain/index.js'
@@ -18,6 +20,7 @@ function option(name) {
 function summary(evaluation) {
   return {
     status: evaluation.status,
+    cohort_id: evaluation.cohortId,
     host_lock_digest: evaluation.digest,
     goal_available: evaluation.goalAvailable,
     platform: evaluation.platform,
@@ -30,11 +33,17 @@ function summary(evaluation) {
 
 try {
   const command = process.argv[2]
-  if (!['inspect', 'inject', 'verify-dump'].includes(command)) {
+  if (!['inspect', 'inspect-graph', 'inject', 'verify-dump'].includes(command)) {
     throw new Error('usage: dsh-completion-guard-host-lock <inspect|inject|verify-dump> --runtime-root PATH --profile-root PATH [--dump-config FILE]')
   }
   const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+  if (command === 'inspect-graph') {
+    const rows = readActiveHostGraph(option('--runtime-root'), option('--profile-root'))
+    const evaluation = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix' })
+    process.stdout.write(`${JSON.stringify({ ...summary(evaluation), packages: rows })}\n`)
+    process.exit(evaluation.status === 'supported' ? 0 : 1)
+  }
   const active = resolveActiveProfileHostLock(
     option('--runtime-root'),
     option('--profile-root'),
@@ -42,7 +51,7 @@ try {
   )
   if (command === 'inject') injectActiveProfileHostLock(active)
   if (command === 'verify-dump') {
-    verifyComposedHostLockDump(readFileSync(option('--dump-config'), 'utf8'), active.evaluation)
+    verifyComposedHostLockDump(readFileSync(option('--dump-config') === '-' ? 0 : option('--dump-config'), 'utf8'), active.evaluation, active)
   }
   process.stdout.write(`${JSON.stringify(summary(active.evaluation))}\n`)
 } catch (error) {

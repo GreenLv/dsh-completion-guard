@@ -1,4 +1,4 @@
-import { $ as DEFAULT_HOST_LOCK, $t as SUPPORTED_EVIDENCE_ADAPTERS, A as decideTurnBoundary, At as bindingSatisfies, B as extractTextContent, Bt as extractArtifactPaths, C as createGitPrestateEnvelope, Ct as closingHint, D as revalidateGitPrestate, Dt as evidenceAvailabilityReason, E as parseGitCommandManifest, Et as renderRecoveryPacket, F as CAPTURE_V042_NOTICE, Ft as createProjection, G as isRunExecutable, Gt as canonicalRegistryBase, H as isDeterministicCheck, Ht as extractOperation, I as PROTOCOL_V3_NOTICE, It as rebindResponse, J as goalCompletionDenial, Jt as ACTION_MANIFEST_VERSION, K as parsePwshCommand, Kt as npmEscapedPackageName, L as deriveProjection, Lt as captureClause, M as isWholeTaskCompletionClaim, Mt as evidenceMatchesItem, N as latestAssistantText, Nt as isVerifyingCapability, O as verifiedLinearCommitReadback, Ot as itemDiagnosis, P as observeAssistantOutcome, Pt as currentContractDigest, Q as BASE_HOST_PACKAGES, Qt as STOP_PROTOCOL_VERSION, R as supersedeItem, Rt as captureItem, S as commitTreeSnapshotDigest, St as MIN_RECOVERY_CHAR_BUDGET, T as gitCommandMatchesTarget, Tt as recoveryDigest, U as withDurability, Ut as isInformationalMessage, V as extractToolSubject, Vt as extractMethod, W as canonicalArgvFromCommand, Wt as segmentClauses, X as ALPHA2_DSHMARKET_139_HOST_PACKAGES, Xt as SEMANTIC_ACTIONS, Y as hasCurrentCertificate, Yt as CERTIFICATE_VERSION, Z as ALPHA2_HOST_PACKAGES, Zt as STATEFUL_ACTIONS, _ as resolveInstalledHostLock, _t as effectuateBoundary, a as createProofManifest, an as semanticActionFromText, at as bindLiveGoalCapability, b as GIT_COMMAND_MANIFEST_IDS, bt as certifyCheckpoint, c as sessionQuery, cn as COMMAND_SURFACE_MANIFEST, ct as evaluateHostLock, d as hostLockContextFromComposedDump, dn as digestStrings, dt as RC1_HOST_PACKAGES, en as actionCompatible, et as EXPECTED_HOST_PACKAGES, f as hostLockRowsFromComposedDump, fn as normalizeClause, ft as ALPHA3_HOST_PACKAGES, g as resolveActiveProfileHostLock, gt as availableBoundaryQualifications, h as packageRowsFromPnpmLock, hn as sha256, ht as classifyUserInteraction, i as canonicalProjection, in as semanticActionFromCommand, it as bindExecutableIdentity, j as decideTurnStopping, jt as evidenceCoverage, k as classifyCompletionClaim, kt as relevantEvidence, l as validateProofManifest, ln as validateManifest, lt as evaluateToolSurfaceCapability, m as packageRowsFromActiveGraph, mn as sanitizeUrl, mt as segmentAuthorityBlocks, n as PROOF_PROTOCOL_VERSION, nn as requestedTargetAuthorizesMutation, nt as HOST_CAPABILITY_PACKAGE_GROUPS, o as proofDigest, on as validateActionManifest, ot as evaluateExternalWaitCapability, p as injectActiveProfileHostLock, pn as sanitizeClauseText, pt as authorityCaptureCounts, q as parseShellCommand, qt as ACTION_MANIFEST, r as bindProofToProjection, rn as requestedTargetMatchesResolved, rt as HOST_COHORTS, s as proofEvidenceConstraints, sn as validateActionTarget, st as evaluateHostCapability, t as PROOF_KINDS, tn as isStatefulAction, tt as GOAL_HOST_PACKAGES, u as HostProfileError, un as canonicalizePath, ut as selectHostCohort, v as verifyComposedHostLockDump, vt as isCurrentAcceptedBoundary, w as executeRevalidatedGitEffect, wt as openItems, x as commitIndexSnapshotDigest, xt as DEFAULT_RECOVERY_CHAR_BUDGET, y as snapshotSessionEvents, yt as qualifyBoundary, z as evidenceFromPersistedToolResult, zt as classifyClause } from "./domain-BXB_BPQg.js";
+import { $ as BASE_HOST_PACKAGES, $t as STATEFUL_ACTIONS, A as classifyCompletionClaim, At as itemDiagnosis, B as evidenceFromPersistedToolResult, Bt as captureItem, C as commitTreeSnapshotDigest, Ct as DEFAULT_RECOVERY_CHAR_BUDGET, D as parseGitCommandManifest, Dt as recoveryDigest, E as gitCommandMatchesTarget, Et as openItems, F as observeAssistantOutcome, Ft as isVerifyingCapability, G as canonicalArgvFromCommand, Gt as isInformationalMessage, H as extractToolSubject, Ht as extractArtifactPaths, I as CAPTURE_V042_NOTICE, It as currentContractDigest, J as parseShellCommand, Jt as npmEscapedPackageName, K as isRunExecutable, Kt as segmentClauses, L as PROTOCOL_V3_NOTICE, Lt as createProjection, M as decideTurnStopping, Mt as bindingSatisfies, N as isWholeTaskCompletionClaim, Nt as evidenceCoverage, O as revalidateGitPrestate, Ot as renderRecoveryPacket, P as latestAssistantText, Pt as evidenceMatchesItem, Q as ALPHA2_HOST_PACKAGES, Qt as SEMANTIC_ACTIONS, R as deriveProjection, Rt as rebindResponse, S as commitIndexSnapshotDigest, St as certifyCheckpoint, T as executeRevalidatedGitEffect, Tt as closingHint, U as isDeterministicCheck, Ut as extractMethod, V as extractTextContent, Vt as classifyClause, W as withDurability, Wt as extractOperation, X as hasCurrentCertificate, Xt as ACTION_MANIFEST_VERSION, Y as goalCompletionDenial, Yt as ACTION_MANIFEST, Z as ALPHA2_DSHMARKET_139_HOST_PACKAGES, Zt as CERTIFICATE_VERSION, _ as resolveActiveProfileHostLock, _n as sha256, _t as classifyUserInteraction, a as createProofManifest, an as requestedTargetMatchesResolved, at as LEGACY_HOST_COHORTS, b as snapshotSessionEvents, bt as isCurrentAcceptedBoundary, c as sessionQuery, cn as validateActionManifest, ct as evaluateExternalWaitCapability, d as hostLockContextFromComposedDump, dn as validateManifest, dt as evaluateToolSurfaceCapability, en as STOP_PROTOCOL_VERSION, et as DEFAULT_HOST_LOCK, f as hostLockRowsFromComposedDump, fn as canonicalizePath, ft as selectHostCohort, g as readActiveHostGraph, gn as sanitizeUrl, gt as segmentAuthorityBlocks, h as packageRowsFromPnpmLock, hn as sanitizeClauseText, ht as authorityCaptureCounts, i as canonicalProjection, in as requestedTargetAuthorizesMutation, it as HOST_COHORTS, j as decideTurnBoundary, jt as relevantEvidence, k as verifiedLinearCommitReadback, kt as evidenceAvailabilityReason, l as validateProofManifest, ln as validateActionTarget, lt as evaluateHostCapability, m as packageRowsFromActiveGraph, mn as normalizeClause, mt as ALPHA3_HOST_PACKAGES, n as PROOF_PROTOCOL_VERSION, nn as actionCompatible, nt as GOAL_HOST_PACKAGES, o as proofDigest, on as semanticActionFromCommand, ot as bindExecutableIdentity, p as injectActiveProfileHostLock, pn as digestStrings, pt as RC1_HOST_PACKAGES, q as parsePwshCommand, qt as canonicalRegistryBase, r as bindProofToProjection, rn as isStatefulAction, rt as HOST_CAPABILITY_PACKAGE_GROUPS, s as proofEvidenceConstraints, sn as semanticActionFromText, st as bindLiveGoalCapability, t as PROOF_KINDS, tn as SUPPORTED_EVIDENCE_ADAPTERS, tt as EXPECTED_HOST_PACKAGES, u as HostProfileError, un as COMMAND_SURFACE_MANIFEST, ut as evaluateHostLock, v as resolveInstalledHostLock, vt as availableBoundaryQualifications, w as createGitPrestateEnvelope, wt as MIN_RECOVERY_CHAR_BUDGET, x as GIT_COMMAND_MANIFEST_IDS, xt as qualifyBoundary, y as verifyComposedHostLockDump, yt as effectuateBoundary, z as supersedeItem, zt as captureClause } from "./domain-qd_2cBm8.js";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -900,7 +900,7 @@ function tuple(value) {
 function adapterId(action) {
 	if (["create", "modify"].includes(action)) return "context-guard.artifact.v1";
 	if (["install", "apply"].includes(action)) return "context-guard.package.v1";
-	if (action === "restart") return "context-guard.service.v1";
+	if (action === "restart") return "context-guard.service.v2";
 	if (action === "publish") return "context-guard.registry.v1";
 	return "context-guard.git.v1";
 }
@@ -913,7 +913,7 @@ function unavailable(action, role, reason) {
 		resolved_target: {},
 		observed_state: {},
 		adapter_id: adapterId(action),
-		adapter_version: PRODUCER_VERSION,
+		adapter_version: action === "restart" ? "2.0.0" : PRODUCER_VERSION,
 		target_digest: "",
 		command_manifest_digest: ""
 	};
@@ -927,7 +927,7 @@ function supported(action, role, resolved, observed = {}, commandManifest = {}, 
 		resolved_target: jsonTuple(resolved),
 		observed_state: jsonTuple(observed),
 		adapter_id: adapterId(action),
-		adapter_version: PRODUCER_VERSION,
+		adapter_version: action === "restart" ? "2.0.0" : PRODUCER_VERSION,
 		target_digest: digest(resolved),
 		command_manifest_digest: digest(commandManifest),
 		...gitBinding ? { git_binding: gitBinding } : {},
@@ -972,7 +972,7 @@ function findResolution(events, callId, action) {
 		}
 		if (event.type !== "tool/result") continue;
 		const meta = producerMeta(event);
-		if (meta?.semanticAction !== action || meta.evidenceRole !== "resolution" || meta.adapterVersion !== PRODUCER_VERSION || !selector || !commandManifest) return void 0;
+		if (meta?.semanticAction !== action || meta.evidenceRole !== "resolution" || meta.adapterVersion !== (action === "restart" ? "2.0.0" : PRODUCER_VERSION) || !selector || !commandManifest) return void 0;
 		const target = tuple(meta.resolvedTarget);
 		const rawBinding = record(meta.gitBinding);
 		const rawManifest = record(rawBinding?.manifest);
@@ -1155,13 +1155,13 @@ async function tgzIdentity(path) {
 		integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`
 	};
 }
-const DSHMARKET_VERSION = "1.36.0";
-const DSHMARKET_INTEGRITY = "sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g==";
 const MARKET_SCHEMA = "dsh-market/update-api/v1";
+const MARKET_GENERATION_PREFIX = "dsh-market-instance/v1:";
 async function marketCapabilities(roots, signal) {
-	if (!roots.profile || !roots.marketOrigin) return void 0;
+	if (!roots.profile || !roots.marketOrigin || !roots.verifyMarketInstance) return void 0;
 	const installed = await profilePackage(roots.profile.path, "dshmarket");
-	if (installed?.version !== DSHMARKET_VERSION || installed.integrity !== DSHMARKET_INTEGRITY) return void 0;
+	const binding = await roots.verifyMarketInstance(signal);
+	if (!installed || !binding || binding.origin !== roots.marketOrigin || binding.profile !== roots.profile.name || binding.version !== installed.version || binding.integrity !== installed.integrity || !/^[0-9a-f]{64}$/.test(binding.loadedTreeSha256) || !binding.processIdentity || !binding.bootId) return void 0;
 	const response = await (roots.fetcher ?? fetch)(`${roots.marketOrigin}/dsh-market/api/v1/capabilities`, {
 		signal,
 		headers: { accept: "application/json" },
@@ -1169,8 +1169,32 @@ async function marketCapabilities(roots, signal) {
 	});
 	if (!response.ok) return void 0;
 	const value = record(await response.json());
-	if (value?.schema !== MARKET_SCHEMA || value.apiVersion !== 1 || value.marketVersion !== DSHMARKET_VERSION || value.profile !== roots.profile.name || typeof value.bootId !== "string") return void 0;
-	return value;
+	if (value?.schema !== MARKET_SCHEMA || value.apiVersion !== 1 || value.marketVersion !== binding.version || value.profile !== binding.profile || value.bootId !== binding.bootId) return void 0;
+	const features = record(value.features);
+	const restart = record(value.restart);
+	if (features?.restart !== true || restart?.supported !== true || restart.managedBy !== "market") return void 0;
+	const provider = createHash("sha256").update(JSON.stringify([
+		MARKET_SCHEMA,
+		binding.origin,
+		binding.profile,
+		binding.version,
+		binding.integrity,
+		binding.loadedTreeSha256,
+		"restart",
+		true,
+		"market"
+	])).digest("hex");
+	const instance = createHash("sha256").update(JSON.stringify([binding.processIdentity, binding.bootId])).digest("hex");
+	return {
+		...value,
+		generation: `${MARKET_GENERATION_PREFIX}${provider}:${instance}`
+	};
+}
+function sameMarketProvider(before, after) {
+	const pattern = /^dsh-market-instance\/v1:([0-9a-f]{64}):[0-9a-f]{64}$/;
+	const left = typeof before === "string" ? pattern.exec(before) : null;
+	const right = typeof after === "string" ? pattern.exec(after) : null;
+	return !!left && !!right && left[1] === right[1];
 }
 function importerLocator(text, packageId) {
 	const escaped = packageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1200,6 +1224,7 @@ async function profilePackage(profilePath, packageId) {
 	try {
 		const lock = await readFile(resolve(profilePath, "pnpm-lock.yaml"), "utf8");
 		const locator = importerLocator(lock, packageId);
+		if (packageId === "dshmarket" && (!locator || locator.split("(", 1)[0] !== manifest.version)) return void 0;
 		const integrity = locator ? lockIntegrity(lock, packageId, locator) : void 0;
 		return integrity ? {
 			version: manifest.version,
@@ -1354,7 +1379,8 @@ async function executeGuardAction(action, resolution, roots, signal, executableI
 	if (action === "restart") {
 		const capabilities = await marketCapabilities(roots, signal);
 		if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return "unavailable";
-		if (capabilities.bootId !== target.pre_generation) return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? "completed" : "unavailable";
+		if (!sameMarketProvider(target.pre_generation, capabilities.generation)) return "unavailable";
+		if (capabilities.generation !== target.pre_generation) return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? "completed" : "unavailable";
 		if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return "handoff_pending";
 		if (!roots.persistRestartIntent || !await roots.persistRestartIntent(agent, {
 			resolutionCallId,
@@ -1629,7 +1655,7 @@ async function resolveTarget(action, selector, commandManifest, cwd, roots, sign
 		if (features?.restart !== true || restart?.supported !== true || restart.managedBy !== "market") return void 0;
 		return { target: {
 			service_id: service,
-			pre_generation: String(capabilities?.bootId)
+			pre_generation: String(capabilities?.generation)
 		} };
 	}
 	if (action === "publish") {
@@ -1770,9 +1796,9 @@ async function readback(action, target, roots, signal, executableIdentity$1) {
 	}
 	if (action === "restart") {
 		const capabilities = await marketCapabilities(roots, signal);
-		if (!capabilities || capabilities.bootId === target.pre_generation) return void 0;
+		if (!capabilities || !sameMarketProvider(target.pre_generation, capabilities.generation) || capabilities.generation === target.pre_generation) return void 0;
 		return {
-			new_generation: String(capabilities.bootId),
+			new_generation: String(capabilities.generation),
 			health: "healthy"
 		};
 	}
@@ -1850,6 +1876,7 @@ function normalizedRoots(options) {
 			path: resolve(options.profile.path)
 		} } : detectedProfile ? { profile: detectedProfile } : {},
 		...options.marketOrigin ? { marketOrigin: options.marketOrigin } : {},
+		...options.verifyMarketInstance ? { verifyMarketInstance: options.verifyMarketInstance } : {},
 		...options.fetcher ? { fetcher: options.fetcher } : {},
 		...options.commandRunner ? { commandRunner: options.commandRunner } : {},
 		...options.persistRestartIntent ? { persistRestartIntent: options.persistRestartIntent } : {},
@@ -2258,7 +2285,7 @@ function createEvidenceTool(options = {}) {
 					const executableBinding = executable$1 ? await (roots.readExecutableIdentity ?? executableIdentity)(executable$1, exec.signal) : void 0;
 					if (executable$1 && !executableBinding) return unavailable(action, role, "executable_identity_unavailable");
 					const resolved = await resolveTarget(action, record(args.selector) ?? {}, record(args.command_manifest) ?? {}, cwdOf(agent), roots, exec.signal, executableBinding);
-					if (!resolved) return unavailable(action, role, "resolution_unavailable");
+					if (!resolved) return unavailable(action, role, action === "restart" && !roots.verifyMarketInstance ? "market_instance_binding_unavailable" : "resolution_unavailable");
 					const gitBinding = resolved.gitBinding ? JSON.parse(JSON.stringify(resolved.gitBinding)) : void 0;
 					const commandManifest = record(args.command_manifest) ?? {};
 					const expectedTransition = await expectedTransitionForResolution(action, resolved.target, commandManifest);
@@ -2288,7 +2315,7 @@ function createEvidenceTool(options = {}) {
 				if (ownedEffect) {
 					const events = snapshotSessionEvents(agent.session);
 					const actionCall = actionCallMatches(events, args.effect_call_id, action, args.resolution_call_id, resolution.target);
-					if (!(action === "restart" ? actionCall && restartIntent(events, args.resolution_call_id, resolution.target) && (await marketCapabilities(roots, exec.signal))?.bootId !== resolution.target.pre_generation : actionCall && actionResultCompleted(events, args.effect_call_id))) return unavailable(action, role, "persisted_effect_mismatch");
+					if (!(action === "restart" ? actionCall && restartIntent(events, args.resolution_call_id, resolution.target) && !!await readback("restart", resolution.target, roots, exec.signal) : actionCall && actionResultCompleted(events, args.effect_call_id))) return unavailable(action, role, "persisted_effect_mismatch");
 					if (role === "effect") return supported(action, role, resolution.target, {}, resolution.commandManifest, void 0, currentExecutable);
 				} else {
 					const effect = findEffect(snapshotSessionEvents(agent.session), args.effect_call_id);
@@ -3242,6 +3269,9 @@ const Config = Schema.object({
 	activation: Schema.string().default("opt-in"),
 	hostLockPlatform: Schema.string(),
 	hostLockProfile: Schema.string(),
+	hostLockPolicy: Schema.string(),
+	hostLockRuntimeRoot: Schema.string(),
+	hostLockProfileRoot: Schema.string(),
 	hostLockPackages: Schema.array(Schema.object({
 		name: Schema.string().required(),
 		version: Schema.string(),
@@ -3271,7 +3301,15 @@ function resolveConfig(config) {
 	if (config.hostLockProfile !== void 0 && config.hostLockProfile !== "headless" && config.hostLockProfile !== "web") throw new TypeError("hostLockProfile must be \"headless\" or \"web\"");
 	const hasHostRows = hostLockPackages !== void 0;
 	if (hasHostRows !== (config.hostLockPlatform !== void 0) || hasHostRows !== (config.hostLockProfile !== void 0)) throw new TypeError("hostLockPackages, hostLockPlatform, and hostLockProfile must be injected together");
+	for (const key of [
+		"hostLockPolicy",
+		"hostLockRuntimeRoot",
+		"hostLockProfileRoot"
+	]) if (config[key] !== void 0 && (typeof config[key] !== "string" || !config[key])) throw new TypeError(`${key} must be a non-empty string`);
 	return {
+		...typeof config.hostLockPolicy === "string" ? { hostLockPolicy: config.hostLockPolicy } : {},
+		...typeof config.hostLockRuntimeRoot === "string" ? { hostLockRuntimeRoot: config.hostLockRuntimeRoot } : {},
+		...typeof config.hostLockProfileRoot === "string" ? { hostLockProfileRoot: config.hostLockProfileRoot } : {},
 		activation,
 		...hostLockPackages ? { hostLockPackages } : {},
 		...config.hostLockPlatform ? { hostLockPlatform: config.hostLockPlatform } : {},
@@ -3419,7 +3457,7 @@ function sessionHeaderForDigest(session) {
 		delegationDepth: typeof raw.delegationDepth === "number" ? raw.delegationDepth : 0
 	};
 }
-function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalState) {
+function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalState, refreshHostLock) {
 	const projection = createProjection();
 	const session = agent.session;
 	let pendingRecovery = false;
@@ -3430,6 +3468,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	const continuationAttempts = projection.continuationAttempts;
 	const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts;
 	const rebuild = () => {
+		if (refreshHostLock) hostLock = refreshHostLock();
 		const header = session.header;
 		const priorRecoveryDigest = projection.lastRecoveryDigest;
 		const derived = deriveProjection(snapshotSessionEvents(session), { activation: config.activation }, {
@@ -3491,6 +3530,36 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		consumeRecovery
 	};
 }
+/** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
+function revalidateCoreLock(config, expected) {
+	if (config.hostLockPolicy !== "dsh-core/v1" || !config.hostLockRuntimeRoot || !config.hostLockProfileRoot) return {
+		...expected,
+		status: "unavailable",
+		goalAvailable: false,
+		reasonCode: "host_lock_migration_required"
+	};
+	try {
+		const actual = evaluateHostLock(readActiveHostGraph(config.hostLockRuntimeRoot, config.hostLockProfileRoot), {
+			platform: config.hostLockPlatform,
+			profileKind: config.hostLockProfile
+		});
+		if (actual.status !== "supported") return actual;
+		if (actual.digest !== expected.digest) return {
+			...actual,
+			status: "unsupported",
+			goalAvailable: false,
+			reasonCode: "host_lock_installed_graph_drift"
+		};
+		return actual;
+	} catch {
+		return {
+			...expected,
+			status: "unavailable",
+			goalAvailable: false,
+			reasonCode: "host_lock_missing"
+		};
+	}
+}
 function apply(ctx, rawConfig = {}) {
 	const config = resolveConfig(rawConfig);
 	const installedHostLock = evaluateHostLock(config.hostLockPackages ?? [], {
@@ -3504,8 +3573,13 @@ function apply(ctx, rawConfig = {}) {
 		let runtime = runtimes.get(agent);
 		if (!runtime) {
 			const goals = optionalGoalService(ctx, agent);
-			const agentHostLock = bindLiveGoalCapability(installedHostLock, Boolean(goals) && hasPinnedUpdateGoalTool(agent));
-			runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : void 0);
+			const refreshHostLock = () => {
+				const current = bindLiveGoalCapability(revalidateCoreLock(config, installedHostLock), Boolean(goals) && hasPinnedUpdateGoalTool(agent));
+				hostLocks.set(agent, current);
+				return current;
+			};
+			const agentHostLock = refreshHostLock();
+			runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : void 0, refreshHostLock);
 			runtimes.set(agent, runtime);
 			hostLocks.set(agent, agentHostLock);
 		}
@@ -3741,4 +3815,4 @@ function normalizeGoalState(value) {
 }
 
 //#endregion
-export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, COMMAND_SURFACE_MANIFEST, Config, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, EXPECTED_HOST_PACKAGES, GIT_COMMAND_MANIFEST_IDS, GOAL_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, MIN_RECOVERY_CHAR_BUDGET, PROOF_KINDS, PROOF_PROTOCOL_VERSION, PROTOCOL_V3_NOTICE, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, apply, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindingSatisfies, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, captureClause, captureItem, certifyCheckpoint, classifyClause, classifyCompletionClaim, classifyUserInteraction, closingHint, commitIndexSnapshotDigest, commitTreeSnapshotDigest, createGitPrestateEnvelope, createProjection, createProofManifest, currentContractDigest, decideTurnBoundary, decideTurnStopping, deriveProjection, digestStrings, effectuateBoundary, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateToolSurfaceCapability, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, gitCommandMatchesTarget, goalCompletionDenial, hasCurrentCertificate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, inject, injectActiveProfileHostLock, isCurrentAcceptedBoundary, isDeterministicCheck, isInformationalMessage, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, latestAssistantText, name, normalizeClause, observeAssistantOutcome, openItems, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseGitCommandManifest, parsePwshCommand, parseShellCommand, proofDigest, proofEvidenceConstraints, qualifyBoundary, recoveryDigest, renderRecoveryPacket, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, resolveActiveProfileHostLock, resolveInstalledHostLock, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, sessionQuery, sha256, snapshotSessionEvents, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };
+export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, COMMAND_SURFACE_MANIFEST, Config, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, EXPECTED_HOST_PACKAGES, GIT_COMMAND_MANIFEST_IDS, GOAL_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, LEGACY_HOST_COHORTS, MIN_RECOVERY_CHAR_BUDGET, PROOF_KINDS, PROOF_PROTOCOL_VERSION, PROTOCOL_V3_NOTICE, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, apply, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindingSatisfies, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, captureClause, captureItem, certifyCheckpoint, classifyClause, classifyCompletionClaim, classifyUserInteraction, closingHint, commitIndexSnapshotDigest, commitTreeSnapshotDigest, createGitPrestateEnvelope, createProjection, createProofManifest, currentContractDigest, decideTurnBoundary, decideTurnStopping, deriveProjection, digestStrings, effectuateBoundary, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateToolSurfaceCapability, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, gitCommandMatchesTarget, goalCompletionDenial, hasCurrentCertificate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, inject, injectActiveProfileHostLock, isCurrentAcceptedBoundary, isDeterministicCheck, isInformationalMessage, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, latestAssistantText, name, normalizeClause, observeAssistantOutcome, openItems, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseGitCommandManifest, parsePwshCommand, parseShellCommand, proofDigest, proofEvidenceConstraints, qualifyBoundary, readActiveHostGraph, recoveryDigest, renderRecoveryPacket, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, resolveActiveProfileHostLock, resolveInstalledHostLock, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, sessionQuery, sha256, snapshotSessionEvents, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };

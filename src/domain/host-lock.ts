@@ -130,7 +130,7 @@ export const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[] = ALPHA2_HOST_PACK
  * rows, duplicate rows, or use identities outside every registered cohort
  * fail closed.
  */
-export const HOST_COHORTS: readonly HostCohort[] = [
+export const LEGACY_HOST_COHORTS: readonly HostCohort[] = [
   defineCohort('dsh-0.1.1-rc.2', ['0.1.1-rc.2'], ['posix', 'windows'], [
     { name: '@deepseek-ai/cordis', version: '4.0.1', integrity: 'sha512-YBdskTU2Po1kru3GgcUWUbkTsPMA9LkSQDAY8rBkFJeajdgcQad3QPJZE26JyK99Xb6HaASvoXg2DSUTeN/0Nw==' },
     { name: '@deepseek-ai/dsh-agent', version: '0.1.1-rc.2', integrity: 'sha512-cC7lnJe7JgPFcreNXxcxLMxQd78LnpVO9ZXROjZsGRQN1zGH6i/DduI892F1am85IfzzO+XTxMwwUHmfwamb0g==' },
@@ -173,6 +173,24 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   defineCohort('dsh-0.1.2-rc.1', ['0.1.2-rc.1'], ['posix', 'windows'], RC1_HOST_PACKAGES),
 ]
 
+/** Core-lock/v1 separates optional market identity from the audited DSH graph.
+ * Legacy rows remain available for historical verification; they are never
+ * silently re-labelled as a newly accepted core lock.
+ */
+export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
+  .filter((cohort) => !cohort.id.includes('-dshmarket-'))
+  .map((cohort) => ({
+    ...cohort,
+    id: `${cohort.id}-core-v1`,
+    manifestVersion: 2,
+    packages: cohort.packages.filter((row) => row.name !== 'dshmarket'),
+    capabilities: [
+      { name: 'host_cohort', value: { k: 's' as const, v: `${cohort.id}-core-v1` } },
+      { name: 'host_lock_policy', value: { k: 's' as const, v: 'dsh-core/v1' } },
+      ...AUDITED_CAPABILITY_ROWS,
+    ],
+  }))
+
 /**
  * rc.2 audited package identities (first registry cohort). The audited
  * cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
@@ -213,7 +231,7 @@ export const HOST_CAPABILITY_PACKAGE_GROUPS: Readonly<Record<HostCapabilityId, R
   ),
   dsh_cli: packageNames('@deepseek-ai/dsh'),
   plugin_inventory: packageNames('@deepseek-ai/dsh-host-plugin-inventory'),
-  web_control: packageNames('dshmarket', '@deepseek-ai/dsh-host-webserver', '@deepseek-ai/dsh-web-app'),
+  web_control: packageNames('@deepseek-ai/dsh-host-webserver', '@deepseek-ai/dsh-web-app'),
   // `dsh-jobs` owns the lifecycle/status contract, `dsh-jobs-local` is the
   // process-local provider behind ctx.jobs, and `dsh-tool-jobs` attaches the
   // controller without which the pinned registry refuses job admission.
@@ -250,6 +268,8 @@ export interface HostLockEvaluation {
   digest: string
   goalAvailable: boolean
   reasonCode?:
+    | 'host_lock_migration_required'
+    | 'host_lock_installed_graph_drift'
     | 'host_lock_missing'
     | 'host_lock_version_mismatch'
     | 'host_lock_integrity_mismatch'
@@ -317,6 +337,7 @@ export function selectHostCohort(
   rows: readonly PackageRow[],
   platform?: HostPlatform,
 ): HostCohortSelection {
+  rows = rows.filter((row) => row.name !== 'dshmarket')
   const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)))
   if (rows.some((row) => !registryNames.has(row.name))) {
     return { cohort: HOST_COHORTS[0], consistent: false, reasonCode: 'host_cohort_unknown_package' }
@@ -332,7 +353,12 @@ export function selectHostCohort(
     cohort.packages.some((p) => p.name === row.name && p.version === row.version)))
   const identityMatches = bound.map((row, index) => versionMatches[index].filter((cohort) =>
     cohort.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)))
-  const consistentCohort = HOST_COHORTS.find((cohort) => identityMatches.every((matches) => matches.includes(cohort)))
+  // A complete smaller audited graph must not be shadowed by a superset.
+  // This still requires every supplied identity and every cohort row exactly once.
+  const candidates = HOST_COHORTS.filter((cohort) => identityMatches.every((matches) => matches.includes(cohort)))
+  const completeCandidates = candidates.filter((cohort) => cohort.packages.length === rows.length
+    && cohort.packages.every((expected) => rows.filter((row) => row.name === expected.name).length === 1))
+  const consistentCohort = completeCandidates[0] ?? candidates[0]
   if (consistentCohort !== undefined && unboundCount === 0) {
     if (platform && !consistentCohort.auditedPlatforms.includes(platform)) {
       // The exact graph was audited, but never on this platform; integrity
@@ -430,7 +456,7 @@ function cohortForEvaluation(evaluation: Pick<HostLockEvaluation, 'cohortId'>): 
 }
 
 export function evaluateHostLock(rows: readonly PackageRow[], context: HostLockContext = {}): HostLockEvaluation {
-  const supplied = stableRows(rows)
+  const supplied = stableRows(rows.filter((row) => row.name !== 'dshmarket'))
   const selection = selectHostCohort(supplied, context.platform)
   const cohort = selection.cohort
   const capabilities = capabilityEvaluations(supplied, cohort)
@@ -554,7 +580,7 @@ export function evaluateHostCapability(
   if (request.action === 'create' || request.action === 'modify') groups.push('filesystem')
   if (request.action === 'install' || request.action === 'apply') groups.push('dsh_cli')
   if (request.action === 'apply') groups.push('plugin_inventory')
-  if ((request.action === 'apply' || request.action === 'restart') && profileKind === 'web') groups.push('web_control')
+  if (request.action === 'restart' && profileKind === 'web') groups.push('web_control')
   if (request.action === 'restart' && profileKind !== 'web') {
     return {
       id: 'action.restart',

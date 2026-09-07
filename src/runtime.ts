@@ -42,6 +42,7 @@ import {
 import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type StatefulAction } from './domain/protocol-manifest.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
+import { readActiveHostGraph } from './domain/host-resolver.js'
 import { snapshotSessionEvents } from './domain/session-events.js'
 
 export const name = 'context-guard'
@@ -206,6 +207,7 @@ export function createRuntime(
   config: ResolvedConfig,
   hostLock: HostLockEvaluation = DEFAULT_HOST_LOCK,
   readGoalState?: () => unknown,
+  refreshHostLock?: () => HostLockEvaluation,
 ): GuardRuntime {
   const projection = createProjection()
   const session = agent.session
@@ -218,6 +220,7 @@ export function createRuntime(
   const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts
 
   const rebuild = () => {
+    if (refreshHostLock) hostLock = refreshHostLock()
     const header = session.header as { cwd?: unknown } | undefined
     // The recovery digest is runtime-owned liveness state like the per-turn
     // attempt cap; Object.assign would otherwise flush it with the fresh
@@ -294,11 +297,31 @@ export function createRuntime(
   return { projection, session, sync, setEnabled, setDurability, markRecoveryNeeded, consumeRecovery }
 }
 
+/** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
+export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEvaluation): HostLockEvaluation {
+  if (config.hostLockPolicy !== 'dsh-core/v1' || !config.hostLockRuntimeRoot || !config.hostLockProfileRoot) {
+    return { ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_migration_required' }
+  }
+  try {
+    const actual = evaluateHostLock(readActiveHostGraph(config.hostLockRuntimeRoot, config.hostLockProfileRoot), {
+      platform: config.hostLockPlatform, profileKind: config.hostLockProfile,
+    })
+    if (actual.status !== 'supported') return actual
+    if (actual.digest !== expected.digest) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
+    return actual
+  } catch {
+    return { ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_missing' }
+  }
+}
+
 export function apply(ctx: Context, rawConfig: {
   activation?: unknown
   hostLockPackages?: unknown
   hostLockPlatform?: unknown
   hostLockProfile?: unknown
+  hostLockPolicy?: unknown
+  hostLockRuntimeRoot?: unknown
+  hostLockProfileRoot?: unknown
 } = {}): void {
   const config: ResolvedConfig = resolveConfig(rawConfig)
   // Runtime authority must come from the active profile/package graph, not a
@@ -315,8 +338,13 @@ export function apply(ctx: Context, rawConfig: {
     let runtime = runtimes.get(agent)
     if (!runtime) {
       const goals = optionalGoalService(ctx, agent)
-      const agentHostLock = bindLiveGoalCapability(installedHostLock, Boolean(goals) && hasPinnedUpdateGoalTool(agent))
-      runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined)
+      const refreshHostLock = () => {
+        const current = bindLiveGoalCapability(revalidateCoreLock(config, installedHostLock), Boolean(goals) && hasPinnedUpdateGoalTool(agent))
+        hostLocks.set(agent, current)
+        return current
+      }
+      const agentHostLock = refreshHostLock()
+      runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined, refreshHostLock)
       runtimes.set(agent, runtime)
       hostLocks.set(agent, agentHostLock)
     }

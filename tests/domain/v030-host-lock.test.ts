@@ -1,3 +1,4 @@
+import { revalidateCoreLock } from '../../src/runtime.js'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -121,14 +122,11 @@ describe('v0.3 host graph and live capability binding', () => {
       EXPECTED_HOST_PACKAGES.filter((row) => row.name !== 'dshmarket'),
       { platform: 'posix', profileKind: 'web' },
     )
-    expect(missingMarket.status).toBe('unavailable')
-    expect(missingMarket.reasonCode).toBe('host_lock_missing')
-    expect(missingMarket.missingPackages).toEqual(['dshmarket'])
-    expect(evaluateHostCapability(missingMarket, { action: 'apply' })).toMatchObject({
-      status: 'unavailable',
-      reasonCode: 'host_capability_missing',
-    })
-    expect(evaluateHostCapability(missingMarket, { action: 'commit' }).status).toBe('unavailable')
+    expect(missingMarket.status).toBe('supported')
+    expect(missingMarket.reasonCode).toBeUndefined()
+    expect(missingMarket.missingPackages).toEqual([])
+    expect(evaluateHostCapability(missingMarket, { action: 'apply' }).status).toBe('supported')
+    expect(evaluateHostCapability(missingMarket, { action: 'commit' }).status).toBe('supported')
   })
 
   it('locks the filesystem registration/provider/sandbox chain without poisoning terminal actions', () => {
@@ -343,7 +341,7 @@ describe('active profile graph injection and composed readback', () => {
     expect(once).toContain(`hostLockPlatform: "${expectedPlatform}"`)
     expect(once).toContain('hostLockProfile: "web"')
     expect(once).toContain('@deepseek-ai/dsh-tool-goal')
-    expect(once).toContain('dshmarket')
+    expect(once).not.toContain('dshmarket')
     injectActiveProfileHostLock(active)
     expect(readFileSync(join(fixture.profileRoot, 'cordis.patch.yml'), 'utf8')).toBe(once)
 
@@ -416,5 +414,34 @@ describe('active profile graph injection and composed readback', () => {
     expect(once).toContain('\n- id: context-guard\n')
     injectActiveProfileHostLock(active)
     expect(readFileSync(join(fixture.profileRoot, 'cordis.patch.yml'), 'utf8')).toBe(once)
+  })
+})
+
+
+describe('managed core lock migration and live graph revalidation', () => {
+  it('requires explicit migration and rejects an actual core graph changed after injection', () => {
+    const fixture = makeActiveRoots()
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    expect(revalidateCoreLock({ activation: 'always' }, active.evaluation).reasonCode).toBe('host_lock_migration_required')
+    const config = { activation: 'always' as const, hostLockPolicy: 'dsh-core/v1',
+      hostLockRuntimeRoot: fixture.runtimeRoot, hostLockProfileRoot: fixture.profileRoot,
+      hostLockPlatform: active.platform, hostLockProfile: active.profileKind }
+    expect(revalidateCoreLock(config, active.evaluation).status).toBe('supported')
+    writeFileSync(join(fixture.profileRoot, 'node_modules', 'dshmarket', 'package.json'), JSON.stringify({ name: 'dshmarket', version: '99.0.0' }))
+    expect(revalidateCoreLock(config, active.evaluation).digest).toBe(active.evaluation.digest)
+    const row = Object.values(fixture.packages).find((entry) => entry.url.startsWith('./active'))!
+    writeFileSync(join(fixture.runtimeRoot, 'node_modules', row.url, 'package.json'), JSON.stringify({ name: 'changed-core', version: '99.0.0' }))
+    expect(revalidateCoreLock(config, active.evaluation).status).not.toBe('supported')
+  })
+
+  it('checks composed policy and actual source roots, not just copied package rows', () => {
+    const fixture = makeActiveRoots()
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    injectActiveProfileHostLock(active)
+    const patch = readFileSync(join(fixture.profileRoot, 'cordis.patch.yml'), 'utf8')
+    const managed = patch.slice(patch.indexOf('# >>> BEGIN'))
+    expect(verifyComposedHostLockDump(managed, active.evaluation, active).status).toBe('supported')
+    expect(() => verifyComposedHostLockDump(managed.replace('dsh-core/v1', 'legacy'), active.evaluation, active)).toThrow()
+    expect(() => verifyComposedHostLockDump(managed.replace(fixture.runtimeRoot, join(fixture.runtimeRoot, 'other')), active.evaluation, active)).toThrow()
   })
 })

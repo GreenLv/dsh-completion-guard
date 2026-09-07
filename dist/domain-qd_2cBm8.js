@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import * as path from "node:path";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -235,7 +235,7 @@ const SUPPORTED_EVIDENCE_ADAPTERS = {
 	"context-guard.git.v1": "1.0.0",
 	"context-guard.package.v1": "1.0.0",
 	"context-guard.artifact.v1": "1.0.0",
-	"context-guard.service.v1": "1.0.0",
+	"context-guard.service.v2": "2.0.0",
 	"context-guard.registry.v1": "1.0.0"
 };
 const SEMANTIC_ACTIONS = [
@@ -3787,7 +3787,7 @@ const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row) => row
 * rows, duplicate rows, or use identities outside every registered cohort
 * fail closed.
 */
-const HOST_COHORTS = [
+const LEGACY_HOST_COHORTS = [
 	defineCohort("dsh-0.1.1-rc.2", ["0.1.1-rc.2"], ["posix", "windows"], [
 		{
 			name: "@deepseek-ai/cordis",
@@ -3965,6 +3965,33 @@ const HOST_COHORTS = [
 	defineCohort("dsh-0.1.2-alpha.3", ["0.1.2-alpha.3"], ["posix", "windows"], ALPHA3_HOST_PACKAGES),
 	defineCohort("dsh-0.1.2-rc.1", ["0.1.2-rc.1"], ["posix", "windows"], RC1_HOST_PACKAGES)
 ];
+/** Core-lock/v1 separates optional market identity from the audited DSH graph.
+* Legacy rows remain available for historical verification; they are never
+* silently re-labelled as a newly accepted core lock.
+*/
+const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => !cohort.id.includes("-dshmarket-")).map((cohort) => ({
+	...cohort,
+	id: `${cohort.id}-core-v1`,
+	manifestVersion: 2,
+	packages: cohort.packages.filter((row) => row.name !== "dshmarket"),
+	capabilities: [
+		{
+			name: "host_cohort",
+			value: {
+				k: "s",
+				v: `${cohort.id}-core-v1`
+			}
+		},
+		{
+			name: "host_lock_policy",
+			value: {
+				k: "s",
+				v: "dsh-core/v1"
+			}
+		},
+		...AUDITED_CAPABILITY_ROWS
+	]
+}));
 /**
 * rc.2 audited package identities (first registry cohort). The audited
 * cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
@@ -3982,7 +4009,7 @@ const HOST_CAPABILITY_PACKAGE_GROUPS = {
 	terminal_windows: packageNames("@deepseek-ai/dsh-tool-pwsh", "@deepseek-ai/dsh-shell", "@deepseek-ai/dsh-subprocess-local", "@deepseek-ai/dsh-pwsh-sandbox", "@deepseek-ai/dsh-shell-env"),
 	dsh_cli: packageNames("@deepseek-ai/dsh"),
 	plugin_inventory: packageNames("@deepseek-ai/dsh-host-plugin-inventory"),
-	web_control: packageNames("dshmarket", "@deepseek-ai/dsh-host-webserver", "@deepseek-ai/dsh-web-app"),
+	web_control: packageNames("@deepseek-ai/dsh-host-webserver", "@deepseek-ai/dsh-web-app"),
 	jobs: packageNames("@deepseek-ai/dsh-jobs", "@deepseek-ai/dsh-jobs-local", "@deepseek-ai/dsh-tool-jobs"),
 	filesystem: packageNames("@deepseek-ai/dsh-tool-fs", "@deepseek-ai/dsh-fs", "@deepseek-ai/dsh-fs-local", "@deepseek-ai/dsh-fs-sandbox", "@deepseek-ai/dsh-fs-observation-policy", "@deepseek-ai/dsh-sandbox", "@deepseek-ai/dsh-sandbox-policy", "@deepseek-ai/dsh-user-approval", "@deepseek-ai/dsh-attachment", "@deepseek-ai/dsh-system-prompt")
 };
@@ -3996,6 +4023,7 @@ const HOST_CAPABILITY_PACKAGE_GROUPS = {
 * consistently.
 */
 function selectHostCohort(rows, platform) {
+	rows = rows.filter((row) => row.name !== "dshmarket");
 	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)));
 	if (rows.some((row) => !registryNames.has(row.name))) return {
 		cohort: HOST_COHORTS[0],
@@ -4011,7 +4039,8 @@ function selectHostCohort(rows, platform) {
 	const unboundCount = rows.length - bound.length;
 	const versionMatches = bound.map((row) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version)));
 	const identityMatches = bound.map((row, index) => versionMatches[index].filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)));
-	const consistentCohort = HOST_COHORTS.find((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
+	const candidates = HOST_COHORTS.filter((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
+	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row) => row.name === expected.name).length === 1))[0] ?? candidates[0];
 	if (consistentCohort !== void 0 && unboundCount === 0) {
 		if (platform && !consistentCohort.auditedPlatforms.includes(platform)) return {
 			cohort: consistentCohort,
@@ -4115,7 +4144,7 @@ function cohortForEvaluation(evaluation) {
 	return HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
 }
 function evaluateHostLock(rows, context = {}) {
-	const supplied = stableRows(rows);
+	const supplied = stableRows(rows.filter((row) => row.name !== "dshmarket"));
 	const selection = selectHostCohort(supplied, context.platform);
 	const cohort = selection.cohort;
 	const capabilities = capabilityEvaluations(supplied, cohort);
@@ -4247,7 +4276,7 @@ function evaluateHostCapability(evaluation, request) {
 	if (request.action === "create" || request.action === "modify") groups.push("filesystem");
 	if (request.action === "install" || request.action === "apply") groups.push("dsh_cli");
 	if (request.action === "apply") groups.push("plugin_inventory");
-	if ((request.action === "apply" || request.action === "restart") && profileKind === "web") groups.push("web_control");
+	if (request.action === "restart" && profileKind === "web") groups.push("web_control");
 	if (request.action === "restart" && profileKind !== "web") return {
 		id: "action.restart",
 		status: "unavailable",
@@ -6545,6 +6574,21 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 	}
 	return rows;
 }
+/** Read exact reachable critical rows without requiring Guard installation.
+* Used by target preflight before a legacy profile can be migrated.
+*/
+function readActiveHostGraph(runtimeRoot, profileRoot) {
+	const runtime = resolve(runtimeRoot);
+	const profile = resolve(profileRoot);
+	const mapPath = join(runtime, "node_modules", ".package-map.json");
+	const lockPath = join(runtime, "pnpm-lock.yaml");
+	const profileMapPath = join(profile, "node_modules", ".package-map.json");
+	const profileLockPath = join(profile, "pnpm-lock.yaml");
+	const runtimeRows = packageRowsFromActiveGraph(readFileSync(mapPath, "utf8"), readFileSync(lockPath, "utf8"), join(runtime, "node_modules"));
+	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
+	const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`));
+	return [...runtimeRows, ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`))];
+}
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
 function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion) {
 	const runtime = resolve(runtimeRoot);
@@ -6563,8 +6607,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 		profileManifestPath,
 		pluginManifestPath
 	]) if (!existsSync(path$1)) throw new HostProfileError("active_graph_missing", `required active graph file is missing: ${path$1}`);
-	const runtimeRows = packageRowsFromActiveGraph(readFileSync(mapPath, "utf8"), readFileSync(lockPath, "utf8"), join(runtime, "node_modules"));
-	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
+	const rows = readActiveHostGraph(runtime, profile);
 	const profileManifest = readJsonObject(profileManifestPath, "profile_manifest_invalid");
 	const installedPlugin = readJsonObject(pluginManifestPath, "installed_plugin_invalid");
 	const dependencies = profileManifest.dependencies;
@@ -6574,8 +6617,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 	if (installedPlugin.name !== "dsh-completion-guard" || installedPlugin.version !== expectedPluginVersion) throw new HostProfileError("profile_plugin_version_mismatch", "installed profile plugin identity does not match the generator version");
 	const profileKind = bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("dshmarket") ? "web" : "headless";
 	const platform = process.platform === "win32" ? "windows" : "posix";
-	const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`));
-	const evaluation = evaluateHostLock([...runtimeRows, ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`))], {
+	const evaluation = evaluateHostLock(rows, {
 		platform,
 		profileKind
 	});
@@ -6599,13 +6641,16 @@ function readJsonObject(path$1, code) {
 function yamlQuote(value) {
 	return JSON.stringify(value);
 }
-function renderManagedPatch(rows, platform, profileKind, activation) {
+function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot, profileRoot) {
 	const lines = [
 		HOST_LOCK_MARKER_BEGIN,
 		"- id: context-guard",
 		"  name: dsh-completion-guard",
 		"  config:"
 	];
+	lines.push("    hostLockPolicy: \"dsh-core/v1\"");
+	if (runtimeRoot) lines.push(`    hostLockRuntimeRoot: ${yamlQuote(runtimeRoot)}`);
+	if (profileRoot) lines.push(`    hostLockProfileRoot: ${yamlQuote(profileRoot)}`);
 	if (activation) lines.push(`    activation: ${yamlQuote(activation)}`);
 	lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`);
 	lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`);
@@ -6667,7 +6712,7 @@ function injectActiveProfileHostLock(input) {
 	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
-	const managed = renderManagedPatch(input.evaluation.packages.filter((row) => row.version && row.integrity), input.platform, input.profileKind, activation);
+	const managed = renderManagedPatch(input.evaluation.packages.filter((row) => row.version && row.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
 	writeFileSync(temporary, next, {
@@ -6699,7 +6744,8 @@ function parseYamlField(entry, index, value) {
 	].includes(indicator)) return parseYamlScalar(value);
 	const parts = [];
 	for (let cursor = index + 1; cursor < entry.length; cursor += 1) {
-		const blockLine = entry[cursor].match(/^\s{10}(.*)$/);
+		const indentation = (entry[index].match(/^\s*/)?.[0].length ?? 8) + 2;
+		const blockLine = entry[cursor].match(/* @__PURE__ */ new RegExp(`^\\s{${indentation}}(.*)$`));
 		if (!blockLine) break;
 		parts.push(blockLine[1]);
 	}
@@ -6759,7 +6805,24 @@ function hostLockContextFromComposedDump(text) {
 		...profileKind === "headless" || profileKind === "web" ? { profileKind } : {}
 	};
 }
-function verifyComposedHostLockDump(text, expected) {
+function verifyComposedHostLockDump(text, expected, roots) {
+	const lines = text.split(/\r?\n/);
+	const start = lines.findIndex((line) => /^- id:\s*["']?context-guard["']?\s*$/.test(line));
+	const tail = lines.slice(start + 1);
+	const end = tail.findIndex((line) => line.startsWith("- "));
+	const entry = end < 0 ? tail : tail.slice(0, end);
+	const settings = {};
+	for (const key of [
+		"hostLockPolicy",
+		"hostLockRuntimeRoot",
+		"hostLockProfileRoot"
+	]) {
+		const matches = entry.flatMap((line, index$1) => line.startsWith(`    ${key}:`) ? [index$1] : []);
+		if (matches.length !== 1) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
+		const index = matches[0];
+		settings[key] = parseYamlField(entry, index, entry[index].slice(entry[index].indexOf(":") + 1));
+	}
+	if (settings.hostLockPolicy !== "dsh-core/v1" || !isAbsolute(settings.hostLockRuntimeRoot) || !isAbsolute(settings.hostLockProfileRoot) || roots && (resolve(settings.hostLockRuntimeRoot) !== resolve(roots.runtimeRoot) || resolve(settings.hostLockProfileRoot) !== resolve(roots.profileRoot))) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
 	const context = hostLockContextFromComposedDump(text);
 	const actual = evaluateHostLock(hostLockRowsFromComposedDump(text), context);
 	if (actual.status !== "supported" || actual.digest !== expected.digest) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
@@ -6977,4 +7040,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { DEFAULT_HOST_LOCK as $, SUPPORTED_EVIDENCE_ADAPTERS as $t, decideTurnBoundary as A, bindingSatisfies as At, extractTextContent as B, extractArtifactPaths as Bt, createGitPrestateEnvelope as C, closingHint as Ct, revalidateGitPrestate as D, evidenceAvailabilityReason as Dt, parseGitCommandManifest as E, renderRecoveryPacket as Et, CAPTURE_V042_NOTICE as F, createProjection as Ft, isRunExecutable as G, canonicalRegistryBase as Gt, isDeterministicCheck as H, extractOperation as Ht, PROTOCOL_V3_NOTICE as I, rebindResponse as It, goalCompletionDenial as J, ACTION_MANIFEST_VERSION as Jt, parsePwshCommand as K, npmEscapedPackageName as Kt, deriveProjection as L, captureClause as Lt, isWholeTaskCompletionClaim as M, evidenceMatchesItem as Mt, latestAssistantText as N, isVerifyingCapability as Nt, verifiedLinearCommitReadback as O, itemDiagnosis as Ot, observeAssistantOutcome as P, currentContractDigest as Pt, BASE_HOST_PACKAGES as Q, STOP_PROTOCOL_VERSION as Qt, supersedeItem as R, captureItem as Rt, commitTreeSnapshotDigest as S, MIN_RECOVERY_CHAR_BUDGET as St, gitCommandMatchesTarget as T, recoveryDigest as Tt, withDurability as U, isInformationalMessage as Ut, extractToolSubject as V, extractMethod as Vt, canonicalArgvFromCommand as W, segmentClauses as Wt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as X, SEMANTIC_ACTIONS as Xt, hasCurrentCertificate as Y, CERTIFICATE_VERSION as Yt, ALPHA2_HOST_PACKAGES as Z, STATEFUL_ACTIONS as Zt, resolveInstalledHostLock as _, effectuateBoundary as _t, createProofManifest as a, semanticActionFromText as an, bindLiveGoalCapability as at, GIT_COMMAND_MANIFEST_IDS as b, certifyCheckpoint as bt, sessionQuery as c, COMMAND_SURFACE_MANIFEST as cn, evaluateHostLock as ct, hostLockContextFromComposedDump as d, digestStrings as dn, RC1_HOST_PACKAGES as dt, actionCompatible as en, EXPECTED_HOST_PACKAGES as et, hostLockRowsFromComposedDump as f, normalizeClause as fn, ALPHA3_HOST_PACKAGES as ft, resolveActiveProfileHostLock as g, availableBoundaryQualifications as gt, packageRowsFromPnpmLock as h, sha256 as hn, classifyUserInteraction as ht, canonicalProjection as i, semanticActionFromCommand as in, bindExecutableIdentity as it, decideTurnStopping as j, evidenceCoverage as jt, classifyCompletionClaim as k, relevantEvidence as kt, validateProofManifest as l, validateManifest as ln, evaluateToolSurfaceCapability as lt, packageRowsFromActiveGraph as m, sanitizeUrl as mn, segmentAuthorityBlocks as mt, PROOF_PROTOCOL_VERSION as n, requestedTargetAuthorizesMutation as nn, HOST_CAPABILITY_PACKAGE_GROUPS as nt, proofDigest as o, validateActionManifest as on, evaluateExternalWaitCapability as ot, injectActiveProfileHostLock as p, sanitizeClauseText as pn, authorityCaptureCounts as pt, parseShellCommand as q, ACTION_MANIFEST as qt, bindProofToProjection as r, requestedTargetMatchesResolved as rn, HOST_COHORTS as rt, proofEvidenceConstraints as s, validateActionTarget as sn, evaluateHostCapability as st, PROOF_KINDS as t, isStatefulAction as tn, GOAL_HOST_PACKAGES as tt, HostProfileError as u, canonicalizePath as un, selectHostCohort as ut, verifyComposedHostLockDump as v, isCurrentAcceptedBoundary as vt, executeRevalidatedGitEffect as w, openItems$1 as wt, commitIndexSnapshotDigest as x, DEFAULT_RECOVERY_CHAR_BUDGET as xt, snapshotSessionEvents as y, qualifyBoundary as yt, evidenceFromPersistedToolResult as z, classifyClause as zt };
+export { BASE_HOST_PACKAGES as $, STATEFUL_ACTIONS as $t, classifyCompletionClaim as A, itemDiagnosis as At, evidenceFromPersistedToolResult as B, captureItem as Bt, commitTreeSnapshotDigest as C, DEFAULT_RECOVERY_CHAR_BUDGET as Ct, parseGitCommandManifest as D, recoveryDigest as Dt, gitCommandMatchesTarget as E, openItems$1 as Et, observeAssistantOutcome as F, isVerifyingCapability as Ft, canonicalArgvFromCommand as G, isInformationalMessage as Gt, extractToolSubject as H, extractArtifactPaths as Ht, CAPTURE_V042_NOTICE as I, currentContractDigest as It, parseShellCommand as J, npmEscapedPackageName as Jt, isRunExecutable as K, segmentClauses as Kt, PROTOCOL_V3_NOTICE as L, createProjection as Lt, decideTurnStopping as M, bindingSatisfies as Mt, isWholeTaskCompletionClaim as N, evidenceCoverage as Nt, revalidateGitPrestate as O, renderRecoveryPacket as Ot, latestAssistantText as P, evidenceMatchesItem as Pt, ALPHA2_HOST_PACKAGES as Q, SEMANTIC_ACTIONS as Qt, deriveProjection as R, rebindResponse as Rt, commitIndexSnapshotDigest as S, certifyCheckpoint as St, executeRevalidatedGitEffect as T, closingHint as Tt, isDeterministicCheck as U, extractMethod as Ut, extractTextContent as V, classifyClause as Vt, withDurability as W, extractOperation as Wt, hasCurrentCertificate as X, ACTION_MANIFEST_VERSION as Xt, goalCompletionDenial as Y, ACTION_MANIFEST as Yt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Z, CERTIFICATE_VERSION as Zt, resolveActiveProfileHostLock as _, sha256 as _n, classifyUserInteraction as _t, createProofManifest as a, requestedTargetMatchesResolved as an, LEGACY_HOST_COHORTS as at, snapshotSessionEvents as b, isCurrentAcceptedBoundary as bt, sessionQuery as c, validateActionManifest as cn, evaluateExternalWaitCapability as ct, hostLockContextFromComposedDump as d, validateManifest as dn, evaluateToolSurfaceCapability as dt, STOP_PROTOCOL_VERSION as en, DEFAULT_HOST_LOCK as et, hostLockRowsFromComposedDump as f, canonicalizePath as fn, selectHostCohort as ft, readActiveHostGraph as g, sanitizeUrl as gn, segmentAuthorityBlocks as gt, packageRowsFromPnpmLock as h, sanitizeClauseText as hn, authorityCaptureCounts as ht, canonicalProjection as i, requestedTargetAuthorizesMutation as in, HOST_COHORTS as it, decideTurnBoundary as j, relevantEvidence as jt, verifiedLinearCommitReadback as k, evidenceAvailabilityReason as kt, validateProofManifest as l, validateActionTarget as ln, evaluateHostCapability as lt, packageRowsFromActiveGraph as m, normalizeClause as mn, ALPHA3_HOST_PACKAGES as mt, PROOF_PROTOCOL_VERSION as n, actionCompatible as nn, GOAL_HOST_PACKAGES as nt, proofDigest as o, semanticActionFromCommand as on, bindExecutableIdentity as ot, injectActiveProfileHostLock as p, digestStrings as pn, RC1_HOST_PACKAGES as pt, parsePwshCommand as q, canonicalRegistryBase as qt, bindProofToProjection as r, isStatefulAction as rn, HOST_CAPABILITY_PACKAGE_GROUPS as rt, proofEvidenceConstraints as s, semanticActionFromText as sn, bindLiveGoalCapability as st, PROOF_KINDS as t, SUPPORTED_EVIDENCE_ADAPTERS as tn, EXPECTED_HOST_PACKAGES as tt, HostProfileError as u, COMMAND_SURFACE_MANIFEST as un, evaluateHostLock as ut, resolveInstalledHostLock as v, availableBoundaryQualifications as vt, createGitPrestateEnvelope as w, MIN_RECOVERY_CHAR_BUDGET as wt, GIT_COMMAND_MANIFEST_IDS as x, qualifyBoundary as xt, verifyComposedHostLockDump as y, effectuateBoundary as yt, supersedeItem as z, captureClause as zt };

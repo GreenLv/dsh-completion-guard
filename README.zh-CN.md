@@ -8,10 +8,12 @@
 
 ## 快速开始
 
-将已发布插件安装到 DSH 的 Web 运行环境：
+以下步骤适用于 0.4.3。该版本发布前，请用已验收候选包的路径替换下面的包名；已发布的 0.4.2 不支持新的核心锁流程。
+
+将插件安装到 DSH 的 Web 运行环境：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.4.0
+dsh plugin --profile web add dsh-completion-guard
 ```
 
 重启 DSH 前，先记录并验证 DSH 程序目录和 Web 配置目录。请把示例路径替换为本机绝对路径：
@@ -19,16 +21,14 @@ dsh plugin --profile web add dsh-completion-guard@0.4.0
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
 DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
-DSH_COMPOSED_DUMP=/tmp/dsh-web-composed.yml
 GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-lock"
 
 "$GUARD_HOST_LOCK" inspect --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
 "$GUARD_HOST_LOCK" inject --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
-dsh --profile web --dump-config > "$DSH_COMPOSED_DUMP"
-"$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config "$DSH_COMPOSED_DUMP"
+dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。DSH、Web/Headless 配置或包升级后需要重新检查。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -49,21 +49,15 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-仓库记录的 0.4.0 发布基线可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
+0.4.3 将 DSH 核心依赖与可选的 dshmarket 分开检查。market 的普通升级不再要求 Guard 发版或重新注入核心锁；如果它改变了实际解析到的核心依赖，Guard 仍会拒绝认证。Headless 不需要安装 market。
 
-源码当前目标是 **0.4.2（未发布）**，新增有界 checkpoint 查询和用户确认后的要求重绑定。上方安装命令仍指向已记录的发布版本，不包含这些候选变更。验收绑定每一份冻结包，早期候选的结果不能覆盖后续文档或包变更。详见[更新记录](CHANGELOG.zh-CN.md)和[验收范围](docs/LOCAL_ACCEPTANCE.md)。
+重启属于单独能力。当前 DSH 没有提供可独立验证的 market 已加载实例绑定，因此 Guard 的 market 重启适配器返回不可用；已有重启要求仍保持未完成。核心保护和不依赖该接口的操作继续工作。磁盘上的插件安装/应用不等于运行进程或 UI 已生效。
 
-版本 `0.4.1-rc.1` 是已发布到 `next` 通道、面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0` 的预发布版本。其宿主队列已在原生 macOS/posix 上审计，并核对过原生 Windows rc.1 运行时的宿主图谱；宿主图谱审计不能替代同一冻结包的跨平台 exact-artifact acceptance。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+升级到新核心锁时，需要从实际运行时与 profile 重新生成并验证锁；旧证书不会被重新标记为新锁证据。详见[升级说明](docs/HOST_LOCK_UPGRADE.md)和[兼容性](docs/COMPATIBILITY.md)。
 
-0.3.2 继续支持已经检查过的 DSH `0.1.1-rc.2` 和 `0.1.2-alpha.2` 环境。不要混用不同环境的包；只有当前包集合完整匹配 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 中的一套记录时，Guard 才会启用。
+从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 选择已发布版本，并用 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/latest) 的提交、校验和和原生 annex 核对制品。0.4.2 的历史发布面向 rc.1 与 market 1.41；它不包含上述解耦。源码版本号、CI、同包原生验收和公开发布是不同状态，验收范围见[记录](docs/LOCAL_ACCEPTANCE.md)。
 
-0.4.0 的兼容基线继续冻结在这套 alpha.3 环境。alpha.4 及此后的 alpha 版本已跳过。RC 适配已随 DSH `0.1.2-rc.1` 恢复，由 `0.4.1-rc.1` 预发布版支持，并保留在 0.4.2 候选中。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。
-
-发布包只从干净提交生成一次；同一份包在 macOS 和 Windows 上完成 Web、Headless 原生检查后才会发布。CI、原生生命周期、包发布和公开读回是四类独立证据，详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
-
-不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。旧版已检查 DSH 环境可使用 0.3.2；其他环境请按兼容性指南选择对应版本。
-
-> 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，因为另一个无关插件已经使用旧名称。内部 bundle id 仍为 `context-guard`，旧 npm 包会引导用户使用本包。支持的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)；需要 Node.js `>=22` 和 pnpm `>=11`。
+项目在 2026-08-29 从 `dsh-context-guard` 更名为 `dsh-completion-guard`，内部 bundle id 仍为 `context-guard`。迁移保留会话、激活方式和禁用设置；不要在同一 profile 同时加载新旧包。需要 Node.js `>=22` 和 pnpm `>=11`。
 
 ## 启用模式
 
@@ -106,7 +100,7 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 
 只读证据收集与修改包、文件、服务或 Git 状态的操作使用不同工具。查询成功不会自动产生变更权限。精确命令限制和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
-### 要求一直未完成时（0.4.2 候选）
+### 要求一直未完成时
 
 “更新插件并检查 GUI”可能包含 Guard 尚不能认证的部分。checkpoint 会逐项说明原因和下一步。`generic_run_non_certifiable` 表示普通命令成功不能关闭该项，反复换绑定或再跑一条命令也无效。
 

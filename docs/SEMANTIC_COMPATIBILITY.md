@@ -126,9 +126,11 @@ DSH needs a deliberate follow-up, not a line-for-line port. The highest-value sh
 
 Work-unit scope and correction attribution are also shared semantic gaps and should gain portable regression cases before implementation. Stop-disposition handling is partly equivalent already, so it should be compared with the 0.11.0 cases before code is changed. Codex cache repair, Hook trust, and plugin installation remain Codex-only. Incident-corpus tooling may remain owned by Codex, while reviewed platform-neutral cases continue to be mirrored here.
 
-## 0.4.2 candidate boundary
+## 0.4.2 and 0.4.3 product boundaries
 
-The 0.4.2 candidate retains these exact mirrored fixtures and the recorded upstream pin. Its DSH-native rebinding, bounded checkpoint output, and recovery changes do not establish parity with later Codex releases. `upstream-deltas.json` is the dated 2026-09-03 comparison snapshot: its `currentRelease` fields name the releases compared then, not a live latest-version lookup. Refreshing that comparison requires a separate upstream audit; it does not happen merely because either product releases a newer version.
+The 0.4.2 release retained these exact mirrored fixtures and the recorded upstream pin. Its DSH-native rebinding, bounded checkpoint output, and recovery changes do not establish parity with later Codex releases. `upstream-deltas.json` is the dated 2026-09-03 comparison snapshot: its `currentRelease` fields name the releases compared then, not a live latest-version lookup. Refreshing that comparison requires a separate upstream audit; it does not happen merely because either product releases a newer version.
+
+The 0.4.3 core policy changes DSH-specific manifest values, not the shared digest-v3 encoding or byte-mirrored fixtures. Core manifest version 2 and `dsh-core/v1` produce a fresh identity after actual-graph inspection. Legacy cohorts remain historical inputs. Market service adapter `context-guard.service.v2` uses version `2.0.0`; old restart credentials cannot become new-instance credentials. Package apply remains a disk-state operation, and unavailable restart work remains pending.
 
 ## Validation boundaries
 

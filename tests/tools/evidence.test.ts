@@ -747,7 +747,7 @@ describe('trusted stateful evidence producer', () => {
     expect({ probes, commands, http, intents }).toEqual({ probes: 0, commands: 0, http: 0, intents: 0 })
   })
 
-  it('uses the pinned dshmarket capability, same-origin restart POST, and changed bootId readback', async () => {
+  it('uses a verified market instance, same-origin restart POST, and intent-bound new instance readback', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-cg-restart-'))
     const profile = join(root, 'web')
     await mkdir(profile, { recursive: true })
@@ -758,6 +758,9 @@ describe('trusted stateful evidence producer', () => {
       let session!: Session
       const roots: EvidenceToolRoots = {
         profile: { name: 'web', path: profile }, marketOrigin: origin,
+        verifyMarketInstance: async () => ({ origin, profile: 'web', version: '1.36.0',
+          integrity: 'sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g==',
+          loadedTreeSha256: 'a'.repeat(64), processIdentity: bootId, bootId }),
         persistRestartIntent: async (agent, intent) => {
           ;(agent.session as unknown as Session).append('user/message', createUserMessage({
             content: [{ type: 'text', text: `${RESTART_INTENT_PREFIX}${JSON.stringify({ resolution_call_id: intent.resolutionCallId, service_id: intent.serviceId, pre_generation: intent.preGeneration })}` }],
@@ -781,6 +784,14 @@ describe('trusted stateful evidence producer', () => {
       enable(session)
       user(session, 'Restart service dsh-web.')
       await runProducer(session, 'restart-resolution', { semantic_action: 'restart', evidence_role: 'resolution', selector: { service_id: 'dsh-web' }, command_manifest: { manifest_id: 'dshmarket.restart.v1' } }, roots)
+      const drift = await runAction(session, 'restart-provider-drift', { semantic_action: 'restart', resolution_call_id: 'restart-resolution' }, {
+        ...roots, verifyMarketInstance: async (signal) => {
+          const binding = await roots.verifyMarketInstance!(signal)
+          return binding ? { ...binding, loadedTreeSha256: 'b'.repeat(64) } : undefined
+        },
+      })
+      expect(drift.status).toBe('unavailable')
+      expect(bootId).toBe('boot-before')
       const handoff = await runAction(session, 'restart-action', { semantic_action: 'restart', resolution_call_id: 'restart-resolution' }, roots)
       expect(handoff.status).toBe('handoff_pending')
       const killedBeforeResult = structuredClone(session.events).filter((event) => {
@@ -792,6 +803,37 @@ describe('trusted stateful evidence producer', () => {
       await runProducer(restored, 'restart-effect', { semantic_action: 'restart', evidence_role: 'effect', resolution_call_id: 'restart-resolution', effect_call_id: 'restart-action' }, roots)
       await runProducer(restored, 'restart-state', { semantic_action: 'restart', evidence_role: 'state', resolution_call_id: 'restart-resolution', effect_call_id: 'restart-action' }, roots)
       expect(certifyStateful(restored, 'restart').status).toBe('certified')
+    }
+  })
+
+  it('keeps current and future-version protocol fixtures independent of the package version', async () => {
+    for (const version of ['1.41.0', '1.44.0', '99.0.0']) {
+      const root = await mkdtemp(join(tmpdir(), 'dsh-cg-market-protocol-'))
+      await writeInstalledPackage(root, 'dshmarket', version, 'sha512-fixture', version)
+      const origin = 'http://127.0.0.1:3080'
+      const binding = { origin, profile: 'web', version, integrity: 'sha512-fixture', loadedTreeSha256: 'a'.repeat(64), processIdentity: 'pid-start-1', bootId: 'boot-1' }
+      const payload = { schema: 'dsh-market/update-api/v1', apiVersion: 1, marketVersion: version, profile: 'web', bootId: 'boot-1', features: { restart: true }, restart: { supported: true, managedBy: 'market' } }
+      const session = Session.create(SessionId('market-version-fixture'), undefined, { version: 0, id: SessionId('market-version-fixture'), createdAt: 1, cwd: root })
+      enable(session)
+      user(session, 'Restart service dsh-web.')
+      const roots: EvidenceToolRoots = { profile: { path: root, name: 'web' }, marketOrigin: origin,
+        verifyMarketInstance: async () => binding,
+        fetcher: async () => new Response(JSON.stringify(payload), { status: 200 }) }
+      const args = { semantic_action: 'restart', evidence_role: 'resolution', selector: { service_id: 'dsh-web' }, command_manifest: { manifest_id: 'dshmarket.restart.v1' } }
+      const good = await runProducer(session, 'good', args, roots)
+      expect(good.status).toBe('supported')
+      const noVerifier = await runProducer(session, 'unbound', args, { ...roots, verifyMarketInstance: undefined })
+      expect(noVerifier).toMatchObject({ status: 'unavailable', reason_code: 'market_instance_binding_unavailable' })
+      for (const bad of [ { schema: 'unknown' }, { marketVersion: 'mismatch' }, { profile: 'other' }, { bootId: 'forged' }, { features: { restart: false } } ]) {
+        expect((await runProducer(session, 'bad', args, { ...roots, fetcher: async () => new Response(JSON.stringify({ ...payload, ...bad })) })).status).toBe('unavailable')
+      }
+      for (const bad of [{ origin: 'http://127.0.0.1:9999' }, { integrity: 'sha512-wrong' }, { loadedTreeSha256: '' }, { processIdentity: '' }]) {
+        expect((await runProducer(session, 'bad-binding', args, { ...roots, verifyMarketInstance: async () => ({ ...binding, ...bad }) })).status).toBe('unavailable')
+      }
+      // These are protocol fixtures, not acceptance evidence for real versions.
+      const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+      expect([...projection.items.values()].some((item) => item.semanticAction === 'restart')).toBe(true)
+      expect([...projection.evidence.values()].some((fact) => fact.evidenceRole === 'effect' || fact.evidenceRole === 'state')).toBe(false)
     }
   })
 

@@ -8,7 +8,7 @@ export const SUPPORTED_EVIDENCE_ADAPTERS: Readonly<Record<string, string>> = {
   'context-guard.git.v1': '1.0.0',
   'context-guard.package.v1': '1.0.0',
   'context-guard.artifact.v1': '1.0.0',
-  'context-guard.service.v1': '1.0.0',
+  'context-guard.service.v2': '2.0.0',
   'context-guard.registry.v1': '1.0.0',
 }
 

@@ -43,11 +43,27 @@ interface JsonExpectedTransition {
   parameters: Record<string, JsonValue>
 }
 
+/** Trusted embedding evidence, never accepted from a model/tool or HTTP response.
+ * The embedding must bind its actual loaded provider to this process/service.
+ * Current DSH hosts expose no such verifier, so production restart stays
+ * unavailable while core Guard protection remains active.
+ */
+export interface MarketInstanceBinding {
+  origin: string
+  profile: string
+  version: string
+  integrity: string
+  loadedTreeSha256: string
+  processIdentity: string
+  bootId: string
+}
+
 export interface EvidenceToolRoots {
   /** Test/embedding override. Production derives the active profile from this installed module. */
   profile?: { name: string; path: string }
   /** Derived from the live loopback webServer service; never accepted from tool input. */
   marketOrigin?: string
+  verifyMarketInstance?: (signal: AbortSignal) => Promise<MarketInstanceBinding | undefined>
   /** Test seam for exact HTTP request/response contracts. */
   fetcher?: typeof fetch
   /** Test seam for exact logical executable/argv execution. */
@@ -176,7 +192,7 @@ function tuple(value: unknown): TargetTuple | undefined {
 function adapterId(action: StatefulAction): string {
   if (['create', 'modify'].includes(action)) return 'context-guard.artifact.v1'
   if (['install', 'apply'].includes(action)) return 'context-guard.package.v1'
-  if (action === 'restart') return 'context-guard.service.v1'
+  if (action === 'restart') return 'context-guard.service.v2'
   if (action === 'publish') return 'context-guard.registry.v1'
   return 'context-guard.git.v1'
 }
@@ -184,7 +200,7 @@ function adapterId(action: StatefulAction): string {
 function unavailable(action: StatefulAction, role: EvidenceRole, reason: string): ProducerValue {
   return {
     status: 'unavailable', reason_code: reason, semantic_action: action, evidence_role: role,
-    resolved_target: {}, observed_state: {}, adapter_id: adapterId(action), adapter_version: PRODUCER_VERSION,
+    resolved_target: {}, observed_state: {}, adapter_id: adapterId(action), adapter_version: action === 'restart' ? '2.0.0' : PRODUCER_VERSION,
     target_digest: '', command_manifest_digest: '',
   }
 }
@@ -202,7 +218,7 @@ function supported(
   return {
     status: 'supported', reason_code: 'producer_observation_supported', semantic_action: action, evidence_role: role,
     resolved_target: jsonTuple(resolved), observed_state: jsonTuple(observed),
-    adapter_id: adapterId(action), adapter_version: PRODUCER_VERSION,
+    adapter_id: adapterId(action), adapter_version: action === 'restart' ? '2.0.0' : PRODUCER_VERSION,
     target_digest: digest(resolved), command_manifest_digest: digest(commandManifest),
     ...(gitBinding ? { git_binding: gitBinding } : {}),
     ...(executable ? { executable_identity: executable } : {}),
@@ -263,7 +279,7 @@ function findResolution(events: readonly unknown[], callId: string, action: Stat
     if (event.type !== 'tool/result') continue
     const meta = producerMeta(event)
     if (meta?.semanticAction !== action || meta.evidenceRole !== 'resolution'
-      || meta.adapterVersion !== PRODUCER_VERSION || !selector || !commandManifest) return undefined
+      || meta.adapterVersion !== (action === 'restart' ? '2.0.0' : PRODUCER_VERSION) || !selector || !commandManifest) return undefined
     const target = tuple(meta.resolvedTarget)
     const rawBinding = record(meta.gitBinding)
     const rawManifest = record(rawBinding?.manifest)
@@ -464,22 +480,41 @@ async function tgzIdentity(path: string): Promise<TgzIdentity | undefined> {
   }
 }
 
-const DSHMARKET_VERSION = '1.36.0'
-const DSHMARKET_INTEGRITY = 'sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g=='
 const MARKET_SCHEMA = 'dsh-market/update-api/v1'
+const MARKET_GENERATION_PREFIX = 'dsh-market-instance/v1:'
 
 async function marketCapabilities(roots: EvidenceToolRoots, signal: AbortSignal): Promise<RecordValue | undefined> {
-  if (!roots.profile || !roots.marketOrigin) return undefined
+  if (!roots.profile || !roots.marketOrigin || !roots.verifyMarketInstance) return undefined
   const installed = await profilePackage(roots.profile.path, 'dshmarket')
-  if (installed?.version !== DSHMARKET_VERSION || installed.integrity !== DSHMARKET_INTEGRITY) return undefined
+  const binding = await roots.verifyMarketInstance(signal)
+  if (!installed || !binding || binding.origin !== roots.marketOrigin || binding.profile !== roots.profile.name
+    || binding.version !== installed.version || binding.integrity !== installed.integrity
+    || !/^[0-9a-f]{64}$/.test(binding.loadedTreeSha256)
+    || !binding.processIdentity || !binding.bootId) return undefined
   const response = await (roots.fetcher ?? fetch)(`${roots.marketOrigin}/dsh-market/api/v1/capabilities`, {
     signal, headers: { accept: 'application/json' }, redirect: 'error',
   })
   if (!response.ok) return undefined
   const value = record(await response.json())
-  if (value?.schema !== MARKET_SCHEMA || value.apiVersion !== 1 || value.marketVersion !== DSHMARKET_VERSION
-    || value.profile !== roots.profile.name || typeof value.bootId !== 'string') return undefined
-  return value
+  if (value?.schema !== MARKET_SCHEMA || value.apiVersion !== 1 || value.marketVersion !== binding.version
+    || value.profile !== binding.profile || value.bootId !== binding.bootId) return undefined
+  // Capability changes also invalidate outstanding provider-bound operations.
+  const features = record(value.features)
+  const restart = record(value.restart)
+  if (features?.restart !== true || restart?.supported !== true || restart.managedBy !== 'market') return undefined
+  const provider = createHash('sha256').update(JSON.stringify([
+    MARKET_SCHEMA, binding.origin, binding.profile, binding.version, binding.integrity,
+    binding.loadedTreeSha256, 'restart', true, 'market',
+  ])).digest('hex')
+  const instance = createHash('sha256').update(JSON.stringify([binding.processIdentity, binding.bootId])).digest('hex')
+  return { ...value, generation: `${MARKET_GENERATION_PREFIX}${provider}:${instance}` }
+}
+
+function sameMarketProvider(before: unknown, after: unknown): boolean {
+  const pattern = /^dsh-market-instance\/v1:([0-9a-f]{64}):[0-9a-f]{64}$/
+  const left = typeof before === 'string' ? pattern.exec(before) : null
+  const right = typeof after === 'string' ? pattern.exec(after) : null
+  return !!left && !!right && left[1] === right[1]
 }
 
 function importerLocator(text: string, packageId: string): string | undefined {
@@ -516,6 +551,7 @@ async function profilePackage(profilePath: string, packageId: string): Promise<{
   try {
     const lock = await readFile(resolve(profilePath, 'pnpm-lock.yaml'), 'utf8')
     const locator = importerLocator(lock, packageId)
+    if (packageId === 'dshmarket' && (!locator || locator.split('(', 1)[0] !== manifest.version)) return undefined
     const integrity = locator ? lockIntegrity(lock, packageId, locator) : undefined
     return integrity ? { version: manifest.version, integrity } : undefined
   } catch { return undefined }
@@ -681,7 +717,8 @@ async function executeGuardAction(
   if (action === 'restart') {
     const capabilities = await marketCapabilities(roots, signal)
     if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return 'unavailable'
-    if (capabilities.bootId !== target.pre_generation) {
+    if (!sameMarketProvider(target.pre_generation, capabilities.generation)) return 'unavailable'
+    if (capabilities.generation !== target.pre_generation) {
       return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? 'completed' : 'unavailable'
     }
     if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return 'handoff_pending'
@@ -933,7 +970,7 @@ async function resolveTarget(
     const features = record(capabilities?.features)
     const restart = record(capabilities?.restart)
     if (features?.restart !== true || restart?.supported !== true || restart.managedBy !== 'market') return undefined
-    return { target: { service_id: service, pre_generation: String(capabilities?.bootId) } }
+    return { target: { service_id: service, pre_generation: String(capabilities?.generation) } }
   }
   if (action === 'publish') {
     const registry = canonicalRegistryBase(requireString(selector, 'registry') ?? '', {
@@ -1025,8 +1062,9 @@ async function readback(
   }
   if (action === 'restart') {
     const capabilities = await marketCapabilities(roots, signal)
-    if (!capabilities || capabilities.bootId === target.pre_generation) return undefined
-    return { new_generation: String(capabilities.bootId), health: 'healthy' }
+    if (!capabilities || !sameMarketProvider(target.pre_generation, capabilities.generation)
+      || capabilities.generation === target.pre_generation) return undefined
+    return { new_generation: String(capabilities.generation), health: 'healthy' }
   }
   if (action === 'publish') {
     const registry = typeof target.registry === 'string' ? target.registry : undefined
@@ -1081,6 +1119,7 @@ function normalizedRoots(options: EvidenceToolRoots): EvidenceToolRoots {
   return {
     ...(options.profile ? { profile: { name: options.profile.name, path: resolve(options.profile.path) } } : detectedProfile ? { profile: detectedProfile } : {}),
     ...(options.marketOrigin ? { marketOrigin: options.marketOrigin } : {}),
+    ...(options.verifyMarketInstance ? { verifyMarketInstance: options.verifyMarketInstance } : {}),
     ...(options.fetcher ? { fetcher: options.fetcher } : {}),
     ...(options.commandRunner ? { commandRunner: options.commandRunner } : {}),
     ...(options.persistRestartIntent ? { persistRestartIntent: options.persistRestartIntent } : {}),
@@ -1288,7 +1327,8 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
             exec.signal,
             executableBinding,
           )
-          if (!resolved) return unavailable(action, role, 'resolution_unavailable')
+          if (!resolved) return unavailable(action, role, action === 'restart' && !roots.verifyMarketInstance
+            ? 'market_instance_binding_unavailable' : 'resolution_unavailable')
           const gitBinding = resolved.gitBinding
             ? JSON.parse(JSON.stringify(resolved.gitBinding)) as Record<string, JsonValue>
             : undefined
@@ -1315,7 +1355,7 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
           const actionCall = actionCallMatches(events, args.effect_call_id, action, args.resolution_call_id, resolution.target)
           const completed = action === 'restart'
             ? actionCall && restartIntent(events, args.resolution_call_id, resolution.target)
-              && (await marketCapabilities(roots, exec.signal))?.bootId !== resolution.target.pre_generation
+              && !!await readback('restart', resolution.target, roots, exec.signal)
             : actionCall && actionResultCompleted(events, args.effect_call_id)
           if (!completed) {
             return unavailable(action, role, 'persisted_effect_mismatch')

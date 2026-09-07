@@ -2,7 +2,15 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.4.2 - Unreleased
+## 0.4.3 - 2026-09-08
+
+- Separate the exact DSH core lock from optional market versions. Recheck the active core graph during replay; changed, missing or duplicate core dependencies still fail closed.
+- Version the core-lock policy and market service adapter explicitly. Preserve historical records while requiring fresh lock migration and new restart credentials.
+- Require a trusted loaded-instance binding for market restart. Current DSH lacks this binding, so only that adapter remains unavailable; requested restart work is never silently completed.
+- Select native acceptance targets explicitly, inspect supplied daily targets read-only, and test Headless without installing market.
+- Reconcile the historical 0.4.2 release labels and document installation versus runtime acceptance.
+
+## 0.4.2 - 2026-09-07
 
 - Explain when a task cannot be certified and what the user can clarify. Generic command success still cannot prove an update or a GUI result.
 - Add `context_guard_rebind`: propose a complete split of an old requirement, optionally link a later explicit root-user clarification, then replace it only after the user's exact confirmation. Old sources, unsupported remainders, and one-to-many relationships remain visible; the proposal grants no execution permission.

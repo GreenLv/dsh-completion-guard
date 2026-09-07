@@ -88,6 +88,24 @@ class HostBoundEntrypointTests(unittest.TestCase):
         cls.host = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.host)
 
+    def test_explicit_targets_cannot_silently_select_first_runtime_cohort(self):
+        cohorts = [{"id": name, "packages": [{"name": "@deepseek-ai/dsh", "version": "0.1.2-rc.1"}]} for name in ["first", "second"]]
+        with self.assertRaisesRegex(RuntimeError, "explicit"):
+            self.host.select_target_cohorts(cohorts, "0.1.2-rc.1", {})
+        chosen = self.host.select_target_cohorts(cohorts, "0.1.2-rc.1", {"web": "second", "headless": "first"})
+        self.assertEqual(chosen["web"]["id"], "second")
+        with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
+            self.host.select_target_cohorts(cohorts, "wrong", {"web": "second", "headless": "first"})
+        with self.assertRaisesRegex(RuntimeError, "ambiguous"):
+            self.host.select_target_cohorts(cohorts + cohorts, "0.1.2-rc.1", {"web": "second", "headless": "first"})
+
+    def test_target_graph_detects_missing_duplicate_or_changed_core_identity(self):
+        rows = [{"name": "core", "version": "1", "integrity": "sha512-a"}]
+        self.host.verify_target_graph(rows, rows, "web")
+        for actual in [[], rows + rows, [{**rows[0], "integrity": "sha512-b"}]]:
+            with self.assertRaisesRegex(RuntimeError, "target graph mismatch"):
+                self.host.verify_target_graph(actual, rows, "web")
+
     def test_windows_temp_root_inherits_parent_acl_without_posix_mode(self):
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.object(self.host.platform, "system", return_value="Windows"), \

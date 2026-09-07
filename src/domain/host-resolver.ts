@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   HOST_COHORTS,
@@ -168,6 +168,37 @@ export interface ActiveProfileHostLock {
   profileKind: HostProfileKind
 }
 
+/** Read exact reachable critical rows without requiring Guard installation.
+ * Used by target preflight before a legacy profile can be migrated.
+ */
+export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): PackageRow[] {
+  const runtime = resolve(runtimeRoot)
+  const profile = resolve(profileRoot)
+  const mapPath = join(runtime, 'node_modules', '.package-map.json')
+  const lockPath = join(runtime, 'pnpm-lock.yaml')
+  const profileMapPath = join(profile, 'node_modules', '.package-map.json')
+  const profileLockPath = join(profile, 'pnpm-lock.yaml')
+  const runtimeRows = packageRowsFromActiveGraph(
+    readFileSync(mapPath, 'utf8'),
+    readFileSync(lockPath, 'utf8'),
+    join(runtime, 'node_modules'),
+  )
+  const profileRows = packageRowsFromActiveGraph(
+    readFileSync(profileMapPath, 'utf8'),
+    readFileSync(profileLockPath, 'utf8'),
+    join(profile, 'node_modules'),
+  )
+  // Preserve duplicates within either active graph (two reachable variants are
+  // ambiguous), while deduplicating only the same identity repeated across the
+  // runtime/profile boundary.
+  const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`))
+  const rows = [
+    ...runtimeRows,
+    ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`)),
+  ]
+  return rows
+}
+
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
 export function resolveActiveProfileHostLock(
   runtimeRoot: string,
@@ -185,16 +216,7 @@ export function resolveActiveProfileHostLock(
   for (const path of [lockPath, mapPath, profileLockPath, profileMapPath, profileManifestPath, pluginManifestPath]) {
     if (!existsSync(path)) throw new HostProfileError('active_graph_missing', `required active graph file is missing: ${path}`)
   }
-  const runtimeRows = packageRowsFromActiveGraph(
-    readFileSync(mapPath, 'utf8'),
-    readFileSync(lockPath, 'utf8'),
-    join(runtime, 'node_modules'),
-  )
-  const profileRows = packageRowsFromActiveGraph(
-    readFileSync(profileMapPath, 'utf8'),
-    readFileSync(profileLockPath, 'utf8'),
-    join(profile, 'node_modules'),
-  )
+  const rows = readActiveHostGraph(runtime, profile)
   const profileManifest = readJsonObject(profileManifestPath, 'profile_manifest_invalid')
   const installedPlugin = readJsonObject(pluginManifestPath, 'installed_plugin_invalid')
   const dependencies = profileManifest.dependencies
@@ -212,14 +234,6 @@ export function resolveActiveProfileHostLock(
   }
   const profileKind: HostProfileKind = bundles.includes('@deepseek-ai/dsh-web-app') || bundles.includes('dshmarket') ? 'web' : 'headless'
   const platform: HostPlatform = process.platform === 'win32' ? 'windows' : 'posix'
-  // Preserve duplicates within either active graph (two reachable variants are
-  // ambiguous), while deduplicating only the same identity repeated across the
-  // runtime/profile boundary.
-  const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`))
-  const rows = [
-    ...runtimeRows,
-    ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`)),
-  ]
   const evaluation = evaluateHostLock(rows, { platform, profileKind })
   if (evaluation.status !== 'supported') {
     throw new HostProfileError(evaluation.reasonCode ?? 'active_graph_unavailable', 'active runtime graph does not match the supported host manifest')
@@ -247,8 +261,13 @@ function renderManagedPatch(
   platform: HostPlatform,
   profileKind: HostProfileKind,
   activation?: string,
+  runtimeRoot?: string,
+  profileRoot?: string,
 ): string {
   const lines = [HOST_LOCK_MARKER_BEGIN, '- id: context-guard', '  name: dsh-completion-guard', '  config:']
+  lines.push('    hostLockPolicy: "dsh-core/v1"')
+  if (runtimeRoot) lines.push(`    hostLockRuntimeRoot: ${yamlQuote(runtimeRoot)}`)
+  if (profileRoot) lines.push(`    hostLockProfileRoot: ${yamlQuote(profileRoot)}`)
   if (activation) lines.push(`    activation: ${yamlQuote(activation)}`)
   lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`)
   lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`)
@@ -323,6 +342,8 @@ export function injectActiveProfileHostLock(input: ActiveProfileHostLock): strin
     input.platform,
     input.profileKind,
     activation,
+    input.runtimeRoot,
+    input.profileRoot,
   )
   const next = `${base.trimEnd()}${base.trim() ? '\n\n' : ''}${managed}`
   const temporary = `${patchPath}.context-guard-${process.pid}.tmp`
@@ -345,7 +366,8 @@ function parseYamlField(entry: readonly string[], index: number, value: string):
   if (!['>', '>-', '>+', '|', '|-', '|+'].includes(indicator)) return parseYamlScalar(value)
   const parts: string[] = []
   for (let cursor = index + 1; cursor < entry.length; cursor += 1) {
-    const blockLine = entry[cursor].match(/^\s{10}(.*)$/)
+    const indentation = (entry[index].match(/^\s*/)?.[0].length ?? 8) + 2
+    const blockLine = entry[cursor].match(new RegExp(`^\\s{${indentation}}(.*)$`))
     if (!blockLine) break
     parts.push(blockLine[1])
   }
@@ -408,7 +430,28 @@ export function hostLockContextFromComposedDump(text: string): { platform?: Host
   }
 }
 
-export function verifyComposedHostLockDump(text: string, expected: HostLockEvaluation): HostLockEvaluation {
+export function verifyComposedHostLockDump(
+  text: string, expected: HostLockEvaluation,
+  roots?: Pick<ActiveProfileHostLock, 'runtimeRoot' | 'profileRoot'>,
+): HostLockEvaluation {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex((line) => /^- id:\s*["']?context-guard["']?\s*$/.test(line))
+  const tail = lines.slice(start + 1)
+  const end = tail.findIndex((line) => line.startsWith('- '))
+  const entry = end < 0 ? tail : tail.slice(0, end)
+  const settings: Record<string, string> = {}
+  for (const key of ['hostLockPolicy', 'hostLockRuntimeRoot', 'hostLockProfileRoot']) {
+    const matches = entry.flatMap((line, index) => line.startsWith(`    ${key}:`) ? [index] : [])
+    if (matches.length !== 1) throw new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph')
+    const index = matches[0]
+    settings[key] = parseYamlField(entry, index, entry[index].slice(entry[index].indexOf(':') + 1))
+  }
+  if (settings.hostLockPolicy !== 'dsh-core/v1'
+    || !isAbsolute(settings.hostLockRuntimeRoot) || !isAbsolute(settings.hostLockProfileRoot)
+    || (roots && (resolve(settings.hostLockRuntimeRoot) !== resolve(roots.runtimeRoot)
+      || resolve(settings.hostLockProfileRoot) !== resolve(roots.profileRoot)))) {
+    throw new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph')
+  }
   const context = hostLockContextFromComposedDump(text)
   const actual = evaluateHostLock(hostLockRowsFromComposedDump(text), context)
   if (actual.status !== 'supported' || actual.digest !== expected.digest) {
