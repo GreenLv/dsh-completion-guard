@@ -78,6 +78,11 @@ function citedEvidence(projection: GuardProjection, binding: EvidenceBinding): G
 function evidenceProblem(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): RejectedBinding | undefined {
   const missing = binding.evidenceIds.filter((id) => !projection.evidence.has(id))
   if (missing.length) return { itemId: item.id, reason: 'cited evidence is missing', reasonCode: 'evidence_missing', offendingEvidenceIds: missing }
+  if (item.reboundFrom) {
+    const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
+    const tooEarly = binding.evidenceIds.filter(id => !sourceSeq || projection.evidence.get(id)!.toolResultSeq < Number(sourceSeq[1]))
+    if (tooEarly.length) return { itemId: item.id, reason: 'evidence predates the authoritative root clause used by this replacement', reasonCode: 'rebind_evidence_predates_source', offendingEvidenceIds: tooEarly }
+  }
   const wrongEpoch = binding.evidenceIds.filter((id) => projection.evidence.get(id)?.epoch !== projection.epoch)
   if (wrongEpoch.length) return { itemId: item.id, reason: 'cited evidence belongs to a different epoch', reasonCode: 'evidence_wrong_epoch', offendingEvidenceIds: wrongEpoch }
   const notSuccess = binding.evidenceIds.filter((id) => projection.evidence.get(id)?.outcome !== 'success')

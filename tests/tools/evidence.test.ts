@@ -1,3 +1,5 @@
+import { createRebindTool } from '../../src/tools/rebind.js'
+import { createCheckpointTool } from '../../src/tools/checkpoint.js'
 import { createHash } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
@@ -995,3 +997,61 @@ describe('trusted stateful evidence producer', () => {
     })).toMatchObject({ status: 'unavailable', reason_code: 'resolution_unavailable' })
   }, GIT_ROUNDTRIP_TIMEOUT_MS)
 })
+
+it.each([false, true])('T12 replays generic clarification into package certification (original GUI remainder: %s)', async gui => {
+  // Real producer parsing, tar identity, disk state, event replay and certifier;
+  // only executable identity and DSH mutation are synthetic trusted inputs.
+  const root = await mkdtemp(join(tmpdir(), 'guard-rebind-certificate-'))
+  try {
+    const profile = join(root, 'web')
+    await mkdir(profile)
+    const tgz = await packFixture(root, 'demo', '2.0.0')
+    await writeInstalledPackage(profile, 'demo', '1.0.0', 'sha512-b2xk')
+    const session = Session.create(SessionId('rebind-certificate'), undefined, {
+      version: 0, id: SessionId('rebind-certificate'), createdAt: 1, cwd: root,
+    })
+    enable(session)
+    user(session, gui ? '更新插件并检查 GUI 效果' : '更新插件')
+    const projection = () => deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+    let integrity = ''
+    const roots: EvidenceToolRoots = {
+      profile: { name: 'web', path: profile },
+      readExecutableIdentity: async () => ({ executable: 'dsh', realpath: join(root, 'dsh'), version: 'fixture' }),
+      commandRunner: async (_file, args) => {
+        expect(args).toEqual(['plugin', '--profile', 'web', 'add', `file:${tgz}`])
+        await writeInstalledPackage(profile, 'demo', '2.0.0', integrity, `file:${tgz}`)
+      },
+      authorizeMutation: request => authorizeMutationFromProjection(projection(), request),
+    }
+    const resolutionArgs = { semantic_action: 'apply', evidence_role: 'resolution', selector: { package_id: 'demo', version: '2.0.0', profile: 'web' }, command_manifest: { manifest_id: 'dsh.plugin_add_tgz.apply.v1', tgz_path: tgz } }
+    await runProducer(session, 'old-resolution', resolutionArgs, roots)
+    user(session, '把更新插件明确为 apply package demo@2.0.0 profile web')
+    const old = [...projection().items.values()][0]
+    const clarified = [...projection().items.values()].find(item => item.semanticAction === 'apply')!
+    const args = { operation: 'propose', item_id: old.id, clauses: [old.normalizedText], clarification_item_ids: [clarified.id] }
+    const tool = createRebindTool(projection, async () => true)
+    call(session, 'rebind', tool.name, args)
+    const proposal = await tool.execute(args as never, execution(session, 'rebind')) as { status: string; proposal: { id: string } }
+    expect(proposal.status).toBe('proposed')
+    result(session, 'rebind', proposal)
+    user(session, `确认重绑定 ${proposal.proposal.id}`)
+    expect(projection().items.get(old.id)?.status).toBe('superseded')
+    const resolved = await runProducer(session, 'resolution', resolutionArgs, roots)
+    expect(resolved.status).toBe('supported')
+    integrity = (resolved.resolved_target as Record<string, string>).integrity_digest
+    expect(await runAction(session, 'effect', { semantic_action: 'apply', resolution_call_id: 'resolution', contract_item_id: clarified.id, contract_item_revision: clarified.revision }, roots)).toMatchObject({ status: 'completed' })
+    await runProducer(session, 'effect-fact', { semantic_action: 'apply', evidence_role: 'effect', resolution_call_id: 'resolution', effect_call_id: 'effect' }, roots)
+    await runProducer(session, 'state', { semantic_action: 'apply', evidence_role: 'state', resolution_call_id: 'resolution', effect_call_id: 'effect' }, roots)
+    const checkpoint = createCheckpointTool(projection, () => {})
+    const page = await checkpoint.execute({ bindings: [] }, undefined as never) as { open_items: Array<{ binding_template: Record<string, unknown> }> }
+    const binding = page.open_items.find(row => row.binding_template)!.binding_template
+    expect(binding).toBeDefined()
+    const closed = await checkpoint.execute({ bindings: [binding] } as never, undefined as never)
+    expect(closed).toMatchObject(gui ? { status: 'incomplete' } : { status: 'certified', certificate: expect.any(Object) })
+    expect(await checkpoint.execute({ bindings: [{ ...binding, resolved_target: { ...(binding.resolved_target as object), package_id: 'wrong' } }] } as never, undefined as never)).toMatchObject({ status: 'incomplete' })
+    const oldEvidence = [...projection().evidence.values()].find(e => e.callId === 'old-resolution')!
+    expect(await checkpoint.execute({ bindings: [{ ...binding, evidence_ids: [oldEvidence.id], resolution_evidence_id: oldEvidence.id }] } as never, undefined as never)).toMatchObject({ status: 'incomplete', rejected_bindings: [expect.objectContaining({ reason_code: 'rebind_evidence_predates_source' })] })
+    user(session, '检查 GUI 效果')
+    expect(await checkpoint.execute({ bindings: [binding] } as never, undefined as never)).toMatchObject({ status: 'incomplete' })
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, PACKAGE_ACTION_TIMEOUT_MS)

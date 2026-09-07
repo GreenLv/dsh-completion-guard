@@ -49,7 +49,9 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.4.0 是当前版本，可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
+仓库记录的 0.4.0 发布基线可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
+
+源码当前目标是 **0.4.2（未发布）**，新增有界 checkpoint 查询和用户确认后的要求重绑定。上方安装命令仍指向已记录的发布版本，不包含这些候选变更；CI 与精确制品原生验收仍待完成。详见[更新记录](CHANGELOG.zh-CN.md)和[验收范围](docs/LOCAL_ACCEPTANCE.md)。
 
 版本 `0.4.1-rc.1` 是面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0` 的预发布候选。其宿主队列已在原生 macOS/posix 上审计，并核对过原生 Windows rc.1 运行时的宿主图谱；宿主图谱审计不能替代同一冻结包的跨平台 exact-artifact acceptance。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
@@ -103,6 +105,14 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 启用后，Guard 会保存用户直接给出的要求和验收条件。只有已保存的工具结果与指定命令、文件或其他目标一致时，才能作为证据。模型在报告整个任务完成前必须通过 Guard 检查；证据缺失、过期或对象不一致时，任务会保持未完成。
 
 只读证据收集与修改包、文件、服务或 Git 状态的操作使用不同工具。查询成功不会自动产生变更权限。精确命令限制和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+
+### 要求一直未完成时（0.4.2 候选）
+
+“更新插件并检查 GUI”可能包含 Guard 尚不能认证的部分。checkpoint 会逐项说明原因和下一步。`generic_run_non_certifiable` 表示普通命令成功不能关闭该项，反复换绑定或再跑一条命令也无效。
+
+用 `context_guard_rebind` 提出完整的原文拆分方案。动作或对象不明确时，先请根用户给出包含原条款的明确澄清要求，再在提案中引用新要求的 ID。工具会返回提案 ID 和原项/替代项对照；只有用户精确回复 `确认重绑定 <proposal ID>` 才会应用。引用文字、工具输出和模型自称确认都无效。未支持的部分继续保留 pending；按结构化边界安全结束也不表示全部完成。
+
+用 `bindings: []` 调用 `context_guard_checkpoint` 可查询诊断。默认最多展示八个当前要求/限制和十条证据，插件 JSON 不超过 12 KiB。`pagination` 给出总数及各列表独立的 `next_cursor`，首页不代表完整合同。`item_ids`、`evidence_ids` 可按 ID 查询；`evidence_scope: "history"` 可查看完整证据历史，其中不可引用项会明确标记。翻页时保持查询条件不变，合同或证据快照变化后需重新查询。超长行提供 `detail_id`，用 `detail_offset` 取分片；后续分片需把首次返回的 `snapshot` 作为 `detail_snapshot` 传回。分页只改变展示，不会减少认证时检查的要求。
 
 ## 边界
 

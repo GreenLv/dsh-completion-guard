@@ -1,6 +1,6 @@
 {
   "name": "dsh-completion-guard",
-  "version": "0.4.1-rc.1",
+  "version": "0.4.2",
   "description": "A task-contract and completion-certification layer for DeepSeek Harness.",
   "repository": {
     "type": "git",

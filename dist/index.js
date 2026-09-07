@@ -1,8 +1,8 @@
-import { $ as EXPECTED_HOST_PACKAGES, $t as validateActionManifest, A as decideTurnBoundary, At as captureClause, B as extractToolSubject, Bt as ACTION_MANIFEST, C as createGitPrestateEnvelope, Ct as recoveryDigest, D as revalidateGitPrestate, Dt as evidenceMatchesItem, E as parseGitCommandManifest, Et as evidenceCoverage, F as PROTOCOL_V3_NOTICE, Ft as extractOperation, G as parsePwshCommand, Gt as STOP_PROTOCOL_VERSION, H as withDurability, Ht as CERTIFICATE_VERSION, I as deriveProjection, It as isInformationalMessage, J as hasCurrentCertificate, Jt as isStatefulAction, K as parseShellCommand, Kt as SUPPORTED_EVIDENCE_ADAPTERS, L as supersedeItem, Lt as segmentClauses, M as isWholeTaskCompletionClaim, Mt as classifyClause, N as latestAssistantText, Nt as extractArtifactPaths, O as verifiedLinearCommitReadback, Ot as isVerifyingCapability, P as observeAssistantOutcome, Pt as extractMethod, Q as DEFAULT_HOST_LOCK, Qt as semanticActionFromText, R as evidenceFromPersistedToolResult, Rt as canonicalRegistryBase, S as commitTreeSnapshotDigest, St as openItems, T as gitCommandMatchesTarget, Tt as bindingSatisfies, U as canonicalArgvFromCommand, Ut as SEMANTIC_ACTIONS, V as isDeterministicCheck, Vt as ACTION_MANIFEST_VERSION, W as isRunExecutable, Wt as STATEFUL_ACTIONS, X as ALPHA2_HOST_PACKAGES, Xt as requestedTargetMatchesResolved, Y as ALPHA2_DSHMARKET_139_HOST_PACKAGES, Yt as requestedTargetAuthorizesMutation, Z as BASE_HOST_PACKAGES, Zt as semanticActionFromCommand, _ as resolveInstalledHostLock, _t as isCurrentAcceptedBoundary, a as createProofManifest, an as normalizeClause, at as evaluateExternalWaitCapability, b as GIT_COMMAND_MANIFEST_IDS, bt as DEFAULT_RECOVERY_CHAR_BUDGET, c as sessionQuery, cn as sha256, ct as evaluateToolSurfaceCapability, d as hostLockContextFromComposedDump, dt as ALPHA3_HOST_PACKAGES, en as validateActionTarget, et as GOAL_HOST_PACKAGES, f as hostLockRowsFromComposedDump, ft as authorityCaptureCounts, g as resolveActiveProfileHostLock, gt as effectuateBoundary, h as packageRowsFromPnpmLock, ht as availableBoundaryQualifications, i as canonicalProjection, in as digestStrings, it as bindLiveGoalCapability, j as decideTurnStopping, jt as captureItem, k as classifyCompletionClaim, kt as currentContractDigest, l as validateProofManifest, ln as createProjection, lt as selectHostCohort, m as packageRowsFromActiveGraph, mt as classifyUserInteraction, n as PROOF_PROTOCOL_VERSION, nn as validateManifest, nt as HOST_COHORTS, o as proofDigest, on as sanitizeClauseText, ot as evaluateHostCapability, p as injectActiveProfileHostLock, pt as segmentAuthorityBlocks, q as goalCompletionDenial, qt as actionCompatible, r as bindProofToProjection, rn as canonicalizePath, rt as bindExecutableIdentity, s as proofEvidenceConstraints, sn as sanitizeUrl, st as evaluateHostLock, t as PROOF_KINDS, tn as COMMAND_SURFACE_MANIFEST, tt as HOST_CAPABILITY_PACKAGE_GROUPS, u as HostProfileError, ut as RC1_HOST_PACKAGES, v as verifyComposedHostLockDump, vt as qualifyBoundary, w as executeRevalidatedGitEffect, wt as renderRecoveryPacket, x as commitIndexSnapshotDigest, xt as closingHint, y as snapshotSessionEvents, yt as certifyCheckpoint, z as extractTextContent, zt as npmEscapedPackageName } from "./domain-B7TsszvX.js";
-import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
+import { $ as DEFAULT_HOST_LOCK, $t as SUPPORTED_EVIDENCE_ADAPTERS, A as decideTurnBoundary, At as bindingSatisfies, B as extractTextContent, Bt as extractArtifactPaths, C as createGitPrestateEnvelope, Ct as closingHint, D as revalidateGitPrestate, Dt as evidenceAvailabilityReason, E as parseGitCommandManifest, Et as renderRecoveryPacket, F as CAPTURE_V042_NOTICE, Ft as createProjection, G as isRunExecutable, Gt as canonicalRegistryBase, H as isDeterministicCheck, Ht as extractOperation, I as PROTOCOL_V3_NOTICE, It as rebindResponse, J as goalCompletionDenial, Jt as ACTION_MANIFEST_VERSION, K as parsePwshCommand, Kt as npmEscapedPackageName, L as deriveProjection, Lt as captureClause, M as isWholeTaskCompletionClaim, Mt as evidenceMatchesItem, N as latestAssistantText, Nt as isVerifyingCapability, O as verifiedLinearCommitReadback, Ot as itemDiagnosis, P as observeAssistantOutcome, Pt as currentContractDigest, Q as BASE_HOST_PACKAGES, Qt as STOP_PROTOCOL_VERSION, R as supersedeItem, Rt as captureItem, S as commitTreeSnapshotDigest, St as MIN_RECOVERY_CHAR_BUDGET, T as gitCommandMatchesTarget, Tt as recoveryDigest, U as withDurability, Ut as isInformationalMessage, V as extractToolSubject, Vt as extractMethod, W as canonicalArgvFromCommand, Wt as segmentClauses, X as ALPHA2_DSHMARKET_139_HOST_PACKAGES, Xt as SEMANTIC_ACTIONS, Y as hasCurrentCertificate, Yt as CERTIFICATE_VERSION, Z as ALPHA2_HOST_PACKAGES, Zt as STATEFUL_ACTIONS, _ as resolveInstalledHostLock, _t as effectuateBoundary, a as createProofManifest, an as semanticActionFromText, at as bindLiveGoalCapability, b as GIT_COMMAND_MANIFEST_IDS, bt as certifyCheckpoint, c as sessionQuery, cn as COMMAND_SURFACE_MANIFEST, ct as evaluateHostLock, d as hostLockContextFromComposedDump, dn as digestStrings, dt as RC1_HOST_PACKAGES, en as actionCompatible, et as EXPECTED_HOST_PACKAGES, f as hostLockRowsFromComposedDump, fn as normalizeClause, ft as ALPHA3_HOST_PACKAGES, g as resolveActiveProfileHostLock, gt as availableBoundaryQualifications, h as packageRowsFromPnpmLock, hn as sha256, ht as classifyUserInteraction, i as canonicalProjection, in as semanticActionFromCommand, it as bindExecutableIdentity, j as decideTurnStopping, jt as evidenceCoverage, k as classifyCompletionClaim, kt as relevantEvidence, l as validateProofManifest, ln as validateManifest, lt as evaluateToolSurfaceCapability, m as packageRowsFromActiveGraph, mn as sanitizeUrl, mt as segmentAuthorityBlocks, n as PROOF_PROTOCOL_VERSION, nn as requestedTargetAuthorizesMutation, nt as HOST_CAPABILITY_PACKAGE_GROUPS, o as proofDigest, on as validateActionManifest, ot as evaluateExternalWaitCapability, p as injectActiveProfileHostLock, pn as sanitizeClauseText, pt as authorityCaptureCounts, q as parseShellCommand, qt as ACTION_MANIFEST, r as bindProofToProjection, rn as requestedTargetMatchesResolved, rt as HOST_COHORTS, s as proofEvidenceConstraints, sn as validateActionTarget, st as evaluateHostCapability, t as PROOF_KINDS, tn as isStatefulAction, tt as GOAL_HOST_PACKAGES, u as HostProfileError, un as canonicalizePath, ut as selectHostCohort, v as verifyComposedHostLockDump, vt as isCurrentAcceptedBoundary, w as executeRevalidatedGitEffect, wt as openItems, x as commitIndexSnapshotDigest, xt as DEFAULT_RECOVERY_CHAR_BUDGET, y as snapshotSessionEvents, yt as qualifyBoundary, z as evidenceFromPersistedToolResult, zt as classifyClause } from "./domain-BXB_BPQg.js";
+import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
-import { defineTool } from "@deepseek-ai/dsh-tools";
+import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { execFile } from "node:child_process";
 import { constants, existsSync, readFileSync } from "node:fs";
 import { access, readFile, realpath } from "node:fs/promises";
@@ -11,6 +11,213 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzip } from "node:zlib";
 
+//#region src/tools/rebind.ts
+function createRebindTool(getProjection, prepare) {
+	return defineTool({
+		name: "context_guard_rebind",
+		description: "Propose an exact source-clause partition, query, or withdraw it. Only a durable root-user confirmation can replace the contract; no execution authority is added.",
+		parameters: {
+			operation: {
+				type: "string",
+				required: true,
+				enum: [
+					"propose",
+					"query",
+					"withdraw"
+				]
+			},
+			item_id: { type: "string" },
+			proposal_id: { type: "string" },
+			clauses: {
+				type: "array",
+				items: { type: "string" }
+			},
+			clarification_item_ids: {
+				type: "array",
+				items: { type: "string" }
+			}
+		},
+		output: {
+			schema: {
+				type: "object",
+				additionalProperties: true
+			},
+			render: (_args, value) => [{
+				type: "text",
+				text: JSON.stringify(value)
+			}]
+		},
+		async execute(rawArgs) {
+			if (!await prepare()) return {
+				status: "unknown",
+				reason_code: "persistence_unavailable"
+			};
+			const p = getProjection();
+			return p ? rebindResponse(p, rawArgs) : {
+				status: "unknown",
+				reason_code: "guard_unavailable"
+			};
+		}
+	});
+}
+
+//#endregion
+//#region src/tools/checkpoint-page.ts
+const LANES = [
+	"open_items",
+	"active_constraints",
+	"rejected_bindings",
+	"available_evidence",
+	"available_qualifications"
+];
+const MAX_BYTES = 12288;
+const size = (value) => Buffer.byteLength(JSON.stringify(value), "utf8");
+const digest$1 = (value) => sha256(JSON.stringify(value));
+const lookup = (id) => id.length <= 128 ? id : `sha256:${sha256(id)}`;
+/** Changes only display. The caller already certified the complete contract. */
+function checkpointPage(p, query, full) {
+	const { item_ids, evidence_ids, evidence_scope = "relevant", limit = 10, detail_id, detail_offset = 0 } = query;
+	const identity = digest$1({
+		session: p.sessionRefDigest,
+		epoch: p.epoch,
+		revision: p.contractRevision,
+		evidence: [...p.evidence.values()],
+		items: [...p.items.values()],
+		item_ids,
+		evidence_ids,
+		evidence_scope,
+		limit,
+		bindings: query.bindings,
+		rejections: full.rejected_bindings
+	});
+	const invalid = (reason) => ({
+		status: "unknown",
+		contract_revision: p.contractRevision,
+		reason_code: reason,
+		next_step: "Restart context_guard_checkpoint without cursor.",
+		open_items: [],
+		available_evidence: [],
+		rejected_bindings: []
+	});
+	if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50 || !["relevant", "history"].includes(evidence_scope)) return invalid("invalid_query");
+	let lane;
+	let offset = 0;
+	if (query.cursor) try {
+		if (query.cursor.length > 1024) return invalid("malformed_cursor");
+		const parsed = JSON.parse(Buffer.from(query.cursor, "base64url").toString("utf8"));
+		if (!LANES.includes(parsed.lane) || !Number.isSafeInteger(parsed.offset) || parsed.offset < 0) return invalid("malformed_cursor");
+		if (parsed.identity !== identity) return invalid("stale_cursor");
+		lane = parsed.lane;
+		offset = parsed.offset;
+	} catch {
+		return invalid("malformed_cursor");
+	}
+	const rows = Object.fromEntries(LANES.map((key) => [key, full[key] ?? []]));
+	if (item_ids?.length) {
+		rows.open_items = rows.open_items.filter((row) => item_ids.includes(String(row.id)));
+		rows.active_constraints = rows.active_constraints.filter((row) => item_ids.includes(String(row.id)));
+		rows.rejected_bindings = rows.rejected_bindings.filter((row) => item_ids.includes(String(row.item_id)));
+	}
+	if (evidence_ids?.length) rows.available_evidence = rows.available_evidence.filter((row) => evidence_ids.includes(String(row.id)));
+	if (lane && offset > rows[lane].length) return invalid("invalid_cursor_offset");
+	if (detail_id) {
+		if (!Number.isSafeInteger(detail_offset) || detail_offset < 0) return invalid("invalid_detail_offset");
+		if (detail_offset > 0 && query.detail_snapshot !== identity) return invalid("stale_detail_snapshot");
+		const matches = LANES.flatMap((key) => rows[key].filter((row) => row.id === detail_id || row.item_id === detail_id || lookup(String(row.id ?? row.item_id)) === detail_id).map((row) => ({
+			kind: key,
+			...row
+		})));
+		const data = JSON.stringify(matches);
+		if (detail_offset > data.length) return invalid("invalid_detail_offset");
+		let chunk = data.slice(detail_offset, detail_offset + 1600);
+		while (size(chunk) > 8e3) chunk = chunk.slice(0, -100);
+		return {
+			status: full.status,
+			contract_revision: p.contractRevision,
+			detail_id: lookup(detail_id),
+			detail_offset,
+			detail_chunk: chunk,
+			next_detail_offset: detail_offset + chunk.length < data.length ? detail_offset + chunk.length : null,
+			snapshot: identity
+		};
+	}
+	const reasons = /* @__PURE__ */ new Map();
+	for (const row of [...rows.open_items, ...rows.rejected_bindings]) {
+		const reason = String(row.reason_code ?? "missing_evidence").slice(0, 160);
+		reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
+	}
+	const output = {
+		status: full.status,
+		contract_revision: p.contractRevision,
+		blockers: {
+			total: Number(full.blocking_total ?? full.open_items.length),
+			rejected: full.rejected_bindings.length,
+			reasons: [...reasons].slice(0, 8).map(([reason_code, count]) => ({
+				reason_code,
+				count
+			})),
+			folded_reason_count: Math.max(0, reasons.size - 8)
+		},
+		open_items: [],
+		active_constraints: [],
+		rejected_bindings: [],
+		available_evidence: [],
+		available_qualifications: []
+	};
+	if (full.certificate) output.certificate = full.certificate;
+	const pagination = {
+		snapshot: identity,
+		scope: evidence_scope,
+		counts: {
+			pending: [...p.items.values()].filter((i) => i.status === "pending").length,
+			passed: [...p.items.values()].filter((i) => i.status === "passed").length,
+			superseded: [...p.items.values()].filter((i) => i.status === "superseded").length
+		},
+		detail_query: "Use detail_id and detail_offset; evidence_scope=history includes non-citable evidence."
+	};
+	const summarize = (row) => {
+		if (size(row) <= 1800) return row;
+		return {
+			id: String(row.id ?? row.item_id).slice(0, 128),
+			reason_code: row.reason_code,
+			certifiable: row.certifiable,
+			next_step: typeof row.next_step === "string" ? row.next_step.slice(0, 240) : void 0,
+			adapter_disposition: row.adapter_disposition,
+			omitted: true,
+			detail_id: lookup(String(row.id ?? row.item_id))
+		};
+	};
+	for (const key of LANES) {
+		const start = lane === key ? offset : 0;
+		const cap = lane && lane !== key ? 0 : key === "open_items" ? Math.min(limit, 8) : key === "active_constraints" ? Math.min(limit, 8 - output.open_items.length) : limit;
+		const selected = [];
+		for (const row of rows[key].slice(start, start + cap)) {
+			const candidate = summarize(row);
+			if (size({
+				...output,
+				[key]: [...selected, candidate]
+			}) > MAX_BYTES - 2400) break;
+			selected.push(candidate);
+		}
+		output[key] = selected;
+		const next = start + selected.length;
+		pagination[key] = {
+			total: rows[key].length,
+			returned: selected.length,
+			folded: rows[key].length - selected.length,
+			next_cursor: next < rows[key].length ? Buffer.from(JSON.stringify({
+				identity,
+				lane: key,
+				offset: next
+			})).toString("base64url") : null
+		};
+	}
+	output.pagination = pagination;
+	if (size(output) > MAX_BYTES) return invalid("response_budget_exceeded");
+	return JSON.parse(JSON.stringify(output));
+}
+
+//#endregion
 //#region src/tools/checkpoint.ts
 function targetForTool(target) {
 	if (!target) return {};
@@ -58,7 +265,7 @@ function sameTuple(left, right) {
 	return stable$1(left ?? {}) === stable$1(right ?? {});
 }
 function evidenceForAction(projection, item) {
-	return [...projection.evidence.values()].filter((evidence) => evidence.epoch === projection.epoch && evidence.outcome === "success" && evidence.semanticAction === item.semanticAction);
+	return [...projection.evidence.values()].filter((evidence) => relevantEvidence(projection, item, evidence));
 }
 function bindingTemplate(projection, item) {
 	const action = item.semanticAction;
@@ -103,10 +310,16 @@ function openItemForTool(projection, item) {
 	const template = bindingTemplate(projection, item);
 	return {
 		id: item.id,
+		revision: item.revision,
+		status: item.status,
+		...item.supersededByItems ? { superseded_by_items: item.supersededByItems } : {},
+		...item.supersededBy ? { superseded_by: item.supersededBy } : {},
+		...item.reboundFrom ? { rebound_from: item.reboundFrom } : {},
+		text: item.normalizedText,
 		kind: item.kind,
 		semantic_action: action,
 		requested_target: targetForTool(item.requestedTarget),
-		certifiable: action !== "generic_run" && ACTION_MANIFEST.actions[action].evidenceProducer === "supported" && !item.legacyFlags?.length && item.targetCaptureStatus !== "clarification_required",
+		...itemDiagnosis(projection, item),
 		producer_disposition: ACTION_MANIFEST.actions[action].evidenceProducer,
 		...item.targetCaptureStatus ? { target_capture_status: item.targetCaptureStatus } : {},
 		...item.targetCaptureReasonCode ? { target_capture_reason_code: item.targetCaptureReasonCode } : {},
@@ -125,73 +338,107 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 	return defineTool({
 		name: "context_guard_checkpoint",
 		description: "Request a completion certificate from existing durable evidence.",
-		parameters: { bindings: {
-			type: "array",
-			required: true,
-			items: {
-				type: "object",
-				additionalProperties: false,
-				properties: {
-					item_id: {
-						type: "string",
-						required: true
-					},
-					evidence_ids: {
-						type: "array",
-						required: true,
-						items: { type: "string" }
-					},
-					semantic_action: { type: "string" },
-					requested_target: {
-						type: "object",
-						additionalProperties: true
-					},
-					resolved_target: {
-						type: "object",
-						additionalProperties: true
-					},
-					observed_state: {
-						type: "object",
-						additionalProperties: true
-					},
-					expected_transition: {
-						type: "object",
-						additionalProperties: false,
-						properties: {
-							predicate_id: {
-								type: "string",
-								required: true
-							},
-							version: {
-								type: "integer",
-								required: true
-							},
-							pred_params_kind: {
-								type: "string",
-								required: true,
-								enum: ["inline"]
-							},
-							parameters: {
-								type: "object",
-								additionalProperties: true
-							},
-							parameters_digest: { type: "string" }
+		parameters: {
+			item_ids: {
+				type: "array",
+				items: { type: "string" }
+			},
+			evidence_ids: {
+				type: "array",
+				items: { type: "string" }
+			},
+			evidence_scope: {
+				type: "string",
+				enum: ["relevant", "history"]
+			},
+			cursor: { type: "string" },
+			limit: { type: "integer" },
+			detail_id: { type: "string" },
+			detail_offset: { type: "integer" },
+			detail_snapshot: { type: "string" },
+			bindings: {
+				type: "array",
+				required: true,
+				items: {
+					type: "object",
+					additionalProperties: false,
+					properties: {
+						item_id: {
+							type: "string",
+							required: true
+						},
+						evidence_ids: {
+							type: "array",
+							required: true,
+							items: { type: "string" }
+						},
+						semantic_action: { type: "string" },
+						requested_target: {
+							type: "object",
+							additionalProperties: true
+						},
+						resolved_target: {
+							type: "object",
+							additionalProperties: true
+						},
+						observed_state: {
+							type: "object",
+							additionalProperties: true
+						},
+						expected_transition: {
+							type: "object",
+							additionalProperties: false,
+							properties: {
+								predicate_id: {
+									type: "string",
+									required: true
+								},
+								version: {
+									type: "integer",
+									required: true
+								},
+								pred_params_kind: {
+									type: "string",
+									required: true,
+									enum: ["inline"]
+								},
+								parameters: {
+									type: "object",
+									additionalProperties: true
+								},
+								parameters_digest: { type: "string" }
+							}
+						},
+						resolution_evidence_id: { type: "string" },
+						effect_evidence_id: { type: "string" },
+						state_evidence_ids: {
+							type: "array",
+							items: { type: "string" }
 						}
-					},
-					resolution_evidence_id: { type: "string" },
-					effect_evidence_id: { type: "string" },
-					state_evidence_ids: {
-						type: "array",
-						items: { type: "string" }
 					}
 				}
 			}
-		} },
+		},
 		output: {
 			schema: {
 				type: "object",
 				additionalProperties: false,
 				properties: {
+					blockers: {
+						type: "object",
+						additionalProperties: true
+					},
+					pagination: {
+						type: "object",
+						additionalProperties: true
+					},
+					reason_code: { type: "string" },
+					next_step: { type: "string" },
+					detail_id: { type: "string" },
+					detail_offset: { type: "integer" },
+					detail_chunk: { type: "string" },
+					next_detail_offset: { oneOf: [{ type: "integer" }, { type: "null" }] },
+					snapshot: { type: "string" },
 					status: {
 						type: "string",
 						enum: [
@@ -201,6 +448,13 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 						]
 					},
 					contract_revision: { type: "integer" },
+					active_constraints: {
+						type: "array",
+						items: {
+							type: "object",
+							additionalProperties: true
+						}
+					},
 					open_items: {
 						type: "array",
 						items: {
@@ -212,7 +466,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 						type: "array",
 						items: {
 							type: "object",
-							additionalProperties: false,
+							additionalProperties: true,
 							properties: {
 								id: { type: "string" },
 								call_id: { type: "string" },
@@ -275,7 +529,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 						type: "array",
 						items: {
 							type: "object",
-							additionalProperties: false,
+							additionalProperties: true,
 							properties: {
 								id: { type: "string" },
 								kind: { type: "string" },
@@ -289,7 +543,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 						type: "array",
 						items: {
 							type: "object",
-							additionalProperties: false,
+							additionalProperties: true,
 							properties: {
 								item_id: { type: "string" },
 								reason: { type: "string" },
@@ -368,7 +622,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 				...binding.state_evidence_ids ? { stateEvidenceIds: binding.state_evidence_ids } : {}
 			})), `C${projection.checkpoints.length + 1}`, false);
 			if (!result.checkpoint) onRejected();
-			const available_evidence = [...projection.evidence.values()].filter((evidence) => evidence.epoch === projection.epoch && evidence.outcome === "success").sort((a, b) => a.id < b.id ? -1 : 1).map((evidence) => ({
+			const available_evidence = [...projection.evidence.values()].filter((evidence) => evidence.epoch === projection.epoch && (args.evidence_scope === "history" || [...projection.items.values()].some((item) => item.status === "pending" && relevantEvidence(projection, item, evidence)))).sort((a, b) => b.toolResultSeq - a.toolResultSeq || (a.id < b.id ? -1 : 1)).map((evidence) => ({
 				id: evidence.id,
 				call_id: evidence.callId,
 				tool: evidence.toolName,
@@ -387,13 +641,15 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 				parse_status: evidence.parseStatus ?? "adapter_unavailable",
 				...evidence.adapterId ? { adapter_id: evidence.adapterId } : {},
 				...evidence.adapterVersion ? { adapter_version: evidence.adapterVersion } : {},
-				adapter_disposition: evidence.parseStatus === "supported" ? "citable" : "unavailable",
-				...evidence.reasonCode ? { reason_code: evidence.reasonCode } : {}
+				adapter_disposition: evidenceAvailabilityReason(evidence) === void 0 ? "citable" : "unavailable",
+				...evidenceAvailabilityReason(evidence) ? { reason_code: evidenceAvailabilityReason(evidence) } : {}
 			}));
-			return {
+			return checkpointPage(projection, args, {
 				status: result.status,
 				contract_revision: result.contractRevision,
-				open_items: result.openItems.map((id) => projection.items.get(id)).filter((item) => Boolean(item)).map((item) => openItemForTool(projection, item)),
+				blocking_total: result.openItems.length,
+				open_items: (args.item_ids?.length ? args.item_ids : result.openItems).map((id) => projection.items.get(id)).filter((item) => Boolean(item)).sort((a, b) => b.revision - a.revision || a.id.localeCompare(b.id)).map((item) => openItemForTool(projection, item)),
+				active_constraints: [...projection.items.values()].filter((item) => item.kind === "prohibition" && item.status === "pending").map((item) => openItemForTool(projection, item)),
 				available_evidence,
 				available_qualifications: availableBoundaryQualifications(projection).map((row) => ({
 					id: row.id,
@@ -423,7 +679,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 					certification_digest: result.checkpoint.certificationDigest,
 					goal_ref: result.checkpoint.goalRef ?? null
 				} } : {}
-			};
+			});
 		}
 	});
 }
@@ -878,19 +1134,19 @@ async function tgzIdentity(path) {
 		const name$1 = header.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
 		const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim();
 		if (!/^[0-7]+$/.test(sizeText)) return void 0;
-		const size = Number.parseInt(sizeText, 8);
+		const size$1 = Number.parseInt(sizeText, 8);
 		const bodyStart = offset + 512;
-		const bodyEnd = bodyStart + size;
-		if (!Number.isSafeInteger(size) || size < 0 || bodyEnd > tar.length) return void 0;
+		const bodyEnd = bodyStart + size$1;
+		if (!Number.isSafeInteger(size$1) || size$1 < 0 || bodyEnd > tar.length) return void 0;
 		if (name$1 === "package/package.json") {
-			if (manifest || size > 1024 * 1024) return void 0;
+			if (manifest || size$1 > 1024 * 1024) return void 0;
 			try {
 				manifest = record(JSON.parse(tar.subarray(bodyStart, bodyEnd).toString("utf8")));
 			} catch {
 				return;
 			}
 		}
-		offset = bodyStart + Math.ceil(size / 512) * 512;
+		offset = bodyStart + Math.ceil(size$1 / 512) * 512;
 	}
 	if (typeof manifest?.name !== "string" || typeof manifest.version !== "string") return void 0;
 	return {
@@ -3070,6 +3326,13 @@ function authorizeMutationFromProjection(projection, request) {
 		status: "denied",
 		reasonCode: "mutation_legacy_rebind_required"
 	};
+	if (item.reboundFrom) {
+		const original = projection.items.get(item.reboundFrom.itemId);
+		if (original?.sourceMessageId === item.sourceMessageId && (original.semanticAction !== request.action || !requestedTargetAuthorizesMutation(request.action, original.requestedTarget, request.resolvedTarget))) return {
+			status: "denied",
+			reasonCode: "rebind_does_not_authorize_mutation"
+		};
+	}
 	if (item.semanticAction !== request.action) return {
 		status: "denied",
 		reasonCode: "mutation_semantic_action_mismatch"
@@ -3163,6 +3426,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	let durabilityConfirmed = false;
 	let observedEpoch = -1;
 	let observedCompactionSeq = -1;
+	let observedContractRevision = -1;
 	const continuationAttempts = projection.continuationAttempts;
 	const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts;
 	const rebuild = () => {
@@ -3191,8 +3455,11 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			projection.lastRecoveryDigest = void 0;
 		}
 		observedEpoch = derived.projection.epoch;
+		if (observedContractRevision >= 0 && projection.contractRevision !== observedContractRevision) pendingRecovery = true;
+		observedContractRevision = projection.contractRevision;
 		if (derived.lastCompactionSeq > observedCompactionSeq) {
 			pendingRecovery = true;
+			projection.lastRecoveryDigest = void 0;
 			observedCompactionSeq = derived.lastCompactionSeq;
 		}
 	};
@@ -3247,6 +3514,7 @@ function apply(ctx, rawConfig = {}) {
 	ctx.commands.register(createContextGuardCommand((agent) => ensure(agent).projection, (agent, enabled) => ensure(agent).setEnabled(enabled), (agent) => ensure(agent).sync()));
 	ctx.on("agent/session-start", ({ agent, source }) => {
 		ensureProtocolBoundary(agent);
+		ensureProtocolBoundary(agent, CAPTURE_V042_NOTICE);
 		const runtime = ensure(agent);
 		runtime.sync();
 		if (source === "resume" || source === "compact") {
@@ -3255,6 +3523,12 @@ function apply(ctx, rawConfig = {}) {
 		}
 		if (registeredAgents.has(agent)) return;
 		registeredAgents.add(agent);
+		agent.ctx.tools.register(createRebindTool(() => runtime.projection, async () => {
+			const durable = await ctx.sessions.flush(agent.session);
+			runtime.setDurability(durable);
+			runtime.sync();
+			return durable;
+		}));
 		agent.ctx.tools.register(createCheckpointTool(() => runtime.projection, () => runtime.markRecoveryNeeded(), async () => {
 			const durable = await ctx.sessions.flush(agent.session);
 			runtime.setDurability(durable);
@@ -3318,9 +3592,9 @@ function apply(ctx, rawConfig = {}) {
 		const decision = await next();
 		if (decision.kind === "enter" && runtime.projection.enabled && runtime.consumeRecovery()) {
 			const recovery = renderRecoveryPacket(runtime.projection, { charBudget: 4e3 });
-			const digest$1 = recovery ? recoveryDigest(recovery, runtime.projection) : void 0;
-			if (recovery && digest$1 !== runtime.projection.lastRecoveryDigest) {
-				runtime.projection.lastRecoveryDigest = digest$1;
+			const digest$2 = recovery ? recoveryDigest(recovery, runtime.projection) : void 0;
+			if (recovery && digest$2 !== runtime.projection.lastRecoveryDigest) {
+				runtime.projection.lastRecoveryDigest = digest$2;
 				decision.messages = [...decision.messages, createUserMessage({
 					content: [{
 						type: "text",
@@ -3376,24 +3650,24 @@ function optionalMarketOrigin(ctx, agent) {
 		return `http://${service.host === "::1" ? "[::1]" : "127.0.0.1"}:${service.port}`;
 	} catch {}
 }
-function ensureProtocolBoundary(agent) {
+function ensureProtocolBoundary(agent, notice = PROTOCOL_V3_NOTICE) {
 	if (snapshotSessionEvents(agent.session).some((event) => {
 		if (event.type !== "user/message" || !event.data || typeof event.data !== "object") return false;
 		const data = event.data;
 		const source = data.source && typeof data.source === "object" ? data.source : void 0;
 		const content = Array.isArray(data.content) ? data.content : [];
-		return (content.length === 1 && content[0] && typeof content[0] === "object" ? content[0].text : void 0) === PROTOCOL_V3_NOTICE && source?.kind === "plugin" && source.plugin === "context-guard" && source.form === "notice";
+		return (content.length === 1 && content[0] && typeof content[0] === "object" ? content[0].text : void 0) === notice && source?.kind === "plugin" && source.plugin === "context-guard" && source.form === "notice";
 	})) return;
 	agent.session.append.bind(agent.session)("user/message", createUserMessage({
 		content: [{
 			type: "text",
-			text: PROTOCOL_V3_NOTICE
+			text: notice
 		}],
 		source: {
 			kind: "plugin",
 			plugin: "context-guard",
 			form: "notice",
-			summary: boundContextSummary("Context Guard upgraded its replay contract to v3")
+			summary: boundContextSummary("Context Guard recorded a replay version boundary")
 		}
 	}), { surfaceOp: "append" });
 }
@@ -3467,4 +3741,4 @@ function normalizeGoalState(value) {
 }
 
 //#endregion
-export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, CERTIFICATE_VERSION, COMMAND_SURFACE_MANIFEST, Config, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, EXPECTED_HOST_PACKAGES, GIT_COMMAND_MANIFEST_IDS, GOAL_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, PROOF_KINDS, PROOF_PROTOCOL_VERSION, PROTOCOL_V3_NOTICE, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, apply, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindingSatisfies, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, captureClause, captureItem, certifyCheckpoint, classifyClause, classifyCompletionClaim, classifyUserInteraction, closingHint, commitIndexSnapshotDigest, commitTreeSnapshotDigest, createGitPrestateEnvelope, createProjection, createProofManifest, currentContractDigest, decideTurnBoundary, decideTurnStopping, deriveProjection, digestStrings, effectuateBoundary, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateToolSurfaceCapability, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, gitCommandMatchesTarget, goalCompletionDenial, hasCurrentCertificate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, inject, injectActiveProfileHostLock, isCurrentAcceptedBoundary, isDeterministicCheck, isInformationalMessage, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, latestAssistantText, name, normalizeClause, observeAssistantOutcome, openItems, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseGitCommandManifest, parsePwshCommand, parseShellCommand, proofDigest, proofEvidenceConstraints, qualifyBoundary, recoveryDigest, renderRecoveryPacket, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, resolveActiveProfileHostLock, resolveInstalledHostLock, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, sessionQuery, sha256, snapshotSessionEvents, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };
+export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, COMMAND_SURFACE_MANIFEST, Config, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, EXPECTED_HOST_PACKAGES, GIT_COMMAND_MANIFEST_IDS, GOAL_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, MIN_RECOVERY_CHAR_BUDGET, PROOF_KINDS, PROOF_PROTOCOL_VERSION, PROTOCOL_V3_NOTICE, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, apply, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindingSatisfies, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, captureClause, captureItem, certifyCheckpoint, classifyClause, classifyCompletionClaim, classifyUserInteraction, closingHint, commitIndexSnapshotDigest, commitTreeSnapshotDigest, createGitPrestateEnvelope, createProjection, createProofManifest, currentContractDigest, decideTurnBoundary, decideTurnStopping, deriveProjection, digestStrings, effectuateBoundary, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateToolSurfaceCapability, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, gitCommandMatchesTarget, goalCompletionDenial, hasCurrentCertificate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, inject, injectActiveProfileHostLock, isCurrentAcceptedBoundary, isDeterministicCheck, isInformationalMessage, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, latestAssistantText, name, normalizeClause, observeAssistantOutcome, openItems, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseGitCommandManifest, parsePwshCommand, parseShellCommand, proofDigest, proofEvidenceConstraints, qualifyBoundary, recoveryDigest, renderRecoveryPacket, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, resolveActiveProfileHostLock, resolveInstalledHostLock, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, sessionQuery, sha256, snapshotSessionEvents, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };

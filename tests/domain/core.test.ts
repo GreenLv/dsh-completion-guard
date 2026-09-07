@@ -365,11 +365,13 @@ describe('domain core', () => {
     projection.items.set('R001', captureClause('ship the artifact', 'm1', 'R001', 1))
     projection.items.set('P001', captureClause("Don't touch the API", 'm2', 'P001', 1))
     projection.items.set('A001', captureClause('Verify the file', 'm3', 'A001', 1))
-    const packet = renderRecoveryPacket(projection, { charBudget: 200 })
-    expect(packet).toContain('[R001] ship the artifact')
-    expect(packet.indexOf('[R001]')).toBeLessThan(packet.indexOf('[P001]'))
+    const packet = renderRecoveryPacket(projection, { charBudget: 4000 })
+    expect(packet).toContain('[R001]')
+    expect(packet).toContain('ship the artifact')
+    expect(packet.indexOf('[P001]')).toBeLessThan(packet.indexOf('[R001]'))
     expect(packet.indexOf('[P001]')).toBeLessThan(packet.indexOf('[A001]'))
-    expect(packet.length).toBeLessThanOrEqual(200)
+    expect(packet.length).toBeLessThanOrEqual(4000)
+    expect(() => renderRecoveryPacket(projection, { charBudget: 511 })).toThrow(RangeError)
   })
 
   it('derives distinct IDs and supersedes identical re-statements', () => {
@@ -735,7 +737,7 @@ describe('domain core', () => {
     expect(items.filter((item) => item.verification.surface === 'artifact')).toHaveLength(2)
   })
 
-  it('lists citable evidence ids in the recovery packet', () => {
+  it('does not list unsupported generic evidence as citable in recovery', () => {
     const projection = createProjection()
     projection.epoch = 1
     projection.items.set('R001', captureClause('ship the artifact', 'm1', 'R001', 1, { cwd: '/work' }))
@@ -744,7 +746,8 @@ describe('domain core', () => {
       outcome: 'success', capabilities: ['filesystem-read'], subjects: ['/work/artifact'], surfaces: ['artifact'], boundedSummarySha256: sha256('x'),
     })
     const packet = renderRecoveryPacket(projection, { charBudget: 4000 })
-    expect(packet).toContain('evidence E0001 tool=read action=generic_run')
+    expect(packet).not.toContain('evidence E0001')
+    expect(packet).toContain('evidence_scope=history')
   })
 
   it('recognizes a bare completion title followed by a results summary', () => {
@@ -1791,9 +1794,9 @@ describe('domain core', () => {
     })
     const packet = renderRecoveryPacket(projection)
     expect(packet).toContain('[R001]')
-    expect(packet).toContain('more open items')
+    expect(packet).toContain('8 items folded')
     expect(packet).not.toContain('[R012]')
-    expect(packet).toContain('evidence E0001')
-    const small = renderRecoveryPacket(projection, { charBudget: 120 })
-    expect(small.length).toBeLessThanOrEqual(120)
+    expect(packet).not.toContain('evidence E0001')
+    const small = renderRecoveryPacket(projection, { charBudget: 512 })
+    expect(small.length).toBeLessThanOrEqual(512)
   })

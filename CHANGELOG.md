@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.4.2 - Unreleased
+
+- Explain when a task cannot be certified and what the user can clarify. Generic command success still cannot prove an update or a GUI result.
+- Add `context_guard_rebind`: propose a complete split of an old requirement, optionally link a later explicit root-user clarification, then replace it only after the user's exact confirmation. Old sources, unsupported remainders, and one-to-many relationships remain visible; the proposal grants no execution permission.
+- Bound checkpoint pages to 12 KiB and focus default evidence on the current action and target. Item, evidence, and history queries have independent continuation cursors; the full contract is still checked.
+- Reserve recovery space for current constraints, refusal reasons, next steps, and completion rules. Unrelated evidence no longer repeats the same guidance; compact and resume still recover the current state.
+- Add an isolated host-bound native entrypoint with nonempty tool calls and lifecycle checks. CI, frozen-artifact and native execution remain pending for this candidate; see [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
+
 ## 0.4.1-rc.1 - 2026-09-04
 
 - Add the exact DSH `0.1.2-rc.1` + dshmarket `1.41.0` host cohort for macOS/posix and Windows. The Windows host graph was audited on the native Windows rc.1 runtime; host-graph audits do not replace the cross-platform exact-artifact acceptance of one frozen package.

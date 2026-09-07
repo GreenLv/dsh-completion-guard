@@ -1,7 +1,8 @@
 import type { GuardItem, GuardProjection } from './types.js'
 import { sha256 } from './canonicalize.js'
 import { evidenceCoverage } from './matching.js'
-import { ACTION_MANIFEST, isStatefulAction } from './protocol-manifest.js'
+import { itemDiagnosis, relevantEvidence } from './diagnostics.js'
+import { isStatefulAction } from './protocol-manifest.js'
 
 export interface RecoveryOptions {
   rejectedBindings?: Array<{ itemId: string; reason: string; reasonCode?: string; offendingEvidenceIds?: string[] }>
@@ -9,11 +10,8 @@ export interface RecoveryOptions {
 }
 
 export const DEFAULT_RECOVERY_CHAR_BUDGET = 4000
-const MAX_RECOVERY_ITEMS = 8
-const MAX_RECOVERY_EVIDENCE = 20
-const MORE_ITEMS_RULE = (remaining: number) => `…(${remaining} more open items; the full list is in the checkpoint tool response)`
-const MORE_EVIDENCE_RULE = (remaining: number) => `…(${remaining} more evidence rows)`
-const COMPLETION_RULE = 'Obtain a Context Guard checkpoint from matching durable evidence before claiming completion.'
+export const MIN_RECOVERY_CHAR_BUDGET = 512
+const COMPLETION_RULE = 'Obtain a Context Guard checkpoint from matching durable evidence before claiming completion. A qualified safe end preserves pending work; it is not completion.'
 
 /**
  * An actionable one-line hint for how an open item's verification contract can
@@ -23,6 +21,7 @@ const COMPLETION_RULE = 'Obtain a Context Guard checkpoint from matching durable
  * evidence already cover.
  */
 export function closingHint(projection: GuardProjection, item: GuardItem, evidenceIds?: string[]): string {
+  if (item.semanticAction === 'generic_run') return itemDiagnosis(projection, item).next_step
   const verification = item.verification
   const parts: string[] = []
   if (evidenceIds?.length) {
@@ -66,94 +65,60 @@ export function openItems(projection: GuardProjection): GuardItem[] {
  * injected once instead of looping (v0.2.1).
  */
 export function recoveryDigest(packet: string, projection: GuardProjection): string {
-  return sha256(JSON.stringify({ packet, revision: projection.contractRevision, epoch: projection.epoch }))
+  const items = openItems(projection)
+  const evidence = [...projection.evidence.values()].filter(row => items.some(item => relevantEvidence(projection, item, row)))
+  return sha256(JSON.stringify({ packet, revision: projection.contractRevision, epoch: projection.epoch, host: projection.hostLockDigest, evidence }))
 }
 
 export function renderRecoveryPacket(projection: GuardProjection, options: RecoveryOptions = {}): string {
   const budget = options.charBudget ?? DEFAULT_RECOVERY_CHAR_BUDGET
-  const lines: string[] = []
-  let used = 0
-  const push = (line: string) => {
-    if (used + line.length + 1 > budget) return false
-    lines.push(line)
-    used += line.length + 1
+  if (!Number.isSafeInteger(budget) || budget < MIN_RECOVERY_CHAR_BUDGET) throw new RangeError('recovery charBudget must be an integer >= 512')
+  const clip = (text: string, size: number) => text.length <= size ? text : text.slice(0, size - 1) + '…'
+  const items = openItems(projection).sort((a, b) => Number(b.kind === 'prohibition') - Number(a.kind === 'prohibition') || b.revision - a.revision || a.id.localeCompare(b.id))
+  const rejected = options.rejectedBindings ?? (projection.lastCheckpointRejectionRevision === projection.contractRevision ? projection.lastCheckpointRejections : []) ?? []
+  const compact = budget < 1000
+  const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact
+    ? 'Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion.' : COMPLETION_RULE]
+  const pointer = 'Details/omissions: context_guard_checkpoint (item_ids, evidence_scope=history, cursor).'
+  // Reserve the complete footer before any optional row, including long IDs
+  // and rejection diagnostics. Counts must never disappear under pressure.
+  const evidence = [...projection.evidence.values()].filter(e => items.some(item => relevantEvidence(projection, item, e)))
+    .sort((a, b) => b.toolResultSeq - a.toolResultSeq || a.id.localeCompare(b.id))
+  const footer = (count: number, refusals: number, shown: number) => `${items.length - count} items folded; ${rejected.length - refusals} rejections folded; ${evidence.length - shown} relevant evidence rows folded. Full ledger remains enforced.`
+  let remaining = budget - lines.join('\n').length - pointer.length - footer(0, 0, 0).length - 3
+  const add = (line: string, cap: number) => {
+    if (remaining < 30) return false
+    const text = clip(line, Math.min(cap, remaining))
+    lines.push(text)
+    remaining -= text.length + 1
     return true
   }
-
-  const items = openItems(projection)
-  const listedIds = new Set<string>()
-  const pushItems = (list: GuardItem[], render: (item: GuardItem) => string): boolean => {
-    let count = 0
-    for (const item of list) {
-      if (count >= MAX_RECOVERY_ITEMS) {
-        // Best-effort fold notice; evidence rows that follow stay valuable.
-        push(MORE_ITEMS_RULE(list.length - count))
-        return true
-      }
-      if (!push(render(item))) return false
-      listedIds.add(item.id)
-      count += 1
+  const constraints = items.filter(item => item.kind === 'prohibition')
+  const work = items.filter(item => item.kind !== 'prohibition')
+  let count = 0, refusals = 0, shown = 0
+  const constraint = (item: GuardItem) => {
+    if (add(`DO NOT [${clip(item.id, 20)}] ${clip(item.normalizedText, compact ? 18 : 100)}`, compact ? 45 : 140)) count++
+  }
+  const requirement = (item: GuardItem) => {
+    const diagnosis = itemDiagnosis(projection, item)
+    const remedy = diagnosis.reason_code === 'generic_run_non_certifiable' || diagnosis.reason_code === 'target_clarification_required'
+      ? 'context_guard_rebind; root confirmation required'
+      : diagnosis.reason_code === 'host_unavailable' || diagnosis.reason_code === 'adapter_unavailable'
+        ? 'Restore audited host/adapter capability' : 'Collect matching evidence; checkpoint'
+    if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_step}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++
+  }
+  // Each category gets a slot before optional diagnostics can consume space.
+  if (constraints[0]) constraint(constraints[0])
+  if (work[0]) requirement(work[0])
+  if (!compact) {
+    for (const item of work.slice(1, 4)) requirement(item)
+    for (const item of constraints.slice(1, 4)) constraint(item)
+    for (const binding of rejected.slice(0, 4)) {
+      if (add(`rejected ${clip(binding.itemId, 30)}: ${clip(binding.reasonCode ?? binding.reason, 120)}`, 170)) refusals++
     }
-    return true
+    for (const item of work.slice(0, 4)) if (itemDiagnosis(projection, item).certifiable) add(`closing hint [${clip(item.id, 20)}]: ${closingHint(projection, item)}`, 240)
+    for (const row of evidence.slice(0, 4)) if (add(`evidence ${clip(row.id, 40)} action=${row.semanticAction} role=${row.evidenceRole ?? 'effect'}`, 140)) shown++
   }
-  const requirementItems = items.filter((item) => item.kind === 'requirement')
-  const compact = budget < 512
-  const itemDiagnostic = (item: GuardItem) => {
-    if (compact) return `[${item.id}] ${item.normalizedText}`
-    const action = item.semanticAction ?? 'generic_run'
-    const spec = ACTION_MANIFEST.actions[action]
-    return `[${item.id}] ${item.normalizedText} action=${action} requested=${JSON.stringify(item.requestedTarget ?? {})} predicate=${spec.predicateId}@1 params=inline(resolved:${spec.resolvedTargetKeys.join(',') || '-'};observed:${spec.observedStateKeys.join(',') || '-'})`
-  }
-  if (!pushItems(requirementItems, itemDiagnostic)) return finalize()
-  const prohibitionItems = items.filter((item) => item.kind === 'prohibition')
-  if (!pushItems(prohibitionItems, (item) => `[${item.id}] DO NOT ${item.normalizedText}`)) return finalize()
-  const acceptanceItems = items.filter((item) => item.kind === 'acceptance')
-  if (!pushItems(acceptanceItems, (item) => `VERIFY ${itemDiagnostic(item)}`)) return finalize()
-  // Surface the real evidence IDs the model may cite, so a checkpoint attempt
-  // can bind actual evidence instead of guessing identifiers.
-  const citableEvidence = [...projection.evidence.values()]
-    .filter((evidence) => evidence.epoch === projection.epoch && evidence.outcome === 'success')
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-  let evidenceCount = 0
-  for (const evidence of citableEvidence) {
-    if (evidenceCount >= MAX_RECOVERY_EVIDENCE) {
-      push(MORE_EVIDENCE_RULE(citableEvidence.length - evidenceCount))
-      break
-    }
-    const summary = [
-      `evidence ${evidence.id}`,
-      `tool=${evidence.toolName}`,
-      `action=${evidence.semanticAction ?? 'generic_run'}`,
-      `role=${evidence.evidenceRole ?? 'effect'}`,
-      `resolved=${JSON.stringify(evidence.resolvedTarget ?? {})}`,
-      `observed=${JSON.stringify(evidence.observedState ?? {})}`,
-      `adapter=${evidence.adapterId ?? '-'}@${evidence.adapterVersion ?? '-'}`,
-      `ops=${(evidence.operations ?? []).map((entry) => entry.op).join(',') || '-'}`,
-      `executables=${(evidence.executables ?? []).join(',') || '-'}`,
-      `parse=${evidence.parseStatus ?? 'adapter_unavailable'}`,
-    ].join(' ')
-    if (!push(summary)) return finalize()
-    evidenceCount += 1
-  }
-  for (const item of [...projection.items.values()].filter((item) => item.status === 'superseded')) {
-    if (item.supersededBy && !push(`[${item.id} -> ${item.supersededBy}]`)) return finalize()
-  }
-  for (const binding of options.rejectedBindings ?? []) {
-    const offending = binding.offendingEvidenceIds?.length ? ` offending=${binding.offendingEvidenceIds.join(',')}` : ''
-    const reason = binding.reasonCode ? binding.reasonCode : binding.reason
-    if (!push(`rejected ${binding.itemId}: ${reason}${offending}`)) return finalize()
-  }
-  // Best-effort actionable hints for the LISTED items only: folded items never
-  // leak back through the hint lines, and hints never displace the prioritized
-  // item and evidence lines when the budget is tight.
-  for (const item of items) {
-    if (item.kind === 'prohibition' || !listedIds.has(item.id)) continue
-    push(`closing hint [${item.id}]: ${closingHint(projection, item)}`)
-  }
-  push(COMPLETION_RULE)
-  return finalize()
-
-  function finalize() {
-    return lines.join('\n')
-  }
+  lines.push(footer(count, refusals, shown), pointer)
+  return lines.join('\n')
 }

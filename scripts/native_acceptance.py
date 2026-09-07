@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -201,6 +202,9 @@ def portable_acceptance(
         run(app, *npm_args, env=environment)
         installed = app / "node_modules" / "dsh-completion-guard"
         first_digest = tree_digest(installed)
+        if first_digest != tree_digest(extract_root / "package"):
+            raise NativeRunError("installed package tree differs from the exact artifact")
+        gates.append(gate("package_parity", artifact_digest, passed=True))
         gates.append(gate("isolated_install", artifact_digest, passed=True))
         run(app, *npm_args, env=environment)
         if tree_digest(installed) != first_digest:
@@ -259,15 +263,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--run-url")
+    parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound"), default="portable_artifact")
+    parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--transfer-receipt", type=Path)
     parser.add_argument("--transport-url")
     args = parser.parse_args(argv)
     if not HEX64.fullmatch(args.artifact_sha256) or not HEX40.fullmatch(args.source_commit):
         parser.error("artifact SHA-256 and source commit must be full lowercase digests")
+    if args.gate_profile == "host_bound" and args.runtime_root is None:
+        parser.error("host_bound requires --runtime-root pointing to the audited DSH installation")
     result = portable_acceptance(
         args.repo_root.resolve(), args.artifact.resolve(), args.artifact_sha256,
         args.source_commit, args.run_url,
     )
+    if args.gate_profile == "host_bound":
+        helper = Path(__file__).with_name("native_host_acceptance.py")
+        spec = importlib.util.spec_from_file_location("native_host_acceptance", helper)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Pass this module's checked artifact helpers without relying on the
+        # caller's sys.path or loading an arbitrary external runner.
+        from types import SimpleNamespace
+        api = SimpleNamespace(gate=gate, sha256=sha256, tree_digest=tree_digest, timestamp=timestamp)
+        result = module.host_acceptance(api, args.repo_root.resolve(), args.artifact.resolve(),
+                                        args.artifact_sha256, args.runtime_root.resolve(), result)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if args.transfer_receipt:
         if not args.transport_url or result["artifact"]["sha256"] != args.artifact_sha256:

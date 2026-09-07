@@ -1,10 +1,11 @@
+import { createRebindTool } from './tools/rebind.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from './domain/digest.js'
 import { createProjection, type GuardProjection } from './domain/types.js'
-import { deriveProjection, PROTOCOL_V3_NOTICE } from './domain/derive.js'
+import { deriveProjection, PROTOCOL_V3_NOTICE, CAPTURE_V042_NOTICE } from './domain/derive.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
 import { decideTurnBoundary } from './domain/stop-policy.js'
 import { recoveryDigest, renderRecoveryPacket } from './domain/recovery.js'
@@ -91,6 +92,17 @@ export function authorizeMutationFromProjection(
     return { status: 'denied', reasonCode: 'mutation_root_authority_unavailable' }
   }
   if (item.legacyFlags?.length) return { status: 'denied', reasonCode: 'mutation_legacy_rebind_required' }
+  if (item.reboundFrom) {
+    const original = projection.items.get(item.reboundFrom.itemId)
+    // A replacement retaining the original source may only use the original
+    // action and target authority. A later root clarification keeps its own
+    // independent source and was already authorizing before mapping.
+    if (original?.sourceMessageId === item.sourceMessageId
+      && (original.semanticAction !== request.action
+        || !requestedTargetAuthorizesMutation(request.action, original.requestedTarget, request.resolvedTarget))) {
+      return { status: 'denied', reasonCode: 'rebind_does_not_authorize_mutation' }
+    }
+  }
   if (item.semanticAction !== request.action) return { status: 'denied', reasonCode: 'mutation_semantic_action_mismatch' }
   if (item.targetCaptureStatus !== 'resolved') return { status: 'denied', reasonCode: 'mutation_target_clarification_required' }
   if (!requestedTargetAuthorizesMutation(request.action, item.requestedTarget, request.resolvedTarget)) {
@@ -199,6 +211,7 @@ export function createRuntime(
   let durabilityConfirmed = false
   let observedEpoch = -1
   let observedCompactionSeq = -1
+  let observedContractRevision = -1
   const continuationAttempts = projection.continuationAttempts
   const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts
 
@@ -242,10 +255,13 @@ export function createRuntime(
       projection.lastRecoveryDigest = undefined
     }
     observedEpoch = derived.projection.epoch
+    if (observedContractRevision >= 0 && projection.contractRevision !== observedContractRevision) pendingRecovery = true
+    observedContractRevision = projection.contractRevision
     // Compaction summaries stay in the historical log forever, so only re-arm
     // recovery when a NEW summary is observed, keyed by its sequence.
     if (derived.lastCompactionSeq > observedCompactionSeq) {
       pendingRecovery = true
+      projection.lastRecoveryDigest = undefined
       observedCompactionSeq = derived.lastCompactionSeq
     }
   }
@@ -316,6 +332,7 @@ export function apply(ctx: Context, rawConfig: {
 
   ctx.on('agent/session-start', ({ agent, source }) => {
     ensureProtocolBoundary(agent)
+    ensureProtocolBoundary(agent, CAPTURE_V042_NOTICE)
     const runtime = ensure(agent)
     runtime.sync()
     if (source === 'resume' || source === 'compact') {
@@ -327,6 +344,12 @@ export function apply(ctx: Context, rawConfig: {
     }
     if (registeredAgents.has(agent)) return
     registeredAgents.add(agent)
+    agent.ctx.tools.register(createRebindTool(() => runtime.projection, async () => {
+      const durable = await ctx.sessions.flush(agent.session)
+      runtime.setDurability(durable)
+      runtime.sync()
+      return durable
+    }))
     agent.ctx.tools.register(createCheckpointTool(
       () => runtime.projection,
       () => runtime.markRecoveryNeeded(),
@@ -467,7 +490,7 @@ function optionalMarketOrigin(ctx: Context, agent: Agent): string | undefined {
   return undefined
 }
 
-function ensureProtocolBoundary(agent: Agent): void {
+function ensureProtocolBoundary(agent: Agent, notice = PROTOCOL_V3_NOTICE): void {
   const events = snapshotSessionEvents(agent.session) as Array<{ type?: unknown; data?: unknown }>
   const found = events.some((event) => {
     if (event.type !== 'user/message' || !event.data || typeof event.data !== 'object') return false
@@ -475,13 +498,13 @@ function ensureProtocolBoundary(agent: Agent): void {
     const source = data.source && typeof data.source === 'object' ? data.source as Record<string, unknown> : undefined
     const content = Array.isArray(data.content) ? data.content : []
     const text = content.length === 1 && content[0] && typeof content[0] === 'object' ? (content[0] as Record<string, unknown>).text : undefined
-    return text === PROTOCOL_V3_NOTICE && source?.kind === 'plugin' && source.plugin === 'context-guard' && source.form === 'notice'
+    return text === notice && source?.kind === 'plugin' && source.plugin === 'context-guard' && source.form === 'notice'
   })
   if (found) return
   const append = (agent.session as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append.bind(agent.session)
   append('user/message', createUserMessage({
-    content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('Context Guard upgraded its replay contract to v3') },
+    content: [{ type: 'text', text: notice }],
+    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('Context Guard recorded a replay version boundary') },
   }), { surfaceOp: 'append' })
 }
 

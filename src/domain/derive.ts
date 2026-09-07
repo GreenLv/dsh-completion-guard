@@ -1,3 +1,4 @@
+import { confirmRebind, replayRebindResult, type RebindArgs } from './rebind.js'
 import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses } from './capture.js'
 import { certifyCheckpoint } from './checkpoint.js'
 import { qualifyBoundary, type BoundaryRequest } from './boundary.js'
@@ -19,14 +20,16 @@ interface PendingCall {
   boundaryRequest?: BoundaryRequest
 }
 
+export const CAPTURE_V042_NOTICE = 'Context Guard capture boundary: v0.4.2'
+
 export const PROTOCOL_V3_NOTICE = 'Context Guard protocol boundary: v3.0.0'
 
-function isProtocolBoundaryNotice(event: DerivedEnvelope): boolean {
+function isProtocolBoundaryNotice(event: DerivedEnvelope, notice = PROTOCOL_V3_NOTICE): boolean {
   if (event.type !== 'user/message') return false
   const data = asRecord(event.data)
   const source = asRecord(data?.source)
   if (source?.kind !== 'plugin' || source.plugin !== 'context-guard' || source.form !== 'notice') return false
-  return extractTextContent((data?.content as unknown[] | undefined) ?? []) === PROTOCOL_V3_NOTICE
+  return extractTextContent((data?.content as unknown[] | undefined) ?? []) === notice
 }
 
 function parseArguments(raw: string): Record<string, unknown> {
@@ -136,19 +139,20 @@ function insertItems(
   authority: 'root_instruction' | 'root_adoption' = 'root_instruction',
   legacy = false,
   legacyAuthorityProven = false,
+  captureVersion: 'v041' | 'v042' = 'v042',
 ): void {
   const before = new Set(projection.items.keys())
-  for (const segment of segmentClauses(text)) {
+  for (const segment of segmentClauses(text, captureVersion)) {
     // Session-layer clauses (progression phrases, meta questions) inside an
     // otherwise actionable message never become contract items.
     if (classifyUserInteraction(segment.body) === 'conversational') continue
     if (segment.kind === 'requirement' && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue
     if (segment.kind === 'prohibition' || segment.paths.length === 0) {
-      insert(projection, segment.kind, segment.body, sourceMessageId, scope.cwd || 'scope', 'scope')
+      insert(projection, segment.kind, segment.body, sourceMessageId, scope.cwd || 'scope', 'scope', captureVersion)
       continue
     }
     for (const path of segment.paths) {
-      insert(projection, segment.kind, segment.body, sourceMessageId, resolveArtifact(path, scope), 'artifact')
+      insert(projection, segment.kind, segment.body, sourceMessageId, resolveArtifact(path, scope), 'artifact', captureVersion)
     }
   }
   for (const [id, item] of projection.items) {
@@ -180,12 +184,13 @@ function insert(
   sourceMessageId: string,
   subject: string,
   surface: 'artifact' | 'scope',
+  captureVersion: 'v041' | 'v042',
 ): void {
   const revision = projection.contractRevision + 1
   const id = nextId(projection.items, kind)
   const method = extractMethod(body)
   const operation = extractOperation(body)
-  const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation)
+  const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, captureVersion)
   const duplicate = [...projection.items.values()].find(
     (existing) => existing.kind === kind
       && existing.status === 'pending'
@@ -224,10 +229,12 @@ export function deriveProjection(
   let enablementTransitioned = false
   let lastCompactionSeq = -1
   const pendingCalls = new Map<string, PendingCall>()
-  const protocolBoundarySeq = sourceEvents.find(isProtocolBoundaryNotice)?.seq
+  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event))?.seq
+  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE))?.seq
   const priorRootMessages: string[] = []
 
   for (const event of sourceEvents) {
+    projection.enabled = enabled
     projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq)
     switch (event.type) {
       case 'command/run': {
@@ -263,7 +270,7 @@ export function deriveProjection(
         lastCompactionSeq = event.seq
         break
       case 'user/message': {
-        if (isProtocolBoundaryNotice(event)) break
+        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE)) break
         if (!enabled) break
         const data = asRecord(event.data)
         const source = asRecord(data?.source)
@@ -271,6 +278,8 @@ export function deriveProjection(
         const content = (data?.content as unknown[] | undefined) ?? []
         const text = extractTextContent(content)
         if (!text.trim()) break
+        if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== 'subagent'
+          && confirmRebind(projection, text, `m${event.seq}`, durableConfirmed)) break
         // Informational reports (acceptance receipts, pasted summaries/logs)
         // are not task instructions and never become contract items.
         if (isInformationalMessage(text)) break
@@ -288,6 +297,7 @@ export function deriveProjection(
             block.authority === 'root_adoption' ? 'root_adoption' : 'root_instruction',
             protocolBoundarySeq !== undefined && event.seq < protocolBoundarySeq,
             block.kind === 'instruction' || block.authority === 'root_adoption',
+            (captureBoundarySeq !== undefined && event.seq < captureBoundarySeq) || (captureBoundarySeq === undefined && protocolBoundarySeq !== undefined) ? 'v041' : 'v042',
           )
         }
         priorRootMessages.push(text)
@@ -393,13 +403,24 @@ export function deriveProjection(
         pendingCalls.delete(callId)
         const dispatchContent = isDispatch ? (data?.content as unknown[] | undefined) : undefined
         const textContent = extractTextContent(dispatchContent ?? (message?.content as unknown[] | undefined) ?? [])
+        if (call.name === 'context_guard_rebind') {
+          if (!call.rootCallId && !data?.error && durableConfirmed) replayRebindResult(projection, parseArguments(call.arguments) as unknown as RebindArgs, parseArguments(textContent))
+          break
+        }
         if (call.name === 'context_guard_checkpoint') {
           // A checkpoint is restored only when the history already recorded it
           // as certified AND the re-derived evidence still certifies it. Any
           // other combination fails closed; a persisted "incomplete" is never
           // promoted to a certificate.
           const recorded = parseArguments(textContent)
-          if (recorded.status !== 'certified') break
+          if (recorded.status !== 'certified') {
+            if ((call.bindings?.length ?? 0) > 0) {
+              const rejected = certifyCheckpoint(projection, call.bindings ?? [], 'diagnostic', false)
+              projection.lastCheckpointRejections = rejected.rejectedBindings
+              projection.lastCheckpointRejectionRevision = projection.contractRevision
+            }
+            break
+          }
           if (!asRecord(recorded.certificate)) {
             for (const binding of call.bindings ?? []) {
               const item = projection.items.get(binding.itemId)

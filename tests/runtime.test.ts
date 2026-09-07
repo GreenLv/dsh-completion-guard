@@ -659,7 +659,7 @@ describe('runtime derivation', () => {
   })
 
 type PreStepHandler = (payload: { agent: Agent }, next: () => Promise<{ kind: string; messages: unknown[] }>) => Promise<{ kind: string; messages: unknown[] }>
-type CheckpointTool = { execute: (args: { bindings: Array<{ item_id: string; evidence_ids: string[] }> }) => Promise<unknown> }
+type CheckpointTool = { name: string; execute: (args: { bindings: Array<{ item_id: string; evidence_ids: string[] }> }) => Promise<unknown> }
 
 function fakeCtx() {
   const handlers = new Map<string, Array<(...args: never[]) => unknown>>()
@@ -726,7 +726,7 @@ async function runPreStep(ctx: ReturnType<typeof fakeCtx>, agent: Agent): Promis
 }
 
 async function rejectCheckpoint(registered: CheckpointTool[], itemId: string) {
-  await registered[0].execute({ bindings: [{ item_id: itemId, evidence_ids: ['E9999'] }] })
+  await registered.find(tool => tool.name === 'context_guard_checkpoint')!.execute({ bindings: [{ item_id: itemId, evidence_ids: ['E9999'] }] })
 }
 
 function projectionRuntime(projection: ReturnType<typeof createProjection>): GuardRuntime {
@@ -844,7 +844,7 @@ describe('recovery injection dedup (v0.2.1)', () => {
     const notices = session.events.filter((event) => event.type === 'user/message'
       && (event.data as { source?: { kind?: string; plugin?: string } }).source?.kind === 'plugin'
       && (event.data as { source?: { plugin?: string } }).source?.plugin === 'context-guard')
-    expect(notices).toHaveLength(1)
+    expect(notices).toHaveLength(2)
     expect(session.events.some((event) => event.type === 'command/run'
       && (event.data as { source?: { kind?: string } }).source?.kind === 'plugin')).toBe(false)
 
@@ -872,11 +872,11 @@ describe('recovery injection dedup (v0.2.1)', () => {
     await rejectCheckpoint(registered, 'R001')
     expect(await runPreStep(ctx, agent)).toBe(0) // unchanged packet is deduped
 
-    // New evidence changes the packet content, so the reminder flows again.
+    // Unrelated generic evidence does not change current actionable guidance content, so the reminder flows again.
     toolCall(session, 'c1', 'bash', '{"command":"pnpm test","workdir":"/work"}')
     toolResult(session, 'c1', '[exit code: 0]')
     await rejectCheckpoint(registered, 'R001')
-    expect(await runPreStep(ctx, agent)).toBe(1)
+    expect(await runPreStep(ctx, agent)).toBe(0)
   })
 
   it('injects the post-resume reminder even when the packet is unchanged (v0.2.1)', async () => {

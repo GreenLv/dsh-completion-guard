@@ -1,12 +1,14 @@
+import { checkpointPage, type PageQuery } from './checkpoint-page.js'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
+import { itemDiagnosis, relevantEvidence, evidenceAvailabilityReason } from '../domain/diagnostics.js'
 import { certifyCheckpoint } from '../domain/checkpoint.js'
 import { ACTION_MANIFEST, isStatefulAction } from '../domain/protocol-manifest.js'
 import { availableBoundaryQualifications } from '../domain/boundary.js'
 import type { EvidenceBinding, ExpectedTransition, GuardEvidence, GuardItem, GuardProjection, TargetTuple } from '../domain/types.js'
 
-export interface CheckpointArgs {
+export interface CheckpointArgs extends PageQuery {
   bindings: Array<{
     item_id: string
     evidence_ids: string[]
@@ -69,9 +71,7 @@ function sameTuple(left: TargetTuple | undefined, right: TargetTuple | undefined
 }
 
 function evidenceForAction(projection: GuardProjection, item: GuardItem): GuardEvidence[] {
-  return [...projection.evidence.values()].filter((evidence) => evidence.epoch === projection.epoch
-    && evidence.outcome === 'success'
-    && evidence.semanticAction === item.semanticAction)
+  return [...projection.evidence.values()].filter((evidence) => relevantEvidence(projection, item, evidence))
 }
 
 function bindingTemplate(projection: GuardProjection, item: GuardItem): Record<string, JsonValue> | undefined {
@@ -122,11 +122,16 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
   const template = bindingTemplate(projection, item)
   return {
     id: item.id,
+    revision: item.revision,
+    status: item.status,
+    ...(item.supersededByItems ? { superseded_by_items: item.supersededByItems } : {}),
+    ...(item.supersededBy ? { superseded_by: item.supersededBy } : {}),
+    ...(item.reboundFrom ? { rebound_from: item.reboundFrom } : {}),
+    text: item.normalizedText,
     kind: item.kind,
     semantic_action: action,
     requested_target: targetForTool(item.requestedTarget),
-    certifiable: action !== 'generic_run' && ACTION_MANIFEST.actions[action].evidenceProducer === 'supported'
-      && !item.legacyFlags?.length && item.targetCaptureStatus !== 'clarification_required',
+    ...itemDiagnosis(projection, item),
     producer_disposition: ACTION_MANIFEST.actions[action].evidenceProducer,
     ...(item.targetCaptureStatus ? { target_capture_status: item.targetCaptureStatus } : {}),
     ...(item.targetCaptureReasonCode ? { target_capture_reason_code: item.targetCaptureReasonCode } : {}),
@@ -151,6 +156,14 @@ export function createCheckpointTool(
     name: 'context_guard_checkpoint',
     description: 'Request a completion certificate from existing durable evidence.',
     parameters: {
+      item_ids: { type: 'array', items: { type: 'string' } },
+      evidence_ids: { type: 'array', items: { type: 'string' } },
+      evidence_scope: { type: 'string', enum: ['relevant', 'history'] },
+      cursor: { type: 'string' },
+      limit: { type: 'integer' },
+      detail_id: { type: 'string' },
+      detail_offset: { type: 'integer' },
+      detail_snapshot: { type: 'string' },
       bindings: {
         type: 'array',
         required: true,
@@ -187,14 +200,24 @@ export function createCheckpointTool(
         type: 'object',
         additionalProperties: false,
         properties: {
+          blockers: { type: 'object', additionalProperties: true },
+          pagination: { type: 'object', additionalProperties: true },
+          reason_code: { type: 'string' },
+          next_step: { type: 'string' },
+          detail_id: { type: 'string' },
+          detail_offset: { type: 'integer' },
+          detail_chunk: { type: 'string' },
+          next_detail_offset: { oneOf: [{ type: 'integer' }, { type: 'null' }] },
+          snapshot: { type: 'string' },
           status: { type: 'string', enum: ['certified', 'incomplete', 'unknown'] },
           contract_revision: { type: 'integer' },
+          active_constraints: { type: 'array', items: { type: 'object', additionalProperties: true } },
           open_items: { type: 'array', items: { type: 'object', additionalProperties: true } },
           available_evidence: {
             type: 'array',
             items: {
               type: 'object',
-              additionalProperties: false,
+              additionalProperties: true,
               properties: {
                 id: { type: 'string' },
                 call_id: { type: 'string' },
@@ -219,14 +242,14 @@ export function createCheckpointTool(
               },
             },
           },
-          available_qualifications: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+          available_qualifications: { type: 'array', items: { type: 'object', additionalProperties: true, properties: {
             id: { type: 'string' }, kind: { type: 'string' }, disposition: { type: 'string' }, source: { type: 'string' }, status: { type: 'string' },
           } } },
           rejected_bindings: {
             type: 'array',
             items: {
               type: 'object',
-              additionalProperties: false,
+              additionalProperties: true,
               properties: {
                 item_id: { type: 'string' },
                 reason: { type: 'string' },
@@ -282,8 +305,8 @@ export function createCheckpointTool(
       const result = certifyCheckpoint(projection, bindings, `C${projection.checkpoints.length + 1}`, false)
       if (!result.checkpoint) onRejected()
       const available_evidence = [...projection.evidence.values()]
-        .filter((evidence) => evidence.epoch === projection.epoch && evidence.outcome === 'success')
-        .sort((a, b) => (a.id < b.id ? -1 : 1))
+        .filter((evidence) => evidence.epoch === projection.epoch && (args.evidence_scope === 'history' || [...projection.items.values()].some(item => item.status === 'pending' && relevantEvidence(projection, item, evidence))))
+        .sort((a, b) => b.toolResultSeq - a.toolResultSeq || (a.id < b.id ? -1 : 1))
         .map((evidence) => ({
           id: evidence.id,
           call_id: evidence.callId,
@@ -303,13 +326,15 @@ export function createCheckpointTool(
           parse_status: evidence.parseStatus ?? 'adapter_unavailable',
           ...(evidence.adapterId ? { adapter_id: evidence.adapterId } : {}),
           ...(evidence.adapterVersion ? { adapter_version: evidence.adapterVersion } : {}),
-          adapter_disposition: evidence.parseStatus === 'supported' ? 'citable' as const : 'unavailable' as const,
-          ...(evidence.reasonCode ? { reason_code: evidence.reasonCode } : {}),
+          adapter_disposition: evidenceAvailabilityReason(evidence) === undefined ? 'citable' as const : 'unavailable' as const,
+          ...(evidenceAvailabilityReason(evidence) ? { reason_code: evidenceAvailabilityReason(evidence) } : {}),
         }))
-      return {
+      return checkpointPage(projection, args, {
         status: result.status,
         contract_revision: result.contractRevision,
-        open_items: result.openItems.map((id) => projection.items.get(id)).filter((item): item is GuardItem => Boolean(item)).map((item) => openItemForTool(projection, item)),
+        blocking_total: result.openItems.length,
+        open_items: (args.item_ids?.length ? args.item_ids : result.openItems).map((id) => projection.items.get(id)).filter((item): item is GuardItem => Boolean(item)).sort((a, b) => b.revision - a.revision || a.id.localeCompare(b.id)).map((item) => openItemForTool(projection, item)),
+        active_constraints: [...projection.items.values()].filter(item => item.kind === 'prohibition' && item.status === 'pending').map(item => openItemForTool(projection, item)),
         available_evidence,
         available_qualifications: availableBoundaryQualifications(projection).map((row) => ({
           id: row.id, kind: row.kind, disposition: row.disposition, source: row.source, status: row.status,
@@ -335,7 +360,7 @@ export function createCheckpointTool(
           certification_digest: result.checkpoint.certificationDigest,
           goal_ref: result.checkpoint.goalRef ?? null,
         } } : {}),
-      }
+      })
     },
   })
 }

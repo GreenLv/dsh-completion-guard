@@ -4,30 +4,6 @@ import { dirname, join, resolve, sep } from "node:path";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-//#region src/domain/types.ts
-function createProjection() {
-	return {
-		enabled: false,
-		epoch: 0,
-		contractRevision: 0,
-		items: /* @__PURE__ */ new Map(),
-		evidence: /* @__PURE__ */ new Map(),
-		checkpoints: [],
-		boundaries: [],
-		externalOperations: /* @__PURE__ */ new Map(),
-		sessionRefDigest: "11".repeat(32),
-		hostLockDigest: "22".repeat(32),
-		hostStatus: "supported",
-		integrityViolations: [],
-		lastObservedSourceSeq: -1,
-		lastGuardEventSeq: -1,
-		continuationAttempts: /* @__PURE__ */ new Map(),
-		persistenceCorrectionAttempts: /* @__PURE__ */ new Map(),
-		integrity: "valid"
-	};
-}
-
-//#endregion
 //#region src/domain/canonicalize.ts
 function normalizeClause(text) {
 	return text.trim().replace(/\s+/g, " ");
@@ -862,10 +838,10 @@ function extractArtifactPaths(text) {
 	}
 	return [...found];
 }
-function segmentClauses(text) {
+function segmentClauses(text, captureVersion = "v042") {
 	const normalized = normalizeClause(text);
 	if (!normalized) return [];
-	const parts = normalized.split(/(?<=[。！？；])|(?<=[.!?])(?=\s|$)|(?<=(?:^|[\s。！？；.!?，,；:]))(?=(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得))/i).map((part) => part.trim()).filter(Boolean);
+	const parts = normalized.split(/(?<=[。！？；])|(?<=[.!?])(?=\s|$)|(?<=(?:^|[\s。！？；.!?，,；:]))(?=(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得))/i).flatMap((part) => captureVersion === "v041" || classifyClause(part.trim()).kind === "prohibition" ? [part] : part.split(/(?<!一)(?:并且?|以及|同时)(?=(?:验证(?!结果|全部通过|通过|成功)|确认(?!结果|全部通过|通过|成功|完成)|确保(?!结果|全部通过|通过|成功)|检查(?!结果)|更新|记录|安装|应用|重启|提交|推送|发布|在.{0,40}记录))|\s+and\s+(?=(?:verify|confirm|install|apply|restart|commit|push|publish|record)\b)/i)).map((part) => part.trim()).filter(Boolean);
 	const segments = [];
 	for (const part of parts) {
 		const { kind, body } = classifyClause(part);
@@ -881,9 +857,10 @@ function segmentClauses(text) {
 * Build a GuardItem from an already-classified clause body and a resolved
 * verification subject/surface.
 */
-function captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation) {
+function captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, captureVersion = "v042") {
 	const sanitized = sanitizeClauseText(body);
-	const semanticAction = semanticActionFromText(sanitized);
+	const unsupportedVisual = captureVersion === "v042" && /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized);
+	const semanticAction = unsupportedVisual ? "generic_run" : semanticActionFromText(sanitized);
 	const capturedTarget = captureRequestedTarget(semanticAction, sanitized, subject, surface);
 	const effectiveOperation = semanticAction === "verify" ? "verify" : operation;
 	const item = {
@@ -900,7 +877,7 @@ function captureItem(kind, body, sourceMessageId, id, revision, subject, surface
 			subject
 		} : {
 			enforced: true,
-			surface,
+			surface: unsupportedVisual ? "ui" : surface,
 			subject,
 			method,
 			operation: effectiveOperation
@@ -939,6 +916,214 @@ function captureClause(text, sourceMessageId, id, revision, scope = {}) {
 	const path$1 = extractArtifactPaths(sanitizeClauseText(body))[0] ?? "";
 	const surface = path$1 ? "artifact" : "scope";
 	return captureItem(kind, body, sourceMessageId, id, revision, path$1 || scope.cwd || "scope", surface, extractMethod(body), extractOperation(body));
+}
+
+//#endregion
+//#region src/domain/rebind.ts
+function preservesIdentity(old, clarified) {
+	const keys = Object.entries(old.requestedTarget ?? {}).filter(([key]) => key !== "scope");
+	const unwrap = (value) => JSON.stringify(value && typeof value === "object" && "v" in value ? value.v : value);
+	return keys.every(([key, value]) => unwrap(value) === unwrap(clarified.requestedTarget?.[key])) && (!old.verification.method || old.verification.method === clarified.verification.method) && (old.verification.surface !== "artifact" || old.verification.subject === clarified.verification.subject);
+}
+/** Exact source partition is deliberately conservative: a proposal cannot
+* invent authority or silently discard a difficult acceptance clause. */
+function proposeRebind(p, args) {
+	const item = p.items.get(args.item_id ?? "");
+	const clauses = args.clauses;
+	const clarificationItemIds = args.clarification_item_ids ?? [];
+	if (!item || item.status !== "pending" || item.kind === "prohibition" || !item.authority || item.authority === "legacy_authority_unclassified" || !Array.isArray(clauses) || clauses.length < 1 || clauses.length > 8 || clauses.some((s) => typeof s !== "string" || !s.trim() || s.length > 2048) || clauses.join("") !== item.normalizedText || clarificationItemIds.length !== 0 && clarificationItemIds.length !== clauses.length || new Set(clarificationItemIds.filter(Boolean)).size !== clarificationItemIds.filter(Boolean).length) return void 0;
+	for (const [index, id] of clarificationItemIds.entries()) {
+		if (!id) continue;
+		const clarified = p.items.get(id);
+		if (!clarified || clarified.id === item.id || clarified.status !== "pending" || clarified.reboundFrom || clarified.revision <= item.revision || clarified.sourceMessageId === item.sourceMessageId || clarified.authority !== "root_instruction" || clarified.legacyFlags?.length || clarified.kind !== item.kind || !clarified.normalizedText.includes(clauses[index].trim()) || !preservesIdentity(item, clarified) || /GUI|界面|视觉|截图|颜色|效果|布局/i.test(clauses[index]) && clarified.semanticAction !== "generic_run") return void 0;
+	}
+	const candidates = clauses.map((clause, index) => {
+		const root = p.items.get(clarificationItemIds[index] ?? "");
+		const captured = root ?? captureItem(item.kind, clause, item.sourceMessageId, "candidate", item.revision, item.verification.subject ?? "scope", item.verification.surface === "artifact" ? "artifact" : "scope", item.verification.method, item.verification.operation);
+		return {
+			sourceText: clause,
+			action: root || captured.semanticAction === item.semanticAction ? captured.semanticAction : "generic_run",
+			requestedTarget: captured.requestedTarget,
+			acceptance: root ? root.verification : item.verification,
+			sourceMessageId: captured.sourceMessageId,
+			rootItemId: root?.id ?? null,
+			rootRevision: root?.revision ?? null
+		};
+	});
+	const body = {
+		session: p.sessionRefDigest,
+		epoch: p.epoch,
+		contractRevision: p.contractRevision,
+		itemId: item.id,
+		itemRevision: item.revision,
+		sourceMessageId: item.sourceMessageId,
+		originalText: item.normalizedText,
+		clauses,
+		clarificationItemIds,
+		candidates
+	};
+	if (Buffer.byteLength(JSON.stringify(body), "utf8") > 8192) return void 0;
+	const digest$1 = sha256(JSON.stringify(body));
+	const normalized = JSON.parse(JSON.stringify(body));
+	return {
+		id: `RB-${digest$1.slice(0, 24)}`,
+		digest: digest$1,
+		...normalized,
+		status: "pending"
+	};
+}
+function rebindResponse(p, args) {
+	if (!p.enabled || p.integrity !== "valid") return {
+		status: "unknown",
+		reason_code: "guard_unavailable"
+	};
+	if (Object.keys(args).some((key) => ![
+		"operation",
+		"item_id",
+		"proposal_id",
+		"clauses",
+		"clarification_item_ids"
+	].includes(key))) return {
+		status: "rejected",
+		reason_code: "invalid_rebind_parameters"
+	};
+	if (args.operation === "propose") {
+		const candidate = proposeRebind(p, args);
+		if (!candidate) return {
+			status: "rejected",
+			reason_code: "source_partition_required",
+			next_step: "Supply 1-8 exact consecutive clauses covering the original text, including unsupported work; the proposal must fit 8 KiB. Clarification that changes meaning requires a new root-user instruction."
+		};
+		return {
+			status: "proposed",
+			proposal: p.rebindProposals.get(candidate.id) ?? candidate,
+			next_step: `Root user must reply exactly: 确认重绑定 ${candidate.id}. This changes the contract only and grants no execution permission.`
+		};
+	}
+	const proposal = p.rebindProposals.get(args.proposal_id ?? "");
+	if (!proposal) return {
+		status: "rejected",
+		reason_code: "proposal_not_found"
+	};
+	if (args.operation === "withdraw") return proposal.status === "confirmed" ? {
+		status: "rejected",
+		reason_code: "proposal_already_applied"
+	} : {
+		status: "withdrawn",
+		proposal_id: proposal.id,
+		digest: proposal.digest
+	};
+	if (args.operation !== "query") return {
+		status: "rejected",
+		reason_code: "invalid_rebind_operation"
+	};
+	return proposal.status === "pending" && (proposal.contractRevision !== p.contractRevision || proposal.epoch !== p.epoch || proposal.session !== p.sessionRefDigest) ? {
+		status: "stale",
+		reason_code: "proposal_contract_changed",
+		proposal: {
+			...proposal,
+			status: "stale"
+		},
+		next_step: "Propose again against the current contract."
+	} : {
+		status: proposal.status,
+		proposal
+	};
+}
+function replayRebindResult(p, args, recorded) {
+	const expected = rebindResponse(p, args);
+	if (JSON.stringify(expected) !== JSON.stringify(recorded)) return;
+	if (args.operation === "propose") {
+		const candidate = proposeRebind(p, args);
+		if (candidate && !p.rebindProposals.has(candidate.id)) p.rebindProposals.set(candidate.id, candidate);
+	} else if (args.operation === "withdraw") {
+		const proposal = p.rebindProposals.get(args.proposal_id ?? "");
+		if (proposal?.status === "pending") proposal.status = "withdrawn";
+	}
+}
+/** Invoked only for a canonical root user message, never tool or plugin text.
+* The single durable confirmation event is the atomic transaction commit. */
+function confirmRebind(p, text, eventId, durable) {
+	const match = /^确认重绑定 (RB-[a-f0-9]{24})$/.exec(text.trim());
+	if (!match) return false;
+	const proposal = p.rebindProposals.get(match[1]);
+	if (!proposal || !durable) return true;
+	if (proposal.status !== "pending") return true;
+	const old = p.items.get(proposal.itemId);
+	if (!old || proposal.session !== p.sessionRefDigest || proposal.epoch !== p.epoch || old.status !== "pending" || old.revision !== proposal.itemRevision || p.contractRevision !== proposal.contractRevision || proposeRebind(p, {
+		operation: "propose",
+		item_id: old.id,
+		clauses: proposal.clauses,
+		clarification_item_ids: proposal.clarificationItemIds
+	})?.digest !== proposal.digest) {
+		proposal.status = "stale";
+		return true;
+	}
+	const revision = p.contractRevision + 1;
+	const replacements = proposal.clauses.map((clause, index) => {
+		const clarified = p.items.get(proposal.clarificationItemIds[index] ?? "");
+		if (clarified) return {
+			...clarified,
+			reboundFrom: {
+				itemId: old.id,
+				proposalId: proposal.id,
+				confirmationEvent: eventId
+			}
+		};
+		const captured = captureItem(old.kind, clause, old.sourceMessageId, `${old.kind[0].toUpperCase()}:${proposal.id}:${index + 1}`, revision, old.verification.subject ?? "scope", old.verification.surface === "artifact" ? "artifact" : "scope", old.verification.method ?? extractMethod(clause), old.verification.operation ?? extractOperation(clause));
+		if (captured.semanticAction !== old.semanticAction) captured.semanticAction = "generic_run";
+		return {
+			...captured,
+			authority: old.authority,
+			reboundFrom: {
+				itemId: old.id,
+				proposalId: proposal.id,
+				confirmationEvent: eventId
+			},
+			verification: {
+				...captured.verification,
+				...old.verification
+			}
+		};
+	});
+	if (replacements.some((item) => p.items.has(item.id) && !proposal.clarificationItemIds.includes(item.id))) {
+		proposal.status = "stale";
+		return true;
+	}
+	for (const item of replacements) p.items.set(item.id, item);
+	old.status = "superseded";
+	old.supersededByItems = replacements.map((item) => item.id);
+	old.supersededBy = replacements[0].id;
+	p.contractRevision = revision;
+	proposal.status = "confirmed";
+	proposal.confirmationEvent = eventId;
+	proposal.replacementIds = old.supersededByItems;
+	return true;
+}
+
+//#endregion
+//#region src/domain/types.ts
+function createProjection() {
+	return {
+		enabled: false,
+		epoch: 0,
+		contractRevision: 0,
+		rebindProposals: /* @__PURE__ */ new Map(),
+		items: /* @__PURE__ */ new Map(),
+		evidence: /* @__PURE__ */ new Map(),
+		checkpoints: [],
+		boundaries: [],
+		externalOperations: /* @__PURE__ */ new Map(),
+		sessionRefDigest: "11".repeat(32),
+		hostLockDigest: "22".repeat(32),
+		hostStatus: "supported",
+		integrityViolations: [],
+		lastObservedSourceSeq: -1,
+		lastGuardEventSeq: -1,
+		continuationAttempts: /* @__PURE__ */ new Map(),
+		persistenceCorrectionAttempts: /* @__PURE__ */ new Map(),
+		integrity: "valid"
+	};
 }
 
 //#endregion
@@ -1826,13 +2011,54 @@ function bindingSatisfies(projection, item, evidenceIds) {
 }
 
 //#endregion
+//#region src/domain/diagnostics.ts
+function itemDiagnosis(p, item) {
+	if (item.kind === "prohibition") return {
+		certifiable: false,
+		reason_code: "prohibition_active",
+		next_step: "Keep this constraint enforced; it is not a completion evidence obligation."
+	};
+	const action = item.semanticAction ?? "generic_run";
+	const reason = item.status === "passed" ? "certified" : action === "generic_run" ? "generic_run_non_certifiable" : item.legacyFlags?.length || item.targetCaptureStatus === "clarification_required" ? "target_clarification_required" : p.hostStatus !== "supported" ? "host_unavailable" : ACTION_MANIFEST.actions[action].evidenceProducer !== "supported" ? "adapter_unavailable" : "missing_evidence";
+	return {
+		certifiable: reason === "missing_evidence" || reason === "certified",
+		reason_code: reason,
+		next_step: reason === "certified" ? "No further binding needed." : reason === "generic_run_non_certifiable" || reason === "target_clarification_required" ? "Use context_guard_rebind to propose explicit clauses for root-user confirmation; preserve unsupported work pending. Rebinding grants no execution permission." : reason === "missing_evidence" ? "Collect matching durable evidence, then call context_guard_checkpoint with bindings." : "Restore the audited host/adapter capability before certification; keep pending work visible at a qualified safe boundary."
+	};
+}
+const NATIVE_ADAPTERS = new Set([
+	"dsh.bash.v1",
+	"dsh.pwsh.v1",
+	"dsh.shell.v1",
+	"dsh.read.v1",
+	"dsh.write.v1",
+	"dsh.edit.v1",
+	"dsh.web.v1"
+]);
+function evidenceAvailabilityReason(evidence) {
+	if (evidence.parseStatus !== "supported") return evidence.reasonCode ?? evidence.parseStatus ?? "adapter_unavailable";
+	if (!evidence.adapterId || !evidence.adapterVersion || (SUPPORTED_EVIDENCE_ADAPTERS[evidence.adapterId] ?? (NATIVE_ADAPTERS.has(evidence.adapterId) ? "1.0.0" : void 0)) !== evidence.adapterVersion) return "adapter_unavailable";
+	if (evidence.outcome !== "success") return "evidence_outcome_not_success";
+	if (!evidence.semanticAction || evidence.semanticAction === "generic_run") return "generic_run_non_certifiable";
+}
+/** Shared display filter; certification remains the full domain check. */
+function relevantEvidence(p, item, evidence) {
+	const action = item.semanticAction;
+	if (!action || action === "generic_run" || !actionCompatible(action, evidence.semanticAction ?? "generic_run") || evidence.epoch !== p.epoch || evidenceAvailabilityReason(evidence) !== void 0) return false;
+	if (item.reboundFrom) {
+		const source = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+		if (!source || evidence.toolResultSeq < Number(source[1])) return false;
+	}
+	if (isStatefulAction(action)) return requestedTargetMatchesResolved(action, item.requestedTarget, evidence.resolvedTarget);
+	const value = (entry) => JSON.stringify(entry && typeof entry === "object" && "v" in entry ? entry.v : entry);
+	return !!item.requestedTarget && Object.entries(item.requestedTarget).every(([key, entry]) => evidence.resolvedTarget && value(entry) === value(evidence.resolvedTarget[key]));
+}
+
+//#endregion
 //#region src/domain/recovery.ts
 const DEFAULT_RECOVERY_CHAR_BUDGET = 4e3;
-const MAX_RECOVERY_ITEMS = 8;
-const MAX_RECOVERY_EVIDENCE = 20;
-const MORE_ITEMS_RULE = (remaining) => `…(${remaining} more open items; the full list is in the checkpoint tool response)`;
-const MORE_EVIDENCE_RULE = (remaining) => `…(${remaining} more evidence rows)`;
-const COMPLETION_RULE = "Obtain a Context Guard checkpoint from matching durable evidence before claiming completion.";
+const MIN_RECOVERY_CHAR_BUDGET = 512;
+const COMPLETION_RULE = "Obtain a Context Guard checkpoint from matching durable evidence before claiming completion. A qualified safe end preserves pending work; it is not completion.";
 /**
 * An actionable one-line hint for how an open item's verification contract can
 * be closed. It never weakens the contract; it only names the missing facet so
@@ -1841,6 +2067,7 @@ const COMPLETION_RULE = "Obtain a Context Guard checkpoint from matching durable
 * evidence already cover.
 */
 function closingHint(projection, item, evidenceIds) {
+	if (item.semanticAction === "generic_run") return itemDiagnosis(projection, item).next_step;
 	const verification = item.verification;
 	const parts = [];
 	if (evidenceIds?.length) {
@@ -1868,84 +2095,57 @@ function openItems$1(projection) {
 * injected once instead of looping (v0.2.1).
 */
 function recoveryDigest(packet, projection) {
+	const items = openItems$1(projection);
+	const evidence = [...projection.evidence.values()].filter((row) => items.some((item) => relevantEvidence(projection, item, row)));
 	return sha256(JSON.stringify({
 		packet,
 		revision: projection.contractRevision,
-		epoch: projection.epoch
+		epoch: projection.epoch,
+		host: projection.hostLockDigest,
+		evidence
 	}));
 }
 function renderRecoveryPacket(projection, options = {}) {
 	const budget = options.charBudget ?? DEFAULT_RECOVERY_CHAR_BUDGET;
-	const lines = [];
-	let used = 0;
-	const push = (line) => {
-		if (used + line.length + 1 > budget) return false;
-		lines.push(line);
-		used += line.length + 1;
+	if (!Number.isSafeInteger(budget) || budget < MIN_RECOVERY_CHAR_BUDGET) throw new RangeError("recovery charBudget must be an integer >= 512");
+	const clip = (text, size) => text.length <= size ? text : text.slice(0, size - 1) + "…";
+	const items = openItems$1(projection).sort((a, b) => Number(b.kind === "prohibition") - Number(a.kind === "prohibition") || b.revision - a.revision || a.id.localeCompare(b.id));
+	const rejected$1 = options.rejectedBindings ?? (projection.lastCheckpointRejectionRevision === projection.contractRevision ? projection.lastCheckpointRejections : []) ?? [];
+	const compact = budget < 1e3;
+	const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact ? "Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion." : COMPLETION_RULE];
+	const pointer = "Details/omissions: context_guard_checkpoint (item_ids, evidence_scope=history, cursor).";
+	const evidence = [...projection.evidence.values()].filter((e) => items.some((item) => relevantEvidence(projection, item, e))).sort((a, b) => b.toolResultSeq - a.toolResultSeq || a.id.localeCompare(b.id));
+	const footer = (count$1, refusals$1, shown$1) => `${items.length - count$1} items folded; ${rejected$1.length - refusals$1} rejections folded; ${evidence.length - shown$1} relevant evidence rows folded. Full ledger remains enforced.`;
+	let remaining = budget - lines.join("\n").length - 87 - footer(0, 0, 0).length - 3;
+	const add = (line, cap) => {
+		if (remaining < 30) return false;
+		const text = clip(line, Math.min(cap, remaining));
+		lines.push(text);
+		remaining -= text.length + 1;
 		return true;
 	};
-	const items = openItems$1(projection);
-	const listedIds = /* @__PURE__ */ new Set();
-	const pushItems = (list, render) => {
-		let count = 0;
-		for (const item of list) {
-			if (count >= MAX_RECOVERY_ITEMS) {
-				push(MORE_ITEMS_RULE(list.length - count));
-				return true;
-			}
-			if (!push(render(item))) return false;
-			listedIds.add(item.id);
-			count += 1;
-		}
-		return true;
+	const constraints = items.filter((item) => item.kind === "prohibition");
+	const work = items.filter((item) => item.kind !== "prohibition");
+	let count = 0, refusals = 0, shown = 0;
+	const constraint = (item) => {
+		if (add(`DO NOT [${clip(item.id, 20)}] ${clip(item.normalizedText, compact ? 18 : 100)}`, compact ? 45 : 140)) count++;
 	};
-	const requirementItems = items.filter((item) => item.kind === "requirement");
-	const compact = budget < 512;
-	const itemDiagnostic = (item) => {
-		if (compact) return `[${item.id}] ${item.normalizedText}`;
-		const action = item.semanticAction ?? "generic_run";
-		const spec = ACTION_MANIFEST.actions[action];
-		return `[${item.id}] ${item.normalizedText} action=${action} requested=${JSON.stringify(item.requestedTarget ?? {})} predicate=${spec.predicateId}@1 params=inline(resolved:${spec.resolvedTargetKeys.join(",") || "-"};observed:${spec.observedStateKeys.join(",") || "-"})`;
+	const requirement = (item) => {
+		const diagnosis = itemDiagnosis(projection, item);
+		const remedy = diagnosis.reason_code === "generic_run_non_certifiable" || diagnosis.reason_code === "target_clarification_required" ? "context_guard_rebind; root confirmation required" : diagnosis.reason_code === "host_unavailable" || diagnosis.reason_code === "adapter_unavailable" ? "Restore audited host/adapter capability" : "Collect matching evidence; checkpoint";
+		if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_step}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++;
 	};
-	if (!pushItems(requirementItems, itemDiagnostic)) return finalize();
-	if (!pushItems(items.filter((item) => item.kind === "prohibition"), (item) => `[${item.id}] DO NOT ${item.normalizedText}`)) return finalize();
-	if (!pushItems(items.filter((item) => item.kind === "acceptance"), (item) => `VERIFY ${itemDiagnostic(item)}`)) return finalize();
-	const citableEvidence = [...projection.evidence.values()].filter((evidence) => evidence.epoch === projection.epoch && evidence.outcome === "success").sort((a, b) => a.id < b.id ? -1 : 1);
-	let evidenceCount = 0;
-	for (const evidence of citableEvidence) {
-		if (evidenceCount >= MAX_RECOVERY_EVIDENCE) {
-			push(MORE_EVIDENCE_RULE(citableEvidence.length - evidenceCount));
-			break;
-		}
-		if (!push([
-			`evidence ${evidence.id}`,
-			`tool=${evidence.toolName}`,
-			`action=${evidence.semanticAction ?? "generic_run"}`,
-			`role=${evidence.evidenceRole ?? "effect"}`,
-			`resolved=${JSON.stringify(evidence.resolvedTarget ?? {})}`,
-			`observed=${JSON.stringify(evidence.observedState ?? {})}`,
-			`adapter=${evidence.adapterId ?? "-"}@${evidence.adapterVersion ?? "-"}`,
-			`ops=${(evidence.operations ?? []).map((entry) => entry.op).join(",") || "-"}`,
-			`executables=${(evidence.executables ?? []).join(",") || "-"}`,
-			`parse=${evidence.parseStatus ?? "adapter_unavailable"}`
-		].join(" "))) return finalize();
-		evidenceCount += 1;
+	if (constraints[0]) constraint(constraints[0]);
+	if (work[0]) requirement(work[0]);
+	if (!compact) {
+		for (const item of work.slice(1, 4)) requirement(item);
+		for (const item of constraints.slice(1, 4)) constraint(item);
+		for (const binding of rejected$1.slice(0, 4)) if (add(`rejected ${clip(binding.itemId, 30)}: ${clip(binding.reasonCode ?? binding.reason, 120)}`, 170)) refusals++;
+		for (const item of work.slice(0, 4)) if (itemDiagnosis(projection, item).certifiable) add(`closing hint [${clip(item.id, 20)}]: ${closingHint(projection, item)}`, 240);
+		for (const row of evidence.slice(0, 4)) if (add(`evidence ${clip(row.id, 40)} action=${row.semanticAction} role=${row.evidenceRole ?? "effect"}`, 140)) shown++;
 	}
-	for (const item of [...projection.items.values()].filter((item$1) => item$1.status === "superseded")) if (item.supersededBy && !push(`[${item.id} -> ${item.supersededBy}]`)) return finalize();
-	for (const binding of options.rejectedBindings ?? []) {
-		const offending = binding.offendingEvidenceIds?.length ? ` offending=${binding.offendingEvidenceIds.join(",")}` : "";
-		const reason = binding.reasonCode ? binding.reasonCode : binding.reason;
-		if (!push(`rejected ${binding.itemId}: ${reason}${offending}`)) return finalize();
-	}
-	for (const item of items) {
-		if (item.kind === "prohibition" || !listedIds.has(item.id)) continue;
-		push(`closing hint [${item.id}]: ${closingHint(projection, item)}`);
-	}
-	push(COMPLETION_RULE);
-	return finalize();
-	function finalize() {
-		return lines.join("\n");
-	}
+	lines.push(footer(count, refusals, shown), pointer);
+	return lines.join("\n");
 }
 
 //#endregion
@@ -1996,6 +2196,16 @@ function evidenceProblem(projection, item, binding) {
 		reasonCode: "evidence_missing",
 		offendingEvidenceIds: missing
 	};
+	if (item.reboundFrom) {
+		const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+		const tooEarly = binding.evidenceIds.filter((id) => !sourceSeq || projection.evidence.get(id).toolResultSeq < Number(sourceSeq[1]));
+		if (tooEarly.length) return {
+			itemId: item.id,
+			reason: "evidence predates the authoritative root clause used by this replacement",
+			reasonCode: "rebind_evidence_predates_source",
+			offendingEvidenceIds: tooEarly
+		};
+	}
 	const wrongEpoch = binding.evidenceIds.filter((id) => projection.evidence.get(id)?.epoch !== projection.epoch);
 	if (wrongEpoch.length) return {
 		itemId: item.id,
@@ -5340,13 +5550,14 @@ function supersedeItem(items, oldId, replacement) {
 
 //#endregion
 //#region src/domain/derive.ts
+const CAPTURE_V042_NOTICE = "Context Guard capture boundary: v0.4.2";
 const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
-function isProtocolBoundaryNotice(event) {
+function isProtocolBoundaryNotice(event, notice = PROTOCOL_V3_NOTICE) {
 	if (event.type !== "user/message") return false;
 	const data = asRecord(event.data);
 	const source = asRecord(data?.source);
 	if (source?.kind !== "plugin" || source.plugin !== "context-guard" || source.form !== "notice") return false;
-	return extractTextContent(data?.content ?? []) === PROTOCOL_V3_NOTICE;
+	return extractTextContent(data?.content ?? []) === notice;
 }
 function parseArguments(raw) {
 	if (!raw) return {};
@@ -5454,16 +5665,16 @@ function resolveArtifact(path$1, scope) {
 * item, so evidence for one file cannot close a message that also covers other
 * files or embeds prohibitions.
 */
-function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false) {
+function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, captureVersion = "v042") {
 	const before = new Set(projection.items.keys());
-	for (const segment of segmentClauses(text)) {
+	for (const segment of segmentClauses(text, captureVersion)) {
 		if (classifyUserInteraction(segment.body) === "conversational") continue;
 		if (segment.kind === "requirement" && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue;
 		if (segment.kind === "prohibition" || segment.paths.length === 0) {
-			insert(projection, segment.kind, segment.body, sourceMessageId, scope.cwd || "scope", "scope");
+			insert(projection, segment.kind, segment.body, sourceMessageId, scope.cwd || "scope", "scope", captureVersion);
 			continue;
 		}
-		for (const path$1 of segment.paths) insert(projection, segment.kind, segment.body, sourceMessageId, resolveArtifact(path$1, scope), "artifact");
+		for (const path$1 of segment.paths) insert(projection, segment.kind, segment.body, sourceMessageId, resolveArtifact(path$1, scope), "artifact", captureVersion);
 	}
 	for (const [id, item] of projection.items) {
 		if (before.has(id)) continue;
@@ -5478,10 +5689,10 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		else item.authority = authority;
 	}
 }
-function insert(projection, kind, body, sourceMessageId, subject, surface) {
+function insert(projection, kind, body, sourceMessageId, subject, surface, captureVersion) {
 	const revision = projection.contractRevision + 1;
 	const id = nextId(projection.items, kind);
-	const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface, extractMethod(body), extractOperation(body));
+	const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface, extractMethod(body), extractOperation(body), captureVersion);
 	const duplicate = [...projection.items.values()].find((existing) => existing.kind === kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
 	if (duplicate) supersedeItem(projection.items, duplicate.id, item);
 	else projection.items.set(id, item);
@@ -5508,9 +5719,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	let enablementTransitioned = false;
 	let lastCompactionSeq = -1;
 	const pendingCalls = /* @__PURE__ */ new Map();
-	const protocolBoundarySeq = sourceEvents.find(isProtocolBoundaryNotice)?.seq;
+	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event))?.seq;
+	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE))?.seq;
 	const priorRootMessages = [];
 	for (const event of sourceEvents) {
+		projection.enabled = enabled;
 		projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq);
 		switch (event.type) {
 			case "command/run": {
@@ -5540,18 +5753,19 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				lastCompactionSeq = event.seq;
 				break;
 			case "user/message": {
-				if (isProtocolBoundaryNotice(event)) break;
+				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE)) break;
 				if (!enabled) break;
 				const data = asRecord(event.data);
 				if (asRecord(data?.source)?.kind !== "user") break;
 				const text = extractTextContent(data?.content ?? []);
 				if (!text.trim()) break;
+				if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== "subagent" && confirmRebind(projection, text, `m${event.seq}`, durableConfirmed)) break;
 				if (isInformationalMessage(text)) break;
 				if (classifyUserInteraction(text) === "conversational") break;
 				const blocks = segmentAuthorityBlocks(text, priorRootMessages);
 				for (const block$1 of blocks) {
 					if (!block$1.capture) continue;
-					insertItems(projection, block$1.text, `m${event.seq}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", protocolBoundarySeq !== void 0 && event.seq < protocolBoundarySeq, block$1.kind === "instruction" || block$1.authority === "root_adoption");
+					insertItems(projection, block$1.text, `m${event.seq}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", protocolBoundarySeq !== void 0 && event.seq < protocolBoundarySeq, block$1.kind === "instruction" || block$1.authority === "root_adoption", captureBoundarySeq !== void 0 && event.seq < captureBoundarySeq || captureBoundarySeq === void 0 && protocolBoundarySeq !== void 0 ? "v041" : "v042");
 				}
 				priorRootMessages.push(text);
 				if (priorRootMessages.length > 16) priorRootMessages.shift();
@@ -5654,9 +5868,19 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				if (!call) break;
 				pendingCalls.delete(callId);
 				const textContent = extractTextContent((isDispatch ? data?.content : void 0) ?? message?.content ?? []);
+				if (call.name === "context_guard_rebind") {
+					if (!call.rootCallId && !data?.error && durableConfirmed) replayRebindResult(projection, parseArguments(call.arguments), parseArguments(textContent));
+					break;
+				}
 				if (call.name === "context_guard_checkpoint") {
 					const recorded = parseArguments(textContent);
-					if (recorded.status !== "certified") break;
+					if (recorded.status !== "certified") {
+						if ((call.bindings?.length ?? 0) > 0) {
+							projection.lastCheckpointRejections = certifyCheckpoint(projection, call.bindings ?? [], "diagnostic", false).rejectedBindings;
+							projection.lastCheckpointRejectionRevision = projection.contractRevision;
+						}
+						break;
+					}
 					if (!asRecord(recorded.certificate)) {
 						for (const binding of call.bindings ?? []) {
 							const item = projection.items.get(binding.itemId);
@@ -6753,4 +6977,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { EXPECTED_HOST_PACKAGES as $, validateActionManifest as $t, decideTurnBoundary as A, captureClause as At, extractToolSubject as B, ACTION_MANIFEST as Bt, createGitPrestateEnvelope as C, recoveryDigest as Ct, revalidateGitPrestate as D, evidenceMatchesItem as Dt, parseGitCommandManifest as E, evidenceCoverage as Et, PROTOCOL_V3_NOTICE as F, extractOperation as Ft, parsePwshCommand as G, STOP_PROTOCOL_VERSION as Gt, withDurability as H, CERTIFICATE_VERSION as Ht, deriveProjection as I, isInformationalMessage as It, hasCurrentCertificate as J, isStatefulAction as Jt, parseShellCommand as K, SUPPORTED_EVIDENCE_ADAPTERS as Kt, supersedeItem as L, segmentClauses as Lt, isWholeTaskCompletionClaim as M, classifyClause as Mt, latestAssistantText as N, extractArtifactPaths as Nt, verifiedLinearCommitReadback as O, isVerifyingCapability as Ot, observeAssistantOutcome as P, extractMethod as Pt, DEFAULT_HOST_LOCK as Q, semanticActionFromText as Qt, evidenceFromPersistedToolResult as R, canonicalRegistryBase as Rt, commitTreeSnapshotDigest as S, openItems$1 as St, gitCommandMatchesTarget as T, bindingSatisfies as Tt, canonicalArgvFromCommand as U, SEMANTIC_ACTIONS as Ut, isDeterministicCheck as V, ACTION_MANIFEST_VERSION as Vt, isRunExecutable as W, STATEFUL_ACTIONS as Wt, ALPHA2_HOST_PACKAGES as X, requestedTargetMatchesResolved as Xt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Y, requestedTargetAuthorizesMutation as Yt, BASE_HOST_PACKAGES as Z, semanticActionFromCommand as Zt, resolveInstalledHostLock as _, isCurrentAcceptedBoundary as _t, createProofManifest as a, normalizeClause as an, evaluateExternalWaitCapability as at, GIT_COMMAND_MANIFEST_IDS as b, DEFAULT_RECOVERY_CHAR_BUDGET as bt, sessionQuery as c, sha256 as cn, evaluateToolSurfaceCapability as ct, hostLockContextFromComposedDump as d, ALPHA3_HOST_PACKAGES as dt, validateActionTarget as en, GOAL_HOST_PACKAGES as et, hostLockRowsFromComposedDump as f, authorityCaptureCounts as ft, resolveActiveProfileHostLock as g, effectuateBoundary as gt, packageRowsFromPnpmLock as h, availableBoundaryQualifications as ht, canonicalProjection as i, digestStrings as in, bindLiveGoalCapability as it, decideTurnStopping as j, captureItem as jt, classifyCompletionClaim as k, currentContractDigest as kt, validateProofManifest as l, createProjection as ln, selectHostCohort as lt, packageRowsFromActiveGraph as m, classifyUserInteraction as mt, PROOF_PROTOCOL_VERSION as n, validateManifest as nn, HOST_COHORTS as nt, proofDigest as o, sanitizeClauseText as on, evaluateHostCapability as ot, injectActiveProfileHostLock as p, segmentAuthorityBlocks as pt, goalCompletionDenial as q, actionCompatible as qt, bindProofToProjection as r, canonicalizePath as rn, bindExecutableIdentity as rt, proofEvidenceConstraints as s, sanitizeUrl as sn, evaluateHostLock as st, PROOF_KINDS as t, COMMAND_SURFACE_MANIFEST as tn, HOST_CAPABILITY_PACKAGE_GROUPS as tt, HostProfileError as u, RC1_HOST_PACKAGES as ut, verifyComposedHostLockDump as v, qualifyBoundary as vt, executeRevalidatedGitEffect as w, renderRecoveryPacket as wt, commitIndexSnapshotDigest as x, closingHint as xt, snapshotSessionEvents as y, certifyCheckpoint as yt, extractTextContent as z, npmEscapedPackageName as zt };
+export { DEFAULT_HOST_LOCK as $, SUPPORTED_EVIDENCE_ADAPTERS as $t, decideTurnBoundary as A, bindingSatisfies as At, extractTextContent as B, extractArtifactPaths as Bt, createGitPrestateEnvelope as C, closingHint as Ct, revalidateGitPrestate as D, evidenceAvailabilityReason as Dt, parseGitCommandManifest as E, renderRecoveryPacket as Et, CAPTURE_V042_NOTICE as F, createProjection as Ft, isRunExecutable as G, canonicalRegistryBase as Gt, isDeterministicCheck as H, extractOperation as Ht, PROTOCOL_V3_NOTICE as I, rebindResponse as It, goalCompletionDenial as J, ACTION_MANIFEST_VERSION as Jt, parsePwshCommand as K, npmEscapedPackageName as Kt, deriveProjection as L, captureClause as Lt, isWholeTaskCompletionClaim as M, evidenceMatchesItem as Mt, latestAssistantText as N, isVerifyingCapability as Nt, verifiedLinearCommitReadback as O, itemDiagnosis as Ot, observeAssistantOutcome as P, currentContractDigest as Pt, BASE_HOST_PACKAGES as Q, STOP_PROTOCOL_VERSION as Qt, supersedeItem as R, captureItem as Rt, commitTreeSnapshotDigest as S, MIN_RECOVERY_CHAR_BUDGET as St, gitCommandMatchesTarget as T, recoveryDigest as Tt, withDurability as U, isInformationalMessage as Ut, extractToolSubject as V, extractMethod as Vt, canonicalArgvFromCommand as W, segmentClauses as Wt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as X, SEMANTIC_ACTIONS as Xt, hasCurrentCertificate as Y, CERTIFICATE_VERSION as Yt, ALPHA2_HOST_PACKAGES as Z, STATEFUL_ACTIONS as Zt, resolveInstalledHostLock as _, effectuateBoundary as _t, createProofManifest as a, semanticActionFromText as an, bindLiveGoalCapability as at, GIT_COMMAND_MANIFEST_IDS as b, certifyCheckpoint as bt, sessionQuery as c, COMMAND_SURFACE_MANIFEST as cn, evaluateHostLock as ct, hostLockContextFromComposedDump as d, digestStrings as dn, RC1_HOST_PACKAGES as dt, actionCompatible as en, EXPECTED_HOST_PACKAGES as et, hostLockRowsFromComposedDump as f, normalizeClause as fn, ALPHA3_HOST_PACKAGES as ft, resolveActiveProfileHostLock as g, availableBoundaryQualifications as gt, packageRowsFromPnpmLock as h, sha256 as hn, classifyUserInteraction as ht, canonicalProjection as i, semanticActionFromCommand as in, bindExecutableIdentity as it, decideTurnStopping as j, evidenceCoverage as jt, classifyCompletionClaim as k, relevantEvidence as kt, validateProofManifest as l, validateManifest as ln, evaluateToolSurfaceCapability as lt, packageRowsFromActiveGraph as m, sanitizeUrl as mn, segmentAuthorityBlocks as mt, PROOF_PROTOCOL_VERSION as n, requestedTargetAuthorizesMutation as nn, HOST_CAPABILITY_PACKAGE_GROUPS as nt, proofDigest as o, validateActionManifest as on, evaluateExternalWaitCapability as ot, injectActiveProfileHostLock as p, sanitizeClauseText as pn, authorityCaptureCounts as pt, parseShellCommand as q, ACTION_MANIFEST as qt, bindProofToProjection as r, requestedTargetMatchesResolved as rn, HOST_COHORTS as rt, proofEvidenceConstraints as s, validateActionTarget as sn, evaluateHostCapability as st, PROOF_KINDS as t, isStatefulAction as tn, GOAL_HOST_PACKAGES as tt, HostProfileError as u, canonicalizePath as un, selectHostCohort as ut, verifyComposedHostLockDump as v, isCurrentAcceptedBoundary as vt, executeRevalidatedGitEffect as w, openItems$1 as wt, commitIndexSnapshotDigest as x, DEFAULT_RECOVERY_CHAR_BUDGET as xt, snapshotSessionEvents as y, qualifyBoundary as yt, evidenceFromPersistedToolResult as z, classifyClause as zt };

@@ -59,6 +59,8 @@ export interface GuardItem {
   textSha256: string
   status: GuardItemStatus
   supersededBy?: string
+  supersededByItems?: string[]
+  reboundFrom?: { itemId: string; proposalId: string; confirmationEvent: string }
   verification: VerificationContract
   semanticAction?: import('./protocol-manifest.js').SemanticAction
   requestedTarget?: TargetTuple
@@ -175,6 +177,7 @@ export interface GuardProjection {
   enabled: boolean
   epoch: number
   contractRevision: number
+  rebindProposals: Map<string, import('./rebind.js').RebindProposal>
   items: Map<string, GuardItem>
   evidence: Map<string, GuardEvidence>
   checkpoints: GuardCheckpoint[]
@@ -194,6 +197,8 @@ export interface GuardProjection {
   lastObservedSourceSeq: number
   lastGuardEventSeq: number
   lastRecoveryDigest?: string
+  lastCheckpointRejections?: Array<{ itemId: string; reason: string; reasonCode?: string; offendingEvidenceIds?: string[] }>
+  lastCheckpointRejectionRevision?: number
   continuationAttempts: Map<number, number>
   /** Process-local one-shot fallback counters keyed by epoch + contract revision. */
   persistenceCorrectionAttempts: Map<string, number>
@@ -205,6 +210,7 @@ export function createProjection(): GuardProjection {
     enabled: false,
     epoch: 0,
     contractRevision: 0,
+    rebindProposals: new Map(),
     items: new Map(),
     evidence: new Map(),
     checkpoints: [],

@@ -1,0 +1,325 @@
+"""Host-bound exact-artifact acceptance; never reads or modifies a daily profile.
+
+The entrypoint creates both profiles below one new temporary DSH_HOME. A
+versioned Cordis probe drives real host services without requesting a model.
+CI/artifact preconditions are supplied to native_acceptance.py by its caller.
+"""
+from __future__ import annotations
+
+import io
+import tarfile
+import json
+import os
+import platform
+import secrets
+import shutil
+import signal
+import socket
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+PROBE_CASES = {
+    "nonempty_test_certificate", "package_update_rebind_certificate", "generic_pending_and_rebind_roundtrip",
+    "history_pagination_roundtrip", "compact_and_persisted_resume", "qualified_pending_boundary",
+}
+
+
+def isolated_environment(root: Path) -> dict[str, str]:
+    # Deliberate allowlist: inherited API tokens, NODE_OPTIONS and provider
+    # overrides never enter this credential-free acceptance driver.
+    names = {"PATH", "SystemRoot", "SYSTEMROOT", "COMSPEC", "PATHEXT", "WINDIR", "LANG", "LC_ALL"}
+    env = {key: value for key, value in os.environ.items() if key in names}
+    home = root / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    env.update({"HOME": str(home), "USERPROFILE": str(home),
+                "HOMEDRIVE": home.drive, "HOMEPATH": str(home)[len(home.drive):],
+                "APPDATA": str(home / "AppData" / "Roaming"), "LOCALAPPDATA": str(home / "AppData" / "Local"),
+                "DSH_HOME": str(root / "dsh"), "XDG_CONFIG_HOME": str(root / "config"),
+                "XDG_CACHE_HOME": str(root / "cache"), "XDG_DATA_HOME": str(root / "data"),
+                "npm_config_cache": str(root / "npm-cache"), "PNPM_HOME": str(root / "pnpm"),
+                "DSH_TELEMETRY_DISABLED": "1", "DSH_TOOLS_MODE": "native",
+                "CHOKIDAR_USEPOLLING": "1", "TMPDIR": str(root / "tmp"),
+                "TEMP": str(root / "tmp"), "TMP": str(root / "tmp")})
+    for name in ("npm-user.conf", "npm-global.conf"):
+        (root / name).write_text("", encoding="utf-8")
+    env["npm_config_userconfig"] = str(root / "npm-user.conf")
+    env["npm_config_globalconfig"] = str(root / "npm-global.conf")
+    for key in ("DSH_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "npm_config_cache", "PNPM_HOME", "APPDATA", "LOCALAPPDATA", "TMPDIR"):
+        Path(env[key]).mkdir(parents=True, exist_ok=True)
+    return env
+
+
+def package_fixture(root: Path, version: str) -> Path:
+    """Local inert Cordis package for the real DSH update acceptance case."""
+    path = root / f"guard-acceptance-fixture-{version}.tgz"
+    files = {"package/package.json": json.dumps({"name": "guard-acceptance-fixture", "version": version,
+             "type": "module", "main": "index.js"}),
+             "package/index.js": "export const name = 'guard-acceptance-fixture'; export function apply() {}\n"}
+    with tarfile.open(path, "w:gz") as archive:
+        for name, text in files.items():
+            data = text.encode("utf-8")
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o644
+            archive.addfile(info, io.BytesIO(data))
+    return path
+
+
+def validate_probe(value: Any, nonce: str, driver_digest: str) -> bool:
+    return (isinstance(value, dict) and value.get("schema") == "dsh-native-host-probe/v1"
+            and value.get("nonce") == nonce and value.get("driver_sha256") == driver_digest
+            and value.get("status") == "passed" and value.get("real_model_request") is False
+            and isinstance(value.get("pid"), int) and value["pid"] > 0
+            and isinstance(value.get("cases"), list)
+            and len(value["cases"]) == len(PROBE_CASES)
+            and {row.get("id") for row in value["cases"]} == PROBE_CASES
+            and all(row.get("status") == "passed" for row in value["cases"]))
+
+
+def free_loopback_port() -> int:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return listener.getsockname()[1]
+
+
+def http_json(origin: str, path: str, method: str = "GET", request_origin: str | None = None) -> tuple[int, dict[str, Any]]:
+    headers = {"accept": "application/json"}
+    data = None
+    if method == "POST":
+        headers["content-type"] = "application/json"
+        data = b"{}"
+    if request_origin:
+        headers["origin"] = request_origin
+    request = urllib.request.Request(origin + path, data=data, headers=headers, method=method)
+    # Loopback is never sent through an inherited proxy; redirects cannot
+    # redirect an acceptance request to another host.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    try:
+        with opener.open(request, timeout=3) as response:
+            return response.status, json.loads(response.read(65536))
+    except urllib.error.HTTPError as exc:
+        return exc.code, {}
+
+
+def wait_until(callback, timeout: int = 90):
+    deadline = time.monotonic() + timeout
+    delay = 0.1
+    while time.monotonic() < deadline:
+        try:
+            value = callback()
+            if value:
+                return value
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+        time.sleep(delay)
+        delay = min(delay * 1.5, 2)
+    raise RuntimeError("host acceptance deadline exceeded")
+
+
+def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
+                    result: dict[str, Any]) -> dict[str, Any]:
+    result["gate_profile"] = "host_bound"
+    result["capability_skips"] = ["real_model_request"]
+    if result["status"] != "passed":
+        return result
+    temporary = Path(tempfile.mkdtemp(prefix="dsh-guard-host-"))
+    environment = isolated_environment(temporary)
+    work = temporary / "work"
+    work.mkdir()
+    (work / "package.json").write_text(json.dumps({"name": "guard-native-fixture", "private": True,
+                                                   "scripts": {"test": "node fixture.cjs"}}), encoding="utf-8")
+    (work / "fixture.cjs").write_text("require('node:assert/strict').equal(2 + 2, 4)\n", encoding="utf-8")
+    fixture_old = package_fixture(temporary, "1.0.0")
+    fixture_new = package_fixture(temporary, "2.0.0")
+    cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
+    probe = root / "scripts" / "native_host_probe.mjs"
+    driver_digest = api.sha256(probe)
+    processes: list[subprocess.Popen] = []
+    log_handles = []
+    gates = result["gates"]
+    owned_ports: list[int] = []
+    extra_pids: dict[int, Path] = {}
+
+    def command(*args: str) -> str:
+        # No shell evaluation, no inherited secrets, and a finite deadline.
+        executed = subprocess.run(list(args), cwd=work, env=environment, capture_output=True,
+                                  text=True, timeout=120, check=False)
+        if executed.returncode:
+            raise RuntimeError("host command failed; raw output retained only in temporary execution")
+        return executed.stdout
+
+    def passed(id: str) -> None:
+        gates.append(api.gate(id, digest, passed=True))
+
+    try:
+        if not cli.is_file():
+            raise RuntimeError("runtime root has no DSH launcher")
+        runtime_manifest = json.loads((cli.parent.parent / "package.json").read_text(encoding="utf-8"))
+        cohorts = json.loads((root / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))["cohorts"]
+        cohort = next(row for row in cohorts if row["id"] == f"dsh-{runtime_manifest['version']}")
+        packages = cohort["packages"]
+        market = next(row for row in packages if row["name"] == "dshmarket")
+        result["platform"]["toolchain"]["dsh"] = runtime_manifest["version"]
+        result["host_driver_sha256"] = driver_digest
+        result["host_lock_digests"] = {}
+        extracted = temporary / "extracted"
+        extracted.mkdir()
+        command("tar", "-xf", str(artifact), "-C", str(extracted))
+        artifact_tree = api.tree_digest(extracted / "package")
+        for profile in ("web", "headless"):
+            profile_root = temporary / "dsh" / "profiles" / profile
+            install = ["node", str(cli), "plugin", "--profile", profile, "add", "--ignore-scripts",
+                       "--config.auto-install-peers=false", str(artifact), f"dshmarket@{market['version']}", str(fixture_old)]
+            command(*install)
+            installed = profile_root / "node_modules" / "dsh-completion-guard"
+            if api.tree_digest(installed) != artifact_tree:
+                raise RuntimeError("installed package differs from exact tgz")
+            passed(f"{profile}_package_parity")
+            tracked = [profile_root / "package.json", profile_root / "pnpm-lock.yaml", profile_root / "cordis.patch.yml"]
+            before = {path.name: api.sha256(path) for path in tracked if path.exists()}
+            command(*install)
+            after = {path.name: api.sha256(path) for path in tracked if path.exists()}
+            if before != after or api.tree_digest(installed) != artifact_tree:
+                raise RuntimeError("second host install was not a strict no-op")
+            passed(f"{profile}_strict_second_noop")
+            locker = installed / "bin" / "dsh-completion-guard-host-lock.mjs"
+            lock_args = ["--runtime-root", str(runtime_root), "--profile-root", str(profile_root)]
+            readback = json.loads(command("node", str(locker), "inject", *lock_args))
+            if readback.get("status") != "supported" or readback.get("package_count", 0) <= 0:
+                raise RuntimeError("host lock unsupported")
+            result["host_lock_digests"][profile] = readback["host_lock_digest"]
+            composed = profile_root / "composed.yml"
+            composed.write_text(command("node", str(cli), "--profile", profile, "--dump-config"), encoding="utf-8")
+            command("node", str(locker), "verify-dump", *lock_args, "--dump-config", str(composed))
+            passed(f"{profile}_host_lock_readback")
+            if profile == "headless":
+                missing = subprocess.run(["node", str(cli), "--profile", "headless", "Report the isolated acceptance status."],
+                                         cwd=work, env=environment, capture_output=True, text=True, timeout=60, check=False)
+                if missing.returncode == 0 or "MISSING_CREDENTIAL" not in missing.stdout + missing.stderr:
+                    raise RuntimeError("normal Headless missing-credential boundary not observed")
+                passed("headless_missing_credential_boundary")
+            nonce = secrets.token_hex(12)
+            receipt = temporary / f"{profile}-probe"
+            overlay = temporary / f"{profile}-probe.patch.yml"
+            config = {"runtimeRoot": str(runtime_root), "workRoot": str(work), "nonce": nonce, "output": str(receipt), "profile": profile, "fixtureTgz": str(fixture_new)}
+            # JSON is valid YAML. Isolated Headless loads its real base services
+            # with the interactive task driver disabled; no model is requested.
+            patches = [{"id": "context-guard", "config": {"activation": "always",
+                         "hostLockPackages": packages, "hostLockPlatform": "windows" if platform.system() == "Windows" else "posix",
+                         "hostLockProfile": profile}},
+                       {"insert": [{"id": "native-guard-probe", "name": str(probe), "config": config}]}]
+            if profile == "headless":
+                patches.extend([{"id": "headless-runner", "disabled": True}, {"id": "headless-startup", "disabled": True}])
+            overlay.write_text(json.dumps(patches), encoding="utf-8")
+            argv = ["node", str(cli), "--profile", profile, "--patch", str(overlay)]
+            port = None
+            if profile == "web":
+                port = free_loopback_port()
+                owned_ports.append(port)
+                argv.extend(["--host", "127.0.0.1", "--port", str(port), "--no-open"])
+            log = (temporary / f"{profile}-host.log").open("w", encoding="utf-8")
+            log_handles.append(log)
+            process = subprocess.Popen(argv, cwd=work, env=environment, stdout=log, stderr=log,
+                                       start_new_session=platform.system() != "Windows")
+            processes.append(process)
+
+            def probe_result(exclude: set[int] | None = None):
+                for path in temporary.glob(f"{profile}-probe.*.json"):
+                    value = json.loads(path.read_text(encoding="utf-8"))
+                    if exclude and value.get("pid") in exclude:
+                        continue
+                    if not validate_probe(value, nonce, driver_digest):
+                        raise RuntimeError("real host probe failed or returned an incomplete case set")
+                    extra_pids[value["pid"]] = overlay
+                    return value
+                if process.poll() is not None:
+                    raise RuntimeError("real host exited before probe completion")
+                return None
+            first = wait_until(probe_result)
+            for row in first["cases"]:
+                passed(f"{profile}_{row['id']}")
+            if port is not None:
+                origin = f"http://127.0.0.1:{port}"
+                _, capabilities = http_json(origin, "/dsh-market/api/v1/capabilities")
+                boot = capabilities.get("bootId")
+                if (not boot or capabilities.get("schema") != "dsh-market/update-api/v1"
+                    or capabilities.get("profile") != "web" or capabilities.get("marketVersion") != market["version"]):
+                    raise RuntimeError("web boot identity missing")
+                code, _ = http_json(origin, "/dsh-market/api/v1/restart", "POST", "http://invalid.example")
+                if code != 403:
+                    raise RuntimeError("wrong-origin restart was not denied")
+                code, _ = http_json(origin, "/dsh-market/api/v1/restart", "POST", origin)
+                if code != 202:
+                    raise RuntimeError("same-origin restart was not accepted")
+                wait_until(lambda: http_json(origin, "/dsh-market/api/v1/capabilities")[1].get("bootId") not in (None, boot))
+                second = wait_until(lambda: probe_result({first["pid"]}))
+                if second["pid"] == first["pid"]:
+                    raise RuntimeError("restart did not change host process")
+                passed("web_restart_changed_boot_and_process")
+            # Exercise the installed launcher shim, with the same isolated env.
+            shim = runtime_root / "node_modules" / ".bin" / ("dsh.cmd" if platform.system() == "Windows" else "dsh")
+            if runtime_manifest["version"] not in command(str(shim), "--version"):
+                raise RuntimeError("shell shim identity mismatch")
+            passed(f"{profile}_shell_shim")
+    except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError, RuntimeError):
+        gates.append(api.gate("host_bound_acceptance", digest, passed=False,
+                              note="host-bound gate failed; this is not native acceptance"))
+    finally:
+        remaining = []
+        for process in processes:
+            if process.poll() is None:
+                if platform.system() != "Windows":
+                    os.killpg(process.pid, signal.SIGTERM)
+                else:
+                    process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=10)
+        # Restarted hosts may have detached from the original parent. Verify
+        # this invocation's exact overlay argument before terminating a PID.
+        for pid, overlay in extra_pids.items():
+            if any(process.pid == pid for process in processes):
+                continue
+            try:
+                if platform.system() == "Windows":
+                    inspect = subprocess.run(["powershell", "-NoProfile", "-Command",
+                        f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').CommandLine"],
+                        capture_output=True, text=True, timeout=10, check=False)
+                    if str(overlay) not in inspect.stdout:
+                        remaining.append("restart_process_identity_unavailable")
+                        continue
+                    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=10, check=True)
+                else:
+                    inspect = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=10, check=False)
+                    if inspect.returncode:
+                        continue
+                    if str(overlay) not in inspect.stdout:
+                        remaining.append("restart_process_identity_unavailable")
+                        continue
+                    os.kill(pid, signal.SIGTERM)
+            except (OSError, subprocess.SubprocessError):
+                remaining.append("restart_process_cleanup_failed")
+        for log in log_handles:
+            log.close()
+        for port in owned_ports:
+            with socket.socket() as connection:
+                connection.settimeout(1)
+                if connection.connect_ex(("127.0.0.1", port)) == 0:
+                    remaining.append("owned_listener_still_open")
+        shutil.rmtree(temporary, ignore_errors=True)
+        if temporary.exists():
+            remaining.append("host_temporary_root")
+        result["cleanup"] = {"status": "failed" if remaining else "passed", "remaining_ids": remaining}
+    result["status"] = "passed" if all(row["status"] == "passed" for row in gates) and result["cleanup"]["status"] == "passed" else "failed"
+    result["run"]["finished_at"] = api.timestamp()
+    return result

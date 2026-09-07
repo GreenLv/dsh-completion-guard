@@ -49,7 +49,9 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 ## Status and compatibility
 
-Version 0.4.0 is the current release. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) carries the exact package checksum and native macOS and Windows acceptance records. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
+The installation example uses the recorded 0.4.0 release baseline. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) carries the exact package checksum and native macOS and Windows acceptance records. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
+
+The source tree now targets **0.4.2 (unreleased)**. It adds bounded checkpoint queries and root-user-confirmed requirement rebinding. The published installation example above does not install these candidate changes; CI and exact-artifact native acceptance are still pending. See [the changelog](CHANGELOG.md) and [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
 
 Version `0.4.1-rc.1` is a prerelease candidate for DSH `0.1.2-rc.1` with dshmarket `1.41.0`. Its host cohort is audited on native macOS/posix and against the native Windows rc.1 host graph; host-graph audits do not replace the cross-platform exact-artifact acceptance of one frozen package. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
@@ -103,6 +105,14 @@ After the change, restart DSH.
 Once enabled, the Guard saves direct user requirements and acceptance checks. A saved tool result counts only when it matches the requested command, file, or other target. Before claiming the whole task complete, the model must pass the Guard's checkpoint; missing, stale, or mismatched evidence leaves the task open.
 
 Read-only evidence collection and actions that change packages, files, services, or Git state use separate tools. A successful lookup never grants permission to make a change. Exact command limits and platform evidence are documented in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+
+### When a requirement stays incomplete (0.4.2 candidate)
+
+“Update the plugin and check the GUI” can contain work the Guard cannot certify. The checkpoint reports a reason and a next step for each item. A `generic_run_non_certifiable` result means that changing the binding or running another ordinary command cannot close that item.
+
+Use `context_guard_rebind` to propose an exact, complete split of the old text. If the action or target needs clarification, first ask the root user for an explicit instruction that includes the original clause; the proposal can reference that new item's ID. The tool returns a proposal ID and a comparison. Only the user's exact reply `确认重绑定 <proposal ID>` applies it. Quoted text, tool output, and model confirmation flags do not count. Unsupported parts remain pending, and a qualified safe end does not mean all work is complete.
+
+The default `context_guard_checkpoint` call uses `bindings: []` for diagnosis. It shows at most eight current items/constraints and ten evidence rows, within 12 KiB of plugin JSON. `pagination` reports totals and a separate `next_cursor` for each list; the first page is not the whole contract. Use `item_ids` or `evidence_ids` to focus a query, or `evidence_scope: "history"` for the complete evidence history, including rows marked unavailable. Keep the query unchanged when following a cursor; a changed contract or evidence snapshot requires a fresh query. Large rows expose `detail_id`; retrieve chunks with `detail_offset` and return the first response's `snapshot` as `detail_snapshot` on later chunks. All queries remain read-only and never shrink the certification set.
 
 ## Boundaries
 

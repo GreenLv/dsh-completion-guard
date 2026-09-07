@@ -128,7 +128,7 @@
     },
     {
       "id": "native_acceptance_infrastructure",
-      "paths": ["scripts/native_acceptance.py", "tests/native_acceptance_test.py"],
+      "paths": ["scripts/native_acceptance.py", "scripts/native_host_acceptance.py", "scripts/native_host_probe.mjs", "tests/native_acceptance_test.py"],
       "gates": ["full_candidate"],
       "invalidates": ["native_artifact"],
       "contracts": [],

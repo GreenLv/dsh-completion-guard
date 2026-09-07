@@ -2,6 +2,24 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## v0.4.2 repair candidate (unreleased)
+
+This source candidate adds bounded feedback and root-confirmed rebinding. Local regression tests exercise compound capture, source authority, one-to-many replacement, stale/partial replay, target matching, large pages, snapshot changes, small recovery budgets and qualified pending boundaries. Local tests and the existence of a host driver do not establish native DSH acceptance.
+
+The versioned entrypoint is `scripts/native_acceptance.py`. Its default `portable_artifact` profile checks exact source/tgz identity, isolated installation, installed-file parity, second-install no-op and JavaScript syntax. `--gate-profile host_bound --runtime-root <audited-runtime>` additionally creates isolated Web and Headless profiles, injects and reads back their host locks, then runs `scripts/native_host_probe.mjs` inside the real DSH composition. The probe uses the host AgentRegistry, ToolRuntime and durable Session services for nonempty test certification, generic refusal, rebind confirmation, history queries, compact/resume and a qualified pending boundary. Web checks also require wrong-origin restart denial, same-origin acceptance, changed boot/process identities and listener cleanup. The installed launcher shim is checked separately.
+
+The host driver deliberately makes no model request. It first checks that the normal Headless task driver stops with `MISSING_CREDENTIAL` in the isolated environment, then disables that task driver for the separate real-service probe. A required package-update probe installs an inert local fixture at version 1, then clarifies and confirms a generic requirement, applies version 2 through the real producer/action tools, independently reads it back and requires a nonempty certificate. Its native execution remains pending. Capability skips appear in the returned annex. Never treat a synthetic test or an empty probe case set as a passed native run.
+
+After exact-candidate portability CI passes and one clean commit's tgz has been frozen, a native owner can run the following with Python 3.11+ (the same artifact is used on both platforms):
+
+```text
+python scripts/native_acceptance.py --gate-profile host_bound --repo-root <clean-checkout> --runtime-root <audited-runtime> --artifact <frozen.tgz> --artifact-sha256 <sha256> --source-commit <full-commit> --output <outside-repository-annex.json>
+```
+
+The driver creates a new temporary DSH_HOME, explicit temporary HOME/USERPROFILE and credential-free environment; it does not select or enable a daily profile. It binds the annex to the artifact, source commit, host lock and probe bytes, and checks owned processes, ports and temporary-file cleanup. Do not run it from a dirty source tree, substitute a rebuilt package, or copy raw temporary logs into the repository.
+
+For 0.4.2, exact-candidate CI, clean-commit artifact freeze, native macOS and Windows execution, the normal Headless credential boundary, full package-update workflow, and publication/readback remain pending. A disabled daily installation remains disabled until the user separately requests an upgrade and enablement.
+
 ## v0.4.0 release gates (2026-09-02, passed)
 
 Version 0.4.0 targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`. The repository does not place a candidate's own commit, checksum, or public status inside that candidate's packaged documentation: those facts are generated after the package bytes are frozen and are attached to the GitHub Release.

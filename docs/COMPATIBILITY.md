@@ -2,7 +2,13 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## Current 0.4.0 release baseline
+## 0.4.2 source candidate (unreleased)
+
+The repair candidate retains the existing five audited host cohorts and peer dependency ranges. It does not change the Codex upstream pin, host package identities, or digest-v3 fixtures. The package version is `0.4.2`; no CI, frozen-package, native-platform or publication result is implied by that version field.
+
+For old pending requirements, use the new proposal/confirmation flow rather than editing the session log. Old events remain under their recorded capture version. Checkpoint output is paged and byte-bounded; clients must follow each list's cursor or query an ID instead of assuming that `open_items` or `available_evidence` on the first page is exhaustive. `bindings` and the top-level `certified|incomplete|unknown` meanings are unchanged. Generic execution and GUI/visual checks still cannot certify user-level completion. See the [architecture](ARCHITECTURE.md) for the schema and the [acceptance record](LOCAL_ACCEPTANCE.md) for remaining gates.
+
+## Recorded 0.4.0 release baseline
 
 - Plugin: `dsh-completion-guard` `0.4.0`
 - DeepSeek Harness: `0.1.2-alpha.3`

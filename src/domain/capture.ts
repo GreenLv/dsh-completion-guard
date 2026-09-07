@@ -236,13 +236,15 @@ export interface ClauseSegment {
   paths: string[]
 }
 
-export function segmentClauses(text: string): ClauseSegment[] {
+export function segmentClauses(text: string, captureVersion: 'v041' | 'v042' = 'v042'): ClauseSegment[] {
   const normalized = normalizeClause(text)
   if (!normalized) return []
-  const parts = normalized
-    .split(/(?<=[。！？；])|(?<=[.!?])(?=\s|$)|(?<=(?:^|[\s。！？；.!?，,；:]))(?=(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得))/i)
-    .map((part) => part.trim())
-    .filter(Boolean)
+  // Establish sentence/negative scope before splitting positive conjunctions.
+  // A prohibition retains its entire coordinated body for downstream checks.
+  const scoped = normalized.split(/(?<=[。！？；])|(?<=[.!?])(?=\s|$)|(?<=(?:^|[\s。！？；.!?，,；:]))(?=(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得))/i)
+  const parts = scoped.flatMap(part => captureVersion === 'v041' || classifyClause(part.trim()).kind === 'prohibition' ? [part] : part
+    .split(/(?<!一)(?:并且?|以及|同时)(?=(?:验证(?!结果|全部通过|通过|成功)|确认(?!结果|全部通过|通过|成功|完成)|确保(?!结果|全部通过|通过|成功)|检查(?!结果)|更新|记录|安装|应用|重启|提交|推送|发布|在.{0,40}记录))|\s+and\s+(?=(?:verify|confirm|install|apply|restart|commit|push|publish|record)\b)/i))
+    .map(part => part.trim()).filter(Boolean)
   const segments: ClauseSegment[] = []
   for (const part of parts) {
     const { kind, body } = classifyClause(part)
@@ -265,9 +267,11 @@ export function captureItem(
   surface: 'artifact' | 'scope',
   method?: string,
   operation?: GuardOperation,
+  captureVersion: 'v041' | 'v042' = 'v042',
 ): GuardItem {
   const sanitized = sanitizeClauseText(body)
-  const semanticAction = semanticActionFromText(sanitized)
+  const unsupportedVisual = captureVersion === 'v042' && /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized)
+  const semanticAction = unsupportedVisual ? 'generic_run' : semanticActionFromText(sanitized)
   const capturedTarget = captureRequestedTarget(semanticAction, sanitized, subject, surface)
   const effectiveOperation = semanticAction === 'verify' ? 'verify' : operation
   const item: GuardItem = {
@@ -280,7 +284,7 @@ export function captureItem(
     status: 'pending',
     verification: kind === 'prohibition'
       ? { enforced: false, surface, subject }
-      : { enforced: true, surface, subject, method, operation: effectiveOperation },
+      : { enforced: true, surface: unsupportedVisual ? 'ui' : surface, subject, method, operation: effectiveOperation },
     semanticAction,
     requestedTarget: capturedTarget.target,
     targetCaptureStatus: capturedTarget.reasonCode ? 'clarification_required' : 'resolved',
