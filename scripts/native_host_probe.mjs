@@ -9,14 +9,14 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
 export const name = 'completion-guard-native-probe'
-export const inject = ['agents', 'sessions', 'tools', 'sessionPersistence']
+export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady']
 
 export function runtimeRequire(runtimeRoot) {
   return createRequire(realpathSync(join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')))
 }
 
 export function apply(ctx, config) {
-  ctx.on('ready', async () => {
+  ctx.effect(() => ctx.appReady.onReady(async () => {
     const rows = []
     let handle
     let failedCase = 'initialize_runtime'
@@ -162,5 +162,5 @@ export function apply(ctx, config) {
       writeFileSync(`${output}.tmp`, JSON.stringify(result))
       renameSync(`${output}.tmp`, output)
     }
-  })
+  }), 'native acceptance readiness')
 }

@@ -134,6 +134,28 @@ class HostBoundEntrypointTests(unittest.TestCase):
             value = subprocess.check_output(["node", "--input-type=module", "-e", code, str(root / "runtime")], text=True)
             self.assertEqual(value, "42")
 
+    def test_probe_starts_from_launcher_readiness_and_reports_initialization_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = SCRIPT.with_name("native_host_probe.mjs").resolve().as_uri()
+            code = f"""
+                import {{ apply, inject }} from {json.dumps(probe)};
+                import {{ readFileSync }} from 'node:fs';
+                import assert from 'node:assert/strict';
+                let ready;
+                const ctx = {{ effect: fn => fn(), appReady: {{ onReady: fn => {{ ready = fn; return () => {{}}; }} }} }};
+                assert.ok(!inject.includes('tools'));
+                apply(ctx, {{ runtimeRoot: process.argv[1], output: process.argv[1] + '/probe', nonce: 'fixture' }});
+                assert.equal(typeof ready, 'function');
+                await ready();
+                const result = JSON.parse(readFileSync(process.argv[1] + '/probe.' + process.pid + '.json'));
+                assert.equal(result.status, 'failed');
+                assert.equal(result.cases[0].id, 'initialize_runtime');
+                process.stdout.write('readiness_failure_recorded');
+            """
+            value = subprocess.check_output(["node", "--input-type=module", "-e", code, str(root)], text=True)
+            self.assertEqual(value, "readiness_failure_recorded")
+
     def test_restart_probe_requires_persisted_resume_without_repeating_update(self):
         receipt = {"schema": "dsh-native-host-probe/v1", "nonce": "nonce", "driver_sha256": "a" * 64,
                    "mode": "restart", "status": "passed", "pid": 100, "real_model_request": False,
