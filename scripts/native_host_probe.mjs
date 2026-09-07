@@ -52,6 +52,14 @@ export async function readProbeItem(call, page, itemId) {
   throw new Error('checkpoint detail exceeded native probe bound')
 }
 
+export async function readProbeTestBinding(call, page) {
+  for (const row of page.open_items) {
+    const item = await readProbeItem(call, page, row.id)
+    if (item.binding_template?.semantic_action === 'test') return item.binding_template
+  }
+  return undefined
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const rows = []
@@ -83,7 +91,9 @@ export function apply(ctx, config) {
       const code = value => typeof value === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(value) ? value : null
       lastTool = { name, is_error: result.isError, status: code(result.value?.status), reason_code: code(result.value?.reason_code), error_code: code(result.error?.info?.code),
         blockers: result.value?.open_items?.map(row => code(row.reason_code)).filter(Boolean).slice(0, 8) ?? [],
-        rejections: result.value?.rejected_bindings?.map(row => code(row.reason_code ?? row.reason)).filter(Boolean).slice(0, 8) ?? [] }
+        rejections: result.value?.rejected_bindings?.map(row => code(row.reason_code ?? row.reason)).filter(Boolean).slice(0, 8) ?? [],
+        item_shapes: result.value?.open_items?.slice(0, 8).map(row => ({ omitted: row.omitted === true, has_detail: typeof row.detail_id === 'string', has_template: !!row.binding_template, action: code(row.semantic_action) })) ?? [],
+        evidence_shapes: result.value?.available_evidence?.slice(0, 10).map(row => ({ parse: code(row.parse_status), disposition: code(row.adapter_disposition), reason: code(row.reason_code), action: code(row.semantic_action) })) ?? [] }
       agent.session.append('tool/result', {
         turn: 1, step: ordinal,
         message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
@@ -123,7 +133,7 @@ export function apply(ctx, config) {
         const pending = await call('context_guard_checkpoint', { bindings: [] })
         operation = 'checkpoint_incomplete'
         assert.equal(pending.status, 'incomplete')
-        const template = pending.open_items.find(row => row.binding_template)?.binding_template
+        const template = await readProbeTestBinding(call, pending)
         operation = 'binding_template_present'
         assert.ok(template)
         const certificate = await call('context_guard_checkpoint', { bindings: [template] })
