@@ -346,11 +346,16 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             # with the interactive task driver disabled; no model is requested.
             patches = [{"id": "context-guard", "config": {"activation": "always",
                          "hostLockPackages": packages, "hostLockPlatform": "windows" if platform.system() == "Windows" else "posix",
-                         "hostLockProfile": profile}},
+                         "hostLockProfile": profile, "hostLockPolicy": "dsh-core/v1",
+                         "hostLockRuntimeRoot": str(runtime_root), "hostLockProfileRoot": str(profile_root)}},
                        native_probe_patch(probe, config)]
             if profile == "headless":
                 patches.extend([{"id": "headless-runner", "disabled": True}, {"id": "headless-startup", "disabled": True}])
             overlay.write_text(json.dumps(patches), encoding="utf-8")
+            # DSH overlays replace config objects; validate the effective probe
+            # composition too, not only the base profile that was injected above.
+            composed.write_text(command("node", str(cli), "--profile", profile, "--patch", str(overlay), "--dump-config"), encoding="utf-8")
+            command("node", str(locker), "verify-dump", *lock_args, "--dump-config", str(composed))
             argv = ["node", str(cli), "--profile", profile, "--patch", str(overlay)]
             port = None
             if profile == "web":
