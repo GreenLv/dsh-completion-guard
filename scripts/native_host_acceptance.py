@@ -14,6 +14,7 @@ import platform
 import secrets
 import shutil
 import signal
+import shlex
 import socket
 import subprocess
 import tempfile
@@ -126,6 +127,40 @@ def wait_until(callback, timeout: int = 90):
     raise RuntimeError("host acceptance deadline exceeded")
 
 
+def owns_host_command(command: str, cli: Path, overlay: Path, windows: bool = False) -> bool:
+    """Require exact CLI and --patch argv, never a process-name-only match."""
+    try:
+        argv = shlex.split(command, posix=not windows)
+    except ValueError:
+        return False
+    if windows:
+        argv = [arg.strip('"').casefold() for arg in argv]
+    expected_cli = str(cli).casefold() if windows else str(cli)
+    expected_overlay = str(overlay).casefold() if windows else str(overlay)
+    return expected_cli in argv and any(argv[i:i + 2] == ["--patch", expected_overlay] for i in range(len(argv) - 1))
+
+
+def discover_owned_hosts(cli: Path, overlays: list[Path]) -> dict[int, Path]:
+    """Find this invocation's restarted host even before its probe completes."""
+    windows = platform.system() == "Windows"
+    if windows:
+        result = subprocess.run(["powershell", "-NoProfile", "-Command",
+            "Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"],
+            capture_output=True, text=True, timeout=10, check=True)
+        value = json.loads(result.stdout or "[]")
+        rows = value if isinstance(value, list) else [value]
+        pairs = [(row.get("ProcessId"), row.get("CommandLine") or "") for row in rows]
+    else:
+        result = subprocess.run(["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=10, check=True)
+        pairs = []
+        for line in result.stdout.splitlines():
+            fields = line.strip().split(None, 1)
+            if len(fields) == 2 and fields[0].isdigit():
+                pairs.append((int(fields[0]), fields[1]))
+    return {pid: overlay for pid, command in pairs if isinstance(pid, int) and pid > 0 and pid != os.getpid()
+            for overlay in overlays if owns_host_command(command, cli, overlay, windows)}
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any]) -> dict[str, Any]:
     result["gate_profile"] = "host_bound"
@@ -149,6 +184,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     gates = result["gates"]
     owned_ports: list[int] = []
     extra_pids: dict[int, Path] = {}
+    overlays: list[Path] = []
 
     def command(*args: str) -> str:
         # No shell evaluation, no inherited secrets, and a finite deadline.
@@ -211,6 +247,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             nonce = secrets.token_hex(12)
             receipt = temporary / f"{profile}-probe"
             overlay = temporary / f"{profile}-probe.patch.yml"
+            overlays.append(overlay)
             config = {"runtimeRoot": str(runtime_root), "workRoot": str(work), "nonce": nonce, "output": str(receipt), "profile": profile, "fixtureTgz": str(fixture_new)}
             # JSON is valid YAML. Isolated Headless loads its real base services
             # with the interactive task driver disabled; no model is requested.
@@ -243,7 +280,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                         raise RuntimeError("real host probe failed or returned an incomplete case set")
                     extra_pids[value["pid"]] = overlay
                     return value
-                if process.poll() is not None:
+                if not exclude and process.poll() is not None:
                     raise RuntimeError("real host exited before probe completion")
                 return None
             first = wait_until(probe_result)
@@ -288,6 +325,10 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=10)
+        try:
+            extra_pids.update(discover_owned_hosts(cli, overlays))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            remaining.append("restart_process_discovery_failed")
         # Restarted hosts may have detached from the original parent. Verify
         # this invocation's exact overlay argument before terminating a PID.
         for pid, overlay in extra_pids.items():
@@ -298,7 +339,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     inspect = subprocess.run(["powershell", "-NoProfile", "-Command",
                         f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').CommandLine"],
                         capture_output=True, text=True, timeout=10, check=False)
-                    if str(overlay) not in inspect.stdout:
+                    if not owns_host_command(inspect.stdout.strip(), cli, overlay, platform.system() == "Windows"):
                         remaining.append("restart_process_identity_unavailable")
                         continue
                     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=10, check=True)
@@ -306,19 +347,25 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     inspect = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=10, check=False)
                     if inspect.returncode:
                         continue
-                    if str(overlay) not in inspect.stdout:
+                    if not owns_host_command(inspect.stdout.strip(), cli, overlay, platform.system() == "Windows"):
                         remaining.append("restart_process_identity_unavailable")
                         continue
                     os.kill(pid, signal.SIGTERM)
-            except (OSError, subprocess.SubprocessError):
+                    wait_until(lambda: subprocess.run(["ps", "-p", str(pid), "-o", "pid="],
+                        capture_output=True, timeout=3, check=False).returncode != 0, timeout=10)
+            except (OSError, subprocess.SubprocessError, RuntimeError):
                 remaining.append("restart_process_cleanup_failed")
         for log in log_handles:
             log.close()
         for port in owned_ports:
-            with socket.socket() as connection:
-                connection.settimeout(1)
-                if connection.connect_ex(("127.0.0.1", port)) == 0:
-                    remaining.append("owned_listener_still_open")
+            def listener_closed():
+                with socket.socket() as connection:
+                    connection.settimeout(1)
+                    return connection.connect_ex(("127.0.0.1", port)) != 0
+            try:
+                wait_until(listener_closed, timeout=10)
+            except RuntimeError:
+                remaining.append("owned_listener_still_open")
         shutil.rmtree(temporary, ignore_errors=True)
         if temporary.exists():
             remaining.append("host_temporary_root")

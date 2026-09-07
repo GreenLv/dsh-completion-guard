@@ -202,6 +202,19 @@ class HostBoundEntrypointTests(unittest.TestCase):
         value = subprocess.check_output(["node", "--input-type=module", "-e", code], text=True)
         self.assertEqual(value, 'detail_roundtrip_passed')
 
+    def test_restart_cleanup_discovers_only_exact_owned_patch_argv(self):
+        cli, overlay = Path('/runtime/dsh/bin.js'), Path('/tmp/isolated profile/probe.yml')
+        command = 'node /runtime/dsh/bin.js --profile web --patch "/tmp/isolated profile/probe.yml"'
+        self.assertTrue(self.host.owns_host_command(command, cli, overlay))
+        self.assertFalse(self.host.owns_host_command(command + '.other', cli, overlay))
+        self.assertFalse(self.host.owns_host_command(command.replace('--patch', '--other'), cli, overlay))
+        self.assertFalse(self.host.owns_host_command(command.replace('/runtime/dsh/bin.js', '/other/bin.js'), cli, overlay))
+        windows_cli, windows_overlay = Path(r'C:\Runtime\bin.js'), Path(r'C:\Temp\probe root\probe.yml')
+        self.assertTrue(self.host.owns_host_command('node "C:\\Runtime\\bin.js" --patch "C:\\Temp\\probe root\\probe.yml"', windows_cli, windows_overlay, True))
+        process_rows = f'101 {command}\n102 node /runtime/dsh/bin.js --patch /tmp/other.yml\n'
+        with mock.patch.object(self.host.platform, 'system', return_value='Darwin'), mock.patch.object(self.host.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, process_rows)):
+            self.assertEqual(self.host.discover_owned_hosts(cli, [overlay]), {101: overlay})
+
     def test_restart_probe_requires_persisted_resume_without_repeating_update(self):
         receipt = {"schema": "dsh-native-host-probe/v1", "nonce": "nonce", "driver_sha256": "a" * 64,
                    "mode": "restart", "status": "passed", "pid": 100, "real_model_request": False,
