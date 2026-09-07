@@ -20,6 +20,8 @@ export function apply(ctx, config) {
     const rows = []
     let handle
     let failedCase = 'initialize_runtime'
+    let operation = 'initialize'
+    let lastTool = null
     let mode = 'initial'
     let createUserMessage, createToolResultMessage, sessionId
     let proposalId
@@ -31,6 +33,7 @@ export function apply(ctx, config) {
     }
     let ordinal = 0
     const root = async text => {
+      operation = 'root_flush'
       handle.agent.session.append('user/message', createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), { surfaceOp: 'append' })
       assert.equal(await ctx.sessions.flush(handle.agent.session), true)
     }
@@ -38,13 +41,19 @@ export function apply(ctx, config) {
       const agent = handle.agent
       const callId = `native-${process.pid}-${++ordinal}`
       agent.session.append('tool/call', { turn: 1, step: ordinal, callId, name, arguments: JSON.stringify(args) })
+      operation = `tool_${name}`
       const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
+      const code = value => typeof value === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(value) ? value : null
+      lastTool = { name, is_error: result.isError, status: code(result.value?.status), reason_code: code(result.value?.reason_code), error_code: code(result.error?.info?.code),
+        blockers: result.value?.open_items?.map(row => code(row.reason_code)).filter(Boolean).slice(0, 8) ?? [] }
       agent.session.append('tool/result', {
         turn: 1, step: ordinal,
         message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
         ...(result.error ? { error: result.error } : {}), ...(result.meta ? { meta: result.meta } : {}),
       }, { surfaceOp: 'append' })
+      operation = 'tool_result_flush'
       assert.equal(await ctx.sessions.flush(agent.session), true)
+      operation = 'tool_result_success'
       assert.equal(result.isError, false, name)
       if (name === 'context_guard_checkpoint') assert.ok(Buffer.byteLength(JSON.stringify(result.value)) <= 12288)
       return result.value
@@ -72,10 +81,13 @@ export function apply(ctx, config) {
         await root('Run pnpm test.')
         await call(process.platform === 'win32' ? 'pwsh' : 'bash', { command: 'pnpm test' })
         const pending = await call('context_guard_checkpoint', { bindings: [] })
+        operation = 'checkpoint_incomplete'
         assert.equal(pending.status, 'incomplete')
         const template = pending.open_items.find(row => row.binding_template)?.binding_template
+        operation = 'binding_template_present'
         assert.ok(template)
         const certificate = await call('context_guard_checkpoint', { bindings: [template] })
+        operation = 'certificate_issued'
         assert.equal(certificate.status, 'certified')
         assert.ok(certificate.certificate)
       })
@@ -148,7 +160,7 @@ export function apply(ctx, config) {
         assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       })
     } catch (error) {
-      rows.push({ id: failedCase, status: 'failed', error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })
+      rows.push({ id: failedCase, status: 'failed', operation, last_tool: lastTool, error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })
     } finally {
       if (handle) {
         try { await handle.dispose() } catch { rows.push({ id: 'agent_cleanup', status: 'failed' }) }

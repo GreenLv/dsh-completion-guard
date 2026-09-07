@@ -239,7 +239,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     if exclude and value.get("pid") in exclude:
                         continue
                     if not validate_probe(value, nonce, driver_digest, restart=bool(exclude)):
-                        result["host_probe_failures"] = [{"id": row.get("id"), "status": row.get("status"), "error_code": row.get("error_code")} for row in value.get("cases", []) if row.get("status") != "passed"]
+                        result["host_probe_failures"] = [{"id": row.get("id"), "status": row.get("status"), "error_code": row.get("error_code"), "operation": row.get("operation"), "last_tool": row.get("last_tool")} for row in value.get("cases", []) if row.get("status") != "passed"]
                         raise RuntimeError("real host probe failed or returned an incomplete case set")
                     extra_pids[value["pid"]] = overlay
                     return value
