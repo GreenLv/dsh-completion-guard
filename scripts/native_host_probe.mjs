@@ -26,6 +26,32 @@ export async function createProbeAgent(ctx, sessionId, workRoot, resume = false)
   return handle
 }
 
+/** Resolve rows folded by the public checkpoint response budget. */
+export async function readProbeItem(call, page, itemId) {
+  const row = page.open_items.find(item => item.id === itemId)
+  assert.ok(row)
+  if (!row.omitted) return row
+  let offset = 0
+  let snapshot
+  let text = ''
+  for (let count = 0; count < 128; count++) {
+    const detail = await call('context_guard_checkpoint', { bindings: [], detail_id: row.detail_id,
+      detail_offset: offset, ...(snapshot ? { detail_snapshot: snapshot } : {}) })
+    assert.equal(typeof detail.detail_chunk, 'string')
+    if (snapshot) assert.equal(detail.snapshot, snapshot)
+    snapshot = detail.snapshot
+    text += detail.detail_chunk
+    if (detail.next_detail_offset === null) {
+      const item = JSON.parse(text).find(entry => entry.id === itemId)
+      assert.ok(item)
+      return item
+    }
+    assert.ok(detail.next_detail_offset > offset)
+    offset = detail.next_detail_offset
+  }
+  throw new Error('checkpoint detail exceeded native probe bound')
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const rows = []
@@ -56,7 +82,8 @@ export function apply(ctx, config) {
       const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
       const code = value => typeof value === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(value) ? value : null
       lastTool = { name, is_error: result.isError, status: code(result.value?.status), reason_code: code(result.value?.reason_code), error_code: code(result.error?.info?.code),
-        blockers: result.value?.open_items?.map(row => code(row.reason_code)).filter(Boolean).slice(0, 8) ?? [] }
+        blockers: result.value?.open_items?.map(row => code(row.reason_code)).filter(Boolean).slice(0, 8) ?? [],
+        rejections: result.value?.rejected_bindings?.map(row => code(row.reason_code ?? row.reason)).filter(Boolean).slice(0, 8) ?? [] }
       agent.session.append('tool/result', {
         turn: 1, step: ordinal,
         message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
@@ -110,6 +137,7 @@ export function apply(ctx, config) {
         const before = await call('context_guard_checkpoint', { bindings: [] })
         const old = before.open_items.find(row => row.reason_code === 'generic_run_non_certifiable')
         const clarified = before.open_items.find(row => row.semantic_action === 'apply')
+        operation = 'package_source_items_present'
         assert.ok(old && clarified)
         const proposed = await call('context_guard_rebind', { operation: 'propose', item_id: old.id,
           clauses: [old.text], clarification_item_ids: [clarified.id] })
@@ -130,9 +158,12 @@ export function apply(ctx, config) {
             resolution_call_id: resolutionCall, effect_call_id: effectCall })).status, 'supported')
         }
         const page = await call('context_guard_checkpoint', { bindings: [] })
-        const binding = page.open_items.find(row => row.id === clarified.id)?.binding_template
+        const binding = (await readProbeItem(call, page, clarified.id)).binding_template
+        operation = 'package_binding_template_present'
         assert.ok(binding)
-        assert.equal((await call('context_guard_checkpoint', { bindings: [binding] })).status, 'certified')
+        const certificate = await call('context_guard_checkpoint', { bindings: [binding] })
+        operation = 'package_certificate_issued'
+        assert.equal(certificate.status, 'certified')
       })
       await check('generic_pending_and_rebind_roundtrip', async () => {
         await root('更新演示插件并检查 GUI 效果')

@@ -177,6 +177,31 @@ class HostBoundEntrypointTests(unittest.TestCase):
         value = subprocess.check_output(["node", "--input-type=module", "-e", code], text=True)
         self.assertEqual(value, 'preset_lifecycle_passed')
 
+    def test_native_probe_reads_folded_binding_details_with_snapshot(self):
+        probe = SCRIPT.with_name("native_host_probe.mjs").resolve().as_uri()
+        code = f"""
+            import {{ readProbeItem }} from {json.dumps(probe)};
+            import assert from 'node:assert/strict';
+            const item = {{ id: 'R003', binding_template: {{ evidence_ids: ['resolution', 'effect', 'state'] }} }};
+            const text = JSON.stringify([item]);
+            let calls = 0;
+            const call = async (name, args) => {{
+                assert.equal(name, 'context_guard_checkpoint');
+                assert.equal(args.detail_id, 'detail-token');
+                assert.equal(args.detail_offset, calls * 20);
+                if (calls) assert.equal(args.detail_snapshot, 'same-snapshot');
+                calls++;
+                const end = Math.min(args.detail_offset + 20, text.length);
+                return {{ detail_chunk: text.slice(args.detail_offset, end), snapshot: 'same-snapshot', next_detail_offset: end < text.length ? end : null }};
+            }};
+            assert.deepEqual(await readProbeItem(call, {{open_items: [{{id: item.id, omitted: true, detail_id: 'detail-token'}}]}}, item.id), item);
+            assert.ok(calls > 1);
+            assert.deepEqual(await readProbeItem(() => {{ throw Error('unexpected detail request'); }}, {{open_items: [item]}}, item.id), item);
+            process.stdout.write('detail_roundtrip_passed');
+        """
+        value = subprocess.check_output(["node", "--input-type=module", "-e", code], text=True)
+        self.assertEqual(value, 'detail_roundtrip_passed')
+
     def test_restart_probe_requires_persisted_resume_without_repeating_update(self):
         receipt = {"schema": "dsh-native-host-probe/v1", "nonce": "nonce", "driver_sha256": "a" * 64,
                    "mode": "restart", "status": "passed", "pid": 100, "real_model_request": False,

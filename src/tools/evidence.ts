@@ -502,7 +502,9 @@ function lockIntegrity(text: string, packageId: string, locator: string): string
   if (start < 0) return undefined
   for (let index = start + 1; index < lines.length; index += 1) {
     if (/^  \S/.test(lines[index])) break
-    const match = /^    resolution: \{integrity: ([^}]+)\}\s*$/.exec(lines[index])
+    // pnpm file dependencies append a tarball locator in the same map.
+    // Bind only the integrity token, never the adjacent locator field.
+    const match = /^    resolution: \{integrity: ([^,\s}]+)(?:, tarball: .+)?\}\s*$/.exec(lines[index])
     if (match) return match[1]
   }
   return undefined

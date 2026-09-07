@@ -1190,7 +1190,7 @@ function lockIntegrity(text, packageId, locator) {
 	if (start < 0) return void 0;
 	for (let index = start + 1; index < lines.length; index += 1) {
 		if (/^  \S/.test(lines[index])) break;
-		const match = /^    resolution: \{integrity: ([^}]+)\}\s*$/.exec(lines[index]);
+		const match = /^    resolution: \{integrity: ([^,\s}]+)(?:, tarball: .+)?\}\s*$/.exec(lines[index]);
 		if (match) return match[1];
 	}
 }

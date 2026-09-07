@@ -197,7 +197,7 @@ async function writeInstalledPackage(profile: string, name: string, version: str
   await writeFile(join(packagePath, 'package.json'), JSON.stringify({ name, version }))
   await writeFile(join(profile, 'pnpm-lock.yaml'), [
     "lockfileVersion: '9.0'", '', 'importers:', '', '  .:', '    dependencies:', `      '${name}':`, `        specifier: ${locator}`, `        version: ${locator}`,
-    '', 'packages:', '', `  '${name}@${locator}':`, `    resolution: {integrity: ${integrity}}`, '', 'snapshots:', '',
+    '', 'packages:', '', `  '${name}@${locator}':`, `    resolution: {integrity: ${integrity}, tarball: ${JSON.stringify(locator)}}`, '', 'snapshots:', '',
   ].join('\n'))
   await mkdir(join(profile, 'node_modules'), { recursive: true })
   await writeFile(join(profile, 'node_modules', '.package-map.json'), JSON.stringify({ packages: { '.': { url: '..', dependencies: { [name]: name } }, [name]: { url: `./${name}`, dependencies: {} } } }))
