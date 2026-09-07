@@ -15,6 +15,17 @@ export function runtimeRequire(runtimeRoot) {
   return createRequire(realpathSync(join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')))
 }
 
+export async function createProbeAgent(ctx, sessionId, workRoot, resume = false) {
+  const presets = ctx.get('agentPresets')
+  const preset = presets ? (await presets.resolve('standard')).id : undefined
+  const setup = presets ? async agentCtx => { await presets.mount(agentCtx, preset) } : undefined
+  const handle = resume
+    ? await ctx.agents.resume({ resumeSessionId: sessionId, setup })
+    : await ctx.agents.create({ sessionId, meta: { cwd: workRoot, ...(preset ? { agentPreset: preset } : {}) }, setup })
+  await handle.agent.whenIdle()
+  return handle
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const rows = []
@@ -70,18 +81,18 @@ export function apply(ctx, config) {
         assert.equal(prior.driver_sha256, driverDigest)
         proposalId = prior.proposal_id
         await check('persisted_restart_resume', async () => {
-          handle = await ctx.agents.resume({ resumeSessionId: sessionId })
-          await handle.agent.whenIdle()
+          handle = await createProbeAgent(ctx, sessionId, config.workRoot, true)
           assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
           assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
         })
         return
       }
-      handle = await ctx.agents.create({ sessionId, meta: { cwd: config.workRoot } })
-      await handle.agent.whenIdle()
+      handle = await createProbeAgent(ctx, sessionId, config.workRoot)
       await check('nonempty_test_certificate', async () => {
         await root('Run pnpm test.')
-        await call(process.platform === 'win32' ? 'pwsh' : 'bash', { command: 'pnpm test' })
+        const shell = process.platform === 'win32' ? 'pwsh' : 'bash'
+        const fields = handle.agent.ctx.tools.get(shell, handle.agent)?.parameters?.properties ?? {}
+        await call(shell, { command: 'pnpm test', ...(fields.description ? { description: 'Run isolated deterministic acceptance test' } : {}) })
         const pending = await call('context_guard_checkpoint', { bindings: [] })
         operation = 'checkpoint_incomplete'
         assert.equal(pending.status, 'incomplete')
@@ -148,8 +159,7 @@ export function apply(ctx, config) {
         handle.agent.session.append('compaction/summary', { compactionId: 'native', summary: [], shadowedRange: { start: 0, end: 0 }, shadowedSeqs: [], shadowedTokenCount: 0, provider: 'native-driver', model: 'none' })
         assert.equal(await ctx.sessions.flush(handle.agent.session), true)
         await handle.dispose()
-        handle = await ctx.agents.resume({ resumeSessionId: sessionId })
-        await handle.agent.whenIdle()
+        handle = await createProbeAgent(ctx, sessionId, config.workRoot, true)
         assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
         assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       })

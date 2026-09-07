@@ -156,6 +156,27 @@ class HostBoundEntrypointTests(unittest.TestCase):
             value = subprocess.check_output(["node", "--input-type=module", "-e", code, str(root)], text=True)
             self.assertEqual(value, "readiness_failure_recorded")
 
+    def test_native_factory_mounts_the_standard_preset_before_use_and_on_resume(self):
+        probe = SCRIPT.with_name("native_host_probe.mjs").resolve().as_uri()
+        code = f"""
+            import {{ createProbeAgent }} from {json.dumps(probe)};
+            import assert from 'node:assert/strict';
+            const events = [];
+            const agentCtx = {{}};
+            const presets = {{ resolve: async id => ({{id}}), mount: async (ctx, id) => {{ assert.equal(ctx, agentCtx); assert.equal(id, 'standard'); events.push('mount'); }} }};
+            const handle = {{ agent: {{ whenIdle: async () => events.push('idle') }} }};
+            const ctx = {{ get: name => name === 'agentPresets' ? presets : undefined, agents: {{
+                create: async options => {{ assert.equal(options.meta.agentPreset, 'standard'); await options.setup(agentCtx); events.push('create'); return handle; }},
+                resume: async options => {{ assert.equal(options.resumeSessionId, 'fixture'); await options.setup(agentCtx); events.push('resume'); return handle; }}
+            }} }};
+            await createProbeAgent(ctx, 'fixture', '/work');
+            await createProbeAgent(ctx, 'fixture', '/work', true);
+            assert.deepEqual(events, ['mount', 'create', 'idle', 'mount', 'resume', 'idle']);
+            process.stdout.write('preset_lifecycle_passed');
+        """
+        value = subprocess.check_output(["node", "--input-type=module", "-e", code], text=True)
+        self.assertEqual(value, 'preset_lifecycle_passed')
+
     def test_restart_probe_requires_persisted_resume_without_repeating_update(self):
         receipt = {"schema": "dsh-native-host-probe/v1", "nonce": "nonce", "driver_sha256": "a" * 64,
                    "mode": "restart", "status": "passed", "pid": 100, "real_model_request": False,
