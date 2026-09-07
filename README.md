@@ -51,17 +51,17 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 The installation example uses the recorded 0.4.0 release baseline. Install it from [npm](https://www.npmjs.com/package/dsh-completion-guard); its [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) carries the exact package checksum and native macOS and Windows acceptance records. It targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
 
-The source tree now targets **0.4.2 (unreleased)**. It adds bounded checkpoint queries and root-user-confirmed requirement rebinding. The published installation example above does not install these candidate changes; CI and exact-artifact native acceptance are still pending. See [the changelog](CHANGELOG.md) and [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
+The source tree now targets **0.4.2 (unreleased)**. It adds bounded checkpoint queries and root-user-confirmed requirement rebinding. The published installation example above does not install these candidate changes. Acceptance is bound to each frozen package; earlier candidate results do not cover later documentation or package changes. See [the changelog](CHANGELOG.md) and [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
 
-Version `0.4.1-rc.1` is a prerelease candidate for DSH `0.1.2-rc.1` with dshmarket `1.41.0`. Its host cohort is audited on native macOS/posix and against the native Windows rc.1 host graph; host-graph audits do not replace the cross-platform exact-artifact acceptance of one frozen package. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+Version `0.4.1-rc.1` is the published `next` prerelease for DSH `0.1.2-rc.1` with dshmarket `1.41.0`. Its host cohort is audited on native macOS/posix and against the native Windows rc.1 host graph; host-graph audits do not replace the cross-platform exact-artifact acceptance of one frozen package. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 Version 0.3.2 remains available for the checked DSH `0.1.1-rc.2` and `0.1.2-alpha.2` setups. Do not combine packages from different checked setups; the Guard fails closed when the active package set does not match one complete cohort in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-Version 0.4.0 remains frozen on this alpha.3 setup. Alpha.4 and later alpha releases are not new adaptation targets; compatibility work resumes with the first upstream RC published after alpha.3. Track that milestone on the [DeepSeek Harness tags page](https://github.com/deepseek-ai/deepseek-harness/tags).
+Version 0.4.0 remains frozen on this alpha.3 setup. Alpha.4 and later alpha releases were skipped. RC adaptation resumed with DSH `0.1.2-rc.1`, supported by the `0.4.1-rc.1` prerelease and retained in the 0.4.2 candidate. Follow upstream releases on the [DeepSeek Harness tags page](https://github.com/deepseek-ai/deepseek-harness/tags).
 
 Release packages are built once from a clean commit and published only after those exact bytes pass native macOS and Windows Web and Headless checks. CI, native lifecycle checks, package publication, and public readback remain separate evidence scopes; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
 
-Version 0.3.0 is not recommended. Its package passed native checks, but npm did not record the required source commit, so the version cannot be repaired in place and has no GitHub Release. Use 0.3.2.
+Version 0.3.0 is not recommended. Its package passed native checks, but npm did not record the required source commit, so the version cannot be repaired in place and has no GitHub Release. Use 0.3.2 for the older checked DSH setups, or choose the release matching your host from the compatibility guide.
 
 > The project was renamed from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 because an unrelated plugin already used the old name. The internal bundle id remains `context-guard`, and the old npm package points users to this one. Supported DSH setups are listed in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md); Node.js `>=22` and pnpm `>=11` are required.
 
@@ -126,7 +126,7 @@ This project began as a DSH port of deterministic behavior from [`GreenLv/codex-
 
 Version 0.4.0 was deliberately aligned with the shared evidence rules in Codex Context Guard 0.10.0: proof must belong to work that is still open and must show the operation, target, and result the user actually requested. This is a limited behavior-level alignment, not a claim that the two products have the same features.
 
-Codex Context Guard 0.11.0 was released afterward. DSH 0.4.0 already has native checks for exact mutation targets, typed waits, and quoted text, but it does not yet include the full 0.11.0 authorization-ticket, work-unit, supersession, or incident-benchmark changes. The plain-language comparison and current delta ledger are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
+Codex Context Guard 0.11.0 was released afterward. DSH 0.4.0 already has native checks for exact mutation targets, typed waits, and quoted text, but it does not yet include the full 0.11.0 authorization-ticket, work-unit, supersession, or incident-benchmark changes. The plain-language comparison and dated delta ledger are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
 
 The two repositories serve different runtimes:
 
@@ -139,7 +139,11 @@ They do not share runtime state, installers, caches, or release histories. Fixes
 
 ![Combined cumulative npm download growth across dsh-context-guard and dsh-completion-guard](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.svg)
 
-The cumulative chart keeps the old and new npm package totals visibly separate, marks the 2026-08-29 rename, and combines them only for the project growth line. npm download counts measure registry requests; they are not counts of unique users or confirmed installations. The workflow updates the chart daily and can also be triggered manually.
+The cumulative chart keeps the old and new npm package totals visibly separate, marks the 2026-08-29 rename, and combines them only for the project growth line. npm download counts measure registry requests; they are not counts of unique users or confirmed installations.
+
+History starts on the first public npm release day, 2026-08-26; its real first-day count is retained even when nonzero. The vertical axis starts at zero. Date labels share one fixed day interval and centered anchors; the caption always gives the exact coverage end.
+
+The daily workflow publishes through the last day whose counts are unchanged in checks at least 12 hours apart and at least two UTC calendar days old. The API availability date is shown separately; this observation rule is not an npm guarantee that counts will never change. See the [source data](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.json).
 
 ## Documentation
 

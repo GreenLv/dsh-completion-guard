@@ -8,7 +8,9 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Add `context_guard_rebind`: propose a complete split of an old requirement, optionally link a later explicit root-user clarification, then replace it only after the user's exact confirmation. Old sources, unsupported remainders, and one-to-many relationships remain visible; the proposal grants no execution permission.
 - Bound checkpoint pages to 12 KiB and focus default evidence on the current action and target. Item, evidence, and history queries have independent continuation cursors; the full contract is still checked.
 - Reserve recovery space for current constraints, refusal reasons, next steps, and completion rules. Unrelated evidence no longer repeats the same guidance; compact and resume still recover the current state.
-- Add an isolated host-bound native entrypoint with nonempty tool calls and lifecycle checks. CI, frozen-artifact and native execution remain pending for this candidate; see [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
+- Add an isolated host-bound native entrypoint with nonempty tool calls and lifecycle checks. Acceptance is bound to the exact candidate and package; see [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
+
+- Align npm chart date labels with centered anchors and a fixed day interval, preserve real first-day downloads, and distinguish repeat-checked coverage from API availability.
 
 ## 0.4.1-rc.1 - 2026-09-04
 

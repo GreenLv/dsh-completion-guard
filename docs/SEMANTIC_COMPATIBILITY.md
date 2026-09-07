@@ -79,7 +79,7 @@ event vocabulary `root_message`, `delegated_message`, `tool_result`,
 runner executes every mirrored case without skips and compares the bounded
 result contract; it does not translate a missing capability into a pass.
 
-## Current 0.4.0 alignment status
+## Recorded 0.4.0 alignment status (2026-09-03)
 
 The semantic implementation described here entered the DSH `0.4.0` line from implementation baseline `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The shared-contract reference is the Codex `0.10.0` source at `e4fccf690bcbc2be79d0b8d42a1a269f87072120`; this covers only the named contracts, not full product parity. Exact release commit, artifact, native-platform, and publication identities are recorded outside this semantic document because each is a separate evidence scope.
 
@@ -120,11 +120,15 @@ This is not a full product-parity claim. It does not copy the Codex private ledg
 
 Main CI run `33540907051` passed the implementation baseline. The exact 0.4.0 package later passed same-byte native macOS and Windows acceptance and was published from annotated tag `v0.4.0`; exact release and public-readback identities are recorded in [`LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md). Historical candidate results remain bound to their recorded SHA-256 values and never transfer to changed bytes.
 
-## Codex 0.11.0 follow-up
+## Follow-up identified against Codex 0.11.0
 
 DSH needs a deliberate follow-up, not a line-for-line port. The highest-value shared gap is execution-time authorization for public release identities. DSH already routes supported mutations through `context_guard_action`, so the next design should extend that native path with a one-shot authorization record bound to the exact candidate and input instead of copying the Codex `PreToolUse` Hook.
 
 Work-unit scope and correction attribution are also shared semantic gaps and should gain portable regression cases before implementation. Stop-disposition handling is partly equivalent already, so it should be compared with the 0.11.0 cases before code is changed. Codex cache repair, Hook trust, and plugin installation remain Codex-only. Incident-corpus tooling may remain owned by Codex, while reviewed platform-neutral cases continue to be mirrored here.
+
+## 0.4.2 candidate boundary
+
+The 0.4.2 candidate retains these exact mirrored fixtures and the recorded upstream pin. Its DSH-native rebinding, bounded checkpoint output, and recovery changes do not establish parity with later Codex releases. `upstream-deltas.json` is the dated 2026-09-03 comparison snapshot: its `currentRelease` fields name the releases compared then, not a live latest-version lookup. Refreshing that comparison requires a separate upstream audit; it does not happen merely because either product releases a newer version.
 
 ## Validation boundaries
 

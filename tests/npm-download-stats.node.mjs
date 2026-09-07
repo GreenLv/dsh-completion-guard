@@ -13,6 +13,7 @@ import {
   normalizeRangePayload,
   reconcilePointPayload,
   renderSvg,
+  resolvePackageHistory,
   run,
   settledThrough,
   splitDateRange,
@@ -89,9 +90,9 @@ test("renders a zero-based y axis and aligns every point and marker with its dat
   const chinese = renderSvg(document, "zh-CN");
   for (const svg of [english, chinese]) {
     assert.match(svg, /y1="436"[^>]+class="grid"\/><text[^>]+class="axis">0<\/text>/);
-    assert.match(svg, /data-renderer-version="2"/);
-    assert.match(svg, /x="84\.00" y="464" text-anchor="start" class="axis x-axis-tick" data-day="2026-08-26"/);
-    assert.match(svg, /x="924\.00" y="464" text-anchor="end" class="axis x-axis-tick" data-day="2026-09-02"/);
+    assert.match(svg, /data-renderer-version="3"/);
+    assert.match(svg, /x="84\.00" y="464" text-anchor="middle" class="axis x-axis-tick" data-day="2026-08-26"/);
+    assert.match(svg, /x="900\.00" y="464" text-anchor="middle" class="axis x-axis-tick" data-day="2026-09-02"/);
     assert.match(svg, /class="endpoint-badge" data-position="below">/);
     assert.match(svg, /class="endpoint-backdrop"/);
     const endpointY = Number(svg.match(/<circle cx="[^"]+" cy="([^"]+)" r="5" fill="#ffffff" stroke="#0f766e"/)[1]);
@@ -110,29 +111,29 @@ test("renders a zero-based y axis and aligns every point and marker with its dat
     assert.ok(points[0][1] < 436, "the first real daily value must not be replaced by a synthetic zero point");
     assert.deepEqual(points.map((point) => point[0]), tickXs.map((match) => Number(match[1])));
     const renameX = Number(svg.match(/<line x1="([^"]+)" y1="176"[^>]+class="rename"/)[1]);
-    assert.equal(renameX, Number(tickXs.find((match) => match[2] === "2026-08-29")[1]));
+    assert.ok(Math.abs(renameX - Number(tickXs.find((match) => match[2] === "2026-08-29")[1])) < 0.01);
   }
-  assert.match(english, /All available daily history · 2026-08-26 → 2026-09-02 · 8 daily points/);
-  assert.match(chinese, /全量每日历史 · 2026-08-26 → 2026-09-02 · 8 个每日数据点/);
+  assert.match(english, /Full daily history · 2026-08-26 → 2026-09-02/);
+  assert.match(chinese, /全量每日历史 · 2026-08-26 → 2026-09-02/);
 });
 
-test("keeps short and long tick layouts bounded and non-overlapping", () => {
-  const shortTicks = buildTickLayout(enumerateDays("2026-08-26", "2026-09-02"), 84, 840);
-  assert.equal(shortTicks.length, 8);
-  assert.equal(shortTicks[0].x, 84);
-  assert.equal(shortTicks[0].anchor, "start");
-  assert.equal(shortTicks.at(-1).x, 924);
-  assert.equal(shortTicks.at(-1).anchor, "end");
-  const longTicks = buildTickLayout(enumerateDays("2026-01-01", "2026-12-31"), 84, 840);
-  assert.ok(longTicks.length < 365);
-  assert.equal(longTicks[0].day, "2026-01-01");
-  assert.equal(longTicks.at(-1).day, "2026-12-31");
-  for (const ticks of [shortTicks, longTicks]) {
+test("uses one calendar stride and centered anchors without an irregular final tick", () => {
+  for (const [start, end] of [["2026-08-26", "2026-09-02"], ["2026-08-26", "2026-09-06"], ["2026-01-01", "2026-12-31"], ["2025-12-24", "2027-01-12"]]) {
+    const days = enumerateDays(start, end);
+    const ticks = buildTickLayout(days, 84, 816);
+    assert.equal(ticks[0].day, start);
+    if (days.length <= 12) assert.equal(ticks.length, days.length);
     for (let index = 0; index < ticks.length; index += 1) {
-      assert.ok(ticks[index].left >= 84);
-      assert.ok(ticks[index].right <= 924);
-      if (index > 0) assert.ok(ticks[index].left - ticks[index - 1].right >= 13.9);
+      assert.equal(ticks[index].anchor, "middle");
+      assert.ok(ticks[index].left >= 18 && ticks[index].right <= 942);
+      if (index > 0) {
+        assert.equal(ticks[index].index - ticks[index - 1].index, ticks[0].stepDays);
+        assert.ok(Math.abs(ticks[index].x - ticks[index - 1].x - 816 * ticks[0].stepDays / (days.length - 1)) < 1e-8);
+        assert.ok(ticks[index].left - ticks[index - 1].right >= 17.9);
+      }
     }
+    const doc = buildStatsDocument({ ...config, rename: null, packages: [{ ...oldSpec, start }] }, [{ spec: { ...oldSpec, start }, downloads: daily(start, end), sources: [] }], "2027-02-01T00:00:00Z", end);
+    assert.ok(renderSvg(doc).includes(`${start} → ${end}`), "coverage caption retains exact final day even when not a tick");
   }
 });
 
@@ -146,7 +147,7 @@ test("rejects missing collected dates and splits long ranges without gaps", () =
   ]);
 });
 
-test("publishes the latest available day as provisional when a correction is not settled", async () => {
+test("preserves prior chart bytes while revised observations settle", async () => {
   const root = await mkdtemp(join(tmpdir(), "dsh-cg-npm-stats-"));
   try {
     const previousDir = join(root, "previous");
@@ -159,6 +160,10 @@ test("publishes the latest available day as provisional when a correction is not
     await writeFile(join(previousDir, "npm-downloads.svg"), "previous-en");
     await writeFile(join(previousDir, "npm-downloads.zh-CN.svg"), "previous-zh");
     const fetchImpl = async (url) => {
+      const packageNameFromUrl = decodeURIComponent(url.split("/").at(-1));
+      const spec = packageNameFromUrl === oldSpec.package ? oldSpec : newSpec;
+      if (url.startsWith("https://registry.npmjs.org/")) return new Response(JSON.stringify({ name: spec.package, time: { "0.1.0": `${spec.start}T12:00:00Z` } }));
+      if (url.includes("/point/last-day/")) return new Response(JSON.stringify({ package: spec.package, start: "2026-09-02", end: "2026-09-02", downloads: 2 }));
       const match = url.match(/\/(range|point)\/(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})\/([^/]+)$/);
       const [, kind, start, end, encodedPackage] = match;
       const packageName = decodeURIComponent(encodedPackage);
@@ -174,12 +179,10 @@ test("publishes the latest available day as provisional when a correction is not
       "--previous-dir", previousDir,
       "--generated-at", "2026-09-03T04:37:00.000Z",
     ], fetchImpl);
-    assert.equal(result.publish_mode, "generated");
-    assert.equal(result.data_through, "2026-09-02");
-    assert.equal(result.settlement.latest_day_status, "provisional");
-    assert.equal(result.settlement.stable_through, null);
-    assert.match(await readFile(join(outputDir, "npm-downloads.svg"), "utf8"), /latest day may be revised/);
-    assert.match(await readFile(join(outputDir, "npm-downloads.zh-CN.svg"), "utf8"), /最新一天可能调整/);
+    assert.equal(result.publish_mode, "preserved");
+    assert.equal(result.data_through, "2026-08-31");
+    assert.equal(await readFile(join(outputDir, "npm-downloads.svg"), "utf8"), "previous-en");
+    assert.equal(await readFile(join(outputDir, "npm-downloads.zh-CN.svg"), "utf8"), "previous-zh");
     const observation = JSON.parse(await readFile(join(outputDir, "observations.json"), "utf8"));
     assert.equal(observation.candidate_through, "2026-09-02");
   } finally {
@@ -189,4 +192,31 @@ test("publishes the latest available day as provisional when a correction is not
 
 test("fails closed on an npm API request failure", async () => {
   await assert.rejects(collectPackageSeries(oldSpec, "2026-08-26", async () => ({ ok: false, status: 503 })), /HTTP 503/);
+});
+
+
+test("checks registry first-public dates and treats last-day only as availability", async () => {
+  const mock = (first, end) => async (url) => new Response(JSON.stringify(url.includes("registry.npmjs.org")
+    ? { name: oldSpec.package, time: { created: "2020-01-01T00:00:00Z", "0.2.0": "2026-08-27T12:00:00Z", "0.1.0": first } }
+    : { package: oldSpec.package, start: end, end, downloads: 0 }));
+  const history = await resolvePackageHistory(oldSpec, "2026-09-07T13:00:00Z", mock("2026-08-26T19:24:20Z", "2026-09-05"));
+  assert.equal(history.first_public_day, "2026-08-26");
+  assert.equal(history.first_version, "0.1.0");
+  assert.equal(history.available_through, "2026-09-05");
+  assert.equal((await resolvePackageHistory(oldSpec, "2026-09-07T13:00:00Z", mock("2026-08-26T19:24:20Z", "2026-09-07"))).available_through, "2026-09-06");
+  await assert.rejects(resolvePackageHistory(oldSpec, "2026-09-07T13:00:00Z", mock("2026-08-25T19:24:20Z", "2026-09-06")), /first public day differs/);
+});
+
+test("small totals keep distinct integer y ticks and preserve a nonzero first day", () => {
+  for (const value of [0, 1, 2, 95]) {
+    const single = { ...config, rename: null, packages: [oldSpec] };
+    const doc = buildStatsDocument(single, [{ spec: oldSpec, downloads: [{ day: oldSpec.start, downloads: value }], sources: [] }], "2026-08-29T00:00:00Z", oldSpec.start);
+    const svg = renderSvg(doc);
+    const labels = [...svg.matchAll(/text-anchor="end" class="axis">([^<]+)<\/text>/g)].map((m) => Number(m[1]));
+    assert.equal(labels[0], 0);
+    assert.equal(new Set(labels).size, labels.length);
+    const pointY = Number(svg.match(/<polyline points="[0-9.]+,([0-9.]+)"/)[1]);
+    assert.equal(pointY === 436, value === 0);
+    assert.equal(doc.project_cumulative[0].cumulative, value);
+  }
 });

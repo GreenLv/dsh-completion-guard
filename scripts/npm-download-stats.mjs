@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 365;
-const RENDERER_VERSION = 2;
+const RENDERER_VERSION = 3;
 const MIN_SETTLEMENT_AGE_DAYS = 2;
 const MIN_OBSERVATION_SPAN_MS = 12 * 60 * 60 * 1000;
 
@@ -100,6 +100,26 @@ export function latestCandidateUtcDay(generatedAt = new Date().toISOString()) {
   assert(Number.isFinite(generatedTime), "generatedAt must be an ISO timestamp");
   const generatedUtcDay = new Date(generatedTime).toISOString().slice(0, 10);
   return addDays(generatedUtcDay, -1);
+}
+
+export async function resolvePackageHistory(spec, generatedAt, fetchImpl = fetch) {
+  const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(spec.package)}`;
+  const availableUrl = `https://api.npmjs.org/downloads/point/last-day/${encodeURIComponent(spec.package)}`;
+  const [registry, available] = await Promise.all([fetchJson(registryUrl, fetchImpl), fetchJson(availableUrl, fetchImpl)]);
+  assert(registry?.name === spec.package && registry.time && typeof registry.time === "object", `registry identity missing for ${spec.package}`);
+  const releases = Object.entries(registry.time).filter(([version]) => version !== "created" && version !== "modified");
+  assert(releases.length > 0 && releases.every(([, time]) => typeof time === "string" && Number.isFinite(Date.parse(time))), `registry release dates invalid for ${spec.package}`);
+  releases.sort((a, b) => Date.parse(a[1]) - Date.parse(b[1]));
+  const [firstVersion, firstPublished] = releases[0];
+  assert(new Date(firstPublished).toISOString().slice(0, 10) === spec.start, `configured first public day differs from registry for ${spec.package}`);
+  assert(available?.package === spec.package && available.start === available.end, `latest available day identity mismatch for ${spec.package}`);
+  parseDay(available.end, "latest available day");
+  assert(Number.isSafeInteger(available.downloads) && available.downloads >= 0, `latest available count invalid for ${spec.package}`);
+  const upper = latestCandidateUtcDay(generatedAt);
+  const through = available.end < upper ? available.end : upper;
+  assert(through >= spec.start, `no available full UTC day for ${spec.package}`);
+  return { package: spec.package, first_version: firstVersion, first_published_at: firstPublished,
+    first_public_day: spec.start, available_through: through, registry: registryUrl, availability: availableUrl };
 }
 
 export async function collectPackageSeries(spec, end, fetchImpl = fetch) {
@@ -278,45 +298,28 @@ function tickLabel(day, allDays) {
   return years.size === 1 ? day.slice(5) : day;
 }
 
-function textBounds(x, width, anchor) {
-  if (anchor === "start") return { left: x, right: x + width };
-  if (anchor === "end") return { left: x - width, right: x };
-  return { left: x - width / 2, right: x + width / 2 };
-}
-
 export function buildTickLayout(days, plotLeft, plotWidth) {
   if (days.length === 0) return [];
-  const plotRight = plotLeft + plotWidth;
-  const entries = days.map((day, index) => {
+  // Every label has the same centre anchor. Reserve the outer label half-width
+  // in the SVG margins, rather than shifting just the first and last labels.
+  const labelWidth = tickLabel(days[0], days).length * 7;
+  const minimumStep = Math.max(1, Math.ceil((labelWidth + 18) * (days.length - 1) / plotWidth));
+  const intervals = [1, 2, 3, 7, 14, 28, 56, 112, 224, 364];
+  const step = intervals.find((value) => value >= minimumStep) ?? Math.ceil(minimumStep / 364) * 364;
+  return days.flatMap((day, index) => {
+    if (index % step !== 0) return [];
     const label = tickLabel(day, days);
-    const x = plotLeft + (days.length === 1 ? 0 : (index / (days.length - 1)) * plotWidth);
-    const width = label.length * 7;
-    let anchor = index === 0 ? "start" : index === days.length - 1 ? "end" : "middle";
-    let bounds = textBounds(x, width, anchor);
-    if (bounds.left < plotLeft) {
-      anchor = "start";
-      bounds = textBounds(x, width, anchor);
-    }
-    return { index, day, label, x, anchor, ...bounds };
+    const x = plotLeft + (days.length === 1 ? 0 : index / (days.length - 1) * plotWidth);
+    return [{ index, day, label, x, anchor: "middle", left: x - labelWidth / 2, right: x + labelWidth / 2, stepDays: step }];
   });
-  const gap = 14;
-  const allFit = entries.every((entry, index) => entry.left >= plotLeft && entry.right <= plotRight
-    && (index === 0 || entry.left - entries[index - 1].right >= gap));
-  if (allFit || entries.length === 1) return entries;
-  const selected = [entries[0]];
-  const last = entries.at(-1);
-  for (const entry of entries.slice(1, -1)) {
-    if (entry.left - selected.at(-1).right >= gap && last.left - entry.right >= gap) selected.push(entry);
-  }
-  if (last.index !== selected.at(-1).index) selected.push(last);
-  return selected;
 }
 
-function niceCeiling(value) {
-  if (value <= 1) return 1;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const step = magnitude >= 10 ? magnitude / 2 : 1;
-  return Math.ceil(value / step) * step;
+function cumulativeScale(value) {
+  const rawStep = Math.max(1, value / 4);
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const step = [1, 2, 5, 10].map((factor) => factor * magnitude).find((candidate) => candidate >= rawStep);
+  const maximum = Math.max(step, Math.ceil(value / step) * step);
+  return { maximum, ticks: Array.from({ length: Math.round(maximum / step) + 1 }, (_, index) => index * step) };
 }
 
 function formatCount(value, locale) {
@@ -326,7 +329,8 @@ function formatCount(value, locale) {
 const COPY = {
   en: {
     title: (project) => `${project} npm download growth`,
-    coverage: (start, end, count, sampled, provisional) => `All available daily history · ${start} → ${end} · ${count} daily points${sampled ? " · date labels sampled" : ""}${provisional ? " · latest day may be revised" : ""}`,
+    coverage: (start, end) => `Full daily history · ${start} → ${end}`,
+    cutoff: (count, through) => `${count} daily observations · Unchanged on repeat checks · Available data through ${through}`,
     total: "Total downloads",
     axis: "Cumulative downloads",
     source: "Source: npm Downloads API",
@@ -338,11 +342,12 @@ const COPY = {
   },
   "zh-CN": {
     title: (project) => `${project} npm 下载增长`,
-    coverage: (start, end, count, sampled, provisional) => `全量每日历史 · ${start} → ${end} · ${count} 个每日数据点${sampled ? " · 日期标签已抽样" : ""}${provisional ? " · 最新一天可能调整" : ""}`,
+    coverage: (start, end) => `全量每日历史 · ${start} → ${end}`,
+    cutoff: (count, through) => `${count} 个每日数据点 · 间隔复查数值一致 · API 数据可用至 ${through}`,
     total: "累计下载量",
     axis: "累计下载量",
     source: "来源：npm Downloads API",
-    note: "下载量统计 registry 请求，不等于独立用户数或已确认的真实安装人数。",
+    note: "下载次数不代表独立用户数或已确认安装。",
     previous: "旧包",
     current: "当前包",
     package: "npm 包",
@@ -356,7 +361,7 @@ export function renderSvg(document, locale = "en") {
   const width = 960;
   const height = 540;
   const left = 84;
-  const right = 36;
+  const right = 60;
   const plotWidth = width - left - right;
   const plotTop = 176;
   const plotBottom = 436;
@@ -365,11 +370,11 @@ export function renderSvg(document, locale = "en") {
   const dayIndex = new Map(allDays.map((day, index) => [day, index]));
   const xDay = (index) => left + (allDays.length === 1 ? 0 : (index / (allDays.length - 1)) * plotWidth);
   const projectTotal = document.project_cumulative.at(-1)?.cumulative ?? 0;
-  const cumulativeMax = niceCeiling(Math.max(1, projectTotal));
+  const scale = cumulativeScale(projectTotal);
+  const cumulativeMax = scale.maximum;
   const yCumulative = (value) => plotBottom - (value / cumulativeMax) * plotHeight;
-  const grid = Array.from({ length: 5 }, (_, index) => {
-    const value = Math.round((cumulativeMax * index) / 4);
-    const y = plotBottom - (plotHeight * index) / 4;
+  const grid = scale.ticks.map((value) => {
+    const y = yCumulative(value);
     return `<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" class="grid"/><text x="${left - 14}" y="${y + 4}" text-anchor="end" class="axis">${xml(formatCount(value, locale))}</text>`;
   }).join("");
   const cumulativeValues = document.project_cumulative.map((entry) => entry.cumulative);
@@ -378,7 +383,7 @@ export function renderSvg(document, locale = "en") {
   const areaPoints = `${xDay(0).toFixed(2)},${plotBottom} ${cumulativePoints} ${xDay(allDays.length - 1).toFixed(2)},${plotBottom}`;
   const ticks = buildTickLayout(allDays, left, plotWidth);
   const xTicks = ticks.map((tick) => {
-    return `<text x="${tick.x.toFixed(2)}" y="${plotBottom + 28}" text-anchor="${tick.anchor}" class="axis x-axis-tick" data-day="${tick.day}">${xml(tick.label)}</text>`;
+    return `<line x1="${tick.x.toFixed(2)}" y1="${plotBottom}" x2="${tick.x.toFixed(2)}" y2="${plotBottom + 5}" class="grid"/><text x="${tick.x.toFixed(2)}" y="${plotBottom + 28}" text-anchor="${tick.anchor}" class="axis x-axis-tick" data-day="${tick.day}">${xml(tick.label)}</text>`;
   }).join("");
   const packageSummary = document.packages.map((item, index) => {
     const role = document.packages.length === 1 ? copy.package : index === 0 ? copy.previous : copy.current;
@@ -396,8 +401,10 @@ export function renderSvg(document, locale = "en") {
   }
   const project = document.project ?? document.title;
   const title = copy.title(project);
-  const latestDayProvisional = document.settlement?.latest_day_status === "provisional";
-  const coverage = copy.coverage(document.period.start, document.period.end, allDays.length, ticks.length < allDays.length, latestDayProvisional);
+  const coverage = copy.coverage(document.period.start, document.period.end);
+  const cutoff = document.settlement?.mode === "observed-stable-days"
+    ? copy.cutoff(allDays.length, document.observation_through)
+    : (locale === "en" ? "Explicit reporting period · See source data for collection status" : "指定统计区间 · 采集状态见源数据");
   const description = `${title}. ${coverage}. ${copy.note}`;
   const endX = xDay(allDays.length - 1);
   const endY = yCumulative(projectTotal);
@@ -409,7 +416,7 @@ export function renderSvg(document, locale = "en") {
   const endpointBoxY = endpointAbove ? endY - 34 : endY + 12;
   const endpointLabelY = endpointBoxY + 15;
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="chart-title chart-desc" data-renderer-version="${RENDERER_VERSION}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="chart-title chart-desc" data-renderer-version="${RENDERER_VERSION}" data-tick-step-days="${ticks[0]?.stepDays ?? 1}">
   <title id="chart-title">${xml(title)}</title>
   <desc id="chart-desc">${xml(description)}</desc>
   <defs>
@@ -457,7 +464,8 @@ export function renderSvg(document, locale = "en") {
     <text x="${(endpointBoxRight - 7).toFixed(2)}" y="${endpointLabelY.toFixed(2)}" text-anchor="end" class="endpoint">${xml(endpointLabel)}</text>
   </g>
   ${xTicks}
-  <text x="${left}" y="496" class="subtitle">${xml(copy.source)} · ${xml(copy.note)}</text>
+  <text x="${left}" y="486" class="subtitle">${xml(cutoff)}</text>
+  <text x="${left}" y="508" class="subtitle">${xml(copy.source)} · ${xml(copy.note)}</text>
 </svg>
 `;
 }
@@ -517,19 +525,20 @@ export async function run(argv, fetchImpl = fetch) {
   const args = parseArgs(argv);
   const config = JSON.parse(await readFile(args.config, "utf8"));
   const previous = await loadPrevious(args.previousDir);
-  const candidateEnd = args.end ?? latestCandidateUtcDay(args.generatedAt);
+  const history = args.end ? [] : await Promise.all(config.packages.map((spec) => resolvePackageHistory(spec, args.generatedAt, fetchImpl)));
+  const candidateEnd = args.end ?? history.map((item) => item.available_through).sort()[0];
   parseDay(candidateEnd, "candidate end date");
   const collected = await Promise.all(config.packages.map((spec) => collectPackageSeries(spec, candidateEnd, fetchImpl)));
   const observation = buildObservationDocument(config, collected, args.generatedAt, candidateEnd, previous.state);
   const stableEnd = settledThrough(observation, args.generatedAt);
-  const end = args.end ?? candidateEnd;
+  const end = args.end ?? stableEnd;
   let document;
   let svg;
   let svgZhCn;
   let publishMode = "generated";
   const previousEnd = previous.published?.period?.end;
-  const previousIsV2 = previous.published?.renderer_version === RENDERER_VERSION;
-  const regression = end && previousEnd && previousIsV2 && parseDay(end) < parseDay(previousEnd);
+  const previousIsCurrent = previous.published?.renderer_version === RENDERER_VERSION;
+  const regression = end && previousEnd && previousIsCurrent && parseDay(end) < parseDay(previousEnd);
   if (!end || regression) {
     assert(previous.published && previous.svg && previous.svgZhCn, "no settled date and no previous published chart to preserve");
     document = previous.published;
@@ -542,8 +551,9 @@ export async function run(argv, fetchImpl = fetch) {
       settlement: args.end
         ? { mode: "explicit-end-date" }
         : {
-            mode: "latest-available-day",
-            latest_day_status: stableEnd === candidateEnd ? "stable" : "provisional",
+            mode: "observed-stable-days",
+            latest_day_status: "stable",
+            package_history: history,
             stable_through: stableEnd,
             minimum_age_days: MIN_SETTLEMENT_AGE_DAYS,
             minimum_observation_span_hours: MIN_OBSERVATION_SPAN_MS / 3_600_000,

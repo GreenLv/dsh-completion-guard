@@ -51,17 +51,17 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 仓库记录的 0.4.0 发布基线可从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 安装。[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0) 附有精确的包校验和，以及 macOS、Windows 原生验收记录。它面向 DSH `0.1.2-alpha.3`、dshmarket `1.39.0` 和 Cordis `4.0.2`。
 
-源码当前目标是 **0.4.2（未发布）**，新增有界 checkpoint 查询和用户确认后的要求重绑定。上方安装命令仍指向已记录的发布版本，不包含这些候选变更；CI 与精确制品原生验收仍待完成。详见[更新记录](CHANGELOG.zh-CN.md)和[验收范围](docs/LOCAL_ACCEPTANCE.md)。
+源码当前目标是 **0.4.2（未发布）**，新增有界 checkpoint 查询和用户确认后的要求重绑定。上方安装命令仍指向已记录的发布版本，不包含这些候选变更。验收绑定每一份冻结包，早期候选的结果不能覆盖后续文档或包变更。详见[更新记录](CHANGELOG.zh-CN.md)和[验收范围](docs/LOCAL_ACCEPTANCE.md)。
 
-版本 `0.4.1-rc.1` 是面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0` 的预发布候选。其宿主队列已在原生 macOS/posix 上审计，并核对过原生 Windows rc.1 运行时的宿主图谱；宿主图谱审计不能替代同一冻结包的跨平台 exact-artifact acceptance。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+版本 `0.4.1-rc.1` 是已发布到 `next` 通道、面向 DSH `0.1.2-rc.1` 与 dshmarket `1.41.0` 的预发布版本。其宿主队列已在原生 macOS/posix 上审计，并核对过原生 Windows rc.1 运行时的宿主图谱；宿主图谱审计不能替代同一冻结包的跨平台 exact-artifact acceptance。详见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
 0.3.2 继续支持已经检查过的 DSH `0.1.1-rc.2` 和 `0.1.2-alpha.2` 环境。不要混用不同环境的包；只有当前包集合完整匹配 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) 中的一套记录时，Guard 才会启用。
 
-0.4.0 的兼容基线继续冻结在这套 alpha.3 环境。alpha.4 及此后的 alpha 版本不作为新的适配目标；兼容性适配将在上游发布 alpha.3 之后的第一版 RC 时恢复。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。
+0.4.0 的兼容基线继续冻结在这套 alpha.3 环境。alpha.4 及此后的 alpha 版本已跳过。RC 适配已随 DSH `0.1.2-rc.1` 恢复，由 `0.4.1-rc.1` 预发布版支持，并保留在 0.4.2 候选中。上游版本进度见 [DeepSeek Harness 标签页](https://github.com/deepseek-ai/deepseek-harness/tags)。
 
 发布包只从干净提交生成一次；同一份包在 macOS 和 Windows 上完成 Web、Headless 原生检查后才会发布。CI、原生生命周期、包发布和公开读回是四类独立证据，详见 [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md)。
 
-不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。请使用 0.3.2。
+不建议使用 0.3.0。它的包通过了原生检查，但 npm 没有记录所需的源码提交，因此不能原地修复，也没有 GitHub Release。旧版已检查 DSH 环境可使用 0.3.2；其他环境请按兼容性指南选择对应版本。
 
 > 本项目于 2026-08-29 由 `dsh-context-guard` 更名为 `dsh-completion-guard`，因为另一个无关插件已经使用旧名称。内部 bundle id 仍为 `context-guard`，旧 npm 包会引导用户使用本包。支持的 DSH 环境见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)；需要 Node.js `>=22` 和 pnpm `>=11`。
 
@@ -126,7 +126,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 0.4.0 明确对齐了 Codex Context Guard 0.10.0 的共享证据规则：证据必须对应仍未完成的工作，并证明用户实际要求的操作、目标和结果。这只是有边界的行为对齐，不表示两个产品拥有相同功能。
 
-Codex Context Guard 0.11.0 在此后发布。DSH 0.4.0 已经能按自己的宿主机制核对精确变更目标、等待状态和引用文字，但还没有完整同步 0.11.0 的一次性授权票据、工作单元、需求替代归因和事故 benchmark。通俗对照表与当前差异台账见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
+Codex Context Guard 0.11.0 在此后发布。DSH 0.4.0 已经能按自己的宿主机制核对精确变更目标、等待状态和引用文字，但还没有完整同步 0.11.0 的一次性授权票据、工作单元、需求替代归因和事故 benchmark。通俗对照表与注明日期的差异台账见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
 
 两个项目服务于不同运行时：
 
@@ -139,7 +139,11 @@ Codex Context Guard 0.11.0 在此后发布。DSH 0.4.0 已经能按自己的宿�
 
 ![dsh-context-guard 与 dsh-completion-guard 的 npm 累计下载增长](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.zh-CN.svg)
 
-累计图分别显示更名前后的 npm 包下载总量，标记 2026-08-29 的更名，并仅在项目增长曲线中合并两者。npm 下载量统计的是 registry 请求，不等于独立用户数或已确认的真实安装人数。工作流每天自动更新，也可以手动触发。
+累计图分别显示更名前后的 npm 包下载总量，标记 2026-08-29 的更名，并仅在项目增长曲线中合并两者。npm 下载量统计的是 registry 请求，不等于独立用户数或已确认的真实安装人数。
+
+历史从首次公开发布 npm 的 2026-08-26 开始，保留首日真实下载数，不强行归零；纵轴从零起算。日期标签统一居中，按固定天数间隔显示，图注始终保留精确截止日。
+
+每日工作流仅发布至少相隔 12 小时复查一致、且距离当日已有两个 UTC 日历日的数据，另行标明 API 数据可用日期。这是项目的观测规则，不代表 npm 保证数值永不修订。详见[源数据](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.json)。
 
 ## 文档
 

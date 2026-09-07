@@ -19,9 +19,9 @@ For old pending requirements, use the new proposal/confirmation flow rather than
 
 DSH is still a developer preview and may make breaking changes. Version 0.4.0 therefore makes no floating alpha compatibility claim.
 
-## 0.4.1-rc.1 prerelease candidate
+## Published 0.4.1-rc.1 prerelease (`next`)
 
-- Plugin: `dsh-completion-guard` `0.4.1-rc.1` prerelease candidate
+- Plugin: `dsh-completion-guard` `0.4.1-rc.1` prerelease
 - DeepSeek Harness: `0.1.2-rc.1`
 - dshmarket: `1.41.0`
 - Cordis: `4.0.2`
@@ -32,7 +32,7 @@ DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and
 
 ## Upstream adaptation policy
 
-Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumes with the first DeepSeek Harness RC published after alpha.3; follow the upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) for that milestone.
+Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumed with DSH `0.1.2-rc.1`; that cohort is included in the published `0.4.1-rc.1` prerelease and retained by the 0.4.2 candidate. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases; a newer tag does not establish support.
 
 ## Platform and release evidence
 
@@ -178,7 +178,7 @@ retained) so an empty-binding checkpoint can certify while the guard stays
 enabled, and `update_goal(action=blocked)` records the blocker truthfully.
 Recovery packet injection is content-deduplicated: an unchanged packet is
 injected once per re-arm, while resume, compaction, an enablement transition,
-new evidence, or a new contract revision always re-remind.
+relevant evidence, or a new contract revision triggers reevaluation. In 0.4.2, unrelated historical success does not repeat unchanged refusal guidance; every actual recovery still receives a current summary.
 
 ## v0.3 semantic action and binding contract
 
