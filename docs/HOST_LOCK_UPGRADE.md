@@ -34,6 +34,14 @@ installed `.cmd` launcher and Windows absolute paths. A strict repeat leaves
 the package and profile contents unchanged. Restarting or enabling a daily
 profile remains a separate user action.
 
+## Check a Headless profile before installation
+
+A DSH `0.1.2-rc.1` Headless profile can have no external dependencies and no private `node_modules` or lockfile. From an accepted package or matching source checkout, `node bin/dsh-completion-guard-host-lock.mjs inspect-graph --runtime-root <runtime> --profile-root <profile>` checks that state without initializing or launching the profile.
+
+This narrow case requires exactly the installation-owned `dsh-base` and `dsh-headless` bundles, a complete audited runtime core, and matching bundle versions, package-map origins and patch files. Declared but uninstalled dependencies, partial map/lock pairs, unexplained local modules and foreign parent-module fallbacks are rejected. Existing profiles with both graph files retain their active-importer checks; damaged files are not treated as an empty graph.
+
+The result labels `inspection_scope: pre_install_target` and `profile_graph.state: dependency_free_headless`, with the manifest hash and bundle identities. Its package rows describe the verified runtime core used for this installation target, not a private profile importer or a live boot. After installing Guard, the `inspect`, `inject` and runtime replay checks still require the profile's package map, lockfile and installed plugin binding. This pre-install result cannot replace those checks.
+
 ## What changes in the lock
 
 The generator writes `hostLockPolicy: dsh-core/v1`, the actual runtime/profile

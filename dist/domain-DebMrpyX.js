@@ -1,7 +1,8 @@
+import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 //#region src/domain/canonicalize.ts
@@ -6455,7 +6456,7 @@ function findUp(start, filename) {
 * v9 lockfile. Multiple resolved versions are preserved as separate rows so
 * callers cannot silently select a nearest instance.
 */
-function packageRowsFromPnpmLock(text) {
+function packageRowsFromPnpmLock(text, names = CRITICAL_NAMES) {
 	const rows = /* @__PURE__ */ new Map();
 	const lines = text.split(/\r?\n/);
 	const packagesStart = lines.findIndex((line) => line === "packages:");
@@ -6464,7 +6465,7 @@ function packageRowsFromPnpmLock(text) {
 	const end = snapshotsStart > packagesStart ? snapshotsStart : lines.length;
 	for (let index = packagesStart + 1; index < end; index += 1) {
 		const match = lines[index].match(/^  '?((?:@[^/'\s]+\/)?[^@'\s]+)@([^':\s]+)'?:\s*$/);
-		if (!match || !CRITICAL_NAMES.includes(match[1])) continue;
+		if (!match || !names.includes(match[1])) continue;
 		let integrity;
 		for (let cursor = index + 1; cursor < lines.length && !/^  \S/.test(lines[cursor]); cursor += 1) {
 			const resolution = lines[cursor].match(/^    resolution: \{[^}]*\bintegrity: ([^,}\s]+)[^}]*\}\s*$/);
@@ -6481,7 +6482,7 @@ function packageRowsFromPnpmLock(text) {
 		});
 		rows.set(match[1], entries);
 	}
-	return CRITICAL_NAMES.flatMap((name) => {
+	return names.flatMap((name) => {
 		const entries = rows.get(name) ?? [];
 		if (entries.length === 0) return [];
 		return entries;
@@ -6496,6 +6497,38 @@ function resolveInstalledHostLock(moduleUrl = import.meta.url) {
 		return evaluateHostLock([]);
 	}
 }
+function activeGraphRecords(packageMapText) {
+	let document;
+	try {
+		document = JSON.parse(packageMapText);
+	} catch {
+		throw new HostProfileError("active_graph_invalid", "invalid package map");
+	}
+	if (!document || typeof document !== "object") throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+	const packages = document.packages;
+	if (!packages || typeof packages !== "object" || Array.isArray(packages)) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+	const records = packages;
+	if (!records["."] || Object.keys(records).length > 2e4) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+	const reachable = /* @__PURE__ */ new Set();
+	const queue = ["."];
+	while (queue.length > 0 && reachable.size <= 2e4) {
+		const id = queue.shift();
+		if (reachable.has(id)) continue;
+		const record = records[id];
+		if (!record || typeof record !== "object") throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+		reachable.add(id);
+		if (!record.dependencies || typeof record.dependencies !== "object" || Array.isArray(record.dependencies)) throw new HostProfileError("active_graph_invalid", "invalid reachable dependencies");
+		for (const target of Object.values(record.dependencies)) {
+			if (typeof target !== "string" || !target) throw new HostProfileError("active_graph_invalid", "invalid dependency target");
+			if (target !== "." && !reachable.has(target)) queue.push(target);
+		}
+	}
+	if (queue.length > 0) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+	return {
+		records,
+		reachable
+	};
+}
 /**
 * Resolve only package identities reachable from the active pnpm importer.
 * Historical snapshots elsewhere in the lockfile are deliberately ignored;
@@ -6503,29 +6536,8 @@ function resolveInstalledHostLock(moduleUrl = import.meta.url) {
 * are returned twice so evaluateHostLock can fail closed with a bounded code.
 */
 function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
-	let document;
-	try {
-		document = JSON.parse(packageMapText);
-	} catch {
-		return [];
-	}
-	if (!document || typeof document !== "object") return [];
-	const packages = document.packages;
-	if (!packages || typeof packages !== "object" || Array.isArray(packages)) return [];
-	const records = packages;
-	if (!records["."] || Object.keys(records).length > 2e4) return [];
-	const reachable = /* @__PURE__ */ new Set();
-	const queue = ["."];
-	while (queue.length > 0 && reachable.size <= 2e4) {
-		const id = queue.shift();
-		if (reachable.has(id)) continue;
-		const record = records[id];
-		if (!record || typeof record !== "object") return [];
-		reachable.add(id);
-		if (!record.dependencies || typeof record.dependencies !== "object" || Array.isArray(record.dependencies)) continue;
-		for (const target of Object.values(record.dependencies)) if (typeof target === "string" && target !== "." && !reachable.has(target)) queue.push(target);
-	}
-	if (queue.length > 0) return [];
+	const { records, reachable } = activeGraphRecords(packageMapText);
+	if (!/^lockfileVersion: ['"]?9\.0['"]?\s*$/m.test(lockText) || !/^packages:(?:\s*\{\})?\s*$/m.test(lockText)) throw new HostProfileError("active_graph_invalid", "invalid pnpm lockfile shape");
 	const locked = packageRowsFromPnpmLock(lockText);
 	const rows = [];
 	for (const name of CRITICAL_NAMES) {
@@ -6540,8 +6552,8 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 					continue;
 				}
 				try {
-					const modules = resolve(nodeModulesRoot);
-					const manifestPath = resolve(modules, record.url, "package.json");
+					const modules = realpathSync(nodeModulesRoot);
+					const manifestPath = realpathSync(resolve(modules, record.url, "package.json"));
 					if (!manifestPath.startsWith(`${modules}${sep}`)) {
 						rows.push({ name });
 						continue;
@@ -6588,6 +6600,102 @@ function readActiveHostGraph(runtimeRoot, profileRoot) {
 	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
 	const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`));
 	return [...runtimeRows, ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`))];
+}
+function pathPresent(path$1) {
+	try {
+		lstatSync(path$1);
+		return true;
+	} catch (error) {
+		if (error.code === "ENOENT") return false;
+		throw error;
+	}
+}
+function within(root, path$1) {
+	return path$1.startsWith(`${root}${sep}`);
+}
+/** Same static lookup order as DSH; do not load/normalize/heal a daily profile. */
+function packageFromAnchor(anchor, name) {
+	for (const directory of createRequire(anchor).resolve.paths(name) ?? []) {
+		const candidate = join(directory, name);
+		if (pathPresent(candidate)) {
+			if (!existsSync(join(candidate, "package.json"))) throw new HostProfileError("target_bundle_unresolved", "invalid resolver-visible package");
+			return realpathSync(candidate);
+		}
+	}
+}
+/**
+* Pre-install inspection only. A fresh rc.1 Headless profile can use its two
+* installation-owned bundles without a private importer. Never extend this
+* absence rule to inject or runtime replay, which still call the strict reader.
+*/
+function inspectTargetHostGraph(runtimeRoot, profileRoot) {
+	const runtime = realpathSync(runtimeRoot);
+	const profile = realpathSync(profileRoot);
+	const mapPath = join(profile, "node_modules", ".package-map.json");
+	const lockPath = join(profile, "pnpm-lock.yaml");
+	if (pathPresent(mapPath) && pathPresent(lockPath)) return {
+		packages: readActiveHostGraph(runtime, profile),
+		profileGraph: { state: "active_importer" }
+	};
+	if (pathPresent(mapPath) || pathPresent(lockPath)) throw new HostProfileError("active_graph_missing", "partial profile importer");
+	if (pathPresent(join(profile, "node_modules")) || pathPresent(join(profile, ".dsh-module-fallback"))) throw new HostProfileError("target_profile_unmanaged_modules", "profile modules exist without an importer");
+	const manifestPath = join(profile, "package.json");
+	const manifest = readJsonObject(manifestPath, "profile_manifest_invalid");
+	for (const key of [
+		"dependencies",
+		"devDependencies",
+		"optionalDependencies",
+		"peerDependencies",
+		"bundledDependencies",
+		"bundleDependencies"
+	]) {
+		const value = manifest[key];
+		if (value !== void 0 && (!value || typeof value !== "object" || Object.keys(value).length !== 0 || Array.isArray(value) && !["bundledDependencies", "bundleDependencies"].includes(key))) throw new HostProfileError("target_profile_dependency_uninstalled", "profile declares dependencies without an importer");
+	}
+	const bundles = manifest.dsh?.profile?.bundles;
+	const names = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"];
+	if (!Array.isArray(bundles) || bundles.length !== names.length || bundles.some((name, index) => name !== names[index])) throw new HostProfileError("target_profile_bundles_unsupported", "not the installation-owned Headless bundle tuple");
+	const modules = realpathSync(join(runtime, "node_modules"));
+	const mapText = readFileSync(join(modules, ".package-map.json"), "utf8");
+	const lockText = readFileSync(join(runtime, "pnpm-lock.yaml"), "utf8");
+	const rows = packageRowsFromActiveGraph(mapText, lockText, modules);
+	const evaluation = evaluateHostLock(rows, {
+		platform: process.platform === "win32" ? "windows" : "posix",
+		profileKind: "headless"
+	});
+	if (evaluation.status !== "supported" || evaluation.cohortId !== "dsh-0.1.2-rc.1-core-v1") throw new HostProfileError("target_runtime_unsupported", "dependency-free inspection requires the audited rc.1 core");
+	const { records, reachable } = activeGraphRecords(mapText);
+	const launcher = realpathSync(join(modules, "@deepseek-ai", "dsh"));
+	const anchor = join(launcher, "package.json");
+	const host = readJsonObject(anchor, "target_runtime_unsupported");
+	const launcherId = [...reachable].filter((id) => id.startsWith("@deepseek-ai/dsh@"));
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== "0.1.2-rc.1" || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	const bundleRows = names.map((name) => {
+		const packageRoot = packageFromAnchor(anchor, name);
+		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
+		if (!packageRoot || !within(modules, packageRoot) || ids.length !== 1) throw new HostProfileError("target_bundle_unresolved", "bundle is not uniquely installation-owned");
+		const record = records[ids[0]];
+		if (typeof record.url !== "string" || realpathSync(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
+		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
+		const patch = installed.dsh?.bundle?.patch;
+		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row) => row.version === host.version && row.integrity);
+		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
+		return locked[0];
+	});
+	for (const name of [...CRITICAL_NAMES, ...names]) {
+		const visible = packageFromAnchor(manifestPath, name);
+		if (!visible) continue;
+		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
+		if (ids.length !== 1 || typeof records[ids[0]].url !== "string" || !within(modules, visible) || realpathSync(resolve(modules, records[ids[0]].url)) !== visible) throw new HostProfileError("target_profile_module_shadow", "profile lookup differs from the audited installation");
+	}
+	return {
+		packages: rows,
+		profileGraph: {
+			state: "dependency_free_headless",
+			manifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
+			bundles: bundleRows
+		}
+	};
 }
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
 function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion) {
@@ -7044,4 +7152,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { BASE_HOST_PACKAGES as $, STATEFUL_ACTIONS as $t, classifyCompletionClaim as A, itemDiagnosis as At, evidenceFromPersistedToolResult as B, captureItem as Bt, commitTreeSnapshotDigest as C, DEFAULT_RECOVERY_CHAR_BUDGET as Ct, parseGitCommandManifest as D, recoveryDigest as Dt, gitCommandMatchesTarget as E, openItems$1 as Et, observeAssistantOutcome as F, isVerifyingCapability as Ft, canonicalArgvFromCommand as G, isInformationalMessage as Gt, extractToolSubject as H, extractArtifactPaths as Ht, CAPTURE_V042_NOTICE as I, currentContractDigest as It, parseShellCommand as J, npmEscapedPackageName as Jt, isRunExecutable as K, segmentClauses as Kt, PROTOCOL_V3_NOTICE as L, createProjection as Lt, decideTurnStopping as M, bindingSatisfies as Mt, isWholeTaskCompletionClaim as N, evidenceCoverage as Nt, revalidateGitPrestate as O, renderRecoveryPacket as Ot, latestAssistantText as P, evidenceMatchesItem as Pt, ALPHA2_HOST_PACKAGES as Q, SEMANTIC_ACTIONS as Qt, deriveProjection as R, rebindResponse as Rt, commitIndexSnapshotDigest as S, certifyCheckpoint as St, executeRevalidatedGitEffect as T, closingHint as Tt, isDeterministicCheck as U, extractMethod as Ut, extractTextContent as V, classifyClause as Vt, withDurability as W, extractOperation as Wt, hasCurrentCertificate as X, ACTION_MANIFEST_VERSION as Xt, goalCompletionDenial as Y, ACTION_MANIFEST as Yt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Z, CERTIFICATE_VERSION as Zt, resolveActiveProfileHostLock as _, sha256 as _n, classifyUserInteraction as _t, createProofManifest as a, requestedTargetMatchesResolved as an, LEGACY_HOST_COHORTS as at, snapshotSessionEvents as b, isCurrentAcceptedBoundary as bt, sessionQuery as c, validateActionManifest as cn, evaluateExternalWaitCapability as ct, hostLockContextFromComposedDump as d, validateManifest as dn, evaluateToolSurfaceCapability as dt, STOP_PROTOCOL_VERSION as en, DEFAULT_HOST_LOCK as et, hostLockRowsFromComposedDump as f, canonicalizePath as fn, selectHostCohort as ft, readActiveHostGraph as g, sanitizeUrl as gn, segmentAuthorityBlocks as gt, packageRowsFromPnpmLock as h, sanitizeClauseText as hn, authorityCaptureCounts as ht, canonicalProjection as i, requestedTargetAuthorizesMutation as in, HOST_COHORTS as it, decideTurnBoundary as j, relevantEvidence as jt, verifiedLinearCommitReadback as k, evidenceAvailabilityReason as kt, validateProofManifest as l, validateActionTarget as ln, evaluateHostCapability as lt, packageRowsFromActiveGraph as m, normalizeClause as mn, ALPHA3_HOST_PACKAGES as mt, PROOF_PROTOCOL_VERSION as n, actionCompatible as nn, GOAL_HOST_PACKAGES as nt, proofDigest as o, semanticActionFromCommand as on, bindExecutableIdentity as ot, injectActiveProfileHostLock as p, digestStrings as pn, RC1_HOST_PACKAGES as pt, parsePwshCommand as q, canonicalRegistryBase as qt, bindProofToProjection as r, isStatefulAction as rn, HOST_CAPABILITY_PACKAGE_GROUPS as rt, proofEvidenceConstraints as s, semanticActionFromText as sn, bindLiveGoalCapability as st, PROOF_KINDS as t, SUPPORTED_EVIDENCE_ADAPTERS as tn, EXPECTED_HOST_PACKAGES as tt, HostProfileError as u, COMMAND_SURFACE_MANIFEST as un, evaluateHostLock as ut, resolveInstalledHostLock as v, availableBoundaryQualifications as vt, createGitPrestateEnvelope as w, MIN_RECOVERY_CHAR_BUDGET as wt, GIT_COMMAND_MANIFEST_IDS as x, qualifyBoundary as xt, verifyComposedHostLockDump as y, effectuateBoundary as yt, supersedeItem as z, captureClause as zt };
+export { ALPHA2_HOST_PACKAGES as $, SEMANTIC_ACTIONS as $t, verifiedLinearCommitReadback as A, evidenceAvailabilityReason as At, supersedeItem as B, captureClause as Bt, commitIndexSnapshotDigest as C, certifyCheckpoint as Ct, gitCommandMatchesTarget as D, openItems$1 as Dt, executeRevalidatedGitEffect as E, closingHint as Et, latestAssistantText as F, evidenceMatchesItem as Ft, withDurability as G, extractOperation as Gt, extractTextContent as H, classifyClause as Ht, observeAssistantOutcome as I, isVerifyingCapability as It, parsePwshCommand as J, canonicalRegistryBase as Jt, canonicalArgvFromCommand as K, isInformationalMessage as Kt, CAPTURE_V042_NOTICE as L, currentContractDigest as Lt, decideTurnBoundary as M, relevantEvidence as Mt, decideTurnStopping as N, bindingSatisfies as Nt, parseGitCommandManifest as O, recoveryDigest as Ot, isWholeTaskCompletionClaim as P, evidenceCoverage as Pt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Q, CERTIFICATE_VERSION as Qt, PROTOCOL_V3_NOTICE as R, createProjection as Rt, GIT_COMMAND_MANIFEST_IDS as S, qualifyBoundary as St, createGitPrestateEnvelope as T, MIN_RECOVERY_CHAR_BUDGET as Tt, extractToolSubject as U, extractArtifactPaths as Ut, evidenceFromPersistedToolResult as V, captureItem as Vt, isDeterministicCheck as W, extractMethod as Wt, goalCompletionDenial as X, ACTION_MANIFEST as Xt, parseShellCommand as Y, npmEscapedPackageName as Yt, hasCurrentCertificate as Z, ACTION_MANIFEST_VERSION as Zt, readActiveHostGraph as _, sanitizeUrl as _n, segmentAuthorityBlocks as _t, createProofManifest as a, requestedTargetAuthorizesMutation as an, HOST_COHORTS as at, verifyComposedHostLockDump as b, effectuateBoundary as bt, sessionQuery as c, semanticActionFromText as cn, bindLiveGoalCapability as ct, hostLockContextFromComposedDump as d, COMMAND_SURFACE_MANIFEST as dn, evaluateHostLock as dt, STATEFUL_ACTIONS as en, BASE_HOST_PACKAGES as et, hostLockRowsFromComposedDump as f, validateManifest as fn, evaluateToolSurfaceCapability as ft, packageRowsFromPnpmLock as g, sanitizeClauseText as gn, authorityCaptureCounts as gt, packageRowsFromActiveGraph as h, normalizeClause as hn, ALPHA3_HOST_PACKAGES as ht, canonicalProjection as i, isStatefulAction as in, HOST_CAPABILITY_PACKAGE_GROUPS as it, classifyCompletionClaim as j, itemDiagnosis as jt, revalidateGitPrestate as k, renderRecoveryPacket as kt, validateProofManifest as l, validateActionManifest as ln, evaluateExternalWaitCapability as lt, inspectTargetHostGraph as m, digestStrings as mn, RC1_HOST_PACKAGES as mt, PROOF_PROTOCOL_VERSION as n, SUPPORTED_EVIDENCE_ADAPTERS as nn, EXPECTED_HOST_PACKAGES as nt, proofDigest as o, requestedTargetMatchesResolved as on, LEGACY_HOST_COHORTS as ot, injectActiveProfileHostLock as p, canonicalizePath as pn, selectHostCohort as pt, isRunExecutable as q, segmentClauses as qt, bindProofToProjection as r, actionCompatible as rn, GOAL_HOST_PACKAGES as rt, proofEvidenceConstraints as s, semanticActionFromCommand as sn, bindExecutableIdentity as st, PROOF_KINDS as t, STOP_PROTOCOL_VERSION as tn, DEFAULT_HOST_LOCK as tt, HostProfileError as u, validateActionTarget as un, evaluateHostCapability as ut, resolveActiveProfileHostLock as v, sha256 as vn, classifyUserInteraction as vt, commitTreeSnapshotDigest as w, DEFAULT_RECOVERY_CHAR_BUDGET as wt, snapshotSessionEvents as x, isCurrentAcceptedBoundary as xt, resolveInstalledHostLock as y, availableBoundaryQualifications as yt, deriveProjection as z, rebindResponse as zt };

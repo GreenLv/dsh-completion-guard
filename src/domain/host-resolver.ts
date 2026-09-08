@@ -1,4 +1,6 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -38,7 +40,7 @@ function findUp(start: string, filename: string): string | undefined {
  * v9 lockfile. Multiple resolved versions are preserved as separate rows so
  * callers cannot silently select a nearest instance.
  */
-export function packageRowsFromPnpmLock(text: string): PackageRow[] {
+export function packageRowsFromPnpmLock(text: string, names: readonly string[] = CRITICAL_NAMES): PackageRow[] {
   const rows = new Map<string, PackageRow[]>()
   const lines = text.split(/\r?\n/)
   const packagesStart = lines.findIndex((line) => line === 'packages:')
@@ -47,7 +49,7 @@ export function packageRowsFromPnpmLock(text: string): PackageRow[] {
   const end = snapshotsStart > packagesStart ? snapshotsStart : lines.length
   for (let index = packagesStart + 1; index < end; index += 1) {
     const match = lines[index].match(/^  '?((?:@[^/'\s]+\/)?[^@'\s]+)@([^':\s]+)'?:\s*$/)
-    if (!match || !CRITICAL_NAMES.includes(match[1])) continue
+    if (!match || !names.includes(match[1])) continue
     let integrity: string | undefined
     for (let cursor = index + 1; cursor < lines.length && !/^  \S/.test(lines[cursor]); cursor += 1) {
       const resolution = lines[cursor].match(/^    resolution: \{[^}]*\bintegrity: ([^,}\s]+)[^}]*\}\s*$/)
@@ -57,7 +59,7 @@ export function packageRowsFromPnpmLock(text: string): PackageRow[] {
     entries.push({ name: match[1], version: match[2], ...(integrity ? { integrity } : {}) })
     rows.set(match[1], entries)
   }
-  return CRITICAL_NAMES.flatMap((name) => {
+  return names.flatMap((name) => {
     const entries = rows.get(name) ?? []
     if (entries.length === 0) return []
     return entries
@@ -79,6 +81,35 @@ interface PackageMapRecord {
   dependencies?: unknown
 }
 
+function activeGraphRecords(packageMapText: string): { records: Record<string, PackageMapRecord>; reachable: Set<string> } {
+  let document: unknown
+  try { document = JSON.parse(packageMapText) } catch { throw new HostProfileError('active_graph_invalid', 'invalid package map') }
+  if (!document || typeof document !== 'object') throw new HostProfileError('active_graph_invalid', 'invalid reachable package map')
+  const packages = (document as { packages?: unknown }).packages
+  if (!packages || typeof packages !== 'object' || Array.isArray(packages)) throw new HostProfileError('active_graph_invalid', 'invalid reachable package map')
+  const records = packages as Record<string, PackageMapRecord>
+  if (!records['.'] || Object.keys(records).length > 20_000) throw new HostProfileError('active_graph_invalid', 'invalid reachable package map')
+  const reachable = new Set<string>()
+  const queue = ['.']
+  while (queue.length > 0 && reachable.size <= 20_000) {
+    const id = queue.shift()!
+    if (reachable.has(id)) continue
+    const record = records[id]
+    if (!record || typeof record !== 'object') throw new HostProfileError('active_graph_invalid', 'invalid reachable package map')
+    reachable.add(id)
+    if (!record.dependencies || typeof record.dependencies !== 'object' || Array.isArray(record.dependencies)) {
+      throw new HostProfileError('active_graph_invalid', 'invalid reachable dependencies')
+    }
+    for (const target of Object.values(record.dependencies as Record<string, unknown>)) {
+      if (typeof target !== 'string' || !target) throw new HostProfileError('active_graph_invalid', 'invalid dependency target')
+      if (target !== '.' && !reachable.has(target)) queue.push(target)
+    }
+  }
+  if (queue.length > 0) throw new HostProfileError('active_graph_invalid', 'invalid reachable package map')
+
+  return { records, reachable }
+}
+
 /**
  * Resolve only package identities reachable from the active pnpm importer.
  * Historical snapshots elsewhere in the lockfile are deliberately ignored;
@@ -90,27 +121,10 @@ export function packageRowsFromActiveGraph(
   lockText: string,
   nodeModulesRoot?: string,
 ): PackageRow[] {
-  let document: unknown
-  try { document = JSON.parse(packageMapText) } catch { return [] }
-  if (!document || typeof document !== 'object') return []
-  const packages = (document as { packages?: unknown }).packages
-  if (!packages || typeof packages !== 'object' || Array.isArray(packages)) return []
-  const records = packages as Record<string, PackageMapRecord>
-  if (!records['.'] || Object.keys(records).length > 20_000) return []
-  const reachable = new Set<string>()
-  const queue = ['.']
-  while (queue.length > 0 && reachable.size <= 20_000) {
-    const id = queue.shift()!
-    if (reachable.has(id)) continue
-    const record = records[id]
-    if (!record || typeof record !== 'object') return []
-    reachable.add(id)
-    if (!record.dependencies || typeof record.dependencies !== 'object' || Array.isArray(record.dependencies)) continue
-    for (const target of Object.values(record.dependencies as Record<string, unknown>)) {
-      if (typeof target === 'string' && target !== '.' && !reachable.has(target)) queue.push(target)
-    }
+  const { records, reachable } = activeGraphRecords(packageMapText)
+  if (!/^lockfileVersion: ['"]?9\.0['"]?\s*$/m.test(lockText) || !/^packages:(?:\s*\{\})?\s*$/m.test(lockText)) {
+    throw new HostProfileError('active_graph_invalid', 'invalid pnpm lockfile shape')
   }
-  if (queue.length > 0) return []
 
   const locked = packageRowsFromPnpmLock(lockText)
   const rows: PackageRow[] = []
@@ -126,8 +140,8 @@ export function packageRowsFromActiveGraph(
           continue
         }
         try {
-          const modules = resolve(nodeModulesRoot)
-          const manifestPath = resolve(modules, record.url, 'package.json')
+          const modules = realpathSync(nodeModulesRoot)
+          const manifestPath = realpathSync(resolve(modules, record.url, 'package.json'))
           if (!manifestPath.startsWith(`${modules}${sep}`)) {
             rows.push({ name })
             continue
@@ -197,6 +211,136 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): P
     ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`)),
   ]
   return rows
+}
+
+export interface TargetHostGraph {
+  packages: PackageRow[]
+  profileGraph: {
+    state: 'active_importer' | 'dependency_free_headless'
+    manifestSha256?: string
+    bundles?: PackageRow[]
+  }
+}
+
+function pathPresent(path: string): boolean {
+  try { lstatSync(path); return true } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
+function within(root: string, path: string): boolean {
+  return path.startsWith(`${root}${sep}`)
+}
+
+/** Same static lookup order as DSH; do not load/normalize/heal a daily profile. */
+function packageFromAnchor(anchor: string, name: string): string | undefined {
+  for (const directory of createRequire(anchor).resolve.paths(name) ?? []) {
+    const candidate = join(directory, name)
+    if (pathPresent(candidate)) {
+      // A dangling or malformed first entry is not a reason to try a fallback.
+      if (!existsSync(join(candidate, 'package.json'))) {
+        throw new HostProfileError('target_bundle_unresolved', 'invalid resolver-visible package')
+      }
+      return realpathSync(candidate)
+    }
+  }
+  return undefined
+}
+
+/**
+ * Pre-install inspection only. A fresh rc.1 Headless profile can use its two
+ * installation-owned bundles without a private importer. Never extend this
+ * absence rule to inject or runtime replay, which still call the strict reader.
+ */
+export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string): TargetHostGraph {
+  const runtime = realpathSync(runtimeRoot)
+  const profile = realpathSync(profileRoot)
+  const mapPath = join(profile, 'node_modules', '.package-map.json')
+  const lockPath = join(profile, 'pnpm-lock.yaml')
+  if (pathPresent(mapPath) && pathPresent(lockPath)) {
+    return { packages: readActiveHostGraph(runtime, profile), profileGraph: { state: 'active_importer' } }
+  }
+  if (pathPresent(mapPath) || pathPresent(lockPath)) {
+    throw new HostProfileError('active_graph_missing', 'partial profile importer')
+  }
+  if (pathPresent(join(profile, 'node_modules')) || pathPresent(join(profile, '.dsh-module-fallback'))) {
+    throw new HostProfileError('target_profile_unmanaged_modules', 'profile modules exist without an importer')
+  }
+  const manifestPath = join(profile, 'package.json')
+  const manifest = readJsonObject(manifestPath, 'profile_manifest_invalid')
+  for (const key of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'bundledDependencies', 'bundleDependencies']) {
+    const value = manifest[key]
+    if (value !== undefined && (!value || typeof value !== 'object' || Object.keys(value).length !== 0 || (Array.isArray(value) && !['bundledDependencies', 'bundleDependencies'].includes(key)))) {
+      throw new HostProfileError('target_profile_dependency_uninstalled', 'profile declares dependencies without an importer')
+    }
+  }
+  const dsh = manifest.dsh as { profile?: { bundles?: unknown } } | undefined
+  const bundles = dsh?.profile?.bundles
+  const names = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
+  if (!Array.isArray(bundles) || bundles.length !== names.length || bundles.some((name, index) => name !== names[index])) {
+    throw new HostProfileError('target_profile_bundles_unsupported', 'not the installation-owned Headless bundle tuple')
+  }
+  const modules = realpathSync(join(runtime, 'node_modules'))
+  const mapText = readFileSync(join(modules, '.package-map.json'), 'utf8')
+  const lockText = readFileSync(join(runtime, 'pnpm-lock.yaml'), 'utf8')
+  const rows = packageRowsFromActiveGraph(mapText, lockText, modules)
+  const evaluation = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: 'headless' })
+  if (evaluation.status !== 'supported' || evaluation.cohortId !== 'dsh-0.1.2-rc.1-core-v1') {
+    throw new HostProfileError('target_runtime_unsupported', 'dependency-free inspection requires the audited rc.1 core')
+  }
+  const { records, reachable } = activeGraphRecords(mapText)
+  const launcher = realpathSync(join(modules, '@deepseek-ai', 'dsh'))
+  const anchor = join(launcher, 'package.json')
+  const host = readJsonObject(anchor, 'target_runtime_unsupported')
+  const launcherId = [...reachable].filter((id) => id.startsWith('@deepseek-ai/dsh@'))
+  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== '0.1.2-rc.1'
+    || typeof records[launcherId[0]].url !== 'string'
+    || realpathSync(resolve(modules, records[launcherId[0]].url as string)) !== launcher || !within(modules, launcher)) {
+    throw new HostProfileError('target_runtime_unsupported', 'launcher differs from the active runtime importer')
+  }
+  const bundleRows = names.map((name): PackageRow => {
+    const packageRoot = packageFromAnchor(anchor, name)
+    const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`))
+    if (!packageRoot || !within(modules, packageRoot) || ids.length !== 1) {
+      throw new HostProfileError('target_bundle_unresolved', 'bundle is not uniquely installation-owned')
+    }
+    const record = records[ids[0]]
+    if (typeof record.url !== 'string' || realpathSync(resolve(modules, record.url)) !== packageRoot) {
+      throw new HostProfileError('target_bundle_origin_mismatch', 'bundle differs from active runtime mapping')
+    }
+    const installed = readJsonObject(join(packageRoot, 'package.json'), 'target_bundle_invalid')
+    const bundle = installed.dsh as { bundle?: { patch?: unknown } } | undefined
+    const patch = bundle?.bundle?.patch
+    const locked = packageRowsFromPnpmLock(lockText, [name])
+      .filter((row) => row.version === host.version && row.integrity)
+    if (installed.name !== name || installed.version !== host.version || locked.length !== 1
+      || ids[0].split('(', 1)[0] !== `${name}@${host.version}`
+      || typeof patch !== 'string' || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch)))
+      || !statSync(resolve(packageRoot, patch)).isFile()) {
+      throw new HostProfileError('target_bundle_invalid', 'bundle identity or patch is not installation-owned')
+    }
+    return locked[0]
+  })
+  // A parent module fallback is optional before first boot. If one is visible,
+  // it must point at the same installed packages; never trust a foreign shadow.
+  for (const name of [...CRITICAL_NAMES, ...names]) {
+    const visible = packageFromAnchor(manifestPath, name)
+    if (!visible) continue
+    const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`))
+    if (ids.length !== 1 || typeof records[ids[0]].url !== 'string'
+      || !within(modules, visible) || realpathSync(resolve(modules, records[ids[0]].url as string)) !== visible) {
+      throw new HostProfileError('target_profile_module_shadow', 'profile lookup differs from the audited installation')
+    }
+  }
+  return {
+    packages: rows,
+    profileGraph: {
+      state: 'dependency_free_headless',
+      manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+      bundles: bundleRows,
+    },
+  }
 }
 
 /** Read and validate the actual runtime graph plus the installed profile plugin. */

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import {
   injectActiveProfileHostLock,
-  readActiveHostGraph,
+  inspectTargetHostGraph,
   evaluateHostLock,
   resolveActiveProfileHostLock,
   verifyComposedHostLockDump,
@@ -39,9 +39,13 @@ try {
   const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   if (command === 'inspect-graph') {
-    const rows = readActiveHostGraph(option('--runtime-root'), option('--profile-root'))
-    const evaluation = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix' })
-    process.stdout.write(`${JSON.stringify({ ...summary(evaluation), packages: rows })}\n`)
+    const target = inspectTargetHostGraph(option('--runtime-root'), option('--profile-root'))
+    const rows = target.packages
+    const evaluation = evaluateHostLock(rows, {
+      platform: process.platform === 'win32' ? 'windows' : 'posix',
+      ...(target.profileGraph.state === 'dependency_free_headless' ? { profileKind: 'headless' } : {}),
+    })
+    process.stdout.write(`${JSON.stringify({ ...summary(evaluation), inspection_scope: 'pre_install_target', profile_graph: target.profileGraph, packages: rows })}\n`)
     process.exit(evaluation.status === 'supported' ? 0 : 1)
   }
   const active = resolveActiveProfileHostLock(

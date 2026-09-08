@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Version the core-lock policy and market service adapter explicitly. Preserve historical records while requiring fresh lock migration and new restart credentials.
 - Require a trusted loaded-instance binding for market restart. Current DSH lacks this binding, so only that adapter remains unavailable; requested restart work is never silently completed.
 - Select native acceptance targets explicitly, inspect supplied daily targets read-only, and test Headless without installing market.
+- Recognize dependency-free DSH `0.1.2-rc.1` Headless profiles during read-only pre-install checks. Verify their installation-owned bundles without creating profile files; installed profiles still require intact package maps and locks.
 - Reconcile the historical 0.4.2 release labels and document installation versus runtime acceptance.
 
 ## 0.4.2 - 2026-09-07
