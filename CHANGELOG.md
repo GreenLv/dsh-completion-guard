@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## Unreleased
+
+- Restrict advertised DSH peer requirements to `0.1.2-rc.1 || 0.1.1-rc.2`. Market compatibility labels derive from these requirements, so alpha hosts are no longer advertised as installation targets. Historical alpha core graphs and exact runtime certification checks remain unchanged.
+
 ## 0.4.3 - 2026-09-08
 
 - Separate the exact DSH core lock from optional market versions. Recheck the active core graph during replay; changed, missing or duplicate core dependencies still fail closed.

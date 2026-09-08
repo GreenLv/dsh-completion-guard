@@ -205,12 +205,12 @@ describe('audited host cohort registry', () => {
     expect(rc2Again.digest).toBe(rc2.digest)
   })
 
-  it('accepts peer dependency ranges covering all five audited cohorts', () => {
+  it('advertises only exact RC installation targets while retaining historical cohorts', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as Record<string, Record<string, string>>
     const peers = manifest.peerDependencies
     expect(peers['@deepseek-ai/cordis']).toBe('4.0.1 || 4.0.2')
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
-      expect(peers[name]).toBe('0.1.1-rc.2 || 0.1.2-alpha.2 || 0.1.2-alpha.3 || 0.1.2-rc.1')
+      expect(peers[name]).toBe('0.1.2-rc.1 || 0.1.1-rc.2')
     }
     // No floating ranges: compatibility must never widen beyond the audited sets.
     for (const range of Object.values(peers)) {

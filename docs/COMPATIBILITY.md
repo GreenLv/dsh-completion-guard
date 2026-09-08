@@ -2,6 +2,10 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
+## Unreleased installation metadata
+
+The next package advertises only the exact DSH RC targets `0.1.2-rc.1 || 0.1.1-rc.2` through its host peer dependencies. This narrows installation metadata; it does not erase historical alpha core graphs or broaden runtime certification. dshmarket derives its compatibility label from the npm manifest, so this change requires a new package release and a market metadata refresh. Published 0.4.3 is unchanged. No unbounded minimum-version range is claimed.
+
 ## 0.4.3 core-lock policy
 
 `dsh-core/v1` uses manifest version 2 and four exact 33-package DSH core graphs, retaining the previously audited DSH and Cordis versions. Market is not a core row. Its transitive dependencies remain part of active-graph traversal, so replacing or duplicating a core dependency still blocks certification. No floating DSH version range is introduced.
