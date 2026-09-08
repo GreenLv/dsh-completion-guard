@@ -933,7 +933,7 @@ describe('trusted stateful evidence producer', () => {
     await execFileAsync('git', ['commit', '-m', 'third'], { cwd: repository })
     const drifted = await runAction(session, 'git-action-drifted', { semantic_action: 'push', resolution_call_id: 'git-resolution' })
     expect(drifted).toMatchObject({ status: 'unavailable', reason_code: 'action_execution_failed' })
-  })
+  }, GIT_ROUNDTRIP_TIMEOUT_MS)
 
   it('executes and independently reads back exact commit, push, fetch, and pull in real repositories', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-roundtrip-'))
