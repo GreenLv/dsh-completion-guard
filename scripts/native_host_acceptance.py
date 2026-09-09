@@ -236,6 +236,20 @@ def verify_target_graph(actual: list[dict[str, str]], expected: list[dict[str, s
         raise RuntimeError(f"{profile} target graph mismatch: {', '.join(different)}")
 
 
+def preflight_host_inputs(root: Path, runtime_root: Path,
+                          targets: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read launcher/cohort inputs before any package installation or host start."""
+    cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
+    if not cli.is_file():
+        raise RuntimeError("runtime root has no DSH launcher")
+    if not (root / "scripts" / "native_host_probe.mjs").is_file():
+        raise RuntimeError("native host probe is missing")
+    manifest = json.loads((cli.parent.parent / "package.json").read_text(encoding="utf-8"))
+    cohorts = json.loads((root / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))["cohorts"]
+    selected = select_target_cohorts(cohorts, manifest["version"], targets)
+    return manifest, selected
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any], targets: dict[str, str] | None = None,
                     target_profiles: dict[str, Path] | None = None,
@@ -272,11 +286,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         gates.append(api.gate(id, digest, passed=True))
 
     try:
-        if not cli.is_file():
-            raise RuntimeError("runtime root has no DSH launcher")
-        runtime_manifest = json.loads((cli.parent.parent / "package.json").read_text(encoding="utf-8"))
-        cohorts = json.loads((root / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))["cohorts"]
-        selected = select_target_cohorts(cohorts, runtime_manifest["version"], targets or {})
+        runtime_manifest, selected = preflight_host_inputs(root, runtime_root, targets or {})
         # Optional daily targets are read-only inputs, never destinations.
         # A caller supplying one must supply both; no silent fixture fallback.
         if target_profiles and set(target_profiles) != {"web", "headless"}:

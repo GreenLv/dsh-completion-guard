@@ -13,11 +13,13 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlsplit
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -255,12 +257,65 @@ def portable_acceptance(
     }
 
 
+def check_output_path(output: Path, repo_root: Path) -> None:
+    if output.exists() or output.is_symlink():
+        raise NativeRunError("output already exists; keep it and choose a new result path")
+    if output.resolve().is_relative_to(repo_root.resolve()):
+        raise NativeRunError("output must be outside the source repository")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryFile(dir=output.parent) as probe:
+        probe.write(b"result-path-check")
+        probe.flush()
+
+
+def write_result(output: Path, result: dict[str, Any]) -> None:
+    payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+        stream.write(payload)
+
+
+def preflight_inputs(args: argparse.Namespace) -> Any:
+    """Validate local inputs; never install a package or start a host/model."""
+    root = args.repo_root.resolve()
+    verify_exact_source(root, args.source_commit)
+    normalize_repository_url(run(root, "git", "remote", "get-url", "origin").stdout)
+    if sha256(args.artifact) != args.artifact_sha256:
+        raise NativeRunError("artifact SHA-256 does not match the expected digest")
+    with tarfile.open(args.artifact, "r:gz") as archive:
+        safe_tar_entries("\n".join(member.name for member in archive.getmembers()))
+        member = archive.getmember("package/package.json")
+        if not member.isfile() or member.size > 1024 * 1024:
+            raise NativeRunError("artifact package manifest must be a bounded regular file")
+        with archive.extractfile(member) as stream:
+            manifest = json.load(stream)
+        if manifest.get("name") != "dsh-completion-guard" or manifest.get("gitHead") != args.source_commit:
+            raise NativeRunError("package manifest name or gitHead does not match the candidate")
+    for command in ("node", "npm", "tar"):
+        resolve_executable(command)
+    if args.gate_profile != "host_bound":
+        return None
+    helper = Path(__file__).with_name("native_host_acceptance.py")
+    spec = importlib.util.spec_from_file_location("native_host_acceptance", helper)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.preflight_host_inputs(root, args.runtime_root.resolve(),
+                                 {"web": args.web_cohort, "headless": args.headless_cohort})
+    for profile in (args.target_web_profile, args.target_headless_profile):
+        if profile is not None and not profile.is_dir():
+            raise NativeRunError("target profile directory is missing")
+    return module
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", type=Path, required=True)
     parser.add_argument("--artifact-sha256", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--preflight", action="store_true",
+                        help="check local inputs and output paths without installing or starting hosts")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--run-url")
     parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound"), default="portable_artifact")
@@ -284,16 +339,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("host_bound requires --web-market-version VERSION (or none)")
     if bool(args.target_web_profile) != bool(args.target_headless_profile):
         parser.error("supply both target profile paths, or neither for standalone isolated acceptance")
+    try:
+        if args.transfer_receipt:
+            url = urlsplit(args.transport_url or "")
+            if url.scheme != "https" or not url.hostname or url.username or url.password:
+                raise NativeRunError("a transfer receipt requires a credential-free HTTPS transport URL")
+            if args.output.resolve() == args.transfer_receipt.resolve():
+                raise NativeRunError("acceptance and transfer receipt need different output paths")
+            check_output_path(args.transfer_receipt, args.repo_root)
+        check_output_path(args.output, args.repo_root)
+        module = preflight_inputs(args)
+    except (OSError, ValueError, KeyError, AttributeError, tarfile.TarError, RuntimeError) as exc:
+        parser.error(str(exc))
+    if args.preflight:
+        print("native_preflight=passed; input_checks_only; acceptance_not_run")
+        return 0
     result = portable_acceptance(
         args.repo_root.resolve(), args.artifact.resolve(), args.artifact_sha256,
         args.source_commit, args.run_url,
     )
     if args.gate_profile == "host_bound":
-        helper = Path(__file__).with_name("native_host_acceptance.py")
-        spec = importlib.util.spec_from_file_location("native_host_acceptance", helper)
-        assert spec and spec.loader
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
         # Pass this module's checked artifact helpers without relying on the
         # caller's sys.path or loading an arbitrary external runner.
         from types import SimpleNamespace
@@ -305,14 +370,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                                          "headless": args.target_headless_profile.resolve()}
                                         if args.target_web_profile else None,
                                         None if args.web_market_version == "none" else args.web_market_version)
-    args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_result(args.output, result)
     if args.transfer_receipt:
         if not args.transport_url or result["artifact"]["sha256"] != args.artifact_sha256:
             parser.error("a transfer receipt requires an HTTPS transport URL and matching bytes")
-        args.transfer_receipt.write_text(
-            json.dumps(transfer_receipt(result, args.transport_url), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        write_result(args.transfer_receipt, transfer_receipt(result, args.transport_url))
     print(f"native_acceptance={result['status']}")
     return 0 if result["status"] == "passed" else 1
 

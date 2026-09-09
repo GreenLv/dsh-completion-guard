@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
+import os
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -18,6 +22,100 @@ SPEC.loader.exec_module(NATIVE)
 
 
 class NativeAcceptanceEntrypointTests(unittest.TestCase):
+    def fixture(self, directory, *, manifest_head="a" * 40):
+        root = Path(directory) / "repo"
+        root.mkdir()
+        artifact = Path(directory) / "candidate.tgz"
+        data = json.dumps({"name": "dsh-completion-guard", "gitHead": manifest_head}).encode()
+        with tarfile.open(artifact, "w:gz") as archive:
+            member = tarfile.TarInfo("package/package.json")
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+        output = Path(directory) / "results" / "native.json"
+        return root, output, ["--repo-root", str(root), "--artifact", str(artifact),
+                              "--artifact-sha256", NATIVE.sha256(artifact),
+                              "--source-commit", "a" * 40, "--output", str(output)]
+
+    def test_existing_result_is_preserved_without_starting_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            output.parent.mkdir()
+            output.write_bytes(b"original evidence")
+            with mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                NATIVE.main(args)
+            self.assertEqual(caught.exception.code, 2)
+            execute.assert_not_called()
+            self.assertEqual(output.read_bytes(), b"original evidence")
+
+    def test_bad_transfer_metadata_fails_before_any_acceptance(self):
+        for extra in (("--transport-url", "http://example.invalid/result"),
+                      ("--transport-url", "https://token@example.invalid/result"), ()):
+            with tempfile.TemporaryDirectory() as directory:
+                _, output, args = self.fixture(directory)
+                with mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    NATIVE.main(args + ["--transfer-receipt", str(output.parent / "receipt.json"), *extra])
+                execute.assert_not_called()
+                self.assertFalse(output.exists())
+
+    def test_result_and_transfer_paths_must_differ(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            with mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                NATIVE.main(args + ["--transfer-receipt", str(output),
+                                   "--transport-url", "https://example.invalid/result"])
+            execute.assert_not_called()
+
+    def test_preflight_reads_real_artifact_without_installing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            with mock.patch.object(NATIVE, "verify_exact_source") as verify, \
+                    mock.patch.object(NATIVE, "run", return_value=subprocess.CompletedProcess(
+                        [], 0, "https://example.invalid/repo.git", "")), \
+                    mock.patch.object(NATIVE, "resolve_executable", side_effect=lambda name: name), \
+                    mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout:
+                self.assertEqual(NATIVE.main(args + ["--preflight"]), 0)
+            verify.assert_called_once()
+            execute.assert_not_called()
+            self.assertFalse(output.exists())
+            self.assertEqual(list(output.parent.iterdir()), [])
+            self.assertIn("acceptance_not_run", stdout.getvalue())
+
+    def test_manifest_mismatch_and_missing_host_fail_before_install(self):
+        for bad_manifest in (True, False):
+            with tempfile.TemporaryDirectory() as directory:
+                root, output, args = self.fixture(directory, manifest_head=("b" if bad_manifest else "a") * 40)
+                if not bad_manifest:
+                    args += ["--gate-profile", "host_bound", "--runtime-root", str(root / "missing"),
+                             "--web-cohort", "web", "--headless-cohort", "headless", "--web-market-version", "none"]
+                with mock.patch.object(NATIVE, "verify_exact_source"), \
+                        mock.patch.object(NATIVE, "run", return_value=subprocess.CompletedProcess(
+                            [], 0, "https://example.invalid/repo.git", "")), \
+                        mock.patch.object(NATIVE, "resolve_executable", side_effect=lambda name: name), \
+                        mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    NATIVE.main(args)
+                execute.assert_not_called()
+                self.assertFalse(output.exists())
+
+    def test_result_output_rejects_source_and_late_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, output, _ = self.fixture(directory)
+            with self.assertRaises(NATIVE.NativeRunError):
+                NATIVE.check_output_path(root / "result.json", root)
+            NATIVE.check_output_path(output, root)
+            NATIVE.write_result(output, {"status": "failed"})
+            original = output.read_bytes()
+            self.assertNotIn(b"\r\n", original)
+            if os.name != "nt":
+                self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+            with self.assertRaises(FileExistsError):
+                NATIVE.write_result(output, {"status": "passed"})
+            self.assertEqual(output.read_bytes(), original)
+
     def test_resolves_windows_command_launchers(self) -> None:
         with mock.patch.object(NATIVE.shutil, "which", return_value=r"C:\\nodejs\\npm.cmd"):
             self.assertEqual(NATIVE.resolve_executable("npm"), r"C:\\nodejs\\npm.cmd")

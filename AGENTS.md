@@ -56,6 +56,23 @@ change the installed plugin runtime or grant release authority.
   commit still creates a new artifact identity. Changing `package.json`,
   generated runtime, or any listed package byte changes the payload itself.
 
+## Coordination and reader quality
+
+- Keep a single coordinating owner and one writer per candidate worktree.
+  An authorized external harness may implement a complete batch and return
+  its diff and evidence for concentrated acceptance; do not add another review
+  merely because ownership changed. Repair affected findings without replaying
+  unchanged accepted work.
+- Pause related monitoring for missing authorization, login or manual handback;
+  an unavailable channel needs a concrete resume event, not repeated polling.
+- Review important README, install/upgrade and release prose for human
+  readability before publication. Explain useful actions and results before
+  internal terms, preserve necessary technical precision in references, and
+  fix actual comprehension failures. Valid links are not readability evidence.
+- One user confirmation may cover an exact prepared action list. Each release
+  action still uses its own required checks and one-shot ticket; preserve
+  already-covered authorization and recheck only actual scope changes.
+
 ## Candidate and artifact freeze
 
 - Finalize the version, both changelogs, packaged README/docs, manifests,
@@ -80,6 +97,15 @@ node scripts/release-pack.mjs --source . --output-dir <outside-repository-dir>
   portable or host-bound runs. It emits a redacted annex bound to the source
   commit and artifact digest; a handwritten command transcript is not an
   equivalent interface.
+- Add `--preflight` to the intended native command before expensive execution.
+  It checks source/artifact identity, tool availability, declared host cohorts,
+  and result paths without installing packages or starting hosts. It does not
+  establish restricted-child access, loaded instances, credentials, target
+  dependency graphs or real-model behavior; the actual run still checks those
+  applicable surfaces. Store `--output` and any `--transfer-receipt` at distinct,
+  unused paths outside the source checkout and disposable fixtures. Missing
+  parents are created; existing results are preserved. Remove `--preflight`
+  to run acceptance. Recover a missing transfer from those files before rerunning.
 
 ## Release identity and authorization
 
