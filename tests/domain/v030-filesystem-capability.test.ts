@@ -47,7 +47,7 @@ describe('v0.3 pinned filesystem tool capability', () => {
   it('reads the real pinned read/write/edit schemas, canonical outputs, and presentation shapes', () => {
     const registered: ToolDefinition[] = []
     const context = {
-      systemPrompt: { section: () => undefined },
+      systemPrompt: { section: () => undefined, getSectionOrder: () => 0 },
       tools: { register: (tool: ToolDefinition) => { registered.push(tool) } },
       fs: { sandboxMode: 'workspace-write' },
       inject: () => undefined,

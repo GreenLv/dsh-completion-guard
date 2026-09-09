@@ -1,8 +1,9 @@
-import { confirmRebind, replayRebindResult, type RebindArgs } from './rebind.js'
+import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from './rebind.js'
 import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses } from './capture.js'
 import { certifyCheckpoint } from './checkpoint.js'
 import { qualifyBoundary, type BoundaryRequest } from './boundary.js'
 import { classifyUserInteraction } from './conversation.js'
+import { CONFIRM_LINE_PATTERN, parseConfirmationMessage } from './confirm-parse.js'
 import { segmentAuthorityBlocks } from './contract-segment.js'
 import { sessionRefDigest } from './digest.js'
 import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from './host-lock.js'
@@ -23,6 +24,15 @@ interface PendingCall {
 export const CAPTURE_V042_NOTICE = 'Context Guard capture boundary: v0.4.2'
 
 export const PROTOCOL_V3_NOTICE = 'Context Guard protocol boundary: v3.0.0'
+
+/**
+ * 0.5.0 first-step boundary: written at the first real root input step (never
+ * at session start), before the constrained root message in the same batch.
+ * It implies the v3 protocol and v0.4.2 capture semantics and marks the cut
+ * where the 0.5 confirmation syntax becomes active; earlier notices keep
+ * their historical meaning for replay.
+ */
+export const PROTOCOL_V4_NOTICE = 'Context Guard protocol boundary: v4.0.0'
 
 function isProtocolBoundaryNotice(event: DerivedEnvelope, notice = PROTOCOL_V3_NOTICE): boolean {
   if (event.type !== 'user/message') return false
@@ -123,6 +133,37 @@ function resolveArtifact(path: string, scope: DeriveScope): string {
   if (!scope.cwd) return path
   if (/^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/') || path.startsWith('\\')) return path
   return `${scope.cwd.replace(/[\\/]+$/, '')}/${path}`
+}
+
+/** Capture one canonical root text through the authority-block segmentation.
+ * `prefix` keeps the historical `m<seq>` source identity; a remainder uses
+ * `m<seq>:r` so confirmation follow-ups stay traceable to their message. */
+function captureRootText(
+  projection: GuardProjection,
+  text: string,
+  seq: number,
+  scope: DeriveScope,
+  protocolBoundarySeq: number | undefined,
+  captureBoundarySeq: number | undefined,
+  priorRootMessages: string[],
+  prefix = `m${seq}`,
+): void {
+  const blocks = segmentAuthorityBlocks(text, priorRootMessages)
+  for (const block of blocks) {
+    if (!block.capture) continue
+    insertItems(
+      projection,
+      block.text,
+      `${prefix}:${block.blockId}`,
+      scope,
+      block.authority === 'root_adoption' ? 'root_adoption' : 'root_instruction',
+      protocolBoundarySeq !== undefined && seq < protocolBoundarySeq,
+      block.kind === 'instruction' || block.authority === 'root_adoption',
+      (captureBoundarySeq !== undefined && seq < captureBoundarySeq) || (captureBoundarySeq === undefined && protocolBoundarySeq !== undefined) ? 'v041' : 'v042',
+    )
+  }
+  priorRootMessages.push(text)
+  if (priorRootMessages.length > 16) priorRootMessages.shift()
 }
 
 /**
@@ -229,9 +270,11 @@ export function deriveProjection(
   let enablementTransitioned = false
   let lastCompactionSeq = -1
   const pendingCalls = new Map<string, PendingCall>()
-  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event))?.seq
-  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE))?.seq
+  const v4BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
+  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
+  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
   const priorRootMessages: string[] = []
+  let realRootInputSeen = false
 
   for (const event of sourceEvents) {
     projection.enabled = enabled
@@ -270,38 +313,47 @@ export function deriveProjection(
         lastCompactionSeq = event.seq
         break
       case 'user/message': {
-        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE)) break
+        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break
         if (!enabled) break
         const data = asRecord(event.data)
         const source = asRecord(data?.source)
         if (source?.kind !== 'user') break
         const content = (data?.content as unknown[] | undefined) ?? []
         const text = extractTextContent(content)
+        // Activation fact: any real root input counts, including image- or
+        // attachment-only messages that carry no captureable text.
+        if (text.trim() || content.some((part) => part && typeof part === 'object' && (part as Record<string, unknown>).type !== 'text')) {
+          realRootInputSeen = true
+        }
         if (!text.trim()) break
-        if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== 'subagent'
-          && confirmRebind(projection, text, `m${event.seq}`, durableConfirmed)) break
+        if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== 'subagent') {
+          // One durable root message is one atomic transaction: the
+          // confirmation validates against the state BEFORE this message,
+          // then the remaining text is processed with its own semantics.
+          const parsed = parseConfirmationMessage(text)
+          if (parsed.kind === 'confirm') {
+            const consumed = confirmRebind(projection, parsed.proposalId, `m${event.seq}`, durableConfirmed)
+            if (consumed) {
+              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages, `m${event.seq}:r`)
+              break
+            }
+          } else if (parsed.kind !== 'none') {
+            // Malformed or ambiguous control text never confirms; the control
+            // line itself is not task text, but the rest captures normally.
+            projection.lastConfirmationRejection = { eventSeq: event.seq, kind: parsed.kind, reason: parsed.reason }
+            const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join('\n')
+            if (!stripped.trim()) break
+            captureRootText(projection, stripped, event.seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages)
+            break
+          }
+        }
         // Informational reports (acceptance receipts, pasted summaries/logs)
         // are not task instructions and never become contract items.
         if (isInformationalMessage(text)) break
         // Session-layer talk (progression phrases, meta questions, meta
         // comments) is not a task requirement either (v0.2.1).
         if (classifyUserInteraction(text) === 'conversational') break
-        const blocks = segmentAuthorityBlocks(text, priorRootMessages)
-        for (const block of blocks) {
-          if (!block.capture) continue
-          insertItems(
-            projection,
-            block.text,
-            `m${event.seq}:${block.blockId}`,
-            scope,
-            block.authority === 'root_adoption' ? 'root_adoption' : 'root_instruction',
-            protocolBoundarySeq !== undefined && event.seq < protocolBoundarySeq,
-            block.kind === 'instruction' || block.authority === 'root_adoption',
-            (captureBoundarySeq !== undefined && event.seq < captureBoundarySeq) || (captureBoundarySeq === undefined && protocolBoundarySeq !== undefined) ? 'v041' : 'v042',
-          )
-        }
-        priorRootMessages.push(text)
-        if (priorRootMessages.length > 16) priorRootMessages.shift()
+        captureRootText(projection, text, event.seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages)
         break
       }
       case 'goal/change': {
@@ -404,7 +456,21 @@ export function deriveProjection(
         const dispatchContent = isDispatch ? (data?.content as unknown[] | undefined) : undefined
         const textContent = extractTextContent(dispatchContent ?? (message?.content as unknown[] | undefined) ?? [])
         if (call.name === 'context_guard_rebind') {
-          if (!call.rootCallId && !data?.error && durableConfirmed) replayRebindResult(projection, parseArguments(call.arguments) as unknown as RebindArgs, parseArguments(textContent))
+          // Proposal registration is replay bookkeeping and runs in every
+          // rebuild; the confirmation itself stays durable-gated inside
+          // confirmRebind, so a pending proposal can never authorize without
+          // a durable root event.
+          if (!call.rootCallId && !data?.error) {
+            const rebindArgs = parseArguments(call.arguments) as unknown as RebindArgs
+            const recordedResponse = parseArguments(textContent)
+            replayRebindResult(projection, rebindArgs, recordedResponse)
+            // Log-derived retry ledger: a recorded rejection feeds the stable
+            // attempt key so identical retries collapse onto `unchanged`.
+            if (recordedResponse.status === 'rejected' && typeof recordedResponse.reason_code === 'string') {
+              const key = rebindAttemptKey(rebindArgs, recordedResponse.reason_code)
+              projection.rebindRejections.set(key, (projection.rebindRejections.get(key) ?? 0) + 1)
+            }
+          }
           break
         }
         if (call.name === 'context_guard_checkpoint') {
@@ -505,5 +571,5 @@ export function deriveProjection(
   }
   projection.enabled = enabled
   projection.epoch = epoch
-  return { projection, compacted, enablementTransitioned, lastCompactionSeq }
+  return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined }
 }

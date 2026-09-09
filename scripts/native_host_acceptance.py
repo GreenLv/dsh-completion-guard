@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 PROBE_CASES = {
-    "nonempty_test_certificate", "package_update_rebind_certificate", "generic_pending_and_rebind_roundtrip",
+    "nonempty_test_certificate", "package_update_rebind_certificate", "generic_pending_and_rebind_no_gain_refusal",
     "history_pagination_roundtrip", "compact_and_persisted_resume", "qualified_pending_boundary",
 }
 

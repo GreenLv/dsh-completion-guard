@@ -1,4 +1,5 @@
 import { normalizeClause, sanitizeClauseText, sha256 } from './canonicalize.js'
+import { classifyTaskIntent } from './conversation.js'
 import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
 import { semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
 import { canonicalRegistryBase } from './registry.js'
@@ -289,6 +290,7 @@ export function captureItem(
     requestedTarget: capturedTarget.target,
     targetCaptureStatus: capturedTarget.reasonCode ? 'clarification_required' : 'resolved',
     ...(capturedTarget.reasonCode ? { targetCaptureReasonCode: capturedTarget.reasonCode } : {}),
+    taskKind: kind === 'prohibition' ? undefined : classifyTaskIntent(sanitized),
     authority: 'root_instruction',
   }
   if (/(?:等待|暂停|等).{0,12}(?:用户|你|您|我).{0,12}(?:选择|确认|输入)(?:.{0,8}(?:后|再)?继续)?|收到.{0,8}(?:用户|你|您|我)?的?确认.{0,8}(?:后)?再继续|\bwait for (?:the )?(?:user|your)\b|\bcontinue only after (?:the )?(?:user's?|your) confirmation\b/i.test(sanitized)) {

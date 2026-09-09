@@ -1,5 +1,5 @@
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 export interface ExternalOperationSnapshot {
   id: string

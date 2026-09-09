@@ -116,19 +116,12 @@ export const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[] = ALPHA2_HOST_PACK
     : row)
 
 /**
- * Audited host cohort registry. The rc.2 cohort keeps the exact identities
- * audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
- * exact package graph extracted from native macOS and Windows DSH
- * `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
- * cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
- * the graph audited in the 2026-09-01 annex. The rc.1 cohort carries the exact
- * runtime plus dshmarket 1.41.0 graph audited natively on macOS, then confirmed
- * on Windows: the 2026-09-04 native Windows rc.1 runtime graph (dshmarket
- * 1.41.0) was extracted from the runtime lockfile and verified row-for-row
- * identical (name, version, registry integrity) to the posix extraction before
- * this cohort was widened. Graphs that mix cohorts, lack
- * rows, duplicate rows, or use identities outside every registered cohort
- * fail closed.
+ * Historical audited host cohort registry. Every entry keeps the exact package
+ * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
+ * contracts). These are historical verification facts only: since 0.5.0 the
+ * active support target is `0.1.2-rc.1`, so an installed graph from any of
+ * these cohorts — including previous RCs and alphas — is no longer an active
+ * support entry and fails closed in `evaluateHostLock`.
  */
 export const LEGACY_HOST_COHORTS: readonly HostCohort[] = [
   defineCohort('dsh-0.1.1-rc.2', ['0.1.1-rc.2'], ['posix', 'windows'], [
@@ -174,11 +167,13 @@ export const LEGACY_HOST_COHORTS: readonly HostCohort[] = [
 ]
 
 /** Core-lock/v1 separates optional market identity from the audited DSH graph.
- * Legacy rows remain available for historical verification; they are never
- * silently re-labelled as a newly accepted core lock.
+ * The active support target is exactly one audited cohort, `0.1.2-rc.1`:
+ * historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
+ * never silently re-labelled as accepted active locks, and an installed
+ * historical graph fails closed under `evaluateHostLock`.
  */
 export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
-  .filter((cohort) => !cohort.id.includes('-dshmarket-'))
+  .filter((cohort) => cohort.id === 'dsh-0.1.2-rc.1')
   .map((cohort) => ({
     ...cohort,
     id: `${cohort.id}-core-v1`,
@@ -192,8 +187,8 @@ export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
   }))
 
 /**
- * rc.2 audited package identities (first registry cohort). The audited
- * cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
+ * rc.1 audited package identities: the active support cohort since 0.5.0. The
+ * audited cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
  * duplicated, unknown-version, unbound, OR MISSING row fails the whole lock
  * closed (`host_lock_missing`); no capability inherits independence from a
  * partially present graph.

@@ -8,7 +8,7 @@ import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { certifyCheckpoint } from '../../src/domain/checkpoint.js'
 import { deriveProjection } from '../../src/domain/derive.js'
@@ -127,7 +127,7 @@ async function runAction(session: Session, callId: string, args: Record<string, 
     ...roots,
   })
   const resolutionId = String(args.resolution_call_id ?? '')
-  const resolution = [...session.events].reverse().find((raw: unknown) => {
+  const resolution = [...session.snapshotEvents()].reverse().find((raw: unknown) => {
     const event = raw as unknown as { type?: string; data?: { message?: { source?: { callId?: string } }; meta?: { contextGuard?: { resolvedTarget?: Record<string, string> } } } }
     return event.type === 'tool/result' && event.data?.message?.source?.callId === resolutionId && event.data.meta?.contextGuard?.resolvedTarget
   }) as unknown as { data?: { meta?: { contextGuard?: { resolvedTarget?: Record<string, string> } } } } | undefined
@@ -204,7 +204,7 @@ async function writeInstalledPackage(profile: string, name: string, version: str
 }
 
 function certifyStateful(session: Session, action: 'install' | 'apply' | 'restart' | 'publish') {
-  const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: String((session.header as { cwd?: unknown }).cwd ?? '') }, true).projection
+  const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: String((session.header as { cwd?: unknown }).cwd ?? '') }, true).projection
   const facts = [...projection.evidence.values()].filter((entry) => entry.toolName === 'context_guard_evidence')
   expect(facts.map((entry) => entry.evidenceRole)).toEqual(['resolution', 'effect', 'state'])
   const item = [...projection.items.values()].find((entry) => entry.semanticAction === action)!
@@ -225,7 +225,7 @@ describe('trusted stateful evidence producer', () => {
     const artifact = join(dir, 'created.txt')
     const planned = { file_path: artifact, content: 'bounded producer fixture\n' }
     const session = Session.create(SessionId('producer-create-session'), undefined, {
-      version: 0, id: SessionId('producer-create-session'), createdAt: 1, cwd: dir,
+      version: 0, isSeeded: false, id: SessionId('producer-create-session'), createdAt: 1, cwd: dir,
     })
     enable(session)
     user(session, `create ${artifact}`)
@@ -252,7 +252,7 @@ describe('trusted stateful evidence producer', () => {
     expect(effect.status).toBe('supported')
     expect(state.status).toBe('supported')
 
-    const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: dir }, true).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: dir }, true).projection
     const facts = [...projection.evidence.values()].filter((entry) => entry.toolName === 'context_guard_evidence')
     expect(facts.map((entry) => entry.evidenceRole)).toEqual(['resolution', 'effect', 'state'])
     expect(new Set(facts.map((entry) => entry.callId)).size).toBe(3)
@@ -276,7 +276,7 @@ describe('trusted stateful evidence producer', () => {
       ? { file_path: artifact, content: 'expected bytes\n' }
       : { file_path: artifact, old_string: 'OLD', new_string: 'NEW' }
     const session = Session.create(SessionId(`producer-${action}-transition`), undefined, {
-      version: 0, id: SessionId(`producer-${action}-transition`), createdAt: 1, cwd: dir,
+      version: 0, isSeeded: false, id: SessionId(`producer-${action}-transition`), createdAt: 1, cwd: dir,
     })
     enable(session)
     user(session, `${action} ${artifact}`)
@@ -296,7 +296,7 @@ describe('trusted stateful evidence producer', () => {
       semantic_action: action, evidence_role: 'state', resolution_call_id: `${action}-transition-resolution`,
       effect_call_id: `${action}-transition-effect-call`,
     })
-    const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: dir }, true).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: dir }, true).projection
     const facts = [...projection.evidence.values()].filter((entry) => entry.toolName === 'context_guard_evidence')
     const item = [...projection.items.values()].find((entry) => entry.semanticAction === action)!
     const resolutionFact = facts.find((entry) => entry.evidenceRole === 'resolution')!
@@ -321,7 +321,7 @@ describe('trusted stateful evidence producer', () => {
     const artifact = join(dir, 'artifact.txt')
     await writeFile(artifact, 'OLD and OLD\n', 'utf8')
     const session = Session.create(SessionId('producer-modify-ambiguous'), undefined, {
-      version: 0, id: SessionId('producer-modify-ambiguous'), createdAt: 1, cwd: dir,
+      version: 0, isSeeded: false, id: SessionId('producer-modify-ambiguous'), createdAt: 1, cwd: dir,
     })
     expect(await runProducer(session, 'modify-ambiguous-resolution', {
       semantic_action: 'modify', evidence_role: 'resolution', selector: { artifact_id: artifact },
@@ -351,7 +351,7 @@ describe('trusted stateful evidence producer', () => {
       adapterId: 'context-guard.git.v1', adapterVersion: '1.0.0', semanticAction: 'push', evidenceRole: 'state',
       resolvedTarget: { repository: 'spoof' }, observedState: { remote_oid: 'spoof' },
     } })
-    const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, {}, true).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, {}, true).projection
     const evidence = [...projection.evidence.values()][0]
     expect(evidence.semanticAction).toBe('pull')
     expect(evidence.evidenceRole).toBe('effect')
@@ -388,7 +388,7 @@ describe('trusted stateful evidence producer', () => {
       const tgz = await packFixture(root, name, version)
       if (action === 'apply') await writeInstalledPackage(profile, name, '1.0.0', 'sha512-b2xk')
       const session = Session.create(SessionId(`producer-${action}-session`), undefined, {
-        version: 0, id: SessionId(`producer-${action}-session`), createdAt: 1, cwd: root,
+        version: 0, isSeeded: false, id: SessionId(`producer-${action}-session`), createdAt: 1, cwd: root,
       })
       enable(session)
       user(session, `${action} package ${name}@${version} in profile web.`)
@@ -483,7 +483,7 @@ describe('trusted stateful evidence producer', () => {
     let publishedIntegrity: string | undefined
     const registry = 'https://registry.example.invalid/'
     {
-      const session = Session.create(SessionId('producer-publish-session'), undefined, { version: 0, id: SessionId('producer-publish-session'), createdAt: 1, cwd: root })
+      const session = Session.create(SessionId('producer-publish-session'), undefined, { version: 0, isSeeded: false, id: SessionId('producer-publish-session'), createdAt: 1, cwd: root })
       enable(session)
       user(session, `Publish package fixture-publish version 3.0.0 to registry ${registry}.`)
       const roots: EvidenceToolRoots = {
@@ -518,7 +518,7 @@ describe('trusted stateful evidence producer', () => {
     const tgz = await packFixture(root, 'fixture-authority', '1.0.0')
     const registry = 'https://registry.example.invalid/'
     const session = Session.create(SessionId('producer-action-authority'), undefined, {
-      version: 0, id: SessionId('producer-action-authority'), createdAt: 1, cwd: root,
+      version: 0, isSeeded: false, id: SessionId('producer-action-authority'), createdAt: 1, cwd: root,
     })
     enable(session)
     user(session, `Publish package fixture-authority version 1.0.0 registry ${registry}`)
@@ -562,7 +562,7 @@ describe('trusted stateful evidence producer', () => {
     const tgzA = await packFixture(root, 'fixture-a', '1.0.0')
     const tgzB = await packFixture(root, 'fixture-b', '1.0.0')
     const session = Session.create(SessionId('producer-action-swap'), undefined, {
-      version: 0, id: SessionId('producer-action-swap'), createdAt: 1, cwd: root,
+      version: 0, isSeeded: false, id: SessionId('producer-action-swap'), createdAt: 1, cwd: root,
     })
     enable(session)
     user(session, `Publish package fixture-a version 1.0.0 registry ${registry}`)
@@ -582,7 +582,7 @@ describe('trusted stateful evidence producer', () => {
     expect(resolutionA.status).toBe('supported')
     expect(resolutionB.status).toBe('supported')
 
-    const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: root }, true).projection
     const itemA = [...projection.items.values()].find((item) => item.requestedTarget?.artifact_id === 'fixture-a')!
     const itemB = [...projection.items.values()].find((item) => item.requestedTarget?.artifact_id === 'fixture-b')!
     expect(itemA.targetCaptureStatus).toBe('resolved')
@@ -623,7 +623,7 @@ describe('trusted stateful evidence producer', () => {
     const registry = 'https://registry.example.invalid/'
     const tgz = await packFixture(root, 'fixture-durable', '1.0.0')
     const session = Session.create(SessionId('producer-action-durable'), undefined, {
-      version: 0, id: SessionId('producer-action-durable'), createdAt: 1, cwd: root,
+      version: 0, isSeeded: false, id: SessionId('producer-action-durable'), createdAt: 1, cwd: root,
     })
     enable(session)
     user(session, `Publish package fixture-durable version 1.0.0 registry ${registry}`)
@@ -676,7 +676,7 @@ describe('trusted stateful evidence producer', () => {
     ] as const) {
       const tgz = await packFixture(root, label === 'unrelated-prohibition' ? 'fixture-allowed' : 'fixture-blocked', '1.0.0')
       const session = Session.create(SessionId(`producer-${label}`), undefined, {
-        version: 0, id: SessionId(`producer-${label}`), createdAt: 1, cwd: root,
+        version: 0, isSeeded: false, id: SessionId(`producer-${label}`), createdAt: 1, cwd: root,
       })
       enable(session)
       for (const message of messages) user(session, message)
@@ -686,7 +686,7 @@ describe('trusted stateful evidence producer', () => {
         selector: { artifact_id: artifactId, version: '1.0.0', registry },
         command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
       }, { readExecutableIdentity: async () => executableIdentity })
-      const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+      const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: root }, true).projection
       const requirement = [...projection.items.values()].find((item) => item.kind === 'requirement' && item.requestedTarget?.artifact_id === artifactId)!
       let probes = 0
       let commands = 0
@@ -715,7 +715,7 @@ describe('trusted stateful evidence producer', () => {
     const registry = 'https://registry.example.invalid/'
     const tgz = await packFixture(root, 'fixture-partial', '1.0.0')
     const session = Session.create(SessionId('producer-action-partial'), undefined, {
-      version: 0, id: SessionId('producer-action-partial'), createdAt: 1, cwd: root,
+      version: 0, isSeeded: false, id: SessionId('producer-action-partial'), createdAt: 1, cwd: root,
     })
     enable(session)
     user(session, `Publish package fixture-partial registry ${registry}`)
@@ -725,7 +725,7 @@ describe('trusted stateful evidence producer', () => {
       selector: { artifact_id: 'fixture-partial', version: '1.0.0', registry },
       command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
     }, { readExecutableIdentity: async () => executableIdentity })
-    const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: root }, true).projection
     const item = [...projection.items.values()].find((candidate) => candidate.requestedTarget?.artifact_id === 'fixture-partial')!
     expect(item).toMatchObject({ targetCaptureStatus: 'resolved', requestedTarget: { artifact_id: 'fixture-partial', registry } })
     let probes = 0
@@ -780,7 +780,7 @@ describe('trusted stateful evidence producer', () => {
           return new Response(JSON.stringify({ schema: 'dsh-market/update-api/v1', result: { accepted: true } }), { status: 200 })
         },
       }
-      session = Session.create(SessionId('producer-restart-session'), undefined, { version: 0, id: SessionId('producer-restart-session'), createdAt: 1, cwd: root })
+      session = Session.create(SessionId('producer-restart-session'), undefined, { version: 0, isSeeded: false, id: SessionId('producer-restart-session'), createdAt: 1, cwd: root })
       enable(session)
       user(session, 'Restart service dsh-web.')
       await runProducer(session, 'restart-resolution', { semantic_action: 'restart', evidence_role: 'resolution', selector: { service_id: 'dsh-web' }, command_manifest: { manifest_id: 'dshmarket.restart.v1' } }, roots)
@@ -794,12 +794,12 @@ describe('trusted stateful evidence producer', () => {
       expect(bootId).toBe('boot-before')
       const handoff = await runAction(session, 'restart-action', { semantic_action: 'restart', resolution_call_id: 'restart-resolution' }, roots)
       expect(handoff.status).toBe('handoff_pending')
-      const killedBeforeResult = structuredClone(session.events).filter((event) => {
+      const killedBeforeResult = structuredClone(session.snapshotEvents()).filter((event) => {
         if ((event as { type?: unknown }).type !== 'tool/result') return true
         const message = ((event as { data?: { message?: unknown } }).data?.message ?? {}) as { source?: { callId?: unknown } }
         return message.source?.callId !== 'restart-action'
       })
-      const restored = Session.fromRestore(SessionId('producer-restart-session'), killedBeforeResult as never, structuredClone(session.header) as never)
+      const restored = Session.fromRestore(SessionId('producer-restart-session'), killedBeforeResult as never, structuredClone(session.header) as never, SessionLogOffset(0))
       await runProducer(restored, 'restart-effect', { semantic_action: 'restart', evidence_role: 'effect', resolution_call_id: 'restart-resolution', effect_call_id: 'restart-action' }, roots)
       await runProducer(restored, 'restart-state', { semantic_action: 'restart', evidence_role: 'state', resolution_call_id: 'restart-resolution', effect_call_id: 'restart-action' }, roots)
       expect(certifyStateful(restored, 'restart').status).toBe('certified')
@@ -813,7 +813,7 @@ describe('trusted stateful evidence producer', () => {
       const origin = 'http://127.0.0.1:3080'
       const binding = { origin, profile: 'web', version, integrity: 'sha512-fixture', loadedTreeSha256: 'a'.repeat(64), processIdentity: 'pid-start-1', bootId: 'boot-1' }
       const payload = { schema: 'dsh-market/update-api/v1', apiVersion: 1, marketVersion: version, profile: 'web', bootId: 'boot-1', features: { restart: true }, restart: { supported: true, managedBy: 'market' } }
-      const session = Session.create(SessionId('market-version-fixture'), undefined, { version: 0, id: SessionId('market-version-fixture'), createdAt: 1, cwd: root })
+      const session = Session.create(SessionId('market-version-fixture'), undefined, { version: 0, isSeeded: false, id: SessionId('market-version-fixture'), createdAt: 1, cwd: root })
       enable(session)
       user(session, 'Restart service dsh-web.')
       const roots: EvidenceToolRoots = { profile: { path: root, name: 'web' }, marketOrigin: origin,
@@ -831,7 +831,7 @@ describe('trusted stateful evidence producer', () => {
         expect((await runProducer(session, 'bad-binding', args, { ...roots, verifyMarketInstance: async () => ({ ...binding, ...bad }) })).status).toBe('unavailable')
       }
       // These are protocol fixtures, not acceptance evidence for real versions.
-      const projection = deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+      const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: root }, true).projection
       expect([...projection.items.values()].some((item) => item.semanticAction === 'restart')).toBe(true)
       expect([...projection.evidence.values()].some((fact) => fact.evidenceRole === 'effect' || fact.evidenceRole === 'state')).toBe(false)
     }
@@ -852,7 +852,7 @@ describe('trusted stateful evidence producer', () => {
     await execFileAsync('git', ['push', '-u', 'origin', 'main'], { cwd: repository })
 
     const session = Session.create(SessionId('producer-git-target-session'), undefined, {
-      version: 0, id: SessionId('producer-git-target-session'), createdAt: 1, cwd: repository,
+      version: 0, isSeeded: false, id: SessionId('producer-git-target-session'), createdAt: 1, cwd: repository,
     })
     enable(session)
     await writeFile(join(repository, 'a.txt'), 'a\nb\n')
@@ -953,7 +953,7 @@ describe('trusted stateful evidence producer', () => {
     await execFileAsync('git', ['push', '-u', 'origin', 'main'], { cwd: work })
 
     const session = Session.create(SessionId('producer-git-roundtrip'), undefined, {
-      version: 0, id: SessionId('producer-git-roundtrip'), createdAt: 1, cwd: work,
+      version: 0, isSeeded: false, id: SessionId('producer-git-roundtrip'), createdAt: 1, cwd: work,
     })
     enable(session)
     await writeFile(join(work, 'b.txt'), 'guarded\n')
@@ -1050,11 +1050,11 @@ it.each([false, true])('T12 replays generic clarification into package certifica
     const tgz = await packFixture(root, 'demo', '2.0.0')
     await writeInstalledPackage(profile, 'demo', '1.0.0', 'sha512-b2xk')
     const session = Session.create(SessionId('rebind-certificate'), undefined, {
-      version: 0, id: SessionId('rebind-certificate'), createdAt: 1, cwd: root,
+      version: 0, isSeeded: false, id: SessionId('rebind-certificate'), createdAt: 1, cwd: root,
     })
     enable(session)
     user(session, gui ? '更新插件并检查 GUI 效果' : '更新插件')
-    const projection = () => deriveProjection(session.events as never, { activation: 'opt-in' }, { cwd: root }, true).projection
+    const projection = () => deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: root }, true).projection
     let integrity = ''
     const roots: EvidenceToolRoots = {
       profile: { name: 'web', path: profile },

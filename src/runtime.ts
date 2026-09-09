@@ -5,12 +5,15 @@ import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from './domain/digest.js'
 import { createProjection, type GuardProjection } from './domain/types.js'
-import { deriveProjection, PROTOCOL_V3_NOTICE, CAPTURE_V042_NOTICE } from './domain/derive.js'
+import { deriveProjection, PROTOCOL_V4_NOTICE } from './domain/derive.js'
+import { claimedBatchHasRealRootInput, lifecyclePhase, previewFirstStepInjection, type LifecyclePhase } from './domain/lifecycle.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
 import { decideTurnBoundary } from './domain/stop-policy.js'
 import { recoveryDigest, renderRecoveryPacket } from './domain/recovery.js'
 import { createCheckpointTool } from './tools/checkpoint.js'
 import { createBoundaryTool } from './tools/boundary.js'
+import { createPrepareTool } from './tools/prepare.js'
+import { GIT_COMMAND_TEMPLATES, type GitAdapterAction } from './domain/git-adapter.js'
 import {
   createActionTool,
   createEvidenceTool,
@@ -59,6 +62,10 @@ export const inject = ['sessions', 'commands'] as const
 export interface GuardRuntime {
   readonly projection: GuardProjection
   readonly session: Session
+  /** Startup lifecycle: armed (waiting for the first real root input), active, or disabled. */
+  readonly lifecycle: LifecyclePhase
+  /** The durable log already carries the 0.5 first-step protocol boundary. */
+  readonly protocolV4Present: boolean
   sync(): void
   setEnabled(_enabled: boolean): void
   setDurability(confirmed: boolean): void
@@ -216,6 +223,9 @@ export function createRuntime(
   let observedEpoch = -1
   let observedCompactionSeq = -1
   let observedContractRevision = -1
+  let protocolV4Present = false
+  let realRootInputSeen = false
+  let lifecycle: LifecyclePhase = 'armed'
   const continuationAttempts = projection.continuationAttempts
   const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts
 
@@ -251,6 +261,12 @@ export function createRuntime(
     projection.continuationAttempts = continuationAttempts
     projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts
     projection.lastRecoveryDigest = priorRecoveryDigest
+    // Startup lifecycle facts for the first-step injection decision and the
+    // status surface: the v4 boundary and the real-input observation are both
+    // derived from the same durable log as the contract.
+    protocolV4Present = derived.protocolV4Present
+    realRootInputSeen = derived.realRootInputSeen
+    lifecycle = lifecyclePhase({ enabled: projection.enabled, realInputSeen: realRootInputSeen })
     // A newly observed epoch means enablement transitioned since the last
     // rebuild; the first rebuild only records the baseline. Recovery re-arms
     // and the content dedup forgets the last packet, so the first reminder
@@ -294,7 +310,25 @@ export function createRuntime(
   }
 
   rebuild()
-  return { projection, session, sync, setEnabled, setDurability, markRecoveryNeeded, consumeRecovery }
+  return {
+    projection,
+    session,
+    get lifecycle() { return lifecycle },
+    get protocolV4Present() { return protocolV4Present },
+    sync,
+    setEnabled,
+    setDurability,
+    markRecoveryNeeded,
+    consumeRecovery,
+  }
+}
+
+/** Delegated/subagent sessions never receive root-conversation injections. */
+function isDelegatedSession(session: Session): boolean {
+  const header = session.header as { parentSession?: unknown; delegationDepth?: unknown; origin?: unknown } | undefined
+  return header?.origin === 'subagent'
+    || (typeof header?.delegationDepth === 'number' && header.delegationDepth > 0)
+    || typeof header?.parentSession === 'string'
 }
 
 /** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
@@ -358,11 +392,14 @@ export function apply(ctx: Context, rawConfig: {
     (agent) => ensure(agent).projection,
     (agent, enabled) => ensure(agent).setEnabled(enabled),
     (agent) => ensure(agent).sync(),
+    (agent) => ensure(agent).lifecycle,
   ))
 
+  // T0 stays silent: session-start registers tools and the runtime, reads
+  // history, and arms recovery for resume/compact. It never appends Guard
+  // messages, so a fresh session remains blank (seq 0) and the Web mode
+  // picker can still stage a preset before the first real input.
   ctx.on('agent/session-start', ({ agent, source }) => {
-    ensureProtocolBoundary(agent)
-    ensureProtocolBoundary(agent, CAPTURE_V042_NOTICE)
     const runtime = ensure(agent)
     runtime.sync()
     if (source === 'resume' || source === 'compact') {
@@ -436,6 +473,14 @@ export function apply(ctx: Context, rawConfig: {
     }
     agent.ctx.tools.register(createEvidenceTool(evidenceOptions))
     agent.ctx.tools.register(createActionTool(evidenceOptions))
+    agent.ctx.tools.register(createPrepareTool({
+      getProjection: () => runtime.projection,
+      hostCapability: (action) => {
+        const evaluation = createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action)
+        return { status: evaluation.status, reasonCode: evaluation.reasonCode }
+      },
+      commandTemplate: (action) => GIT_COMMAND_TEMPLATES[action as GitAdapterAction],
+    }))
     agent.ctx.tools.register(createExternalOperationTool(
       (id, toolAgent) => readExternalOperation(ctx, toolAgent as Agent | undefined, id),
       () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
@@ -446,26 +491,57 @@ export function apply(ctx: Context, rawConfig: {
       exec.arguments,
     ))
   })
-  ctx.on('agent/pre-step', async ({ agent }, next) => {
+  // T1 activation: the loop claims this step's input before persisting it, so
+  // first-step injections are decided from the validated claim (pure preview)
+  // and delivered INSIDE the same step batch, ahead of the root message. The
+  // formal projection still derives only from durable events.
+  ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
     const durability = await ctx.sessions.flush(agent.session)
     const runtime = ensure(agent)
     runtime.setDurability(durability)
     runtime.sync()
     const decision = await next()
-    if (decision.kind === 'enter' && runtime.projection.enabled && runtime.consumeRecovery()) {
-      const recovery = renderRecoveryPacket(runtime.projection, { charBudget: 4000 })
+    if (decision.kind !== 'enter') return decision
+    const injected: ReturnType<typeof createUserMessage>[] = []
+    const delegated = isDelegatedSession(agent.session)
+    let boundaryPending = !runtime.protocolV4Present
+    const firstStep = previewFirstStepInjection(
+      { activation: config.activation, enabled: runtime.projection.enabled, boundaryPresent: runtime.protocolV4Present, delegated },
+      claimedBatchHasRealRootInput(messages),
+    )
+    if (firstStep) {
+      injected.push(pluginNoticeMessage(firstStep.boundary, 'Context Guard recorded a replay version boundary'))
+      injected.push(pluginNoticeMessage(firstStep.guidance, 'Context Guard first-step protection guidance'))
+      boundaryPending = false
+    }
+    if (runtime.projection.enabled && runtime.consumeRecovery()) {
+      // A session with nothing open has nothing to recover: a "0 pending"
+      // packet is noise, not a reminder.
+      const hasOpenWork = [...runtime.projection.items.values()].some((item) => item.status === 'pending')
+      const hasRejections = (runtime.projection.lastCheckpointRejections?.length ?? 0) > 0
+      const recovery = hasOpenWork || hasRejections
+        ? renderRecoveryPacket(runtime.projection, { charBudget: 4000 })
+        : undefined
       const digest = recovery ? recoveryDigest(recovery, runtime.projection) : undefined
       if (recovery && digest !== runtime.projection.lastRecoveryDigest) {
         // Content dedup (v0.2.1): a rejection loop with an unchanged packet
         // injects once; new evidence or a new contract changes the digest and
         // is reminded again.
         runtime.projection.lastRecoveryDigest = digest
-        decision.messages = [...decision.messages, createUserMessage({
+        // The first 0.5 write into a pre-0.5 session is the explicit version
+        // cut: duties and certificates before it keep their historical rules.
+        // At most one boundary rides per step, never one per injection path.
+        if (boundaryPending && !delegated) {
+          injected.push(pluginNoticeMessage(PROTOCOL_V4_NOTICE, 'Context Guard recorded a replay version boundary'))
+          boundaryPending = false
+        }
+        injected.push(createUserMessage({
           content: [{ type: 'text', text: `Open task requirements (recovered after compaction or resume):\n${recovery}` }],
           source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recovering open task requirements') },
-        })]
+        }))
       }
     }
+    if (injected.length > 0) decision.messages = [...injected, ...decision.messages]
     return decision
   })
   ctx.on('agent/turn-stopping', async ({ agent }) => {
@@ -520,22 +596,12 @@ function optionalMarketOrigin(ctx: Context, agent: Agent): string | undefined {
   return undefined
 }
 
-function ensureProtocolBoundary(agent: Agent, notice = PROTOCOL_V3_NOTICE): void {
-  const events = snapshotSessionEvents(agent.session) as Array<{ type?: unknown; data?: unknown }>
-  const found = events.some((event) => {
-    if (event.type !== 'user/message' || !event.data || typeof event.data !== 'object') return false
-    const data = event.data as Record<string, unknown>
-    const source = data.source && typeof data.source === 'object' ? data.source as Record<string, unknown> : undefined
-    const content = Array.isArray(data.content) ? data.content : []
-    const text = content.length === 1 && content[0] && typeof content[0] === 'object' ? (content[0] as Record<string, unknown>).text : undefined
-    return text === notice && source?.kind === 'plugin' && source.plugin === 'context-guard' && source.form === 'notice'
+/** Build one host-approved plugin notice user/message for step-batch delivery. */
+function pluginNoticeMessage(text: string, summaryLabel: string) {
+  return createUserMessage({
+    content: [{ type: 'text', text }],
+    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary(summaryLabel) },
   })
-  if (found) return
-  const append = (agent.session as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append.bind(agent.session)
-  append('user/message', createUserMessage({
-    content: [{ type: 'text', text: notice }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('Context Guard recorded a replay version boundary') },
-  }), { surfaceOp: 'append' })
 }
 
 interface OptionalGoalService {

@@ -1,22 +1,197 @@
+import { sha256 } from './canonicalize.js'
 import { ACTION_MANIFEST, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, isStatefulAction, requestedTargetMatchesResolved } from './protocol-manifest.js'
 import type { GuardEvidence, GuardItem, GuardProjection } from './types.js'
 
-export function itemDiagnosis(p: GuardProjection, item: GuardItem): { certifiable: boolean; reason_code: string; next_step: string } {
-  if (item.kind === 'prohibition') return { certifiable: false, reason_code: 'prohibition_active', next_step: 'Keep this constraint enforced; it is not a completion evidence obligation.' }
+export type TaskKind = 'inquiry' | 'action' | 'deliverable' | 'constraint' | 'unresolved'
+export type CertificationSupport = 'supported' | 'unsupported' | 'needs_target' | 'needs_evidence' | 'unavailable'
+export type Repairability = 'agent_repairable' | 'user_input_required' | 'unsupported' | 'historical_gap' | 'none'
+
+export interface DiagnosisNextAction {
+  kind: 'report_only' | 'collect_evidence' | 'checkpoint' | 'clarify_target' | 'restore_host' | 'none'
+  tool?: string
+  required_input?: string
+  resume_condition?: string
+}
+
+/** The single unified diagnosis shared by checkpoint, recovery, rebind,
+ * evidence/action, and status surfaces (v0.5). It states what certification
+ * can do, never invents targets, evidence IDs, or authority. */
+export interface UnifiedItemDiagnosis {
+  item_id: string
+  item_revision: number
+  contract_revision: number
+  task_kind: TaskKind
+  certification: CertificationSupport
+  reason_code: string
+  repairability: Repairability
+  missing_fields: string[]
+  missing_facets: Array<'resolution' | 'effect' | 'state'>
+  next_action: DiagnosisNextAction
+  /** Stable over unchanged inputs; identical retries collapse onto it. */
+  attempt_fingerprint: string
+}
+
+/** Bounded, honest task-kind classification for a captured item. */
+function taskKindOf(item: GuardItem): TaskKind {
+  if (item.kind === 'prohibition') return 'constraint'
+  if (item.taskKind === 'inquiry') return 'inquiry'
+  return 'action'
+}
+
+const TARGET_FIELD_REASONS: Record<string, string> = {
+  requested_target_package_id_missing: 'package_id',
+  requested_target_artifact_id_missing: 'artifact_id',
+  requested_target_repository_missing: 'repository',
+  requested_target_service_id_missing: 'service_id',
+  requested_target_registry_missing_or_invalid: 'registry',
+}
+
+function evidenceFacets(p: GuardProjection, item: GuardItem): Array<'resolution' | 'effect' | 'state'> {
+  const present = new Set<'resolution' | 'effect' | 'state'>()
+  for (const evidence of p.evidence.values()) {
+    if (!relevantEvidence(p, item, evidence)) continue
+    if (evidence.evidenceRole) present.add(evidence.evidenceRole)
+  }
+  return (['resolution', 'effect', 'state'] as const).filter((facet) => !present.has(facet))
+}
+
+/**
+ * The pure repair judge. It decides between: fixable from existing evidence,
+ * missing pre-evidence, missing a user target choice, not supported by any
+ * adapter, an executed-without-evidence historical gap, or nothing to do —
+ * and it NEVER recommends a rebind that cannot change certification.
+ */
+export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): UnifiedItemDiagnosis {
+  const kind = taskKindOf(item)
+  const missing_facets = item.status === 'pending' && kind !== 'constraint' ? evidenceFacets(p, item) : []
+  const base = { item_id: item.id, item_revision: item.revision, contract_revision: p.contractRevision, task_kind: kind, missing_facets }
+
+  if (item.kind === 'prohibition') {
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: 'prohibition_active',
+      repairability: 'none',
+      missing_fields: [],
+      next_action: { kind: 'none', resume_condition: 'Keep this constraint enforced; it is not a completion evidence obligation.' },
+      attempt_fingerprint: fingerprint(p, item, 'prohibition_active'),
+    }
+  }
   const action = item.semanticAction ?? 'generic_run'
-  const reason = item.status === 'passed' ? 'certified'
-    : action === 'generic_run' ? 'generic_run_non_certifiable'
-      : item.legacyFlags?.length || item.targetCaptureStatus === 'clarification_required' ? 'target_clarification_required'
-        : p.hostStatus !== 'supported' ? 'host_unavailable'
-          : ACTION_MANIFEST.actions[action].evidenceProducer !== 'supported' ? 'adapter_unavailable' : 'missing_evidence'
+  if (item.status === 'passed') {
+    return {
+      ...base, certification: 'supported', reason_code: 'certified', repairability: 'none', missing_fields: [],
+      next_action: { kind: 'none', resume_condition: 'No further binding needed.' },
+      attempt_fingerprint: fingerprint(p, item, 'certified'),
+    }
+  }
+  if (action !== 'generic_run' && !item.legacyFlags?.length && item.targetCaptureStatus === 'clarification_required') {
+    const missingFields = item.targetCaptureReasonCode ? [TARGET_FIELD_REASONS[item.targetCaptureReasonCode] ?? item.targetCaptureReasonCode] : []
+    return {
+      ...base,
+      certification: 'needs_target',
+      reason_code: 'target_clarification_required',
+      repairability: 'user_input_required',
+      missing_fields: missingFields,
+      next_action: {
+        kind: 'clarify_target',
+        tool: 'context_guard_prepare',
+        required_input: missingFields.length > 0 ? `the exact ${missingFields.join(' and ')} for this action` : 'the exact target fields for this action',
+        resume_condition: 'A root-user instruction supplying the exact target re-enables certification.',
+      },
+      attempt_fingerprint: fingerprint(p, item, 'target_clarification_required'),
+    }
+  }
+  if (action === 'generic_run' || item.legacyFlags?.length) {
+    if (kind === 'inquiry') {
+      // Inquiries stay obligations but are not machine-certifiable: report
+      // honestly instead of dragging the user through a pointless rebind.
+      return {
+        ...base,
+        certification: 'unsupported',
+        reason_code: 'inquiry_non_certifiable',
+        repairability: 'unsupported',
+        missing_fields: [],
+        next_action: {
+          kind: 'report_only',
+          resume_condition: 'Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this.',
+        },
+        attempt_fingerprint: fingerprint(p, item, 'inquiry_non_certifiable'),
+      }
+    }
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: 'generic_run_non_certifiable',
+      repairability: 'user_input_required',
+      missing_fields: [],
+      next_action: {
+        kind: 'report_only',
+        required_input: 'a concrete supported action and target for this obligation',
+        resume_condition: 'A fresh root-user instruction naming a supported action and exact target replaces the generic obligation; identical re-phrasing changes nothing.',
+      },
+      attempt_fingerprint: fingerprint(p, item, 'generic_run_non_certifiable'),
+    }
+  }
+  if (p.hostStatus !== 'supported') {
+    return {
+      ...base, certification: 'unavailable', reason_code: 'host_unavailable', repairability: 'unsupported', missing_fields: [],
+      next_action: { kind: 'restore_host', resume_condition: 'Restore the audited host cohort; keep pending work visible at a qualified safe boundary.' },
+      attempt_fingerprint: fingerprint(p, item, 'host_unavailable'),
+    }
+  }
+  if (ACTION_MANIFEST.actions[action].evidenceProducer !== 'supported') {
+    return {
+      ...base, certification: 'unavailable', reason_code: 'adapter_unavailable', repairability: 'unsupported', missing_fields: [],
+      next_action: { kind: 'restore_host', resume_condition: 'The audited adapter for this action is unavailable in the installed cohort.' },
+      attempt_fingerprint: fingerprint(p, item, 'adapter_unavailable'),
+    }
+  }
+  // An effect already recorded without its resolution prestate is a
+  // historical gap: readback honestly, never re-execute to mint evidence.
+  if (missing_facets.includes('resolution') && !missing_facets.includes('effect')) {
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: 'historical_evidence_gap',
+      repairability: 'historical_gap',
+      missing_fields: [],
+      next_action: {
+        kind: 'report_only',
+        resume_condition: 'Record the observed state as read-only fact; do not repeat the action to mint missing prestate evidence.',
+      },
+      attempt_fingerprint: fingerprint(p, item, 'historical_evidence_gap'),
+    }
+  }
   return {
-    certifiable: reason === 'missing_evidence' || reason === 'certified',
-    reason_code: reason,
-    next_step: reason === 'certified' ? 'No further binding needed.'
-      : reason === 'generic_run_non_certifiable' || reason === 'target_clarification_required'
-        ? 'Use context_guard_rebind to propose explicit clauses for root-user confirmation; preserve unsupported work pending. Rebinding grants no execution permission.'
-        : reason === 'missing_evidence' ? 'Collect matching durable evidence, then call context_guard_checkpoint with bindings.'
-          : 'Restore the audited host/adapter capability before certification; keep pending work visible at a qualified safe boundary.',
+    ...base,
+    certification: 'needs_evidence',
+    reason_code: 'missing_evidence',
+    repairability: 'agent_repairable',
+    missing_fields: [],
+    next_action: {
+      kind: 'collect_evidence',
+      tool: 'context_guard_prepare',
+      resume_condition: 'Collect the matching durable evidence in resolution/effect/state order, then checkpoint.',
+    },
+    attempt_fingerprint: fingerprint(p, item, 'missing_evidence'),
+  }
+}
+
+function fingerprint(p: GuardProjection, item: GuardItem, reason: string): string {
+  return sha256(JSON.stringify([item.id, item.revision, p.contractRevision, reason, item.verification.subject ?? null]))
+}
+
+/** Legacy compact view, now derived from the single unified diagnosis. */
+export function itemDiagnosis(p: GuardProjection, item: GuardItem): { certifiable: boolean; reason_code: string; next_step: string } {
+  const diagnosis = deriveItemDiagnosis(p, item)
+  const nextStep = diagnosis.next_action.resume_condition
+    ?? (diagnosis.next_action.kind === 'collect_evidence' ? 'Collect matching durable evidence, then call context_guard_checkpoint with bindings.' : diagnosis.next_action.required_input)
+    ?? 'No further action needed.'
+  return {
+    certifiable: diagnosis.reason_code === 'missing_evidence' || diagnosis.reason_code === 'certified',
+    reason_code: diagnosis.reason_code,
+    next_step: nextStep,
   }
 }
 

@@ -8,7 +8,7 @@
 
 ## 快速开始
 
-以下步骤适用于 0.4.3。该版本发布前，请用已验收候选包的路径替换下面的包名；已发布的 0.4.2 不支持新的核心锁流程。
+以下步骤适用于 0.5.0。
 
 将插件安装到 DSH 的 Web 运行环境：
 
@@ -37,7 +37,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 /context-guard status
 ```
 
-默认采用 opt-in。`status` 显示 Guard 是否开启以及还有多少检查项。`off` 停止保护当前会话，但不删除历史。`clear` 关闭当前待办，同时保留禁止项。`diagnose` 说明完成检查为什么通过或失败。
+默认采用 opt-in。`status` 显示 Guard 是否开启、启动阶段（`armed` 表示已就绪、等待你的第一条消息）以及还有多少检查项。`off` 停止保护当前会话，但不删除历史。`clear` 关闭当前待办，同时保留禁止项。`diagnose` 说明完成检查为什么通过或失败。
 
 ## 它保护什么
 
@@ -49,7 +49,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.4.3 将 DSH 核心依赖与可选的 dshmarket 分开检查。market 的普通升级不再要求 Guard 发版或重新注入核心锁；如果它改变了实际解析到的核心依赖，Guard 仍会拒绝认证。Headless 不需要安装 market。
+当前支持的 DSH 目标是 `0.1.2-rc.1`（配合 Cordis `4.0.2`）。Guard 将 DSH 核心依赖与可选的 dshmarket 分开检查，market 的普通升级不要求 Guard 发版或重新注入核心锁；如果插件改变了实际解析到的核心依赖，Guard 仍会拒绝认证。Headless 不需要安装 market。alpha 版本和更早 RC 的 DSH 包组合仅作为历史身份保留，由这些包组合构成的运行环境会被报告为不受支持，而不会通过认证。
 
 重启属于单独能力。当前 DSH 没有提供可独立验证的 market 已加载实例绑定，因此 Guard 的 market 重启适配器返回不可用；已有重启要求仍保持未完成。核心保护和不依赖该接口的操作继续工作。磁盘上的插件安装/应用不等于运行进程或 UI 已生效。
 
@@ -64,9 +64,9 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 Context Guard 有两种启用模式：
 
 - `opt-in`（默认）：打开会话时不会自动保护。你需要在这个会话中执行 `/context-guard on` 才会启用；执行 `/context-guard off` 可以再次关闭。开关只影响当前会话。
-- `always`：DSH 会话会自动启用保护。如果你在某个会话中执行 `/context-guard off`，只会关闭这个会话；其他会话会自动开启保护。
+- `always`：DSH 会话从第一条真实消息开始自动保护。全新会话保持完全空白——Guard 不写入任何内容——因此你仍然可以在发送任何内容之前选择 DSH 会话模式（standard、minimal 或自定义 preset）。第一条真实消息进入执行步骤的那一刻，保护在同一步骤内、且位于该消息之前开始：第一个任务连同它的第一次文件修改都在覆盖范围内。首条消息只有图片或附件时同样开始保护；纯空白消息不启动任何内容。在某个会话中执行 `/context-guard off` 后，该会话关闭保护，直到再次执行 `on`。
 
-启用模式只控制 Guard 是否保护会话，不是 DSH 的会话模式（例如会话开始时所选的标准模式、极简模式）。选择 `always` 后，Guard 会在每个 DSH 会话开始前自动加载。DSH 当前不支持在会话开始后切换会话模式，因此受这样保护的会话会一直使用它开始时的 DSH 会话模式。`/context-guard on` 和 `/context-guard off` 只负责开启或关闭 Guard 保护，不会改变 DSH 会话模式。
+启用模式只控制 Guard 是否保护会话，不是 DSH 的会话模式（例如会话开始时所选的标准模式、极简模式）。Guard 不再在第一条消息之前写入任何内容，因此 DSH 会话模式可以在会话尚为新会话时选择。`/context-guard on` 和 `/context-guard off` 只负责开启或关闭 Guard 保护，不会改变 DSH 会话模式。
 
 如果希望 DSH 会话自动启用保护，请在当前 DSH 启动方式使用的 `cordis.patch.yml` 中增加：
 
@@ -102,9 +102,9 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 
 ### 要求一直未完成时
 
-“更新插件并检查 GUI”可能包含 Guard 尚不能认证的部分。checkpoint 会逐项说明原因和下一步。`generic_run_non_certifiable` 表示普通命令成功不能关闭该项，反复换绑定或再跑一条命令也无效。
+“更新插件并检查 GUI”可能包含 Guard 尚不能认证的部分；而“是否有更新”这类提问属于调查：Guard 会保留原文和来源，但如实说明无法机器认证——完成调查并如实回答即可。checkpoint 会逐项给出原因和一个具体的下一步；`context_guard_prepare`（只读）可以在执行有状态动作之前，展示受支持的命令形状、所需的 resolution/effect/state 证据顺序以及精确缺失的目标字段。
 
-用 `context_guard_rebind` 提出完整的原文拆分方案。动作或对象不明确时，先请根用户给出包含原条款的明确澄清要求，再在提案中引用新要求的 ID。工具会返回提案 ID 和原项/替代项对照；只有用户精确回复 `确认重绑定 <proposal ID>` 才会应用。引用文字、工具输出和模型自称确认都无效。未支持的部分继续保留 pending；按结构化边界安全结束也不表示全部完成。
+用 `context_guard_rebind` 提出完整的原文拆分方案。动作或对象不明确时，先请根用户给出包含原条款的明确澄清要求，再在提案中引用新要求的 ID。工具会返回提案 ID 和原项/替代项对照；用户把确认行 `确认重绑定 <proposal ID>` 作为回复的第一行即可应用，空行之后的解释请求或新任务保留各自含义，新任务照常采集。嵌在句子、引号或代码块里的确认，以及后面跟反转表述的确认，都无效。把要求拆成同样不可认证的片段会得到“无认证收益”，而不是要求一次无意义的确认。未支持的部分继续保留 pending；按结构化边界安全结束也不表示全部完成。
 
 用 `bindings: []` 调用 `context_guard_checkpoint` 可查询诊断。默认最多展示八个当前要求/限制和十条证据，插件 JSON 不超过 12 KiB。`pagination` 给出总数及各列表独立的 `next_cursor`，首页不代表完整合同。`item_ids`、`evidence_ids` 可按 ID 查询；`evidence_scope: "history"` 可查看完整证据历史，其中不可引用项会明确标记。翻页时保持查询条件不变，合同或证据快照变化后需重新查询。超长行提供 `detail_id`，用 `detail_offset` 取分片；后续分片需把首次返回的 `snapshot` 作为 `detail_snapshot` 传回。分页只改变展示，不会减少认证时检查的要求。
 

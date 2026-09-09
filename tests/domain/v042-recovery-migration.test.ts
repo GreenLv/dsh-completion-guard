@@ -18,7 +18,7 @@ describe('0.4.2 recovery and old-log compatibility', () => {
       const packet = renderRecoveryPacket(p, { charBudget: budget })
       expect(packet.length).toBeLessThanOrEqual(budget)
       expect(packet).toContain('DO NOT')
-      expect(packet).toContain('context_guard_rebind')
+      expect(packet).toContain('uncertified')
       expect(packet).toContain('checkpoint')
       expect(packet).toContain('folded')
     }
@@ -78,7 +78,7 @@ it('reserves current work and folding summaries under constraint and rejection p
     expect(packet.length).toBeLessThanOrEqual(charBudget)
     expect(packet).toContain('Rnew')
     expect(packet).toContain('generic_run_non_certifiable')
-    expect(packet).toContain('context_guard_rebind')
+    expect(packet).toContain('uncertified')
     expect(packet).toContain('items folded')
     expect(packet).toContain('rejections folded')
     expect(packet).toContain('DO NOT')

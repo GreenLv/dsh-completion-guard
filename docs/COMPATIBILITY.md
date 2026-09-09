@@ -2,9 +2,9 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## Unreleased installation metadata
+## 0.5.0 support policy
 
-The next package advertises only the exact DSH RC targets `0.1.2-rc.1 || 0.1.1-rc.2` through its host peer dependencies. This narrows installation metadata; it does not erase historical alpha core graphs or broaden runtime certification. dshmarket derives its compatibility label from the npm manifest, so this change requires a new package release and a market metadata refresh. Published 0.4.3 is unchanged. No unbounded minimum-version range is claimed.
+The active support target is exactly DSH `0.1.2-rc.1` with Cordis `4.0.2`. The npm peer dependencies advertise only `0.1.2-rc.1`, and the active host allowlist contains that single audited core graph. Alpha package sets and older RC sets remain recorded as historical identities in the shipped manifest and source registry so previously accepted annexes stay verifiable, but an installed runtime built from one of those sets fails closed (`host_lock_version_mismatch`) instead of certifying. No floating version range and no alpha support is claimed; future compatibility work starts from the next upstream RC.
 
 ## 0.4.3 core-lock policy
 
@@ -36,7 +36,7 @@ DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and
 
 ## Upstream adaptation policy
 
-Version 0.4.0 remains frozen on the alpha.3 setup above. Alpha.4 and later alpha releases are not new adaptation targets. Compatibility work resumed with DSH `0.1.2-rc.1`; that cohort is included in the published `0.4.1-rc.1` prerelease and retained by the 0.4.2 release. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases; a newer tag does not establish support.
+Version 0.5.0 targets DSH `0.1.2-rc.1`; alpha releases are observed for trend only and are never adaptation or validation targets. A newer upstream tag does not establish support by itself; support starts when that exact RC or release is added as its own audited cohort with source, CI, and native acceptance. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases.
 
 ## Platform and release evidence
 
@@ -68,7 +68,7 @@ Market versions do not select a core cohort. Market restart has its own protocol
 
 The package exposes a named `apply(ctx)` function and a named `inject` array (`['sessions', 'commands']`) with no default export. Its `dsh.bundle.patch` points at `cordis.patch.yml`, which inserts the `context-guard` bundle row.
 
-The plugin accepts an `activation` configuration value of `opt-in` or `always`. The default is `opt-in`; `always` initializes the projection as enabled before the persisted session log is replayed. Invalid values fail during plugin configuration instead of silently falling back. A DSH profile can select `always` with an ID-targeted `config` override in its `cordis.patch.yml`; see the README quick start for the complete example and the replay implications for existing sessions.
+The plugin accepts an `activation` configuration value of `opt-in` or `always`. The default is `opt-in`; `always` means every session is protected automatically from its first real user message. Since 0.5.0, session start writes nothing into the session log: the versioned protocol boundary and first-step guidance are delivered inside the same step batch as — and ahead of — the first real user message, so a new session stays blank (`seq === 0`) and a DSH preset can be selected before anything is sent. An explicit `off` suppresses `always` in that session until the next `on`. Invalid values fail during plugin configuration instead of silently falling back. A DSH profile can select `always` with an ID-targeted `config` override in its `cordis.patch.yml`; see the README quick start for the complete example.
 
 ### Host-lock setup
 

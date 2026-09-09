@@ -2,9 +2,24 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## Unreleased
+## 0.5.0 - 2026-09-10
 
-- Restrict advertised DSH peer requirements to `0.1.2-rc.1 || 0.1.1-rc.2`. Market compatibility labels derive from these requirements, so alpha hosts are no longer advertised as installation targets. Historical alpha core graphs and exact runtime certification checks remain unchanged.
+### Changed
+
+- **`always` mode now protects from your first message instead of writing into brand-new sessions.** A freshly created session stays completely empty: the Guard no longer appends context messages when the session starts, so the session still looks new and a DSH session mode (standard, minimal, or a custom preset) can be chosen before anything is sent. Protection begins in the same step as the first real user message, ahead of that message — the first task, including its first file changes, is covered. A first message that only carries an image or an attachment also starts protection; a blank message starts nothing and creates no empty contract.
+- **A confirmation can carry follow-up text in the same reply.** The confirmation line `确认重绑定 <proposal ID>` may stand alone as the first line; an explanation request or a new task after a blank line keeps its own meaning, and a new task is captured like any other instruction. A confirmation buried inside a sentence, inside quotes, inside a code block, or followed by a reversal such as "先不要确认", does nothing — a reply either confirms cleanly or stays pending, never partially.
+- **Useless rebind confirmations are refused up front.** Splitting one uncertifiable requirement into clauses that are all equally uncertifiable returns "no certification gain" instead of producing a proposal that would spend a user confirmation without improving certification.
+- **Diagnosis names what is possible before what is missing.** Checkpoint, recovery, rebind, and status share one diagnosis per item: what kind of work it is, whether the current adapters can certify it, which target fields or evidence facets are missing, and one concrete next action. Questions such as "是否有更新" stay recorded with their source but report honestly that they cannot be machine-certified — finish them and report the answer — instead of being pushed into a rebind loop. Repeating an identical rejected attempt returns the same stable "unchanged" answer instead of a fresh rejection each time.
+
+### Added
+
+- **`context_guard_prepare` (read-only).** Before a stateful action it reports the supported command shape (from the same audited parser the executor uses), the required resolution/effect/state evidence order, reusable evidence references, the host capability verdict, and the exact missing target fields. It performs no action, and a guessed or default target is never treated as user authority.
+- **An action that already happened without its prestate evidence is reported as a historical gap**: the observed state can be read back, and repeating the action to mint missing evidence is explicitly not suggested.
+
+### Compatibility
+
+- The supported DSH target is exactly `0.1.2-rc.1` (with Cordis `4.0.2`). The active host allowlist contains that one audited core graph; alpha and older RC package sets are recorded as historical identities only, and an installed graph from those sets fails closed instead of certifying. npm peer dependencies accept only `0.1.2-rc.1`.
+- Sessions created before this version keep their stored messages, proposals, and certificates under their historical rules. The first message this version writes into such a session carries an explicit protocol boundary marking the cut; duties and certificates from before the cut are never reinterpreted. Upgrading does not remove previously injected messages.
 
 ## 0.4.3 - 2026-09-08
 

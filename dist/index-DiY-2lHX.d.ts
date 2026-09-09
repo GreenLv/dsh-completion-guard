@@ -54,6 +54,13 @@ declare function requestedTargetAuthorizesMutation(action: StatefulAction, reque
 declare function validateActionManifest(): string[];
 //#endregion
 //#region src/domain/rebind.d.ts
+interface RebindArgs {
+  operation: "propose" | "query" | "withdraw";
+  item_id?: string;
+  proposal_id?: string;
+  clauses?: string[];
+  clarification_item_ids?: string[];
+}
 interface RebindProposal {
   id: string;
   digest: string;
@@ -78,7 +85,56 @@ interface RebindProposal {
   status: "pending" | "confirmed" | "withdrawn" | "stale";
   confirmationEvent?: string;
   replacementIds?: string[];
+  /** Proposals created under the 0.5 protocol carry their replay schema. */
+  protocol?: "v050";
+  /** Matching control line observed during a non-durable replay (not applied). */
+  observedUnconfirmedEvent?: string;
 }
+/** Bounded alignment facts for a mismatched partition, budget-aware. */
+interface BoundedSource {
+  length: number;
+  sha256: string;
+  text?: string;
+  head?: string;
+  tail?: string;
+}
+/** Typed propose outcomes; `undefined` never hides WHY a proposal failed. */
+type ProposeOutcome = {
+  ok: true;
+  proposal: RebindProposal;
+} | {
+  ok: false;
+  reasonCode: "item_not_found" | "item_not_pending" | "unsupported_clarification" | "partition_mismatch" | "payload_too_large" | "no_certification_gain";
+  /** Bounded alignment facts for partition mismatches, within the 12 KiB budget. */
+  source?: BoundedSource;
+};
+/** Exact source partition is deliberately conservative: a proposal cannot
+* invent authority or silently discard a difficult acceptance clause. */
+declare function proposeRebind(p: GuardProjection, args: RebindArgs): RebindProposal | undefined;
+/** 0.5 proposer with typed failures and the no-certification-gain gate. */
+declare function proposeRebindOutcome(p: GuardProjection, args: RebindArgs): ProposeOutcome;
+/**
+* Frozen v0.4.2/v0.4.3 proposer: identical semantics to the 0.4 releases,
+* without the 0.5 no-gain gate or typed failures. Used ONLY to replay
+* historical tool results and historical confirmations faithfully.
+*/
+declare function proposeRebindV042(p: GuardProjection, args: RebindArgs): RebindProposal | undefined;
+/** Stable attempt key: item identity, exact inputs, and outcome class. Identical
+* retries collapse onto it no matter how many unrelated log rows intervene. */
+declare function rebindAttemptKey(args: RebindArgs, reasonCode: string): string;
+declare function rebindResponse(p: GuardProjection, args: RebindArgs): Record<string, unknown>;
+/**
+* Replay validation with version dispatch (A12): structured v0.5 results
+* match semantically (display text may evolve); results carrying the frozen
+* 0.4 response shapes validate against the frozen 0.4 rules exactly. Anything
+* else is tampered or unknown and never replays.
+*/
+declare function replayRebindResult(p: GuardProjection, args: RebindArgs, recorded: Record<string, unknown>): void;
+/** Invoked only for a canonical root user message, never tool or plugin text.
+* The single durable confirmation event is the atomic transaction commit:
+* the confirmation validates against the state BEFORE this message, and the
+* caller processes the remaining text afterwards with its own semantics. */
+declare function confirmRebind(p: GuardProjection, proposalId: string, eventId: string, durable: boolean): boolean;
 //#endregion
 //#region src/domain/digest.d.ts
 type TypedObject = {
@@ -173,6 +229,8 @@ interface GuardItem {
   targetCaptureReasonCode?: TargetCaptureReasonCode;
   authority?: "root_instruction" | "root_adoption" | "legacy_authority_unclassified";
   legacyFlags?: Array<"legacy_generic_run" | "legacy_authority_unclassified">;
+  /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
+  taskKind?: "inquiry" | "action";
   waitAuthorization?: WaitAuthorization;
   deferAuthorization?: DeferAuthorization;
   persistenceAuthorization?: PersistenceAuthorization;
@@ -304,9 +362,17 @@ interface GuardProjection {
     offendingEvidenceIds?: string[];
   }>;
   lastCheckpointRejectionRevision?: number;
+  /** Bounded fact about the latest rejected confirmation attempt (never raw text). */
+  lastConfirmationRejection?: {
+    eventSeq: number;
+    kind: "malformed" | "ambiguous";
+    reason: string;
+  };
   continuationAttempts: Map<number, number>;
   /** Process-local one-shot fallback counters keyed by epoch + contract revision. */
   persistenceCorrectionAttempts: Map<string, number>;
+  /** Log-derived count of rejected rebind attempts by stable attempt key; survives reload. */
+  rebindRejections: Map<string, number>;
   integrity: GuardIntegrity;
 }
 declare function createProjection(): GuardProjection;
@@ -326,6 +392,10 @@ interface DeriveResult {
   enablementTransitioned: boolean;
   /** Sequence of the last compaction summary in the log, or -1 when none. */
   lastCompactionSeq: number;
+  /** True when a real root user input (text or asset) is present while enabled. */
+  realRootInputSeen: boolean;
+  /** True when the durable log carries the 0.5 first-step protocol boundary. */
+  protocolV4Present: boolean;
 }
 interface DerivedEnvelope {
   seq: number;
@@ -454,6 +524,44 @@ interface CheckpointResult {
 }
 declare function certifyCheckpoint(projection: GuardProjection, bindings: EvidenceBinding[], id: string, commit?: boolean): CheckpointResult;
 //#endregion
+//#region src/domain/confirm-parse.d.ts
+/**
+* 0.5 confirmation-line grammar (A10/A11).
+*
+* A durable root message may carry AT MOST ONE rebind confirmation as a
+* restricted top-level control line; everything after it is follow-up content
+* processed with its own semantics. The parser is intentionally conservative:
+* - only the first non-empty top-level line can be a control line;
+* - lines inside code fences, quoted lines, and blockquote/forward wrappers
+*   are data, never control;
+* - an embedded or mid-sentence control string is `malformed`, never a
+*   confirmation;
+* - a matching control line that is NOT in first position, or an explicit
+*   reversal in the remainder, makes the whole message `ambiguous` (stays
+*   unconfirmed; no partial effect).
+*/
+type ParsedConfirmation = {
+  kind: "none";
+} | {
+  kind: "malformed";
+  reason: "embedded_control_text" | "inside_code_fence" | "quoted";
+} | {
+  kind: "ambiguous";
+  reason: "multiple_control_lines" | "late_control_line" | "reversal_in_remainder";
+} | {
+  kind: "confirm";
+  proposalId: string;
+  remainder: string;
+};
+declare const CONFIRM_LINE_PATTERN: RegExp;
+/**
+* Parse one canonical root user message for a rebind confirmation. Pure and
+* deterministic over the message text alone.
+*/
+declare function parseConfirmationMessage(text: string): ParsedConfirmation;
+/** Whether a recorded tool/result carries the frozen v0.4.x response shape. */
+declare function isFrozenV042RebindResponse(recorded: unknown): boolean;
+//#endregion
 //#region src/domain/conversation.d.ts
 type UserInteractionKind = "instruction" | "conversational";
 /**
@@ -469,6 +577,15 @@ type UserInteractionKind = "instruction" | "conversational";
 * forms, and finally a progression lead over a featureless remainder.
 */
 declare function classifyUserInteraction(text: string): UserInteractionKind;
+type TaskIntent = "inquiry" | "action";
+/**
+* Separate intent layer (v0.5): whether the captured work is an inquiry about
+* state or an ordered change. Intent NEVER drops capture or weakens
+* protection — an inquiry keeps its original obligation; it only changes what
+* certification support the diagnosis reports (inquiries are not machine
+* certifiable by the current adapters and must not be re-bound).
+*/
+declare function classifyTaskIntent(text: string): TaskIntent;
 //#endregion
 //#region src/domain/contract-segment.d.ts
 type AuthorityBlockKind = "instruction" | "reference" | "quoted" | "code" | "uncertain";
@@ -528,29 +645,24 @@ declare const ALPHA2_HOST_PACKAGES: PackageRow[];
 */
 declare const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[];
 /**
-* Audited host cohort registry. The rc.2 cohort keeps the exact identities
-* audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
-* exact package graph extracted from native macOS and Windows DSH
-* `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
-* cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
-* the graph audited in the 2026-09-01 annex. The rc.1 cohort carries the exact
-* runtime plus dshmarket 1.41.0 graph audited natively on macOS, then confirmed
-* on Windows: the 2026-09-04 native Windows rc.1 runtime graph (dshmarket
-* 1.41.0) was extracted from the runtime lockfile and verified row-for-row
-* identical (name, version, registry integrity) to the posix extraction before
-* this cohort was widened. Graphs that mix cohorts, lack
-* rows, duplicate rows, or use identities outside every registered cohort
-* fail closed.
+* Historical audited host cohort registry. Every entry keeps the exact package
+* identities audited natively for a past Guard release (CG-DSH-001 whole-graph
+* contracts). These are historical verification facts only: since 0.5.0 the
+* active support target is `0.1.2-rc.1`, so an installed graph from any of
+* these cohorts — including previous RCs and alphas — is no longer an active
+* support entry and fails closed in `evaluateHostLock`.
 */
 declare const LEGACY_HOST_COHORTS: readonly HostCohort[];
 /** Core-lock/v1 separates optional market identity from the audited DSH graph.
-* Legacy rows remain available for historical verification; they are never
-* silently re-labelled as a newly accepted core lock.
+* The active support target is exactly one audited cohort, `0.1.2-rc.1`:
+* historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
+* never silently re-labelled as accepted active locks, and an installed
+* historical graph fails closed under `evaluateHostLock`.
 */
 declare const HOST_COHORTS: readonly HostCohort[];
 /**
-* rc.2 audited package identities (first registry cohort). The audited
-* cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
+* rc.1 audited package identities: the active support cohort since 0.5.0. The
+* audited cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
 * duplicated, unknown-version, unbound, OR MISSING row fails the whole lock
 * closed (`host_lock_missing`); no capability inherits independence from a
 * partially present graph.
@@ -663,6 +775,14 @@ declare const DEFAULT_HOST_LOCK: HostLockEvaluation;
 declare const CAPTURE_V042_NOTICE = "Context Guard capture boundary: v0.4.2";
 declare const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
 /**
+* 0.5.0 first-step boundary: written at the first real root input step (never
+* at session start), before the constrained root message in the same batch.
+* It implies the v3 protocol and v0.4.2 capture semantics and marks the cut
+* where the 0.5 confirmation syntax becomes active; earlier notices keep
+* their historical meaning for replay.
+*/
+declare const PROTOCOL_V4_NOTICE = "Context Guard protocol boundary: v4.0.0";
+/**
 * Pure, deterministic re-derivation of the guard projection from the DSH
 * native event log. Context Guard never writes custom session events, so every
 * piece of state is derived from `command/run`, `user/message`, `tool/call`,
@@ -670,6 +790,50 @@ declare const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
 * `compaction/summary`.
 */
 declare function deriveProjection(sourceEvents: readonly DerivedEnvelope[], config: DeriveConfig, scope: DeriveScope, durableConfirmed: boolean, hostLock?: HostLockEvaluation): DeriveResult;
+//#endregion
+//#region src/domain/diagnostics.d.ts
+type TaskKind = "inquiry" | "action" | "deliverable" | "constraint" | "unresolved";
+type CertificationSupport = "supported" | "unsupported" | "needs_target" | "needs_evidence" | "unavailable";
+type Repairability = "agent_repairable" | "user_input_required" | "unsupported" | "historical_gap" | "none";
+interface DiagnosisNextAction {
+  kind: "report_only" | "collect_evidence" | "checkpoint" | "clarify_target" | "restore_host" | "none";
+  tool?: string;
+  required_input?: string;
+  resume_condition?: string;
+}
+/** The single unified diagnosis shared by checkpoint, recovery, rebind,
+* evidence/action, and status surfaces (v0.5). It states what certification
+* can do, never invents targets, evidence IDs, or authority. */
+interface UnifiedItemDiagnosis {
+  item_id: string;
+  item_revision: number;
+  contract_revision: number;
+  task_kind: TaskKind;
+  certification: CertificationSupport;
+  reason_code: string;
+  repairability: Repairability;
+  missing_fields: string[];
+  missing_facets: Array<"resolution" | "effect" | "state">;
+  next_action: DiagnosisNextAction;
+  /** Stable over unchanged inputs; identical retries collapse onto it. */
+  attempt_fingerprint: string;
+}
+/**
+* The pure repair judge. It decides between: fixable from existing evidence,
+* missing pre-evidence, missing a user target choice, not supported by any
+* adapter, an executed-without-evidence historical gap, or nothing to do —
+* and it NEVER recommends a rebind that cannot change certification.
+*/
+declare function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): UnifiedItemDiagnosis;
+/** Legacy compact view, now derived from the single unified diagnosis. */
+declare function itemDiagnosis(p: GuardProjection, item: GuardItem): {
+  certifiable: boolean;
+  reason_code: string;
+  next_step: string;
+};
+declare function evidenceAvailabilityReason(evidence: GuardEvidence): string | undefined;
+/** Shared display filter; certification remains the full domain check. */
+declare function relevantEvidence(p: GuardProjection, item: GuardItem, evidence: GuardEvidence): boolean;
 //#endregion
 //#region src/domain/evidence.d.ts
 interface ToolCallInput {
@@ -867,6 +1031,12 @@ interface LinearCommitReadback {
 * wildcard refspecs, and implicit HEAD/ref destinations fail closed because
 * none occur in an accepted exact shape.
 */
+/**
+* Canonical command templates, derived from the SAME audited argv shapes the
+* parser accepts above. Guidance surfaces (context_guard_prepare) render these
+* so a tool description can never advertise a command the executor rejects.
+*/
+declare const GIT_COMMAND_TEMPLATES: Partial<Record<GitAdapterAction, Record<string, unknown>>>;
 declare function parseGitCommandManifest(command: string, surface: CanonicalCommandSurface): GitCommandParseResult;
 /** Bind the command's explicit remote/ref identities to the canonical target. */
 declare function gitCommandMatchesTarget(manifest: GitCommandManifest, target: GitTargetIdentity): boolean;
@@ -951,6 +1121,76 @@ declare function hostLockContextFromComposedDump(text: string): {
   profileKind?: HostProfileKind;
 };
 declare function verifyComposedHostLockDump(text: string, expected: HostLockEvaluation, roots?: Pick<ActiveProfileHostLock, "runtimeRoot" | "profileRoot">): HostLockEvaluation;
+//#endregion
+//#region src/domain/lifecycle.d.ts
+/**
+* Runtime-owned startup lifecycle. It expresses the activation strategy of a
+* session, never contract or certification state: `armed` means protection is
+* enabled and waiting for the first real root user input, `active` means that
+* input has entered a step, and `disabled` means an explicit `off` (or an
+* opt-in session without `on`). Certification still depends only on durable
+* root events, the current contract, and the evidence chain.
+*/
+type LifecyclePhase = "armed" | "active" | "disabled";
+interface FirstStepInjection {
+  /** Versioned protocol boundary appended before this step's messages. */
+  boundary: string;
+  /** Compact first-step guidance describing the activated protection. */
+  guidance: string;
+}
+/** One claimed pre-step message: a validated host `UserMessage`. */
+interface ClaimedMessage {
+  source?: {
+    kind?: unknown;
+    plugin?: unknown;
+  };
+  content?: unknown;
+}
+/**
+* Pure preview of one claimed pre-step batch. Messages claimed by the loop are
+* NOT yet persisted as `user/message` events at pre-step time, so this reads
+* only the validated claim: it never writes contract items, evidence, or
+* authority. A message activates protection when it carries a root user source
+* and real content — non-empty text, or any non-text part (image/attachment).
+* Whitespace-only messages with no other parts are real input but state no
+* task, so they neither activate nor produce contract items.
+*/
+declare function claimedBatchHasRealRootInput(messages: readonly unknown[]): boolean;
+interface FirstStepPreviewInput {
+  activation: "opt-in" | "always";
+  /** Log-derived enablement: an explicit `off` suppresses `always` until `on`. */
+  enabled: boolean;
+  /** The durable log already contains a v4 (or newer) Guard boundary. */
+  boundaryPresent: boolean;
+  /** The session is a delegated/subagent session, never a root conversation. */
+  delegated: boolean;
+}
+/**
+* Pure decision for the first-step activation injection under `always`. The
+* boundary must precede the first constrained root message inside the SAME
+* persisted step batch; guidance is compact and never claims a recovery that
+* did not happen. `opt-in` never auto-injects: its explicit `on` command is
+* the user-visible acknowledgment. Delegated sessions receive neither: their
+* scope arrives through the parent's delegation prompt (A04).
+*/
+declare function previewFirstStepInjection(input: FirstStepPreviewInput, claimedRealInput: boolean): FirstStepInjection | undefined;
+/**
+* Compact first-step guidance: protection has started, what it protects, and
+* the working order for stateful actions. It is not a task, asks no question,
+* and contains no recovery wording.
+*/
+declare const FIRST_STEP_GUIDANCE = "Context Guard is now protecting this session: requirements from your messages stay open until they are certified with matching durable evidence. Before a stateful action (write, install, commit, push, publish, restart), call context_guard_prepare to see the supported command shape and required resolution/effect/state order; collect evidence with the guarded tools, then close items with context_guard_checkpoint. Ordinary answers and investigations need no certification.";
+/**
+* Lifecycle phase derived from durable facts. `enabled` is the log-derived
+* enablement (`always`, or the explicit `on`/`off` command sequence), and
+* `realInputSeen` records that a real root user input already entered a step.
+* Pure over its inputs so status display and tests cannot drift from the
+* injection decision.
+*/
+declare function lifecyclePhase(input: {
+  enabled: boolean;
+  realInputSeen: boolean;
+}): LifecyclePhase;
 //#endregion
 //#region src/domain/manifest.d.ts
 /**
@@ -1160,4 +1400,4 @@ declare function latestAssistantText(events: readonly {
 //#region src/domain/supersession.d.ts
 declare function supersedeItem(items: Map<string, GuardItem>, oldId: string, replacement: GuardItem): boolean;
 //#endregion
-export { packageRowsFromPnpmLock as $, BoundaryDisposition as $n, normalizeClause as $r, GOAL_HOST_PACKAGES as $t, createProofManifest as A, CheckpointResult as An, createProjection as Ar, parsePwshCommand as At, COMMAND_SURFACE_MANIFEST as B, extractMethod as Bn, SUPPORTED_EVIDENCE_ADAPTERS as Br, isDeterministicCheck as Bt, ProofKind as C, AuthorityBlock as Cn, PersistenceAuthorization as Cr, verifiedLinearCommitReadback as Ct, SessionQuery as D, segmentAuthorityBlocks as Dn, TargetValue as Dr, ShellParseStatus as Dt, ProofSurface as E, authorityCaptureCounts as En, TargetTuple as Er, ParsedShell as Et, EvidenceFacetCoverage as F, ClauseSegment as Fn, ActionSpec as Fr, ToolResultInput as Ft, ActiveProfileHostLock as G, BoundaryQualification as Gn, requestedTargetAuthorizesMutation as Gr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Gt, ManifestIssue as H, isInformationalMessage as Hn, StatefulAction as Hr, CAPTURE_V042_NOTICE as Ht, bindingSatisfies as I, captureClause as In, CERTIFICATE_VERSION as Ir, ToolSubject as It, hostLockContextFromComposedDump as J, GoalBoundaryAccess as Jn, semanticActionFromText as Jr, BASE_HOST_PACKAGES as Jt, HostProfileError as K, BoundaryRequest as Kn, requestedTargetMatchesResolved as Kr, ALPHA2_HOST_PACKAGES as Kt, evidenceCoverage as L, captureItem as Ln, SEMANTIC_ACTIONS as Lr, evidenceFromPersistedToolResult as Lt, proofEvidenceConstraints as M, certifyCheckpoint as Mn, ACTION_MANIFEST as Mr, goalCompletionDenial as Mt, sessionQuery as N, CaptureScope as Nn, ACTION_MANIFEST_VERSION as Nr, hasCurrentCertificate as Nt, bindProofToProjection as O, UserInteractionKind as On, VerificationContract as Or, canonicalArgvFromCommand as Ot, validateProofManifest as P, ClassifiedClause as Pn, ActionManifest as Pr, ToolCallInput as Pt, packageRowsFromActiveGraph as Q, qualifyBoundary as Qn, digestStrings as Qr, ExecutableIdentityBinding as Qt, evidenceMatchesItem as R, classifyClause as Rn, STATEFUL_ACTIONS as Rr, extractTextContent as Rt, PROOF_PROTOCOL_VERSION as S, currentContractDigest as Sn, HostStatus as Sr, revalidateGitPrestate as St, ProofObligation as T, AuthorityKind as Tn, TargetCaptureStatus as Tr, CanonicalCommandSurface as Tt, OperationVerbEntry as U, segmentClauses as Un, actionCompatible as Ur, PROTOCOL_V3_NOTICE as Ut, CommandSurfaceManifest as V, extractOperation as Vn, SemanticAction as Vr, withDurability as Vt, validateManifest as W, BoundaryEffectuation as Wn, isStatefulAction as Wr, deriveProjection as Wt, injectActiveProfileHostLock as X, effectuateBoundary as Xn, validateActionTarget as Xr, EXPECTED_HOST_PACKAGES as Xt, hostLockRowsFromComposedDump as Y, availableBoundaryQualifications as Yn, validateActionManifest as Yr, DEFAULT_HOST_LOCK as Yt, inspectTargetHostGraph as Z, isCurrentAcceptedBoundary as Zn, canonicalizePath as Zr, ExecutableIdentity as Zt, openItems as _, evaluateExternalWaitCapability as _n, GuardItem as _r, commitTreeSnapshotDigest as _t, classifyCompletionClaim as a, HostCohort as an, DerivedEnvelope as ar, GitAdapterAction as at, ALPHA3_HOST_PACKAGES as b, evaluateToolSurfaceCapability as bn, GuardOperation as br, gitCommandMatchesTarget as bt, isWholeTaskCompletionClaim as c, HostLockContext as cn, EvidenceParseStatus as cr, GitCommandParseResult as ct, snapshotSessionEvents as d, HostPlatform as dn, ExternalOperation as dr, GitEffectRunner as dt, sanitizeClauseText as ei, HOST_CAPABILITY_PACKAGE_GROUPS as en, BoundaryQualificationKind as er, readActiveHostGraph as et, RC1_HOST_PACKAGES as f, HostProfileKind as fn, GoalRef as fr, GitPrestateCheck as ft, closingHint as g, bindLiveGoalCapability as gn, GuardIntegrity as gr, commitIndexSnapshotDigest as gt, RecoveryOptions as h, bindExecutableIdentity as hn, GuardEvidence as hr, LinearCommitReadback as ht, TurnStoppingDecision as i, HostCapabilityRequest as in, DeriveScope as ir, GIT_COMMAND_MANIFEST_IDS as it, proofDigest as j, RejectedBinding as jn, PackageRow as jr, parseShellCommand as jt, canonicalProjection as k, classifyUserInteraction as kn, WaitAuthorization as kr, isRunExecutable as kt, latestAssistantText as l, HostLockEvaluation as ln, EvidenceRole as lr, GitCommandRejected as lt, MIN_RECOVERY_CHAR_BUDGET as m, LEGACY_HOST_COHORTS as mn, GuardCheckpoint as mr, GitTargetIdentity as mt, AssistantOutcomeObservation as n, sha256 as ni, HostCapabilityEvaluation as nn, DeriveConfig as nr, resolveInstalledHostLock as nt, decideTurnBoundary as o, HostCohortSelection as on, EvidenceBinding as or, GitCommandAccepted as ot, DEFAULT_RECOVERY_CHAR_BUDGET as p, HostToolSurface as pn, GuardBoundary as pr, GitPrestateEnvelope as pt, TargetHostGraph as q, GoalActivationState as qn, semanticActionFromCommand as qr, AuditedExecutable as qt, CompletionDisposition as r, HostCapabilityId as rn, DeriveResult as rr, verifyComposedHostLockDump as rt, decideTurnStopping as s, HostCohortSelectionReason as sn, EvidenceOutcome as sr, GitCommandManifest as st, supersedeItem as t, sanitizeUrl as ti, HOST_COHORTS as tn, DeferAuthorization as tr, resolveActiveProfileHostLock as tt, observeAssistantOutcome as u, HostLockStatus as un, ExpectedTransition as ur, GitEffectExecution as ut, recoveryDigest as v, evaluateHostCapability as vn, GuardItemKind as vr, createGitPrestateEnvelope as vt, ProofManifest as w, AuthorityBlockKind as wn, TargetCaptureReasonCode as wr, CanonicalArgv as wt, PROOF_KINDS as x, selectHostCohort as xn, GuardProjection as xr, parseGitCommandManifest as xt, renderRecoveryPacket as y, evaluateHostLock as yn, GuardItemStatus as yr, executeRevalidatedGitEffect as yt, isVerifyingCapability as z, extractArtifactPaths as zn, STOP_PROTOCOL_VERSION as zr, extractToolSubject as zt };
+export { ActiveProfileHostLock as $, isFrozenV042RebindResponse as $n, VerificationContract as $r, Repairability as $t, createProofManifest as A, semanticActionFromText as Ai, HostPlatform as An, DerivedEnvelope as Ar, parseGitCommandManifest as At, COMMAND_SURFACE_MANIFEST as B, selectHostCohort as Bn, GuardEvidence as Br, parseShellCommand as Bt, ProofKind as C, SemanticAction as Ci, HostCapabilityRequest as Cn, qualifyBoundary as Cr, GitTargetIdentity as Ct, SessionQuery as D, requestedTargetAuthorizesMutation as Di, HostLockContext as Dn, DeriveConfig as Dr, createGitPrestateEnvelope as Dt, ProofSurface as E, isStatefulAction as Ei, HostCohortSelectionReason as En, DeferAuthorization as Er, commitTreeSnapshotDigest as Et, EvidenceFacetCoverage as F, normalizeClause as Fi, bindLiveGoalCapability as Fn, ExpectedTransition as Fr, ParsedShell as Ft, ClaimedMessage as G, authorityCaptureCounts as Gn, GuardOperation as Gr, ToolSubject as Gt, ManifestIssue as H, AuthorityBlock as Hn, GuardItem as Hr, hasCurrentCertificate as Ht, bindingSatisfies as I, sanitizeClauseText as Ii, evaluateExternalWaitCapability as In, ExternalOperation as Ir, ShellParseStatus as It, FirstStepPreviewInput as J, UserInteractionKind as Jn, PersistenceAuthorization as Jr, extractToolSubject as Jt, FIRST_STEP_GUIDANCE as K, segmentAuthorityBlocks as Kn, GuardProjection as Kr, evidenceFromPersistedToolResult as Kt, evidenceCoverage as L, sanitizeUrl as Li, evaluateHostCapability as Ln, GoalRef as Lr, canonicalArgvFromCommand as Lt, proofEvidenceConstraints as M, validateActionTarget as Mi, HostToolSurface as Mn, EvidenceOutcome as Mr, verifiedLinearCommitReadback as Mt, sessionQuery as N, canonicalizePath as Ni, LEGACY_HOST_COHORTS as Nn, EvidenceParseStatus as Nr, CanonicalArgv as Nt, bindProofToProjection as O, requestedTargetMatchesResolved as Oi, HostLockEvaluation as On, DeriveResult as Or, executeRevalidatedGitEffect as Ot, validateProofManifest as P, digestStrings as Pi, bindExecutableIdentity as Pn, EvidenceRole as Pr, CanonicalCommandSurface as Pt, previewFirstStepInjection as Q, ParsedConfirmation as Qn, TargetValue as Qr, DiagnosisNextAction as Qt, evidenceMatchesItem as R, sha256 as Ri, evaluateHostLock as Rn, GuardBoundary as Rr, isRunExecutable as Rt, PROOF_PROTOCOL_VERSION as S, SUPPORTED_EVIDENCE_ADAPTERS as Si, HostCapabilityId as Sn, isCurrentAcceptedBoundary as Sr, GitPrestateEnvelope as St, ProofObligation as T, actionCompatible as Ti, HostCohortSelection as Tn, BoundaryQualificationKind as Tr, commitIndexSnapshotDigest as Tt, OperationVerbEntry as U, AuthorityBlockKind as Un, GuardItemKind as Ur, ToolCallInput as Ut, CommandSurfaceManifest as V, currentContractDigest as Vn, GuardIntegrity as Vr, goalCompletionDenial as Vt, validateManifest as W, AuthorityKind as Wn, GuardItemStatus as Wr, ToolResultInput as Wt, claimedBatchHasRealRootInput as X, classifyUserInteraction as Xn, TargetCaptureStatus as Xr, withDurability as Xt, LifecyclePhase as Y, classifyTaskIntent as Yn, TargetCaptureReasonCode as Yr, isDeterministicCheck as Yt, lifecyclePhase as Z, CONFIRM_LINE_PATTERN as Zn, TargetTuple as Zr, CertificationSupport as Zt, openItems as _, ActionSpec as _i, ExecutableIdentityBinding as _n, BoundaryRequest as _r, GitCommandParseResult as _t, classifyCompletionClaim as a, RebindArgs as ai, relevantEvidence as an, ClassifiedClause as ar, inspectTargetHostGraph as at, ALPHA3_HOST_PACKAGES as b, STATEFUL_ACTIONS as bi, HOST_COHORTS as bn, availableBoundaryQualifications as br, GitEffectRunner as bt, isWholeTaskCompletionClaim as c, proposeRebind as ci, PROTOCOL_V4_NOTICE as cn, captureItem as cr, readActiveHostGraph as ct, snapshotSessionEvents as d, rebindAttemptKey as di, ALPHA2_HOST_PACKAGES as dn, extractMethod as dr, verifyComposedHostLockDump as dt, WaitAuthorization as ei, TaskKind as en, parseConfirmationMessage as er, HostProfileError as et, RC1_HOST_PACKAGES as f, rebindResponse as fi, AuditedExecutable as fn, extractOperation as fr, GIT_COMMAND_MANIFEST_IDS as ft, closingHint as g, ActionManifest as gi, ExecutableIdentity as gn, BoundaryQualification as gr, GitCommandManifest as gt, RecoveryOptions as h, ACTION_MANIFEST_VERSION as hi, EXPECTED_HOST_PACKAGES as hn, BoundaryEffectuation as hr, GitCommandAccepted as ht, TurnStoppingDecision as i, ProposeOutcome as ii, itemDiagnosis as in, CaptureScope as ir, injectActiveProfileHostLock as it, proofDigest as j, validateActionManifest as ji, HostProfileKind as jn, EvidenceBinding as jr, revalidateGitPrestate as jt, canonicalProjection as k, semanticActionFromCommand as ki, HostLockStatus as kn, DeriveScope as kr, gitCommandMatchesTarget as kt, latestAssistantText as l, proposeRebindOutcome as li, deriveProjection as ln, classifyClause as lr, resolveActiveProfileHostLock as lt, MIN_RECOVERY_CHAR_BUDGET as m, ACTION_MANIFEST as mi, DEFAULT_HOST_LOCK as mn, segmentClauses as mr, GitAdapterAction as mt, AssistantOutcomeObservation as n, PackageRow as ni, deriveItemDiagnosis as nn, RejectedBinding as nr, hostLockContextFromComposedDump as nt, decideTurnBoundary as o, RebindProposal as oi, CAPTURE_V042_NOTICE as on, ClauseSegment as or, packageRowsFromActiveGraph as ot, DEFAULT_RECOVERY_CHAR_BUDGET as p, replayRebindResult as pi, BASE_HOST_PACKAGES as pn, isInformationalMessage as pr, GIT_COMMAND_TEMPLATES as pt, FirstStepInjection as q, TaskIntent as qn, HostStatus as qr, extractTextContent as qt, CompletionDisposition as r, BoundedSource as ri, evidenceAvailabilityReason as rn, certifyCheckpoint as rr, hostLockRowsFromComposedDump as rt, decideTurnStopping as s, confirmRebind as si, PROTOCOL_V3_NOTICE as sn, captureClause as sr, packageRowsFromPnpmLock as st, supersedeItem as t, createProjection as ti, UnifiedItemDiagnosis as tn, CheckpointResult as tr, TargetHostGraph as tt, observeAssistantOutcome as u, proposeRebindV042 as ui, ALPHA2_DSHMARKET_139_HOST_PACKAGES as un, extractArtifactPaths as ur, resolveInstalledHostLock as ut, recoveryDigest as v, CERTIFICATE_VERSION as vi, GOAL_HOST_PACKAGES as vn, GoalActivationState as vr, GitCommandRejected as vt, ProofManifest as w, StatefulAction as wi, HostCohort as wn, BoundaryDisposition as wr, LinearCommitReadback as wt, PROOF_KINDS as x, STOP_PROTOCOL_VERSION as xi, HostCapabilityEvaluation as xn, effectuateBoundary as xr, GitPrestateCheck as xt, renderRecoveryPacket as y, SEMANTIC_ACTIONS as yi, HOST_CAPABILITY_PACKAGE_GROUPS as yn, GoalBoundaryAccess as yr, GitEffectExecution as yt, isVerifyingCapability as z, evaluateToolSurfaceCapability as zn, GuardCheckpoint as zr, parsePwshCommand as zt };

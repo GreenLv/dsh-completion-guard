@@ -11,7 +11,10 @@ describe('0.4.2 bounded feedback regressions', () => {
     p.items.set('R001', captureClause('更新皮肤中心并在本地仓库记录', 'm1', 'R001', 1))
     const result = await createCheckpointTool(() => p, () => {}).execute({ bindings: [] }, undefined as never)
     expect(result).toMatchObject({ status: 'incomplete', open_items: [{ certifiable: false, reason_code: 'generic_run_non_certifiable' }] })
-    expect(JSON.stringify(result)).toContain('context_guard_rebind')
+    // v0.5: generic obligations name the honest-delivery repair condition
+    // instead of pointing at a rebind that cannot add certification.
+    expect(JSON.stringify(result)).toContain('fresh root-user instruction')
+    expect(JSON.stringify(result)).not.toContain('context_guard_rebind')
     expect(renderRecoveryPacket(p)).not.toContain('whitelisted executable')
   })
   it.each([50, 100, 200])('T06 bounds %i history rows to 12 KiB', async (count) => {
@@ -33,7 +36,7 @@ describe('0.4.2 bounded feedback regressions', () => {
       expect(packet.length).toBeLessThanOrEqual(charBudget)
       expect(packet).toContain('DO NOT')
       expect(packet).toContain('checkpoint')
-      expect(packet).toContain('context_guard_rebind')
+      expect(packet).toContain('uncertified')
     }
   })
 })

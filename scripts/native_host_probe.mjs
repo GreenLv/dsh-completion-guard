@@ -171,7 +171,10 @@ export function apply(ctx, config) {
         const proposed = await call('context_guard_rebind', { operation: 'propose', item_id: old.id,
           clauses: [old.text], clarification_item_ids: [clarified.id] })
         assert.equal(proposed.status, 'proposed')
-        await root(`确认重绑定 ${proposed.proposal.id}`)
+        // v0.5 confirmation transaction: control line first, trailing
+        // explanation request keeps its conversational meaning.
+        await root(`确认重绑定 ${proposed.proposal.id}\n\n这个提案是什么意思？请简单解释。`)
+        proposalId = proposed.proposal.id
         const resolution = await call('context_guard_evidence', { semantic_action: 'apply', evidence_role: 'resolution',
           selector: { package_id: 'guard-acceptance-fixture', version: '2.0.0', profile: config.profile },
           command_manifest: { manifest_id: 'dsh.plugin_add_tgz.apply.v1', tgz_path: config.fixtureTgz } })
@@ -194,17 +197,18 @@ export function apply(ctx, config) {
         operation = 'package_certificate_issued'
         assert.equal(certificate.status, 'certified')
       })
-      await check('generic_pending_and_rebind_roundtrip', async () => {
+      await check('generic_pending_and_rebind_no_gain_refusal', async () => {
         await root('更新演示插件并检查 GUI 效果')
         const pending = await call('context_guard_checkpoint', { bindings: [] })
         assert.equal(pending.status, 'incomplete')
         const item = pending.open_items.find(row => row.reason_code === 'generic_run_non_certifiable')
         assert.ok(item)
-        const proposal = await call('context_guard_rebind', { operation: 'propose', item_id: item.id, clauses: [item.text] })
-        assert.equal(proposal.status, 'proposed')
-        proposalId = proposal.proposal.id
-        await root(`确认重绑定 ${proposalId}`)
-        assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
+        // v0.5: splitting an already-generic requirement into identical
+        // generic clauses is refused instead of demanding a confirmation
+        // that cannot improve certification. The item stays pending.
+        const refusal = await call('context_guard_rebind', { operation: 'propose', item_id: item.id, clauses: [item.text] })
+        assert.equal(refusal.status, 'rejected')
+        assert.equal(refusal.reason_code, 'no_certification_gain')
         assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       })
       await check('history_pagination_roundtrip', async () => {

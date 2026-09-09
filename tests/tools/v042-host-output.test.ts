@@ -26,5 +26,13 @@ it('T11 materializes bounded checkpoint and proposal JSON through the real DSH T
   expect(JSON.parse(text)).toMatchObject({ status: 'incomplete', available_evidence: [{ omitted: true, adapter_disposition: 'unavailable' }] })
   const proposal = await runtime.execute({ callId: 'propose' as never, name: 'context_guard_rebind', arguments: { operation: 'propose', item_id: 'R1', clauses: ['更新演示包'] }, signal: new AbortController().signal })
   expect(proposal.isError).toBe(false)
-  expect(proposal.value).toMatchObject({ status: 'proposed' })
+  // A same-generic whole-text split buys no certification and must not cost
+  // a confirmation; the response stays within the bounded output contract.
+  expect(proposal.value).toMatchObject({ status: 'rejected', reason_code: 'no_certification_gain' })
+  expect(Buffer.byteLength(JSON.stringify(proposal.value))).toBeLessThanOrEqual(12288)
+  // A partition that would carry a supported action still proposes.
+  p.items.get('R1')!.semanticAction = 'install'
+  const gainful = await runtime.execute({ callId: 'propose2' as never, name: 'context_guard_rebind', arguments: { operation: 'propose', item_id: 'R1', clauses: ['更新演示包'] }, signal: new AbortController().signal })
+  expect(gainful.isError).toBe(false)
+  expect(gainful.value).toMatchObject({ status: 'proposed' })
 })

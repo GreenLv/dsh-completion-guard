@@ -425,7 +425,7 @@ describe('domain core', () => {
   it('round-trips a real Session log through derivation', () => {
     const session = Session.create(SessionId('integration-session'))
     ;(session as unknown as { append: (type: string, data: unknown) => unknown }).append('command/run', { commandId: 'cmd-1', name: 'context-guard', args: 'on', source: { kind: 'user' } })
-    const derived = deriveProjection(session.events as never, OPT_IN, {}, true)
+    const derived = deriveProjection(session.snapshotEvents() as never, OPT_IN, {}, true)
     expect(derived.projection.enabled).toBe(true)
     expect(derived.projection.epoch).toBe(1)
   })

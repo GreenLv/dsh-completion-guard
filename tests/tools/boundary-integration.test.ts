@@ -77,7 +77,7 @@ describe('typed boundary production sources', () => {
     const meta = external.output.presentationMeta?.(externalArgs, value as never)
     toolResult(session, 'external-read', value, meta)
 
-    let projection = deriveProjection(session.events as never, { activation: 'opt-in' }, {}, true).projection
+    let projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, {}, true).projection
     expect(availableBoundaryQualifications(projection)).toEqual([{
       id: 'bash-1', kind: 'external_operation_pending', disposition: 'external_wait', source: 'trusted_adapter', status: 'running',
     }])
@@ -89,7 +89,7 @@ describe('typed boundary production sources', () => {
     expect(boundaryValue).toMatchObject({ status: 'accepted' })
     toolResult(session, 'boundary-call', boundaryValue)
 
-    projection = deriveProjection(session.events as never, { activation: 'opt-in' }, {}, true).projection
+    projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, {}, true).projection
     expect(projection.boundaries).toHaveLength(1)
     expect(projection.boundaries[0]).toMatchObject({ persistedResult: 'accepted', qualificationIds: ['bash-1'] })
   })

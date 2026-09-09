@@ -70,6 +70,133 @@ function sanitizeUrl(value) {
 }
 
 //#endregion
+//#region src/domain/conversation.ts
+/**
+* Punctuation and whitespace that may surround a bare progression phrase
+* without turning it into sentence content.
+*/
+const PUNCT = String.raw`[\s。，、；：！？．,;:!?\-*"'“”‘’()（）.…～~]`;
+/**
+* Session-layer phrases that acknowledge or advance the conversation without
+* stating a task. Longer forms come first so the alternation consumes them
+* before their prefixes.
+*/
+const PROGRESSION_SOURCE = String.raw`(?:继续执行|继续吧|请继续|继续|接着做|接着|下一步|没问题|知道了|明白了|了解|好的?|是的?|对的?|收到|可以|行|嗯+|continue|go on|go ahead|keep going|proceed|okay|ok|yes|sure|right|next)`;
+const PROGRESSION_WHOLE = new RegExp(`^${PUNCT}*${PROGRESSION_SOURCE}${PUNCT}*$`, "i");
+const PROGRESSION_LEAD = new RegExp(`^${PROGRESSION_SOURCE}${PUNCT}+`, "i");
+const PROGRESSION_ANYWHERE = new RegExp(PROGRESSION_SOURCE, "gi");
+/**
+* Clause-leading prohibition keywords. A message that opens with one is a
+* captured prohibition, never a meta comment.
+*/
+const PROHIBITION_LEAD = /^(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得)/i;
+/**
+* Question markers: a question mark, an interrogative pronoun/particle, or an
+* explicit request-for-answer phrase.
+*/
+const QUESTION_TERMS = /[？?]|什么|为什么|怎么|如何|是否|是不是|哪|谁|啥|吗|呢|对不对|正常吗|bug吗|有问题吗|有必要|合理吗|可否|能否|能不能|请问|问一下/;
+/**
+* Meta-comment/objection leads (no question mark required). `不是` requires
+* trailing punctuation so negated statements ("不是都要推送") stay fail-closed.
+*/
+const META_COMMENT_LEAD = /^(?:不是[，,。；;：:\s]|你(?:这|光|啥|怎么|什么|到底|就)|我(?:只是|就是|想|问|建议|认为|觉得)|这(?:有|什么)意义|有什么用|有什么意义)/;
+/** Diagnostic/inspection verbs: mentioning them alone is never a task feature. */
+const META_VERBS = /确认下|看看|看一下|想问|确认|验证|检查|查看|分析|解释|说明|排查|定位|诊断|评估|考虑|建议|讨论|复查|核对|盘点|复盘|问|看/g;
+/**
+* Operation verbs that indicate a real task effect. English verbs are
+* word-bounded so "latest" does not contain "test". The classifier vocabulary
+* is intentionally independent from the command-surface manifest.
+*/
+const OPERATION_VERBS = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|整理|总结|记录|更新|修复|改进|解决|处理|推送|发布|安装|升级|提交|下载|上传|拉取|同步|部署|重启|测试|写|\b(?:build|create|write|modify|run|fix|update|install|push|publish|test)\b/gi;
+const NEGATIONS = /没有|并无|不存在|无需|不用|不需要|尚未|还未|没|未|不是/;
+function excludedRanges(text) {
+	const ranges = [];
+	for (const pattern of [PROGRESSION_ANYWHERE, META_VERBS]) {
+		pattern.lastIndex = 0;
+		for (const match of text.matchAll(pattern)) {
+			const start = match.index;
+			ranges.push([start, start + match[0].length]);
+		}
+	}
+	return ranges;
+}
+/** The negation filter is scoped to the clause (sentence or comma segment). */
+function isNegatedInClause(text, verbStart) {
+	const clause = text.slice(0, verbStart).split(/[。！？；.!?;，,\r\n]/).pop() ?? "";
+	return NEGATIONS.test(clause);
+}
+function hasOperationVerb(text) {
+	const excluded = excludedRanges(text);
+	for (const match of text.matchAll(OPERATION_VERBS)) {
+		const start = match.index;
+		if (excluded.some(([from, to]) => start >= from && start < to)) continue;
+		if (isNegatedInClause(text, start)) continue;
+		return true;
+	}
+	return false;
+}
+function hasStrongTaskFeature(text) {
+	if (extractArtifactPaths(text).length > 0) return true;
+	if (extractMethod(text) !== void 0) return true;
+	return hasOperationVerb(text);
+}
+/**
+* Classify a direct user message (or one clause of it) as an actionable
+* `instruction` or a session-layer `conversational` utterance. Only
+* conversational results drop capture, so the classifier fails closed:
+* everything it cannot confidently recognize as session-layer talk stays an
+* instruction and is captured exactly as before.
+*
+* Order matters: progression and prohibition leads first, then strong task
+* features (artifact path, explicit method, or a non-negated operation verb
+* outside progression/meta spans), then the meta-question and meta-comment
+* forms, and finally a progression lead over a featureless remainder.
+*/
+function classifyUserInteraction(text) {
+	const normalized = normalizeClause(text);
+	if (!normalized) return "instruction";
+	if (PROGRESSION_WHOLE.test(normalized)) return "conversational";
+	if (PROHIBITION_LEAD.test(normalized)) return "instruction";
+	if (hasStrongTaskFeature(normalized)) return "instruction";
+	if (QUESTION_TERMS.test(normalized)) return "conversational";
+	if (META_COMMENT_LEAD.test(normalized)) return "conversational";
+	if (PROGRESSION_LEAD.test(normalized)) return "conversational";
+	return "instruction";
+}
+/**
+* Inquiry verbs: the operation verb appears as the OBJECT of an
+* investigation rather than an imperative ("是否有更新", "check whether…").
+* The clause asks about state; it does not order a change.
+*/
+const INQUIRY_PATTERNS = [
+	/(?:是否|有没有|有没|是否存在|是不是已经?|可曾|曾否)[^。！？；，,]{0,12}(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启|生成|写入)/,
+	/(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启)(?:了)?(?:吗|么|没有|没)\s*[?？]?\s*$/,
+	/^(?:检查|看看|查看|确认|了解|查一下|帮忙看)[^。！？；]{0,16}(?:是否|有没有|是否已经)/,
+	/\b(?:is|are)\s+there\s+(?:any|an?)?\s*(?:update|updates|upgrade|commit|push|change|fix)/i,
+	/\bcheck\s+(?:whether|if)\b/i,
+	/\bwhether\b[^.?!]{0,24}\b(?:update|upgrade|commit|push|install|change)/i
+];
+/**
+* Imperative leads that keep an ACTION reading even when the clause also
+* contains an inquiry verb ("更新后检查" orders a change first).
+*/
+const ACTION_LEAD = /^(?:请\s*)?(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|同步|拉取|下载|重启|生成|写入|创建|新建|运行|执行|部署)\b|^(?:please\s+)?(?:update|upgrade|commit|push|publish|install|modify|delete|fix|deploy|run|create)\b/i;
+/**
+* Separate intent layer (v0.5): whether the captured work is an inquiry about
+* state or an ordered change. Intent NEVER drops capture or weakens
+* protection — an inquiry keeps its original obligation; it only changes what
+* certification support the diagnosis reports (inquiries are not machine
+* certifiable by the current adapters and must not be re-bound).
+*/
+function classifyTaskIntent(text) {
+	const normalized = normalizeClause(text);
+	if (!normalized) return "action";
+	if (ACTION_LEAD.test(normalized)) return "action";
+	for (const pattern of INQUIRY_PATTERNS) if (pattern.test(normalized)) return "inquiry";
+	return "action";
+}
+
+//#endregion
 //#region src/domain/manifest.ts
 const COMMAND_SURFACE_MANIFEST = {
 	fileTools: [
@@ -887,6 +1014,7 @@ function captureItem(kind, body, sourceMessageId, id, revision, subject, surface
 		requestedTarget: capturedTarget.target,
 		targetCaptureStatus: capturedTarget.reasonCode ? "clarification_required" : "resolved",
 		...capturedTarget.reasonCode ? { targetCaptureReasonCode: capturedTarget.reasonCode } : {},
+		taskKind: kind === "prohibition" ? void 0 : classifyTaskIntent(sanitized),
 		authority: "root_instruction"
 	};
 	if (/(?:等待|暂停|等).{0,12}(?:用户|你|您|我).{0,12}(?:选择|确认|输入)(?:.{0,8}(?:后|再)?继续)?|收到.{0,8}(?:用户|你|您|我)?的?确认.{0,8}(?:后)?再继续|\bwait for (?:the )?(?:user|your)\b|\bcontinue only after (?:the )?(?:user's?|your) confirmation\b/i.test(sanitized)) item.waitAuthorization = {
@@ -920,25 +1048,376 @@ function captureClause(text, sourceMessageId, id, revision, scope = {}) {
 }
 
 //#endregion
+//#region src/domain/diagnostics.ts
+/** Bounded, honest task-kind classification for a captured item. */
+function taskKindOf(item) {
+	if (item.kind === "prohibition") return "constraint";
+	if (item.taskKind === "inquiry") return "inquiry";
+	return "action";
+}
+const TARGET_FIELD_REASONS = {
+	requested_target_package_id_missing: "package_id",
+	requested_target_artifact_id_missing: "artifact_id",
+	requested_target_repository_missing: "repository",
+	requested_target_service_id_missing: "service_id",
+	requested_target_registry_missing_or_invalid: "registry"
+};
+function evidenceFacets(p, item) {
+	const present = /* @__PURE__ */ new Set();
+	for (const evidence of p.evidence.values()) {
+		if (!relevantEvidence(p, item, evidence)) continue;
+		if (evidence.evidenceRole) present.add(evidence.evidenceRole);
+	}
+	return [
+		"resolution",
+		"effect",
+		"state"
+	].filter((facet) => !present.has(facet));
+}
+/**
+* The pure repair judge. It decides between: fixable from existing evidence,
+* missing pre-evidence, missing a user target choice, not supported by any
+* adapter, an executed-without-evidence historical gap, or nothing to do —
+* and it NEVER recommends a rebind that cannot change certification.
+*/
+function deriveItemDiagnosis(p, item) {
+	const kind = taskKindOf(item);
+	const missing_facets = item.status === "pending" && kind !== "constraint" ? evidenceFacets(p, item) : [];
+	const base = {
+		item_id: item.id,
+		item_revision: item.revision,
+		contract_revision: p.contractRevision,
+		task_kind: kind,
+		missing_facets
+	};
+	if (item.kind === "prohibition") return {
+		...base,
+		certification: "unsupported",
+		reason_code: "prohibition_active",
+		repairability: "none",
+		missing_fields: [],
+		next_action: {
+			kind: "none",
+			resume_condition: "Keep this constraint enforced; it is not a completion evidence obligation."
+		},
+		attempt_fingerprint: fingerprint(p, item, "prohibition_active")
+	};
+	const action = item.semanticAction ?? "generic_run";
+	if (item.status === "passed") return {
+		...base,
+		certification: "supported",
+		reason_code: "certified",
+		repairability: "none",
+		missing_fields: [],
+		next_action: {
+			kind: "none",
+			resume_condition: "No further binding needed."
+		},
+		attempt_fingerprint: fingerprint(p, item, "certified")
+	};
+	if (action !== "generic_run" && !item.legacyFlags?.length && item.targetCaptureStatus === "clarification_required") {
+		const missingFields = item.targetCaptureReasonCode ? [TARGET_FIELD_REASONS[item.targetCaptureReasonCode] ?? item.targetCaptureReasonCode] : [];
+		return {
+			...base,
+			certification: "needs_target",
+			reason_code: "target_clarification_required",
+			repairability: "user_input_required",
+			missing_fields: missingFields,
+			next_action: {
+				kind: "clarify_target",
+				tool: "context_guard_prepare",
+				required_input: missingFields.length > 0 ? `the exact ${missingFields.join(" and ")} for this action` : "the exact target fields for this action",
+				resume_condition: "A root-user instruction supplying the exact target re-enables certification."
+			},
+			attempt_fingerprint: fingerprint(p, item, "target_clarification_required")
+		};
+	}
+	if (action === "generic_run" || item.legacyFlags?.length) {
+		if (kind === "inquiry") return {
+			...base,
+			certification: "unsupported",
+			reason_code: "inquiry_non_certifiable",
+			repairability: "unsupported",
+			missing_fields: [],
+			next_action: {
+				kind: "report_only",
+				resume_condition: "Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this."
+			},
+			attempt_fingerprint: fingerprint(p, item, "inquiry_non_certifiable")
+		};
+		return {
+			...base,
+			certification: "unsupported",
+			reason_code: "generic_run_non_certifiable",
+			repairability: "user_input_required",
+			missing_fields: [],
+			next_action: {
+				kind: "report_only",
+				required_input: "a concrete supported action and target for this obligation",
+				resume_condition: "A fresh root-user instruction naming a supported action and exact target replaces the generic obligation; identical re-phrasing changes nothing."
+			},
+			attempt_fingerprint: fingerprint(p, item, "generic_run_non_certifiable")
+		};
+	}
+	if (p.hostStatus !== "supported") return {
+		...base,
+		certification: "unavailable",
+		reason_code: "host_unavailable",
+		repairability: "unsupported",
+		missing_fields: [],
+		next_action: {
+			kind: "restore_host",
+			resume_condition: "Restore the audited host cohort; keep pending work visible at a qualified safe boundary."
+		},
+		attempt_fingerprint: fingerprint(p, item, "host_unavailable")
+	};
+	if (ACTION_MANIFEST.actions[action].evidenceProducer !== "supported") return {
+		...base,
+		certification: "unavailable",
+		reason_code: "adapter_unavailable",
+		repairability: "unsupported",
+		missing_fields: [],
+		next_action: {
+			kind: "restore_host",
+			resume_condition: "The audited adapter for this action is unavailable in the installed cohort."
+		},
+		attempt_fingerprint: fingerprint(p, item, "adapter_unavailable")
+	};
+	if (missing_facets.includes("resolution") && !missing_facets.includes("effect")) return {
+		...base,
+		certification: "unsupported",
+		reason_code: "historical_evidence_gap",
+		repairability: "historical_gap",
+		missing_fields: [],
+		next_action: {
+			kind: "report_only",
+			resume_condition: "Record the observed state as read-only fact; do not repeat the action to mint missing prestate evidence."
+		},
+		attempt_fingerprint: fingerprint(p, item, "historical_evidence_gap")
+	};
+	return {
+		...base,
+		certification: "needs_evidence",
+		reason_code: "missing_evidence",
+		repairability: "agent_repairable",
+		missing_fields: [],
+		next_action: {
+			kind: "collect_evidence",
+			tool: "context_guard_prepare",
+			resume_condition: "Collect the matching durable evidence in resolution/effect/state order, then checkpoint."
+		},
+		attempt_fingerprint: fingerprint(p, item, "missing_evidence")
+	};
+}
+function fingerprint(p, item, reason) {
+	return sha256(JSON.stringify([
+		item.id,
+		item.revision,
+		p.contractRevision,
+		reason,
+		item.verification.subject ?? null
+	]));
+}
+/** Legacy compact view, now derived from the single unified diagnosis. */
+function itemDiagnosis(p, item) {
+	const diagnosis = deriveItemDiagnosis(p, item);
+	const nextStep = diagnosis.next_action.resume_condition ?? (diagnosis.next_action.kind === "collect_evidence" ? "Collect matching durable evidence, then call context_guard_checkpoint with bindings." : diagnosis.next_action.required_input) ?? "No further action needed.";
+	return {
+		certifiable: diagnosis.reason_code === "missing_evidence" || diagnosis.reason_code === "certified",
+		reason_code: diagnosis.reason_code,
+		next_step: nextStep
+	};
+}
+const NATIVE_ADAPTERS = new Set([
+	"dsh.bash.v1",
+	"dsh.pwsh.v1",
+	"dsh.shell.v1",
+	"dsh.read.v1",
+	"dsh.write.v1",
+	"dsh.edit.v1",
+	"dsh.web.v1"
+]);
+function evidenceAvailabilityReason(evidence) {
+	if (evidence.parseStatus !== "supported") return evidence.reasonCode ?? evidence.parseStatus ?? "adapter_unavailable";
+	if (!evidence.adapterId || !evidence.adapterVersion || (SUPPORTED_EVIDENCE_ADAPTERS[evidence.adapterId] ?? (NATIVE_ADAPTERS.has(evidence.adapterId) ? "1.0.0" : void 0)) !== evidence.adapterVersion) return "adapter_unavailable";
+	if (evidence.outcome !== "success") return "evidence_outcome_not_success";
+	if (!evidence.semanticAction || evidence.semanticAction === "generic_run") return "generic_run_non_certifiable";
+}
+/** Shared display filter; certification remains the full domain check. */
+function relevantEvidence(p, item, evidence) {
+	const action = item.semanticAction;
+	if (!action || action === "generic_run" || !actionCompatible(action, evidence.semanticAction ?? "generic_run") || evidence.epoch !== p.epoch || evidenceAvailabilityReason(evidence) !== void 0) return false;
+	if (item.reboundFrom) {
+		const source = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+		if (!source || evidence.toolResultSeq < Number(source[1])) return false;
+	}
+	if (isStatefulAction(action)) return requestedTargetMatchesResolved(action, item.requestedTarget, evidence.resolvedTarget);
+	const value = (entry) => JSON.stringify(entry && typeof entry === "object" && "v" in entry ? entry.v : entry);
+	return !!item.requestedTarget && Object.entries(item.requestedTarget).every(([key, entry]) => evidence.resolvedTarget && value(entry) === value(evidence.resolvedTarget[key]));
+}
+
+//#endregion
+//#region src/domain/confirm-parse.ts
+const CONFIRM_LINE_PATTERN = /^确认重绑定 (RB-[a-f0-9]{24})$/;
+const REVERSAL_LEAD = /^(?:不要确认|请勿确认|取消(?:确认|刚才的)?|撤销(?:确认|刚才的)?|先不(?:要)?确认|暂不确认|先别确认|别确认)/;
+function classifyLines(text) {
+	let fenced = false;
+	return text.split(/\r?\n/).map((raw) => {
+		const trimmed = raw.trim();
+		if (/^(?:```|~~~)/.test(trimmed)) fenced = !fenced;
+		const isFenceRow = fenced || /^(?:```|~~~)/.test(trimmed);
+		return {
+			text: trimmed,
+			blank: trimmed.length === 0,
+			fenced: isFenceRow,
+			quoted: trimmed.startsWith(">")
+		};
+	});
+}
+/**
+* Parse one canonical root user message for a rebind confirmation. Pure and
+* deterministic over the message text alone.
+*/
+function parseConfirmationMessage(text) {
+	const content = classifyLines(text).filter((line) => !line.blank && !line.fenced);
+	if (content.length === 0) return { kind: "none" };
+	const controlLines = content.filter((line) => CONFIRM_LINE_PATTERN.test(line.text));
+	const mentionsControl = content.filter((line) => /确认重绑定|RB-[a-f0-9]{24}/.test(line.text));
+	const first = content[0];
+	if (first.quoted || /^["“'『「].*["”'』」]$/.test(first.text)) return mentionsControl.length > 0 ? {
+		kind: "malformed",
+		reason: "quoted"
+	} : { kind: "none" };
+	if (CONFIRM_LINE_PATTERN.test(first.text)) {
+		if (controlLines.length > 1) return {
+			kind: "ambiguous",
+			reason: "multiple_control_lines"
+		};
+		const remainderLines = content.slice(1).map((line) => line.text);
+		if (remainderLines.some((line) => CONFIRM_LINE_PATTERN.test(line) || /确认重绑定|RB-[a-f0-9]{24}/.test(line))) return {
+			kind: "ambiguous",
+			reason: "multiple_control_lines"
+		};
+		const remainder = remainderLines.join("\n").trim();
+		if (remainder && REVERSAL_LEAD.test(remainder)) return {
+			kind: "ambiguous",
+			reason: "reversal_in_remainder"
+		};
+		return {
+			kind: "confirm",
+			proposalId: CONFIRM_LINE_PATTERN.exec(first.text)[1],
+			remainder
+		};
+	}
+	if (controlLines.length > 0) return {
+		kind: "ambiguous",
+		reason: "late_control_line"
+	};
+	if (mentionsControl.length > 0) return {
+		kind: "malformed",
+		reason: "embedded_control_text"
+	};
+	return { kind: "none" };
+}
+/** Whether a recorded tool/result carries the frozen v0.4.x response shape. */
+function isFrozenV042RebindResponse(recorded) {
+	if (!recorded || typeof recorded !== "object") return false;
+	const nextStep = recorded.next_step;
+	if (typeof nextStep !== "string") return false;
+	return nextStep.startsWith("Root user must reply exactly: 确认重绑定 ") || nextStep === "Supply 1-8 exact consecutive clauses covering the original text, including unsupported work; the proposal must fit 8 KiB. Clarification that changes meaning requires a new root-user instruction." || nextStep === "Propose again against the current contract.";
+}
+
+//#endregion
 //#region src/domain/rebind.ts
+/** Whether the partition changes certification at all: a same-generic split
+* is organizational at best and must not cost a user confirmation. */
+function certificationGain(item, candidates) {
+	if ((item.semanticAction ?? "generic_run") !== "generic_run") return true;
+	return candidates.some((candidate) => candidate.action !== void 0 && candidate.action !== "generic_run");
+}
 function preservesIdentity(old, clarified) {
 	const keys = Object.entries(old.requestedTarget ?? {}).filter(([key]) => key !== "scope");
 	const unwrap = (value) => JSON.stringify(value && typeof value === "object" && "v" in value ? value.v : value);
 	return keys.every(([key, value]) => unwrap(value) === unwrap(clarified.requestedTarget?.[key])) && (!old.verification.method || old.verification.method === clarified.verification.method) && (old.verification.surface !== "artifact" || old.verification.subject === clarified.verification.subject);
 }
+function validateProposalShape(item, args) {
+	const clauses = args.clauses;
+	const clarificationItemIds = args.clarification_item_ids ?? [];
+	if (!item) return {
+		ok: false,
+		reasonCode: "item_not_found"
+	};
+	if (item.status !== "pending") return {
+		ok: false,
+		reasonCode: "item_not_pending"
+	};
+	if (item.kind === "prohibition" || !item.authority || item.authority === "legacy_authority_unclassified") return {
+		ok: false,
+		reasonCode: "unsupported_clarification"
+	};
+	if (!Array.isArray(clauses) || clauses.length < 1 || clauses.length > 8 || clauses.some((s) => typeof s !== "string" || !s.trim() || s.length > 2048)) return {
+		ok: false,
+		reasonCode: "partition_mismatch"
+	};
+	if (clauses.join("") !== item.normalizedText) {
+		const source = boundedSource(item.normalizedText);
+		return {
+			ok: false,
+			reasonCode: "partition_mismatch",
+			...source ? { source } : {}
+		};
+	}
+	if (clarificationItemIds.length !== 0 && clarificationItemIds.length !== clauses.length || new Set(clarificationItemIds.filter(Boolean)).size !== clarificationItemIds.filter(Boolean).length) return {
+		ok: false,
+		reasonCode: "partition_mismatch"
+	};
+}
 /** Exact source partition is deliberately conservative: a proposal cannot
 * invent authority or silently discard a difficult acceptance clause. */
 function proposeRebind(p, args) {
+	const outcome = proposeRebindOutcome(p, args);
+	return outcome.ok ? outcome.proposal : void 0;
+}
+/** 0.5 proposer with typed failures and the no-certification-gain gate. */
+function proposeRebindOutcome(p, args) {
 	const item = p.items.get(args.item_id ?? "");
-	const clauses = args.clauses;
 	const clarificationItemIds = args.clarification_item_ids ?? [];
-	if (!item || item.status !== "pending" || item.kind === "prohibition" || !item.authority || item.authority === "legacy_authority_unclassified" || !Array.isArray(clauses) || clauses.length < 1 || clauses.length > 8 || clauses.some((s) => typeof s !== "string" || !s.trim() || s.length > 2048) || clauses.join("") !== item.normalizedText || clarificationItemIds.length !== 0 && clarificationItemIds.length !== clauses.length || new Set(clarificationItemIds.filter(Boolean)).size !== clarificationItemIds.filter(Boolean).length) return void 0;
+	const shape = validateProposalShape(item, args);
+	if (shape) return shape;
 	for (const [index, id] of clarificationItemIds.entries()) {
 		if (!id) continue;
 		const clarified = p.items.get(id);
-		if (!clarified || clarified.id === item.id || clarified.status !== "pending" || clarified.reboundFrom || clarified.revision <= item.revision || clarified.sourceMessageId === item.sourceMessageId || clarified.authority !== "root_instruction" || clarified.legacyFlags?.length || clarified.kind !== item.kind || !clarified.normalizedText.includes(clauses[index].trim()) || !preservesIdentity(item, clarified) || /GUI|界面|视觉|截图|颜色|效果|布局/i.test(clauses[index]) && clarified.semanticAction !== "generic_run") return void 0;
+		const clause = args.clauses[index];
+		if (!clarified || clarified.id === item.id || clarified.status !== "pending" || clarified.reboundFrom || clarified.revision <= item.revision || clarified.sourceMessageId === item.sourceMessageId || clarified.authority !== "root_instruction" || clarified.legacyFlags?.length || clarified.kind !== item.kind || !clarified.normalizedText.includes(clause.trim()) || !preservesIdentity(item, clarified) || /GUI|界面|视觉|截图|颜色|效果|布局/i.test(clause) && clarified.semanticAction !== "generic_run") return {
+			ok: false,
+			reasonCode: "unsupported_clarification"
+		};
 	}
-	const candidates = clauses.map((clause, index) => {
+	const candidates = buildCandidates(p, item, args.clauses, clarificationItemIds);
+	if (!certificationGain(item, candidates)) return {
+		ok: false,
+		reasonCode: "no_certification_gain"
+	};
+	const body = proposalBody(p, item, args.clauses, clarificationItemIds, candidates);
+	if (Buffer.byteLength(JSON.stringify(body), "utf8") > 8192) return {
+		ok: false,
+		reasonCode: "payload_too_large"
+	};
+	const digest$1 = sha256(JSON.stringify(body));
+	const normalized = JSON.parse(JSON.stringify(body));
+	return {
+		ok: true,
+		proposal: {
+			id: `RB-${digest$1.slice(0, 24)}`,
+			digest: digest$1,
+			...normalized,
+			status: "pending",
+			protocol: "v050"
+		}
+	};
+}
+function buildCandidates(p, item, clauses, clarificationItemIds) {
+	return clauses.map((clause, index) => {
 		const root = p.items.get(clarificationItemIds[index] ?? "");
 		const captured = root ?? captureItem(item.kind, clause, item.sourceMessageId, "candidate", item.revision, item.verification.subject ?? "scope", item.verification.surface === "artifact" ? "artifact" : "scope", item.verification.method, item.verification.operation);
 		return {
@@ -951,7 +1430,9 @@ function proposeRebind(p, args) {
 			rootRevision: root?.revision ?? null
 		};
 	});
-	const body = {
+}
+function proposalBody(p, item, clauses, clarificationItemIds, candidates) {
+	return {
 		session: p.sessionRefDigest,
 		epoch: p.epoch,
 		contractRevision: p.contractRevision,
@@ -963,6 +1444,39 @@ function proposeRebind(p, args) {
 		clarificationItemIds,
 		candidates
 	};
+}
+/** Bounded alignment facts for a mismatched partition, budget-aware. */
+function boundedSource(text) {
+	const sha = sha256(text);
+	if (Buffer.byteLength(text, "utf8") <= 4096) return {
+		length: text.length,
+		sha256: sha,
+		text
+	};
+	return {
+		length: text.length,
+		sha256: sha,
+		head: text.slice(0, 200),
+		tail: text.slice(-200)
+	};
+}
+/**
+* Frozen v0.4.2/v0.4.3 proposer: identical semantics to the 0.4 releases,
+* without the 0.5 no-gain gate or typed failures. Used ONLY to replay
+* historical tool results and historical confirmations faithfully.
+*/
+function proposeRebindV042(p, args) {
+	const item = p.items.get(args.item_id ?? "");
+	const clarificationItemIds = args.clarification_item_ids ?? [];
+	if (validateProposalShape(item, args)) return void 0;
+	for (const [index, id] of clarificationItemIds.entries()) {
+		if (!id) continue;
+		const clarified = p.items.get(id);
+		const clause = args.clauses[index];
+		if (!clarified || clarified.id === item.id || clarified.status !== "pending" || clarified.reboundFrom || clarified.revision <= item.revision || clarified.sourceMessageId === item.sourceMessageId || clarified.authority !== "root_instruction" || clarified.legacyFlags?.length || clarified.kind !== item.kind || !clarified.normalizedText.includes(clause.trim()) || !preservesIdentity(item, clarified) || /GUI|界面|视觉|截图|颜色|效果|布局/i.test(clause) && clarified.semanticAction !== "generic_run") return void 0;
+	}
+	const candidates = buildCandidates(p, item, args.clauses, clarificationItemIds);
+	const body = proposalBody(p, item, args.clauses, clarificationItemIds, candidates);
 	if (Buffer.byteLength(JSON.stringify(body), "utf8") > 8192) return void 0;
 	const digest$1 = sha256(JSON.stringify(body));
 	const normalized = JSON.parse(JSON.stringify(body));
@@ -973,34 +1487,32 @@ function proposeRebind(p, args) {
 		status: "pending"
 	};
 }
-function rebindResponse(p, args) {
-	if (!p.enabled || p.integrity !== "valid") return {
-		status: "unknown",
-		reason_code: "guard_unavailable"
-	};
-	if (Object.keys(args).some((key) => ![
-		"operation",
-		"item_id",
-		"proposal_id",
-		"clauses",
-		"clarification_item_ids"
-	].includes(key))) return {
+/** The exact 0.4-era propose response, frozen for legacy replay validation. */
+function frozenV042ProposeResponse(p, args) {
+	const candidate = proposeRebindV042(p, args);
+	if (!candidate) return {
 		status: "rejected",
-		reason_code: "invalid_rebind_parameters"
+		reason_code: "source_partition_required",
+		next_step: "Supply 1-8 exact consecutive clauses covering the original text, including unsupported work; the proposal must fit 8 KiB. Clarification that changes meaning requires a new root-user instruction."
 	};
-	if (args.operation === "propose") {
-		const candidate = proposeRebind(p, args);
-		if (!candidate) return {
-			status: "rejected",
-			reason_code: "source_partition_required",
-			next_step: "Supply 1-8 exact consecutive clauses covering the original text, including unsupported work; the proposal must fit 8 KiB. Clarification that changes meaning requires a new root-user instruction."
-		};
-		return {
-			status: "proposed",
-			proposal: p.rebindProposals.get(candidate.id) ?? candidate,
-			next_step: `Root user must reply exactly: 确认重绑定 ${candidate.id}. This changes the contract only and grants no execution permission.`
-		};
-	}
+	return {
+		status: "proposed",
+		proposal: p.rebindProposals.get(candidate.id) ?? candidate,
+		next_step: `Root user must reply exactly: 确认重绑定 ${candidate.id}. This changes the contract only and grants no execution permission.`
+	};
+}
+/** Structured v0.5 replay match: semantic fields exact, display text exempt. */
+function rebindResponseMatchesV050(expected, recorded) {
+	if (!recorded || typeof recorded !== "object" || Array.isArray(recorded)) return false;
+	const strip = (value) => {
+		const { next_step: _display,...rest } = value;
+		return rest;
+	};
+	return JSON.stringify(strip(expected)) === JSON.stringify(strip(recorded));
+}
+/** The 0.4-era query/withdraw responses, frozen for legacy replay validation. */
+function frozenV042Response(p, args) {
+	if (args.operation === "propose") return frozenV042ProposeResponse(p, args);
 	const proposal = p.rebindProposals.get(args.proposal_id ?? "");
 	if (!proposal) return {
 		status: "rejected",
@@ -1031,32 +1543,201 @@ function rebindResponse(p, args) {
 		proposal
 	};
 }
+function proposalConfirmation(p, proposal) {
+	if (proposal.status === "confirmed") return {
+		state: "confirmed",
+		event: proposal.confirmationEvent,
+		replacement_ids: proposal.replacementIds
+	};
+	if (proposal.status === "pending" && proposal.observedUnconfirmedEvent) return {
+		state: "not_durable",
+		event: proposal.observedUnconfirmedEvent
+	};
+	return { state: "not_received" };
+}
+/** Stable attempt key: item identity, exact inputs, and outcome class. Identical
+* retries collapse onto it no matter how many unrelated log rows intervene. */
+function rebindAttemptKey(args, reasonCode) {
+	return sha256(JSON.stringify([
+		args.item_id ?? null,
+		args.clauses ?? null,
+		args.clarification_item_ids ?? null,
+		reasonCode
+	]));
+}
+function rebindResponse(p, args) {
+	if (!p.enabled || p.integrity !== "valid") return {
+		status: "unknown",
+		reason_code: "guard_unavailable"
+	};
+	if (Object.keys(args).some((key) => ![
+		"operation",
+		"item_id",
+		"proposal_id",
+		"clauses",
+		"clarification_item_ids"
+	].includes(key))) return {
+		status: "rejected",
+		reason_code: "invalid_rebind_parameters"
+	};
+	if (args.operation === "propose") {
+		const outcome = proposeRebindOutcome(p, args);
+		if (!outcome.ok) {
+			const key = rebindAttemptKey(args, outcome.reasonCode);
+			if ((p.rebindRejections.get(key) ?? 0) > 0) return {
+				status: "unchanged",
+				reason_code: outcome.reasonCode,
+				resume_condition: "No input changed since the previous identical attempt. New related evidence, a new root instruction, or a changed target re-opens evaluation."
+			};
+			const response = {
+				status: "rejected",
+				reason_code: outcome.reasonCode
+			};
+			if (outcome.source) response.expected_source = outcome.source;
+			response.next_step = proposeNextStep(outcome.reasonCode);
+			return response;
+		}
+		const candidate = outcome.proposal;
+		return {
+			status: "proposed",
+			proposal: p.rebindProposals.get(candidate.id) ?? candidate,
+			next_step: `Root user must reply with the control line 确认重绑定 ${candidate.id} alone on its first line. Follow-up requests or new tasks may follow after a blank line and keep their own meaning; confirmation adds no execution permission.`
+		};
+	}
+	if (args.operation === "query" && !args.proposal_id && args.item_id) {
+		const item = p.items.get(args.item_id);
+		if (!item) return {
+			status: "rejected",
+			reason_code: "item_not_found"
+		};
+		if (item.status !== "pending") return {
+			status: "rejected",
+			reason_code: "item_not_pending",
+			item_id: item.id,
+			item_status: item.status
+		};
+		const pendingProposal = [...p.rebindProposals.values()].find((candidate) => candidate.status === "pending" && candidate.itemId === item.id && candidate.contractRevision === p.contractRevision && candidate.epoch === p.epoch);
+		return {
+			status: "item_status",
+			item: {
+				id: item.id,
+				revision: item.revision,
+				kind: item.kind,
+				status: item.status,
+				semantic_action: item.semanticAction,
+				target_capture_status: item.targetCaptureStatus
+			},
+			diagnosis: deriveItemDiagnosis(p, item),
+			pending_proposal_id: pendingProposal?.id
+		};
+	}
+	const proposal = p.rebindProposals.get(args.proposal_id ?? "");
+	if (!proposal) return {
+		status: "rejected",
+		reason_code: "proposal_not_found"
+	};
+	if (args.operation === "withdraw") return proposal.status === "confirmed" ? {
+		status: "rejected",
+		reason_code: "proposal_already_applied"
+	} : {
+		status: "withdrawn",
+		proposal_id: proposal.id,
+		digest: proposal.digest
+	};
+	if (args.operation !== "query") return {
+		status: "rejected",
+		reason_code: "invalid_rebind_operation"
+	};
+	if (proposal.status === "pending" && (proposal.contractRevision !== p.contractRevision || proposal.epoch !== p.epoch || proposal.session !== p.sessionRefDigest)) return {
+		status: "stale",
+		reason_code: "proposal_contract_changed",
+		proposal: {
+			...proposal,
+			status: "stale"
+		},
+		confirmation: { state: "not_received" },
+		next_step: "Propose again against the current contract; unrelated new work makes the old proposal stale."
+	};
+	return {
+		status: proposal.status,
+		proposal,
+		confirmation: proposalConfirmation(p, proposal)
+	};
+}
+function proposeNextStep(reasonCode) {
+	switch (reasonCode) {
+		case "no_certification_gain": return "No certification gain: this split keeps every part generic_run. Report the work honestly instead of asking the user to confirm a relabeled proposal; a real scope change needs a new root-user instruction.";
+		case "partition_mismatch": return "The clauses do not exactly cover the original text. Copy the expected source verbatim (see expected_source) and re-partition without changing any character.";
+		case "payload_too_large": return "The proposal exceeds 8 KiB. Split into smaller independent proposals.";
+		case "unsupported_clarification": return "This item cannot be re-bound by proposal: it needs a fresh root-user instruction or is not a re-bindable requirement.";
+		case "item_not_pending": return "The item is not pending; query the checkpoint page for its current state.";
+		default: return "Unknown item: query context_guard_checkpoint for the current contract items.";
+	}
+}
+/**
+* Replay validation with version dispatch (A12): structured v0.5 results
+* match semantically (display text may evolve); results carrying the frozen
+* 0.4 response shapes validate against the frozen 0.4 rules exactly. Anything
+* else is tampered or unknown and never replays.
+*/
 function replayRebindResult(p, args, recorded) {
 	const expected = rebindResponse(p, args);
-	if (JSON.stringify(expected) !== JSON.stringify(recorded)) return;
+	const legacy = isFrozenV042RebindResponse(recorded) && (() => {
+		const frozen = frozenV042Response(p, args);
+		return frozen !== void 0 && JSON.stringify(frozen) === JSON.stringify(recorded);
+	})();
+	if (!legacy && !rebindResponseMatchesV050(expected, recorded)) return;
 	if (args.operation === "propose") {
-		const candidate = proposeRebind(p, args);
-		if (candidate && !p.rebindProposals.has(candidate.id)) p.rebindProposals.set(candidate.id, candidate);
-	} else if (args.operation === "withdraw") {
+		if (p.rebindProposals.get(String(recorded.proposal?.id ?? ""))) return;
+		const rebuilt = legacy ? proposeRebindV042(p, args) : (() => {
+			const outcome = proposeRebindOutcome(p, args);
+			return outcome.ok ? outcome.proposal : void 0;
+		})();
+		if (rebuilt) p.rebindProposals.set(rebuilt.id, rebuilt);
+		return;
+	}
+	if (args.operation === "withdraw") {
 		const proposal = p.rebindProposals.get(args.proposal_id ?? "");
 		if (proposal?.status === "pending") proposal.status = "withdrawn";
 	}
 }
+/** Register an observed but not-yet-applied confirmation attempt (non-durable replay). */
+function observeUnconfirmed(p, proposalId, eventId) {
+	const proposal = p.rebindProposals.get(proposalId);
+	if (proposal && proposal.status === "pending") proposal.observedUnconfirmedEvent = eventId;
+}
 /** Invoked only for a canonical root user message, never tool or plugin text.
-* The single durable confirmation event is the atomic transaction commit. */
-function confirmRebind(p, text, eventId, durable) {
-	const match = /^确认重绑定 (RB-[a-f0-9]{24})$/.exec(text.trim());
-	if (!match) return false;
-	const proposal = p.rebindProposals.get(match[1]);
-	if (!proposal || !durable) return true;
+* The single durable confirmation event is the atomic transaction commit:
+* the confirmation validates against the state BEFORE this message, and the
+* caller processes the remaining text afterwards with its own semantics. */
+function confirmRebind(p, proposalId, eventId, durable) {
+	if (!/^RB-[a-f0-9]{24}$/.test(proposalId)) return false;
+	const proposal = p.rebindProposals.get(proposalId);
+	if (!proposal) return true;
+	if (!durable) {
+		observeUnconfirmed(p, proposalId, eventId);
+		return true;
+	}
 	if (proposal.status !== "pending") return true;
 	const old = p.items.get(proposal.itemId);
-	if (!old || proposal.session !== p.sessionRefDigest || proposal.epoch !== p.epoch || old.status !== "pending" || old.revision !== proposal.itemRevision || p.contractRevision !== proposal.contractRevision || proposeRebind(p, {
+	const repropose = proposal.protocol === "v050" ? proposeRebindOutcome(p, {
 		operation: "propose",
-		item_id: old.id,
+		item_id: old?.id,
 		clauses: proposal.clauses,
 		clarification_item_ids: proposal.clarificationItemIds
-	})?.digest !== proposal.digest) {
+	}) : (() => {
+		const rebuilt = proposeRebindV042(p, {
+			operation: "propose",
+			item_id: old?.id,
+			clauses: proposal.clauses,
+			clarification_item_ids: proposal.clarificationItemIds
+		});
+		return rebuilt ? {
+			ok: true,
+			proposal: rebuilt
+		} : { ok: false };
+	})();
+	if (!old || proposal.session !== p.sessionRefDigest || proposal.epoch !== p.epoch || old.status !== "pending" || old.revision !== proposal.itemRevision || p.contractRevision !== proposal.contractRevision || !(repropose.ok && repropose.proposal.digest === proposal.digest)) {
 		proposal.status = "stale";
 		return true;
 	}
@@ -1123,6 +1804,7 @@ function createProjection() {
 		lastGuardEventSeq: -1,
 		continuationAttempts: /* @__PURE__ */ new Map(),
 		persistenceCorrectionAttempts: /* @__PURE__ */ new Map(),
+		rebindRejections: /* @__PURE__ */ new Map(),
 		integrity: "valid"
 	};
 }
@@ -2012,54 +2694,10 @@ function bindingSatisfies(projection, item, evidenceIds) {
 }
 
 //#endregion
-//#region src/domain/diagnostics.ts
-function itemDiagnosis(p, item) {
-	if (item.kind === "prohibition") return {
-		certifiable: false,
-		reason_code: "prohibition_active",
-		next_step: "Keep this constraint enforced; it is not a completion evidence obligation."
-	};
-	const action = item.semanticAction ?? "generic_run";
-	const reason = item.status === "passed" ? "certified" : action === "generic_run" ? "generic_run_non_certifiable" : item.legacyFlags?.length || item.targetCaptureStatus === "clarification_required" ? "target_clarification_required" : p.hostStatus !== "supported" ? "host_unavailable" : ACTION_MANIFEST.actions[action].evidenceProducer !== "supported" ? "adapter_unavailable" : "missing_evidence";
-	return {
-		certifiable: reason === "missing_evidence" || reason === "certified",
-		reason_code: reason,
-		next_step: reason === "certified" ? "No further binding needed." : reason === "generic_run_non_certifiable" || reason === "target_clarification_required" ? "Use context_guard_rebind to propose explicit clauses for root-user confirmation; preserve unsupported work pending. Rebinding grants no execution permission." : reason === "missing_evidence" ? "Collect matching durable evidence, then call context_guard_checkpoint with bindings." : "Restore the audited host/adapter capability before certification; keep pending work visible at a qualified safe boundary."
-	};
-}
-const NATIVE_ADAPTERS = new Set([
-	"dsh.bash.v1",
-	"dsh.pwsh.v1",
-	"dsh.shell.v1",
-	"dsh.read.v1",
-	"dsh.write.v1",
-	"dsh.edit.v1",
-	"dsh.web.v1"
-]);
-function evidenceAvailabilityReason(evidence) {
-	if (evidence.parseStatus !== "supported") return evidence.reasonCode ?? evidence.parseStatus ?? "adapter_unavailable";
-	if (!evidence.adapterId || !evidence.adapterVersion || (SUPPORTED_EVIDENCE_ADAPTERS[evidence.adapterId] ?? (NATIVE_ADAPTERS.has(evidence.adapterId) ? "1.0.0" : void 0)) !== evidence.adapterVersion) return "adapter_unavailable";
-	if (evidence.outcome !== "success") return "evidence_outcome_not_success";
-	if (!evidence.semanticAction || evidence.semanticAction === "generic_run") return "generic_run_non_certifiable";
-}
-/** Shared display filter; certification remains the full domain check. */
-function relevantEvidence(p, item, evidence) {
-	const action = item.semanticAction;
-	if (!action || action === "generic_run" || !actionCompatible(action, evidence.semanticAction ?? "generic_run") || evidence.epoch !== p.epoch || evidenceAvailabilityReason(evidence) !== void 0) return false;
-	if (item.reboundFrom) {
-		const source = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
-		if (!source || evidence.toolResultSeq < Number(source[1])) return false;
-	}
-	if (isStatefulAction(action)) return requestedTargetMatchesResolved(action, item.requestedTarget, evidence.resolvedTarget);
-	const value = (entry) => JSON.stringify(entry && typeof entry === "object" && "v" in entry ? entry.v : entry);
-	return !!item.requestedTarget && Object.entries(item.requestedTarget).every(([key, entry]) => evidence.resolvedTarget && value(entry) === value(evidence.resolvedTarget[key]));
-}
-
-//#endregion
 //#region src/domain/recovery.ts
 const DEFAULT_RECOVERY_CHAR_BUDGET = 4e3;
 const MIN_RECOVERY_CHAR_BUDGET = 512;
-const COMPLETION_RULE = "Obtain a Context Guard checkpoint from matching durable evidence before claiming completion. A qualified safe end preserves pending work; it is not completion.";
+const COMPLETION_RULE = "Supported actions certify through matching durable evidence (checkpoint). Investigations and explanations outside the supported set can be delivered honestly but stay uncertified. A qualified safe end preserves pending work; it is not completion.";
 /**
 * An actionable one-line hint for how an open item's verification contract can
 * be closed. It never weakens the contract; it only names the missing facet so
@@ -2132,9 +2770,9 @@ function renderRecoveryPacket(projection, options = {}) {
 		if (add(`DO NOT [${clip(item.id, 20)}] ${clip(item.normalizedText, compact ? 18 : 100)}`, compact ? 45 : 140)) count++;
 	};
 	const requirement = (item) => {
-		const diagnosis = itemDiagnosis(projection, item);
-		const remedy = diagnosis.reason_code === "generic_run_non_certifiable" || diagnosis.reason_code === "target_clarification_required" ? "context_guard_rebind; root confirmation required" : diagnosis.reason_code === "host_unavailable" || diagnosis.reason_code === "adapter_unavailable" ? "Restore audited host/adapter capability" : "Collect matching evidence; checkpoint";
-		if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_step}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++;
+		const diagnosis = deriveItemDiagnosis(projection, item);
+		const remedy = diagnosis.repairability === "agent_repairable" ? "Collect matching evidence; checkpoint" : diagnosis.repairability === "historical_gap" ? "Read back observed state; do not re-execute" : diagnosis.certification === "unsupported" ? "Deliver honestly; stays uncertified unless a fresh instruction names a supported action" : "Restore audited host/adapter capability";
+		if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_action.resume_condition ?? remedy}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++;
 	};
 	if (constraints[0]) constraint(constraints[0]);
 	if (work[0]) requirement(work[0]);
@@ -2876,101 +3514,6 @@ async function effectuateBoundary(boundary, access) {
 		stopAllowed: true,
 		resumeRequired: false
 	};
-}
-
-//#endregion
-//#region src/domain/conversation.ts
-/**
-* Punctuation and whitespace that may surround a bare progression phrase
-* without turning it into sentence content.
-*/
-const PUNCT = String.raw`[\s。，、；：！？．,;:!?\-*"'“”‘’()（）.…～~]`;
-/**
-* Session-layer phrases that acknowledge or advance the conversation without
-* stating a task. Longer forms come first so the alternation consumes them
-* before their prefixes.
-*/
-const PROGRESSION_SOURCE = String.raw`(?:继续执行|继续吧|请继续|继续|接着做|接着|下一步|没问题|知道了|明白了|了解|好的?|是的?|对的?|收到|可以|行|嗯+|continue|go on|go ahead|keep going|proceed|okay|ok|yes|sure|right|next)`;
-const PROGRESSION_WHOLE = new RegExp(`^${PUNCT}*${PROGRESSION_SOURCE}${PUNCT}*$`, "i");
-const PROGRESSION_LEAD = new RegExp(`^${PROGRESSION_SOURCE}${PUNCT}+`, "i");
-const PROGRESSION_ANYWHERE = new RegExp(PROGRESSION_SOURCE, "gi");
-/**
-* Clause-leading prohibition keywords. A message that opens with one is a
-* captured prohibition, never a meta comment.
-*/
-const PROHIBITION_LEAD = /^(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得)/i;
-/**
-* Question markers: a question mark, an interrogative pronoun/particle, or an
-* explicit request-for-answer phrase.
-*/
-const QUESTION_TERMS = /[？?]|什么|为什么|怎么|如何|是否|是不是|哪|谁|啥|吗|呢|对不对|正常吗|bug吗|有问题吗|有必要|合理吗|可否|能否|能不能|请问|问一下/;
-/**
-* Meta-comment/objection leads (no question mark required). `不是` requires
-* trailing punctuation so negated statements ("不是都要推送") stay fail-closed.
-*/
-const META_COMMENT_LEAD = /^(?:不是[，,。；;：:\s]|你(?:这|光|啥|怎么|什么|到底|就)|我(?:只是|就是|想|问|建议|认为|觉得)|这(?:有|什么)意义|有什么用|有什么意义)/;
-/** Diagnostic/inspection verbs: mentioning them alone is never a task feature. */
-const META_VERBS = /确认下|看看|看一下|想问|确认|验证|检查|查看|分析|解释|说明|排查|定位|诊断|评估|考虑|建议|讨论|复查|核对|盘点|复盘|问|看/g;
-/**
-* Operation verbs that indicate a real task effect. English verbs are
-* word-bounded so "latest" does not contain "test". The classifier vocabulary
-* is intentionally independent from the command-surface manifest.
-*/
-const OPERATION_VERBS = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|整理|总结|记录|更新|修复|改进|解决|处理|推送|发布|安装|升级|提交|下载|上传|拉取|同步|部署|重启|测试|写|\b(?:build|create|write|modify|run|fix|update|install|push|publish|test)\b/gi;
-const NEGATIONS = /没有|并无|不存在|无需|不用|不需要|尚未|还未|没|未|不是/;
-function excludedRanges(text) {
-	const ranges = [];
-	for (const pattern of [PROGRESSION_ANYWHERE, META_VERBS]) {
-		pattern.lastIndex = 0;
-		for (const match of text.matchAll(pattern)) {
-			const start = match.index;
-			ranges.push([start, start + match[0].length]);
-		}
-	}
-	return ranges;
-}
-/** The negation filter is scoped to the clause (sentence or comma segment). */
-function isNegatedInClause(text, verbStart) {
-	const clause = text.slice(0, verbStart).split(/[。！？；.!?;，,\r\n]/).pop() ?? "";
-	return NEGATIONS.test(clause);
-}
-function hasOperationVerb(text) {
-	const excluded = excludedRanges(text);
-	for (const match of text.matchAll(OPERATION_VERBS)) {
-		const start = match.index;
-		if (excluded.some(([from, to]) => start >= from && start < to)) continue;
-		if (isNegatedInClause(text, start)) continue;
-		return true;
-	}
-	return false;
-}
-function hasStrongTaskFeature(text) {
-	if (extractArtifactPaths(text).length > 0) return true;
-	if (extractMethod(text) !== void 0) return true;
-	return hasOperationVerb(text);
-}
-/**
-* Classify a direct user message (or one clause of it) as an actionable
-* `instruction` or a session-layer `conversational` utterance. Only
-* conversational results drop capture, so the classifier fails closed:
-* everything it cannot confidently recognize as session-layer talk stays an
-* instruction and is captured exactly as before.
-*
-* Order matters: progression and prohibition leads first, then strong task
-* features (artifact path, explicit method, or a non-negated operation verb
-* outside progression/meta spans), then the meta-question and meta-comment
-* forms, and finally a progression lead over a featureless remainder.
-*/
-function classifyUserInteraction(text) {
-	const normalized = normalizeClause(text);
-	if (!normalized) return "instruction";
-	if (PROGRESSION_WHOLE.test(normalized)) return "conversational";
-	if (PROHIBITION_LEAD.test(normalized)) return "instruction";
-	if (hasStrongTaskFeature(normalized)) return "instruction";
-	if (QUESTION_TERMS.test(normalized)) return "conversational";
-	if (META_COMMENT_LEAD.test(normalized)) return "conversational";
-	if (PROGRESSION_LEAD.test(normalized)) return "conversational";
-	return "instruction";
 }
 
 //#endregion
@@ -3774,19 +4317,12 @@ const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row) => row
 	integrity: ALPHA3_HOST_PACKAGES.find((entry) => entry.name === "dshmarket").integrity
 } : row);
 /**
-* Audited host cohort registry. The rc.2 cohort keeps the exact identities
-* audited for 0.3.0/0.3.1 on macOS and Windows. The alpha.2 cohort carries the
-* exact package graph extracted from native macOS and Windows DSH
-* `0.1.2-alpha.2` / dshmarket `1.38.1` runtimes. The alpha.2+dshmarket-1.39.0
-* cohort carries the exact upgraded-Windows graph. The alpha.3 cohort carries
-* the graph audited in the 2026-09-01 annex. The rc.1 cohort carries the exact
-* runtime plus dshmarket 1.41.0 graph audited natively on macOS, then confirmed
-* on Windows: the 2026-09-04 native Windows rc.1 runtime graph (dshmarket
-* 1.41.0) was extracted from the runtime lockfile and verified row-for-row
-* identical (name, version, registry integrity) to the posix extraction before
-* this cohort was widened. Graphs that mix cohorts, lack
-* rows, duplicate rows, or use identities outside every registered cohort
-* fail closed.
+* Historical audited host cohort registry. Every entry keeps the exact package
+* identities audited natively for a past Guard release (CG-DSH-001 whole-graph
+* contracts). These are historical verification facts only: since 0.5.0 the
+* active support target is `0.1.2-rc.1`, so an installed graph from any of
+* these cohorts — including previous RCs and alphas — is no longer an active
+* support entry and fails closed in `evaluateHostLock`.
 */
 const LEGACY_HOST_COHORTS = [
 	defineCohort("dsh-0.1.1-rc.2", ["0.1.1-rc.2"], ["posix", "windows"], [
@@ -3967,10 +4503,12 @@ const LEGACY_HOST_COHORTS = [
 	defineCohort("dsh-0.1.2-rc.1", ["0.1.2-rc.1"], ["posix", "windows"], RC1_HOST_PACKAGES)
 ];
 /** Core-lock/v1 separates optional market identity from the audited DSH graph.
-* Legacy rows remain available for historical verification; they are never
-* silently re-labelled as a newly accepted core lock.
+* The active support target is exactly one audited cohort, `0.1.2-rc.1`:
+* historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
+* never silently re-labelled as accepted active locks, and an installed
+* historical graph fails closed under `evaluateHostLock`.
 */
-const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => !cohort.id.includes("-dshmarket-")).map((cohort) => ({
+const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => cohort.id === "dsh-0.1.2-rc.1").map((cohort) => ({
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
@@ -3994,8 +4532,8 @@ const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => !cohort.id.includes(
 	]
 }));
 /**
-* rc.2 audited package identities (first registry cohort). The audited
-* cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
+* rc.1 audited package identities: the active support cohort since 0.5.0. The
+* audited cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
 * duplicated, unknown-version, unbound, OR MISSING row fails the whole lock
 * closed (`host_lock_missing`); no capability inherits independence from a
 * partially present graph.
@@ -5582,6 +6120,14 @@ function supersedeItem(items, oldId, replacement) {
 //#region src/domain/derive.ts
 const CAPTURE_V042_NOTICE = "Context Guard capture boundary: v0.4.2";
 const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
+/**
+* 0.5.0 first-step boundary: written at the first real root input step (never
+* at session start), before the constrained root message in the same batch.
+* It implies the v3 protocol and v0.4.2 capture semantics and marks the cut
+* where the 0.5 confirmation syntax becomes active; earlier notices keep
+* their historical meaning for replay.
+*/
+const PROTOCOL_V4_NOTICE = "Context Guard protocol boundary: v4.0.0";
 function isProtocolBoundaryNotice(event, notice = PROTOCOL_V3_NOTICE) {
 	if (event.type !== "user/message") return false;
 	const data = asRecord(event.data);
@@ -5689,6 +6235,18 @@ function resolveArtifact(path$1, scope) {
 	if (/^[A-Za-z]:[\\/]/.test(path$1) || path$1.startsWith("/") || path$1.startsWith("\\")) return path$1;
 	return `${scope.cwd.replace(/[\\/]+$/, "")}/${path$1}`;
 }
+/** Capture one canonical root text through the authority-block segmentation.
+* `prefix` keeps the historical `m<seq>` source identity; a remainder uses
+* `m<seq>:r` so confirmation follow-ups stay traceable to their message. */
+function captureRootText(projection, text, seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages, prefix = `m${seq}`) {
+	const blocks = segmentAuthorityBlocks(text, priorRootMessages);
+	for (const block$1 of blocks) {
+		if (!block$1.capture) continue;
+		insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", protocolBoundarySeq !== void 0 && seq < protocolBoundarySeq, block$1.kind === "instruction" || block$1.authority === "root_adoption", captureBoundarySeq !== void 0 && seq < captureBoundarySeq || captureBoundarySeq === void 0 && protocolBoundarySeq !== void 0 ? "v041" : "v042");
+	}
+	priorRootMessages.push(text);
+	if (priorRootMessages.length > 16) priorRootMessages.shift();
+}
 /**
 * Insert every independently tracked clause from one user message. Compound
 * instructions are segmented and each distinct artifact path becomes its own
@@ -5749,9 +6307,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	let enablementTransitioned = false;
 	let lastCompactionSeq = -1;
 	const pendingCalls = /* @__PURE__ */ new Map();
-	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event))?.seq;
-	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE))?.seq;
+	const v4BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
+	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
+	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
 	const priorRootMessages = [];
+	let realRootInputSeen = false;
 	for (const event of sourceEvents) {
 		projection.enabled = enabled;
 		projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq);
@@ -5783,22 +6343,36 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				lastCompactionSeq = event.seq;
 				break;
 			case "user/message": {
-				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE)) break;
+				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break;
 				if (!enabled) break;
 				const data = asRecord(event.data);
 				if (asRecord(data?.source)?.kind !== "user") break;
-				const text = extractTextContent(data?.content ?? []);
+				const content = data?.content ?? [];
+				const text = extractTextContent(content);
+				if (text.trim() || content.some((part) => part && typeof part === "object" && part.type !== "text")) realRootInputSeen = true;
 				if (!text.trim()) break;
-				if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== "subagent" && confirmRebind(projection, text, `m${event.seq}`, durableConfirmed)) break;
+				if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== "subagent") {
+					const parsed = parseConfirmationMessage(text);
+					if (parsed.kind === "confirm") {
+						if (confirmRebind(projection, parsed.proposalId, `m${event.seq}`, durableConfirmed)) {
+							if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages, `m${event.seq}:r`);
+							break;
+						}
+					} else if (parsed.kind !== "none") {
+						projection.lastConfirmationRejection = {
+							eventSeq: event.seq,
+							kind: parsed.kind,
+							reason: parsed.reason
+						};
+						const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join("\n");
+						if (!stripped.trim()) break;
+						captureRootText(projection, stripped, event.seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages);
+						break;
+					}
+				}
 				if (isInformationalMessage(text)) break;
 				if (classifyUserInteraction(text) === "conversational") break;
-				const blocks = segmentAuthorityBlocks(text, priorRootMessages);
-				for (const block$1 of blocks) {
-					if (!block$1.capture) continue;
-					insertItems(projection, block$1.text, `m${event.seq}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", protocolBoundarySeq !== void 0 && event.seq < protocolBoundarySeq, block$1.kind === "instruction" || block$1.authority === "root_adoption", captureBoundarySeq !== void 0 && event.seq < captureBoundarySeq || captureBoundarySeq === void 0 && protocolBoundarySeq !== void 0 ? "v041" : "v042");
-				}
-				priorRootMessages.push(text);
-				if (priorRootMessages.length > 16) priorRootMessages.shift();
+				captureRootText(projection, text, event.seq, scope, protocolBoundarySeq, captureBoundarySeq, priorRootMessages);
 				break;
 			}
 			case "goal/change": {
@@ -5899,7 +6473,15 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				pendingCalls.delete(callId);
 				const textContent = extractTextContent((isDispatch ? data?.content : void 0) ?? message?.content ?? []);
 				if (call.name === "context_guard_rebind") {
-					if (!call.rootCallId && !data?.error && durableConfirmed) replayRebindResult(projection, parseArguments(call.arguments), parseArguments(textContent));
+					if (!call.rootCallId && !data?.error) {
+						const rebindArgs = parseArguments(call.arguments);
+						const recordedResponse = parseArguments(textContent);
+						replayRebindResult(projection, rebindArgs, recordedResponse);
+						if (recordedResponse.status === "rejected" && typeof recordedResponse.reason_code === "string") {
+							const key = rebindAttemptKey(rebindArgs, recordedResponse.reason_code);
+							projection.rebindRejections.set(key, (projection.rebindRejections.get(key) ?? 0) + 1);
+						}
+					}
 					break;
 				}
 				if (call.name === "context_guard_checkpoint") {
@@ -5988,8 +6570,86 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 		projection,
 		compacted,
 		enablementTransitioned,
-		lastCompactionSeq
+		lastCompactionSeq,
+		realRootInputSeen,
+		protocolV4Present: v4BoundarySeq !== void 0
 	};
+}
+
+//#endregion
+//#region src/domain/lifecycle.ts
+function claimedTextParts(content) {
+	if (!Array.isArray(content)) return {
+		hasText: false,
+		hasOtherParts: false
+	};
+	let hasText = false;
+	let hasOtherParts = false;
+	for (const part of content) {
+		if (!part || typeof part !== "object") continue;
+		const record = part;
+		if (record.type === "text") {
+			if (typeof record.text === "string" && record.text.trim()) hasText = true;
+			continue;
+		}
+		hasOtherParts = true;
+	}
+	return {
+		hasText,
+		hasOtherParts
+	};
+}
+/**
+* Pure preview of one claimed pre-step batch. Messages claimed by the loop are
+* NOT yet persisted as `user/message` events at pre-step time, so this reads
+* only the validated claim: it never writes contract items, evidence, or
+* authority. A message activates protection when it carries a root user source
+* and real content — non-empty text, or any non-text part (image/attachment).
+* Whitespace-only messages with no other parts are real input but state no
+* task, so they neither activate nor produce contract items.
+*/
+function claimedBatchHasRealRootInput(messages) {
+	for (const message of messages) {
+		if (!message || typeof message !== "object") continue;
+		const record = message;
+		if (record.source?.kind !== "user") continue;
+		const { hasText, hasOtherParts } = claimedTextParts(record.content);
+		if (hasText || hasOtherParts) return true;
+	}
+	return false;
+}
+/**
+* Pure decision for the first-step activation injection under `always`. The
+* boundary must precede the first constrained root message inside the SAME
+* persisted step batch; guidance is compact and never claims a recovery that
+* did not happen. `opt-in` never auto-injects: its explicit `on` command is
+* the user-visible acknowledgment. Delegated sessions receive neither: their
+* scope arrives through the parent's delegation prompt (A04).
+*/
+function previewFirstStepInjection(input, claimedRealInput) {
+	if (input.activation !== "always" || !input.enabled || input.boundaryPresent || input.delegated) return void 0;
+	if (!claimedRealInput) return void 0;
+	return {
+		boundary: PROTOCOL_V4_NOTICE,
+		guidance: FIRST_STEP_GUIDANCE
+	};
+}
+/**
+* Compact first-step guidance: protection has started, what it protects, and
+* the working order for stateful actions. It is not a task, asks no question,
+* and contains no recovery wording.
+*/
+const FIRST_STEP_GUIDANCE = "Context Guard is now protecting this session: requirements from your messages stay open until they are certified with matching durable evidence. Before a stateful action (write, install, commit, push, publish, restart), call context_guard_prepare to see the supported command shape and required resolution/effect/state order; collect evidence with the guarded tools, then close items with context_guard_checkpoint. Ordinary answers and investigations need no certification.";
+/**
+* Lifecycle phase derived from durable facts. `enabled` is the log-derived
+* enablement (`always`, or the explicit `on`/`off` command sequence), and
+* `realInputSeen` records that a real root user input already entered a step.
+* Pure over its inputs so status display and tests cannot drift from the
+* injection decision.
+*/
+function lifecyclePhase(input) {
+	if (!input.enabled) return "disabled";
+	return input.realInputSeen ? "active" : "armed";
 }
 
 //#endregion
@@ -6210,6 +6870,37 @@ function baseManifest(action, surface, argv) {
 * wildcard refspecs, and implicit HEAD/ref destinations fail closed because
 * none occur in an accepted exact shape.
 */
+/**
+* Canonical command templates, derived from the SAME audited argv shapes the
+* parser accepts above. Guidance surfaces (context_guard_prepare) render these
+* so a tool description can never advertise a command the executor rejects.
+*/
+const GIT_COMMAND_TEMPLATES = {
+	commit: {
+		command: "git commit -m <message>",
+		shape: ["exactly: git, commit, -m, non-empty message"]
+	},
+	push: {
+		command: "git push <remote> <source_ref>:<destination_ref>",
+		shape: [
+			"exactly 4 argv words",
+			"full refs with explicit \":\"",
+			"no force flags"
+		]
+	},
+	fetch: {
+		command: "git fetch --no-tags <remote> <source_ref>:<tracking_ref>",
+		shape: ["exactly 5 argv words", "tracking ref must match <remote>/<source_ref>"]
+	},
+	pull: {
+		command: "git pull --ff-only --no-tags <remote> <source_ref>",
+		shape: ["exactly 6 argv words", "fast-forward only"]
+	},
+	inspect_remote_updates: {
+		command: "git ls-remote --exit-code --refs <remote> <source_ref>",
+		shape: ["exactly 6 argv words"]
+	}
+};
 function parseGitCommandManifest(command, surface) {
 	const canonical = canonicalArgvFromCommand(command, surface);
 	if (canonical.status !== "supported") return rejected("shell_command_unsupported");
@@ -7152,4 +7843,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { ALPHA2_HOST_PACKAGES as $, SEMANTIC_ACTIONS as $t, verifiedLinearCommitReadback as A, evidenceAvailabilityReason as At, supersedeItem as B, captureClause as Bt, commitIndexSnapshotDigest as C, certifyCheckpoint as Ct, gitCommandMatchesTarget as D, openItems$1 as Dt, executeRevalidatedGitEffect as E, closingHint as Et, latestAssistantText as F, evidenceMatchesItem as Ft, withDurability as G, extractOperation as Gt, extractTextContent as H, classifyClause as Ht, observeAssistantOutcome as I, isVerifyingCapability as It, parsePwshCommand as J, canonicalRegistryBase as Jt, canonicalArgvFromCommand as K, isInformationalMessage as Kt, CAPTURE_V042_NOTICE as L, currentContractDigest as Lt, decideTurnBoundary as M, relevantEvidence as Mt, decideTurnStopping as N, bindingSatisfies as Nt, parseGitCommandManifest as O, recoveryDigest as Ot, isWholeTaskCompletionClaim as P, evidenceCoverage as Pt, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Q, CERTIFICATE_VERSION as Qt, PROTOCOL_V3_NOTICE as R, createProjection as Rt, GIT_COMMAND_MANIFEST_IDS as S, qualifyBoundary as St, createGitPrestateEnvelope as T, MIN_RECOVERY_CHAR_BUDGET as Tt, extractToolSubject as U, extractArtifactPaths as Ut, evidenceFromPersistedToolResult as V, captureItem as Vt, isDeterministicCheck as W, extractMethod as Wt, goalCompletionDenial as X, ACTION_MANIFEST as Xt, parseShellCommand as Y, npmEscapedPackageName as Yt, hasCurrentCertificate as Z, ACTION_MANIFEST_VERSION as Zt, readActiveHostGraph as _, sanitizeUrl as _n, segmentAuthorityBlocks as _t, createProofManifest as a, requestedTargetAuthorizesMutation as an, HOST_COHORTS as at, verifyComposedHostLockDump as b, effectuateBoundary as bt, sessionQuery as c, semanticActionFromText as cn, bindLiveGoalCapability as ct, hostLockContextFromComposedDump as d, COMMAND_SURFACE_MANIFEST as dn, evaluateHostLock as dt, STATEFUL_ACTIONS as en, BASE_HOST_PACKAGES as et, hostLockRowsFromComposedDump as f, validateManifest as fn, evaluateToolSurfaceCapability as ft, packageRowsFromPnpmLock as g, sanitizeClauseText as gn, authorityCaptureCounts as gt, packageRowsFromActiveGraph as h, normalizeClause as hn, ALPHA3_HOST_PACKAGES as ht, canonicalProjection as i, isStatefulAction as in, HOST_CAPABILITY_PACKAGE_GROUPS as it, classifyCompletionClaim as j, itemDiagnosis as jt, revalidateGitPrestate as k, renderRecoveryPacket as kt, validateProofManifest as l, validateActionManifest as ln, evaluateExternalWaitCapability as lt, inspectTargetHostGraph as m, digestStrings as mn, RC1_HOST_PACKAGES as mt, PROOF_PROTOCOL_VERSION as n, SUPPORTED_EVIDENCE_ADAPTERS as nn, EXPECTED_HOST_PACKAGES as nt, proofDigest as o, requestedTargetMatchesResolved as on, LEGACY_HOST_COHORTS as ot, injectActiveProfileHostLock as p, canonicalizePath as pn, selectHostCohort as pt, isRunExecutable as q, segmentClauses as qt, bindProofToProjection as r, actionCompatible as rn, GOAL_HOST_PACKAGES as rt, proofEvidenceConstraints as s, semanticActionFromCommand as sn, bindExecutableIdentity as st, PROOF_KINDS as t, STOP_PROTOCOL_VERSION as tn, DEFAULT_HOST_LOCK as tt, HostProfileError as u, validateActionTarget as un, evaluateHostCapability as ut, resolveActiveProfileHostLock as v, sha256 as vn, classifyUserInteraction as vt, commitTreeSnapshotDigest as w, DEFAULT_RECOVERY_CHAR_BUDGET as wt, snapshotSessionEvents as x, isCurrentAcceptedBoundary as xt, resolveInstalledHostLock as y, availableBoundaryQualifications as yt, deriveProjection as z, rebindResponse as zt };
+export { isRunExecutable as $, itemDiagnosis as $t, revalidateGitPrestate as A, canonicalizePath as An, MIN_RECOVERY_CHAR_BUDGET as At, lifecyclePhase as B, createProjection as Bt, GIT_COMMAND_TEMPLATES as C, semanticActionFromText as Cn, segmentAuthorityBlocks as Ct, executeRevalidatedGitEffect as D, validateManifest as Dn, qualifyBoundary as Dt, createGitPrestateEnvelope as E, COMMAND_SURFACE_MANIFEST as En, isCurrentAcceptedBoundary as Et, isWholeTaskCompletionClaim as F, sha256 as Fn, bindingSatisfies as Ft, deriveProjection as G, rebindAttemptKey as Gt, CAPTURE_V042_NOTICE as H, proposeRebind as Ht, latestAssistantText as I, evidenceCoverage as It, extractTextContent as J, CONFIRM_LINE_PATTERN as Jt, supersedeItem as K, rebindResponse as Kt, observeAssistantOutcome as L, evidenceMatchesItem as Lt, classifyCompletionClaim as M, normalizeClause as Mn, openItems$1 as Mt, decideTurnBoundary as N, sanitizeClauseText as Nn, recoveryDigest as Nt, gitCommandMatchesTarget as O, classifyTaskIntent as On, certifyCheckpoint as Ot, decideTurnStopping as P, sanitizeUrl as Pn, renderRecoveryPacket as Pt, canonicalArgvFromCommand as Q, evidenceAvailabilityReason as Qt, FIRST_STEP_GUIDANCE as R, isVerifyingCapability as Rt, GIT_COMMAND_MANIFEST_IDS as S, semanticActionFromCommand as Sn, authorityCaptureCounts as St, commitTreeSnapshotDigest as T, validateActionTarget as Tn, effectuateBoundary as Tt, PROTOCOL_V3_NOTICE as U, proposeRebindOutcome as Ut, previewFirstStepInjection as V, confirmRebind as Vt, PROTOCOL_V4_NOTICE as W, proposeRebindV042 as Wt, isDeterministicCheck as X, parseConfirmationMessage as Xt, extractToolSubject as Y, isFrozenV042RebindResponse as Yt, withDurability as Z, deriveItemDiagnosis as Zt, readActiveHostGraph as _, SUPPORTED_EVIDENCE_ADAPTERS as _n, evaluateHostLock as _t, createProofManifest as a, extractMethod as an, ALPHA2_HOST_PACKAGES as at, verifyComposedHostLockDump as b, requestedTargetAuthorizesMutation as bn, RC1_HOST_PACKAGES as bt, sessionQuery as c, segmentClauses as cn, EXPECTED_HOST_PACKAGES as ct, hostLockContextFromComposedDump as d, ACTION_MANIFEST as dn, HOST_COHORTS as dt, relevantEvidence as en, parsePwshCommand as et, hostLockRowsFromComposedDump as f, ACTION_MANIFEST_VERSION as fn, LEGACY_HOST_COHORTS as ft, packageRowsFromPnpmLock as g, STOP_PROTOCOL_VERSION as gn, evaluateHostCapability as gt, packageRowsFromActiveGraph as h, STATEFUL_ACTIONS as hn, evaluateExternalWaitCapability as ht, canonicalProjection as i, extractArtifactPaths as in, ALPHA2_DSHMARKET_139_HOST_PACKAGES as it, verifiedLinearCommitReadback as j, digestStrings as jn, closingHint as jt, parseGitCommandManifest as k, classifyUserInteraction as kn, DEFAULT_RECOVERY_CHAR_BUDGET as kt, validateProofManifest as l, canonicalRegistryBase as ln, GOAL_HOST_PACKAGES as lt, inspectTargetHostGraph as m, SEMANTIC_ACTIONS as mn, bindLiveGoalCapability as mt, PROOF_PROTOCOL_VERSION as n, captureItem as nn, goalCompletionDenial as nt, proofDigest as o, extractOperation as on, BASE_HOST_PACKAGES as ot, injectActiveProfileHostLock as p, CERTIFICATE_VERSION as pn, bindExecutableIdentity as pt, evidenceFromPersistedToolResult as q, replayRebindResult as qt, bindProofToProjection as r, classifyClause as rn, hasCurrentCertificate as rt, proofEvidenceConstraints as s, isInformationalMessage as sn, DEFAULT_HOST_LOCK as st, PROOF_KINDS as t, captureClause as tn, parseShellCommand as tt, HostProfileError as u, npmEscapedPackageName as un, HOST_CAPABILITY_PACKAGE_GROUPS as ut, resolveActiveProfileHostLock as v, actionCompatible as vn, evaluateToolSurfaceCapability as vt, commitIndexSnapshotDigest as w, validateActionManifest as wn, availableBoundaryQualifications as wt, snapshotSessionEvents as x, requestedTargetMatchesResolved as xn, ALPHA3_HOST_PACKAGES as xt, resolveInstalledHostLock as y, isStatefulAction as yn, selectHostCohort as yt, claimedBatchHasRealRootInput as z, currentContractDigest as zt };

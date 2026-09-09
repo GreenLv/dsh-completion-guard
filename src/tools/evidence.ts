@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { gunzip } from 'node:zlib'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { ACTION_MANIFEST, type StatefulAction } from '../domain/protocol-manifest.js'
 import { canonicalRegistryBase, npmEscapedPackageName } from '../domain/registry.js'
 import type { EvidenceRole, ExpectedTransition, TargetTuple } from '../domain/types.js'
@@ -69,7 +69,7 @@ export interface EvidenceToolRoots {
   /** Test seam for exact logical executable/argv execution. */
   commandRunner?: (file: string, args: string[], cwd?: string, signal?: AbortSignal) => Promise<void>
   persistRestartIntent?: (
-    agent: { session: { events: readonly unknown[] } },
+    agent: { session: unknown },
     intent: { resolutionCallId: string; serviceId: string; preGeneration: string },
   ) => Promise<boolean>
   /** Runtime-supplied, action-scoped host capability decision. */
@@ -77,7 +77,7 @@ export interface EvidenceToolRoots {
   /** Runtime-owned root-contract authorization. Absence is fail-closed. */
   authorizeMutation?: (request: MutationAuthorizationRequest) => MutationAuthorizationDecision
   /** Flush and replay the resolution/contract chain before any side effect. */
-  prepareMutation?: (agent: { session: { events: readonly unknown[] } }) => Promise<boolean>
+  prepareMutation?: (agent: { session: unknown }) => Promise<boolean>
   /** Test seam for proving that durability/authority rejection precedes probes. */
   readExecutableIdentity?: (executable: AuditedExecutable, signal: AbortSignal) => Promise<ExecutableIdentity | undefined>
   /** Test-only seam; production never enables HTTP registries. */
@@ -692,7 +692,7 @@ async function executeGuardAction(
   signal: AbortSignal,
   executableIdentity?: ExecutableIdentity,
   resolutionCallId?: string,
-  agent?: { session: { events: readonly unknown[] } },
+  agent?: { session: unknown },
 ): Promise<'completed' | 'handoff_pending' | 'unavailable'> {
   const target = resolution.target
   if (action === 'install' || action === 'apply') {

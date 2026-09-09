@@ -68,6 +68,8 @@ export interface GuardItem {
   targetCaptureReasonCode?: TargetCaptureReasonCode
   authority?: 'root_instruction' | 'root_adoption' | 'legacy_authority_unclassified'
   legacyFlags?: Array<'legacy_generic_run' | 'legacy_authority_unclassified'>
+  /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
+  taskKind?: 'inquiry' | 'action'
   waitAuthorization?: WaitAuthorization
   deferAuthorization?: DeferAuthorization
   persistenceAuthorization?: PersistenceAuthorization
@@ -199,9 +201,13 @@ export interface GuardProjection {
   lastRecoveryDigest?: string
   lastCheckpointRejections?: Array<{ itemId: string; reason: string; reasonCode?: string; offendingEvidenceIds?: string[] }>
   lastCheckpointRejectionRevision?: number
+  /** Bounded fact about the latest rejected confirmation attempt (never raw text). */
+  lastConfirmationRejection?: { eventSeq: number; kind: 'malformed' | 'ambiguous'; reason: string }
   continuationAttempts: Map<number, number>
   /** Process-local one-shot fallback counters keyed by epoch + contract revision. */
   persistenceCorrectionAttempts: Map<string, number>
+  /** Log-derived count of rejected rebind attempts by stable attempt key; survives reload. */
+  rebindRejections: Map<string, number>
   integrity: GuardIntegrity
 }
 
@@ -224,6 +230,7 @@ export function createProjection(): GuardProjection {
     lastGuardEventSeq: -1,
     continuationAttempts: new Map(),
     persistenceCorrectionAttempts: new Map(),
+    rebindRejections: new Map(),
     integrity: 'valid',
   }
 }
@@ -246,6 +253,10 @@ export interface DeriveResult {
   enablementTransitioned: boolean
   /** Sequence of the last compaction summary in the log, or -1 when none. */
   lastCompactionSeq: number
+  /** True when a real root user input (text or asset) is present while enabled. */
+  realRootInputSeen: boolean
+  /** True when the durable log carries the 0.5 first-step protocol boundary. */
+  protocolV4Present: boolean
 }
 
 export interface DerivedEnvelope {

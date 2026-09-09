@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply as applyPinnedGoalTool } from '@deepseek-ai/dsh-tool-goal'
 import {
@@ -63,11 +63,11 @@ function toolResult(session: Session, callId: string, text: string, meta?: unkno
 describe('runtime derivation', () => {
   it('authorizes a mutation only for the exact pending root-owned action and target', () => {
     const session = Session.create(SessionId('mutation-root-authority'), undefined, {
-      version: 0, id: SessionId('mutation-root-authority'), createdAt: 1, cwd: '/work',
+      version: 0, isSeeded: false, id: SessionId('mutation-root-authority'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Install package fixture@2.0.0 in profile web.')
-    const projection = deriveProjection(session.events as never, OPT_IN, { cwd: '/work' }, true).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true).projection
     const item = [...projection.items.values()].find((entry) => entry.semanticAction === 'install')!
     const target = { package_id: 'fixture', version: '2.0.0', integrity_digest: 'sha512-fixture', profile: 'web' }
     const request = { action: 'install' as const, contractItemId: item.id, contractItemRevision: item.revision, resolvedTarget: target }
@@ -180,15 +180,18 @@ describe('runtime derivation', () => {
     }
     const agent = {
       id: 'agent-pinned', status: 'running',
-      session: { events: [
+      session: { snapshotEvents: () => [
         { seq: 1, type: 'turn/start', data: { turn: 1 } },
         { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'finish it' }] } },
       ] },
     }
     const ctx = {
-      systemPrompt: { section: () => undefined },
+      systemPrompt: { section: () => undefined, getSectionOrder: () => 0 },
       tools: { register: (tool: typeof registered[number]) => { registered.push(tool) } },
       agents: { get: (id: string) => id === agent.id ? agent : undefined, currentInitiator: () => agent, roots: () => [agent] },
+      // rc.1 goal tools resolve the open-turn cut through the session
+      // projection readback; turn 1 opens at the seq 1 `turn/start`.
+      sessionProjections: { stateOf: () => ({ openTurnStartSeq: 0, lastTurn: 0 }) },
       goals: {
         get: () => goal,
         complete: (_agent: unknown, ref: { id: string; revision: number }) => {
@@ -270,7 +273,7 @@ describe('runtime derivation', () => {
 
   it('strictly restores a v0.2 pre-marker checkpoint as legacy while a post-marker recapture remains certifiable', () => {
     const session = Session.create(SessionId('legacy-upgrade-restore'), undefined, {
-      version: 0, id: SessionId('legacy-upgrade-restore'), createdAt: 1, cwd: '/work',
+      version: 0, isSeeded: false, id: SessionId('legacy-upgrade-restore'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Background material about old.txt')
@@ -286,9 +289,9 @@ describe('runtime derivation', () => {
     toolResult(session, 'new-read', '[exit code: 0]')
 
     const restored = Session.fromRestore(
-      SessionId('legacy-upgrade-restore'), structuredClone(session.events) as never, structuredClone(session.header) as never,
+      SessionId('legacy-upgrade-restore'), structuredClone(session.snapshotEvents()) as never, structuredClone(session.header) as never, SessionLogOffset(0),
     )
-    const projection = deriveProjection(restored.events as never, OPT_IN, { cwd: '/work' }, true, TEST_HOST_LOCK).projection
+    const projection = deriveProjection(restored.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true, TEST_HOST_LOCK).projection
     const oldItem = [...projection.items.values()].find((item) => item.normalizedText.includes('old.txt'))!
     const newItem = [...projection.items.values()].find((item) => item.normalizedText.includes('workspace'))!
     expect(oldItem).toMatchObject({ status: 'passed', authority: 'legacy_authority_unclassified' })
@@ -308,7 +311,7 @@ describe('runtime derivation', () => {
 
   it('certifies a deterministic legacy_rebind only after direct-root provenance and fresh v3 evidence', () => {
     const session = Session.create(SessionId('legacy-deterministic-rebind'), undefined, {
-      version: 0, id: SessionId('legacy-deterministic-rebind'), createdAt: 1, cwd: '/work',
+      version: 0, isSeeded: false, id: SessionId('legacy-deterministic-rebind'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Run pnpm test in the workspace')
@@ -318,7 +321,7 @@ describe('runtime derivation', () => {
     }), { surfaceOp: 'append' })
     toolCall(session, 'rebind-test', 'bash', JSON.stringify({ command: 'pnpm test', workdir: '/work' }))
     toolResult(session, 'rebind-test', '[exit code: 0]')
-    const projection = deriveProjection(session.events as never, OPT_IN, { cwd: '/work' }, true, TEST_HOST_LOCK).projection
+    const projection = deriveProjection(session.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true, TEST_HOST_LOCK).projection
     const item = [...projection.items.values()][0]
     const fact = [...projection.evidence.values()][0]
     expect(item).toMatchObject({ authority: 'root_instruction', semanticAction: 'test', targetCaptureStatus: 'resolved' })
@@ -331,7 +334,7 @@ describe('runtime derivation', () => {
     expect(result.status).toBe('certified')
 
     const uncertainSession = Session.create(SessionId('legacy-unclassified-negative'), undefined, {
-      version: 0, id: SessionId('legacy-unclassified-negative'), createdAt: 1, cwd: '/work',
+      version: 0, isSeeded: false, id: SessionId('legacy-unclassified-negative'), createdAt: 1, cwd: '/work',
     })
     enableCommand(uncertainSession, 'on')
     userText(uncertainSession, 'Background material about workspace state')
@@ -341,7 +344,7 @@ describe('runtime derivation', () => {
     }), { surfaceOp: 'append' })
     toolCall(uncertainSession, 'unclassified-test', 'bash', JSON.stringify({ command: 'pnpm test', workdir: '/work' }))
     toolResult(uncertainSession, 'unclassified-test', '[exit code: 0]')
-    const uncertain = deriveProjection(uncertainSession.events as never, OPT_IN, { cwd: '/work' }, true).projection
+    const uncertain = deriveProjection(uncertainSession.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true).projection
     const uncertainItem = [...uncertain.items.values()][0]
     const uncertainFact = [...uncertain.evidence.values()][0]
     const rejected = certifyCheckpoint(uncertain, [{
@@ -358,7 +361,7 @@ describe('runtime derivation', () => {
     const session = Session.create(SessionId('boundary-unknown-replay'))
     enableCommand(session, 'on')
     userText(session, '等待用户选择后继续')
-    const before = deriveProjection(session.events as never, OPT_IN, {}, true).projection
+    const before = deriveProjection(session.snapshotEvents() as never, OPT_IN, {}, true).projection
     const qualification = [...before.items.values()][0].waitAuthorization!
     const args = {
       disposition: 'user_wait' as const,
@@ -371,7 +374,7 @@ describe('runtime derivation', () => {
     expect(value).toMatchObject({ status: 'unknown', reason_code: 'boundary_persistence_unknown' })
     toolResult(session, 'boundary-unknown', JSON.stringify(value))
 
-    const replay = deriveProjection(session.events as never, OPT_IN, {}, true).projection
+    const replay = deriveProjection(session.snapshotEvents() as never, OPT_IN, {}, true).projection
     expect(replay.integrity).toBe('valid')
     expect(replay.boundaries).toHaveLength(1)
     expect(replay.boundaries[0]).toMatchObject({ persistedResult: 'unknown', reasonCode: 'boundary_persistence_unknown' })
@@ -379,7 +382,7 @@ describe('runtime derivation', () => {
 
   it('replays certificates against the exact runtime host identity and reports a changed digest as stale-host', () => {
     const session = Session.create(SessionId('host-identity-replay'), undefined, {
-      version: 0, id: SessionId('host-identity-replay'), createdAt: 1, cwd: '/work',
+      version: 0, isSeeded: false, id: SessionId('host-identity-replay'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Run pnpm test in the workspace')
@@ -425,7 +428,7 @@ describe('runtime derivation', () => {
     // Its roundtrip must preserve a nonempty certificate's session identity.
     const persistedSession = {
       header: { ...session.header, delegationDepth: 0 },
-      events: session.events,
+      events: session.snapshotEvents(),
     } as unknown as Session
     const resumed = createRuntime(fakeAgent(persistedSession), OPT_IN, hostA)
     resumed.setDurability(true)
@@ -433,7 +436,7 @@ describe('runtime derivation', () => {
     expect(resumed.projection.integrity).toBe('valid')
     expect(hasCurrentCertificate(resumed.projection)).toBe(true)
     const delegatedSession = {
-      header: { ...session.header, delegationDepth: 1 }, events: session.events,
+      header: { ...session.header, delegationDepth: 1 }, events: session.snapshotEvents(),
     } as unknown as Session
     const delegated = createRuntime(fakeAgent(delegatedSession), OPT_IN, hostA)
     delegated.setDurability(true)
@@ -548,7 +551,7 @@ describe('runtime derivation', () => {
     toolCall(session, 'c2', 'context_guard_checkpoint', '{"bindings":[]}')
     toolResult(session, 'c2', JSON.stringify({ status: 'incomplete', contract_revision: 1, open_items: [], rejected_bindings: [] }))
     runtime.sync()
-    const custom = session.events.filter((event) => event.type.startsWith('context-guard/'))
+    const custom = session.snapshotEvents().filter((event) => event.type.startsWith('context-guard/'))
     expect(custom).toEqual([])
   })
 
@@ -607,7 +610,7 @@ describe('runtime derivation', () => {
     expect(runtime.projection.items.get(itemId)?.legacyFlags).toContain('legacy_generic_run')
 
     // Rebuild over the same event log must reproduce the same state (resume path).
-    const rebuilt = deriveProjection(session.events as never, OPT_IN, { cwd: '' }, true)
+    const rebuilt = deriveProjection(session.snapshotEvents() as never, OPT_IN, { cwd: '' }, true)
     expect(rebuilt.projection.checkpoints).toHaveLength(0)
     expect(rebuilt.projection.items.get(itemId)?.status).toBe('passed')
     expect(rebuilt.projection.integrity).toBe('valid')
@@ -738,9 +741,11 @@ function startGuard(ctx: ReturnType<typeof fakeCtx>, agent: Agent, source: strin
   }
 }
 
-async function runPreStep(ctx: ReturnType<typeof fakeCtx>, agent: Agent): Promise<number> {
+async function runPreStep(ctx: ReturnType<typeof fakeCtx>, agent: Agent, claimed: unknown[] = []): Promise<number> {
   const handler = ctx.handlers.get('agent/pre-step')?.[0] as PreStepHandler | undefined
-  const decision = await handler!({ agent }, async () => ({ kind: 'enter', messages: [] }))
+  // The host default keeps the claimed batch and appends any assembled
+  // context; tests pass no context so the count is injected + claimed.
+  const decision = await handler!({ agent, messages: claimed } as never, async () => ({ kind: 'enter', messages: claimed as never }))
   return decision.messages.length
 }
 
@@ -752,6 +757,8 @@ function projectionRuntime(projection: ReturnType<typeof createProjection>): Gua
   return {
     projection,
     session: Session.create(SessionId('turn-stop-projection')),
+    get lifecycle() { return 'active' as const },
+    get protocolV4Present() { return true },
     sync: () => {}, setEnabled: () => {}, setDurability: () => {},
     markRecoveryNeeded: () => {}, consumeRecovery: () => false,
   }
@@ -849,8 +856,13 @@ describe('production turn-stopping integration', () => {
 })
 
 describe('recovery injection dedup (v0.2.1)', () => {
-  it('persists protocol-v3 only as a legal plugin notice and survives strict Session restore', () => {
+  it('keeps session-start silent, replays a legacy v3 notice session, and survives strict Session restore', () => {
     const session = Session.create(SessionId('protocol-notice-session'))
+    // A pre-0.5 session carries the old T0 boundary notices as plain history.
+    rawAppend(session)('user/message', createUserMessage({
+      content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('Context Guard recorded a replay version boundary') },
+    }), { surfaceOp: 'append' })
     enableCommand(session, 'on')
     userText(session, 'verify package.json')
     const ctx = fakeCtx()
@@ -859,19 +871,23 @@ describe('recovery injection dedup (v0.2.1)', () => {
     })
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
+    startGuard(ctx, agent, 'new')
 
-    const notices = session.events.filter((event) => event.type === 'user/message'
+    // T0 is silent: no Guard appends beyond the seeded legacy notice, and a
+    // repeated session-start does not add any.
+    const notices = session.snapshotEvents().filter((event) => event.type === 'user/message'
       && (event.data as { source?: { kind?: string; plugin?: string } }).source?.kind === 'plugin'
       && (event.data as { source?: { plugin?: string } }).source?.plugin === 'context-guard')
-    expect(notices).toHaveLength(2)
-    expect(session.events.some((event) => event.type === 'command/run'
+    expect(notices).toHaveLength(1)
+    expect(session.snapshotEvents().some((event) => event.type === 'command/run'
       && (event.data as { source?: { kind?: string } }).source?.kind === 'plugin')).toBe(false)
 
-    const seed = structuredClone(session.events) as never
+    const seed = structuredClone(session.snapshotEvents()) as never
     const header = structuredClone(session.header) as never
-    const restored = Session.fromRestore(SessionId('protocol-notice-session'), seed, header)
-    const replay = deriveProjection(restored.events as never, OPT_IN, { cwd: '/work' }, true)
+    const restored = Session.fromRestore(SessionId('protocol-notice-session'), seed, header, SessionLogOffset(0))
+    const replay = deriveProjection(restored.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true)
     expect([...replay.projection.items.values()].some((item) => item.normalizedText.includes('protocol boundary'))).toBe(false)
+    expect([...replay.projection.items.values()].some((item) => item.normalizedText.includes('package.json'))).toBe(true)
   })
 
   it('injects an unchanged packet once, dedups repeated rejections, and re-injects on new content', async () => {
@@ -887,7 +903,7 @@ describe('recovery injection dedup (v0.2.1)', () => {
 
     expect(await runPreStep(ctx, agent)).toBe(0) // nothing armed
     await rejectCheckpoint(registered, 'R001')
-    expect(await runPreStep(ctx, agent)).toBe(1) // first injection
+    expect(await runPreStep(ctx, agent)).toBe(2) // first injection: v4 cut boundary + packet
     await rejectCheckpoint(registered, 'R001')
     expect(await runPreStep(ctx, agent)).toBe(0) // unchanged packet is deduped
 
@@ -910,12 +926,12 @@ describe('recovery injection dedup (v0.2.1)', () => {
     startGuard(ctx, agent, 'new')
     const registrationCount = registered.length
     await rejectCheckpoint(registered, 'R001')
-    expect(await runPreStep(ctx, agent)).toBe(1)
+    expect(await runPreStep(ctx, agent)).toBe(2) // v4 cut boundary + recovery packet
     await rejectCheckpoint(registered, 'R001')
     expect(await runPreStep(ctx, agent)).toBe(0)
     startGuard(ctx, agent, 'resume')
     expect(registered).toHaveLength(registrationCount)
-    expect(await runPreStep(ctx, agent)).toBe(1)
+    expect(await runPreStep(ctx, agent)).toBe(2)
   })
 })
 
@@ -926,7 +942,7 @@ describe('context-guard clear command (v0.2.1)', () => {
     userText(session, '修改 guard-demo.txt。不要 push。')
     rawAppend(session)('command/run', { commandId: 'cmd-clear', name: 'context-guard', args: 'clear', source: { kind: 'user' } })
 
-    const { projection } = deriveProjection(session.events as never, OPT_IN, { cwd: '/work' }, true)
+    const { projection } = deriveProjection(session.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true)
     const items = [...projection.items.values()]
     const requirement = items.find((item) => item.kind === 'requirement')!
     const prohibition = items.find((item) => item.kind === 'prohibition')!
@@ -935,7 +951,7 @@ describe('context-guard clear command (v0.2.1)', () => {
     expect(prohibition.status).toBe('pending')
 
     // Replay is deterministic: a second derivation reports the same states.
-    const replayed = deriveProjection(session.events as never, OPT_IN, { cwd: '/work' }, true)
+    const replayed = deriveProjection(session.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true)
     expect([...replayed.projection.items.values()].map((item) => [item.id, item.status]))
       .toEqual(items.map((item) => [item.id, item.status]))
 

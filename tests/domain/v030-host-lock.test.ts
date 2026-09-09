@@ -43,8 +43,8 @@ describe('v0.3 host graph and live capability binding', () => {
   it('locks the real update_goal provider and treats the Goal graph as a pair', () => {
     expect(EXPECTED_HOST_PACKAGES).toContainEqual({
       name: '@deepseek-ai/dsh-tool-goal',
-      version: '0.1.1-rc.2',
-      integrity: 'sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA==',
+      version: '0.1.2-rc.1',
+      integrity: 'sha512-ooHKN6Eqy3owNS/oCDO7mR+UalEE4AxJMXou29waahIdSQsFAlk4pPApvhrwg1lpchF5CKwBPOtsVmjq2HfBKQ==',
     })
     // CG-DSH-001: a graph missing the whole Goal pair fails closed as an
     // incomplete audited graph; a partial Goal pair still names its own gap.
@@ -350,7 +350,7 @@ describe('active profile graph injection and composed readback', () => {
     expect(hostLockRowsFromComposedDump(managed)).toEqual(active.evaluation.packages)
     expect(hostLockContextFromComposedDump(managed)).toEqual({ platform: expectedPlatform, profileKind: 'web' })
     expect(verifyComposedHostLockDump(managed, active.evaluation).digest).toBe(active.evaluation.digest)
-    expect(() => verifyComposedHostLockDump(managed.replace('0.1.1-rc.2', '0.1.1-rc.3'), active.evaluation))
+    expect(() => verifyComposedHostLockDump(managed.replace('0.1.2-rc.1', '0.1.2-rc.2'), active.evaluation))
       .toThrowError(new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph'))
     expect(() => verifyComposedHostLockDump(managed.replace('hostLockProfile: "web"', 'hostLockProfile: "headless"'), active.evaluation))
       .toThrowError(/does not match the active graph/)

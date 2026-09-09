@@ -8,7 +8,7 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-These instructions target 0.4.3. Until that version is published, use the accepted candidate archive in place of the package name below; the published 0.4.2 does not support the new core-lock workflow.
+These instructions target 0.5.0.
 
 Install the plugin into the DSH Web environment:
 
@@ -37,7 +37,7 @@ Restart DSH Web, open a session, and enable the Guard:
 /context-guard status
 ```
 
-Activation is opt-in by default. `status` shows whether the Guard is on and how many checks remain. `off` stops protection for the current session without deleting its history. `clear` closes the current checklist while keeping prohibitions. `diagnose` explains why a completion check passed or failed.
+Activation is opt-in by default. `status` shows whether the Guard is on, its startup phase (`armed` means waiting for your first message), and how many checks remain. `off` stops protection for the current session without deleting its history. `clear` closes the current checklist while keeping prohibitions. `diagnose` explains why a completion check passed or failed.
 
 ## What it protects
 
@@ -49,7 +49,7 @@ Activation is opt-in by default. `status` shows whether the Guard is on and how 
 
 ## Status and compatibility
 
-The 0.4.3 line checks the exact DSH core separately from optional dshmarket. An ordinary market upgrade does not require a Guard release or core-lock reinjection. If a plugin changes the resolved core dependencies, certification still fails closed. Headless does not need market installed.
+The supported DSH target is `0.1.2-rc.1` with Cordis `4.0.2`. The Guard checks the exact DSH core separately from optional dshmarket, so an ordinary market upgrade does not require a Guard release or core-lock reinjection; if a plugin changes the resolved core dependencies, certification still fails closed. Headless does not need market installed. DSH package sets from alpha releases and older RCs stay recorded as historical identities, and a runtime built from one of them is reported as unsupported instead of certified.
 
 Restart is a separate capability. Current DSH does not supply independently verified bindings for market's loaded instance, so the Guard market restart adapter is unavailable. A requested restart remains pending; core protection and unrelated operations continue. Installing or applying a package on disk does not prove that a running process or UI has adopted it.
 
@@ -64,9 +64,9 @@ The project was renamed from `dsh-context-guard` on 2026-08-29; its internal bun
 Context Guard has two activation modes:
 
 - `opt-in` (default): protection is off when a session starts. Run `/context-guard on` in that session to turn it on, and `/context-guard off` to turn it off again. This changes only the current session.
-- `always`: DSH sessions are protected automatically. Running `/context-guard off` turns protection off only for that session; other sessions start with protection on.
+- `always`: DSH sessions are protected automatically from the first real message. A brand-new session stays completely empty — the Guard writes nothing into it — so you can still pick the DSH session mode (standard, minimal, or a custom preset) before sending anything. The moment your first real message enters a step, protection begins in that same step and ahead of your message: the first task, including its first file changes, is covered. A first message that only carries an image or an attachment starts protection too; a blank message starts nothing. Running `/context-guard off` turns protection off for that session until you run `on` again.
 
-These modes only control Guard protection. They are not the DSH session mode (for example, the standard or minimal mode) that a session starts with. With `always`, the Guard loads before each DSH session starts. DSH currently cannot switch a session's mode after the session has started, so a session protected this way keeps the DSH session mode it started with. `/context-guard on` and `/context-guard off` turn Guard protection on or off; they never change the DSH session mode.
+These modes only control Guard protection. They are not the DSH session mode (for example, the standard or minimal mode) that a session starts with. Because the Guard no longer writes into sessions before the first message, a session's DSH mode can be selected while the session is still new. `/context-guard on` and `/context-guard off` turn Guard protection on or off; they never change the DSH session mode.
 
 To make DSH sessions start with protection on, add this entry to the `cordis.patch.yml` used by the way you start DSH:
 
@@ -102,9 +102,9 @@ Read-only evidence collection and actions that change packages, files, services,
 
 ### When a requirement stays incomplete
 
-“Update the plugin and check the GUI” can contain work the Guard cannot certify. The checkpoint reports a reason and a next step for each item. A `generic_run_non_certifiable` result means that changing the binding or running another ordinary command cannot close that item.
+“Update the plugin and check the GUI” can contain work the Guard cannot certify, and questions such as “是否有更新” are inquiries: they stay recorded with their source, but no checkpoint or rebind can machine-certify an answer — complete the investigation and report the result. The checkpoint reports a reason and one concrete next action per item, and `context_guard_prepare` (read-only) shows, before a stateful action, the supported command shape, the required resolution/effect/state evidence order, and the exact missing target fields.
 
-Use `context_guard_rebind` to propose an exact, complete split of the old text. If the action or target needs clarification, first ask the root user for an explicit instruction that includes the original clause; the proposal can reference that new item's ID. The tool returns a proposal ID and a comparison. Only the user's exact reply `确认重绑定 <proposal ID>` applies it. Quoted text, tool output, and model confirmation flags do not count. Unsupported parts remain pending, and a qualified safe end does not mean all work is complete.
+Use `context_guard_rebind` to propose an exact, complete split of the old text. If the action or target needs clarification, first ask the root user for an explicit instruction that includes the original clause; the proposal can reference that new item's ID. The tool returns a proposal ID and a comparison. The user applies it with the confirmation line `确认重绑定 <proposal ID>` as the first line of a reply; an explanation request or a new task after a blank line keeps its own meaning, and a new task is captured normally. A confirmation buried in a sentence, quotes, or a code block, or followed by a reversal, does nothing. Splitting a requirement into equally uncertifiable pieces returns “no certification gain” instead of asking for a pointless confirmation. Unsupported parts remain pending, and a qualified safe end does not mean all work is complete.
 
 The default `context_guard_checkpoint` call uses `bindings: []` for diagnosis. It shows at most eight current items/constraints and ten evidence rows, within 12 KiB of plugin JSON. `pagination` reports totals and a separate `next_cursor` for each list; the first page is not the whole contract. Use `item_ids` or `evidence_ids` to focus a query, or `evidence_scope: "history"` for the complete evidence history, including rows marked unavailable. Keep the query unchanged when following a cursor; a changed contract or evidence snapshot requires a fresh query. Large rows expose `detail_id`; retrieve chunks with `detail_offset` and return the first response's `snapshot` as `detail_snapshot` on later chunks. All queries remain read-only and never shrink the certification set.
 

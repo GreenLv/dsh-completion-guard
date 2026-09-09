@@ -122,6 +122,19 @@ function baseManifest(
  * wildcard refspecs, and implicit HEAD/ref destinations fail closed because
  * none occur in an accepted exact shape.
  */
+/**
+ * Canonical command templates, derived from the SAME audited argv shapes the
+ * parser accepts above. Guidance surfaces (context_guard_prepare) render these
+ * so a tool description can never advertise a command the executor rejects.
+ */
+export const GIT_COMMAND_TEMPLATES: Partial<Record<GitAdapterAction, Record<string, unknown>>> = {
+  commit: { command: 'git commit -m <message>', shape: ['exactly: git, commit, -m, non-empty message'] },
+  push: { command: 'git push <remote> <source_ref>:<destination_ref>', shape: ['exactly 4 argv words', 'full refs with explicit ":"', 'no force flags'] },
+  fetch: { command: 'git fetch --no-tags <remote> <source_ref>:<tracking_ref>', shape: ['exactly 5 argv words', 'tracking ref must match <remote>/<source_ref>'] },
+  pull: { command: 'git pull --ff-only --no-tags <remote> <source_ref>', shape: ['exactly 6 argv words', 'fast-forward only'] },
+  inspect_remote_updates: { command: 'git ls-remote --exit-code --refs <remote> <source_ref>', shape: ['exactly 6 argv words'] },
+}
+
 export function parseGitCommandManifest(command: string, surface: CanonicalCommandSurface): GitCommandParseResult {
   const canonical = canonicalArgvFromCommand(command, surface)
   if (canonical.status !== 'supported') return rejected('shell_command_unsupported')

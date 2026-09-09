@@ -1,4 +1,4 @@
-import { $ as ALPHA2_HOST_PACKAGES, $t as SEMANTIC_ACTIONS, A as verifiedLinearCommitReadback, At as evidenceAvailabilityReason, B as supersedeItem, Bt as captureClause, C as commitIndexSnapshotDigest, Ct as certifyCheckpoint, D as gitCommandMatchesTarget, Dt as openItems, E as executeRevalidatedGitEffect, Et as closingHint, F as latestAssistantText, Ft as evidenceMatchesItem, G as withDurability, Gt as extractOperation, H as extractTextContent, Ht as classifyClause, I as observeAssistantOutcome, It as isVerifyingCapability, J as parsePwshCommand, Jt as canonicalRegistryBase, K as canonicalArgvFromCommand, Kt as isInformationalMessage, L as CAPTURE_V042_NOTICE, Lt as currentContractDigest, M as decideTurnBoundary, Mt as relevantEvidence, N as decideTurnStopping, Nt as bindingSatisfies, O as parseGitCommandManifest, Ot as recoveryDigest, P as isWholeTaskCompletionClaim, Pt as evidenceCoverage, Q as ALPHA2_DSHMARKET_139_HOST_PACKAGES, Qt as CERTIFICATE_VERSION, R as PROTOCOL_V3_NOTICE, Rt as createProjection, S as GIT_COMMAND_MANIFEST_IDS, St as qualifyBoundary, T as createGitPrestateEnvelope, Tt as MIN_RECOVERY_CHAR_BUDGET, U as extractToolSubject, Ut as extractArtifactPaths, V as evidenceFromPersistedToolResult, Vt as captureItem, W as isDeterministicCheck, Wt as extractMethod, X as goalCompletionDenial, Xt as ACTION_MANIFEST, Y as parseShellCommand, Yt as npmEscapedPackageName, Z as hasCurrentCertificate, Zt as ACTION_MANIFEST_VERSION, _ as readActiveHostGraph, _n as sanitizeUrl, _t as segmentAuthorityBlocks, a as createProofManifest, an as requestedTargetAuthorizesMutation, at as HOST_COHORTS, b as verifyComposedHostLockDump, bt as effectuateBoundary, c as sessionQuery, cn as semanticActionFromText, ct as bindLiveGoalCapability, d as hostLockContextFromComposedDump, dn as COMMAND_SURFACE_MANIFEST, dt as evaluateHostLock, en as STATEFUL_ACTIONS, et as BASE_HOST_PACKAGES, f as hostLockRowsFromComposedDump, fn as validateManifest, ft as evaluateToolSurfaceCapability, g as packageRowsFromPnpmLock, gn as sanitizeClauseText, gt as authorityCaptureCounts, h as packageRowsFromActiveGraph, hn as normalizeClause, ht as ALPHA3_HOST_PACKAGES, i as canonicalProjection, in as isStatefulAction, it as HOST_CAPABILITY_PACKAGE_GROUPS, j as classifyCompletionClaim, jt as itemDiagnosis, k as revalidateGitPrestate, kt as renderRecoveryPacket, l as validateProofManifest, ln as validateActionManifest, lt as evaluateExternalWaitCapability, m as inspectTargetHostGraph, mn as digestStrings, mt as RC1_HOST_PACKAGES, n as PROOF_PROTOCOL_VERSION, nn as SUPPORTED_EVIDENCE_ADAPTERS, nt as EXPECTED_HOST_PACKAGES, o as proofDigest, on as requestedTargetMatchesResolved, ot as LEGACY_HOST_COHORTS, p as injectActiveProfileHostLock, pn as canonicalizePath, pt as selectHostCohort, q as isRunExecutable, qt as segmentClauses, r as bindProofToProjection, rn as actionCompatible, rt as GOAL_HOST_PACKAGES, s as proofEvidenceConstraints, sn as semanticActionFromCommand, st as bindExecutableIdentity, t as PROOF_KINDS, tn as STOP_PROTOCOL_VERSION, tt as DEFAULT_HOST_LOCK, u as HostProfileError, un as validateActionTarget, ut as evaluateHostCapability, v as resolveActiveProfileHostLock, vn as sha256, vt as classifyUserInteraction, w as commitTreeSnapshotDigest, wt as DEFAULT_RECOVERY_CHAR_BUDGET, x as snapshotSessionEvents, xt as isCurrentAcceptedBoundary, y as resolveInstalledHostLock, yt as availableBoundaryQualifications, z as deriveProjection, zt as rebindResponse } from "./domain-DebMrpyX.js";
+import { $ as isRunExecutable, $t as itemDiagnosis, A as revalidateGitPrestate, An as canonicalizePath, At as MIN_RECOVERY_CHAR_BUDGET, B as lifecyclePhase, Bt as createProjection, C as GIT_COMMAND_TEMPLATES, Cn as semanticActionFromText, Ct as segmentAuthorityBlocks, D as executeRevalidatedGitEffect, Dn as validateManifest, Dt as qualifyBoundary, E as createGitPrestateEnvelope, En as COMMAND_SURFACE_MANIFEST, Et as isCurrentAcceptedBoundary, F as isWholeTaskCompletionClaim, Fn as sha256, Ft as bindingSatisfies, G as deriveProjection, Gt as rebindAttemptKey, H as CAPTURE_V042_NOTICE, Ht as proposeRebind, I as latestAssistantText, It as evidenceCoverage, J as extractTextContent, Jt as CONFIRM_LINE_PATTERN, K as supersedeItem, Kt as rebindResponse, L as observeAssistantOutcome, Lt as evidenceMatchesItem, M as classifyCompletionClaim, Mn as normalizeClause, Mt as openItems, N as decideTurnBoundary, Nn as sanitizeClauseText, Nt as recoveryDigest, O as gitCommandMatchesTarget, On as classifyTaskIntent, Ot as certifyCheckpoint, P as decideTurnStopping, Pn as sanitizeUrl, Pt as renderRecoveryPacket, Q as canonicalArgvFromCommand, Qt as evidenceAvailabilityReason, R as FIRST_STEP_GUIDANCE, Rt as isVerifyingCapability, S as GIT_COMMAND_MANIFEST_IDS, Sn as semanticActionFromCommand, St as authorityCaptureCounts, T as commitTreeSnapshotDigest, Tn as validateActionTarget, Tt as effectuateBoundary, U as PROTOCOL_V3_NOTICE, Ut as proposeRebindOutcome, V as previewFirstStepInjection, Vt as confirmRebind, W as PROTOCOL_V4_NOTICE, Wt as proposeRebindV042, X as isDeterministicCheck, Xt as parseConfirmationMessage, Y as extractToolSubject, Yt as isFrozenV042RebindResponse, Z as withDurability, Zt as deriveItemDiagnosis, _ as readActiveHostGraph, _n as SUPPORTED_EVIDENCE_ADAPTERS, _t as evaluateHostLock, a as createProofManifest, an as extractMethod, at as ALPHA2_HOST_PACKAGES, b as verifyComposedHostLockDump, bn as requestedTargetAuthorizesMutation, bt as RC1_HOST_PACKAGES, c as sessionQuery, cn as segmentClauses, ct as EXPECTED_HOST_PACKAGES, d as hostLockContextFromComposedDump, dn as ACTION_MANIFEST, dt as HOST_COHORTS, en as relevantEvidence, et as parsePwshCommand, f as hostLockRowsFromComposedDump, fn as ACTION_MANIFEST_VERSION, ft as LEGACY_HOST_COHORTS, g as packageRowsFromPnpmLock, gn as STOP_PROTOCOL_VERSION, gt as evaluateHostCapability, h as packageRowsFromActiveGraph, hn as STATEFUL_ACTIONS, ht as evaluateExternalWaitCapability, i as canonicalProjection, in as extractArtifactPaths, it as ALPHA2_DSHMARKET_139_HOST_PACKAGES, j as verifiedLinearCommitReadback, jn as digestStrings, jt as closingHint, k as parseGitCommandManifest, kn as classifyUserInteraction, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as validateProofManifest, ln as canonicalRegistryBase, lt as GOAL_HOST_PACKAGES, m as inspectTargetHostGraph, mn as SEMANTIC_ACTIONS, mt as bindLiveGoalCapability, n as PROOF_PROTOCOL_VERSION, nn as captureItem, nt as goalCompletionDenial, o as proofDigest, on as extractOperation, ot as BASE_HOST_PACKAGES, p as injectActiveProfileHostLock, pn as CERTIFICATE_VERSION, pt as bindExecutableIdentity, q as evidenceFromPersistedToolResult, qt as replayRebindResult, r as bindProofToProjection, rn as classifyClause, rt as hasCurrentCertificate, s as proofEvidenceConstraints, sn as isInformationalMessage, st as DEFAULT_HOST_LOCK, t as PROOF_KINDS, tn as captureClause, tt as parseShellCommand, u as HostProfileError, un as npmEscapedPackageName, ut as HOST_CAPABILITY_PACKAGE_GROUPS, v as resolveActiveProfileHostLock, vn as actionCompatible, vt as evaluateToolSurfaceCapability, w as commitIndexSnapshotDigest, wn as validateActionManifest, wt as availableBoundaryQualifications, x as snapshotSessionEvents, xn as requestedTargetMatchesResolved, xt as ALPHA3_HOST_PACKAGES, y as resolveInstalledHostLock, yn as isStatefulAction, yt as selectHostCohort, z as claimedBatchHasRealRootInput, zt as currentContractDigest } from "./domain-asTyeMNh.js";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -807,6 +807,102 @@ function createBoundaryTool(getProjection, prepare, onRejected) {
 					contract_sha256: candidate.contractSha256,
 					candidate_sha256: candidate.candidateSha256
 				}
+			};
+		}
+	});
+}
+
+//#endregion
+//#region src/tools/prepare.ts
+/**
+* Thin READ-ONLY preparation surface (v0.5): before any stateful action it
+* reports the supported command shape, the required resolution/effect/state
+* evidence order, existing reusable references, and the exact missing fields.
+* It never executes, installs, commits, pushes, restarts, or probes authority
+* through side effects, and it never upgrades a default into user authority.
+*/
+function createPrepareTool(options) {
+	return defineTool({
+		name: "context_guard_prepare",
+		description: "Read-only pre-action preparation: report the supported command shape, required resolution/effect/state evidence order, existing references, and exact missing target fields for one contract item. Performs no action and grants no authority.",
+		parameters: {
+			item_id: {
+				type: "string",
+				required: true
+			},
+			item_revision: { type: "number" },
+			semantic_action: { type: "string" },
+			requested_target: {
+				type: "object",
+				additionalProperties: true
+			},
+			planned_operation: { type: "string" }
+		},
+		output: {
+			schema: {
+				type: "object",
+				additionalProperties: true
+			},
+			render: (_args, value) => [{
+				type: "text",
+				text: JSON.stringify(value)
+			}]
+		},
+		async execute(rawArgs) {
+			const args = rawArgs;
+			const p = options.getProjection();
+			if (!p || !p.enabled || p.integrity !== "valid") return {
+				status: "unknown",
+				reason_code: "guard_unavailable"
+			};
+			const item = p.items.get(args.item_id ?? "");
+			if (!item) return {
+				status: "rejected",
+				reason_code: "item_not_found"
+			};
+			if (args.item_revision !== void 0 && item.revision !== args.item_revision) return {
+				status: "rejected",
+				reason_code: "item_revision_mismatch",
+				item_revision: item.revision
+			};
+			const diagnosis = deriveItemDiagnosis(p, item);
+			const plannedAction = args.semantic_action ?? item.semanticAction;
+			const manifestEntry = plannedAction ? ACTION_MANIFEST.actions[plannedAction] : void 0;
+			if (plannedAction && !manifestEntry) return {
+				status: "rejected",
+				reason_code: "unsupported_action"
+			};
+			const reusable = [...p.evidence.values()].filter((evidence) => relevantEvidence(p, item, evidence) && evidenceAvailabilityReason(evidence) === void 0).sort((a, b) => b.toolResultSeq - a.toolResultSeq).slice(0, 8).map((evidence) => ({
+				evidence_id: evidence.id,
+				role: evidence.evidenceRole,
+				semantic_action: evidence.semanticAction,
+				resolved_target: evidence.resolvedTarget,
+				tool_result_seq: evidence.toolResultSeq
+			}));
+			const requiredOrder = manifestEntry?.stateful ? [
+				"resolution (prestate facts from a trusted read)",
+				"effect (the exact planned change)",
+				"state (independent post-state readback)"
+			] : ["state (matching durable evidence for the requested verification)"];
+			const missingTargetFields = manifestEntry?.stateful && plannedAction ? manifestEntry.resolvedTargetKeys.filter((key) => !(item.requestedTarget?.[key] !== void 0 || args.requested_target?.[key] !== void 0)) : [];
+			const capability = plannedAction && options.hostCapability ? options.hostCapability(plannedAction) : void 0;
+			return {
+				status: "prepared",
+				item: {
+					id: item.id,
+					revision: item.revision
+				},
+				diagnosis,
+				planned_action: plannedAction,
+				supported_command_shape: options.commandTemplate && plannedAction ? options.commandTemplate(plannedAction) ?? void 0 : void 0,
+				required_evidence_order: requiredOrder,
+				reusable_references: reusable,
+				missing_target_fields: missingTargetFields,
+				host_capability: capability ? {
+					status: capability.status,
+					reason_code: capability.reasonCode
+				} : void 0,
+				note: "Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields."
 			};
 		}
 	});
@@ -2411,7 +2507,7 @@ function createExternalOperationTool(read, capability) {
 function pendingCount(projection) {
 	return [...projection.items.values()].filter((item) => item.status === "pending").length;
 }
-function createContextGuardCommand(projectionFor, setEnabled, clearContract) {
+function createContextGuardCommand(projectionFor, setEnabled, clearContract, lifecycleFor) {
 	return {
 		name: "context-guard",
 		description: "Enable, disable, clear, inspect, or diagnose Context Guard for this session.",
@@ -2449,12 +2545,26 @@ function createContextGuardCommand(projectionFor, setEnabled, clearContract) {
 				text: "Usage: /context-guard on|off|clear|status|diagnose"
 			};
 			const passed = [...projection.items.values()].filter((item) => item.status === "passed").length;
+			let certifiable_missing_evidence = 0;
+			let unsupported = 0;
+			for (const item of projection.items.values()) {
+				if (item.status !== "pending") continue;
+				const diagnosis = deriveItemDiagnosis(projection, item);
+				if (diagnosis.repairability === "agent_repairable") certifiable_missing_evidence += 1;
+				else if (diagnosis.certification === "unsupported") unsupported += 1;
+			}
 			const response = {
 				enabled: projection.enabled,
+				lifecycle: lifecycleFor?.(agent) ?? (projection.enabled ? "active" : "disabled"),
 				epoch: projection.epoch,
 				contract_revision: projection.contractRevision,
 				pending: pendingCount(projection),
 				passed,
+				diagnosis: {
+					certified: passed,
+					certifiable_missing_evidence,
+					unsupported
+				},
 				evidence: projection.evidence.size,
 				integrity: projection.integrity,
 				last_source_seq: projection.lastObservedSourceSeq
@@ -3465,6 +3575,9 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	let observedEpoch = -1;
 	let observedCompactionSeq = -1;
 	let observedContractRevision = -1;
+	let protocolV4Present = false;
+	let realRootInputSeen = false;
+	let lifecycle = "armed";
 	const continuationAttempts = projection.continuationAttempts;
 	const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts;
 	const rebuild = () => {
@@ -3489,6 +3602,12 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		projection.continuationAttempts = continuationAttempts;
 		projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts;
 		projection.lastRecoveryDigest = priorRecoveryDigest;
+		protocolV4Present = derived.protocolV4Present;
+		realRootInputSeen = derived.realRootInputSeen;
+		lifecycle = lifecyclePhase({
+			enabled: projection.enabled,
+			realInputSeen: realRootInputSeen
+		});
 		if (observedEpoch >= 0 && derived.projection.epoch > observedEpoch) {
 			pendingRecovery = true;
 			projection.lastRecoveryDigest = void 0;
@@ -3523,12 +3642,23 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	return {
 		projection,
 		session,
+		get lifecycle() {
+			return lifecycle;
+		},
+		get protocolV4Present() {
+			return protocolV4Present;
+		},
 		sync,
 		setEnabled,
 		setDurability,
 		markRecoveryNeeded,
 		consumeRecovery
 	};
+}
+/** Delegated/subagent sessions never receive root-conversation injections. */
+function isDelegatedSession(session) {
+	const header = session.header;
+	return header?.origin === "subagent" || typeof header?.delegationDepth === "number" && header.delegationDepth > 0 || typeof header?.parentSession === "string";
 }
 /** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
 function revalidateCoreLock(config, expected) {
@@ -3585,10 +3715,8 @@ function apply(ctx, rawConfig = {}) {
 		}
 		return runtime;
 	};
-	ctx.commands.register(createContextGuardCommand((agent) => ensure(agent).projection, (agent, enabled) => ensure(agent).setEnabled(enabled), (agent) => ensure(agent).sync()));
+	ctx.commands.register(createContextGuardCommand((agent) => ensure(agent).projection, (agent, enabled) => ensure(agent).setEnabled(enabled), (agent) => ensure(agent).sync(), (agent) => ensure(agent).lifecycle));
 	ctx.on("agent/session-start", ({ agent, source }) => {
-		ensureProtocolBoundary(agent);
-		ensureProtocolBoundary(agent, CAPTURE_V042_NOTICE);
 		const runtime = ensure(agent);
 		runtime.sync();
 		if (source === "resume" || source === "compact") {
@@ -3655,21 +3783,53 @@ function apply(ctx, rawConfig = {}) {
 		};
 		agent.ctx.tools.register(createEvidenceTool(evidenceOptions));
 		agent.ctx.tools.register(createActionTool(evidenceOptions));
+		agent.ctx.tools.register(createPrepareTool({
+			getProjection: () => runtime.projection,
+			hostCapability: (action) => {
+				const evaluation = createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action);
+				return {
+					status: evaluation.status,
+					reasonCode: evaluation.reasonCode
+				};
+			},
+			commandTemplate: (action) => GIT_COMMAND_TEMPLATES[action]
+		}));
 		agent.ctx.tools.register(createExternalOperationTool((id, toolAgent) => readExternalOperation(ctx, toolAgent, id), () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock)));
 		agent.ctx.tools.guard((exec) => goalCompletionDenial(runtime.projection, exec.name, exec.arguments));
 	});
-	ctx.on("agent/pre-step", async ({ agent }, next) => {
+	ctx.on("agent/pre-step", async ({ agent, messages }, next) => {
 		const durability = await ctx.sessions.flush(agent.session);
 		const runtime = ensure(agent);
 		runtime.setDurability(durability);
 		runtime.sync();
 		const decision = await next();
-		if (decision.kind === "enter" && runtime.projection.enabled && runtime.consumeRecovery()) {
-			const recovery = renderRecoveryPacket(runtime.projection, { charBudget: 4e3 });
+		if (decision.kind !== "enter") return decision;
+		const injected = [];
+		const delegated = isDelegatedSession(agent.session);
+		let boundaryPending = !runtime.protocolV4Present;
+		const firstStep = previewFirstStepInjection({
+			activation: config.activation,
+			enabled: runtime.projection.enabled,
+			boundaryPresent: runtime.protocolV4Present,
+			delegated
+		}, claimedBatchHasRealRootInput(messages));
+		if (firstStep) {
+			injected.push(pluginNoticeMessage(firstStep.boundary, "Context Guard recorded a replay version boundary"));
+			injected.push(pluginNoticeMessage(firstStep.guidance, "Context Guard first-step protection guidance"));
+			boundaryPending = false;
+		}
+		if (runtime.projection.enabled && runtime.consumeRecovery()) {
+			const hasOpenWork = [...runtime.projection.items.values()].some((item) => item.status === "pending");
+			const hasRejections = (runtime.projection.lastCheckpointRejections?.length ?? 0) > 0;
+			const recovery = hasOpenWork || hasRejections ? renderRecoveryPacket(runtime.projection, { charBudget: 4e3 }) : void 0;
 			const digest$2 = recovery ? recoveryDigest(recovery, runtime.projection) : void 0;
 			if (recovery && digest$2 !== runtime.projection.lastRecoveryDigest) {
 				runtime.projection.lastRecoveryDigest = digest$2;
-				decision.messages = [...decision.messages, createUserMessage({
+				if (boundaryPending && !delegated) {
+					injected.push(pluginNoticeMessage(PROTOCOL_V4_NOTICE, "Context Guard recorded a replay version boundary"));
+					boundaryPending = false;
+				}
+				injected.push(createUserMessage({
 					content: [{
 						type: "text",
 						text: `Open task requirements (recovered after compaction or resume):\n${recovery}`
@@ -3680,9 +3840,10 @@ function apply(ctx, rawConfig = {}) {
 						form: "notice",
 						summary: boundContextSummary("recovering open task requirements")
 					}
-				})];
+				}));
 			}
 		}
+		if (injected.length > 0) decision.messages = [...injected, ...decision.messages];
 		return decision;
 	});
 	ctx.on("agent/turn-stopping", async ({ agent }) => {
@@ -3724,26 +3885,20 @@ function optionalMarketOrigin(ctx, agent) {
 		return `http://${service.host === "::1" ? "[::1]" : "127.0.0.1"}:${service.port}`;
 	} catch {}
 }
-function ensureProtocolBoundary(agent, notice = PROTOCOL_V3_NOTICE) {
-	if (snapshotSessionEvents(agent.session).some((event) => {
-		if (event.type !== "user/message" || !event.data || typeof event.data !== "object") return false;
-		const data = event.data;
-		const source = data.source && typeof data.source === "object" ? data.source : void 0;
-		const content = Array.isArray(data.content) ? data.content : [];
-		return (content.length === 1 && content[0] && typeof content[0] === "object" ? content[0].text : void 0) === notice && source?.kind === "plugin" && source.plugin === "context-guard" && source.form === "notice";
-	})) return;
-	agent.session.append.bind(agent.session)("user/message", createUserMessage({
+/** Build one host-approved plugin notice user/message for step-batch delivery. */
+function pluginNoticeMessage(text, summaryLabel) {
+	return createUserMessage({
 		content: [{
 			type: "text",
-			text: notice
+			text
 		}],
 		source: {
 			kind: "plugin",
 			plugin: "context-guard",
 			form: "notice",
-			summary: boundContextSummary("Context Guard recorded a replay version boundary")
+			summary: boundContextSummary(summaryLabel)
 		}
-	}), { surfaceOp: "append" });
+	});
 }
 function hasPinnedUpdateGoalTool(agent) {
 	try {
@@ -3815,4 +3970,4 @@ function normalizeGoalState(value) {
 }
 
 //#endregion
-export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, COMMAND_SURFACE_MANIFEST, Config, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, EXPECTED_HOST_PACKAGES, GIT_COMMAND_MANIFEST_IDS, GOAL_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, LEGACY_HOST_COHORTS, MIN_RECOVERY_CHAR_BUDGET, PROOF_KINDS, PROOF_PROTOCOL_VERSION, PROTOCOL_V3_NOTICE, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, apply, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindingSatisfies, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, captureClause, captureItem, certifyCheckpoint, classifyClause, classifyCompletionClaim, classifyUserInteraction, closingHint, commitIndexSnapshotDigest, commitTreeSnapshotDigest, createGitPrestateEnvelope, createProjection, createProofManifest, currentContractDigest, decideTurnBoundary, decideTurnStopping, deriveProjection, digestStrings, effectuateBoundary, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateToolSurfaceCapability, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, gitCommandMatchesTarget, goalCompletionDenial, hasCurrentCertificate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, inject, injectActiveProfileHostLock, inspectTargetHostGraph, isCurrentAcceptedBoundary, isDeterministicCheck, isInformationalMessage, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, latestAssistantText, name, normalizeClause, observeAssistantOutcome, openItems, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseGitCommandManifest, parsePwshCommand, parseShellCommand, proofDigest, proofEvidenceConstraints, qualifyBoundary, readActiveHostGraph, recoveryDigest, renderRecoveryPacket, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, resolveActiveProfileHostLock, resolveInstalledHostLock, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, sessionQuery, sha256, snapshotSessionEvents, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };
+export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, COMMAND_SURFACE_MANIFEST, CONFIRM_LINE_PATTERN, Config, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, EXPECTED_HOST_PACKAGES, FIRST_STEP_GUIDANCE, GIT_COMMAND_MANIFEST_IDS, GIT_COMMAND_TEMPLATES, GOAL_HOST_PACKAGES, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, LEGACY_HOST_COHORTS, MIN_RECOVERY_CHAR_BUDGET, PROOF_KINDS, PROOF_PROTOCOL_VERSION, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, apply, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindingSatisfies, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, captureClause, captureItem, certifyCheckpoint, claimedBatchHasRealRootInput, classifyClause, classifyCompletionClaim, classifyTaskIntent, classifyUserInteraction, closingHint, commitIndexSnapshotDigest, commitTreeSnapshotDigest, confirmRebind, createGitPrestateEnvelope, createProjection, createProofManifest, currentContractDigest, decideTurnBoundary, decideTurnStopping, deriveItemDiagnosis, deriveProjection, digestStrings, effectuateBoundary, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateToolSurfaceCapability, evidenceAvailabilityReason, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, gitCommandMatchesTarget, goalCompletionDenial, hasCurrentCertificate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, inject, injectActiveProfileHostLock, inspectTargetHostGraph, isCurrentAcceptedBoundary, isDeterministicCheck, isFrozenV042RebindResponse, isInformationalMessage, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, itemDiagnosis, latestAssistantText, lifecyclePhase, name, normalizeClause, observeAssistantOutcome, openItems, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseConfirmationMessage, parseGitCommandManifest, parsePwshCommand, parseShellCommand, previewFirstStepInjection, proofDigest, proofEvidenceConstraints, proposeRebind, proposeRebindOutcome, proposeRebindV042, qualifyBoundary, readActiveHostGraph, rebindAttemptKey, rebindResponse, recoveryDigest, relevantEvidence, renderRecoveryPacket, replayRebindResult, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, resolveActiveProfileHostLock, resolveInstalledHostLock, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, sessionQuery, sha256, snapshotSessionEvents, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };

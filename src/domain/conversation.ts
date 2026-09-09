@@ -110,3 +110,40 @@ export function classifyUserInteraction(text: string): UserInteractionKind {
   if (PROGRESSION_LEAD.test(normalized)) return 'conversational'
   return 'instruction'
 }
+
+export type TaskIntent = 'inquiry' | 'action'
+
+/**
+ * Inquiry verbs: the operation verb appears as the OBJECT of an
+ * investigation rather than an imperative ("是否有更新", "check whether…").
+ * The clause asks about state; it does not order a change.
+ */
+const INQUIRY_PATTERNS: RegExp[] = [
+  /(?:是否|有没有|有没|是否存在|是不是已经?|可曾|曾否)[^。！？；，,]{0,12}(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启|生成|写入)/,
+  /(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启)(?:了)?(?:吗|么|没有|没)\s*[?？]?\s*$/,
+  /^(?:检查|看看|查看|确认|了解|查一下|帮忙看)[^。！？；]{0,16}(?:是否|有没有|是否已经)/,
+  /\b(?:is|are)\s+there\s+(?:any|an?)?\s*(?:update|updates|upgrade|commit|push|change|fix)/i,
+  /\bcheck\s+(?:whether|if)\b/i,
+  /\bwhether\b[^.?!]{0,24}\b(?:update|upgrade|commit|push|install|change)/i,
+]
+
+/**
+ * Imperative leads that keep an ACTION reading even when the clause also
+ * contains an inquiry verb ("更新后检查" orders a change first).
+ */
+const ACTION_LEAD = /^(?:请\s*)?(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|同步|拉取|下载|重启|生成|写入|创建|新建|运行|执行|部署)\b|^(?:please\s+)?(?:update|upgrade|commit|push|publish|install|modify|delete|fix|deploy|run|create)\b/i
+
+/**
+ * Separate intent layer (v0.5): whether the captured work is an inquiry about
+ * state or an ordered change. Intent NEVER drops capture or weakens
+ * protection — an inquiry keeps its original obligation; it only changes what
+ * certification support the diagnosis reports (inquiries are not machine
+ * certifiable by the current adapters and must not be re-bound).
+ */
+export function classifyTaskIntent(text: string): TaskIntent {
+  const normalized = normalizeClause(text)
+  if (!normalized) return 'action'
+  if (ACTION_LEAD.test(normalized)) return 'action'
+  for (const pattern of INQUIRY_PATTERNS) if (pattern.test(normalized)) return 'inquiry'
+  return 'action'
+}

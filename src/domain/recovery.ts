@@ -1,7 +1,7 @@
 import type { GuardItem, GuardProjection } from './types.js'
 import { sha256 } from './canonicalize.js'
 import { evidenceCoverage } from './matching.js'
-import { itemDiagnosis, relevantEvidence } from './diagnostics.js'
+import { deriveItemDiagnosis, itemDiagnosis, relevantEvidence } from './diagnostics.js'
 import { isStatefulAction } from './protocol-manifest.js'
 
 export interface RecoveryOptions {
@@ -11,7 +11,7 @@ export interface RecoveryOptions {
 
 export const DEFAULT_RECOVERY_CHAR_BUDGET = 4000
 export const MIN_RECOVERY_CHAR_BUDGET = 512
-const COMPLETION_RULE = 'Obtain a Context Guard checkpoint from matching durable evidence before claiming completion. A qualified safe end preserves pending work; it is not completion.'
+const COMPLETION_RULE = 'Supported actions certify through matching durable evidence (checkpoint). Investigations and explanations outside the supported set can be delivered honestly but stay uncertified. A qualified safe end preserves pending work; it is not completion.'
 
 /**
  * An actionable one-line hint for how an open item's verification contract can
@@ -100,12 +100,15 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
     if (add(`DO NOT [${clip(item.id, 20)}] ${clip(item.normalizedText, compact ? 18 : 100)}`, compact ? 45 : 140)) count++
   }
   const requirement = (item: GuardItem) => {
-    const diagnosis = itemDiagnosis(projection, item)
-    const remedy = diagnosis.reason_code === 'generic_run_non_certifiable' || diagnosis.reason_code === 'target_clarification_required'
-      ? 'context_guard_rebind; root confirmation required'
-      : diagnosis.reason_code === 'host_unavailable' || diagnosis.reason_code === 'adapter_unavailable'
-        ? 'Restore audited host/adapter capability' : 'Collect matching evidence; checkpoint'
-    if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_step}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++
+    const diagnosis = deriveItemDiagnosis(projection, item)
+    const remedy = diagnosis.repairability === 'agent_repairable'
+      ? 'Collect matching evidence; checkpoint'
+      : diagnosis.repairability === 'historical_gap'
+        ? 'Read back observed state; do not re-execute'
+          : diagnosis.certification === 'unsupported'
+            ? 'Deliver honestly; stays uncertified unless a fresh instruction names a supported action'
+              : 'Restore audited host/adapter capability'
+    if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_action.resume_condition ?? remedy}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++
   }
   // Each category gets a slot before optional diagnostics can consume space.
   if (constraints[0]) constraint(constraints[0])
