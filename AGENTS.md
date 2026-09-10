@@ -70,8 +70,9 @@ change the installed plugin runtime or grant release authority.
   internal terms, preserve necessary technical precision in references, and
   fix actual comprehension failures. Valid links are not readability evidence.
 - One user confirmation may cover an exact prepared action list. Each release
-  action still uses its own required checks and one-shot ticket; preserve
-  already-covered authorization and recheck only actual scope changes.
+  action still uses its required checks and host approval. Exact tickets apply
+  only to an explicitly selected or adopted ticketed contract; never silently
+  downgrade one. Preserve covered authorization and recheck actual scope changes.
 
 ## Candidate and artifact freeze
 
