@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRebindTool } from '../../src/tools/rebind.js'
-import { deriveProjection } from '../../src/domain/derive.js'
+import { deriveProjection, PROTOCOL_V4_NOTICE } from '../../src/domain/derive.js'
 import type { DerivedEnvelope } from '../../src/domain/types.js'
 
 /**
@@ -20,7 +20,7 @@ import type { DerivedEnvelope } from '../../src/domain/types.js'
 const config = { activation: 'always' as const }
 const scope = { cwd: '/workspace', sessionHeader: { version: 1, id: 'incident-synthetic', createdAt: 42 } }
 const user = (seq: number, text: string): DerivedEnvelope => ({ seq, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
-const replay = (events: DerivedEnvelope[], durable = true) => deriveProjection(events, config, scope, durable).projection
+const replay = (events: DerivedEnvelope[], durable = true) => deriveProjection([{ seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } }, ...events], config, scope, durable).projection
 
 describe('A20: synthetic incident regression', () => {
   it('reproduces the incident shapes and resolves them without misleading guidance', async () => {

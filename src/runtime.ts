@@ -495,7 +495,7 @@ export function apply(ctx: Context, rawConfig: {
   // first-step injections are decided from the validated claim (pure preview)
   // and delivered INSIDE the same step batch, ahead of the root message. The
   // formal projection still derives only from durable events.
-  ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
+  ctx.on('agent/pre-step', async ({ agent }, next) => {
     const durability = await ctx.sessions.flush(agent.session)
     const runtime = ensure(agent)
     runtime.setDurability(durability)
@@ -507,11 +507,11 @@ export function apply(ctx: Context, rawConfig: {
     let boundaryPending = !runtime.protocolV4Present
     const firstStep = previewFirstStepInjection(
       { activation: config.activation, enabled: runtime.projection.enabled, boundaryPresent: runtime.protocolV4Present, delegated },
-      claimedBatchHasRealRootInput(messages),
+      claimedBatchHasRealRootInput(decision.messages),
     )
     if (firstStep) {
       injected.push(pluginNoticeMessage(firstStep.boundary, 'Context Guard recorded a replay version boundary'))
-      injected.push(pluginNoticeMessage(firstStep.guidance, 'Context Guard first-step protection guidance'))
+      if (runtime.lifecycle === 'armed') injected.push(pluginNoticeMessage(firstStep.guidance, 'Context Guard first-step protection guidance'))
       boundaryPending = false
     }
     if (runtime.projection.enabled && runtime.consumeRecovery()) {

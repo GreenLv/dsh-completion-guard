@@ -71,18 +71,17 @@ export interface FirstStepPreviewInput {
 }
 
 /**
- * Pure decision for the first-step activation injection under `always`. The
+ * Pure decision for the first-step activation injection when protection is enabled. The
  * boundary must precede the first constrained root message inside the SAME
  * persisted step batch; guidance is compact and never claims a recovery that
- * did not happen. `opt-in` never auto-injects: its explicit `on` command is
- * the user-visible acknowledgment. Delegated sessions receive neither: their
+ * did not happen. `opt-in` reaches this path only after its explicit `on` command. Delegated sessions receive neither: their
  * scope arrives through the parent's delegation prompt (A04).
  */
 export function previewFirstStepInjection(
   input: FirstStepPreviewInput,
   claimedRealInput: boolean,
 ): FirstStepInjection | undefined {
-  if (input.activation !== 'always' || !input.enabled || input.boundaryPresent || input.delegated) return undefined
+  if (!input.enabled || input.boundaryPresent || input.delegated) return undefined
   if (!claimedRealInput) return undefined
   return {
     boundary: PROTOCOL_V4_NOTICE,

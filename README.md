@@ -13,7 +13,7 @@ These instructions target 0.5.0.
 Install the plugin into the DSH Web environment:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard
+dsh plugin --profile web add dsh-completion-guard@0.5.0
 ```
 
 Before restarting DSH, record and verify the DSH program directory and the Web settings directory. Replace the example paths with the absolute paths on your machine:
@@ -64,7 +64,7 @@ The project was renamed from `dsh-context-guard` on 2026-08-29; its internal bun
 Context Guard has two activation modes:
 
 - `opt-in` (default): protection is off when a session starts. Run `/context-guard on` in that session to turn it on, and `/context-guard off` to turn it off again. This changes only the current session.
-- `always`: DSH sessions are protected automatically from the first real message. A brand-new session stays completely empty — the Guard writes nothing into it — so you can still pick the DSH session mode (standard, minimal, or a custom preset) before sending anything. The moment your first real message enters a step, protection begins in that same step and ahead of your message: the first task, including its first file changes, is covered. A first message that only carries an image or an attachment starts protection too; a blank message starts nothing. Running `/context-guard off` turns protection off for that session until you run `on` again.
+- `always`: DSH sessions are protected automatically from the first real message. A brand-new session stays completely empty — the Guard writes nothing into it — so you can still pick the DSH session mode (standard, minimal, or a custom preset) before sending anything. The moment your first real message enters a step, protection begins in that same step and ahead of your message: the first task, including its first file changes, is covered. A first message that only carries an image or an attachment starts protection too and leaves an unresolved asset item until its meaning is clarified; a blank message starts nothing. Running `/context-guard off` turns protection off for that session until you run `on` again.
 
 These modes only control Guard protection. They are not the DSH session mode (for example, the standard or minimal mode) that a session starts with. Because the Guard no longer writes into sessions before the first message, a session's DSH mode can be selected while the session is still new. `/context-guard on` and `/context-guard off` turn Guard protection on or off; they never change the DSH session mode.
 
@@ -96,7 +96,7 @@ After the change, restart DSH.
 
 ## How completion is checked
 
-Once enabled, the Guard saves direct user requirements and acceptance checks. A saved tool result counts only when it matches the requested command, file, or other target. Before claiming the whole task complete, the model must pass the Guard's checkpoint; missing, stale, or mismatched evidence leaves the task open.
+Once enabled, the Guard saves direct user requirements and acceptance checks. A saved tool result counts only when it matches the requested command, file, or other target. A machine-certified completion requires the Guard's checkpoint; missing, stale, or mismatched evidence leaves the task uncertified. Investigations and explanations outside the supported evidence rules can still end with an honest answer, without a completion certificate.
 
 Read-only evidence collection and actions that change packages, files, services, or Git state use separate tools. A successful lookup never grants permission to make a change. Exact command limits and platform evidence are documented in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 

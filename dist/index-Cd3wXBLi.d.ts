@@ -121,7 +121,7 @@ declare function proposeRebindOutcome(p: GuardProjection, args: RebindArgs): Pro
 declare function proposeRebindV042(p: GuardProjection, args: RebindArgs): RebindProposal | undefined;
 /** Stable attempt key: item identity, exact inputs, and outcome class. Identical
 * retries collapse onto it no matter how many unrelated log rows intervene. */
-declare function rebindAttemptKey(args: RebindArgs, reasonCode: string): string;
+declare function rebindAttemptKey(p: GuardProjection, args: RebindArgs, reasonCode: string): string;
 declare function rebindResponse(p: GuardProjection, args: RebindArgs): Record<string, unknown>;
 /**
 * Replay validation with version dispatch (A12): structured v0.5 results
@@ -554,10 +554,7 @@ type ParsedConfirmation = {
   remainder: string;
 };
 declare const CONFIRM_LINE_PATTERN: RegExp;
-/**
-* Parse one canonical root user message for a rebind confirmation. Pure and
-* deterministic over the message text alone.
-*/
+/** Parse control without rewriting the follow-up's authority wrappers. */
 declare function parseConfirmationMessage(text: string): ParsedConfirmation;
 /** Whether a recorded tool/result carries the frozen v0.4.x response shape. */
 declare function isFrozenV042RebindResponse(recorded: unknown): boolean;
@@ -1166,11 +1163,10 @@ interface FirstStepPreviewInput {
   delegated: boolean;
 }
 /**
-* Pure decision for the first-step activation injection under `always`. The
+* Pure decision for the first-step activation injection when protection is enabled. The
 * boundary must precede the first constrained root message inside the SAME
 * persisted step batch; guidance is compact and never claims a recovery that
-* did not happen. `opt-in` never auto-injects: its explicit `on` command is
-* the user-visible acknowledgment. Delegated sessions receive neither: their
+* did not happen. `opt-in` reaches this path only after its explicit `on` command. Delegated sessions receive neither: their
 * scope arrives through the parent's delegation prompt (A04).
 */
 declare function previewFirstStepInjection(input: FirstStepPreviewInput, claimedRealInput: boolean): FirstStepInjection | undefined;

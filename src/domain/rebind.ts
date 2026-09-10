@@ -1,6 +1,6 @@
 import { sha256 } from './canonicalize.js'
 import { captureItem, extractMethod, extractOperation } from './capture.js'
-import { deriveItemDiagnosis } from './diagnostics.js'
+import { deriveItemDiagnosis, relevantEvidence } from './diagnostics.js'
 import type { GuardItem, GuardProjection } from './types.js'
 import { isFrozenV042RebindResponse } from './confirm-parse.js'
 
@@ -238,8 +238,10 @@ function proposalConfirmation(p: GuardProjection, proposal: RebindProposal): Rec
 
 /** Stable attempt key: item identity, exact inputs, and outcome class. Identical
  * retries collapse onto it no matter how many unrelated log rows intervene. */
-export function rebindAttemptKey(args: RebindArgs, reasonCode: string): string {
-  return sha256(JSON.stringify([args.item_id ?? null, args.clauses ?? null, args.clarification_item_ids ?? null, reasonCode]))
+export function rebindAttemptKey(p: GuardProjection, args: RebindArgs, reasonCode: string): string {
+  const item = p.items.get(args.item_id ?? '')
+  const evidence = item ? [...p.evidence.values()].filter(value => relevantEvidence(p, item, value)) : []
+  return sha256(JSON.stringify([p.epoch, p.contractRevision, p.hostLockDigest, evidence, args.item_id ?? null, args.clauses ?? null, args.clarification_item_ids ?? null, reasonCode]))
 }
 
 export function rebindResponse(p: GuardProjection, args: RebindArgs): Record<string, unknown> {
@@ -250,7 +252,7 @@ export function rebindResponse(p: GuardProjection, args: RebindArgs): Record<str
     if (!outcome.ok) {
       // Retry budget: an identical rejected attempt already in the log returns
       // a stable `unchanged` diagnosis instead of a fresh rejection round.
-      const key = rebindAttemptKey(args, outcome.reasonCode)
+      const key = rebindAttemptKey(p, args, outcome.reasonCode)
       if ((p.rebindRejections.get(key) ?? 0) > 0) {
         return {
           status: 'unchanged',

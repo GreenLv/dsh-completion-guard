@@ -95,7 +95,15 @@ export function apply(ctx, config) {
     let ordinal = 0
     const root = async text => {
       operation = 'root_flush'
-      handle.agent.session.append('user/message', createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+      const agent = handle.agent
+      const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
+      // Exercise the real registered pre-step waterfall before persisting the
+      // driver input. This is hook delivery evidence, not a model request.
+      const decision = await agent.ctx.waterfall('agent/pre-step', {
+        agent, messages: [message], turn: 1, step: ordinal + 1, signal: AbortSignal.timeout(30000),
+      }, async () => ({ kind: 'enter', messages: [message] }))
+      assert.equal(decision.kind, 'enter')
+      for (const entry of decision.messages) agent.session.append('user/message', entry, { surfaceOp: 'append' })
       assert.equal(await ctx.sessions.flush(handle.agent.session), true)
     }
     const call = async (name, args) => {
@@ -143,7 +151,12 @@ export function apply(ctx, config) {
       }
       handle = await createProbeAgent(ctx, sessionId, config.workRoot)
       await check('nonempty_test_certificate', async () => {
+        assert.equal(handle.agent.session.snapshotEvents().filter(event => event.type === 'user/message').length, 0)
         await root('Run pnpm test.')
+        const messages = handle.agent.session.snapshotEvents().filter(event => event.type === 'user/message')
+        assert.equal(messages[0].data.source.plugin, 'context-guard')
+        assert.equal(messages[0].data.content[0].text, 'Context Guard protocol boundary: v4.0.0')
+        assert.equal(messages.filter(event => event.data.source.kind === 'user').length, 1)
         const shell = process.platform === 'win32' ? 'pwsh' : 'bash'
         const fields = handle.agent.ctx.tools.get(shell, handle.agent)?.parameters?.properties ?? {}
         const terminal = await call(shell, { command: 'pnpm test', ...(fields.description ? { description: 'Run isolated deterministic acceptance test' } : {}) })

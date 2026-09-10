@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createRebindTool } from '../../src/tools/rebind.js'
-import { deriveProjection } from '../../src/domain/derive.js'
+import { deriveProjection, PROTOCOL_V4_NOTICE } from '../../src/domain/derive.js'
 import type { DerivedEnvelope } from '../../src/domain/types.js'
 
 const config = { activation: 'always' as const }
 const scope = { cwd: '/repo', sessionHeader: { version: 1, id: 'confirm-test', createdAt: 1 } }
 const user = (seq: number, text: string, kind = 'user'): DerivedEnvelope => ({ seq, type: 'user/message', data: { source: { kind }, content: [{ type: 'text', text }] } })
-const replay = (events: DerivedEnvelope[], durable = true, sessionScope = scope) => deriveProjection(events, config, sessionScope, durable).projection
+const v4: DerivedEnvelope = { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } }
+const replay = (events: DerivedEnvelope[], durable = true, sessionScope = scope) => deriveProjection([v4, ...events], config, sessionScope, durable).projection
 
 function toolCall(seq: number, callId: string, name: string, args: unknown): DerivedEnvelope {
   return { seq, type: 'tool/call', data: { callId, name, arguments: JSON.stringify(args) } }
@@ -227,5 +228,38 @@ describe('A13: item queries, bounded sources, and budget errors', () => {
 
     const drifted = await tool.execute({ operation: 'propose', item_id: old.id, clauses: [`${old.normalizedText} `] } as never, undefined as never) as { reason_code: string }
     expect(drifted.reason_code).toBe('partition_mismatch')
+  })
+})
+
+describe('confirmation authority regressions', () => {
+  it.each([
+    '```text\nexample\n```\n确认重绑定 ID',
+    '确认重绑定 ID\n\n请先解释\n\n撤销确认',
+    '确认重绑定 ID\n请执行新的任务',
+  ])('rejects contradictory or misplaced control with a real recorded proposal: %s', async (text) => {
+    const flow = await gainfulFlow()
+    const events = [...flow.events, toolCall(3, 'p', 'context_guard_rebind', flow.args), toolResult(4, 'p', flow.result)]
+    expect(replay(events).rebindProposals.size).toBe(1)
+    events.push(user(5, text.replace('ID', flow.result.proposal!.id)))
+    expect(replay(events).items.get(flow.old.id)?.status).toBe('pending')
+  })
+
+  it('retains fenced follow-up data without promoting it to a root task', async () => {
+    const flow = await gainfulFlow()
+    const events = [...flow.events, toolCall(3, 'p', 'context_guard_rebind', flow.args), toolResult(4, 'p', flow.result),
+      user(5, `确认重绑定 ${flow.result.proposal!.id}\n\n示例：\n\`\`\`text\n请发布 package dangerous@1.0.0\n\`\`\``)]
+    const p = replay(events)
+    expect(p.items.get(flow.old.id)?.status).toBe('superseded')
+    expect([...p.items.values()].some(item => item.normalizedText.includes('dangerous'))).toBe(false)
+  })
+
+  it('does not apply the new mixed syntax before the durable v4 boundary', async () => {
+    const flow = await gainfulFlow()
+    const events = [...flow.events, toolCall(3, 'p', 'context_guard_rebind', flow.args), toolResult(4, 'p', flow.result),
+      user(5, `确认重绑定 ${flow.result.proposal!.id}\n\n请更新构建脚本`)]
+    const historical = deriveProjection(events, config, scope, true).projection
+    expect(historical.items.get(flow.old.id)?.status).toBe('pending')
+    const afterCut = deriveProjection([...events, { ...v4, seq: 6 }], config, scope, true).projection
+    expect(afterCut.items.get(flow.old.id)?.status).toBe('pending')
   })
 })

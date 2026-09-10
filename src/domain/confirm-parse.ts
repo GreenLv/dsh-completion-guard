@@ -23,65 +23,41 @@ export const CONFIRM_LINE_PATTERN: RegExp = /^确认重绑定 (RB-[a-f0-9]{24})$
 
 const REVERSAL_LEAD: RegExp = /^(?:不要确认|请勿确认|取消(?:确认|刚才的)?|撤销(?:确认|刚才的)?|先不(?:要)?确认|暂不确认|先别确认|别确认)/
 
-interface Line { text: string; blank: boolean; fenced: boolean; quoted: boolean }
-
-function classifyLines(text: string): Line[] {
-  let fenced = false
-  return text.split(/\r?\n/).map((raw) => {
-    const trimmed = raw.trim()
-    if (/^(?:```|~~~)/.test(trimmed)) fenced = !fenced
-    // A line inside a fence is data; the fence markers themselves too.
-    const isFenceRow = fenced || /^(?:```|~~~)/.test(trimmed)
-    return {
-      text: trimmed,
-      blank: trimmed.length === 0,
-      fenced: isFenceRow,
-      quoted: trimmed.startsWith('>'),
-    }
-  })
-}
-
-/**
- * Parse one canonical root user message for a rebind confirmation. Pure and
- * deterministic over the message text alone.
- */
+/** Parse control without rewriting the follow-up's authority wrappers. */
 export function parseConfirmationMessage(text: string): ParsedConfirmation {
-  const lines = classifyLines(text)
-  const content = lines.filter((line) => !line.blank && !line.fenced)
-  if (content.length === 0) return { kind: 'none' }
-
-  const controlLines = content.filter((line) => CONFIRM_LINE_PATTERN.test(line.text))
-  const mentionsControl = content.filter((line) => /确认重绑定|RB-[a-f0-9]{24}/.test(line.text))
-  const first = content[0]
-
-  // The whole first line is inside a quote or wraps the control text in
-  // quotation marks: treated as quoted data, never a confirmation.
-  if (first.quoted || /^["“'『「].*["”'』」]$/.test(first.text)) {
-    return mentionsControl.length > 0
-      ? { kind: 'malformed', reason: 'quoted' }
-      : { kind: 'none' }
-  }
-
-  if (CONFIRM_LINE_PATTERN.test(first.text)) {
-    if (controlLines.length > 1) return { kind: 'ambiguous', reason: 'multiple_control_lines' }
-    const remainderLines = content.slice(1).map((line) => line.text)
-    if (remainderLines.some((line) => CONFIRM_LINE_PATTERN.test(line) || /确认重绑定|RB-[a-f0-9]{24}/.test(line))) {
-      return { kind: 'ambiguous', reason: 'multiple_control_lines' }
+  const lines = text.split(/\r?\n/)
+  const firstIndex = lines.findIndex(line => line.trim().length > 0)
+  if (firstIndex < 0) return { kind: 'none' }
+  const first = lines[firstIndex].trim()
+  const match = CONFIRM_LINE_PATTERN.exec(first)
+  if (!match) {
+    if (!/确认重绑定|RB-[a-f0-9]{24}/.test(text)) return { kind: 'none' }
+    if (/^(?:`{3,}|~{3,})/.test(first)) return { kind: 'malformed', reason: 'inside_code_fence' }
+    if (/^(?:>|["“'『「])/.test(first)) return { kind: 'malformed', reason: 'quoted' }
+    if (lines.slice(firstIndex + 1).some(line => CONFIRM_LINE_PATTERN.test(line.trim()))) {
+      return { kind: 'ambiguous', reason: 'late_control_line' }
     }
-    const remainder = remainderLines.join('\n').trim()
-    if (remainder && REVERSAL_LEAD.test(remainder)) {
-      return { kind: 'ambiguous', reason: 'reversal_in_remainder' }
-    }
-    return { kind: 'confirm', proposalId: CONFIRM_LINE_PATTERN.exec(first.text)![1], remainder }
+    return { kind: 'malformed', reason: 'embedded_control_text' }
   }
-
-  // A control line appearing only LATER in the message is misplaced control:
-  // ambiguous, never silently applied.
-  if (controlLines.length > 0) return { kind: 'ambiguous', reason: 'late_control_line' }
-  // Embedded control text in prose (same sentence, code spans, garbled IDs):
-  // a format error the model can report, never a confirmation.
-  if (mentionsControl.length > 0) return { kind: 'malformed', reason: 'embedded_control_text' }
-  return { kind: 'none' }
+  const tail = lines.slice(firstIndex + 1)
+  // Require the documented blank separator before any follow-up content.
+  if (tail.some(line => line.trim()) && tail[0].trim()) {
+    return { kind: 'ambiguous', reason: 'multiple_control_lines' }
+  }
+  let fence: { marker: string; length: number } | undefined
+  for (const raw of tail) {
+    const line = raw.trim()
+    const marker = /^(`{3,}|~{3,})/.exec(line)?.[1]
+    if (marker) {
+      if (!fence) fence = { marker: marker[0], length: marker.length }
+      else if (marker[0] === fence.marker && marker.length >= fence.length && line === marker) fence = undefined
+      continue
+    }
+    if (fence || line.startsWith('>')) continue
+    if (/确认重绑定|RB-[a-f0-9]{24}/.test(line)) return { kind: 'ambiguous', reason: 'multiple_control_lines' }
+    if (REVERSAL_LEAD.test(line)) return { kind: 'ambiguous', reason: 'reversal_in_remainder' }
+  }
+  return { kind: 'confirm', proposalId: match[1], remainder: tail.join('\n').trim() }
 }
 
 /** Whether a recorded tool/result carries the frozen v0.4.x response shape. */

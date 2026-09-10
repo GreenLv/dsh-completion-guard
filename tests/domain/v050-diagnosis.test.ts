@@ -144,6 +144,10 @@ describe('A17: identical rejected retries collapse onto a stable unchanged answe
     expect(second).toMatchObject({ status: 'unchanged', reason_code: 'no_certification_gain' })
     expect(second.resume_condition).toContain('re-opens evaluation')
 
+    const newRoot = replay([...eventsWithAttempt, user(4, '请检查新的配置文件')])
+    const reopened = await createRebindTool(() => newRoot, async () => true).execute(args as never, undefined as never) as { status: string }
+    expect(reopened.status).toBe('rejected')
+
     // A changed input re-opens evaluation (different clause partition).
     const changed = await tool2.execute({ ...args, clauses: [old.normalizedText] } as never, undefined as never) as { status: string; reason_code: string }
     expect(changed.status).toBe('rejected')

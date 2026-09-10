@@ -4,6 +4,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from '../src/runtime.js'
 import { deriveProjection, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE } from '../src/domain/derive.js'
+import { certifyCheckpoint } from '../src/domain/checkpoint.js'
 import { FIRST_STEP_GUIDANCE } from '../src/domain/lifecycle.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
@@ -191,7 +192,9 @@ describe('A02: first real input is covered exactly once, including asset-only in
 
     const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
     expect(derived.realRootInputSeen).toBe(true)
-    expect(derived.projection.items.size).toBe(0)
+    expect(derived.projection.items.size).toBe(1)
+    expect([...derived.projection.items.values()][0].sourceMessageId).toMatch(/:asset:0$/)
+    expect(certifyCheckpoint(derived.projection, [], 'asset-check', false).status).toBe('incomplete')
   })
 
   it('a whitespace-only message neither activates nor fabricates a task', async () => {
@@ -341,4 +344,33 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     expect(afterItem).toMatchObject({ authority: beforeItem!.authority, status: beforeItem!.status })
     expect([...after.projection.items.values()].some((item) => item.normalizedText.includes('后续要求'))).toBe(true)
   })
+})
+
+it('does not activate when a downstream pre-step gate filters the claimed root input', async () => {
+  const session = Session.create(SessionId('filtered-root'))
+  const ctx = fakeCtx()
+  guardApply(ctx, 'always')
+  const { agent } = guardedAgent(session)
+  startGuard(ctx, agent, 'new')
+  const claimed = [createUserMessage({ content: [{ type: 'text', text: '请检查代码' }], source: { kind: 'user' } })]
+  const filtered = await runPreStep(ctx, agent, claimed, async () => ({ kind: 'enter', messages: [] }))
+  expect(filtered.messages).toEqual([])
+  const retried = await runPreStep(ctx, agent, claimed)
+  expect(retried.messages).toHaveLength(3)
+})
+
+it('explicit opt-in records the v4 boundary ahead of its first protected input', async () => {
+  const session = Session.create(SessionId('opt-in-v4'))
+  const ctx = fakeCtx()
+  guardApply(ctx, 'opt-in')
+  const { agent } = guardedAgent(session)
+  startGuard(ctx, agent, 'new')
+  enableCommand(session)
+  const claimed = [createUserMessage({ content: [{ type: 'text', text: '请检查配置' }], source: { kind: 'user' } })]
+  const step = await runPreStep(ctx, agent, claimed)
+  expect(step.messages).toHaveLength(3)
+  persistStep(session, step.messages)
+  const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
+  expect(derived.protocolV4Present).toBe(true)
+  expect(derived.projection.items.size).toBeGreaterThan(0)
 })
