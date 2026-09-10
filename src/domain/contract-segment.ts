@@ -12,7 +12,7 @@ export interface AuthorityBlock {
 }
 
 const REFERENCE_FRAME = /(?:以下|下面|下列|附上|粘贴|提供).{0,12}(?:报告|材料|内容|记录|日志).{0,12}(?:供参考|参考|如下)|(?:for reference|pasted|attached|following).{0,16}(?:report|material|log)/i
-const INSTRUCTION_SIGNAL = /(?:请|需要|必须|务必|禁止|不要|不得|运行|执行|修改|创建|读取|验证|检查|安装|拉取|提交|推送|发布|重启)|\b(?:please|must|shall|do not|run|execute|modify|create|read|verify|check|install|pull|commit|push|publish|restart)\b/i
+const INSTRUCTION_SIGNAL = /(?:请|需要|必须|务必|禁止|不要|不得|运行|执行|修改|创建|读取|验证|检查|安装|应用|拉取|抓取|获取|同步|提交|推送|发布|重启|升级|更新)|\b(?:please|must|shall|do not|run|execute|modify|create|read|verify|check|install|apply|pull|fetch|commit|push|publish|restart|upgrade|update)\b/i
 const ADOPTION_SIGNAL = /(?:按照|依照|采用|执行).{0,16}(?:下面|以下|报告|材料|第\s*([0-9一二三四五六七八九十]+)\s*节).{0,16}(?:全部执行|执行|作为验收|作为要求)|(?:把|将).{0,16}(?:上一条|前述|上述).{0,8}(?:报告|材料).{0,12}第\s*([0-9一二三四五六七八九十]+)\s*节.{0,20}(?:执行|采用)|(?:adopt|follow|apply).{0,20}(?:section\s+(\d+)|below|report)/i
 const PREVIOUS_REFERENCE_ADOPTION = /(?:把|将).{0,16}(?:上一条|前述|上述).{0,8}(?:报告|材料).{0,12}第\s*[0-9一二三四五六七八九十]+\s*节.{0,20}(?:执行|采用)|(?:adopt|follow|apply).{0,16}(?:the\s+)?(?:previous|above).{0,12}(?:report|material).{0,12}section\s+\d+/i
 

@@ -59,10 +59,32 @@ export type TypedObject = { k: 'b' | 'i' | 's' | 'e' | 'x'; v: unknown }
 export type Typed = boolean | number | string | TypedObject
 
 export interface SessionHeader {
+  /**
+   * DSH Session format version stamped into the durable header. Guard supports
+   * only the V3 session format (`3`); any other value is a different digest
+   * domain input rather than being reinterpreted as V3.
+   */
   version: number
   id: string
   createdAt: number
   parentSession?: string
+  /**
+   * Durable fork-inherited prefix length.
+   *
+   * DSH Session V3 moved this value out of the header onto the `Session`
+   * itself as `inheritedEventCount` (durably marked by `session/end-seed`); the
+   * meaning is unchanged, so the token keeps its historical name and the `v3`
+   * digest domain keeps every byte-mirrored vector identical.
+   *
+   * V3's `header.isSeeded` marker is deliberately NOT added as a digest input.
+   * It is not needed for identity — `parentSession`, `seedLength`,
+   * `delegationDepth` and `origin` already bind the fork lineage, and `id` plus
+   * `createdAt` separate distinct sessions — while adding any field (even an
+   * optional one) would change every existing digest, because an absent
+   * optional field still encodes a presence-0 row. Changing the shared digest
+   * domain is an upstream semantic decision with its own cross-repository
+   * parity gate; a host upgrade must not make it silently.
+   */
   seedLength?: number
   agentPreset?: string
   origin?: string

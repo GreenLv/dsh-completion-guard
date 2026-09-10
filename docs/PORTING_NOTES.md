@@ -15,6 +15,28 @@ fixtures and an explicit delta ledger.
 | portable protocol and digest fixtures | Mirror exact upstream bytes and verify their hashes |
 | product-specific or newer Codex behavior | Record explicitly in the delta ledger before porting |
 
+## Current host boundary (0.5.1)
+
+Version 0.5.1 ports Guard onto DSH >= 0.1.5-rc.1 and keeps no path back to the
+older host. Concretely:
+
+- Session history is read only through the DSH Session V3 `snapshotEvents()`
+  API. The V2 `events` getter is gone, and a session that does not expose the
+  V3 API is refused instead of being treated as an empty log.
+- Dispatch evidence comes from the current `tool/ptc-dispatch-start` and
+  `tool/ptc-dispatch` vocabulary. The retired `tool/code-dispatch*` names are
+  ignored, so an old log cannot mint evidence under the new protocol.
+- A V3 `system/message` is a plugin-sourced surface node, never root
+  authority, and a compaction checkpoint message stays plugin context.
+- Guard never resumes a Goal the user paused: its Goal access surface has no
+  resume entry point, and turn stopping yields while a Goal is paused, blocked,
+  completed, or not yet read back.
+
+The host identifier is the exact 33-row DSH core graph. The active 0.1.5-rc.1
+cohort is registry-derived with its native audit still pending, and that
+provenance is bound into the host-lock digest rather than inferred from a
+version number.
+
 The DSH port derives guard state from native DSH session events, connects the
 completion gate to Goal handling, and fails closed when it cannot verify the
 host or evidence. Version 0.3.2 has passed same-package Web and Headless

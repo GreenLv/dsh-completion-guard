@@ -85,6 +85,17 @@ export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): Unifie
       attempt_fingerprint: fingerprint(p, item, 'certified'),
     }
   }
+  if (item.status === 'pending' && item.waitAuthorization?.kind === 'root_explicit_wait') {
+    return {
+      ...base, certification: 'unavailable', reason_code: 'root_condition_pending',
+      repairability: 'user_input_required', missing_fields: [], missing_facets: [],
+      next_action: {
+        kind: 'none',
+        resume_condition: `Wait for the matching trusted root input: ${item.resumeEvent ?? item.condition ?? item.normalizedText}. Keep this obligation pending; do not execute it or collect effect evidence before release.`,
+      },
+      attempt_fingerprint: fingerprint(p, item, 'root_condition_pending'),
+    }
+  }
   if (action !== 'generic_run' && !item.legacyFlags?.length && item.targetCaptureStatus === 'clarification_required') {
     const missingFields = item.targetCaptureReasonCode ? [TARGET_FIELD_REASONS[item.targetCaptureReasonCode] ?? item.targetCaptureReasonCode] : []
     return {

@@ -29,14 +29,36 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
+**Run this block after the runtime is already on the target DSH version, not
+before.** `inject` records the absolute runtime and profile roots and binds the
+graph it finds there, and runtime replay re-reads those same roots. Injecting
+against the old runtime therefore writes a lock that describes a graph the new
+runtime no longer has, and it will fail on the next replay. Order: upgrade the
+runtime, restart it, then inspect/inject/verify.
+
+`inject` **writes to `<profile>/cordis.patch.yml`** — it replaces or adds Guard's
+managed block in that file. Back the file up first. The same file is the one
+`docs/LOCAL_ACCEPTANCE.md` tells you to preserve.
+
+**Read the verdict from the JSON body, not from the exit status.** All three
+commands print a JSON object whose `status` is the verdict — `supported`,
+`unsupported` or `unavailable` — together with `cohort_id`, `host_lock_digest` and
+`audit_provenance`. Note that `inspect`, `inject` and `verify-dump` exit **0** even
+when that status is `unsupported`; only `inspect-graph` exits non-zero on an
+unsupported graph, and only a thrown error produces `status: "unavailable"` with a
+`reason_code` on stderr and exit 1. So a shell check of `$?` alone will not tell
+you whether the graph was accepted.
+
 For Headless, use its profile path and `--profile headless`. On Windows, use the
-installed `.cmd` launcher and Windows absolute paths. A strict repeat leaves
+installed `.cmd` launcher and Windows absolute paths. **Windows is accepted for
+evaluation but has not been natively audited for this cohort**, so treat a
+Windows result as unverified until the native gate runs. A strict repeat leaves
 the package and profile contents unchanged. Restarting or enabling a daily
 profile remains a separate user action.
 
 ## Check a Headless profile before installation
 
-A DSH `0.1.2-rc.1` Headless profile can have no external dependencies and no private `node_modules` or lockfile. From an accepted package or matching source checkout, `node bin/dsh-completion-guard-host-lock.mjs inspect-graph --runtime-root <runtime> --profile-root <profile>` checks that state without initializing or launching the profile.
+A DSH `0.1.5-rc.1` Headless profile can have no external dependencies and no private `node_modules` or lockfile. From an accepted package or matching source checkout, `node bin/dsh-completion-guard-host-lock.mjs inspect-graph --runtime-root <runtime> --profile-root <profile>` checks that state without initializing or launching the profile.
 
 This narrow case requires exactly the installation-owned `dsh-base` and `dsh-headless` bundles, a complete audited runtime core, and matching bundle versions, package-map origins and patch files. Declared but uninstalled dependencies, partial map/lock pairs, unexplained local modules and foreign parent-module fallbacks are rejected. Existing profiles with both graph files retain their active-importer checks; damaged files are not treated as an empty graph.
 
@@ -49,9 +71,35 @@ source roots, platform/profile kind and the complete 33-row core graph. The
 core manifest is version 2. Runtime replay re-reads those graph sources and
 requires the same exact core before using certificate authority.
 
-An older injected configuration reports `host_lock_migration_required`.
-Removing its market row by hand is not migration. Reinspect, inject and verify
-the actual environment. Historical cohorts, requirements and session records
+Version 0.5.1's active cohort is the DSH `0.1.5-rc.1` core graph, and its rows
+are the exact published npm tarball identities rather than a graph read off a
+running host. The cohort therefore records
+`auditProvenance: registry-derived-pending-native-audit` with an empty
+`auditedPlatforms` list, and that provenance is part of the digest. A lock
+generated from it can certify the bytes, but no certificate may describe it as
+a native pass. Reading the native gate as "not run" is the accurate reading.
+Every successful `inspect`, `inspect-graph`, `inject` and `verify-dump` readback
+prints the same value as `audit_provenance`, next to the cohort id and the
+digest, so you can tell which of the two you are holding without decoding the
+digest. (A failing command prints only a status and a reason code: no cohort was
+resolved, so there is no provenance to report.)
+
+**Which failure code you see depends on the lock generation you are holding**, and
+that matters for deciding whether you are migrating or just drifting:
+
+- A **pre-0.4.3** lock — no `hostLockPolicy: dsh-core/v1`, or no recorded
+  runtime/profile roots — reports `host_lock_migration_required`. Removing its
+  market row by hand is not migration. Reinspect, inject and verify the actual
+  environment.
+- A **0.4.3-or-later** lock already carries the policy and the roots, so it never
+  reports `host_lock_migration_required`. It reports the mismatch instead:
+  `host_lock_version_mismatch` when the installed core package versions differ from
+  the cohort, or `host_lock_installed_graph_drift` when the re-read graph resolves
+  to a different digest than the lock recorded. Both are the expected answers after
+  a DSH upgrade, and both are cured by re-running inspect, inject and verify against
+  the new runtime rather than by editing the lock.
+
+Historical cohorts, requirements and session records
 are retained; old certificates do not become certificates for the new lock.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 

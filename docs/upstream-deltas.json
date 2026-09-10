@@ -1,7 +1,7 @@
 {
   "ledgerVersion": "2",
   "description": "Current, evidence-bounded delta ledger for behavior shared between codex-context-guard and dsh-completion-guard. It separates aligned behavior, partial host-native equivalents, missing shared behavior, and Codex-only lifecycle features.",
-  "updatedAt": "2026-09-03",
+  "updatedAt": "2026-09-10",
   "source": {
     "product": "codex-context-guard",
     "currentRelease": "v0.11.0",
@@ -11,10 +11,10 @@
   },
   "target": {
     "product": "dsh-completion-guard",
-    "currentRelease": "v0.4.0",
-    "currentReleaseHead": "d5cd0ca17833d05bfdf41457ae203864bde8056b",
+    "currentRelease": "v0.5.1",
+    "currentReleaseHead": "uncommitted candidate on 09df9ecfdc94d7880ddabb37774e626486aca972",
     "implementationBaseline": "ffc6fe9e1246a815f0bb630943c59d14b6505716",
-    "host": "DSH 0.1.2-alpha.3 / dshmarket 1.39.0 / Cordis 4.0.2"
+    "host": "DSH 0.1.5-rc.1 / Cordis 4.0.2 (registry-derived cohort; native audit pending)"
   },
   "alignmentClaim": "DSH 0.4.0 aligns the named evidence and proof obligations with Codex 0.10.0. It does not claim full product parity and does not include all Codex 0.11.0 changes.",
   "dispositions": [
@@ -113,6 +113,32 @@
       "plainLanguage": "Codex Hook trust, plugin-cache recovery, and the Codex installer do not exist in the DSH host model.",
       "implementation": "DSH uses Cordis bundles, DSH profiles, host-lock checks, and DSH-native lifecycle events. Shared safety behavior must be adapted through those mechanisms rather than copied.",
       "tests": []
+    },
+    {
+      "capability": "session-identity-digest-across-host-format-bump",
+      "introducedBy": "dsh-completion-guard v0.5.1 (host adaptation: DSH Session V2 -> V3)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.5.1",
+      "plainLanguage": "The shared session-identity digest keeps one meaning even though the host moved where it stores the inherited-prefix length, so certificates from either side stay comparable.",
+      "implementation": "DSH Session V3 moved the fork-inherited prefix length from SessionHeader.seedLength to Session.inheritedEventCount. Guard feeds that same durable value into the existing seedLength digest token and leaves the ccg.sessionRefDigest.v3 domain unchanged. V3 header.isSeeded is deliberately NOT added as a digest input: an absent optional field still encodes a presence-0 row, so adding it would change every digest and break the byte-mirrored vectors upstream. Identity remains bound by id, createdAt, parentSession, seedLength, delegationDepth, origin and formatVersion, and a non-V3 header is refused before hashing.",
+      "impactBoundary": "No shared fixture byte changes; all 29 mirrored digest_v3 vectors still reproduce identically. Cross-repository parity therefore needs no re-mirror for this round. If upstream later wants isSeeded inside the shared domain, that is a new shared-semantics decision requiring a new fixture family and a joint re-pin.",
+      "tests": [
+        "tests/domain/digest-v3.test.ts",
+        "tests/domain/v051-dsh015-adaptation.test.ts"
+      ]
+    },
+    {
+      "capability": "turn-boundary-continuation-ownership",
+      "introducedBy": "dsh-completion-guard v0.5.1 (host fact: DSH 0.1.5-rc.1 pauses a Goal immediately and only a human resume re-arms it)",
+      "disposition": "partial-equivalent",
+      "targetRelease": "dsh-completion-guard v0.5.1",
+      "plainLanguage": "When no Goal is running, the shared rule for whether a turn may be continued is unchanged. When a Goal exists and is paused, blocked, completed, or not yet read back, the DSH product yields instead of continuing, because only the user may restart paused work.",
+      "implementation": "decideTurnBoundary is part of the portable production surface. Guard 0.5.1 added one guard before the root-persistence correction steer: if projection.currentGoalRef is set but the Goal is not the active+armed continuation owner, the decision is stop with goal_paused_by_user_safe_yield (paused) or goal_not_continuable_safe_yield (blocked, complete, or phase not yet read back). Guard's Goal access exposes only get and disarm; there is no resume entry point anywhere in the plugin.",
+      "impactBoundary": "All 37 mirrored portable cases behave identically: exactly one case uses force_continue (stop-protocol-correction-once) and it carries no Goal reference, so the shared continuation path is untouched. The divergence is confined to an input state the Codex product has no equivalent for, which is why the two new reason codes are deliberately NOT added to the mirrored reasonCodeVocabulary — that fixture is a byte mirror and describes the shared contract, while these are host-specific stop reasons. No mirrored byte changed. There is no fixture self-check that would force the vocabulary to grow.",
+      "tests": [
+        "tests/domain/portable-semantics.test.ts",
+        "tests/domain/v051-dsh015-adaptation.test.ts"
+      ]
     }
   ]
 }

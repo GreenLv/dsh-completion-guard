@@ -2,13 +2,35 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## 0.5.1 candidate scope (uncommitted, unverified natively)
+
+The 0.5.1 candidate adapts the plugin to DSH >= `0.1.5-rc.1`. Its scope stops
+deliberately short of every native and publication gate:
+
+| Gate | State for this candidate |
+| --- | --- |
+| Local deterministic matrix (`typecheck`, `lint`, `test`, `test:release-pack`, `test:stats`, `build`, `pack:check`, documentation audit, Python unittests, `git diff --check`) | run on the working tree; results recorded in `IMPLEMENTATION_RESULT.md` |
+| Generated `dist/` reproducibility | two consecutive builds produced an identical `dist` SHA-256 manifest |
+| `pnpm test` | 39 files, 623 passed, **1 capability-skipped**: `tests/tools/evidence.test.ts` → "probes and executes one exact cmd shim without a PATH relookup", gated by `it.skipIf(process.platform !== 'win32')`. It builds real `dsh.cmd` shims and executes one, so it runs only in the native Windows phase. The skip is a capability boundary, never a pass |
+| Cross-platform CI (Ubuntu/macOS/Windows × Node 22/24) | **not run**; nothing was pushed |
+| Native macOS/Windows exact-artifact acceptance | **not run** |
+| Frozen release artifact | **not created**; only a local `pack --dry-run` inventory check |
+| Daily profile install or live host load | **not performed** by the implementation agent |
+| Publication, tag, GitHub Release | **not performed** |
+
+The active host cohort for this candidate is registry-derived
+(`auditProvenance: registry-derived-pending-native-audit`) because no native
+host has loaded the 0.1.5-rc.1 graph yet. Read that as "the native audit is
+pending", never as a pass: the provenance value is part of `hostLockDigest`,
+so a certificate issued from this graph cannot be presented as native evidence.
+
 ## Host-bound acceptance for the 0.4.3 line
 
 This line separates core and optional-provider acceptance while retaining completion feedback and root-confirmed rebinding. Local regression tests exercise compound capture, source authority, one-to-many replacement, stale/partial replay, target matching, large pages, snapshot changes, small recovery budgets and qualified pending boundaries. Local tests and the existence of a host driver do not establish native DSH acceptance.
 
 The versioned entrypoint is `scripts/native_acceptance.py`. Its default `portable_artifact` profile checks exact source/tgz identity, isolated installation, installed-file parity, second-install no-op and JavaScript syntax. `--gate-profile host_bound --runtime-root <audited-runtime>` additionally creates isolated Web and Headless profiles, injects and reads back their host locks, then runs `scripts/native_host_probe.mjs` inside the real DSH composition. The probe uses the host AgentRegistry, ToolRuntime and durable Session services for nonempty test certification, generic refusal, rebind confirmation, history queries, compact/resume and a qualified pending boundary. Web checks require an owned-host restart, a different host process, persisted-session recovery and listener cleanup; they do not depend on a market restart API. The installed launcher shim is checked separately.
 
-Supplied daily target paths use the [read-only installation preflight](HOST_LOCK_UPGRADE.md#check-a-headless-profile-before-installation). A dependency-free rc.1 Headless target may have no private map or lockfile; the preflight verifies its installation-owned bundles and labels that state separately. The isolated lifecycle still installs Guard before checking its private graph, lock and second-install no-op. A successful target preflight alone is not a native gate result or proof of live adoption.
+Supplied daily target paths use the [read-only installation preflight](HOST_LOCK_UPGRADE.md#check-a-headless-profile-before-installation). A dependency-free `0.1.5-rc.1` Headless target may have no private map or lockfile; the preflight verifies its installation-owned bundles and labels that state separately. The isolated lifecycle still installs Guard before checking its private graph, lock and second-install no-op. A successful target preflight alone is not a native gate result or proof of live adoption.
 
 The host driver deliberately makes no model request. It first checks that the normal Headless task driver stops with `MISSING_CREDENTIAL` in the isolated environment, then disables that task driver for the separate real-service probe. A required package-update probe installs an inert local fixture at version 1, then clarifies and confirms a generic requirement, applies version 2 through the real producer/action tools, independently reads it back and requires a nonempty certificate. Capability skips appear in the returned annex. Never treat a synthetic test or an empty probe case set as a passed native run.
 

@@ -101,6 +101,10 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
   }
   const requirement = (item: GuardItem) => {
     const diagnosis = deriveItemDiagnosis(projection, item)
+    if (diagnosis.reason_code === 'root_condition_pending') {
+      if (add(`[${clip(item.id, 20)}] root_condition_pending; wait for trusted root: ${item.resumeEvent ?? item.condition ?? item.normalizedText}; do not execute before release`, compact ? 160 : 310)) count++
+      return
+    }
     const remedy = diagnosis.repairability === 'agent_repairable'
       ? 'Collect matching evidence; checkpoint'
       : diagnosis.repairability === 'historical_gap'

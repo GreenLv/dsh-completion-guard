@@ -73,17 +73,29 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       const capability = plannedAction && options.hostCapability
         ? options.hostCapability(plannedAction)
         : undefined
+      const commandShape = options.commandTemplate && plannedAction
+        ? options.commandTemplate(plannedAction)
+        : undefined
 
+      // Optional fields are SPREAD IN ONLY WHEN DEFINED. The host validates a
+      // tool's canonical value as lossless JSON before rendering or persisting
+      // it, and `undefined` is not a lossless JSON value: an object literal
+      // carrying `supported_command_shape: undefined` fails the WHOLE call with
+      // `INVALID_TOOL_OUTPUT`, so the model gets an error instead of the
+      // preparation it asked for. That triggered whenever an item had no
+      // semantic action — a `generic_run` requirement, for example — or no
+      // command template. The `as unknown as Record<string, JsonValue>` cast
+      // below is what kept the type checker from flagging the `undefined`s.
       return {
         status: 'prepared',
         item: { id: item.id, revision: item.revision },
         diagnosis,
-        planned_action: plannedAction,
-        supported_command_shape: options.commandTemplate && plannedAction ? options.commandTemplate(plannedAction) ?? undefined : undefined,
+        ...(plannedAction !== undefined ? { planned_action: plannedAction } : {}),
+        ...(commandShape !== undefined ? { supported_command_shape: commandShape } : {}),
         required_evidence_order: requiredOrder,
         reusable_references: reusable,
         missing_target_fields: missingTargetFields,
-        host_capability: capability ? { status: capability.status, reason_code: capability.reasonCode } : undefined,
+        ...(capability ? { host_capability: { status: capability.status, reason_code: capability.reasonCode } } : {}),
         note: 'Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields.',
       } as unknown as Record<string, JsonValue>
     },

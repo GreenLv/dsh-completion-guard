@@ -1,5 +1,6 @@
 import { sha256 } from './canonicalize.js'
 import { currentContractDigest } from './contract-digest.js'
+import { NO_PROGRESS_TURNS_BEFORE_STOP, progressFingerprint } from './stop-policy.js'
 import type {
   BoundaryDisposition,
   BoundaryQualificationKind,
@@ -70,6 +71,34 @@ function qualificationReason(projection: GuardProjection, request: BoundaryReque
       const operation = projection.externalOperations.get(id)
       return operation?.epoch === projection.epoch && (operation.status === 'running' || operation.status === 'pending')
     }) ? undefined : 'boundary_disposition_unqualified'
+  }
+  if (request.disposition === 'guard_bounded_stop') {
+    // Guard's own bounded stop. It needs no root qualification — the root never
+    // asked to stop, and manufacturing a root qualification for it would be a
+    // lie — but it does need Guard's own evidence: the qualification id is the
+    // progress fingerprint, and it qualifies only once that exact fingerprint
+    // has actually repeated to the bound. Neither an agent nor a model can
+    // produce this disposition by asserting it.
+    if (request.qualificationKind !== 'guard_no_progress') return 'boundary_qualification_kind_mismatch'
+    // The qualification is the progress fingerprint of the state being stopped,
+    // so the check is a digest comparison and not a lookup in this process's
+    // bookkeeping: a reloaded session re-derives the same digest from the same
+    // durable log, so a persisted bounded stop survives replay, while a
+    // fabricated one cannot name the state it claims to describe. The bound on
+    // repetition is enforced where the decision is made — a bounded stop is only
+    // ever raised on a fingerprint that has already repeated — so this gate
+    // never has to trust an unreplayable counter.
+    const fingerprint = request.qualificationIds.length === 1 ? request.qualificationIds[0] : undefined
+    if (!fingerprint || fingerprint !== progressFingerprint(projection)) return 'boundary_disposition_unqualified'
+    // The bound is re-checked against the durable budget, so a reloaded session
+    // cannot be stopped on a fingerprint that never repeated, and a session that
+    // did repeat keeps its stop.
+    const claims = projection.noProgressClaims.get(fingerprint)
+    // The bound counts the boundaries that reached a decision about this
+    // fingerprint, not the number of records: one boundary retried is one.
+    return (claims?.size ?? 0) >= NO_PROGRESS_TURNS_BEFORE_STOP - 1
+      ? undefined
+      : 'boundary_disposition_unqualified'
   }
   if (request.qualificationKind !== 'root_explicit_defer') {
     return 'boundary_qualification_kind_mismatch'

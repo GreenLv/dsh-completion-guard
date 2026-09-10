@@ -221,7 +221,13 @@ describe('A13: item queries, bounded sources, and budget errors', () => {
     const p = replay(events)
     const old = [...p.items.values()][0]
     const tool = createRebindTool(() => p, async () => true)
-    const mismatch = await tool.execute({ operation: 'propose', item_id: old.id, clauses: ['更新皮肤中心'] } as never, undefined as never) as { status: string; reason_code: string; expected_source: { text?: string; length: number; sha256: string } }
+    // A partition must cover the source exactly. Both directions are stated
+    // against the item's own text: a hard-coded clause stops being a mismatch
+    // as soon as the capture rules change, and the test would then be measuring
+    // a different refusal without saying so.
+    const uncovered = old.normalizedText.slice(0, -1)
+    expect(uncovered).not.toBe(old.normalizedText)
+    const mismatch = await tool.execute({ operation: 'propose', item_id: old.id, clauses: [uncovered] } as never, undefined as never) as { status: string; reason_code: string; expected_source: { text?: string; length: number; sha256: string } }
     expect(mismatch).toMatchObject({ status: 'rejected', reason_code: 'partition_mismatch' })
     expect(mismatch.expected_source.text).toBe(old.normalizedText)
     expect(mismatch.expected_source.length).toBe(old.normalizedText.length)

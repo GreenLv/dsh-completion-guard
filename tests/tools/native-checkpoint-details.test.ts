@@ -1,4 +1,4 @@
-import { RC1_HOST_PACKAGES } from '../../src/domain/rc1-host.js'
+import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { it, expect } from 'vitest'
 import { deriveProjection } from '../../src/domain/derive.js'
@@ -24,7 +24,7 @@ it.each(['short', 'long'])('retrieves a %s Windows test template through the nat
   { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run pnpm test.' }] } },
   { seq: 2, type: 'tool/call', data: { callId: 'native-12345-1', name: 'pwsh', arguments: JSON.stringify({ command: 'pnpm test' }) } },
   { seq: 3, type: 'tool/result', data: { message: { source: { callId: 'native-12345-1' }, content: [{ type: 'text', text: '> node fixture.cjs' }] } } },
- ], { activation: 'always' }, { cwd }, true, evaluateHostLock(RC1_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).projection
+ ], { activation: 'always' }, { cwd }, true, evaluateHostLock(RC015_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).projection
  const tool = createCheckpointTool(() => p, () => {})
  const call = async (name: string, args: never) => {
   expect(name).toBe('context_guard_checkpoint')

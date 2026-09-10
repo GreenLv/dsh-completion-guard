@@ -221,23 +221,36 @@ function analyzeCommand(command: string, workdir: unknown, toolName: string): Co
  * in ordinary stdout — `documentation says [timed out after 1000ms] but command
  * succeeded` — is not a terminal fact.
  *
- * Two renderer families exist. The session shell tools (`dsh-tool-bash` /
- * `dsh-tool-pwsh`) append `[exit code: N]` (non-zero only), `[killed by
- * signal: S]`, `[sandbox: ...]`, and `[timed out after Nms]` as trailing
- * lines. The persistent shell tools (`dsh-tool-bash-persistent` /
- * `dsh-tool-pwsh-persistent`) use a non-zero-only `[exit code: N]` for the
- * normal path but render timeout and shell-session-exit reports as
- * `[shell exited: code N]` / `[shell killed by signal: S]` / `[shell exited]`
- * (or a prose timeout intro at the head) followed by a prose reset line
- * (`The persistent bash shell was reset; ...`). The reset prose is not a
- * terminal marker itself, so the scan strips a trailing reset line first and
- * treats the timeout intro as a negative fact only when a reset line
- * confirms the report came from the persistent renderer — a clean result
- * that merely echoes such prose must stay a clean success.
+ * Renderer audit for the DSH 0.1.5-rc.1 support baseline:
+ *
+ * - The bundled session shell tools (`dsh-tool-bash` / `dsh-tool-pwsh`, the two
+ *   registered by the `@deepseek-ai/dsh-base` profile) append `[exit code: N]`
+ *   (NON-ZERO only), `[killed by signal: S]`, `[sandbox: ...]`, and
+ *   `[timed out after Nms]` as trailing lines. Their marker logic is unchanged
+ *   between 0.1.2-rc.1 and 0.1.5-rc.1, so a completed foreground result with no
+ *   marker at all is still a clean success — but ONLY for those two names, and
+ *   only when the host lock proves that pinned graph.
+ * - The persistent shell tools (`dsh-tool-bash-persistent`, out of the default
+ *   bundle) render `[shell exited: code N]` / `[shell killed by signal: S]` /
+ *   `[shell exited]`, and 0.1.5-rc.1 added two markers this scanner must know:
+ *   `[Command finished with exit code N]` on the normal completion path and
+ *   `[Command timed out or OOM]` on the timeout path. Recognizing them keeps a
+ *   persistent-renderer result classified by its own marker instead of falling
+ *   through to the unmarked rule, which belongs to the session renderer alone.
+ *   The audited cohort admits `dsh-tool-bash` / `dsh-tool-pwsh` and not the
+ *   persistent package, so such a host fails the whole graph lock closed too.
+ * - Either family may append the prose reset line `The persistent bash shell
+ *   was reset; ...`, which is not a marker itself, so the scan strips a
+ *   trailing reset line first and treats the timeout intro as a negative fact
+ *   only when a reset line confirms the report came from the persistent
+ *   renderer — a clean result that merely echoes such prose stays a clean
+ *   success.
  */
 interface TerminalFacts {
   exitCode?: number
   negative: boolean
+  /** An explicit terminal marker was recognized (success or failure). */
+  marked: boolean
 }
 
 const PERSISTENT_RESET_LINE = /^The persistent (?:bash|pwsh) shell was reset;/
@@ -256,11 +269,16 @@ function structuredTerminalFacts(meta: unknown): TerminalFacts | undefined {
   const rawExit = record.exitCode ?? record.exit_code
   const rawSignal = record.signal
   if (rawSignal !== undefined && rawSignal !== null) {
-    return { exitCode: typeof rawExit === 'number' ? rawExit : undefined, negative: true }
+    return { exitCode: typeof rawExit === 'number' ? rawExit : undefined, negative: true, marked: true }
   }
-  if (typeof rawExit === 'number') return { exitCode: rawExit, negative: false }
+  if (typeof rawExit === 'number') return { exitCode: rawExit, negative: false, marked: true }
   return undefined
 }
+
+/** `[exit code: N]`, `[shell exited: code N]`, `[Command finished with exit code N]`. */
+const TERMINAL_EXIT_MARKER = /^\[(?:exit code|shell exited: code|command finished with exit code)\s*:?\s*(\d+)\]$/
+/** Negative markers with no exit code of their own. */
+const TERMINAL_NEGATIVE_MARKER = /^\[(?:timed out[^\]]*|sandbox[^\]]*|killed by signal[^\]]*|shell killed by signal[^\]]*|shell exited|command timed out or oom|interrupted[^\]]*)\]$/
 
 function extractTerminalFacts(textContent: string): TerminalFacts {
   const lines = textContent.split(/\r?\n/)
@@ -276,22 +294,24 @@ function extractTerminalFacts(textContent: string): TerminalFacts {
   const timeoutIntroAtHead = resetStripped && lines.length > 0 && PERSISTENT_TIMEOUT_INTRO.test(lines[0].trim())
   let exitCode: number | undefined
   let negative = timeoutIntroAtHead
+  let marked = timeoutIntroAtHead
   while (index >= 0) {
-    const line = lines[index].trim()
-    const exitMatch = line.match(/^\[(?:exit code|shell exited: code)\s*:?\s*(\d+)\]$/)
-    const negativeLine = /^\[(?:timed out|sandbox[^\]]*|killed by signal[^\]]*|shell killed by signal[^\]]*|shell exited|interrupted[^\]]*)[^\]]*\]$/i.test(line)
+    const line = lines[index].trim().toLowerCase()
+    const exitMatch = line.match(TERMINAL_EXIT_MARKER)
     if (exitMatch) {
       // The last terminal exit marker is authoritative. Earlier adjacent
       // markers may be retained only as context, never as an override.
       if (exitCode === undefined) exitCode = Number(exitMatch[1])
-    } else if (negativeLine) {
+      marked = true
+    } else if (TERMINAL_NEGATIVE_MARKER.test(line)) {
       negative = true
+      marked = true
     } else {
       break
     }
     index -= 1
   }
-  return { exitCode, negative }
+  return { exitCode, negative, marked }
 }
 
 function metaUrls(meta: unknown): string[] {
@@ -521,17 +541,22 @@ export function extractToolSubject(
       const commandCwd = typeof args.workdir === 'string' ? args.workdir : defaultCwd
       const action = structured?.semanticAction ?? semanticActionFromCommand(command)
       const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)
-      // The pinned DSH bash/pwsh renderers append markers only for negative
-      // terminal facts or non-zero exits. A completed foreground result with
-      // no such marker is therefore a clean success for those two registered
-      // tools. The generic `shell` alias has no verified renderer contract and
-      // remains fail-closed when no explicit exit marker is present.
+      // The bundled DSH session shell renderers (`dsh-tool-bash` / `dsh-tool-pwsh`)
+      // append markers only for negative terminal facts or non-zero exits; a
+      // completed foreground result with no marker is therefore a clean success
+      // for those two registered tools. That rule is NOT generalized: the
+      // generic `shell` alias has no verified renderer contract, and a result
+      // that carries a marker this scanner cannot classify stays `unknown`
+      // rather than being promoted to success (0.1.5-rc.1 added the
+      // persistent-renderer `[Command finished with exit code N]` and
+      // `[Command timed out or OOM]` markers).
+      const unmarkedSuccessAllowed = (call.name === 'bash' || call.name === 'pwsh') && !terminal.marked
       const outcome: EvidenceOutcome = backgrounded
         ? 'unknown'
         : result.error || terminal.negative
           ? 'failure'
           : terminal.exitCode === undefined
-            ? (call.name === 'bash' || call.name === 'pwsh' ? 'success' : 'unknown')
+            ? (unmarkedSuccessAllowed ? 'success' : 'unknown')
             : terminal.exitCode === 0 ? 'success' : 'failure'
       const subject: ToolSubject = {
         capabilities: ['shell', ...(deterministic ? ['deterministic-check'] : [])],

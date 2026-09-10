@@ -6,7 +6,7 @@ import { itemDiagnosis, relevantEvidence, evidenceAvailabilityReason } from '../
 import { certifyCheckpoint } from '../domain/checkpoint.js'
 import { ACTION_MANIFEST, isStatefulAction } from '../domain/protocol-manifest.js'
 import { availableBoundaryQualifications } from '../domain/boundary.js'
-import type { EvidenceBinding, ExpectedTransition, GuardEvidence, GuardItem, GuardProjection, TargetTuple } from '../domain/types.js'
+import type { BindingActionClosure, EvidenceBinding, ExpectedTransition, GuardEvidence, GuardItem, GuardProjection, TargetTuple } from '../domain/types.js'
 
 export interface CheckpointArgs extends PageQuery {
   bindings: Array<{
@@ -26,6 +26,12 @@ export interface CheckpointArgs extends PageQuery {
     resolution_evidence_id?: string
     effect_evidence_id?: string
     state_evidence_ids?: string[]
+    action_bindings?: Array<{
+      action: BindingActionClosure['action']
+      evidence_ids: string[]
+      resolved_target: BindingActionClosure['resolvedTarget']
+      order: number
+    }>
   }>
 }
 
@@ -191,6 +197,19 @@ export function createCheckpointTool(
             resolution_evidence_id: { type: 'string' },
             effect_evidence_id: { type: 'string' },
             state_evidence_ids: { type: 'array', items: { type: 'string' } },
+            action_bindings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  action: { type: 'string', required: true },
+                  evidence_ids: { type: 'array', required: true, items: { type: 'string' } },
+                  resolved_target: { type: 'object', required: true, additionalProperties: true },
+                  order: { type: 'integer', required: true },
+                },
+              },
+            },
           },
         },
       },
@@ -301,6 +320,12 @@ export function createCheckpointTool(
         ...(binding.resolution_evidence_id ? { resolutionEvidenceId: binding.resolution_evidence_id } : {}),
         ...(binding.effect_evidence_id ? { effectEvidenceId: binding.effect_evidence_id } : {}),
         ...(binding.state_evidence_ids ? { stateEvidenceIds: binding.state_evidence_ids } : {}),
+        ...(binding.action_bindings ? { actionBindings: binding.action_bindings.map((closure) => ({
+          action: closure.action,
+          evidenceIds: closure.evidence_ids,
+          resolvedTarget: closure.resolved_target,
+          order: closure.order,
+        })) } : {}),
       }))
       const result = certifyCheckpoint(projection, bindings, `C${projection.checkpoints.length + 1}`, false)
       if (!result.checkpoint) onRejected()

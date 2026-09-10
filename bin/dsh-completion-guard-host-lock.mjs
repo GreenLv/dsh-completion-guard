@@ -25,6 +25,22 @@ function summary(evaluation) {
     goal_available: evaluation.goalAvailable,
     platform: evaluation.platform,
     profile: evaluation.profileKind,
+    // How the cohort's rows were established. Without this in the READBACK, an
+    // operator (or a native-acceptance annex built from it) sees "supported"
+    // and a digest but cannot tell a natively audited graph from one that was
+    // only resolved from the registry. The value is already bound into the
+    // digest; this surfaces it so it cannot be read as a native pass.
+    audit_provenance: evaluation.auditProvenance,
+    // The version policy is a separate fact from the graph audit, so it is
+    // read back separately: an operator must be able to tell "this host is too
+    // old" from "this graph was never audited", and neither may be reported as
+    // the other.
+    host_version: evaluation.hostVersion ? {
+      version: evaluation.hostVersion.version,
+      minimum: evaluation.hostVersion.minimum,
+      status: evaluation.hostVersion.status,
+      reason_code: evaluation.hostVersion.reasonCode,
+    } : { status: 'unrecorded', reason_code: 'host_version_not_recorded' },
     capabilities: Object.fromEntries(Object.entries(evaluation.capabilities)
       .map(([id, result]) => [id, result.status])),
     package_count: evaluation.packages.filter((row) => row.version && row.integrity).length,

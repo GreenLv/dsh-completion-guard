@@ -1,27 +1,20 @@
 import { normalizeClause, sanitizeClauseText, sha256 } from './canonicalize.js'
 import { classifyTaskIntent } from './conversation.js'
 import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
-import { semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
+import { isStatefulAction, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
 import { canonicalRegistryBase } from './registry.js'
+import { interpretMessage, kindOfScope, semanticActionOfScope, statefulActionsOfScope, type InterpretOptions, type ScopeInterpretation } from './semantics.js'
 import type { GuardItem, GuardItemKind, GuardOperation, TargetCaptureReasonCode, TargetTuple } from './types.js'
 
-const CLAUSE_PATTERNS: Array<[GuardItemKind, RegExp]> = [
-  ['prohibition', /^(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得)\s*(.+)$/i],
-  ['acceptance', /^(?:verify|confirm|ensure|验收|确认|确保)\s*(.+)$/i],
-]
-
-export interface ClassifiedClause {
-  kind: GuardItemKind
-  body: string
-}
-
-export function classifyClause(text: string): ClassifiedClause {
-  const normalizedText = normalizeClause(text)
-  for (const [kind, pattern] of CLAUSE_PATTERNS) {
-    const match = normalizedText.match(pattern)
-    if (match) return { kind, body: normalizeClause(match[1].replace(/^[:：,，\s]+/, '')) }
-  }
-  return { kind: 'requirement', body: normalizedText }
+/**
+ * Whether a clause opens with an explicit ban. The lane question ("is this a
+ * constraint or a duty?") is answered by {@link ScopeInterpretation}; this stays
+ * exported because the framing/segmentation callers ask it directly.
+ */
+export function classifyClause(text: string): GuardItemKind {
+  const normalized = normalizeClause(text)
+  const [first] = interpretMessage(normalized)
+  return first ? kindOfScope(first.directive, first.body) : 'requirement'
 }
 
 const METHOD_TOOL = '(?:bash|shell|powershell|pwsh|git|read|write|edit|node|python|python3|npm|pnpm|tsc|vitest)'
@@ -97,7 +90,20 @@ interface CapturedRequestedTarget {
   reasonCode?: TargetCaptureReasonCode
 }
 
-const TARGET_TOKEN = '(?:`[^`]+`|"[^"]+"|\'[^\']+\'|[\\p{L}\\p{N}@][\\p{L}\\p{N}@._/\\\\:+%?&=#\\[\\]-]*)'
+/**
+ * A target token, as a human writes it.
+ *
+ * A path and a bare word do not start the same way: "/work/repo" and "./repo"
+ * open with a separator, so a leading character class of letters, digits and
+ * "@" cannot match them at all, and the field silently falls back to an
+ * unrelated value. Paths therefore get their own branch, which requires the
+ * separator plus at least one more character — a lone "/" is punctuation, not
+ * a path.
+ */
+const TARGET_TAIL = '[\\p{L}\\p{N}@._/\\\\:+%?&=#\\[\\]-]'
+const TARGET_PATH = `[.~]*[\\\\/]${TARGET_TAIL}+`
+const TARGET_WORD = `[\\p{L}\\p{N}@]${TARGET_TAIL}*`
+const TARGET_TOKEN = `(?:\`[^\`]+\`|"[^"]+"|'[^']+'|${TARGET_PATH}|${TARGET_WORD})`
 
 function unquoteTargetToken(value: string | undefined): string | undefined {
   if (!value) return undefined
@@ -106,16 +112,58 @@ function unquoteTargetToken(value: string | undefined): string | undefined {
   return (unquoted?.[1] ?? unquoted?.[2] ?? unquoted?.[3] ?? trimmed) || undefined
 }
 
+/**
+ * The value of a labelled field ("repository X", "版本：1.2.3").
+ *
+ * The label must END where it ends: a label that is only a prefix of a longer
+ * word is skipped, so the literal word "repository" is never read as the label
+ * "repo" followed by the value "sitory".
+ */
 function labeledToken(text: string, labels: string): string | undefined {
-  const match = new RegExp(`(?:${labels})\\s*(?:[:=：]|为|是)?\\s*(${TARGET_TOKEN})`, 'iu').exec(text)
-  return unquoteTargetToken(match?.[1])
+  const label = new RegExp(`(?:${labels})`, 'iu')
+  const after = new RegExp(`^(?![\\p{L}\\p{N}_])\\s*(?:[:=：]|为|是)?\\s*(${TARGET_TOKEN})`, 'iu')
+  // A value that is itself another label ("repository /x to remote origin")
+  // belongs to that other field, not to this one.
+  const OTHER_LABEL = /^(?:to|from|on|into|with|at|using|version|profile|registry|remote|refspec|branch|service|repository|repo|包|插件|制品|服务|仓库|版本|配置档|远端|分支|注册表)$/i
+  let cursor = 0
+  while (cursor <= text.length) {
+    const match = label.exec(text.slice(cursor))
+    if (!match) return undefined
+    cursor = cursor + match.index + match[0].length
+    const token = after.exec(text.slice(cursor))
+    const value = unquoteTargetToken(token?.[1])
+    if (value && !OTHER_LABEL.test(value)) return value
+    if (cursor >= text.length) return undefined
+  }
+  return undefined
 }
 
+/**
+ * The object a verb acts on. The verb is matched first, then — separately — an
+ * optional noun that has to end at a word boundary, and only the text AFTER
+ * that noun is the target. Matching the noun and the token in one pattern let
+ * the noun eat a prefix of the real word ("repository" consumed as "repo" +
+ * "sitory"), which captured "sitory" as a repository name.
+ */
 function actionObjectToken(text: string, verbs: string, nouns: string): string | undefined {
-  const match = new RegExp(`(?:${verbs})\\s*(?:(?:${nouns})\\s*)?(?:[:=：]|为)?\\s*(${TARGET_TOKEN})`, 'iu').exec(text)
-  const token = unquoteTargetToken(match?.[1])
+  const verb = new RegExp(`(?:${verbs})`, 'iu').exec(text)
+  if (!verb) return undefined
+  let cursor = verb.index + verb[0].length
+  const noun = new RegExp(`^\\s*(?:${nouns})(?![\\p{L}\\p{N}_])`, 'iu').exec(text.slice(cursor))
+  if (noun) cursor += noun[0].length
+  else cursor += (text.slice(cursor).match(/^\s*[\p{Script=Han}]{0,2}\s*/u)?.[0].length ?? 0)
+  const rest = text.slice(cursor).replace(/^\s*(?:[:=：]|为)?\s*/u, '')
+  const token = unquoteTargetToken(new RegExp(`^(${TARGET_TOKEN})`, 'u').exec(rest)?.[1])
   if (!token || /^(?:the|a|an|this|that|to|from|in|on|into|with|package|plugin|artifact|service|repository|repo|包|插件|制品|服务|仓库)$/i.test(token)) return undefined
   return token
+}
+
+/** The verbs that name each repository-facing action, for unlabelled objects. */
+const GIT_OBJECT_VERB: Record<string, string> = {
+  push: 'push|推送',
+  pull: 'pull|拉取',
+  fetch: 'fetch|抓取|获取',
+  commit: 'commit|提交',
 }
 
 function splitPackageSpec(spec: string | undefined): { packageId?: string; version?: string } {
@@ -180,7 +228,12 @@ function captureRequestedTarget(
     } }
   }
   if (action === 'pull' || action === 'fetch' || action === 'commit' || action === 'push') {
+    // A path written in the instruction outranks the ambient default: "push
+    // /work/repo" names its repository even without the word "repository", and
+    // reading the session working directory instead would silently bind the
+    // obligation to a different path than the one the human wrote.
     const repository = labeledToken(text, 'repository|repo|仓库')
+      ?? actionObjectToken(text, GIT_OBJECT_VERB[action], 'repository|repo|仓库')
       ?? (subject !== 'scope' ? subject : undefined)
     if (!repository) return { target: {}, reasonCode: 'requested_target_repository_missing' }
     const branch = labeledToken(text, 'branch|分支')
@@ -227,36 +280,46 @@ export function extractArtifactPaths(text: string): string[] {
 
 /**
  * Split a single human message into independently tracked clauses. Sentence
- * boundaries and embedded prohibition keywords delimit segments so a compound
- * instruction such as "Modify src/a.ts and src/b.ts. Do not push." yields
- * separate items instead of collapsing into one artifact.
+ * boundaries and negations delimit segments so a compound instruction such as
+ * "Modify src/a.ts and src/b.ts. Do not push." yields separate items instead of
+ * collapsing into one artifact.
+ *
+ * Segmentation asks {@link interpretMessage} where the semantic scopes are, so a
+ * negation keeps its whole coordinated span ("不推送、不发布" is two
+ * prohibitions, not one requirement) and a mixed sentence keeps both executees.
  */
 export interface ClauseSegment {
   kind: GuardItemKind
+  /** Action-bearing text used for target, method and operation extraction. */
   body: string
+  /** Verbatim source scope, kept for the audit record. */
+  text: string
   paths: string[]
+  /** The one interpretation this segment came from; never re-derived downstream. */
+  interpretation: ScopeInterpretation
 }
 
-export function segmentClauses(text: string, captureVersion: 'v041' | 'v042' = 'v042'): ClauseSegment[] {
+export function segmentClauses(text: string, options: InterpretOptions = {}): ClauseSegment[] {
   const normalized = normalizeClause(text)
   if (!normalized) return []
-  // Establish sentence/negative scope before splitting positive conjunctions.
-  // A prohibition retains its entire coordinated body for downstream checks.
-  const scoped = normalized.split(/(?<=[。！？；])|(?<=[.!?])(?=\s|$)|(?<=(?:^|[\s。！？；.!?，,；:]))(?=(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得))/i)
-  const parts = scoped.flatMap(part => captureVersion === 'v041' || classifyClause(part.trim()).kind === 'prohibition' ? [part] : part
-    .split(/(?<!一)(?:并且?|以及|同时)(?=(?:验证(?!结果|全部通过|通过|成功)|确认(?!结果|全部通过|通过|成功|完成)|确保(?!结果|全部通过|通过|成功)|检查(?!结果)|更新|记录|安装|应用|重启|提交|推送|发布|在.{0,40}记录))|\s+and\s+(?=(?:verify|confirm|install|apply|restart|commit|push|publish|record)\b)/i))
-    .map(part => part.trim()).filter(Boolean)
-  const segments: ClauseSegment[] = []
-  for (const part of parts) {
-    const { kind, body } = classifyClause(part)
-    segments.push({ kind, body, paths: extractArtifactPaths(body) })
-  }
-  return segments
+  return interpretMessage(normalized, options)
+    .filter((interpretation) => interpretation.text.trim().length > 0)
+    .map((interpretation) => ({
+      kind: kindOfScope(interpretation.directive, interpretation.body),
+      body: interpretation.body,
+      text: interpretation.text,
+      paths: extractArtifactPaths(interpretation.body),
+      interpretation,
+    }))
 }
 
 /**
  * Build a GuardItem from an already-classified clause body and a resolved
  * verification subject/surface.
+ *
+ * The optional `interpretation` carries the scope reading taken from the same
+ * bytes. It is passed through rather than re-derived, so the obligation lane and
+ * the authority of one clause cannot disagree between callers.
  */
 export function captureItem(
   kind: GuardItemKind,
@@ -268,11 +331,13 @@ export function captureItem(
   surface: 'artifact' | 'scope',
   method?: string,
   operation?: GuardOperation,
-  captureVersion: 'v041' | 'v042' = 'v042',
+  interpretation?: ScopeInterpretation,
 ): GuardItem {
   const sanitized = sanitizeClauseText(body)
-  const unsupportedVisual = captureVersion === 'v042' && /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized)
-  const semanticAction = unsupportedVisual ? 'generic_run' : semanticActionFromText(sanitized)
+  const unsupportedVisual = /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized)
+  // A prohibition's body may be a bare verb ("不要提交并推送"), so the closed
+  // action vocabulary resolves the action the ban is recorded against.
+  const semanticAction = unsupportedVisual ? 'generic_run' : semanticActionOfScope(sanitized, interpretation?.text ?? sanitized, kind === 'prohibition')
   const capturedTarget = captureRequestedTarget(semanticAction, sanitized, subject, surface)
   const effectiveOperation = semanticAction === 'verify' ? 'verify' : operation
   const item: GuardItem = {
@@ -292,8 +357,25 @@ export function captureItem(
     ...(capturedTarget.reasonCode ? { targetCaptureReasonCode: capturedTarget.reasonCode } : {}),
     taskKind: kind === 'prohibition' ? undefined : classifyTaskIntent(sanitized),
     authority: 'root_instruction',
+    ...(kind === 'requirement' ? buildActionPlan(sanitized, subject, surface, semanticAction) : {}),
+    ...(interpretation ? {
+      directive: interpretation.directive,
+      executee: interpretation.executee,
+      authorityDisposition: interpretation.authorityDisposition,
+      ...(interpretation.condition ? { condition: interpretation.condition } : {}),
+      ...(interpretation.resumeEvent ? { resumeEvent: interpretation.resumeEvent } : {}),
+      interpretationFingerprint: interpretation.fingerprint,
+    } : {}),
   }
-  if (/(?:等待|暂停|等).{0,12}(?:用户|你|您|我).{0,12}(?:选择|确认|输入)(?:.{0,8}(?:后|再)?继续)?|收到.{0,8}(?:用户|你|您|我)?的?确认.{0,8}(?:后)?再继续|\bwait for (?:the )?(?:user|your)\b|\bcontinue only after (?:the )?(?:user's?|your) confirmation\b/i.test(sanitized)) {
+  // A wait qualification is derived from the same interpretation as the
+  // authority: a clause the root has already released is executable now and
+  // carries no outstanding wait, so it cannot be blocked by a stale one.
+  const waitBearing = interpretation
+    ? interpretation.authorityDisposition !== 'executable_now'
+      && (interpretation.resumeEvent !== undefined || interpretation.authorityDisposition === 'conditional_wait')
+    : false
+  if (waitBearing
+    || /(?:等待|暂停|等).{0,12}(?:用户|你|您|我).{0,12}(?:选择|确认|输入)(?:.{0,8}(?:后|再)?继续)?|收到.{0,8}(?:用户|你|您|我)?的?确认.{0,8}(?:后)?再继续|\bwait for (?:the )?(?:user|your)\b|\bcontinue only after (?:the )?(?:user's?|your) confirmation\b/i.test(sanitized)) {
     item.waitAuthorization = { kind: 'root_explicit_wait', id: `wait:${id}:${sha256(sanitized).slice(0, 12)}` }
   } else if (/(?:请选择|请决定|需要用户决定)|\b(?:please choose|user decision required)\b/i.test(sanitized)) {
     item.waitAuthorization = { kind: 'user_decision_item', id: `decision:${id}:${sha256(sanitized).slice(0, 12)}` }
@@ -307,6 +389,29 @@ export function captureItem(
   return item
 }
 
+/** The stateful actions a clause names, with the target captured for each. */
+function buildActionPlan(
+  body: string,
+  subject: string,
+  surface: 'artifact' | 'scope',
+  primary: ReturnType<typeof semanticActionOfScope>,
+): Pick<GuardItem, 'actionPlan'> {
+  const actions = statefulActionsOfScope(body)
+  if (actions.length === 0 && isStatefulAction(primary)) actions.push(primary)
+  if (actions.length <= 1) return {}
+  return {
+    actionPlan: actions.map((action) => {
+      const captured = captureRequestedTarget(action, body, subject, surface)
+      return {
+        action,
+        requestedTarget: captured.target,
+        targetCaptureStatus: captured.reasonCode ? 'clarification_required' as const : 'resolved' as const,
+        ...(captured.reasonCode ? { targetCaptureReasonCode: captured.reasonCode } : {}),
+      }
+    }),
+  }
+}
+
 /**
  * Capture one contract clause. Every captured item receives a concrete
  * verification contract: a named artifact path (artifact surface) or the
@@ -318,12 +423,15 @@ export function captureClause(
   id: string,
   revision: number,
   scope: CaptureScope = {},
+  options: InterpretOptions = {},
 ): GuardItem {
-  const { kind, body } = classifyClause(text)
+  const [interpretation] = interpretMessage(text, options)
+  const kind = interpretation ? kindOfScope(interpretation.directive, interpretation.body) : 'requirement'
+  const body = interpretation?.body ?? text
   const path = extractArtifactPaths(sanitizeClauseText(body))[0] ?? ''
   const surface = path ? 'artifact' as const : 'scope' as const
   const subject = path || scope.cwd || 'scope'
-  const method = extractMethod(body)
+  const method = interpretation?.method ?? extractMethod(body)
   const operation = extractOperation(body)
-  return captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation)
+  return captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, interpretation)
 }

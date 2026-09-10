@@ -8,15 +8,19 @@
 
 ## 快速开始
 
-以下步骤适用于 0.5.0。
-
-将插件安装到 DSH 的 Web 运行环境：
+以下步骤描述的是 **0.5.1**，它是发布候选版本，**尚未发布到 npm**，因此钉住版本的 `@0.5.1` 安装在其发布前会失败。在此之前，请省略版本号以安装当前已发布的最新版本，或从源码构建本版本：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.5.0
+dsh plugin --profile web add dsh-completion-guard
 ```
 
-重启 DSH 前，先记录并验证 DSH 程序目录和 Web 配置目录。请把示例路径替换为本机绝对路径：
+0.5.1 发布后，再安装这个确切版本到 DSH 的 Web 运行环境：
+
+```sh
+dsh plugin --profile web add dsh-completion-guard@0.5.1
+```
+
+**请先升级并重启 DSH，再执行下面这一段。** `inject` 会记录运行目录与 profile 的绝对路径，并绑定它在当地读到的图；运行时之后会重新读取同一批根目录，因此在旧运行时上执行 inject 会写下一份描述"新运行时不复存在的那张图"的锁。`inject` 还会**把 Guard 的托管块写入 `<profile>/cordis.patch.yml`**，请先备份该文件。判定结果请读 JSON 输出里的 `status` 字段——**即使它是 `unsupported`，`inspect`、`inject`、`verify-dump` 的退出码仍是 `0`**，所以只看 `$?` 无法判断图是否被接受。
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -28,7 +32,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。**Windows 可接受判定，但本队列尚未经过原生审计**，因此原生门执行前应把 Windows 结果视为未验证。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -49,7 +53,11 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-当前支持的 DSH 目标是 `0.1.2-rc.1`（配合 Cordis `4.0.2`）。Guard 将 DSH 核心依赖与可选的 dshmarket 分开检查，market 的普通升级不要求 Guard 发版或重新注入核心锁；如果插件改变了实际解析到的核心依赖，Guard 仍会拒绝认证。Headless 不需要安装 market。alpha 版本和更早 RC 的 DSH 包组合仅作为历史身份保留，由这些包组合构成的运行环境会被报告为不受支持，而不会通过认证。
+0.5.1 支持 **DSH >= 0.1.5-rc.1**（配合 Cordis `4.0.2`），且不向后兼容：旧的 Session API、V2 事件词表和所有更早的宿主包组合都已删除，不再保留 fallback。`0.1.5-rc.1` 是本版本实际开发与验证的基线，不是支持上限。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
+
+版本范围与宿主校验是两层判断。范围 `>=0.1.5-rc.1` 会拒绝更早的版本，包括 `0.1.4` 与 `0.1.5-alpha.9`；而某个已安装宿主是否真正可用，由精确的 33 包 DSH 核心图决定：未注册的图会被报告为未验证，绝不报告为受支持。alpha 与更早 RC 的包组合只作为历史身份保留，由这些组合构成的运行环境会被报告为不受支持，而不会通过认证。
+
+当前活跃的 `0.1.5-rc.1` 图是**注册表推导**的：各行是已发布的 npm tarball 身份，但本轮尚未有原生 macOS 或 Windows 宿主实际加载过它。Guard 把这一事实写入宿主锁摘要并对外报告，因此该图签发的证书绝不会被表述为原生通过。原生门应视为"未执行"。[兼容性说明](docs/COMPATIBILITY.md)完整记录了本级别：范围、收窄它的 npm 预发布规则、精确图，以及如何解读原生审计尚待完成的队列。
 
 重启属于单独能力。当前 DSH 没有提供可独立验证的 market 已加载实例绑定，因此 Guard 的 market 重启适配器返回不可用；已有重启要求仍保持未完成。核心保护和不依赖该接口的操作继续工作。磁盘上的插件安装/应用不等于运行进程或 UI 已生效。
 

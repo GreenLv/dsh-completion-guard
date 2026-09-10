@@ -89,8 +89,14 @@ function evidenceProblem(projection: GuardProjection, item: GuardItem, binding: 
   if (notSuccess.length) return { itemId: item.id, reason: 'cited evidence outcome is not success', reasonCode: 'evidence_outcome_not_success', offendingEvidenceIds: notSuccess }
 
   const requiredAction = item.semanticAction ?? 'generic_run'
+  // A clause that orders several actions is certified one action at a time, so
+  // the evidence it may cite is the union of what its plan needs. Judging every
+  // citation against the clause's own headline action alone made such a clause
+  // uncertifiable: the closure for the second action could never cite the
+  // evidence that action requires.
+  const compatibleWith = [requiredAction, ...(item.actionPlan ?? []).map((entry) => entry.action)]
   const facts = citedEvidence(projection, binding)
-  const incompatible = facts.filter((fact) => !actionCompatible(requiredAction, fact.semanticAction ?? 'generic_run'))
+  const incompatible = facts.filter((fact) => !compatibleWith.some((action) => actionCompatible(action, fact.semanticAction ?? 'generic_run')))
   if (incompatible.length) {
     const compatibleCount = facts.length - incompatible.length
     return {
@@ -337,6 +343,17 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
         hint: closingHint(projection, item),
       }); continue
     }
+    // A clause that ordered more than one action needs a closure for EACH
+    // action instance: its own resolved target and its own successful evidence.
+    // One action's evidence never covers another, the declared order is kept,
+    // and two instances of the same action on different targets stay separate.
+    // This is checked before the single-facet guard, so a missing action
+    // closure is reported as an incomplete action plan rather than as generic
+    // missing evidence.
+    if (item.actionPlan && item.actionPlan.length > 0) {
+      const planProblem = bindingActionPlanProblem(projection, item, binding)
+      if (planProblem) { rejectedBindings.push(planProblem); continue }
+    }
     if (!binding.evidenceIds.length) {
       rejectedBindings.push({ itemId: item.id, reason: 'no evidence cited', reasonCode: 'binding_missing_required_facet', hint: closingHint(projection, item) }); continue
     }
@@ -379,6 +396,83 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
   } catch (error) {
     return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: openItems(projection), rejectedBindings: [{ itemId: '*', reason: error instanceof Error ? error.message : 'certificate manifest rejected', reasonCode: 'certificate_manifest_rejected' }] }
   }
+}
+
+/**
+ * Per-action closure check for a multi-action clause. Each planned action needs
+ * a matching closure whose resolved target matches the target captured for that
+ * action, whose cited evidence succeeded, and whose evidence is not older than
+ * the item revision it is closing.
+ */
+function bindingActionPlanProblem(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): RejectedBinding | undefined {
+  const plan = item.actionPlan ?? []
+  const closures = binding.actionBindings ?? []
+  if (closures.length !== plan.length) {
+    return {
+      itemId: item.id,
+      reason: `the clause orders ${plan.map((entry) => entry.action).join(' + ')}; ${closures.length} action closure(s) supplied`,
+      reasonCode: 'action_plan_incomplete',
+      hint: closingHint(projection, item),
+    }
+  }
+  const ordered = [...closures].sort((a, b) => a.order - b.order)
+  for (const [index, planned] of plan.entries()) {
+    const closure = ordered[index]
+    if (!closure || closure.action !== planned.action) {
+      return {
+        itemId: item.id,
+        reason: `action closure ${index + 1} must be '${planned.action}' in the clause's order`,
+        reasonCode: 'action_plan_order_mismatch',
+      }
+    }
+    if (planned.targetCaptureStatus !== 'resolved') {
+      return {
+        itemId: item.id,
+        reason: `the clause does not identify an exact target for '${planned.action}'`,
+        reasonCode: planned.targetCaptureReasonCode ?? 'action_plan_target_missing',
+        hint: closingHint(projection, item),
+      }
+    }
+    if (!tuplesEqual(planned.requestedTarget, closure.resolvedTarget)) {
+      return {
+        itemId: item.id,
+        reason: `the closure for '${planned.action}' resolves a different target than the clause captured`,
+        reasonCode: 'action_plan_target_mismatch',
+      }
+    }
+    // Each closure is judged on its own merits: the target it resolves is
+    // compared with the target the clause captured before its citations are
+    // examined, so wrong target, order, and a citation another action already
+    // used are reported as different failures.
+    const reused = closure.evidenceIds.filter((id) => closures.some((other) => other !== closure && other.evidenceIds.includes(id)))
+    if (reused.length > 0) {
+      return { itemId: item.id, reason: `evidence cited for '${planned.action}' also closes another action`, reasonCode: 'action_plan_evidence_reused', offendingEvidenceIds: reused }
+    }
+    if (closure.evidenceIds.length === 0) {
+      return { itemId: item.id, reason: `no evidence cited for '${planned.action}'`, reasonCode: 'action_plan_evidence_missing' }
+    }
+    const cited = closure.evidenceIds.map((id) => projection.evidence.get(id))
+    const missing = closure.evidenceIds.filter((id) => !projection.evidence.has(id))
+    if (missing.length > 0) {
+      return { itemId: item.id, reason: `cited evidence for '${planned.action}' is missing`, reasonCode: 'evidence_missing', offendingEvidenceIds: missing }
+    }
+    for (const [position, evidence] of cited.entries()) {
+      if (!evidence) continue
+      if (evidence.epoch !== projection.epoch) {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' belongs to another epoch`, reasonCode: 'evidence_wrong_epoch', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+      if (evidence.outcome !== 'success') {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' did not succeed`, reasonCode: 'action_plan_evidence_not_successful', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+      if (evidence.toolResultSeq < 0) {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' predates the item`, reasonCode: 'action_plan_evidence_predates_item', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+      if (evidence.semanticAction && evidence.semanticAction !== planned.action) {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' records '${evidence.semanticAction}'`, reasonCode: 'action_plan_action_mismatch', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+    }
+  }
+  return undefined
 }
 
 function openItems(projection: GuardProjection): string[] {

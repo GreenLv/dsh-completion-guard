@@ -4,15 +4,19 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { RC1_HOST_PACKAGES } from '../../src/domain/rc1-host.js'
+import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
+import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
 import { revalidateCoreLock } from '../../src/runtime.js'
 
 const roots: string[] = []
 const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
-const version = '0.1.2-rc.1'
-const core = RC1_HOST_PACKAGES.filter((row) => row.name !== 'dshmarket')
+const version = MIN_SUPPORTED_HOST_VERSION
+// The active core cohort already excludes dshmarket (market identity is not a
+// core lock input), so the fixture is the exact active graph plus the two
+// installation-owned Headless bundles.
+const core = RC015_HOST_PACKAGES
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 function json(path: string, value: unknown) {
@@ -114,6 +118,13 @@ describe('dependency-free Headless target inspection', () => {
     const target = spawnSync(process.execPath, [cli, 'inspect-graph', ...args], { encoding: 'utf8' })
     expect(target.status, target.stderr).toBe(0)
     expect(JSON.parse(target.stdout)).toMatchObject({ inspection_scope: 'pre_install_target', profile_graph: { state: 'dependency_free_headless' }, profile: 'headless', package_count: 33 })
+    // The readback must state how the cohort's rows were established. A
+    // "supported" status plus a digest is not enough: a graph that was only
+    // resolved from the registry must never read as a natively audited one,
+    // and this readback is what a native-acceptance annex records.
+    const readback = JSON.parse(target.stdout) as { cohort_id: string; audit_provenance: string }
+    expect(readback.cohort_id).toBe('dsh-0.1.5-rc.1-core-v1')
+    expect(readback.audit_provenance).toBe('registry-derived-pending-native-audit')
     const installed = spawnSync(process.execPath, [cli, 'inspect', ...args], { encoding: 'utf8' })
     expect(installed.status).toBe(1)
     expect(JSON.parse(installed.stderr)).toMatchObject({ reason_code: 'active_graph_missing' })

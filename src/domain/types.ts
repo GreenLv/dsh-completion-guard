@@ -70,6 +70,34 @@ export interface GuardItem {
   legacyFlags?: Array<'legacy_generic_run' | 'legacy_authority_unclassified'>
   /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
   taskKind?: 'inquiry' | 'action'
+  /**
+   * v0.5.1 interpretation layer, derived from the same source bytes as
+   * {@link normalizedText} by `domain/semantics.ts`. These fields record what
+   * the message actually authorized, so a prohibition, a human-owned action, a
+   * conditional action and an explanation can never become an agent obligation.
+   * Absent on legacy items, which keep their historical executable reading.
+   */
+  directive?: import('./semantics.js').DirectiveClass
+  executee?: import('./semantics.js').Executee
+  authorityDisposition?: import('./semantics.js').AuthorityDisposition
+  /** The unresolved condition guarding a `conditional_wait` item. */
+  condition?: string
+  /** The event that ends a human wait, when the source names one. */
+  resumeEvent?: string
+  /** Stable identity of the interpretation these fields came from. */
+  interpretationFingerprint?: string
+  /**
+   * Every stateful action this item's clause names, in source order, with the
+   * target captured for each. A clause may order more than one action
+   * ("安装插件，重启 DSH"): the item stays one top-level obligation, and every
+   * action it names needs its own matching evidence before it can close.
+   */
+  actionPlan?: Array<{
+    action: 'install' | 'apply' | 'create' | 'modify' | 'restart' | 'commit' | 'push' | 'publish' | 'pull' | 'fetch'
+    requestedTarget: TargetTuple
+    targetCaptureStatus: TargetCaptureStatus
+    targetCaptureReasonCode?: TargetCaptureReasonCode
+  }>
   waitAuthorization?: WaitAuthorization
   deferAuthorization?: DeferAuthorization
   persistenceAuthorization?: PersistenceAuthorization
@@ -129,6 +157,21 @@ export interface EvidenceBinding {
   resolutionEvidenceId?: string
   effectEvidenceId?: string
   stateEvidenceIds?: string[]
+  /**
+   * Per-action closure for a clause that ordered several actions. Every entry
+   * of {@link GuardItem.actionPlan} needs its own entry here: one action's
+   * evidence never covers another action, and two instances of the same action
+   * on different targets are two separate entries.
+   */
+  actionBindings?: BindingActionClosure[]
+}
+
+export interface BindingActionClosure {
+  action: import('./protocol-manifest.js').StatefulAction
+  evidenceIds: string[]
+  resolvedTarget: TargetTuple
+  /** Position of this action in the clause's instruction order. */
+  order: number
 }
 
 export interface GuardCheckpoint {
@@ -149,8 +192,8 @@ export interface GuardCheckpoint {
   result: 'certified' | 'incomplete' | 'unknown'
 }
 
-export type BoundaryDisposition = 'user_wait' | 'external_wait' | 'deferred'
-export type BoundaryQualificationKind = 'user_decision_item' | 'root_explicit_wait' | 'external_operation_pending' | 'root_explicit_defer'
+export type BoundaryDisposition = 'user_wait' | 'external_wait' | 'deferred' | 'guard_bounded_stop'
+export type BoundaryQualificationKind = 'user_decision_item' | 'root_explicit_wait' | 'external_operation_pending' | 'root_explicit_defer' | 'guard_no_progress'
 
 export interface GuardBoundary {
   protocolVersion: '1'
@@ -206,6 +249,32 @@ export interface GuardProjection {
   continuationAttempts: Map<number, number>
   /** Process-local one-shot fallback counters keyed by epoch + contract revision. */
   persistenceCorrectionAttempts: Map<string, number>
+  /**
+   * The no-progress budget, rebuilt from the durable log.
+   *
+   * Keyed by progress fingerprint, then by the boundary the claim was decided
+   * at, holding the attempt number that boundary was given. Keyed by boundary
+   * rather than counted per fingerprint on purpose: the same boundary processed
+   * twice — a retry, with or without the projection being re-derived in between
+   * — maps to the same key and therefore the same attempt, so a retry cannot
+   * spend the budget twice, while a genuinely new boundary adds a new key.
+   */
+  noProgressClaims: Map<string, Map<string, number>>
+  /**
+   * Root event sequences whose control request Guard already carried to the
+   * host. A pause is a one-shot input: once the host has paused, the same
+   * message stays in the log forever, and re-reading it must not re-pause a goal
+   * the human has since resumed.
+   */
+  handledControlSeqs: Set<number>
+  /**
+   * The host turn the projection is currently in, taken from the host's own
+   * durable `turn/start` event. This is the turn boundary's identity: the host
+   * opens it before it claims input or runs pre-step, so it is stable across a
+   * reload, it does not move when Guard writes its own bookkeeping, and a retry
+   * of the same turn re-reads the same number.
+   */
+  hostTurn?: number
   /** Log-derived count of rejected rebind attempts by stable attempt key; survives reload. */
   rebindRejections: Map<string, number>
   integrity: GuardIntegrity
@@ -230,6 +299,8 @@ export function createProjection(): GuardProjection {
     lastGuardEventSeq: -1,
     continuationAttempts: new Map(),
     persistenceCorrectionAttempts: new Map(),
+    noProgressClaims: new Map(),
+    handledControlSeqs: new Set(),
     rebindRejections: new Map(),
     integrity: 'valid',
   }

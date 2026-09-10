@@ -29,4 +29,7 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install isolated host fixture
+        working-directory: tests/fixtures/host-composition
+        run: pnpm install --ignore-workspace --frozen-lockfile
       - run: pnpm test

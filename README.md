@@ -8,15 +8,19 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-These instructions target 0.5.0.
-
-Install the plugin into the DSH Web environment:
+These instructions describe **0.5.1**, which is a release candidate and is **not published to npm yet**, so a version-pinned install of `@0.5.1` fails until it is. While that is true, install the newest published version by omitting the version tag, or build this version from source:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.5.0
+dsh plugin --profile web add dsh-completion-guard
 ```
 
-Before restarting DSH, record and verify the DSH program directory and the Web settings directory. Replace the example paths with the absolute paths on your machine:
+Once 0.5.1 is published, install that exact version into the DSH Web environment:
+
+```sh
+dsh plugin --profile web add dsh-completion-guard@0.5.1
+```
+
+**Run this block after DSH is already upgraded and restarted, not before.** `inject` records the absolute runtime and profile roots and binds the graph it finds there, and the runtime re-reads those same roots later; injecting against the old runtime writes a lock describing a graph the new runtime no longer has. `inject` also **writes Guard's managed block into `<profile>/cordis.patch.yml`**, so back that file up first. Read each command's verdict from the `status` field in its JSON output — `inspect`, `inject` and `verify-dump` exit `0` even when it says `unsupported`, so a `$?` check alone does not tell you the graph was accepted.
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -28,7 +32,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
+On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. **Windows is accepted for evaluation but has not been natively audited for this cohort**, so treat a Windows result as unverified until the native gate runs. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
 
 Restart DSH Web, open a session, and enable the Guard:
 
@@ -49,7 +53,11 @@ Activation is opt-in by default. `status` shows whether the Guard is on, its sta
 
 ## Status and compatibility
 
-The supported DSH target is `0.1.2-rc.1` with Cordis `4.0.2`. The Guard checks the exact DSH core separately from optional dshmarket, so an ordinary market upgrade does not require a Guard release or core-lock reinjection; if a plugin changes the resolved core dependencies, certification still fails closed. Headless does not need market installed. DSH package sets from alpha releases and older RCs stay recorded as historical identities, and a runtime built from one of them is reported as unsupported instead of certified.
+Version 0.5.1 supports **DSH >= 0.1.5-rc.1** with Cordis `4.0.2`, and has no backward compatibility: the previous Session API, the V2 event vocabulary, and every older host package set were removed rather than kept behind a fallback. `0.1.5-rc.1` is the version this release was built and tested against, not a ceiling. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+
+The version range and the host check are separate. The range `>=0.1.5-rc.1` refuses anything older, including `0.1.4` and `0.1.5-alpha.9`. Whether a specific installed host actually works is decided by the exact 33-package DSH core graph: a graph that is not registered is reported as unverified, never as supported. Alpha and older RC sets stay recorded as historical identities only, so a runtime built from one of them is reported as unsupported instead of certified.
+
+The active `0.1.5-rc.1` graph is **registry-derived**: its rows are the published npm tarball identities, but no native macOS or Windows host has loaded it yet in this round. Guard records that fact inside the host-lock digest and reports it, so a certificate from this graph is never presented as a native pass. Treat the native gate as not run. The [compatibility guide](docs/COMPATIBILITY.md) records this level in full: the range, the npm prerelease rules that narrow it, the exact graph, and how to read a cohort whose native audit is still pending.
 
 Restart is a separate capability. Current DSH does not supply independently verified bindings for market's loaded instance, so the Guard market restart adapter is unavailable. A requested restart remains pending; core protection and unrelated operations continue. Installing or applying a package on disk does not prove that a running process or UI has adopted it.
 

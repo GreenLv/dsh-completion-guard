@@ -278,12 +278,22 @@ export function rebindResponse(p: GuardProjection, args: RebindArgs): Record<str
     const pendingProposal = [...p.rebindProposals.values()].find((candidate) =>
       candidate.status === 'pending' && candidate.itemId === item.id
       && candidate.contractRevision === p.contractRevision && candidate.epoch === p.epoch)
+    // Optional fields are spread in only when defined: the host validates this
+    // tool's canonical value as lossless JSON, and `undefined` is not a
+    // lossless JSON value, so an `undefined`-valued property fails the whole
+    // call with `INVALID_TOOL_OUTPUT`. `item.semanticAction` and
+    // `item.targetCaptureStatus` are optional on a contract item, and
+    // `pendingProposal` is absent whenever nothing is pending — the common case
+    // for this query.
     return {
       status: 'item_status',
-      item: { id: item.id, revision: item.revision, kind: item.kind, status: item.status,
-        semantic_action: item.semanticAction, target_capture_status: item.targetCaptureStatus },
+      item: {
+        id: item.id, revision: item.revision, kind: item.kind, status: item.status,
+        ...(item.semanticAction !== undefined ? { semantic_action: item.semanticAction } : {}),
+        ...(item.targetCaptureStatus !== undefined ? { target_capture_status: item.targetCaptureStatus } : {}),
+      },
       diagnosis: deriveItemDiagnosis(p, item),
-      pending_proposal_id: pendingProposal?.id,
+      ...(pendingProposal ? { pending_proposal_id: pendingProposal.id } : {}),
     }
   }
   const proposal = p.rebindProposals.get(args.proposal_id ?? '')

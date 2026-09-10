@@ -4,6 +4,8 @@ import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  ACTIVE_HOST_COHORT_ID,
+  ACTIVE_HOST_LAUNCHER_VERSION,
   HOST_COHORTS,
   evaluateHostLock,
   type HostLockEvaluation,
@@ -12,8 +14,16 @@ import {
 } from './host-lock.js'
 import type { PackageRow } from './digest.js'
 
-/** Names audited in any registered cohort; rows outside the union are unknown. */
+/**
+ * Names registered in any cohort; rows outside the union are unknown.
+ *
+ * Sorted, not inherited from cohort row order: the active cohort's own listing
+ * order is a presentation choice, and letting it decide the resolution order of
+ * `packageRowsFromPnpmLock` would make an unrelated cohort re-ordering look like
+ * a lock-reading change.
+ */
 const CRITICAL_NAMES: readonly string[] = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)))]
+  .sort((a, b) => a.localeCompare(b))
 const HOST_LOCK_MARKER_BEGIN = '# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>'
 const HOST_LOCK_MARKER_END = '# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<'
 
@@ -66,13 +76,35 @@ export function packageRowsFromPnpmLock(text: string, names: readonly string[] =
   })
 }
 
+/**
+ * The production host verdict: the version floor and the exact-graph audit,
+ * combined into the one answer a caller acts on.
+ *
+ * The two facts stay separable — `hostVersion` is always reported on the
+ * evaluation — but a host below the supported floor is refused here even when
+ * its graph matches an audited cohort, because no graph can lift a version
+ * floor. Keeping this combination out of `evaluateHostLock` leaves that
+ * function a pure graph audit, so a graph verdict is never overwritten by a
+ * version verdict inside it.
+ */
+export function combineHostPolicy(evaluation: HostLockEvaluation): HostLockEvaluation {
+  const version = evaluation.hostVersion
+  if (version?.status !== 'below_minimum' && version?.status !== 'unparseable') return evaluation
+  return {
+    ...evaluation,
+    status: 'unsupported',
+    goalAvailable: false,
+    reasonCode: version.status === 'below_minimum' ? 'host_lock_version_below_minimum' : 'host_lock_version_unparseable',
+  }
+}
+
 export function resolveInstalledHostLock(moduleUrl: string = import.meta.url): HostLockEvaluation {
   const lockPath = findUp(dirname(fileURLToPath(moduleUrl)), 'pnpm-lock.yaml')
-  if (!lockPath) return evaluateHostLock([])
+  if (!lockPath) return combineHostPolicy(evaluateHostLock([]))
   try {
-    return evaluateHostLock(packageRowsFromPnpmLock(readFileSync(lockPath, 'utf8')))
+    return combineHostPolicy(evaluateHostLock(packageRowsFromPnpmLock(readFileSync(lockPath, 'utf8'))))
   } catch {
-    return evaluateHostLock([])
+    return combineHostPolicy(evaluateHostLock([]))
   }
 }
 
@@ -286,8 +318,8 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   const lockText = readFileSync(join(runtime, 'pnpm-lock.yaml'), 'utf8')
   const rows = packageRowsFromActiveGraph(mapText, lockText, modules)
   const evaluation = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: 'headless' })
-  if (evaluation.status !== 'supported' || evaluation.cohortId !== 'dsh-0.1.2-rc.1-core-v1') {
-    throw new HostProfileError('target_runtime_unsupported', 'dependency-free inspection requires the audited rc.1 core')
+  if (evaluation.status !== 'supported' || evaluation.cohortId !== ACTIVE_HOST_COHORT_ID + '-core-v1') {
+    throw new HostProfileError('target_runtime_unsupported', 'dependency-free inspection requires the active audited core cohort')
   }
   const { records, reachable } = activeGraphRecords(mapText)
   const launcher = realpathSync(join(modules, '@deepseek-ai', 'dsh'))
@@ -296,7 +328,7 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   // pnpm's hoisted map uses bare package names; the installed manifest and
   // exact mapped realpath below remain authoritative for either key shape.
   const launcherId = [...reachable].filter((id) => id === '@deepseek-ai/dsh' || id.startsWith('@deepseek-ai/dsh@'))
-  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== '0.1.2-rc.1'
+  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== ACTIVE_HOST_LAUNCHER_VERSION
     || typeof records[launcherId[0]].url !== 'string'
     || realpathSync(resolve(modules, records[launcherId[0]].url as string)) !== launcher || !within(modules, launcher)) {
     throw new HostProfileError('target_runtime_unsupported', 'launcher differs from the active runtime importer')

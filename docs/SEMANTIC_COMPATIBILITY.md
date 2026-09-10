@@ -79,6 +79,30 @@ event vocabulary `root_message`, `delegated_message`, `tool_result`,
 runner executes every mirrored case without skips and compares the bounded
 result contract; it does not translate a missing capability into a pass.
 
+## 0.5.1 host adaptation note (2026-09-10)
+
+The DSH host moved from Session format 0 to format 3 under Guard 0.5.1. That is
+a host-side change, and one part of it touches a shared asset: the
+session-identity digest input.
+
+DSH Session V3 moved the fork-inherited prefix length out of the session header
+(`seedLength`) onto the Session itself (`inheritedEventCount`). Guard feeds that
+same durable value into the existing `seedLength` token and leaves the
+`ccg.sessionRefDigest.v3` domain unchanged, so **every byte-mirrored digest
+vector still reproduces identically** and no re-mirror is required. V3's
+`header.isSeeded` marker was deliberately left out of the shared domain: an
+absent optional field still encodes a presence-0 row, so adding it would change
+every digest and silently invalidate the pinned parity evidence. The decision,
+its root cause, and its impact boundary are recorded in
+[`upstream-deltas.json`](upstream-deltas.json).
+
+Everything else in the host adaptation is host-specific and stays out of the
+shared fixture: the V2→V3 event vocabulary, the required `surfaceOp` metadata,
+the renamed PTC dispatch events, the terminal renderer markers of 0.1.5-rc.1,
+and the registry-derived host cohort. The maintainer document
+`UPSTREAM_API_AUDIT.md` at the repository root records those differences; it is
+not part of the published package.
+
 ## Recorded 0.4.0 alignment status (2026-09-03)
 
 The semantic implementation described here entered the DSH `0.4.0` line from implementation baseline `ffc6fe9e1246a815f0bb630943c59d14b6505716`. The shared-contract reference is the Codex `0.10.0` source at `e4fccf690bcbc2be79d0b8d42a1a269f87072120`; this covers only the named contracts, not full product parity. Exact release commit, artifact, native-platform, and publication identities are recorded outside this semantic document because each is a separate evidence scope.

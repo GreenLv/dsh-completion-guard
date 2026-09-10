@@ -3,6 +3,7 @@ import { createRebindTool } from '../../src/tools/rebind.js'
 import { deriveProjection } from '../../src/domain/derive.js'
 import { proposeRebindV042 } from '../../src/domain/rebind.js'
 import { createCheckpointTool } from '../../src/tools/checkpoint.js'
+import { PROTOCOL_V3_NOTICE } from '../../src/domain/derive.js'
 import type { DerivedEnvelope } from '../../src/domain/types.js'
 
 const config = { activation: 'always' as const }
@@ -11,16 +12,37 @@ const user = (seq: number, text: string, kind = 'user'): DerivedEnvelope => ({ s
 const replay = (events: DerivedEnvelope[], durable = true, sessionScope = scope) => deriveProjection(events, config, sessionScope, durable).projection
 
 /**
+ * The text the 0.4 runtime captured, and the partition it recorded for it.
+ *
+ * Both are literals on purpose. A frozen replay fixture must replay a frozen
+ * *input*: deriving the item and its clauses from the live capture would let a
+ * later capture change silently rewrite the history this file claims to
+ * reproduce, and the file would still report success. The durable log below is
+ * what pins the 0.4 reading: the 0.3 protocol boundary is the session's own
+ * record that these messages were captured by the 0.4 line, so they keep the
+ * coordinated-clause shape that release recorded instead of whatever shape the
+ * current parser would give the same words.
+ */
+const HISTORICAL_TEXT = '更新皮肤中心、在本地仓库记录'
+const HISTORICAL_CLAUSES = ['更新皮肤中心', '、在本地仓库记录']
+const protocolBoundary = (seq: number): DerivedEnvelope => ({
+  seq, type: 'user/message',
+  data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }] },
+})
+
+/**
  * Build the exact tool/result a 0.4 runtime recorded for a propose call.
  * The frozen proposer and the frozen response text keep historical replay
  * faithful; the live 0.5 tool is NOT involved.
  */
-function v042ProposalFlow(text = '更新皮肤中心、在本地仓库记录') {
-  const events = [user(1, text)]
+function v042ProposalFlow(text = HISTORICAL_TEXT) {
+  const events = [protocolBoundary(0), user(1, text)]
   const p = replay(events)
   const old = [...p.items.values()][0]
-  const split = old.normalizedText.indexOf('、')
-  const args = { operation: 'propose', item_id: old.id, clauses: split > 0 ? [old.normalizedText.slice(0, split), old.normalizedText.slice(split)] : [old.normalizedText] }
+  // The historical item must replay unchanged. A capture change that
+  // re-partitions it fails loudly here rather than quietly moving the fixture.
+  expect([...p.items.values()].map(item => item.normalizedText)).toEqual([HISTORICAL_TEXT])
+  const args = { operation: 'propose', item_id: old.id, clauses: text === HISTORICAL_TEXT ? HISTORICAL_CLAUSES : [old.normalizedText] }
   const proposal = proposeRebindV042(p, args as never)!
   const recorded = { status: 'proposed', proposal,
     next_step: `Root user must reply exactly: 确认重绑定 ${proposal.id}. This changes the contract only and grants no execution permission.` }

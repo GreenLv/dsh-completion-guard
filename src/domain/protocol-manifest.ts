@@ -184,7 +184,7 @@ const ORDERED_TEXT_RULES: Array<[SemanticAction, RegExp]> = [
 ]
 
 export function semanticActionFromText(text: string): SemanticAction {
-  if (/^\s*(?:验证|确认|确保|verif(?:y|ies|ied|ying)\b|confirm\b)/i.test(text)) return 'verify'
+  if (/^\s*(?:验证|校验|确认|确保|核对|verif(?:y|ies|ied|ying)\b|confirm\b)/i.test(text)) return 'verify'
   for (const [action, pattern] of ORDERED_TEXT_RULES) {
     if (pattern.test(text)) return action
   }

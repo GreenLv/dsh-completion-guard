@@ -17,10 +17,10 @@ export function createBoundaryTool(
 ): ToolDefinition {
   return defineTool({
     name: 'context_guard_boundary',
-    description: 'Persist a qualified user_wait, external_wait, or deferred boundary. Free-form notes never qualify a boundary.',
+    description: 'Persist a qualified user_wait, external_wait, deferred, or guard_bounded_stop boundary. Free-form notes never qualify a boundary.',
     parameters: {
-      disposition: { type: 'string', required: true, enum: ['user_wait', 'external_wait', 'deferred'] },
-      qualification_kind: { type: 'string', required: true, enum: ['user_decision_item', 'root_explicit_wait', 'external_operation_pending', 'root_explicit_defer'] },
+      disposition: { type: 'string', required: true, enum: ['user_wait', 'external_wait', 'deferred', 'guard_bounded_stop'] },
+      qualification_kind: { type: 'string', required: true, enum: ['user_decision_item', 'root_explicit_wait', 'external_operation_pending', 'root_explicit_defer', 'guard_no_progress'] },
       qualification_ids: { type: 'array', required: true, items: { type: 'string' } },
       note: { type: 'string' },
     },

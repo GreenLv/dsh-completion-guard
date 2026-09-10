@@ -1,6 +1,72 @@
 import { normalizeClause } from './canonicalize.js'
+import { availableBoundaryQualifications } from './boundary.js'
 import { hasCurrentCertificate } from './goal-gate.js'
 import type { GuardProjection } from './types.js'
+
+/**
+ * What "relevant progress" means, as one value.
+ *
+ * The inputs are the recorded state a caller could not have faked without
+ * changing the work itself: the epoch and contract revision, the open items and
+ * their blockers, the qualified evidence set, the boundary qualifications
+ * available right now, and the Goal's identity and activation. Deliberately
+ * absent: timestamps, event counts, wording, checkpoint bodies, and the Goal
+ * *revision* — editing a Goal's text is not progress, and treating it as such
+ * would let a re-statement reset the stop budget.
+ */
+/**
+ * How many times the same progress fingerprint must be observed at a turn
+ * boundary before Guard stops the automatic continuation.
+ *
+ * The first sighting is a baseline, not a stalled turn: it is the state a turn
+ * either advanced to or started from, and the host's driver owns continuation
+ * there. The second sighting is the first turn that produced nothing new, which
+ * earns the one diagnosis and correction opportunity. The third is the bounded
+ * stop. The count is a resource bound on repetition, never a way to declare the
+ * task finished.
+ */
+export const NO_PROGRESS_TURNS_BEFORE_STOP = 3
+
+/** Marks the durable no-progress record; replay reads the budget from these. */
+export const NO_PROGRESS_RECORD_PREFIX = 'Context Guard no-progress record: '
+
+/**
+ * The identity of the turn boundary a decision is taken at.
+ *
+ * Guard does not own the host's turn counter, and a retry must be recognisable
+ * as the same boundary rather than as a new one. The last durable event is that
+ * identity: it is derivable from the log alone, it is stable across a reload,
+ * and it only advances when the session actually records something new.
+ */
+export function decisionBoundaryKey(projection: GuardProjection): number | undefined {
+  return projection.hostTurn
+}
+
+export function progressFingerprint(projection: GuardProjection): string {
+  const open = [...projection.items.values()]
+    .filter((item) => item.status === 'pending')
+    .map((item) => `${item.id}:${item.revision}:${item.normalizedText}`)
+    .sort()
+  const evidence = [...projection.evidence.values()]
+    .filter((row) => row.epoch === projection.epoch && row.outcome === 'success')
+    .map((row) => row.id)
+    .sort()
+  const qualifications = availableBoundaryQualifications(projection)
+    .map((row) => `${row.id}:${row.status}`)
+    .sort()
+  return JSON.stringify({
+    epoch: projection.epoch,
+    contractRevision: projection.contractRevision,
+    open,
+    evidence,
+    qualifications,
+    goal: projection.currentGoalRef?.id ?? null,
+    // Phase and activation are deliberately absent: they are what a stop
+    // CHANGES, not evidence of progress. Including them would make the digest of
+    // a stopped task differ from the digest the stop recorded, so a persisted
+    // bounded stop could never re-qualify after its own effect.
+  })
+}
 
 export type CompletionDisposition =
   | 'complete'
@@ -116,6 +182,12 @@ export function classifyCompletionClaim(text: string): CompletionDisposition {
 export interface TurnStoppingDecision {
   action: 'continue' | 'stop'
   reason?: string
+  /**
+   * The no-progress attempt this decision asks the caller to record durably.
+   * Recording is the caller's job because it is a durable side effect; deciding
+   * is this function's job and must stay free of them.
+   */
+  noProgressClaim?: { fingerprint: string; boundaryKey: string; attempt: number }
 }
 
 export interface AssistantOutcomeObservation {
@@ -150,7 +222,45 @@ export function decideTurnBoundary(projection: GuardProjection): TurnStoppingDec
     return { action: 'stop', reason: 'accepted_boundary_pending_effectuation' }
   }
   if (projection.currentGoalPhase === 'active' && projection.currentGoalActivation === 'armed') {
-    return { action: 'stop', reason: 'goal_round_driver_owns_continuation' }
+    // An active armed Goal is the continuation owner, but "armed" is not
+    // unbounded: a turn boundary that repeats the SAME progress fingerprint is
+    // evidence that nothing relevant changed, and Guard stops the automatic
+    // continuation instead of spending the host's rounds forever.
+    // The budget is read from the log, never incremented here: this function is
+    // a decision, and a decision that spent budget by being asked would count a
+    // replay as progress made. The caller records the claim it is told to make.
+    const fingerprint = progressFingerprint(projection)
+    const claims = projection.noProgressClaims.get(fingerprint) ?? new Map<string, number>()
+    // The boundary is identified by the last durable event this decision was
+    // taken from. A retry re-reads the same log, so it recomputes the same
+    // boundary key, sees its own claim excluded from the prior count, and lands
+    // on the same attempt — whether or not the projection was re-derived in
+    // between. A new turn has a new last event, so it is a new boundary.
+    const hostTurn = decisionBoundaryKey(projection)
+    // No host turn identity means no reliable boundary. The guard then declines
+    // to spend the budget at all — it does not fall back to an inferred key,
+    // because a wrong key either freezes the budget or spends it twice, and
+    // neither is a stop the host can be asked to honour.
+    if (hostTurn === undefined) return { action: 'stop', reason: 'no_progress_identity_unavailable' }
+    const boundaryKey = String(hostTurn)
+    const prior = [...claims].filter(([key]) => key !== boundaryKey).length
+    const claim = { fingerprint, boundaryKey, attempt: prior + 1 }
+    if (prior === 0) return { action: 'stop', reason: 'goal_round_driver_owns_continuation', noProgressClaim: claim }
+    if (prior < NO_PROGRESS_TURNS_BEFORE_STOP - 1) return { action: 'continue', reason: 'no_progress_diagnosis_steer', noProgressClaim: claim }
+    return { action: 'stop', reason: 'no_progress_bounded_disarm' }
+  }
+  // A current Goal that is not the active, armed continuation owner belongs to
+  // the host or the user, never to Guard. DSH 0.1.5-rc.1 pauses a goal
+  // immediately and only a human `resume` re-arms it, so Guard must not spend
+  // its one correction steer to restart work the user stopped: a paused,
+  // blocked, completed, or not-yet-read-back goal yields instead of continuing.
+  if (projection.currentGoalRef) {
+    return {
+      action: 'stop',
+      reason: projection.currentGoalPhase === 'paused'
+        ? 'goal_paused_by_user_safe_yield'
+        : 'goal_not_continuable_safe_yield',
+    }
   }
   if ([...projection.items.values()].some((item) => item.status === 'pending' && item.persistenceAuthorization)) {
     const key = `${projection.epoch}:${projection.contractRevision}`
@@ -170,6 +280,41 @@ export function decideTurnStopping(
   _maxAttempts: number,
 ): TurnStoppingDecision {
   return decideTurnBoundary(projection)
+}
+
+/**
+ * Whether the last trusted ROOT instruction asked to pause.
+ *
+ * The source filter is the contract, not a heuristic: a quoted log, a tool
+ * result, a plugin notice or a model message is not a `user/message` with
+ * `source.kind === 'user'`, so none of them can reach this function at all, and
+ * neither can the model's own summary of one. A negated pause ("不要暂停") is not
+ * a pause request, and the check is anchored to a clause head so a pause word
+ * mentioned inside a longer instruction is not a control request.
+ */
+export function latestRootInstruction(
+  events: readonly { type: string; seq?: number; data: unknown }[],
+): { text: string; seq: number } | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type !== 'user/message') continue
+    const data = event.data as { source?: { kind?: string }; content?: Array<{ type?: string; text?: string }> }
+    if (data.source?.kind !== 'user') continue
+    const text = (data.content ?? []).filter((part) => part?.type === 'text').map((part) => part.text ?? '').join('\n')
+    if (text.trim()) return { text, seq: event.seq ?? 0 }
+  }
+  return undefined
+}
+
+/** Marks a root control request Guard has already carried to the host. */
+export const CONTROL_RECORD_PREFIX = 'Context Guard control record: '
+
+const PAUSE_REQUEST = /(?:^|[。！？；;，,、\s])(?:请|麻烦)?\s*(?:先)?\s*(?:暂停|停一下|停一停|先停|暂时停止)(?:一下|下|吧)?\s*(?:[。！？；;，,、]|$)|\b(?:please\s+)?(?:pause|hold\s+on|stop\s+for\s+now)\b/i
+const NEGATED_PAUSE = /(?:不要|不用|别|无需|不必)\s*(?:先)?\s*(?:暂停|停)|\b(?:do\s+not|don't|never)\s+(?:pause|stop)\b/i
+
+export function isRootPauseRequest(text: string): boolean {
+  if (NEGATED_PAUSE.test(text)) return false
+  return PAUSE_REQUEST.test(text)
 }
 
 export function latestAssistantText(events: readonly { type: string; data: unknown }[]): string {

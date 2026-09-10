@@ -4,6 +4,15 @@ import { captureClause } from '../../src/domain/capture.js'
 import { createProjection } from '../../src/domain/types.js'
 import { renderRecoveryPacket } from '../../src/domain/recovery.js'
 
+/**
+ * T06 interprets 200 clauses of 4000+ characters — the size class the
+ * analysis-bounds tests pin — so it is CPU-bound rather than slow in the
+ * product. The default 5 s budget holds when this file runs alone (~4.8 s) and
+ * fails only when the whole suite competes for cores, so the budget is raised
+ * to fit the fixture instead of shrinking the fixture the test needs.
+ */
+const T06_TIMEOUT_MS = 60_000
+
 describe('0.4.2 bounded feedback regressions', () => {
   it('T01/T05 explains generic update capability without command guidance', async () => {
     const p = createProjection()
@@ -116,7 +125,7 @@ it('T06 keeps the entire certification set despite focused display and returns f
   expect(Buffer.byteLength(JSON.stringify(response))).toBeLessThanOrEqual(12288)
   const constraint = await tool.execute({ bindings: [], item_ids: ['P99'], detail_id: 'P99' } as never, undefined as never) as { detail_chunk: string }
   expect(constraint.detail_chunk).toContain('P99')
-})
+}, T06_TIMEOUT_MS)
 
 it('T04 rejects pre-clarification evidence without changing its historical ID', async () => {
   const p = createProjection()

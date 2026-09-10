@@ -197,6 +197,49 @@ class HostBoundEntrypointTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "ambiguous"):
             self.host.select_target_cohorts(cohorts + cohorts, "0.1.2-rc.1", {"web": "second", "headless": "first"})
 
+    def test_shipped_manifest_selects_the_active_cohort(self):
+        """The cases above use synthetic cohorts; this one runs the same logic
+        against the manifest that actually ships. The native run's first step
+        resolves the requested cohort id and requires the installed runtime
+        version to match that cohort's single `@deepseek-ai/dsh` row, so a
+        malformed active cohort would fail at preflight on the expensive gate,
+        long after the source was declared good."""
+        manifest = json.loads(
+            (Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
+        cohorts = manifest["cohorts"]
+        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.1.5-rc.1-core-v1"])
+        active = cohorts[0]
+        launcher = [row for row in active["packages"] if row["name"] == "@deepseek-ai/dsh"]
+        self.assertEqual(len(launcher), 1, "the launcher row must be unique for version lookup")
+        self.assertEqual(launcher[0]["version"], "0.1.5-rc.1")
+
+        targets = {"web": active["id"], "headless": active["id"]}
+        chosen = self.host.select_target_cohorts(cohorts, launcher[0]["version"], targets)
+        self.assertEqual(chosen["web"]["id"], active["id"])
+        self.assertEqual(chosen["headless"]["id"], active["id"])
+        # A runtime built from another version must be refused, never silently
+        # matched against the active cohort.
+        with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
+            self.host.select_target_cohorts(cohorts, "0.1.2-rc.1", targets)
+        with self.assertRaisesRegex(RuntimeError, "unknown or ambiguous"):
+            self.host.select_target_cohorts(cohorts, "0.1.5-rc.1", {"web": "nope", "headless": active["id"]})
+
+    def test_shipped_manifest_keeps_historical_cohorts_resolvable(self):
+        """Historical cohorts remain as verification records. They must stay
+        well formed for their own runtime version even though they can never be
+        selected as the active target, so a later annex audit can still read
+        them."""
+        manifest = json.loads(
+            (Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
+        legacy = manifest["legacyCohorts"]
+        self.assertGreaterEqual(len(legacy), 5)
+        for cohort in legacy:
+            launcher = [row for row in cohort["packages"] if row["name"] == "@deepseek-ai/dsh"]
+            self.assertEqual(len(launcher), 1, cohort["id"])
+            chosen = self.host.select_target_cohorts(
+                legacy, launcher[0]["version"], {"web": cohort["id"], "headless": cohort["id"]})
+            self.assertEqual(chosen["web"]["id"], cohort["id"])
+
     def test_target_graph_detects_missing_duplicate_or_changed_core_identity(self):
         rows = [{"name": "core", "version": "1", "integrity": "sha512-a"}]
         self.host.verify_target_graph(rows, rows, "web")

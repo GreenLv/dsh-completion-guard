@@ -369,6 +369,7 @@ class NativeSessionAdapter {
     const available = availableBoundaryQualifications(projection).filter((row) => row.disposition === disposition)
     const fallbackKind: Record<BoundaryDisposition, BoundaryQualificationKind> = {
       user_wait: 'root_explicit_wait', external_wait: 'external_operation_pending', deferred: 'root_explicit_defer',
+      guard_bounded_stop: 'guard_no_progress',
     }
     const request = {
       disposition, qualificationKind: available[0]?.kind ?? fallbackKind[disposition],

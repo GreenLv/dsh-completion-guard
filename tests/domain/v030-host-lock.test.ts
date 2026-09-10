@@ -23,6 +23,8 @@ import {
   resolveActiveProfileHostLock,
   verifyComposedHostLockDump,
 } from '../../src/domain/host-resolver.js'
+import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
+import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
 const temporaryRoots: string[] = []
 
@@ -41,11 +43,13 @@ function auditedRows(...names: string[]) {
 
 describe('v0.3 host graph and live capability binding', () => {
   it('locks the real update_goal provider and treats the Goal graph as a pair', () => {
-    expect(EXPECTED_HOST_PACKAGES).toContainEqual({
-      name: '@deepseek-ai/dsh-tool-goal',
-      version: '0.1.2-rc.1',
-      integrity: 'sha512-ooHKN6Eqy3owNS/oCDO7mR+UalEE4AxJMXou29waahIdSQsFAlk4pPApvhrwg1lpchF5CKwBPOtsVmjq2HfBKQ==',
-    })
+    // The active cohort row is asserted against the published 0.1.5-rc.1
+    // identity module, so a cohort swap cannot leave the Goal pair unlocked.
+    expect(EXPECTED_HOST_PACKAGES).toContainEqual(
+      RC015_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
+    )
+    expect(EXPECTED_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal')?.version)
+      .toBe(MIN_SUPPORTED_HOST_VERSION)
     // CG-DSH-001: a graph missing the whole Goal pair fails closed as an
     // incomplete audited graph; a partial Goal pair still names its own gap.
     const withoutGoalLock = evaluateHostLock(withoutGoal())
@@ -116,8 +120,9 @@ describe('v0.3 host graph and live capability binding', () => {
     const web = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluateHostCapability(web, { action: 'apply' }).status).toBe('supported')
     expect(evaluateHostCapability(web, { action: 'restart' }).status).toBe('supported')
-    // CG-DSH-001: a graph missing the dshmarket controller row fails the
-    // whole lock closed and every capability inherits the failure.
+    // The active core cohort excludes dshmarket by design: the market row is
+    // verified independently by the action adapter, so a graph without it is
+    // still the complete core contract.
     const missingMarket = evaluateHostLock(
       EXPECTED_HOST_PACKAGES.filter((row) => row.name !== 'dshmarket'),
       { platform: 'posix', profileKind: 'web' },
@@ -350,7 +355,7 @@ describe('active profile graph injection and composed readback', () => {
     expect(hostLockRowsFromComposedDump(managed)).toEqual(active.evaluation.packages)
     expect(hostLockContextFromComposedDump(managed)).toEqual({ platform: expectedPlatform, profileKind: 'web' })
     expect(verifyComposedHostLockDump(managed, active.evaluation).digest).toBe(active.evaluation.digest)
-    expect(() => verifyComposedHostLockDump(managed.replace('0.1.2-rc.1', '0.1.2-rc.2'), active.evaluation))
+    expect(() => verifyComposedHostLockDump(managed.replace(MIN_SUPPORTED_HOST_VERSION, '0.1.5-rc.2'), active.evaluation))
       .toThrowError(new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph'))
     expect(() => verifyComposedHostLockDump(managed.replace('hostLockProfile: "web"', 'hostLockProfile: "headless"'), active.evaluation))
       .toThrowError(/does not match the active graph/)

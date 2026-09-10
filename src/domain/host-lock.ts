@@ -3,17 +3,30 @@ import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
 import { ALPHA3_HOST_PACKAGES } from './alpha3-host.js'
 import { RC1_HOST_PACKAGES } from './rc1-host.js'
+import { RC015_HOST_PACKAGES } from './rc015-host.js'
+import { evaluateMinimumHostVersion, type HostVersionDecision } from './host-version.js'
 
 export type HostLockStatus = 'supported' | 'unsupported' | 'unavailable'
 export type HostPlatform = 'posix' | 'windows'
 export type HostProfileKind = 'headless' | 'web'
 
 /**
- * Capability expectations shared by every audited host cohort. The rc.1 audit
- * found one host API change: Session event reads moved from `events` to
- * `snapshotEvents()`. Guard adapts that API locally while the event vocabulary,
- * flush contract, Goal disarm, `update_goal` gating, tool definition, and
- * renderer terminal markers remain compatible.
+ * Capability expectations shared by every registered cohort.
+ *
+ * Every row is a host contract Guard actually consumes, re-checked against the
+ * 0.1.5-rc.1 package surfaces: `ctx.sessions.flush()` still returns whether a
+ * durability listener participated; `tools.guard()` is still a monotonic
+ * post-policy denial; the Goal service still exposes `get`/`disarm` with a
+ * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
+ * `ctx.jobs.get()` still yields the `dsh.jobs.v1` status vocabulary; and
+ * `dsh-tool-fs` still registers `read`/`write`/`edit` with the same parameter
+ * and result contract (`dsh.fs-tools.v1`).
+ *
+ * What is NOT a row, because it changed rather than stayed compatible: the
+ * Session event API and vocabulary. Guard 0.5.1 supports only V3
+ * `snapshotEvents()` and refuses a session that does not expose it, so a V2
+ * host is rejected by the cohort's exact package rows before any capability row
+ * is consulted.
  */
 const AUDITED_CAPABILITY_ROWS: readonly CapabilityRow[] = [
   { name: 'goal_complete_precommit_guard', value: { k: 's', v: 'required' } },
@@ -26,6 +39,14 @@ const AUDITED_CAPABILITY_ROWS: readonly CapabilityRow[] = [
   ...SEMANTIC_ACTIONS.map((action) => ({ name: 'supported_action', value: { k: 's' as const, v: action } })),
 ]
 
+/**
+ * How a cohort's package rows were established. Bound into every host-lock
+ * digest through the `host_audit_provenance` capability row, so a certificate
+ * records whether the exact graph it used was loaded on a native host or only
+ * resolved from the registry.
+ */
+export type HostAuditProvenance = 'native-audited' | 'registry-derived-pending-native-audit'
+
 export interface HostCohort {
   /** Stable cohort identity; bound into every hostLockDigest via `host_cohort`. */
   id: string
@@ -33,10 +54,19 @@ export interface HostCohort {
   supportedGoalVersions: string[]
   /**
    * Platforms where this cohort's exact package graph was extracted from a
-   * native host and audited. Other platforms fail closed; integrity must not
-   * be inferred across platforms.
+   * native host and audited. A cohort with no native audit has an empty list
+   * here even while it accepts evaluations — see {@link acceptedPlatforms}.
    */
   auditedPlatforms: readonly HostPlatform[]
+  /**
+   * Platforms on which the cohort may evaluate to `supported`. This is the
+   * gating list; a platform outside it fails closed with
+   * `host_cohort_platform_not_audited`. `auditedPlatforms` remains the stricter
+   * fact and `auditProvenance` states which one a certificate actually rests
+   * on, so a registry-derived graph is never silently reported as a native pass.
+   */
+  acceptedPlatforms: readonly HostPlatform[]
+  auditProvenance: HostAuditProvenance
   packages: PackageRow[]
   capabilities: CapabilityRow[]
 }
@@ -46,15 +76,20 @@ function defineCohort(
   supportedGoalVersions: string[],
   auditedPlatforms: readonly HostPlatform[],
   packages: PackageRow[],
+  auditProvenance: HostAuditProvenance = 'native-audited',
+  acceptedPlatforms: readonly HostPlatform[] = auditedPlatforms,
 ): HostCohort {
   return {
     id,
     manifestVersion: 1,
     supportedGoalVersions,
     auditedPlatforms,
+    acceptedPlatforms,
+    auditProvenance,
     packages,
     capabilities: [
       { name: 'host_cohort', value: { k: 's', v: id } },
+      { name: 'host_audit_provenance', value: { k: 's', v: auditProvenance } },
       ...AUDITED_CAPABILITY_ROWS,
     ],
   }
@@ -118,8 +153,8 @@ export const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[] = ALPHA2_HOST_PACK
 /**
  * Historical audited host cohort registry. Every entry keeps the exact package
  * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
- * contracts). These are historical verification facts only: since 0.5.0 the
- * active support target is `0.1.2-rc.1`, so an installed graph from any of
+ * contracts). These are historical verification facts only: since 0.5.1 the
+ * active support target is `0.1.5-rc.1`, so an installed graph from any of
  * these cohorts — including previous RCs and alphas — is no longer an active
  * support entry and fails closed in `evaluateHostLock`.
  */
@@ -164,16 +199,36 @@ export const LEGACY_HOST_COHORTS: readonly HostCohort[] = [
   defineCohort('dsh-0.1.2-alpha.2-dshmarket-1.39.0', ['0.1.2-alpha.2'], ['posix', 'windows'], ALPHA2_DSHMARKET_139_HOST_PACKAGES),
   defineCohort('dsh-0.1.2-alpha.3', ['0.1.2-alpha.3'], ['posix', 'windows'], ALPHA3_HOST_PACKAGES),
   defineCohort('dsh-0.1.2-rc.1', ['0.1.2-rc.1'], ['posix', 'windows'], RC1_HOST_PACKAGES),
+  // DSH 0.1.5-rc.1: the graph rows are the exact published registry identities,
+  // but this cohort has never been loaded on a native host in this round, so it
+  // is registered as registry-derived. It accepts evaluation on both platforms
+  // (the whole point of implementing and testing against this baseline), while
+  // `auditProvenance` records that the native macOS/Windows audit is still
+  // outstanding and is bound into the digest so no certificate can imply one.
+  defineCohort(
+    'dsh-0.1.5-rc.1',
+    ['0.1.5-rc.1'],
+    [],
+    RC015_HOST_PACKAGES,
+    'registry-derived-pending-native-audit',
+    ['posix', 'windows'],
+  ),
 ]
 
+/** The single active support cohort since 0.5.1. */
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.1.5-rc.1'
+
 /** Core-lock/v1 separates optional market identity from the audited DSH graph.
- * The active support target is exactly one audited cohort, `0.1.2-rc.1`:
+ * The active support target is exactly one registered cohort, `0.1.5-rc.1`:
  * historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
  * never silently re-labelled as accepted active locks, and an installed
- * historical graph fails closed under `evaluateHostLock`.
+ * historical graph fails closed under `evaluateHostLock`. The version policy
+ * (`>=0.1.5-rc.1`) and the graph lock are separate judgments: a newer host that
+ * has not been registered here is "unverified / pending audit", never
+ * supported by range alone.
  */
 export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
-  .filter((cohort) => cohort.id === 'dsh-0.1.2-rc.1')
+  .filter((cohort) => cohort.id === ACTIVE_HOST_COHORT_ID)
   .map((cohort) => ({
     ...cohort,
     id: `${cohort.id}-core-v1`,
@@ -182,18 +237,27 @@ export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
     capabilities: [
       { name: 'host_cohort', value: { k: 's' as const, v: `${cohort.id}-core-v1` } },
       { name: 'host_lock_policy', value: { k: 's' as const, v: 'dsh-core/v1' } },
+      { name: 'host_audit_provenance', value: { k: 's' as const, v: cohort.auditProvenance } },
       ...AUDITED_CAPABILITY_ROWS,
     ],
   }))
 
 /**
- * rc.1 audited package identities: the active support cohort since 0.5.0. The
- * audited cohort is an atomic whole-graph contract (CG-DSH-001): any drifted,
- * duplicated, unknown-version, unbound, OR MISSING row fails the whole lock
- * closed (`host_lock_missing`); no capability inherits independence from a
- * partially present graph.
+ * Active support cohort package identities (0.5.1: DSH 0.1.5-rc.1). The cohort
+ * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
+ * unknown-version, unbound, OR MISSING row fails the whole lock closed
+ * (`host_lock_missing`); no capability inherits independence from a partially
+ * present graph.
  */
 export const EXPECTED_HOST_PACKAGES: PackageRow[] = HOST_COHORTS[0].packages
+
+/**
+ * The `@deepseek-ai/dsh` launcher version of the active cohort, read from the
+ * cohort rows rather than hardcoded, so a cohort bump cannot leave a stale
+ * literal behind in the target-inspection path.
+ */
+export const ACTIVE_HOST_LAUNCHER_VERSION: string | undefined =
+  EXPECTED_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh')?.version
 
 const packageNames = (...names: string[]): ReadonlySet<string> => new Set(names)
 
@@ -267,6 +331,8 @@ export interface HostLockEvaluation {
     | 'host_lock_installed_graph_drift'
     | 'host_lock_missing'
     | 'host_lock_version_mismatch'
+    | 'host_lock_version_below_minimum'
+    | 'host_lock_version_unparseable'
     | 'host_lock_integrity_mismatch'
     | 'host_lock_unknown_package'
     | 'host_lock_duplicate_package'
@@ -280,8 +346,22 @@ export interface HostLockEvaluation {
   platform?: HostPlatform
   profileKind?: HostProfileKind
   liveGoalAvailable?: boolean
+  /**
+   * The version-policy half of host support, decided separately from the graph.
+   * A host below the minimum is refused here even when its graph matches an
+   * audited cohort, and an in-range version never substitutes for the
+   * exact-graph audit: the two are independent facts, both reported.
+   */
+  hostVersion?: HostVersionDecision
   /** Readback of the audited cohort the supplied graph was evaluated against. */
   cohortId?: string
+  /**
+   * Readback of how that cohort's rows were established. `registry-derived-
+   * pending-native-audit` means the exact published graph was verified but no
+   * native host load has happened yet; a certificate must never present that as
+   * a native pass.
+   */
+  auditProvenance?: HostAuditProvenance
   /** Audited cohort rows absent from the supplied graph (diagnostic). */
   missingPackages?: string[]
 }
@@ -290,6 +370,24 @@ export interface HostLockContext {
   platform?: HostPlatform
   profileKind?: HostProfileKind
   capabilityId?: string
+  /**
+   * The DSH host version the graph was read from, when the caller read one.
+   * Supplying it turns the version policy into a production decision; omitting
+   * it leaves the version question unanswered rather than assumed supported.
+   */
+  hostVersion?: string
+}
+
+/**
+ * The host version a package graph records, for the version-policy decision.
+ *
+ * Every DSH package versions with the host, so the graph's own `dsh` row is the
+ * version the caller is running. A graph without that row leaves the version
+ * unknown, and an unknown version is not treated as supported.
+ */
+export function hostVersionFromPackages(rows: readonly PackageRow[]): string | undefined {
+  const host = rows.find((row) => row.name === '@deepseek-ai/dsh')
+  return host?.version
 }
 
 export type HostCohortSelectionReason =
@@ -355,9 +453,9 @@ export function selectHostCohort(
     && cohort.packages.every((expected) => rows.filter((row) => row.name === expected.name).length === 1))
   const consistentCohort = completeCandidates[0] ?? candidates[0]
   if (consistentCohort !== undefined && unboundCount === 0) {
-    if (platform && !consistentCohort.auditedPlatforms.includes(platform)) {
-      // The exact graph was audited, but never on this platform; integrity
-      // must not be inferred across platforms.
+    if (platform && !consistentCohort.acceptedPlatforms.includes(platform)) {
+      // The exact graph is registered, but it is not accepted on this platform;
+      // integrity must not be inferred across platforms.
       return { cohort: consistentCohort, consistent: false, reasonCode: 'host_cohort_platform_not_audited' }
     }
     const suppliedCounts = new Map<string, number>()
@@ -467,13 +565,22 @@ export function evaluateHostLock(rows: readonly PackageRow[], context: HostLockC
     .sort((a, b) => a.localeCompare(b))
   const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row) => row.name)))
   const unknown = supplied.find((row) => !registryNames.has(row.name))
+  // The version policy is decided before the graph, and independently of it.
+  // Reading the version from the graph when the caller did not name one keeps
+  // the decision on the production path rather than in a test-only function,
+  // and a graph that records no version leaves the question unanswered instead
+  // of answered "supported".
+  const hostVersionValue = context.hostVersion ?? hostVersionFromPackages(supplied)
+  const hostVersion = hostVersionValue === undefined ? undefined : evaluateMinimumHostVersion(hostVersionValue)
   const baseResult = {
     digest,
     goalAvailable,
     packages: supplied,
     capabilities,
     cohortId: cohort.id,
+    auditProvenance: cohort.auditProvenance,
     missingPackages,
+    ...(hostVersion ? { hostVersion } : {}),
     ...(context.platform ? { platform: context.platform } : {}),
     ...(context.profileKind ? { profileKind: context.profileKind } : {}),
   }
@@ -535,6 +642,19 @@ export function evaluateHostLock(rows: readonly PackageRow[], context: HostLockC
       status: failure.status,
       goalAvailable: false,
       reasonCode: failure.reasonCode,
+    }
+  }
+  // Below the minimum is refused whatever the graph says: the floor is not a
+  // graph property, so a lock that happened to match can never lift it. It is
+  // decided last on purpose — a graph that already failed keeps its own graph
+  // verdict, because the version policy and the exact-graph audit are
+  // independent facts and neither may be reported as the other.
+  if (hostVersion?.status === 'below_minimum' || hostVersion?.status === 'unparseable') {
+    return {
+      ...baseResult,
+      status: 'unsupported',
+      goalAvailable: false,
+      reasonCode: hostVersion.status === 'below_minimum' ? 'host_lock_version_below_minimum' : 'host_lock_version_unparseable',
     }
   }
   return { ...baseResult, status: 'supported' }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply as applyPinnedGoalTool } from '@deepseek-ai/dsh-tool-goal'
@@ -15,7 +15,7 @@ import {
 import { deriveProjection, PROTOCOL_V3_NOTICE } from '../src/domain/derive.js'
 import { certifyCheckpoint } from '../src/domain/checkpoint.js'
 import { goalCompletionDenial, hasCurrentCertificate } from '../src/domain/goal-gate.js'
-import { recoveryDigest } from '../src/domain/recovery.js'
+import { recoveryDigest, renderRecoveryPacket } from '../src/domain/recovery.js'
 import { captureClause } from '../src/domain/capture.js'
 import { createProjection } from '../src/domain/types.js'
 import { createContextGuardCommand } from '../src/commands/context-guard.js'
@@ -25,6 +25,21 @@ import { evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostLockEvaluation } fro
 
 function fakeAgent(session: Session): Agent {
   return { session } as unknown as Agent
+}
+
+/**
+ * A V3 session view with a rewritten durable header, used to model the JSONL
+ * persistence roundtrip. Guard reads only the V3 surface, so the view must
+ * carry the same `snapshotEvents()` capability and the Session-owned inherited
+ * prefix length; a bare `{ header, events }` object is a V2 shape and is
+ * refused by the production reader.
+ */
+function v3SessionView(session: Session, headerPatch: Record<string, unknown>): Session {
+  return {
+    header: { ...session.header, ...headerPatch },
+    inheritedEventCount: session.inheritedEventCount,
+    snapshotEvents: () => session.snapshotEvents(),
+  } as unknown as Session
 }
 
 function rawAppend(session: Session): (type: string, data: unknown, opts?: unknown) => unknown {
@@ -63,7 +78,7 @@ function toolResult(session: Session, callId: string, text: string, meta?: unkno
 describe('runtime derivation', () => {
   it('authorizes a mutation only for the exact pending root-owned action and target', () => {
     const session = Session.create(SessionId('mutation-root-authority'), undefined, {
-      version: 0, isSeeded: false, id: SessionId('mutation-root-authority'), createdAt: 1, cwd: '/work',
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('mutation-root-authority'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Install package fixture@2.0.0 in profile web.')
@@ -273,7 +288,7 @@ describe('runtime derivation', () => {
 
   it('strictly restores a v0.2 pre-marker checkpoint as legacy while a post-marker recapture remains certifiable', () => {
     const session = Session.create(SessionId('legacy-upgrade-restore'), undefined, {
-      version: 0, isSeeded: false, id: SessionId('legacy-upgrade-restore'), createdAt: 1, cwd: '/work',
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('legacy-upgrade-restore'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Background material about old.txt')
@@ -289,7 +304,7 @@ describe('runtime derivation', () => {
     toolResult(session, 'new-read', '[exit code: 0]')
 
     const restored = Session.fromRestore(
-      SessionId('legacy-upgrade-restore'), structuredClone(session.snapshotEvents()) as never, structuredClone(session.header) as never, SessionLogOffset(0),
+      SessionId('legacy-upgrade-restore'), structuredClone(session.snapshotEvents()) as never, structuredClone(session.header) as never, SessionLogOffset(0), 'detached',
     )
     const projection = deriveProjection(restored.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true, TEST_HOST_LOCK).projection
     const oldItem = [...projection.items.values()].find((item) => item.normalizedText.includes('old.txt'))!
@@ -311,7 +326,7 @@ describe('runtime derivation', () => {
 
   it('certifies a deterministic legacy_rebind only after direct-root provenance and fresh v3 evidence', () => {
     const session = Session.create(SessionId('legacy-deterministic-rebind'), undefined, {
-      version: 0, isSeeded: false, id: SessionId('legacy-deterministic-rebind'), createdAt: 1, cwd: '/work',
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('legacy-deterministic-rebind'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Run pnpm test in the workspace')
@@ -334,7 +349,7 @@ describe('runtime derivation', () => {
     expect(result.status).toBe('certified')
 
     const uncertainSession = Session.create(SessionId('legacy-unclassified-negative'), undefined, {
-      version: 0, isSeeded: false, id: SessionId('legacy-unclassified-negative'), createdAt: 1, cwd: '/work',
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('legacy-unclassified-negative'), createdAt: 1, cwd: '/work',
     })
     enableCommand(uncertainSession, 'on')
     userText(uncertainSession, 'Background material about workspace state')
@@ -382,7 +397,7 @@ describe('runtime derivation', () => {
 
   it('replays certificates against the exact runtime host identity and reports a changed digest as stale-host', () => {
     const session = Session.create(SessionId('host-identity-replay'), undefined, {
-      version: 0, isSeeded: false, id: SessionId('host-identity-replay'), createdAt: 1, cwd: '/work',
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('host-identity-replay'), createdAt: 1, cwd: '/work',
     })
     enableCommand(session, 'on')
     userText(session, 'Run pnpm test in the workspace')
@@ -426,18 +441,13 @@ describe('runtime derivation', () => {
 
     // The audited JSONL persistence writes omitted root depth as zero.
     // Its roundtrip must preserve a nonempty certificate's session identity.
-    const persistedSession = {
-      header: { ...session.header, delegationDepth: 0 },
-      events: session.snapshotEvents(),
-    } as unknown as Session
+    const persistedSession = v3SessionView(session, { delegationDepth: 0 })
     const resumed = createRuntime(fakeAgent(persistedSession), OPT_IN, hostA)
     resumed.setDurability(true)
     resumed.sync()
     expect(resumed.projection.integrity).toBe('valid')
     expect(hasCurrentCertificate(resumed.projection)).toBe(true)
-    const delegatedSession = {
-      header: { ...session.header, delegationDepth: 1 }, events: session.snapshotEvents(),
-    } as unknown as Session
+    const delegatedSession = v3SessionView(session, { delegationDepth: 1 })
     const delegated = createRuntime(fakeAgent(delegatedSession), OPT_IN, hostA)
     delegated.setDurability(true)
     delegated.sync()
@@ -764,8 +774,11 @@ function projectionRuntime(projection: ReturnType<typeof createProjection>): Gua
   }
 }
 
-function steeringAgent(steered: unknown[]): Agent {
-  return { steer: (message: unknown) => steered.push(message) } as unknown as Agent
+function steeringAgent(steered: unknown[], session = Session.create(SessionId('turn-stop-steering'))): Agent {
+  // A live session is part of the contract: the no-progress budget is spent by
+  // writing a durable record, so an agent without a session cannot take a turn
+  // boundary at all.
+  return { steer: (message: unknown) => steered.push(message), session } as unknown as Agent
 }
 
 describe('production turn-stopping integration', () => {
@@ -795,10 +808,22 @@ describe('production turn-stopping integration', () => {
     goalProjection.currentGoalRef = { id: 'goal-1', revision: 1 }
     goalProjection.currentGoalPhase = 'active'
     goalProjection.currentGoalActivation = 'armed'
+    // The host turn the boundary is identified by.
+    goalProjection.hostTurn = 1
+    // New contract, both directions: the FIRST sighting of a fingerprint is a
+    // baseline — the driver keeps the continuation and Guard spends one budget
+    // claim durably rather than steering. Only a repeated fingerprint earns the
+    // diagnosis and, after that, the bounded stop (covered against the real goal
+    // service in tests/domain/v051-goal-lifecycle-composed.test.ts).
     const goalSteers: unknown[] = []
-    expect(await handleGuardTurnStopping(steeringAgent(goalSteers), projectionRuntime(goalProjection), access))
+    const goalSession = Session.create(SessionId('turn-stop-armed-goal'))
+    const goalAgent = steeringAgent(goalSteers, goalSession)
+    expect(await handleGuardTurnStopping(goalAgent, projectionRuntime(goalProjection), access))
       .toBe('goal_round_driver_owns_continuation')
     expect(goalSteers).toEqual([])
+    const records = (goalSession.snapshotEvents() as unknown as Array<{ type: string; data: unknown }>)
+      .filter((event) => JSON.stringify(event.data).includes('Context Guard no-progress record:'))
+    expect(records).toHaveLength(1)
   })
 
   it('requires a successful flush and an unchanged immutable candidate before disarm', async () => {
@@ -856,6 +881,55 @@ describe('production turn-stopping integration', () => {
 })
 
 describe('recovery injection dedup (v0.2.1)', () => {
+  it('preserves the root wait and exact resume event through checkpoint, compaction and recovery injection', async () => {
+    const session = Session.create(SessionId('wait-recovery-contract'))
+    enableCommand(session, 'on')
+    userText(session, '请在收到我的确认后再推送代码。')
+    const before = deriveProjection(session.snapshotEvents() as never, OPT_IN, {}, true).projection
+    const waiting = [...before.items.values()].find(item => item.authorityDisposition === 'conditional_wait')!
+    expect(waiting).toMatchObject({ status: 'pending', waitAuthorization: { kind: 'root_explicit_wait' } })
+    expect(waiting.resumeEvent).toBeTruthy()
+    for (const charBudget of [512, 4000]) {
+      const packet = renderRecoveryPacket(before, { charBudget })
+      expect(packet).toContain(waiting.resumeEvent!)
+      expect(packet).toContain('root_condition_pending')
+      expect(packet.length).toBeLessThanOrEqual(charBudget)
+    }
+
+    rawAppend(session)('compaction/summary', {
+      compactionId: 'wait-c1', summary: [], shadowedRange: { start: 0, end: session.seq },
+      shadowedSeqs: [], shadowedTokenCount: 0, provider: 'fixture', model: 'fixture',
+    })
+    const restored = Session.fromRestore(SessionId('wait-recovery-contract'),
+      structuredClone(session.snapshotEvents()) as never, structuredClone(session.header) as never,
+      SessionLogOffset(0), 'detached')
+    const ctx = fakeCtx()
+    apply(ctx as never, {
+      activation: 'opt-in', hostLockPackages: TEST_HOST_ROWS, hostLockPlatform: 'posix', hostLockProfile: 'web',
+    })
+    const { agent, registered } = guardedAgent(restored)
+    startGuard(ctx, agent, 'resume')
+    const checkpoint = await registered.find(tool => tool.name === 'context_guard_checkpoint')!.execute({ bindings: [] })
+    expect(checkpoint).toMatchObject({
+      available_qualifications: expect.arrayContaining([expect.objectContaining({ kind: 'root_explicit_wait' })]),
+      open_items: expect.arrayContaining([expect.objectContaining({
+        id: waiting.id, status: 'pending', reason_code: 'root_condition_pending',
+        next_step: expect.stringContaining(waiting.resumeEvent!),
+      })]),
+    })
+    expect(checkpoint).not.toMatchObject({ status: 'certified' })
+    const handler = ctx.handlers.get('agent/pre-step')![0] as PreStepHandler
+    const decision = await handler({ agent, messages: [] } as never, async () => ({ kind: 'enter', messages: [] }))
+    const notices = JSON.stringify(decision.messages)
+    expect(notices).toContain(waiting.resumeEvent!)
+    expect(notices).toContain('root_condition_pending')
+    expect(notices).not.toContain('Collect matching evidence')
+    const after = deriveProjection(restored.snapshotEvents() as never, OPT_IN, {}, true).projection
+    expect(after.items.get(waiting.id)).toMatchObject({
+      status: 'pending', waitAuthorization: { kind: 'root_explicit_wait' }, resumeEvent: waiting.resumeEvent,
+    })
+  })
+
   it('keeps session-start silent, replays a legacy v3 notice session, and survives strict Session restore', () => {
     const session = Session.create(SessionId('protocol-notice-session'))
     // A pre-0.5 session carries the old T0 boundary notices as plain history.
@@ -884,7 +958,7 @@ describe('recovery injection dedup (v0.2.1)', () => {
 
     const seed = structuredClone(session.snapshotEvents()) as never
     const header = structuredClone(session.header) as never
-    const restored = Session.fromRestore(SessionId('protocol-notice-session'), seed, header, SessionLogOffset(0))
+    const restored = Session.fromRestore(SessionId('protocol-notice-session'), seed, header, SessionLogOffset(0), 'detached')
     const replay = deriveProjection(restored.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true)
     expect([...replay.projection.items.values()].some((item) => item.normalizedText.includes('protocol boundary'))).toBe(false)
     expect([...replay.projection.items.values()].some((item) => item.normalizedText.includes('package.json'))).toBe(true)

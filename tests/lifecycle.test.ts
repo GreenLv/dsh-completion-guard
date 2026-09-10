@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from '../src/runtime.js'
@@ -246,7 +246,7 @@ describe('A03/A04: rejected, canceled, filtered, and non-root batches never acti
 
     // A delegated (subagent) session never receives root-conversation injections.
     const sub = Session.create(SessionId('a04-sub'), undefined, {
-      version: 0, isSeeded: false, id: SessionId('a04-sub'), createdAt: 1, cwd: '/work', origin: 'subagent', delegationDepth: 1,
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('a04-sub'), createdAt: 1, cwd: '/work', origin: 'subagent', delegationDepth: 1,
     })
     const subGuard = guardedAgent(sub)
     startGuard(ctx, subGuard.agent, 'new')

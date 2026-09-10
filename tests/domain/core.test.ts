@@ -589,8 +589,8 @@ describe('domain core', () => {
   it('folds Code Mode dispatch events into evidence', () => {
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-      { seq: 1, type: 'tool/code-dispatch-start', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: '{"file_path":"src/app.ts"}' } },
-      { seq: 2, type: 'tool/code-dispatch', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: '{}', isError: false, content: [{ type: 'text', text: 'ok' }] } },
+      { seq: 1, type: 'tool/ptc-dispatch-start', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: '{"file_path":"src/app.ts"}' } },
+      { seq: 2, type: 'tool/ptc-dispatch', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: '{}', isError: false, content: [{ type: 'text', text: 'ok' }] } },
     ]
     const derived = deriveProjection(events, OPT_IN, {}, true)
     const evidence = [...derived.projection.evidence.values()]
@@ -636,8 +636,8 @@ describe('domain core', () => {
   it('extracts subjects from object-form Code Mode arguments', () => {
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-      { seq: 1, type: 'tool/code-dispatch-start', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: { file_path: 'src/app.ts' } } },
-      { seq: 2, type: 'tool/code-dispatch', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: {}, isError: false, content: [{ type: 'text', text: 'ok' }] } },
+      { seq: 1, type: 'tool/ptc-dispatch-start', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: { file_path: 'src/app.ts' } } },
+      { seq: 2, type: 'tool/ptc-dispatch', data: { rootCallId: 'r9', parentCallId: 'p1', subCallId: 's1', name: 'read', arguments: {}, isError: false, content: [{ type: 'text', text: 'ok' }] } },
     ]
     const derived = deriveProjection(events, OPT_IN, {}, true)
     const evidence = [...derived.projection.evidence.values()]

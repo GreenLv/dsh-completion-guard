@@ -1,10 +1,17 @@
 import { createRebindTool } from './tools/rebind.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from './domain/digest.js'
-import { createProjection, type GuardProjection } from './domain/types.js'
+import {
+  createProjection,
+  type BoundaryDisposition,
+  type BoundaryQualificationKind,
+  type GuardBoundary,
+  type GuardProjection,
+} from './domain/types.js'
+import { CONTROL_RECORD_PREFIX, isRootPauseRequest, latestRootInstruction, NO_PROGRESS_RECORD_PREFIX, progressFingerprint } from './domain/stop-policy.js'
 import { deriveProjection, PROTOCOL_V4_NOTICE } from './domain/derive.js'
 import { claimedBatchHasRealRootInput, lifecyclePhase, previewFirstStepInjection, type LifecyclePhase } from './domain/lifecycle.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
@@ -30,6 +37,7 @@ import {
 import {
   effectuateBoundary,
   isCurrentAcceptedBoundary,
+  qualifyBoundary,
   type GoalActivationState,
   type GoalBoundaryAccess,
 } from './domain/boundary.js'
@@ -46,7 +54,8 @@ import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
 import { readActiveHostGraph } from './domain/host-resolver.js'
-import { snapshotSessionEvents } from './domain/session-events.js'
+import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
+import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 
 export const name = 'context-guard'
 export const inject = ['sessions', 'commands'] as const
@@ -93,6 +102,20 @@ export function authorizeMutationFromProjection(
     return { status: 'denied', reasonCode: 'mutation_contract_item_revision_mismatch' }
   }
   if (item.status !== 'pending') return { status: 'denied', reasonCode: 'mutation_contract_item_not_pending' }
+  // A root instruction that reserves the action for its own later confirmation
+  // withholds execution authority: the obligation stays recorded and open, but
+  // the mutation is refused until the root actually releases the wait. This is
+  // checked before the target comparison so the refusal is reported for the
+  // condition that caused it rather than as a target mismatch.
+  if (item.authorityDisposition === 'conditional_wait' || item.waitAuthorization) {
+    return {
+      status: 'denied',
+      reasonCode: item.authorityDisposition === 'conditional_wait'
+        ? 'mutation_awaiting_root_condition'
+        : 'mutation_awaiting_root_wait',
+    }
+  }
+  if (item.authorityDisposition === 'human_actor') return { status: 'denied', reasonCode: 'mutation_human_executor' }
   if (item.kind !== 'requirement' || item.verification.enforced !== true) {
     return { status: 'denied', reasonCode: 'mutation_contract_item_not_authorizing' }
   }
@@ -137,9 +160,111 @@ export const PROTOCOL_CORRECTION_NOTICE = 'Context Guard protocol correction: ro
 export interface RuntimeTurnStoppingAccess {
   flush(): Promise<boolean>
   goalAccess?: GoalBoundaryAccess
+  /**
+   * The host's own pause entry. Routing a real user's pause request here is not
+   * impersonating a human: the human asked, and this is the lifecycle call that
+   * carries their request. Guard never resumes through it — re-arming stays a
+   * human action.
+   */
+  pauseAccess?: {
+    pause(): Promise<GoalActivationState | undefined>
+    get(): Promise<GoalActivationState | undefined>
+  }
   hostSupported: boolean
   externalWaitCapability?: ExternalOperationCapability
   readExternalOperation(id: string): ExternalOperationSnapshot | undefined
+}
+
+
+/**
+ * Establish a boundary Guard itself owns, through the same durable record the
+ * boundary tool writes.
+ *
+ * Replay reads boundaries from the `context_guard_boundary` call/result pair, so
+ * a Guard-created boundary is written in exactly that wire shape rather than in
+ * a private side channel — otherwise it would not survive a reload, and a
+ * boundary that only exists in memory is not a persisted wait or stop.
+ *
+ * Returns the boundary only after the durable flush succeeded. A failed flush
+ * reports the failure instead of a boundary, because an unflushed record must
+ * never be read back as an established boundary.
+ */
+async function establishBoundary(
+  agent: Agent,
+  runtime: GuardRuntime,
+  flush: () => Promise<boolean>,
+  request: { disposition: BoundaryDisposition; qualificationKind: BoundaryQualificationKind; qualificationIds: string[] },
+): Promise<{ boundary?: GuardBoundary; reasonCode: string }> {
+  const projection = runtime.projection
+  const candidate = qualifyBoundary(projection, request)
+  if (candidate.persistedResult !== 'accepted') return { reasonCode: candidate.reasonCode }
+  const session = agent.session as unknown as {
+    seq: number
+    append: (type: string, data: unknown, options?: unknown) => unknown
+  }
+  const callId = `guard-boundary-${candidate.id}`
+  session.append('tool/call', {
+    turn: 0, step: session.seq, callId, name: 'context_guard_boundary',
+    arguments: JSON.stringify({
+      disposition: request.disposition,
+      qualification_kind: request.qualificationKind,
+      qualification_ids: request.qualificationIds,
+    }),
+  })
+  session.append('tool/result', {
+    turn: 0, step: session.seq,
+    message: createToolResultMessage({
+      callId: callId as never,
+      content: [{ type: 'text', text: JSON.stringify({
+        status: candidate.persistedResult,
+        reason_code: candidate.reasonCode,
+        boundary: { candidate_sha256: candidate.candidateSha256 },
+      }) }],
+      isError: false,
+    }),
+  }, { surfaceOp: 'append' })
+  let durable = false
+  try {
+    durable = await flush()
+  } catch {
+    durable = false
+  }
+  runtime.setDurability(durable)
+  runtime.sync()
+  if (!durable) return { reasonCode: 'boundary_flush_failed' }
+  return { boundary: candidate, reasonCode: candidate.reasonCode }
+}
+
+/**
+ * Effectuate a boundary Guard established in this turn, with the Goal revision
+ * re-checked at the moment of the side effect.
+ *
+ * The progress fingerprint deliberately ignores the Goal revision, because an
+ * edited Goal text is not progress. That is a statement about *detecting*
+ * progress, not permission to act on a stale reference: before disarming, the
+ * boundary's own Goal identity and revision are compared with the live readback,
+ * so a Goal that changed under the boundary is refused rather than disarmed.
+ */
+async function effectuateOwnBoundary(
+  runtime: GuardRuntime,
+  boundary: GuardBoundary,
+  access: RuntimeTurnStoppingAccess,
+): Promise<string> {
+  const goalAccess = access.goalAccess ?? { get: async () => undefined, disarm: async () => undefined }
+  const recorded = boundary.goalRef
+  const effect = await effectuateBoundary(boundary, {
+    ...goalAccess,
+    requalify: async () => {
+      const live = await goalAccess.get()
+      if (!live || !recorded) return false
+      return live.id === recorded.id && live.revision === recorded.revision && live.activation === 'armed'
+    },
+  })
+  if (effect.resumeRequired) {
+    runtime.projection.integrity = 'unknown'
+    runtime.projection.integrityViolations.push(effect.reasonCode)
+  }
+  return effect.reasonCode
 }
 
 /** Production Stop boundary: durable replay first, then immutable/live checks. */
@@ -148,18 +273,131 @@ export async function handleGuardTurnStopping(
   runtime: GuardRuntime,
   access: RuntimeTurnStoppingAccess,
 ): Promise<string> {
-  const durable = await access.flush()
+  // A rejected flush is as fatal as a false one: the V3 store rejects a flush
+  // for a session that is no longer live (detached, prepared-but-not-entered,
+  // or disposed), and an exception is not evidence that the durable log caught
+  // up. Both paths report the boundary as failed and issue nothing.
+  let durable = false
+  try {
+    durable = await access.flush()
+  } catch {
+    durable = false
+  }
   runtime.setDurability(durable)
   runtime.sync()
   if (!durable) return 'boundary_flush_failed'
 
+  // A trusted root pause request outranks the old Goal's continuation: the user
+  // stopped the work, so Guard routes that request to the host's own pause entry
+  // and reads back what the host did. The source filter is what keeps quoted
+  // text, tool output and model text from reaching this branch.
+  const rootInstruction = latestRootInstruction(
+    (agent.session as unknown as { snapshotEvents?: () => Array<{ type: string; seq?: number; data: unknown }> } | undefined)
+      ?.snapshotEvents?.() ?? [],
+  )
+  // A pause is carried ONCE. The message stays in the log forever, so the
+  // question is not "did the user ever ask to pause" but "is there a pause
+  // request Guard has not carried yet" — otherwise a goal the human resumed
+  // through the host would be paused again by the same old message.
+  const pendingPause = rootInstruction !== undefined
+    && isRootPauseRequest(rootInstruction.text)
+    && !runtime.projection.handledControlSeqs.has(rootInstruction.seq)
+  if (pendingPause && access.pauseAccess) {
+    const session = agent.session as unknown as { seq: number; append: (type: string, data: unknown, options?: unknown) => unknown }
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: `${CONTROL_RECORD_PREFIX}${JSON.stringify({ kind: 'root_pause', rootSeq: rootInstruction.seq })}` }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('carrying the root pause request to the host') },
+    }), { surfaceOp: 'append' })
+    // An already-paused goal is the same outcome, not an error: the host refuses
+    // to pause a goal that is not active, and a user pause that was already
+    // carried must not be reported as a failure on the next turn boundary.
+    const current = await access.pauseAccess.get()
+    const paused = current?.phase === 'paused' && current.activation === 'disarmed'
+      ? current
+      : await access.pauseAccess.pause()
+    const readback = await access.pauseAccess.get()
+    if (!paused || paused.activation !== 'disarmed' || readback?.activation !== 'disarmed') {
+      runtime.projection.integrity = 'unknown'
+      runtime.projection.integrityViolations.push('root_pause_readback_failed')
+      return 'root_pause_readback_failed'
+    }
+    return 'root_pause_routed'
+  }
+
   const decision = decideTurnBoundary(runtime.projection)
+  // Spend the no-progress budget in the log, not in memory: the record is what
+  // makes the bound survive a reload and what makes a replayed decision
+  // idempotent, because the attempt it claims is stored in a set.
+  if (decision.noProgressClaim) {
+    const record = `${NO_PROGRESS_RECORD_PREFIX}${JSON.stringify(decision.noProgressClaim)}`
+    const session = agent.session as unknown as { seq: number; append: (type: string, data: unknown, options?: unknown) => unknown }
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: record }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recording a turn boundary without relevant progress') },
+    }), { surfaceOp: 'append' })
+    let recorded = false
+    try {
+      recorded = await access.flush()
+    } catch {
+      recorded = false
+    }
+    runtime.setDurability(recorded)
+    runtime.sync()
+    if (!recorded) return 'boundary_flush_failed'
+  }
   if (decision.action === 'continue') {
     agent.steer(createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_CORRECTION_NOTICE }],
       source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('requesting the one allowed protocol correction step') },
     }))
     return decision.reason ?? 'protocol_correction_steer'
+  }
+  // Guard-owned stops and waits are established here, in the turn boundary,
+  // rather than waiting for the model to call the boundary tool: a bounded stop
+  // and a human wait are the guard's own reading of the session, and requiring
+  // a model round trip for them is how a stalled task stays stalled.
+  if (decision.reason === 'no_progress_bounded_disarm') {
+    if (!access.goalAccess || !access.hostSupported) {
+      runtime.projection.integrity = 'unknown'
+      runtime.projection.integrityViolations.push('boundary_host_lock_unsupported')
+      return 'boundary_host_lock_unsupported'
+    }
+    const established = await establishBoundary(agent, runtime, access.flush, {
+      disposition: 'guard_bounded_stop',
+      qualificationKind: 'guard_no_progress',
+      qualificationIds: [progressFingerprint(runtime.projection)],
+    })
+    if (!established.boundary) return established.reasonCode
+    return await effectuateOwnBoundary(runtime, established.boundary, access)
+  }
+  if (decision.reason === 'goal_round_driver_owns_continuation' && access.goalAccess) {
+    // A trusted root human wait disarms the automatic continuation without
+    // touching the open items: the work stays recorded and uncertified, and the
+    // only thing that moves again is a matching trusted root input.
+    const waiting = [...runtime.projection.items.values()]
+      .filter((item) => item.status === 'pending' && item.waitAuthorization)
+      .map((item) => item.waitAuthorization!.id)
+      .sort()
+    const current = runtime.projection.boundaries.at(-1)
+    const alreadyCurrent = current && isCurrentAcceptedBoundary(runtime.projection, current)
+      && current.disposition === 'user_wait'
+      && current.qualificationIds.slice().sort().join(',') === waiting.join(',')
+    if (waiting.length > 0 && !alreadyCurrent) {
+      if (!access.hostSupported) {
+        runtime.projection.integrity = 'unknown'
+        runtime.projection.integrityViolations.push('boundary_host_lock_unsupported')
+        return 'boundary_host_lock_unsupported'
+      }
+      const established = await establishBoundary(agent, runtime, access.flush, {
+        disposition: 'user_wait',
+        qualificationKind: 'root_explicit_wait',
+        qualificationIds: waiting,
+      })
+      if (established.boundary) return await effectuateOwnBoundary(runtime, established.boundary, access)
+      // A wait that cannot be established is reported, not asserted: the open
+      // items keep their reservation and the caller sees why nothing stopped.
+      return established.reasonCode
+    }
   }
   if (decision.reason !== 'accepted_boundary_pending_effectuation') return decision.reason ?? 'safe_yield_pending_preserved'
 
@@ -194,13 +432,30 @@ export function createHostCapabilityEvaluator(hostLock: HostLockEvaluation): Run
   return (action) => evaluateHostCapability(hostLock, { action })
 }
 
+/**
+ * Durable session identity for the certificate binding, read from the
+ * DSH Session V3 header plus the Session-owned inherited prefix length.
+ *
+ * Session V3 stamps `version: 3`, requires the `isSeeded` fork-lineage marker,
+ * and moved the inherited-prefix length off the header onto the `Session`
+ * (`inheritedEventCount`). Anything else is not a V3 identity: returning
+ * `undefined` makes the projection report `session_ref_unavailable` instead of
+ * certifying against a guessed identity.
+ */
 function sessionHeaderForDigest(session: Session): SessionHeader | undefined {
   const raw = session.header as unknown as Record<string, unknown> | undefined
-  if (!raw || typeof raw.version !== 'number' || typeof raw.id !== 'string' || typeof raw.createdAt !== 'number') return undefined
+  if (!raw || raw.version !== SUPPORTED_SESSION_FORMAT_VERSION) return undefined
+  if (typeof raw.id !== 'string' || typeof raw.createdAt !== 'number') return undefined
+  if (typeof raw.isSeeded !== 'boolean') return undefined
+  const inherited = (session as unknown as { inheritedEventCount?: unknown }).inheritedEventCount
+  if (typeof inherited !== 'number' || !Number.isSafeInteger(inherited) || inherited < 0) return undefined
   return {
     version: raw.version, id: raw.id, createdAt: raw.createdAt,
     ...(typeof raw.parentSession === 'string' ? { parentSession: raw.parentSession } : {}),
-    ...(typeof raw.seedLength === 'number' ? { seedLength: raw.seedLength } : {}),
+    // V3 carries the same durable fact under a new owner: the inherited prefix
+    // length moved from the header to the Session. The digest token keeps its
+    // historical name so no certificate digest changes shape on a host upgrade.
+    seedLength: inherited,
     ...(typeof raw.agentPreset === 'string' ? { agentPreset: raw.agentPreset } : {}),
     ...(typeof raw.origin === 'string' ? { origin: raw.origin } : {}),
     // DSH JSONL persistence materializes an omitted root depth as zero.
@@ -236,14 +491,33 @@ export function createRuntime(
     // attempt cap; Object.assign would otherwise flush it with the fresh
     // projection's undefined.
     const priorRecoveryDigest = projection.lastRecoveryDigest
+    const sessionHeader = sessionHeaderForDigest(session)
+    let events: readonly unknown[]
+    try {
+      events = snapshotSessionEvents(session)
+    } catch (error) {
+      // A session that does not expose the V3 snapshot API is an unsupported
+      // host, not an empty log: fail closed and keep the previous derivation
+      // instead of projecting a session whose events were never read.
+      const code = error instanceof SessionApiError ? error.code : 'session_snapshot_failed'
+      projection.integrity = 'unknown'
+      if (!projection.integrityViolations.includes(code)) projection.integrityViolations.push(code)
+      return
+    }
     const derived = deriveProjection(
-      snapshotSessionEvents(session) as Parameters<typeof deriveProjection>[0],
+      events as Parameters<typeof deriveProjection>[0],
       { activation: config.activation },
-      { cwd: typeof header?.cwd === 'string' ? header.cwd : '', sessionHeader: sessionHeaderForDigest(session) },
+      { cwd: typeof header?.cwd === 'string' ? header.cwd : '', sessionHeader },
       durabilityConfirmed,
       hostLock,
     )
     Object.assign(projection, derived.projection)
+    if (!sessionHeader) {
+      projection.integrity = 'unknown'
+      if (!projection.integrityViolations.includes('session_ref_unavailable')) {
+        projection.integrityViolations.push('session_ref_unavailable')
+      }
+    }
     if (readGoalState) {
       try {
         const state = normalizeGoalState(readGoalState())
@@ -562,6 +836,15 @@ export function apply(ctx: Context, rawConfig: {
 
 export function readExternalOperation(ctx: Context, agent: Agent | undefined, id: string): ExternalOperationSnapshot | undefined {
   if (!agent || !id) return undefined
+  // Probe the agent's scoped context first, then the root one. The single
+  // `catch { return undefined }` covers the whole loop, so a service that THROWS
+  // while probed ends the search instead of falling through to the next owner.
+  // That is deliberate and fail-closed — "cannot tell" must never become "still
+  // running" — but it means the fallback is single-shot rather than per-owner. A
+  // live Agent always carries a scoped `ctx`, so the throwing path is
+  // unreachable from a real composition; the reachable fallback (scoped context
+  // present but carrying no jobs service) is covered by
+  // `tests/tools/external-operation.test.ts`.
   for (const owner of [agent.ctx, ctx] as unknown as Array<{ get?: (name: string) => unknown; jobs?: unknown }>) {
     try {
       const service = owner.get?.('jobs') ?? owner.jobs
