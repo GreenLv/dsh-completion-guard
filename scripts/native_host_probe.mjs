@@ -185,9 +185,12 @@ export function apply(ctx, config) {
           clauses: [old.text], clarification_item_ids: [clarified.id] })
         assert.equal(proposed.status, 'proposed')
         // v0.5 confirmation transaction: control line first, trailing
-        // explanation request keeps its conversational meaning.
-        await root(`确认重绑定 ${proposed.proposal.id}\n\n这个提案是什么意思？请简单解释。`)
+        // conversational question is not a second execution obligation.
+        // An imperative follow-up would correctly keep the whole contract
+        // uncertified; that behavior is covered by the domain regression.
+        await root(`确认重绑定 ${proposed.proposal.id}\n\n这个提案是什么意思？`)
         proposalId = proposed.proposal.id
+        assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
         const resolution = await call('context_guard_evidence', { semantic_action: 'apply', evidence_role: 'resolution',
           selector: { package_id: 'guard-acceptance-fixture', version: '2.0.0', profile: config.profile },
           command_manifest: { manifest_id: 'dsh.plugin_add_tgz.apply.v1', tgz_path: config.fixtureTgz } })

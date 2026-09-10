@@ -263,3 +263,14 @@ describe('confirmation authority regressions', () => {
     expect(afterCut.items.get(flow.old.id)?.status).toBe('pending')
   })
 })
+
+
+it('confirms the native mixed reply but retains its extra imperative explanation as pending', async () => {
+  const flow = await gainfulFlow()
+  const events = [...flow.events, toolCall(3, 'p', 'context_guard_rebind', flow.args), toolResult(4, 'p', flow.result),
+    user(5, `确认重绑定 ${flow.result.proposal!.id}\n\n这个提案是什么意思？请简单解释。`)]
+  const p = replay(events)
+  expect(p.rebindProposals.get(flow.result.proposal!.id)?.status).toBe('confirmed')
+  expect(p.items.get(flow.old.id)?.status).toBe('superseded')
+  expect([...p.items.values()].some(item => item.status === 'pending' && item.normalizedText.includes('简单解释'))).toBe(true)
+})
