@@ -293,7 +293,9 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   const launcher = realpathSync(join(modules, '@deepseek-ai', 'dsh'))
   const anchor = join(launcher, 'package.json')
   const host = readJsonObject(anchor, 'target_runtime_unsupported')
-  const launcherId = [...reachable].filter((id) => id.startsWith('@deepseek-ai/dsh@'))
+  // pnpm's hoisted map uses bare package names; the installed manifest and
+  // exact mapped realpath below remain authoritative for either key shape.
+  const launcherId = [...reachable].filter((id) => id === '@deepseek-ai/dsh' || id.startsWith('@deepseek-ai/dsh@'))
   if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== '0.1.2-rc.1'
     || typeof records[launcherId[0]].url !== 'string'
     || realpathSync(resolve(modules, records[launcherId[0]].url as string)) !== launcher || !within(modules, launcher)) {
@@ -315,7 +317,7 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
     const locked = packageRowsFromPnpmLock(lockText, [name])
       .filter((row) => row.version === host.version && row.integrity)
     if (installed.name !== name || installed.version !== host.version || locked.length !== 1
-      || ids[0].split('(', 1)[0] !== `${name}@${host.version}`
+      || (ids[0] !== name && ids[0].split('(', 1)[0] !== `${name}@${host.version}`)
       || typeof patch !== 'string' || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch)))
       || !statSync(resolve(packageRoot, patch)).isFile()) {
       throw new HostProfileError('target_bundle_invalid', 'bundle identity or patch is not installation-owned')

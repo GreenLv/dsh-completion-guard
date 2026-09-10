@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Compatibility
 
+- Recognize pnpm hoisted installations when checking a dependency-free Headless profile. Bare package-name entries now work alongside versioned entries; installed versions, lockfile integrity, unique identities, and actual package locations remain mandatory.
 - The supported DSH target is exactly `0.1.2-rc.1` (with Cordis `4.0.2`). The active host allowlist contains that one audited core graph; alpha and older RC package sets are recorded as historical identities only, and an installed graph from those sets fails closed instead of certifying. npm peer dependencies accept only `0.1.2-rc.1`.
 - Sessions created before this version keep their stored messages, proposals, and certificates under their historical rules. The first message this version writes into such a session carries an explicit protocol boundary marking the cut; duties and certificates from before the cut are never reinterpreted. Upgrading does not remove previously injected messages.
 

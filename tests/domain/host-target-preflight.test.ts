@@ -24,7 +24,7 @@ function lock(rows: typeof core) {
     `  '${row.name}@${row.version}':`, `    resolution: {integrity: ${row.integrity}}`, '',
   ]), 'snapshots:', ''].join('\n')
 }
-function fixture() {
+function fixture(mapKey: 'versioned' | 'bare' = 'versioned') {
   const root = mkdtempSync(join(tmpdir(), 'dsh-target-preflight-')); roots.push(root)
   const runtime = join(root, 'runtime'); const profile = join(root, 'profiles', 'headless')
   const modules = join(runtime, 'node_modules')
@@ -32,7 +32,7 @@ function fixture() {
     '.': { url: '..', dependencies: {} },
   }
   for (const row of [...core, ...bundles.map((name) => ({ name, version, integrity: 'sha512-synthetic-bundle' }))]) {
-    const id = `${row.name}@${row.version}`
+    const id = mapKey === 'bare' ? row.name : `${row.name}@${row.version}`
     records['.'].dependencies[row.name] = id
     records[id] = { url: `./${row.name}`, dependencies: {} }
     json(join(modules, row.name, 'package.json'), {
@@ -62,6 +62,39 @@ function installGuard(f: ReturnType<typeof fixture>) {
 }
 
 describe('dependency-free Headless target inspection', () => {
+  it('accepts pnpm hoisted bare keys only with the same exact installed runtime and bundles', () => {
+    const f = fixture('bare')
+    const target = inspectTargetHostGraph(f.runtime, f.profile)
+    expect(target.profileGraph.state).toBe('dependency_free_headless')
+    expect(target.packages).toEqual(core)
+    expect(target.profileGraph.bundles?.map((row) => [row.name, row.version])).toEqual(bundles.map((name) => [name, version]))
+    expect(() => readActiveHostGraph(f.runtime, f.profile)).toThrow()
+  })
+
+  it.each(['@deepseek-ai/dsh', ...bundles])('rejects a same-version alternate installed path for bare map key %s', (name) => {
+    const f = fixture('bare')
+    const foreign = join(f.modules, 'alternate', name)
+    json(join(foreign, 'package.json'), { name, version, dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    writeFileSync(join(foreign, 'cordis.patch.yml'), '[]\n')
+    f.records[name].url = `./alternate/${name}`
+    json(f.mapPath, { packages: f.records })
+    expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
+  })
+
+  it.each(['@deepseek-ai/dsh', ...bundles])('rejects duplicate bare and versioned identities for %s', (name) => {
+    const f = fixture('bare')
+    f.records[`${name}@${version}`] = f.records[name]
+    f.records['.'].dependencies.alias = `${name}@${version}`
+    json(f.mapPath, { packages: f.records })
+    expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
+  })
+
+  it.each(['@deepseek-ai/dsh', ...bundles])('rejects installed version drift behind bare key %s', (name) => {
+    const f = fixture('bare')
+    json(join(f.modules, name, 'package.json'), { name, version: '0.1.2-alpha.3', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
+  })
+
   it('recognizes the static Windows counterexample without installing, healing or certifying a profile importer', () => {
     const f = fixture()
     const before = readdirSync(f.profile).map((name) => [name, readFileSync(join(f.profile, name), 'utf8')])

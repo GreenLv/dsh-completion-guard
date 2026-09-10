@@ -7384,7 +7384,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 	const launcher = realpathSync(join(modules, "@deepseek-ai", "dsh"));
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
-	const launcherId = [...reachable].filter((id) => id.startsWith("@deepseek-ai/dsh@"));
+	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
 	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== "0.1.2-rc.1" || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
@@ -7395,7 +7395,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
 		const patch = installed.dsh?.bundle?.patch;
 		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row) => row.version === host.version && row.integrity);
-		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
+		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
 		return locked[0];
 	});
 	for (const name of [...CRITICAL_NAMES, ...names]) {
