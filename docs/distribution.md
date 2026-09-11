@@ -25,11 +25,13 @@ version and annotated tag are retained for audit history; the npm version is
 deprecated with `Release metadata incomplete; use dsh-completion-guard@0.3.1.`
 Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
 
-## Published v0.5.1 destinations (2026-09-11)
+## Published v0.5.2 destinations (2026-09-11)
 
-1. [GitHub Release `v0.5.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1) is a non-draft, non-prerelease release. Its annotated tag identifies commit `aefdeaf2737ef1c99f1170085140c93a515e1125`.
-2. [`dsh-completion-guard@0.5.1` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.1) is published and `latest` resolves to `0.5.1`. Its `gitHead` equals that release commit. The registry download and Release tgz match SHA-256 `5e00ddf2f9772b1ae2ca3665d7c4ce858b814dc26a4116388082db2d625da28d`.
+1. [GitHub Release `v0.5.2`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.2) is a non-draft, non-prerelease release named `DSH Completion Guard 0.5.2`. Its annotated tag identifies commit `e8b21b3d0bb5b3864c856cc9ea6bd19d5ab066ef`.
+2. [`dsh-completion-guard@0.5.2` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.2) is published and `latest` resolves to `0.5.2`. Its `gitHead` equals that release commit. The registry download and Release tgz match SHA-256 `d975f17dc3bfed999cbe6c0e638b226c3dcf8651f288ea7ab83faa5ba7903d31`. The public package exposes `0.1.5-rc.2 || 0.1.5-rc.1` in both DSH engine fields and all seven DSH peer dependencies.
 3. All seven Release attachments were downloaded and matched the accepted files. The separate macOS and Windows annexes each record 28 required gates passed on DSH `0.1.5-rc.2`, with real-model requests skipped. See [acceptance details](LOCAL_ACCEPTANCE.md).
+
+Version 0.5.1 remains available as an immutable historical release.
 
 ## Historical v0.4.0 destinations
 

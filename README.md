@@ -28,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. The preceding 0.5.1 package passed separate macOS and Windows native acceptance on DSH `0.1.5-rc.2`; each 0.5.2 artifact keeps its own acceptance identity in the [acceptance record](docs/LOCAL_ACCEPTANCE.md). Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
+On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. The published 0.5.2 package passed separate macOS and Windows native acceptance on DSH `0.1.5-rc.2`; both runs are bound to its exact bytes in the [acceptance record](docs/LOCAL_ACCEPTANCE.md). Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
 
 Restart DSH Web, open a session, and enable the Guard:
 

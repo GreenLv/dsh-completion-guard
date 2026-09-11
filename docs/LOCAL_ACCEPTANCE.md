@@ -2,6 +2,16 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## 0.5.2 published release (2026-09-11)
+
+[Version 0.5.2](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.2) is published on GitHub and [npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.2). The annotated tag and npm `gitHead` identify commit `e8b21b3d0bb5b3864c856cc9ea6bd19d5ab066ef`. The frozen 303412-byte, 27-file tgz has SHA-256 `d975f17dc3bfed999cbe6c0e638b226c3dcf8651f288ea7ab83faa5ba7903d31`.
+
+The local deterministic matrix and [exact-candidate portability CI](https://github.com/GreenLv/dsh-completion-guard/actions/runs/34577054241) passed. Separate macOS and Windows runs on DSH `0.1.5-rc.2` each passed all 28 required host-bound gates for these same bytes, with cleanup passed. Both annexes retain the `real_model_request` skip; no real-model task, daily-profile adoption, or rc.1 native run is claimed for this artifact.
+
+Anonymous public readback verified the annotated tag target, npm version and `latest` tag, embedded `gitHead`, registry integrity, and downloaded tgz bytes. The GitHub Release title is `DSH Completion Guard 0.5.2`. All seven attachments matched the accepted files: the tgz, checksum, artifact manifest, and separate native annexes and transfer receipts for macOS and Windows. The public package publishes `0.1.5-rc.2 || 0.1.5-rc.1` consistently in the top-level DSH engine field, nested plugin engine field, and all seven DSH peer dependencies.
+
+This section and the updated main-branch installation guidance are post-release documentation. The published tag and npm package retain their original bytes.
+
 ## 0.5.1 published release (2026-09-11)
 
 [Version 0.5.1](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1) is published on GitHub and [npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.1). The annotated tag and npm `gitHead` identify commit `aefdeaf2737ef1c99f1170085140c93a515e1125`. The frozen 303460-byte, 27-file tgz has SHA-256 `5e00ddf2f9772b1ae2ca3665d7c4ce858b814dc26a4116388082db2d625da28d`.
