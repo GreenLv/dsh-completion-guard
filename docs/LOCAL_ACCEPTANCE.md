@@ -2,27 +2,13 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
-## 0.5.1 candidate scope (uncommitted, unverified natively)
+## 0.5.1 candidate scope
 
-The 0.5.1 candidate adapts the plugin to DSH >= `0.1.5-rc.1`. Its scope stops
-deliberately short of every native and publication gate:
+The candidate supports exact DSH `0.1.5-rc.1` and `0.1.5-rc.2` core graphs. Development tests retain the rc.1 baseline; rc.2 graph tests additionally reject missing, mixed, forged and unregistered package identities. Dependency-free Headless preflight selects the matching registered cohort and checks its launcher version.
 
-| Gate | State for this candidate |
-| --- | --- |
-| Local deterministic matrix (`typecheck`, `lint`, `test`, `test:release-pack`, `test:stats`, `build`, `pack:check`, documentation audit, Python unittests, `git diff --check`) | run on the working tree; results recorded in `IMPLEMENTATION_RESULT.md` |
-| Generated `dist/` reproducibility | two consecutive builds produced an identical `dist` SHA-256 manifest |
-| `pnpm test` | 39 files, 623 passed, **1 capability-skipped**: `tests/tools/evidence.test.ts` → "probes and executes one exact cmd shim without a PATH relookup", gated by `it.skipIf(process.platform !== 'win32')`. It builds real `dsh.cmd` shims and executes one, so it runs only in the native Windows phase. The skip is a capability boundary, never a pass |
-| Cross-platform CI (Ubuntu/macOS/Windows × Node 22/24) | **not run**; nothing was pushed |
-| Native macOS/Windows exact-artifact acceptance | **not run** |
-| Frozen release artifact | **not created**; only a local `pack --dry-run` inventory check |
-| Daily profile install or live host load | **not performed** by the implementation agent |
-| Publication, tag, GitHub Release | **not performed** |
+Candidate results are recorded outside packaged documents after the source and package bytes are frozen. Require the local deterministic matrix, exact-candidate portability CI, and separate macOS and Windows native annexes for the same frozen tgz. An earlier rc.1 artifact's result does not establish acceptance of an artifact that adds rc.2 support. Real-model behaviour, daily profile adoption and publication remain separate gates.
 
-The active host cohort for this candidate is registry-derived
-(`auditProvenance: registry-derived-pending-native-audit`) because no native
-host has loaded the 0.1.5-rc.1 graph yet. Read that as "the native audit is
-pending", never as a pass: the provenance value is part of `hostLockDigest`,
-so a certificate issued from this graph cannot be presented as native evidence.
+The shipped graphs retain their registry-derived provenance in the host-lock digest. Read a matching native annex for platform acceptance; the provenance field alone establishes neither a native pass nor a failed native run.
 
 ## Host-bound acceptance for the 0.4.3 line
 
@@ -30,7 +16,7 @@ This line separates core and optional-provider acceptance while retaining comple
 
 The versioned entrypoint is `scripts/native_acceptance.py`. Its default `portable_artifact` profile checks exact source/tgz identity, isolated installation, installed-file parity, second-install no-op and JavaScript syntax. `--gate-profile host_bound --runtime-root <audited-runtime>` additionally creates isolated Web and Headless profiles, injects and reads back their host locks, then runs `scripts/native_host_probe.mjs` inside the real DSH composition. The probe uses the host AgentRegistry, ToolRuntime and durable Session services for nonempty test certification, generic refusal, rebind confirmation, history queries, compact/resume and a qualified pending boundary. Web checks require an owned-host restart, a different host process, persisted-session recovery and listener cleanup; they do not depend on a market restart API. The installed launcher shim is checked separately.
 
-Supplied daily target paths use the [read-only installation preflight](HOST_LOCK_UPGRADE.md#check-a-headless-profile-before-installation). A dependency-free `0.1.5-rc.1` Headless target may have no private map or lockfile; the preflight verifies its installation-owned bundles and labels that state separately. The isolated lifecycle still installs Guard before checking its private graph, lock and second-install no-op. A successful target preflight alone is not a native gate result or proof of live adoption.
+Supplied daily target paths use the [read-only installation preflight](HOST_LOCK_UPGRADE.md#check-a-headless-profile-before-installation). A dependency-free `0.1.5-rc.1` or `0.1.5-rc.2` Headless target may have no private map or lockfile; the preflight verifies its installation-owned bundles and labels that state separately. The isolated lifecycle still installs Guard before checking its private graph, lock and second-install no-op. A successful target preflight alone is not a native gate result or proof of live adoption.
 
 The host driver deliberately makes no model request. It first checks that the normal Headless task driver stops with `MISSING_CREDENTIAL` in the isolated environment, then disables that task driver for the separate real-service probe. A required package-update probe installs an inert local fixture at version 1, then clarifies and confirms a generic requirement, applies version 2 through the real producer/action tools, independently reads it back and requires a nonempty certificate. Capability skips appear in the returned annex. Never treat a synthetic test or an empty probe case set as a passed native run.
 
@@ -46,7 +32,7 @@ The driver creates a new temporary DSH_HOME, explicit temporary HOME/USERPROFILE
 
 The historical 0.4.2 candidate at `6b92b3b7a5eb642686df9f2a1b4d66d54455f503` passed [candidate CI](https://github.com/GreenLv/dsh-completion-guard/actions/runs/34128172642). Its frozen tgz SHA-256 was `9d3e0a0bb948b137f27303a98ad38d3ecc8a901c5c579ce7e3b3c664530c3b4a`. Native macOS and Windows each passed all 28 required host-bound gates, including the normal Headless credential boundary and package-update probe, with cleanup passed. Both annexes retained the `real_model_request` capability skip. These are historical candidate results, not a release or evidence for later package bytes.
 
-The core annex uses `native-acceptance/v2`, gate profile `host_bound_core`, and the DSH-specific `capability_skips`, `host_driver_sha256`, `host_lock_digests`, `host_lock_policy` and `market_interface` fields. A generic closed v2 validator correctly rejects those extensions. The historical 0.4.2 `host_bound` annex retains its original `dsh-host-bound/v1` contract; v1 and v2 are not interchangeable. A consumer that provides the explicit `dsh-host-bound/v2` contract profile must validate the original annex with independently supplied expected commit, artifact SHA-256, and probe SHA-256; do not remove fields to make it pass. `host_driver_sha256` identifies `native_host_probe.mjs`, not the Python wrapper. Windows checkout CRLF bytes can produce a different probe hash from macOS LF bytes; bind each platform to its actual reviewed file bytes. Failed probe annexes may additionally contain bounded `host_probe_failures` diagnostics. The profile consumer is separate tooling and is not installed by this npm package.
+The core annex uses `native-acceptance/v2`, gate profile `host_bound_core`, and the DSH-specific `capability_skips`, `host_driver_sha256`, `host_lock_digests`, `host_lock_policy` and `market_interface` fields. A generic closed v2 validator correctly rejects those extensions. The historical 0.4.2 `host_bound` annex retains its original `dsh-host-bound/v1` contract; the historical v1/v2 profiles and the current v3 profile are not interchangeable. A consumer that provides the explicit `dsh-host-bound/v3` contract profile must validate the original annex with independently supplied expected commit, artifact SHA-256, and probe SHA-256; do not remove fields to make it pass. `host_driver_sha256` identifies `native_host_probe.mjs`, not the Python wrapper. Windows checkout CRLF bytes can produce a different probe hash from macOS LF bytes; bind each platform to its actual reviewed file bytes. Failed probe annexes may additionally contain bounded `host_probe_failures` diagnostics. The profile consumer is separate tooling and is not installed by this npm package.
 
 Every subsequent frozen package needs its own CI and same-byte native annexes, recorded outside its packaged documentation. Publication and public readback are separate gates. A disabled daily installation remains disabled until the user separately requests an upgrade and enablement.
 

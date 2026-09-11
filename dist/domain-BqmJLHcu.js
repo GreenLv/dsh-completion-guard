@@ -5786,6 +5786,179 @@ const RC015_HOST_PACKAGES = [
 }));
 
 //#endregion
+//#region src/domain/rc015-rc2-host.ts
+/** Exact npm registry identities for DSH 0.1.5-rc.2 (Cordis 4.0.2).
+* Native acceptance is recorded separately; these rows are registry-derived.
+*/
+const RC015_RC2_HOST_PACKAGES = [
+	{
+		"name": "@deepseek-ai/cordis",
+		"version": "4.0.2",
+		"integrity": "sha512-asOnXP1TzFSFQlHb1iegDZp0z/8WD1c7YNrwJR/Tx2bzNuMXfcekE/I67Iv6SQXeLB4csxqCngzQKANP7gdw0g=="
+	},
+	{
+		"name": "@deepseek-ai/dsh",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-8Xc8hCQHcIWRmTCVU/xZdp6/qMsWMeAd2ObChKDEsfhUPJFXx6H0lgeb1DxUMD86HZrrVN+1bCvn1ppjZ/fOxw=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-agent",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-SlUL1riZmVLwMUR3jo9CP/R1cxov9dHkCJDh6JQW3fSZJVCIdPygBRlAweCUDvHxAEmPpFHxE/U3NmSUbX+vQQ=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-agent-loop",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-24wvqVlqFmdqJ2Bhcku/vKeNy+qWSmeEeN7lvcUB+WkhcF0/Ra2G3WwcVmnahJA4+w0AKdW3W7v+YYcO/jKJpg=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-attachment",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-S6b8/WjqzGw+dMDLRXnq+tbijDGkQh38yE+zpQytX2/w/mPR3VzGj5r6McS01WwD76vXR8WFoheSCLyCAro8WQ=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-bash-sandbox",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-y8vwK6jf4gPq8mG71zWure803NjfqJ66Nvzr1FTB8An+IF68hT2eU+hHJCByvP0u6FuiLPRptuX/im2CxcNo1g=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-commands",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-ODc9h2Jig+Lo4XLdxqHpHjSXsBFeUCth6Y/rToor4KVRWQMedUARlq5otPyB1lYHyQh2DonNs2uf7g3mvag57A=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-6DHTquXPbpYdykGayqYaXSI9t668tDCoswH/bDezV+nwj4LxjrfY/smEtgp7nC4ubyoKf1hmjpNfUonGC9e7aA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs-local",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-akUTz9D/N0ruSOzytZ8SZ330SdzG75fd7DzHsJ7KJzSif/QM0Y+RpOmGMnjlJzit4HDV2A4Etn80wSzstyp82A=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs-observation-policy",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-AntY5dfkTL8WugNGHkJxCEffaTFHqdXaYm7ZrerexnLiZQscDRRjf9zI00JwOmlFM/IrioCuLf5cERfhZN5GYw=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs-sandbox",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-eUxNsnM+TsjGw5OleOIcAhMnFhmQ4OAZoBYeiRMSeOMuCKWEjhxUGN8S8Hg1HxPaZVeIrUV7qFsNQzhehKj7wg=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-goal",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-atFJaoijwAz5yZ119f82I7jMx3tGCwXOz6qoY0Likb2c5DpumWZTJgs5L19OhKbhvEW+r2MAC4MYKaUxtrbb0Q=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-host-plugin-inventory",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-U7RTRLRs+O18ru6KzUy7LvMk/IgXnkWSalogg0abfA+QU020XZi+UpwZqM567RzC7MtpxijQk8bulGunu0lifw=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-host-webserver",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-lFgGm9wDrHiTBANzsdoWzdfPSjWYuDFwCoNQ4Uko57Fo5XASL2unfRHGm1xZ828rwEYuGwRvJHMOuoP/17VmlA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-jobs",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-C3rBEuWhtDBlxMeKykFvSfBwjSPxkLsvKCFq8BrFdjDmZC1lI9GooMjPZkPxXVbogVrcOBaYVtJdOYJ4+rIpQg=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-jobs-local",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-PCDLSktONJ+If3QCcPlRskVLXIa8hG/l0pBIgKNllz4mb7CmYlJ5w1H9pWyrFZllMO0Wm94ZS9aP3SnUcJ8R1g=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-llm",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-Z7BVsBkK24SE4EItQeow8PHms/9GP0DSTi337vTAa/RY7tNg2Snz3INcXUj6CPZfvntQr1in9op9wLI+rfNsqA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-pwsh-sandbox",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-AYTAiy8wQwVoHO47e+hnG73GvHdmg+bKy3bFnrPDANCqnRZh9TJIbkxHxtJnfpBnNCcs2fhhCo6yHtGFYl7KHg=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-sandbox",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-OTOR6Jj9cey5YkhALG0TBwZ/Z3t986aczH6fLbzoIIegix+gwNaEBOqCWs+exVJ0Z2QuN/ItXzn+xHxW8Y0dcA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-sandbox-policy",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-QyQSCyLFxljkvmsVWJG0xUrYTiXr1DVOxHWURf7EHnbmvYZgg2B+nFcI58+IeUB2qbB35B1ClW5NQsKjOgDm2g=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-session",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-y+klWiGAWR4m4cc4ylurA0cW63673B4N8cr2ANMimweDZAfxL4XVBC7WiD/5DT2DtIhYmVZhz/niyS/WbniUTA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-shell",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-BfmNN6X0NHN2XleW0fCbtFXedXEppeDQ2oa3WsOTuhvnBftl6QWMWWMM59weE4xXker5fzqOnoJdeBR8D9qR9Q=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-shell-env",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-fFSrfhxfvVYfDxsOuV0cjAeC/PWweW+86uOJWT+2paHXOSgM6MSDe3eTd5DHRDYnjb5XutTYu32pR49cVBHMug=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-subprocess-local",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-DmG3lcQlAh8bTKfeyYM44cfRyJktbLL8drXrVfOvGrFk0zSs5eTSLcfhIKLT3jFJ5CKFriHYZPLdRT6Alvyy4w=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-system-prompt",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-VtmZVKqBMJ7kzskHu0jY+Jth7jSuKMG8QB3MBPzJe9M0LL4YPMWsGKt9gGky9RXolk/ugAy4YZEv1gUqouVofA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-bash",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-f4LmiZkZSfJfvBcEzV4q5J83VL79l/+ncLkwnJyHzsjvJbW5qFxzCy4p5FXfY/CflG0taG14/p42UJzb9qEhrQ=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-fs",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-/3AUx+V1UxVfl24fm10hwRbJnHwpBkRDHniOeocGknMvASheRiKnHpnnj9EszFRLYSpe2PRFSMuyuhXgYyd3MQ=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-goal",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-nZ0NkUxvtAsrPAd9NMXt+4kS7WPn8xIvXCwVunKfBwbrnGnFCNmIsTQoHF44J6q9VbMeSCN2eyj07w6ej3Hf+g=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-jobs",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-v4y56H3FsVBF2jUJLGLHdPeKaKJxLT4Zx/oii45UmJv5t8Bp3uCTVUoq/mfSFVuFY66q6rHJwgIOKWc4ZO3ySw=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-pwsh",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-rnHM3Jqlr7rthwfPYysXPq6zH+K8JTDqbE+xzjkbo1WIBKBZeSGr8kPjqdCZa7eUtWhmV/RFBP1qmBgDjEZaWg=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-tools",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-k2yZuJJtszaU9lzr2aBtdeFMINrkdlk4ellbtrMokA2oySVqJmAM8dv+u9RtzduD3aRRqyr2i2hWrTACz0qOrA=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-user-approval",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-8UpMEnEyMo6mYEVELBo0DC2iG7aJJfFMTNkU+DKD3c5Ut7ySRDzt1iRr1qni/CzqlTIpQBAkGaG77qk4q/v1bg=="
+	},
+	{
+		"name": "@deepseek-ai/dsh-web-app",
+		"version": "0.1.5-rc.2",
+		"integrity": "sha512-Ng7YVDt9txh2BlLmu6B+V677c1bihbh/rq3EOtZK4b0JWtgdNgYb1KPIED8+aK2i+FghrCrIy6X60AyJ45eOvw=="
+	}
+];
+
+//#endregion
 //#region src/domain/host-version.ts
 /**
 * DSH host version support policy.
@@ -6220,7 +6393,7 @@ const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row) => row
 * Historical audited host cohort registry. Every entry keeps the exact package
 * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
 * contracts). These are historical verification facts only: since 0.5.1 the
-* active support target is `0.1.5-rc.1`, so an installed graph from any of
+* active support targets are `0.1.5-rc.1` and `0.1.5-rc.2`, so an installed graph from any of
 * these cohorts — including previous RCs and alphas — is no longer an active
 * support entry and fails closed in `evaluateHostLock`.
 */
@@ -6403,10 +6576,11 @@ const LEGACY_HOST_COHORTS = [
 	defineCohort("dsh-0.1.2-rc.1", ["0.1.2-rc.1"], ["posix", "windows"], RC1_HOST_PACKAGES),
 	defineCohort("dsh-0.1.5-rc.1", ["0.1.5-rc.1"], [], RC015_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])
 ];
-/** The single active support cohort since 0.5.1. */
+/** Baseline cohort retained for callers that need a default fixture. */
 const ACTIVE_HOST_COHORT_ID = "dsh-0.1.5-rc.1";
+const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID, "dsh-0.1.5-rc.2"];
 /** Core-lock/v1 separates optional market identity from the audited DSH graph.
-* The active support target is exactly one registered cohort, `0.1.5-rc.1`:
+* The active support targets are the exact registered rc.1 and rc.2 graphs:
 * historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
 * never silently re-labelled as accepted active locks, and an installed
 * historical graph fails closed under `evaluateHostLock`. The version policy
@@ -6414,7 +6588,7 @@ const ACTIVE_HOST_COHORT_ID = "dsh-0.1.5-rc.1";
 * has not been registered here is "unverified / pending audit", never
 * supported by range alone.
 */
-const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => cohort.id === ACTIVE_HOST_COHORT_ID).map((cohort) => ({
+const HOST_COHORTS = [...LEGACY_HOST_COHORTS, defineCohort("dsh-0.1.5-rc.2", ["0.1.5-rc.2"], [], RC015_RC2_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
@@ -6445,7 +6619,7 @@ const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => cohort.id === ACTIVE
 	]
 }));
 /**
-* Active support cohort package identities (0.5.1: DSH 0.1.5-rc.1). The cohort
+* Baseline fixture package identities (DSH 0.1.5-rc.1). The cohort
 * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
 * unknown-version, unbound, OR MISSING row fails the whole lock closed
 * (`host_lock_missing`); no capability inherits independence from a partially
@@ -6453,7 +6627,7 @@ const HOST_COHORTS = LEGACY_HOST_COHORTS.filter((cohort) => cohort.id === ACTIVE
 */
 const EXPECTED_HOST_PACKAGES = HOST_COHORTS[0].packages;
 /**
-* The `@deepseek-ai/dsh` launcher version of the active cohort, read from the
+* The `@deepseek-ai/dsh` launcher version of the baseline fixture, read from the
 * cohort rows rather than hardcoded, so a cohort bump cannot leave a stale
 * literal behind in the target-inspection path.
 */
@@ -9268,13 +9442,14 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 		platform: process.platform === "win32" ? "windows" : "posix",
 		profileKind: "headless"
 	});
-	if (evaluation.status !== "supported" || evaluation.cohortId !== ACTIVE_HOST_COHORT_ID + "-core-v1") throw new HostProfileError("target_runtime_unsupported", "dependency-free inspection requires the active audited core cohort");
+	const selectedCohort = HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId);
+	if (evaluation.status !== "supported" || !selectedCohort) throw new HostProfileError("target_runtime_unsupported", "dependency-free inspection requires the active audited core cohort");
 	const { records, reachable } = activeGraphRecords(mapText);
 	const launcher = realpathSync(join(modules, "@deepseek-ai", "dsh"));
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
 	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
-	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== ACTIVE_HOST_LAUNCHER_VERSION || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row) => row.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
@@ -9757,4 +9932,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { parseShellCommand as $, semanticActionFromText as $n, progressFingerprint as $t, createGitPrestateEnvelope as A, interpretClause as An, certifyCheckpoint as At, CAPTURE_V042_NOTICE as B, npmEscapedPackageName as Bn, isVerifyingCapability as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, captureItem as Cn, parseHostVersion as Ct, GIT_COMMAND_TEMPLATES as D, extractOperation as Dn, ALPHA3_HOST_PACKAGES as Dt, GIT_COMMAND_MANIFEST_IDS as E, extractMethod as En, RC1_HOST_PACKAGES as Et, verifiedLinearCommitReadback as F, maskCodeSpans as Fn, recoveryDigest as Ft, evidenceFromPersistedToolResult as G, STATEFUL_ACTIONS as Gn, decideTurnBoundary as Gt, PROTOCOL_V4_NOTICE as H, ACTION_MANIFEST_VERSION as Hn, NO_PROGRESS_RECORD_PREFIX as Ht, FIRST_STEP_GUIDANCE as I, namedActions as In, renderRecoveryPacket as It, isDeterministicCheck as J, actionCompatible as Jn, isRootPauseRequest as Jt, extractTextContent as K, STOP_PROTOCOL_VERSION as Kn, decideTurnStopping as Kt, claimedBatchHasRealRootInput as L, semanticActionOfScope as Ln, bindingSatisfies as Lt, gitCommandMatchesTarget as M, isExecutableItem as Mn, MIN_RECOVERY_CHAR_BUDGET as Mt, parseGitCommandManifest as N, isOpenObligation as Nn, closingHint as Nt, commitIndexSnapshotDigest as O, isInformationalMessage as On, authorityCaptureCounts as Ot, revalidateGitPrestate as P, kindOfScope as Pn, openItems$1 as Pt, parsePwshCommand as Q, semanticActionFromCommand as Qn, observeAssistantOutcome as Qt, lifecyclePhase as R, statefulActionsOfScope as Rn, evidenceCoverage as Rt, SESSION_API_UNSUPPORTED as S, captureClause as Sn, evaluateMinimumHostVersion as St, snapshotSessionEvents as T, extractArtifactPaths as Tn, RC015_HOST_PACKAGES as Tt, deriveProjection as U, CERTIFICATE_VERSION as Un, NO_PROGRESS_TURNS_BEFORE_STOP as Ut, PROTOCOL_V3_NOTICE as V, ACTION_MANIFEST as Vn, CONTROL_RECORD_PREFIX as Vt, supersedeItem as W, SEMANTIC_ACTIONS as Wn, classifyCompletionClaim as Wt, canonicalArgvFromCommand as X, requestedTargetAuthorizesMutation as Xn, latestAssistantText as Xt, withDurability as Y, isStatefulAction as Yn, isWholeTaskCompletionClaim as Yt, isRunExecutable as Z, requestedTargetMatchesResolved as Zn, latestRootInstruction as Zt, packageRowsFromPnpmLock as _, parseConfirmationMessage as _n, hostVersionFromPackages as _t, createProofManifest as a, qualifyBoundary as an, classifyUserInteraction as ar, DEFAULT_HOST_LOCK as at, resolveInstalledHostLock as b, itemDiagnosis as bn, SUPPORTED_HOST_RANGE as bt, sessionQuery as c, confirmRebind as cn, normalizeClause as cr, HOST_CAPABILITY_PACKAGE_GROUPS as ct, combineHostPolicy as d, proposeRebindV042 as dn, sha256 as dr, bindExecutableIdentity as dt, goalCompletionDenial as en, validateActionManifest as er, ACTIVE_HOST_COHORT_ID as et, hostLockContextFromComposedDump as f, rebindAttemptKey as fn, bindLiveGoalCapability as ft, packageRowsFromActiveGraph as g, isFrozenV042RebindResponse as gn, evaluateToolSurfaceCapability as gt, inspectTargetHostGraph as h, CONFIRM_LINE_PATTERN as hn, evaluateHostLock as ht, canonicalProjection as i, isCurrentAcceptedBoundary as in, classifyTaskIntent as ir, BASE_HOST_PACKAGES as it, executeRevalidatedGitEffect as j, interpretMessage as jn, DEFAULT_RECOVERY_CHAR_BUDGET as jt, commitTreeSnapshotDigest as k, segmentClauses as kn, segmentAuthorityBlocks as kt, validateProofManifest as l, proposeRebind as ln, sanitizeClauseText as lr, HOST_COHORTS as lt, injectActiveProfileHostLock as m, replayRebindResult as mn, evaluateHostCapability as mt, PROOF_PROTOCOL_VERSION as n, availableBoundaryQualifications as nn, COMMAND_SURFACE_MANIFEST as nr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as nt, proofDigest as o, currentContractDigest as on, canonicalizePath as or, EXPECTED_HOST_PACKAGES as ot, hostLockRowsFromComposedDump as p, rebindResponse as pn, evaluateExternalWaitCapability as pt, extractToolSubject as q, SUPPORTED_EVIDENCE_ADAPTERS as qn, decisionBoundaryKey as qt, bindProofToProjection as r, effectuateBoundary as rn, validateManifest as rr, ALPHA2_HOST_PACKAGES as rt, proofEvidenceConstraints as s, createProjection as sn, digestStrings as sr, GOAL_HOST_PACKAGES as st, PROOF_KINDS as t, hasCurrentCertificate as tn, validateActionTarget as tr, ACTIVE_HOST_LAUNCHER_VERSION as tt, HostProfileError as u, proposeRebindOutcome as un, sanitizeUrl as ur, LEGACY_HOST_COHORTS as ut, readActiveHostGraph as v, deriveItemDiagnosis as vn, selectHostCohort as vt, SessionApiError as w, classifyClause as wn, satisfiesSupportedHostRange as wt, verifyComposedHostLockDump as x, relevantEvidence as xn, compareHostVersions as xt, resolveActiveProfileHostLock as y, evidenceAvailabilityReason as yn, MIN_SUPPORTED_HOST_VERSION as yt, previewFirstStepInjection as z, canonicalRegistryBase as zn, evidenceMatchesItem as zt };
+export { parseShellCommand as $, requestedTargetMatchesResolved as $n, latestRootInstruction as $t, createGitPrestateEnvelope as A, isInformationalMessage as An, authorityCaptureCounts as At, CAPTURE_V042_NOTICE as B, statefulActionsOfScope as Bn, evidenceCoverage as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, relevantEvidence as Cn, evaluateMinimumHostVersion as Ct, GIT_COMMAND_TEMPLATES as D, extractArtifactPaths as Dn, RC015_HOST_PACKAGES as Dt, GIT_COMMAND_MANIFEST_IDS as E, classifyClause as En, RC015_RC2_HOST_PACKAGES as Et, verifiedLinearCommitReadback as F, isOpenObligation as Fn, closingHint as Ft, evidenceFromPersistedToolResult as G, CERTIFICATE_VERSION as Gn, NO_PROGRESS_TURNS_BEFORE_STOP as Gt, PROTOCOL_V4_NOTICE as H, npmEscapedPackageName as Hn, isVerifyingCapability as Ht, FIRST_STEP_GUIDANCE as I, kindOfScope as In, openItems$1 as It, isDeterministicCheck as J, STOP_PROTOCOL_VERSION as Jn, decideTurnStopping as Jt, extractTextContent as K, SEMANTIC_ACTIONS as Kn, classifyCompletionClaim as Kt, claimedBatchHasRealRootInput as L, maskCodeSpans as Ln, recoveryDigest as Lt, gitCommandMatchesTarget as M, interpretClause as Mn, certifyCheckpoint as Mt, parseGitCommandManifest as N, interpretMessage as Nn, DEFAULT_RECOVERY_CHAR_BUDGET as Nt, commitIndexSnapshotDigest as O, extractMethod as On, RC1_HOST_PACKAGES as Ot, revalidateGitPrestate as P, isExecutableItem as Pn, MIN_RECOVERY_CHAR_BUDGET as Pt, parsePwshCommand as Q, requestedTargetAuthorizesMutation as Qn, latestAssistantText as Qt, lifecyclePhase as R, namedActions as Rn, renderRecoveryPacket as Rt, SESSION_API_UNSUPPORTED as S, itemDiagnosis as Sn, compareHostVersions as St, snapshotSessionEvents as T, captureItem as Tn, satisfiesSupportedHostRange as Tt, deriveProjection as U, ACTION_MANIFEST as Un, CONTROL_RECORD_PREFIX as Ut, PROTOCOL_V3_NOTICE as V, canonicalRegistryBase as Vn, evidenceMatchesItem as Vt, supersedeItem as W, ACTION_MANIFEST_VERSION as Wn, NO_PROGRESS_RECORD_PREFIX as Wt, canonicalArgvFromCommand as X, actionCompatible as Xn, isRootPauseRequest as Xt, withDurability as Y, SUPPORTED_EVIDENCE_ADAPTERS as Yn, decisionBoundaryKey as Yt, isRunExecutable as Z, isStatefulAction as Zn, isWholeTaskCompletionClaim as Zt, packageRowsFromPnpmLock as _, CONFIRM_LINE_PATTERN as _n, evaluateToolSurfaceCapability as _t, createProofManifest as a, effectuateBoundary as an, validateManifest as ar, BASE_HOST_PACKAGES as at, resolveInstalledHostLock as b, deriveItemDiagnosis as bn, MIN_SUPPORTED_HOST_VERSION as bt, sessionQuery as c, currentContractDigest as cn, canonicalizePath as cr, GOAL_HOST_PACKAGES as ct, combineHostPolicy as d, proposeRebind as dn, sanitizeClauseText as dr, LEGACY_HOST_COHORTS as dt, observeAssistantOutcome as en, semanticActionFromCommand as er, ACTIVE_HOST_COHORT_ID as et, hostLockContextFromComposedDump as f, proposeRebindOutcome as fn, sanitizeUrl as fr, bindExecutableIdentity as ft, packageRowsFromActiveGraph as g, replayRebindResult as gn, evaluateHostLock as gt, inspectTargetHostGraph as h, rebindResponse as hn, evaluateHostCapability as ht, canonicalProjection as i, availableBoundaryQualifications as in, COMMAND_SURFACE_MANIFEST as ir, ALPHA2_HOST_PACKAGES as it, executeRevalidatedGitEffect as j, segmentClauses as jn, segmentAuthorityBlocks as jt, commitTreeSnapshotDigest as k, extractOperation as kn, ALPHA3_HOST_PACKAGES as kt, validateProofManifest as l, createProjection as ln, digestStrings as lr, HOST_CAPABILITY_PACKAGE_GROUPS as lt, injectActiveProfileHostLock as m, rebindAttemptKey as mn, evaluateExternalWaitCapability as mt, PROOF_PROTOCOL_VERSION as n, goalCompletionDenial as nn, validateActionManifest as nr, ACTIVE_HOST_LAUNCHER_VERSION as nt, proofDigest as o, isCurrentAcceptedBoundary as on, classifyTaskIntent as or, DEFAULT_HOST_LOCK as ot, hostLockRowsFromComposedDump as p, proposeRebindV042 as pn, sha256 as pr, bindLiveGoalCapability as pt, extractToolSubject as q, STATEFUL_ACTIONS as qn, decideTurnBoundary as qt, bindProofToProjection as r, hasCurrentCertificate as rn, validateActionTarget as rr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as rt, proofEvidenceConstraints as s, qualifyBoundary as sn, classifyUserInteraction as sr, EXPECTED_HOST_PACKAGES as st, PROOF_KINDS as t, progressFingerprint as tn, semanticActionFromText as tr, ACTIVE_HOST_COHORT_IDS as tt, HostProfileError as u, confirmRebind as un, normalizeClause as ur, HOST_COHORTS as ut, readActiveHostGraph as v, isFrozenV042RebindResponse as vn, hostVersionFromPackages as vt, SessionApiError as w, captureClause as wn, parseHostVersion as wt, verifyComposedHostLockDump as x, evidenceAvailabilityReason as xn, SUPPORTED_HOST_RANGE as xt, resolveActiveProfileHostLock as y, parseConfirmationMessage as yn, selectHostCohort as yt, previewFirstStepInjection as z, semanticActionOfScope as zn, bindingSatisfies as zt };

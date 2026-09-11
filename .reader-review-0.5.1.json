@@ -10,28 +10,28 @@
       "path": "README.md",
       "role": "readme",
       "language": "default",
-      "sha256": "3b1add9193b10782a3563b13c16a097b43afc6d5c2e27d04d0c5a2bbbb8fd8e0"
+      "sha256": "2bd7e54f42c045178cb8fbeee9cce5a2626586cfe2d81e0274ad05050ce15e8e"
     },
     {
       "path": "README.zh-CN.md",
       "role": "readme",
       "language": "zh-CN",
-      "sha256": "8a5d672fd669ad352064c2950228dcb5729d6dc4446ac55699e3f57e39b3cb86"
+      "sha256": "2896cb8fa718d73bff299b896f5cf5940787e0ed00ded98e50c027e90e6c4fbb"
     },
     {
       "path": "CHANGELOG.md",
       "role": "changelog",
       "language": "default",
-      "sha256": "64aa7df0e854b276c3f065243dd1d0c312b570f0a8e9c9b07f9704bd1b93e877"
+      "sha256": "ff1b4b130b92e9c8d13c0826b2770c0986a9472daa82d53fdb28ee19208e1cec"
     },
     {
       "path": "CHANGELOG.zh-CN.md",
       "role": "changelog",
       "language": "zh-CN",
-      "sha256": "fbb4b132c924a5734818bfb41b6451ed7076750b33f91c5277ac821daaed1ec7"
+      "sha256": "4ef4d892fe829c3860b61168a9962f91518e274bf0db2d0bcae822516f89c4c7"
     }
   ],
-  "document_set_sha256": "e38eade2373b0e6883ce7ff7d02938a64893e2a387abeb33d5b6ba46312efd6f",
+  "document_set_sha256": "6393441279da5e4aeabfbf34a84c885ebce547761a5e37043285f6e59c8ff26e",
   "method": {
     "kind": "cold_read",
     "implementation_context_used": false,
@@ -46,7 +46,7 @@
         "README.md",
         "CHANGELOG.md"
       ],
-      "note": "The README answers whether this release is for the reader and how to install it; the changelog answers what changed between 0.5.0 and 0.5.1 and what the upgrade requires. Neither duplicates the other: the README lists no per-change detail, and the changelog restates no installation step."
+      "note": "Both README editions introduce the task checklist, show installation and activation, and explain host compatibility. The changelogs describe version changes without repeating the installation instructions."
     },
     {
       "id": "reader_outcome",
@@ -58,7 +58,7 @@
         "CHANGELOG.md",
         "CHANGELOG.zh-CN.md"
       ],
-      "note": "A reader can state that 0.5.1 moves to DSH >= 0.1.5-rc.1, that the old Session API is gone with no fallback, that the required action is to start a new session rather than migrate anything, that the native gate for this host has not been run, and that 0.5.1 itself is not published yet so the unpinned install is the one that works today."
+      "note": "The reader can choose the frozen unpublished candidate, install it, inspect and inject the host lock, then enable protection. The compatibility section explicitly identifies rc.1 and rc.2 as separate exact host sets and requires a new session for older Session V2 data."
     },
     {
       "id": "term_onboarding",
@@ -67,7 +67,7 @@
       "evidence_paths": [
         "README.md"
       ],
-      "note": "Internal terms arrive after the effect they describe. \"Host lock\" follows the inspect/inject commands that produce it, and \"registry-derived\" is introduced with its plain meaning - the rows are published npm tarball identities and no host has loaded the graph - before the digest consequence is stated."
+      "note": "The README explains the saved checklist and matching tool results before host-lock terminology. The rc.2 addition explains the 33-package set and mixed-version refusal in ordinary language before linking the detailed reference."
     },
     {
       "id": "evidence_boundary",
@@ -77,7 +77,7 @@
         "README.md",
         "CHANGELOG.md"
       ],
-      "note": "The candidate changelog distinguishes a real host loop with a simulated model from native application and real-model acceptance. README identifies the package as unpublished and the native audit as pending. The added recovery guidance does not imply release of the reserved action."
+      "note": "The updated paragraphs distinguish registry package identity from native acceptance for an exact artifact and platform. Candidate installation no longer directs the reader to an older published package; publication and real-model acceptance remain separate."
     },
     {
       "id": "density_and_order",
@@ -87,7 +87,7 @@
         "README.md",
         "CHANGELOG.md"
       ],
-      "note": "The README leads with installation and states that host-lock injection follows the runtime upgrade. The candidate changelog explains compatibility and pending-confirmation recovery, then unchanged guarantees and separate acceptance gates."
+      "note": "Installation and the visible status command precede detailed contracts. The new compatibility paragraph answers which host versions can be evaluated, with identity mechanics in the reference. The changed changelog bullet states the rc.2 addition first."
     },
     {
       "id": "language_independence",
@@ -97,22 +97,21 @@
         "README.zh-CN.md",
         "CHANGELOG.zh-CN.md"
       ],
-      "note": "Both Chinese editions stand on their own: commands and version identifiers are preserved verbatim, and the Chinese prose states the same facts and the same required action without depending on the English text."
+      "note": "The English and Chinese reading paths were read separately. Both provide the same frozen-package command and exact host versions; each explains mixed-version refusal and the need for matching native evidence without relying on the other edition."
     }
   ],
   "findings": [
     {
       "code": "version_sensitive_compatibility_claim",
       "document": "README.md",
-      "line": 52,
+      "line": 56,
       "severity": "advisory",
       "message": "The structural auditor warns that the status paragraph names exact versions. This is the current compatibility level rather than historical provenance, and the paragraph links docs/COMPATIBILITY.md for the full record of the range, the prerelease rules, and the exact graph. The Chinese edition carries the same warning at README.zh-CN.md:52 and the same link."
     }
   ],
   "limitations": [
-    "Candidate follow-up: cold-read the updated English and Chinese 0.5.1 entries and the unchanged README entry paths. The new wait-recovery bullet and simulated-model fixture boundary are clear in both languages. Historical entries retain their previous review scope.",
-    "The cold read covered the four reader documents that changed for 0.5.1. The long-form acceptance record and the compatibility reference were checked for factual consistency, not re-read end to end.",
-    "This receipt binds the working-tree bytes at review time. Any later edit to a listed document invalidates it and requires a fresh cold read.",
-    "A passing receipt records that the review happened; it does not establish factual correctness, native acceptance, or publication."
+    "Cold read covered both complete README entry paths and both current 0.5.1 changelog entries; unchanged historical release entries retain their earlier review scope.",
+    "Compatibility and local-acceptance references were reconciled for rc.2 and the current validator profile; their historical sections were not re-reviewed end to end.",
+    "This receipt binds the reviewed bytes. A later document edit requires fresh review; it does not establish native acceptance, publication or factual correctness."
   ]
 }

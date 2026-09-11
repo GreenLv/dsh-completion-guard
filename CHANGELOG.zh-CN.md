@@ -8,7 +8,7 @@
 
 - **支持 DSH >= 0.1.5-rc.1，且不向后兼容。** DSH Session V2 API、V2 事件词表和所有更早的宿主包组合都已删除，不再保留 fallback。不暴露 V3 `snapshotEvents()` 的会话对象会被明确拒绝，而不会被当作空日志投影；不是会话格式 3 的头部也会被拒绝，而不会被当作猜测出的身份参与哈希。`0.1.5-rc.1` 是本版本实际开发与验证的基线，不是支持上限。从 DSH `0.1.2-rc.1` 升级意味着**新建会话**；旧日志、提案和证书既不迁移、也不提升为当前证据，更不会删除。
 - **支持政策是范围，宿主校验仍是精确图。** `peerDependencies` 发布 `>=0.1.5-rc.1`（Cordis `^4.0.2`），因此 `0.1.4`、`0.1.5-alpha.9` 及更早版本都会被拒绝。由于 npm 只有在预发布版本的 `major.minor.patch` 与下界一致时才会从范围中解析，`0.1.5-rc.2` 与 `0.1.5` 可解析，而 `0.1.6-rc.1` 与 `0.2.0-rc.1` 不会；这一限制被记录下来并写进决策测试，而不是用通配符掩盖。未注册为队列的更新宿主仍报告为未验证，范围绝不替代宿主图校验。
-- **活跃队列是 33 行的 DSH 0.1.5-rc.1 核心图，并明确标注它是如何确立的。** 各行是已发布的精确 npm `dist.integrity` 身份。本轮没有任何原生 macOS 或 Windows 宿主加载过该图，因此队列记录 `auditProvenance: registry-derived-pending-native-audit`，`auditedPlatforms` 为空列表，同时在两个平台上仍可进行判定。该来源标记写入 `hostLockDigest`，因此由注册表推导图签发的证书绝不会被表述为原生通过。五个更早的队列仅作为历史身份保留并 fail-closed。`dshmarket` 不再是队列行：market 身份由动作适配器独立校验。
+- **分别注册 DSH 0.1.5-rc.1 和 0.1.5-rc.2 的精确宿主组合。** 每组包含 33 个核心包，绑定各自已发布的 npm 身份；跨版本混装会被拒绝。宿主锁摘要保留注册表来源标记，原生验收则按确切制品和平台单独记录。更早的宿主组合仅保留历史身份，不再支持。`dshmarket` 由动作适配器独立校验。
 - **Guard 绝不重启用户已停止的 Goal。** 当前 Goal 处于暂停、阻塞、已完成，或其阶段尚未回读时，回合停止会以 `goal_paused_by_user_safe_yield` / `goal_not_continuable_safe_yield` 让出，而不是消耗唯一一次纠正引导。Guard 的 Goal 访问面根本没有 resume 入口：它只能在已接受的边界上 disarm，只有人类执行 `resume` 才能重新武装。
 - **终端标记分类已针对 0.1.5-rc.1 实际渲染器重新核对。** `@deepseek-ai/dsh-base` 注册的两个会话渲染器只在否定事实和非零退出时追加标记（两个宿主版本一致），因此在受支持的宿主锁下，这两个名字的"完成的前台结果且无标记"仍是干净成功。不在默认 bundle 内的常驻渲染器新增了 `[Command finished with exit code N]` 与 `[Command timed out or OOM]`；两者现在都被显式分类，因此这类结果按自身标记判定，而不会落入无标记规则。
 - **重命名后的 PTC 派发事件是唯一的派发词表。** `tool/ptc-dispatch-start`、`tool/ptc-dispatch` 取代了 `tool/code-dispatch-start`、`tool/code-dispatch`；旧名称被忽略，不产生任何证据。

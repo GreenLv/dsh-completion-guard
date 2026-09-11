@@ -28,17 +28,11 @@ If you are upgrading from a profile that ran DSH 0.1.2-rc.1, start a **new
 session**. Guard does not migrate V2 logs, proposals, or certificates, and old
 user data is never deleted or reinterpreted.
 
-### The 0.1.5-rc.1 cohort is registry-derived, not natively audited
+### Exact rc.1 and rc.2 host sets
 
-The active cohort `dsh-0.1.5-rc.1-core-v1` carries the exact npm registry
-`dist.integrity` of every published 0.1.5-rc.1 tarball, so the graph lock can
-certify the bytes. No native macOS or Windows host has loaded this graph in the
-0.5.1 implementation round, so the cohort records
-`auditProvenance: registry-derived-pending-native-audit` with an empty
-`auditedPlatforms` list, while `acceptedPlatforms` still contains `posix` and
-`windows` so the graph can be evaluated. The provenance value is bound into
-`hostLockDigest`, so a certificate issued against it can never be presented as
-a native pass. Read the native gate as **not run**, not as passed.
+The registered cohorts are `dsh-0.1.5-rc.1-core-v1` and `dsh-0.1.5-rc.2-core-v1`. Each contains 33 exact package identities from the corresponding npm release. A complete set must match atomically; mixing rc.1 and rc.2 rows fails closed.
+
+Both record `auditProvenance: registry-derived-pending-native-audit`, an empty `auditedPlatforms` list and `acceptedPlatforms` containing `posix` and `windows`. These fields describe the registry source of the shipped graph, not a live acceptance result. The provenance is included in `hostLockDigest`. Native acceptance must be established by a separate annex bound to the exact Guard artifact, host cohort and platform; a host-lock certificate alone is insufficient.
 
 Every older cohort — `0.1.1-rc.2`, `0.1.2-alpha.2`, the alpha.2 + dshmarket
 1.39.0 combination, `0.1.2-alpha.3`, and `0.1.2-rc.1` — stays in the shipped

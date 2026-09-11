@@ -4,6 +4,7 @@ import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
 import { ALPHA3_HOST_PACKAGES } from './alpha3-host.js'
 import { RC1_HOST_PACKAGES } from './rc1-host.js'
 import { RC015_HOST_PACKAGES } from './rc015-host.js'
+import { RC015_RC2_HOST_PACKAGES } from './rc015-rc2-host.js'
 import { evaluateMinimumHostVersion, type HostVersionDecision } from './host-version.js'
 
 export type HostLockStatus = 'supported' | 'unsupported' | 'unavailable'
@@ -154,7 +155,7 @@ export const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[] = ALPHA2_HOST_PACK
  * Historical audited host cohort registry. Every entry keeps the exact package
  * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
  * contracts). These are historical verification facts only: since 0.5.1 the
- * active support target is `0.1.5-rc.1`, so an installed graph from any of
+ * active support targets are `0.1.5-rc.1` and `0.1.5-rc.2`, so an installed graph from any of
  * these cohorts — including previous RCs and alphas — is no longer an active
  * support entry and fails closed in `evaluateHostLock`.
  */
@@ -215,11 +216,12 @@ export const LEGACY_HOST_COHORTS: readonly HostCohort[] = [
   ),
 ]
 
-/** The single active support cohort since 0.5.1. */
+/** Baseline cohort retained for callers that need a default fixture. */
 export const ACTIVE_HOST_COHORT_ID = 'dsh-0.1.5-rc.1'
+export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID, 'dsh-0.1.5-rc.2']
 
 /** Core-lock/v1 separates optional market identity from the audited DSH graph.
- * The active support target is exactly one registered cohort, `0.1.5-rc.1`:
+ * The active support targets are the exact registered rc.1 and rc.2 graphs:
  * historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
  * never silently re-labelled as accepted active locks, and an installed
  * historical graph fails closed under `evaluateHostLock`. The version policy
@@ -227,8 +229,11 @@ export const ACTIVE_HOST_COHORT_ID = 'dsh-0.1.5-rc.1'
  * has not been registered here is "unverified / pending audit", never
  * supported by range alone.
  */
-export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
-  .filter((cohort) => cohort.id === ACTIVE_HOST_COHORT_ID)
+export const HOST_COHORTS: readonly HostCohort[] = [...LEGACY_HOST_COHORTS,
+  defineCohort('dsh-0.1.5-rc.2', ['0.1.5-rc.2'], [], RC015_RC2_HOST_PACKAGES,
+    'registry-derived-pending-native-audit', ['posix', 'windows']),
+]
+  .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))
   .map((cohort) => ({
     ...cohort,
     id: `${cohort.id}-core-v1`,
@@ -243,7 +248,7 @@ export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
   }))
 
 /**
- * Active support cohort package identities (0.5.1: DSH 0.1.5-rc.1). The cohort
+ * Baseline fixture package identities (DSH 0.1.5-rc.1). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially
@@ -252,7 +257,7 @@ export const HOST_COHORTS: readonly HostCohort[] = LEGACY_HOST_COHORTS
 export const EXPECTED_HOST_PACKAGES: PackageRow[] = HOST_COHORTS[0].packages
 
 /**
- * The `@deepseek-ai/dsh` launcher version of the active cohort, read from the
+ * The `@deepseek-ai/dsh` launcher version of the baseline fixture, read from the
  * cohort rows rather than hardcoded, so a cohort bump cannot leave a stale
  * literal behind in the target-inspection path.
  */

@@ -8,10 +8,10 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-These instructions describe **0.5.1**, which is a release candidate and is **not published to npm yet**, so a version-pinned install of `@0.5.1` fails until it is. While that is true, install the newest published version by omitting the version tag, or build this version from source:
+These instructions describe the **unpublished 0.5.1 candidate**. To evaluate it, use the frozen candidate package supplied with its checksum and acceptance records:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard
+dsh plugin --profile web add /absolute/path/to/dsh-completion-guard-0.5.1.tgz
 ```
 
 Once 0.5.1 is published, install that exact version into the DSH Web environment:
@@ -57,7 +57,7 @@ Version 0.5.1 supports **DSH >= 0.1.5-rc.1** with Cordis `4.0.2`, and has no bac
 
 The version range and the host check are separate. The range `>=0.1.5-rc.1` refuses anything older, including `0.1.4` and `0.1.5-alpha.9`. Whether a specific installed host actually works is decided by the exact 33-package DSH core graph: a graph that is not registered is reported as unverified, never as supported. Alpha and older RC sets stay recorded as historical identities only, so a runtime built from one of them is reported as unsupported instead of certified.
 
-The active `0.1.5-rc.1` graph is **registry-derived**: its rows are the published npm tarball identities, but no native macOS or Windows host has loaded it yet in this round. Guard records that fact inside the host-lock digest and reports it, so a certificate from this graph is never presented as a native pass. Treat the native gate as not run. The [compatibility guide](docs/COMPATIBILITY.md) records this level in full: the range, the npm prerelease rules that narrow it, the exact graph, and how to read a cohort whose native audit is still pending.
+The registered host sets are **DSH `0.1.5-rc.1` and `0.1.5-rc.2`**, each with its own exact 33-package graph. Their identities come from published npm tarballs; mixed versions fail the host check. Registry identity and native acceptance are separate: use the annex for the exact Guard artifact, host version and platform to establish a native pass. See the [compatibility guide](docs/COMPATIBILITY.md) for version rules and host-lock provenance.
 
 Restart is a separate capability. Current DSH does not supply independently verified bindings for market's loaded instance, so the Guard market restart adapter is unavailable. A requested restart remains pending; core protection and unrelated operations continue. Installing or applying a package on disk does not prove that a running process or UI has adopted it.
 

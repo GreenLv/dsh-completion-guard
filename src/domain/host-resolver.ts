@@ -4,8 +4,6 @@ import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  ACTIVE_HOST_COHORT_ID,
-  ACTIVE_HOST_LAUNCHER_VERSION,
   HOST_COHORTS,
   evaluateHostLock,
   type HostLockEvaluation,
@@ -318,7 +316,8 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   const lockText = readFileSync(join(runtime, 'pnpm-lock.yaml'), 'utf8')
   const rows = packageRowsFromActiveGraph(mapText, lockText, modules)
   const evaluation = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: 'headless' })
-  if (evaluation.status !== 'supported' || evaluation.cohortId !== ACTIVE_HOST_COHORT_ID + '-core-v1') {
+  const selectedCohort = HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId)
+  if (evaluation.status !== 'supported' || !selectedCohort) {
     throw new HostProfileError('target_runtime_unsupported', 'dependency-free inspection requires the active audited core cohort')
   }
   const { records, reachable } = activeGraphRecords(mapText)
@@ -328,7 +327,7 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   // pnpm's hoisted map uses bare package names; the installed manifest and
   // exact mapped realpath below remain authoritative for either key shape.
   const launcherId = [...reachable].filter((id) => id === '@deepseek-ai/dsh' || id.startsWith('@deepseek-ai/dsh@'))
-  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== ACTIVE_HOST_LAUNCHER_VERSION
+  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== selectedCohort.packages.find((row) => row.name === '@deepseek-ai/dsh')?.version
     || typeof records[launcherId[0]].url !== 'string'
     || realpathSync(resolve(modules, records[launcherId[0]].url as string)) !== launcher || !within(modules, launcher)) {
     throw new HostProfileError('target_runtime_unsupported', 'launcher differs from the active runtime importer')

@@ -378,7 +378,7 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
 
 describe('core lock policy identity', () => {
   it('exports only the active exact DSH core with an explicit new manifest policy', () => {
-    expect(CORE_HOST_COHORTS).toHaveLength(1)
+    expect(CORE_HOST_COHORTS).toHaveLength(2)
     expect(CORE_HOST_COHORTS[0].id).toBe(ACTIVE_COHORT_ID)
     for (const core of CORE_HOST_COHORTS) {
       expect(core.manifestVersion).toBe(2)

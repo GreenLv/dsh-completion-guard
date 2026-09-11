@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
+import { RC015_RC2_HOST_PACKAGES } from '../../src/domain/rc015-rc2-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
@@ -28,7 +29,9 @@ function lock(rows: typeof core) {
     `  '${row.name}@${row.version}':`, `    resolution: {integrity: ${row.integrity}}`, '',
   ]), 'snapshots:', ''].join('\n')
 }
-function fixture(mapKey: 'versioned' | 'bare' = 'versioned') {
+function fixture(mapKey: 'versioned' | 'bare' = 'versioned', coreRows = core) {
+  const core = coreRows
+  const version = core.find((row) => row.name === '@deepseek-ai/dsh')!.version!
   const root = mkdtempSync(join(tmpdir(), 'dsh-target-preflight-')); roots.push(root)
   const runtime = join(root, 'runtime'); const profile = join(root, 'profiles', 'headless')
   const modules = join(runtime, 'node_modules')
@@ -66,6 +69,13 @@ function installGuard(f: ReturnType<typeof fixture>) {
 }
 
 describe('dependency-free Headless target inspection', () => {
+  it.each(['versioned', 'bare'] as const)('accepts the exact rc.2 graph with %s mapping and binds its launcher', (mapKey) => {
+    const f = fixture(mapKey, RC015_RC2_HOST_PACKAGES)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC015_RC2_HOST_PACKAGES)
+    json(join(f.modules, '@deepseek-ai/dsh', 'package.json'), { name: '@deepseek-ai/dsh', version })
+    expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
+  })
+
   it('accepts pnpm hoisted bare keys only with the same exact installed runtime and bundles', () => {
     const f = fixture('bare')
     const target = inspectTargetHostGraph(f.runtime, f.profile)
