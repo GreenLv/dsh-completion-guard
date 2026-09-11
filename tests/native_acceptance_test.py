@@ -22,6 +22,16 @@ SPEC.loader.exec_module(NATIVE)
 
 
 class NativeAcceptanceEntrypointTests(unittest.TestCase):
+    def test_failed_host_capability_prevents_portable_install(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            with mock.patch.object(NATIVE, "preflight_inputs", side_effect=RuntimeError("junction unavailable")), \
+                    mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                NATIVE.main(args)
+            execute.assert_not_called()
+            self.assertFalse(output.exists())
+
     def fixture(self, directory, *, manifest_head="a" * 40):
         root = Path(directory) / "repo"
         root.mkdir()
@@ -300,7 +310,8 @@ class HostBoundEntrypointTests(unittest.TestCase):
         completed = subprocess.CompletedProcess(["node"], 0, output, b"")
         with mock.patch.object(self.host.subprocess, "run", return_value=completed) as run:
             self.assertEqual(self.host.run_host_command(Path("."), {}, "node"), "路径和证书")
-            self.assertFalse(run.call_args.kwargs["text"])
+
+        self.assertFalse(run.call_args.kwargs["text"])
 
     def test_host_command_rejects_invalid_utf8_and_nonzero_exit(self):
         completed = subprocess.CompletedProcess(["node"], 0, b"\xff", b"")
@@ -311,6 +322,52 @@ class HostBoundEntrypointTests(unittest.TestCase):
         with mock.patch.object(self.host.subprocess, "run", return_value=completed):
             with self.assertRaisesRegex(RuntimeError, "code 7"):
                 self.host.run_host_command(Path("."), {}, "node")
+
+    def test_failure_note_retains_stage_and_codes_without_raw_output(self):
+        value = subprocess.CompletedProcess([], 2, b"private config", b"ERR_MODULE_NOT_FOUND private-path")
+        with mock.patch.object(self.host.subprocess, "run", return_value=value), self.assertRaises(self.host.HostCommandError) as caught:
+            self.host.run_host_command(Path("."), {}, "node")
+        note = self.host.failure_note("web_host_start_and_probe", caught.exception)
+        self.assertNotIn("private", note)
+        self.assertEqual(json.loads(note)["diagnostic_code"], "ERR_MODULE_NOT_FOUND")
+        self.assertEqual(json.loads(note)["exit_code"], 2)
+        error = OSError("private-path")
+        error.winerror = 448
+        self.assertEqual(json.loads(self.host.failure_note("junction_read", error))["os_error"], 448)
+
+    def test_windows_process_query_uses_utf8_bytes_and_preserves_failed_exit(self):
+        success = subprocess.CompletedProcess([], 0, '中文路径'.encode(), b'')
+        with mock.patch.object(self.host.subprocess, "run", return_value=success) as run:
+            self.assertEqual(self.host.windows_process_query("Get-CimInstance Win32_Process"), "中文路径")
+        self.assertFalse(run.call_args.kwargs["text"])
+        self.assertIn("OutputEncoding", run.call_args.args[0][-1])
+        failure = subprocess.CompletedProcess([], 3, b'', b'\xff')
+        with mock.patch.object(self.host.subprocess, "run", return_value=failure), self.assertRaises(self.host.HostCommandError) as caught:
+            self.host.windows_process_query("Get-CimInstance Win32_Process")
+        self.assertEqual(caught.exception.exit_code, 3)
+
+    def test_junction_preflight_checks_read_and_cleans_owned_fixture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory) / "probe"
+            work.mkdir()
+            with mock.patch.object(self.host.platform, "system", return_value="Windows"), \
+                    mock.patch.object(self.host, "host_temporary_root", return_value=work):
+                self.host.preflight_link_access()
+            self.assertFalse(work.exists())
+
+    def test_junction_preflight_failure_preserves_code_and_cleans(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory) / "probe"
+            work.mkdir()
+            error = OSError("private target")
+            error.winerror = 448
+            with mock.patch.object(self.host.platform, "system", return_value="Windows"), \
+                    mock.patch.object(self.host, "host_temporary_root", return_value=work), \
+                    mock.patch.object(self.host, "run_host_command", side_effect=error), \
+                    self.assertRaisesRegex(RuntimeError, "448") as caught:
+                self.host.preflight_link_access()
+            self.assertNotIn("private target", str(caught.exception))
+            self.assertFalse(work.exists())
 
     def test_fixture_has_exact_portable_bytes(self):
         with tempfile.TemporaryDirectory() as directory:

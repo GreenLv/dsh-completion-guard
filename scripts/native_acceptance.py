@@ -305,6 +305,7 @@ def preflight_inputs(args: argparse.Namespace) -> Any:
     for profile in (args.target_web_profile, args.target_headless_profile):
         if profile is not None and not profile.is_dir():
             raise NativeRunError("target profile directory is missing")
+    module.preflight_link_access()
     return module
 
 

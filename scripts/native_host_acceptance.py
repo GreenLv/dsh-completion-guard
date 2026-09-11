@@ -30,6 +30,30 @@ PROBE_CASES = {
 }
 
 
+class HostCommandError(RuntimeError):
+    def __init__(self, executable: str, exit_code: int, diagnostic_code: str | None = None):
+        self.exit_code = exit_code
+        self.executable = Path(executable).name
+        self.diagnostic_code = diagnostic_code
+        super().__init__(f"host command {self.executable} exited with code {exit_code}")
+
+
+def known_error_code(data: bytes) -> str | None:
+    # Only fixed diagnostic labels may leave local process output.
+    import re
+    codes = ("ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND", "ERR_ACCESS_DENIED", "EACCES", "EPERM", "ENOENT")
+    return next((code for code in codes if re.search(rb"\b" + code.encode() + rb"\b", data)), None)
+
+
+def failure_note(stage: str, error: BaseException) -> str:
+    """Portable failure detail without captured config, paths or raw logs."""
+    return json.dumps({"stage": stage, "error_type": type(error).__name__,
+                       "exit_code": getattr(error, "exit_code", None),
+                       "diagnostic_code": getattr(error, "diagnostic_code", None),
+                       "os_error": getattr(error, "winerror", None) or getattr(error, "errno", None)},
+                      sort_keys=True)
+
+
 def host_temporary_root() -> Path:
     """Create a disposable root using the host's normal directory ACL policy.
 
@@ -83,7 +107,8 @@ def run_host_command(work: Path, environment: dict[str, str], *args: str) -> str
     executed = subprocess.run(list(args), cwd=work, env=environment, capture_output=True,
                               text=False, timeout=120, check=False)
     if executed.returncode:
-        raise RuntimeError(f"host command exited with code {executed.returncode}")
+        raise HostCommandError(args[0], executed.returncode,
+                               known_error_code(executed.stdout[-8192:] + b"\n" + executed.stderr[-8192:]))
     # Decode in the calling thread. text=True's Windows reader thread can lose
     # stdout on a GBK decode error and leave a misleading later None TypeError.
     output = executed.stdout.decode("utf-8", errors="strict")
@@ -182,14 +207,21 @@ def owns_host_command(command: str, cli: Path, overlay: Path, windows: bool = Fa
     return expected_cli in argv and any(argv[i:i + 2] == ["--patch", expected_overlay] for i in range(len(argv) - 1))
 
 
+def windows_process_query(script: str) -> str:
+    prefix = "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = [Console]::OutputEncoding; "
+    result = subprocess.run(["powershell", "-NoProfile", "-Command", prefix + script],
+                            capture_output=True, text=False, timeout=10, check=False)
+    if result.returncode:
+        raise HostCommandError("powershell", result.returncode, known_error_code(result.stderr[-8192:]))
+    return result.stdout.decode("utf-8", errors="strict")
+
+
 def discover_owned_hosts(cli: Path, overlays: list[Path]) -> dict[int, Path]:
     """Find this invocation's restarted host even before its probe completes."""
     windows = platform.system() == "Windows"
     if windows:
-        result = subprocess.run(["powershell", "-NoProfile", "-Command",
-            "Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"],
-            capture_output=True, text=True, timeout=10, check=True)
-        value = json.loads(result.stdout or "[]")
+        output = windows_process_query("Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
+        value = json.loads(output or "[]")
         rows = value if isinstance(value, list) else [value]
         pairs = [(row.get("ProcessId"), row.get("CommandLine") or "") for row in rows]
     else:
@@ -250,6 +282,37 @@ def preflight_host_inputs(root: Path, runtime_root: Path,
     return manifest, selected
 
 
+def preflight_link_access() -> None:
+    """Probe the Windows junction path in this channel before any install.
+
+    This tests normal channel access only, not the host's restricted child
+    token. Do not alter ACLs, trust settings or the user's runtime to pass it.
+    """
+    if platform.system() != "Windows":
+        return
+    temporary = host_temporary_root()
+    link = temporary / "link"
+    try:
+        environment = isolated_environment(temporary)
+        target = temporary / "target"
+        target.mkdir()
+        (target / "probe").write_bytes(b"junction-readable")
+        code = "require('node:fs').symlinkSync(process.argv[1], process.argv[2], 'junction')"
+        run_host_command(temporary, environment, "node", "-e", code, str(target), str(link))
+        if (link / "probe").read_bytes() != b"junction-readable":
+            raise RuntimeError("junction probe content mismatch")
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        raise RuntimeError("channel capability failed: " + failure_note("junction_read", error)) from error
+    finally:
+        # Remove the link itself, never traverse its target during cleanup.
+        if os.path.lexists(link):
+            if link.is_symlink():
+                link.unlink()
+            else:
+                link.rmdir()
+        shutil.rmtree(temporary)
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any], targets: dict[str, str] | None = None,
                     target_profiles: dict[str, Path] | None = None,
@@ -278,6 +341,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     owned_ports: list[int] = []
     extra_pids: dict[int, Path] = {}
     overlays: list[Path] = []
+    stage = "host_inputs"
 
     def command(*args: str) -> str:
         return run_host_command(work, environment, *args)
@@ -292,6 +356,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         if target_profiles and set(target_profiles) != {"web", "headless"}:
             raise RuntimeError("both target profile paths are required")
         for profile, profile_path in (target_profiles or {}).items():
+            stage = f"{profile}_target_graph"
             graph = json.loads(command("node", str(root / "bin" / "dsh-completion-guard-host-lock.mjs"),
                                        "inspect-graph", "--runtime-root", str(runtime_root),
                                        "--profile-root", str(profile_path)))
@@ -309,6 +374,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         command("tar", "-xf", str(artifact), "-C", str(extracted))
         artifact_tree = api.tree_digest(extracted / "package")
         for profile in ("web", "headless"):
+            stage = f"{profile}_install"
             packages = selected[profile]["packages"]
             market_version = web_market_version if profile == "web" else None
             profile_root = temporary / "dsh" / "profiles" / profile
@@ -318,17 +384,20 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 install.append(f"dshmarket@{market_version}")
             command(*install)
             installed = profile_root / "node_modules" / "dsh-completion-guard"
+            stage = f"{profile}_package_parity"
             if api.tree_digest(installed) != artifact_tree:
                 raise RuntimeError("installed package differs from exact tgz")
             passed(f"{profile}_package_parity")
             tracked = [profile_root / "package.json", profile_root / "pnpm-lock.yaml", profile_root / "cordis.patch.yml"]
             before = {path.name: api.sha256(path) for path in tracked if path.exists()}
+            stage = f"{profile}_second_install"
             command(*install)
             after = {path.name: api.sha256(path) for path in tracked if path.exists()}
             if before != after or api.tree_digest(installed) != artifact_tree:
                 raise RuntimeError("second host install was not a strict no-op")
             passed(f"{profile}_strict_second_noop")
             locker = installed / "bin" / "dsh-completion-guard-host-lock.mjs"
+            stage = f"{profile}_host_lock"
             lock_args = ["--runtime-root", str(runtime_root), "--profile-root", str(profile_root)]
             readback = json.loads(command("node", str(locker), "inject", *lock_args))
             if (readback.get("status") != "supported"
@@ -341,6 +410,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             command("node", str(locker), "verify-dump", *lock_args, "--dump-config", str(composed))
             passed(f"{profile}_host_lock_readback")
             if profile == "headless":
+                stage = "headless_missing_credential"
                 missing = subprocess.run(["node", str(cli), "--profile", "headless", "Report the isolated acceptance status."],
                                          cwd=work, env=environment, capture_output=True, text=True,
                                          encoding="utf-8", errors="strict", timeout=60, check=False)
@@ -362,6 +432,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             if profile == "headless":
                 patches.extend([{"id": "headless-runner", "disabled": True}, {"id": "headless-startup", "disabled": True}])
             overlay.write_text(json.dumps(patches), encoding="utf-8")
+            stage = f"{profile}_probe_composition"
             # DSH overlays replace config objects; validate the effective probe
             # composition too, not only the base profile that was injected above.
             composed.write_text(command("node", str(cli), "--profile", profile, "--patch", str(overlay), "--dump-config"), encoding="utf-8")
@@ -374,6 +445,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 argv.extend(["--host", "127.0.0.1", "--port", str(port), "--no-open"])
             log = (temporary / f"{profile}-host.log").open("w", encoding="utf-8")
             log_handles.append(log)
+            stage = f"{profile}_host_start_and_probe"
             process = subprocess.Popen(argv, cwd=work, env=environment, stdout=log, stderr=log,
                                        start_new_session=platform.system() != "Windows")
             processes.append(process)
@@ -389,12 +461,16 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     extra_pids[value["pid"]] = overlay
                     return value
                 if not exclude and process.poll() is not None:
-                    raise RuntimeError("real host exited before probe completion")
+                    with (temporary / f"{profile}-host.log").open("rb") as failed_log:
+                        failed_log.seek(max(0, failed_log.seek(0, 2) - 8192))
+                        diagnostic_code = known_error_code(failed_log.read(8192))
+                    raise HostCommandError("node", process.returncode, diagnostic_code)
                 return None
             first = wait_until(probe_result)
             for row in first["cases"]:
                 passed(f"{profile}_{row['id']}")
             if port is not None:
+                stage = "web_owned_restart"
                 origin = f"http://127.0.0.1:{port}"
                 # An optional protocol observation cannot decide core acceptance.
                 # It is not a loaded-provider identity or Guard restart certificate.
@@ -431,12 +507,13 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 passed("web_owned_restart_and_persisted_resume")
             # Exercise the installed launcher shim, with the same isolated env.
             shim = runtime_root / "node_modules" / ".bin" / ("dsh.cmd" if platform.system() == "Windows" else "dsh")
+            stage = f"{profile}_shell_shim"
             if runtime_manifest["version"] not in command(str(shim), "--version"):
                 raise RuntimeError("shell shim identity mismatch")
             passed(f"{profile}_shell_shim")
-    except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError, RuntimeError):
+    except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError, RuntimeError) as error:
         gates.append(api.gate("host_bound_acceptance", digest, passed=False,
-                              note="host-bound gate failed; this is not native acceptance"))
+                              note=failure_note(stage, error)))
     finally:
         remaining = []
         for process in processes:
@@ -452,7 +529,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     process.wait(timeout=10)
         try:
             extra_pids.update(discover_owned_hosts(cli, overlays))
-        except (OSError, ValueError, subprocess.SubprocessError):
+        except (OSError, ValueError, subprocess.SubprocessError, RuntimeError):
             remaining.append("restart_process_discovery_failed")
         # Restarted hosts may have detached from the original parent. Verify
         # this invocation's exact overlay argument before terminating a PID.
@@ -461,10 +538,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 continue
             try:
                 if platform.system() == "Windows":
-                    inspect = subprocess.run(["powershell", "-NoProfile", "-Command",
-                        f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').CommandLine"],
-                        capture_output=True, text=True, timeout=10, check=False)
-                    if not owns_host_command(inspect.stdout.strip(), cli, overlay, platform.system() == "Windows"):
+                    command_line = windows_process_query(f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').CommandLine")
+                    if not owns_host_command(command_line.strip(), cli, overlay, platform.system() == "Windows"):
                         remaining.append("restart_process_identity_unavailable")
                         continue
                     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=10, check=True)
