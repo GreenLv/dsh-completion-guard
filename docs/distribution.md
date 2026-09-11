@@ -25,16 +25,22 @@ version and annotated tag are retained for audit history; the npm version is
 deprecated with `Release metadata incomplete; use dsh-completion-guard@0.3.1.`
 Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
 
-## Published v0.4.0 destinations
+## Published v0.5.1 destinations (2026-09-11)
+
+1. [GitHub Release `v0.5.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1) is a non-draft, non-prerelease release. Its annotated tag identifies commit `aefdeaf2737ef1c99f1170085140c93a515e1125`.
+2. [`dsh-completion-guard@0.5.1` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.1) is published and `latest` resolves to `0.5.1`. Its `gitHead` equals that release commit. The registry download and Release tgz match SHA-256 `5e00ddf2f9772b1ae2ca3665d7c4ce858b814dc26a4116388082db2d625da28d`.
+3. All seven Release attachments were downloaded and matched the accepted files. The separate macOS and Windows annexes each record 28 required gates passed on DSH `0.1.5-rc.2`, with real-model requests skipped. See [acceptance details](LOCAL_ACCEPTANCE.md).
+
+## Historical v0.4.0 destinations
 
 1. [GitHub Release `v0.4.0`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0)
-   is the latest non-draft, non-prerelease release. Its annotated tag peels to
+   remains a historical non-draft, non-prerelease release. Its annotated tag peels to
    release commit `d5cd0ca17833d05bfdf41457ae203864bde8056b`. The Release
    carries the frozen tgz, checksum, artifact manifest, and separate macOS and
    Windows native-acceptance annexes. The tgz has SHA-256
    `71ce205dedeffe72566ad399e001f0b337d057cede297e1d2249acec67cde1f2`.
 2. [`dsh-completion-guard@0.4.0` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.4.0)
-   is published and `latest` resolves to `0.4.0`. The registry `gitHead`
+   remains published. The registry `gitHead`
    equals the release commit, and a fresh registry download is byte-identical
    to the frozen Release tgz.
 3. Source commit, candidate/main/tag CI, native macOS and Windows acceptance,
@@ -83,9 +89,9 @@ install target.
 
 | Channel | Entry | Status | Evidence |
 |---|---|---|---|
-| [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) | `GreenLv/dsh-completion-guard` (category `security`) | Listed | Added via [PR #3693](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3693) (merge commit `299f0b5c`, 2026-08-29). The shorter plain-language English and Chinese descriptions merged via [PR #3977](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3977) (merge commit `bdf5145`, 2026-09-01) and were read back from the current generated READMEs, source YAML, and public [`plugins.json`](https://awesome-dsh-plugin.com/plugins.json). The detail page still showed the earlier wording and GitHub install command at readback, so that page refresh remains pending. Screenshots are declared in this repository's [`screenshots.json`](../screenshots.json); image changes do not need a listing PR. |
-| [dsh-market](https://dsh-market.com/) | `dsh-completion-guard` (Tools / Development workflow) | Listed | Added via [PR #1285](https://github.com/zhu1090093659/dsh-web/pull/1285) (merge commit `be426da`, 2026-08-31); read back on 2026-09-01 from the public [`manifest/plugins.json`](https://dsh-market.com/manifest/plugins.json) at rank 51. The market reads the listing text from its community index; npm download counts and likes are updated separately by the site. |
-| [Awesome DeepSeek Harness](https://github.com/Dominic789654/awesome-deepseek-harness#security--permissions) | `GreenLv/dsh-completion-guard` | Listed | Rows merged via [PR #332](https://github.com/Dominic789654/awesome-deepseek-harness/pull/332) (merge commit `ba414c4`, 2026-08-29) and read back live the same day from both generated READMEs (`README.md` line 940, `README.zh-CN.md` line 946), under **Security & Permissions** alongside the other fail-closed gates and verifier plugins. |
+| [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) | `GreenLv/dsh-completion-guard` (category `security`) | Listed | Added via [PR #3693](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3693) (merge commit `299f0b5c`, 2026-08-29). The shorter plain-language English and Chinese descriptions merged via [PR #3977](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3977) (merge commit `bdf5145`, 2026-09-01) and were read back from the current generated READMEs, source YAML, and public [`plugins.json`](https://awesome-dsh-plugin.com/plugins.json). On 2026-09-11, the detail page showed the updated bilingual description and npm install command. Its embedded README still described 0.4.0 and the public index version remained 0.4.3; those generated caches await the directory publisher's refresh. Screenshots are declared in this repository's [`screenshots.json`](../screenshots.json); image changes do not need a listing PR. |
+| [dsh-market](https://dsh-market.com/) | `dsh-completion-guard` (Tools / Development workflow) | Listed | Added via [PR #1285](https://github.com/zhu1090093659/dsh-web/pull/1285) (merge commit `be426da`, 2026-08-31); read back on 2026-09-01 from the public [`manifest/plugins.json`](https://dsh-market.com/manifest/plugins.json) at rank 51. A browser readback on 2026-09-11 confirmed the Completion Guard detail page, matching bilingual description, repository identity and unversioned npm install command. The market reads the listing text from its community index; npm download counts and likes are updated separately by the site. |
+| [Awesome DeepSeek Harness](https://github.com/Dominic789654/awesome-deepseek-harness#security--permissions) | `GreenLv/dsh-completion-guard` | Listed | Rows merged via [PR #332](https://github.com/Dominic789654/awesome-deepseek-harness/pull/332) (merge commit `ba414c4`, 2026-08-29) and read back live the same day from both generated READMEs (`README.md` line 940, `README.zh-CN.md` line 946), under **Security & Permissions** alongside the other fail-closed gates and verifier plugins. The English source README still contained the matching version-independent entry on 2026-09-11. |
 
 ## Update route
 

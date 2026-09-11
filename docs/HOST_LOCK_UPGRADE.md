@@ -50,9 +50,7 @@ unsupported graph, and only a thrown error produces `status: "unavailable"` with
 you whether the graph was accepted.
 
 For Headless, use its profile path and `--profile headless`. On Windows, use the
-installed `.cmd` launcher and Windows absolute paths. **Windows is accepted for
-evaluation but has not been natively audited for this cohort**, so treat a
-Windows result as unverified until the native gate runs. A strict repeat leaves
+installed `.cmd` launcher and Windows absolute paths. The published 0.5.1 artifact passed separate native macOS and Windows acceptance on DSH `0.1.5-rc.2`; see the [acceptance record](LOCAL_ACCEPTANCE.md). That result does not cover other artifacts or host versions. A strict repeat leaves
 the package and profile contents unchanged. Restarting or enabling a daily
 profile remains a separate user action.
 
@@ -71,18 +69,9 @@ source roots, platform/profile kind and the complete 33-row core graph. The
 core manifest is version 2. Runtime replay re-reads those graph sources and
 requires the same exact core before using certificate authority.
 
-Version 0.5.1's active cohort is the DSH `0.1.5-rc.1` core graph, and its rows
-are the exact published npm tarball identities rather than a graph read off a
-running host. The cohort therefore records
-`auditProvenance: registry-derived-pending-native-audit` with an empty
-`auditedPlatforms` list, and that provenance is part of the digest. A lock
-generated from it can certify the bytes, but no certificate may describe it as
-a native pass. Reading the native gate as "not run" is the accurate reading.
-Every successful `inspect`, `inspect-graph`, `inject` and `verify-dump` readback
-prints the same value as `audit_provenance`, next to the cohort id and the
-digest, so you can tell which of the two you are holding without decoding the
-digest. (A failing command prints only a status and a reason code: no cohort was
-resolved, so there is no provenance to report.)
+Version 0.5.1 registers separate DSH `0.1.5-rc.1` and `0.1.5-rc.2` core graphs. Their package identities come from exact published npm tarballs. The immutable package records `auditProvenance: registry-derived-pending-native-audit` and an empty `auditedPlatforms` list; this provenance is part of the lock digest.
+
+The later macOS and Windows native runs on rc.2 are recorded in the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). They establish native acceptance for that artifact and host version without modifying its registry or digest. A lock readback by itself proves the registered graph match, not a native run. Successful inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest; a failed check reports only its status and reason.
 
 **Which failure code you see depends on the lock generation you are holding**, and
 that matters for deciding whether you are migrating or just drifting:

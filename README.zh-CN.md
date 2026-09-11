@@ -8,19 +8,15 @@
 
 ## 快速开始
 
-以下步骤面向**尚未发布的 0.5.1 候选版本**。评估候选版本时，请使用随校验和与验收记录提供的冻结包：
-
-```sh
-dsh plugin --profile web add /absolute/path/to/dsh-completion-guard-0.5.1.tgz
-```
-
-0.5.1 发布后，再安装这个确切版本到 DSH 的 Web 运行环境：
+将已发布的 **0.5.1** 安装到 DSH 的 Web 运行环境：
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.5.1
 ```
 
-**请先升级并重启 DSH，再执行下面这一段。** `inject` 会记录运行目录与 profile 的绝对路径，并绑定它在当地读到的图；运行时之后会重新读取同一批根目录，因此在旧运行时上执行 inject 会写下一份描述"新运行时不复存在的那张图"的锁。`inject` 还会**把 Guard 的托管块写入 `<profile>/cordis.patch.yml`**，请先备份该文件。判定结果请读 JSON 输出里的 `status` 字段——**即使它是 `unsupported`，`inspect`、`inject`、`verify-dump` 的退出码仍是 `0`**，所以只看 `$?` 无法判断图是否被接受。
+**先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
+
+查看每条命令 JSON 输出中的 `status`，确认它为 `supported`。`inspect`、`inject` 和 `verify-dump` 即使报告 `unsupported`，退出码也可能为 `0`，因此不能只看命令是否正常退出。
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -32,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。**Windows 可接受判定，但本队列尚未经过原生审计**，因此原生门执行前应把 Windows 结果视为未验证。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。已发布的 0.5.1 包已在 DSH `0.1.5-rc.2` 上分别通过 macOS 和 Windows 原生验收，详见[验收记录](docs/LOCAL_ACCEPTANCE.md)。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -63,7 +59,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 升级到新核心锁时，需要从实际运行时与 profile 重新生成并验证锁；旧证书不会被重新标记为新锁证据。详见[升级说明](docs/HOST_LOCK_UPGRADE.md)和[兼容性](docs/COMPATIBILITY.md)。
 
-从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 选择已发布版本，并用 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/latest) 的提交、校验和和原生 annex 核对制品。0.4.2 的历史发布面向 rc.1 与 market 1.41；它不包含上述解耦。源码版本号、CI、同包原生验收和公开发布是不同状态，验收范围见[记录](docs/LOCAL_ACCEPTANCE.md)。
+从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 选择已发布版本，并用 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/latest) 的提交、校验和和原生 annex 核对制品。0.4.2 的历史发布面向 DSH `0.1.2-rc.1` 与 market 1.41；它不包含上述解耦。源码版本号、CI、同包原生验收和公开发布是不同状态，验收范围见[记录](docs/LOCAL_ACCEPTANCE.md)。
 
 项目在 2026-08-29 从 `dsh-context-guard` 更名为 `dsh-completion-guard`，内部 bundle id 仍为 `context-guard`。迁移保留会话、激活方式和禁用设置；不要在同一 profile 同时加载新旧包。需要 Node.js `>=22` 和 pnpm `>=11`。
 

@@ -2,9 +2,19 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
-## 0.5.1 candidate scope
+## 0.5.1 published release (2026-09-11)
 
-The candidate supports exact DSH `0.1.5-rc.1` and `0.1.5-rc.2` core graphs. Development tests retain the rc.1 baseline; rc.2 graph tests additionally reject missing, mixed, forged and unregistered package identities. Dependency-free Headless preflight selects the matching registered cohort and checks its launcher version.
+[Version 0.5.1](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1) is published on GitHub and [npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.1). The annotated tag and npm `gitHead` identify commit `aefdeaf2737ef1c99f1170085140c93a515e1125`. The frozen 303460-byte, 27-file tgz has SHA-256 `5e00ddf2f9772b1ae2ca3665d7c4ce858b814dc26a4116388082db2d625da28d`.
+
+The local deterministic matrix and [exact-candidate portability CI](https://github.com/GreenLv/dsh-completion-guard/actions/runs/34553623984) passed. Separate macOS and Windows runs on DSH `0.1.5-rc.2` each passed all 28 required host-bound gates for these same bytes, with cleanup passed. Both annexes retain the `real_model_request` skip; no real-model task is claimed. These isolated runs do not establish daily-profile adoption or native acceptance on rc.1.
+
+Anonymous public readback verified the annotated tag target, npm version and `latest` tag, embedded `gitHead`, registry integrity and downloaded tgz bytes. All seven GitHub Release attachments matched the accepted files: the tgz, checksum, artifact manifest, and separate native annexes and transfer receipts for macOS and Windows. The packaged registry provenance remains `registry-derived-pending-native-audit`; the later native results are carried by the exact-artifact annexes, not by a changed host-lock digest.
+
+This section and the updated main-branch installation guidance are post-release documentation. The published tag and npm package retain their original bytes.
+
+## 0.5.1 validation scope
+
+The release supports exact DSH `0.1.5-rc.1` and `0.1.5-rc.2` core graphs. Development tests retain the rc.1 baseline; rc.2 graph tests additionally reject missing, mixed, forged and unregistered package identities. Dependency-free Headless preflight selects the matching registered cohort and checks its launcher version.
 
 Candidate results are recorded outside packaged documents after the source and package bytes are frozen. Require the local deterministic matrix, exact-candidate portability CI, and separate macOS and Windows native annexes for the same frozen tgz. An earlier rc.1 artifact's result does not establish acceptance of an artifact that adds rc.2 support. Real-model behaviour, daily profile adoption and publication remain separate gates.
 
