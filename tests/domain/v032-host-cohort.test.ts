@@ -243,7 +243,7 @@ describe('audited host cohort registry', () => {
     expect(selectHostCohort(unknownVersion, 'posix').reasonCode).toBe('host_cohort_version_mismatch')
     expect(evaluateHostLock(unknownVersion, { platform: 'posix' }).status).toBe('unsupported')
     // A HIGHER version that no cohort registers is also a version mismatch: the
-    // `>=0.1.5-rc.1` policy never admits an unaudited graph on range alone.
+    // The exact rc.2-or-rc.1 policy never admits an unaudited graph.
     const futureVersion = EXPECTED_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-agent'
       ? { ...row, version: '0.1.6-rc.1' }
       : row)
@@ -278,26 +278,30 @@ describe('audited host cohort registry', () => {
     }
   })
 
-  it('advertises the DSH >=0.1.5-rc.1 installation target and pins only the audited baseline', () => {
+  it('advertises only the verified minimum and latest DSH releases', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      engines: Record<string, string>
+      dsh: { engines: Record<string, string> }
       peerDependencies: Record<string, string>
       devDependencies: Record<string, string>
     }
     const peers = manifest.peerDependencies
+    expect(manifest.engines.dsh).toBe(SUPPORTED_HOST_RANGE)
+    expect(manifest.dsh.engines.dsh).toBe(SUPPORTED_HOST_RANGE)
     expect(peers['@deepseek-ai/cordis']).toBe('^4.0.2')
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
       expect(peers[name]).toBe(SUPPORTED_HOST_RANGE)
     }
-    // The advertised range is the documented lower bound, never a floating
-    // wildcard and never silently narrowed to one exact RC.
-    for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-session']) {
-      expect(peers[name]).toBe(`>=${MIN_SUPPORTED_HOST_VERSION}`)
-      expect(satisfiesSupportedHostRange(MIN_SUPPORTED_HOST_VERSION)).toBe(true)
+    expect(SUPPORTED_HOST_RANGE).toBe('0.1.5-rc.2 || 0.1.5-rc.1')
+    for (const version of ['0.1.5-rc.2', MIN_SUPPORTED_HOST_VERSION]) {
+      expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    expect(peers['@deepseek-ai/dsh-agent']).not.toBe(MIN_SUPPORTED_HOST_VERSION)
+    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.2.0']) {
+      expect(satisfiesSupportedHostRange(version)).toBe(false)
+    }
     expect(Object.values(peers)).not.toContain('*')
     expect(Object.values(peers).some((range) => /0\.1\.1|alpha/.test(range))).toBe(false)
-    // Development dependencies pin what this round actually verified.
+    // Development dependencies retain the verified minimum as the build baseline.
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tools']) {
       expect(manifest.devDependencies[name]).toBe(MIN_SUPPORTED_HOST_VERSION)
     }

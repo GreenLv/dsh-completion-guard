@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.5.2 - 2026-09-11
+
+### Changed
+
+- Publish the exact DSH support union `0.1.5-rc.2 || 0.1.5-rc.1` in top-level `engines.dsh`, nested `dsh.engines.dsh`, and all seven DSH peer dependencies. These are the latest registered host and the verified minimum; older, stable `0.1.5`, and future versions are no longer advertised by npm or plugin markets.
+- Export the same newest-first support set and range from the domain entry. The minimum-version comparison remains diagnostic, while actual support still requires one complete registered 33-package host graph.
+- Package version is `0.5.2`; the version was confirmed unused on npm before preparation.
+
+### Unchanged
+
+- Runtime task capture, evidence, certification, host graphs, Cordis range, and the rc.1 development baseline are unchanged from 0.5.1.
+
+### Evidence boundary
+
+- The metadata and source-policy regressions are part of this candidate. CI, exact-artifact native acceptance, publication, and live market refresh remain separate evidence.
+
 ## 0.5.1 - 2026-09-10
 
 ### Changed

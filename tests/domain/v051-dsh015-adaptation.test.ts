@@ -91,18 +91,15 @@ describe('DSH host version policy (T09)', () => {
     expect(evaluateMinimumHostVersion(MIN_SUPPORTED_HOST_VERSION, MIN_SUPPORTED_HOST_VERSION).status).toBe('supported')
   })
 
-  it('records the npm range limitation instead of pretending the policy is one range', () => {
-    // npm resolves the bound, its same-base prereleases, and later releases.
-    for (const version of ['0.1.5-rc.1', '0.1.5-rc.2', '0.1.5', '0.1.6', '0.2.0']) {
+  it('advertises only the verified minimum and latest host releases', () => {
+    for (const version of ['0.1.5-rc.2', '0.1.5-rc.1']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    // A prerelease of a DIFFERENT base never resolves under `>=0.1.5-rc.1`,
-    // even though the version policy itself orders it above the bound. The
-    // documented resolution is an explicit install plus a host-lock cohort
-    // entry, never a widened range.
-    for (const version of ['0.1.4', '0.1.5-alpha.9', '0.1.6-rc.1', '0.2.0-rc.1', '1.0.0-rc.1']) {
+    for (const version of ['0.1.4', '0.1.5-alpha.9', '0.1.5', '0.1.6', '0.1.6-rc.1', '0.2.0-rc.1', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
+    // The minimum diagnostic still distinguishes a future unregistered host
+    // from an old host; the exact public range and graph lock refuse support.
     expect(evaluateMinimumHostVersion('0.2.0-rc.1').status).toBe('supported')
   })
 

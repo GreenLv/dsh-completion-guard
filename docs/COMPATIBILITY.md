@@ -2,27 +2,25 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## 0.5.1 support policy
+## 0.5.2 support policy
 
-Version 0.5.1 supports **DSH >= 0.1.5-rc.1** and nothing older. There is no
+Version 0.5.2 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`**.
+These are the latest registered release and the verified minimum. There is no
 backward compatibility: the previous Session V2 API, the V2 event vocabulary,
-and every older host cohort were removed rather than kept behind a fallback.
-`0.1.5-rc.1` is the version this release was implemented and tested against; it
-is the baseline, not a ceiling.
+and every older host cohort remain removed.
 
 Two separate judgments decide whether a host is usable, and neither replaces the
 other:
 
-1. **Version policy** — `src/domain/host-version.ts` orders host versions with
-   the SemVer prerelease rules. `peerDependencies` publish the range
-   `>=0.1.5-rc.1`; because a range cannot express "every future prerelease at
-   any base", the range is the conservative install-time statement and the
-   module is the explicit decision path. `0.1.4` and `0.1.5-alpha.9` are
-   refused. `0.1.6-rc.1` and `0.2.0-rc.1` order above the bound but do not
-   resolve from the published range and are not registered cohorts.
-2. **Host identity** — the exact 33-row DSH core graph must match one registered
-   cohort row for row. A newer host that has not been registered is reported as
-   unverified, never as supported: the version range alone never admits a graph.
+1. **Exact published set** — top-level `engines.dsh`, nested
+   `dsh.engines.dsh`, and every DSH peer dependency publish the newest-first
+   union `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable
+   `0.1.5`, and future releases are not advertised as supported. The minimum
+   comparison remains a diagnostic that distinguishes old hosts from newer but
+   unregistered hosts.
+2. **Host identity** — membership in the published set is not enough. The exact
+   33-row DSH core graph must match one registered cohort row for row. Missing,
+   mixed, or unknown graphs are reported as unsupported.
 
 If you are upgrading from a profile that ran DSH 0.1.2-rc.1, start a **new
 session**. Guard does not migrate V2 logs, proposals, or certificates, and old
@@ -71,7 +69,7 @@ DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and
 
 ## Upstream adaptation policy
 
-Version 0.5.1 targets DSH >= `0.1.5-rc.1` with `0.1.5-rc.1` as the implemented and tested baseline; alpha releases are observed for trend only and are never adaptation or validation targets. A newer upstream tag does not establish support by itself: support starts when that exact RC or release is added as its own registered cohort with source, CI, and native acceptance. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases. The host-side API differences that this adaptation had to absorb are listed in the repository's upstream API audit (`UPSTREAM_API_AUDIT.md` at the repository root), which is a maintainer document and is not part of the published package.
+Version 0.5.2 advertises only DSH `0.1.5-rc.2` and `0.1.5-rc.1`, with rc.1 retained as the implemented and tested baseline; alpha releases are observed for trend only and are never adaptation or validation targets. A newer upstream tag does not establish support by itself: support starts when that exact RC or release is added as its own registered cohort with source, CI, and native acceptance. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases. The host-side API differences that this adaptation had to absorb are listed in the repository's upstream API audit (`UPSTREAM_API_AUDIT.md` at the repository root), which is a maintainer document and is not part of the published package.
 
 ## Platform and release evidence
 
@@ -84,14 +82,15 @@ Version 0.5.1 targets DSH >= `0.1.5-rc.1` with `0.1.5-rc.1` as the implemented a
 ## Historical compatibility cohorts
 
 These are verification records, not support entries. An installed runtime built
-from any of them fails closed under the 0.5.1 policy.
+from any of them fails closed under the 0.5.2 policy.
 
 - DSH `0.1.1-rc.2` + dshmarket `1.36.0` + Cordis `4.0.1` is a retained, published-line cohort.
 - DSH `0.1.2-alpha.2` + dshmarket `1.38.1` + Cordis `4.0.2` is the published 0.3.2 cohort checked natively on macOS and Windows.
 - DSH `0.1.2-alpha.2` + dshmarket `1.39.0` + Cordis `4.0.2` remains a deterministic compatibility cohort. It is no longer a native 0.4.0 release blocker.
 - DSH `0.1.2-alpha.3` + dshmarket `1.39.0` + Cordis `4.0.2` is the recorded 0.4.0 release baseline.
 - DSH `0.1.2-rc.1` + dshmarket `1.41.0` + Cordis `4.0.2` is the 0.4.1-rc.1 / 0.5.0 cohort, checked natively on macOS and Windows.
-- DSH `0.1.5-rc.1` + Cordis `4.0.2` is the **active** 0.5.1 cohort, with no dshmarket row.
+- DSH `0.1.5-rc.1` + Cordis `4.0.2` is the verified minimum 0.5.2 cohort, with no dshmarket row.
+- DSH `0.1.5-rc.2` + Cordis `4.0.2` is the latest 0.5.2 cohort, with no dshmarket row.
 
 ## Rejection rules
 
@@ -147,20 +146,16 @@ The ordinary runtime packages are host-provided peers:
 
 Goal support uses two exact optional peers as one capability. `@deepseek-ai/dsh-goal` owns Goal state, while `@deepseek-ai/dsh-tool-goal` owns the audited `update_goal` name, schema, and arguments. Both host-graph rows and the live Goal service and tool must agree. A profile without this complete pair can still load, but Goal-dependent integration stays inactive.
 
-Version 0.5.1 publishes one range per DSH package: `>=0.1.5-rc.1`, with Cordis `^4.0.2` (Cordis is versioned independently and unchanged at `4.0.2`). The range is the floor of the support policy, never a claim that any graph above it works: runtime acceptance still requires an exact injected host lock and atomic selection of one complete registered cohort.
+Version 0.5.2 publishes `0.1.5-rc.2 || 0.1.5-rc.1` in top-level
+`engines.dsh`, nested `dsh.engines.dsh`, and every DSH peer dependency. Cordis
+is versioned independently and remains `^4.0.2`. Plugin markets and package
+managers therefore see the same two exact host releases as the host-lock
+registry; neither an unregistered stable release nor a future version is
+implicitly admitted.
 
-Two npm facts are worth stating plainly, because a bare `>=` reads stronger than it is:
-
-- A version carrying a prerelease resolves from `>=0.1.5-rc.1` only when its
-  `major.minor.patch` tuple is `0.1.5`. So `0.1.5-rc.2` and `0.1.5` resolve,
-  while `0.1.6-rc.1` and `0.2.0-rc.1` do not. Later `x.y.z` releases resolve
-  normally.
-- The development dependencies pin the exact `0.1.5-rc.1` packages this release
-  actually verified, so the tested baseline is recorded even though the peer
-  range is wider.
-
-Historical peer declarations belong to their own release sections above and are
-not part of the 0.5.1 contract.
+The development dependencies retain exact `0.1.5-rc.1` pins as the build
+baseline. Historical peer declarations belong to their own release sections
+above and are not part of the 0.5.2 contract.
 
 ## Terminal outcome contract
 

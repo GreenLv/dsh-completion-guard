@@ -52,7 +52,9 @@ describe('shipped artifact entries', () => {
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.1.5-rc.1')
     expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.1.5-rc.1')
-    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.1.5-rc.1')
+    expect(domain.LATEST_SUPPORTED_HOST_VERSION).toBe('0.1.5-rc.2')
+    expect(domain.SUPPORTED_HOST_VERSIONS).toEqual(['0.1.5-rc.2', '0.1.5-rc.1'])
+    expect(domain.SUPPORTED_HOST_RANGE).toBe('0.1.5-rc.2 || 0.1.5-rc.1')
   })
 
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {
@@ -94,7 +96,7 @@ describe('shipped artifact entries', () => {
   })
 
   it('advertises only entry points that exist in the built tree', () => {
-    expect(manifest.version).toBe('0.5.1')
+    expect(manifest.version).toBe('0.5.2')
     expect(manifest.main).toBe('dist/index.js')
     for (const [subpath, target] of Object.entries(manifest.exports)) {
       for (const field of ['types', 'default'] as const) {

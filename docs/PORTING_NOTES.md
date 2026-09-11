@@ -15,10 +15,10 @@ fixtures and an explicit delta ledger.
 | portable protocol and digest fixtures | Mirror exact upstream bytes and verify their hashes |
 | product-specific or newer Codex behavior | Record explicitly in the delta ledger before porting |
 
-## Current host boundary (0.5.1)
+## Current host boundary (0.5.2)
 
-Version 0.5.1 ports Guard onto DSH >= 0.1.5-rc.1 and keeps no path back to the
-older host. Concretely:
+Version 0.5.2 admits exactly DSH `0.1.5-rc.2` and `0.1.5-rc.1` and keeps no path back to the
+older host or ahead to an unregistered host. Concretely:
 
 - Session history is read only through the DSH Session V3 `snapshotEvents()`
   API. The V2 `events` getter is gone, and a session that does not expose the
@@ -32,8 +32,8 @@ older host. Concretely:
   resume entry point, and turn stopping yields while a Goal is paused, blocked,
   completed, or not yet read back.
 
-The host identifier is the exact 33-row DSH core graph. The active 0.1.5-rc.1
-cohort is registry-derived with its native audit still pending, and that
+The host identifier is the exact 33-row DSH core graph. The rc.1 verified-minimum
+and rc.2 latest cohorts are registry-derived, and that
 provenance is bound into the host-lock digest rather than inferred from a
 version number.
 

@@ -1,47 +1,31 @@
 /**
  * DSH host version support policy.
  *
- * Context Guard 0.5.1 supports **DSH >= 0.1.5-rc.1** and nothing older. The
- * policy is one value with one comparison, used by the install entry
- * (`peerDependencies`), by the runtime host readback, and by the decision tests
- * — so the advertised range and the enforced range cannot drift apart.
+ * Context Guard 0.5.2 supports exactly the two registered DSH host releases:
+ * `0.1.5-rc.2` (latest) and `0.1.5-rc.1` (verified minimum). Package discovery,
+ * npm installation, and the exported support range use the same newest-first
+ * exact union, so an unregistered stable or future prerelease is never advertised
+ * merely because it sorts above the minimum.
  *
- * ## Why a range is not enough on its own
- *
- * npm's SemVer prerelease rule is narrower than "0.1.5-rc.1 or newer": a
- * version carrying a prerelease satisfies a comparator set only when some
- * comparator in that set names the SAME `major.minor.patch` tuple and itself
- * carries a prerelease. For the range `>=0.1.5-rc.1` that means:
- *
- * | Candidate          | Satisfies `>=0.1.5-rc.1` | Why |
- * | ---                | ---                      | --- |
- * | `0.1.5-rc.1`       | yes | the bound itself |
- * | `0.1.5-rc.2`       | yes | same tuple, comparator has a prerelease |
- * | `0.1.5`            | yes | a release is ordered after its own prereleases |
- * | `0.1.6`, `0.2.0`   | yes | higher release |
- * | `0.1.6-rc.1`       | **no** | prerelease of a DIFFERENT tuple |
- * | `0.2.0-rc.1`       | **no** | prerelease of a DIFFERENT tuple |
- * | `0.1.4`, `0.1.5-alpha.9` | no | below the bound |
- *
- * No finite SemVer range expresses "every future prerelease at any base", and
- * an unconditional `*` would drop the lower bound entirely. The range is
- * therefore the honest, conservative install-time statement, and this module is
- * the explicit runtime/decision path for the policy itself: {@link
- * compareHostVersions} accepts a future different-base RC by the documented
- * policy while {@link evaluateMinimumHostVersion} still refuses anything below
- * the minimum. An unobserved new-base RC remains `unverified` for host-lock
- * purposes — the version policy never substitutes for the exact-graph host
- * audit.
+ * The minimum comparison remains a diagnostic layer for distinguishing an old
+ * host from an at-or-above-floor but unregistered host. It never substitutes for
+ * the exact support set or the complete 33-package host graph.
  */
 
 /** Lowest supported DSH host version. DSH packages version independently of Cordis. */
 export const MIN_SUPPORTED_HOST_VERSION = '0.1.5-rc.1'
 
-/**
- * The exact npm range published in `peerDependencies`. It is deliberately the
- * plain lower bound plus the documented prerelease caveat above.
- */
-export const SUPPORTED_HOST_RANGE: string = `>=${MIN_SUPPORTED_HOST_VERSION}`
+/** Latest DSH release with a registered complete host graph. */
+export const LATEST_SUPPORTED_HOST_VERSION = '0.1.5-rc.2'
+
+/** Exact endpoints supported by the current release, newest first. */
+export const SUPPORTED_HOST_VERSIONS: readonly string[] = [
+  LATEST_SUPPORTED_HOST_VERSION,
+  MIN_SUPPORTED_HOST_VERSION,
+] as const
+
+/** Exact npm range shared by package discovery and peer dependency declarations. */
+export const SUPPORTED_HOST_RANGE: string = SUPPORTED_HOST_VERSIONS.join(' || ')
 
 export interface ParsedHostVersion {
   major: number
@@ -126,20 +110,11 @@ export function evaluateMinimumHostVersion(
     : { status: 'supported', version, minimum, reasonCode: 'host_version_supported' }
 }
 
-/**
- * Whether npm's own range resolution would admit this version for
- * {@link SUPPORTED_HOST_RANGE}. Used by the decision tests to keep the
- * documented prerelease table true, and by diagnostics to explain why an
- * install did not resolve.
- */
+/** Whether npm's exact public support union admits this host version. */
 export function satisfiesSupportedHostRange(version: string): boolean {
-  const candidate = parseHostVersion(version)
-  const bound = parseHostVersion(MIN_SUPPORTED_HOST_VERSION)!
-  if (!candidate) return false
-  const comparison = compareHostVersions(version, MIN_SUPPORTED_HOST_VERSION)!
-  if (comparison < 0) return false
-  if (candidate.prerelease.length === 0) return true
-  // A prerelease only resolves when a comparator in the set shares its tuple
-  // and carries a prerelease; the sole comparator is the lower bound.
-  return candidate.major === bound.major && candidate.minor === bound.minor && candidate.patch === bound.patch
+  const normalized = version.trim()
+  if (!parseHostVersion(normalized)) return false
+  return SUPPORTED_HOST_VERSIONS.some(
+    (supported) => compareHostVersions(normalized, supported) === 0,
+  )
 }

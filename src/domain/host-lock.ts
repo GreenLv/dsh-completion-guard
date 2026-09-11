@@ -225,9 +225,9 @@ export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID,
  * historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
  * never silently re-labelled as accepted active locks, and an installed
  * historical graph fails closed under `evaluateHostLock`. The version policy
- * (`>=0.1.5-rc.1`) and the graph lock are separate judgments: a newer host that
- * has not been registered here is "unverified / pending audit", never
- * supported by range alone.
+ * (the exact rc.2-or-rc.1 public set) and the graph lock are separate
+ * judgments: a host that has not been registered here is "unverified / pending
+ * audit", never supported by version order alone.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [...LEGACY_HOST_COHORTS,
   defineCohort('dsh-0.1.5-rc.2', ['0.1.5-rc.2'], [], RC015_RC2_HOST_PACKAGES,

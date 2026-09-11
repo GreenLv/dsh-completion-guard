@@ -38,9 +38,9 @@ describe('the minimum host version is decided by the production host entry', () 
     expect(decision.hostVersion).toMatchObject({ status, minimum: MIN_SUPPORTED_HOST_VERSION, version })
   })
 
-  it.each(['0.1.5', '0.1.6-rc.2', '0.2.0-rc.1'])('accepts %s by policy but keeps it unaudited', (version) => {
+  it.each(['0.1.5', '0.1.6-rc.2', '0.2.0-rc.1'])('classifies %s above the minimum but keeps it unsupported', (version) => {
     const decision = evaluateHostLock(withHostVersion(version))
-    // In range: the version half passes…
+    // At or above the diagnostic floor: the version half passes…
     expect(decision.hostVersion).toMatchObject({ status: 'supported', version })
     // …and the graph half still refuses, so an unobserved graph never becomes a
     // certification because its version happens to be high enough.

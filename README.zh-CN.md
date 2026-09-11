@@ -8,10 +8,10 @@
 
 ## 快速开始
 
-将已发布的 **0.5.1** 安装到 DSH 的 Web 运行环境：
+将已发布的 **0.5.2** 安装到 DSH 的 Web 运行环境：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.5.1
+dsh plugin --profile web add dsh-completion-guard@0.5.2
 ```
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -28,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。已发布的 0.5.1 包已在 DSH `0.1.5-rc.2` 上分别通过 macOS 和 Windows 原生验收，详见[验收记录](docs/LOCAL_ACCEPTANCE.md)。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。前一版 0.5.1 包已在 DSH `0.1.5-rc.2` 上分别通过 macOS 和 Windows 原生验收；0.5.2 的每个制品身份由[验收记录](docs/LOCAL_ACCEPTANCE.md)单独绑定。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -49,9 +49,9 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.5.1 支持 **DSH >= 0.1.5-rc.1**（配合 Cordis `4.0.2`），且不向后兼容：旧的 Session API、V2 事件词表和所有更早的宿主包组合都已删除，不再保留 fallback。`0.1.5-rc.1` 是本版本实际开发与验证的基线，不是支持上限。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
+0.5.2 仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
 
-版本范围与宿主校验是两层判断。范围 `>=0.1.5-rc.1` 会拒绝更早的版本，包括 `0.1.4` 与 `0.1.5-alpha.9`；而某个已安装宿主是否真正可用，由精确的 33 包 DSH 核心图决定：未注册的图会被报告为未验证，绝不报告为受支持。alpha 与更早 RC 的包组合只作为历史身份保留，由这些组合构成的运行环境会被报告为不受支持，而不会通过认证。
+插件市场与 npm 安装现在统一发布按新到旧排列的精确并集 `0.1.5-rc.2 || 0.1.5-rc.1`。更早版本、未注册的稳定版 `0.1.5` 以及未来版本都不会被宣称为受支持。进入版本集合后仍必须匹配完整的 33 包 DSH 核心图；缺失、混装或未知图会 fail closed。
 
 已注册的宿主组合是 **DSH `0.1.5-rc.1` 和 `0.1.5-rc.2`**，各自绑定完整的 33 个核心包。包身份取自已发布的 npm tarball；两个版本混装会被拒绝。注册表身份和原生验收是不同证据：原生通过需要匹配 Guard 制品、宿主版本和平台的验收附件。版本规则和宿主锁来源详见[兼容性说明](docs/COMPATIBILITY.md)。
 

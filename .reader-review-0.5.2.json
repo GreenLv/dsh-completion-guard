@@ -1,0 +1,117 @@
+{
+  "schema": "repository-reader-review/v1",
+  "status": "passed",
+  "audience": {
+    "role": "A DSH user deciding whether to install or upgrade, and a first-time repository reader",
+    "prior_knowledge": "careful_upgrader"
+  },
+  "documents": [
+    {
+      "path": "README.md",
+      "role": "readme",
+      "language": "default",
+      "sha256": "9ae89ec0671cbc1cd02c659d277fa1b22bec0fbd0a27dfc697fab59f53027a13"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "role": "readme",
+      "language": "zh-CN",
+      "sha256": "40347404e6c892bc4eff27b6c6cb48a2859097ea4e81e3e8a24f2ad93000cb4c"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "role": "changelog",
+      "language": "default",
+      "sha256": "a47879f69f002c89a95cd2c7e7605a61579d5412d7b8b5942656e1380a3ff599"
+    },
+    {
+      "path": "CHANGELOG.zh-CN.md",
+      "role": "changelog",
+      "language": "zh-CN",
+      "sha256": "ad11990f7b0f1bab25abf4cf8cc4fb9ed878267acff044a9896d752bfc687cd7"
+    }
+  ],
+  "document_set_sha256": "36dea3656a291567306dfc2d136f416cc412bbe5660d8c62852376a8b76e62ac",
+  "method": {
+    "kind": "cold_read",
+    "implementation_context_used": false,
+    "claim_ledger_used": false
+  },
+  "checks": [
+    {
+      "id": "document_role",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "Each README owns installation, activation, compatibility, and operating guidance; each changelog records the version delta and evidence boundary without duplicating the full user path."
+    },
+    {
+      "id": "reader_outcome",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "A reader can identify 0.5.2 as the release, install it, check the host-lock JSON verdict, restart DSH, enable Guard, and distinguish the exact rc.2-or-rc.1 support union from complete graph acceptance."
+    },
+    {
+      "id": "term_onboarding",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md"
+      ],
+      "note": "The useful install and status actions appear before host-lock and cohort details; the documents explain the complete 33-package graph and fail-closed result where those terms first affect a decision."
+    },
+    {
+      "id": "evidence_boundary",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "The text limits compatibility claims to the exact rc.2 and rc.1 host releases and separates package discovery, graph identity, CI, native acceptance, publication, and live market refresh."
+    },
+    {
+      "id": "density_and_order",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "Both language paths lead with installation and the observable supported verdict, then explain compatibility mechanics and evidence; the changelogs lead with the market-visible metadata correction."
+    },
+    {
+      "id": "language_independence",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "English and Chinese were read independently. Each includes the same version, command, support union, graph boundary, restart requirement, and evidence limitations without depending on the other edition."
+    }
+  ],
+  "findings": [],
+  "limitations": [
+    "Cold read covers both complete README entry paths and the current 0.5.2 changelog entries; unchanged historical changelog entries were not re-reviewed end to end.",
+    "The receipt binds current document bytes and does not establish source tests, CI, native acceptance, publication, or market refresh. Any listed-document edit requires a new cold read."
+  ]
+}
