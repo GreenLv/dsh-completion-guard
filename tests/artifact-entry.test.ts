@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, relative, resolve } from 'node:path'
+import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -126,7 +126,7 @@ describe('shipped artifact entries', () => {
           .find((candidate) => existsSync(candidate))
         expect(resolved, `${entryPath} references ${reference}, which does not resolve`).toBeDefined()
         expect(resolved!.startsWith(fileURLToPath(new URL('../dist/', import.meta.url)))).toBe(true)
-        if (resolved!.endsWith('.d.ts')) queue.push(relative(root, resolved!))
+        if (resolved!.endsWith('.d.ts')) queue.push(relative(root, resolved!).split(sep).join('/'))
       }
     }
     // Both advertised entries were reached, and the walk descended into the
