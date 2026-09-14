@@ -2,7 +2,7 @@ import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { deriveItemDiagnosis } from '../domain/diagnostics.js'
 import { migrationReport } from '../domain/migration.js'
-import { releaseCoverage, RELEASE_OPERATION_SURFACES, RELEASE_OPERATIONS } from '../domain/release.js'
+import { normalizeReleaseContract, releaseCoverage, RELEASE_OPERATION_SURFACES, RELEASE_OPERATIONS } from '../domain/release.js'
 import type { GuardProjection } from '../domain/types.js'
 
 function pendingCount(projection: GuardProjection): number {
@@ -19,17 +19,68 @@ function pendingCount(projection: GuardProjection): number {
 function releaseResponse(projection: GuardProjection, rawInput: string): { kind: 'success' | 'error'; text: string } {
   const rest = rawInput.trim().slice('release'.length).trim()
   const [verb] = rest.split(/\s+/, 1)
+  if (verb === 'adopt') {
+    // Adoption AUTHORITY comes only from the durable root `command/run` that
+    // the derivation reads; this handler validates the same payload and reports
+    // exactly what was adopted, so the visible result can never disagree with
+    // the permission state that will actually apply.
+    const payload = rest.slice('adopt'.length).trim()
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(payload)
+    } catch {
+      return { kind: 'error', text: 'Context Guard release adopt: the contract must be one JSON object.' }
+    }
+    const normalized = normalizeReleaseContract(parsed, { seq: -1, digest: '' })
+    if (!normalized.contract) {
+      return { kind: 'error', text: `Context Guard release adopt rejected: ${normalized.errors.join(', ')}` }
+    }
+    const contract = normalized.contract
+    const adopted = projection.releaseContracts.some((entry) => entry.contractId === contract.contractId)
+      ? projection.releaseContracts.find((entry) => entry.contractId === contract.contractId)!
+      : contract
+    return { kind: 'success', text: JSON.stringify({
+      status: 'adopted',
+      contract_id: adopted.contractId,
+      candidate: adopted.candidate,
+      operations: releaseCoverage(adopted),
+      readiness_refs: adopted.readinessRefs,
+      closure_cert_ref: adopted.closureCertRef ?? null,
+      expires_at_epoch_ms: adopted.expiresAtEpochMs ?? null,
+      note: 'The contract becomes authoritative from the durable root command that carried it. It grants no authority in this process.',
+    }) }
+  }
+  if (verb === 'revoke') {
+    const contractId = rest.slice('revoke'.length).trim()
+    if (!contractId) return { kind: 'error', text: 'Usage: /context-guard release revoke <contract_id>' }
+    const contract = projection.releaseContracts.find((entry) => entry.contractId === contractId)
+    if (!contract) return { kind: 'error', text: `Context Guard release revoke: unknown contract ${contractId}` }
+    return { kind: 'success', text: JSON.stringify({
+      status: contract.revokedAtSeq === undefined ? 'revoking' : 'revoked',
+      contract_id: contractId,
+      revoked_at_seq: contract.revokedAtSeq ?? null,
+      in_flight: projection.releaseReservations
+        .filter((reservation) => reservation.contractId === contractId
+          && !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId
+            && (settlement.outcome === 'settled' || settlement.outcome === 'not_effected')))
+        .map(({ operation, callId }) => ({ operation, call_id: callId })),
+      note: 'Revocation is recorded durably and keeps the audit trail. It denies the next effect; an operation already in flight still needs its trusted readback to be reconciled.',
+    }) }
+  }
   if (verb !== '' && verb !== 'status') {
     return {
       kind: 'error',
-      text: 'Usage: /context-guard release status | /context-guard release adopt <json contract>. '
-        + 'Adoption is recorded from this command itself; it never grants authority in-process.',
+      text: 'Usage: /context-guard release status | release adopt <json contract> | release revoke <contract_id>. '
+        + 'Adoption and revocation are recorded from this command itself; they never grant authority in-process.',
     }
   }
   const contracts = projection.releaseContracts.map((contract) => ({
     contract_id: contract.contractId,
     adopted_at_seq: contract.adoptedBy.seq,
+    revoked_at_seq: contract.revokedAtSeq ?? null,
     candidate: contract.candidate,
+    readiness_refs: contract.readinessRefs,
+    closure_cert_ref: contract.closureCertRef ?? null,
     operations: releaseCoverage(contract),
     expires_at_epoch_ms: contract.expiresAtEpochMs ?? null,
     consumed_operations: projection.releaseSettlements
@@ -37,7 +88,8 @@ function releaseResponse(projection: GuardProjection, rawInput: string): { kind:
       .map((settlement) => settlement.operation),
     in_flight: projection.releaseReservations
       .filter((reservation) => reservation.contractId === contract.contractId
-        && !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId && settlement.outcome === 'settled'))
+        && !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId
+          && (settlement.outcome === 'settled' || settlement.outcome === 'not_effected')))
       .map(({ operation, callId, startedAtSeq }) => ({ operation, call_id: callId, started_at_seq: startedAtSeq })),
     settlements: projection.releaseSettlements
       .filter((settlement) => settlement.contractId === contract.contractId)
@@ -48,10 +100,11 @@ function releaseResponse(projection: GuardProjection, rawInput: string): { kind:
     text: JSON.stringify({
       profile_applicable: projection.policy === 'release' || contracts.length > 0,
       policy: projection.policy,
+      state_damaged: projection.releaseStateDamaged,
       adopted_contracts: contracts,
-      // The frozen coverage wording, machine-readable: an operation with no
-      // Guard execution surface is refused before any effect, and the operator
-      // is never told to fall back to a plain shell command.
+      // The coverage table is machine-readable: an operation with no
+      // Guard-owned execution surface is refused before any effect, and the
+      // operator is never told to fall back to a plain shell command.
       coverage_surface: RELEASE_OPERATIONS.map((operation) => ({ operation, ...RELEASE_OPERATION_SURFACES[operation] })),
       diagnostics: projection.releaseDiagnostics,
       note: 'A release is never implicit: only an explicit root adoption creates a contract, and only operations with a Guard execution surface can be protected.',
@@ -69,7 +122,7 @@ export function createContextGuardCommand(
     name: 'context-guard',
     description: 'Enable, disable, clear, inspect, diagnose, or manage the explicit release contract for this session.',
     recordInput: true,
-    input: { hint: 'on|off|clear|status|diagnose|migration|release status' },
+    input: { hint: 'on|off|clear|status|diagnose|migration|release status|release adopt <json>|release revoke <id>' },
     handler: ({ agent, rawInput }) => {
       const projection = projectionFor(agent)
       const [subcommand] = rawInput.trim().split(/\s+/, 1)
@@ -97,7 +150,7 @@ export function createContextGuardCommand(
       if (resolved === 'release') return releaseResponse(projection, rawInput)
       if (resolved === 'migration') return { kind: 'success', text: JSON.stringify(migrationReport(projection)) }
       if (resolved !== 'status' && resolved !== 'diagnose') {
-        return { kind: 'error', text: 'Usage: /context-guard on|off|clear|status|diagnose|migration|release' }
+        return { kind: 'error', text: 'Usage: /context-guard on|off|clear|status|diagnose|migration|release status|release adopt <json>|release revoke <id>' }
       }
       const passed = [...projection.items.values()].filter((item) => item.status === 'passed').length
       // Three-way diagnosis statistics: certified, repairable-missing-evidence,
@@ -136,6 +189,7 @@ export function createContextGuardCommand(
         },
         release: {
           policy: projection.policy,
+          state_damaged: projection.releaseStateDamaged,
           adopted_contracts: projection.releaseContracts.length,
           in_flight: projection.releaseReservations.filter((reservation) => !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId && settlement.outcome === 'settled')).length,
           applicable: projection.policy === 'release' || projection.releaseContracts.length > 0,

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import type { EvidenceRole, GuardEvidence, GuardOperation, GuardProjection } from './types.js'
+import { evidenceAvailabilityReason } from './diagnostics.js'
+import type { EvidenceRole, GuardEvidence, GuardItem, GuardOperation, GuardProjection } from './types.js'
 
 export const PROOF_PROTOCOL_VERSION = '0.4.0'
 export const PROOF_KINDS = ['subject_readback', 'scope_coverage', 'state_verification'] as const
@@ -458,7 +459,74 @@ export function proofV2Rejection(evidence: GuardEvidence, obligation: ProofOblig
   return undefined
 }
 
-/** Bind a v2 manifest to the live projection; [] means every obligation binds. */
+/**
+ * The subjects an item's own obligation requires. They come from the item's
+ * frozen verification contract and captured target — never from the proof
+ * manifest, which is exactly what a proof must be checked against.
+ */
+export function requiredSubjectsOf(item: GuardItem): string[] {
+  const values = new Set<string>()
+  const subject = item.verification.subject
+  if (typeof subject === 'string' && subject.length > 0 && subject !== 'scope') values.add(subject)
+  const target = item.requestedTarget ?? {}
+  // The session scope is a required subject only for a scope-surface
+  // obligation: for an artifact obligation the enclosing directory is a bound,
+  // not something the evidence has to read.
+  if (item.verification.surface === 'scope') {
+    const scope = target.scope
+    if (typeof scope === 'string' && scope.length > 0 && scope !== 'scope') values.add(scope)
+  }
+  for (const key of ['artifact_id', 'package_id', 'service_id', 'repository']) {
+    const value = target[key]
+    if (typeof value === 'string' && value.length > 0 && value !== 'scope') values.add(value)
+  }
+  return [...values].sort()
+}
+
+/** The frozen coverage digest of a subject set: sorted, then hashed. */
+export function scopeCoverageDigest(subjects: readonly string[]): string {
+  return createHash('sha256').update('ccg.proofScopeCoverage.v2\n', 'utf8')
+    .update(JSON.stringify([...subjects].sort()), 'utf8').digest('hex')
+}
+
+/**
+ * Operations a fact may perform to discharge one proof kind. `execution_fact`
+ * is bound to the obligation's own declared operation; the readback kinds
+ * accept only an actual read or verify, so a bare successful call never
+ * satisfies them.
+ */
+const KIND_OPERATIONS: Readonly<Record<ProofKindV2, readonly GuardOperation[] | 'declared'>> = {
+  subject_readback: ['read', 'verify'],
+  scope_coverage: ['run', 'verify'],
+  state_verification: ['read', 'verify'],
+  input_asset_check: ['read', 'verify'],
+  output_visual_readback: ['read', 'verify'],
+  object_url_readback: ['read', 'verify'],
+  execution_fact: 'declared',
+  external_fact: [],
+}
+
+/** Whether the fact performed an operation the kind accepts. */
+export function proofOperationMatches(evidence: GuardEvidence, obligation: ProofObligationV2): boolean {
+  const allowed = KIND_OPERATIONS[obligation.kind]
+  const operations = evidence.operations ?? []
+  if (allowed === 'declared') return operations.some((entry) => entry.op === obligation.operation)
+  if (allowed.length === 0) return true
+  return operations.some((entry) => allowed.includes(entry.op))
+}
+
+/**
+ * Bind a v2 manifest to the live projection; [] means every obligation binds.
+ *
+ * The binding is the whole chain the review demanded, in one place:
+ * the user's obligation (frozen subject and scope on the ITEM) → the trusted
+ * producer fact (qualified by the same availability rules ordinary evidence
+ * uses) → the declared source → the declared operation and its order relative
+ * to the effect → the real coverage set. Only then is the obligation
+ * discharged. A manifest that describes a different subject than the item
+ * asked about fails even when the manifest and the facts agree with each
+ * other.
+ */
 export function bindProofV2ToProjection(projection: GuardProjection, manifest: ProofManifestV2): string[] {
   const errors: string[] = []
   for (const obligation of manifest.obligations) {
@@ -466,24 +534,59 @@ export function bindProofV2ToProjection(projection: GuardProjection, manifest: P
     if (!item) { errors.push('proof_obligation_unbound'); continue }
     if (item.status !== 'pending') { errors.push('proof_obligation_not_pending'); continue }
     if (item.verification.surface !== undefined && item.verification.surface !== obligation.surface) errors.push('proof_surface_unbound')
-    let bound = 0
+    const required = requiredSubjectsOf(item)
+    if (required.length > 0) {
+      // The manifest may not claim a subject the item never asked about, and it
+      // must bind every subject the item does require. The two failures are
+      // reported separately: a foreign subject is an identity error, a partial
+      // one is an incomplete scope.
+      if (!obligation.subjectIds.every((subject) => required.includes(subject))) { errors.push('proof_subject_unbound'); continue }
+      if (!required.every((subject) => obligation.subjectIds.includes(subject))) { errors.push('proof_scope_incomplete'); continue }
+    }
+    const cited: GuardEvidence[] = []
     for (const evidenceId of obligation.evidenceIds) {
       const evidence = projection.evidence.get(evidenceId)
       if (!evidence) { errors.push('proof_evidence_unknown'); continue }
+      // Reuse the ordinary qualification rules: wrong epoch, an unreadable or
+      // unsupported adapter, a non-success outcome, an undetermined action and
+      // a bounded delegated result are all unavailable proof sources.
+      const availability = evidenceAvailabilityReason(evidence)
+      if (availability !== undefined) { errors.push(availability); continue }
       if (evidence.epoch !== projection.epoch) { errors.push('proof_evidence_wrong_epoch'); continue }
-      if (!evidence.subjects.some((subject) => obligation.subjectIds.includes(subject))) { errors.push('proof_subject_unbound'); continue }
+      if (obligation.subjectIds.length > 0 && !evidence.subjects.some((subject) => obligation.subjectIds.includes(subject))) {
+        errors.push('proof_subject_unbound'); continue
+      }
+      if (!proofOperationMatches(evidence, obligation)) { errors.push('proof_operation_unbound'); continue }
       const rejection = proofV2Rejection(evidence, obligation)
       if (rejection) { errors.push(rejection); continue }
-      bound += 1
+      cited.push(evidence)
     }
-    if (bound === 0 && obligation.evidenceIds.length > 0 && !errors.includes('proof_producer_capability_unavailable')) {
-      // Every cited fact failed for a reason already reported; nothing to add.
+    if (cited.length === 0 && obligation.evidenceIds.length > 0) continue
+    if (required.length > 0 && !required.every((subject) => cited.some((fact) => fact.subjects.includes(subject)))) {
+      errors.push('proof_scope_incomplete')
+      continue
+    }
+    if (obligation.kind === 'input_asset_check') {
+      // A pre-effect check that ran after the effect proves nothing about the
+      // input. Any effect fact on the same subject with an earlier sequence is
+      // a contradiction, not a proof.
+      const firstCheck = Math.min(...cited.map((fact) => fact.toolResultSeq))
+      const earlierEffect = [...projection.evidence.values()].some((fact) =>
+        fact.evidenceRole === 'effect'
+        && required.some((subject) => fact.subjects.includes(subject))
+        && fact.toolResultSeq < firstCheck)
+      if (earlierEffect) { errors.push('proof_input_check_after_effect'); continue }
     }
     if (obligation.kind === 'scope_coverage') {
-      const itemScope = item.requestedTarget?.scope
-      const itemSubject = item.verification.subject
-      const boundSubjects = obligation.subjectIds.every((subject) => subject === itemScope || subject === itemSubject)
-      if (!boundSubjects) errors.push('proof_scope_subject_unbound')
+      // A declared expectation must be discharged against the REAL sets: the
+      // subjects the item requires and the subjects the facts actually covered.
+      const covered = [...new Set(cited.flatMap((fact) => fact.subjects))].sort()
+      if (obligation.expectedScopeDigest !== undefined && obligation.expectedScopeDigest !== scopeCoverageDigest(required)) {
+        errors.push('proof_scope_digest_unbound'); continue
+      }
+      if (obligation.observedScopeDigest !== undefined && obligation.observedScopeDigest !== scopeCoverageDigest(covered)) {
+        errors.push('proof_scope_digest_unbound'); continue
+      }
     }
   }
   return [...new Set(errors)]

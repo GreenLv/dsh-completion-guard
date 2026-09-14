@@ -49,9 +49,6 @@ const DELEGATION_MARKER = new RegExp([
   '\\bsub-?agent\\s+(?:should|must|to)\\s+\\w+',
 ].join('|'), 'i')
 
-/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
-const ITEM_REFERENCE = /\b(?:[RAPU]\d{3})\b/
-
 /**
  * Whether a root message hands its work to a delegated sub-unit. A delegation
  * marker is an explicit, closed-vocabulary act: a mere mention of a subagent,
@@ -92,13 +89,30 @@ export function opensChildUnit(projection: GuardProjection, text: string): boole
   return projection.currentUnitId !== undefined && DELEGATION_MARKER.test(text)
 }
 
-/** Whether the message explicitly links itself to the current unit's items. */
+/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
+const ITEM_REFERENCE = /\b([RAPU]\d{3})\b/g
+
+/**
+ * Whether the message explicitly links itself to the current unit's items.
+ *
+ * A reference counts only when it names an item that still exists as live work:
+ * an ID that never existed, or one already `passed`/`superseded`, is history and
+ * cannot pull a new instruction back into an old unit. A live item binds when it
+ * belongs to the current unit's lineage — the current unit, an ancestor, or a
+ * required descendant — while a unit-less (pre-v5) obligation is always a
+ * legitimate continuation target.
+ */
 export function explicitlyLinkedToCurrentUnit(projection: GuardProjection, text: string): boolean {
-  if (ITEM_REFERENCE.test(text)) {
-    // A reference counts as linkage only when it names something that exists.
-    for (const match of text.matchAll(ITEM_REFERENCE)) {
-      if (projection.items.has(match[1])) return true
-    }
+  const current = projection.currentUnitId
+  const lineage = current === undefined
+    ? undefined
+    : new Set<string>([current, ...unitAncestorIds(projection, current), ...unitDescendantIds(projection, current)])
+  for (const match of text.matchAll(ITEM_REFERENCE)) {
+    const item = projection.items.get(match[1]!)
+    if (!item) continue
+    if (item.status === 'passed' || item.status === 'superseded') continue
+    if (lineage === undefined || item.unitId === undefined) return true
+    if (lineage.has(item.unitId)) return true
   }
   return false
 }
@@ -206,11 +220,20 @@ export function recordDelegation(
 /**
  * Whether the current unit still holds open executable work — the rule-3
  * handover test, evaluated BEFORE the new message's items are inserted.
+ *
+ * This is the SAME closure the certificate uses: the current unit's own open
+ * work plus the open work of every required descendant unit. A parent whose own
+ * items are all passed but whose delegated child is still open has not finished,
+ * so an ordinary follow-up must not be treated as a handover to a new sibling
+ * task — that would silently exclude the child from the certified scope.
  */
 export function currentUnitHasOpenWork(projection: GuardProjection): boolean {
-  if (projection.currentUnitId === undefined) return false
+  const current = projection.currentUnitId
+  if (current === undefined) return false
+  const closure = new Set<string>([current, ...unitDescendantIds(projection, current)])
   return [...projection.items.values()].some((item) =>
     item.status === 'pending'
-    && item.unitId === projection.currentUnitId
+    && item.unitId !== undefined
+    && closure.has(item.unitId)
     && item.kind !== 'prohibition')
 }

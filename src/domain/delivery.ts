@@ -5,18 +5,25 @@ import type { DerivedEnvelope } from './types.js'
 /**
  * Trusted answer delivery (0.6.0, C03).
  *
- * A delivery fact exists only when the HOST says the turn completed normally.
- * The frozen composition criterion, all four parts required:
+ * A delivery fact exists only when the HOST says the turn completed normally
+ * AND the turn's own structure shows that the answer really was the last thing
+ * the turn produced. The frozen composition criterion, all parts required:
  *
- * 1. an `assistant/message` event for turn T;
- * 2. at the turn's highest step number (the final step);
- * 3. carrying no `interrupted` marker (a cancelled mid-stream prefix);
- * 4. followed by `turn/end { turn: T, reason.kind: 'completed' }`.
+ * 1. the turn has a `turn/start`, so the turn is a complete host turn;
+ * 2. exactly one `turn/end` for that turn, with `reason.kind === 'completed'` —
+ *    a repeated or abnormal end is ambiguous and delivers nothing;
+ * 3. the turn's highest host step is known (from `step/start`/`step/end` and
+ *    the assistant messages themselves), and the final message sits in that
+ *    step — an earlier step's text is an intermediate answer, even when no
+ *    later text was written;
+ * 4. that message carries no `interrupted` marker and has non-empty text;
+ * 5. it appears BEFORE the `turn/end` — text that arrives after the turn ended
+ *    belongs to nothing and can never be retro-fitted onto the completed turn.
  *
- * `assistant/attempt` records, aborted/errored/interrupted turns, other
- * turns' replies, and delegated sessions can never bind a delivery. A delivery
- * proves only that an answer was handed to the user — never that it was
- * accurate, sufficient, or that any execution happened.
+ * `assistant/attempt` records, aborted/errored/interrupted turns, other turns'
+ * replies, and delegated sessions can never bind a delivery. A delivery proves
+ * only that an answer was handed to the user — never that it was accurate,
+ * sufficient, or that any execution happened.
  */
 
 export interface TrustedDelivery {
@@ -28,10 +35,16 @@ export interface TrustedDelivery {
 
 interface AssistantRecord {
   seq: number
-  turn: number
   step: number
   text: string
   interrupted: boolean
+}
+
+interface TurnFacts {
+  started: boolean
+  steps: Set<number>
+  assistants: AssistantRecord[]
+  ends: Array<{ seq: number; kind: string }>
 }
 
 function assistantTextOf(data: unknown): string {
@@ -42,46 +55,89 @@ function assistantTextOf(data: unknown): string {
     .join('\n')
 }
 
+function integerField(data: unknown, field: string): number | undefined {
+  const value = (data as Record<string, unknown> | undefined)?.[field]
+  return typeof value === 'number' && Number.isSafeInteger(value) ? value : undefined
+}
+
 /**
  * Derive the trusted deliveries from the event log. Deterministic: a replay of
  * identical events yields identical facts.
  */
 export function deriveTrustedDeliveries(events: readonly DerivedEnvelope[]): TrustedDelivery[] {
-  const assistants = new Map<number, AssistantRecord[]>()
-  for (const event of events) {
-    if (event.type !== 'assistant/message') continue
-    const data = (event.data ?? {}) as { turn?: unknown; step?: unknown; interrupted?: unknown }
-    if (typeof data.turn !== 'number' || !Number.isSafeInteger(data.turn)) continue
-    if (typeof data.step !== 'number' || !Number.isSafeInteger(data.step)) continue
-    assistants.set(data.turn, [
-      ...(assistants.get(data.turn) ?? []),
-      {
-        seq: event.seq,
-        turn: data.turn,
-        step: data.step,
-        text: assistantTextOf(event.data),
-        interrupted: data.interrupted === true,
-      },
-    ])
+  const turns = new Map<number, TurnFacts>()
+  const factsFor = (turn: number): TurnFacts => {
+    let facts = turns.get(turn)
+    if (!facts) {
+      facts = { started: false, steps: new Set(), assistants: [], ends: [] }
+      turns.set(turn, facts)
+    }
+    return facts
   }
-  const deliveries: TrustedDelivery[] = []
+
   for (const event of events) {
-    if (event.type !== 'turn/end') continue
-    const data = (event.data ?? {}) as { turn?: unknown; reason?: { kind?: unknown } }
-    if (typeof data.turn !== 'number' || !Number.isSafeInteger(data.turn)) continue
-    if (data.reason?.kind !== 'completed') continue
-    const candidates = assistants.get(data.turn) ?? []
-    const finalStep = Math.max(...candidates.map((row) => row.step), -1)
-    const final = candidates.find((row) => row.step === finalStep && !row.interrupted && row.text.trim().length > 0)
-    if (!final) continue
+    switch (event.type) {
+      case 'turn/start': {
+        const turn = integerField(event.data, 'turn')
+        if (turn !== undefined) factsFor(turn).started = true
+        break
+      }
+      case 'step/start':
+      case 'step/end': {
+        const turn = integerField(event.data, 'turn')
+        const step = integerField(event.data, 'step')
+        if (turn !== undefined && step !== undefined) factsFor(turn).steps.add(step)
+        break
+      }
+      case 'assistant/message': {
+        const turn = integerField(event.data, 'turn')
+        const step = integerField(event.data, 'step')
+        if (turn === undefined || step === undefined) break
+        const facts = factsFor(turn)
+        facts.steps.add(step)
+        facts.assistants.push({
+          seq: event.seq,
+          step,
+          text: assistantTextOf(event.data),
+          interrupted: (event.data as { interrupted?: unknown } | undefined)?.interrupted === true,
+        })
+        break
+      }
+      case 'turn/end': {
+        const turn = integerField(event.data, 'turn')
+        if (turn === undefined) break
+        const reason = (event.data as { reason?: { kind?: unknown } } | undefined)?.reason
+        factsFor(turn).ends.push({ seq: event.seq, kind: typeof reason?.kind === 'string' ? reason.kind : '' })
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  const deliveries: TrustedDelivery[] = []
+  for (const [turn, facts] of turns) {
+    if (!facts.started) continue
+    // A repeated or abnormal turn end is ambiguous: nothing is delivered.
+    if (facts.ends.length !== 1) continue
+    const end = facts.ends[0]!
+    if (end.kind !== 'completed') continue
+    if (facts.steps.size === 0) continue
+    const finalStep = Math.max(...facts.steps)
+    const inFinalStep = facts.assistants.filter((row) =>
+      row.step === finalStep && row.seq < end.seq && !row.interrupted && row.text.trim().length > 0)
+    if (inFinalStep.length === 0) continue
+    const final = inFinalStep.reduce((left, right) => (right.seq > left.seq ? right : left))
+    // Nothing else the turn produced may follow the claimed final answer.
+    if (facts.assistants.some((row) => row.seq > final.seq && row.seq < end.seq)) continue
     deliveries.push({
-      turn: data.turn,
-      turnEndSeq: event.seq,
+      turn,
+      turnEndSeq: end.seq,
       responseSeq: final.seq,
       responseSha256: sha256(final.text),
     })
   }
-  return deliveries
+  return deliveries.sort((left, right) => left.turnEndSeq - right.turnEndSeq)
 }
 
 /**

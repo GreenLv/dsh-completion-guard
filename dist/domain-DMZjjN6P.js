@@ -2482,6 +2482,7 @@ const REASON_CLASS_TABLE = {
 	release_contract_required: "policy_boundary",
 	release_operation_not_adopted: "policy_boundary",
 	release_operation_unprotectable: "policy_boundary",
+	release_operation_unrouted: "policy_boundary",
 	release_runner_opaque: "policy_boundary",
 	release_contract_expired: "policy_boundary",
 	release_expiry_unevaluable: "policy_boundary",
@@ -2501,8 +2502,32 @@ const REASON_CLASS_TABLE = {
 	release_candidate_sha_mismatch: "policy_boundary",
 	release_candidate_ref_mismatch: "policy_boundary",
 	release_candidate_repository_mismatch: "policy_boundary",
-	release_candidate_artifact_mismatch: "policy_boundary",
+	release_candidate_package_mismatch: "policy_boundary",
 	release_candidate_version_mismatch: "policy_boundary",
+	release_candidate_registry_mismatch: "policy_boundary",
+	release_candidate_artifact_mismatch: "policy_boundary",
+	release_candidate_artifact_sri_mismatch: "policy_boundary",
+	release_candidate_sha_unresolved: "policy_boundary",
+	release_candidate_ref_unresolved: "policy_boundary",
+	release_candidate_repository_unresolved: "policy_boundary",
+	release_candidate_package_unresolved: "policy_boundary",
+	release_candidate_version_unresolved: "policy_boundary",
+	release_candidate_registry_unresolved: "policy_boundary",
+	release_artifact_sha256_unresolved: "policy_boundary",
+	release_artifact_sri_unresolved: "policy_boundary",
+	release_artifact_identity_required: "policy_boundary",
+	release_candidate_sha256_invalid: "policy_boundary",
+	release_candidate_sri_invalid: "policy_boundary",
+	release_candidate_field_unknown: "policy_boundary",
+	release_candidate_unobservable: "policy_boundary",
+	release_contract_revoked: "policy_boundary",
+	release_contract_revocation_unknown: "policy_boundary",
+	release_state_damaged: "policy_boundary",
+	release_readiness_unresolved: "policy_boundary",
+	release_closure_unresolved: "policy_boundary",
+	release_target_package_mismatch: "policy_boundary",
+	release_target_version_mismatch: "policy_boundary",
+	release_target_registry_mismatch: "policy_boundary",
 	release_artifact_digest_unresolved: "policy_boundary",
 	release_target_unresolved: "policy_boundary",
 	release_contract_granted: "policy_boundary",
@@ -3330,6 +3355,7 @@ function createProjection() {
 		releaseReservations: [],
 		releaseSettlements: [],
 		releaseDiagnostics: [],
+		releaseStateDamaged: false,
 		policy: "standard",
 		trustedSelections: [],
 		approvals: [],
@@ -4990,8 +5016,6 @@ const DELEGATION_MARKER = new RegExp([
 	"\\b(?:spawn|dispatch|hand\\s+(?:this|it)\\s+off\\s+to)\\s+(?:a\\s+|the\\s+)?(?:subagent|sub-agent|child\\s+agent)\\b",
 	"\\bsub-?agent\\s+(?:should|must|to)\\s+\\w+"
 ].join("|"), "i");
-/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
-const ITEM_REFERENCE = /\b(?:[RAPU]\d{3})\b/;
 /**
 * Whether a root message opens a new work unit rather than joining the
 * current one. `directiveBearing` says the message produced (or would
@@ -5011,10 +5035,31 @@ function opensNewUnit(projection, text, directiveBearing, openWorkInCurrentUnit)
 function opensChildUnit(projection, text) {
 	return projection.currentUnitId !== void 0 && DELEGATION_MARKER.test(text);
 }
-/** Whether the message explicitly links itself to the current unit's items. */
+/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
+const ITEM_REFERENCE = /\b([RAPU]\d{3})\b/g;
+/**
+* Whether the message explicitly links itself to the current unit's items.
+*
+* A reference counts only when it names an item that still exists as live work:
+* an ID that never existed, or one already `passed`/`superseded`, is history and
+* cannot pull a new instruction back into an old unit. A live item binds when it
+* belongs to the current unit's lineage — the current unit, an ancestor, or a
+* required descendant — while a unit-less (pre-v5) obligation is always a
+* legitimate continuation target.
+*/
 function explicitlyLinkedToCurrentUnit(projection, text) {
-	if (ITEM_REFERENCE.test(text)) {
-		for (const match of text.matchAll(ITEM_REFERENCE)) if (projection.items.has(match[1])) return true;
+	const current = projection.currentUnitId;
+	const lineage = current === void 0 ? void 0 : new Set([
+		current,
+		...unitAncestorIds(projection, current),
+		...unitDescendantIds(projection, current)
+	]);
+	for (const match of text.matchAll(ITEM_REFERENCE)) {
+		const item = projection.items.get(match[1]);
+		if (!item) continue;
+		if (item.status === "passed" || item.status === "superseded") continue;
+		if (lineage === void 0 || item.unitId === void 0) return true;
+		if (lineage.has(item.unitId)) return true;
 	}
 	return false;
 }
@@ -5112,10 +5157,18 @@ function recordDelegation(projection, unitId, ref) {
 /**
 * Whether the current unit still holds open executable work — the rule-3
 * handover test, evaluated BEFORE the new message's items are inserted.
+*
+* This is the SAME closure the certificate uses: the current unit's own open
+* work plus the open work of every required descendant unit. A parent whose own
+* items are all passed but whose delegated child is still open has not finished,
+* so an ordinary follow-up must not be treated as a handover to a new sibling
+* task — that would silently exclude the child from the certified scope.
 */
 function currentUnitHasOpenWork(projection) {
-	if (projection.currentUnitId === void 0) return false;
-	return [...projection.items.values()].some((item) => item.status === "pending" && item.unitId === projection.currentUnitId && item.kind !== "prohibition");
+	const current = projection.currentUnitId;
+	if (current === void 0) return false;
+	const closure = new Set([current, ...unitDescendantIds(projection, current)]);
+	return [...projection.items.values()].some((item) => item.status === "pending" && item.unitId !== void 0 && closure.has(item.unitId) && item.kind !== "prohibition");
 }
 
 //#endregion
@@ -5682,7 +5735,71 @@ function proofV2Rejection(evidence, obligation) {
 	if (obligation.kind === "state_verification" && evidence.surfaces.length > 0 && !evidence.surfaces.includes(obligation.surface)) return "proof_surface_unbound";
 	if (obligation.kind === "execution_fact" && !(evidence.operations ?? []).some((entry) => entry.op === obligation.operation)) return "proof_operation_unbound";
 }
-/** Bind a v2 manifest to the live projection; [] means every obligation binds. */
+/**
+* The subjects an item's own obligation requires. They come from the item's
+* frozen verification contract and captured target — never from the proof
+* manifest, which is exactly what a proof must be checked against.
+*/
+function requiredSubjectsOf(item) {
+	const values = /* @__PURE__ */ new Set();
+	const subject = item.verification.subject;
+	if (typeof subject === "string" && subject.length > 0 && subject !== "scope") values.add(subject);
+	const target = item.requestedTarget ?? {};
+	if (item.verification.surface === "scope") {
+		const scope = target.scope;
+		if (typeof scope === "string" && scope.length > 0 && scope !== "scope") values.add(scope);
+	}
+	for (const key of [
+		"artifact_id",
+		"package_id",
+		"service_id",
+		"repository"
+	]) {
+		const value = target[key];
+		if (typeof value === "string" && value.length > 0 && value !== "scope") values.add(value);
+	}
+	return [...values].sort();
+}
+/** The frozen coverage digest of a subject set: sorted, then hashed. */
+function scopeCoverageDigest(subjects) {
+	return createHash("sha256").update("ccg.proofScopeCoverage.v2\n", "utf8").update(JSON.stringify([...subjects].sort()), "utf8").digest("hex");
+}
+/**
+* Operations a fact may perform to discharge one proof kind. `execution_fact`
+* is bound to the obligation's own declared operation; the readback kinds
+* accept only an actual read or verify, so a bare successful call never
+* satisfies them.
+*/
+const KIND_OPERATIONS = {
+	subject_readback: ["read", "verify"],
+	scope_coverage: ["run", "verify"],
+	state_verification: ["read", "verify"],
+	input_asset_check: ["read", "verify"],
+	output_visual_readback: ["read", "verify"],
+	object_url_readback: ["read", "verify"],
+	execution_fact: "declared",
+	external_fact: []
+};
+/** Whether the fact performed an operation the kind accepts. */
+function proofOperationMatches(evidence, obligation) {
+	const allowed = KIND_OPERATIONS[obligation.kind];
+	const operations = evidence.operations ?? [];
+	if (allowed === "declared") return operations.some((entry) => entry.op === obligation.operation);
+	if (allowed.length === 0) return true;
+	return operations.some((entry) => allowed.includes(entry.op));
+}
+/**
+* Bind a v2 manifest to the live projection; [] means every obligation binds.
+*
+* The binding is the whole chain the review demanded, in one place:
+* the user's obligation (frozen subject and scope on the ITEM) → the trusted
+* producer fact (qualified by the same availability rules ordinary evidence
+* uses) → the declared source → the declared operation and its order relative
+* to the effect → the real coverage set. Only then is the obligation
+* discharged. A manifest that describes a different subject than the item
+* asked about fails even when the manifest and the facts agree with each
+* other.
+*/
 function bindProofV2ToProjection(projection, manifest) {
 	const errors = [];
 	for (const obligation of manifest.obligations) {
@@ -5696,19 +5813,39 @@ function bindProofV2ToProjection(projection, manifest) {
 			continue;
 		}
 		if (item.verification.surface !== void 0 && item.verification.surface !== obligation.surface) errors.push("proof_surface_unbound");
-		let bound = 0;
+		const required = requiredSubjectsOf(item);
+		if (required.length > 0) {
+			if (!obligation.subjectIds.every((subject) => required.includes(subject))) {
+				errors.push("proof_subject_unbound");
+				continue;
+			}
+			if (!required.every((subject) => obligation.subjectIds.includes(subject))) {
+				errors.push("proof_scope_incomplete");
+				continue;
+			}
+		}
+		const cited = [];
 		for (const evidenceId of obligation.evidenceIds) {
 			const evidence = projection.evidence.get(evidenceId);
 			if (!evidence) {
 				errors.push("proof_evidence_unknown");
 				continue;
 			}
+			const availability = evidenceAvailabilityReason(evidence);
+			if (availability !== void 0) {
+				errors.push(availability);
+				continue;
+			}
 			if (evidence.epoch !== projection.epoch) {
 				errors.push("proof_evidence_wrong_epoch");
 				continue;
 			}
-			if (!evidence.subjects.some((subject) => obligation.subjectIds.includes(subject))) {
+			if (obligation.subjectIds.length > 0 && !evidence.subjects.some((subject) => obligation.subjectIds.includes(subject))) {
 				errors.push("proof_subject_unbound");
+				continue;
+			}
+			if (!proofOperationMatches(evidence, obligation)) {
+				errors.push("proof_operation_unbound");
 				continue;
 			}
 			const rejection = proofV2Rejection(evidence, obligation);
@@ -5716,13 +5853,30 @@ function bindProofV2ToProjection(projection, manifest) {
 				errors.push(rejection);
 				continue;
 			}
-			bound += 1;
+			cited.push(evidence);
 		}
-		if (bound === 0 && obligation.evidenceIds.length > 0 && !errors.includes("proof_producer_capability_unavailable")) {}
+		if (cited.length === 0 && obligation.evidenceIds.length > 0) continue;
+		if (required.length > 0 && !required.every((subject) => cited.some((fact) => fact.subjects.includes(subject)))) {
+			errors.push("proof_scope_incomplete");
+			continue;
+		}
+		if (obligation.kind === "input_asset_check") {
+			const firstCheck = Math.min(...cited.map((fact) => fact.toolResultSeq));
+			if ([...projection.evidence.values()].some((fact) => fact.evidenceRole === "effect" && required.some((subject) => fact.subjects.includes(subject)) && fact.toolResultSeq < firstCheck)) {
+				errors.push("proof_input_check_after_effect");
+				continue;
+			}
+		}
 		if (obligation.kind === "scope_coverage") {
-			const itemScope = item.requestedTarget?.scope;
-			const itemSubject = item.verification.subject;
-			if (!obligation.subjectIds.every((subject) => subject === itemScope || subject === itemSubject)) errors.push("proof_scope_subject_unbound");
+			const covered = [...new Set(cited.flatMap((fact) => fact.subjects))].sort();
+			if (obligation.expectedScopeDigest !== void 0 && obligation.expectedScopeDigest !== scopeCoverageDigest(required)) {
+				errors.push("proof_scope_digest_unbound");
+				continue;
+			}
+			if (obligation.observedScopeDigest !== void 0 && obligation.observedScopeDigest !== scopeCoverageDigest(covered)) {
+				errors.push("proof_scope_digest_unbound");
+				continue;
+			}
 		}
 	}
 	return [...new Set(errors)];
@@ -9588,43 +9742,88 @@ function supersedeItem(items, oldId, replacement) {
 function assistantTextOf(data) {
 	return (data?.message?.content ?? []).filter((part) => part?.type === "text").map((part) => part?.text ?? "").join("\n");
 }
+function integerField(data, field$1) {
+	const value = data?.[field$1];
+	return typeof value === "number" && Number.isSafeInteger(value) ? value : void 0;
+}
 /**
 * Derive the trusted deliveries from the event log. Deterministic: a replay of
 * identical events yields identical facts.
 */
 function deriveTrustedDeliveries(events) {
-	const assistants = /* @__PURE__ */ new Map();
-	for (const event of events) {
-		if (event.type !== "assistant/message") continue;
-		const data = event.data ?? {};
-		if (typeof data.turn !== "number" || !Number.isSafeInteger(data.turn)) continue;
-		if (typeof data.step !== "number" || !Number.isSafeInteger(data.step)) continue;
-		assistants.set(data.turn, [...assistants.get(data.turn) ?? [], {
-			seq: event.seq,
-			turn: data.turn,
-			step: data.step,
-			text: assistantTextOf(event.data),
-			interrupted: data.interrupted === true
-		}]);
+	const turns = /* @__PURE__ */ new Map();
+	const factsFor = (turn) => {
+		let facts = turns.get(turn);
+		if (!facts) {
+			facts = {
+				started: false,
+				steps: /* @__PURE__ */ new Set(),
+				assistants: [],
+				ends: []
+			};
+			turns.set(turn, facts);
+		}
+		return facts;
+	};
+	for (const event of events) switch (event.type) {
+		case "turn/start": {
+			const turn = integerField(event.data, "turn");
+			if (turn !== void 0) factsFor(turn).started = true;
+			break;
+		}
+		case "step/start":
+		case "step/end": {
+			const turn = integerField(event.data, "turn");
+			const step = integerField(event.data, "step");
+			if (turn !== void 0 && step !== void 0) factsFor(turn).steps.add(step);
+			break;
+		}
+		case "assistant/message": {
+			const turn = integerField(event.data, "turn");
+			const step = integerField(event.data, "step");
+			if (turn === void 0 || step === void 0) break;
+			const facts = factsFor(turn);
+			facts.steps.add(step);
+			facts.assistants.push({
+				seq: event.seq,
+				step,
+				text: assistantTextOf(event.data),
+				interrupted: event.data?.interrupted === true
+			});
+			break;
+		}
+		case "turn/end": {
+			const turn = integerField(event.data, "turn");
+			if (turn === void 0) break;
+			const reason = event.data?.reason;
+			factsFor(turn).ends.push({
+				seq: event.seq,
+				kind: typeof reason?.kind === "string" ? reason.kind : ""
+			});
+			break;
+		}
+		default: break;
 	}
 	const deliveries = [];
-	for (const event of events) {
-		if (event.type !== "turn/end") continue;
-		const data = event.data ?? {};
-		if (typeof data.turn !== "number" || !Number.isSafeInteger(data.turn)) continue;
-		if (data.reason?.kind !== "completed") continue;
-		const candidates = assistants.get(data.turn) ?? [];
-		const finalStep = Math.max(...candidates.map((row) => row.step), -1);
-		const final = candidates.find((row) => row.step === finalStep && !row.interrupted && row.text.trim().length > 0);
-		if (!final) continue;
+	for (const [turn, facts] of turns) {
+		if (!facts.started) continue;
+		if (facts.ends.length !== 1) continue;
+		const end = facts.ends[0];
+		if (end.kind !== "completed") continue;
+		if (facts.steps.size === 0) continue;
+		const finalStep = Math.max(...facts.steps);
+		const inFinalStep = facts.assistants.filter((row) => row.step === finalStep && row.seq < end.seq && !row.interrupted && row.text.trim().length > 0);
+		if (inFinalStep.length === 0) continue;
+		const final = inFinalStep.reduce((left, right) => right.seq > left.seq ? right : left);
+		if (facts.assistants.some((row) => row.seq > final.seq && row.seq < end.seq)) continue;
 		deliveries.push({
-			turn: data.turn,
-			turnEndSeq: event.seq,
+			turn,
+			turnEndSeq: end.seq,
 			responseSeq: final.seq,
 			responseSha256: sha256(final.text)
 		});
 	}
-	return deliveries;
+	return deliveries.sort((left, right) => left.turnEndSeq - right.turnEndSeq);
 }
 /**
 * The information-slot items a delivery closes: obligations captured from a
@@ -9754,30 +9953,39 @@ function deriveTrustedSelections(events, options) {
 * Three durable records carry the state machine (P0 §5), all written through
 * the plugin-notice channel the host already persists:
 *
-* - `contract`   — the adopted scope: operations, the exact candidate, the
-*                  readiness/closure references and an optional expiry.
+* - `contract`    — the adopted scope: operations, the exact candidate, the
+*                   readiness/closure references and an optional expiry.
 * - `reservation` — written BEFORE any effect; the operation is `in_flight`
-*                  from that moment, so a crash cannot be mistaken for "never
-*                  started" and the operation is never blindly re-sent.
-* - `settlement`  — written after the effect, from a TRUSTED readback when one
-*                  exists. Without a readback producer the attempt stays
-*                  `unconfirmed`, which keeps the in-flight protection and
-*                  reports `release_readback_unavailable` instead of claiming
-*                  a verified release.
+*                   from that moment, so a crash cannot be mistaken for "never
+*                   started" and the operation is never blindly re-sent.
+* - `settlement`  — written after the effect. Its outcome distinguishes a
+*                   PROVEN no-effect (`not_effected`, which releases the lock)
+*                   from an UNKNOWN effect (`unknown`/`failed`/`unconfirmed`,
+*                   which keeps the lock until a trusted readback reconciles
+*                   it) and from a `settled` release.
+*
+* CANDIDATE IDENTITY IS TYPED, NOT CONFLATED. A release artifact has several
+* genuinely different identities — the commit it was built from, the SHA-256 of
+* the exact bytes, npm's SHA-512 SRI, the package name, the version, the
+* repository, the ref and the target registry. Each is a separate field and is
+* compared with its own observed value read from a trusted producer. Comparing,
+* say, a 64-hex SHA-256 against an SRI can never succeed, so a legitimate
+* release would have been permanently refused; and accepting a model-supplied
+* SHA instead of the artifact's embedded one would bind nothing. Every field
+* the contract declares must be OBSERVED, so omitting evidence is a refusal,
+* never a bypass.
 *
 * COVERAGE SURFACE (frozen wording): only the surfaces Guard itself routes can
-* be protected. `npm_publish` runs through the Guard-owned action tool and is
-* therefore protectable. `git_tag`, the GitHub Release operations and any
-* composite/opaque runner have NO interception point in this host, so a
-* contract that requires them is refused before any effect with
-* `release_operation_unprotectable` / `release_runner_opaque` — Guard never
-* suggests falling back to a plain shell command. A trusted in-process caller
-* that bypasses Guard entirely is a host trust boundary and is disclosed as
-* such in the documentation, not pretended away.
+* be protected. Operations with no Guard execution surface are refused before
+* any effect, and the plugin never suggests falling back to a plain shell
+* command. A trusted in-process caller that bypasses Guard entirely is a host
+* trust boundary and is disclosed as such in the documentation, not pretended
+* away.
 */
 const RELEASE_CONTRACT_PREFIX = "Context Guard release contract v1: ";
 const RELEASE_RESERVATION_PREFIX = "Context Guard release reservation v1: ";
 const RELEASE_SETTLEMENT_PREFIX = "Context Guard release settlement v1: ";
+const RELEASE_REVOCATION_PREFIX = "Context Guard release revocation v1: ";
 const RELEASE_OPERATIONS = [
 	"npm_publish",
 	"git_tag",
@@ -9786,42 +9994,72 @@ const RELEASE_OPERATIONS = [
 	"github_release_delete",
 	"composite_runner"
 ];
+/**
+* The routing table for this release. `git_tag` and the GitHub Release
+* operations have no Guard-owned execution route yet; the coordinator
+* explicitly approved that staged scope reduction on 2026-09-14, and the new
+* route is the way each of them becomes protectable. A composite runner stays
+* opaque by construction.
+*/
 const RELEASE_OPERATION_SURFACES = {
 	npm_publish: {
 		surface: "context_guard_action",
 		protectable: true,
-		reasonCode: "release_operation_protectable"
+		reasonCode: "release_operation_protectable",
+		attribution: "implemented"
 	},
 	git_tag: {
 		surface: "none",
 		protectable: false,
-		reasonCode: "release_operation_unprotectable"
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
 	},
 	github_release_create: {
 		surface: "none",
 		protectable: false,
-		reasonCode: "release_operation_unprotectable"
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
 	},
 	github_release_update: {
 		surface: "none",
 		protectable: false,
-		reasonCode: "release_operation_unprotectable"
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
 	},
 	github_release_delete: {
 		surface: "none",
 		protectable: false,
-		reasonCode: "release_operation_unprotectable"
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
 	},
 	composite_runner: {
 		surface: "none",
 		protectable: false,
-		reasonCode: "release_runner_opaque"
+		reasonCode: "release_runner_opaque",
+		attribution: "host_boundary"
 	}
 };
 const FULL_SHA40 = /^[0-9a-f]{40}$/;
-const DIGEST64 = /^[0-9a-f]{64}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const SRI = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/;
+/**
+* How strongly an outcome resolves the reservation. A `settled` release is
+* never downgraded by a later record, while a stronger record reconciles a
+* weaker one — that is how a trusted readback recovers an earlier unconfirmed
+* attempt instead of being discarded.
+*/
+const OUTCOME_STRENGTH = {
+	not_effected: 0,
+	unknown: 1,
+	failed: 1,
+	unconfirmed: 2,
+	settled: 3
+};
 function asRecord$1(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function optionalString(value) {
+	return typeof value === "string" && value.trim().length > 0 ? value.trim() : void 0;
 }
 /**
 * Normalize a candidate release contract from a root adoption payload. Every
@@ -9849,29 +10087,51 @@ function normalizeReleaseContract(raw, adoptedBy) {
 	}
 	const candidate = asRecord$1(value.candidate);
 	if (!candidate) errors.push("release_candidate_missing");
-	const ref = typeof candidate?.ref === "string" ? candidate.ref.trim() : "";
-	const fullSha40 = typeof candidate?.fullSha40 === "string" ? candidate.fullSha40.trim() : "";
-	if (!ref) errors.push("release_candidate_ref_missing");
+	const CANDIDATE_FIELDS = [
+		"fullSha40",
+		"ref",
+		"repository",
+		"packageId",
+		"version",
+		"artifactSha256",
+		"artifactSri",
+		"registry",
+		"artifactDigest"
+	];
+	for (const key of Object.keys(candidate ?? {})) if (!CANDIDATE_FIELDS.includes(key)) errors.push("release_candidate_field_unknown");
+	const fullSha40 = optionalString(candidate?.fullSha40) ?? "";
 	if (!FULL_SHA40.test(fullSha40)) errors.push("release_candidate_sha_invalid");
-	const repository = typeof candidate?.repository === "string" && candidate.repository.trim() ? candidate.repository.trim() : void 0;
-	const version = typeof candidate?.version === "string" && candidate.version.trim() ? candidate.version.trim() : void 0;
-	const artifactDigest = typeof candidate?.artifactDigest === "string" ? candidate.artifactDigest.trim() : void 0;
-	if (artifactDigest !== void 0 && !DIGEST64.test(artifactDigest)) errors.push("release_candidate_artifact_digest_invalid");
+	const ref = optionalString(candidate?.ref);
+	const repository = optionalString(candidate?.repository);
+	const packageId = optionalString(candidate?.packageId);
+	const version = optionalString(candidate?.version);
+	let artifactSha256 = optionalString(candidate?.artifactSha256);
+	let artifactSri = optionalString(candidate?.artifactSri);
+	const legacyDigest = optionalString(candidate?.artifactDigest);
+	if (legacyDigest !== void 0) if (SHA256.test(legacyDigest)) artifactSha256 ??= legacyDigest;
+	else if (SRI.test(legacyDigest)) artifactSri ??= legacyDigest;
+	else errors.push("release_candidate_artifact_digest_invalid");
+	const registry = optionalString(candidate?.registry);
+	if (artifactSha256 !== void 0 && !SHA256.test(artifactSha256)) errors.push("release_candidate_sha256_invalid");
+	if (artifactSri !== void 0 && !SRI.test(artifactSri)) errors.push("release_candidate_sri_invalid");
 	const readinessRefs = Array.isArray(value.readinessRefs) ? value.readinessRefs.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
-	const closureCertRef = typeof value.closureCertRef === "string" && value.closureCertRef ? value.closureCertRef : void 0;
+	const closureCertRef = optionalString(value.closureCertRef);
 	let expiresAtEpochMs;
 	if (value.expiresAtEpochMs !== void 0) if (typeof value.expiresAtEpochMs !== "number" || !Number.isSafeInteger(value.expiresAtEpochMs) || value.expiresAtEpochMs <= 0) errors.push("release_expiry_invalid");
 	else expiresAtEpochMs = value.expiresAtEpochMs;
 	if (errors.length) return { errors: [...new Set(errors)] };
-	const suppliedId = typeof value.contractId === "string" && value.contractId.trim() ? value.contractId.trim() : void 0;
+	const suppliedId = optionalString(value.contractId);
 	const body = {
 		operations: [...operations].sort(),
 		candidate: {
-			...repository ? { repository } : {},
-			ref,
 			fullSha40,
-			...artifactDigest ? { artifactDigest } : {},
-			...version ? { version } : {}
+			...ref ? { ref } : {},
+			...repository ? { repository } : {},
+			...packageId ? { packageId } : {},
+			...version ? { version } : {},
+			...artifactSha256 ? { artifactSha256 } : {},
+			...artifactSri ? { artifactSri } : {},
+			...registry ? { registry } : {}
 		},
 		readinessRefs: [...readinessRefs].sort(),
 		...closureCertRef ? { closureCertRef } : {},
@@ -9893,12 +10153,12 @@ function normalizeReleaseContract(raw, adoptedBy) {
 function normalizeReservation(raw) {
 	const value = asRecord$1(raw);
 	if (!value) return void 0;
-	const contractId = typeof value.contractId === "string" ? value.contractId : "";
-	const operation = typeof value.operation === "string" ? value.operation : "";
-	const callId = typeof value.callId === "string" ? value.callId : "";
+	const contractId = optionalString(value.contractId);
+	const operation = optionalString(value.operation);
+	const callId = optionalString(value.callId);
 	const startedAtSeq = value.startedAtSeq;
 	if (!contractId || !callId) return void 0;
-	if (!RELEASE_OPERATIONS.includes(operation)) return void 0;
+	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
 	if (typeof startedAtSeq !== "number" || !Number.isSafeInteger(startedAtSeq)) return void 0;
 	return {
 		contractId,
@@ -9908,18 +10168,25 @@ function normalizeReservation(raw) {
 		status: "in_flight"
 	};
 }
+const RELEASE_OUTCOMES = [
+	"settled",
+	"unconfirmed",
+	"unknown",
+	"failed",
+	"not_effected"
+];
 function normalizeSettlement(raw) {
 	const value = asRecord$1(raw);
 	if (!value) return void 0;
-	const contractId = typeof value.contractId === "string" ? value.contractId : "";
-	const operation = typeof value.operation === "string" ? value.operation : "";
-	const callId = typeof value.callId === "string" ? value.callId : "";
+	const contractId = optionalString(value.contractId);
+	const operation = optionalString(value.operation);
+	const callId = optionalString(value.callId);
 	const settledAtSeq = value.settledAtSeq;
-	const outcome = typeof value.outcome === "string" ? value.outcome : "";
+	const outcome = optionalString(value.outcome);
 	if (!contractId || !callId) return void 0;
-	if (!RELEASE_OPERATIONS.includes(operation)) return void 0;
+	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
 	if (typeof settledAtSeq !== "number" || !Number.isSafeInteger(settledAtSeq)) return void 0;
-	if (outcome !== "settled" && outcome !== "unconfirmed" && outcome !== "failed") return void 0;
+	if (!outcome || !RELEASE_OUTCOMES.includes(outcome)) return void 0;
 	const readbackRaw = asRecord$1(value.readback);
 	const kind = readbackRaw?.kind;
 	return {
@@ -9927,23 +10194,53 @@ function normalizeSettlement(raw) {
 		operation,
 		callId,
 		settledAtSeq,
-		readback: readbackRaw && (kind === "npm_integrity" || kind === "git_ref" || kind === "github_release") && typeof readbackRaw.identity === "string" && readbackRaw.identity ? {
+		readback: readbackRaw && (kind === "npm_integrity" || kind === "git_ref" || kind === "github_release") && optionalString(readbackRaw.identity) ? {
 			kind,
-			identity: readbackRaw.identity
+			identity: optionalString(readbackRaw.identity)
 		} : "unavailable",
 		outcome
 	};
 }
-/** The adopted contract that covers an operation, newest adoption first. */
+/** The adopted, not-revoked contract that covers an operation, newest first. */
 function releaseContractFor(projection, operation, contractId) {
-	const contracts = projection.releaseContracts.filter((contract) => (contractId === void 0 || contract.contractId === contractId) && contract.operations.includes(operation));
+	const contracts = projection.releaseContracts.filter((contract) => contract.revokedAtSeq === void 0 && (contractId === void 0 || contract.contractId === contractId) && contract.operations.includes(operation));
 	return contracts.length ? contracts[contracts.length - 1] : void 0;
 }
-/** The in-flight (unsettled) reservation for one contract operation, if any. */
+/** Whether a contract was explicitly revoked by a durable root command. */
+function isContractRevoked(projection, contractId) {
+	return projection.releaseContracts.some((contract) => contract.contractId === contractId && contract.revokedAtSeq !== void 0);
+}
+/**
+* The reconciled settlement per (contract, operation, callId): the strongest
+* outcome wins, ties resolve to the later record. A `settled` release is never
+* revoked by a later weaker record.
+*/
+function reconciledSettlements(projection, contractId, operation) {
+	const byCall = /* @__PURE__ */ new Map();
+	for (const settlement of projection.releaseSettlements) {
+		if (settlement.contractId !== contractId || settlement.operation !== operation) continue;
+		const existing = byCall.get(settlement.callId);
+		if (!existing) {
+			byCall.set(settlement.callId, settlement);
+			continue;
+		}
+		const stronger = OUTCOME_STRENGTH[settlement.outcome] > OUTCOME_STRENGTH[existing.outcome];
+		const newer = OUTCOME_STRENGTH[settlement.outcome] === OUTCOME_STRENGTH[existing.outcome] && settlement.settledAtSeq >= existing.settledAtSeq;
+		if (stronger || newer) byCall.set(settlement.callId, settlement);
+	}
+	return [...byCall.values()];
+}
+/** Whether a settlement releases the one-shot lock: settled, or proven no-effect. */
+function releasesLock(settlement) {
+	return settlement.outcome === "settled" || settlement.outcome === "not_effected";
+}
+/** The in-flight (unresolved) reservation for one contract operation, if any. */
 function inFlightReservation(projection, contractId, operation) {
+	const settled = reconciledSettlements(projection, contractId, operation);
 	for (const reservation of projection.releaseReservations) {
 		if (reservation.contractId !== contractId || reservation.operation !== operation) continue;
-		if (!projection.releaseSettlements.some((settlement) => settlement.contractId === contractId && settlement.operation === operation && settlement.callId === reservation.callId && settlement.outcome !== "unconfirmed")) return reservation;
+		const resolution = settled.find((settlement) => settlement.callId === reservation.callId);
+		if (!resolution || !releasesLock(resolution)) return reservation;
 	}
 }
 /** Whether a contract operation has already been consumed by a settled effect. */
@@ -9956,10 +10253,67 @@ function settledOperations(projection, contractId) {
 	}
 	return consumed.sort();
 }
+const CANDIDATE_FIELD_CODES = [
+	{
+		field: "fullSha40",
+		label: "commit",
+		unresolvedCode: "release_candidate_sha_unresolved",
+		mismatchCode: "release_candidate_sha_mismatch"
+	},
+	{
+		field: "ref",
+		label: "ref",
+		unresolvedCode: "release_candidate_ref_unresolved",
+		mismatchCode: "release_candidate_ref_mismatch"
+	},
+	{
+		field: "repository",
+		label: "repository",
+		unresolvedCode: "release_candidate_repository_unresolved",
+		mismatchCode: "release_candidate_repository_mismatch"
+	},
+	{
+		field: "packageId",
+		label: "package",
+		unresolvedCode: "release_candidate_package_unresolved",
+		mismatchCode: "release_candidate_package_mismatch"
+	},
+	{
+		field: "version",
+		label: "version",
+		unresolvedCode: "release_candidate_version_unresolved",
+		mismatchCode: "release_candidate_version_mismatch"
+	},
+	{
+		field: "artifactSha256",
+		label: "artifact SHA-256",
+		unresolvedCode: "release_artifact_sha256_unresolved",
+		mismatchCode: "release_candidate_artifact_mismatch"
+	},
+	{
+		field: "artifactSri",
+		label: "artifact SRI",
+		unresolvedCode: "release_artifact_sri_unresolved",
+		mismatchCode: "release_candidate_artifact_sri_mismatch"
+	},
+	{
+		field: "registry",
+		label: "registry",
+		unresolvedCode: "release_candidate_registry_unresolved",
+		mismatchCode: "release_candidate_registry_mismatch"
+	}
+];
+/** A readiness reference resolves to a real, already-established fact. */
+function readinessResolves(projection, ref) {
+	if (projection.checkpoints.some((checkpoint) => checkpoint.id === ref && checkpoint.result === "certified")) return true;
+	if (projection.boundaries.some((boundary) => boundary.id === ref)) return true;
+	return projection.items.get(ref)?.status === "passed";
+}
 /**
-* The pre-effect release decision. Order matters: an unprotectable surface is
-* refused before expiry or candidate checks, because running an unprotected
-* operation is never made acceptable by a valid ticket.
+* The pre-effect release decision. Order matters: an unprotectable surface and
+* a damaged release state are refused before expiry or candidate checks,
+* because running an unprotected operation is never made acceptable by a valid
+* ticket, and because unreadable release state must not authorize anything.
 */
 function releasePreEffectDecision(projection, request) {
 	const surface = RELEASE_OPERATION_SURFACES[request.operation];
@@ -9967,11 +10321,25 @@ function releasePreEffectDecision(projection, request) {
 		status: "denied",
 		reasonCode: surface.reasonCode
 	};
-	const contract = releaseContractFor(projection, request.operation, request.contractId);
-	if (!contract) return {
+	if (projection.releaseStateDamaged) return {
 		status: "denied",
-		reasonCode: projection.releaseContracts.length === 0 ? "release_contract_required" : "release_operation_not_adopted"
+		reasonCode: "release_state_damaged"
 	};
+	const contract = releaseContractFor(projection, request.operation, request.contractId);
+	if (!contract) {
+		if (projection.releaseContracts.some((entry) => entry.revokedAtSeq !== void 0 && entry.operations.includes(request.operation) && (request.contractId === void 0 || entry.contractId === request.contractId))) return {
+			status: "denied",
+			reasonCode: "release_contract_revoked"
+		};
+		if (request.contractId !== void 0 && isContractRevoked(projection, request.contractId)) return {
+			status: "denied",
+			reasonCode: "release_contract_revoked"
+		};
+		return {
+			status: "denied",
+			reasonCode: projection.releaseContracts.length === 0 ? "release_contract_required" : "release_operation_not_adopted"
+		};
+	}
 	if (contract.expiresAtEpochMs !== void 0) {
 		if (request.nowEpochMs === void 0) return {
 			status: "denied",
@@ -9994,43 +10362,68 @@ function releasePreEffectDecision(projection, request) {
 		reasonCode: "release_operation_in_flight",
 		contractId: contract.contractId
 	};
+	for (const ref of contract.readinessRefs) if (!readinessResolves(projection, ref)) return {
+		status: "denied",
+		reasonCode: "release_readiness_unresolved",
+		contractId: contract.contractId
+	};
+	const closureRef = contract.closureCertRef;
+	const closure = closureRef !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === closureRef) : void 0;
+	if (!closure || closure.result !== "certified" || closure.epoch !== projection.epoch || closure.contractRevision !== projection.contractRevision) return {
+		status: "denied",
+		reasonCode: "release_closure_unresolved",
+		contractId: contract.contractId
+	};
+	if (contract.candidate.artifactSha256 === void 0 && contract.candidate.artifactSri === void 0) return {
+		status: "denied",
+		reasonCode: "release_artifact_identity_required",
+		contractId: contract.contractId
+	};
 	const candidate = contract.candidate;
-	const requested = request.candidate;
-	if (requested.fullSha40 === void 0 || requested.fullSha40 !== candidate.fullSha40) return {
-		status: "denied",
-		reasonCode: "release_candidate_sha_mismatch",
-		contractId: contract.contractId
-	};
-	if (requested.ref !== void 0 && requested.ref !== candidate.ref) return {
-		status: "denied",
-		reasonCode: "release_candidate_ref_mismatch",
-		contractId: contract.contractId
-	};
-	if (requested.repository !== void 0 && candidate.repository !== void 0 && requested.repository !== candidate.repository) return {
-		status: "denied",
-		reasonCode: "release_candidate_repository_mismatch",
-		contractId: contract.contractId
-	};
-	if (candidate.artifactDigest !== void 0) {
-		if (requested.artifactDigest === void 0) return {
+	const observedIdentity = request.observed ?? {};
+	const compared = [];
+	for (const entry of CANDIDATE_FIELD_CODES) {
+		const declared = candidate[entry.field];
+		if (typeof declared !== "string") continue;
+		compared.push([entry, declared]);
+	}
+	for (const [entry, declared] of compared) {
+		const observed = observedIdentity[entry.field];
+		if (observed === void 0) return {
 			status: "denied",
-			reasonCode: "release_artifact_digest_unresolved",
+			reasonCode: entry.unresolvedCode,
 			contractId: contract.contractId
 		};
-		if (requested.artifactDigest !== candidate.artifactDigest) return {
+		if (observed !== declared) return {
 			status: "denied",
-			reasonCode: "release_candidate_artifact_mismatch",
+			reasonCode: entry.mismatchCode,
 			contractId: contract.contractId
 		};
 	}
-	if (candidate.version !== void 0 && requested.version !== void 0 && requested.version !== candidate.version) return {
-		status: "denied",
-		reasonCode: "release_candidate_version_mismatch",
-		contractId: contract.contractId
-	};
-	if (request.operation === "npm_publish" && request.resolvedTarget?.version === void 0) return {
+	const resolved = request.resolvedTarget;
+	if (resolved === void 0) return {
 		status: "denied",
 		reasonCode: "release_target_unresolved",
+		contractId: contract.contractId
+	};
+	if (resolved.version === void 0) return {
+		status: "denied",
+		reasonCode: "release_target_unresolved",
+		contractId: contract.contractId
+	};
+	if (candidate.packageId !== void 0 && resolved.artifact_id !== candidate.packageId) return {
+		status: "denied",
+		reasonCode: "release_target_package_mismatch",
+		contractId: contract.contractId
+	};
+	if (candidate.version !== void 0 && resolved.version !== candidate.version) return {
+		status: "denied",
+		reasonCode: "release_target_version_mismatch",
+		contractId: contract.contractId
+	};
+	if (candidate.registry !== void 0 && resolved.registry !== candidate.registry) return {
+		status: "denied",
+		reasonCode: "release_target_registry_mismatch",
 		contractId: contract.contractId
 	};
 	return {
@@ -10040,10 +10433,18 @@ function releasePreEffectDecision(projection, request) {
 	};
 }
 /**
-* The coverage report for one contract: which adopted operations Guard can
-* actually protect, and which it must refuse. Used by diagnostics and by the
-* adoption record itself, so a contract never implies coverage it cannot have.
+* Whether a trusted readback settles the attempt: the readback must name the
+* SAME artifact identity the contract froze. A registry that answers with a
+* different integrity proves the wrong bytes are published, which is an
+* unknown outcome for this contract, never a settlement.
 */
+function readbackSettlesContract(contract, readback) {
+	if (readback === "unavailable") return "unconfirmed";
+	if (readback.kind !== "npm_integrity") return "unconfirmed";
+	if (contract.candidate.artifactSri === void 0) return "unconfirmed";
+	return readback.identity === contract.candidate.artifactSri ? "settled" : "mismatch";
+}
+/** The coverage report for one contract: which adopted operations Guard can protect. */
 function releaseCoverage(contract) {
 	return [...contract.operations].sort().map((operation) => ({
 		operation,
@@ -10113,8 +10514,15 @@ function stableJson(value) {
 	if (value && typeof value === "object") return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(",")}}`;
 	return JSON.stringify(value);
 }
-/** Bounded release diagnostic ledger (last 16 entries). */
+/**
+* Bounded release diagnostic ledger (last 16 entries). A rejected record also
+* marks the release state damaged: an unreadable reservation, settlement or
+* contract must block release operations rather than being silently forgotten,
+* and it must not touch the projection's own integrity, which governs ordinary
+* work.
+*/
 function pushReleaseDiagnostic(projection, seq, reasonCode) {
+	projection.releaseStateDamaged = true;
 	if (projection.releaseDiagnostics.some((entry) => entry.seq === seq && entry.reasonCode === reasonCode)) return;
 	projection.releaseDiagnostics.push({
 		seq,
@@ -10122,6 +10530,17 @@ function pushReleaseDiagnostic(projection, seq, reasonCode) {
 	});
 	if (projection.releaseDiagnostics.length > 16) projection.releaseDiagnostics.shift();
 }
+/**
+* Whether a recorded certificate is exactly the certificate this log re-derives.
+*
+* The comparison is by FIELD SEMANTICS, not by JSON text: a tool output is a
+* JSON object whose property order is an artifact of serialization, so
+* `JSON.stringify` equality made an identical certificate replay as corrupt
+* whenever the writer emitted `unit_id` before `goal_ref` (or vice versa). The
+* field set is still exact — an extra, missing, or renamed field stays a
+* mismatch — and values are compared by canonical encoding, so tampering is as
+* detectable as before.
+*/
 function recordedCertificateMatches(recorded, checkpoint) {
 	const value = asRecord(recorded);
 	if (!value) return false;
@@ -10151,7 +10570,10 @@ function recordedCertificateMatches(recorded, checkpoint) {
 			revision: goal.revision
 		} : value.goal_ref
 	};
-	return JSON.stringify(normalized) === JSON.stringify(exact);
+	const expectedKeys = Object.keys(exact).sort();
+	const actualKeys = Object.keys(normalized).sort();
+	if (expectedKeys.length !== actualKeys.length) return false;
+	return expectedKeys.every((key, index) => key === actualKeys[index] && stableJson(normalized[key]) === stableJson(exact[key]));
 }
 function restoreHistoricalCheckpoint(recorded, bindings, id) {
 	const stringField = (name) => typeof recorded[name] === "string" ? recorded[name] : void 0;
@@ -10396,9 +10818,30 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	const v4BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
 	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
 	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
-	if (v5BoundarySeq !== void 0) projection.boundaryProtocol = 5;
 	const priorRootMessages = [];
 	let realRootInputSeen = false;
+	const trustedDeliveries = v5BoundarySeq !== void 0 ? deriveTrustedDeliveries(sourceEvents) : [];
+	let deliveryCursor = 0;
+	const applyDeliveriesUpTo = (seq) => {
+		while (deliveryCursor < trustedDeliveries.length && trustedDeliveries[deliveryCursor].turnEndSeq <= seq) {
+			const delivery = trustedDeliveries[deliveryCursor];
+			deliveryCursor += 1;
+			const inputSeqs = turnRootInputSeqs.get(delivery.turn);
+			if (!inputSeqs) continue;
+			const owningUnitId = turnUnitIds.get(delivery.turn);
+			const eligibleUnitIds = owningUnitId === void 0 ? void 0 : new Set([owningUnitId, ...unitDescendantIds(projection, owningUnitId)]);
+			for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
+				const item = projection.items.get(itemId);
+				if (!item || item.status !== "pending") continue;
+				item.status = "answered";
+				item.answeredBy = {
+					turn: delivery.turn,
+					responseSeq: delivery.responseSeq,
+					responseSha256: delivery.responseSha256
+				};
+			}
+		}
+	};
 	const turnRootInputSeqs = /* @__PURE__ */ new Map();
 	const turnUnitIds = /* @__PURE__ */ new Map();
 	let activeTurn;
@@ -10406,6 +10849,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	for (const event of sourceEvents) {
 		projection.enabled = enabled;
 		projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq);
+		applyDeliveriesUpTo(event.seq);
 		switch (event.type) {
 			case "command/run": {
 				const data = asRecord(event.data);
@@ -10428,6 +10872,14 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					projection.contractRevision = revision;
 				} else if (subcommand === "release") {
 					const rest = typeof data.args === "string" ? data.args.trim().slice(7).trim() : "";
+					const revoke = /^revoke(?:\s+(\S+))?$/.exec(rest);
+					if (revoke) {
+						const contractId = revoke[1] ?? "";
+						const contract = projection.releaseContracts.find((entry) => entry.contractId === contractId);
+						if (!contract) pushReleaseDiagnostic(projection, event.seq, "release_contract_revocation_unknown");
+						else if (contract.revokedAtSeq === void 0) contract.revokedAtSeq = event.seq;
+						break;
+					}
 					const match = /^adopt(?:\s+([\s\S]+))?$/.exec(rest);
 					if (match) {
 						const payload = parseArguments((match[1] ?? "").trim());
@@ -10459,7 +10911,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				break;
 			}
 			case "user/message": {
-				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) break;
+				if (isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) {
+					projection.boundaryProtocol = 5;
+					break;
+				}
+				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break;
 				{
 					const record = asRecord(event.data);
 					const recordSource = asRecord(record?.source);
@@ -10503,13 +10959,27 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 							});
 							break;
 						}
+						if (recordText.startsWith(RELEASE_REVOCATION_PREFIX)) {
+							const payload = asRecord(parseArguments(recordText.slice(RELEASE_REVOCATION_PREFIX.length)));
+							const contractId = typeof payload?.contractId === "string" ? payload.contractId : "";
+							const contract = projection.releaseContracts.find((entry) => entry.contractId === contractId);
+							if (!contract) pushReleaseDiagnostic(projection, event.seq, "release_contract_revocation_unknown");
+							else if (contract.revokedAtSeq === void 0) contract.revokedAtSeq = event.seq;
+							break;
+						}
 						if (recordText.startsWith(RELEASE_SETTLEMENT_PREFIX)) {
 							const settlement = normalizeSettlement(parseArguments(recordText.slice(RELEASE_SETTLEMENT_PREFIX.length)));
 							if (!settlement) pushReleaseDiagnostic(projection, event.seq, "release_settlement_malformed");
-							else if (!projection.releaseSettlements.some((entry) => entry.callId === settlement.callId)) projection.releaseSettlements.push({
-								...settlement,
-								settledAtSeq: event.seq
-							});
+							else {
+								const pinned = {
+									...settlement,
+									settledAtSeq: event.seq
+								};
+								const key = (row) => `${row.contractId}\u0000${row.operation}\u0000${row.callId}`;
+								const index = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned));
+								if (index < 0) projection.releaseSettlements.push(pinned);
+								else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index].outcome]) projection.releaseSettlements[index] = pinned;
+							}
 							break;
 						}
 					}
@@ -10819,22 +11289,6 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	}
 	projection.enabled = enabled;
 	projection.epoch = epoch;
-	if (v5BoundarySeq !== void 0) for (const delivery of deriveTrustedDeliveries(sourceEvents)) {
-		const inputSeqs = turnRootInputSeqs.get(delivery.turn);
-		if (!inputSeqs) continue;
-		const owningUnitId = turnUnitIds.get(delivery.turn);
-		const eligibleUnitIds = owningUnitId === void 0 ? void 0 : new Set([owningUnitId, ...unitDescendantIds(projection, owningUnitId)]);
-		for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
-			const item = projection.items.get(itemId);
-			if (!item || item.status !== "pending") continue;
-			item.status = "answered";
-			item.answeredBy = {
-				turn: delivery.turn,
-				responseSeq: delivery.responseSeq,
-				responseSha256: delivery.responseSha256
-			};
-		}
-	}
 	projection.trustedSelections = deriveTrustedSelections(sourceEvents, { questionToolNames: DEFAULT_QUESTION_TOOL_NAMES });
 	if (projection.trustedSelections.length > 16) projection.trustedSelections = projection.trustedSelections.slice(-16);
 	const approvalAsked = /* @__PURE__ */ new Map();
@@ -10871,6 +11325,13 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 		}
 	}
 	if (projection.approvals.length > 16) projection.approvals = projection.approvals.slice(-16);
+	if (!projection.releaseStateDamaged) projection.releaseStateDamaged = projection.releaseSettlements.some((settlement) => {
+		if (settlement.readback === "unavailable") return false;
+		const contract = projection.releaseContracts.find((entry) => entry.contractId === settlement.contractId);
+		if (!contract || settlement.readback.kind !== "npm_integrity") return false;
+		const declared = contract.candidate.artifactSri;
+		return declared !== void 0 && declared !== settlement.readback.identity;
+	});
 	return {
 		projection,
 		compacted,
@@ -11858,4 +12319,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { parseShellCommand as $, extractMethod as $n, sessionQueryV2 as $t, previewFirstStepInjection as A, effectuateBoundary as An, semanticActionFromCommand as Ar, RC1_HOST_PACKAGES as At, RELEASE_SETTLEMENT_PREFIX as B, rebindResponse as Bn, normalizeClause as Br, PROOF_PROTOCOL_VERSION_V2 as Bt, gitCommandMatchesTarget as C, latestAssistantText as Cn, SUPPORTED_EVIDENCE_ADAPTERS as Cr, SUPPORTED_HOST_VERSIONS as Ct, FIRST_STEP_GUIDANCE as D, goalCompletionDenial as Dn, requestedIdentityKey as Dr, satisfiesSupportedHostRange as Dt, verifiedLinearCommitReadback as E, progressFingerprint as En, isStatefulAction as Er, parseHostVersion as Et, PROTOCOL_V5_NOTICE as F, confirmRebind as Fn, validateManifest as Fr, PROOF_CAPABILITY_MATRIX as Ft, evidenceFromPersistedToolResult as G, deriveItemDiagnosis as Gn, createProofManifestV2 as Gt, releaseCoverage as H, CONFIRM_LINE_PATTERN as Hn, sanitizeUrl as Hr, bindProofV2ToProjection as Ht, deriveProjection as I, proposeRebind as In, classifyTaskIntent as Ir, PROOF_KINDS as It, isDeterministicCheck as J, relevantEvidence as Jn, proofDigestV2 as Jt, extractTextContent as K, evidenceAvailabilityReason as Kn, proofCapabilityReport as Kt, RELEASE_OPERATIONS as L, proposeRebindOutcome as Ln, classifyUserInteraction as Lr, PROOF_KINDS_V2 as Lt, DEFAULT_DELEGATION_TOOL_NAMES as M, qualifyBoundary as Mn, validateActionManifest as Mr, authorityCaptureCounts as Mt, PROTOCOL_V3_NOTICE as N, currentContractDigest as Nn, validateActionTarget as Nr, segmentAuthorityBlocks as Nt, claimedBatchHasRealRootInput as O, hasCurrentCertificate as On, requestedTargetAuthorizesMutation as Or, RC015_RC2_HOST_PACKAGES as Ot, PROTOCOL_V4_NOTICE as P, createProjection as Pn, COMMAND_SURFACE_MANIFEST as Pr, certifyCheckpoint as Pt, parsePwshCommand as Q, extractArtifactPaths as Qn, sessionQuery as Qt, RELEASE_OPERATION_SURFACES as R, proposeRebindV042 as Rn, canonicalizePath as Rr, PROOF_MANIFEST_DOMAIN_V2 as Rt, executeRevalidatedGitEffect as S, isWholeTaskCompletionClaim as Sn, STOP_PROTOCOL_VERSION_V2 as Sr, SUPPORTED_HOST_RANGE as St, revalidateGitPrestate as T, observeAssistantOutcome as Tn, boundedArtifactChoiceMatches as Tr, evaluateMinimumHostVersion as Tt, releasePreEffectDecision as U, isFrozenV042RebindResponse as Un, sha256 as Ur, canonicalProjection as Ut, releaseContractFor as V, replayRebindResult as Vn, sanitizeClauseText as Vr, bindProofToProjection as Vt, supersedeItem as W, parseConfirmationMessage as Wn, createProofManifest as Wt, canonicalArgvFromCommand as X, captureItem as Xn, proofHostSurfacesOf as Xt, withDurability as Y, captureClause as Yn, proofEvidenceConstraints as Yt, isRunExecutable as Z, classifyClause as Zn, proofV2Rejection as Zt, GIT_COMMAND_MANIFEST_IDS as _, classifyCompletionClaim as _n, CERTIFICATE_VERSION as _r, evaluateToolSurfaceCapability as _t, injectActiveProfileHostLock as a, MIN_RECOVERY_CHAR_BUDGET as an, isExecutableItem as ar, BASE_HOST_PACKAGES as at, commitTreeSnapshotDigest as b, decisionBoundaryKey as bn, STATEFUL_ACTIONS as br, LATEST_SUPPORTED_HOST_VERSION as bt, packageRowsFromPnpmLock as c, recoveryDigest as cn, maskCodeSpans as cr, GOAL_HOST_PACKAGES as ct, resolveInstalledHostLock as d, evidenceCoverage as dn, statefulActionsOfScope as dr, LEGACY_HOST_COHORTS as dt, validateProofManifest as en, extractOperation as er, ACTIVE_HOST_COHORT_ID as et, verifyComposedHostLockDump as f, evidenceMatchesItem as fn, canonicalRegistryBase as fr, bindExecutableIdentity as ft, snapshotSessionEvents as g, NO_PROGRESS_TURNS_BEFORE_STOP as gn, BOUNDED_ARTIFACT_TYPES as gr, evaluateHostLock as gt, SessionApiError as h, NO_PROGRESS_RECORD_PREFIX as hn, ACTION_MANIFEST_VERSION as hr, evaluateHostCapability as ht, hostLockRowsFromComposedDump as i, DEFAULT_RECOVERY_CHAR_BUDGET as in, interpretMessage as ir, ALPHA2_HOST_PACKAGES as it, CAPTURE_V042_NOTICE as j, isCurrentAcceptedBoundary as jn, semanticActionFromText as jr, ALPHA3_HOST_PACKAGES as jt, lifecyclePhase as k, availableBoundaryQualifications as kn, requestedTargetMatchesResolved as kr, RC015_HOST_PACKAGES as kt, readActiveHostGraph as l, renderRecoveryPacket as ln, namedActions as lr, HOST_CAPABILITY_PACKAGE_GROUPS as lt, SESSION_EVENT_ENVELOPE_INVALID as m, CONTROL_RECORD_PREFIX as mn, ACTION_MANIFEST as mr, evaluateExternalWaitCapability as mt, combineHostPolicy as n, certifiableOpenItems as nn, segmentClauses as nr, ACTIVE_HOST_LAUNCHER_VERSION as nt, inspectTargetHostGraph as o, closingHint as on, isOpenObligation as or, DEFAULT_HOST_LOCK as ot, SESSION_API_UNSUPPORTED as p, isVerifyingCapability as pn, npmEscapedPackageName as pr, bindLiveGoalCapability as pt, extractToolSubject as q, itemDiagnosis as qn, proofDigest as qt, hostLockContextFromComposedDump as r, certificateClosure as rn, interpretClause as rr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as rt, packageRowsFromActiveGraph as s, openItems as sn, kindOfScope as sr, EXPECTED_HOST_PACKAGES as st, HostProfileError as t, validateProofManifestV2 as tn, isInformationalMessage as tr, ACTIVE_HOST_COHORT_IDS as tt, resolveActiveProfileHostLock as u, bindingSatisfies as un, semanticActionOfScope as ur, HOST_COHORTS as ut, GIT_COMMAND_TEMPLATES as v, decideTurnBoundary as vn, CERTIFICATE_VERSION_V2 as vr, hostVersionFromPackages as vt, parseGitCommandManifest as w, latestRootInstruction as wn, actionCompatible as wr, compareHostVersions as wt, createGitPrestateEnvelope as x, isRootPauseRequest as xn, STOP_PROTOCOL_VERSION as xr, MIN_SUPPORTED_HOST_VERSION as xt, commitIndexSnapshotDigest as y, decideTurnStopping as yn, SEMANTIC_ACTIONS as yr, selectHostCohort as yt, RELEASE_RESERVATION_PREFIX as z, rebindAttemptKey as zn, digestStrings as zr, PROOF_PROTOCOL_VERSION as zt };
+export { isRunExecutable as $, relevantEvidence as $n, proofOperationMatches as $t, previewFirstStepInjection as A, observeAssistantOutcome as An, boundedArtifactChoiceMatches as Ar, RC015_RC2_HOST_PACKAGES as At, RELEASE_SETTLEMENT_PREFIX as B, confirmRebind as Bn, validateManifest as Br, PROOF_MANIFEST_DOMAIN_V2 as Bt, gitCommandMatchesTarget as C, decideTurnBoundary as Cn, CERTIFICATE_VERSION_V2 as Cr, MIN_SUPPORTED_HOST_VERSION as Ct, FIRST_STEP_GUIDANCE as D, isWholeTaskCompletionClaim as Dn, STOP_PROTOCOL_VERSION_V2 as Dr, evaluateMinimumHostVersion as Dt, verifiedLinearCommitReadback as E, isRootPauseRequest as En, STOP_PROTOCOL_VERSION as Er, compareHostVersions as Et, PROTOCOL_V5_NOTICE as F, effectuateBoundary as Fn, semanticActionFromCommand as Fr, segmentAuthorityBlocks as Ft, releasePreEffectDecision as G, rebindResponse as Gn, normalizeClause as Gr, canonicalProjection as Gt, readbackSettlesContract as H, proposeRebindOutcome as Hn, classifyUserInteraction as Hr, PROOF_PROTOCOL_VERSION_V2 as Ht, deriveProjection as I, isCurrentAcceptedBoundary as In, semanticActionFromText as Ir, certifyCheckpoint as It, extractTextContent as J, isFrozenV042RebindResponse as Jn, sha256 as Jr, proofCapabilityReport as Jt, supersedeItem as K, replayRebindResult as Kn, sanitizeClauseText as Kr, createProofManifest as Kt, RELEASE_OPERATIONS as L, qualifyBoundary as Ln, validateActionManifest as Lr, PROOF_CAPABILITY_MATRIX as Lt, DEFAULT_DELEGATION_TOOL_NAMES as M, goalCompletionDenial as Mn, requestedIdentityKey as Mr, RC1_HOST_PACKAGES as Mt, PROTOCOL_V3_NOTICE as N, hasCurrentCertificate as Nn, requestedTargetAuthorizesMutation as Nr, ALPHA3_HOST_PACKAGES as Nt, claimedBatchHasRealRootInput as O, latestAssistantText as On, SUPPORTED_EVIDENCE_ADAPTERS as Or, parseHostVersion as Ot, PROTOCOL_V4_NOTICE as P, availableBoundaryQualifications as Pn, requestedTargetMatchesResolved as Pr, authorityCaptureCounts as Pt, canonicalArgvFromCommand as Q, itemDiagnosis as Qn, proofHostSurfacesOf as Qt, RELEASE_OPERATION_SURFACES as R, currentContractDigest as Rn, validateActionTarget as Rr, PROOF_KINDS as Rt, executeRevalidatedGitEffect as S, classifyCompletionClaim as Sn, CERTIFICATE_VERSION as Sr, LATEST_SUPPORTED_HOST_VERSION as St, revalidateGitPrestate as T, decisionBoundaryKey as Tn, STATEFUL_ACTIONS as Tr, SUPPORTED_HOST_VERSIONS as Tt, releaseContractFor as U, proposeRebindV042 as Un, canonicalizePath as Ur, bindProofToProjection as Ut, normalizeReleaseContract as V, proposeRebind as Vn, classifyTaskIntent as Vr, PROOF_PROTOCOL_VERSION as Vt, releaseCoverage as W, rebindAttemptKey as Wn, digestStrings as Wr, bindProofV2ToProjection as Wt, isDeterministicCheck as X, deriveItemDiagnosis as Xn, proofDigestV2 as Xt, extractToolSubject as Y, parseConfirmationMessage as Yn, proofDigest as Yt, withDurability as Z, evidenceAvailabilityReason as Zn, proofEvidenceConstraints as Zt, GIT_COMMAND_MANIFEST_IDS as _, evidenceMatchesItem as _n, canonicalRegistryBase as _r, evaluateHostCapability as _t, injectActiveProfileHostLock as a, validateProofManifest as an, extractOperation as ar, ALPHA2_DSHMARKET_139_HOST_PACKAGES as at, commitTreeSnapshotDigest as b, NO_PROGRESS_RECORD_PREFIX as bn, ACTION_MANIFEST_VERSION as br, hostVersionFromPackages as bt, packageRowsFromPnpmLock as c, certificateClosure as cn, interpretClause as cr, DEFAULT_HOST_LOCK as ct, resolveInstalledHostLock as d, closingHint as dn, isOpenObligation as dr, HOST_CAPABILITY_PACKAGE_GROUPS as dt, proofV2Rejection as en, captureClause as er, parsePwshCommand as et, verifyComposedHostLockDump as f, openItems as fn, kindOfScope as fr, HOST_COHORTS as ft, snapshotSessionEvents as g, evidenceCoverage as gn, statefulActionsOfScope as gr, evaluateExternalWaitCapability as gt, SessionApiError as h, bindingSatisfies as hn, semanticActionOfScope as hr, bindLiveGoalCapability as ht, hostLockRowsFromComposedDump as i, sessionQueryV2 as in, extractMethod as ir, ACTIVE_HOST_LAUNCHER_VERSION as it, CAPTURE_V042_NOTICE as j, progressFingerprint as jn, isStatefulAction as jr, RC015_HOST_PACKAGES as jt, lifecyclePhase as k, latestRootInstruction as kn, actionCompatible as kr, satisfiesSupportedHostRange as kt, readActiveHostGraph as l, DEFAULT_RECOVERY_CHAR_BUDGET as ln, interpretMessage as lr, EXPECTED_HOST_PACKAGES as lt, SESSION_EVENT_ENVELOPE_INVALID as m, renderRecoveryPacket as mn, namedActions as mr, bindExecutableIdentity as mt, combineHostPolicy as n, scopeCoverageDigest as nn, classifyClause as nr, ACTIVE_HOST_COHORT_ID as nt, inspectTargetHostGraph as o, validateProofManifestV2 as on, isInformationalMessage as or, ALPHA2_HOST_PACKAGES as ot, SESSION_API_UNSUPPORTED as p, recoveryDigest as pn, maskCodeSpans as pr, LEGACY_HOST_COHORTS as pt, evidenceFromPersistedToolResult as q, CONFIRM_LINE_PATTERN as qn, sanitizeUrl as qr, createProofManifestV2 as qt, hostLockContextFromComposedDump as r, sessionQuery as rn, extractArtifactPaths as rr, ACTIVE_HOST_COHORT_IDS as rt, packageRowsFromActiveGraph as s, certifiableOpenItems as sn, segmentClauses as sr, BASE_HOST_PACKAGES as st, HostProfileError as t, requiredSubjectsOf as tn, captureItem as tr, parseShellCommand as tt, resolveActiveProfileHostLock as u, MIN_RECOVERY_CHAR_BUDGET as un, isExecutableItem as ur, GOAL_HOST_PACKAGES as ut, GIT_COMMAND_TEMPLATES as v, isVerifyingCapability as vn, npmEscapedPackageName as vr, evaluateHostLock as vt, parseGitCommandManifest as w, decideTurnStopping as wn, SEMANTIC_ACTIONS as wr, SUPPORTED_HOST_RANGE as wt, createGitPrestateEnvelope as x, NO_PROGRESS_TURNS_BEFORE_STOP as xn, BOUNDED_ARTIFACT_TYPES as xr, selectHostCohort as xt, commitIndexSnapshotDigest as y, CONTROL_RECORD_PREFIX as yn, ACTION_MANIFEST as yr, evaluateToolSurfaceCapability as yt, RELEASE_RESERVATION_PREFIX as z, createProjection as zn, COMMAND_SURFACE_MANIFEST as zr, PROOF_KINDS_V2 as zt };

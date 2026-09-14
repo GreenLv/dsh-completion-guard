@@ -251,6 +251,18 @@ Two consequences are recorded as limitations rather than features:
   reservation, and settlement need durable bytes, and they use the plugin-notice
   `user/message` channel the persistence layer already reloads.
 
+### 9.1 Repair round (2026-09-14)
+
+The concentrated review changed four of the rows above, and the changes are
+recorded here because they alter what the plugin claims about the host:
+
+| Surface | Change |
+| --- | --- |
+| Release `ref` | The local repository is now a trusted producer: when a contract names a ref, the audited git executable resolves it and the observed commit is compared with the contract. A declared ref that cannot be observed is refused as unresolved, never skipped. |
+| Canonical tgz | The trusted reader now yields the byte SHA-256, the npm SRI, the embedded `gitHead`, the packed package name, the version and the declared repository as SEPARATE fields. Comparing a SHA-256 with an SRI is impossible by construction. |
+| Proof manifest | `bindProofV2ToProjection` is reachable from `context_guard_checkpoint`; the tool binds a presented v2 manifest before issuing any certificate and reports `proof_state`. A proof that does not bind fails the query closed. |
+| `git_tag` / GitHub Release / composite runner | Still refused before any effect, but now attributed: `release_operation_unrouted` with `attribution: scope_reduction` for the first two (a missing Guard route, approved as a staged scope reduction), and `release_runner_opaque` with `attribution: host_boundary` for the third. The plugin no longer implies that the host makes the first two impossible. |
+
 ## APIs explicitly NOT used
 
 Searched with `grep -rn` over `src/`, `tests/`, `scripts/`, and `bin/`:

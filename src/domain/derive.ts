@@ -23,8 +23,8 @@ import {
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
 import {
-  normalizeReleaseContract, normalizeReservation, normalizeSettlement,
-  RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX,
+  normalizeReleaseContract, normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH,
+  RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX, RELEASE_REVOCATION_PREFIX,
 } from './release.js'
 
 interface PendingCall {
@@ -106,13 +106,31 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value)
 }
 
-/** Bounded release diagnostic ledger (last 16 entries). */
+/**
+ * Bounded release diagnostic ledger (last 16 entries). A rejected record also
+ * marks the release state damaged: an unreadable reservation, settlement or
+ * contract must block release operations rather than being silently forgotten,
+ * and it must not touch the projection's own integrity, which governs ordinary
+ * work.
+ */
 function pushReleaseDiagnostic(projection: GuardProjection, seq: number, reasonCode: string): void {
+  projection.releaseStateDamaged = true
   if (projection.releaseDiagnostics.some((entry) => entry.seq === seq && entry.reasonCode === reasonCode)) return
   projection.releaseDiagnostics.push({ seq, reasonCode })
   if (projection.releaseDiagnostics.length > 16) projection.releaseDiagnostics.shift()
 }
 
+/**
+ * Whether a recorded certificate is exactly the certificate this log re-derives.
+ *
+ * The comparison is by FIELD SEMANTICS, not by JSON text: a tool output is a
+ * JSON object whose property order is an artifact of serialization, so
+ * `JSON.stringify` equality made an identical certificate replay as corrupt
+ * whenever the writer emitted `unit_id` before `goal_ref` (or vice versa). The
+ * field set is still exact — an extra, missing, or renamed field stays a
+ * mismatch — and values are compared by canonical encoding, so tampering is as
+ * detectable as before.
+ */
 function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoint): boolean {
   const value = asRecord(recorded)
   if (!value) return false
@@ -137,8 +155,12 @@ function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoi
     exact.unit_id = checkpoint.unitId
     exact.unit_closure_digest = checkpoint.unitClosureDigest
   }
-  const normalized = { ...value, goal_ref: goal ? { id: goal.id, revision: goal.revision } : value.goal_ref }
-  return JSON.stringify(normalized) === JSON.stringify(exact)
+  const normalized: Record<string, unknown> = { ...value, goal_ref: goal ? { id: goal.id, revision: goal.revision } : value.goal_ref }
+  const expectedKeys = Object.keys(exact).sort()
+  const actualKeys = Object.keys(normalized).sort()
+  if (expectedKeys.length !== actualKeys.length) return false
+  return expectedKeys.every((key, index) => key === actualKeys[index]
+    && stableJson(normalized[key]) === stableJson(exact[key]))
 }
 
 function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings: EvidenceBinding[], id: string): GuardCheckpoint | undefined {
@@ -455,12 +477,37 @@ export function deriveProjection(
   const v4BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
   const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
   const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
-  // The rule mode is a fact about the log's boundary position, known before
-  // replay starts: certificate re-derivation mid-loop must already use v2
-  // unit semantics in a v5 session, or a replayed checkpoint would mismatch.
-  if (v5BoundarySeq !== undefined) projection.boundaryProtocol = 5
   const priorRootMessages: string[] = []
   let realRootInputSeen = false
+  // 0.6.0 trusted delivery (C03), applied at the WATERMARK of the turn end that
+  // produced it rather than after the loop. A projection must equal the
+  // projection of its own prefix: a checkpoint recorded in a later turn is
+  // replay-verified while the delivered answer is already closed, exactly as it
+  // was when the certificate was minted. Each delivery is fully determined by
+  // events at or before its own turn end, so precomputing the deterministic
+  // list and applying it at that watermark is prefix-exact.
+  const trustedDeliveries = v5BoundarySeq !== undefined ? deriveTrustedDeliveries(sourceEvents) : []
+  let deliveryCursor = 0
+  const applyDeliveriesUpTo = (seq: number): void => {
+    while (deliveryCursor < trustedDeliveries.length && trustedDeliveries[deliveryCursor]!.turnEndSeq <= seq) {
+      const delivery = trustedDeliveries[deliveryCursor]!
+      deliveryCursor += 1
+      const inputSeqs = turnRootInputSeqs.get(delivery.turn)
+      if (!inputSeqs) continue
+      // The delivered turn's answers bind the unit that owned the turn's input
+      // and any delegated sub-unit created inside it (C04).
+      const owningUnitId = turnUnitIds.get(delivery.turn)
+      const eligibleUnitIds = owningUnitId === undefined
+        ? undefined
+        : new Set<string>([owningUnitId, ...unitDescendantIds(projection, owningUnitId)])
+      for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
+        const item = projection.items.get(itemId)
+        if (!item || item.status !== 'pending') continue
+        item.status = 'answered'
+        item.answeredBy = { turn: delivery.turn, responseSeq: delivery.responseSeq, responseSha256: delivery.responseSha256 }
+      }
+    }
+  }
   // 0.6.0 delivery bookkeeping: per-turn root input sequences and the unit
   // each turn's input belonged to, consumed after the loop by the trusted
   // delivery pass.
@@ -477,6 +524,9 @@ export function deriveProjection(
   for (const event of sourceEvents) {
     projection.enabled = enabled
     projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq)
+    // Everything derived so far is a prefix fact: close the deliveries whose
+    // turn already ended before this event is interpreted.
+    applyDeliveriesUpTo(event.seq)
     switch (event.type) {
       case 'command/run': {
         const data = asRecord(event.data)
@@ -508,6 +558,14 @@ export function deriveProjection(
           // command, never by a keyword in prose, a loaded Skill, or an
           // installation. The command's own sequence is the adoption witness.
           const rest = typeof data.args === 'string' ? data.args.trim().slice('release'.length).trim() : ''
+          const revoke = /^revoke(?:\s+(\S+))?$/.exec(rest)
+          if (revoke) {
+            const contractId = revoke[1] ?? ''
+            const contract = projection.releaseContracts.find((entry) => entry.contractId === contractId)
+            if (!contract) pushReleaseDiagnostic(projection, event.seq, 'release_contract_revocation_unknown')
+            else if (contract.revokedAtSeq === undefined) contract.revokedAtSeq = event.seq
+            break
+          }
           const match = /^adopt(?:\s+([\s\S]+))?$/.exec(rest)
           if (match) {
             const payload = parseArguments((match[1] ?? '').trim())
@@ -543,7 +601,14 @@ export function deriveProjection(
         break
       }
       case 'user/message': {
-        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) break
+        if (isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) {
+          // The v5 cut takes effect AT the notice: a certificate recorded before
+          // it keeps the whole-session contract and version-1 identity and must
+          // never be re-derived under the new rules.
+          projection.boundaryProtocol = 5
+          break
+        }
+        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break
         // The no-progress budget lives in the log, so it is read back here
         // before anything that depends on activation: the record is a fact about
         // what Guard already decided, and a reload must restore the budget
@@ -602,11 +667,29 @@ export function deriveProjection(
               }
               break
             }
+            if (recordText.startsWith(RELEASE_REVOCATION_PREFIX)) {
+              const payload = asRecord(parseArguments(recordText.slice(RELEASE_REVOCATION_PREFIX.length)))
+              const contractId = typeof payload?.contractId === 'string' ? payload.contractId : ''
+              const contract = projection.releaseContracts.find((entry) => entry.contractId === contractId)
+              if (!contract) pushReleaseDiagnostic(projection, event.seq, 'release_contract_revocation_unknown')
+              else if (contract.revokedAtSeq === undefined) contract.revokedAtSeq = event.seq
+              break
+            }
             if (recordText.startsWith(RELEASE_SETTLEMENT_PREFIX)) {
               const settlement = normalizeSettlement(parseArguments(recordText.slice(RELEASE_SETTLEMENT_PREFIX.length)))
               if (!settlement) pushReleaseDiagnostic(projection, event.seq, 'release_settlement_malformed')
-              else if (!projection.releaseSettlements.some((entry) => entry.callId === settlement.callId)) {
-                projection.releaseSettlements.push({ ...settlement, settledAtSeq: event.seq })
+              else {
+                // Reconciliation, not dedup: a trusted readback that arrives
+                // after an unconfirmed record must be able to settle the same
+                // attempt, while a `settled` release is never downgraded.
+                const pinned = { ...settlement, settledAtSeq: event.seq }
+                const key = (row: { contractId: string; operation: string; callId: string }) =>
+                  `${row.contractId}\u0000${row.operation}\u0000${row.callId}`
+                const index = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned))
+                if (index < 0) projection.releaseSettlements.push(pinned)
+                else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index]!.outcome]) {
+                  projection.releaseSettlements[index] = pinned
+                }
               }
               break
             }
@@ -995,27 +1078,6 @@ export function deriveProjection(
   }
   projection.enabled = enabled
   projection.epoch = epoch
-  // 0.6.0 trusted delivery pass (C03): apply host-confirmed answer deliveries
-  // to information-slot items of the turns that asked them. Derived entirely
-  // from durable events, so a replay reproduces every answered mark exactly.
-  if (v5BoundarySeq !== undefined) {
-    for (const delivery of deriveTrustedDeliveries(sourceEvents)) {
-      const inputSeqs = turnRootInputSeqs.get(delivery.turn)
-      if (!inputSeqs) continue
-      // The delivered turn's answers bind the unit that owned the turn's input
-      // and any delegated sub-unit created inside it (C04).
-      const owningUnitId = turnUnitIds.get(delivery.turn)
-      const eligibleUnitIds = owningUnitId === undefined
-        ? undefined
-        : new Set<string>([owningUnitId, ...unitDescendantIds(projection, owningUnitId)])
-      for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
-        const item = projection.items.get(itemId)
-        if (!item || item.status !== 'pending') continue
-        item.status = 'answered'
-        item.answeredBy = { turn: delivery.turn, responseSeq: delivery.responseSeq, responseSha256: delivery.responseSha256 }
-      }
-    }
-  }
   // 0.6.0 C07: trusted host selections and sandbox approvals are derived
   // facts with a bounded ledger each; an approval never authorizes a target.
   projection.trustedSelections = deriveTrustedSelections(sourceEvents, { questionToolNames: DEFAULT_QUESTION_TOOL_NAMES })
@@ -1040,5 +1102,19 @@ export function deriveProjection(
     }
   }
   if (projection.approvals.length > 16) projection.approvals = projection.approvals.slice(-16)
+  // Release state is damaged when a record could not be read back OR when a
+  // recorded readback names bytes other than the ones the adopted contract
+  // froze. Both are durable log facts, so the refusal survives a reload; the
+  // projection's own integrity is deliberately left alone so ordinary work is
+  // unaffected.
+  if (!projection.releaseStateDamaged) {
+    projection.releaseStateDamaged = projection.releaseSettlements.some((settlement) => {
+      if (settlement.readback === 'unavailable') return false
+      const contract = projection.releaseContracts.find((entry) => entry.contractId === settlement.contractId)
+      if (!contract || settlement.readback.kind !== 'npm_integrity') return false
+      const declared = contract.candidate.artifactSri
+      return declared !== undefined && declared !== settlement.readback.identity
+    })
+  }
   return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined, boundaryV5: v5BoundarySeq !== undefined }
 }

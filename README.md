@@ -190,14 +190,16 @@ settled afterwards from a trusted readback. A wrong candidate SHA, ref, artifact
 digest or version, an expired ticket, a consumed ticket, a retry of a request
 that is still in flight, and an opaque runner are all refused before any effect.
 
-**Coverage is stated honestly.** In this host the Guard can intercept only the
-surfaces it routes itself: publishing an npm artifact through
-`context_guard_action` is protected. `git tag`, creating or editing a GitHub
-Release, and any composite or opaque runner have no interception point here, so
-a contract that requires them is refused outright rather than pretended to be
-covered. A trusted in-process caller that bypasses the Guard entirely is a host
-trust boundary; the plugin reports what it can see and does not claim to stop
-what it cannot see.
+**Coverage is stated honestly, and the gap is attributed.** This release
+protects only the surface Guard itself routes: publishing an npm artifact
+through `context_guard_action`. `git tag` and the GitHub Release operations have
+no Guard-owned route yet, so a contract requiring them is refused before any
+effect and reported as `release_operation_unrouted` — a scope reduction this
+release explicitly took, not a claim that the host makes them impossible. A
+composite runner is refused as an opaque host boundary. `/context-guard release`
+prints this table in machine-readable form. A trusted in-process caller that
+bypasses the Guard entirely is a host trust boundary; the plugin reports what it
+can see and does not claim to stop what it cannot see.
 
 ## Boundaries
 

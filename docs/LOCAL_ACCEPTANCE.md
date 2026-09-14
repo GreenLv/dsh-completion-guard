@@ -2,6 +2,33 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+### Repair round after concentrated review (2026-09-14)
+
+The `0dce898` candidate failed a concentrated review: fifteen counterexamples,
+all reproducing real defects. The findings were repaired as eight families
+(F01–F08) and the reviewer's suite is now a permanent regression gate
+(`tests/domain/review-counterexamples.test.ts`, 15 cases, all passing). One
+reviewer expectation was deliberately changed and is marked in place.
+
+Added deterministic evidence for this round:
+
+- `tests/domain/v060-proof-production-chain.test.ts` — the C09 proof entry
+  through real DSH tool registration: a real read fact, the real binder, the real
+  checkpoint tool, a persisted certificate and a full log replay.
+- `tests/domain/v060-release-migration.test.ts` — rewritten (26 cases) around a
+  REAL certified closure, with every candidate identity refusal, the
+  reconciliation of an unconfirmed attempt by a trusted readback, damaged-state
+  scoping, revocation, and the migration rule sets.
+- The v2 fixture grew to 27 cases: S09 now carries a real read fact and asserts
+  the binder's outcome, the S11 probes are evaluated at their own point in the
+  log with real closure certificates, and the coverage table records each
+  operation's honest attribution.
+
+The two scope facts decided on 2026-09-14 (candidate-only v2 plus open parity;
+`npm_publish` as the only protectable release surface, with the missing routes
+attributed as an approved scope reduction) are recorded in
+[SEMANTIC_COMPATIBILITY.md](SEMANTIC_COMPATIBILITY.md).
+
 ## 0.6.0 source candidate (2026-09-14)
 
 This section records a **source and deterministic** claim only. It is not a

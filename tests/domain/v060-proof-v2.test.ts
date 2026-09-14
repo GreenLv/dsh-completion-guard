@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PROOF_CAPABILITY_MATRIX, PROOF_KINDS_V2, PROOF_PROTOCOL_VERSION_V2,
   bindProofV2ToProjection, createProofManifestV2, proofCapabilityReport, proofDigestV2,
-  proofHostSurfacesOf, proofV2Rejection, sessionQueryV2, validateProofManifestV2,
+  proofHostSurfacesOf, proofV2Rejection, scopeCoverageDigest, sessionQueryV2, validateProofManifestV2,
   type ProofObligationV2,
 } from '../../src/domain/proof.js'
 import { createProjection, type GuardEvidence, type GuardItem, type GuardProjection } from '../../src/domain/types.js'
@@ -13,8 +13,20 @@ function evidence(overrides: Partial<GuardEvidence> = {}): GuardEvidence {
     outcome: 'success', capabilities: ['filesystem-read'], subjects: ['/repo/report.md'],
     surfaces: ['artifact'], boundedSummarySha256: 'a'.repeat(64),
     operations: [{ op: 'read', path: '/repo/report.md' }], evidenceRole: 'state', parseStatus: 'supported',
+    // Binding reuses the ordinary evidence qualification rules, so a fact used
+    // in a proof round-trip must carry a recognized adapter identity and a
+    // determined action — exactly like any other certifiable evidence.
+    adapterId: contextGuardAdapter(overrides.toolName ?? 'read'), adapterVersion: '1.0.0', semanticAction: 'verify',
     ...overrides,
   }
+}
+
+/** The adapter a fact's tool maps to under the ordinary qualification rules. */
+function contextGuardAdapter(toolName: string): string {
+  if (['bash', 'shell', 'pwsh', 'read', 'read_file'].includes(toolName)) return 'dsh.read.v1'
+  if (['write', 'edit', 'write_file', 'edit_file'].includes(toolName)) return 'dsh.write.v1'
+  if (['web_fetch', 'web_fetch_url', 'web_search'].includes(toolName)) return 'dsh.web.v1'
+  return 'context-guard.artifact.v1'
 }
 
 function item(overrides: Partial<GuardItem> = {}): GuardItem {
@@ -208,6 +220,33 @@ describe('0.6.0 proof v2 (C09/S09): subject, source, and producer binding', () =
     expect(sessionQueryV2(p, createProofManifestV2([obligation()]))).toMatchObject({ state: 'valid' })
     expect(sessionQueryV2(p, { ...createProofManifestV2([obligation()]), proofSha256: '0'.repeat(64) })).toMatchObject({ state: 'corrupt', reasonCode: 'proof_invalid' })
     expect(sessionQueryV2(p, createProofManifestV2([obligation({ obligationId: 'R999' })]))).toMatchObject({ state: 'corrupt', reasonCode: 'proof_unbound' })
+  })
+
+  it('a scope obligation binds its declared digests to the real coverage sets', () => {
+    const scopeItem = item({
+      requestedTarget: { scope: '/repo' },
+      verification: { enforced: true, surface: 'scope', subject: '/repo', operation: 'verify' },
+    })
+    const fact = evidence({
+      capabilities: ['deterministic-check'], surfaces: ['scope'], subjects: ['/repo'],
+      operations: [{ op: 'verify', path: '/repo' }],
+    })
+    const p = projectionWith([fact], [scopeItem])
+    const base = {
+      obligationId: 'R001', kind: 'scope_coverage' as const, surface: 'scope' as const,
+      subjectIds: ['/repo'], sourceIds: ['read'], operation: 'verify' as const, evidenceIds: ['E0001'],
+    }
+    // Self-consistent but unbound digests are refused.
+    const wrong = scopeCoverageDigest(['/somewhere/else'])
+    expect(bindProofV2ToProjection(p, createProofManifestV2([{ ...base, expectedScopeDigest: wrong, observedScopeDigest: wrong }])))
+      .toContain('proof_scope_digest_unbound')
+    // The digests of the REAL required and covered sets bind.
+    const real = scopeCoverageDigest(['/repo'])
+    expect(bindProofV2ToProjection(p, createProofManifestV2([{ ...base, expectedScopeDigest: real, observedScopeDigest: real }])))
+      .toEqual([])
+    // A partly covered scope is reported as incomplete, not satisfied.
+    const partial = createProofManifestV2([{ ...base, subjectIds: ['/repo'], evidenceIds: ['E0001'] }])
+    expect(bindProofV2ToProjection(projectionWith([{ ...fact, subjects: ['/repo/other.md'] }], [scopeItem]), partial).length).toBeGreaterThan(0)
   })
 
   it('classifies which host surface a fact can come from', () => {

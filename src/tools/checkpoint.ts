@@ -6,6 +6,7 @@ import { itemDiagnosis, relevantEvidence, evidenceAvailabilityReason } from '../
 import { certifyCheckpoint } from '../domain/checkpoint.js'
 import { ACTION_MANIFEST, isStatefulAction } from '../domain/protocol-manifest.js'
 import { availableBoundaryQualifications } from '../domain/boundary.js'
+import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from '../domain/proof.js'
 import type { BindingActionClosure, EvidenceBinding, ExpectedTransition, GuardEvidence, GuardItem, GuardProjection, TargetTuple } from '../domain/types.js'
 
 export interface CheckpointArgs extends PageQuery {
@@ -33,6 +34,7 @@ export interface CheckpointArgs extends PageQuery {
       order: number
     }>
   }>
+  proof?: ProofManifestV2
 }
 
 function targetForTool(target: EvidenceBinding['resolvedTarget']): Record<string, JsonValue> {
@@ -170,6 +172,11 @@ export function createCheckpointTool(
       detail_id: { type: 'string' },
       detail_offset: { type: 'integer' },
       detail_snapshot: { type: 'string' },
+      // C09/S09: an optional v2 proof manifest. It is validated and bound
+      // against the replayed projection through the production entry, so a
+      // manifest that does not bind the item's own subjects, source, operation
+      // and coverage cannot be presented as proof.
+      proof: { type: 'object', additionalProperties: true },
       bindings: {
         type: 'array',
         required: true,
@@ -221,6 +228,13 @@ export function createCheckpointTool(
         properties: {
           blockers: { type: 'object', additionalProperties: true },
           pagination: { type: 'object', additionalProperties: true },
+          proof_state: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              status: { type: 'string', enum: ['absent', 'bound', 'rejected', 'invalid'] },
+              reason_codes: { type: 'array', items: { type: 'string' } },
+            },
+          },
           reason_code: { type: 'string' },
           next_step: { type: 'string' },
           detail_id: { type: 'string' },
@@ -328,7 +342,28 @@ export function createCheckpointTool(
           order: closure.order,
         })) } : {}),
       }))
-      const result = certifyCheckpoint(projection, bindings, `C${projection.checkpoints.length + 1}`, false)
+      // A presented proof is bound BEFORE any certificate is issued: an
+      // unbound proof makes the query fail closed with its exact reasons
+      // instead of yielding a certificate that ignores it.
+      let proofState: { status: 'absent' | 'bound' | 'rejected' | 'invalid'; reason_codes: string[] } = { status: 'absent', reason_codes: [] }
+      if (args.proof !== undefined) {
+        const structural = validateProofManifestV2(args.proof)
+        if (structural.length) proofState = { status: 'invalid', reason_codes: structural }
+        else {
+          const binding = bindProofV2ToProjection(projection, args.proof)
+          proofState = binding.length
+            ? { status: 'rejected', reason_codes: binding }
+            : { status: 'bound', reason_codes: [] }
+        }
+      }
+      const result = proofState.status === 'rejected' || proofState.status === 'invalid'
+        ? { status: 'incomplete' as const, contractRevision: projection.contractRevision, openItems: [], rejectedBindings: [] }
+        : certifyCheckpoint(projection, bindings, `C${projection.checkpoints.length + 1}`, false)
+      if (proofState.status === 'rejected' || proofState.status === 'invalid') {
+        for (const code of proofState.reason_codes) {
+          result.rejectedBindings.push({ itemId: '*', reason: 'the presented proof does not bind the current contract', reasonCode: code })
+        }
+      }
       if (!result.checkpoint) onRejected()
       const available_evidence = [...projection.evidence.values()]
         .filter((evidence) => evidence.epoch === projection.epoch && (args.evidence_scope === 'history' || [...projection.items.values()].some(item => item.status === 'pending' && relevantEvidence(projection, item, evidence))))
@@ -357,6 +392,7 @@ export function createCheckpointTool(
         }))
       return checkpointPage(projection, args, {
         status: result.status,
+        proof_state: proofState,
         contract_revision: result.contractRevision,
         blocking_total: result.openItems.length,
         open_items: (args.item_ids?.length ? args.item_ids : result.openItems).map((id) => projection.items.get(id)).filter((item): item is GuardItem => Boolean(item)).sort((a, b) => b.revision - a.revision || a.id.localeCompare(b.id)).map((item) => openItemForTool(projection, item)),

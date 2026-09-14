@@ -467,67 +467,6 @@
       }
     },
     {
-      "id": "S09-requested-visual-proof-cannot-be-faked",
-      "family": "S09",
-      "boundary": "v5",
-      "events": [
-        {
-          "type": "root_message",
-          "text": "生成报告并检查界面截图效果"
-        }
-      ],
-      "expect": {
-        "interpreted": "unknown",
-        "open_items": [
-          {
-            "kind": "acceptance",
-            "status": "pending"
-          },
-          {
-            "kind": "requirement",
-            "status": "pending"
-          }
-        ],
-        "closure": "open",
-        "delivery": null,
-        "reason_codes": [
-          "generic_run_non_certifiable"
-        ],
-        "reason_classes": [
-          "parameter_missing",
-          "source_insufficient"
-        ]
-      }
-    },
-    {
-      "id": "S09-object-readback-stays-open-without-evidence",
-      "family": "S09",
-      "boundary": "v5",
-      "events": [
-        {
-          "type": "root_message",
-          "text": "验证 report.md 的内容正确"
-        }
-      ],
-      "expect": {
-        "interpreted": "interpreted",
-        "open_items": [
-          {
-            "kind": "acceptance",
-            "status": "pending"
-          }
-        ],
-        "closure": "open",
-        "delivery": null,
-        "reason_codes": [
-          "missing_evidence"
-        ],
-        "reason_classes": [
-          "parameter_missing"
-        ]
-      }
-    },
-    {
       "id": "S10-release-policy-does-not-block-ordinary-work",
       "family": "S10",
       "boundary": "v5",
@@ -585,221 +524,6 @@
       }
     },
     {
-      "id": "S11-release-without-a-contract-is-refused",
-      "family": "S11",
-      "boundary": "v5",
-      "policy": "release",
-      "events": [
-        {
-          "type": "root_message",
-          "text": "创建 report.txt"
-        },
-        {
-          "type": "release_probe",
-          "operation": "npm_publish",
-          "candidate": {
-            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        },
-        {
-          "type": "release_probe",
-          "operation": "git_tag",
-          "candidate": {
-            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        },
-        {
-          "type": "release_probe",
-          "operation": "composite_runner",
-          "candidate": {
-            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        }
-      ],
-      "expect": {
-        "interpreted": "interpreted",
-        "open_items": [
-          {
-            "kind": "requirement",
-            "status": "pending"
-          }
-        ],
-        "closure": "open",
-        "delivery": null,
-        "release_contracts": 0,
-        "release_in_flight": 0,
-        "release_gate_denials": [
-          "release_contract_required",
-          "release_operation_unprotectable",
-          "release_runner_opaque"
-        ]
-      }
-    },
-    {
-      "id": "S11-unprotectable-adoption-is-refused-before-any-effect",
-      "family": "S11",
-      "boundary": "v5",
-      "policy": "release",
-      "events": [
-        {
-          "type": "root_message",
-          "text": "创建 report.txt"
-        },
-        {
-          "type": "release_adopt",
-          "contract": {
-            "contractId": "rel-tag",
-            "operations": [
-              "git_tag"
-            ],
-            "candidate": {
-              "ref": "refs/heads/main",
-              "fullSha40": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            }
-          }
-        }
-      ],
-      "expect": {
-        "interpreted": "interpreted",
-        "open_items": [
-          {
-            "kind": "requirement",
-            "status": "pending"
-          }
-        ],
-        "closure": "open",
-        "delivery": null,
-        "release_contracts": 0
-      }
-    },
-    {
-      "id": "S11-reserved-operation-is-never-resent",
-      "family": "S11",
-      "boundary": "v5",
-      "policy": "release",
-      "events": [
-        {
-          "type": "root_message",
-          "text": "创建 report.txt"
-        },
-        {
-          "type": "release_adopt",
-          "contract": {
-            "contractId": "rel-1",
-            "operations": [
-              "npm_publish"
-            ],
-            "candidate": {
-              "ref": "refs/heads/main",
-              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "version": "1.0.0",
-              "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-            }
-          }
-        },
-        {
-          "type": "release_reservation",
-          "contractId": "rel-1",
-          "operation": "npm_publish",
-          "callId": "res-1"
-        },
-        {
-          "type": "release_probe",
-          "operation": "npm_publish",
-          "candidate": {
-            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "version": "1.0.0",
-            "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-          }
-        }
-      ],
-      "expect": {
-        "interpreted": "interpreted",
-        "open_items": [
-          {
-            "kind": "requirement",
-            "status": "pending"
-          }
-        ],
-        "closure": "open",
-        "delivery": null,
-        "release_contracts": 1,
-        "release_in_flight": 1,
-        "release_gate_denials": [
-          "release_operation_in_flight"
-        ]
-      }
-    },
-    {
-      "id": "S11-consumed-ticket-refuses-the-replay",
-      "family": "S11",
-      "boundary": "v5",
-      "policy": "release",
-      "events": [
-        {
-          "type": "root_message",
-          "text": "创建 report.txt"
-        },
-        {
-          "type": "release_adopt",
-          "contract": {
-            "contractId": "rel-1",
-            "operations": [
-              "npm_publish"
-            ],
-            "candidate": {
-              "ref": "refs/heads/main",
-              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "version": "1.0.0",
-              "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-            }
-          }
-        },
-        {
-          "type": "release_reservation",
-          "contractId": "rel-1",
-          "operation": "npm_publish",
-          "callId": "res-1"
-        },
-        {
-          "type": "release_settlement",
-          "contractId": "rel-1",
-          "operation": "npm_publish",
-          "callId": "res-1",
-          "outcome": "settled",
-          "readback": {
-            "kind": "npm_integrity",
-            "identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-          }
-        },
-        {
-          "type": "release_probe",
-          "operation": "npm_publish",
-          "candidate": {
-            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "version": "1.0.0",
-            "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-          }
-        }
-      ],
-      "expect": {
-        "interpreted": "interpreted",
-        "open_items": [
-          {
-            "kind": "requirement",
-            "status": "pending"
-          }
-        ],
-        "closure": "open",
-        "delivery": null,
-        "release_contracts": 1,
-        "release_in_flight": 0,
-        "release_gate_denials": [
-          "release_operation_consumed"
-        ]
-      }
-    },
-    {
       "id": "S12-legacy-session-reports-its-own-rule-set",
       "family": "S12",
       "boundary": "none",
@@ -851,6 +575,369 @@
           "certificate_version": "2",
           "unit_closure": true
         }
+      }
+    },
+    {
+      "id": "S09-real-read-fact-binds-a-proof",
+      "family": "S09",
+      "boundary": "v5",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "验证 report.md 的内容正确"
+        },
+        {
+          "type": "read_fact",
+          "callId": "v2-read",
+          "path": "/synthetic/workspace/report.md"
+        }
+      ],
+      "proof": {
+        "kind": "subject_readback",
+        "subject": "item",
+        "source": "read_file",
+        "operation": "verify"
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "acceptance",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "proof_state": {
+          "status": "bound"
+        }
+      }
+    },
+    {
+      "id": "S09-proof-about-another-subject-is-refused",
+      "family": "S09",
+      "boundary": "v5",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "验证 report.md 的内容正确"
+        },
+        {
+          "type": "read_fact",
+          "callId": "v2-read",
+          "path": "/synthetic/workspace/report.md"
+        }
+      ],
+      "proof": {
+        "kind": "subject_readback",
+        "subject": "foreign",
+        "source": "read_file",
+        "operation": "verify"
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "acceptance",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "proof_state": {
+          "status": "rejected",
+          "reason_codes": [
+            "proof_subject_unbound"
+          ]
+        }
+      }
+    },
+    {
+      "id": "S09-requested-visual-proof-cannot-be-faked",
+      "family": "S09",
+      "boundary": "v5",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "生成报告并检查界面截图效果"
+        }
+      ],
+      "expect": {
+        "interpreted": "unknown",
+        "open_items": [
+          {
+            "kind": "acceptance",
+            "status": "pending"
+          },
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": [
+          "generic_run_non_certifiable"
+        ],
+        "reason_classes": [
+          "parameter_missing",
+          "source_insufficient"
+        ]
+      }
+    },
+    {
+      "id": "S11-release-without-a-contract-is-refused",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        }
+      ],
+      "releaseProbe": {
+        "operation": "npm_publish",
+        "observed": {
+          "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "release_contracts": 0,
+        "release_in_flight": 0,
+        "release_gate_denials": [
+          "release_contract_required"
+        ]
+      }
+    },
+    {
+      "id": "S11-unprotectable-surface-is-refused",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        }
+      ],
+      "releaseProbe": {
+        "operation": "composite_runner",
+        "observed": {
+          "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "release_gate_denials": [
+          "release_runner_opaque"
+        ]
+      }
+    },
+    {
+      "id": "S11-adoption-without-a-closure-is-refused",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "clear_contract"
+        },
+        {
+          "type": "checkpoint"
+        },
+        {
+          "type": "release_adopt",
+          "contract": {
+            "contractId": "rel-1",
+            "operations": [
+              "npm_publish"
+            ],
+            "candidate": {
+              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "packageId": "dsh-completion-guard",
+              "version": "0.6.0",
+              "artifactSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          }
+        }
+      ],
+      "releaseProbe": {
+        "operation": "npm_publish",
+        "observed": {
+          "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "packageId": "dsh-completion-guard",
+          "version": "0.6.0",
+          "artifactSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [],
+        "closure": "complete",
+        "delivery": null,
+        "release_contracts": 1,
+        "release_gate_denials": [
+          "release_closure_unresolved"
+        ]
+      }
+    },
+    {
+      "id": "S11-missing-observed-identity-is-refused",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "clear_contract"
+        },
+        {
+          "type": "checkpoint"
+        },
+        {
+          "type": "release_adopt",
+          "contract": {
+            "contractId": "rel-1",
+            "operations": [
+              "npm_publish"
+            ],
+            "candidate": {
+              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "packageId": "dsh-completion-guard",
+              "version": "0.6.0",
+              "artifactSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "readinessRefs": [
+              "C1"
+            ],
+            "closureCertRef": "C1"
+          }
+        }
+      ],
+      "releaseProbe": {
+        "operation": "npm_publish",
+        "observed": {
+          "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "packageId": "dsh-completion-guard",
+          "version": "0.6.0"
+        }
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [],
+        "closure": "complete",
+        "delivery": null,
+        "release_contracts": 1,
+        "release_gate_denials": [
+          "release_artifact_sha256_unresolved"
+        ]
+      }
+    },
+    {
+      "id": "S11-consumed-ticket-refuses-the-replay",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "clear_contract"
+        },
+        {
+          "type": "checkpoint"
+        },
+        {
+          "type": "release_adopt",
+          "contract": {
+            "contractId": "rel-1",
+            "operations": [
+              "npm_publish"
+            ],
+            "candidate": {
+              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "packageId": "dsh-completion-guard",
+              "version": "0.6.0",
+              "artifactSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "artifactSri": "sha512-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB==",
+              "repository": "r",
+              "ref": "refs/heads/main",
+              "registry": "https://registry.npmjs.org/"
+            },
+            "readinessRefs": [
+              "C1"
+            ],
+            "closureCertRef": "C1"
+          }
+        },
+        {
+          "type": "release_reservation",
+          "contractId": "rel-1",
+          "operation": "npm_publish",
+          "callId": "res-1"
+        },
+        {
+          "type": "release_settlement",
+          "contractId": "rel-1",
+          "operation": "npm_publish",
+          "callId": "res-1",
+          "outcome": "settled",
+          "readback": {
+            "kind": "npm_integrity",
+            "identity": "sha512-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=="
+          }
+        }
+      ],
+      "releaseProbe": {
+        "operation": "npm_publish",
+        "observed": {
+          "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "packageId": "dsh-completion-guard",
+          "version": "0.6.0",
+          "artifactSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "artifactSri": "sha512-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB==",
+          "repository": "r",
+          "ref": "refs/heads/main",
+          "registry": "https://registry.npmjs.org/"
+        }
+      },
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [],
+        "closure": "complete",
+        "delivery": null,
+        "release_contracts": 1,
+        "release_in_flight": 0,
+        "release_gate_denials": [
+          "release_operation_consumed"
+        ]
       }
     }
   ]

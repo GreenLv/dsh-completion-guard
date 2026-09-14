@@ -65,6 +65,9 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
     blockers: { total: Number(full.blocking_total ?? (full.open_items as unknown[]).length), rejected: (full.rejected_bindings as unknown[]).length, reasons: [...reasons].slice(0, 8).map(([reason_code, count]) => ({ reason_code, count })), folded_reason_count: Math.max(0, reasons.size - 8) },
     open_items: [], active_constraints: [], rejected_bindings: [], available_evidence: [], available_qualifications: [] }
   if (full.certificate) output.certificate = full.certificate
+  // The presented proof's binding state is part of the answer, not a range
+  // detail: a caller that supplied a proof must learn whether it bound.
+  if (full.proof_state) output.proof_state = full.proof_state
   const pagination: Record<string, unknown> = { snapshot: identity, scope: evidence_scope,
     counts: { pending: [...p.items.values()].filter(i => i.status === 'pending').length,
       passed: [...p.items.values()].filter(i => i.status === 'passed').length,

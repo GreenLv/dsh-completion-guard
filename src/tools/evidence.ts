@@ -28,7 +28,7 @@ import {
 } from '../domain/git-adapter.js'
 import { bindExecutableIdentity, type AuditedExecutable, type ExecutableIdentity } from '../domain/host-lock.js'
 import { snapshotSessionEvents } from '../domain/session-events.js'
-import type { ReleaseGateDecision, ReleaseOperation, ReleaseSettlement } from '../domain/release.js'
+import type { ReleaseGateDecision, ReleaseObservedIdentity, ReleaseOperation, ReleaseSettlement } from '../domain/release.js'
 
 const execFileAsync = promisify(execFile)
 const PRODUCER_VERSION = '1.0.0'
@@ -100,17 +100,25 @@ export interface ReleaseGateToolRequest {
   /** The resolution call the effect is bound to; the replay key. */
   callId: string
   resolvedTarget: TargetTuple
-  /** The repo candidate the caller declares; compared with the contract. */
-  candidateSha?: string
+  /** What the trusted producers actually observed for this candidate. */
+  observed: ReleaseObservedIdentity
 }
 
+/**
+ * The outcome the executor can prove, before the runtime decides how it
+ * resolves the reservation:
+ * - `not_effected` — every pre-effect check refused, so no side effect ran;
+ * - `unknown` — the effect was attempted and its result cannot be established;
+ * - `completed` — the effect reported success (the runtime still compares the
+ *   readback identity before it settles anything).
+ */
 export interface ReleaseSettlementToolRequest {
   agent: { session: unknown }
   operation: ReleaseOperation
   callId: string
   /** The contract the granted reservation belonged to. */
   contractId?: string
-  outcome: ReleaseSettlement['outcome']
+  effect: 'completed' | 'not_effected' | 'unknown'
   readback: ReleaseSettlement['readback']
 }
 
@@ -482,7 +490,18 @@ async function readJson(path: string): Promise<RecordValue | undefined> {
   try { return record(JSON.parse(await readFile(path, 'utf8'))) } catch { return undefined }
 }
 
-interface TgzIdentity { name: string; version: string; integrity: string }
+interface TgzIdentity {
+  name: string
+  version: string
+  /** npm integrity (SHA-512 SRI) of the exact bytes. */
+  integrity: string
+  /** SHA-256 of the exact bytes — a DIFFERENT identity from the SRI. */
+  sha256: string
+  /** The commit the packer embedded in the artifact, when it recorded one. */
+  gitHead?: string
+  /** The repository declared by the packed manifest, when present. */
+  repository?: string
+}
 
 async function tgzIdentity(path: string): Promise<TgzIdentity | undefined> {
   if (!isAbsolute(path) || !path.endsWith('.tgz')) return undefined
@@ -507,10 +526,70 @@ async function tgzIdentity(path: string): Promise<TgzIdentity | undefined> {
     offset = bodyStart + Math.ceil(size / 512) * 512
   }
   if (typeof manifest?.name !== 'string' || typeof manifest.version !== 'string') return undefined
+  const gitHead = typeof manifest.gitHead === 'string' && /^[0-9a-f]{40}$/.test(manifest.gitHead) ? manifest.gitHead : undefined
+  const repositoryField = manifest.repository
+  const repository = typeof repositoryField === 'string'
+    ? repositoryField
+    : record(repositoryField) && typeof record(repositoryField)?.url === 'string'
+      ? String(record(repositoryField)!.url)
+      : undefined
   return {
     name: manifest.name,
     version: manifest.version,
     integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    ...(gitHead ? { gitHead } : {}),
+    ...(repository ? { repository } : {}),
+  }
+}
+
+/**
+ * Read the candidate identity of a publish from TRUSTED PRODUCERS only: the
+ * exact tgz bytes (SHA-256 and npm SRI), the manifest the packer embedded
+ * (package name, version, gitHead, repository) and, when the contract names a
+ * ref, the local repository's own answer for that ref. Nothing here comes from
+ * a model argument, so a caller cannot assert an identity the artifact does
+ * not have.
+ */
+async function observePublishCandidate(
+  resolution: PersistedResolution,
+  roots: EvidenceToolRoots,
+  signal: AbortSignal,
+  cwd: string | undefined,
+): Promise<ReleaseObservedIdentity | undefined> {
+  const tgzPath = requireString(resolution.commandManifest, 'tgz_path')
+  if (!tgzPath) return undefined
+  const identity = await tgzIdentity(tgzPath)
+  if (!identity) return undefined
+  const observed: ReleaseObservedIdentity = {
+    packageId: identity.name,
+    version: identity.version,
+    artifactSha256: identity.sha256,
+    artifactSri: identity.integrity,
+    ...(identity.gitHead ? { fullSha40: identity.gitHead } : {}),
+    ...(identity.repository ? { repository: identity.repository } : {}),
+  }
+  const ref = requireString(resolution.commandManifest, 'release_ref')
+  if (ref) {
+    const sha = await observeRef(cwd, ref, roots, signal)
+    if (sha) {
+      observed.ref = ref
+      if (observed.fullSha40 === undefined) observed.fullSha40 = sha
+    }
+  }
+  return observed
+}
+
+/** Resolve one ref to its commit with the audited git executable. */
+async function observeRef(cwd: string | undefined, ref: string, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
+  if (!cwd || !/^refs\/[A-Za-z0-9._/-]+$/.test(ref)) return undefined
+  try {
+    const identity = await (roots.readExecutableIdentity ?? executableIdentity)('git' as AuditedExecutable, signal)
+    if (!identity || identity.executable !== 'git') return undefined
+    const resolved = (await git(cwd, ['rev-parse', '--verify', `${ref}^{commit}`], signal, identity.realpath)).trim().toLowerCase()
+    return /^[0-9a-f]{40}$/.test(resolved) ? resolved : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -1179,10 +1258,6 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       target_digest: { type: 'string', required: true },
       contract_item_id: { type: 'string', required: true },
       contract_item_revision: { type: 'number', required: true },
-      // C10: the repo candidate the caller believes it is releasing. Declaring
-      // it is not authority — it is compared with the adopted contract, and a
-      // mismatch (including an omitted value) is refused before the effect.
-      release_candidate_sha: { type: 'string' },
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
@@ -1260,6 +1335,12 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       let releaseGranted = false
       let releaseContractId: string | undefined
       if (releaseOperation && roots.releaseGate) {
+        // The candidate identity comes from the trusted producers (the exact
+        // tgz and the local repository), never from the caller's arguments.
+        const observed = await observePublishCandidate(resolution, roots, exec.signal, cwdOf(agent as never))
+        if (!observed) {
+          return { status: 'unavailable' as const, reason_code: 'release_candidate_unobservable', ...identity }
+        }
         let decision: ReleaseGateDecision | undefined
         try {
           decision = await roots.releaseGate({
@@ -1267,7 +1348,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
             operation: releaseOperation,
             callId: args.resolution_call_id,
             resolvedTarget: resolution.target,
-            ...(typeof args.release_candidate_sha === 'string' ? { candidateSha: args.release_candidate_sha } : {}),
+            observed,
           })
         } catch {
           decision = undefined
@@ -1296,6 +1377,9 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
         // `unconfirmed`, which keeps the in-flight protection and never
         // pretends the release was verified.
         if (releaseOperation && releaseGranted && roots.releaseSettle) {
+          // `unavailable` here means every pre-effect check refused, so no
+          // command ran: that is a PROVEN no-effect. Anything else is an
+          // attempted effect whose result only a readback can establish.
           const readback = status === 'completed'
             ? await publishReadback(resolution.target, roots, exec.signal)
             : undefined
@@ -1304,7 +1388,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
             operation: releaseOperation,
             callId: args.resolution_call_id,
             ...(releaseContractId !== undefined ? { contractId: releaseContractId } : {}),
-            outcome: status !== 'completed' ? 'failed' : readback === undefined ? 'unconfirmed' : 'settled',
+            effect: status === 'completed' ? 'completed' : status === 'unavailable' ? 'not_effected' : 'unknown',
             readback: readback === undefined ? 'unavailable' : { kind: 'npm_integrity', identity: readback },
           })
         }
@@ -1316,9 +1400,12 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
         }
       } catch {
         if (releaseOperation && releaseGranted && roots.releaseSettle) {
+          // A thrown execution error is an UNKNOWN effect: npm may have
+          // published before the timeout/disconnect. The reservation stays
+          // locked until a trusted readback reconciles it.
           await roots.releaseSettle({
             agent, operation: releaseOperation, callId: args.resolution_call_id,
-            outcome: 'failed', readback: 'unavailable',
+            effect: 'unknown', readback: 'unavailable',
           })
         }
         return { status: 'unavailable' as const, reason_code: 'action_execution_failed', ...identity }

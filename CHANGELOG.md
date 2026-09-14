@@ -2,6 +2,99 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.0 repairs after concentrated review (2026-09-14)
+
+A concentrated review of the `0dce898` candidate produced fifteen targeted
+counterexamples; all fifteen reproduced a real defect. This section records the
+repair. The stable finding numbers (`F01`–`F08`, `R1`–`R15`) are the reviewer's.
+
+### Fixed
+
+- **F01 certificate replay was timing-dependent.** Deliveries were applied after
+  the whole log was replayed, so a checkpoint recorded in a later turn was
+  re-verified while the delivered answer still looked open, and the v5 rule set
+  was applied to the whole log rather than from the boundary onwards. Delivery
+  is now applied at the watermark of the turn that produced it and the rule mode
+  switches at the boundary event, which makes a projection equal to the
+  projection of its own prefix. Certificate comparison is also field-semantic
+  now: identical certificates replay identically regardless of JSON property
+  order, while an extra, missing, or tampered field still fails.
+- **F02 delivery accepted late and non-final answers.** The final answer must
+  appear before the turn's own `turn/end`, must sit in the highest step the host
+  actually entered, and the turn must have exactly one completed end and a
+  recorded start. Late text, an intermediate step, a repeated or abnormal end,
+  and an aborted turn all deliver nothing.
+- **F03 the switch test ignored descendants, and an item reference crashed.**
+  The handover test now uses the same closure as the certificate, so a parent
+  with a pending delegated child is not treated as finished, and the item-ID
+  pattern is a global capture that distinguishes live lineage references from
+  unknown or historical IDs.
+- **F04 release identity was not really bound.** A candidate now has separate,
+  named identities — commit, ref, repository, package, version, artifact
+  SHA-256, npm SRI, registry — and each is compared with its own observed value
+  read from a trusted producer (the exact tgz bytes and the local repository),
+  never with a model-supplied string. Readiness and closure references must
+  resolve to real certified facts, the resolved target must be the artifact the
+  contract names, and a contract that names no artifact digest is refused
+  outright so omitting one cannot be a bypass. A registry readback that names
+  different bytes is not a settlement.
+- **F05 an unknown effect could be re-sent, and a late readback was discarded.**
+  Outcomes are distinguished: `not_effected` is a proven pre-effect refusal and
+  releases the one-shot lock, while `failed`/`unknown`/`unconfirmed` keep it and
+  refuse a re-send. Settlements are reconciled rather than de-duplicated, so a
+  trusted readback settles an earlier unconfirmed attempt, and a settled release
+  is never downgraded. Damaged release state now blocks release operations
+  (`release_state_damaged`) without touching ordinary work.
+- **F06 adoption reported an error and revocation did not exist.** The public
+  command validates and reports exactly what the durable root command adopts,
+  and `/context-guard release revoke <contract_id>` records a durable revocation
+  that keeps the audit trail, denies the next effect, and still shows an
+  in-flight reservation whose readback is owed.
+- **F07 proof could be satisfied about the wrong subject.** Binding now runs the
+  whole chain: the item's own frozen subject and scope, the fact's qualification
+  under the ordinary evidence rules, the declared source, the declared operation
+  for every kind, the order of an input check before the effect, and the real
+  coverage set behind a declared scope digest. A manifest and a fact that agree
+  with each other but not with the user's obligation are rejected.
+- **F08 the proof entry was not reachable from production.** The v2 binder is now
+  wired into `context_guard_checkpoint` (an optional `proof` manifest is bound
+  before any certificate and its state is reported), the v2 fixture evaluates
+  each release probe at its own point in the log, mints real closure
+  certificates, and carries a real read fact for S09, and a dedicated
+  production-chain suite drives producer → persisted log → derive → checkpoint →
+  replay.
+
+### Scope rulings (coordinator, 2026-09-14)
+
+Two scope facts were decided once, and both are recorded as fact rather than as
+a general parity claim:
+
+1. **The v2 shared fixture stays a DSH-authored candidate and cross-language
+   parity stays open.** The upstream repository has not frozen a v2
+   specification, so there is nothing to mirror. The plan's shared gate is
+   therefore recorded as a cross-repository pending item owned by the upstream.
+2. **The release profile's protectable surface is `npm_publish` only.** The
+   `git_tag` and GitHub Release routes are NOT claimed to be blocked by the
+   host: the plugin reports them as `release_operation_unrouted` with
+   `attribution: scope_reduction`, because building the Guard-owned route is the
+   work that would make them protectable. Only a composite runner is reported as
+   an opaque host boundary. The coverage table is machine-readable so this
+   distinction cannot be lost in prose.
+
+The plugin therefore does not claim "C01–C12 core alignment" with Codex Context
+Guard, and it does not claim a complete release coverage surface.
+
+### Verification
+
+The reviewer's fifteen counterexamples are kept as
+`tests/domain/review-counterexamples.test.ts` and now pass; the expectations
+that the repair deliberately changed are marked in place with the reason. New
+coverage: `tests/domain/v060-proof-production-chain.test.ts` (the proof entry
+through real tool registration), the rewritten release/migration suite (26
+cases, including a real certified closure and every identity refusal), and the
+extended v2 fixture (S09 proof binding, per-timeline release probes, and the
+scope-attribution table).
+
 ## 0.6.0 - 2026-09-14
 
 This release makes ordinary DSH work enter, execute, deliver, and resume under

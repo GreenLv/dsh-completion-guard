@@ -52,7 +52,8 @@ import {
 } from './domain/host-lock.js'
 import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type StatefulAction } from './domain/protocol-manifest.js'
 import {
-  releaseContractFor, releasePreEffectDecision,
+  readbackSettlesContract, releaseContractFor, releasePreEffectDecision,
+  type ReleaseSettlement,
   RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX,
 } from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
@@ -792,11 +793,9 @@ export function apply(ctx: Context, rawConfig: {
         if (!applicable) return { status: 'granted', reasonCode: 'release_profile_not_adopted' }
         const decision = releasePreEffectDecision(projection, {
           operation: request.operation,
-          candidate: {
-            ...(request.candidateSha !== undefined ? { fullSha40: request.candidateSha } : {}),
-            ...(typeof request.resolvedTarget.version === 'string' ? { version: request.resolvedTarget.version } : {}),
-            ...(typeof request.resolvedTarget.integrity_digest === 'string' ? { artifactDigest: request.resolvedTarget.integrity_digest } : {}),
-          },
+          // The observed identity is produced by the trusted readers inside the
+          // action tool; the runtime only forwards it.
+          observed: request.observed,
           resolvedTarget: request.resolvedTarget,
           nowEpochMs: Date.now(),
         })
@@ -815,16 +814,29 @@ export function apply(ctx: Context, rawConfig: {
           : { status: 'denied', reasonCode: 'release_reservation_not_durable' }
       },
       releaseSettle: async (request) => {
+        // The runtime owns the final outcome because only it can compare the
+        // readback with the adopted contract. A readback that names DIFFERENT
+        // bytes than the contract froze is not a settlement: the attempt stays
+        // unknown and locked, and the mismatch is reported.
+        const contractId = request.contractId
+          ?? releaseContractFor(runtime.projection, request.operation)?.contractId
+          ?? 'unknown'
+        const contract = runtime.projection.releaseContracts.find((entry) => entry.contractId === contractId)
+        let outcome: ReleaseSettlement['outcome'] = request.effect === 'not_effected' ? 'not_effected' : 'unknown'
+        if (request.effect === 'completed' && contract) {
+          const settled = readbackSettlesContract(contract, request.readback)
+          outcome = settled === 'settled' ? 'settled' : 'unknown'
+        }
         await persistReleaseRecord(agent, RELEASE_SETTLEMENT_PREFIX, {
           // The settlement belongs to the contract the granted reservation
           // belonged to. Derive pins settledAtSeq to the durable event, so the
           // payload's placeholder cannot be forged by a replay.
-          contractId: request.contractId ?? releaseContractFor(runtime.projection, request.operation)?.contractId ?? 'unknown',
+          contractId,
           operation: request.operation,
           callId: request.callId,
           settledAtSeq: 0,
           readback: request.readback,
-          outcome: request.outcome,
+          outcome,
         })
       },
       persistRestartIntent: async (toolAgent, intent) => {

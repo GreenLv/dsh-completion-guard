@@ -180,6 +180,32 @@ artifacts are not mirrored (see below).
 | C11 fresh projection | Every public read/control entry flushes, re-snapshots, and re-derives; a failed flush reports unavailability | `tests/tools/prepare-fresh-projection.test.ts`, `tests/flush.test.ts` |
 | C12 migration and diagnosis | Seven-class reason mapping, rule-set report, preserved identities, rollback precondition | `tests/domain/v060-release-migration.test.ts`, `v042-recovery-migration.test.ts` |
 
+### Scope rulings and protocol difference table (2026-09-14)
+
+A concentrated review of the `0dce898` candidate found eight defect families and
+asked for two scope decisions. Both were decided by the coordinator on
+2026-09-14 and are recorded here as facts, not as a parity claim:
+
+1. **The v2 fixture stays a DSH-authored candidate; cross-language parity stays
+   open.** The upstream has not frozen a v2 specification, so the shared gate is
+   recorded as a cross-repository pending item owned by `codex-context-guard`.
+   Nothing here claims C01–C12 alignment with that product.
+2. **The release profile's protectable surface is `npm_publish` only.** The
+   `git_tag` and GitHub Release operations are reported as
+   `release_operation_unrouted` with `attribution: scope_reduction` — the gap is
+   the missing Guard-owned route, which a later release can add — and only a
+   composite runner is reported as an opaque host boundary. The coverage table
+   is machine-readable precisely so this distinction cannot be flattened into
+   "the host does not support it".
+
+| Difference | Value here | Reason |
+| --- | --- | --- |
+| Action manifest version | stays `1` | The new preparation fields live in the `actionPreparation()` descriptor (plugin output), not in `ActionSpec`; no shipped manifest byte changed. |
+| Boundary protocol | stays `1` | No unit-attribution field was needed; adding one would change every boundary digest without adding a guarantee. |
+| Release `ref` observability | a contract that declares `ref` requires an observed ref | `npm_publish` observes the tgz and, when the contract names a ref, the local repository's own answer; a declared-but-unobserved `ref` is refused as unresolved rather than skipped. |
+| Release artifact identity | three named identities, never conflated | The commit (`gitHead`), the byte SHA-256 and the npm SRI are different facts; the legacy `artifactDigest` alias is split by its own shape. |
+| `git_tag` / GitHub Release / composite runner | refused before any effect | Approved scope reduction for the first two (no Guard route yet); opaque host boundary for the third. |
+
 ### P0 deviation record (2026-09-14)
 
 The P0 specification's identity table assigned new protocol numbers to every

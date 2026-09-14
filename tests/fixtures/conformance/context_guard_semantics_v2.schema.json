@@ -86,7 +86,10 @@
                     "release_adopt",
                     "release_reservation",
                     "release_settlement",
-                    "release_probe"
+                    "release_probe",
+                    "read_fact",
+                    "checkpoint",
+                    "clear_contract"
                   ]
                 },
                 "text": {
@@ -169,6 +172,9 @@
                 },
                 "nowEpochMs": {
                   "type": "integer"
+                },
+                "path": {
+                  "type": "string"
                 }
               }
             }
@@ -337,6 +343,29 @@
                     "type": "boolean"
                   }
                 }
+              },
+              "proof_state": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "absent",
+                      "bound",
+                      "rejected",
+                      "invalid"
+                    ]
+                  },
+                  "reason_codes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           },
@@ -346,6 +375,73 @@
               "strict",
               "release"
             ]
+          },
+          "proof": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "subject_readback",
+                  "scope_coverage",
+                  "state_verification",
+                  "input_asset_check",
+                  "output_visual_readback",
+                  "object_url_readback",
+                  "execution_fact",
+                  "external_fact"
+                ]
+              },
+              "subject": {
+                "enum": [
+                  "item",
+                  "foreign"
+                ]
+              },
+              "source": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "mutate": {
+                "enum": [
+                  "none",
+                  "digest",
+                  "surface"
+                ]
+              }
+            }
+          },
+          "releaseProbe": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "operation"
+            ],
+            "properties": {
+              "operation": {
+                "type": "string"
+              },
+              "observed": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "contractId": {
+                "type": "string"
+              },
+              "nowEpochMs": {
+                "type": "integer"
+              }
+            }
+          },
+          "checkpoint": {
+            "const": true
           }
         }
       }

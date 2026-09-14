@@ -371,6 +371,13 @@ export interface GuardProjection {
   /** Bounded audit of rejected release records (never raw payloads). */
   releaseDiagnostics: Array<{ seq: number; reasonCode: string }>
   /**
+   * True when a release record could not be read back. Damaged release state
+   * blocks RELEASE operations with `release_state_damaged` while leaving the
+   * projection's own integrity and all ordinary work untouched: the plugin
+   * reports what it cannot read instead of quietly forgetting it.
+   */
+  releaseStateDamaged: boolean
+  /**
    * 0.6.0 C07 trusted host selections, derived only from paired durable
    * question-tool round-trips (last 16). A directory selection narrows where
    * a bounded file choice may land for obligations of the same unit.
@@ -461,6 +468,7 @@ export function createProjection(): GuardProjection {
     releaseReservations: [],
     releaseSettlements: [],
     releaseDiagnostics: [],
+    releaseStateDamaged: false,
     policy: 'standard',
     trustedSelections: [],
     approvals: [],
