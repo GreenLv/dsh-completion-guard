@@ -1,4 +1,4 @@
-import { PROTOCOL_V4_NOTICE } from './derive.js'
+import { PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE } from './derive.js'
 
 /**
  * Runtime-owned startup lifecycle. It expresses the activation strategy of a
@@ -64,6 +64,8 @@ export interface FirstStepPreviewInput {
   activation: 'opt-in' | 'always'
   /** Log-derived enablement: an explicit `off` suppresses `always` until `on`. */
   enabled: boolean
+  /** The durable log already contains a v5 (0.6) Guard boundary. */
+  boundaryV5Present?: boolean
   /** The durable log already contains a v4 (or newer) Guard boundary. */
   boundaryPresent: boolean
   /** The session is a delegated/subagent session, never a root conversation. */
@@ -76,15 +78,20 @@ export interface FirstStepPreviewInput {
  * persisted step batch; guidance is compact and never claims a recovery that
  * did not happen. `opt-in` reaches this path only after its explicit `on` command. Delegated sessions receive neither: their
  * scope arrives through the parent's delegation prompt (A04).
+ *
+ * A session without a v5 boundary receives the 0.6 boundary: it cuts the
+ * work-unit/delivery/certificate-v2 semantics at exactly this message. A
+ * session that already has v5 injects nothing.
  */
 export function previewFirstStepInjection(
   input: FirstStepPreviewInput,
   claimedRealInput: boolean,
 ): FirstStepInjection | undefined {
-  if (!input.enabled || input.boundaryPresent || input.delegated) return undefined
+  if (!input.enabled || input.delegated) return undefined
   if (!claimedRealInput) return undefined
+  if (input.boundaryV5Present) return undefined
   return {
-    boundary: PROTOCOL_V4_NOTICE,
+    boundary: PROTOCOL_V5_NOTICE,
     guidance: FIRST_STEP_GUIDANCE,
   }
 }

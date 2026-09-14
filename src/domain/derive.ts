@@ -15,6 +15,8 @@ import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.
 import { supersedeItem } from './supersession.js'
 import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItemKind } from './types.js'
 import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
+import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
+import { explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensNewUnit, currentUnitHasOpenWork } from './work-unit.js'
 
 interface PendingCall {
   name: string
@@ -36,6 +38,16 @@ export const PROTOCOL_V3_NOTICE = 'Context Guard protocol boundary: v3.0.0'
  * their historical meaning for replay.
  */
 export const PROTOCOL_V4_NOTICE = 'Context Guard protocol boundary: v4.0.0'
+
+/**
+ * 0.6.0 first-step boundary: same placement discipline as v4. It cuts the
+ * work-unit, delivery, and certificate-v2 semantics (P0 §1): messages before
+ * it keep their historical rules, messages after it are captured into work
+ * units and close through unit-closure certificates and trusted deliveries.
+ * An old binary ignores this notice (plugin source, unmatched pattern), so the
+ * fail direction on rollback is closed, never a misread.
+ */
+export const PROTOCOL_V5_NOTICE = 'Context Guard protocol boundary: v5.0.0'
 
 function isProtocolBoundaryNotice(event: DerivedEnvelope, notice = PROTOCOL_V3_NOTICE): boolean {
   if (event.type !== 'user/message') return false
@@ -63,7 +75,7 @@ function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoi
   const value = asRecord(recorded)
   if (!value) return false
   const goal = asRecord(value.goal_ref)
-  const exact = {
+  const exact: Record<string, unknown> = {
     stop_protocol_version: checkpoint.stopProtocolVersion,
     certificate_version: checkpoint.certificateVersion,
     epoch: checkpoint.epoch,
@@ -76,6 +88,12 @@ function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoi
     binding_digest: checkpoint.bindingDigest,
     certification_digest: checkpoint.certificationDigest,
     goal_ref: checkpoint.goalRef ?? null,
+  }
+  // v2 certificates bind their unit closure; the identity comparison is exact
+  // on those fields too, so a certificate for another unit never replays.
+  if (checkpoint.unitId !== undefined) {
+    exact.unit_id = checkpoint.unitId
+    exact.unit_closure_digest = checkpoint.unitClosureDigest
   }
   const normalized = { ...value, goal_ref: goal ? { id: goal.id, revision: goal.revision } : value.goal_ref }
   return JSON.stringify(normalized) === JSON.stringify(exact)
@@ -93,6 +111,9 @@ function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings
   ] as const
   if (fields.some((name) => !stringField(name))) return undefined
   if (goal && (typeof goal.id !== 'string' || !Number.isSafeInteger(goal.revision))) return undefined
+  // A v2 record carries its unit identity; an incomplete unit binding fails
+  // the restore instead of replaying a half-specified certificate.
+  if (recorded.unit_id !== undefined && (typeof recorded.unit_id !== 'string' || !stringField('unit_closure_digest'))) return undefined
   return {
     id,
     stopProtocolVersion: stringField('stop_protocol_version')!,
@@ -107,6 +128,7 @@ function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings
     bindingDigest: stringField('binding_digest')!,
     bindings,
     ...(goal ? { goalRef: { id: goal.id as string, revision: goal.revision as number } } : {}),
+    ...(typeof recorded.unit_id === 'string' ? { unitId: recorded.unit_id, unitClosureDigest: stringField('unit_closure_digest') } : {}),
     certificationDigest: stringField('certification_digest')!,
     result: 'certified',
   }
@@ -158,6 +180,7 @@ function captureRootText(
   priorRootMessages: string[],
   prefix = `m${seq}`,
   coordinationSplit = true,
+  unitId?: string,
 ): void {
   const blocks = segmentAuthorityBlocks(text, priorRootMessages)
   for (const block of blocks) {
@@ -171,6 +194,7 @@ function captureRootText(
       legacy,
       block.kind === 'instruction' || block.authority === 'root_adoption',
       coordinationSplit,
+      unitId,
     )
   }
   priorRootMessages.push(text)
@@ -192,6 +216,7 @@ function insertItems(
   legacy = false,
   legacyAuthorityProven = false,
   coordinationSplit = true,
+  unitId?: string,
 ): void {
   const before = new Set(projection.items.keys())
   for (const segment of segmentClauses(text, { coordinationSplit })) {
@@ -200,11 +225,11 @@ function insertItems(
     if (classifyUserInteraction(segment.body) === 'conversational') continue
     if (segment.kind === 'requirement' && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue
     if (segment.paths.length === 0) {
-      insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope')
+      insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope', unitId)
       continue
     }
     for (const path of segment.paths) {
-      insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact')
+      insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact', unitId)
     }
   }
   // A new unconditional root instruction on the same action and target
@@ -254,6 +279,7 @@ function insert(
   sourceMessageId: string,
   subject: string,
   surface: 'artifact' | 'scope',
+  unitId?: string,
 ): void {
   const revision = projection.contractRevision + 1
   const id = nextId(projection.items, segment.kind)
@@ -263,6 +289,7 @@ function insert(
     segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation,
     segment.interpretation,
   )
+  if (unitId !== undefined) item.unitId = unitId
   const duplicate = [...projection.items.values()].find(
     (existing) => existing.kind === segment.kind
       && existing.status === 'pending'
@@ -301,11 +328,28 @@ export function deriveProjection(
   let enablementTransitioned = false
   let lastCompactionSeq = -1
   const pendingCalls = new Map<string, PendingCall>()
+  const v5BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
   const v4BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
-  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
-  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
+  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
+  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
+  // The rule mode is a fact about the log's boundary position, known before
+  // replay starts: certificate re-derivation mid-loop must already use v2
+  // unit semantics in a v5 session, or a replayed checkpoint would mismatch.
+  if (v5BoundarySeq !== undefined) projection.boundaryProtocol = 5
   const priorRootMessages: string[] = []
   let realRootInputSeen = false
+  // 0.6.0 delivery bookkeeping: per-turn root input sequences and the unit
+  // each turn's input belonged to, consumed after the loop by the trusted
+  // delivery pass.
+  const turnRootInputSeqs = new Map<number, Set<number>>()
+  const turnUnitIds = new Map<number, string | undefined>()
+  let activeTurn: number | undefined
+  // Units and delivery derive only after the v5 boundary and only for
+  // non-delegated sessions; the flag is computed once.
+  const unitSemanticsActive = () => v5BoundarySeq !== undefined
+    && !scope.sessionHeader?.parentSession
+    && !scope.sessionHeader?.delegationDepth
+    && scope.sessionHeader?.origin !== 'subagent'
 
   for (const event of sourceEvents) {
     projection.enabled = enabled
@@ -348,11 +392,19 @@ export function deriveProjection(
         // reliable way to count turns from the log, and a fabricated identity
         // would move the no-progress budget for reasons the host never saw.
         const started = asRecord(event.data)
-        if (typeof started?.turn === 'number' && Number.isSafeInteger(started.turn)) projection.hostTurn = started.turn
+        if (typeof started?.turn === 'number' && Number.isSafeInteger(started.turn)) {
+          projection.hostTurn = started.turn
+          activeTurn = started.turn
+        }
+        break
+      }
+      case 'turn/end': {
+        const ended = asRecord(event.data)
+        if (typeof ended?.turn === 'number' && Number.isSafeInteger(ended.turn)) activeTurn = undefined
         break
       }
       case 'user/message': {
-        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break
+        if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) break
         // The no-progress budget lives in the log, so it is read back here
         // before anything that depends on activation: the record is a fact about
         // what Guard already decided, and a reload must restore the budget
@@ -393,6 +445,24 @@ export function deriveProjection(
         // attachment-only messages that carry no captureable text.
         if (text.trim() || content.some((part) => part && typeof part === 'object' && (part as Record<string, unknown>).type !== 'text')) {
           realRootInputSeen = true
+          // Delivery bookkeeping: the turn this root input entered under. The
+          // host opens the turn before claiming input, so the pairing is the
+          // host's own, never inferred.
+          if (activeTurn !== undefined) {
+            const seqs = turnRootInputSeqs.get(activeTurn) ?? new Set<number>()
+            seqs.add(event.seq)
+            turnRootInputSeqs.set(activeTurn, seqs)
+          }
+        }
+        // Root inputs arriving before the v5 boundary never gain units.
+        const unitSemantics = unitSemanticsActive() && v5BoundarySeq !== undefined && event.seq > v5BoundarySeq
+        // Continuation/remainder/asset input joins the current unit (C08 rule
+        // 2: follow-ups and explicit linkage never open a unit).
+        const foldUnitId = (): string | undefined => {
+          if (!unitSemantics) return undefined
+          foldIntoCurrentUnit(projection, event.seq)
+          if (activeTurn !== undefined) turnUnitIds.set(activeTurn, projection.currentUnitId)
+          return projection.currentUnitId
         }
         // A message is a legacy continuation only when a protocol boundary
         // exists AND the message precedes it. A session that never wrote a
@@ -407,11 +477,12 @@ export function deriveProjection(
         // neither boundary is a current session and uses the current shape.
         const coordinationSplit = !(protocolBoundarySeq !== undefined
           && (captureBoundarySeq === undefined || event.seq < captureBoundarySeq))
-        const captureAssets = () => {
+        const captureAssets = (unitId?: string) => {
           // Non-text root input must not vanish into an empty certifiable
           // contract. Keep its durable event/part identity as an unresolved
           // obligation; attachment content itself never supplies authority.
-          if (v4BoundarySeq !== undefined && event.seq > v4BoundarySeq) {
+          // A v5 boundary implies the 0.5 asset rule.
+          if ((v4BoundarySeq ?? v5BoundarySeq) !== undefined && event.seq > (v4BoundarySeq ?? v5BoundarySeq)!) {
             content.forEach((part, index) => {
               if (!part || typeof part !== 'object' || (part as Record<string, unknown>).type === 'text') return
               const identity = sha256(JSON.stringify(part))
@@ -432,16 +503,20 @@ export function deriveProjection(
                   authorityDisposition: 'executable_now',
                   fingerprint: `asset:${identity.slice(0, 16)}`,
                 },
-              }, `m${event.seq}:asset:${index}`, scope.cwd || 'scope', 'scope')
+              }, `m${event.seq}:asset:${index}`, scope.cwd || 'scope', 'scope', unitId)
             })
           }
         }
-        if (!text.trim()) { captureAssets(); break }
+        if (!text.trim()) { captureAssets(unitSemantics ? foldUnitId() : undefined); break }
         if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== 'subagent') {
           // One durable root message is one atomic transaction: the
           // confirmation validates against the state BEFORE this message,
-          // then the remaining text is processed with its own semantics.
-          const parsed = v4BoundarySeq !== undefined && event.seq > v4BoundarySeq
+          // then the remaining text is processed with its own semantics. The
+          // confirm parse deliberately precedes every conversational guard —
+          // a confirmation message is a control line first. A v5 boundary
+          // implies the 0.5 confirmation grammar.
+          const confirmGrammarSeq = v4BoundarySeq ?? v5BoundarySeq
+          const parsed = confirmGrammarSeq !== undefined && event.seq > confirmGrammarSeq
             ? parseConfirmationMessage(text)
             : (() => {
               const match = CONFIRM_LINE_PATTERN.exec(text.trim())
@@ -450,29 +525,49 @@ export function deriveProjection(
           if (parsed.kind === 'confirm') {
             const consumed = confirmRebind(projection, parsed.proposalId, `m${event.seq}`, durableConfirmed)
             if (consumed) {
-              captureAssets()
-              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit)
+              const unitId = unitSemantics ? foldUnitId() : undefined
+              captureAssets(unitId)
+              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId)
               break
             }
           } else if (parsed.kind !== 'none') {
             // Malformed or ambiguous control text never confirms; the control
             // line itself is not task text, but the rest captures normally.
-            captureAssets()
+            const unitId = unitSemantics ? foldUnitId() : undefined
+            captureAssets(unitId)
             projection.lastConfirmationRejection = { eventSeq: event.seq, kind: parsed.kind, reason: parsed.reason }
             const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join('\n')
             if (!stripped.trim()) break
-            captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit)
+            captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId)
             break
           }
         }
-        captureAssets()
+        // The unit decision (C04) for the main capture path is taken against
+        // the pre-message state, before any item of this message exists. An
+        // explicit switch marker or a finished current unit opens the next
+        // unit; anything else joins the current one; the session's first task
+        // message opens U001. An asset-only or empty message never opens one.
+        const directiveBearing = text.trim().length > 0
+          && !isInformationalMessage(text)
+          && classifyUserInteraction(text) !== 'conversational'
+        let captureUnitId: string | undefined
+        if (unitSemantics && directiveBearing) {
+          if (!explicitlyLinkedToCurrentUnit(projection, text)
+            && opensNewUnit(projection, text, true, currentUnitHasOpenWork(projection))) {
+            captureUnitId = openUnit(projection, event.seq, text.slice(0, 200)).unitId
+          } else {
+            captureUnitId = foldUnitId()
+          }
+          if (activeTurn !== undefined) turnUnitIds.set(activeTurn, captureUnitId)
+        }
+        captureAssets(captureUnitId ?? (unitSemantics ? foldUnitId() : undefined))
         // Informational reports (acceptance receipts, pasted summaries/logs)
         // are not task instructions and never become contract items.
         if (isInformationalMessage(text)) break
         // Session-layer talk (progression phrases, meta questions, meta
         // comments) is not a task requirement either (v0.2.1).
         if (classifyUserInteraction(text) === 'conversational') break
-        captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit)
+        captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId)
         break
       }
       case 'goal/change': {
@@ -699,5 +794,21 @@ export function deriveProjection(
   }
   projection.enabled = enabled
   projection.epoch = epoch
-  return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined }
+  // 0.6.0 trusted delivery pass (C03): apply host-confirmed answer deliveries
+  // to information-slot items of the turns that asked them. Derived entirely
+  // from durable events, so a replay reproduces every answered mark exactly.
+  if (v5BoundarySeq !== undefined) {
+    for (const delivery of deriveTrustedDeliveries(sourceEvents)) {
+      const inputSeqs = turnRootInputSeqs.get(delivery.turn)
+      if (!inputSeqs) continue
+      const unitId = turnUnitIds.get(delivery.turn)
+      for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, unitId)) {
+        const item = projection.items.get(itemId)
+        if (!item || item.status !== 'pending') continue
+        item.status = 'answered'
+        item.answeredBy = { turn: delivery.turn, responseSeq: delivery.responseSeq, responseSha256: delivery.responseSha256 }
+      }
+    }
+  }
+  return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined, boundaryV5: v5BoundarySeq !== undefined }
 }

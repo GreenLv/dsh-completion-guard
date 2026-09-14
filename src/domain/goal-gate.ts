@@ -10,6 +10,12 @@ export function hasCurrentCertificate(projection: GuardProjection): boolean {
   else if (checkpoint.sessionRefDigest !== projection.sessionRefDigest) reason = 'foreign_session'
   else if (checkpoint.hostLockDigest !== projection.hostLockDigest) reason = 'stale_host_lock'
   else if (checkpoint.contractRevision !== projection.contractRevision) reason = 'stale_contract_revision'
+  else if (projection.boundaryProtocol === 5) {
+    // v5 sessions certify through unit-closure certificates only; a version-1
+    // record keeps its historical meaning and is never current authority here.
+    if (checkpoint.certificateVersion !== '2') reason = 'legacy_certificate_in_v5_session'
+    else if (checkpoint.unitId !== projection.currentUnitId) reason = 'stale_unit_ref'
+  } else if (checkpoint.certificateVersion !== '1') reason = 'certificate_version_unavailable'
   else if (projection.currentGoalRef
     ? checkpoint.goalRef?.id !== projection.currentGoalRef.id || checkpoint.goalRef.revision !== projection.currentGoalRef.revision
     : checkpoint.goalRef !== undefined) reason = 'stale_goal_ref'

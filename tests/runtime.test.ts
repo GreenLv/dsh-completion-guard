@@ -769,6 +769,7 @@ function projectionRuntime(projection: ReturnType<typeof createProjection>): Gua
     session: Session.create(SessionId('turn-stop-projection')),
     get lifecycle() { return 'active' as const },
     get protocolV4Present() { return true },
+    get protocolV5Present() { return true },
     sync: () => {}, setEnabled: () => {}, setDurability: () => {},
     markRecoveryNeeded: () => {}, consumeRecovery: () => false,
   }

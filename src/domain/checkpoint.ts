@@ -1,14 +1,15 @@
 import { digestStrings, sha256 } from './canonicalize.js'
 import { currentContractDigest } from './contract-digest.js'
 import {
-  bindingDigest as deriveBindingDigest, bindingStateClosure, certificationDigest,
+  bindingDigest as deriveBindingDigest, bindingStateClosure, certificationDigest, certificationDigestV2,
   evidenceSha256Digest, predParamsDigest, resolveAllowlist,
   type BindingRecord, type EvidenceFact, type Typed,
 } from './digest.js'
 import { bindingSatisfies, evidenceCoverage } from './matching.js'
 import { closingHint } from './recovery.js'
+import { certificateClosure, certifiableOpenItems } from './closure.js'
 import {
-  ACTION_MANIFEST, CERTIFICATE_VERSION, STOP_PROTOCOL_VERSION,
+  ACTION_MANIFEST, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2,
   actionCompatible, isStatefulAction, requestedTargetMatchesResolved, validateActionTarget,
   type SemanticAction,
 } from './protocol-manifest.js'
@@ -319,7 +320,7 @@ function simpleRecord(projection: GuardProjection, item: GuardItem, binding: Evi
 
 export function certifyCheckpoint(projection: GuardProjection, bindings: EvidenceBinding[], id: string, commit = true): CheckpointResult {
   if (projection.integrity !== 'valid' || projection.hostStatus !== 'supported') {
-    return { status: 'unknown', contractRevision: projection.contractRevision, openItems: openItems(projection), rejectedBindings: [] }
+    return { status: 'unknown', contractRevision: projection.contractRevision, openItems: certifiableOpenItems(projection).map((item) => item.id), rejectedBindings: [] }
   }
   const rejectedBindings: RejectedBinding[] = []
   const records: BindingRecord[] = []
@@ -367,26 +368,60 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     records.push(built.record!)
     referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact))
   }
-  const open = openItems(projection).filter((itemId) => !bindings.some((binding) => binding.itemId === itemId))
-  if (rejectedBindings.length || open.length) return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: openItems(projection), rejectedBindings }
+  // The certified scope comes from the single closure implementation: the
+  // current unit plus any pre-v5 obligations under a v5 boundary, or the whole
+  // session under the legacy contract.
+  const closure = certificateClosure(projection)
+  const open = closure.itemIds.filter((itemId) => !bindings.some((binding) => binding.itemId === itemId))
+  if (rejectedBindings.length || open.length) return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: closure.itemIds, rejectedBindings }
+  if (projection.boundaryProtocol === 5 && closure.unitId === undefined) {
+    // Unreachable in a live session (the v5 boundary is written with the first
+    // real input, which opens U001); failing closed keeps a unit-less v2
+    // certificate from ever existing.
+    return {
+      status: 'incomplete', contractRevision: projection.contractRevision,
+      openItems: closure.itemIds,
+      rejectedBindings: [{ itemId: '*', reason: 'no current work unit is available for a v2 certificate', reasonCode: 'unit_unavailable' }],
+    }
+  }
   try {
     const contractSha256 = currentContractDigest(projection)
-    const openDigest = digestStrings(openItems(projection))
+    const openDigest = digestStrings(closure.itemIds)
     const evidenceSha256 = evidenceSha256Digest(referencedFacts)
     const bindingDigest = deriveBindingDigest(records, resolveAllowlist('product'))
-    const certification = certificationDigest({
-      stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
-      sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
-      contractRevision: projection.contractRevision, contractSha256,
-      ...(projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {}), openDigest, evidenceSha256, bindingDigest,
-    })
-    const checkpoint: GuardCheckpoint = {
-      id, stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
-      sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
-      contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
-      ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
-      certificationDigest: certification, result: 'certified',
-    }
+    const checkpoint: GuardCheckpoint = projection.boundaryProtocol === 5
+      ? (() => {
+        const certification = certificationDigestV2({
+          stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: CERTIFICATE_VERSION_V2, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256,
+          unitId: closure.unitId!, unitClosureDigest: openDigest, evidenceSha256, bindingDigest,
+          goalRef: projection.currentGoalRef ?? null,
+        })
+        return {
+          id, stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: CERTIFICATE_VERSION_V2, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
+          ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
+          unitId: closure.unitId!, unitClosureDigest: openDigest,
+          certificationDigest: certification, result: 'certified' as const,
+        }
+      })()
+      : (() => {
+        const certification = certificationDigest({
+          stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256,
+          ...(projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {}), openDigest, evidenceSha256, bindingDigest,
+        })
+        return {
+          id, stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
+          ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
+          certificationDigest: certification, result: 'certified' as const,
+        }
+      })()
     if (commit) {
       projection.checkpoints.push(checkpoint)
       for (const binding of bindings) projection.items.get(binding.itemId)!.status = 'passed'
@@ -394,7 +429,7 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     }
     return { status: 'certified', contractRevision: projection.contractRevision, openItems: [], rejectedBindings: [], checkpoint }
   } catch (error) {
-    return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: openItems(projection), rejectedBindings: [{ itemId: '*', reason: error instanceof Error ? error.message : 'certificate manifest rejected', reasonCode: 'certificate_manifest_rejected' }] }
+    return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: closure.itemIds, rejectedBindings: [{ itemId: '*', reason: error instanceof Error ? error.message : 'certificate manifest rejected', reasonCode: 'certificate_manifest_rejected' }] }
   }
 }
 
@@ -473,8 +508,4 @@ function bindingActionPlanProblem(projection: GuardProjection, item: GuardItem, 
     }
   }
   return undefined
-}
-
-function openItems(projection: GuardProjection): string[] {
-  return [...projection.items.values()].filter((item) => item.status === 'pending' && item.kind !== 'prohibition').map((item) => item.id)
 }

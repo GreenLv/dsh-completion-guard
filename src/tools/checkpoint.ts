@@ -285,6 +285,7 @@ export function createCheckpointTool(
               session_ref_digest: { type: 'string' }, host_lock_digest: { type: 'string' }, contract_revision: { type: 'integer' },
               contract_sha256: { type: 'string' }, open_digest: { type: 'string' }, evidence_sha256: { type: 'string' },
               binding_digest: { type: 'string' }, certification_digest: { type: 'string' },
+              unit_id: { type: 'string' }, unit_closure_digest: { type: 'string' },
               goal_ref: { oneOf: [
                 { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, revision: { type: 'integer' } } },
                 { type: 'null' },
@@ -383,6 +384,10 @@ export function createCheckpointTool(
           evidence_sha256: result.checkpoint.evidenceSha256,
           binding_digest: result.checkpoint.bindingDigest,
           certification_digest: result.checkpoint.certificationDigest,
+          ...(result.checkpoint.unitId !== undefined ? {
+            unit_id: result.checkpoint.unitId,
+            unit_closure_digest: result.checkpoint.unitClosureDigest,
+          } : {}),
           goal_ref: result.checkpoint.goalRef ?? null,
         } } : {}),
       })

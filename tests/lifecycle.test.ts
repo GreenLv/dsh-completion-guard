@@ -3,7 +3,7 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from '../src/runtime.js'
-import { deriveProjection, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE } from '../src/domain/derive.js'
+import { deriveProjection, PROTOCOL_V3_NOTICE, PROTOCOL_V5_NOTICE } from '../src/domain/derive.js'
 import { certifyCheckpoint } from '../src/domain/checkpoint.js'
 import { FIRST_STEP_GUIDANCE } from '../src/domain/lifecycle.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
@@ -159,21 +159,21 @@ describe('A01: fresh empty sessions stay silent at T0', () => {
       const data = (message as { content?: Array<{ text?: string }> }).content ?? []
       return data[0]?.text
     })
-    expect(texts[0]).toBe(PROTOCOL_V4_NOTICE)
+    expect(texts[0]).toBe(PROTOCOL_V5_NOTICE)
     expect(texts[1]).toBe(FIRST_STEP_GUIDANCE)
     expect(texts[2]).toContain('guard-demo.txt')
 
     // Persisting the step makes the boundary durable ahead of the root input.
     persistStep(session, decision.messages)
     const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
-    expect(derived.protocolV4Present).toBe(true)
+    expect(derived.boundaryV5).toBe(true)
     expect(derived.realRootInputSeen).toBe(true)
     expect([...derived.projection.items.values()].some((item) => item.normalizedText.includes('guard-demo.txt'))).toBe(true)
 
     // The next step never injects a second boundary; the revision-change
-    // reminder may flow once, but the v4 cut happens exactly once.
+    // reminder may flow once, but the v5 cut happens exactly once.
     const again = await runPreStep(ctx, agent, [createUserMessage({ content: [{ type: 'text', text: '继续' }], source: { kind: 'user' } })])
-    expect(again.messages.filter((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text === PROTOCOL_V4_NOTICE)).toHaveLength(0)
+    expect(again.messages.filter((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text === PROTOCOL_V5_NOTICE)).toHaveLength(0)
   })
 })
 
@@ -227,7 +227,7 @@ describe('A03/A04: rejected, canceled, filtered, and non-root batches never acti
 
     const retried = await runPreStep(ctx, agent, claimed)
     expect(retried.messages).toHaveLength(3)
-    expect((retried.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V4_NOTICE)
+    expect((retried.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V5_NOTICE)
   })
 
   it('plugin, tool, and imported batches do not root-activate; delegated sessions never inject', async () => {
@@ -309,11 +309,11 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     const resumed = await runPreStep(ctx, agent, claimed)
     expect(resumed.messages).toHaveLength(2)
     const texts = resumed.messages.map((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text)
-    expect(texts.filter((text) => text === PROTOCOL_V4_NOTICE)).toHaveLength(0)
+    expect(texts.filter((text) => text === PROTOCOL_V5_NOTICE)).toHaveLength(0)
     expect(texts.some((text) => String(text).includes('recovered after compaction or resume'))).toBe(true)
   })
 
-  it('a pre-0.5 session gains the v4 cut at the first 0.5 write and keeps historical interpretation', async () => {
+  it('a pre-0.6 session gains the v5 cut at the first 0.6 write and keeps historical interpretation', async () => {
     const session = Session.create(SessionId('a06-legacy'))
     // Old-style T0 notices exist as history from a pre-0.5 session.
     rawAppend(session)('user/message', createUserMessage({
@@ -323,20 +323,20 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     enableCommand(session, 'on')
     userText(session, '修改 g.txt')
     const baseline = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
-    expect(baseline.protocolV4Present).toBe(false)
+    expect(baseline.boundaryV5).toBe(false)
 
     const ctx = fakeCtx()
     guardApply(ctx, 'opt-in')
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'resume')
     const decision = await runPreStep(ctx, agent, [createUserMessage({ content: [{ type: 'text', text: '还有后续要求' }], source: { kind: 'user' } })])
-    // The first 0.5 write is the explicit cut: v4 boundary, then the recovery
+    // The first 0.6 write is the explicit cut: v5 boundary, then the recovery
     // packet, then the claimed input.
     expect(decision.messages).toHaveLength(3)
-    expect((decision.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V4_NOTICE)
+    expect((decision.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V5_NOTICE)
     persistStep(session, decision.messages)
     const after = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
-    expect(after.protocolV4Present).toBe(true)
+    expect(after.boundaryV5).toBe(true)
     // Historical interpretation is frozen: the pre-cut item keeps its exact
     // captured identity while the new input captures normally.
     const beforeItem = [...baseline.projection.items.values()][0]
@@ -359,7 +359,7 @@ it('does not activate when a downstream pre-step gate filters the claimed root i
   expect(retried.messages).toHaveLength(3)
 })
 
-it('explicit opt-in records the v4 boundary ahead of its first protected input', async () => {
+it('explicit opt-in records the v5 boundary ahead of its first protected input', async () => {
   const session = Session.create(SessionId('opt-in-v4'))
   const ctx = fakeCtx()
   guardApply(ctx, 'opt-in')
@@ -371,6 +371,6 @@ it('explicit opt-in records the v4 boundary ahead of its first protected input',
   expect(step.messages).toHaveLength(3)
   persistStep(session, step.messages)
   const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
-  expect(derived.protocolV4Present).toBe(true)
+  expect(derived.boundaryV5).toBe(true)
   expect(derived.projection.items.size).toBeGreaterThan(0)
 })

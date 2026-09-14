@@ -358,6 +358,13 @@ function validateManifest(manifest = COMMAND_SURFACE_MANIFEST) {
 //#region src/domain/protocol-manifest.ts
 const STOP_PROTOCOL_VERSION = "2.0.0";
 const CERTIFICATE_VERSION = "1";
+/**
+* 0.6.0 v5-session identity (P0 §1): v2 certificates bind a work unit's
+* closure instead of the whole session. Version-1 identity keeps its
+* historical meaning for legacy sessions and is never silently re-read.
+*/
+const STOP_PROTOCOL_VERSION_V2 = "3.0.0";
+const CERTIFICATE_VERSION_V2 = "2";
 const ACTION_MANIFEST_VERSION = 1;
 const SUPPORTED_EVIDENCE_ADAPTERS = {
 	"context-guard.git.v1": "1.0.0",
@@ -2218,6 +2225,19 @@ function deriveItemDiagnosis(p, item) {
 		},
 		attempt_fingerprint: fingerprint(p, item, "certified")
 	};
+	if (item.status === "answered") return {
+		...base,
+		certification: "supported",
+		reason_code: "answer_delivered",
+		repairability: "none",
+		missing_fields: [],
+		missing_facets: [],
+		next_action: {
+			kind: "none",
+			resume_condition: "The host-confirmed final answer was delivered; no further binding needed."
+		},
+		attempt_fingerprint: fingerprint(p, item, "answer_delivered")
+	};
 	if (item.status === "pending" && item.waitAuthorization?.kind === "root_explicit_wait") return {
 		...base,
 		certification: "unavailable",
@@ -2249,18 +2269,21 @@ function deriveItemDiagnosis(p, item) {
 		};
 	}
 	if (action === "generic_run" || item.legacyFlags?.length) {
-		if (kind === "inquiry") return {
-			...base,
-			certification: "unsupported",
-			reason_code: "inquiry_non_certifiable",
-			repairability: "unsupported",
-			missing_fields: [],
-			next_action: {
-				kind: "report_only",
-				resume_condition: "Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this."
-			},
-			attempt_fingerprint: fingerprint(p, item, "inquiry_non_certifiable")
-		};
+		if (kind === "inquiry") {
+			const closable = p.boundaryProtocol === 5;
+			return {
+				...base,
+				certification: "unsupported",
+				reason_code: closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable",
+				repairability: "unsupported",
+				missing_fields: [],
+				next_action: {
+					kind: "report_only",
+					resume_condition: closable ? "Deliver the actual answer; the host-confirmed final response of a completed turn closes this item." : "Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this."
+				},
+				attempt_fingerprint: fingerprint(p, item, closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable")
+			};
+		}
 		return {
 			...base,
 			certification: "unsupported",
@@ -2918,6 +2941,7 @@ function createProjection() {
 		checkpoints: [],
 		boundaries: [],
 		externalOperations: /* @__PURE__ */ new Map(),
+		units: /* @__PURE__ */ new Map(),
 		sessionRefDigest: "11".repeat(32),
 		hostLockDigest: "22".repeat(32),
 		hostStatus: "supported",
@@ -3188,6 +3212,10 @@ function hasCurrentCertificate(projection) {
 	else if (checkpoint.sessionRefDigest !== projection.sessionRefDigest) reason = "foreign_session";
 	else if (checkpoint.hostLockDigest !== projection.hostLockDigest) reason = "stale_host_lock";
 	else if (checkpoint.contractRevision !== projection.contractRevision) reason = "stale_contract_revision";
+	else if (projection.boundaryProtocol === 5) {
+		if (checkpoint.certificateVersion !== "2") reason = "legacy_certificate_in_v5_session";
+		else if (checkpoint.unitId !== projection.currentUnitId) reason = "stale_unit_ref";
+	} else if (checkpoint.certificateVersion !== "1") reason = "certificate_version_unavailable";
 	else if (projection.currentGoalRef ? checkpoint.goalRef?.id !== projection.currentGoalRef.id || checkpoint.goalRef.revision !== projection.currentGoalRef.revision : checkpoint.goalRef !== void 0) reason = "stale_goal_ref";
 	projection.certificateStatusReason = reason;
 	return reason === void 0;
@@ -4074,6 +4102,74 @@ function certificationDigest(certificate) {
 	checkFieldCount(count);
 	return sha256Hex(Buffer.concat(parts));
 }
+const CERTIFICATE_V2_KEYS = [
+	"stopProtocolVersion",
+	"certificateVersion",
+	"epoch",
+	"sessionRefDigest",
+	"hostLockDigest",
+	"contractRevision",
+	"contractSha256",
+	"unitId",
+	"unitClosureDigest",
+	"evidenceSha256",
+	"bindingDigest",
+	"goalRef"
+];
+/**
+* 0.6.0 v2 certificate field table over the new `ccg.certificationDigest.v4`
+* domain (P0 §1): the certified scope is a work unit's closure instead of the
+* whole session. digest_v3 domains and their golden vectors stay frozen; this
+* function never re-reads a v1 record.
+*/
+function certificationDigestV2(certificate) {
+	requireExactKeys(certificate, CERTIFICATE_V2_KEYS, "certificateV2");
+	const parts = [Buffer.from("ccg.certificationDigest.v4\n", "utf8")];
+	let count = 0;
+	parts.push(field("stopProtocolVersion", typedToken(expectString(certificate.stopProtocolVersion, "stopProtocolVersion"))));
+	parts.push(field("certificateVersion", typedToken(expectString(certificate.certificateVersion, "certificateVersion"))));
+	parts.push(field("epoch", typedToken(expectInt(certificate.epoch, "epoch"))));
+	parts.push(field("sessionRefDigest", typedToken({
+		k: "x",
+		v: expectHex(certificate.sessionRefDigest)
+	})));
+	parts.push(field("hostLockDigest", typedToken({
+		k: "x",
+		v: expectHex(certificate.hostLockDigest)
+	})));
+	parts.push(field("contractRevision", typedToken(expectInt(certificate.contractRevision, "contractRevision"))));
+	parts.push(field("contractSha256", typedToken({
+		k: "x",
+		v: expectHex(certificate.contractSha256)
+	})));
+	count += 7;
+	parts.push(field("unitId", typedToken(expectString(certificate.unitId, "unitId"))));
+	parts.push(field("unitClosureDigest", typedToken({
+		k: "x",
+		v: expectHex(certificate.unitClosureDigest)
+	})));
+	parts.push(field("evidenceSha256", typedToken({
+		k: "x",
+		v: expectHex(certificate.evidenceSha256)
+	})));
+	parts.push(field("bindingDigest", typedToken({
+		k: "x",
+		v: expectHex(certificate.bindingDigest)
+	})));
+	count += 4;
+	const goalRef = certificate.goalRef;
+	if (goalRef !== void 0 && goalRef !== null) {
+		requireExactKeys(goalRef, GOAL_REF_KEYS, "goalRef");
+		parts.push(optField("goalRefId", expectString(goalRef.id, "goalRef.id"), (v) => typedToken(v)));
+		parts.push(optField("goalRefRevision", expectInt(goalRef.revision, "goalRef.revision"), (v) => typedToken(v)));
+	} else {
+		parts.push(optField("goalRefId", null, () => Buffer.alloc(0)));
+		parts.push(optField("goalRefRevision", null, () => Buffer.alloc(0)));
+	}
+	count += 2;
+	checkFieldCount(count);
+	return sha256Hex(Buffer.concat(parts));
+}
 /**
 * Verifier-side role matrix and binding closure. Digest derivation stays
 * pure; this mirrors the checks a proof verifier must run before accepting a
@@ -4390,7 +4486,7 @@ function closingHint(projection, item, evidenceIds) {
 	else parts.push("needs a state-verification evidence (read tool, or a deterministic check run in scope) matching the subject");
 	return parts.join("; ");
 }
-function openItems$1(projection) {
+function openItems(projection) {
 	return [...projection.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1));
 }
 /**
@@ -4400,7 +4496,7 @@ function openItems$1(projection) {
 * injected once instead of looping (v0.2.1).
 */
 function recoveryDigest(packet, projection) {
-	const items = openItems$1(projection);
+	const items = openItems(projection);
 	const evidence = [...projection.evidence.values()].filter((row) => items.some((item) => relevantEvidence(projection, item, row)));
 	return sha256(JSON.stringify({
 		packet,
@@ -4414,7 +4510,7 @@ function renderRecoveryPacket(projection, options = {}) {
 	const budget = options.charBudget ?? DEFAULT_RECOVERY_CHAR_BUDGET;
 	if (!Number.isSafeInteger(budget) || budget < MIN_RECOVERY_CHAR_BUDGET) throw new RangeError("recovery charBudget must be an integer >= 512");
 	const clip = (text, size) => text.length <= size ? text : text.slice(0, size - 1) + "…";
-	const items = openItems$1(projection).sort((a, b) => Number(b.kind === "prohibition") - Number(a.kind === "prohibition") || b.revision - a.revision || a.id.localeCompare(b.id));
+	const items = openItems(projection).sort((a, b) => Number(b.kind === "prohibition") - Number(a.kind === "prohibition") || b.revision - a.revision || a.id.localeCompare(b.id));
 	const rejected$1 = options.rejectedBindings ?? (projection.lastCheckpointRejectionRevision === projection.contractRevision ? projection.lastCheckpointRejections : []) ?? [];
 	const compact = budget < 1e3;
 	const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact ? "Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion." : COMPLETION_RULE];
@@ -4455,6 +4551,59 @@ function renderRecoveryPacket(projection, options = {}) {
 	}
 	lines.push(footer(count, refusals, shown), pointer);
 	return lines.join("\n");
+}
+
+//#endregion
+//#region src/domain/closure.ts
+/**
+* The single open-closure implementation (0.6.0, C02/C04/D06-03/D06-07).
+*
+* Before 0.6.0, checkpoint, recovery, diagnostics, and the Goal gate each
+* filtered pending obligations with their own slightly different rule, and the
+* answers could disagree. Every question about "what is open" now goes through
+* this module:
+*
+* - {@link visiblePendingItems} — everything still pending, constraints first
+*   in spirit: display surfaces (recovery, status, checkpoint pages) show
+*   prohibitions too, because a constraint is never finished work.
+* - {@link certifiableOpenItems} — the obligations a completion certificate
+*   answers for: pending, not a prohibition. Prohibitions are standing
+*   constraints, never counted work; `answered` items closed by a trusted
+*   delivery are no longer open; `passed` and `superseded` never were.
+* - {@link unitClosureItemIds} — the v5 unit closure: the certified scope of
+*   one work unit. Legacy sessions (no v5 boundary) certify the whole session
+*   instead, which is exactly what {@link certifiableOpenItems} returns.
+*/
+/** Every pending item, in stable display order. Constraints stay visible. */
+function visiblePendingItems(projection) {
+	return [...projection.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1));
+}
+/** The obligations a completion certificate answers for: open work, no constraints. */
+function certifiableOpenItems(projection) {
+	return visiblePendingItems(projection).filter((item) => item.kind !== "prohibition");
+}
+/** The certifiable open obligations inside one work unit's closure. */
+function unitClosureItemIds(projection, unitId) {
+	return certifiableOpenItems(projection).filter((item) => item.unitId === unitId).map((item) => item.id);
+}
+/**
+* The closure a completion certificate must answer for right now.
+*
+* Legacy sessions certify the whole session. v5 sessions certify the current
+* work unit's closure PLUS every pre-v5 obligation: items captured before the
+* boundary carry no unit and keep their birth rules, so a unit certificate
+* must never silently shrink their scope (migration table, P0 §6).
+*/
+function certificateClosure(projection) {
+	if (projection.boundaryProtocol === 5) {
+		const legacyIds = certifiableOpenItems(projection).filter((item) => item.unitId === void 0).map((item) => item.id);
+		const unitIds = projection.currentUnitId !== void 0 ? unitClosureItemIds(projection, projection.currentUnitId) : [];
+		return {
+			unitId: projection.currentUnitId,
+			itemIds: [...legacyIds, ...unitIds]
+		};
+	}
+	return { itemIds: certifiableOpenItems(projection).map((item) => item.id) };
 }
 
 //#endregion
@@ -4829,7 +4978,7 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 	if (projection.integrity !== "valid" || projection.hostStatus !== "supported") return {
 		status: "unknown",
 		contractRevision: projection.contractRevision,
-		openItems: openItems(projection),
+		openItems: certifiableOpenItems(projection).map((item) => item.id),
 		rejectedBindings: []
 	};
 	const rejectedBindings = [];
@@ -4907,48 +5056,95 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		records.push(built.record);
 		referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact));
 	}
-	const open = openItems(projection).filter((itemId) => !bindings.some((binding) => binding.itemId === itemId));
+	const closure = certificateClosure(projection);
+	const open = closure.itemIds.filter((itemId) => !bindings.some((binding) => binding.itemId === itemId));
 	if (rejectedBindings.length || open.length) return {
 		status: "incomplete",
 		contractRevision: projection.contractRevision,
-		openItems: openItems(projection),
+		openItems: closure.itemIds,
 		rejectedBindings
+	};
+	if (projection.boundaryProtocol === 5 && closure.unitId === void 0) return {
+		status: "incomplete",
+		contractRevision: projection.contractRevision,
+		openItems: closure.itemIds,
+		rejectedBindings: [{
+			itemId: "*",
+			reason: "no current work unit is available for a v2 certificate",
+			reasonCode: "unit_unavailable"
+		}]
 	};
 	try {
 		const contractSha256 = currentContractDigest(projection);
-		const openDigest = digestStrings(openItems(projection));
+		const openDigest = digestStrings(closure.itemIds);
 		const evidenceSha256 = evidenceSha256Digest(referencedFacts);
 		const bindingDigest$1 = bindingDigest(records, resolveAllowlist("product"));
-		const certification = certificationDigest({
-			stopProtocolVersion: STOP_PROTOCOL_VERSION,
-			certificateVersion: CERTIFICATE_VERSION,
-			epoch: projection.epoch,
-			sessionRefDigest: projection.sessionRefDigest,
-			hostLockDigest: projection.hostLockDigest,
-			contractRevision: projection.contractRevision,
-			contractSha256,
-			...projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {},
-			openDigest,
-			evidenceSha256,
-			bindingDigest: bindingDigest$1
-		});
-		const checkpoint = {
-			id,
-			stopProtocolVersion: STOP_PROTOCOL_VERSION,
-			certificateVersion: CERTIFICATE_VERSION,
-			epoch: projection.epoch,
-			sessionRefDigest: projection.sessionRefDigest,
-			hostLockDigest: projection.hostLockDigest,
-			contractRevision: projection.contractRevision,
-			contractSha256,
-			openDigest,
-			evidenceSha256,
-			bindingDigest: bindingDigest$1,
-			bindings,
-			...projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {},
-			certificationDigest: certification,
-			result: "certified"
-		};
+		const checkpoint = projection.boundaryProtocol === 5 ? (() => {
+			const certification = certificationDigestV2({
+				stopProtocolVersion: STOP_PROTOCOL_VERSION_V2,
+				certificateVersion: CERTIFICATE_VERSION_V2,
+				epoch: projection.epoch,
+				sessionRefDigest: projection.sessionRefDigest,
+				hostLockDigest: projection.hostLockDigest,
+				contractRevision: projection.contractRevision,
+				contractSha256,
+				unitId: closure.unitId,
+				unitClosureDigest: openDigest,
+				evidenceSha256,
+				bindingDigest: bindingDigest$1,
+				goalRef: projection.currentGoalRef ?? null
+			});
+			return {
+				id,
+				stopProtocolVersion: STOP_PROTOCOL_VERSION_V2,
+				certificateVersion: CERTIFICATE_VERSION_V2,
+				epoch: projection.epoch,
+				sessionRefDigest: projection.sessionRefDigest,
+				hostLockDigest: projection.hostLockDigest,
+				contractRevision: projection.contractRevision,
+				contractSha256,
+				openDigest,
+				evidenceSha256,
+				bindingDigest: bindingDigest$1,
+				bindings,
+				...projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {},
+				unitId: closure.unitId,
+				unitClosureDigest: openDigest,
+				certificationDigest: certification,
+				result: "certified"
+			};
+		})() : (() => {
+			const certification = certificationDigest({
+				stopProtocolVersion: STOP_PROTOCOL_VERSION,
+				certificateVersion: CERTIFICATE_VERSION,
+				epoch: projection.epoch,
+				sessionRefDigest: projection.sessionRefDigest,
+				hostLockDigest: projection.hostLockDigest,
+				contractRevision: projection.contractRevision,
+				contractSha256,
+				...projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {},
+				openDigest,
+				evidenceSha256,
+				bindingDigest: bindingDigest$1
+			});
+			return {
+				id,
+				stopProtocolVersion: STOP_PROTOCOL_VERSION,
+				certificateVersion: CERTIFICATE_VERSION,
+				epoch: projection.epoch,
+				sessionRefDigest: projection.sessionRefDigest,
+				hostLockDigest: projection.hostLockDigest,
+				contractRevision: projection.contractRevision,
+				contractSha256,
+				openDigest,
+				evidenceSha256,
+				bindingDigest: bindingDigest$1,
+				bindings,
+				...projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {},
+				certificationDigest: certification,
+				result: "certified"
+			};
+		})();
 		if (commit) {
 			projection.checkpoints.push(checkpoint);
 			for (const binding of bindings) projection.items.get(binding.itemId).status = "passed";
@@ -4965,7 +5161,7 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		return {
 			status: "incomplete",
 			contractRevision: projection.contractRevision,
-			openItems: openItems(projection),
+			openItems: closure.itemIds,
 			rejectedBindings: [{
 				itemId: "*",
 				reason: error instanceof Error ? error.message : "certificate manifest rejected",
@@ -5056,9 +5252,6 @@ function bindingActionPlanProblem(projection, item, binding) {
 			};
 		}
 	}
-}
-function openItems(projection) {
-	return [...projection.items.values()].filter((item) => item.status === "pending" && item.kind !== "prohibition").map((item) => item.id);
 }
 
 //#endregion
@@ -8167,6 +8360,156 @@ function supersedeItem(items, oldId, replacement) {
 }
 
 //#endregion
+//#region src/domain/delivery.ts
+function assistantTextOf(data) {
+	return (data?.message?.content ?? []).filter((part) => part?.type === "text").map((part) => part?.text ?? "").join("\n");
+}
+/**
+* Derive the trusted deliveries from the event log. Deterministic: a replay of
+* identical events yields identical facts.
+*/
+function deriveTrustedDeliveries(events) {
+	const assistants = /* @__PURE__ */ new Map();
+	for (const event of events) {
+		if (event.type !== "assistant/message") continue;
+		const data = event.data ?? {};
+		if (typeof data.turn !== "number" || !Number.isSafeInteger(data.turn)) continue;
+		if (typeof data.step !== "number" || !Number.isSafeInteger(data.step)) continue;
+		assistants.set(data.turn, [...assistants.get(data.turn) ?? [], {
+			seq: event.seq,
+			turn: data.turn,
+			step: data.step,
+			text: assistantTextOf(event.data),
+			interrupted: data.interrupted === true
+		}]);
+	}
+	const deliveries = [];
+	for (const event of events) {
+		if (event.type !== "turn/end") continue;
+		const data = event.data ?? {};
+		if (typeof data.turn !== "number" || !Number.isSafeInteger(data.turn)) continue;
+		if (data.reason?.kind !== "completed") continue;
+		const candidates = assistants.get(data.turn) ?? [];
+		const finalStep = Math.max(...candidates.map((row) => row.step), -1);
+		const final = candidates.find((row) => row.step === finalStep && !row.interrupted && row.text.trim().length > 0);
+		if (!final) continue;
+		deliveries.push({
+			turn: data.turn,
+			turnEndSeq: event.seq,
+			responseSeq: final.seq,
+			responseSha256: sha256(final.text)
+		});
+	}
+	return deliveries;
+}
+/**
+* The information-slot items a delivery closes: obligations captured from a
+* root message inside the delivered turn, in the unit that turn's input
+* belonged to, whose semantic slot is information (an inquiry or an
+* explanation request). Execution, constraints, and unknowns are never closed
+* by delivery, and neither are questions from earlier messages.
+*/
+function informationItemIdsForDelivery(items, delivery, turnRootInputSeqs, unitId) {
+	const closed = [];
+	for (const [itemId, item] of items) {
+		if (item.status !== "pending") continue;
+		if (item.kind === "prohibition") continue;
+		if (unitId !== void 0 && item.unitId !== unitId) continue;
+		const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+		if (!sourceSeq || !turnRootInputSeqs.has(Number(sourceSeq[1]))) continue;
+		if (item.taskKind === "inquiry" || item.authorityDisposition === "informational" && item.kind === "requirement") closed.push(itemId);
+	}
+	return closed;
+}
+
+//#endregion
+//#region src/domain/work-unit.ts
+/**
+* Work-unit derivation rules (0.6.0, C04). Units are derived from the durable
+* message stream — nothing is ever written to the log — so the classification
+* below must stay deterministic and conservative: an ambiguous relation keeps
+* the current unit rather than inventing a new one, and a mis-assigned
+* obligation is recoverable through clarification, never through a silent
+* unit rewrite.
+*
+* The rules are the frozen P0 §3 C04 decision, in evaluation order:
+*
+* 1. The session's first root task message opens U001.
+* 2. A message explicitly linked to the current unit (item-ID reference,
+*    rebind control, a direct answer while an inquiry is open) stays in it.
+* 3. When the current unit has no open executable obligations left, a
+*    directive-bearing message opens a new unit; the old one is switched away,
+*    never retroactively closed.
+* 4. While the current unit still has open work, only an EXPLICIT switch
+*    marker (closed vocabulary, fixture-pinned) opens a new unit; anything
+*    else stays in the current unit.
+*/
+/** Explicit task-switch markers; a closed vocabulary pinned by the v2 fixture. */
+const SWITCH_MARKER = new RegExp([
+	"^(?:另外|此外|另一(?:件事|个任务|个话题)|换个?话题|下一个任务|新任务|下一个问题|先做(?:另一|别的))[：:，,。。\\s]",
+	"^(?:now\\s+a\\s+)?(?:different|new|separate)\\s+task\\b",
+	"^next\\s+task\\b",
+	"^(?:on\\s+a\\s+related\\s+note|by\\s+the\\s+way)\\b"
+].join("|"), "i");
+/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
+const ITEM_REFERENCE = /\b(?:[RAPU]\d{3})\b/;
+/**
+* Whether a root message opens a new work unit rather than joining the
+* current one. `directiveBearing` says the message produced (or would
+* produce) requirement/acceptance work; `openWorkInCurrentUnit` is evaluated
+* against the state BEFORE the message is captured.
+*/
+function opensNewUnit(projection, text, directiveBearing, openWorkInCurrentUnit) {
+	if (!directiveBearing) return false;
+	if (SWITCH_MARKER.test(text)) return true;
+	return !openWorkInCurrentUnit;
+}
+/** Whether the message explicitly links itself to the current unit's items. */
+function explicitlyLinkedToCurrentUnit(projection, text) {
+	if (ITEM_REFERENCE.test(text)) {
+		for (const match of text.matchAll(ITEM_REFERENCE)) if (projection.items.has(match[1])) return true;
+	}
+	return false;
+}
+/** The next unit identity in the session's sequence. */
+function nextUnitId(projection) {
+	let max = 0;
+	for (const unitId of projection.units.keys()) {
+		const num = Number(unitId.slice(1));
+		if (Number.isInteger(num) && num > max) max = num;
+	}
+	return `U${String(max + 1).padStart(3, "0")}`;
+}
+/** Open a unit, switching the previous current one away. */
+function openUnit(projection, seq, headline) {
+	const unitId = nextUnitId(projection);
+	const previous = projection.currentUnitId !== void 0 ? projection.units.get(projection.currentUnitId) : void 0;
+	if (previous && previous.switchedAwayAtSeq === void 0) previous.switchedAwayAtSeq = seq;
+	const unit = {
+		unitId,
+		openedAtSeq: seq,
+		rootInputRefs: [{ seq }],
+		headline
+	};
+	projection.units.set(unitId, unit);
+	projection.currentUnitId = unitId;
+	return unit;
+}
+/** Fold one later root message into the current unit's input references. */
+function foldIntoCurrentUnit(projection, seq) {
+	const unit = projection.currentUnitId !== void 0 ? projection.units.get(projection.currentUnitId) : void 0;
+	if (unit) unit.rootInputRefs.push({ seq });
+}
+/**
+* Whether the current unit still holds open executable work — the rule-3
+* handover test, evaluated BEFORE the new message's items are inserted.
+*/
+function currentUnitHasOpenWork(projection) {
+	if (projection.currentUnitId === void 0) return false;
+	return [...projection.items.values()].some((item) => item.status === "pending" && item.unitId === projection.currentUnitId && item.kind !== "prohibition");
+}
+
+//#endregion
 //#region src/domain/derive.ts
 const CAPTURE_V042_NOTICE = "Context Guard capture boundary: v0.4.2";
 const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
@@ -8178,6 +8521,15 @@ const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
 * their historical meaning for replay.
 */
 const PROTOCOL_V4_NOTICE = "Context Guard protocol boundary: v4.0.0";
+/**
+* 0.6.0 first-step boundary: same placement discipline as v4. It cuts the
+* work-unit, delivery, and certificate-v2 semantics (P0 §1): messages before
+* it keep their historical rules, messages after it are captured into work
+* units and close through unit-closure certificates and trusted deliveries.
+* An old binary ignores this notice (plugin source, unmatched pattern), so the
+* fail direction on rollback is closed, never a misread.
+*/
+const PROTOCOL_V5_NOTICE = "Context Guard protocol boundary: v5.0.0";
 function isProtocolBoundaryNotice(event, notice = PROTOCOL_V3_NOTICE) {
 	if (event.type !== "user/message") return false;
 	const data = asRecord(event.data);
@@ -8215,6 +8567,10 @@ function recordedCertificateMatches(recorded, checkpoint) {
 		certification_digest: checkpoint.certificationDigest,
 		goal_ref: checkpoint.goalRef ?? null
 	};
+	if (checkpoint.unitId !== void 0) {
+		exact.unit_id = checkpoint.unitId;
+		exact.unit_closure_digest = checkpoint.unitClosureDigest;
+	}
 	const normalized = {
 		...value,
 		goal_ref: goal ? {
@@ -8242,6 +8598,7 @@ function restoreHistoricalCheckpoint(recorded, bindings, id) {
 		"certification_digest"
 	].some((name) => !stringField(name))) return void 0;
 	if (goal && (typeof goal.id !== "string" || !Number.isSafeInteger(goal.revision))) return void 0;
+	if (recorded.unit_id !== void 0 && (typeof recorded.unit_id !== "string" || !stringField("unit_closure_digest"))) return void 0;
 	return {
 		id,
 		stopProtocolVersion: stringField("stop_protocol_version"),
@@ -8259,6 +8616,10 @@ function restoreHistoricalCheckpoint(recorded, bindings, id) {
 			id: goal.id,
 			revision: goal.revision
 		} } : {},
+		...typeof recorded.unit_id === "string" ? {
+			unitId: recorded.unit_id,
+			unitClosureDigest: stringField("unit_closure_digest")
+		} : {},
 		certificationDigest: stringField("certification_digest"),
 		result: "certified"
 	};
@@ -8296,11 +8657,11 @@ function resolveArtifact(path$1, scope) {
 * an item whose action/target could not be derived deterministically stays
 * `legacy_authority_unclassified` instead of being retroactively authorized.
 */
-function captureRootText(projection, text, seq, scope, legacy, priorRootMessages, prefix = `m${seq}`, coordinationSplit = true) {
+function captureRootText(projection, text, seq, scope, legacy, priorRootMessages, prefix = `m${seq}`, coordinationSplit = true, unitId) {
 	const blocks = segmentAuthorityBlocks(text, priorRootMessages);
 	for (const block$1 of blocks) {
 		if (!block$1.capture) continue;
-		insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", legacy, block$1.kind === "instruction" || block$1.authority === "root_adoption", coordinationSplit);
+		insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", legacy, block$1.kind === "instruction" || block$1.authority === "root_adoption", coordinationSplit, unitId);
 	}
 	priorRootMessages.push(text);
 	if (priorRootMessages.length > 16) priorRootMessages.shift();
@@ -8311,16 +8672,16 @@ function captureRootText(projection, text, seq, scope, legacy, priorRootMessages
 * item, so evidence for one file cannot close a message that also covers other
 * files or embeds prohibitions.
 */
-function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true) {
+function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId) {
 	const before = new Set(projection.items.keys());
 	for (const segment of segmentClauses(text, { coordinationSplit })) {
 		if (classifyUserInteraction(segment.body) === "conversational") continue;
 		if (segment.kind === "requirement" && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue;
 		if (segment.paths.length === 0) {
-			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope");
+			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId);
 			continue;
 		}
-		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact");
+		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId);
 	}
 	for (const [id, item] of projection.items) {
 		if (before.has(id)) continue;
@@ -8349,12 +8710,13 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		else item.authority = authority;
 	}
 }
-function insert(projection, segment, sourceMessageId, subject, surface) {
+function insert(projection, segment, sourceMessageId, subject, surface, unitId) {
 	const revision = projection.contractRevision + 1;
 	const id = nextId(projection.items, segment.kind);
 	const method = extractMethod(segment.body);
 	const operation = extractOperation(segment.body);
 	const item = captureItem(segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation, segment.interpretation);
+	if (unitId !== void 0) item.unitId = unitId;
 	const duplicate = [...projection.items.values()].find((existing) => existing.kind === segment.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
 	if (duplicate) supersedeItem(projection.items, duplicate.id, item);
 	else projection.items.set(id, item);
@@ -8381,11 +8743,17 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	let enablementTransitioned = false;
 	let lastCompactionSeq = -1;
 	const pendingCalls = /* @__PURE__ */ new Map();
+	const v5BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
 	const v4BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
-	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
-	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
+	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
+	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
+	if (v5BoundarySeq !== void 0) projection.boundaryProtocol = 5;
 	const priorRootMessages = [];
 	let realRootInputSeen = false;
+	const turnRootInputSeqs = /* @__PURE__ */ new Map();
+	const turnUnitIds = /* @__PURE__ */ new Map();
+	let activeTurn;
+	const unitSemanticsActive = () => v5BoundarySeq !== void 0 && !scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== "subagent";
 	for (const event of sourceEvents) {
 		projection.enabled = enabled;
 		projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq);
@@ -8418,11 +8786,19 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				break;
 			case "turn/start": {
 				const started = asRecord(event.data);
-				if (typeof started?.turn === "number" && Number.isSafeInteger(started.turn)) projection.hostTurn = started.turn;
+				if (typeof started?.turn === "number" && Number.isSafeInteger(started.turn)) {
+					projection.hostTurn = started.turn;
+					activeTurn = started.turn;
+				}
+				break;
+			}
+			case "turn/end": {
+				const ended = asRecord(event.data);
+				if (typeof ended?.turn === "number" && Number.isSafeInteger(ended.turn)) activeTurn = void 0;
 				break;
 			}
 			case "user/message": {
-				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break;
+				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) break;
 				{
 					const record = asRecord(event.data);
 					const recordSource = asRecord(record?.source);
@@ -8451,11 +8827,25 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				if (asRecord(data?.source)?.kind !== "user") break;
 				const content = data?.content ?? [];
 				const text = extractTextContent(content);
-				if (text.trim() || content.some((part) => part && typeof part === "object" && part.type !== "text")) realRootInputSeen = true;
+				if (text.trim() || content.some((part) => part && typeof part === "object" && part.type !== "text")) {
+					realRootInputSeen = true;
+					if (activeTurn !== void 0) {
+						const seqs = turnRootInputSeqs.get(activeTurn) ?? /* @__PURE__ */ new Set();
+						seqs.add(event.seq);
+						turnRootInputSeqs.set(activeTurn, seqs);
+					}
+				}
+				const unitSemantics = unitSemanticsActive() && v5BoundarySeq !== void 0 && event.seq > v5BoundarySeq;
+				const foldUnitId = () => {
+					if (!unitSemantics) return void 0;
+					foldIntoCurrentUnit(projection, event.seq);
+					if (activeTurn !== void 0) turnUnitIds.set(activeTurn, projection.currentUnitId);
+					return projection.currentUnitId;
+				};
 				const legacyMessage = protocolBoundarySeq !== void 0 && event.seq < protocolBoundarySeq;
 				const coordinationSplit = !(protocolBoundarySeq !== void 0 && (captureBoundarySeq === void 0 || event.seq < captureBoundarySeq));
-				const captureAssets = () => {
-					if (v4BoundarySeq !== void 0 && event.seq > v4BoundarySeq) content.forEach((part, index) => {
+				const captureAssets = (unitId) => {
+					if ((v4BoundarySeq ?? v5BoundarySeq) !== void 0 && event.seq > (v4BoundarySeq ?? v5BoundarySeq)) content.forEach((part, index) => {
 						if (!part || typeof part !== "object" || part.type === "text") return;
 						const identity = sha256(JSON.stringify(part));
 						insert(projection, {
@@ -8472,15 +8862,16 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 								authorityDisposition: "executable_now",
 								fingerprint: `asset:${identity.slice(0, 16)}`
 							}
-						}, `m${event.seq}:asset:${index}`, scope.cwd || "scope", "scope");
+						}, `m${event.seq}:asset:${index}`, scope.cwd || "scope", "scope", unitId);
 					});
 				};
 				if (!text.trim()) {
-					captureAssets();
+					captureAssets(unitSemantics ? foldUnitId() : void 0);
 					break;
 				}
 				if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== "subagent") {
-					const parsed = v4BoundarySeq !== void 0 && event.seq > v4BoundarySeq ? parseConfirmationMessage(text) : (() => {
+					const confirmGrammarSeq = v4BoundarySeq ?? v5BoundarySeq;
+					const parsed = confirmGrammarSeq !== void 0 && event.seq > confirmGrammarSeq ? parseConfirmationMessage(text) : (() => {
 						const match = CONFIRM_LINE_PATTERN.exec(text.trim());
 						return match ? {
 							kind: "confirm",
@@ -8490,12 +8881,14 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					})();
 					if (parsed.kind === "confirm") {
 						if (confirmRebind(projection, parsed.proposalId, `m${event.seq}`, durableConfirmed)) {
-							captureAssets();
-							if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit);
+							const unitId = unitSemantics ? foldUnitId() : void 0;
+							captureAssets(unitId);
+							if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId);
 							break;
 						}
 					} else if (parsed.kind !== "none") {
-						captureAssets();
+						const unitId = unitSemantics ? foldUnitId() : void 0;
+						captureAssets(unitId);
 						projection.lastConfirmationRejection = {
 							eventSeq: event.seq,
 							kind: parsed.kind,
@@ -8503,14 +8896,21 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						};
 						const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join("\n");
 						if (!stripped.trim()) break;
-						captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit);
+						captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId);
 						break;
 					}
 				}
-				captureAssets();
+				const directiveBearing = text.trim().length > 0 && !isInformationalMessage(text) && classifyUserInteraction(text) !== "conversational";
+				let captureUnitId;
+				if (unitSemantics && directiveBearing) {
+					if (!explicitlyLinkedToCurrentUnit(projection, text) && opensNewUnit(projection, text, true, currentUnitHasOpenWork(projection))) captureUnitId = openUnit(projection, event.seq, text.slice(0, 200)).unitId;
+					else captureUnitId = foldUnitId();
+					if (activeTurn !== void 0) turnUnitIds.set(activeTurn, captureUnitId);
+				}
+				captureAssets(captureUnitId ?? (unitSemantics ? foldUnitId() : void 0));
 				if (isInformationalMessage(text)) break;
 				if (classifyUserInteraction(text) === "conversational") break;
-				captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit);
+				captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId);
 				break;
 			}
 			case "goal/change": {
@@ -8713,13 +9113,29 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	}
 	projection.enabled = enabled;
 	projection.epoch = epoch;
+	if (v5BoundarySeq !== void 0) for (const delivery of deriveTrustedDeliveries(sourceEvents)) {
+		const inputSeqs = turnRootInputSeqs.get(delivery.turn);
+		if (!inputSeqs) continue;
+		const unitId = turnUnitIds.get(delivery.turn);
+		for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, unitId)) {
+			const item = projection.items.get(itemId);
+			if (!item || item.status !== "pending") continue;
+			item.status = "answered";
+			item.answeredBy = {
+				turn: delivery.turn,
+				responseSeq: delivery.responseSeq,
+				responseSha256: delivery.responseSha256
+			};
+		}
+	}
 	return {
 		projection,
 		compacted,
 		enablementTransitioned,
 		lastCompactionSeq,
 		realRootInputSeen,
-		protocolV4Present: v4BoundarySeq !== void 0
+		protocolV4Present: v4BoundarySeq !== void 0,
+		boundaryV5: v5BoundarySeq !== void 0
 	};
 }
 
@@ -8771,12 +9187,17 @@ function claimedBatchHasRealRootInput(messages) {
 * persisted step batch; guidance is compact and never claims a recovery that
 * did not happen. `opt-in` reaches this path only after its explicit `on` command. Delegated sessions receive neither: their
 * scope arrives through the parent's delegation prompt (A04).
+*
+* A session without a v5 boundary receives the 0.6 boundary: it cuts the
+* work-unit/delivery/certificate-v2 semantics at exactly this message. A
+* session that already has v5 injects nothing.
 */
 function previewFirstStepInjection(input, claimedRealInput) {
-	if (!input.enabled || input.boundaryPresent || input.delegated) return void 0;
+	if (!input.enabled || input.delegated) return void 0;
 	if (!claimedRealInput) return void 0;
+	if (input.boundaryV5Present) return void 0;
 	return {
-		boundary: PROTOCOL_V4_NOTICE,
+		boundary: PROTOCOL_V5_NOTICE,
 		guidance: FIRST_STEP_GUIDANCE
 	};
 }
@@ -9904,4 +10325,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { parseShellCommand as $, isStatefulAction as $n, isWholeTaskCompletionClaim as $t, createGitPrestateEnvelope as A, extractMethod as An, RC1_HOST_PACKAGES as At, CAPTURE_V042_NOTICE as B, namedActions as Bn, renderRecoveryPacket as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, evidenceAvailabilityReason as Cn, SUPPORTED_HOST_VERSIONS as Ct, GIT_COMMAND_TEMPLATES as D, captureItem as Dn, satisfiesSupportedHostRange as Dt, GIT_COMMAND_MANIFEST_IDS as E, captureClause as En, parseHostVersion as Et, verifiedLinearCommitReadback as F, interpretMessage as Fn, DEFAULT_RECOVERY_CHAR_BUDGET as Ft, evidenceFromPersistedToolResult as G, ACTION_MANIFEST as Gn, CONTROL_RECORD_PREFIX as Gt, PROTOCOL_V4_NOTICE as H, statefulActionsOfScope as Hn, evidenceCoverage as Ht, FIRST_STEP_GUIDANCE as I, isExecutableItem as In, MIN_RECOVERY_CHAR_BUDGET as It, isDeterministicCheck as J, SEMANTIC_ACTIONS as Jn, classifyCompletionClaim as Jt, extractTextContent as K, ACTION_MANIFEST_VERSION as Kn, NO_PROGRESS_RECORD_PREFIX as Kt, claimedBatchHasRealRootInput as L, isOpenObligation as Ln, closingHint as Lt, gitCommandMatchesTarget as M, isInformationalMessage as Mn, authorityCaptureCounts as Mt, parseGitCommandManifest as N, segmentClauses as Nn, segmentAuthorityBlocks as Nt, commitIndexSnapshotDigest as O, classifyClause as On, RC015_RC2_HOST_PACKAGES as Ot, revalidateGitPrestate as P, interpretClause as Pn, certifyCheckpoint as Pt, parsePwshCommand as Q, actionCompatible as Qn, isRootPauseRequest as Qt, lifecyclePhase as R, kindOfScope as Rn, openItems$1 as Rt, SESSION_API_UNSUPPORTED as S, deriveItemDiagnosis as Sn, SUPPORTED_HOST_RANGE as St, snapshotSessionEvents as T, relevantEvidence as Tn, evaluateMinimumHostVersion as Tt, deriveProjection as U, canonicalRegistryBase as Un, evidenceMatchesItem as Ut, PROTOCOL_V3_NOTICE as V, semanticActionOfScope as Vn, bindingSatisfies as Vt, supersedeItem as W, npmEscapedPackageName as Wn, isVerifyingCapability as Wt, canonicalArgvFromCommand as X, STOP_PROTOCOL_VERSION as Xn, decideTurnStopping as Xt, withDurability as Y, STATEFUL_ACTIONS as Yn, decideTurnBoundary as Yt, isRunExecutable as Z, SUPPORTED_EVIDENCE_ADAPTERS as Zn, decisionBoundaryKey as Zt, packageRowsFromPnpmLock as _, rebindResponse as _n, evaluateToolSurfaceCapability as _t, createProofManifest as a, hasCurrentCertificate as an, validateActionTarget as ar, BASE_HOST_PACKAGES as at, resolveInstalledHostLock as b, isFrozenV042RebindResponse as bn, LATEST_SUPPORTED_HOST_VERSION as bt, sessionQuery as c, isCurrentAcceptedBoundary as cn, classifyTaskIntent as cr, GOAL_HOST_PACKAGES as ct, combineHostPolicy as d, createProjection as dn, digestStrings as dr, LEGACY_HOST_COHORTS as dt, latestAssistantText as en, requestedTargetAuthorizesMutation as er, ACTIVE_HOST_COHORT_ID as et, hostLockContextFromComposedDump as f, confirmRebind as fn, normalizeClause as fr, bindExecutableIdentity as ft, packageRowsFromActiveGraph as g, rebindAttemptKey as gn, evaluateHostLock as gt, inspectTargetHostGraph as h, proposeRebindV042 as hn, sha256 as hr, evaluateHostCapability as ht, canonicalProjection as i, goalCompletionDenial as in, validateActionManifest as ir, ALPHA2_HOST_PACKAGES as it, executeRevalidatedGitEffect as j, extractOperation as jn, ALPHA3_HOST_PACKAGES as jt, commitTreeSnapshotDigest as k, extractArtifactPaths as kn, RC015_HOST_PACKAGES as kt, validateProofManifest as l, qualifyBoundary as ln, classifyUserInteraction as lr, HOST_CAPABILITY_PACKAGE_GROUPS as lt, injectActiveProfileHostLock as m, proposeRebindOutcome as mn, sanitizeUrl as mr, evaluateExternalWaitCapability as mt, PROOF_PROTOCOL_VERSION as n, observeAssistantOutcome as nn, semanticActionFromCommand as nr, ACTIVE_HOST_LAUNCHER_VERSION as nt, proofDigest as o, availableBoundaryQualifications as on, COMMAND_SURFACE_MANIFEST as or, DEFAULT_HOST_LOCK as ot, hostLockRowsFromComposedDump as p, proposeRebind as pn, sanitizeClauseText as pr, bindLiveGoalCapability as pt, extractToolSubject as q, CERTIFICATE_VERSION as qn, NO_PROGRESS_TURNS_BEFORE_STOP as qt, bindProofToProjection as r, progressFingerprint as rn, semanticActionFromText as rr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as rt, proofEvidenceConstraints as s, effectuateBoundary as sn, validateManifest as sr, EXPECTED_HOST_PACKAGES as st, PROOF_KINDS as t, latestRootInstruction as tn, requestedTargetMatchesResolved as tr, ACTIVE_HOST_COHORT_IDS as tt, HostProfileError as u, currentContractDigest as un, canonicalizePath as ur, HOST_COHORTS as ut, readActiveHostGraph as v, replayRebindResult as vn, hostVersionFromPackages as vt, SessionApiError as w, itemDiagnosis as wn, compareHostVersions as wt, verifyComposedHostLockDump as x, parseConfirmationMessage as xn, MIN_SUPPORTED_HOST_VERSION as xt, resolveActiveProfileHostLock as y, CONFIRM_LINE_PATTERN as yn, selectHostCohort as yt, previewFirstStepInjection as z, maskCodeSpans as zn, recoveryDigest as zt };
+export { parsePwshCommand as $, STOP_PROTOCOL_VERSION_V2 as $n, isRootPauseRequest as $t, createGitPrestateEnvelope as A, extractArtifactPaths as An, RC015_HOST_PACKAGES as At, CAPTURE_V042_NOTICE as B, maskCodeSpans as Bn, recoveryDigest as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, deriveItemDiagnosis as Cn, SUPPORTED_HOST_RANGE as Ct, GIT_COMMAND_TEMPLATES as D, captureClause as Dn, parseHostVersion as Dt, GIT_COMMAND_MANIFEST_IDS as E, relevantEvidence as En, evaluateMinimumHostVersion as Et, verifiedLinearCommitReadback as F, interpretClause as Fn, certifyCheckpoint as Ft, supersedeItem as G, npmEscapedPackageName as Gn, isVerifyingCapability as Gt, PROTOCOL_V4_NOTICE as H, semanticActionOfScope as Hn, bindingSatisfies as Ht, FIRST_STEP_GUIDANCE as I, interpretMessage as In, DEFAULT_RECOVERY_CHAR_BUDGET as It, extractToolSubject as J, CERTIFICATE_VERSION as Jn, NO_PROGRESS_TURNS_BEFORE_STOP as Jt, evidenceFromPersistedToolResult as K, ACTION_MANIFEST as Kn, CONTROL_RECORD_PREFIX as Kt, claimedBatchHasRealRootInput as L, isExecutableItem as Ln, MIN_RECOVERY_CHAR_BUDGET as Lt, gitCommandMatchesTarget as M, extractOperation as Mn, ALPHA3_HOST_PACKAGES as Mt, parseGitCommandManifest as N, isInformationalMessage as Nn, authorityCaptureCounts as Nt, commitIndexSnapshotDigest as O, captureItem as On, satisfiesSupportedHostRange as Ot, revalidateGitPrestate as P, segmentClauses as Pn, segmentAuthorityBlocks as Pt, isRunExecutable as Q, STOP_PROTOCOL_VERSION as Qn, decisionBoundaryKey as Qt, lifecyclePhase as R, isOpenObligation as Rn, closingHint as Rt, SESSION_API_UNSUPPORTED as S, parseConfirmationMessage as Sn, MIN_SUPPORTED_HOST_VERSION as St, snapshotSessionEvents as T, itemDiagnosis as Tn, compareHostVersions as Tt, PROTOCOL_V5_NOTICE as U, statefulActionsOfScope as Un, evidenceCoverage as Ut, PROTOCOL_V3_NOTICE as V, namedActions as Vn, renderRecoveryPacket as Vt, deriveProjection as W, canonicalRegistryBase as Wn, evidenceMatchesItem as Wt, withDurability as X, SEMANTIC_ACTIONS as Xn, decideTurnBoundary as Xt, isDeterministicCheck as Y, CERTIFICATE_VERSION_V2 as Yn, classifyCompletionClaim as Yt, canonicalArgvFromCommand as Z, STATEFUL_ACTIONS as Zn, decideTurnStopping as Zt, packageRowsFromPnpmLock as _, rebindAttemptKey as _n, sanitizeUrl as _r, evaluateHostLock as _t, createProofManifest as a, goalCompletionDenial as an, semanticActionFromCommand as ar, ALPHA2_HOST_PACKAGES as at, resolveInstalledHostLock as b, CONFIRM_LINE_PATTERN as bn, selectHostCohort as bt, sessionQuery as c, effectuateBoundary as cn, validateActionTarget as cr, EXPECTED_HOST_PACKAGES as ct, combineHostPolicy as d, currentContractDigest as dn, classifyTaskIntent as dr, HOST_COHORTS as dt, isWholeTaskCompletionClaim as en, SUPPORTED_EVIDENCE_ADAPTERS as er, parseShellCommand as et, hostLockContextFromComposedDump as f, createProjection as fn, classifyUserInteraction as fr, LEGACY_HOST_COHORTS as ft, packageRowsFromActiveGraph as g, proposeRebindV042 as gn, sanitizeClauseText as gr, evaluateHostCapability as gt, inspectTargetHostGraph as h, proposeRebindOutcome as hn, normalizeClause as hr, evaluateExternalWaitCapability as ht, canonicalProjection as i, progressFingerprint as in, requestedTargetMatchesResolved as ir, ALPHA2_DSHMARKET_139_HOST_PACKAGES as it, executeRevalidatedGitEffect as j, extractMethod as jn, RC1_HOST_PACKAGES as jt, commitTreeSnapshotDigest as k, classifyClause as kn, RC015_RC2_HOST_PACKAGES as kt, validateProofManifest as l, isCurrentAcceptedBoundary as ln, COMMAND_SURFACE_MANIFEST as lr, GOAL_HOST_PACKAGES as lt, injectActiveProfileHostLock as m, proposeRebind as mn, digestStrings as mr, bindLiveGoalCapability as mt, PROOF_PROTOCOL_VERSION as n, latestRootInstruction as nn, isStatefulAction as nr, ACTIVE_HOST_COHORT_IDS as nt, proofDigest as o, hasCurrentCertificate as on, semanticActionFromText as or, BASE_HOST_PACKAGES as ot, hostLockRowsFromComposedDump as p, confirmRebind as pn, canonicalizePath as pr, bindExecutableIdentity as pt, extractTextContent as q, ACTION_MANIFEST_VERSION as qn, NO_PROGRESS_RECORD_PREFIX as qt, bindProofToProjection as r, observeAssistantOutcome as rn, requestedTargetAuthorizesMutation as rr, ACTIVE_HOST_LAUNCHER_VERSION as rt, proofEvidenceConstraints as s, availableBoundaryQualifications as sn, validateActionManifest as sr, DEFAULT_HOST_LOCK as st, PROOF_KINDS as t, latestAssistantText as tn, actionCompatible as tr, ACTIVE_HOST_COHORT_ID as tt, HostProfileError as u, qualifyBoundary as un, validateManifest as ur, HOST_CAPABILITY_PACKAGE_GROUPS as ut, readActiveHostGraph as v, rebindResponse as vn, sha256 as vr, evaluateToolSurfaceCapability as vt, SessionApiError as w, evidenceAvailabilityReason as wn, SUPPORTED_HOST_VERSIONS as wt, verifyComposedHostLockDump as x, isFrozenV042RebindResponse as xn, LATEST_SUPPORTED_HOST_VERSION as xt, resolveActiveProfileHostLock as y, replayRebindResult as yn, hostVersionFromPackages as yt, previewFirstStepInjection as z, kindOfScope as zn, openItems as zt };

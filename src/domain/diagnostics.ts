@@ -85,6 +85,16 @@ export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): Unifie
       attempt_fingerprint: fingerprint(p, item, 'certified'),
     }
   }
+  if (item.status === 'answered') {
+    // C03: a trusted delivery closed this information obligation. It certifies
+    // delivery only — never accuracy or any execution.
+    return {
+      ...base, certification: 'supported', reason_code: 'answer_delivered', repairability: 'none',
+      missing_fields: [], missing_facets: [],
+      next_action: { kind: 'none', resume_condition: 'The host-confirmed final answer was delivered; no further binding needed.' },
+      attempt_fingerprint: fingerprint(p, item, 'answer_delivered'),
+    }
+  }
   if (item.status === 'pending' && item.waitAuthorization?.kind === 'root_explicit_wait') {
     return {
       ...base, certification: 'unavailable', reason_code: 'root_condition_pending',
@@ -117,17 +127,22 @@ export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): Unifie
     if (kind === 'inquiry') {
       // Inquiries stay obligations but are not machine-certifiable: report
       // honestly instead of dragging the user through a pointless rebind.
+      // Under a v5 boundary the obligation has a real closing path: the
+      // host-confirmed delivery of the final answer marks it answered.
+      const closable = p.boundaryProtocol === 5
       return {
         ...base,
         certification: 'unsupported',
-        reason_code: 'inquiry_non_certifiable',
+        reason_code: closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable',
         repairability: 'unsupported',
         missing_fields: [],
         next_action: {
           kind: 'report_only',
-          resume_condition: 'Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this.',
+          resume_condition: closable
+            ? 'Deliver the actual answer; the host-confirmed final response of a completed turn closes this item.'
+            : 'Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this.',
         },
-        attempt_fingerprint: fingerprint(p, item, 'inquiry_non_certifiable'),
+        attempt_fingerprint: fingerprint(p, item, closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable'),
       }
     }
     return {

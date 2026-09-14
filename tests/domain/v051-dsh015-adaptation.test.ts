@@ -36,6 +36,7 @@ function projectionRuntime(projection: GuardProjection): GuardRuntime {
     session: undefined as never,
     lifecycle: 'active',
     protocolV4Present: true,
+    protocolV5Present: true,
     sync() {},
     setEnabled() {},
     setDurability() {},

@@ -12,7 +12,7 @@ import {
   type GuardProjection,
 } from './domain/types.js'
 import { CONTROL_RECORD_PREFIX, isRootPauseRequest, latestRootInstruction, NO_PROGRESS_RECORD_PREFIX, progressFingerprint } from './domain/stop-policy.js'
-import { deriveProjection, PROTOCOL_V4_NOTICE } from './domain/derive.js'
+import { deriveProjection, PROTOCOL_V5_NOTICE } from './domain/derive.js'
 import { claimedBatchHasRealRootInput, lifecyclePhase, previewFirstStepInjection, type LifecyclePhase } from './domain/lifecycle.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
 import { decideTurnBoundary } from './domain/stop-policy.js'
@@ -75,6 +75,8 @@ export interface GuardRuntime {
   readonly lifecycle: LifecyclePhase
   /** The durable log already carries the 0.5 first-step protocol boundary. */
   readonly protocolV4Present: boolean
+  /** The durable log already carries the 0.6 first-step protocol boundary. */
+  readonly protocolV5Present: boolean
   sync(): void
   setEnabled(_enabled: boolean): void
   setDurability(confirmed: boolean): void
@@ -480,6 +482,7 @@ export function createRuntime(
   let observedCompactionSeq = -1
   let observedContractRevision = -1
   let protocolV4Present = false
+  let protocolV5Present = false
   let realRootInputSeen = false
   let lifecycle: LifecyclePhase = 'armed'
   const continuationAttempts = projection.continuationAttempts
@@ -542,6 +545,7 @@ export function createRuntime(
     // status surface: the v4 boundary and the real-input observation are both
     // derived from the same durable log as the contract.
     protocolV4Present = derived.protocolV4Present
+    protocolV5Present = derived.boundaryV5
     realRootInputSeen = derived.realRootInputSeen
     lifecycle = lifecyclePhase({ enabled: projection.enabled, realInputSeen: realRootInputSeen })
     // A newly observed epoch means enablement transitioned since the last
@@ -597,6 +601,7 @@ export function createRuntime(
     session,
     get lifecycle() { return lifecycle },
     get protocolV4Present() { return protocolV4Present },
+    get protocolV5Present() { return protocolV5Present },
     sync,
     setEnabled,
     setDurability,
@@ -795,9 +800,9 @@ export function apply(ctx: Context, rawConfig: {
     if (decision.kind !== 'enter') return decision
     const injected: ReturnType<typeof createUserMessage>[] = []
     const delegated = isDelegatedSession(agent.session)
-    let boundaryPending = !runtime.protocolV4Present
+    let boundaryPending = !runtime.protocolV5Present
     const firstStep = previewFirstStepInjection(
-      { activation: config.activation, enabled: runtime.projection.enabled, boundaryPresent: runtime.protocolV4Present, delegated },
+      { activation: config.activation, enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryPresent: runtime.protocolV4Present, delegated },
       claimedBatchHasRealRootInput(decision.messages),
     )
     if (firstStep) {
@@ -823,7 +828,7 @@ export function apply(ctx: Context, rawConfig: {
         // cut: duties and certificates before it keep their historical rules.
         // At most one boundary rides per step, never one per injection path.
         if (boundaryPending && !delegated) {
-          injected.push(pluginNoticeMessage(PROTOCOL_V4_NOTICE, 'Context Guard recorded a replay version boundary'))
+          injected.push(pluginNoticeMessage(PROTOCOL_V5_NOTICE, 'Context Guard recorded a replay version boundary'))
           boundaryPending = false
         }
         injected.push(createUserMessage({

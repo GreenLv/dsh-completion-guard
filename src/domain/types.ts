@@ -1,5 +1,11 @@
 export type GuardItemKind = 'requirement' | 'acceptance' | 'prohibition'
-export type GuardItemStatus = 'pending' | 'passed' | 'superseded'
+/**
+ * `answered` (0.6.0, C03) marks an information-slot obligation closed by a
+ * trusted delivery fact: the host-confirmed final answer of a completed turn.
+ * It certifies only that delivery happened — never accuracy, sufficiency, or
+ * that any execution happened. Legacy sessions (no v5 boundary) never mint it.
+ */
+export type GuardItemStatus = 'pending' | 'answered' | 'passed' | 'superseded'
 export type GuardIntegrity = 'valid' | 'unknown' | 'corrupt'
 export type EvidenceOutcome = 'success' | 'failure' | 'unknown' | 'durability-unknown'
 export type GuardOperation = 'create' | 'write' | 'modify' | 'read' | 'run' | 'verify'
@@ -101,6 +107,18 @@ export interface GuardItem {
   waitAuthorization?: WaitAuthorization
   deferAuthorization?: DeferAuthorization
   persistenceAuthorization?: PersistenceAuthorization
+  /**
+   * 0.6.0 work-unit assignment (C04), present only for obligations captured
+   * after a v5 protocol boundary in a non-delegated session. Legacy items keep
+   * the whole-session contract and carry no unit.
+   */
+  unitId?: string
+  /**
+   * The trusted delivery fact that closed an information-slot item: the host's
+   * completed turn and its final assistant message. Derived from durable
+   * events, never from assistant prose alone.
+   */
+  answeredBy?: { turn: number; responseSeq: number; responseSha256: string }
 }
 
 export interface GuardEvidence {
@@ -190,6 +208,33 @@ export interface GuardCheckpoint {
   goalRef?: GoalRef
   certificationDigest: string
   result: 'certified' | 'incomplete' | 'unknown'
+  /**
+   * 0.6.0 v2 certificate (v5 sessions only): the unit whose closure was
+   * certified. Version-1 certificates keep the whole-session contract and
+   * never carry a unit.
+   */
+  unitId?: string
+  /** v2 certificates: the digest of the certified unit's open closure. */
+  unitClosureDigest?: string
+}
+
+/**
+ * One 0.6.0 work unit (C04): the obligations captured from one root task and
+ * their closure state. Units are derived from the durable message stream, so
+ * they replay deterministically; no unit state is ever written to the log.
+ */
+export interface WorkUnit {
+  unitId: string
+  /** Sequence of the root message that opened the unit. */
+  openedAtSeq: number
+  /** Root messages folded into this unit, in source order. */
+  rootInputRefs: Array<{ seq: number }>
+  /** The normalized text of the unit's opening instruction (bounded audit). */
+  headline: string
+  /** Sequence at which a newer unit became current, when superseded as current. */
+  switchedAwayAtSeq?: number
+  /** Reserved for in-session sub-unit linkage; flat in 0.6.0. */
+  parentUnitId?: string
 }
 
 export type BoundaryDisposition = 'user_wait' | 'external_wait' | 'deferred' | 'guard_bounded_stop'
@@ -228,6 +273,18 @@ export interface GuardProjection {
   checkpoints: GuardCheckpoint[]
   boundaries: GuardBoundary[]
   externalOperations: Map<string, ExternalOperation>
+  /**
+   * 0.6.0 work units keyed by unit id, and the id of the unit currently
+   * receiving captured work. Derived; present only after a v5 boundary.
+   */
+  units: Map<string, WorkUnit>
+  currentUnitId?: string
+  /**
+   * The session's rule mode: `5` once a v5 protocol boundary exists in the log,
+   * `undefined` (legacy) before it. Determines certificate version, closure
+   * scope, and whether delivery/unit semantics are active.
+   */
+  boundaryProtocol?: 5
   sessionRefDigest: string
   hostLockDigest: string
   hostStatus: HostStatus
@@ -301,6 +358,7 @@ export function createProjection(): GuardProjection {
     checkpoints: [],
     boundaries: [],
     externalOperations: new Map(),
+    units: new Map(),
     sessionRefDigest: '11'.repeat(32),
     hostLockDigest: '22'.repeat(32),
     hostStatus: 'supported',
@@ -339,6 +397,8 @@ export interface DeriveResult {
   realRootInputSeen: boolean
   /** True when the durable log carries the 0.5 first-step protocol boundary. */
   protocolV4Present: boolean
+  /** True when the durable log carries the 0.6 first-step protocol boundary. */
+  boundaryV5: boolean
 }
 
 export interface DerivedEnvelope {

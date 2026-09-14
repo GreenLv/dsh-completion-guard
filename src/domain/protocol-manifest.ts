@@ -2,6 +2,13 @@ import type { TargetTuple } from './types.js'
 
 export const STOP_PROTOCOL_VERSION = '2.0.0'
 export const CERTIFICATE_VERSION = '1'
+/**
+ * 0.6.0 v5-session identity (P0 §1): v2 certificates bind a work unit's
+ * closure instead of the whole session. Version-1 identity keeps its
+ * historical meaning for legacy sessions and is never silently re-read.
+ */
+export const STOP_PROTOCOL_VERSION_V2 = '3.0.0'
+export const CERTIFICATE_VERSION_V2 = '2'
 export const ACTION_MANIFEST_VERSION = 1
 
 export const SUPPORTED_EVIDENCE_ADAPTERS: Readonly<Record<string, string>> = {

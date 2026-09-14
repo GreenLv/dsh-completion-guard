@@ -767,6 +767,64 @@ export function locatorDigest(rawLocator: string): string {
   return sha256Hex(Buffer.concat([Buffer.from('ccg.locator.v1\n', 'utf8'), utf8(rawLocator)]))
 }
 
+const CERTIFICATE_V2_KEYS = [
+  'stopProtocolVersion', 'certificateVersion', 'epoch', 'sessionRefDigest',
+  'hostLockDigest', 'contractRevision', 'contractSha256', 'unitId',
+  'unitClosureDigest', 'evidenceSha256', 'bindingDigest', 'goalRef',
+]
+
+export interface CertificateV2Input {
+  stopProtocolVersion: string
+  certificateVersion: string
+  epoch: number
+  sessionRefDigest: string
+  hostLockDigest: string
+  contractRevision: number
+  contractSha256: string
+  unitId: string
+  unitClosureDigest: string
+  evidenceSha256: string
+  bindingDigest: string
+  goalRef?: { id: string; revision: number } | null
+}
+
+/**
+ * 0.6.0 v2 certificate field table over the new `ccg.certificationDigest.v4`
+ * domain (P0 §1): the certified scope is a work unit's closure instead of the
+ * whole session. digest_v3 domains and their golden vectors stay frozen; this
+ * function never re-reads a v1 record.
+ */
+export function certificationDigestV2(certificate: CertificateV2Input): string {
+  requireExactKeys(certificate, CERTIFICATE_V2_KEYS, 'certificateV2')
+  const parts: Buffer[] = [Buffer.from('ccg.certificationDigest.v4\n', 'utf8')]
+  let count = 0
+  parts.push(field('stopProtocolVersion', typedToken(expectString(certificate.stopProtocolVersion, 'stopProtocolVersion'))))
+  parts.push(field('certificateVersion', typedToken(expectString(certificate.certificateVersion, 'certificateVersion'))))
+  parts.push(field('epoch', typedToken(expectInt(certificate.epoch, 'epoch'))))
+  parts.push(field('sessionRefDigest', typedToken({ k: 'x', v: expectHex(certificate.sessionRefDigest) })))
+  parts.push(field('hostLockDigest', typedToken({ k: 'x', v: expectHex(certificate.hostLockDigest) })))
+  parts.push(field('contractRevision', typedToken(expectInt(certificate.contractRevision, 'contractRevision'))))
+  parts.push(field('contractSha256', typedToken({ k: 'x', v: expectHex(certificate.contractSha256) })))
+  count += 7
+  parts.push(field('unitId', typedToken(expectString(certificate.unitId, 'unitId'))))
+  parts.push(field('unitClosureDigest', typedToken({ k: 'x', v: expectHex(certificate.unitClosureDigest) })))
+  parts.push(field('evidenceSha256', typedToken({ k: 'x', v: expectHex(certificate.evidenceSha256) })))
+  parts.push(field('bindingDigest', typedToken({ k: 'x', v: expectHex(certificate.bindingDigest) })))
+  count += 4
+  const goalRef = certificate.goalRef
+  if (goalRef !== undefined && goalRef !== null) {
+    requireExactKeys(goalRef, GOAL_REF_KEYS, 'goalRef')
+    parts.push(optField('goalRefId', expectString(goalRef.id, 'goalRef.id'), (v) => typedToken(v as Typed)))
+    parts.push(optField('goalRefRevision', expectInt(goalRef.revision, 'goalRef.revision'), (v) => typedToken(v as Typed)))
+  } else {
+    parts.push(optField('goalRefId', null, () => Buffer.alloc(0)))
+    parts.push(optField('goalRefRevision', null, () => Buffer.alloc(0)))
+  }
+  count += 2
+  checkFieldCount(count)
+  return sha256Hex(Buffer.concat(parts))
+}
+
 export interface StateClosureInput {
   binding: BindingRecord
   resolution: EvidenceFact
