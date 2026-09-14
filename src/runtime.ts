@@ -20,6 +20,7 @@ import { recoveryDigest, renderRecoveryPacket } from './domain/recovery.js'
 import { createCheckpointTool } from './tools/checkpoint.js'
 import { createBoundaryTool } from './tools/boundary.js'
 import { createPrepareTool } from './tools/prepare.js'
+import { createReleaseTool } from './tools/release.js'
 import { GIT_COMMAND_TEMPLATES, type GitAdapterAction } from './domain/git-adapter.js'
 import {
   createActionTool,
@@ -52,7 +53,7 @@ import {
 } from './domain/host-lock.js'
 import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type StatefulAction } from './domain/protocol-manifest.js'
 import {
-  readbackSettlesContract, releaseContractFor, releasePreEffectDecision,
+  readbackSettlesContract, releaseContractFor, releasePreEffectDecision, reservationFor,
   type ReleaseSettlement,
   RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX,
 } from './domain/release.js'
@@ -60,6 +61,7 @@ import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
 import { readActiveHostGraph } from './domain/host-resolver.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
+import { resolveAuditedRef } from './tools/evidence.js'
 import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 
 export const name = 'context-guard'
@@ -626,6 +628,17 @@ export function createRuntime(
   }
 }
 
+/** The durable session working directory, when the V3 header carries one. */
+function sessionCwd(session: Session): string | undefined {
+  const header = session.header as { cwd?: unknown } | undefined
+  return typeof header?.cwd === 'string' && header.cwd.length > 0 ? header.cwd : undefined
+}
+
+/** A bounded signal for a short trusted readback performed by the gate. */
+function requestSignal(): AbortSignal {
+  return AbortSignal.timeout(5_000)
+}
+
 /** Delegated/subagent sessions never receive root-conversation injections. */
 function isDelegatedSession(session: Session): boolean {
   const header = session.header as { parentSession?: unknown; delegationDepth?: unknown; origin?: unknown } | undefined
@@ -651,6 +664,29 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
   }
 }
 
+/**
+ * Executor and network seams for acceptance runs. They replace ONLY the two
+ * things a deterministic test cannot do for real — spawning the mutation
+ * binary and reaching the registry — and never the authorization gate, the
+ * reservation/settlement records, or the evidence producers. Production
+ * callers omit them and get the real implementations.
+ */
+export interface RuntimeExecutorSeams {
+  commandRunner?: EvidenceToolRoots['commandRunner']
+  fetcher?: EvidenceToolRoots['fetcher']
+  allowLoopbackHttpRegistry?: boolean
+  /**
+   * Pin the audited host cohort instead of reading a live profile graph. An
+   * acceptance run that already declared its cohort needs this because the
+   * migration revalidation reads real filesystem roots; it replaces ONLY the
+   * host-lock EVALUATION. The release ticket gate, the reservation and
+   * settlement records, the evidence producers and the replay stay production
+   * code, and the host lock keeps its own dedicated suites and native
+   * acceptance.
+   */
+  hostLock?: HostLockEvaluation
+}
+
 export function apply(ctx: Context, rawConfig: {
   activation?: unknown
   hostLockPackages?: unknown
@@ -659,12 +695,12 @@ export function apply(ctx: Context, rawConfig: {
   hostLockPolicy?: unknown
   hostLockRuntimeRoot?: unknown
   hostLockProfileRoot?: unknown
-} = {}): void {
+} = {}, seams: RuntimeExecutorSeams = {}): void {
   const config: ResolvedConfig = resolveConfig(rawConfig)
   // Runtime authority must come from the active profile/package graph, not a
   // nearest lockfile (profiles and the DSH runtime have separate locks). The
   // acceptance installer injects this bounded identity; absence is unknown.
-  const installedHostLock = evaluateHostLock(config.hostLockPackages ?? [], {
+  const installedHostLock = seams.hostLock ?? evaluateHostLock(config.hostLockPackages ?? [], {
     platform: config.hostLockPlatform,
     profileKind: config.hostLockProfile,
   })
@@ -676,7 +712,8 @@ export function apply(ctx: Context, rawConfig: {
     if (!runtime) {
       const goals = optionalGoalService(ctx, agent)
       const refreshHostLock = () => {
-        const current = bindLiveGoalCapability(revalidateCoreLock(config, installedHostLock), Boolean(goals) && hasPinnedUpdateGoalTool(agent))
+        const evaluated = seams.hostLock ?? revalidateCoreLock(config, installedHostLock)
+        const current = bindLiveGoalCapability(evaluated, Boolean(goals) && hasPinnedUpdateGoalTool(agent))
         hostLocks.set(agent, current)
         return current
       }
@@ -765,6 +802,9 @@ export function apply(ctx: Context, rawConfig: {
     }
     const evidenceOptions: EvidenceToolRoots & { hostCapability: RuntimeHostCapabilityEvaluator } = {
       hostCapability: createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock),
+      ...(seams.commandRunner ? { commandRunner: seams.commandRunner } : {}),
+      ...(seams.fetcher ? { fetcher: seams.fetcher } : {}),
+      ...(seams.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
       prepareMutation: async (toolAgent) => {
         if (toolAgent.session !== agent.session) return false
         const durable = await ctx.sessions.flush(agent.session)
@@ -791,11 +831,24 @@ export function apply(ctx: Context, rawConfig: {
         const projection = runtime.projection
         const applicable = projection.policy === 'release' || projection.releaseContracts.length > 0
         if (!applicable) return { status: 'granted', reasonCode: 'release_profile_not_adopted' }
+        // The candidate identity comes from trusted readers: the action tool
+        // read the artifact, and the runtime resolves the ref an ADOPTED
+        // CONTRACT names, because that contract is the only closed, reachable
+        // path for a ref (a model-supplied one would not be authority).
+        const observed = { ...request.observed }
+        const declaredContract = releaseContractFor(projection, request.operation)
+        const declaredRef = declaredContract?.candidate.ref
+        if (declaredRef !== undefined && observed.ref === undefined) {
+          const cwd = sessionCwd(runtime.session)
+          const refSha = await resolveAuditedRef(cwd, declaredRef, evidenceOptions, requestSignal())
+          if (refSha !== undefined) {
+            observed.ref = declaredRef
+            observed.refSha = refSha
+          }
+        }
         const decision = releasePreEffectDecision(projection, {
           operation: request.operation,
-          // The observed identity is produced by the trusted readers inside the
-          // action tool; the runtime only forwards it.
-          observed: request.observed,
+          observed,
           resolvedTarget: request.resolvedTarget,
           nowEpochMs: Date.now(),
         })
@@ -808,6 +861,10 @@ export function apply(ctx: Context, rawConfig: {
           callId: request.callId,
           startedAtSeq: 0,
           status: 'in_flight',
+          // Record the SRI the producer read, so a contract that froze only the
+          // byte SHA-256 can still be reconciled later instead of becoming
+          // permanently unsettleable.
+          ...(observed.artifactSri !== undefined ? { observedArtifactSri: observed.artifactSri } : {}),
         })
         return persisted
           ? { status: 'granted', reasonCode: decision.reasonCode, contractId: decision.contractId }
@@ -822,9 +879,10 @@ export function apply(ctx: Context, rawConfig: {
           ?? releaseContractFor(runtime.projection, request.operation)?.contractId
           ?? 'unknown'
         const contract = runtime.projection.releaseContracts.find((entry) => entry.contractId === contractId)
+        const reservation = reservationFor(runtime.projection, contractId, request.callId)
         let outcome: ReleaseSettlement['outcome'] = request.effect === 'not_effected' ? 'not_effected' : 'unknown'
         if (request.effect === 'completed' && contract) {
-          const settled = readbackSettlesContract(contract, request.readback)
+          const settled = readbackSettlesContract(contract, request.readback, reservation?.observedArtifactSri)
           outcome = settled === 'settled' ? 'settled' : 'unknown'
         }
         await persistReleaseRecord(agent, RELEASE_SETTLEMENT_PREFIX, {
@@ -874,6 +932,19 @@ export function apply(ctx: Context, rawConfig: {
         runtime.sync()
         return durable
       },
+    }))
+    agent.ctx.tools.register(createReleaseTool({
+      getProjection: () => runtime.projection,
+      fetcher: evidenceOptions.fetcher,
+      ...(evidenceOptions.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
+      persistSettlement: async (request) => persistReleaseRecord(request.agent as Agent, RELEASE_SETTLEMENT_PREFIX, {
+        contractId: request.contractId,
+        operation: request.operation,
+        callId: request.callId,
+        settledAtSeq: 0,
+        readback: request.readback,
+        outcome: request.outcome,
+      }),
     }))
     agent.ctx.tools.register(createExternalOperationTool(
       (id, toolAgent) => readExternalOperation(ctx, toolAgent as Agent | undefined, id),

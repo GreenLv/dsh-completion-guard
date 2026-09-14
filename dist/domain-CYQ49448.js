@@ -10067,7 +10067,7 @@ function optionalString(value) {
 * approximated, because a half-specified contract would authorize an
 * unspecified candidate.
 */
-function normalizeReleaseContract(raw, adoptedBy) {
+function normalizeReleaseContract(raw, adoptedBy, adoptedAtRevision = 0) {
 	const errors = [];
 	const value = asRecord$1(raw);
 	if (!value) return { errors: ["release_contract_malformed"] };
@@ -10141,6 +10141,7 @@ function normalizeReleaseContract(raw, adoptedBy) {
 		contract: {
 			contractId: suppliedId ?? `rel-${sha256(JSON.stringify(body)).slice(0, 16)}`,
 			adoptedBy,
+			adoptedAtRevision,
 			operations: operations.sort(),
 			candidate: body.candidate,
 			readinessRefs: body.readinessRefs,
@@ -10160,12 +10161,14 @@ function normalizeReservation(raw) {
 	if (!contractId || !callId) return void 0;
 	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
 	if (typeof startedAtSeq !== "number" || !Number.isSafeInteger(startedAtSeq)) return void 0;
+	const observedArtifactSri = optionalString(value.observedArtifactSri);
 	return {
 		contractId,
 		operation,
 		callId,
 		startedAtSeq,
-		status: "in_flight"
+		status: "in_flight",
+		...observedArtifactSri ? { observedArtifactSri } : {}
 	};
 }
 const RELEASE_OUTCOMES = [
@@ -10369,7 +10372,7 @@ function releasePreEffectDecision(projection, request) {
 	};
 	const closureRef = contract.closureCertRef;
 	const closure = closureRef !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === closureRef) : void 0;
-	if (!closure || closure.result !== "certified" || closure.epoch !== projection.epoch || closure.contractRevision !== projection.contractRevision) return {
+	if (!closure || closure.result !== "certified" || closure.epoch !== projection.epoch || closure.contractRevision !== contract.adoptedAtRevision) return {
 		status: "denied",
 		reasonCode: "release_closure_unresolved",
 		contractId: contract.contractId
@@ -10400,6 +10403,11 @@ function releasePreEffectDecision(projection, request) {
 			contractId: contract.contractId
 		};
 	}
+	if (candidate.ref !== void 0 && observedIdentity.refSha !== void 0 && observedIdentity.fullSha40 !== void 0 && observedIdentity.refSha !== observedIdentity.fullSha40) return {
+		status: "denied",
+		reasonCode: "release_ref_commit_mismatch",
+		contractId: contract.contractId
+	};
 	const resolved = request.resolvedTarget;
 	if (resolved === void 0) return {
 		status: "denied",
@@ -10438,11 +10446,24 @@ function releasePreEffectDecision(projection, request) {
 * different integrity proves the wrong bytes are published, which is an
 * unknown outcome for this contract, never a settlement.
 */
-function readbackSettlesContract(contract, readback) {
+function readbackSettlesContract(contract, readback, reservationSri) {
 	if (readback === "unavailable") return "unconfirmed";
 	if (readback.kind !== "npm_integrity") return "unconfirmed";
-	if (contract.candidate.artifactSri === void 0) return "unconfirmed";
-	return readback.identity === contract.candidate.artifactSri ? "settled" : "mismatch";
+	const expected = contract.candidate.artifactSri ?? reservationSri;
+	if (expected === void 0) return "unconfirmed";
+	return readback.identity === expected ? "settled" : "mismatch";
+}
+/**
+* The reservation for one call, including revoked contracts: reconciling an
+* operation that was already in flight when its contract was revoked is the
+* recovery case, not an authority question.
+*/
+function reservationFor(projection, contractId, callId) {
+	return projection.releaseReservations.find((entry) => entry.contractId === contractId && entry.callId === callId);
+}
+/** A contract by id, INCLUDING revoked ones, for recovery lookups. */
+function contractById(projection, contractId) {
+	return projection.releaseContracts.find((entry) => entry.contractId === contractId);
 }
 /** The coverage report for one contract: which adopted operations Guard can protect. */
 function releaseCoverage(contract) {
@@ -10521,8 +10542,8 @@ function stableJson(value) {
 * and it must not touch the projection's own integrity, which governs ordinary
 * work.
 */
-function pushReleaseDiagnostic(projection, seq, reasonCode) {
-	projection.releaseStateDamaged = true;
+function pushReleaseDiagnostic(projection, seq, reasonCode, damaging = false) {
+	if (damaging) projection.releaseStateDamaged = true;
 	if (projection.releaseDiagnostics.some((entry) => entry.seq === seq && entry.reasonCode === reasonCode)) return;
 	projection.releaseDiagnostics.push({
 		seq,
@@ -10574,6 +10595,37 @@ function recordedCertificateMatches(recorded, checkpoint) {
 	const actualKeys = Object.keys(normalized).sort();
 	if (expectedKeys.length !== actualKeys.length) return false;
 	return expectedKeys.every((key, index) => key === actualKeys[index] && stableJson(normalized[key]) === stableJson(exact[key]));
+}
+/**
+* The proof binding state the log itself implies for one checkpoint call. This
+* is the same computation the signing tool performs, replayed against the
+* projection derived up to that call.
+*/
+function replayProofState(projection, proof) {
+	if (proof === void 0) return {
+		status: "absent",
+		reason_codes: []
+	};
+	const structural = validateProofManifestV2(proof);
+	if (structural.length) return {
+		status: "invalid",
+		reason_codes: [...structural].sort()
+	};
+	const binding = bindProofV2ToProjection(projection, proof);
+	return binding.length ? {
+		status: "rejected",
+		reason_codes: [...binding].sort()
+	} : {
+		status: "bound",
+		reason_codes: []
+	};
+}
+/** Bounded set equality for reason-code lists, order-insensitive. */
+function sameStringSet(recorded, expected) {
+	if (!Array.isArray(recorded)) return false;
+	const left = [...new Set(recorded.filter((entry) => typeof entry === "string"))].sort();
+	const right = [...new Set(expected)].sort();
+	return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 function restoreHistoricalCheckpoint(recorded, bindings, id) {
 	const stringField = (name) => typeof recorded[name] === "string" ? recorded[name] : void 0;
@@ -10820,7 +10872,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
 	const priorRootMessages = [];
 	let realRootInputSeen = false;
-	const trustedDeliveries = v5BoundarySeq !== void 0 ? deriveTrustedDeliveries(sourceEvents) : [];
+	const trustedDeliveries = (v5BoundarySeq !== void 0 ? deriveTrustedDeliveries(sourceEvents) : []).filter((delivery) => delivery.turnEndSeq > v5BoundarySeq);
 	let deliveryCursor = 0;
 	const applyDeliveriesUpTo = (seq) => {
 		while (deliveryCursor < trustedDeliveries.length && trustedDeliveries[deliveryCursor].turnEndSeq <= seq) {
@@ -10833,6 +10885,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 			for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
 				const item = projection.items.get(itemId);
 				if (!item || item.status !== "pending") continue;
+				const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+				if (!sourceSeq || Number(sourceSeq[1]) <= v5BoundarySeq) continue;
 				item.status = "answered";
 				item.answeredBy = {
 					turn: delivery.turn,
@@ -10886,10 +10940,10 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						const normalized = normalizeReleaseContract(payload, {
 							seq: event.seq,
 							digest: sha256(stableJson(payload))
-						});
-						if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code);
+						}, projection.contractRevision);
+						if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code, true);
 						else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract.contractId)) projection.releaseContracts.push(normalized.contract);
-					} else if (rest.length > 0) pushReleaseDiagnostic(projection, event.seq, "release_subcommand_unknown");
+					} else if (rest.length > 0 && !/^status$/.test(rest)) pushReleaseDiagnostic(projection, event.seq, "release_subcommand_unknown");
 				}
 				break;
 			}
@@ -10945,14 +10999,14 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 							const normalized = normalizeReleaseContract(asRecord(payload.contract) ?? payload, {
 								seq: adoptionSeq,
 								digest: sha256(stableJson(payload.contract ?? null))
-							});
+							}, projection.contractRevision);
 							if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code);
 							else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract.contractId)) projection.releaseContracts.push(normalized.contract);
 							break;
 						}
 						if (recordText.startsWith(RELEASE_RESERVATION_PREFIX)) {
 							const reservation = normalizeReservation(parseArguments(recordText.slice(RELEASE_RESERVATION_PREFIX.length)));
-							if (!reservation) pushReleaseDiagnostic(projection, event.seq, "release_reservation_malformed");
+							if (!reservation) pushReleaseDiagnostic(projection, event.seq, "release_reservation_malformed", true);
 							else if (!projection.releaseReservations.some((entry) => entry.callId === reservation.callId)) projection.releaseReservations.push({
 								...reservation,
 								startedAtSeq: event.seq
@@ -10969,7 +11023,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						}
 						if (recordText.startsWith(RELEASE_SETTLEMENT_PREFIX)) {
 							const settlement = normalizeSettlement(parseArguments(recordText.slice(RELEASE_SETTLEMENT_PREFIX.length)));
-							if (!settlement) pushReleaseDiagnostic(projection, event.seq, "release_settlement_malformed");
+							if (!settlement) pushReleaseDiagnostic(projection, event.seq, "release_settlement_malformed", true);
 							else {
 								const pinned = {
 									...settlement,
@@ -11116,6 +11170,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				};
 				if (call.name === "context_guard_checkpoint") {
 					const args = parseArguments(call.arguments);
+					if (asRecord(args.proof)) call.proof = args.proof;
 					call.bindings = Array.isArray(args.bindings) ? args.bindings.map((binding) => {
 						const record = asRecord(binding);
 						const transition = asRecord(record?.expected_transition);
@@ -11203,6 +11258,18 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 							projection.lastCheckpointRejections = certifyCheckpoint(projection, call.bindings ?? [], "diagnostic", false).rejectedBindings;
 							projection.lastCheckpointRejectionRevision = projection.contractRevision;
 						}
+						break;
+					}
+					const recordedProof = asRecord(recorded.proof_state);
+					const recomputedProof = replayProofState(projection, call.proof);
+					if ((recordedProof !== void 0 || call.proof !== void 0) && (recordedProof === void 0 || String(recordedProof.status ?? "") !== recomputedProof.status || !sameStringSet(recordedProof.reason_codes, recomputedProof.reason_codes))) {
+						projection.integrity = "corrupt";
+						projection.integrityViolations.push("proof_replay_mismatch");
+						break;
+					}
+					if (recomputedProof.status === "invalid" || recomputedProof.status === "rejected") {
+						projection.integrity = "corrupt";
+						projection.integrityViolations.push("proof_replay_mismatch");
 						break;
 					}
 					if (!asRecord(recorded.certificate)) {
@@ -11329,8 +11396,9 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 		if (settlement.readback === "unavailable") return false;
 		const contract = projection.releaseContracts.find((entry) => entry.contractId === settlement.contractId);
 		if (!contract || settlement.readback.kind !== "npm_integrity") return false;
-		const declared = contract.candidate.artifactSri;
-		return declared !== void 0 && declared !== settlement.readback.identity;
+		const reservation = projection.releaseReservations.find((entry) => entry.contractId === settlement.contractId && entry.operation === settlement.operation && entry.callId === settlement.callId);
+		const expected = contract.candidate.artifactSri ?? reservation?.observedArtifactSri;
+		return expected !== void 0 && expected !== settlement.readback.identity;
 	});
 	return {
 		projection,
@@ -12319,4 +12387,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { isRunExecutable as $, relevantEvidence as $n, proofOperationMatches as $t, previewFirstStepInjection as A, observeAssistantOutcome as An, boundedArtifactChoiceMatches as Ar, RC015_RC2_HOST_PACKAGES as At, RELEASE_SETTLEMENT_PREFIX as B, confirmRebind as Bn, validateManifest as Br, PROOF_MANIFEST_DOMAIN_V2 as Bt, gitCommandMatchesTarget as C, decideTurnBoundary as Cn, CERTIFICATE_VERSION_V2 as Cr, MIN_SUPPORTED_HOST_VERSION as Ct, FIRST_STEP_GUIDANCE as D, isWholeTaskCompletionClaim as Dn, STOP_PROTOCOL_VERSION_V2 as Dr, evaluateMinimumHostVersion as Dt, verifiedLinearCommitReadback as E, isRootPauseRequest as En, STOP_PROTOCOL_VERSION as Er, compareHostVersions as Et, PROTOCOL_V5_NOTICE as F, effectuateBoundary as Fn, semanticActionFromCommand as Fr, segmentAuthorityBlocks as Ft, releasePreEffectDecision as G, rebindResponse as Gn, normalizeClause as Gr, canonicalProjection as Gt, readbackSettlesContract as H, proposeRebindOutcome as Hn, classifyUserInteraction as Hr, PROOF_PROTOCOL_VERSION_V2 as Ht, deriveProjection as I, isCurrentAcceptedBoundary as In, semanticActionFromText as Ir, certifyCheckpoint as It, extractTextContent as J, isFrozenV042RebindResponse as Jn, sha256 as Jr, proofCapabilityReport as Jt, supersedeItem as K, replayRebindResult as Kn, sanitizeClauseText as Kr, createProofManifest as Kt, RELEASE_OPERATIONS as L, qualifyBoundary as Ln, validateActionManifest as Lr, PROOF_CAPABILITY_MATRIX as Lt, DEFAULT_DELEGATION_TOOL_NAMES as M, goalCompletionDenial as Mn, requestedIdentityKey as Mr, RC1_HOST_PACKAGES as Mt, PROTOCOL_V3_NOTICE as N, hasCurrentCertificate as Nn, requestedTargetAuthorizesMutation as Nr, ALPHA3_HOST_PACKAGES as Nt, claimedBatchHasRealRootInput as O, latestAssistantText as On, SUPPORTED_EVIDENCE_ADAPTERS as Or, parseHostVersion as Ot, PROTOCOL_V4_NOTICE as P, availableBoundaryQualifications as Pn, requestedTargetMatchesResolved as Pr, authorityCaptureCounts as Pt, canonicalArgvFromCommand as Q, itemDiagnosis as Qn, proofHostSurfacesOf as Qt, RELEASE_OPERATION_SURFACES as R, currentContractDigest as Rn, validateActionTarget as Rr, PROOF_KINDS as Rt, executeRevalidatedGitEffect as S, classifyCompletionClaim as Sn, CERTIFICATE_VERSION as Sr, LATEST_SUPPORTED_HOST_VERSION as St, revalidateGitPrestate as T, decisionBoundaryKey as Tn, STATEFUL_ACTIONS as Tr, SUPPORTED_HOST_VERSIONS as Tt, releaseContractFor as U, proposeRebindV042 as Un, canonicalizePath as Ur, bindProofToProjection as Ut, normalizeReleaseContract as V, proposeRebind as Vn, classifyTaskIntent as Vr, PROOF_PROTOCOL_VERSION as Vt, releaseCoverage as W, rebindAttemptKey as Wn, digestStrings as Wr, bindProofV2ToProjection as Wt, isDeterministicCheck as X, deriveItemDiagnosis as Xn, proofDigestV2 as Xt, extractToolSubject as Y, parseConfirmationMessage as Yn, proofDigest as Yt, withDurability as Z, evidenceAvailabilityReason as Zn, proofEvidenceConstraints as Zt, GIT_COMMAND_MANIFEST_IDS as _, evidenceMatchesItem as _n, canonicalRegistryBase as _r, evaluateHostCapability as _t, injectActiveProfileHostLock as a, validateProofManifest as an, extractOperation as ar, ALPHA2_DSHMARKET_139_HOST_PACKAGES as at, commitTreeSnapshotDigest as b, NO_PROGRESS_RECORD_PREFIX as bn, ACTION_MANIFEST_VERSION as br, hostVersionFromPackages as bt, packageRowsFromPnpmLock as c, certificateClosure as cn, interpretClause as cr, DEFAULT_HOST_LOCK as ct, resolveInstalledHostLock as d, closingHint as dn, isOpenObligation as dr, HOST_CAPABILITY_PACKAGE_GROUPS as dt, proofV2Rejection as en, captureClause as er, parsePwshCommand as et, verifyComposedHostLockDump as f, openItems as fn, kindOfScope as fr, HOST_COHORTS as ft, snapshotSessionEvents as g, evidenceCoverage as gn, statefulActionsOfScope as gr, evaluateExternalWaitCapability as gt, SessionApiError as h, bindingSatisfies as hn, semanticActionOfScope as hr, bindLiveGoalCapability as ht, hostLockRowsFromComposedDump as i, sessionQueryV2 as in, extractMethod as ir, ACTIVE_HOST_LAUNCHER_VERSION as it, CAPTURE_V042_NOTICE as j, progressFingerprint as jn, isStatefulAction as jr, RC015_HOST_PACKAGES as jt, lifecyclePhase as k, latestRootInstruction as kn, actionCompatible as kr, satisfiesSupportedHostRange as kt, readActiveHostGraph as l, DEFAULT_RECOVERY_CHAR_BUDGET as ln, interpretMessage as lr, EXPECTED_HOST_PACKAGES as lt, SESSION_EVENT_ENVELOPE_INVALID as m, renderRecoveryPacket as mn, namedActions as mr, bindExecutableIdentity as mt, combineHostPolicy as n, scopeCoverageDigest as nn, classifyClause as nr, ACTIVE_HOST_COHORT_ID as nt, inspectTargetHostGraph as o, validateProofManifestV2 as on, isInformationalMessage as or, ALPHA2_HOST_PACKAGES as ot, SESSION_API_UNSUPPORTED as p, recoveryDigest as pn, maskCodeSpans as pr, LEGACY_HOST_COHORTS as pt, evidenceFromPersistedToolResult as q, CONFIRM_LINE_PATTERN as qn, sanitizeUrl as qr, createProofManifestV2 as qt, hostLockContextFromComposedDump as r, sessionQuery as rn, extractArtifactPaths as rr, ACTIVE_HOST_COHORT_IDS as rt, packageRowsFromActiveGraph as s, certifiableOpenItems as sn, segmentClauses as sr, BASE_HOST_PACKAGES as st, HostProfileError as t, requiredSubjectsOf as tn, captureItem as tr, parseShellCommand as tt, resolveActiveProfileHostLock as u, MIN_RECOVERY_CHAR_BUDGET as un, isExecutableItem as ur, GOAL_HOST_PACKAGES as ut, GIT_COMMAND_TEMPLATES as v, isVerifyingCapability as vn, npmEscapedPackageName as vr, evaluateHostLock as vt, parseGitCommandManifest as w, decideTurnStopping as wn, SEMANTIC_ACTIONS as wr, SUPPORTED_HOST_RANGE as wt, createGitPrestateEnvelope as x, NO_PROGRESS_TURNS_BEFORE_STOP as xn, BOUNDED_ARTIFACT_TYPES as xr, selectHostCohort as xt, commitIndexSnapshotDigest as y, CONTROL_RECORD_PREFIX as yn, ACTION_MANIFEST as yr, evaluateToolSurfaceCapability as yt, RELEASE_RESERVATION_PREFIX as z, createProjection as zn, COMMAND_SURFACE_MANIFEST as zr, PROOF_KINDS_V2 as zt };
+export { isDeterministicCheck as $, deriveItemDiagnosis as $n, proofDigestV2 as $t, previewFirstStepInjection as A, isWholeTaskCompletionClaim as An, STOP_PROTOCOL_VERSION_V2 as Ar, evaluateMinimumHostVersion as At, RELEASE_SETTLEMENT_PREFIX as B, qualifyBoundary as Bn, validateActionManifest as Br, PROOF_CAPABILITY_MATRIX as Bt, gitCommandMatchesTarget as C, NO_PROGRESS_RECORD_PREFIX as Cn, ACTION_MANIFEST_VERSION as Cr, hostVersionFromPackages as Ct, FIRST_STEP_GUIDANCE as D, decideTurnStopping as Dn, SEMANTIC_ACTIONS as Dr, SUPPORTED_HOST_RANGE as Dt, verifiedLinearCommitReadback as E, decideTurnBoundary as En, CERTIFICATE_VERSION_V2 as Er, MIN_SUPPORTED_HOST_VERSION as Et, PROTOCOL_V5_NOTICE as F, goalCompletionDenial as Fn, requestedIdentityKey as Fr, RC1_HOST_PACKAGES as Ft, releaseContractFor as G, proposeRebindOutcome as Gn, classifyUserInteraction as Gr, PROOF_PROTOCOL_VERSION_V2 as Gt, inFlightReservation as H, createProjection as Hn, COMMAND_SURFACE_MANIFEST as Hr, PROOF_KINDS_V2 as Ht, deriveProjection as I, hasCurrentCertificate as In, requestedTargetAuthorizesMutation as Ir, ALPHA3_HOST_PACKAGES as It, reservationFor as J, rebindResponse as Jn, normalizeClause as Jr, canonicalProjection as Jt, releaseCoverage as K, proposeRebindV042 as Kn, canonicalizePath as Kr, bindProofToProjection as Kt, RELEASE_OPERATIONS as L, availableBoundaryQualifications as Ln, requestedTargetMatchesResolved as Lr, authorityCaptureCounts as Lt, DEFAULT_DELEGATION_TOOL_NAMES as M, latestRootInstruction as Mn, actionCompatible as Mr, satisfiesSupportedHostRange as Mt, PROTOCOL_V3_NOTICE as N, observeAssistantOutcome as Nn, boundedArtifactChoiceMatches as Nr, RC015_RC2_HOST_PACKAGES as Nt, claimedBatchHasRealRootInput as O, decisionBoundaryKey as On, STATEFUL_ACTIONS as Or, SUPPORTED_HOST_VERSIONS as Ot, PROTOCOL_V4_NOTICE as P, progressFingerprint as Pn, isStatefulAction as Pr, RC015_HOST_PACKAGES as Pt, extractToolSubject as Q, parseConfirmationMessage as Qn, proofDigest as Qt, RELEASE_OPERATION_SURFACES as R, effectuateBoundary as Rn, semanticActionFromCommand as Rr, segmentAuthorityBlocks as Rt, executeRevalidatedGitEffect as S, CONTROL_RECORD_PREFIX as Sn, ACTION_MANIFEST as Sr, evaluateToolSurfaceCapability as St, revalidateGitPrestate as T, classifyCompletionClaim as Tn, CERTIFICATE_VERSION as Tr, LATEST_SUPPORTED_HOST_VERSION as Tt, normalizeReleaseContract as U, confirmRebind as Un, validateManifest as Ur, PROOF_MANIFEST_DOMAIN_V2 as Ut, contractById as V, currentContractDigest as Vn, validateActionTarget as Vr, PROOF_KINDS as Vt, readbackSettlesContract as W, proposeRebind as Wn, classifyTaskIntent as Wr, PROOF_PROTOCOL_VERSION as Wt, evidenceFromPersistedToolResult as X, CONFIRM_LINE_PATTERN as Xn, sanitizeUrl as Xr, createProofManifestV2 as Xt, supersedeItem as Y, replayRebindResult as Yn, sanitizeClauseText as Yr, createProofManifest as Yt, extractTextContent as Z, isFrozenV042RebindResponse as Zn, sha256 as Zr, proofCapabilityReport as Zt, GIT_COMMAND_MANIFEST_IDS as _, renderRecoveryPacket as _n, namedActions as _r, bindExecutableIdentity as _t, injectActiveProfileHostLock as a, scopeCoverageDigest as an, classifyClause as ar, ACTIVE_HOST_COHORT_ID as at, commitTreeSnapshotDigest as b, evidenceMatchesItem as bn, canonicalRegistryBase as br, evaluateHostCapability as bt, packageRowsFromPnpmLock as c, validateProofManifest as cn, extractOperation as cr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as ct, resolveInstalledHostLock as d, certificateClosure as dn, interpretClause as dr, DEFAULT_HOST_LOCK as dt, proofEvidenceConstraints as en, evidenceAvailabilityReason as er, withDurability as et, verifyComposedHostLockDump as f, DEFAULT_RECOVERY_CHAR_BUDGET as fn, interpretMessage as fr, EXPECTED_HOST_PACKAGES as ft, snapshotSessionEvents as g, recoveryDigest as gn, maskCodeSpans as gr, LEGACY_HOST_COHORTS as gt, SessionApiError as h, openItems as hn, kindOfScope as hr, HOST_COHORTS as ht, hostLockRowsFromComposedDump as i, requiredSubjectsOf as in, captureItem as ir, parseShellCommand as it, CAPTURE_V042_NOTICE as j, latestAssistantText as jn, SUPPORTED_EVIDENCE_ADAPTERS as jr, parseHostVersion as jt, lifecyclePhase as k, isRootPauseRequest as kn, STOP_PROTOCOL_VERSION as kr, compareHostVersions as kt, readActiveHostGraph as l, validateProofManifestV2 as ln, isInformationalMessage as lr, ALPHA2_HOST_PACKAGES as lt, SESSION_EVENT_ENVELOPE_INVALID as m, closingHint as mn, isOpenObligation as mr, HOST_CAPABILITY_PACKAGE_GROUPS as mt, combineHostPolicy as n, proofOperationMatches as nn, relevantEvidence as nr, isRunExecutable as nt, inspectTargetHostGraph as o, sessionQuery as on, extractArtifactPaths as or, ACTIVE_HOST_COHORT_IDS as ot, SESSION_API_UNSUPPORTED as p, MIN_RECOVERY_CHAR_BUDGET as pn, isExecutableItem as pr, GOAL_HOST_PACKAGES as pt, releasePreEffectDecision as q, rebindAttemptKey as qn, digestStrings as qr, bindProofV2ToProjection as qt, hostLockContextFromComposedDump as r, proofV2Rejection as rn, captureClause as rr, parsePwshCommand as rt, packageRowsFromActiveGraph as s, sessionQueryV2 as sn, extractMethod as sr, ACTIVE_HOST_LAUNCHER_VERSION as st, HostProfileError as t, proofHostSurfacesOf as tn, itemDiagnosis as tr, canonicalArgvFromCommand as tt, resolveActiveProfileHostLock as u, certifiableOpenItems as un, segmentClauses as ur, BASE_HOST_PACKAGES as ut, GIT_COMMAND_TEMPLATES as v, bindingSatisfies as vn, semanticActionOfScope as vr, bindLiveGoalCapability as vt, parseGitCommandManifest as w, NO_PROGRESS_TURNS_BEFORE_STOP as wn, BOUNDED_ARTIFACT_TYPES as wr, selectHostCohort as wt, createGitPrestateEnvelope as x, isVerifyingCapability as xn, npmEscapedPackageName as xr, evaluateHostLock as xt, commitIndexSnapshotDigest as y, evidenceCoverage as yn, statefulActionsOfScope as yr, evaluateExternalWaitCapability as yt, RELEASE_RESERVATION_PREFIX as z, isCurrentAcceptedBoundary as zn, semanticActionFromText as zr, certifyCheckpoint as zt };

@@ -114,6 +114,14 @@ export interface ReleaseCandidate {
 export interface ReleaseContract {
   contractId: string
   adoptedBy: { seq: number; digest: string }
+  /**
+   * The contract revision the candidate scope was FROZEN at. The closure
+   * certificate must be the one that certified exactly this revision: a later
+   * obligation (including the release instruction itself) does not invalidate
+   * the accepted candidate, while a certificate minted after the adoption — or
+   * a candidate whose content moved on — is refused.
+   */
+  adoptedAtRevision: number
   operations: ReleaseOperation[]
   candidate: ReleaseCandidate
   readinessRefs: string[]
@@ -129,6 +137,13 @@ export interface ReleaseReservation {
   callId: string
   startedAtSeq: number
   status: 'in_flight'
+  /**
+   * The npm SRI the trusted producer read when the reservation was written.
+   * Recorded so a contract that froze only the byte SHA-256 can still be
+   * reconciled by a registry readback: without it, a SHA-256-only contract
+   * would be permanently unsettleable.
+   */
+  observedArtifactSri?: string
 }
 
 export type ReleaseOutcome = 'settled' | 'unconfirmed' | 'unknown' | 'failed' | 'not_effected'
@@ -171,7 +186,11 @@ function optionalString(value: unknown): string | undefined {
  * approximated, because a half-specified contract would authorize an
  * unspecified candidate.
  */
-export function normalizeReleaseContract(raw: unknown, adoptedBy: { seq: number; digest: string }): { contract?: ReleaseContract; errors: string[] } {
+export function normalizeReleaseContract(
+  raw: unknown,
+  adoptedBy: { seq: number; digest: string },
+  adoptedAtRevision = 0,
+): { contract?: ReleaseContract; errors: string[] } {
   const errors: string[] = []
   const value = asRecord(raw)
   if (!value) return { errors: ['release_contract_malformed'] }
@@ -253,6 +272,7 @@ export function normalizeReleaseContract(raw: unknown, adoptedBy: { seq: number;
     contract: {
       contractId,
       adoptedBy,
+      adoptedAtRevision,
       operations: operations.sort(),
       candidate: body.candidate,
       readinessRefs: body.readinessRefs,
@@ -273,7 +293,11 @@ export function normalizeReservation(raw: unknown): ReleaseReservation | undefin
   if (!contractId || !callId) return undefined
   if (!operation || !(RELEASE_OPERATIONS as readonly string[]).includes(operation)) return undefined
   if (typeof startedAtSeq !== 'number' || !Number.isSafeInteger(startedAtSeq)) return undefined
-  return { contractId, operation: operation as ReleaseOperation, callId, startedAtSeq, status: 'in_flight' }
+  const observedArtifactSri = optionalString(value.observedArtifactSri)
+  return {
+    contractId, operation: operation as ReleaseOperation, callId, startedAtSeq, status: 'in_flight',
+    ...(observedArtifactSri ? { observedArtifactSri } : {}),
+  }
 }
 
 export const RELEASE_OUTCOMES: readonly ReleaseOutcome[] = ['settled', 'unconfirmed', 'unknown', 'failed', 'not_effected']
@@ -368,7 +392,10 @@ export function settledOperations(projection: GuardProjection, contractId: strin
  */
 export interface ReleaseObservedIdentity {
   fullSha40?: string
+  /** The ref NAME the candidate is expected to be on. */
   ref?: string
+  /** The commit that ref resolves to, read by the audited git producer. */
+  refSha?: string
   repository?: string
   packageId?: string
   version?: string
@@ -471,8 +498,12 @@ export function releasePreEffectDecision(projection: GuardProjection, request: R
   }
   const closureRef = contract.closureCertRef
   const closure = closureRef !== undefined ? projection.checkpoints.find((checkpoint) => checkpoint.id === closureRef) : undefined
+  // The certificate must be the one that certified the FROZEN candidate
+  // revision. Requiring the CURRENT revision made publishing depend on having
+  // already published: the release instruction is itself a new obligation, so
+  // its own capture invalidated the certificate it was about to use.
   if (!closure || closure.result !== 'certified' || closure.epoch !== projection.epoch
-    || closure.contractRevision !== projection.contractRevision) {
+    || closure.contractRevision !== contract.adoptedAtRevision) {
     return { status: 'denied', reasonCode: 'release_closure_unresolved', contractId: contract.contractId }
   }
   // The artifact must be bound to its bytes by at least one measurable digest:
@@ -493,6 +524,12 @@ export function releasePreEffectDecision(projection: GuardProjection, request: R
     const observed = observedIdentity[entry.field]
     if (observed === undefined) return { status: 'denied', reasonCode: entry.unresolvedCode, contractId: contract.contractId }
     if (observed !== declared) return { status: 'denied', reasonCode: entry.mismatchCode, contractId: contract.contractId }
+  }
+  // A ref that RESOLVES to a different commit than the artifact's embedded
+  // gitHead is not this candidate's ref, even though both resolved cleanly.
+  if (candidate.ref !== undefined && observedIdentity.refSha !== undefined && observedIdentity.fullSha40 !== undefined
+    && observedIdentity.refSha !== observedIdentity.fullSha40) {
+    return { status: 'denied', reasonCode: 'release_ref_commit_mismatch', contractId: contract.contractId }
   }
   // The resolved target must be the artifact the contract names, not merely a
   // target that happens to satisfy the command manifest.
@@ -517,11 +554,32 @@ export function releasePreEffectDecision(projection: GuardProjection, request: R
  * different integrity proves the wrong bytes are published, which is an
  * unknown outcome for this contract, never a settlement.
  */
-export function readbackSettlesContract(contract: ReleaseContract, readback: { kind: string; identity: string } | 'unavailable'): 'settled' | 'unconfirmed' | 'mismatch' {
+export function readbackSettlesContract(
+  contract: ReleaseContract,
+  readback: { kind: string; identity: string } | 'unavailable',
+  reservationSri?: string,
+): 'settled' | 'unconfirmed' | 'mismatch' {
   if (readback === 'unavailable') return 'unconfirmed'
   if (readback.kind !== 'npm_integrity') return 'unconfirmed'
-  if (contract.candidate.artifactSri === undefined) return 'unconfirmed'
-  return readback.identity === contract.candidate.artifactSri ? 'settled' : 'mismatch'
+  // The contract's own SRI, or the one the producer recorded when it reserved
+  // the attempt. Both are trusted; neither is inferred from the readback.
+  const expected = contract.candidate.artifactSri ?? reservationSri
+  if (expected === undefined) return 'unconfirmed'
+  return readback.identity === expected ? 'settled' : 'mismatch'
+}
+
+/**
+ * The reservation for one call, including revoked contracts: reconciling an
+ * operation that was already in flight when its contract was revoked is the
+ * recovery case, not an authority question.
+ */
+export function reservationFor(projection: GuardProjection, contractId: string, callId: string): ReleaseReservation | undefined {
+  return projection.releaseReservations.find((entry) => entry.contractId === contractId && entry.callId === callId)
+}
+
+/** A contract by id, INCLUDING revoked ones, for recovery lookups. */
+export function contractById(projection: GuardProjection, contractId: string): ReleaseContract | undefined {
+  return projection.releaseContracts.find((entry) => entry.contractId === contractId)
 }
 
 /** The coverage report for one contract: which adopted operations Guard can protect. */

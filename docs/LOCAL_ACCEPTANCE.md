@@ -2,6 +2,28 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+### Second repair round after follow-up review (2026-09-14)
+
+The follow-up review of the repair commit found five remaining wiring defects
+(pre-v5 delivery retro-closure, the unobserved registry and unreachable ref, the
+closure revision that made publishing depend on publishing, read-only status
+poisoning the release state, and a proof that was checked when signed but not
+when replayed). All five are fixed and the reviewer's counterexamples remain as
+regression cases.
+
+Added deterministic evidence for this round:
+
+- `tests/tools/v060-release-chain.test.ts` — the production release chain: a real
+  root publish instruction, a real certified preparation closure, a real
+  contract adoption, a real tgz and resolution through the registered evidence
+  tool, and the registered action tool consulting the runtime's own gate
+  (reserve, execute once, stay in flight, reconcile through the registered
+  recovery tool, refuse the replay). Also the revoked-but-in-flight restart
+  recovery and a mismatching readback.
+- `tests/domain/v060-proof-production-chain.test.ts` — a proof-bound certificate
+  signed, persisted and replayed through the real tool, plus the missing-proof,
+  tampered-proof and Goal-consumption negatives.
+
 ### Repair round after concentrated review (2026-09-14)
 
 The `0dce898` candidate failed a concentrated review: fifteen counterexamples,

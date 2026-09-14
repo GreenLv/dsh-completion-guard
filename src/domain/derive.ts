@@ -21,6 +21,7 @@ import {
   opensNewUnit, currentUnitHasOpenWork, recordDelegation, unitDescendantIds,
 } from './work-unit.js'
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
+import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
 import {
   normalizeReleaseContract, normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH,
@@ -35,6 +36,12 @@ interface PendingCall {
   boundaryRequest?: BoundaryRequest
   /** The work unit current when the call was issued (C04 delegation linkage). */
   unitIdAtCall?: string
+  /**
+   * The v2 proof manifest the checkpoint call presented (C09). It is persisted
+   * with the call and re-validated at replay: a certificate may only be
+   * restored when the proof that justified it still binds.
+   */
+  proof?: ProofManifestV2
 }
 
 /**
@@ -113,8 +120,8 @@ function stableJson(value: unknown): string {
  * and it must not touch the projection's own integrity, which governs ordinary
  * work.
  */
-function pushReleaseDiagnostic(projection: GuardProjection, seq: number, reasonCode: string): void {
-  projection.releaseStateDamaged = true
+function pushReleaseDiagnostic(projection: GuardProjection, seq: number, reasonCode: string, damaging = false): void {
+  if (damaging) projection.releaseStateDamaged = true
   if (projection.releaseDiagnostics.some((entry) => entry.seq === seq && entry.reasonCode === reasonCode)) return
   projection.releaseDiagnostics.push({ seq, reasonCode })
   if (projection.releaseDiagnostics.length > 16) projection.releaseDiagnostics.shift()
@@ -161,6 +168,27 @@ function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoi
   if (expectedKeys.length !== actualKeys.length) return false
   return expectedKeys.every((key, index) => key === actualKeys[index]
     && stableJson(normalized[key]) === stableJson(exact[key]))
+}
+
+/**
+ * The proof binding state the log itself implies for one checkpoint call. This
+ * is the same computation the signing tool performs, replayed against the
+ * projection derived up to that call.
+ */
+function replayProofState(projection: GuardProjection, proof: ProofManifestV2 | undefined): { status: 'absent' | 'bound' | 'rejected' | 'invalid'; reason_codes: string[] } {
+  if (proof === undefined) return { status: 'absent', reason_codes: [] }
+  const structural = validateProofManifestV2(proof)
+  if (structural.length) return { status: 'invalid', reason_codes: [...structural].sort() }
+  const binding = bindProofV2ToProjection(projection, proof)
+  return binding.length ? { status: 'rejected', reason_codes: [...binding].sort() } : { status: 'bound', reason_codes: [] }
+}
+
+/** Bounded set equality for reason-code lists, order-insensitive. */
+function sameStringSet(recorded: unknown, expected: readonly string[]): boolean {
+  if (!Array.isArray(recorded)) return false
+  const left = [...new Set(recorded.filter((entry): entry is string => typeof entry === 'string'))].sort()
+  const right = [...new Set(expected)].sort()
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
 function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings: EvidenceBinding[], id: string): GuardCheckpoint | undefined {
@@ -486,7 +514,12 @@ export function deriveProjection(
   // was when the certificate was minted. Each delivery is fully determined by
   // events at or before its own turn end, so precomputing the deterministic
   // list and applying it at that watermark is prefix-exact.
-  const trustedDeliveries = v5BoundarySeq !== undefined ? deriveTrustedDeliveries(sourceEvents) : []
+  // A delivery is a v5 fact. It counts only when its own turn ended AFTER the
+  // boundary: a turn that completed before the cut keeps its historical
+  // reading, so appending a v5 boundary can never retroactively answer an
+  // inquiry the old rules left open (migration contract, P0 §6).
+  const trustedDeliveries = (v5BoundarySeq !== undefined ? deriveTrustedDeliveries(sourceEvents) : [])
+    .filter((delivery) => delivery.turnEndSeq > v5BoundarySeq!)
   let deliveryCursor = 0
   const applyDeliveriesUpTo = (seq: number): void => {
     while (deliveryCursor < trustedDeliveries.length && trustedDeliveries[deliveryCursor]!.turnEndSeq <= seq) {
@@ -503,6 +536,8 @@ export function deriveProjection(
       for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
         const item = projection.items.get(itemId)
         if (!item || item.status !== 'pending') continue
+        const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
+        if (!sourceSeq || Number(sourceSeq[1]) <= v5BoundarySeq!) continue
         item.status = 'answered'
         item.answeredBy = { turn: delivery.turn, responseSeq: delivery.responseSeq, responseSha256: delivery.responseSha256 }
       }
@@ -558,6 +593,10 @@ export function deriveProjection(
           // command, never by a keyword in prose, a loaded Skill, or an
           // installation. The command's own sequence is the adoption witness.
           const rest = typeof data.args === 'string' ? data.args.trim().slice('release'.length).trim() : ''
+          // Only `adopt` and `revoke` change release state. `status` (and an
+          // omitted verb) are READ-ONLY: treating them as an unknown
+          // subcommand used to damage the release state permanently, so a
+          // plain query could block every future publication.
           const revoke = /^revoke(?:\s+(\S+))?$/.exec(rest)
           if (revoke) {
             const contractId = revoke[1] ?? ''
@@ -569,12 +608,17 @@ export function deriveProjection(
           const match = /^adopt(?:\s+([\s\S]+))?$/.exec(rest)
           if (match) {
             const payload = parseArguments((match[1] ?? '').trim())
-            const normalized = normalizeReleaseContract(payload, { seq: event.seq, digest: sha256(stableJson(payload)) })
-            if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code)
+            // The candidate scope is frozen at THIS revision: a later
+            // obligation, including the release instruction itself, must not
+            // invalidate the certificate the adoption was based on.
+            const normalized = normalizeReleaseContract(payload, { seq: event.seq, digest: sha256(stableJson(payload)) }, projection.contractRevision)
+            if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code, true)
             else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract!.contractId)) {
               projection.releaseContracts.push(normalized.contract)
             }
-          } else if (rest.length > 0) {
+          } else if (rest.length > 0 && !/^status$/.test(rest)) {
+            // A user typing an unknown verb is a usage error, not damaged
+            // persisted state: it is reported but never poisons the contract.
             pushReleaseDiagnostic(projection, event.seq, 'release_subcommand_unknown')
           }
         }
@@ -650,7 +694,7 @@ export function deriveProjection(
               const normalized = normalizeReleaseContract(asRecord(payload.contract) ?? payload, {
                 seq: adoptionSeq,
                 digest: sha256(stableJson(payload.contract ?? null)),
-              })
+              }, projection.contractRevision)
               if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code)
               else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract!.contractId)) {
                 projection.releaseContracts.push(normalized.contract)
@@ -659,7 +703,7 @@ export function deriveProjection(
             }
             if (recordText.startsWith(RELEASE_RESERVATION_PREFIX)) {
               const reservation = normalizeReservation(parseArguments(recordText.slice(RELEASE_RESERVATION_PREFIX.length)))
-              if (!reservation) pushReleaseDiagnostic(projection, event.seq, 'release_reservation_malformed')
+              if (!reservation) pushReleaseDiagnostic(projection, event.seq, 'release_reservation_malformed', true)
               else if (!projection.releaseReservations.some((entry) => entry.callId === reservation.callId)) {
                 // The durable event's own sequence is the reservation time; the
                 // payload's value is a hint a replay must not be able to forge.
@@ -677,7 +721,7 @@ export function deriveProjection(
             }
             if (recordText.startsWith(RELEASE_SETTLEMENT_PREFIX)) {
               const settlement = normalizeSettlement(parseArguments(recordText.slice(RELEASE_SETTLEMENT_PREFIX.length)))
-              if (!settlement) pushReleaseDiagnostic(projection, event.seq, 'release_settlement_malformed')
+              if (!settlement) pushReleaseDiagnostic(projection, event.seq, 'release_settlement_malformed', true)
               else {
                 // Reconciliation, not dedup: a trusted readback that arrives
                 // after an unconfirmed record must be able to settle the same
@@ -878,6 +922,10 @@ export function deriveProjection(
         }
         if (call.name === 'context_guard_checkpoint') {
           const args = parseArguments(call.arguments)
+          // The proof is part of the persisted contract of the call: without
+          // recording it, a replay could restore a certificate whose proof had
+          // been tampered with or omitted.
+          if (asRecord(args.proof)) call.proof = args.proof as unknown as ProofManifestV2
           call.bindings = Array.isArray(args.bindings)
             ? args.bindings.map((binding) => {
                 const record = asRecord(binding)
@@ -978,6 +1026,30 @@ export function deriveProjection(
               projection.lastCheckpointRejections = rejected.rejectedBindings
               projection.lastCheckpointRejectionRevision = projection.contractRevision
             }
+            break
+          }
+          // The proof is re-bound at ITS OWN watermark before any certificate is
+          // restored. A tampered, unbound, or newly-invalid proof makes the
+          // replay fail closed instead of silently reusing the certification.
+          const recordedProof = asRecord(recorded.proof_state)
+          const recomputedProof = replayProofState(projection, call.proof)
+          // The proof contract is persisted, so the replay must agree with it
+          // in BOTH directions: a call that carried a proof must have recorded
+          // its state, and a result that claims a proof state must be justified
+          // by the call. A missing, tampered, or newly-unbound proof fails
+          // closed instead of restoring the certification it paid for.
+          const proofDeclared = recordedProof !== undefined || call.proof !== undefined
+          if (proofDeclared
+            && (recordedProof === undefined
+              || String(recordedProof.status ?? '') !== recomputedProof.status
+              || !sameStringSet(recordedProof.reason_codes, recomputedProof.reason_codes))) {
+            projection.integrity = 'corrupt'
+            projection.integrityViolations.push('proof_replay_mismatch')
+            break
+          }
+          if (recomputedProof.status === 'invalid' || recomputedProof.status === 'rejected') {
+            projection.integrity = 'corrupt'
+            projection.integrityViolations.push('proof_replay_mismatch')
             break
           }
           if (!asRecord(recorded.certificate)) {
@@ -1112,8 +1184,14 @@ export function deriveProjection(
       if (settlement.readback === 'unavailable') return false
       const contract = projection.releaseContracts.find((entry) => entry.contractId === settlement.contractId)
       if (!contract || settlement.readback.kind !== 'npm_integrity') return false
-      const declared = contract.candidate.artifactSri
-      return declared !== undefined && declared !== settlement.readback.identity
+      // The expected identity is the contract's SRI, or the one the producer
+      // recorded when it reserved the attempt. A contract that froze only the
+      // byte SHA-256 must still be able to DETECT a mismatched readback, not
+      // merely fail to settle it.
+      const reservation = projection.releaseReservations.find((entry) =>
+        entry.contractId === settlement.contractId && entry.operation === settlement.operation && entry.callId === settlement.callId)
+      const expected = contract.candidate.artifactSri ?? reservation?.observedArtifactSri
+      return expected !== undefined && expected !== settlement.readback.identity
     })
   }
   return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined, boundaryV5: v5BoundarySeq !== undefined }

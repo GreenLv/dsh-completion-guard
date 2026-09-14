@@ -251,6 +251,16 @@ Two consequences are recorded as limitations rather than features:
   reservation, and settlement need durable bytes, and they use the plugin-notice
   `user/message` channel the persistence layer already reloads.
 
+### 9.2 Follow-up repair round (2026-09-14)
+
+| Surface | Change |
+| --- | --- |
+| Registry observation | The publish producer now returns the registry the trusted resolution canonicalized, so a contract naming a registry can be satisfied by a real observation instead of being permanently refused. |
+| Ref resolution | Moved to the runtime, which resolves the ref named by the ADOPTED CONTRACT with the audited git executable. The command-manifest schema is unchanged and no model-supplied ref is accepted; a ref whose commit differs from the artifact's embedded `gitHead` is refused. |
+| Delivery watermark | A delivery counts only when its turn ended after the v5 boundary, and only obligations captured after the boundary can be closed by one: appending the boundary cannot retroactively answer an older question. |
+| Recovery entry | New `context_guard_release` tool (`status` read-only, `reconcile` from a trusted registry readback). It never re-sends a release and works for revoked-but-in-flight attempts. |
+| Acceptance seams | `apply(ctx, config, seams)` accepts a command runner, an HTTP client and a pinned host cohort, so an acceptance run can replace the executor and the network while the release gate, records, producers and replay stay production code. |
+
 ### 9.1 Repair round (2026-09-14)
 
 The concentrated review changed four of the rows above, and the changes are

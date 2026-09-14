@@ -2,6 +2,84 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.0 second repair round after follow-up review (2026-09-14)
+
+A follow-up review of the repair commit found five remaining defects in the new
+wiring. All five reproduced and are fixed. The reviewer's counterexamples are
+kept as permanent regression cases in the suites they belong to.
+
+### Fixed
+
+- **Adding the v5 boundary no longer answers a pre-v5 question.** Deliveries were
+  only gated by the watermark of their own turn; appending the boundary at the
+  end of a v4 log therefore made an old turn's answer retroactively close an
+  obligation the old rules had left open. A delivery now counts only when its
+  turn ended AFTER the boundary, and only obligations captured after the
+  boundary can be closed by one.
+- **The real publish producer now observes everything the contract names.** The
+  trusted reader fills the registry from the canonicalized resolution (it was
+  simply missing, so any contract naming a registry could never be granted), and
+  the ref is resolved by the runtime from the ADOPTED CONTRACT with the audited
+  git executable — a closed, reachable path, instead of a command-manifest field
+  the publish manifest schema rejects. A ref that resolves to a commit different
+  from the artifact's embedded `gitHead` is refused.
+- **A new release instruction no longer invalidates the certificate it needs.**
+  The closure check demanded the CURRENT contract revision, so capturing the
+  publish obligation invalidated the very certificate the release was about to
+  use, and certifying afterwards required the publish to be complete first. The
+  contract now freezes the candidate scope's revision at adoption and requires
+  the closure certificate to be the one that certified exactly that revision.
+  A later obligation does not re-validate a moved candidate, and a certificate
+  minted after adoption is still refused.
+- **Read-only release queries no longer poison the release state.** `release
+  status` (and an omitted verb) is a read-only command; an unknown verb is a
+  usage diagnostic. Only an unreadable persisted record marks the release state
+  damaged, so a plain query can no longer block every future publication
+  irreversibly.
+- **There is now a callable trusted recovery entry.** `context_guard_release`
+  reads the release state and, for `reconcile`, reads the external identity
+  through the same audited registry adapter the publish path uses and settles
+  the reservation only when the readback names the bytes the contract — or the
+  reservation's recorded SRI — froze. It never re-sends a release, and it works
+  after a restart and for a revoked-but-in-flight attempt, because revocation
+  withdraws future authority rather than the duty to reconcile an effect that
+  may already have happened. A contract that froze only the byte SHA-256 stays
+  reconcilable and can still DETECT a mismatched readback.
+- **A presented proof is now part of the persisted contract.** The checkpoint
+  call records its `proof` manifest, and the replay re-binds it at that call's
+  own watermark and requires the recorded proof state to match what the log
+  implies. A tampered or omitted proof — with a result that still claims it was
+  bound — now fails closed with `proof_replay_mismatch` instead of restoring a
+  valid certificate. Signing, persistence and replay use the same call argument,
+  and the Goal gate consumes only a certificate whose proof still binds.
+
+### Verification
+
+- The reviewer's five follow-up counterexamples pass and remain as regression
+  cases: pre-v5 delivery, read-only status, the frozen candidate closure, the
+  observed registry, and persisted proof tampering.
+- New: `tests/tools/v060-release-chain.test.ts` — the acceptance the review asked
+  for. One test drives a real root publish instruction, a real certified
+  preparation closure, a real contract adoption, a real tgz and resolution
+  through the registered evidence tool, and then the registered action tool
+  consulting the RUNTIME's own release gate: it reserves, executes once, leaves
+  the attempt in flight, reconciles it through the registered recovery tool, and
+  refuses the replay as a consumed ticket. Only the npm executor and the
+  registry HTTP client are replaced; the authorization gate, records, producers
+  and replay are production code. Two further cases cover the revoked-but-in-
+  flight restart recovery and a mismatching readback.
+- The proof suite gained the missing-proof, Goal-consumption and
+  accurate-evidence-boundary cases.
+
+### Evidence boundary
+
+The release chain test pins the audited host cohort through an explicit
+`RuntimeExecutorSeams.hostLock` acceptance seam, because the host-lock
+migration revalidation reads real filesystem roots. That replaces ONLY the
+host-lock evaluation; the release gate, the reservation and settlement records,
+the evidence producers and the replay are the production ones, and the host lock
+keeps its own suites and native acceptance.
+
 ## 0.6.0 repairs after concentrated review (2026-09-14)
 
 A concentrated review of the `0dce898` candidate produced fifteen targeted

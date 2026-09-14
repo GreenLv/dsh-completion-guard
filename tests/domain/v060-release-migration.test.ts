@@ -53,7 +53,7 @@ const CONTRACT = {
 const adoptLine = (contract: Record<string, unknown> = CONTRACT): string => JSON.stringify(contract)
 
 const OBSERVED = {
-  fullSha40: SHA, ref: REF, repository: REPOSITORY, packageId: PACKAGE, version: VERSION,
+  fullSha40: SHA, ref: REF, refSha: SHA, repository: REPOSITORY, packageId: PACKAGE, version: VERSION,
   artifactSha256: SHA256, artifactSri: SRI, registry: REGISTRY,
 }
 const RESOLVED = { artifact_id: PACKAGE, version: VERSION, registry: REGISTRY, integrity_digest: SRI }
@@ -271,6 +271,7 @@ describe('0.6.0 C10: the pre-effect gate binds the artifact identity it observed
       [{ fullSha40: OTHER_SHA }, 'release_candidate_sha_mismatch'],
       [{ fullSha40: undefined }, 'release_candidate_sha_unresolved'],
       [{ ref: 'refs/heads/other' }, 'release_candidate_ref_mismatch'],
+      [{ refSha: OTHER_SHA }, 'release_ref_commit_mismatch'],
       [{ ref: undefined }, 'release_candidate_ref_unresolved'],
       [{ repository: 'https://github.com/other/other.git' }, 'release_candidate_repository_mismatch'],
       [{ packageId: 'other-package' }, 'release_candidate_package_mismatch'],
@@ -448,3 +449,16 @@ describe('0.6.0 C12: migration reports the rule set actually in force', () => {
     expect(migrationReport(before).unitClosure).toBe(false)
   })
 })
+
+ it('FOLLOWUP F05-F06: release status must be read-only for the release state',()=>{
+ const before=adopted(); expect(releasePreEffectDecision(before,request()).status).toBe('granted');
+ const after=adopted([{seq:201,type:'command/run',data:{name:'context-guard',args:'release status',source:{kind:'user'}}}]);
+ console.log('STATUS',after.releaseDiagnostics,releasePreEffectDecision(after,request()));
+ expect(after.releaseStateDamaged).toBe(false);
+ });
+
+it('FOLLOWUP F04: a new authorized release task must not invalidate the accepted candidate closure',()=>{
+ const p=adopted([{seq:201,type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'Publish package dsh-completion-guard version 0.6.0 registry https://registry.npmjs.org/'}]}}]);
+ console.log('CLOSURE',releasePreEffectDecision(p,request()),p.contractRevision,p.checkpoints.map(c=>c.contractRevision));
+ expect(releasePreEffectDecision(p,request()).status).toBe('granted');
+});

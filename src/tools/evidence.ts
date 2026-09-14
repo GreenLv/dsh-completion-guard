@@ -561,27 +561,27 @@ async function observePublishCandidate(
   if (!tgzPath) return undefined
   const identity = await tgzIdentity(tgzPath)
   if (!identity) return undefined
-  const observed: ReleaseObservedIdentity = {
+  // The registry is the one the trusted resolution itself canonicalized, so a
+  // contract that names a registry can be checked against a real producer.
+  const registry = typeof resolution.target.registry === 'string' ? resolution.target.registry : undefined
+  return {
     packageId: identity.name,
     version: identity.version,
     artifactSha256: identity.sha256,
     artifactSri: identity.integrity,
     ...(identity.gitHead ? { fullSha40: identity.gitHead } : {}),
     ...(identity.repository ? { repository: identity.repository } : {}),
+    ...(registry ? { registry } : {}),
   }
-  const ref = requireString(resolution.commandManifest, 'release_ref')
-  if (ref) {
-    const sha = await observeRef(cwd, ref, roots, signal)
-    if (sha) {
-      observed.ref = ref
-      if (observed.fullSha40 === undefined) observed.fullSha40 = sha
-    }
-  }
-  return observed
 }
 
-/** Resolve one ref to its commit with the audited git executable. */
-async function observeRef(cwd: string | undefined, ref: string, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
+/**
+ * Resolve one ref to its commit with the audited git executable. Exported so
+ * the runtime can resolve the ref an ADOPTED CONTRACT names, which is the only
+ * closed, reachable path for that identity: the action tool's manifest schema
+ * has no field for it, and a model-supplied ref would not be authority.
+ */
+export async function resolveAuditedRef(cwd: string | undefined, ref: string, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
   if (!cwd || !/^refs\/[A-Za-z0-9._/-]+$/.test(ref)) return undefined
   try {
     const identity = await (roots.readExecutableIdentity ?? executableIdentity)('git' as AuditedExecutable, signal)
@@ -670,7 +670,7 @@ async function profilePackage(profilePath: string, packageId: string): Promise<{
   } catch { return undefined }
 }
 
-async function registryIntegrity(registry: string, packageId: string, version: string, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
+export async function registryIntegrity(registry: string, packageId: string, version: string, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
   const canonical = canonicalRegistryBase(registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry })
   if (!canonical || canonical !== registry) return undefined
   const response = await (roots.fetcher ?? fetch)(new URL(npmEscapedPackageName(packageId), canonical), {

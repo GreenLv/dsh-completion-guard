@@ -5,12 +5,11 @@ import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { deriveProjection } from '../../src/domain/derive.js'
-import { certifyCheckpoint } from '../../src/domain/checkpoint.js'
-import { createEvidenceTool } from '../../src/tools/evidence.js'
+import { hasCurrentCertificate, goalCompletionDenial } from '../../src/domain/goal-gate.js'
 import { createCheckpointTool } from '../../src/tools/checkpoint.js'
 import {
   bindProofV2ToProjection, createProofManifestV2, proofCapabilityReport, requiredSubjectsOf,
-  scopeCoverageDigest, sessionQueryV2, validateProofManifestV2,
+  sessionQueryV2, validateProofManifestV2,
   type ProofManifestV2, type ProofObligationV2,
 } from '../../src/domain/proof.js'
 import { evidenceAvailabilityReason } from '../../src/domain/diagnostics.js'
@@ -21,10 +20,17 @@ import { createProjection, type GuardProjection } from '../../src/domain/types.j
  *
  * This suite exists because a proof rule that is only reachable from its own
  * module is not a supported capability. Every case below goes through the real
- * registration entry points: a real DSH `Session`, the real evidence producer,
- * the real derive replay and the real `context_guard_checkpoint` tool, whose
- * optional `proof` manifest is bound before any certificate is issued. The
- * round trip is then replayed from the durable log.
+ * registration entry points: a real DSH `Session`, the real `context_guard_checkpoint`
+ * tool with its optional `proof` manifest, the real derive replay and the real
+ * Goal gate. The round trip is signed by the tool, persisted verbatim and then
+ * replayed from the durable log.
+ *
+ * EVIDENCE BOUNDARY, stated precisely: the read fact is produced by writing the
+ * host's own persisted `tool/call` + `tool/result` pair for its read tool, which
+ * is exactly what the DSH loop writes for a real read; the production
+ * `evidenceFromPersistedToolResult` parser is what turns it into a fact. This is
+ * NOT a native file-read acceptance run, and it does not establish that a real
+ * DSH process loaded the plugin.
  */
 
 function append(session: Session, type: string, data: unknown, options?: unknown): void {
@@ -120,54 +126,33 @@ describe('0.6.0 C09/S09: the proof entry is a production chain, not a rule libra
       expect(bindProofV2ToProjection(inMemory, proof)).toEqual([])
       expect(sessionQueryV2(inMemory, proof)).toMatchObject({ state: 'valid' })
 
-      // The same proof through the real tool: bound before any certificate.
+      // The whole round trip goes through the REAL tool: it is called with
+      // bindings AND the proof, its call argument and its result text are
+      // persisted verbatim, and the log is then replayed. Calling
+      // certifyCheckpoint directly and hand-assembling a proof-less call would
+      // bypass exactly the replay path this case exists to exercise.
       const checkpoint = createCheckpointTool(() => inMemory, () => {})
-      const page = await checkpoint.execute({ bindings: [], proof } as never, execution(f.session, 'cp', 'context_guard_checkpoint')) as {
-        status: string; proof_state: { status: string; reason_codes: string[] }
+      const bindingWire = {
+        item_id: item!.id, evidence_ids: [fact!.id], semantic_action: 'verify',
+        requested_target: item!.requestedTarget, resolved_target: fact!.resolvedTarget,
+        observed_state: {}, effect_evidence_id: fact!.id,
+        expected_transition: {
+          predicate_id: 'pred.verify.outcome', version: 1, pred_params_kind: 'inline',
+          parameters: { expected_outcome: { k: 'e', v: 'success' }, min_matches: 1 },
+        },
+      }
+      const toolArgs = { bindings: [bindingWire], proof }
+      const page = await checkpoint.execute(toolArgs as never, execution(f.session, 'cp', 'context_guard_checkpoint')) as {
+        status: string; proof_state: { status: string; reason_codes: string[] }; certificate?: Record<string, unknown>
       }
       expect(page.proof_state).toEqual({ status: 'bound', reason_codes: [] })
+      expect(page.status, JSON.stringify((page as { rejected_bindings?: unknown }).rejected_bindings)).toBe('certified')
 
-      // The obligation itself closes on the same real fact, and the resulting
-      // certificate is persisted and replayed from the durable log.
-      const binding = {
-        itemId: item!.id, evidenceIds: [fact!.id], semanticAction: 'verify' as const,
-        requestedTarget: item!.requestedTarget, resolvedTarget: fact!.resolvedTarget, observedState: {},
-        effectEvidenceId: fact!.id,
-        expectedTransition: {
-          predicateId: 'pred.verify.outcome', version: 1, predParamsKind: 'inline' as const,
-          parameters: { expected_outcome: { k: 'e' as const, v: 'success' }, min_matches: 1 },
-        },
-      }
-      const certified = certifyCheckpoint(inMemory, [binding], 'C1', false)
-      const certificate = certified.checkpoint
-      expect(certificate, JSON.stringify(certified.rejectedBindings)).toBeDefined()
-      if (!certificate) throw new Error('the real fact did not certify the obligation')
-      // Persist exactly what the tool would: the same bindings and the
-      // certificate they produced. A record whose bindings do not reproduce the
-      // certificate replays as corrupt, which is why the wire shape matters.
-      call(f.session, 'cp', 'context_guard_checkpoint', {
-        bindings: [{
-          item_id: binding.itemId, evidence_ids: binding.evidenceIds, semantic_action: binding.semanticAction,
-          requested_target: binding.requestedTarget, resolved_target: binding.resolvedTarget,
-          observed_state: binding.observedState, effect_evidence_id: binding.effectEvidenceId,
-          expected_transition: {
-            predicate_id: binding.expectedTransition.predicateId, version: binding.expectedTransition.version,
-            pred_params_kind: binding.expectedTransition.predParamsKind, parameters: binding.expectedTransition.parameters,
-          },
-        }],
-      })
-      result(f.session, 'cp', {
-        status: 'certified',
-        proof_state: { status: 'bound', reason_codes: [] },
-        certificate: {
-          stop_protocol_version: certificate.stopProtocolVersion, certificate_version: certificate.certificateVersion,
-          epoch: certificate.epoch, session_ref_digest: certificate.sessionRefDigest, host_lock_digest: certificate.hostLockDigest,
-          contract_revision: certificate.contractRevision, contract_sha256: certificate.contractSha256,
-          open_digest: certificate.openDigest, evidence_sha256: certificate.evidenceSha256,
-          binding_digest: certificate.bindingDigest, certification_digest: certificate.certificationDigest,
-          goal_ref: certificate.goalRef ?? null,
-        },
-      })
+      // Persist the exact argument the tool was invoked with and its own result,
+      // unchanged: this is the same `tool/call` + `tool/result` pair the host
+      // loop writes, so the replay below exercises the real path.
+      call(f.session, 'cp', 'context_guard_checkpoint', toolArgs)
+      result(f.session, 'cp', page)
       const replayed = projectionOf(f.session)
       expect(replayed.integrity).toBe('valid')
       expect(replayed.checkpoints).toHaveLength(1)
@@ -176,6 +161,90 @@ describe('0.6.0 C09/S09: the proof entry is a production chain, not a rule libra
       // to it: a proof binds OPEN work and says so instead of silently passing.
       expect(replayed.items.get(item!.id)?.status).toBe('passed')
       expect(bindProofV2ToProjection(replayed, proof)).toEqual(['proof_obligation_not_pending'])
+    } finally { await rm(f.root, { recursive: true, force: true }) }
+  })
+
+  it('FOLLOWUP F08: persisted proof tampering invalidates replayed certification',async()=>{
+ const f=await sessionWithReadback('proof-replay');
+ try {const p=projectionOf(f.session);const tool=createCheckpointTool(()=>p,()=>{}); const item=[...p.items.values()].find(e=>e.status==='pending')!;const read=[...p.evidence.values()].find(e=>e.toolName==='read_file')!;const binding={item_id:item.id,evidence_ids:[read.id],semantic_action:'verify',requested_target:item.requestedTarget,resolved_target:read.resolvedTarget,observed_state:{},effect_evidence_id:read.id,expected_transition:{predicate_id:'pred.verify.outcome',version:1,pred_params_kind:'inline',parameters:{expected_outcome:{k:'e',v:'success'},min_matches:1}}};
+ const fact=[...p.evidence.values()].find(e=>e.toolName==='read_file')!;const proof=obligationFor(p,'subject_readback',[f.artifact],[fact.id]);
+ const good:any=await tool.execute({bindings:[binding],proof} as never,execution(f.session,'cert'));expect(good.status).toBe('certified');expect(good.proof_state.status).toBe('bound');
+ call(f.session,'cert','context_guard_checkpoint',{bindings:[binding],proof:{...proof,proofSha256:'0'.repeat(64)}});result(f.session,'cert',good);
+ const replay=projectionOf(f.session); console.log('PROOF REPLAY',replay.integrity,replay.checkpoints.length);expect(replay.integrity).toBe('corrupt');
+ } finally {await rm(f.root,{recursive:true,force:true})}
+ });
+  it('a result claiming a bound proof with no proof in the call is refused at replay', async () => {
+    const f = await sessionWithReadback('missing-proof')
+    try {
+      const projection = projectionOf(f.session)
+      const item = [...projection.items.values()].find((entry) => entry.status === 'pending')!
+      const fact = [...projection.evidence.values()].find((entry) => entry.toolName === 'read_file')!
+      const proof = obligationFor(projection, 'subject_readback', [f.artifact], [fact!.id])
+      const checkpoint = createCheckpointTool(() => projection, () => {})
+      const binding = {
+        item_id: item.id, evidence_ids: [fact!.id], semantic_action: 'verify',
+        requested_target: item.requestedTarget, resolved_target: fact!.resolvedTarget,
+        observed_state: {}, effect_evidence_id: fact!.id,
+        expected_transition: {
+          predicate_id: 'pred.verify.outcome', version: 1, pred_params_kind: 'inline',
+          parameters: { expected_outcome: { k: 'e', v: 'success' }, min_matches: 1 },
+        },
+      }
+      const good = await checkpoint.execute({ bindings: [binding], proof } as never, execution(f.session, 'cert', 'context_guard_checkpoint')) as {
+        status: string; proof_state: { status: string; reason_codes: string[] }
+      }
+      expect(good.proof_state.status).toBe('bound')
+      // The call is persisted WITHOUT the proof it was signed with, while the
+      // result still claims `bound`: the certificate must not survive.
+      call(f.session, 'cert', 'context_guard_checkpoint', { bindings: [binding] })
+      result(f.session, 'cert', good)
+      const replayed = projectionOf(f.session)
+      expect(replayed.integrity).toBe('corrupt')
+      expect(replayed.integrityViolations).toContain('proof_replay_mismatch')
+    } finally { await rm(f.root, { recursive: true, force: true }) }
+  })
+
+  it('a proof-bound certificate is what the Goal gate consumes, and a tampered one is not', async () => {
+    const f = await sessionWithReadback('goal')
+    try {
+      const projection = projectionOf(f.session)
+      const item = [...projection.items.values()].find((entry) => entry.status === 'pending')!
+      const fact = [...projection.evidence.values()].find((entry) => entry.toolName === 'read_file')!
+      const proof = obligationFor(projection, 'subject_readback', [f.artifact], [fact!.id])
+      const checkpoint = createCheckpointTool(() => projection, () => {})
+      const binding = {
+        item_id: item.id, evidence_ids: [fact!.id], semantic_action: 'verify',
+        requested_target: item.requestedTarget, resolved_target: fact!.resolvedTarget,
+        observed_state: {}, effect_evidence_id: fact!.id,
+        expected_transition: {
+          predicate_id: 'pred.verify.outcome', version: 1, pred_params_kind: 'inline',
+          parameters: { expected_outcome: { k: 'e', v: 'success' }, min_matches: 1 },
+        },
+      }
+      const good = await checkpoint.execute({ bindings: [binding], proof } as never, execution(f.session, 'goal-cert', 'context_guard_checkpoint')) as {
+        status: string; certificate?: Record<string, unknown>
+      }
+      expect(good.status).toBe('certified')
+      call(f.session, 'goal-cert', 'context_guard_checkpoint', { bindings: [binding], proof })
+      result(f.session, 'goal-cert', good)
+      const replayed = projectionOf(f.session)
+      replayed.currentGoalRef = { id: 'goal-1', revision: 1 }
+      replayed.checkpoints[replayed.checkpoints.length - 1]!.goalRef = { id: 'goal-1', revision: 1 }
+      expect(hasCurrentCertificate(replayed)).toBe(true)
+      expect(goalCompletionDenial(replayed, 'update_goal', { goal_id: 'goal-1', revision: 1, action: 'complete' })).toBeUndefined()
+
+      // The same log with the proof tampered in the persisted call: the replay
+      // is corrupt, so the certificate is gone and completion is denied.
+      const tampered = deriveProjection([
+        ...(f.session.snapshotEvents() as never[]).slice(0, -2),
+        { seq: 900, type: 'tool/call', data: { callId: 'goal-cert', name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [binding], proof: { ...proof, proofSha256: '0'.repeat(64) } }) } },
+        { seq: 901, type: 'tool/result', data: { message: { source: { callId: 'goal-cert' }, content: [{ type: 'text', text: JSON.stringify(good) }] } } },
+      ] as never, { activation: 'opt-in' }, { cwd: process.cwd() }, true).projection
+      expect(tampered.integrity).toBe('corrupt')
+      expect(tampered.checkpoints).toHaveLength(0)
+      tampered.currentGoalRef = { id: 'goal-1', revision: 1 }
+      expect(goalCompletionDenial(tampered, 'update_goal', { goal_id: 'goal-1', revision: 1, action: 'complete' }))
+        .toContain('certificate_missing')
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })
 

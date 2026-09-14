@@ -305,7 +305,6 @@ function buildCaseEvents(fixtureCase: V2Case): { events: DerivedEnvelope[]; prob
 
 /** Translate exactly one case event, given the current sequence allocator. */
 function translateOne(fixtureCase: V2Case, event: Record<string, unknown>, nextSeq: () => number): [DerivedEnvelope[]] {
-  const holder = { events: [event] } as unknown as V2Case
   // Reuse the single-event translation by delegating to the public translator on
   // a synthetic single-event case and rebasing its sequence numbers.
   const translated = translateEvents({ ...fixtureCase, boundary: 'none', events: [event] } as V2Case)

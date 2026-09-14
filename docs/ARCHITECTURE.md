@@ -145,11 +145,32 @@ demand the proof the user explicitly asked for.
 
 Contracts, reservations and settlements are persisted through the plugin-notice
 channel the host already writes, and each is idempotent by its own identity
-(contract id, call id). Reservations are written before the effect; a settlement
-records a trusted readback when one exists and otherwise stays `unconfirmed`,
-which preserves the in-flight protection and refuses a re-send. Adoption comes
-only from the root `command/run`, and only operations with a Guard execution
-surface are protectable.
+(contract id, call id). Reservations are written before the effect and record
+the SRI the trusted producer read; a settlement records a trusted readback when
+one exists and otherwise stays `unconfirmed`, which preserves the in-flight
+protection and refuses a re-send. Adoption comes only from the root
+`command/run`, and `release status`/`release revoke` are read-only and
+authority-withdrawing respectively — neither is a state corruption.
+
+The contract freezes the candidate scope's `adoptedAtRevision`, and the closure
+certificate must be the one that certified exactly that revision: the release
+instruction is itself a new obligation, so requiring the CURRENT revision would
+make publishing depend on having already published, while freezing the revision
+still refuses a candidate whose content moved on.
+
+Candidate identity is read from trusted producers only: the action tool reads
+the exact tgz (byte SHA-256, npm SRI, embedded `gitHead`, package, version,
+repository) and the canonicalized registry, and the runtime resolves a declared
+ref with the audited git executable. Each named identity is compared with its
+own observation.
+
+`context_guard_release` is the recovery entry: `status` is a read-only report,
+and `reconcile` reads the external identity through the auditing registry
+adapter and settles a reservation only when the readback names the frozen bytes.
+It never re-sends a release, and it works after a restart and for a
+revoked-but-in-flight attempt. `RuntimeExecutorSeams` exists so an acceptance
+run can replace the mutation executor, the HTTP client and the pinned host
+cohort; the release gate, records, producers and replay stay production code.
 
 ## Bounded queries and recovery
 

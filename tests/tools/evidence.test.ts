@@ -1153,6 +1153,13 @@ describe('0.6.0 C10: the release ticket gate runs before any publish effect', ()
     return { root, registry, executableIdentity, session, resolution, label }
   }
 
+  it('FOLLOWUP F04: the real publish producer observes the registry required by the contract', async()=>{
+ const f=await publishFixture('registry-observation');
+ try { let observed:any; const tool=createActionTool({prepareMutation:async()=>true,authorizeMutation:()=>({status:'authorized',reasonCode:'test'}),readExecutableIdentity:async()=>f.executableIdentity,releaseGate:async request=>{observed=request.observed;return {status:'denied',reasonCode:'test_stop_before_effect'}}});
+ await tool.execute({semantic_action:'publish',resolution_call_id:'registry-observation-resolution',target_digest:f.resolution.target_digest,contract_item_id:'R001',contract_item_revision:1} as never,execution(f.session,'probe','context_guard_action'));
+ console.log('OBSERVED',observed); expect(observed.registry).toBe(f.registry);
+ } finally { await rm(f.root,{recursive:true,force:true}) }
+ });
   it('refuses an ungranted ticket without probing or executing anything', async () => {
     const f = await publishFixture('denied')
     try {

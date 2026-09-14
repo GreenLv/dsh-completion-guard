@@ -132,3 +132,10 @@ it('R15: certificate replay must be invariant to JSON property order',async()=>{
  console.log('R15 original/reordered',replay(result).integrity,replay(reordered).integrity)
  expect(replay(result).integrity).toBe(replay(reordered).integrity)
 })
+
+it('FOLLOWUP F01: adding v5 must not retroactively answer a pre-v5 inquiry',()=>{
+ const events:any[]=[notice(0,'Context Guard protocol boundary: v4.0.0'),{seq:1,type:'turn/start',data:{turn:1}},{seq:2,type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'请解释这个流程'}]}},{seq:3,type:'assistant/message',data:{turn:1,step:1,message:{content:[{type:'text',text:'说明'}]}}},{seq:4,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}}];
+ const before=deriveProjection(events,config,scope,true).projection; const after=deriveProjection([...events,notice(5,PROTOCOL_V5_NOTICE)],config,scope,true).projection;
+ console.log('LEGACY before/after',[...before.items.values()].map(i=>i.status),[...after.items.values()].map(i=>i.status));
+ expect([...after.items.values()].map(i=>i.status)).toEqual([...before.items.values()].map(i=>i.status));
+});
