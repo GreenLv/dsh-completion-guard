@@ -155,7 +155,7 @@ export function apply(ctx, config) {
         await root('Run pnpm test.')
         const messages = handle.agent.session.snapshotEvents().filter(event => event.type === 'user/message')
         assert.equal(messages[0].data.source.plugin, 'context-guard')
-        assert.equal(messages[0].data.content[0].text, 'Context Guard protocol boundary: v4.0.0')
+        assert.equal(messages[0].data.content[0].text, 'Context Guard protocol boundary: v5.0.0')
         assert.equal(messages.filter(event => event.data.source.kind === 'user').length, 1)
         const shell = process.platform === 'win32' ? 'pwsh' : 'bash'
         const fields = handle.agent.ctx.tools.get(shell, handle.agent)?.parameters?.properties ?? {}
