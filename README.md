@@ -6,15 +6,12 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
-
-Source candidate **0.5.3** fixes preparation failures and explains the Git evidence sequence. The published installation below remains 0.5.2 until the new package is verified on npm. See the [candidate changes](CHANGELOG.md) and [remaining semantic work](docs/NEXT_VERSION_REPAIR_NOTES.md).
-
 ## Quick start
 
-Install the published **0.5.2** release into the DSH Web environment:
+Install the published **0.5.3** release into the DSH Web environment:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.5.2
+dsh plugin --profile web add dsh-completion-guard@0.5.3
 ```
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -31,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. The published 0.5.2 package passed separate macOS and Windows native acceptance on DSH `0.1.5-rc.2`; both runs are bound to its exact bytes in the [acceptance record](docs/LOCAL_ACCEPTANCE.md). Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
+On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. The published 0.5.3 package passed separate macOS and Windows native acceptance on DSH `0.1.5-rc.2`; both runs are bound to its exact bytes in the [acceptance record](docs/LOCAL_ACCEPTANCE.md). Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
 
 Restart DSH Web, open a session, and enable the Guard:
 
@@ -52,7 +49,7 @@ Activation is opt-in by default. `status` shows whether the Guard is on, its sta
 
 ## Status and compatibility
 
-Version 0.5.2 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+Version 0.5.3 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
 
 Package discovery and npm installation now publish the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
 

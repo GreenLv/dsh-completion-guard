@@ -2,6 +2,16 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## 0.5.3 published release (2026-09-14)
+
+[Version 0.5.3](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.3) is published on GitHub and [npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.3). The annotated tag and npm `gitHead` identify commit `a7baccdfbc538aa071941ebb36aa41fa9bf6e709`. The frozen 308178-byte, 28-file tgz has SHA-256 `972269489ba65092bf13daf2993c162b6f509d5f49040412376e6ae21d957798`.
+
+The local deterministic checks and [exact-candidate CI](https://github.com/GreenLv/dsh-completion-guard/actions/runs/34813886909) passed, including Ubuntu/macOS/Windows on Node.js 22 and 24. Separate macOS and Windows native runs on DSH `0.1.5-rc.2` each passed all 28 required host-bound gates on the same CI-frozen package, with no reused gates and successful cleanup. The real host tool path covers prepare without an optional reason code and Git missing-input replies. Both annexes retain the `real_model_request` skip; these runs do not establish daily-profile adoption, rc.1 native acceptance, or general answer-delivery semantics.
+
+Anonymous readback verified the annotated tag target, npm version and latest tag, embedded commit, registry integrity and downloaded package bytes. The GitHub Release title and bilingual body match the reviewed candidate. All seven attachments match the accepted files: package, checksum, artifact manifest, and the separate macOS/Windows annexes and transfer receipts. Windows result hashes were also matched to the original remote files before publication.
+
+This section and the updated main-branch installation instructions are post-release documentation; the tag and npm package retain their original bytes. The patch fixes prepare serialization and Git input guidance. The answer-delivery design remains future work in [the repair notes](NEXT_VERSION_REPAIR_NOTES.md).
+
 ## 0.5.2 published release (2026-09-11)
 
 [Version 0.5.2](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.2) is published on GitHub and [npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.2). The annotated tag and npm `gitHead` identify commit `e8b21b3d0bb5b3864c856cc9ea6bd19d5ab066ef`. The frozen 303412-byte, 27-file tgz has SHA-256 `d975f17dc3bfed999cbe6c0e638b226c3dcf8651f288ea7ab83faa5ba7903d31`.

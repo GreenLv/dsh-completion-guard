@@ -6,15 +6,12 @@
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
-
-源码候选 **0.5.3** 修复准备工具报错，并补充 Git 取证顺序。下方公开安装版本暂为 0.5.2，待新包在 npm 发布并回读后更新。详见[候选变更](CHANGELOG.zh-CN.md)与[后续语义工作](docs/NEXT_VERSION_REPAIR_NOTES.md)。
-
 ## 快速开始
 
-将已发布的 **0.5.2** 安装到 DSH 的 Web 运行环境：
+将已发布的 **0.5.3** 安装到 DSH 的 Web 运行环境：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.5.2
+dsh plugin --profile web add dsh-completion-guard@0.5.3
 ```
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -31,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。已发布的 0.5.2 包在 DSH `0.1.5-rc.2` 上分别通过 macOS 和 Windows 原生验收；两次运行均在[验收记录](docs/LOCAL_ACCEPTANCE.md)中绑定同一份精确制品。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。已发布的 0.5.3 包在 DSH `0.1.5-rc.2` 上分别通过 macOS 和 Windows 原生验收；两次运行均在[验收记录](docs/LOCAL_ACCEPTANCE.md)中绑定同一份精确制品。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -52,7 +49,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.5.2 仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
+0.5.3 仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
 
 插件市场与 npm 安装现在统一发布按新到旧排列的精确并集 `0.1.5-rc.2 || 0.1.5-rc.1`。更早版本、未注册的稳定版 `0.1.5` 以及未来版本都不会被宣称为受支持。进入版本集合后仍必须匹配完整的 33 包 DSH 核心图；缺失、混装或未知图会 fail closed。
 
