@@ -3,7 +3,7 @@
   "fixture": "context_guard_semantics_v2",
   "fixtureVersion": "2.0.0-candidate.1",
   "status": "dsh-candidate",
-  "description": "Platform-neutral 0.6.0 semantic conformance candidate. Canonical ownership follows the upstream repository: when the upstream lands the frozen v2 fixture, this file is replaced by a byte mirror and the pin is refreshed. Cases run through the production derive/delivery/closure/goal chains without fixture-ID branches.",
+  "description": "Platform-neutral 0.6.0 semantic conformance candidate. Canonical ownership follows the upstream repository: when the upstream lands the frozen v2 fixture, this file is replaced by a byte mirror and the pin is refreshed. Cases run through the production derive/delivery/closure/goal chains without fixture-ID branches. Every declared expectation is compared against a value the runner computes from the events and the production projection alone; the runner never reads this file's expectations to decide an actual result. Revision note (0.6.0 P2 repair): the S07-independent-task-switches-unit case declared interpreted for the same unresolved '更新皮肤中心' obligation that S03-non-file-object-stays-generic declares unknown; the independent reading is unknown, and the declaration was corrected instead of teaching the runner to agree with it.",
   "families": {
     "S01": "delivered questions close on the host-confirmed final answer only",
     "S02": "same-prefix variants keep execution and unknown spans open",
@@ -198,10 +198,27 @@
         { "type": "root_message", "text": "另外，更新皮肤中心" }
       ],
       "expect": {
-        "interpreted": "interpreted",
+        "interpreted": "unknown",
         "open_items": [{ "kind": "requirement", "status": "pending" }, { "kind": "requirement", "status": "pending" }],
         "closure": "switched",
         "delivery": null
+      }
+    },
+    {
+      "id": "S08-delegation-opens-a-required-descendant-unit",
+      "family": "S08",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "创建 report.txt" },
+        { "type": "root_message", "text": "让子代理去创建 notes.txt" },
+        { "type": "delegation", "callId": "d1", "name": "subagent", "prompt": "创建 notes.txt", "text": "已完成：notes.txt 已创建。" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }, { "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "goal_denied": true
       }
     },
     {

@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "context_guard_semantics_v2 candidate fixture",
+  "description": "DSH-authored candidate schema for the platform-neutral v2 fixture. Correction (0.6.0 P2 repair): `families` originally required each family DESCRIPTION to match ^S\\d{2}, which no fixture can satisfy and which mis-states the field as family id -> description. The constraint now applies to the family keys via propertyNames, and descriptions must be non-empty; this was found by actually validating the candidate fixture against this file.",
   "type": "object",
   "required": ["fixture", "fixtureVersion", "cases"],
   "properties": {
@@ -10,7 +11,8 @@
     "description": { "type": "string" },
     "families": {
       "type": "object",
-      "additionalProperties": { "type": "string", "pattern": "^S\\d{2}" }
+      "propertyNames": { "pattern": "^S\\d{2}$" },
+      "additionalProperties": { "type": "string", "minLength": 1 }
     },
     "cases": {
       "type": "array",
@@ -32,7 +34,7 @@
                 "type": {
                   "enum": [
                     "root_message", "assistant_final", "turn_end", "tool_result",
-                    "goal_change", "question_pair", "approval"
+                    "goal_change", "question_pair", "approval", "delegation"
                   ]
                 },
                 "text": { "type": "string" },
@@ -50,6 +52,7 @@
                 "question": { "type": "string" },
                 "options": { "type": "array", "items": { "type": "string" } },
                 "answer": { "type": "string" },
+                "prompt": { "type": "string" },
                 "id": { "type": "string" },
                 "toolName": { "type": "string" },
                 "outcome": { "type": "string" }
