@@ -138,7 +138,18 @@ export function authorizeMutationFromProjection(
   }
   if (item.semanticAction !== request.action) return { status: 'denied', reasonCode: 'mutation_semantic_action_mismatch' }
   if (item.targetCaptureStatus !== 'resolved') return { status: 'denied', reasonCode: 'mutation_target_clarification_required' }
-  if (!requestedTargetAuthorizesMutation(request.action, item.requestedTarget, request.resolvedTarget)) {
+  // A bounded file choice (C07) may land inside a directory the user picked
+  // through a trusted host question in the same unit: the answer is root
+  // authority from an audited tool source, recorded separately from sandbox
+  // approvals. Any other target mismatch stays denied.
+  const boundedAuthorized = (scope: unknown): boolean =>
+    requestedTargetAuthorizesMutation(request.action, { ...item.requestedTarget, scope } as typeof item.requestedTarget, request.resolvedTarget)
+  const selectionAuthorized = projection.trustedSelections.some((selection) =>
+    selection.kind === 'directory'
+    && typeof item.requestedTarget?.artifact_type === 'string'
+    && item.unitId !== undefined
+    && boundedAuthorized(selection.selected))
+  if (!requestedTargetAuthorizesMutation(request.action, item.requestedTarget, request.resolvedTarget) && !selectionAuthorized) {
     return { status: 'denied', reasonCode: 'mutation_requested_target_mismatch' }
   }
   const conflictingProhibition = [...projection.items.values()].some((candidate) => (

@@ -3155,6 +3155,8 @@ function createProjection() {
 		externalOperations: /* @__PURE__ */ new Map(),
 		units: /* @__PURE__ */ new Map(),
 		coverage: [],
+		trustedSelections: [],
+		approvals: [],
 		sessionRefDigest: "11".repeat(32),
 		hostLockDigest: "22".repeat(32),
 		hostStatus: "supported",
@@ -8723,6 +8725,100 @@ function currentUnitHasOpenWork(projection) {
 }
 
 //#endregion
+//#region src/domain/host-selection.ts
+/**
+* The default question-tool allowlist. The real names are a host tool-bundle
+* surface: native acceptance pins the audited names for the running cohort,
+* and the runtime may override this list per cohort.
+*/
+const DEFAULT_QUESTION_TOOL_NAMES = ["question", "ask_user"];
+function parseQuestionCall(rawArguments) {
+	if (typeof rawArguments !== "string") return void 0;
+	let args;
+	try {
+		args = JSON.parse(rawArguments);
+	} catch {
+		return;
+	}
+	if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+	const record = args;
+	const rawOptions = record.options ?? record.choices;
+	if (!Array.isArray(rawOptions) || rawOptions.length === 0) return void 0;
+	const options = [];
+	for (const entry of rawOptions) {
+		if (typeof entry !== "string" || !entry.trim()) return void 0;
+		options.push(entry.trim());
+	}
+	return {
+		questionId: typeof record.question_id === "string" ? record.question_id : typeof record.questionId === "string" ? record.questionId : void 0,
+		question: typeof record.question === "string" ? record.question : void 0,
+		options
+	};
+}
+function parseSelectionAnswer(content, options) {
+	if (!Array.isArray(content)) return void 0;
+	const text = content.filter((part) => !!part && typeof part === "object").filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n");
+	if (!text.trim()) return void 0;
+	const trimmed = text.trim();
+	if (options.includes(trimmed)) return trimmed;
+	try {
+		const parsed = JSON.parse(trimmed);
+		const answer = parsed.answer ?? parsed.selected ?? parsed.value;
+		if (typeof answer === "string" && options.includes(answer.trim())) return answer.trim();
+	} catch {}
+}
+function looksLikeDirectory(value) {
+	return /^[~.]?(?:[\\/][^\n]*)+$/.test(value);
+}
+/**
+* Derive the trusted selections from the durable log. Deterministic: a replay
+* of identical events yields identical selections.
+*/
+function deriveTrustedSelections(events, options) {
+	const names = new Set(options.questionToolNames);
+	const pending = /* @__PURE__ */ new Map();
+	const selections = [];
+	for (const event of events) {
+		if (event.type === "tool/call") {
+			const data$1 = event.data ?? {};
+			const name = String(data$1.name ?? "");
+			if (!names.has(name)) continue;
+			const shape = parseQuestionCall(data$1.arguments);
+			if (!shape) continue;
+			pending.set(String(data$1.callId ?? ""), {
+				callId: String(data$1.callId ?? ""),
+				seq: event.seq,
+				turn: typeof data$1.turn === "number" ? data$1.turn : void 0,
+				toolName: name,
+				shape
+			});
+			continue;
+		}
+		if (event.type !== "tool/result") continue;
+		const data = event.data ?? {};
+		const callId = String(data.message?.source?.callId ?? "");
+		const call = pending.get(callId);
+		if (!call) continue;
+		pending.delete(callId);
+		if (data.error !== void 0) continue;
+		const selected = parseSelectionAnswer(data.message?.content, call.shape.options);
+		if (!selected) continue;
+		selections.push({
+			callId,
+			resultSeq: event.seq,
+			turn: call.turn,
+			toolName: call.toolName,
+			questionId: call.shape.questionId,
+			question: call.shape.question,
+			options: call.shape.options,
+			selected,
+			kind: looksLikeDirectory(selected) ? "directory" : "value"
+		});
+	}
+	return selections;
+}
+
+//#endregion
 //#region src/domain/derive.ts
 const CAPTURE_V042_NOTICE = "Context Guard capture boundary: v0.4.2";
 const PROTOCOL_V3_NOTICE = "Context Guard protocol boundary: v3.0.0";
@@ -8870,7 +8966,7 @@ function resolveArtifact(path$1, scope) {
 * an item whose action/target could not be derived deterministically stays
 * `legacy_authority_unclassified` instead of being retroactively authorized.
 */
-function captureRootText(projection, text, seq, scope, legacy, priorRootMessages, prefix = `m${seq}`, coordinationSplit = true, unitId) {
+function captureRootText(projection, text, seq, scope, legacy, priorRootMessages, prefix = `m${seq}`, coordinationSplit = true, unitId, clarification = false) {
 	const blocks = segmentAuthorityBlocks(text, priorRootMessages);
 	const provenance = legacy ? void 0 : {
 		rawTextSha256: sha256(text),
@@ -8893,7 +8989,7 @@ function captureRootText(projection, text, seq, scope, legacy, priorRootMessages
 			blockOffset,
 			blockText: block$1.text,
 			blockAuthority: block$1.authority
-		} : void 0);
+		} : void 0, clarification ? text : void 0);
 	}
 	if (provenance) {
 		projection.coverage.push({
@@ -8913,7 +9009,7 @@ function captureRootText(projection, text, seq, scope, legacy, priorRootMessages
 * item, so evidence for one file cannot close a message that also covers other
 * files or embeds prohibitions.
 */
-function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId, provenance) {
+function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId, provenance, clarificationText) {
 	const before = new Set(projection.items.keys());
 	let coveredSpans = 0;
 	const usedOccurrences = /* @__PURE__ */ new Set();
@@ -8959,6 +9055,24 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			if (!action || !isStatefulAction(action)) continue;
 			if (!requestedTargetMatchesResolved(action, other.requestedTarget, item.requestedTarget)) continue;
 			supersedeItem(projection.items, otherId, item);
+			break;
+		}
+	}
+	if (clarificationText) for (const [id, item] of projection.items) {
+		if (before.has(id)) continue;
+		if (item.kind === "prohibition" || item.status !== "pending") continue;
+		if (item.authorityDisposition !== "executable_now") continue;
+		if (!item.semanticAction || item.semanticAction === "generic_run") continue;
+		for (const [otherId, other] of projection.items) {
+			if (otherId === id || !before.has(otherId)) continue;
+			if (other.status !== "pending" || other.kind === "prohibition") continue;
+			if (other.waitAuthorization || other.legacyFlags?.length) continue;
+			if (other.semanticAction !== "generic_run" || other.authorityDisposition !== "executable_now") continue;
+			if (other.normalizedText.length < 4) continue;
+			if (!clarificationText.includes(other.normalizedText)) continue;
+			if (other.verification.subject !== item.verification.subject) continue;
+			supersedeItem(projection.items, otherId, item);
+			item.clarifiesItemId = otherId;
 			break;
 		}
 	}
@@ -9153,7 +9267,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						if (confirmRebind(projection, parsed.proposalId, `m${event.seq}`, durableConfirmed)) {
 							const unitId = unitSemantics ? foldUnitId() : void 0;
 							captureAssets(unitId);
-							if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId);
+							if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId, unitSemantics);
 							break;
 						}
 					} else if (parsed.kind !== "none") {
@@ -9166,7 +9280,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						};
 						const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join("\n");
 						if (!stripped.trim()) break;
-						captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId);
+						captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId, unitSemantics);
 						break;
 					}
 				}
@@ -9180,7 +9294,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				captureAssets(captureUnitId ?? (unitSemantics ? foldUnitId() : void 0));
 				if (isInformationalMessage(text)) break;
 				if (classifyUserInteraction(text) === "conversational") break;
-				captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId);
+				captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId, unitSemantics);
 				break;
 			}
 			case "goal/change": {
@@ -9398,6 +9512,42 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 			};
 		}
 	}
+	projection.trustedSelections = deriveTrustedSelections(sourceEvents, { questionToolNames: DEFAULT_QUESTION_TOOL_NAMES });
+	if (projection.trustedSelections.length > 16) projection.trustedSelections = projection.trustedSelections.slice(-16);
+	const approvalAsked = /* @__PURE__ */ new Map();
+	for (const event of sourceEvents) {
+		const data = asRecord(event.data);
+		if (event.type === "approval/asked") {
+			const id = typeof data?.id === "string" ? data.id : "";
+			const toolName = typeof data?.toolName === "string" ? data.toolName : void 0;
+			if (id) approvalAsked.set(id, {
+				id,
+				seq: event.seq,
+				toolName
+			});
+			continue;
+		}
+		if (event.type === "approval/decided") {
+			const id = typeof data?.id === "string" ? data.id : "";
+			const asked = approvalAsked.get(id);
+			if (!asked) continue;
+			const outcome = String(data?.outcome ?? "");
+			if (![
+				"allowed-once",
+				"rejected",
+				"cancelled",
+				"unavailable"
+			].includes(outcome)) continue;
+			projection.approvals.push({
+				id: asked.id,
+				seq: asked.seq,
+				toolName: asked.toolName,
+				outcome
+			});
+			approvalAsked.delete(id);
+		}
+	}
+	if (projection.approvals.length > 16) projection.approvals = projection.approvals.slice(-16);
 	return {
 		projection,
 		compacted,

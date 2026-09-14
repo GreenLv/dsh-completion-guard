@@ -18,6 +18,7 @@ import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from '.
 import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
 import { explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensNewUnit, currentUnitHasOpenWork } from './work-unit.js'
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
+import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
 
 interface PendingCall {
   name: string
@@ -182,6 +183,7 @@ function captureRootText(
   prefix = `m${seq}`,
   coordinationSplit = true,
   unitId?: string,
+  clarification = false,
 ): void {
   const blocks = segmentAuthorityBlocks(text, priorRootMessages)
   // 0.6.0 C01 provenance: current messages bind their items to UTF-8 byte
@@ -211,6 +213,7 @@ function captureRootText(
       coordinationSplit,
       unitId,
       provenance ? { ...provenance, blockOffset, blockText: block.text, blockAuthority: block.authority } : undefined,
+      clarification ? text : undefined,
     )
   }
   if (provenance) {
@@ -243,6 +246,7 @@ function insertItems(
   coordinationSplit = true,
   unitId?: string,
   provenance?: { rawTextSha256: string; rawText: string; blockOffset?: number; blockText: string; blockAuthority: string },
+  clarificationText?: string,
 ): number {
   const before = new Set(projection.items.keys())
   let coveredSpans = 0
@@ -295,6 +299,32 @@ function insertItems(
       if (!requestedTargetMatchesResolved(action, other.requestedTarget, item.requestedTarget)) continue
       supersedeItem(projection.items, otherId, item)
       break
+    }
+  }
+  // 0.6.0 C08 general clarification (v5 sessions only): a later root
+  // instruction that contains a pending obligation's text verbatim refines it
+  // atomically — root authority needs no proposal grammar. Only a concrete,
+  // executable refinement supersedes; explanations, prohibitions, waits,
+  // legacy items, and a refined duty that would change the action never
+  // qualify, so nothing unrelated is deleted by similar wording.
+  if (clarificationText) {
+    for (const [id, item] of projection.items) {
+      if (before.has(id)) continue
+      if (item.kind === 'prohibition' || item.status !== 'pending') continue
+      if (item.authorityDisposition !== 'executable_now') continue
+      if (!item.semanticAction || item.semanticAction === 'generic_run') continue
+      for (const [otherId, other] of projection.items) {
+        if (otherId === id || !before.has(otherId)) continue
+        if (other.status !== 'pending' || other.kind === 'prohibition') continue
+        if (other.waitAuthorization || other.legacyFlags?.length) continue
+        if (other.semanticAction !== 'generic_run' || other.authorityDisposition !== 'executable_now') continue
+        if (other.normalizedText.length < 4) continue
+        if (!clarificationText.includes(other.normalizedText)) continue
+        if (other.verification.subject !== item.verification.subject) continue
+        supersedeItem(projection.items, otherId, item)
+        item.clarifiesItemId = otherId
+        break
+      }
     }
   }
   for (const [id, item] of projection.items) {
@@ -579,7 +609,7 @@ export function deriveProjection(
             if (consumed) {
               const unitId = unitSemantics ? foldUnitId() : undefined
               captureAssets(unitId)
-              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId)
+              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId, unitSemantics)
               break
             }
           } else if (parsed.kind !== 'none') {
@@ -590,7 +620,7 @@ export function deriveProjection(
             projection.lastConfirmationRejection = { eventSeq: event.seq, kind: parsed.kind, reason: parsed.reason }
             const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join('\n')
             if (!stripped.trim()) break
-            captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId)
+            captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId, unitSemantics)
             break
           }
         }
@@ -619,7 +649,7 @@ export function deriveProjection(
         // Session-layer talk (progression phrases, meta questions, meta
         // comments) is not a task requirement either (v0.2.1).
         if (classifyUserInteraction(text) === 'conversational') break
-        captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId)
+        captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId, unitSemantics)
         break
       }
       case 'goal/change': {
@@ -862,5 +892,29 @@ export function deriveProjection(
       }
     }
   }
+  // 0.6.0 C07: trusted host selections and sandbox approvals are derived
+  // facts with a bounded ledger each; an approval never authorizes a target.
+  projection.trustedSelections = deriveTrustedSelections(sourceEvents, { questionToolNames: DEFAULT_QUESTION_TOOL_NAMES })
+  if (projection.trustedSelections.length > 16) projection.trustedSelections = projection.trustedSelections.slice(-16)
+  const approvalAsked = new Map<string, { id: string; seq: number; toolName?: string }>()
+  for (const event of sourceEvents) {
+    const data = asRecord(event.data)
+    if (event.type === 'approval/asked') {
+      const id = typeof data?.id === 'string' ? data.id : ''
+      const toolName = typeof data?.toolName === 'string' ? data.toolName : undefined
+      if (id) approvalAsked.set(id, { id, seq: event.seq, toolName })
+      continue
+    }
+    if (event.type === 'approval/decided') {
+      const id = typeof data?.id === 'string' ? data.id : ''
+      const asked = approvalAsked.get(id)
+      if (!asked) continue
+      const outcome = String(data?.outcome ?? '')
+      if (!['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(outcome)) continue
+      projection.approvals.push({ id: asked.id, seq: asked.seq, toolName: asked.toolName, outcome: outcome as 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable' })
+      approvalAsked.delete(id)
+    }
+  }
+  if (projection.approvals.length > 16) projection.approvals = projection.approvals.slice(-16)
   return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined, boundaryV5: v5BoundarySeq !== undefined }
 }

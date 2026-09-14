@@ -273,6 +273,36 @@ declare function replayRebindResult(p: GuardProjection, args: RebindArgs, record
 * caller processes the remaining text afterwards with its own semantics. */
 declare function confirmRebind(p: GuardProjection, proposalId: string, eventId: string, durable: boolean): boolean;
 //#endregion
+//#region src/domain/host-selection.d.ts
+/**
+* Trusted host-native selection adapter (0.6.0 DS06-D, C07/S06).
+*
+* Only a PAIRED durable tool round-trip can form a trusted user selection:
+* a `tool/call` whose arguments pose a question with explicit options, and
+* its successful `tool/result` carrying the answer, bound by the same
+* callId in the same session. Pasted answer text, a model restatement, or
+* the answer of another call can never form a selection. Path selections
+* and sandbox approvals are separate facts and are recorded separately.
+*
+* The question tool's name is a host tool-bundle surface: the adapter
+* matches a bounded allowlist supplied by the caller (production wires the
+* names audited for the running cohort; native acceptance pins them).
+*/
+interface TrustedSelection {
+  callId: string;
+  /** Sequence of the tool/result event that settled the selection. */
+  resultSeq: number;
+  turn: number | undefined;
+  toolName: string;
+  questionId: string | undefined;
+  question: string | undefined;
+  options: string[];
+  /** The answer the user actually chose, verbatim from the paired result. */
+  selected: string;
+  /** A directory selection narrows where bounded file choices may land. */
+  kind: "directory" | "value";
+}
+//#endregion
 //#region src/domain/digest.d.ts
 type TypedObject = {
   k: "b" | "i" | "s" | "e" | "x";
@@ -472,6 +502,12 @@ interface GuardItem {
     responseSeq: number;
     responseSha256: string;
   };
+  /**
+  * 0.6.0 C08: the pending obligation this item atomically superseded through
+  * a verbatim general clarification. Audit trail only — the superseded item
+  * keeps its own history.
+  */
+  clarifiesItemId?: string;
 }
 interface GuardEvidence {
   id: string;
@@ -635,6 +671,23 @@ interface GuardProjection {
   boundaryProtocol?: 5;
   /** 0.6.0 C01 coverage summaries, one per captured root message (last 16). */
   coverage: MessageCoverage[];
+  /**
+  * 0.6.0 C07 trusted host selections, derived only from paired durable
+  * question-tool round-trips (last 16). A directory selection narrows where
+  * a bounded file choice may land for obligations of the same unit.
+  */
+  trustedSelections: TrustedSelection[];
+  /**
+  * 0.6.0 C07 sandbox approvals, derived from the host's own
+  * `approval/asked` + `approval/decided` audit pair (last 16). Recorded for
+  * provenance only: an approval is never a target authority.
+  */
+  approvals: Array<{
+    id: string;
+    seq: number;
+    toolName?: string;
+    outcome: "allowed-once" | "rejected" | "cancelled" | "unavailable";
+  }>;
   sessionRefDigest: string;
   hostLockDigest: string;
   hostStatus: HostStatus;

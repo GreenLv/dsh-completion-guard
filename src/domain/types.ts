@@ -150,6 +150,12 @@ export interface GuardItem {
    * events, never from assistant prose alone.
    */
   answeredBy?: { turn: number; responseSeq: number; responseSha256: string }
+  /**
+   * 0.6.0 C08: the pending obligation this item atomically superseded through
+   * a verbatim general clarification. Audit trail only — the superseded item
+   * keeps its own history.
+   */
+  clarifiesItemId?: string
 }
 
 export interface GuardEvidence {
@@ -318,6 +324,18 @@ export interface GuardProjection {
   boundaryProtocol?: 5
   /** 0.6.0 C01 coverage summaries, one per captured root message (last 16). */
   coverage: MessageCoverage[]
+  /**
+   * 0.6.0 C07 trusted host selections, derived only from paired durable
+   * question-tool round-trips (last 16). A directory selection narrows where
+   * a bounded file choice may land for obligations of the same unit.
+   */
+  trustedSelections: import('./host-selection.js').TrustedSelection[]
+  /**
+   * 0.6.0 C07 sandbox approvals, derived from the host's own
+   * `approval/asked` + `approval/decided` audit pair (last 16). Recorded for
+   * provenance only: an approval is never a target authority.
+   */
+  approvals: Array<{ id: string; seq: number; toolName?: string; outcome: 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable' }>
   sessionRefDigest: string
   hostLockDigest: string
   hostStatus: HostStatus
@@ -393,6 +411,8 @@ export function createProjection(): GuardProjection {
     externalOperations: new Map(),
     units: new Map(),
     coverage: [],
+    trustedSelections: [],
+    approvals: [],
     sessionRefDigest: '11'.repeat(32),
     hostLockDigest: '22'.repeat(32),
     hostStatus: 'supported',
