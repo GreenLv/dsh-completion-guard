@@ -359,6 +359,18 @@ export interface GuardProjection {
   /** 0.6.0 C01 coverage summaries, one per captured root message (last 16). */
   coverage: MessageCoverage[]
   /**
+   * 0.6.0 C10 explicit release records, derived from the durable plugin-notice
+   * channel. A release is never implicit: without an adopted contract the
+   * release gate denies every operation. A malformed record is reported through
+   * {@link releaseDiagnostics} and never makes the whole projection corrupt, so
+   * damaged release state cannot block unrelated ordinary work.
+   */
+  releaseContracts: import('./release.js').ReleaseContract[]
+  releaseReservations: import('./release.js').ReleaseReservation[]
+  releaseSettlements: import('./release.js').ReleaseSettlement[]
+  /** Bounded audit of rejected release records (never raw payloads). */
+  releaseDiagnostics: Array<{ seq: number; reasonCode: string }>
+  /**
    * 0.6.0 C07 trusted host selections, derived only from paired durable
    * question-tool round-trips (last 16). A directory selection narrows where
    * a bounded file choice may land for obligations of the same unit.
@@ -445,6 +457,10 @@ export function createProjection(): GuardProjection {
     externalOperations: new Map(),
     units: new Map(),
     coverage: [],
+    releaseContracts: [],
+    releaseReservations: [],
+    releaseSettlements: [],
+    releaseDiagnostics: [],
     policy: 'standard',
     trustedSelections: [],
     approvals: [],

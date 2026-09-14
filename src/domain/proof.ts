@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { GuardEvidence, GuardProjection } from './types.js'
+import type { EvidenceRole, GuardEvidence, GuardOperation, GuardProjection } from './types.js'
 
 export const PROOF_PROTOCOL_VERSION = '0.4.0'
 export const PROOF_KINDS = ['subject_readback', 'scope_coverage', 'state_verification'] as const
@@ -211,4 +211,335 @@ export function proofEvidenceConstraints(evidence: GuardEvidence, obligation: Pr
   if (obligation.kind === 'scope_coverage' && !(evidence.operations ?? []).some(({ op }) => op === 'run' || op === 'verify')) return false
   if (obligation.kind === 'state_verification' && evidence.evidenceRole !== 'state') return false
   return true
+}
+
+/* ------------------------------------------------------------------------ *
+ * 0.6.0 proof v2 (C09 / DS06-E)
+ *
+ * The v1 three-kind manifest and its `ccg.proofManifest.v1` digest stay frozen:
+ * an old record is read by the old rules and never re-interpreted. The v2
+ * manifest covers the full capability matrix, binds each fact to a current
+ * SUBJECT, a SOURCE (the producer the fact must come from) and an OPERATION,
+ * and refuses to promote an unobservable result to a satisfied obligation:
+ *
+ * - tool success is only ever an `execution_fact`; it is never a visual fact.
+ *   `output_visual_readback` additionally requires a fact that carries a
+ *   visual-readback capability and an actual read on the subject, so a browser
+ *   call that merely succeeded cannot prove the artifact was looked at.
+ * - `input_asset_check` requires a PRIOR-state fact (role `resolution`) that
+ *   actually read the asset, so a post-hoc read cannot be relabelled as the
+ *   pre-effect check.
+ * - `external_fact` requires a real external-operation reference that has
+ *   completed.
+ * - When the audited cohort exposes no producer for a kind, binding returns
+ *   `proof_producer_capability_unavailable` rather than a silent pass.
+ * ------------------------------------------------------------------------ */
+
+export const PROOF_PROTOCOL_VERSION_V2 = '0.6.0'
+/** The v2 digest domain; the v1 domain string is untouched. */
+export const PROOF_MANIFEST_DOMAIN_V2 = 'ccg.proofManifest.v2'
+
+export const PROOF_KINDS_V2 = [
+  'subject_readback', 'scope_coverage', 'state_verification',
+  'input_asset_check', 'output_visual_readback', 'object_url_readback',
+  'execution_fact', 'external_fact',
+] as const
+export type ProofKindV2 = (typeof PROOF_KINDS_V2)[number]
+
+/** Host surfaces that can carry a proof producer in the audited cohort. */
+export type ProofHostSurface = 'native_read' | 'native_write_edit' | 'shell' | 'web' | 'jobs' | 'subagent' | 'visual_capture'
+
+export interface ProofObligationV2 {
+  obligationId: string
+  kind: ProofKindV2
+  surface: ProofSurface
+  /** The current subject identities this obligation binds. */
+  subjectIds: string[]
+  /** Producer/source identities a satisfying fact must originate from. */
+  sourceIds: string[]
+  /** The operation the fact must have actually performed. */
+  operation: GuardOperation
+  evidenceIds: string[]
+  expectedScopeDigest?: string
+  observedScopeDigest?: string
+}
+
+export interface ProofManifestV2 {
+  proofProtocolVersion: typeof PROOF_PROTOCOL_VERSION_V2
+  obligations: ProofObligationV2[]
+  proofSha256: string
+}
+
+/**
+ * The frozen capability requirement per proof kind. `capabilities` is the set
+ * a satisfying fact must intersect; `readbackRequired` demands an actual read
+ * or verify operation (never a bare successful call); `requiredRole` pins the
+ * fact to the resolution/effect/state role the semantics need; and
+ * `supportedSurfaces` lists the audited host surfaces that can produce it.
+ */
+export interface ProofKindCapability {
+  kind: ProofKindV2
+  capabilities: string[]
+  readbackRequired: boolean
+  requiredRole?: EvidenceRole
+  operationOnSubject: boolean
+  supportedSurfaces: ProofHostSurface[]
+  /** Host surfaces in the audited cohort that CANNOT produce this fact. */
+  unavailableSurfaces: ProofHostSurface[]
+}
+
+const ALL_SURFACES: readonly ProofHostSurface[] = ['native_read', 'native_write_edit', 'shell', 'web', 'jobs', 'subagent', 'visual_capture']
+
+function surfaces(supported: readonly ProofHostSurface[]): { supportedSurfaces: ProofHostSurface[]; unavailableSurfaces: ProofHostSurface[] } {
+  return {
+    supportedSurfaces: [...supported],
+    unavailableSurfaces: ALL_SURFACES.filter((surface) => !supported.includes(surface)),
+  }
+}
+
+export const PROOF_CAPABILITY_MATRIX: Readonly<Record<ProofKindV2, ProofKindCapability>> = {
+  subject_readback: {
+    kind: 'subject_readback', capabilities: ['filesystem-read', 'verify', 'deterministic-check'],
+    readbackRequired: true, operationOnSubject: true, ...surfaces(['native_read', 'shell']),
+  },
+  scope_coverage: {
+    kind: 'scope_coverage', capabilities: ['filesystem-read', 'verify', 'deterministic-check', 'web-fetch'],
+    readbackRequired: true, operationOnSubject: false, ...surfaces(['native_read', 'shell', 'web']),
+  },
+  state_verification: {
+    kind: 'state_verification', capabilities: ['filesystem-read', 'web-fetch', 'deterministic-check'],
+    readbackRequired: true, requiredRole: 'state', operationOnSubject: false, ...surfaces(['native_read', 'web']),
+  },
+  input_asset_check: {
+    kind: 'input_asset_check', capabilities: ['filesystem-read', 'web-fetch'],
+    readbackRequired: true, requiredRole: 'resolution', operationOnSubject: true, ...surfaces(['native_read', 'web']),
+  },
+  output_visual_readback: {
+    kind: 'output_visual_readback', capabilities: ['visual-readback'],
+    readbackRequired: true, operationOnSubject: true, ...surfaces(['visual_capture']),
+  },
+  object_url_readback: {
+    kind: 'object_url_readback', capabilities: ['web-fetch'],
+    readbackRequired: true, operationOnSubject: true, ...surfaces(['web']),
+  },
+  execution_fact: {
+    kind: 'execution_fact', capabilities: [],
+    readbackRequired: false, requiredRole: 'effect', operationOnSubject: false, ...surfaces(['shell', 'native_write_edit', 'native_read', 'web', 'jobs', 'subagent']),
+  },
+  external_fact: {
+    kind: 'external_fact', capabilities: [],
+    readbackRequired: false, operationOnSubject: false, ...surfaces(['jobs', 'subagent']),
+  },
+}
+
+/** The host surface names a fact's tool/adapter identity maps to. */
+export function proofHostSurfacesOf(evidence: GuardEvidence): ProofHostSurface[] {
+  const surface = new Set<ProofHostSurface>()
+  if (evidence.externalOperationRef) surface.add('jobs')
+  if (evidence.delegatedSubtask) surface.add('subagent')
+  if (evidence.capabilities.includes('visual-readback')) surface.add('visual_capture')
+  if (evidence.capabilities.includes('web-fetch')) surface.add('web')
+  const writeTools = new Set(['write', 'edit', 'write_file', 'edit_file'])
+  if (writeTools.has(evidence.toolName)) surface.add('native_write_edit')
+  const readTools = new Set(['read', 'read_file', 'web_fetch', 'web_fetch_url', 'web_search'])
+  if (readTools.has(evidence.toolName)) surface.add('native_read')
+  if (['bash', 'shell', 'pwsh'].includes(evidence.toolName)) surface.add('shell')
+  if (evidence.capabilities.includes('filesystem-read')) surface.add('native_read')
+  return [...surface].sort()
+}
+
+function digestV2(value: unknown): string {
+  return createHash('sha256').update(`${PROOF_MANIFEST_DOMAIN_V2}\n`, 'utf8').update(stable(value), 'utf8').digest('hex')
+}
+
+export function proofDigestV2(obligations: readonly ProofObligationV2[]): string {
+  return digestV2({ proofProtocolVersion: PROOF_PROTOCOL_VERSION_V2, obligations: [...obligations] })
+}
+
+export function createProofManifestV2(obligations: readonly ProofObligationV2[]): ProofManifestV2 {
+  const normalized = obligations.map((obligation) => ({
+    obligationId: obligation.obligationId,
+    kind: obligation.kind,
+    surface: obligation.surface,
+    subjectIds: [...obligation.subjectIds].sort(),
+    sourceIds: [...obligation.sourceIds].sort(),
+    operation: obligation.operation,
+    evidenceIds: [...obligation.evidenceIds].sort(),
+    ...(obligation.expectedScopeDigest ? { expectedScopeDigest: obligation.expectedScopeDigest } : {}),
+    ...(obligation.observedScopeDigest ? { observedScopeDigest: obligation.observedScopeDigest } : {}),
+  })).sort((a, b) => a.obligationId.localeCompare(b.obligationId))
+  const manifest: ProofManifestV2 = {
+    proofProtocolVersion: PROOF_PROTOCOL_VERSION_V2,
+    obligations: normalized,
+    proofSha256: proofDigestV2(normalized),
+  }
+  const errors = validateProofManifestV2(manifest)
+  if (errors.length) throw new Error(`proof v2 manifest rejected: ${errors.join(',')}`)
+  return manifest
+}
+
+export function validateProofManifestV2(manifest: unknown): string[] {
+  const errors: string[] = []
+  if (!manifest || typeof manifest !== 'object') return ['proof_manifest_invalid']
+  const value = manifest as Record<string, unknown>
+  if (value.proofProtocolVersion !== PROOF_PROTOCOL_VERSION_V2) errors.push('proof_protocol_version_mismatch')
+  if (!Array.isArray(value.obligations)) errors.push('proof_obligations_missing')
+  if (typeof value.proofSha256 !== 'string' || !validDigest(value.proofSha256)) errors.push('proof_digest_invalid')
+  const obligations = Array.isArray(value.obligations) ? value.obligations : []
+  const ids = new Set<string>()
+  for (const raw of obligations) {
+    if (!raw || typeof raw !== 'object') { errors.push('proof_obligation_invalid'); continue }
+    const obligation = raw as Record<string, unknown>
+    if (typeof obligation.obligationId !== 'string' || !obligation.obligationId || ids.has(obligation.obligationId)) errors.push('proof_obligation_id_duplicate_or_invalid')
+    if (typeof obligation.obligationId === 'string') ids.add(obligation.obligationId)
+    if (!(PROOF_KINDS_V2 as readonly unknown[]).includes(obligation.kind)) errors.push('proof_kind_unsupported')
+    if (!['artifact', 'ui', 'visual', 'scope'].includes(String(obligation.surface))) errors.push('proof_surface_unsupported')
+    if (!['create', 'write', 'modify', 'read', 'run', 'verify'].includes(String(obligation.operation))) errors.push('proof_operation_unsupported')
+    // A v2 obligation binds a current subject AND a source: a fact with no
+    // subject or no declared producer can never be attributed to one.
+    if (!Array.isArray(obligation.subjectIds) || obligation.subjectIds.length === 0
+      || obligation.subjectIds.some((id) => typeof id !== 'string' || !id)) errors.push('proof_subject_invalid')
+    if (!Array.isArray(obligation.sourceIds) || obligation.sourceIds.length === 0
+      || obligation.sourceIds.some((id) => typeof id !== 'string' || !id)) errors.push('proof_source_invalid')
+    if (!Array.isArray(obligation.evidenceIds) || obligation.evidenceIds.length === 0
+      || obligation.evidenceIds.some((id) => typeof id !== 'string' || !id)
+      || new Set(obligation.evidenceIds).size !== obligation.evidenceIds.length) errors.push('proof_evidence_invalid')
+    const expected = obligation.expectedScopeDigest
+    const observed = obligation.observedScopeDigest
+    for (const digestValue of [expected, observed]) {
+      if (digestValue !== undefined && (typeof digestValue !== 'string' || !validDigest(digestValue))) errors.push('proof_scope_digest_invalid')
+    }
+    if (expected !== observed) errors.push('proof_scope_digest_mismatch')
+  }
+  if (errors.length === 0 && value.proofSha256 !== proofDigestV2(obligations as ProofObligationV2[])) errors.push('proof_digest_mismatch')
+  return [...new Set(errors)]
+}
+
+/**
+ * Why one fact cannot discharge one v2 obligation, or `undefined` when it can.
+ * The checks are ordered so the reported reason names the first unmet
+ * requirement: missing producer capability, wrong role, absent readback, wrong
+ * source, wrong subject, wrong operation.
+ */
+export function proofV2Rejection(evidence: GuardEvidence, obligation: ProofObligationV2): string | undefined {
+  const spec = PROOF_CAPABILITY_MATRIX[obligation.kind]
+  if (evidence.delegatedSubtask) return 'proof_source_bounded_delegation'
+  if (obligation.sourceIds.length > 0 && !obligation.sourceIds.includes(evidence.toolName) && !obligation.sourceIds.includes(evidence.adapterId ?? '')) {
+    return 'proof_source_unbound'
+  }
+  if (evidence.outcome !== 'success') return 'proof_evidence_outcome_invalid'
+  // An external fact is identified by its external-operation reference, not by
+  // a local producer surface: the reference is checked first so a plain local
+  // fact is reported as "no external fact" rather than as a surface mismatch.
+  if (obligation.kind === 'external_fact') {
+    if (!evidence.externalOperationRef) return 'proof_external_fact_unavailable'
+    if (evidence.externalOperationRef.status !== 'completed') return 'proof_external_fact_incomplete'
+  }
+  const available = proofHostSurfacesOf(evidence)
+  if (available.length === 0 || !available.some((surface) => spec.supportedSurfaces.includes(surface))) {
+    return 'proof_producer_capability_unavailable'
+  }
+  if (spec.capabilities.length > 0 && !spec.capabilities.some((capability) => evidence.capabilities.includes(capability))) {
+    return 'proof_producer_capability_unavailable'
+  }
+  if (spec.requiredRole !== undefined && evidence.evidenceRole !== spec.requiredRole) return 'proof_role_unbound'
+  if (spec.readbackRequired) {
+    const operations = evidence.operations ?? []
+    if (!operations.some((entry) => entry.op === 'read' || entry.op === 'verify')) return 'proof_readback_unavailable'
+    if (spec.operationOnSubject && obligation.subjectIds.length > 0) {
+      const subjects = evidence.subjects
+      if (!obligation.subjectIds.every((subject) => subjects.some((value) => value === subject))) return 'proof_subject_unbound'
+    }
+  }
+  if (obligation.kind === 'state_verification' && evidence.surfaces.length > 0 && !evidence.surfaces.includes(obligation.surface)) return 'proof_surface_unbound'
+  if (obligation.kind === 'execution_fact' && !(evidence.operations ?? []).some((entry) => entry.op === obligation.operation)) {
+    return 'proof_operation_unbound'
+  }
+  return undefined
+}
+
+/** Bind a v2 manifest to the live projection; [] means every obligation binds. */
+export function bindProofV2ToProjection(projection: GuardProjection, manifest: ProofManifestV2): string[] {
+  const errors: string[] = []
+  for (const obligation of manifest.obligations) {
+    const item = projection.items.get(obligation.obligationId)
+    if (!item) { errors.push('proof_obligation_unbound'); continue }
+    if (item.status !== 'pending') { errors.push('proof_obligation_not_pending'); continue }
+    if (item.verification.surface !== undefined && item.verification.surface !== obligation.surface) errors.push('proof_surface_unbound')
+    let bound = 0
+    for (const evidenceId of obligation.evidenceIds) {
+      const evidence = projection.evidence.get(evidenceId)
+      if (!evidence) { errors.push('proof_evidence_unknown'); continue }
+      if (evidence.epoch !== projection.epoch) { errors.push('proof_evidence_wrong_epoch'); continue }
+      if (!evidence.subjects.some((subject) => obligation.subjectIds.includes(subject))) { errors.push('proof_subject_unbound'); continue }
+      const rejection = proofV2Rejection(evidence, obligation)
+      if (rejection) { errors.push(rejection); continue }
+      bound += 1
+    }
+    if (bound === 0 && obligation.evidenceIds.length > 0 && !errors.includes('proof_producer_capability_unavailable')) {
+      // Every cited fact failed for a reason already reported; nothing to add.
+    }
+    if (obligation.kind === 'scope_coverage') {
+      const itemScope = item.requestedTarget?.scope
+      const itemSubject = item.verification.subject
+      const boundSubjects = obligation.subjectIds.every((subject) => subject === itemScope || subject === itemSubject)
+      if (!boundSubjects) errors.push('proof_scope_subject_unbound')
+    }
+  }
+  return [...new Set(errors)]
+}
+
+/** The v2 session query; the v1 `sessionQuery` keeps its own frozen behaviour. */
+export interface SessionQueryV2 {
+  sessionRefDigest: string
+  epoch: number
+  contractRevision: number
+  state: 'valid' | 'unknown' | 'corrupt'
+  proof?: ProofManifestV2
+  cohortId?: string
+  reasonCode?: 'proof_invalid' | 'proof_unbound'
+}
+
+export function sessionQueryV2(projection: GuardProjection, proof?: ProofManifestV2): SessionQueryV2 {
+  if (proof) {
+    const structural = validateProofManifestV2(proof)
+    if (structural.length) {
+      return { sessionRefDigest: projection.sessionRefDigest, epoch: projection.epoch, contractRevision: projection.contractRevision, state: 'corrupt', reasonCode: 'proof_invalid', cohortId: projection.hostCohortId }
+    }
+    const binding = bindProofV2ToProjection(projection, proof)
+    if (binding.length) {
+      return { sessionRefDigest: projection.sessionRefDigest, epoch: projection.epoch, contractRevision: projection.contractRevision, state: 'corrupt', reasonCode: 'proof_unbound', cohortId: projection.hostCohortId }
+    }
+  }
+  const state: SessionQueryV2['state'] = projection.integrity === 'valid'
+    ? (projection.hostStatus === 'supported' ? 'valid' : 'unknown')
+    : projection.integrity
+  return {
+    sessionRefDigest: projection.sessionRefDigest,
+    epoch: projection.epoch,
+    contractRevision: projection.contractRevision,
+    state,
+    ...(proof ? { proof } : {}),
+    cohortId: projection.hostCohortId,
+  }
+}
+
+/**
+ * The capability report for one proof kind against the facts a cohort actually
+ * produced: `unavailable` with a stable reason when no producer is observable,
+ * never a silent pass.
+ */
+export function proofCapabilityReport(kind: ProofKindV2, facts: Iterable<GuardEvidence>): { status: 'supported' | 'unavailable'; reasonCode?: string } {
+  for (const fact of facts) {
+    if (fact.outcome !== 'success') continue
+    // The probe uses the fact's own subject so the subject rule does not mask a
+    // producer that this cohort genuinely has.
+    const probe: ProofObligationV2 = {
+      obligationId: 'probe', kind, surface: 'artifact',
+      subjectIds: fact.subjects.slice(0, 1), sourceIds: [], operation: 'verify', evidenceIds: [],
+    }
+    if (probe.subjectIds.length === 0) probe.subjectIds = ['probe']
+    if (proofV2Rejection(fact, probe) === undefined) return { status: 'supported' }
+  }
+  return { status: 'unavailable', reasonCode: 'proof_producer_capability_unavailable' }
 }

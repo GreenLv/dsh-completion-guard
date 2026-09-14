@@ -1,6 +1,7 @@
 import { sha256 } from './canonicalize.js'
 import { ACTION_MANIFEST, SUPPORTED_EVIDENCE_ADAPTERS, actionCompatible, isStatefulAction, requestedTargetMatchesResolved } from './protocol-manifest.js'
 import type { GuardEvidence, GuardItem, GuardProjection } from './types.js'
+import { reasonClassOf, type ReasonClass } from './reason-class.js'
 
 export type TaskKind = 'inquiry' | 'action' | 'deliverable' | 'constraint' | 'unresolved'
 export type CertificationSupport = 'supported' | 'unsupported' | 'needs_target' | 'needs_evidence' | 'unavailable'
@@ -23,6 +24,8 @@ export interface UnifiedItemDiagnosis {
   task_kind: TaskKind
   certification: CertificationSupport
   reason_code: string
+  /** The seven-class label this fine-grained reason code belongs to (C12). */
+  reason_class: ReasonClass
   repairability: Repairability
   missing_fields: string[]
   missing_facets: Array<'resolution' | 'effect' | 'state'>
@@ -61,7 +64,18 @@ function evidenceFacets(p: GuardProjection, item: GuardItem): Array<'resolution'
  * adapter, an executed-without-evidence historical gap, or nothing to do —
  * and it NEVER recommends a rebind that cannot change certification.
  */
+/**
+ * The unified diagnosis, with the frozen seven-class label attached (C12).
+ *
+ * The class is derived from whatever `reason_code` the judge decides, so a new
+ * branch cannot drift from the classification table.
+ */
 export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): UnifiedItemDiagnosis {
+  const diagnosis = judgeItemDiagnosis(p, item)
+  return { ...diagnosis, reason_class: reasonClassOf(diagnosis.reason_code) }
+}
+
+function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedItemDiagnosis, 'reason_class'> {
   const kind = taskKindOf(item)
   const missing_facets = item.status === 'pending' && kind !== 'constraint' ? evidenceFacets(p, item) : []
   const base = { item_id: item.id, item_revision: item.revision, contract_revision: p.contractRevision, task_kind: kind, missing_facets }

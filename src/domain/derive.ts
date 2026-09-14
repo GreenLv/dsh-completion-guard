@@ -22,6 +22,10 @@ import {
 } from './work-unit.js'
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
+import {
+  normalizeReleaseContract, normalizeReservation, normalizeSettlement,
+  RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX,
+} from './release.js'
 
 interface PendingCall {
   name: string
@@ -88,6 +92,25 @@ function parseArguments(raw: string): Record<string, unknown> {
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined
+}
+
+/** Stable JSON, used for the release adoption digest. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+/** Bounded release diagnostic ledger (last 16 entries). */
+function pushReleaseDiagnostic(projection: GuardProjection, seq: number, reasonCode: string): void {
+  if (projection.releaseDiagnostics.some((entry) => entry.seq === seq && entry.reasonCode === reasonCode)) return
+  projection.releaseDiagnostics.push({ seq, reasonCode })
+  if (projection.releaseDiagnostics.length > 16) projection.releaseDiagnostics.shift()
 }
 
 function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoint): boolean {
@@ -480,6 +503,22 @@ export function deriveProjection(
             item.supersededBy = `CLEAR:${revision}`
           }
           projection.contractRevision = revision
+        } else if (subcommand === 'release') {
+          // C10 adoption: a release contract is adopted by an EXPLICIT root
+          // command, never by a keyword in prose, a loaded Skill, or an
+          // installation. The command's own sequence is the adoption witness.
+          const rest = typeof data.args === 'string' ? data.args.trim().slice('release'.length).trim() : ''
+          const match = /^adopt(?:\s+([\s\S]+))?$/.exec(rest)
+          if (match) {
+            const payload = parseArguments((match[1] ?? '').trim())
+            const normalized = normalizeReleaseContract(payload, { seq: event.seq, digest: sha256(stableJson(payload)) })
+            if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code)
+            else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract!.contractId)) {
+              projection.releaseContracts.push(normalized.contract)
+            }
+          } else if (rest.length > 0) {
+            pushReleaseDiagnostic(projection, event.seq, 'release_subcommand_unknown')
+          }
         }
         break
       }
@@ -533,6 +572,44 @@ export function deriveProjection(
             const rootSeq = typeof parsed?.rootSeq === 'number' && Number.isSafeInteger(parsed.rootSeq) ? parsed.rootSeq : undefined
             if (rootSeq !== undefined) projection.handledControlSeqs.add(rootSeq)
             break
+          }
+          // 0.6.0 C10 release records. Each is idempotent by its own identity
+          // (contractId / callId), so a replayed log or a repeated record adds
+          // nothing. A malformed record is recorded as a bounded diagnostic and
+          // never marks the projection corrupt: damaged release state must not
+          // block unrelated ordinary work.
+          if (recordSource?.kind === 'plugin' && recordSource.plugin === 'context-guard') {
+            if (recordText.startsWith(RELEASE_CONTRACT_PREFIX)) {
+              const payload = parseArguments(recordText.slice(RELEASE_CONTRACT_PREFIX.length))
+              const adoptionSeq = typeof payload.adoptedBySeq === 'number' && Number.isSafeInteger(payload.adoptedBySeq) ? payload.adoptedBySeq : event.seq
+              const normalized = normalizeReleaseContract(asRecord(payload.contract) ?? payload, {
+                seq: adoptionSeq,
+                digest: sha256(stableJson(payload.contract ?? null)),
+              })
+              if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code)
+              else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract!.contractId)) {
+                projection.releaseContracts.push(normalized.contract)
+              }
+              break
+            }
+            if (recordText.startsWith(RELEASE_RESERVATION_PREFIX)) {
+              const reservation = normalizeReservation(parseArguments(recordText.slice(RELEASE_RESERVATION_PREFIX.length)))
+              if (!reservation) pushReleaseDiagnostic(projection, event.seq, 'release_reservation_malformed')
+              else if (!projection.releaseReservations.some((entry) => entry.callId === reservation.callId)) {
+                // The durable event's own sequence is the reservation time; the
+                // payload's value is a hint a replay must not be able to forge.
+                projection.releaseReservations.push({ ...reservation, startedAtSeq: event.seq })
+              }
+              break
+            }
+            if (recordText.startsWith(RELEASE_SETTLEMENT_PREFIX)) {
+              const settlement = normalizeSettlement(parseArguments(recordText.slice(RELEASE_SETTLEMENT_PREFIX.length)))
+              if (!settlement) pushReleaseDiagnostic(projection, event.seq, 'release_settlement_malformed')
+              else if (!projection.releaseSettlements.some((entry) => entry.callId === settlement.callId)) {
+                projection.releaseSettlements.push({ ...settlement, settledAtSeq: event.seq })
+              }
+              break
+            }
           }
         }
         if (!enabled) break

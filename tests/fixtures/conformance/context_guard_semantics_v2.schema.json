@@ -3,112 +3,349 @@
   "title": "context_guard_semantics_v2 candidate fixture",
   "description": "DSH-authored candidate schema for the platform-neutral v2 fixture. Correction (0.6.0 P2 repair): `families` originally required each family DESCRIPTION to match ^S\\d{2}, which no fixture can satisfy and which mis-states the field as family id -> description. The constraint now applies to the family keys via propertyNames, and descriptions must be non-empty; this was found by actually validating the candidate fixture against this file.",
   "type": "object",
-  "required": ["fixture", "fixtureVersion", "cases"],
+  "required": [
+    "fixture",
+    "fixtureVersion",
+    "cases"
+  ],
   "properties": {
-    "fixture": { "const": "context_guard_semantics_v2" },
-    "fixtureVersion": { "type": "string", "pattern": "^2\\.0\\.0-candidate" },
-    "status": { "type": "string", "enum": ["dsh-candidate", "canonical"] },
-    "description": { "type": "string" },
+    "fixture": {
+      "const": "context_guard_semantics_v2"
+    },
+    "fixtureVersion": {
+      "type": "string",
+      "pattern": "^2\\.0\\.0-candidate"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "dsh-candidate",
+        "canonical"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
     "families": {
       "type": "object",
-      "propertyNames": { "pattern": "^S\\d{2}$" },
-      "additionalProperties": { "type": "string", "minLength": 1 }
+      "propertyNames": {
+        "pattern": "^S\\d{2}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "cases": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "family", "boundary", "events", "expect"],
+        "required": [
+          "id",
+          "family",
+          "boundary",
+          "events",
+          "expect"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "pattern": "^S\\d{2}-" },
-          "family": { "type": "string", "pattern": "^S\\d{2}$" },
-          "boundary": { "enum": ["v5", "v4", "none"] },
+          "id": {
+            "type": "string",
+            "pattern": "^S\\d{2}-"
+          },
+          "family": {
+            "type": "string",
+            "pattern": "^S\\d{2}$"
+          },
+          "boundary": {
+            "enum": [
+              "v5",
+              "v4",
+              "none"
+            ]
+          },
           "events": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["type"],
+              "required": [
+                "type"
+              ],
               "properties": {
                 "type": {
                   "enum": [
-                    "root_message", "assistant_final", "turn_end", "tool_result",
-                    "goal_change", "question_pair", "approval", "delegation"
+                    "root_message",
+                    "assistant_final",
+                    "turn_end",
+                    "tool_result",
+                    "goal_change",
+                    "question_pair",
+                    "approval",
+                    "delegation",
+                    "release_adopt",
+                    "release_reservation",
+                    "release_settlement",
+                    "release_probe"
                   ]
                 },
-                "text": { "type": "string" },
-                "turn": { "type": "integer" },
-                "step": { "type": "integer" },
-                "interrupted": { "const": true },
-                "reason": { "type": "string" },
-                "callId": { "type": "string" },
-                "name": { "type": "string" },
-                "error": { "type": "boolean" },
-                "action": { "type": "string" },
-                "revision": { "type": "integer" },
-                "producer": { "type": "string" },
-                "questionId": { "type": "string" },
-                "question": { "type": "string" },
-                "options": { "type": "array", "items": { "type": "string" } },
-                "answer": { "type": "string" },
-                "prompt": { "type": "string" },
-                "id": { "type": "string" },
-                "toolName": { "type": "string" },
-                "outcome": { "type": "string" }
+                "text": {
+                  "type": "string"
+                },
+                "turn": {
+                  "type": "integer"
+                },
+                "step": {
+                  "type": "integer"
+                },
+                "interrupted": {
+                  "const": true
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "callId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "boolean"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer"
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "questionId": {
+                  "type": "string"
+                },
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "toolName": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string"
+                },
+                "contract": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "operation": {
+                  "type": "string"
+                },
+                "candidate": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "contractId": {
+                  "type": "string"
+                },
+                "readback": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "nowEpochMs": {
+                  "type": "integer"
+                }
               }
             }
           },
           "expect": {
             "type": "object",
-            "required": ["interpreted", "open_items", "closure", "delivery"],
+            "required": [
+              "interpreted",
+              "open_items",
+              "closure",
+              "delivery"
+            ],
             "additionalProperties": false,
             "properties": {
-              "interpreted": { "enum": ["interpreted", "unknown"] },
+              "interpreted": {
+                "enum": [
+                  "interpreted",
+                  "unknown"
+                ]
+              },
               "open_items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["kind", "status"],
+                  "required": [
+                    "kind",
+                    "status"
+                  ],
                   "properties": {
-                    "kind": { "enum": ["requirement", "acceptance", "prohibition"] },
-                    "status": { "enum": ["pending", "answered", "passed", "superseded"] }
+                    "kind": {
+                      "enum": [
+                        "requirement",
+                        "acceptance",
+                        "prohibition"
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "answered",
+                        "passed",
+                        "superseded"
+                      ]
+                    }
                   }
                 }
               },
-              "closure": { "enum": ["complete", "open", "switched"] },
+              "closure": {
+                "enum": [
+                  "complete",
+                  "open",
+                  "switched"
+                ]
+              },
               "delivery": {
                 "oneOf": [
-                  { "type": "null" },
+                  {
+                    "type": "null"
+                  },
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["answered"],
+                    "required": [
+                      "answered"
+                    ],
                     "properties": {
-                      "answered": { "type": "integer", "minimum": 0 },
-                      "turn_bound": { "type": "boolean" }
+                      "answered": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "turn_bound": {
+                        "type": "boolean"
+                      }
                     }
                   }
                 ]
               },
               "correction": {
                 "oneOf": [
-                  { "type": "null" },
+                  {
+                    "type": "null"
+                  },
                   {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["allowed"],
-                    "properties": { "allowed": { "type": "boolean" } }
+                    "required": [
+                      "allowed"
+                    ],
+                    "properties": {
+                      "allowed": {
+                        "type": "boolean"
+                      }
+                    }
                   }
                 ]
               },
-              "trusted_selections": { "type": "integer", "minimum": 0 },
-              "approvals": { "type": "integer", "minimum": 0 },
-              "superseded": { "type": "integer", "minimum": 0 },
-              "goal_denied": { "type": "boolean" },
-              "reason_codes": { "type": "array", "items": { "type": "string" } }
+              "trusted_selections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "approvals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "superseded": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "goal_denied": {
+                "type": "boolean"
+              },
+              "reason_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reason_classes": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "parameter_missing",
+                    "source_insufficient",
+                    "condition_unmet",
+                    "producer_capability_unavailable",
+                    "historical_gap",
+                    "integrity_failure",
+                    "policy_boundary"
+                  ]
+                }
+              },
+              "release_contracts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "release_in_flight": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "release_gate_denials": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "migration": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rule_mode",
+                  "certificate_version",
+                  "unit_closure"
+                ],
+                "properties": {
+                  "rule_mode": {
+                    "enum": [
+                      "v5",
+                      "legacy-v4"
+                    ]
+                  },
+                  "certificate_version": {
+                    "type": "string"
+                  },
+                  "unit_closure": {
+                    "type": "boolean"
+                  }
+                }
+              }
             }
+          },
+          "policy": {
+            "enum": [
+              "standard",
+              "strict",
+              "release"
+            ]
           }
         }
       }

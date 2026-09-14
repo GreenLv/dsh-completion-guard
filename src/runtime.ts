@@ -51,6 +51,10 @@ import {
   type HostLockEvaluation,
 } from './domain/host-lock.js'
 import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type StatefulAction } from './domain/protocol-manifest.js'
+import {
+  releaseContractFor, releasePreEffectDecision,
+  RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX,
+} from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
 import { readActiveHostGraph } from './domain/host-resolver.js'
@@ -735,6 +739,29 @@ export function apply(ctx: Context, rawConfig: {
       },
       () => runtime.markRecoveryNeeded(),
     ))
+    /**
+     * Persist one C10 release record through the plugin-notice channel and make
+     * it durable before returning. A record that cannot be flushed is reported
+     * as a failure: an unflushed reservation is not an in-flight operation, and
+     * an unflushed settlement would let a consumed ticket look unused.
+     */
+    const persistReleaseRecord = async (toolAgent: Agent, prefix: string, payload: Record<string, unknown>): Promise<boolean> => {
+      const target = toolAgent.session as Session
+      const append = (target as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append.bind(target)
+      append('user/message', createUserMessage({
+        content: [{ type: 'text', text: `${prefix}${JSON.stringify(payload)}` }],
+        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recording an explicit release record') },
+      }), { surfaceOp: 'append' })
+      let durable = false
+      try {
+        durable = await ctx.sessions.flush(target)
+      } catch {
+        durable = false
+      }
+      runtime.setDurability(durable)
+      runtime.sync()
+      return durable
+    }
     const evidenceOptions: EvidenceToolRoots & { hostCapability: RuntimeHostCapabilityEvaluator } = {
       hostCapability: createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock),
       prepareMutation: async (toolAgent) => {
@@ -752,6 +779,54 @@ export function apply(ctx: Context, rawConfig: {
         return authorizeMutationFromProjection(runtime.projection, request)
       },
       marketOrigin: optionalMarketOrigin(ctx, agent),
+      // C10 explicit release: the gate is consulted before any publish effect.
+      // It applies once a contract has been adopted OR the session policy is
+      // `release`; before that, publishing keeps its existing Guard-owned
+      // mutation authorization chain and nothing new is required. A granted
+      // decision persists the one-shot reservation BEFORE the effect, and a
+      // reservation that cannot be made durable is a denial, not a warning.
+      releaseGate: async (request) => {
+        runtime.sync()
+        const projection = runtime.projection
+        const applicable = projection.policy === 'release' || projection.releaseContracts.length > 0
+        if (!applicable) return { status: 'granted', reasonCode: 'release_profile_not_adopted' }
+        const decision = releasePreEffectDecision(projection, {
+          operation: request.operation,
+          candidate: {
+            ...(request.candidateSha !== undefined ? { fullSha40: request.candidateSha } : {}),
+            ...(typeof request.resolvedTarget.version === 'string' ? { version: request.resolvedTarget.version } : {}),
+            ...(typeof request.resolvedTarget.integrity_digest === 'string' ? { artifactDigest: request.resolvedTarget.integrity_digest } : {}),
+          },
+          resolvedTarget: request.resolvedTarget,
+          nowEpochMs: Date.now(),
+        })
+        if (decision.status !== 'granted' || decision.contractId === undefined) {
+          return { status: 'denied', reasonCode: decision.reasonCode }
+        }
+        const persisted = await persistReleaseRecord(agent, RELEASE_RESERVATION_PREFIX, {
+          contractId: decision.contractId,
+          operation: request.operation,
+          callId: request.callId,
+          startedAtSeq: 0,
+          status: 'in_flight',
+        })
+        return persisted
+          ? { status: 'granted', reasonCode: decision.reasonCode, contractId: decision.contractId }
+          : { status: 'denied', reasonCode: 'release_reservation_not_durable' }
+      },
+      releaseSettle: async (request) => {
+        await persistReleaseRecord(agent, RELEASE_SETTLEMENT_PREFIX, {
+          // The settlement belongs to the contract the granted reservation
+          // belonged to. Derive pins settledAtSeq to the durable event, so the
+          // payload's placeholder cannot be forged by a replay.
+          contractId: request.contractId ?? releaseContractFor(runtime.projection, request.operation)?.contractId ?? 'unknown',
+          operation: request.operation,
+          callId: request.callId,
+          settledAtSeq: 0,
+          readback: request.readback,
+          outcome: request.outcome,
+        })
+      },
       persistRestartIntent: async (toolAgent, intent) => {
         const session = toolAgent.session as Session
         const append = (session as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append.bind(session)

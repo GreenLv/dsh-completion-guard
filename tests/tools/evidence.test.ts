@@ -1122,3 +1122,123 @@ it.each([false, true])('T12 replays generic clarification into package certifica
     expect(await checkpoint.execute({ bindings: [binding] } as never, undefined as never)).toMatchObject({ status: 'incomplete' })
   } finally { await rm(root, { recursive: true, force: true }) }
 }, PACKAGE_ACTION_TIMEOUT_MS)
+
+describe('0.6.0 C10: the release ticket gate runs before any publish effect', () => {
+  it('refuses an ungranted ticket without probing or executing anything', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-release-gate-'))
+    const registry = 'https://registry.example.invalid/'
+    const executableIdentity = { executable: 'npm' as const, realpath: '/fixture/bin/npm', version: '10.0.0' }
+    try {
+      const tgz = await packFixture(root, 'fixture-release', '1.0.0')
+      const session = Session.create(SessionId('producer-release-gate'), undefined, {
+        version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('producer-release-gate'), createdAt: 1, cwd: root,
+      })
+      enable(session)
+      user(session, `Publish package fixture-release version 1.0.0 registry ${registry}`)
+      const resolution = await runProducer(session, 'release-resolution', {
+        semantic_action: 'publish', evidence_role: 'resolution',
+        selector: { artifact_id: 'fixture-release', version: '1.0.0', registry },
+        command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
+      }, { readExecutableIdentity: async () => executableIdentity })
+      let commands = 0
+      let http = 0
+      let gateCalls = 0
+      let settlements = 0
+      const tool = createActionTool({
+        prepareMutation: async () => true,
+        authorizeMutation: () => ({ status: 'authorized', reasonCode: 'test_root_contract_authorized' }),
+        readExecutableIdentity: async () => executableIdentity,
+        commandRunner: async () => { commands += 1 },
+        fetcher: async () => { http += 1; return new Response('{}', { status: 500 }) },
+        releaseGate: async (request) => {
+          gateCalls += 1
+          expect(request.operation).toBe('npm_publish')
+          expect(request.candidateSha).toBe('a'.repeat(40))
+          return { status: 'denied', reasonCode: 'release_operation_consumed' }
+        },
+        releaseSettle: async () => { settlements += 1 },
+      })
+      const denied = await tool.execute({
+        semantic_action: 'publish', resolution_call_id: 'release-resolution', target_digest: resolution.target_digest,
+        contract_item_id: 'R001', contract_item_revision: 1, release_candidate_sha: 'a'.repeat(40),
+      } as never, execution(session, 'release-action', 'context_guard_action'))
+      expect(denied).toMatchObject({ status: 'unavailable', reason_code: 'release_operation_consumed' })
+      // The gate ran before every probe and effect, and nothing was settled.
+      expect({ gateCalls, commands, http, settlements }).toEqual({ gateCalls: 1, commands: 0, http: 0, settlements: 0 })
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it('executes a granted ticket once and settles it from the trusted readback', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-release-grant-'))
+    const registry = 'https://registry.example.invalid/'
+    const executableIdentity = { executable: 'npm' as const, realpath: '/fixture/bin/npm', version: '10.0.0' }
+    try {
+      const tgz = await packFixture(root, 'fixture-release-ok', '1.0.0')
+      const session = Session.create(SessionId('producer-release-grant'), undefined, {
+        version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('producer-release-grant'), createdAt: 1, cwd: root,
+      })
+      enable(session)
+      user(session, `Publish package fixture-release-ok version 1.0.0 registry ${registry}`)
+      const resolution = await runProducer(session, 'grant-resolution', {
+        semantic_action: 'publish', evidence_role: 'resolution',
+        selector: { artifact_id: 'fixture-release-ok', version: '1.0.0', registry },
+        command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
+      }, { readExecutableIdentity: async () => executableIdentity })
+      let commands = 0
+      let gateCalls = 0
+      const settlements: Array<Record<string, unknown>> = []
+      const tool = createActionTool({
+        prepareMutation: async () => true,
+        authorizeMutation: () => ({ status: 'authorized', reasonCode: 'test_root_contract_authorized' }),
+        readExecutableIdentity: async () => executableIdentity,
+        commandRunner: async () => { commands += 1 },
+        // No reachable registry producer in this fixture: the settlement must
+        // report `unconfirmed` with `readback: 'unavailable'` rather than claim
+        // a verified release.
+        fetcher: async () => new Response('{}', { status: 404 }),
+        releaseGate: async () => { gateCalls += 1; return { status: 'granted', reasonCode: 'release_contract_granted', contractId: 'rel-1' } },
+        releaseSettle: async (request) => { settlements.push({ ...request }) },
+      })
+      const granted = await tool.execute({
+        semantic_action: 'publish', resolution_call_id: 'grant-resolution', target_digest: resolution.target_digest,
+        contract_item_id: 'R001', contract_item_revision: 1, release_candidate_sha: 'a'.repeat(40),
+      } as never, execution(session, 'grant-action', 'context_guard_action'))
+      expect(granted).toMatchObject({ status: 'completed' })
+      expect({ gateCalls, commands }).toEqual({ gateCalls: 1, commands: 1 })
+      expect(settlements).toHaveLength(1)
+      expect(settlements[0]).toMatchObject({ operation: 'npm_publish', callId: 'grant-resolution', contractId: 'rel-1', outcome: 'unconfirmed', readback: 'unavailable' })
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it('a missing release gate keeps the existing Guard-owned authorization chain', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-release-absent-'))
+    const registry = 'https://registry.example.invalid/'
+    const executableIdentity = { executable: 'npm' as const, realpath: '/fixture/bin/npm', version: '10.0.0' }
+    try {
+      const tgz = await packFixture(root, 'fixture-release-none', '1.0.0')
+      const session = Session.create(SessionId('producer-release-absent'), undefined, {
+        version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('producer-release-absent'), createdAt: 1, cwd: root,
+      })
+      enable(session)
+      user(session, `Publish package fixture-release-none version 1.0.0 registry ${registry}`)
+      const resolution = await runProducer(session, 'absent-resolution', {
+        semantic_action: 'publish', evidence_role: 'resolution',
+        selector: { artifact_id: 'fixture-release-none', version: '1.0.0', registry },
+        command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
+      }, { readExecutableIdentity: async () => executableIdentity })
+      let commands = 0
+      const tool = createActionTool({
+        prepareMutation: async () => true,
+        authorizeMutation: () => ({ status: 'authorized', reasonCode: 'test_root_contract_authorized' }),
+        readExecutableIdentity: async () => executableIdentity,
+        commandRunner: async () => { commands += 1 },
+      })
+      const value = await tool.execute({
+        semantic_action: 'publish', resolution_call_id: 'absent-resolution', target_digest: resolution.target_digest,
+        contract_item_id: 'R001', contract_item_revision: 1,
+      } as never, execution(session, 'absent-action', 'context_guard_action'))
+      expect(value).toMatchObject({ status: 'completed' })
+      expect(commands).toBe(1)
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+}, PACKAGE_ACTION_TIMEOUT_MS)

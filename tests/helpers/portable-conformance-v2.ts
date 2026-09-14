@@ -6,6 +6,9 @@ import { certificateClosure } from '../../src/domain/closure.js'
 import { decideTurnBoundary } from '../../src/domain/stop-policy.js'
 import { deriveTrustedDeliveries } from '../../src/domain/delivery.js'
 import { unitDescendantIds } from '../../src/domain/work-unit.js'
+import { reasonClassOf, type ReasonClass } from '../../src/domain/reason-class.js'
+import { migrationReport } from '../../src/domain/migration.js'
+import { releasePreEffectDecision, type ReleaseOperation } from '../../src/domain/release.js'
 import { validateSchemaSubset, type SchemaValidationError } from './schema-subset.js'
 import type { DerivedEnvelope } from '../../src/domain/types.js'
 
@@ -38,6 +41,8 @@ export interface V2Case {
   id: string
   family: string
   boundary: 'v5' | 'v4' | 'none'
+  /** The responsibility tier the session runs under (C06); default standard. */
+  policy?: 'standard' | 'strict' | 'release'
   events: Array<Record<string, unknown>>
   expect: {
     interpreted: 'interpreted' | 'unknown'
@@ -50,6 +55,11 @@ export interface V2Case {
     superseded?: number
     goal_denied?: boolean
     reason_codes?: string[]
+    reason_classes?: ReasonClass[]
+    release_contracts?: number
+    release_in_flight?: number
+    release_gate_denials?: string[]
+    migration?: { rule_mode: 'v5' | 'legacy-v4'; certificate_version: string; unit_closure: boolean }
   }
 }
 
@@ -78,7 +88,7 @@ export function validateV2Fixture(fixture: unknown, schema: unknown = loadV2Sche
   return validateSchemaSubset(fixture, schema)
 }
 
-const CONFIG = { activation: 'always' as const, policy: 'standard' as const }
+const BASE_CONFIG = { activation: 'always' as const }
 const SCOPE = { cwd: '/synthetic/workspace', sessionHeader: { version: 3, id: 'v2-portable', createdAt: 1 } }
 
 function notice(text: string, seq: number): DerivedEnvelope {
@@ -130,6 +140,35 @@ export function translateEvents(fixtureCase: V2Case): DerivedEnvelope[] {
         events.push({ seq: seq++, type: 'approval/asked', data: { id: String(event.id), toolName: String(event.toolName ?? 'bash') } })
         events.push({ seq: seq++, type: 'approval/decided', data: { id: String(event.id), outcome: String(event.outcome) } })
         break
+      case 'release_adopt':
+        // Explicit root adoption: the durable command/run is the adoption act.
+        events.push({ seq: seq++, type: 'command/run', data: {
+          name: 'context-guard', args: `release adopt ${JSON.stringify(event.contract)}`, source: { kind: 'user' },
+        } })
+        break
+      case 'release_reservation':
+        events.push({ seq: seq++, type: 'user/message', data: {
+          source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+          content: [{ type: 'text', text: `Context Guard release reservation v1: ${JSON.stringify({
+            contractId: String(event.contractId), operation: String(event.operation),
+            callId: String(event.callId), startedAtSeq: 0, status: 'in_flight',
+          })}` }],
+        } })
+        break
+      case 'release_settlement':
+        events.push({ seq: seq++, type: 'user/message', data: {
+          source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+          content: [{ type: 'text', text: `Context Guard release settlement v1: ${JSON.stringify({
+            contractId: String(event.contractId), operation: String(event.operation), callId: String(event.callId),
+            settledAtSeq: 0, outcome: String(event.outcome ?? 'settled'),
+            ...(event.readback === undefined ? { readback: 'unavailable' } : { readback: event.readback }),
+          })}` }],
+        } })
+        break
+      case 'release_probe':
+        // A probe is not a log event: it is evaluated against the derived
+        // projection after the replay, so the translation emits nothing here.
+        break
       case 'delegation':
         events.push({ seq: seq++, type: 'tool/call', data: { callId: String(event.callId), name: String(event.name ?? 'subagent'), arguments: JSON.stringify({ prompt: String(event.prompt ?? '') }) } })
         events.push({ seq: seq++, type: 'tool/result', data: {
@@ -163,6 +202,16 @@ export interface V2Result {
   descendant_units: number
   /** Number of delegated round-trips recorded as bounded evidence. */
   delegations: number
+  /** The seven-class labels of the still-open obligations. */
+  reason_classes: ReasonClass[]
+  /** Adopted release contracts in this session. */
+  release_contracts: number
+  /** Release operations still in flight (reserved and not settled). */
+  release_in_flight: number
+  /** Reason codes the release gate returned for each declared probe. */
+  release_gate_denials: string[]
+  /** Migration facts the production report states for this session. */
+  migration: { rule_mode: 'v5' | 'legacy-v4'; certificate_version: string; unit_closure: boolean }
 }
 
 /**
@@ -172,7 +221,7 @@ export interface V2Result {
  */
 export function runV2Case(fixtureCase: V2Case): V2Result {
   const events = translateEvents(fixtureCase)
-  const { projection } = deriveProjection(events, CONFIG, SCOPE, true)
+  const { projection } = deriveProjection(events, { ...BASE_CONFIG, policy: fixtureCase.policy ?? 'standard' }, SCOPE, true)
   const items = [...projection.items.values()]
   const pending = items.filter((item) => item.status === 'pending')
   const reasons = new Set<string>()
@@ -235,6 +284,25 @@ export function runV2Case(fixtureCase: V2Case): V2Result {
       ? 0
       : unitDescendantIds(projection, projection.currentUnitId).length,
     delegations: [...projection.units.values()].reduce((total, unit) => total + (unit.delegationRefs?.length ?? 0), 0),
+    reason_classes: [...new Set(pending.map((item) => reasonClassOf(deriveItemDiagnosis(projection, item).reason_code)))].sort(),
+    release_contracts: projection.releaseContracts.length,
+    release_in_flight: projection.releaseReservations.filter((reservation) => !projection.releaseSettlements.some(
+      (settlement) => settlement.callId === reservation.callId && settlement.outcome === 'settled')).length,
+    // Each declared probe is a real production gate call; the denials are the
+    // gate's own reason codes, never the fixture's claim.
+    release_gate_denials: fixtureCase.events
+      .filter((event) => event.type === 'release_probe')
+      .map((event) => releasePreEffectDecision(projection, {
+        operation: String(event.operation) as ReleaseOperation,
+        candidate: (event.candidate ?? {}) as Record<string, string>,
+        ...(typeof event.nowEpochMs === 'number' ? { nowEpochMs: event.nowEpochMs } : { nowEpochMs: 1_700_000_000_000 }),
+      }).reasonCode)
+      .filter((code) => code !== 'release_contract_granted')
+      .sort(),
+    migration: (() => {
+      const report = migrationReport(projection)
+      return { rule_mode: report.ruleMode, certificate_version: report.certificateVersion, unit_closure: report.unitClosure }
+    })(),
   }
 }
 
@@ -266,5 +334,25 @@ export function evaluateV2Case(fixtureCase: V2Case): string[] {
   if (expect.superseded !== undefined && actual.superseded !== expect.superseded) failures.push(`superseded: ${actual.superseded} != ${expect.superseded}`)
   if (expect.goal_denied !== undefined && actual.goal_denied !== expect.goal_denied) failures.push(`goal_denied: ${actual.goal_denied} != ${expect.goal_denied}`)
   if (expect.correction !== undefined && expect.correction !== null && actual.correction_allowed !== expect.correction.allowed) failures.push(`correction.allowed: ${actual.correction_allowed} != ${expect.correction.allowed}`)
+  if (expect.reason_classes !== undefined && JSON.stringify([...expect.reason_classes].sort()) !== JSON.stringify(actual.reason_classes)) {
+    failures.push(`reason_classes: ${JSON.stringify(actual.reason_classes)} != ${JSON.stringify([...expect.reason_classes].sort())}`)
+  }
+  if (expect.release_contracts !== undefined && actual.release_contracts !== expect.release_contracts) {
+    failures.push(`release_contracts: ${actual.release_contracts} != ${expect.release_contracts}`)
+  }
+  if (expect.release_in_flight !== undefined && actual.release_in_flight !== expect.release_in_flight) {
+    failures.push(`release_in_flight: ${actual.release_in_flight} != ${expect.release_in_flight}`)
+  }
+  if (expect.release_gate_denials !== undefined) {
+    const expected = [...expect.release_gate_denials].sort()
+    if (JSON.stringify(expected) !== JSON.stringify(actual.release_gate_denials)) {
+      failures.push(`release_gate_denials: ${JSON.stringify(actual.release_gate_denials)} != ${JSON.stringify(expected)}`)
+    }
+  }
+  if (expect.migration !== undefined) {
+    for (const key of ['rule_mode', 'certificate_version', 'unit_closure'] as const) {
+      if (actual.migration[key] !== expect.migration[key]) failures.push(`migration.${key}: ${String(actual.migration[key])} != ${String(expect.migration[key])}`)
+    }
+  }
   return failures
 }

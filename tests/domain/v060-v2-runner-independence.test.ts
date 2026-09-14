@@ -66,6 +66,11 @@ describe('0.6.0 v2 fixture: the runner computes actuals, expectations only compa
       corrupted.expect.trusted_selections = actual.trusted_selections + 1
       corrupted.expect.approvals = actual.approvals + 1
       corrupted.expect.reason_codes = ['definitely_not_a_reason_code']
+      corrupted.expect.reason_classes = actual.reason_classes.length > 0 ? [] : ['policy_boundary']
+      corrupted.expect.release_contracts = actual.release_contracts + 1
+      corrupted.expect.release_in_flight = actual.release_in_flight + 1
+      corrupted.expect.release_gate_denials = ['not_a_release_reason']
+      corrupted.expect.migration = { rule_mode: 'legacy-v4', certificate_version: '9', unit_closure: !actual.migration.unit_closure }
       expect(runV2Case(corrupted), fixtureCase.id).toEqual(actual)
       expect(evaluateV2Case(corrupted).length, fixtureCase.id).toBeGreaterThan(0)
     }
@@ -165,6 +170,36 @@ describe('0.6.0 v2 fixture: the runner computes actuals, expectations only compa
     const wrongSuperseded = copyOf('S07-verbatim-clarification-supersedes')
     wrongSuperseded.expect.superseded = 0
     expect(evaluateV2Case(wrongSuperseded)).toContain('superseded: 1 != 0')
+  })
+
+  it('detects wrong release, migration, and reason-class expectations', () => {
+    const release = copyOf('S11-consumed-ticket-refuses-the-replay')
+    expect(runV2Case(release)).toMatchObject({ release_contracts: 1, release_in_flight: 0, release_gate_denials: ['release_operation_consumed'] })
+    release.expect.release_contracts = 0
+    release.expect.release_in_flight = 2
+    release.expect.release_gate_denials = ['release_contract_granted']
+    const releaseFailures = evaluateV2Case(release)
+    expect(releaseFailures).toContain('release_contracts: 1 != 0')
+    expect(releaseFailures).toContain('release_in_flight: 0 != 2')
+    expect(releaseFailures.some((failure) => failure.startsWith('release_gate_denials:'))).toBe(true)
+
+    const inFlight = copyOf('S11-reserved-operation-is-never-resent')
+    expect(runV2Case(inFlight).release_in_flight).toBe(1)
+    inFlight.expect.release_in_flight = 0
+    expect(evaluateV2Case(inFlight)).toContain('release_in_flight: 1 != 0')
+
+    const migration = copyOf('S12-legacy-session-reports-its-own-rule-set')
+    expect(runV2Case(migration).migration).toEqual({ rule_mode: 'legacy-v4', certificate_version: '1', unit_closure: false })
+    migration.expect.migration = { rule_mode: 'v5', certificate_version: '2', unit_closure: true }
+    const migrationFailures = evaluateV2Case(migration)
+    expect(migrationFailures).toContain('migration.rule_mode: legacy-v4 != v5')
+    expect(migrationFailures).toContain('migration.certificate_version: 1 != 2')
+    expect(migrationFailures).toContain('migration.unit_closure: false != true')
+
+    const classes = copyOf('S09-requested-visual-proof-cannot-be-faked')
+    expect(runV2Case(classes).reason_classes).toEqual(['parameter_missing', 'source_insufficient'])
+    classes.expect.reason_classes = ['integrity_failure']
+    expect(evaluateV2Case(classes).some((failure) => failure.startsWith('reason_classes:'))).toBe(true)
   })
 })
 

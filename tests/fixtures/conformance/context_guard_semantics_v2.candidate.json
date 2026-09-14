@@ -12,11 +12,11 @@
     "S05": "first-step and persisted-input visibility with the same closure",
     "S06": "trusted host selections and separate approval records",
     "S07": "clarification supersedes atomically; unrelated tasks never collide",
-    "S08": "turn structure gates delivery; the Goal gate demands a certificate",
-    "S09": "lands with proof v2 (P3)",
-    "S10": "lands with policy/strict enforcement and release adoption (P3)",
-    "S11": "lands with the release contract (P3)",
-    "S12": "lands with migration and rollback evidence (P3)"
+    "S08": "turn structure gates delivery; delegation never closes the parent",
+    "S09": "requested visual and readback proof stays unavailable when no producer exists",
+    "S10": "policy tiers are orthogonal to activation and never block ordinary work",
+    "S11": "the explicit release ticket refuses every wrong or consumed adoption",
+    "S12": "legacy and v5 sessions report their own rule set and keep old identities"
   },
   "cases": [
     {
@@ -24,15 +24,30 @@
       "family": "S01",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "检查一下插件是否有更新吗？" },
-        { "type": "assistant_final", "turn": 1, "step": 1, "text": "已检查远端，本地插件 2.0.0 已是最新版本。" },
-        { "type": "turn_end", "turn": 1, "reason": "completed" }
+        {
+          "type": "root_message",
+          "text": "检查一下插件是否有更新吗？"
+        },
+        {
+          "type": "assistant_final",
+          "turn": 1,
+          "step": 1,
+          "text": "已检查远端，本地插件 2.0.0 已是最新版本。"
+        },
+        {
+          "type": "turn_end",
+          "turn": 1,
+          "reason": "completed"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
         "open_items": [],
         "closure": "complete",
-        "delivery": { "answered": 1, "turn_bound": true }
+        "delivery": {
+          "answered": 1,
+          "turn_bound": true
+        }
       }
     },
     {
@@ -40,15 +55,34 @@
       "family": "S01",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "更新文档" },
-        { "type": "assistant_final", "turn": 1, "step": 1, "text": "说明文档包含安装与升级两个章节。" },
-        { "type": "turn_end", "turn": 1, "reason": "completed" }
+        {
+          "type": "root_message",
+          "text": "更新文档"
+        },
+        {
+          "type": "assistant_final",
+          "turn": 1,
+          "step": 1,
+          "text": "说明文档包含安装与升级两个章节。"
+        },
+        {
+          "type": "turn_end",
+          "turn": 1,
+          "reason": "completed"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
-        "delivery": { "answered": 0 }
+        "delivery": {
+          "answered": 0
+        }
       }
     },
     {
@@ -56,15 +90,35 @@
       "family": "S02",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "检查一下是否有更新吗？顺便创建 report.txt" },
-        { "type": "assistant_final", "turn": 1, "step": 1, "text": "远端没有更新；report.txt 稍后创建。" },
-        { "type": "turn_end", "turn": 1, "reason": "completed" }
+        {
+          "type": "root_message",
+          "text": "检查一下是否有更新吗？顺便创建 report.txt"
+        },
+        {
+          "type": "assistant_final",
+          "turn": 1,
+          "step": 1,
+          "text": "远端没有更新；report.txt 稍后创建。"
+        },
+        {
+          "type": "turn_end",
+          "turn": 1,
+          "reason": "completed"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
-        "delivery": { "answered": 1, "turn_bound": true }
+        "delivery": {
+          "answered": 1,
+          "turn_bound": true
+        }
       }
     },
     {
@@ -72,11 +126,19 @@
       "family": "S02",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "不要更新文档" }
+        {
+          "type": "root_message",
+          "text": "不要更新文档"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "prohibition", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "prohibition",
+            "status": "pending"
+          }
+        ],
         "closure": "complete",
         "delivery": null
       }
@@ -86,11 +148,19 @@
       "family": "S03",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "更新文档" }
+        {
+          "type": "root_message",
+          "text": "更新文档"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null
       }
@@ -100,14 +170,24 @@
       "family": "S03",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "更新皮肤中心" }
+        {
+          "type": "root_message",
+          "text": "更新皮肤中心"
+        }
       ],
       "expect": {
         "interpreted": "unknown",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
-        "reason_codes": ["generic_run_non_certifiable"]
+        "reason_codes": [
+          "generic_run_non_certifiable"
+        ]
       }
     },
     {
@@ -115,14 +195,24 @@
       "family": "S04",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "收到我的确认后再推送代码" }
+        {
+          "type": "root_message",
+          "text": "收到我的确认后再推送代码"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
-        "correction": { "allowed": false }
+        "correction": {
+          "allowed": false
+        }
       }
     },
     {
@@ -130,14 +220,24 @@
       "family": "S04",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "明天推送" }
+        {
+          "type": "root_message",
+          "text": "明天推送"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
-        "reason_codes": ["missing_evidence"]
+        "reason_codes": [
+          "missing_evidence"
+        ]
       }
     },
     {
@@ -145,12 +245,23 @@
       "family": "S05",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "创建 report.txt" },
-        { "type": "root_message", "text": "现在进展怎么样？" }
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "root_message",
+          "text": "现在进展怎么样？"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null
       }
@@ -160,13 +271,36 @@
       "family": "S06",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "更新文档" },
-        { "type": "question_pair", "callId": "q1", "questionId": "q-1", "question": "文档放在哪个目录？", "options": ["/srv/docs", "/tmp"], "answer": "/srv/docs" },
-        { "type": "approval", "id": "ap-1", "toolName": "bash", "outcome": "allowed-once" }
+        {
+          "type": "root_message",
+          "text": "更新文档"
+        },
+        {
+          "type": "question_pair",
+          "callId": "q1",
+          "questionId": "q-1",
+          "question": "文档放在哪个目录？",
+          "options": [
+            "/srv/docs",
+            "/tmp"
+          ],
+          "answer": "/srv/docs"
+        },
+        {
+          "type": "approval",
+          "id": "ap-1",
+          "toolName": "bash",
+          "outcome": "allowed-once"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
         "trusted_selections": 1,
@@ -178,12 +312,23 @@
       "family": "S07",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "更新插件" },
-        { "type": "root_message", "text": "把更新插件明确为 install package demo@2.0.0 profile web" }
+        {
+          "type": "root_message",
+          "text": "更新插件"
+        },
+        {
+          "type": "root_message",
+          "text": "把更新插件明确为 install package demo@2.0.0 profile web"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
         "superseded": 1
@@ -194,12 +339,27 @@
       "family": "S07",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "创建 report.txt" },
-        { "type": "root_message", "text": "另外，更新皮肤中心" }
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "root_message",
+          "text": "另外，更新皮肤中心"
+        }
       ],
       "expect": {
         "interpreted": "unknown",
-        "open_items": [{ "kind": "requirement", "status": "pending" }, { "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          },
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "switched",
         "delivery": null
       }
@@ -209,13 +369,34 @@
       "family": "S08",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "创建 report.txt" },
-        { "type": "root_message", "text": "让子代理去创建 notes.txt" },
-        { "type": "delegation", "callId": "d1", "name": "subagent", "prompt": "创建 notes.txt", "text": "已完成：notes.txt 已创建。" }
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "root_message",
+          "text": "让子代理去创建 notes.txt"
+        },
+        {
+          "type": "delegation",
+          "callId": "d1",
+          "name": "subagent",
+          "prompt": "创建 notes.txt",
+          "text": "已完成：notes.txt 已创建。"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }, { "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          },
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
         "goal_denied": true
@@ -226,15 +407,34 @@
       "family": "S08",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "检查一下插件是否有更新吗？" },
-        { "type": "assistant_final", "turn": 1, "step": 1, "text": "已检查远端，本地插件 2.0.0 已是最新版本。" },
-        { "type": "turn_end", "turn": 1, "reason": "aborted" }
+        {
+          "type": "root_message",
+          "text": "检查一下插件是否有更新吗？"
+        },
+        {
+          "type": "assistant_final",
+          "turn": 1,
+          "step": 1,
+          "text": "已检查远端，本地插件 2.0.0 已是最新版本。"
+        },
+        {
+          "type": "turn_end",
+          "turn": 1,
+          "reason": "aborted"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
-        "delivery": { "answered": 0 }
+        "delivery": {
+          "answered": 0
+        }
       }
     },
     {
@@ -242,15 +442,415 @@
       "family": "S08",
       "boundary": "v5",
       "events": [
-        { "type": "root_message", "text": "创建 report.txt" },
-        { "type": "goal_change", "action": "complete", "revision": 1, "producer": "model_tool" }
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "goal_change",
+          "action": "complete",
+          "revision": 1,
+          "producer": "model_tool"
+        }
       ],
       "expect": {
         "interpreted": "interpreted",
-        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
         "closure": "open",
         "delivery": null,
         "goal_denied": true
+      }
+    },
+    {
+      "id": "S09-requested-visual-proof-cannot-be-faked",
+      "family": "S09",
+      "boundary": "v5",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "生成报告并检查界面截图效果"
+        }
+      ],
+      "expect": {
+        "interpreted": "unknown",
+        "open_items": [
+          {
+            "kind": "acceptance",
+            "status": "pending"
+          },
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": [
+          "generic_run_non_certifiable"
+        ],
+        "reason_classes": [
+          "parameter_missing",
+          "source_insufficient"
+        ]
+      }
+    },
+    {
+      "id": "S09-object-readback-stays-open-without-evidence",
+      "family": "S09",
+      "boundary": "v5",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "验证 report.md 的内容正确"
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "acceptance",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": [
+          "missing_evidence"
+        ],
+        "reason_classes": [
+          "parameter_missing"
+        ]
+      }
+    },
+    {
+      "id": "S10-release-policy-does-not-block-ordinary-work",
+      "family": "S10",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": [
+          "missing_evidence"
+        ],
+        "reason_classes": [
+          "parameter_missing"
+        ],
+        "release_contracts": 0
+      }
+    },
+    {
+      "id": "S10-strict-policy-keeps-the-same-open-obligations",
+      "family": "S10",
+      "boundary": "v5",
+      "policy": "strict",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": [
+          "missing_evidence"
+        ],
+        "release_contracts": 0
+      }
+    },
+    {
+      "id": "S11-release-without-a-contract-is-refused",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "release_probe",
+          "operation": "npm_publish",
+          "candidate": {
+            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        {
+          "type": "release_probe",
+          "operation": "git_tag",
+          "candidate": {
+            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        {
+          "type": "release_probe",
+          "operation": "composite_runner",
+          "candidate": {
+            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "release_contracts": 0,
+        "release_in_flight": 0,
+        "release_gate_denials": [
+          "release_contract_required",
+          "release_operation_unprotectable",
+          "release_runner_opaque"
+        ]
+      }
+    },
+    {
+      "id": "S11-unprotectable-adoption-is-refused-before-any-effect",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "release_adopt",
+          "contract": {
+            "contractId": "rel-tag",
+            "operations": [
+              "git_tag"
+            ],
+            "candidate": {
+              "ref": "refs/heads/main",
+              "fullSha40": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "release_contracts": 0
+      }
+    },
+    {
+      "id": "S11-reserved-operation-is-never-resent",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "release_adopt",
+          "contract": {
+            "contractId": "rel-1",
+            "operations": [
+              "npm_publish"
+            ],
+            "candidate": {
+              "ref": "refs/heads/main",
+              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "version": "1.0.0",
+              "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        },
+        {
+          "type": "release_reservation",
+          "contractId": "rel-1",
+          "operation": "npm_publish",
+          "callId": "res-1"
+        },
+        {
+          "type": "release_probe",
+          "operation": "npm_publish",
+          "candidate": {
+            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "version": "1.0.0",
+            "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "release_contracts": 1,
+        "release_in_flight": 1,
+        "release_gate_denials": [
+          "release_operation_in_flight"
+        ]
+      }
+    },
+    {
+      "id": "S11-consumed-ticket-refuses-the-replay",
+      "family": "S11",
+      "boundary": "v5",
+      "policy": "release",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        },
+        {
+          "type": "release_adopt",
+          "contract": {
+            "contractId": "rel-1",
+            "operations": [
+              "npm_publish"
+            ],
+            "candidate": {
+              "ref": "refs/heads/main",
+              "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "version": "1.0.0",
+              "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        },
+        {
+          "type": "release_reservation",
+          "contractId": "rel-1",
+          "operation": "npm_publish",
+          "callId": "res-1"
+        },
+        {
+          "type": "release_settlement",
+          "contractId": "rel-1",
+          "operation": "npm_publish",
+          "callId": "res-1",
+          "outcome": "settled",
+          "readback": {
+            "kind": "npm_integrity",
+            "identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "type": "release_probe",
+          "operation": "npm_publish",
+          "candidate": {
+            "fullSha40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "version": "1.0.0",
+            "artifactDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "release_contracts": 1,
+        "release_in_flight": 0,
+        "release_gate_denials": [
+          "release_operation_consumed"
+        ]
+      }
+    },
+    {
+      "id": "S12-legacy-session-reports-its-own-rule-set",
+      "family": "S12",
+      "boundary": "none",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "migration": {
+          "rule_mode": "legacy-v4",
+          "certificate_version": "1",
+          "unit_closure": false
+        }
+      }
+    },
+    {
+      "id": "S12-v5-session-reports-the-unit-closure-rule-set",
+      "family": "S12",
+      "boundary": "v5",
+      "events": [
+        {
+          "type": "root_message",
+          "text": "创建 report.txt"
+        }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [
+          {
+            "kind": "requirement",
+            "status": "pending"
+          }
+        ],
+        "closure": "open",
+        "delivery": null,
+        "migration": {
+          "rule_mode": "v5",
+          "certificate_version": "2",
+          "unit_closure": true
+        }
       }
     }
   ]

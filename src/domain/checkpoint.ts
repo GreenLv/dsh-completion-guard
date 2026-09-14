@@ -8,6 +8,7 @@ import {
 import { bindingSatisfies, evidenceCoverage } from './matching.js'
 import { closingHint } from './recovery.js'
 import { certificateClosure, certifiableOpenItems, ancestorConstraintForBinding } from './closure.js'
+import { proofV2Rejection, type ProofObligationV2 } from './proof.js'
 import {
   ACTION_MANIFEST, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2,
   actionCompatible, isStatefulAction, requestedTargetMatchesResolved, validateActionTarget,
@@ -119,6 +120,41 @@ function evidenceProblem(projection: GuardProjection, item: GuardItem, binding: 
     }
   }
   return undefined
+}
+
+/**
+ * The strict-policy proof obligation (C06). Only the surfaces the USER asked
+ * for add a requirement, and the requirement is a real readback from the v2
+ * capability matrix: a visual verification needs a fact that actually observed
+ * the output, a complete-scope verification needs a fact that actually covered
+ * the scope. Standard policy does not run this, and no ordinary action gains an
+ * approval step.
+ */
+function strictProofProblem(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): RejectedBinding | undefined {
+  const surface = item.verification.surface
+  if (surface !== 'visual' && surface !== 'scope') return undefined
+  const kind = surface === 'visual' ? 'output_visual_readback' : 'scope_coverage'
+  const obligation = {
+    obligationId: item.id,
+    kind,
+    surface,
+    subjectIds: [item.verification.subject ?? item.requestedTarget?.scope ?? 'scope'].filter((value): value is string => typeof value === 'string' && value.length > 0),
+    sourceIds: [],
+    operation: item.verification.operation ?? 'verify',
+    evidenceIds: binding.evidenceIds,
+  } as ProofObligationV2
+  const cited = citedEvidence(projection, binding)
+  const satisfying = cited.some((fact) => fact.outcome === 'success'
+    && fact.subjects.some((subject) => obligation.subjectIds.includes(subject))
+    && proofV2Rejection(fact, obligation) === undefined)
+  if (satisfying) return undefined
+  return {
+    itemId: item.id,
+    reason: `strict policy: the requested ${surface} verification needs a real readback fact from the current projection`,
+    reasonCode: 'strict_proof_required',
+    offendingEvidenceIds: cited.map((fact) => fact.id),
+    hint: closingHint(projection, item, binding.evidenceIds),
+  }
 }
 
 function expectedTransitionMatches(action: SemanticAction, transition: ExpectedTransition, resolved: TargetTuple, observed: TargetTuple): boolean {
@@ -376,6 +412,14 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     }
     const problem = evidenceProblem(projection, item, binding)
     if (problem) { rejectedBindings.push(problem); continue }
+    // C06 strict policy: on top of standard it enforces the proof the user
+    // ALREADY asked for — a requested visual or complete-scope verification must
+    // be discharged by a real readback fact, not by any evidence that merely
+    // claims the surface. It adds no new approval for ordinary actions.
+    if (projection.policy === 'strict') {
+      const strictProblem = strictProofProblem(projection, item, binding)
+      if (strictProblem) { rejectedBindings.push(strictProblem); continue }
+    }
     if ((item.semanticAction ?? 'generic_run') === 'generic_run') {
       rejectedBindings.push({ itemId: item.id, reason: 'generic run evidence cannot prove a user-level completion contract', reasonCode: 'generic_run_non_certifiable' }); continue
     }

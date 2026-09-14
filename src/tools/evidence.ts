@@ -28,6 +28,7 @@ import {
 } from '../domain/git-adapter.js'
 import { bindExecutableIdentity, type AuditedExecutable, type ExecutableIdentity } from '../domain/host-lock.js'
 import { snapshotSessionEvents } from '../domain/session-events.js'
+import type { ReleaseGateDecision, ReleaseOperation, ReleaseSettlement } from '../domain/release.js'
 
 const execFileAsync = promisify(execFile)
 const PRODUCER_VERSION = '1.0.0'
@@ -83,6 +84,34 @@ export interface EvidenceToolRoots {
   readExecutableIdentity?: (executable: AuditedExecutable, signal: AbortSignal) => Promise<ExecutableIdentity | undefined>
   /** Test-only seam; production never enables HTTP registries. */
   allowLoopbackHttpRegistry?: boolean
+  /**
+   * C10 release ticket gate, consulted before any release-class effect. Absent
+   * means no release contract governs the session, so the existing Guard-owned
+   * mutation authorization is the whole authority chain.
+   */
+  releaseGate?: (request: ReleaseGateToolRequest) => Promise<ReleaseGateDecision>
+  /** C10 settlement record, written after the effect from a trusted readback. */
+  releaseSettle?: (request: ReleaseSettlementToolRequest) => Promise<void>
+}
+
+export interface ReleaseGateToolRequest {
+  agent: { session: unknown }
+  operation: ReleaseOperation
+  /** The resolution call the effect is bound to; the replay key. */
+  callId: string
+  resolvedTarget: TargetTuple
+  /** The repo candidate the caller declares; compared with the contract. */
+  candidateSha?: string
+}
+
+export interface ReleaseSettlementToolRequest {
+  agent: { session: unknown }
+  operation: ReleaseOperation
+  callId: string
+  /** The contract the granted reservation belonged to. */
+  contractId?: string
+  outcome: ReleaseSettlement['outcome']
+  readback: ReleaseSettlement['readback']
 }
 
 export interface MutationAuthorizationRequest {
@@ -1133,6 +1162,9 @@ function normalizedRoots(options: EvidenceToolRoots): EvidenceToolRoots {
     ...(options.prepareMutation ? { prepareMutation: options.prepareMutation } : {}),
     ...(options.readExecutableIdentity ? { readExecutableIdentity: options.readExecutableIdentity } : {}),
     ...(options.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
+    // C10 release seams: the runtime's ticket gate and settlement recorder.
+    ...(options.releaseGate ? { releaseGate: options.releaseGate } : {}),
+    ...(options.releaseSettle ? { releaseSettle: options.releaseSettle } : {}),
   }
 }
 
@@ -1147,6 +1179,10 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       target_digest: { type: 'string', required: true },
       contract_item_id: { type: 'string', required: true },
       contract_item_revision: { type: 'number', required: true },
+      // C10: the repo candidate the caller believes it is releasing. Declaring
+      // it is not authority — it is compared with the adopted contract, and a
+      // mismatch (including an omitted value) is refused before the effect.
+      release_candidate_sha: { type: 'string' },
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
@@ -1216,6 +1252,35 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
           return { status: 'unavailable' as const, reason_code: 'executable_identity_drift', ...identity }
         }
       }
+      // C10: the explicit release ticket is checked before ANY effect. Only
+      // `publish` has a Guard-owned execution surface in this host, so the
+      // other release operations are refused at contract adoption rather than
+      // here (they have no interception point to reach).
+      const releaseOperation: ReleaseOperation | undefined = action === 'publish' ? 'npm_publish' : undefined
+      let releaseGranted = false
+      let releaseContractId: string | undefined
+      if (releaseOperation && roots.releaseGate) {
+        let decision: ReleaseGateDecision | undefined
+        try {
+          decision = await roots.releaseGate({
+            agent,
+            operation: releaseOperation,
+            callId: args.resolution_call_id,
+            resolvedTarget: resolution.target,
+            ...(typeof args.release_candidate_sha === 'string' ? { candidateSha: args.release_candidate_sha } : {}),
+          })
+        } catch {
+          decision = undefined
+        }
+        if (decision === undefined) {
+          return { status: 'unavailable' as const, reason_code: 'release_gate_unavailable', ...identity }
+        }
+        if (decision.status !== 'granted') {
+          return { status: 'unavailable' as const, reason_code: decision.reasonCode, ...identity }
+        }
+        releaseGranted = true
+        releaseContractId = decision.contractId
+      }
       try {
         const status = await executeGuardAction(
           action,
@@ -1226,6 +1291,23 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
           args.resolution_call_id,
           agent,
         )
+        // C10 settlement: the effect is now reported. A trusted readback is
+        // attempted where a producer exists; without one the attempt stays
+        // `unconfirmed`, which keeps the in-flight protection and never
+        // pretends the release was verified.
+        if (releaseOperation && releaseGranted && roots.releaseSettle) {
+          const readback = status === 'completed'
+            ? await publishReadback(resolution.target, roots, exec.signal)
+            : undefined
+          await roots.releaseSettle({
+            agent,
+            operation: releaseOperation,
+            callId: args.resolution_call_id,
+            ...(releaseContractId !== undefined ? { contractId: releaseContractId } : {}),
+            outcome: status !== 'completed' ? 'failed' : readback === undefined ? 'unconfirmed' : 'settled',
+            readback: readback === undefined ? 'unavailable' : { kind: 'npm_integrity', identity: readback },
+          })
+        }
         return {
           status,
           reason_code: status === 'completed' ? 'action_completed'
@@ -1233,10 +1315,34 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
           ...identity,
         }
       } catch {
+        if (releaseOperation && releaseGranted && roots.releaseSettle) {
+          await roots.releaseSettle({
+            agent, operation: releaseOperation, callId: args.resolution_call_id,
+            outcome: 'failed', readback: 'unavailable',
+          })
+        }
         return { status: 'unavailable' as const, reason_code: 'action_execution_failed', ...identity }
       }
     },
   })
+}
+
+/**
+ * The trusted npm readback identity for a completed publish: the registry's
+ * own `dist.integrity` for the exact package version. `undefined` means no
+ * producer is reachable, which keeps the release attempt `unconfirmed` instead
+ * of claiming a verified release.
+ */
+async function publishReadback(target: TargetTuple, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
+  const registry = typeof target.registry === 'string' ? target.registry : undefined
+  const artifact = typeof target.artifact_id === 'string' ? target.artifact_id : undefined
+  const version = typeof target.version === 'string' ? target.version : undefined
+  if (!registry || !artifact || !version) return undefined
+  try {
+    return await registryIntegrity(registry, artifact, version, roots, signal)
+  } catch {
+    return undefined
+  }
 }
 
 export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinition {
