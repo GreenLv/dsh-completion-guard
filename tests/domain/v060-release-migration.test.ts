@@ -483,7 +483,7 @@ describe('0.6.0 C10: adoption is ratified only by evidence that already existed'
       source: { kind: 'user' }, content: [{ type: 'text', text: `Publish package ${PACKAGE} version ${VERSION} registry ${REGISTRY}` }],
     } }])
     expect(releasePreEffectDecision(afterNewTask, request()).status).toBe('granted')
-    // ...and neither does a later certificate that merely reuses the id.
+    // Another pending obligation after adoption also preserves the frozen closure.
     const { record } = closureFixture()
     const shadowed = deriveProjection([
       ...closureFixture().prefix,
@@ -537,4 +537,15 @@ it('FOLLOWUP F04: a new authorized release task must not invalidate the accepted
  const p=adopted([{seq:201,type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'Publish package dsh-completion-guard version 0.6.0 registry https://registry.npmjs.org/'}]}}]);
  console.log('CLOSURE',releasePreEffectDecision(p,request()),p.contractRevision,p.checkpoints.map(c=>c.contractRevision));
  expect(releasePreEffectDecision(p,request()).status).toBe('granted');
+});
+
+it('FOLLOWUP F04: a closure already stale BEFORE adoption cannot certify the adopted candidate', () => {
+ const p = withClosure([
+ {seq:150,type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'创建 report.txt'}]}},
+ {seq:200,type:'command/run',data:{name:'context-guard',args:`release adopt ${adoptLine()}`,source:{kind:'user'}}},
+ ]);
+ expect(p.integrity).toBe('valid');
+ expect([...p.items.values()].some(i=>i.status==='pending')).toBe(true);
+ expect(p.releaseContracts[0]!.adoptedAtRevision).toBeGreaterThan(p.checkpoints[0]!.contractRevision);
+ expect(releasePreEffectDecision(p,request()).reasonCode).toBe('release_closure_unresolved');
 });

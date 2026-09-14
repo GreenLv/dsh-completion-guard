@@ -15,7 +15,9 @@ Two findings from the targeted review of `fcc3813`, both fixed.
   adoption watermark, and the gate requires exactly that certificate. An
   unresolvable reference is recorded as unresolved rather than left open for a
   future entry to satisfy. A later release obligation still does not invalidate
-  the frozen candidate closure.
+  the frozen candidate closure. The frozen certificate must also match the
+  candidate revision at adoption; a certificate already stale before adoption
+  is refused.
 - **Invalid adoption input no longer poisons a valid contract.** A root
   `/context-guard release adopt` with a malformed payload was treated as damaged
   persisted state, so one typo permanently blocked every later publication. A
@@ -25,7 +27,7 @@ Two findings from the targeted review of `fcc3813`, both fixed.
 
 New regression cases: a certificate minted after adoption is refused (with the
 projection still valid), a certificate that existed at adoption is frozen by
-identity and survives both a later obligation and a later same-id certificate,
+identity and survives a later obligation,
 and invalid/mistyped adopt input leaves a valid contract usable.
 
 ## 0.6.0 second repair round after follow-up review (2026-09-14)

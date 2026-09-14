@@ -10372,7 +10372,7 @@ function releasePreEffectDecision(projection, request) {
 	};
 	const frozen = contract.frozenClosure;
 	const closure = frozen !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === frozen.id) : void 0;
-	if (!frozen || frozen.id !== contract.closureCertRef || !closure || closure.result !== "certified" || closure.certificationDigest !== frozen.certificationDigest || closure.epoch !== projection.epoch) return {
+	if (!frozen || frozen.contractRevision !== contract.adoptedAtRevision || frozen.id !== contract.closureCertRef || !closure || closure.result !== "certified" || closure.certificationDigest !== frozen.certificationDigest || closure.epoch !== projection.epoch) return {
 		status: "denied",
 		reasonCode: "release_closure_unresolved",
 		contractId: contract.contractId

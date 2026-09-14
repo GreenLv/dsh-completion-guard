@@ -516,7 +516,8 @@ export function releasePreEffectDecision(projection: GuardProjection, request: R
   // release instruction may add obligations, but it may not add the evidence.
   const frozen = contract.frozenClosure
   const closure = frozen !== undefined ? projection.checkpoints.find((checkpoint) => checkpoint.id === frozen.id) : undefined
-  if (!frozen || frozen.id !== contract.closureCertRef
+  if (!frozen || frozen.contractRevision !== contract.adoptedAtRevision
+    || frozen.id !== contract.closureCertRef
     || !closure || closure.result !== 'certified'
     || closure.certificationDigest !== frozen.certificationDigest
     || closure.epoch !== projection.epoch) {
