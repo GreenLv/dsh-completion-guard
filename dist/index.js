@@ -849,6 +849,35 @@ function createBoundaryTool(getProjection, prepare, onRejected) {
 }
 
 //#endregion
+//#region src/tools/git-preparation.ts
+/** Input recipes are guidance only; live resolution remains authoritative. */
+function gitPreparation(action) {
+	if (![
+		"commit",
+		"push",
+		"fetch",
+		"pull"
+	].includes(action)) return void 0;
+	return {
+		selector_fields: action === "commit" ? ["repository", "branch"] : [
+			"repository",
+			"remote",
+			"refspec"
+		],
+		command_manifest_fields: ["planned_tool", "planned_arguments"],
+		planned_tools: ["bash", "pwsh"],
+		planned_argument_fields: ["command", "workdir"],
+		steps: [
+			"Before execution: context_guard_evidence with evidence_role=resolution, selector and command_manifest. Keep the successful tool call ID and target_digest.",
+			"Execute once with context_guard_action, semantic_action, resolution_call_id, target_digest, contract_item_id and contract_item_revision.",
+			"Collect effect and state separately with context_guard_evidence, using the same resolution_call_id and the successful action call ID as effect_call_id.",
+			"Checkpoint the matching resolution/effect/state evidence IDs. Call IDs identify tool events; evidence IDs identify checkpoint facts.",
+			"If the action already ran without resolution, report the historical evidence gap and read back state. Do not repeat a mutation to create missing prestate evidence."
+		]
+	};
+}
+
+//#endregion
 //#region src/tools/prepare.ts
 /**
 * Thin READ-ONLY preparation surface (v0.5): before any stateful action it
@@ -920,7 +949,8 @@ function createPrepareTool(options) {
 				"effect (the exact planned change)",
 				"state (independent post-state readback)"
 			] : ["state (matching durable evidence for the requested verification)"];
-			const missingTargetFields = manifestEntry?.stateful && plannedAction ? manifestEntry.resolvedTargetKeys.filter((key) => !(item.requestedTarget?.[key] !== void 0 || args.requested_target?.[key] !== void 0)) : [];
+			const recipe = plannedAction ? gitPreparation(plannedAction) : void 0;
+			const missingTargetFields = manifestEntry?.stateful && plannedAction ? (recipe?.selector_fields ?? manifestEntry.resolvedTargetKeys).filter((key) => !(item.requestedTarget?.[key] !== void 0 || args.requested_target?.[key] !== void 0)) : [];
 			const capability = plannedAction && options.hostCapability ? options.hostCapability(plannedAction) : void 0;
 			const commandShape = options.commandTemplate && plannedAction ? options.commandTemplate(plannedAction) : void 0;
 			return {
@@ -937,8 +967,9 @@ function createPrepareTool(options) {
 				missing_target_fields: missingTargetFields,
 				...capability ? { host_capability: {
 					status: capability.status,
-					reason_code: capability.reasonCode
+					...capability.reasonCode !== void 0 ? { reason_code: capability.reasonCode } : {}
 				} } : {},
+				...recipe ? { evidence_input_contract: recipe } : {},
 				note: "Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields."
 			};
 		}
@@ -1037,12 +1068,14 @@ function adapterId(action) {
 	if (action === "publish") return "context-guard.registry.v1";
 	return "context-guard.git.v1";
 }
-function unavailable(action, role, reason) {
+function unavailable(action, role, reason, missingFields, nextStep) {
 	return {
 		status: "unavailable",
 		reason_code: reason,
 		semantic_action: action,
 		evidence_role: role,
+		...missingFields?.length ? { missing_fields: missingFields } : {},
+		...nextStep ? { next_step: nextStep } : {},
 		resolved_target: {},
 		observed_state: {},
 		adapter_id: adapterId(action),
@@ -2292,6 +2325,11 @@ function createEvidenceTool(options = {}) {
 						type: "string",
 						required: true
 					},
+					missing_fields: {
+						type: "array",
+						items: { type: "string" }
+					},
+					next_step: { type: "string" },
 					evidence_role: {
 						type: "string",
 						required: true,
@@ -2414,6 +2452,18 @@ function createEvidenceTool(options = {}) {
 			if (!agent) return unavailable(action, role, "producer_agent_unavailable");
 			try {
 				if (role === "resolution") {
+					const recipe = gitPreparation(action);
+					if (recipe) {
+						const manifest = record(args.command_manifest);
+						const plannedArgs = record(manifest?.planned_arguments);
+						const selector = record(args.selector);
+						const missing = [
+							...recipe.selector_fields.filter((key) => !requireString(selector ?? {}, key)).map((key) => `selector.${key}`),
+							...!requireString(manifest ?? {}, "planned_tool") ? ["command_manifest.planned_tool"] : [],
+							...recipe.planned_argument_fields.filter((key) => !requireString(plannedArgs ?? {}, key)).map((key) => `command_manifest.planned_arguments.${key}`)
+						];
+						if (missing.length) return unavailable(action, role, "resolution_input_missing", missing, "Supply the listed resolution inputs before execution. Use context_guard_prepare for the exact Git input contract. A manifest_id alone does not describe a planned tool call.");
+					}
 					const executable$1 = executableFor(action);
 					const executableBinding = executable$1 ? await (roots.readExecutableIdentity ?? executableIdentity)(executable$1, exec.signal) : void 0;
 					if (executable$1 && !executableBinding) return unavailable(action, role, "executable_identity_unavailable");
@@ -2425,7 +2475,7 @@ function createEvidenceTool(options = {}) {
 					if (!expectedTransition) return unavailable(action, role, "expected_transition_unavailable");
 					return supported(action, role, resolved.target, {}, commandManifest, gitBinding, executableBinding, expectedTransition);
 				}
-				if (!args.resolution_call_id) return unavailable(action, role, "producer_reference_missing");
+				if (!args.resolution_call_id) return unavailable(action, role, "producer_reference_missing", ["resolution_call_id", ...!args.effect_call_id ? ["effect_call_id"] : []], "Use the successful pre-action resolution call ID and matching action call ID. Selectors and evidence IDs cannot replace call IDs. If execution already happened without resolution, report the historical gap; do not repeat the mutation.");
 				const resolution = findResolution(snapshotSessionEvents(agent.session), args.resolution_call_id, action);
 				if (!resolution) return unavailable(action, role, "persisted_effect_mismatch");
 				const executable = executableFor(action);
@@ -2444,7 +2494,7 @@ function createEvidenceTool(options = {}) {
 					"pull",
 					"fetch"
 				].includes(action);
-				if (!args.effect_call_id) return unavailable(action, role, "producer_reference_missing");
+				if (!args.effect_call_id) return unavailable(action, role, "producer_reference_missing", ["effect_call_id"], "Supply the successful matching effect call ID. Git/package/service effects must come from context_guard_action; do not repeat an already completed mutation to manufacture missing evidence.");
 				if (ownedEffect) {
 					const events = snapshotSessionEvents(agent.session);
 					const actionCall = actionCallMatches(events, args.effect_call_id, action, args.resolution_call_id, resolution.target);

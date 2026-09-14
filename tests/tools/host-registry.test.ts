@@ -68,7 +68,7 @@ function registry(options: { withAction?: boolean } = {}) {
   runtime.register(createBoundaryTool(() => projection, async () => true, () => {}))
   runtime.register(createPrepareTool({
     getProjection: () => projection,
-    hostCapability: (action) => ({ status: 'supported', reasonCode: `${action}_supported` }),
+    hostCapability: () => ({ status: 'supported' }),
     commandTemplate: (action) => GIT_COMMAND_TEMPLATES[action as keyof typeof GIT_COMMAND_TEMPLATES],
   }))
   runtime.register(createExternalOperationTool(() => undefined, () => ({ status: 'supported', digest: 'a'.repeat(64) })))
@@ -108,6 +108,9 @@ const CASES: Array<{ tool: string; arguments: Record<string, unknown>; withActio
   { tool: 'context_guard_rebind', arguments: { operation: 'propose', item_id: 'R001', clauses: ['运行 pnpm test 验证工作区'] } },
   { tool: 'context_guard_boundary', arguments: { disposition: 'deferred', qualification_kind: 'root_explicit_defer', qualification_ids: ['R001'] } },
   { tool: 'context_guard_prepare', arguments: { item_id: 'R001' }, withAction: false },
+  ...['generic_run', 'commit', 'install', 'verify', 'push'].map((semantic_action) => ({
+    tool: 'context_guard_prepare', arguments: { item_id: 'R001', semantic_action },
+  })),
   { tool: 'context_guard_prepare', arguments: { item_id: 'R001', semantic_action: 'test' } },
   { tool: 'context_guard_external_operation', arguments: { operation_id: 'job-1' } },
   { tool: 'context_guard_evidence', arguments: { semantic_action: 'commit', evidence_role: 'resolution', selector: {} } },
@@ -135,4 +138,22 @@ it.each(CASES)('$tool materializes through the real DSH ToolRuntime output contr
   expect(code, `${tool} rejected the arguments this case supplies`).not.toBe('INVALID_ARGS')
   expect(code, `${tool} returned a value its own output schema rejects`).not.toBe('INVALID_TOOL_OUTPUT')
   expect(code, `${tool} is not registered in the runtime`).not.toBe('UNKNOWN_TOOL')
+})
+
+it.each(['resolution', 'effect', 'state'])('materializes missing %s inputs through the host registry', async (evidence_role) => {
+  const { runtime } = registry()
+  const response = await runtime.execute({
+    callId: `missing-${evidence_role}` as never,
+    name: 'context_guard_evidence',
+    arguments: { semantic_action: 'commit', evidence_role },
+    // Missing-input paths must not touch a live resource or session API.
+    agent: { session: {} } as never,
+    signal: new AbortController().signal,
+  })
+  expect(response.isError).toBe(false)
+  const value = (response as unknown as { value: Record<string, unknown> }).value
+  expect(value).toMatchObject({ status: 'unavailable',
+    reason_code: evidence_role === 'resolution' ? 'resolution_input_missing' : 'producer_reference_missing',
+    missing_fields: expect.any(Array), next_step: expect.any(String),
+  })
 })

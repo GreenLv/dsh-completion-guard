@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import { gunzip } from 'node:zlib'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { gitPreparation } from './git-preparation.js'
 import { ACTION_MANIFEST, type StatefulAction } from '../domain/protocol-manifest.js'
 import { canonicalRegistryBase, npmEscapedPackageName } from '../domain/registry.js'
 import type { EvidenceRole, ExpectedTransition, TargetTuple } from '../domain/types.js'
@@ -140,6 +141,8 @@ function installedProfile(moduleUrl: string = import.meta.url): { name: string; 
 }
 
 interface ProducerValue {
+  missing_fields?: string[]
+  next_step?: string
   status: 'supported' | 'unavailable'
   reason_code: string
   semantic_action: StatefulAction
@@ -197,9 +200,11 @@ function adapterId(action: StatefulAction): string {
   return 'context-guard.git.v1'
 }
 
-function unavailable(action: StatefulAction, role: EvidenceRole, reason: string): ProducerValue {
+function unavailable(action: StatefulAction, role: EvidenceRole, reason: string, missingFields?: string[], nextStep?: string): ProducerValue {
   return {
     status: 'unavailable', reason_code: reason, semantic_action: action, evidence_role: role,
+    ...(missingFields?.length ? { missing_fields: missingFields } : {}),
+    ...(nextStep ? { next_step: nextStep } : {}),
     resolved_target: {}, observed_state: {}, adapter_id: adapterId(action), adapter_version: action === 'restart' ? '2.0.0' : PRODUCER_VERSION,
     target_digest: '', command_manifest_digest: '',
   }
@@ -1261,6 +1266,8 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
       schema: { type: 'object', additionalProperties: false, properties: {
         status: { type: 'string', required: true, enum: ['supported', 'unavailable'] },
         reason_code: { type: 'string', required: true }, semantic_action: { type: 'string', required: true },
+        missing_fields: { type: 'array', items: { type: 'string' } },
+        next_step: { type: 'string' },
         evidence_role: { type: 'string', required: true, enum: ['resolution', 'effect', 'state'] },
         resolved_target: { type: 'object', required: true, additionalProperties: true },
         observed_state: { type: 'object', required: true, additionalProperties: true },
@@ -1313,6 +1320,19 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
       if (!agent) return unavailable(action, role, 'producer_agent_unavailable')
       try {
         if (role === 'resolution') {
+          const recipe = gitPreparation(action)
+          if (recipe) {
+            const manifest = record(args.command_manifest)
+            const plannedArgs = record(manifest?.planned_arguments)
+            const selector = record(args.selector)
+            const missing = [
+              ...recipe.selector_fields.filter(key => !requireString(selector ?? {}, key)).map(key => `selector.${key}`),
+              ...(!requireString(manifest ?? {}, 'planned_tool') ? ['command_manifest.planned_tool'] : []),
+              ...recipe.planned_argument_fields.filter(key => !requireString(plannedArgs ?? {}, key)).map(key => `command_manifest.planned_arguments.${key}`),
+            ]
+            if (missing.length) return unavailable(action, role, 'resolution_input_missing', missing,
+              'Supply the listed resolution inputs before execution. Use context_guard_prepare for the exact Git input contract. A manifest_id alone does not describe a planned tool call.')
+          }
           const executable = executableFor(action)
           const executableBinding = executable
             ? await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal)
@@ -1337,7 +1357,9 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
           if (!expectedTransition) return unavailable(action, role, 'expected_transition_unavailable')
           return supported(action, role, resolved.target, {}, commandManifest, gitBinding, executableBinding, expectedTransition)
         }
-        if (!args.resolution_call_id) return unavailable(action, role, 'producer_reference_missing')
+        if (!args.resolution_call_id) return unavailable(action, role, 'producer_reference_missing',
+          ['resolution_call_id', ...(!args.effect_call_id ? ['effect_call_id'] : [])],
+          'Use the successful pre-action resolution call ID and matching action call ID. Selectors and evidence IDs cannot replace call IDs. If execution already happened without resolution, report the historical gap; do not repeat the mutation.')
         const resolution = findResolution(snapshotSessionEvents(agent.session), args.resolution_call_id, action)
         if (!resolution) return unavailable(action, role, 'persisted_effect_mismatch')
         const executable = executableFor(action)
@@ -1349,7 +1371,8 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
           }
         }
         const ownedEffect = ['install', 'apply', 'restart', 'publish', 'commit', 'push', 'pull', 'fetch'].includes(action)
-        if (!args.effect_call_id) return unavailable(action, role, 'producer_reference_missing')
+        if (!args.effect_call_id) return unavailable(action, role, 'producer_reference_missing', ['effect_call_id'],
+          'Supply the successful matching effect call ID. Git/package/service effects must come from context_guard_action; do not repeat an already completed mutation to manufacture missing evidence.')
         if (ownedEffect) {
           const events = snapshotSessionEvents(agent.session)
           const actionCall = actionCallMatches(events, args.effect_call_id, action, args.resolution_call_id, resolution.target)

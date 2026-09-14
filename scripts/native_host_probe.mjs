@@ -168,6 +168,20 @@ export function apply(ctx, config) {
         const template = await readProbeTestBinding(call, pending)
         operation = 'binding_template_present'
         assert.ok(template)
+        // Regression: exercise the installed prepare output through the actual
+        // host callback, whose supported capability has no reasonCode.
+        for (const semantic_action of ['test', 'commit', 'push']) {
+          const prepared = await call('context_guard_prepare', { item_id: template.item_id, semantic_action })
+          assert.equal(prepared.status, 'prepared')
+          assert.equal(prepared.host_capability.status, 'supported')
+          if (semantic_action !== 'test') assert.ok(prepared.evidence_input_contract.steps.length > 0)
+        }
+        const missingResolution = await call('context_guard_evidence', { semantic_action: 'commit', evidence_role: 'resolution' })
+        assert.equal(missingResolution.reason_code, 'resolution_input_missing')
+        assert.ok(missingResolution.missing_fields.includes('command_manifest.planned_tool'))
+        const missingState = await call('context_guard_evidence', { semantic_action: 'push', evidence_role: 'state' })
+        assert.equal(missingState.reason_code, 'producer_reference_missing')
+        assert.ok(missingState.missing_fields.includes('resolution_call_id'))
         const certificate = await call('context_guard_checkpoint', { bindings: [template] })
         operation = 'certificate_issued'
         assert.equal(certificate.status, 'certified')

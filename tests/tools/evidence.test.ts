@@ -220,6 +220,31 @@ function certifyStateful(session: Session, action: 'install' | 'apply' | 'restar
 }
 
 describe('trusted stateful evidence producer', () => {
+  it('explains missing Git inputs without probing or treating a selector as a producer reference', async () => {
+    const session = Session.create(SessionId('missing-git-inputs'), undefined, {
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('missing-git-inputs'), createdAt: 1, cwd: '/fixture',
+    })
+    let probes = 0
+    const roots = { readExecutableIdentity: async () => { probes++; return undefined } }
+    const resolution = await runProducer(session, 'missing-resolution', {
+      semantic_action: 'commit', evidence_role: 'resolution', selector: { repository: '/fixture', branch: 'main' },
+    }, roots)
+    expect(resolution).toMatchObject({ status: 'unavailable', reason_code: 'resolution_input_missing',
+      missing_fields: ['command_manifest.planned_tool', 'command_manifest.planned_arguments.command', 'command_manifest.planned_arguments.workdir'],
+    })
+    for (const evidence_role of ['effect', 'state']) {
+      const result = await runProducer(session, `missing-${evidence_role}`, {
+        semantic_action: 'commit', evidence_role, selector: { repository: '/fixture', branch: 'main' },
+        command_manifest: { manifest_id: 'git.commit_index_tree.v2', planned_arguments: { command: 'git commit -m fixture', workdir: '/fixture' } },
+      }, roots)
+      expect(result).toMatchObject({ status: 'unavailable', reason_code: 'producer_reference_missing',
+        missing_fields: ['resolution_call_id', 'effect_call_id'], resolved_target: {},
+      })
+      expect(result.next_step).toContain('do not repeat the mutation')
+    }
+    expect(probes).toBe(0)
+  })
+
   it('derives distinct real resolution/effect/state facts and certifies a create action', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-cg-evidence-'))
     const artifact = join(dir, 'created.txt')

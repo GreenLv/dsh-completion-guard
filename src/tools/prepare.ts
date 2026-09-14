@@ -2,6 +2,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { GuardProjection } from '../domain/types.js'
 import { deriveItemDiagnosis, evidenceAvailabilityReason, relevantEvidence } from '../domain/diagnostics.js'
+import { gitPreparation } from './git-preparation.js'
 import { ACTION_MANIFEST, type StatefulAction } from '../domain/protocol-manifest.js'
 
 export interface PrepareToolOptions {
@@ -66,8 +67,9 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
         ? ['resolution (prestate facts from a trusted read)', 'effect (the exact planned change)', 'state (independent post-state readback)']
         : ['state (matching durable evidence for the requested verification)']
 
+      const recipe = plannedAction ? gitPreparation(plannedAction) : undefined
       const missingTargetFields = manifestEntry?.stateful && plannedAction
-        ? manifestEntry.resolvedTargetKeys.filter((key) => !(item.requestedTarget?.[key] !== undefined || args.requested_target?.[key] !== undefined))
+        ? (recipe?.selector_fields ?? manifestEntry.resolvedTargetKeys).filter((key) => !(item.requestedTarget?.[key] !== undefined || args.requested_target?.[key] !== undefined))
         : []
 
       const capability = plannedAction && options.hostCapability
@@ -95,7 +97,8 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
         required_evidence_order: requiredOrder,
         reusable_references: reusable,
         missing_target_fields: missingTargetFields,
-        ...(capability ? { host_capability: { status: capability.status, reason_code: capability.reasonCode } } : {}),
+        ...(capability ? { host_capability: { status: capability.status, ...(capability.reasonCode !== undefined ? { reason_code: capability.reasonCode } : {}) } } : {}),
+        ...(recipe ? { evidence_input_contract: recipe } : {}),
         note: 'Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields.',
       } as unknown as Record<string, JsonValue>
     },

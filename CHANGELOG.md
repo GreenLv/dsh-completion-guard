@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.5.3 - 2026-09-14
+
+### Fixed
+
+- Preparation succeeds when the host capability check has no reason code. Real tool-registry regressions cover the previously invalid nested optional field.
+- Git preparation lists the required inputs and call sequence. Missing evidence inputs identify their exact fields; producer-computed Git identities are no longer presented as missing user targets. Execution and certification checks remain unchanged.
+
+### Planned
+
+- Track answer delivery separately from execution certification. The design and remaining semantic coverage are recorded in [next-version repair notes](docs/NEXT_VERSION_REPAIR_NOTES.md); question closure is not changed by this patch.
+
 ## 0.5.2 - 2026-09-11
 
 ### Changed

@@ -6,6 +6,9 @@
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
+
+源码候选 **0.5.3** 修复准备工具报错，并补充 Git 取证顺序。下方公开安装版本暂为 0.5.2，待新包在 npm 发布并回读后更新。详见[候选变更](CHANGELOG.zh-CN.md)与[后续语义工作](docs/NEXT_VERSION_REPAIR_NOTES.md)。
+
 ## 快速开始
 
 将已发布的 **0.5.2** 安装到 DSH 的 Web 运行环境：

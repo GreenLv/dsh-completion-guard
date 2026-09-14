@@ -1,3 +1,4 @@
+import { isJsonValue } from '@deepseek-ai/dsh-util-values'
 import { describe, expect, it } from 'vitest'
 import { createRebindTool } from '../../src/tools/rebind.js'
 import { deriveProjection } from '../../src/domain/derive.js'
@@ -67,9 +68,24 @@ describe('A14/A15: prepare reports capability, target gaps, and supported shapes
       note: string
     }
     expect(response.status).toBe('prepared')
+    expect(isJsonValue(response)).toBe(true)
     // Missing authorization-relevant fields are named for the user question.
     expect(response.missing_target_fields.length).toBeGreaterThan(0)
     expect(response.note).toContain('not user authority')
+  })
+
+  it('separates Git caller inputs from producer-computed identities', async () => {
+    const p = replay([user(1, '提交当前修改')])
+    const item = [...p.items.values()][0]
+    const response = await prepare(p).execute({ item_id: item.id, semantic_action: 'commit',
+      requested_target: { repository: '/repo', branch: 'main' },
+    } as never, undefined as never) as Record<string, unknown>
+    expect(response.missing_target_fields).toEqual([])
+    expect(response.evidence_input_contract).toMatchObject({
+      selector_fields: ['repository', 'branch'], command_manifest_fields: ['planned_tool', 'planned_arguments'],
+      planned_argument_fields: ['command', 'workdir'],
+    })
+    expect(isJsonValue(response)).toBe(true)
   })
 
   it('reports the supported push shape and the resolution/effect/state order', async () => {
@@ -81,6 +97,7 @@ describe('A14/A15: prepare reports capability, target gaps, and supported shapes
       requested_target: { repository: '/repo', remote: 'origin', source_ref: 'main', destination_ref: 'main' },
     } as never, undefined as never) as { status: string; supported_command_shape?: { command: string }; required_evidence_order: string[] }
     expect(response.status).toBe('prepared')
+    expect(isJsonValue(response)).toBe(true)
     expect(response.supported_command_shape?.command).toBe('git push <remote> <source_ref>:<destination_ref>')
     expect(response.required_evidence_order.join(' ')).toContain('resolution')
     expect(response.required_evidence_order.join(' ')).toContain('effect')

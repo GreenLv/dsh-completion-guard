@@ -6,6 +6,9 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
+
+Source candidate **0.5.3** fixes preparation failures and explains the Git evidence sequence. The published installation below remains 0.5.2 until the new package is verified on npm. See the [candidate changes](CHANGELOG.md) and [remaining semantic work](docs/NEXT_VERSION_REPAIR_NOTES.md).
+
 ## Quick start
 
 Install the published **0.5.2** release into the DSH Web environment:
