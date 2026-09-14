@@ -7,7 +7,7 @@ import {
 } from './digest.js'
 import { bindingSatisfies, evidenceCoverage } from './matching.js'
 import { closingHint } from './recovery.js'
-import { certificateClosure, certifiableOpenItems } from './closure.js'
+import { certificateClosure, certifiableOpenItems, ancestorConstraintForBinding } from './closure.js'
 import {
   ACTION_MANIFEST, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2,
   actionCompatible, isStatefulAction, requestedTargetMatchesResolved, validateActionTarget,
@@ -335,6 +335,22 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     }
     if (item.legacyFlags?.includes('legacy_generic_run')) {
       rejectedBindings.push({ itemId: item.id, reason: 'legacy generic-run item is non-certifiable until deterministic rebind', reasonCode: 'legacy_generic_run_non_certifiable' }); continue
+    }
+    // C04 ancestor constraints: a prohibition or an unsatisfied condition the
+    // root declared in an ANCESTOR unit stays in force for this descendant
+    // obligation. The check runs before the evidence checks and against the
+    // binding's resolved target, so a descendant can neither discharge an
+    // ancestor's blanket ban nor certify the action the ancestor reserved.
+    const ancestorBlock = ancestorConstraintForBinding(projection, item, binding.resolvedTarget)
+    if (ancestorBlock) {
+      rejectedBindings.push({
+        itemId: item.id,
+        reason: ancestorBlock.kind === 'prohibition'
+          ? `an ancestor unit (${ancestorBlock.constraintUnitId}) holds prohibition ${ancestorBlock.constraintId} on this action and target`
+          : `an ancestor unit (${ancestorBlock.constraintUnitId}) holds the unsatisfied condition ${ancestorBlock.constraintId} that reserves this action`,
+        reasonCode: ancestorBlock.reasonCode,
+        hint: closingHint(projection, item),
+      }); continue
     }
     if (item.targetCaptureStatus === 'clarification_required') {
       rejectedBindings.push({

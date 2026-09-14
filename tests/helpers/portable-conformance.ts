@@ -74,7 +74,7 @@ function checkpointJson(checkpoint: GuardCheckpoint): Record<string, unknown> {
   }
 }
 
-function statefulTarget(action: SemanticAction, requested: TargetTuple | undefined): { resolved: TargetTuple; observed: TargetTuple; params: TargetTuple } {
+export function statefulTarget(action: SemanticAction, requested: TargetTuple | undefined): { resolved: TargetTuple; observed: TargetTuple; params: TargetTuple } {
   const repository = typeof requested?.repository === 'string' ? requested.repository : WORKDIR
   switch (action) {
     case 'install':
@@ -130,7 +130,7 @@ function statefulTarget(action: SemanticAction, requested: TargetTuple | undefin
   }
 }
 
-function expectedParams(action: SemanticAction, resolved: TargetTuple, observed: TargetTuple): TargetTuple {
+export function expectedParams(action: SemanticAction, resolved: TargetTuple, observed: TargetTuple): TargetTuple {
   switch (action) {
     case 'pull': return { pull_mode: resolved.pull_mode!, upstream_oid: resolved.upstream_oid!, pre_head_oid: resolved.pre_head_oid! }
     case 'fetch': return { upstream_oid: resolved.upstream_oid!, pre_head_oid: resolved.pre_head_oid! }

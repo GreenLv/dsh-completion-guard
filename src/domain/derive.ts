@@ -16,7 +16,10 @@ import { supersedeItem } from './supersession.js'
 import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItemKind, type SourceSpan } from './types.js'
 import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
 import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
-import { explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensNewUnit, currentUnitHasOpenWork } from './work-unit.js'
+import {
+  explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensChildUnit,
+  opensNewUnit, currentUnitHasOpenWork, recordDelegation, unitDescendantIds,
+} from './work-unit.js'
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
 
@@ -26,7 +29,21 @@ interface PendingCall {
   rootCallId?: string
   bindings?: EvidenceBinding[]
   boundaryRequest?: BoundaryRequest
+  /** The work unit current when the call was issued (C04 delegation linkage). */
+  unitIdAtCall?: string
 }
+
+/**
+ * Audited delegation tool names (C04/DS06-B). A tool result from one of these
+ * is a subagent's answer: bounded evidence for the unit that asked for it, and
+ * never a parent completion. The real names are a host tool-bundle surface —
+ * native acceptance pins the audited cohort, exactly like the question-tool
+ * allowlist — so this list is the production default and can be overridden by
+ * an audited cohort.
+ */
+export const DEFAULT_DELEGATION_TOOL_NAMES: readonly string[] = [
+  'task', 'delegate', 'delegate_task', 'subagent', 'subagent_fork', 'spawn_agent',
+]
 
 export const CAPTURE_V042_NOTICE = 'Context Guard capture boundary: v0.4.2'
 
@@ -637,11 +654,20 @@ export function deriveProjection(
         if (unitSemantics && directiveBearing) {
           if (!explicitlyLinkedToCurrentUnit(projection, text)
             && opensNewUnit(projection, text, true, currentUnitHasOpenWork(projection))) {
-            captureUnitId = openUnit(projection, event.seq, text.slice(0, 200)).unitId
+            // A delegation-marked root message opens a CHILD unit of the
+            // current one (C04): its open obligations become required
+            // descendants of the parent's closure, so the parent can never be
+            // certified while the delegated work is open. Any other new unit is
+            // a sibling and never blocks the newer unit's certificate.
+            const parentUnitId = opensChildUnit(projection, text) ? projection.currentUnitId : undefined
+            captureUnitId = openUnit(projection, event.seq, text.slice(0, 200), parentUnitId).unitId
           } else {
             captureUnitId = foldUnitId()
           }
-          if (activeTurn !== undefined) turnUnitIds.set(activeTurn, captureUnitId)
+          // The turn is owned by the CURRENT unit even when the message opened
+          // a delegated child: a delivery in this turn answers the owning
+          // unit's questions, and the child is covered as its descendant.
+          if (activeTurn !== undefined) turnUnitIds.set(activeTurn, projection.currentUnitId)
         }
         captureAssets(captureUnitId ?? (unitSemantics ? foldUnitId() : undefined))
         // Informational reports (acceptance receipts, pasted summaries/logs)
@@ -688,6 +714,7 @@ export function deriveProjection(
           name: String(data?.name ?? ''),
           arguments: String(data?.arguments ?? ''),
           rootCallId: typeof data?.rootCallId === 'string' ? data.rootCallId : undefined,
+          ...(projection.currentUnitId !== undefined ? { unitIdAtCall: projection.currentUnitId } : {}),
         }
         if (call.name === 'context_guard_checkpoint') {
           const args = parseArguments(call.arguments)
@@ -852,7 +879,8 @@ export function deriveProjection(
           break
         }
         evidenceCounter += 1
-        const evidence = withDurability(evidenceFromPersistedToolResult(
+        const delegated = DEFAULT_DELEGATION_TOOL_NAMES.includes(call.name)
+        const baseEvidence = withDurability(evidenceFromPersistedToolResult(
           {
             callId,
             name: call.name,
@@ -865,7 +893,20 @@ export function deriveProjection(
           scope.cwd || undefined,
           hostLock,
         ), durableConfirmed)
+        // A delegated subagent's answer is BOUNDED evidence for the unit that
+        // asked for it (C04): it is recorded and visible, and it can never
+        // close a parent obligation. The flag is set here — by the derivation,
+        // from the audited tool identity — never by a caller.
+        const evidence = delegated ? { ...baseEvidence, delegatedSubtask: true as const } : baseEvidence
         projection.evidence.set(evidence.id, evidence)
+        if (delegated && call.unitIdAtCall !== undefined) {
+          recordDelegation(projection, call.unitIdAtCall, {
+            callId,
+            resultSeq: event.seq,
+            toolName: call.name,
+            status: data?.error !== undefined ? 'failed' : 'completed',
+          })
+        }
         if (evidence.externalOperationRef) {
           projection.externalOperations.set(evidence.externalOperationRef.id, evidence.externalOperationRef)
         }
@@ -884,8 +925,13 @@ export function deriveProjection(
     for (const delivery of deriveTrustedDeliveries(sourceEvents)) {
       const inputSeqs = turnRootInputSeqs.get(delivery.turn)
       if (!inputSeqs) continue
-      const unitId = turnUnitIds.get(delivery.turn)
-      for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, unitId)) {
+      // The delivered turn's answers bind the unit that owned the turn's input
+      // and any delegated sub-unit created inside it (C04).
+      const owningUnitId = turnUnitIds.get(delivery.turn)
+      const eligibleUnitIds = owningUnitId === undefined
+        ? undefined
+        : new Set<string>([owningUnitId, ...unitDescendantIds(projection, owningUnitId)])
+      for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds)) {
         const item = projection.items.get(itemId)
         if (!item || item.status !== 'pending') continue
         item.status = 'answered'

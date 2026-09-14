@@ -224,6 +224,10 @@ export function itemDiagnosis(p: GuardProjection, item: GuardItem): { certifiabl
 const NATIVE_ADAPTERS = new Set(['dsh.bash.v1', 'dsh.pwsh.v1', 'dsh.shell.v1', 'dsh.read.v1', 'dsh.write.v1', 'dsh.edit.v1', 'dsh.web.v1'])
 
 export function evidenceAvailabilityReason(evidence: GuardEvidence): string | undefined {
+  // C04: a delegated subagent's answer is bounded evidence. It is recorded,
+  // shown, and auditable, and it never closes a parent obligation — a
+  // subagent finishing is not the parent task finishing.
+  if (evidence.delegatedSubtask) return 'delegated_result_bounded'
   if (evidence.parseStatus !== 'supported') return evidence.reasonCode ?? evidence.parseStatus ?? 'adapter_unavailable'
   if (!evidence.adapterId || !evidence.adapterVersion || (SUPPORTED_EVIDENCE_ADAPTERS[evidence.adapterId] ?? (NATIVE_ADAPTERS.has(evidence.adapterId) ? '1.0.0' : undefined)) !== evidence.adapterVersion) return 'adapter_unavailable'
   if (evidence.outcome !== 'success') return 'evidence_outcome_not_success'

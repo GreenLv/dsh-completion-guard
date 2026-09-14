@@ -191,6 +191,13 @@ export interface GuardEvidence {
   adapterId?: string
   adapterVersion?: string
   externalOperationRef?: ExternalOperation
+  /**
+   * 0.6.0 C04: this fact came from a delegated subagent/task round-trip. A
+   * delegated result is BOUNDED evidence for the parent unit — it is recorded
+   * and visible, and it can never close a parent obligation or a parent unit
+   * by itself. Set only by the derivation, never by a caller.
+   */
+  delegatedSubtask?: true
 }
 
 export interface ExpectedTransition {
@@ -270,8 +277,33 @@ export interface WorkUnit {
   headline: string
   /** Sequence at which a newer unit became current, when superseded as current. */
   switchedAwayAtSeq?: number
-  /** Reserved for in-session sub-unit linkage; flat in 0.6.0. */
+  /**
+   * The unit this one descends from. A delegation-marked root message opens a
+   * CHILD unit of the current unit (C04): the child's open obligations are part
+   * of the parent's required closure, so the parent can never be certified
+   * while a delegated sub-unit still has open work. An ordinary task switch
+   * opens a sibling instead, which is why its residual work never blocks the
+   * newer unit's certificate.
+   */
   parentUnitId?: string
+  /**
+   * Delegated round-trips that entered this unit as bounded evidence (C04).
+   * Recorded for audit only: a subagent's completion is never a parent
+   * completion.
+   */
+  delegationRefs?: DelegationRef[]
+}
+
+/** One durable delegated round-trip observed inside a session. */
+export interface DelegationRef {
+  /** The tool call that requested the delegation. */
+  callId: string
+  /** Sequence of the paired result event. */
+  resultSeq: number
+  /** Audited delegation tool that produced the result. */
+  toolName: string
+  /** Whether the delegated round-trip reported success. */
+  status: 'completed' | 'failed' | 'unknown'
 }
 
 export type BoundaryDisposition = 'user_wait' | 'external_wait' | 'deferred' | 'guard_bounded_stop'

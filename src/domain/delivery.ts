@@ -87,21 +87,22 @@ export function deriveTrustedDeliveries(events: readonly DerivedEnvelope[]): Tru
 /**
  * The information-slot items a delivery closes: obligations captured from a
  * root message inside the delivered turn, in the unit that turn's input
- * belonged to, whose semantic slot is information (an inquiry or an
- * explanation request). Execution, constraints, and unknowns are never closed
- * by delivery, and neither are questions from earlier messages.
+ * belonged to (or in one of that unit's delegated sub-units), whose semantic
+ * slot is information (an inquiry or an explanation request). Execution,
+ * constraints, and unknowns are never closed by delivery, and neither are
+ * questions from earlier messages.
  */
 export function informationItemIdsForDelivery(
   items: ReadonlyMap<string, { status: string; unitId?: string; sourceMessageId: string; taskKind?: string; authorityDisposition?: string; kind: string }>,
   delivery: TrustedDelivery,
   turnRootInputSeqs: ReadonlySet<number>,
-  unitId: string | undefined,
+  eligibleUnitIds: ReadonlySet<string> | undefined,
 ): string[] {
   const closed: string[] = []
   for (const [itemId, item] of items) {
     if (item.status !== 'pending') continue
     if (item.kind === 'prohibition') continue
-    if (unitId !== undefined && item.unitId !== unitId) continue
+    if (eligibleUnitIds !== undefined && (item.unitId === undefined || !eligibleUnitIds.has(item.unitId))) continue
     const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
     if (!sourceSeq || !turnRootInputSeqs.has(Number(sourceSeq[1]))) continue
     const informationSlot = item.taskKind === 'inquiry'
