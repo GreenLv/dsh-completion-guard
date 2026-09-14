@@ -156,6 +156,103 @@ The 0.4.2 release retained these exact mirrored fixtures and the recorded upstre
 
 The 0.4.3 core policy changes DSH-specific manifest values, not the shared digest-v3 encoding or byte-mirrored fixtures. Core manifest version 2 and `dsh-core/v1` produce a fresh identity after actual-graph inspection. Legacy cohorts remain historical inputs. Market service adapter `context-guard.service.v2` uses version `2.0.0`; old restart credentials cannot become new-instance credentials. Package apply remains a disk-state operation, and unavailable restart work remains pending.
 
+## 0.6.0 shared contract status (2026-09-14)
+
+Version 0.6.0 implements the C01–C12 contract that the DSH 0.6.0 development
+plan shares with a planned Codex Context Guard 0.14.0. The table below states
+what this repository actually implements and which part of it is proven by
+production-chain tests. It is not a parity claim: the two products still have
+separate runtimes, persistence, lifecycle, and scheduling, and the shared
+artifacts are not mirrored (see below).
+
+| Contract | DSH 0.6.0 implementation | Production-chain evidence |
+| --- | --- | --- |
+| C01 source spans | UTF-8 byte half-open spans of the original root text, bound to the message digest; per-message coverage records | `tests/domain/v060-bounded-choice-spans.test.ts` |
+| C02 one interpretation | Four semantic slots plus a coverage view; the open set has one implementation in `domain/closure.ts` | `tests/domain/v050-diagnosis.test.ts`, `v060-portable-v2.test.ts` |
+| C03 delivery | Trusted delivery over the host's own turn structure, separate from execution certification | `tests/domain/v060-units-delivery.test.ts`, S01/S02/S08 cases |
+| C04 units and closure | Derived units, delegation lineage, required descendants, ancestor constraints, and a v2 unit-closure certificate | `tests/domain/v060-unit-closure.test.ts`, `v030-certificate.test.ts` |
+| C05 conditions and Stop | Per-action conditions and immediate-work judgement; unchanged waiting and bounded-correction budgets | `tests/domain/v051-wait-lifecycle.test.ts`, `v051-goal-lifecycle-composed.test.ts` |
+| C06 responsibility tiers | `standard` / `strict` / `release`, orthogonal to activation; strict demands the proof the user asked for and adds no ordinary approval | `tests/domain/v060-strict-policy.test.ts` |
+| C07 targets and identity | Trusted question round-trips, bounded file choice, path/type scope, separate sandbox approvals | `tests/domain/v060-selection-clarification.test.ts`, `v051-target-identity.test.ts` |
+| C08 clarification | Atomic verbatim supersession with both revisions kept; evidence invalidation only on a real change | `tests/domain/v060-selection-clarification.test.ts` |
+| C09 proof | v2 manifest, capability matrix, subject/source/operation binding, explicit unavailability | `tests/domain/v060-proof-v2.test.ts` |
+| C10 explicit release | Contracts, reservations, settlements, pre-effect refusals, and an honest coverage surface | `tests/domain/v060-release-migration.test.ts`, `tests/tools/evidence.test.ts` |
+| C11 fresh projection | Every public read/control entry flushes, re-snapshots, and re-derives; a failed flush reports unavailability | `tests/tools/prepare-fresh-projection.test.ts`, `tests/flush.test.ts` |
+| C12 migration and diagnosis | Seven-class reason mapping, rule-set report, preserved identities, rollback precondition | `tests/domain/v060-release-migration.test.ts`, `v042-recovery-migration.test.ts` |
+
+### P0 deviation record (2026-09-14)
+
+The P0 specification's identity table assigned new protocol numbers to every
+surface it lists. Two of them are deliberately NOT changed here, and recording
+that is more honest than bumping a version without a semantic change:
+
+| P0 item | P0 value | 0.6.0 actual | Reason |
+| --- | --- | --- | --- |
+| Action manifest version | `2` | stays `1` | The new action description fields live in the `actionPreparation()` descriptor, which is plugin output generated per action, not an added `ActionSpec` wire field. The shipped `manifests/action-manifest.v1.json` is byte-aligned with `ACTION_MANIFEST.actions` by a test, and no field of it changed. Bumping the number alone would create a new identity for identical bytes and invalidate a mirror for nothing. |
+| Boundary protocol | `2` | stays `1` | The planned "unit attribution" fields were not needed: a boundary already names the exact obligations it covers through `qualificationIds`, and C04's closure never consults boundary ownership. Adding a field would change every boundary candidate digest and break old-boundary replay without buying a semantic guarantee, so the record shape is unchanged. |
+
+Everything else in the P0 identity table is implemented as specified: the
+`v5.0.0` session boundary, Stop protocol `3.0.0`, certificate version `2`,
+proof protocol `0.6.0` in the new `ccg.proofManifest.v2` domain, the
+`ccg.certificationDigest.v4` field table, unchanged adapter identities, and the
+three new release-record prefixes. Every v3 digest domain and the 29 mirrored
+golden vectors are byte-identical.
+
+### Unfinished shared artifacts
+
+Two shared artifacts are deliberately incomplete, and neither is described here
+as done:
+
+- **The v2 fixture is a DSH-authored candidate, not a mirror.** The upstream
+  repository `GreenLv/codex-context-guard` was at
+  `ce667adefd716f829fb1fb070b3089e789ed74c3` with no frozen v2 fixture when this
+  candidate was prepared (verified by a live `ls-remote` read of `refs/heads/main`,
+  and by the local checkout's contents). `tests/fixtures/conformance/context_guard_semantics_v2.candidate.json`
+  therefore carries `fixtureVersion: 2.0.0-candidate.1` and `status:
+  "dsh-candidate"`, and a test asserts that identity. `UPSTREAM_PIN.json` still
+  pins only the unchanged v1 mirrors and is not refreshed by this release.
+- **Cross-language parity is not established.** The Python and TypeScript
+  projections have not been compared on the v2 input family, because the
+  reference implementation for that family does not exist upstream yet. The
+  digest-v3 vectors remain the only byte-level cross-language agreement
+  evidence, and they are unchanged.
+
+The consequence is stated plainly: this repository does not claim "C01–C12
+core alignment" with Codex Context Guard. It claims that its own C01–C12
+implementation is present and covered by production-chain tests, and that the
+shared spec/fixture freeze, the mirror, and the cross-language comparison are
+open items owned by the upstream.
+
+## S01–S12 coverage in this repository
+
+The v2 candidate carries 25 cases across every family. Each case runs through
+the production derive/delivery/closure/Goal chains, and the runner computes its
+actual values from the events and the projection only — it never reads an
+expectation to decide a result, and it has no branch on a case id or family.
+Coverage by family:
+
+| Family | Cases |
+| --- | --- |
+| S01 delivered questions | delivered question closes; execution with a trailing question stays open |
+| S02 same-prefix variants | execution tail stays open; negation keeps the constraint |
+| S03 update/modify objects | document update becomes a bounded modify; a non-file object stays honestly unresolved |
+| S04 conditions | conditional wait stays pending; a future-tense push stays evidence-gated |
+| S05 first step | the persisted requirement is stable across messages |
+| S06 trusted selection | the paired directory answer and the separate approval record |
+| S07 clarification | verbatim refinement supersedes; an independent task switches unit |
+| S08 delivery and delegation | aborted turn never delivers; delegation opens a required descendant; the Goal gate demands a certificate |
+| S09 proof | requested visual proof cannot be faked; a readback obligation stays open |
+| S10 policy | release and strict never block ordinary work; the tier does not imply a contract |
+| S11 release | no contract, unprotectable adoption, in-flight operation, and consumed ticket |
+| S12 migration | a legacy session and a v5 session each report their own rule set |
+
+Negative coverage lives beside it: the independence suite corrupts every
+expectation field and asserts that the actual result is unchanged while the
+comparison reports the mismatch, and separately detects wrong interpretation,
+closure, delivery count, turn binding, delivery surface, open items, reason
+codes, goal gate, correction, selection/approval/supersession counters, reason
+classes, release state, and migration facts.
+
 ## Validation boundaries
 
 - `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm

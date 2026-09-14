@@ -1,22 +1,28 @@
 {
   "ledgerVersion": "2",
   "description": "Current, evidence-bounded delta ledger for behavior shared between codex-context-guard and dsh-completion-guard. It separates aligned behavior, partial host-native equivalents, missing shared behavior, and Codex-only lifecycle features.",
-  "updatedAt": "2026-09-10",
+  "updatedAt": "2026-09-14",
   "source": {
     "product": "codex-context-guard",
-    "currentRelease": "v0.11.0",
-    "currentReleaseHead": "558612b02826fab1e2ccb1e36f1a4e2c36caf2fd",
-    "alignedReference": "v0.10.0",
-    "alignedReferenceHead": "e4fccf690bcbc2be79d0b8d42a1a269f87072120"
+    "currentRelease": "v0.13.9",
+    "currentReleaseHead": "1575c41d318b4c348387532110526f4a63801f07",
+    "alignedReference": "v0.10.0 (historical evidence alignment)",
+    "alignedReferenceHead": "e4fccf690bcbc2be79d0b8d42a1a269f87072120",
+    "sharedPlanTarget": "codex-context-guard v0.14.0 (not implemented upstream)",
+    "upstreamMainAtAudit": {
+      "commit": "ce667adefd716f829fb1fb070b3089e789ed74c3",
+      "verifiedBy": "live `git ls-remote origin refs/heads/main` on 2026-09-14 plus the local checkout contents",
+      "canonicalV2Fixture": "absent: the upstream tree contains only context_guard_semantics_v1.{json,schema.json} and digest_v3"
+    }
   },
   "target": {
     "product": "dsh-completion-guard",
-    "currentRelease": "v0.5.1",
-    "currentReleaseHead": "uncommitted candidate on 09df9ecfdc94d7880ddabb37774e626486aca972",
+    "currentRelease": "v0.6.0",
+    "currentReleaseHead": "not recorded here: the 0.6.0 source candidate is not yet frozen into an artifact, so no commit SHA is asserted in this ledger",
     "implementationBaseline": "ffc6fe9e1246a815f0bb630943c59d14b6505716",
-    "host": "DSH 0.1.5-rc.1 / Cordis 4.0.2 (registry-derived cohort; native audit pending)"
+    "host": "DSH 0.1.5-rc.2 || 0.1.5-rc.1 / Cordis 4.0.2 (registry-derived cohort; native audit pending for 0.6.0)"
   },
-  "alignmentClaim": "DSH 0.4.0 aligns the named evidence and proof obligations with Codex 0.10.0. It does not claim full product parity and does not include all Codex 0.11.0 changes.",
+  "alignmentClaim": "DSH 0.6.0 implements the C01-C12 shared contract of the paired 0.6.0/0.14.0 plans and covers it with production-chain tests. It does NOT claim core alignment with Codex Context Guard: the v2 conformance fixture exists only as a DSH-authored candidate because the upstream has not landed a frozen v2 specification, so the canonical mirror and the cross-language parity comparison remain open. The v1 fixtures, the digest-v3 vectors, and the frozen digest domains are unchanged.",
   "dispositions": [
     "aligned",
     "partial-equivalent",
@@ -139,6 +145,81 @@
         "tests/domain/portable-semantics.test.ts",
         "tests/domain/v051-dsh015-adaptation.test.ts"
       ]
+    },
+    {
+      "capability": "trusted-answer-delivery",
+      "introducedBy": "shared C03 (0.6.0 / 0.14.0 plan)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.0",
+      "plainLanguage": "A question or explanation is closed only by the host's own record of a normally completed turn whose final assistant message was not interrupted; delivery never implies correctness or execution.",
+      "implementation": "domain/delivery.ts derives the fact from assistant/message + turn/end; deriveProjection applies it to information-slot items of that turn's owning unit and its delegated sub-units.",
+      "tests": [
+        "tests/domain/v060-units-delivery.test.ts",
+        "tests/domain/v060-portable-v2.test.ts"
+      ]
+    },
+    {
+      "capability": "work-unit-required-descendant-closure",
+      "introducedBy": "shared C04 (0.6.0 / 0.14.0 plan)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.0",
+      "plainLanguage": "Tasks are grouped into derived units; a delegated child unit's open work is required by the parent's closure, a sibling switch never blocks the newer task, and an ancestor's prohibition or unsatisfied condition still governs a descendant's matching action.",
+      "implementation": "domain/work-unit.ts derives the lineage; domain/closure.ts owns the closure, the ancestor constraints, and the certifier's pre-evidence refusal. Units are derived, never persisted.",
+      "tests": [
+        "tests/domain/v060-unit-closure.test.ts",
+        "tests/domain/v030-certificate.test.ts"
+      ]
+    },
+    {
+      "capability": "proof-capability-matrix-v2",
+      "introducedBy": "shared C09 (0.6.0 / 0.14.0 plan)",
+      "disposition": "partial-equivalent",
+      "targetRelease": "dsh-completion-guard v0.6.0",
+      "plainLanguage": "Five new proof kinds bind a current subject, a declared source, and a real operation. Tool success is only an execution fact, a visual readback needs an actual read, and a cohort with no producer reports unavailability instead of passing.",
+      "implementation": "domain/proof.ts adds the v2 manifest in the new ccg.proofManifest.v2 domain and a capability matrix over DSH host surfaces. There is no Codex-side v2 counterpart yet, so the shared vocabulary is only frozen on the DSH side.",
+      "tests": [
+        "tests/domain/v060-proof-v2.test.ts",
+        "tests/domain/v060-strict-policy.test.ts"
+      ],
+      "dshOnlyReason": "The upstream Python implementation has not been extended with the v2 kinds; the shared fixture that would pin them does not exist upstream."
+    },
+    {
+      "capability": "explicit-release-single-use-ticket",
+      "introducedBy": "shared C10 (0.6.0 / 0.14.0 plan)",
+      "disposition": "partial-equivalent",
+      "targetRelease": "dsh-completion-guard v0.6.0",
+      "plainLanguage": "A release contract is adopted only by an explicit root command; each operation spends one reservation written before the effect and settled afterwards from a trusted readback; wrong candidate, wrong ref, expiry, consumption, replay, in-flight retries, unresolved targets and opaque runners are refused before any effect.",
+      "implementation": "domain/release.ts holds the state machine; the runtime persists contracts, reservations and settlements through the plugin-notice channel; the Guard-owned action tool consults the gate before its first probe. Only npm_publish has a Guard execution surface, so the coverage report marks the other five categories unprotectable.",
+      "tests": [
+        "tests/domain/v060-release-migration.test.ts",
+        "tests/tools/evidence.test.ts"
+      ],
+      "dshOnlyReason": "Codex reuses its own release adapter and PreToolUse hook; the DSH record shapes and the protectable surface set are host-specific and are deliberately not claimed to be equivalent."
+    },
+    {
+      "capability": "unified-reason-classes-and-migration-report",
+      "introducedBy": "shared C12 (0.6.0 / 0.14.0 plan)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.0",
+      "plainLanguage": "Every diagnosis carries one of seven frozen classes beside its exact reason code, and the session reports which rule set is in force, which obligations keep their pre-0.6.0 rules, and what a rollback requires.",
+      "implementation": "domain/reason-class.ts holds the mapping table; domain/diagnostics.ts attaches the class; domain/migration.ts states the rule set, preserved domains, and the snapshot precondition.",
+      "tests": [
+        "tests/domain/v060-release-migration.test.ts",
+        "tests/domain/v050-diagnosis.test.ts"
+      ]
+    },
+    {
+      "capability": "shared-v2-fixture-freeze-and-cross-language-parity",
+      "introducedBy": "shared P0 plan section 4/5 (0.6.0 / 0.14.0 plan)",
+      "disposition": "not-implemented",
+      "targetRelease": "open",
+      "plainLanguage": "The platform-neutral v2 conformance fixture is not frozen upstream, so this repository ships a DSH-authored candidate instead of a byte mirror and has not compared the Python and TypeScript projections on the v2 input family.",
+      "implementation": "tests/fixtures/conformance/context_guard_semantics_v2.candidate.json declares fixtureVersion 2.0.0-candidate.1 and status dsh-candidate; UPSTREAM_PIN.json still pins only the unchanged v1 mirrors.",
+      "tests": [
+        "tests/domain/v060-portable-v2.test.ts",
+        "tests/domain/v060-v2-runner-independence.test.ts"
+      ],
+      "dshOnlyReason": "Only the upstream repository can land the canonical v2 specification, schema and reference projection. Until it does, mirroring and parity cannot be established honestly."
     }
   ]
 }

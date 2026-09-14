@@ -219,6 +219,38 @@ by the launcher and is declared optional on the context, so the probe would simp
 not load outside an app command line. Comparing the registration line across both
 host versions showed it unchanged, which is the check that settles it.
 
+## 9. 0.6.0 host-surface audit (2026-09-14)
+
+The 0.6.0 semantics introduce four new consumers of host-observable facts. Each
+row records the exact surface, whether the audited cohort provides it, what the
+plugin does when it is absent, and the test entry that closes it. As with the
+rest of this document, the input is the **published package metadata and type
+surfaces plus the recorded cohort audit**; native runtime acceptance is a
+separate evidence scope and is not claimed here.
+
+| Surface | Audited availability | Consumer | Honest outcome when absent | Test entry |
+| --- | --- | --- | --- | --- |
+| `turn/start`, `turn/end { turn, reason }` | present in the DSH session event vocabulary | `src/domain/delivery.ts`, `src/domain/derive.ts` | No `turn/end` with `reason.kind: "completed"` means no trusted delivery, so the obligation stays open. Guard never infers delivery from prose. | `tests/domain/v060-units-delivery.test.ts` |
+| `assistant/message { turn, step, interrupted? }` | present; `interrupted` is the host's own cancellation marker | `src/domain/delivery.ts` | A turn with only `assistant/attempt` records, or with an `interrupted` final prefix, binds nothing. | same |
+| Delegation tool round-trips | the delegation tool names are a host tool-bundle surface; no frozen public list | `src/domain/derive.ts` (`DEFAULT_DELEGATION_TOOL_NAMES`), `src/domain/work-unit.ts` | The names are an audited allowlist with an explicit default, exactly like the question-tool allowlist. A name outside it is treated as an ordinary tool result, so no bounded delegation fact is minted; native acceptance pins the audited cohort names. | `tests/domain/v060-unit-closure.test.ts` |
+| `approval/asked` + `approval/decided { id, outcome }` | present via the `dsh-user-approval` plugin events | `src/domain/derive.ts` | An unmatched `approval/decided` is not a fact; a decision without its ask is dropped. Approvals are provenance only and never grant a target. | `tests/domain/v060-selection-clarification.test.ts` |
+| Question-tool round-trip (`tool/call` + `tool/result`) | present; the tool name is a host tool-bundle surface | `src/domain/host-selection.ts` | The allowlist has an explicit default; a result whose answer is not one of the offered options, or whose call id has no matching call, forms no selection. | same |
+| npm registry `dist.integrity` readback | available where a registry producer is reachable; the adapter is `context-guard.registry.v1` | `src/tools/evidence.ts` (`publishReadback`) | The release settlement stays `unconfirmed` with `readback: "unavailable"`; the operation is never re-sent and never reported as verified. | `tests/tools/evidence.test.ts` → release-gate cases |
+| A Guard execution surface for `git tag` / GitHub Release / composite runners | **not available**: DSH exposes no interception point Guard can own for these | `src/domain/release.ts` (`RELEASE_OPERATION_SURFACES`) | The operation is not protectable: a contract naming it is refused at adoption with `release_operation_unprotectable` or `release_runner_opaque`, before any effect. Guard never suggests falling back to a plain shell command. | `tests/domain/v060-release-migration.test.ts` |
+| A visual-readback producer (`visual` / `ui` surfaces) | **not available** in the audited cohort: the evidence parser produces `artifact`, `scope`, and `ui` surfaces, never a visual readback capability | `src/domain/proof.ts` (`PROOF_CAPABILITY_MATRIX.output_visual_readback`), `src/domain/checkpoint.ts` (strict) | A requested visual verification stays open and reports `proof_producer_capability_unavailable`; it is never credited to a tool call that merely succeeded. | `tests/domain/v060-proof-v2.test.ts`, `tests/domain/v060-strict-policy.test.ts` |
+
+Two consequences are recorded as limitations rather than features:
+
+- **The release tier's executable coverage is one operation wide.** Only
+  `npm_publish`, which runs through the Guard-owned action tool, is protectable
+  in this host. The other five operation categories are reported as
+  unprotectable. A trusted in-process caller that bypasses Guard entirely is a
+  host trust boundary; the plugin does not claim to prevent it.
+- **No new session event type was required.** Delivery, units, trusted
+  selections, and approvals are derived facts; only the release contract,
+  reservation, and settlement need durable bytes, and they use the plugin-notice
+  `user/message` channel the persistence layer already reloads.
+
 ## APIs explicitly NOT used
 
 Searched with `grep -rn` over `src/`, `tests/`, `scripts/`, and `bin/`:

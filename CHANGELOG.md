@@ -2,6 +2,125 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.0 - 2026-09-14
+
+This release makes ordinary DSH work enter, execute, deliver, and resume under
+one set of rules. It also closes the substantive gaps against the shared
+Context Guard semantics. Everything before the new protocol boundary keeps its
+old meaning; nothing is re-read or re-labelled.
+
+### Added
+
+- **Answer delivery is tracked separately from execution certification.** A
+  question or explanation is closed only by the host's own evidence: an
+  `assistant/message` in the turn's final step, with no interrupted marker,
+  followed by `turn/end` with `reason.kind: "completed"`. A status summary, a
+  draft, an intermediate reply, another turn's answer, a subagent's answer, or
+  an aborted turn never closes anything. `answered` means "the answer was
+  handed over" — never that it was right, complete, or executed.
+- **Work units with a required-descendant closure.** Tasks are grouped into
+  derived units. A delegation-marked instruction opens a child unit whose open
+  work is required by the parent's closure, so delegating a sub-task can never
+  drop the parent's own work; an ordinary task switch opens a sibling that does
+  not block the newer task. A subagent's result is bounded evidence: it is
+  recorded and visible, and it never closes a parent obligation.
+- **Ancestor constraints stay in force.** A prohibition or an unsatisfied
+  condition the root declared in an earlier unit continues to govern the same
+  action and target in a later one, and the certifier refuses those bindings
+  before examining evidence.
+- **Proof v2 with a real capability matrix.** Five new proof kinds — input
+  asset check, output visual readback, object/URL readback, execution fact, and
+  external fact — each bind a current subject, a declared source, and a real
+  operation. A successful tool call is only ever an execution fact: a browser
+  call that merely returned cannot prove an image was looked at, an input asset
+  check must be a prior-state fact, and a delegated subagent result is never a
+  proof source. When the installed host exposes no producer, the result is
+  `unavailable`, never a silent pass. The old three-kind manifest and its digest
+  domain are unchanged and remain readable.
+- **Explicit release tickets.** A release contract is adopted only by an
+  explicit root command. Once adopted, each operation spends one reservation,
+  written before the effect and settled afterwards from a trusted readback.
+  Wrong candidate SHA, ref, artifact digest or version, an expired or
+  unevaluable ticket, a consumed ticket, a replay, an operation that is already
+  in flight, an unresolved target, and an opaque runner are all refused before
+  any effect. A "release" keyword, a loaded Skill, or an installation never
+  adopts a contract.
+- **A strict proof tier.** On top of the default `standard` tier, a visual or
+  complete-scope verification the user explicitly asked for must be discharged
+  by a real readback fact. Strict adds no approval step to ordinary actions, and
+  installing never enters the `release` tier.
+- **One diagnosis language.** Every incomplete item now reports one of seven
+  classes — parameter missing, source insufficient, condition unmet, producer
+  capability unavailable, historical gap, integrity failure, policy boundary —
+  next to its exact reason code. `/context-guard migration` reports which rule
+  set is in force, which obligations keep their pre-0.6.0 rules, and what a
+  rollback requires.
+- **A host-neutral v2 conformance fixture** covering S01–S12 through the real
+  derive/delivery/closure/Goal chains. Every expectation is compared against a
+  value computed from the events and the production projection alone; the runner
+  never reads an expectation to decide an actual result.
+
+### Changed
+
+- A document "update" or "modify" is decided by the object, not by the verb:
+  a recognized document noun becomes a bounded `modify` the assistant may
+  resolve to an exact file inside the captured scope and type, while an
+  unrecognized object keeps its honest unresolved reading instead of being
+  forced into an action.
+- A trusted answer from the host's own question tool now narrows where a
+  bounded file choice may land, and is recorded separately from sandbox
+  approvals. Pasted or restated answer text forms nothing.
+- A later root instruction that contains a pending generic obligation verbatim
+  supersedes it atomically, keeping both revisions. Explanations, prohibitions
+  and waits never delete an obligation by similar wording.
+- `/context-guard status` reports the active policy tier, the reason-class
+  histogram, the migration facts, and the release state.
+
+### Fixed
+
+- The first step of a session now sees the input persisted in that same step,
+  and a failed durability flush reports an explicit unavailability instead of
+  serving a stale projection.
+- The v2 conformance runner computes `interpreted`, `closure`, `delivery`,
+  `turn_bound` and the correction decision from production state instead of from
+  the fixture's own expectations.
+- A malformed release record is reported as a bounded diagnostic and never
+  marks the whole session corrupt, so damaged release state cannot block
+  unrelated ordinary work.
+
+### Migration and rollback
+
+- The 0.6.0 semantics start at the new `Context Guard protocol boundary:
+  v5.0.0` notice, written at the first real root-input step of a new session.
+  An older binary ignores that notice, so a rollback fails closed instead of
+  misreading new records.
+- A session that never wrote the boundary keeps the previous whole-session
+  contract, version-1 certificates, and its old digest domains.
+- A session that wrote it keeps pre-boundary obligations under their birth
+  rules while new work uses units, delivery and version-2 certificates.
+- Rolling back to 0.5.x requires restoring a 0.5.x state snapshot. Replaying a
+  0.6.0 log with 0.5.x fails closed with `certificate_replay_mismatch`; never
+  migrate new-schema data down by hand.
+
+### Not yet established
+
+- **Cross-language parity and the canonical mirror are not done.** The
+  upstream `codex-context-guard` repository has not landed a frozen v2 fixture,
+  so the v2 file here is explicitly a DSH-authored *candidate*
+  (`2.0.0-candidate.1`, `status: "dsh-candidate"`). `UPSTREAM_PIN.json` still
+  pins the unchanged v1 mirrors and is not refreshed by this release.
+- The `release` tier protects only surfaces Guard itself routes. Publishing an
+  npm artifact through the Guard-owned action tool is protected; `git tag`, the
+  GitHub Release operations, and any composite runner have no interception
+  point in this host and are refused before effect rather than pretended to be
+  covered. A trusted in-process caller that bypasses Guard entirely is a host
+  trust boundary, documented rather than denied.
+- After a publish, the settlement stays `unconfirmed` unless the registry
+  readback producer answers; an unconfirmed operation is never re-sent.
+- Deterministic tests, CI, native macOS/Windows acceptance, publication and
+  installation are separate evidence scopes. This release records source and
+  deterministic evidence; native acceptance and publication follow separately.
+
 ## 0.5.3 - 2026-09-14
 
 ### Fixed

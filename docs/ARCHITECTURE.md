@@ -84,6 +84,73 @@ Since 0.5.0 a durable root message is one atomic confirmation transaction. The f
 
 No digest-v3 wire format or upstream fixture changes are needed. A replacement changes the item/status set and contract revision, invalidating the earlier certificate; evidence is never copied into a passed state. A fresh checkpoint must revalidate the exact action, target, executor, host lock, and transition. Evidence predating the authoritative root clause referenced by a replacement is rejected while retaining its historical ID.
 
+## 0.6.0 semantic layer
+
+The v5 protocol boundary (`Context Guard protocol boundary: v5.0.0`), written
+with the first real root-input step of a new session, activates the semantics
+below. A session that never wrote it keeps the whole-session contract, version-1
+certificates, and the frozen digest domains; a session that wrote it keeps
+pre-boundary obligations under their birth rules while new work uses the v5
+rules. `/context-guard migration` reports which of the two is in force.
+
+| Module | Owns |
+| --- | --- |
+| `domain/spans.ts` | UTF-8 byte offsets and half-open spans of the original root text |
+| `domain/host-selection.ts` | Trusted question round-trips; a selection is only ever a paired call + result |
+| `domain/work-unit.ts` | Derived units, delegation lineage, ancestor/descendant relations, explicit switch and delegation vocabularies |
+| `domain/closure.ts` | The single open-closure implementation: visible pending, certifiable open, unit closure with required descendants, and the ancestor constraints in force |
+| `domain/delivery.ts` | Trusted answer delivery: the four-part composition criterion over durable turn structure |
+| `domain/proof.ts` | v1 and v2 proof manifests, the v2 capability matrix, and the binding/refusal rules per kind |
+| `domain/release.ts` | Explicit release contracts, one-shot reservations, readback settlements, coverage surface, and the pre-effect gate |
+| `domain/reason-class.ts` | The frozen seven-class mapping for every reason code |
+| `domain/migration.ts` | Rule set in force, preserved identities, and the rollback precondition |
+| `domain/diagnostics.ts` | The single per-item judge, now carrying its reason class |
+
+### Delivery
+
+A delivery fact exists only when the host's own log says so: an
+`assistant/message` for turn T at that turn's highest step, with no
+`interrupted` marker, followed by `turn/end { turn: T, reason.kind:
+"completed" }`. `assistant/attempt` records, aborted or errored turns, other
+turns' replies, and delegated sessions never bind a delivery. Delivery closes
+only information-slot obligations captured inside that turn (including those of
+a delegated sub-unit created in it), and it proves delivery only — never
+accuracy, sufficiency, or execution.
+
+### Units and closure
+
+Units are derived from the durable message stream, never written. A
+delegation-marked root message opens a CHILD unit: the parent stays the current
+unit, so delegating a sub-task cannot drop the parent's own work, and the
+child's open obligations join the parent's closure as required descendants. An
+ordinary task switch opens a sibling, whose residual work deliberately does not
+block the newer task. A delegated tool round-trip is recorded per unit and its
+evidence is marked bounded, so a subagent's result is visible and auditable but
+can never close a parent obligation. Certifying a unit also refuses any binding
+that an ancestor unit's prohibition or unsatisfied condition still governs.
+
+### Proof v2
+
+The v1 manifest and `ccg.proofManifest.v1` are frozen and read by their own
+rules. The v2 manifest (`0.6.0`, `ccg.proofManifest.v2`) binds each obligation
+to a current subject, a declared source, and a real operation, and covers eight
+kinds. Tool success is only ever an `execution_fact`; a visual readback needs a
+fact that carries a visual-readback capability and actually read the subject; an
+input asset check must be a prior-state fact; an external fact needs a completed
+external-operation reference; and a cohort with no producer reports
+`proof_producer_capability_unavailable`. Strict policy uses this same matrix to
+demand the proof the user explicitly asked for.
+
+### Explicit release
+
+Contracts, reservations and settlements are persisted through the plugin-notice
+channel the host already writes, and each is idempotent by its own identity
+(contract id, call id). Reservations are written before the effect; a settlement
+records a trusted readback when one exists and otherwise stays `unconfirmed`,
+which preserves the in-flight protection and refuses a re-send. Adoption comes
+only from the root `command/run`, and only operations with a Guard execution
+surface are protectable.
+
 ## Bounded queries and recovery
 
 Checkpoint certification runs over the complete contract before display filtering. Default pages contain at most eight current items/constraints and ten evidence rows. Each list has its own cursor, bound to the session, epoch, contract revision, query, bindings, and evidence snapshot. `history` includes unsupported evidence with an unavailable disposition; default evidence and binding templates share action/target matching. Unknown cursor state is an explicit query error.
