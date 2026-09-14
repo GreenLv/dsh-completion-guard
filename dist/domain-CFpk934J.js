@@ -3155,6 +3155,7 @@ function createProjection() {
 		externalOperations: /* @__PURE__ */ new Map(),
 		units: /* @__PURE__ */ new Map(),
 		coverage: [],
+		policy: "standard",
 		trustedSelections: [],
 		approvals: [],
 		sessionRefDigest: "11".repeat(32),
@@ -9115,6 +9116,7 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 */
 function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLock = DEFAULT_HOST_LOCK) {
 	const projection = createProjection();
+	projection.policy = config.policy ?? "standard";
 	if (scope.sessionHeader) projection.sessionRefDigest = sessionRefDigest(scope.sessionHeader);
 	projection.hostLockDigest = hostLock.digest;
 	projection.hostStatus = hostLock.status;

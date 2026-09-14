@@ -1,0 +1,240 @@
+{
+  "$schema": "./context_guard_semantics_v2.schema.json",
+  "fixture": "context_guard_semantics_v2",
+  "fixtureVersion": "2.0.0-candidate.1",
+  "status": "dsh-candidate",
+  "description": "Platform-neutral 0.6.0 semantic conformance candidate. Canonical ownership follows the upstream repository: when the upstream lands the frozen v2 fixture, this file is replaced by a byte mirror and the pin is refreshed. Cases run through the production derive/delivery/closure/goal chains without fixture-ID branches.",
+  "families": {
+    "S01": "delivered questions close on the host-confirmed final answer only",
+    "S02": "same-prefix variants keep execution and unknown spans open",
+    "S03": "update/modify objects split language behavior from targets",
+    "S04": "unmet conditions stay pending without automation or steering",
+    "S05": "first-step and persisted-input visibility with the same closure",
+    "S06": "trusted host selections and separate approval records",
+    "S07": "clarification supersedes atomically; unrelated tasks never collide",
+    "S08": "turn structure gates delivery; the Goal gate demands a certificate",
+    "S09": "lands with proof v2 (P3)",
+    "S10": "lands with policy/strict enforcement and release adoption (P3)",
+    "S11": "lands with the release contract (P3)",
+    "S12": "lands with migration and rollback evidence (P3)"
+  },
+  "cases": [
+    {
+      "id": "S01-delivered-question-closes",
+      "family": "S01",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "检查一下插件是否有更新吗？" },
+        { "type": "assistant_final", "turn": 1, "step": 1, "text": "已检查远端，本地插件 2.0.0 已是最新版本。" },
+        { "type": "turn_end", "turn": 1, "reason": "completed" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [],
+        "closure": "complete",
+        "delivery": { "answered": 1, "turn_bound": true }
+      }
+    },
+    {
+      "id": "S01-execution-trailing-question-not-closed",
+      "family": "S01",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "更新文档" },
+        { "type": "assistant_final", "turn": 1, "step": 1, "text": "说明文档包含安装与升级两个章节。" },
+        { "type": "turn_end", "turn": 1, "reason": "completed" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": { "answered": 0 }
+      }
+    },
+    {
+      "id": "S02-execution-tail-stays-open",
+      "family": "S02",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "检查一下是否有更新吗？顺便创建 report.txt" },
+        { "type": "assistant_final", "turn": 1, "step": 1, "text": "远端没有更新；report.txt 稍后创建。" },
+        { "type": "turn_end", "turn": 1, "reason": "completed" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": { "answered": 1, "turn_bound": true }
+      }
+    },
+    {
+      "id": "S02-negation-keeps-constraint",
+      "family": "S02",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "不要更新文档" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "prohibition", "status": "pending" }],
+        "closure": "complete",
+        "delivery": null
+      }
+    },
+    {
+      "id": "S03-document-update-bounded-modify",
+      "family": "S03",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "更新文档" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null
+      }
+    },
+    {
+      "id": "S03-non-file-object-stays-generic",
+      "family": "S03",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "更新皮肤中心" }
+      ],
+      "expect": {
+        "interpreted": "unknown",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": ["generic_run_non_certifiable"]
+      }
+    },
+    {
+      "id": "S04-conditional-wait-stays-pending",
+      "family": "S04",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "收到我的确认后再推送代码" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "correction": { "allowed": false }
+      }
+    },
+    {
+      "id": "S04-future-push-stays-evidence-gated",
+      "family": "S04",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "明天推送" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "reason_codes": ["missing_evidence"]
+      }
+    },
+    {
+      "id": "S05-persisted-requirement-stable",
+      "family": "S05",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "创建 report.txt" },
+        { "type": "root_message", "text": "现在进展怎么样？" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null
+      }
+    },
+    {
+      "id": "S06-trusted-directory-selection",
+      "family": "S06",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "更新文档" },
+        { "type": "question_pair", "callId": "q1", "questionId": "q-1", "question": "文档放在哪个目录？", "options": ["/srv/docs", "/tmp"], "answer": "/srv/docs" },
+        { "type": "approval", "id": "ap-1", "toolName": "bash", "outcome": "allowed-once" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "trusted_selections": 1,
+        "approvals": 1
+      }
+    },
+    {
+      "id": "S07-verbatim-clarification-supersedes",
+      "family": "S07",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "更新插件" },
+        { "type": "root_message", "text": "把更新插件明确为 install package demo@2.0.0 profile web" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "superseded": 1
+      }
+    },
+    {
+      "id": "S07-independent-task-switches-unit",
+      "family": "S07",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "创建 report.txt" },
+        { "type": "root_message", "text": "另外，更新皮肤中心" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }, { "kind": "requirement", "status": "pending" }],
+        "closure": "switched",
+        "delivery": null
+      }
+    },
+    {
+      "id": "S08-aborted-turn-never-delivers",
+      "family": "S08",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "检查一下插件是否有更新吗？" },
+        { "type": "assistant_final", "turn": 1, "step": 1, "text": "已检查远端，本地插件 2.0.0 已是最新版本。" },
+        { "type": "turn_end", "turn": 1, "reason": "aborted" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": { "answered": 0 }
+      }
+    },
+    {
+      "id": "S08-goal-complete-denied-without-certificate",
+      "family": "S08",
+      "boundary": "v5",
+      "events": [
+        { "type": "root_message", "text": "创建 report.txt" },
+        { "type": "goal_change", "action": "complete", "revision": 1, "producer": "model_tool" }
+      ],
+      "expect": {
+        "interpreted": "interpreted",
+        "open_items": [{ "kind": "requirement", "status": "pending" }],
+        "closure": "open",
+        "delivery": null,
+        "goal_denied": true
+      }
+    }
+  ]
+}

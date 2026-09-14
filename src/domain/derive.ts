@@ -398,6 +398,7 @@ export function deriveProjection(
   hostLock: HostLockEvaluation = DEFAULT_HOST_LOCK,
 ): DeriveResult {
   const projection = createProjection()
+  projection.policy = config.policy ?? 'standard'
   if (scope.sessionHeader) projection.sessionRefDigest = sessionRefDigest(scope.sessionHeader)
   projection.hostLockDigest = hostLock.digest
   projection.hostStatus = hostLock.status

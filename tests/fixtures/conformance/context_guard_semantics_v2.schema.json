@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "context_guard_semantics_v2 candidate fixture",
+  "type": "object",
+  "required": ["fixture", "fixtureVersion", "cases"],
+  "properties": {
+    "fixture": { "const": "context_guard_semantics_v2" },
+    "fixtureVersion": { "type": "string", "pattern": "^2\\.0\\.0-candidate" },
+    "status": { "type": "string", "enum": ["dsh-candidate", "canonical"] },
+    "description": { "type": "string" },
+    "families": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^S\\d{2}" }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "family", "boundary", "events", "expect"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^S\\d{2}-" },
+          "family": { "type": "string", "pattern": "^S\\d{2}$" },
+          "boundary": { "enum": ["v5", "v4", "none"] },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "root_message", "assistant_final", "turn_end", "tool_result",
+                    "goal_change", "question_pair", "approval"
+                  ]
+                },
+                "text": { "type": "string" },
+                "turn": { "type": "integer" },
+                "step": { "type": "integer" },
+                "interrupted": { "const": true },
+                "reason": { "type": "string" },
+                "callId": { "type": "string" },
+                "name": { "type": "string" },
+                "error": { "type": "boolean" },
+                "action": { "type": "string" },
+                "revision": { "type": "integer" },
+                "producer": { "type": "string" },
+                "questionId": { "type": "string" },
+                "question": { "type": "string" },
+                "options": { "type": "array", "items": { "type": "string" } },
+                "answer": { "type": "string" },
+                "id": { "type": "string" },
+                "toolName": { "type": "string" },
+                "outcome": { "type": "string" }
+              }
+            }
+          },
+          "expect": {
+            "type": "object",
+            "required": ["interpreted", "open_items", "closure", "delivery"],
+            "additionalProperties": false,
+            "properties": {
+              "interpreted": { "enum": ["interpreted", "unknown"] },
+              "open_items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "status"],
+                  "properties": {
+                    "kind": { "enum": ["requirement", "acceptance", "prohibition"] },
+                    "status": { "enum": ["pending", "answered", "passed", "superseded"] }
+                  }
+                }
+              },
+              "closure": { "enum": ["complete", "open", "switched"] },
+              "delivery": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["answered"],
+                    "properties": {
+                      "answered": { "type": "integer", "minimum": 0 },
+                      "turn_bound": { "type": "boolean" }
+                    }
+                  }
+                ]
+              },
+              "correction": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["allowed"],
+                    "properties": { "allowed": { "type": "boolean" } }
+                  }
+                ]
+              },
+              "trusted_selections": { "type": "integer", "minimum": 0 },
+              "approvals": { "type": "integer", "minimum": 0 },
+              "superseded": { "type": "integer", "minimum": 0 },
+              "goal_denied": { "type": "boolean" },
+              "reason_codes": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

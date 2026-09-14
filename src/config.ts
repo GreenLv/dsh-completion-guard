@@ -4,6 +4,7 @@ import type { HostPlatform, HostProfileKind } from './domain/host-lock.js'
 
 export const Config: z<{
   activation: string
+  policy?: string
   hostLockPackages?: PackageRow[]
   hostLockPlatform?: HostPlatform
   hostLockProfile?: HostProfileKind
@@ -12,6 +13,7 @@ export const Config: z<{
   hostLockProfileRoot?: string
 }> = z.object({
   activation: z.string().default('opt-in'),
+  policy: z.string().default('standard'),
   hostLockPlatform: z.string() as z<HostPlatform>,
   hostLockProfile: z.string() as z<HostProfileKind>,
   hostLockPolicy: z.string(),
@@ -24,8 +26,17 @@ export const Config: z<{
   })),
 })
 
+/**
+ * 0.6.0 responsibility tiers (C06): `policy` is what the guard demands at
+ * completion, `activation` is how capture starts. They are orthogonal —
+ * opt-in/always never implies a tier, and installing never enters `release`.
+ */
+export type GuardPolicy = 'standard' | 'strict' | 'release'
+
 export interface ResolvedConfig {
   activation: 'opt-in' | 'always'
+  /** Absent reads as `standard`. */
+  policy?: GuardPolicy
   hostLockPackages?: PackageRow[]
   hostLockPlatform?: HostPlatform
   hostLockProfile?: HostProfileKind
@@ -36,6 +47,7 @@ export interface ResolvedConfig {
 
 export function resolveConfig(config: {
   activation?: unknown
+  policy?: unknown
   hostLockPackages?: unknown
   hostLockPlatform?: unknown
   hostLockProfile?: unknown
@@ -46,6 +58,10 @@ export function resolveConfig(config: {
   const activation = config.activation ?? 'opt-in'
   if (activation !== 'opt-in' && activation !== 'always') {
     throw new TypeError(`activation must be "opt-in" or "always", received ${JSON.stringify(activation)}`)
+  }
+  const policy = config.policy ?? 'standard'
+  if (policy !== 'standard' && policy !== 'strict' && policy !== 'release') {
+    throw new TypeError(`policy must be "standard", "strict", or "release", received ${JSON.stringify(policy)}`)
   }
   let hostLockPackages: PackageRow[] | undefined
   if (config.hostLockPackages !== undefined) {
@@ -77,6 +93,7 @@ export function resolveConfig(config: {
     ...(typeof config.hostLockRuntimeRoot === 'string' ? { hostLockRuntimeRoot: config.hostLockRuntimeRoot } : {}),
     ...(typeof config.hostLockProfileRoot === 'string' ? { hostLockProfileRoot: config.hostLockProfileRoot } : {}),
     activation,
+    policy,
     ...(hostLockPackages ? { hostLockPackages } : {}),
     ...(config.hostLockPlatform ? { hostLockPlatform: config.hostLockPlatform } : {}),
     ...(config.hostLockProfile ? { hostLockProfile: config.hostLockProfile } : {}),

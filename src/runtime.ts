@@ -521,7 +521,7 @@ export function createRuntime(
     }
     const derived = deriveProjection(
       events as Parameters<typeof deriveProjection>[0],
-      { activation: config.activation },
+      { activation: config.activation, policy: config.policy },
       { cwd: typeof header?.cwd === 'string' ? header.cwd : '', sessionHeader },
       durabilityConfirmed,
       hostLock,

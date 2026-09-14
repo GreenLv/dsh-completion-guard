@@ -669,6 +669,8 @@ interface GuardProjection {
   * scope, and whether delivery/unit semantics are active.
   */
   boundaryProtocol?: 5;
+  /** 0.6.0 responsibility tier (C06), from the effective configuration. */
+  policy: "standard" | "strict" | "release";
   /** 0.6.0 C01 coverage summaries, one per captured root message (last 16). */
   coverage: MessageCoverage[];
   /**
@@ -766,6 +768,8 @@ interface DeriveScope {
 }
 interface DeriveConfig {
   activation: "opt-in" | "always";
+  /** 0.6.0 responsibility tier (C06); standard by default. */
+  policy?: "standard" | "strict" | "release";
 }
 interface DeriveResult {
   projection: GuardProjection;
