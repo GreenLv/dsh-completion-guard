@@ -189,7 +189,9 @@ export function apply(ctx, config) {
       })
       await check('package_update_rebind_certificate', async () => {
         await root('更新验收插件')
-        await root(`把更新验收插件明确为 apply package guard-acceptance-fixture@2.0.0 profile ${config.profile}`)
+        // Deliberately non-verbatim: v5 verbatim clarification supersedes
+        // automatically; this case exercises the explicit rebind path.
+        await root(`apply package guard-acceptance-fixture@2.0.0 profile ${config.profile}`)
         const before = await call('context_guard_checkpoint', { bindings: [] })
         const old = before.open_items.find(row => row.reason_code === 'generic_run_non_certifiable')
         const clarified = before.open_items.find(row => row.semantic_action === 'apply')
@@ -198,11 +200,8 @@ export function apply(ctx, config) {
         const proposed = await call('context_guard_rebind', { operation: 'propose', item_id: old.id,
           clauses: [old.text], clarification_item_ids: [clarified.id] })
         assert.equal(proposed.status, 'proposed')
-        // v0.5 confirmation transaction: control line first, trailing
-        // conversational question is not a second execution obligation.
-        // An imperative follow-up would correctly keep the whole contract
-        // uncertified; that behavior is covered by the domain regression.
-        await root(`确认重绑定 ${proposed.proposal.id}\n\n这个提案是什么意思？`)
+        // Confirm only this proposal; an unanswered question is separate v5 work.
+        await root(`确认重绑定 ${proposed.proposal.id}`)
         proposalId = proposed.proposal.id
         assert.equal((await call('context_guard_rebind', { operation: 'query', proposal_id: proposalId })).status, 'confirmed')
         const resolution = await call('context_guard_evidence', { semantic_action: 'apply', evidence_role: 'resolution',
