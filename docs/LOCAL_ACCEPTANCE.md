@@ -2,6 +2,38 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+## 0.6.0 source candidate (2026-09-14)
+
+This section records a **source and deterministic** claim only. It is not a
+release, not an artifact acceptance, and not a native-platform result.
+
+Established at this point:
+
+- The full local deterministic matrix on the frozen candidate: `typecheck`,
+  `lint`, `vitest`, `test:release-pack`, `test:stats`, `build`, `pack:check`,
+  the repository documentation audit and its unit test, `git diff --check`, and
+  a byte-clean `git diff --exit-code -- dist` after the build.
+- The v2 conformance candidate (25 cases, S01–S12) and its independence,
+  proof-v2, release/migration, strict-policy, unit-closure, and release-gate
+  suites, all through production entry points.
+- `pack:check` reports the 0.6.0 payload inventory (28 files) with `dist/`,
+  both changelogs, `docs/`, and `manifests/` included.
+
+Not established here, and deliberately not claimed:
+
+- No tgz has been packed with `scripts/release-pack.mjs`, so there is no frozen
+  artifact digest and no repeated-pack byte identity for 0.6.0.
+- No native macOS or Windows Web/Headless run has been executed against a
+  0.6.0 artifact. The 0.5.3 native annexes are bound to the 0.5.3 bytes and do
+  not transfer.
+- No tag, npm publication, GitHub Release, or consumer installation exists for
+  0.6.0.
+- Cross-language parity for the v2 input family is not established, because the
+  upstream has not landed a canonical v2 fixture.
+
+The next stages are P5 (one canonical pack, two platforms, same tgz) and P6
+(publication and consumption), each requiring its own authorization.
+
 ## 0.5.3 published release (2026-09-14)
 
 [Version 0.5.3](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.3) is published on GitHub and [npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.3). The annotated tag and npm `gitHead` identify commit `a7baccdfbc538aa071941ebb36aa41fa9bf6e709`. The frozen 308178-byte, 28-file tgz has SHA-256 `972269489ba65092bf13daf2993c162b6f509d5f49040412376e6ae21d957798`.
