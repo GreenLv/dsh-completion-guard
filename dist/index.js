@@ -1,4 +1,4 @@
-import { $ as parseShellCommand, $n as isStatefulAction, $t as isWholeTaskCompletionClaim, A as createGitPrestateEnvelope, An as extractMethod, At as RC1_HOST_PACKAGES, B as CAPTURE_V042_NOTICE, Bn as namedActions, Bt as renderRecoveryPacket, C as SESSION_EVENT_ENVELOPE_INVALID, Cn as evidenceAvailabilityReason, Ct as SUPPORTED_HOST_VERSIONS, D as GIT_COMMAND_TEMPLATES, Dn as captureItem, Dt as satisfiesSupportedHostRange, E as GIT_COMMAND_MANIFEST_IDS, En as captureClause, Et as parseHostVersion, F as verifiedLinearCommitReadback, Fn as interpretMessage, Ft as DEFAULT_RECOVERY_CHAR_BUDGET, G as evidenceFromPersistedToolResult, Gn as ACTION_MANIFEST, Gt as CONTROL_RECORD_PREFIX, H as PROTOCOL_V4_NOTICE, Hn as statefulActionsOfScope, Ht as evidenceCoverage, I as FIRST_STEP_GUIDANCE, In as isExecutableItem, It as MIN_RECOVERY_CHAR_BUDGET, J as isDeterministicCheck, Jn as SEMANTIC_ACTIONS, Jt as classifyCompletionClaim, K as extractTextContent, Kn as ACTION_MANIFEST_VERSION, Kt as NO_PROGRESS_RECORD_PREFIX, L as claimedBatchHasRealRootInput, Ln as isOpenObligation, Lt as closingHint, M as gitCommandMatchesTarget, Mn as isInformationalMessage, Mt as authorityCaptureCounts, N as parseGitCommandManifest, Nn as segmentClauses, Nt as segmentAuthorityBlocks, O as commitIndexSnapshotDigest, On as classifyClause, Ot as RC015_RC2_HOST_PACKAGES, P as revalidateGitPrestate, Pn as interpretClause, Pt as certifyCheckpoint, Q as parsePwshCommand, Qn as actionCompatible, Qt as isRootPauseRequest, R as lifecyclePhase, Rn as kindOfScope, Rt as openItems, S as SESSION_API_UNSUPPORTED, Sn as deriveItemDiagnosis, St as SUPPORTED_HOST_RANGE, T as snapshotSessionEvents, Tn as relevantEvidence, Tt as evaluateMinimumHostVersion, U as deriveProjection, Un as canonicalRegistryBase, Ut as evidenceMatchesItem, V as PROTOCOL_V3_NOTICE, Vn as semanticActionOfScope, Vt as bindingSatisfies, W as supersedeItem, Wn as npmEscapedPackageName, Wt as isVerifyingCapability, X as canonicalArgvFromCommand, Xn as STOP_PROTOCOL_VERSION, Xt as decideTurnStopping, Y as withDurability, Yn as STATEFUL_ACTIONS, Yt as decideTurnBoundary, Z as isRunExecutable, Zn as SUPPORTED_EVIDENCE_ADAPTERS, Zt as decisionBoundaryKey, _ as packageRowsFromPnpmLock, _n as rebindResponse, _t as evaluateToolSurfaceCapability, a as createProofManifest, an as hasCurrentCertificate, ar as validateActionTarget, at as BASE_HOST_PACKAGES, b as resolveInstalledHostLock, bn as isFrozenV042RebindResponse, bt as LATEST_SUPPORTED_HOST_VERSION, c as sessionQuery, cn as isCurrentAcceptedBoundary, cr as classifyTaskIntent, ct as GOAL_HOST_PACKAGES, d as combineHostPolicy, dn as createProjection, dr as digestStrings, dt as LEGACY_HOST_COHORTS, en as latestAssistantText, er as requestedTargetAuthorizesMutation, et as ACTIVE_HOST_COHORT_ID, f as hostLockContextFromComposedDump, fn as confirmRebind, fr as normalizeClause, ft as bindExecutableIdentity, g as packageRowsFromActiveGraph, gn as rebindAttemptKey, gt as evaluateHostLock, h as inspectTargetHostGraph, hn as proposeRebindV042, hr as sha256, ht as evaluateHostCapability, i as canonicalProjection, in as goalCompletionDenial, ir as validateActionManifest, it as ALPHA2_HOST_PACKAGES, j as executeRevalidatedGitEffect, jn as extractOperation, jt as ALPHA3_HOST_PACKAGES, k as commitTreeSnapshotDigest, kn as extractArtifactPaths, kt as RC015_HOST_PACKAGES, l as validateProofManifest, ln as qualifyBoundary, lr as classifyUserInteraction, lt as HOST_CAPABILITY_PACKAGE_GROUPS, m as injectActiveProfileHostLock, mn as proposeRebindOutcome, mr as sanitizeUrl, mt as evaluateExternalWaitCapability, n as PROOF_PROTOCOL_VERSION, nn as observeAssistantOutcome, nr as semanticActionFromCommand, nt as ACTIVE_HOST_LAUNCHER_VERSION, o as proofDigest, on as availableBoundaryQualifications, or as COMMAND_SURFACE_MANIFEST, ot as DEFAULT_HOST_LOCK, p as hostLockRowsFromComposedDump, pn as proposeRebind, pr as sanitizeClauseText, pt as bindLiveGoalCapability, q as extractToolSubject, qn as CERTIFICATE_VERSION, qt as NO_PROGRESS_TURNS_BEFORE_STOP, r as bindProofToProjection, rn as progressFingerprint, rr as semanticActionFromText, rt as ALPHA2_DSHMARKET_139_HOST_PACKAGES, s as proofEvidenceConstraints, sn as effectuateBoundary, sr as validateManifest, st as EXPECTED_HOST_PACKAGES, t as PROOF_KINDS, tn as latestRootInstruction, tr as requestedTargetMatchesResolved, tt as ACTIVE_HOST_COHORT_IDS, u as HostProfileError, un as currentContractDigest, ur as canonicalizePath, ut as HOST_COHORTS, v as readActiveHostGraph, vn as replayRebindResult, vt as hostVersionFromPackages, w as SessionApiError, wn as itemDiagnosis, wt as compareHostVersions, x as verifyComposedHostLockDump, xn as parseConfirmationMessage, xt as MIN_SUPPORTED_HOST_VERSION, y as resolveActiveProfileHostLock, yn as CONFIRM_LINE_PATTERN, yt as selectHostCohort, z as previewFirstStepInjection, zn as maskCodeSpans, zt as recoveryDigest } from "./domain-RuX9l07o.js";
+import { $ as parseShellCommand, $n as isStatefulAction, $t as isWholeTaskCompletionClaim, A as createGitPrestateEnvelope, An as extractMethod, At as RC1_HOST_PACKAGES, B as CAPTURE_V042_NOTICE, Bn as namedActions, Bt as renderRecoveryPacket, C as SESSION_EVENT_ENVELOPE_INVALID, Cn as evidenceAvailabilityReason, Ct as SUPPORTED_HOST_VERSIONS, D as GIT_COMMAND_TEMPLATES, Dn as captureItem, Dt as satisfiesSupportedHostRange, E as GIT_COMMAND_MANIFEST_IDS, En as captureClause, Et as parseHostVersion, F as verifiedLinearCommitReadback, Fn as interpretMessage, Ft as DEFAULT_RECOVERY_CHAR_BUDGET, G as evidenceFromPersistedToolResult, Gn as ACTION_MANIFEST, Gt as CONTROL_RECORD_PREFIX, H as PROTOCOL_V4_NOTICE, Hn as statefulActionsOfScope, Ht as evidenceCoverage, I as FIRST_STEP_GUIDANCE, In as isExecutableItem, It as MIN_RECOVERY_CHAR_BUDGET, J as isDeterministicCheck, Jn as SEMANTIC_ACTIONS, Jt as classifyCompletionClaim, K as extractTextContent, Kn as ACTION_MANIFEST_VERSION, Kt as NO_PROGRESS_RECORD_PREFIX, L as claimedBatchHasRealRootInput, Ln as isOpenObligation, Lt as closingHint, M as gitCommandMatchesTarget, Mn as isInformationalMessage, Mt as authorityCaptureCounts, N as parseGitCommandManifest, Nn as segmentClauses, Nt as segmentAuthorityBlocks, O as commitIndexSnapshotDigest, On as classifyClause, Ot as RC015_RC2_HOST_PACKAGES, P as revalidateGitPrestate, Pn as interpretClause, Pt as certifyCheckpoint, Q as parsePwshCommand, Qn as actionCompatible, Qt as isRootPauseRequest, R as lifecyclePhase, Rn as kindOfScope, Rt as openItems, S as SESSION_API_UNSUPPORTED, Sn as deriveItemDiagnosis, St as SUPPORTED_HOST_RANGE, T as snapshotSessionEvents, Tn as relevantEvidence, Tt as evaluateMinimumHostVersion, U as deriveProjection, Un as canonicalRegistryBase, Ut as evidenceMatchesItem, V as PROTOCOL_V3_NOTICE, Vn as semanticActionOfScope, Vt as bindingSatisfies, W as supersedeItem, Wn as npmEscapedPackageName, Wt as isVerifyingCapability, X as canonicalArgvFromCommand, Xn as STOP_PROTOCOL_VERSION, Xt as decideTurnStopping, Y as withDurability, Yn as STATEFUL_ACTIONS, Yt as decideTurnBoundary, Z as isRunExecutable, Zn as SUPPORTED_EVIDENCE_ADAPTERS, Zt as decisionBoundaryKey, _ as packageRowsFromPnpmLock, _n as rebindResponse, _t as evaluateToolSurfaceCapability, a as createProofManifest, an as hasCurrentCertificate, ar as validateActionTarget, at as BASE_HOST_PACKAGES, b as resolveInstalledHostLock, bn as isFrozenV042RebindResponse, bt as LATEST_SUPPORTED_HOST_VERSION, c as sessionQuery, cn as isCurrentAcceptedBoundary, cr as classifyTaskIntent, ct as GOAL_HOST_PACKAGES, d as combineHostPolicy, dn as createProjection, dr as digestStrings, dt as LEGACY_HOST_COHORTS, en as latestAssistantText, er as requestedTargetAuthorizesMutation, et as ACTIVE_HOST_COHORT_ID, f as hostLockContextFromComposedDump, fn as confirmRebind, fr as normalizeClause, ft as bindExecutableIdentity, g as packageRowsFromActiveGraph, gn as rebindAttemptKey, gt as evaluateHostLock, h as inspectTargetHostGraph, hn as proposeRebindV042, hr as sha256, ht as evaluateHostCapability, i as canonicalProjection, in as goalCompletionDenial, ir as validateActionManifest, it as ALPHA2_HOST_PACKAGES, j as executeRevalidatedGitEffect, jn as extractOperation, jt as ALPHA3_HOST_PACKAGES, k as commitTreeSnapshotDigest, kn as extractArtifactPaths, kt as RC015_HOST_PACKAGES, l as validateProofManifest, ln as qualifyBoundary, lr as classifyUserInteraction, lt as HOST_CAPABILITY_PACKAGE_GROUPS, m as injectActiveProfileHostLock, mn as proposeRebindOutcome, mr as sanitizeUrl, mt as evaluateExternalWaitCapability, n as PROOF_PROTOCOL_VERSION, nn as observeAssistantOutcome, nr as semanticActionFromCommand, nt as ACTIVE_HOST_LAUNCHER_VERSION, o as proofDigest, on as availableBoundaryQualifications, or as COMMAND_SURFACE_MANIFEST, ot as DEFAULT_HOST_LOCK, p as hostLockRowsFromComposedDump, pn as proposeRebind, pr as sanitizeClauseText, pt as bindLiveGoalCapability, q as extractToolSubject, qn as CERTIFICATE_VERSION, qt as NO_PROGRESS_TURNS_BEFORE_STOP, r as bindProofToProjection, rn as progressFingerprint, rr as semanticActionFromText, rt as ALPHA2_DSHMARKET_139_HOST_PACKAGES, s as proofEvidenceConstraints, sn as effectuateBoundary, sr as validateManifest, st as EXPECTED_HOST_PACKAGES, t as PROOF_KINDS, tn as latestRootInstruction, tr as requestedTargetMatchesResolved, tt as ACTIVE_HOST_COHORT_IDS, u as HostProfileError, un as currentContractDigest, ur as canonicalizePath, ut as HOST_COHORTS, v as readActiveHostGraph, vn as replayRebindResult, vt as hostVersionFromPackages, w as SessionApiError, wn as itemDiagnosis, wt as compareHostVersions, x as verifyComposedHostLockDump, xn as parseConfirmationMessage, xt as MIN_SUPPORTED_HOST_VERSION, y as resolveActiveProfileHostLock, yn as CONFIRM_LINE_PATTERN, yt as selectHostCohort, z as previewFirstStepInjection, zn as maskCodeSpans, zt as recoveryDigest } from "./domain-DB7G3oaX.js";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -849,52 +849,210 @@ function createBoundaryTool(getProjection, prepare, onRejected) {
 }
 
 //#endregion
-//#region src/tools/git-preparation.ts
-/** Input recipes are guidance only; live resolution remains authoritative. */
-function gitPreparation(action) {
-	if (![
-		"commit",
-		"push",
-		"fetch",
-		"pull"
-	].includes(action)) return void 0;
-	return {
-		selector_fields: action === "commit" ? ["repository", "branch"] : [
-			"repository",
-			"remote",
-			"refspec"
-		],
-		command_manifest_fields: ["planned_tool", "planned_arguments"],
-		planned_tools: ["bash", "pwsh"],
-		planned_argument_fields: ["command", "workdir"],
-		steps: [
-			"Before execution: context_guard_evidence with evidence_role=resolution, selector and command_manifest. Keep the successful tool call ID and target_digest.",
-			"Execute once with context_guard_action, semantic_action, resolution_call_id, target_digest, contract_item_id and contract_item_revision.",
-			"Collect effect and state separately with context_guard_evidence, using the same resolution_call_id and the successful action call ID as effect_call_id.",
-			"Checkpoint the matching resolution/effect/state evidence IDs. Call IDs identify tool events; evidence IDs identify checkpoint facts.",
-			"If the action already ran without resolution, report the historical evidence gap and read back state. Do not repeat a mutation to create missing prestate evidence."
-		]
-	};
+//#region src/tools/action-preparation.ts
+const GUARD_TOOL_STEPS = [
+	"Before execution: context_guard_evidence with evidence_role=resolution, selector and command_manifest. Keep the successful tool call ID and target_digest.",
+	"Execute once with context_guard_action, semantic_action, resolution_call_id, target_digest, contract_item_id and contract_item_revision.",
+	"Collect effect and state separately with context_guard_evidence, using the same resolution_call_id and the successful action call ID as effect_call_id.",
+	"Checkpoint the matching resolution/effect/state evidence IDs. Call IDs identify tool events; evidence IDs identify checkpoint facts.",
+	"If the action already ran without resolution, report the historical evidence gap and read back state. Do not repeat a mutation to create missing prestate evidence."
+];
+const NATIVE_WRITE_STEPS = [
+	"Before execution: context_guard_evidence with evidence_role=resolution, selector and command_manifest. Keep the successful tool call ID and target_digest.",
+	"Execute the planned effect once with the native write/edit tool named by command_manifest.planned_tool and exactly the planned_arguments.",
+	"Collect effect and state separately with context_guard_evidence, using the same resolution_call_id and the successful write/edit call ID as effect_call_id.",
+	"Checkpoint the matching resolution/effect/state evidence IDs. Call IDs identify tool events; evidence IDs identify checkpoint facts.",
+	"If the action already ran without resolution, report the historical evidence gap and read back state. Do not repeat a mutation to create missing prestate evidence."
+];
+/**
+* The unified descriptor for one stateful action. Git actions keep their
+* historical selector/manifest/step shapes; the other six gain the same
+* complete recipe instead of Git-only coverage.
+*/
+function actionPreparation(action) {
+	switch (action) {
+		case "install":
+		case "apply": return {
+			action,
+			selector_fields: ["package_id", "profile"],
+			optional_selector_fields: ["version"],
+			command_manifest_fields: ["manifest_id", "tgz_path"],
+			command_manifest_ids: [action === "install" ? "dsh.plugin_add_tgz.install.v1" : "dsh.plugin_add_tgz.apply.v1"],
+			planned_tools: ["context_guard_action"],
+			planned_argument_fields: [],
+			producer_fields: ["version", "integrity_digest"],
+			readback_fields: [
+				"package_id",
+				"version",
+				"integrity_digest",
+				"profile"
+			],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+		case "create": return {
+			action,
+			selector_fields: ["artifact_id"],
+			optional_selector_fields: [],
+			command_manifest_fields: ["planned_tool", "planned_arguments"],
+			command_manifest_ids: ["artifact.create.v1"],
+			planned_tools: ["write", "write_file"],
+			planned_argument_fields: ["file_path", "content"],
+			producer_fields: [
+				"scope",
+				"pre_digest",
+				"change_set_digest"
+			],
+			readback_fields: ["post_digest"],
+			execution_surface: "native_write_edit",
+			steps: NATIVE_WRITE_STEPS
+		};
+		case "modify": return {
+			action,
+			selector_fields: ["artifact_id"],
+			optional_selector_fields: [],
+			command_manifest_fields: ["planned_tool", "planned_arguments"],
+			command_manifest_ids: ["artifact.modify.v1"],
+			planned_tools: ["edit", "edit_file"],
+			planned_argument_fields: [
+				"file_path",
+				"old_string",
+				"new_string"
+			],
+			producer_fields: [
+				"scope",
+				"pre_digest",
+				"change_set_digest"
+			],
+			readback_fields: ["post_digest"],
+			execution_surface: "native_write_edit",
+			steps: NATIVE_WRITE_STEPS
+		};
+		case "restart": return {
+			action,
+			selector_fields: ["service_id"],
+			optional_selector_fields: [],
+			command_manifest_fields: ["manifest_id"],
+			command_manifest_ids: ["dshmarket.restart.v1"],
+			planned_tools: ["context_guard_action"],
+			planned_argument_fields: [],
+			producer_fields: ["pre_generation"],
+			readback_fields: ["new_generation", "health"],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+		case "publish": return {
+			action,
+			selector_fields: [
+				"artifact_id",
+				"version",
+				"registry"
+			],
+			optional_selector_fields: [],
+			command_manifest_fields: ["manifest_id", "tgz_path"],
+			command_manifest_ids: ["npm.publish_tgz.v1"],
+			planned_tools: ["context_guard_action"],
+			planned_argument_fields: [],
+			producer_fields: ["integrity_digest"],
+			readback_fields: [
+				"artifact_id",
+				"version",
+				"registry",
+				"integrity_digest"
+			],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+		case "commit": return {
+			action,
+			selector_fields: ["repository", "branch"],
+			optional_selector_fields: [],
+			command_manifest_fields: ["planned_tool", "planned_arguments"],
+			command_manifest_ids: ["git.commit_index_tree.v2"],
+			planned_tools: ["bash", "pwsh"],
+			planned_argument_fields: ["command", "workdir"],
+			producer_fields: ["pre_head_oid", "change_set_digest"],
+			readback_fields: ["post_head_oid", "pre_head_oid"],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+		case "push": return {
+			action,
+			selector_fields: [
+				"repository",
+				"remote",
+				"refspec"
+			],
+			optional_selector_fields: [],
+			command_manifest_fields: ["planned_tool", "planned_arguments"],
+			command_manifest_ids: ["git.push_explicit_refs.v2"],
+			planned_tools: ["bash", "pwsh"],
+			planned_argument_fields: ["command", "workdir"],
+			producer_fields: ["local_oid"],
+			readback_fields: ["remote_oid"],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+		case "pull": return {
+			action,
+			selector_fields: [
+				"repository",
+				"remote",
+				"refspec"
+			],
+			optional_selector_fields: [],
+			command_manifest_fields: ["planned_tool", "planned_arguments"],
+			command_manifest_ids: ["git.pull_ff_only_explicit.v2"],
+			planned_tools: ["bash", "pwsh"],
+			planned_argument_fields: ["command", "workdir"],
+			producer_fields: [
+				"upstream_oid",
+				"pre_head_oid",
+				"pull_mode"
+			],
+			readback_fields: ["post_head_oid", "tracking_ref_oid"],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+		case "fetch": return {
+			action,
+			selector_fields: [
+				"repository",
+				"remote",
+				"refspec"
+			],
+			optional_selector_fields: [],
+			command_manifest_fields: ["planned_tool", "planned_arguments"],
+			command_manifest_ids: ["git.fetch_tracking_explicit.v2"],
+			planned_tools: ["bash", "pwsh"],
+			planned_argument_fields: ["command", "workdir"],
+			producer_fields: ["upstream_oid", "pre_head_oid"],
+			readback_fields: ["tracking_ref_oid", "post_head_oid"],
+			execution_surface: "context_guard_action",
+			steps: GUARD_TOOL_STEPS
+		};
+	}
 }
 
 //#endregion
 //#region src/tools/prepare.ts
+/** Discovery pages stay bounded like checkpoint pages. */
+const DISCOVERY_ITEM_LIMIT = 8;
 /**
-* Thin READ-ONLY preparation surface (v0.5): before any stateful action it
+* Thin READ-ONLY preparation surface (v0.5/0.6): before any stateful action it
 * reports the supported command shape, the required resolution/effect/state
 * evidence order, existing reusable references, and the exact missing fields.
 * It never executes, installs, commits, pushes, restarts, or probes authority
 * through side effects, and it never upgrades a default into user authority.
+* Without an `item_id` it returns the bounded current-item discovery list, so
+* the first step of a session can find the right ID instead of guessing one.
 */
 function createPrepareTool(options) {
 	return defineTool({
 		name: "context_guard_prepare",
-		description: "Read-only pre-action preparation: report the supported command shape, required resolution/effect/state evidence order, existing references, and exact missing target fields for one contract item. Performs no action and grants no authority.",
+		description: "Read-only pre-action preparation: report the supported command shape, required resolution/effect/state evidence order, existing references, and exact missing target fields for one contract item. Omit item_id to list current open items with their IDs. Performs no action and grants no authority.",
 		parameters: {
-			item_id: {
-				type: "string",
-				required: true
-			},
+			item_id: { type: "string" },
 			item_revision: { type: "number" },
 			semantic_action: { type: "string" },
 			requested_target: {
@@ -915,11 +1073,46 @@ function createPrepareTool(options) {
 		},
 		async execute(rawArgs) {
 			const args = rawArgs;
+			if (options.refreshProjection) {
+				let durable = false;
+				try {
+					durable = await options.refreshProjection() === true;
+				} catch {
+					durable = false;
+				}
+				if (!durable) return {
+					status: "unknown",
+					reason_code: "projection_durability_unavailable"
+				};
+			}
 			const p = options.getProjection();
 			if (!p || !p.enabled || p.integrity !== "valid") return {
 				status: "unknown",
 				reason_code: "guard_unavailable"
 			};
+			if (args.item_id === void 0) {
+				const open = [...p.items.values()].filter((item$1) => item$1.status === "pending").sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id));
+				return {
+					status: "prepared",
+					mode: "discovery",
+					durability: p.durabilityWatermark,
+					contract_revision: p.contractRevision,
+					total_open: open.length,
+					items: open.slice(0, DISCOVERY_ITEM_LIMIT).map((item$1) => {
+						const diagnosis$1 = deriveItemDiagnosis(p, item$1);
+						return {
+							id: item$1.id,
+							revision: item$1.revision,
+							kind: item$1.kind,
+							...item$1.taskKind !== void 0 ? { task_kind: item$1.taskKind } : {},
+							semantic_action: item$1.semanticAction ?? "generic_run",
+							reason_code: diagnosis$1.reason_code,
+							text: item$1.normalizedText
+						};
+					}),
+					note: "Re-run with one item_id to prepare that item. Preparation performs no action."
+				};
+			}
 			const item = p.items.get(args.item_id ?? "");
 			if (!item) return {
 				status: "rejected",
@@ -949,8 +1142,8 @@ function createPrepareTool(options) {
 				"effect (the exact planned change)",
 				"state (independent post-state readback)"
 			] : ["state (matching durable evidence for the requested verification)"];
-			const recipe = plannedAction ? gitPreparation(plannedAction) : void 0;
-			const missingTargetFields = manifestEntry?.stateful && plannedAction ? (recipe?.selector_fields ?? manifestEntry.resolvedTargetKeys).filter((key) => !(item.requestedTarget?.[key] !== void 0 || args.requested_target?.[key] !== void 0)) : [];
+			const recipe = plannedAction && isStatefulAction(plannedAction) ? actionPreparation(plannedAction) : void 0;
+			const missingTargetFields = recipe ? recipe.selector_fields.filter((key) => !(item.requestedTarget?.[key] !== void 0 || args.requested_target?.[key] !== void 0)) : [];
 			const capability = plannedAction && options.hostCapability ? options.hostCapability(plannedAction) : void 0;
 			const commandShape = options.commandTemplate && plannedAction ? options.commandTemplate(plannedAction) : void 0;
 			return {
@@ -969,7 +1162,18 @@ function createPrepareTool(options) {
 					status: capability.status,
 					...capability.reasonCode !== void 0 ? { reason_code: capability.reasonCode } : {}
 				} } : {},
-				...recipe ? { evidence_input_contract: recipe } : {},
+				...recipe ? { evidence_input_contract: {
+					selector_fields: recipe.selector_fields,
+					optional_selector_fields: recipe.optional_selector_fields,
+					command_manifest_fields: recipe.command_manifest_fields,
+					command_manifest_ids: recipe.command_manifest_ids,
+					planned_tools: recipe.planned_tools,
+					planned_argument_fields: recipe.planned_argument_fields,
+					producer_fields: recipe.producer_fields,
+					readback_fields: recipe.readback_fields,
+					execution_surface: recipe.execution_surface,
+					steps: recipe.steps
+				} } : {},
 				note: "Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields."
 			};
 		}
@@ -2452,17 +2656,26 @@ function createEvidenceTool(options = {}) {
 			if (!agent) return unavailable(action, role, "producer_agent_unavailable");
 			try {
 				if (role === "resolution") {
-					const recipe = gitPreparation(action);
-					if (recipe) {
+					const recipe = actionPreparation(action);
+					{
 						const manifest = record(args.command_manifest);
 						const plannedArgs = record(manifest?.planned_arguments);
 						const selector = record(args.selector);
+						const needsManifestId = [
+							"install",
+							"apply",
+							"publish",
+							"restart"
+						].includes(action);
+						const needsPlannedEffect = !needsManifestId;
 						const missing = [
 							...recipe.selector_fields.filter((key) => !requireString(selector ?? {}, key)).map((key) => `selector.${key}`),
-							...!requireString(manifest ?? {}, "planned_tool") ? ["command_manifest.planned_tool"] : [],
-							...recipe.planned_argument_fields.filter((key) => !requireString(plannedArgs ?? {}, key)).map((key) => `command_manifest.planned_arguments.${key}`)
+							...needsManifestId && !requireString(manifest ?? {}, "manifest_id") ? ["command_manifest.manifest_id"] : [],
+							...needsManifestId && recipe.command_manifest_fields.includes("tgz_path") && !requireString(manifest ?? {}, "tgz_path") ? ["command_manifest.tgz_path"] : [],
+							...needsPlannedEffect && !requireString(manifest ?? {}, "planned_tool") ? ["command_manifest.planned_tool"] : [],
+							...needsPlannedEffect ? recipe.planned_argument_fields.filter((key) => !requireString(plannedArgs ?? {}, key)).map((key) => `command_manifest.planned_arguments.${key}`) : []
 						];
-						if (missing.length) return unavailable(action, role, "resolution_input_missing", missing, "Supply the listed resolution inputs before execution. Use context_guard_prepare for the exact Git input contract. A manifest_id alone does not describe a planned tool call.");
+						if (missing.length) return unavailable(action, role, "resolution_input_missing", missing, "Supply the listed resolution inputs before execution. Use context_guard_prepare for the exact input contract of this action. A manifest_id alone does not describe a planned tool call.");
 					}
 					const executable$1 = executableFor(action);
 					const executableBinding = executable$1 ? await (roots.readExecutableIdentity ?? executableIdentity)(executable$1, exec.signal) : void 0;
@@ -3860,6 +4073,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	const session = agent.session;
 	let pendingRecovery = false;
 	let durabilityConfirmed = false;
+	let durabilityWatermark = "unknown";
 	let observedEpoch = -1;
 	let observedCompactionSeq = -1;
 	let observedContractRevision = -1;
@@ -3904,6 +4118,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		projection.continuationAttempts = continuationAttempts;
 		projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts;
 		projection.lastRecoveryDigest = priorRecoveryDigest;
+		projection.durabilityWatermark = durabilityWatermark;
 		protocolV4Present = derived.protocolV4Present;
 		realRootInputSeen = derived.realRootInputSeen;
 		lifecycle = lifecyclePhase({
@@ -3931,6 +4146,8 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	};
 	const setDurability = (confirmed) => {
 		durabilityConfirmed = confirmed;
+		durabilityWatermark = confirmed ? "confirmed" : "failed";
+		projection.durabilityWatermark = durabilityWatermark;
 	};
 	const markRecoveryNeeded = () => {
 		pendingRecovery = true;
@@ -4094,7 +4311,13 @@ function apply(ctx, rawConfig = {}) {
 					reasonCode: evaluation.reasonCode
 				};
 			},
-			commandTemplate: (action) => GIT_COMMAND_TEMPLATES[action]
+			commandTemplate: (action) => GIT_COMMAND_TEMPLATES[action],
+			refreshProjection: async () => {
+				const durable = await ctx.sessions.flush(agent.session);
+				runtime.setDurability(durable);
+				runtime.sync();
+				return durable;
+			}
 		}));
 		agent.ctx.tools.register(createExternalOperationTool((id, toolAgent) => readExternalOperation(ctx, toolAgent, id), () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock)));
 		agent.ctx.tools.guard((exec) => goalCompletionDenial(runtime.projection, exec.name, exec.arguments));

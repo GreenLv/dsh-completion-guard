@@ -157,3 +157,45 @@ it.each(['resolution', 'effect', 'state'])('materializes missing %s inputs throu
     missing_fields: expect.any(Array), next_step: expect.any(String),
   })
 })
+
+it('materializes prepare discovery through the real host registry output contract', async () => {
+  const ctx = new Context()
+  new SystemPrompt(ctx, {})
+  const runtime = new ToolRuntime(ctx)
+  runtime.register(createPrepareTool({
+    getProjection: () => guardProjection({ withAction: false }),
+    hostCapability: () => ({ status: 'supported' }),
+    // The production wiring: refresh then read. The boolean is the simulated
+    // ctx.sessions.flush outcome.
+    refreshProjection: async () => true,
+  }))
+  const response = await runtime.execute({
+    callId: 'prepare-discovery' as never,
+    name: 'context_guard_prepare',
+    arguments: {},
+    signal: new AbortController().signal,
+  })
+  expect(response.isError).toBe(false)
+  const value = (response as unknown as { value: Record<string, unknown> }).value
+  expect(value).toMatchObject({ status: 'prepared', mode: 'discovery', total_open: 1 })
+  expect((value.items as Array<{ id: string }>)[0]?.id).toBe('R001')
+})
+
+it('surfaces a failed refresh as projection_durability_unavailable through the registry', async () => {
+  const ctx = new Context()
+  new SystemPrompt(ctx, {})
+  const runtime = new ToolRuntime(ctx)
+  runtime.register(createPrepareTool({
+    getProjection: () => guardProjection(),
+    refreshProjection: async () => false,
+  }))
+  const response = await runtime.execute({
+    callId: 'prepare-stale' as never,
+    name: 'context_guard_prepare',
+    arguments: { item_id: 'R001' },
+    signal: new AbortController().signal,
+  })
+  expect(response.isError).toBe(false)
+  const value = (response as unknown as { value: Record<string, unknown> }).value
+  expect(value).toEqual({ status: 'unknown', reason_code: 'projection_durability_unavailable' })
+})

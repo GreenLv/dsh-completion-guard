@@ -275,6 +275,16 @@ export interface GuardProjection {
    * of the same turn re-reads the same number.
    */
   hostTurn?: number
+  /**
+   * Runtime-owned durability watermark (0.6.0 fresh-projection contract): the
+   * result of the most recent flush performed by a public read/control entry.
+   * `confirmed` means the last entry observed a durable log, `failed` means a
+   * flush was refused or threw, and `unknown` means no flush has been observed
+   * yet. A `failed` watermark must make read entries report unavailability —
+   * never a stale-cache projection and never an empty ledger. Preserved
+   * across rebuilds like the other runtime-owned liveness state.
+   */
+  durabilityWatermark: 'confirmed' | 'failed' | 'unknown'
   /** Log-derived count of rejected rebind attempts by stable attempt key; survives reload. */
   rebindRejections: Map<string, number>
   integrity: GuardIntegrity
@@ -302,6 +312,7 @@ export function createProjection(): GuardProjection {
     noProgressClaims: new Map(),
     handledControlSeqs: new Set(),
     rebindRejections: new Map(),
+    durabilityWatermark: 'unknown',
     integrity: 'valid',
   }
 }

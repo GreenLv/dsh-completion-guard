@@ -9,7 +9,7 @@ import { promisify } from 'node:util'
 import { gunzip } from 'node:zlib'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { gitPreparation } from './git-preparation.js'
+import { actionPreparation } from './action-preparation.js'
 import { ACTION_MANIFEST, type StatefulAction } from '../domain/protocol-manifest.js'
 import { canonicalRegistryBase, npmEscapedPackageName } from '../domain/registry.js'
 import type { EvidenceRole, ExpectedTransition, TargetTuple } from '../domain/types.js'
@@ -1320,18 +1320,27 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
       if (!agent) return unavailable(action, role, 'producer_agent_unavailable')
       try {
         if (role === 'resolution') {
-          const recipe = gitPreparation(action)
-          if (recipe) {
+          // One descriptor source for every stateful action: the exact missing
+          // caller inputs are named before any probe or live resolution, so a
+          // structural gap is diagnosable instead of a generic failure. Git
+          // keeps its historical field order; the other actions gain the same
+          // complete contract (0.6.0 unified action descriptors).
+          const recipe = actionPreparation(action)
+          {
             const manifest = record(args.command_manifest)
             const plannedArgs = record(manifest?.planned_arguments)
             const selector = record(args.selector)
+            const needsManifestId = ['install', 'apply', 'publish', 'restart'].includes(action)
+            const needsPlannedEffect = !needsManifestId
             const missing = [
               ...recipe.selector_fields.filter(key => !requireString(selector ?? {}, key)).map(key => `selector.${key}`),
-              ...(!requireString(manifest ?? {}, 'planned_tool') ? ['command_manifest.planned_tool'] : []),
-              ...recipe.planned_argument_fields.filter(key => !requireString(plannedArgs ?? {}, key)).map(key => `command_manifest.planned_arguments.${key}`),
+              ...(needsManifestId && !requireString(manifest ?? {}, 'manifest_id') ? ['command_manifest.manifest_id'] : []),
+              ...(needsManifestId && recipe.command_manifest_fields.includes('tgz_path') && !requireString(manifest ?? {}, 'tgz_path') ? ['command_manifest.tgz_path'] : []),
+              ...(needsPlannedEffect && !requireString(manifest ?? {}, 'planned_tool') ? ['command_manifest.planned_tool'] : []),
+              ...(needsPlannedEffect ? recipe.planned_argument_fields.filter(key => !requireString(plannedArgs ?? {}, key)).map(key => `command_manifest.planned_arguments.${key}`) : []),
             ]
             if (missing.length) return unavailable(action, role, 'resolution_input_missing', missing,
-              'Supply the listed resolution inputs before execution. Use context_guard_prepare for the exact Git input contract. A manifest_id alone does not describe a planned tool call.')
+              'Supply the listed resolution inputs before execution. Use context_guard_prepare for the exact input contract of this action. A manifest_id alone does not describe a planned tool call.')
           }
           const executable = executableFor(action)
           const executableBinding = executable

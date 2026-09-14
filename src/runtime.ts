@@ -475,6 +475,7 @@ export function createRuntime(
   const session = agent.session
   let pendingRecovery = false
   let durabilityConfirmed = false
+  let durabilityWatermark: GuardProjection['durabilityWatermark'] = 'unknown'
   let observedEpoch = -1
   let observedCompactionSeq = -1
   let observedContractRevision = -1
@@ -530,11 +531,13 @@ export function createRuntime(
         projection.integrityViolations.push('goal_readback_unavailable')
       }
     }
-    // Liveness state must survive rebuilds: the per-turn attempt cap and the
-    // one-shot recovery arm are owned by the runtime, not the projection.
+    // Liveness state must survive rebuilds: the per-turn attempt cap, the
+    // one-shot recovery arm, and the durability watermark are owned by the
+    // runtime, not the projection.
     projection.continuationAttempts = continuationAttempts
     projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts
     projection.lastRecoveryDigest = priorRecoveryDigest
+    projection.durabilityWatermark = durabilityWatermark
     // Startup lifecycle facts for the first-step injection decision and the
     // status surface: the v4 boundary and the real-input observation are both
     // derived from the same durable log as the contract.
@@ -573,6 +576,11 @@ export function createRuntime(
 
   const setDurability = (confirmed: boolean) => {
     durabilityConfirmed = confirmed
+    // The watermark is runtime-owned liveness state like the attempt caps: it
+    // records what the most recent public entry observed, and a rebuild must
+    // not reset it to the fresh projection's default.
+    durabilityWatermark = confirmed ? 'confirmed' : 'failed'
+    projection.durabilityWatermark = durabilityWatermark
   }
   const markRecoveryNeeded = () => {
     pendingRecovery = true
@@ -754,6 +762,15 @@ export function apply(ctx: Context, rawConfig: {
         return { status: evaluation.status, reasonCode: evaluation.reasonCode }
       },
       commandTemplate: (action) => GIT_COMMAND_TEMPLATES[action as GitAdapterAction],
+      // 0.6.0 fresh projection: prepare is a public read entry, so it must see
+      // the input this step persisted — a pre-step sync alone is older than the
+      // step's own root message, which is how a correct ID still missed.
+      refreshProjection: async () => {
+        const durable = await ctx.sessions.flush(agent.session)
+        runtime.setDurability(durable)
+        runtime.sync()
+        return durable
+      },
     }))
     agent.ctx.tools.register(createExternalOperationTool(
       (id, toolAgent) => readExternalOperation(ctx, toolAgent as Agent | undefined, id),

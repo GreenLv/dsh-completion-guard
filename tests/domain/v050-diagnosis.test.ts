@@ -58,20 +58,32 @@ describe('A14/A15: prepare reports capability, target gaps, and supported shapes
       : undefined,
   })
 
-  it('lists exact missing target fields without upgrading a default into authority', async () => {
+  it('lists exact missing caller fields and never demands producer-computed identities', async () => {
+    // 0.6.0 D06-06 fix: only caller-ownable selector fields are missing-input
+    // candidates. The tgz integrity digest is read by the trusted producer, so
+    // a complete install instruction no longer reports it as a user question.
     const events = [user(1, '在 profile web 安装 fixture 2.0.0')]
-    const p = replay(events)
+    const completeItem = [...replay(events).items.values()][0]
+    const complete = await prepare(replay(events)).execute({
+      item_id: completeItem.id,
+    } as never, undefined as never) as { status: string; missing_target_fields: string[]; note: string }
+    expect(complete.status).toBe('prepared')
+    expect(isJsonValue(complete)).toBe(true)
+    expect(complete.missing_target_fields).toEqual([])
+    expect(complete.note).toContain('not user authority')
+
+    // A genuinely missing caller field is still named, and producer fields
+    // (integrity_digest) never appear as user questions.
+    const partialEvents = [user(1, '安装 fixture')]
+    const p = replay(partialEvents)
     const item = [...p.items.values()][0]
     const response = await prepare(p).execute({ item_id: item.id } as never, undefined as never) as {
-      status: string
       missing_target_fields: string[]
-      note: string
     }
-    expect(response.status).toBe('prepared')
-    expect(isJsonValue(response)).toBe(true)
-    // Missing authorization-relevant fields are named for the user question.
-    expect(response.missing_target_fields.length).toBeGreaterThan(0)
-    expect(response.note).toContain('not user authority')
+    expect(response.missing_target_fields).toEqual(['profile'])
+    // Producer/readback identities stay documented in the descriptor, never
+    // in the caller's missing-input list.
+    expect(response.missing_target_fields.join(',')).not.toContain('integrity_digest')
   })
 
   it('separates Git caller inputs from producer-computed identities', async () => {

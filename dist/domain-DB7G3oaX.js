@@ -2929,6 +2929,7 @@ function createProjection() {
 		noProgressClaims: /* @__PURE__ */ new Map(),
 		handledControlSeqs: /* @__PURE__ */ new Set(),
 		rebindRejections: /* @__PURE__ */ new Map(),
+		durabilityWatermark: "unknown",
 		integrity: "valid"
 	};
 }
