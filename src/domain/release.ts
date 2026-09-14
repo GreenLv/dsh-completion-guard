@@ -126,6 +126,18 @@ export interface ReleaseContract {
   candidate: ReleaseCandidate
   readinessRefs: string[]
   closureCertRef?: string
+  /**
+   * The closure certificate as it existed AT ADOPTION, frozen by identity.
+   *
+   * Comparing only the revision let a log entry ADD the certificate after the
+   * adoption and still ratify it: the adoption would be validated by evidence
+   * that did not exist when it was made. Freezing the certification digest (and
+   * its epoch/revision) pins the exact certificate the adopter relied on, so a
+   * certificate that appears later — even one that reuses the same id — is
+   * refused. Absent means the adopter named a closure that did not exist yet,
+   * which is equally refused: a later log entry can never supply it.
+   */
+  frozenClosure?: { id: string; certificationDigest: string; epoch: number; contractRevision: number }
   expiresAtEpochMs?: number
   /** Durable root revocation; the record is kept for audit, never deleted. */
   revokedAtSeq?: number
@@ -496,14 +508,18 @@ export function releasePreEffectDecision(projection: GuardProjection, request: R
       return { status: 'denied', reasonCode: 'release_readiness_unresolved', contractId: contract.contractId }
     }
   }
-  const closureRef = contract.closureCertRef
-  const closure = closureRef !== undefined ? projection.checkpoints.find((checkpoint) => checkpoint.id === closureRef) : undefined
-  // The certificate must be the one that certified the FROZEN candidate
-  // revision. Requiring the CURRENT revision made publishing depend on having
-  // already published: the release instruction is itself a new obligation, so
-  // its own capture invalidated the certificate it was about to use.
-  if (!closure || closure.result !== 'certified' || closure.epoch !== projection.epoch
-    || closure.contractRevision !== contract.adoptedAtRevision) {
+  // The certificate must be the EXACT one the adopter froze, and it must have
+  // existed at adoption. Requiring only the frozen revision let a later log
+  // entry add the certificate and ratify an adoption that had relied on
+  // nothing; requiring the CURRENT revision, on the other hand, made publishing
+  // depend on having already published. The frozen identity is neither: the
+  // release instruction may add obligations, but it may not add the evidence.
+  const frozen = contract.frozenClosure
+  const closure = frozen !== undefined ? projection.checkpoints.find((checkpoint) => checkpoint.id === frozen.id) : undefined
+  if (!frozen || frozen.id !== contract.closureCertRef
+    || !closure || closure.result !== 'certified'
+    || closure.certificationDigest !== frozen.certificationDigest
+    || closure.epoch !== projection.epoch) {
     return { status: 'denied', reasonCode: 'release_closure_unresolved', contractId: contract.contractId }
   }
   // The artifact must be bound to its bytes by at least one measurable digest:

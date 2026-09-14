@@ -317,6 +317,23 @@ interface ReleaseContract {
   candidate: ReleaseCandidate;
   readinessRefs: string[];
   closureCertRef?: string;
+  /**
+  * The closure certificate as it existed AT ADOPTION, frozen by identity.
+  *
+  * Comparing only the revision let a log entry ADD the certificate after the
+  * adoption and still ratify it: the adoption would be validated by evidence
+  * that did not exist when it was made. Freezing the certification digest (and
+  * its epoch/revision) pins the exact certificate the adopter relied on, so a
+  * certificate that appears later — even one that reuses the same id — is
+  * refused. Absent means the adopter named a closure that did not exist yet,
+  * which is equally refused: a later log entry can never supply it.
+  */
+  frozenClosure?: {
+    id: string;
+    certificationDigest: string;
+    epoch: number;
+    contractRevision: number;
+  };
   expiresAtEpochMs?: number;
   /** Durable root revocation; the record is kept for audit, never deleted. */
   revokedAtSeq?: number;

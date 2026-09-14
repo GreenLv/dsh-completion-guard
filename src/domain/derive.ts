@@ -15,6 +15,7 @@ import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.
 import { supersedeItem } from './supersession.js'
 import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItemKind, type SourceSpan } from './types.js'
 import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
+import type { ReleaseContract } from './release.js'
 import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
 import {
   explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensChildUnit,
@@ -189,6 +190,27 @@ function sameStringSet(recorded: unknown, expected: readonly string[]): boolean 
   const left = [...new Set(recorded.filter((entry): entry is string => typeof entry === 'string'))].sort()
   const right = [...new Set(expected)].sort()
   return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+/**
+ * Freeze the closure certificate the adopter relied on, resolved AT the
+ * adoption watermark. Only the checkpoints restored so far existed then, so a
+ * certificate that appears LATER in the log can never ratify an earlier
+ * adoption; an unresolvable reference is recorded as unresolved rather than
+ * left open for a future entry to satisfy.
+ */
+function freezeAdoptionClosure(projection: GuardProjection, contract: ReleaseContract): ReleaseContract {
+  const ref = contract.closureCertRef
+  const closure = ref !== undefined
+    ? projection.checkpoints.find((checkpoint) => checkpoint.id === ref && checkpoint.result === 'certified')
+    : undefined
+  return closure === undefined ? contract : {
+    ...contract,
+    frozenClosure: {
+      id: closure.id, certificationDigest: closure.certificationDigest,
+      epoch: closure.epoch, contractRevision: closure.contractRevision,
+    },
+  }
 }
 
 function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings: EvidenceBinding[], id: string): GuardCheckpoint | undefined {
@@ -612,9 +634,12 @@ export function deriveProjection(
             // obligation, including the release instruction itself, must not
             // invalidate the certificate the adoption was based on.
             const normalized = normalizeReleaseContract(payload, { seq: event.seq, digest: sha256(stableJson(payload)) }, projection.contractRevision)
-            if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code, true)
+            // A root COMMAND the user typed badly is a usage error: it is
+            // reported but never marks the persisted release state damaged,
+            // because that would let one typo block every later publication.
+            if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code)
             else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract!.contractId)) {
-              projection.releaseContracts.push(normalized.contract)
+              projection.releaseContracts.push(freezeAdoptionClosure(projection, normalized.contract))
             }
           } else if (rest.length > 0 && !/^status$/.test(rest)) {
             // A user typing an unknown verb is a usage error, not damaged
@@ -695,9 +720,9 @@ export function deriveProjection(
                 seq: adoptionSeq,
                 digest: sha256(stableJson(payload.contract ?? null)),
               }, projection.contractRevision)
-              if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code)
+              if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code, true)
               else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract!.contractId)) {
-                projection.releaseContracts.push(normalized.contract)
+                projection.releaseContracts.push(freezeAdoptionClosure(projection, normalized.contract))
               }
               break
             }

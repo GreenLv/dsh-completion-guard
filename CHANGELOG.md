@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.0 third repair round after targeted review (2026-09-14)
+
+Two findings from the targeted review of `fcc3813`, both fixed.
+
+- **A certificate minted after adoption can no longer ratify the adoption.** The
+  closure check compared the certificate's revision with the revision frozen at
+  adoption, which a later log entry could satisfy: adopting a contract that
+  named a certificate that did not exist yet, then producing that certificate
+  afterwards, was granted. The adoption now resolves and freezes the closure
+  certificate's IDENTITY (its certification digest, epoch and revision) at the
+  adoption watermark, and the gate requires exactly that certificate. An
+  unresolvable reference is recorded as unresolved rather than left open for a
+  future entry to satisfy. A later release obligation still does not invalidate
+  the frozen candidate closure.
+- **Invalid adoption input no longer poisons a valid contract.** A root
+  `/context-guard release adopt` with a malformed payload was treated as damaged
+  persisted state, so one typo permanently blocked every later publication. A
+  root command the user typed badly is a usage diagnostic; only an unreadable
+  persisted reservation, settlement or contract record marks the release state
+  damaged. A malformed plugin-notice record still fails closed.
+
+New regression cases: a certificate minted after adoption is refused (with the
+projection still valid), a certificate that existed at adoption is frozen by
+identity and survives both a later obligation and a later same-id certificate,
+and invalid/mistyped adopt input leaves a valid contract usable.
+
 ## 0.6.0 second repair round after follow-up review (2026-09-14)
 
 A follow-up review of the repair commit found five remaining defects in the new

@@ -10370,9 +10370,9 @@ function releasePreEffectDecision(projection, request) {
 		reasonCode: "release_readiness_unresolved",
 		contractId: contract.contractId
 	};
-	const closureRef = contract.closureCertRef;
-	const closure = closureRef !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === closureRef) : void 0;
-	if (!closure || closure.result !== "certified" || closure.epoch !== projection.epoch || closure.contractRevision !== contract.adoptedAtRevision) return {
+	const frozen = contract.frozenClosure;
+	const closure = frozen !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === frozen.id) : void 0;
+	if (!frozen || frozen.id !== contract.closureCertRef || !closure || closure.result !== "certified" || closure.certificationDigest !== frozen.certificationDigest || closure.epoch !== projection.epoch) return {
 		status: "denied",
 		reasonCode: "release_closure_unresolved",
 		contractId: contract.contractId
@@ -10626,6 +10626,26 @@ function sameStringSet(recorded, expected) {
 	const left = [...new Set(recorded.filter((entry) => typeof entry === "string"))].sort();
 	const right = [...new Set(expected)].sort();
 	return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+/**
+* Freeze the closure certificate the adopter relied on, resolved AT the
+* adoption watermark. Only the checkpoints restored so far existed then, so a
+* certificate that appears LATER in the log can never ratify an earlier
+* adoption; an unresolvable reference is recorded as unresolved rather than
+* left open for a future entry to satisfy.
+*/
+function freezeAdoptionClosure(projection, contract) {
+	const ref = contract.closureCertRef;
+	const closure = ref !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === ref && checkpoint.result === "certified") : void 0;
+	return closure === void 0 ? contract : {
+		...contract,
+		frozenClosure: {
+			id: closure.id,
+			certificationDigest: closure.certificationDigest,
+			epoch: closure.epoch,
+			contractRevision: closure.contractRevision
+		}
+	};
 }
 function restoreHistoricalCheckpoint(recorded, bindings, id) {
 	const stringField = (name) => typeof recorded[name] === "string" ? recorded[name] : void 0;
@@ -10941,8 +10961,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 							seq: event.seq,
 							digest: sha256(stableJson(payload))
 						}, projection.contractRevision);
-						if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code, true);
-						else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract.contractId)) projection.releaseContracts.push(normalized.contract);
+						if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code);
+						else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract.contractId)) projection.releaseContracts.push(freezeAdoptionClosure(projection, normalized.contract));
 					} else if (rest.length > 0 && !/^status$/.test(rest)) pushReleaseDiagnostic(projection, event.seq, "release_subcommand_unknown");
 				}
 				break;
@@ -11000,8 +11020,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 								seq: adoptionSeq,
 								digest: sha256(stableJson(payload.contract ?? null))
 							}, projection.contractRevision);
-							if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code);
-							else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract.contractId)) projection.releaseContracts.push(normalized.contract);
+							if (!normalized.contract) for (const code of normalized.errors) pushReleaseDiagnostic(projection, event.seq, code, true);
+							else if (!projection.releaseContracts.some((contract) => contract.contractId === normalized.contract.contractId)) projection.releaseContracts.push(freezeAdoptionClosure(projection, normalized.contract));
 							break;
 						}
 						if (recordText.startsWith(RELEASE_RESERVATION_PREFIX)) {

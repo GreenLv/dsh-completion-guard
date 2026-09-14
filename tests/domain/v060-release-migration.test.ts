@@ -171,6 +171,25 @@ describe('0.6.0 C10: adoption is explicit, durable, and replayable', () => {
     expect(RELEASE_OPERATION_SURFACES.npm_publish).toMatchObject({ protectable: true, attribution: 'implemented' })
   })
 
+  it('invalid adopt input is a usage error: it never poisons a valid contract', () => {
+    const before = adopted()
+    expect(releasePreEffectDecision(before, request()).status).toBe('granted')
+    // A real user types a broken adoption after a valid one exists.
+    const after = adopted([{ seq: 201, type: 'command/run', data: {
+      name: 'context-guard', args: 'release adopt {not json}', source: { kind: 'user' },
+    } }])
+    expect(after.releaseDiagnostics.map((entry) => entry.reasonCode)).toContain('release_operations_missing')
+    // The release state is NOT damaged, and the valid contract still authorizes.
+    expect(after.releaseStateDamaged).toBe(false)
+    expect(releasePreEffectDecision(after, request()).status).toBe('granted')
+    // A readable-but-mistyped contract is equally a usage error.
+    const mistyped = adopted([{ seq: 201, type: 'command/run', data: {
+      name: 'context-guard', args: `release adopt ${adoptLine({ ...CONTRACT, candidate: { fullSha40: 'nope' } })}`, source: { kind: 'user' },
+    } }])
+    expect(mistyped.releaseStateDamaged).toBe(false)
+    expect(releasePreEffectDecision(mistyped, request()).status).toBe('granted')
+  })
+
   it('a malformed or mistyped adoption is refused with its exact reason and never corrupts the projection', () => {
     const cases: Array<[Record<string, unknown>, string]> = [
       [{ ...CONTRACT, candidate: { ref: 'main', fullSha40: 'nope' } }, 'release_candidate_sha_invalid'],
@@ -187,9 +206,11 @@ describe('0.6.0 C10: adoption is explicit, durable, and replayable', () => {
       const p = deriveProjection([v5(), command(`release adopt ${adoptLine(contract)}`)], config, scope, true).projection
       expect(p.releaseContracts, JSON.stringify(contract)).toHaveLength(0)
       expect(p.releaseDiagnostics.map((entry) => entry.reasonCode), JSON.stringify(contract)).toContain(reason)
-      // Damaged release state never touches ordinary work.
+      // A malformed USER command never touches ordinary work and never marks
+      // the persisted release state damaged.
       expect(p.integrity).toBe('valid')
       expect(p.enabled).toBe(true)
+      expect(p.releaseStateDamaged).toBe(false)
     }
   })
 
@@ -417,6 +438,61 @@ describe('0.6.0 C10: reservations distinguish a proven no-effect from an unknown
     ]) {
       expect(reasonClassOf(code), code).toBe('policy_boundary')
     }
+  })
+})
+
+describe('0.6.0 C10: adoption is ratified only by evidence that already existed', () => {
+  it('a certificate minted AFTER adoption cannot ratify the adoption', () => {
+    const { prefix } = closureFixture()
+    // The contract names C1, but at this watermark C1 does not exist yet: the
+    // adopter relied on nothing, and a later log entry must not be able to
+    // supply it.
+    const closureOnly = adoptLine({ ...CONTRACT, readinessRefs: [] })
+    const adoptedEarly = deriveProjection([
+      ...prefix,
+      command(`release adopt ${closureOnly}`),
+    ], config, scope, true).projection
+    expect(adoptedEarly.releaseContracts).toHaveLength(1)
+    expect(adoptedEarly.releaseContracts[0]!.frozenClosure).toBeUndefined()
+    expect(adoptedEarly.checkpoints).toHaveLength(0)
+    expect(releasePreEffectDecision(adoptedEarly, request()).reasonCode).toBe('release_closure_unresolved')
+
+    // The real certificate is produced afterwards, exactly as the review's
+    // counterexample does.
+    const { record } = closureFixture()
+    const late = deriveProjection([
+      ...prefix,
+      command(`release adopt ${closureOnly}`),
+      { seq: 100, type: 'tool/call', data: { callId: 'closure-cp', name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' } },
+      { seq: 101, type: 'tool/result', data: { message: { source: { callId: 'closure-cp' }, content: [{ type: 'text', text: JSON.stringify(record) }] } } },
+    ], config, scope, true).projection
+    expect(late.integrity).toBe('valid')
+    expect(late.checkpoints.some((checkpoint) => checkpoint.result === 'certified')).toBe(true)
+    // Still refused: the certificate did not exist when the contract was made.
+    expect(releasePreEffectDecision(late, request()).reasonCode).toBe('release_closure_unresolved')
+  })
+
+  it('a certificate that existed at adoption is frozen by identity and stays valid later', () => {
+    const p = adopted()
+    const frozen = p.releaseContracts[0]!.frozenClosure
+    expect(frozen).toBeDefined()
+    expect(frozen!.id).toBe('C1')
+    expect(frozen!.certificationDigest).toMatch(/^[0-9a-f]{64}$/)
+    // A later obligation (the release instruction) does not invalidate it...
+    const afterNewTask = adopted([{ seq: 201, type: 'user/message', data: {
+      source: { kind: 'user' }, content: [{ type: 'text', text: `Publish package ${PACKAGE} version ${VERSION} registry ${REGISTRY}` }],
+    } }])
+    expect(releasePreEffectDecision(afterNewTask, request()).status).toBe('granted')
+    // ...and neither does a later certificate that merely reuses the id.
+    const { record } = closureFixture()
+    const shadowed = deriveProjection([
+      ...closureFixture().prefix,
+      { seq: 100, type: 'tool/call', data: { callId: 'closure-cp', name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' } },
+      { seq: 101, type: 'tool/result', data: { message: { source: { callId: 'closure-cp' }, content: [{ type: 'text', text: JSON.stringify(record) }] } } },
+      { seq: 200, type: 'command/run', data: { name: 'context-guard', args: `release adopt ${adoptLine()}`, source: { kind: 'user' } } },
+      { seq: 201, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '创建 report.txt' }] } },
+    ], config, scope, true).projection
+    expect(releasePreEffectDecision(shadowed, request()).status).toBe('granted')
   })
 })
 

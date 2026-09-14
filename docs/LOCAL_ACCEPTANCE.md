@@ -2,6 +2,17 @@
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
+### Third repair round after targeted review (2026-09-14)
+
+Two findings from the targeted review of `fcc3813`: an adoption could be ratified
+by a certificate minted AFTER it (the revision comparison was satisfiable by a
+later log entry), and a mistyped `/context-guard release adopt` payload marked
+the persisted release state damaged, so one typo blocked every later
+publication. Both are fixed: the adoption freezes the closure certificate's
+identity at its own watermark, and only unreadable persisted records damage the
+release state. Regression cases live in
+`tests/domain/v060-release-migration.test.ts` (31 cases).
+
 ### Second repair round after follow-up review (2026-09-14)
 
 The follow-up review of the repair commit found five remaining wiring defects
