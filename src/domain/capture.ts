@@ -4,6 +4,7 @@ import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
 import { isStatefulAction, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
 import { canonicalRegistryBase } from './registry.js'
 import { interpretMessage, kindOfScope, semanticActionOfScope, statefulActionsOfScope, type InterpretOptions, type ScopeInterpretation } from './semantics.js'
+import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 import type { GuardItem, GuardItemKind, GuardOperation, TargetCaptureReasonCode, TargetTuple } from './types.js'
 
 /**
@@ -181,6 +182,77 @@ function parentScope(subject: string): string {
   return subject.slice(0, separator)
 }
 
+/**
+ * The artifact-type nouns the bounded file-choice vocabulary admits (C07).
+ * A closed list pinned by the v2 fixture: the noun must be the OBJECT of the
+ * action, so "更新文档" captures a bounded choice while "更新皮肤中心" stays
+ * a genuine clarification. The generic "文件/file" admits any file type the
+ * producer accepts.
+ */
+const BOUNDED_TYPE_NOUNS: ReadonlyArray<readonly [RegExp, string]> = [
+  // CJK has no word boundaries, so the noun is matched literally; Latin nouns
+  // keep word boundaries so "profile" never reads as a file.
+  [/文档/, 'document'],
+  [/(?<!\w)readme(?!\w)/iu, 'readme'],
+  [/报告/, 'report'],
+  [/文件/, 'file'],
+  [/(?<!\w)files?(?!\w)/iu, 'file'],
+]
+
+function boundedArtifactTypeOf(text: string): string | undefined {
+  const masked = text
+  for (const [pattern, type] of BOUNDED_TYPE_NOUNS) {
+    if (pattern.test(masked)) return type
+  }
+  return undefined
+}
+
+/** A bounded choice needs a real path scope; the 'scope' sentinel is not one. */
+function scopeIsPath(subject: string): boolean {
+  return subject !== 'scope' && subject !== '' && /[\\/]/.test(subject)
+}
+
+/**
+ * Whether the clause's FIRST action word is the change verb 更新/调整 (the
+ * object-driven modify mapping). A later 更新 inside a referenced task name
+ * ("把更新插件明确为 apply…") never qualifies — the head verb is what the
+ * clause orders.
+ */
+function headVerbIsChangeWord(text: string): boolean {
+  const candidates: Array<{ at: number; word: string }> = []
+  for (const word of ['更新', '调整']) {
+    let at = text.indexOf(word)
+    while (at >= 0) {
+      candidates.push({ at, word })
+      at = text.indexOf(word, at + word.length)
+    }
+  }
+  for (const match of text.matchAll(/\b(?:update|adjust)\b/gi)) {
+    candidates.push({ at: match.index!, word: match[0] })
+  }
+  if (candidates.length === 0) return false
+  candidates.sort((a, b) => a.at - b.at)
+  const head = candidates[0]!
+  // Another action word before the head disqualifies it: the clause orders
+  // that verb, not the change word.
+  const earlier = CJK_ACTION_WORD_AT(text, head.at)
+  return earlier === undefined
+}
+
+/** Any other known action word strictly before `before`, if one exists. */
+function CJK_ACTION_WORD_AT(text: string, before: number): string | undefined {
+  const words = ['创建', '生成', '新建', '写入', '修改', '编辑', '更改', '读取', '运行', '执行', '安装', '部署', '上传', '提交', '推送', '发布', '升级', '重启', '重新启动', '合并', '删除', '下载', '拉取', '同步']
+  let best: { at: number; word: string } | undefined
+  for (const word of words) {
+    const at = text.indexOf(word)
+    if (at >= 0 && at < before && (best === undefined || at < best.at)) best = { at, word }
+  }
+  for (const match of text.matchAll(/\b(?:build|create|write|modify|change|edit|run|fix|install|push|publish|commit|deploy|migrate|delete|restart|fetch|pull|update)\b/gi)) {
+    if (match.index! < before && (best === undefined || match.index! < best.at)) best = { at: match.index!, word: match[0] }
+  }
+  return best?.word
+}
+
 function captureRequestedTarget(
   action: SemanticAction,
   text: string,
@@ -188,8 +260,14 @@ function captureRequestedTarget(
   surface: 'artifact' | 'scope',
 ): CapturedRequestedTarget {
   if (action === 'create' || action === 'modify') {
-    if (surface !== 'artifact') return { target: {}, reasonCode: 'requested_target_artifact_id_missing' }
-    return { target: { artifact_id: subject, scope: parentScope(subject) } }
+    if (surface === 'artifact') return { target: { artifact_id: subject, scope: parentScope(subject) } }
+    // 0.6.0 bounded file choice (C07/S03): an artifact-type noun inside the
+    // session scope lets the assistant pick the exact file, which the
+    // resolution producer freezes before any effect. Without a recognizable
+    // noun the target stays a genuine clarification — never a guess.
+    const artifactType = boundedArtifactTypeOf(text)
+    if (artifactType && scopeIsPath(subject)) return { target: { scope: subject, artifact_type: artifactType } }
+    return { target: {}, reasonCode: 'requested_target_artifact_id_missing' }
   }
   if (action === 'install' || action === 'apply') {
     const spec = actionObjectToken(
@@ -337,7 +415,16 @@ export function captureItem(
   const unsupportedVisual = /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized)
   // A prohibition's body may be a bare verb ("不要提交并推送"), so the closed
   // action vocabulary resolves the action the ban is recorded against.
-  const semanticAction = unsupportedVisual ? 'generic_run' : semanticActionOfScope(sanitized, interpretation?.text ?? sanitized, kind === 'prohibition')
+  let semanticAction = unsupportedVisual ? 'generic_run' : semanticActionOfScope(sanitized, interpretation?.text ?? sanitized, kind === 'prohibition')
+  // 0.6.0 D06-02/S03: the OBJECT decides the lane, never a blanket verb
+  // whitelist. A directive whose head change verb is 更新/调整 and whose
+  // object is a recognized artifact-type noun is a modify with a bounded file
+  // choice (C07); anything else keeps its honest generic reading.
+  if (semanticAction === 'generic_run' && !unsupportedVisual
+    && interpretation?.directive === 'directive'
+    && headVerbIsChangeWord(sanitized) && boundedArtifactTypeOf(sanitized) !== undefined) {
+    semanticAction = 'modify'
+  }
   const capturedTarget = captureRequestedTarget(semanticAction, sanitized, subject, surface)
   const effectiveOperation = semanticAction === 'verify' ? 'verify' : operation
   const item: GuardItem = {
@@ -433,5 +520,20 @@ export function captureClause(
   const subject = path || scope.cwd || 'scope'
   const method = interpretation?.method ?? extractMethod(body)
   const operation = extractOperation(body)
-  return captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, interpretation)
+  const item = captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, interpretation)
+  // Stamp C01 provenance when the interpreted scope occurs verbatim in the
+  // raw input, so standalone captures carry the same span audit trail.
+  if (interpretation) {
+    const at = text.indexOf(interpretation.text)
+    if (at >= 0) {
+      item.rawTextSha256 = sha256(text)
+      item.spans = [{
+        partIndex: 0,
+        start: utf8ByteOffset(text, at),
+        end: utf8ByteOffset(text, at) + utf8ByteLength(interpretation.text),
+        class: spanClassOf(kind, interpretation.directive, 'root_instruction'),
+      }]
+    }
+  }
+  return item
 }

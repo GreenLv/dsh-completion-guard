@@ -20,9 +20,10 @@ describe('0.4.2 bounded feedback regressions', () => {
     p.items.set('R001', captureClause('更新皮肤中心并在本地仓库记录', 'm1', 'R001', 1))
     const result = await createCheckpointTool(() => p, () => {}).execute({ bindings: [] }, undefined as never)
     expect(result).toMatchObject({ status: 'incomplete', open_items: [{ certifiable: false, reason_code: 'generic_run_non_certifiable' }] })
-    // v0.5: generic obligations name the honest-delivery repair condition
-    // instead of pointing at a rebind that cannot add certification.
-    expect(JSON.stringify(result)).toContain('fresh root-user instruction')
+    // 0.6.0 D06-05: the generic diagnosis names the ONE real replacement
+    // mechanism (a confirmed rebind mapping), never a phantom auto-replacement.
+    expect(JSON.stringify(result)).toContain('rebind proposal mapping this obligation')
+    expect(JSON.stringify(result)).toContain('superseded atomically')
     expect(JSON.stringify(result)).not.toContain('context_guard_rebind')
     expect(renderRecoveryPacket(p)).not.toContain('whitelisted executable')
   })

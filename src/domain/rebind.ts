@@ -3,6 +3,7 @@ import { captureItem, extractMethod, extractOperation } from './capture.js'
 import { deriveItemDiagnosis, relevantEvidence } from './diagnostics.js'
 import type { GuardItem, GuardProjection } from './types.js'
 import { isFrozenV042RebindResponse } from './confirm-parse.js'
+import { requestedIdentityKey } from './protocol-manifest.js'
 
 export interface RebindArgs {
   operation: 'propose' | 'query' | 'withdraw'
@@ -58,6 +59,25 @@ export type ProposeOutcome =
  * is organizational at best and must not cost a user confirmation. */
 function certificationGain(item: GuardItem, candidates: RebindProposal['candidates']): boolean {
   const current = item.semanticAction ?? 'generic_run'
+  // 0.6.0 D06-05: splitting a clarification-required stateful obligation into
+  // clauses that capture an equally unresolved target costs a confirmation and
+  // buys nothing. A gain requires a clause that actually resolves the target:
+  // the action's identity key, or a bounded artifact choice (scope + type).
+  if (current !== 'generic_run' && item.targetCaptureStatus === 'clarification_required') {
+    return candidates.some((candidate) => {
+      if (candidate.action === undefined) return false
+      // A different concrete action is a gain over the unresolved one; a
+      // generic_run clause is a downgrade, never a gain.
+      if (candidate.action !== current && candidate.action !== 'generic_run') return true
+      const target = candidate.requestedTarget
+      if (!target) return false
+      const key = requestedIdentityKey(candidate.action)
+      if (key && Object.hasOwn(target, key)) return true
+      if ((candidate.action === 'create' || candidate.action === 'modify')
+        && target.artifact_type !== undefined && target.scope !== undefined) return true
+      return false
+    })
+  }
   if (current !== 'generic_run') return true
   return candidates.some((candidate) => candidate.action !== undefined && candidate.action !== 'generic_run')
 }

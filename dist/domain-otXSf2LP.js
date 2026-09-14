@@ -663,17 +663,78 @@ const REQUESTED_IDENTITY_KEY = {
 	restart: "service_id",
 	publish: "artifact_id"
 };
+/** The single identity field a root instruction must name for this action. */
+function requestedIdentityKey(action) {
+	return REQUESTED_IDENTITY_KEY[action];
+}
 function stableTargetValue(value) {
 	if (Array.isArray(value)) return `[${value.map(stableTargetValue).join(",")}]`;
 	if (value && typeof value === "object") return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${stableTargetValue(entry)}`).join(",")}}`;
 	return JSON.stringify(value);
 }
 /**
+* The 0.6.0 bounded file-choice vocabulary (C07/S03): artifact-type nouns a
+* root instruction may use instead of an exact path. The assistant may pick
+* the exact file INSIDE the captured scope and inside the type, and the
+* choice is frozen by the resolution producer before any effect. An absent
+* extension set (`file`) admits any file the producer accepts.
+*/
+const BOUNDED_ARTIFACT_TYPES = {
+	document: new Set([
+		"md",
+		"markdown",
+		"txt"
+	]),
+	readme: new Set([
+		"md",
+		"rst",
+		"txt"
+	]),
+	report: new Set(["md", "txt"]),
+	file: null
+};
+function extensionOf(path$1) {
+	const base = path$1.split(/[\\/]/).pop() ?? "";
+	const dot = base.lastIndexOf(".");
+	return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
+}
+function normalizeSlashes(value) {
+	return value.replace(/\\/g, "/");
+}
+/** Whether `artifact` lives inside `scope` (or exactly at it), slash-normalized. */
+function insideScope(artifact, scope) {
+	if (scope === "scope" || scope === "") return false;
+	const normalizedArtifact = normalizeSlashes(artifact);
+	const normalizedScope = normalizeSlashes(scope).replace(/\/+$/, "");
+	if (normalizedArtifact === normalizedScope) return false;
+	return normalizedArtifact.startsWith(`${normalizedScope}/`);
+}
+/**
+* Whether a bounded-choice requested target authorizes this resolved target:
+* the resolved artifact must live inside the captured scope and match the
+* captured type. The exact file name is the assistant's bounded decision,
+* frozen by resolution — never a root-named identity substitution.
+*/
+function boundedArtifactChoiceMatches(action, requested, resolved) {
+	if (action !== "create" && action !== "modify") return false;
+	const type = requested?.artifact_type;
+	const scope = requested?.scope;
+	if (typeof type !== "string" || typeof scope !== "string" || !(type in BOUNDED_ARTIFACT_TYPES)) return false;
+	const artifact = resolved?.artifact_id;
+	if (typeof artifact !== "string" || !artifact) return false;
+	if (!insideScope(artifact, scope)) return false;
+	const allowed = BOUNDED_ARTIFACT_TYPES[type];
+	return allowed === null || allowed.has(extensionOf(artifact));
+}
+/**
 * Compare identities captured from the root instruction with a complete
 * adapter-resolved target. Requested targets are partial by design: only
 * explicitly named identities (plus the active repository scope) are frozen.
+* A bounded artifact choice (scope + type, C07) matches when the resolved
+* exact file is inside the scope and of the captured type.
 */
 function requestedTargetMatchesResolved(action, requested, resolved) {
+	if (boundedArtifactChoiceMatches(action, requested, resolved)) return true;
 	const identityKey = REQUESTED_IDENTITY_KEY[action];
 	if (!identityKey || !requested || !resolved || !Object.hasOwn(requested, identityKey)) return false;
 	const allowed = new Set(ACTION_MANIFEST.actions[action].resolvedTargetKeys);
@@ -717,6 +778,7 @@ const MUTATION_AUTHORITY_KEYS = {
 };
 /** A mutation requires every user-selectable identity field, not a partial match. */
 function requestedTargetAuthorizesMutation(action, requested, resolved) {
+	if (boundedArtifactChoiceMatches(action, requested, resolved)) return true;
 	const required = MUTATION_AUTHORITY_KEYS[action];
 	return !!requested && required.every((key) => Object.hasOwn(requested, key)) && requestedTargetMatchesResolved(action, requested, resolved);
 }
@@ -1816,6 +1878,36 @@ function namedActions(text) {
 }
 
 //#endregion
+//#region src/domain/spans.ts
+/**
+* 0.6.0 source-span helpers (C01).
+*
+* Spans are UTF-8 BYTE half-open intervals `[start, end)` inside the original
+* root message text. All conversions go through TextEncoder byte counting —
+* JavaScript string indices are never allowed to masquerade as cross-language
+* positions, so a Python reader agrees with TypeScript on every boundary.
+*/
+const encoder = new TextEncoder();
+function utf8ByteLength(text) {
+	return encoder.encode(text).length;
+}
+/** Byte offset of `index` inside `text`: the UTF-8 length of the prefix. */
+function utf8ByteOffset(text, index) {
+	return utf8ByteLength(text.slice(0, index));
+}
+/**
+* The coverage class of one captured clause: a prohibition is a constraint,
+* an informational reading is a question, an adopted block stays adoption,
+* and everything else is an instruction. Nothing captured is left unclassed.
+*/
+function spanClassOf(kind, directive, authority) {
+	if (authority === "root_adoption") return "adoption";
+	if (kind === "prohibition") return "constraint";
+	if (directive === "informational" || directive === "narrative") return "question";
+	return "instruction";
+}
+
+//#endregion
 //#region src/domain/capture.ts
 /**
 * Whether a clause opens with an explicit ban. The lane question ("is this a
@@ -1960,16 +2052,112 @@ function parentScope(subject) {
 	if (separator === 2 && /^[A-Za-z]:[\\/]$/.test(subject.slice(0, 3))) return subject.slice(0, 3);
 	return subject.slice(0, separator);
 }
+/**
+* The artifact-type nouns the bounded file-choice vocabulary admits (C07).
+* A closed list pinned by the v2 fixture: the noun must be the OBJECT of the
+* action, so "更新文档" captures a bounded choice while "更新皮肤中心" stays
+* a genuine clarification. The generic "文件/file" admits any file type the
+* producer accepts.
+*/
+const BOUNDED_TYPE_NOUNS = [
+	[/文档/, "document"],
+	[/(?<!\w)readme(?!\w)/iu, "readme"],
+	[/报告/, "report"],
+	[/文件/, "file"],
+	[/(?<!\w)files?(?!\w)/iu, "file"]
+];
+function boundedArtifactTypeOf(text) {
+	const masked = text;
+	for (const [pattern, type] of BOUNDED_TYPE_NOUNS) if (pattern.test(masked)) return type;
+}
+/** A bounded choice needs a real path scope; the 'scope' sentinel is not one. */
+function scopeIsPath(subject) {
+	return subject !== "scope" && subject !== "" && /[\\/]/.test(subject);
+}
+/**
+* Whether the clause's FIRST action word is the change verb 更新/调整 (the
+* object-driven modify mapping). A later 更新 inside a referenced task name
+* ("把更新插件明确为 apply…") never qualifies — the head verb is what the
+* clause orders.
+*/
+function headVerbIsChangeWord(text) {
+	const candidates = [];
+	for (const word of ["更新", "调整"]) {
+		let at = text.indexOf(word);
+		while (at >= 0) {
+			candidates.push({
+				at,
+				word
+			});
+			at = text.indexOf(word, at + word.length);
+		}
+	}
+	for (const match of text.matchAll(/\b(?:update|adjust)\b/gi)) candidates.push({
+		at: match.index,
+		word: match[0]
+	});
+	if (candidates.length === 0) return false;
+	candidates.sort((a, b) => a.at - b.at);
+	const head = candidates[0];
+	return CJK_ACTION_WORD_AT(text, head.at) === void 0;
+}
+/** Any other known action word strictly before `before`, if one exists. */
+function CJK_ACTION_WORD_AT(text, before) {
+	const words = [
+		"创建",
+		"生成",
+		"新建",
+		"写入",
+		"修改",
+		"编辑",
+		"更改",
+		"读取",
+		"运行",
+		"执行",
+		"安装",
+		"部署",
+		"上传",
+		"提交",
+		"推送",
+		"发布",
+		"升级",
+		"重启",
+		"重新启动",
+		"合并",
+		"删除",
+		"下载",
+		"拉取",
+		"同步"
+	];
+	let best;
+	for (const word of words) {
+		const at = text.indexOf(word);
+		if (at >= 0 && at < before && (best === void 0 || at < best.at)) best = {
+			at,
+			word
+		};
+	}
+	for (const match of text.matchAll(/\b(?:build|create|write|modify|change|edit|run|fix|install|push|publish|commit|deploy|migrate|delete|restart|fetch|pull|update)\b/gi)) if (match.index < before && (best === void 0 || match.index < best.at)) best = {
+		at: match.index,
+		word: match[0]
+	};
+	return best?.word;
+}
 function captureRequestedTarget(action, text, subject, surface) {
 	if (action === "create" || action === "modify") {
-		if (surface !== "artifact") return {
-			target: {},
-			reasonCode: "requested_target_artifact_id_missing"
-		};
-		return { target: {
+		if (surface === "artifact") return { target: {
 			artifact_id: subject,
 			scope: parentScope(subject)
 		} };
+		const artifactType = boundedArtifactTypeOf(text);
+		if (artifactType && scopeIsPath(subject)) return { target: {
+			scope: subject,
+			artifact_type: artifactType
+		} };
+		return {
+			target: {},
+			reasonCode: "requested_target_artifact_id_missing"
+		};
 	}
 	if (action === "install" || action === "apply") {
 		const parsed = splitPackageSpec(actionObjectToken(text, action === "install" ? "install|add|安装" : "apply|应用", "package|plugin|包|插件"));
@@ -2072,7 +2260,8 @@ function segmentClauses(text, options = {}) {
 function captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, interpretation) {
 	const sanitized = sanitizeClauseText(body);
 	const unsupportedVisual = /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized);
-	const semanticAction = unsupportedVisual ? "generic_run" : semanticActionOfScope(sanitized, interpretation?.text ?? sanitized, kind === "prohibition");
+	let semanticAction = unsupportedVisual ? "generic_run" : semanticActionOfScope(sanitized, interpretation?.text ?? sanitized, kind === "prohibition");
+	if (semanticAction === "generic_run" && !unsupportedVisual && interpretation?.directive === "directive" && headVerbIsChangeWord(sanitized) && boundedArtifactTypeOf(sanitized) !== void 0) semanticAction = "modify";
 	const capturedTarget = captureRequestedTarget(semanticAction, sanitized, subject, surface);
 	const effectiveOperation = semanticAction === "verify" ? "verify" : operation;
 	const item = {
@@ -2154,7 +2343,20 @@ function captureClause(text, sourceMessageId, id, revision, scope = {}, options 
 	const body = interpretation?.body ?? text;
 	const path$1 = extractArtifactPaths(sanitizeClauseText(body))[0] ?? "";
 	const surface = path$1 ? "artifact" : "scope";
-	return captureItem(kind, body, sourceMessageId, id, revision, path$1 || scope.cwd || "scope", surface, interpretation?.method ?? extractMethod(body), extractOperation(body), interpretation);
+	const item = captureItem(kind, body, sourceMessageId, id, revision, path$1 || scope.cwd || "scope", surface, interpretation?.method ?? extractMethod(body), extractOperation(body), interpretation);
+	if (interpretation) {
+		const at = text.indexOf(interpretation.text);
+		if (at >= 0) {
+			item.rawTextSha256 = sha256(text);
+			item.spans = [{
+				partIndex: 0,
+				start: utf8ByteOffset(text, at),
+				end: utf8ByteOffset(text, at) + utf8ByteLength(interpretation.text),
+				class: spanClassOf(kind, interpretation.directive, "root_instruction")
+			}];
+		}
+	}
+	return item;
 }
 
 //#endregion
@@ -2251,6 +2453,22 @@ function deriveItemDiagnosis(p, item) {
 		},
 		attempt_fingerprint: fingerprint(p, item, "root_condition_pending")
 	};
+	if (kind === "inquiry") {
+		const closable = p.boundaryProtocol === 5;
+		return {
+			...base,
+			certification: "unsupported",
+			reason_code: closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable",
+			repairability: "unsupported",
+			missing_fields: [],
+			missing_facets: [],
+			next_action: {
+				kind: "report_only",
+				resume_condition: closable ? "Deliver the actual answer; the host-confirmed final response of a completed turn closes this item." : "Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this."
+			},
+			attempt_fingerprint: fingerprint(p, item, closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable")
+		};
+	}
 	if (action !== "generic_run" && !item.legacyFlags?.length && item.targetCaptureStatus === "clarification_required") {
 		const missingFields = item.targetCaptureReasonCode ? [TARGET_FIELD_REASONS[item.targetCaptureReasonCode] ?? item.targetCaptureReasonCode] : [];
 		return {
@@ -2268,36 +2486,19 @@ function deriveItemDiagnosis(p, item) {
 			attempt_fingerprint: fingerprint(p, item, "target_clarification_required")
 		};
 	}
-	if (action === "generic_run" || item.legacyFlags?.length) {
-		if (kind === "inquiry") {
-			const closable = p.boundaryProtocol === 5;
-			return {
-				...base,
-				certification: "unsupported",
-				reason_code: closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable",
-				repairability: "unsupported",
-				missing_fields: [],
-				next_action: {
-					kind: "report_only",
-					resume_condition: closable ? "Deliver the actual answer; the host-confirmed final response of a completed turn closes this item." : "Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this."
-				},
-				attempt_fingerprint: fingerprint(p, item, closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable")
-			};
-		}
-		return {
-			...base,
-			certification: "unsupported",
-			reason_code: "generic_run_non_certifiable",
-			repairability: "user_input_required",
-			missing_fields: [],
-			next_action: {
-				kind: "report_only",
-				required_input: "a concrete supported action and target for this obligation",
-				resume_condition: "A fresh root-user instruction naming a supported action and exact target replaces the generic obligation; identical re-phrasing changes nothing."
-			},
-			attempt_fingerprint: fingerprint(p, item, "generic_run_non_certifiable")
-		};
-	}
+	if (action === "generic_run" || item.legacyFlags?.length) return {
+		...base,
+		certification: "unsupported",
+		reason_code: "generic_run_non_certifiable",
+		repairability: "user_input_required",
+		missing_fields: [],
+		next_action: {
+			kind: "report_only",
+			required_input: "a concrete supported action and target for this obligation",
+			resume_condition: "A rebind proposal mapping this obligation to a concrete supported action and target is the only thing that replaces it; after the durable confirmation the original is superseded atomically. Similar re-phrasing changes nothing."
+		},
+		attempt_fingerprint: fingerprint(p, item, "generic_run_non_certifiable")
+	};
 	if (p.hostStatus !== "supported") return {
 		...base,
 		certification: "unavailable",
@@ -2471,7 +2672,18 @@ function isFrozenV042RebindResponse(recorded) {
 /** Whether the partition changes certification at all: a same-generic split
 * is organizational at best and must not cost a user confirmation. */
 function certificationGain(item, candidates) {
-	if ((item.semanticAction ?? "generic_run") !== "generic_run") return true;
+	const current = item.semanticAction ?? "generic_run";
+	if (current !== "generic_run" && item.targetCaptureStatus === "clarification_required") return candidates.some((candidate) => {
+		if (candidate.action === void 0) return false;
+		if (candidate.action !== current && candidate.action !== "generic_run") return true;
+		const target = candidate.requestedTarget;
+		if (!target) return false;
+		const key = requestedIdentityKey(candidate.action);
+		if (key && Object.hasOwn(target, key)) return true;
+		if ((candidate.action === "create" || candidate.action === "modify") && target.artifact_type !== void 0 && target.scope !== void 0) return true;
+		return false;
+	});
+	if (current !== "generic_run") return true;
 	return candidates.some((candidate) => candidate.action !== void 0 && candidate.action !== "generic_run");
 }
 function preservesIdentity(old, clarified) {
@@ -2942,6 +3154,7 @@ function createProjection() {
 		boundaries: [],
 		externalOperations: /* @__PURE__ */ new Map(),
 		units: /* @__PURE__ */ new Map(),
+		coverage: [],
 		sessionRefDigest: "11".repeat(32),
 		hostLockDigest: "22".repeat(32),
 		hostStatus: "supported",
@@ -4537,7 +4750,7 @@ function renderRecoveryPacket(projection, options = {}) {
 			if (add(`[${clip(item.id, 20)}] root_condition_pending; wait for trusted root: ${item.resumeEvent ?? item.condition ?? item.normalizedText}; do not execute before release`, compact ? 160 : 310)) count++;
 			return;
 		}
-		const remedy = diagnosis.repairability === "agent_repairable" ? "Collect matching evidence; checkpoint" : diagnosis.repairability === "historical_gap" ? "Read back observed state; do not re-execute" : diagnosis.certification === "unsupported" ? "Deliver honestly; stays uncertified unless a fresh instruction names a supported action" : "Restore audited host/adapter capability";
+		const remedy = diagnosis.repairability === "agent_repairable" ? "Collect matching evidence; checkpoint" : diagnosis.repairability === "historical_gap" ? "Read back observed state; do not re-execute" : diagnosis.next_action.kind === "clarify_target" ? "Supply the exact target; then collect evidence and checkpoint" : diagnosis.certification === "unsupported" ? "Deliver honestly; stays uncertified unless a fresh instruction names a supported action" : "Restore audited host/adapter capability";
 		if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_action.resume_condition ?? remedy}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++;
 	};
 	if (constraints[0]) constraint(constraints[0]);
@@ -8659,9 +8872,37 @@ function resolveArtifact(path$1, scope) {
 */
 function captureRootText(projection, text, seq, scope, legacy, priorRootMessages, prefix = `m${seq}`, coordinationSplit = true, unitId) {
 	const blocks = segmentAuthorityBlocks(text, priorRootMessages);
+	const provenance = legacy ? void 0 : {
+		rawTextSha256: sha256(text),
+		rawText: text
+	};
+	let coveredSpans = 0;
+	let blockCursor = 0;
 	for (const block$1 of blocks) {
 		if (!block$1.capture) continue;
-		insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", legacy, block$1.kind === "instruction" || block$1.authority === "root_adoption", coordinationSplit, unitId);
+		let blockOffset;
+		if (provenance) {
+			const at = provenance.rawText.indexOf(block$1.text, blockCursor);
+			if (at >= 0) {
+				blockCursor = at + 1;
+				blockOffset = utf8ByteOffset(provenance.rawText, at);
+			}
+		}
+		coveredSpans += insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", legacy, block$1.kind === "instruction" || block$1.authority === "root_adoption", coordinationSplit, unitId, provenance ? {
+			...provenance,
+			blockOffset,
+			blockText: block$1.text,
+			blockAuthority: block$1.authority
+		} : void 0);
+	}
+	if (provenance) {
+		projection.coverage.push({
+			seq,
+			rawTextSha256: provenance.rawTextSha256,
+			byteLength: utf8ByteLength(provenance.rawText),
+			coveredSpans
+		});
+		if (projection.coverage.length > 16) projection.coverage.shift();
 	}
 	priorRootMessages.push(text);
 	if (priorRootMessages.length > 16) priorRootMessages.shift();
@@ -8672,16 +8913,40 @@ function captureRootText(projection, text, seq, scope, legacy, priorRootMessages
 * item, so evidence for one file cannot close a message that also covers other
 * files or embeds prohibitions.
 */
-function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId) {
+function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId, provenance) {
 	const before = new Set(projection.items.keys());
+	let coveredSpans = 0;
+	const usedOccurrences = /* @__PURE__ */ new Set();
 	for (const segment of segmentClauses(text, { coordinationSplit })) {
 		if (classifyUserInteraction(segment.body) === "conversational") continue;
 		if (segment.kind === "requirement" && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue;
+		let span;
+		if (provenance) {
+			let at = provenance.blockText.indexOf(segment.text);
+			while (at >= 0 && usedOccurrences.has(at)) at = provenance.blockText.indexOf(segment.text, at + 1);
+			if (at >= 0) {
+				usedOccurrences.add(at);
+				const start = (provenance.blockOffset ?? 0) + utf8ByteOffset(provenance.blockText, at);
+				span = {
+					partIndex: 0,
+					start,
+					end: start + utf8ByteLength(segment.text),
+					class: spanClassOf(segment.kind, segment.interpretation.directive, provenance.blockAuthority)
+				};
+			}
+		}
+		if (span) coveredSpans += 1;
 		if (segment.paths.length === 0) {
-			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId);
+			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance ? {
+				rawTextSha256: provenance.rawTextSha256,
+				span
+			} : void 0);
 			continue;
 		}
-		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId);
+		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId, provenance ? {
+			rawTextSha256: provenance.rawTextSha256,
+			span
+		} : void 0);
 	}
 	for (const [id, item] of projection.items) {
 		if (before.has(id)) continue;
@@ -8709,14 +8974,19 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		}
 		else item.authority = authority;
 	}
+	return coveredSpans;
 }
-function insert(projection, segment, sourceMessageId, subject, surface, unitId) {
+function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance) {
 	const revision = projection.contractRevision + 1;
 	const id = nextId(projection.items, segment.kind);
 	const method = extractMethod(segment.body);
 	const operation = extractOperation(segment.body);
 	const item = captureItem(segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation, segment.interpretation);
 	if (unitId !== void 0) item.unitId = unitId;
+	if (provenance) {
+		item.rawTextSha256 = provenance.rawTextSha256;
+		if (provenance.span) item.spans = [provenance.span];
+	}
 	const duplicate = [...projection.items.values()].find((existing) => existing.kind === segment.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
 	if (duplicate) supersedeItem(projection.items, duplicate.id, item);
 	else projection.items.set(id, item);
@@ -10325,4 +10595,4 @@ function proofEvidenceConstraints(evidence, obligation) {
 }
 
 //#endregion
-export { parsePwshCommand as $, STOP_PROTOCOL_VERSION_V2 as $n, isRootPauseRequest as $t, createGitPrestateEnvelope as A, extractArtifactPaths as An, RC015_HOST_PACKAGES as At, CAPTURE_V042_NOTICE as B, maskCodeSpans as Bn, recoveryDigest as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, deriveItemDiagnosis as Cn, SUPPORTED_HOST_RANGE as Ct, GIT_COMMAND_TEMPLATES as D, captureClause as Dn, parseHostVersion as Dt, GIT_COMMAND_MANIFEST_IDS as E, relevantEvidence as En, evaluateMinimumHostVersion as Et, verifiedLinearCommitReadback as F, interpretClause as Fn, certifyCheckpoint as Ft, supersedeItem as G, npmEscapedPackageName as Gn, isVerifyingCapability as Gt, PROTOCOL_V4_NOTICE as H, semanticActionOfScope as Hn, bindingSatisfies as Ht, FIRST_STEP_GUIDANCE as I, interpretMessage as In, DEFAULT_RECOVERY_CHAR_BUDGET as It, extractToolSubject as J, CERTIFICATE_VERSION as Jn, NO_PROGRESS_TURNS_BEFORE_STOP as Jt, evidenceFromPersistedToolResult as K, ACTION_MANIFEST as Kn, CONTROL_RECORD_PREFIX as Kt, claimedBatchHasRealRootInput as L, isExecutableItem as Ln, MIN_RECOVERY_CHAR_BUDGET as Lt, gitCommandMatchesTarget as M, extractOperation as Mn, ALPHA3_HOST_PACKAGES as Mt, parseGitCommandManifest as N, isInformationalMessage as Nn, authorityCaptureCounts as Nt, commitIndexSnapshotDigest as O, captureItem as On, satisfiesSupportedHostRange as Ot, revalidateGitPrestate as P, segmentClauses as Pn, segmentAuthorityBlocks as Pt, isRunExecutable as Q, STOP_PROTOCOL_VERSION as Qn, decisionBoundaryKey as Qt, lifecyclePhase as R, isOpenObligation as Rn, closingHint as Rt, SESSION_API_UNSUPPORTED as S, parseConfirmationMessage as Sn, MIN_SUPPORTED_HOST_VERSION as St, snapshotSessionEvents as T, itemDiagnosis as Tn, compareHostVersions as Tt, PROTOCOL_V5_NOTICE as U, statefulActionsOfScope as Un, evidenceCoverage as Ut, PROTOCOL_V3_NOTICE as V, namedActions as Vn, renderRecoveryPacket as Vt, deriveProjection as W, canonicalRegistryBase as Wn, evidenceMatchesItem as Wt, withDurability as X, SEMANTIC_ACTIONS as Xn, decideTurnBoundary as Xt, isDeterministicCheck as Y, CERTIFICATE_VERSION_V2 as Yn, classifyCompletionClaim as Yt, canonicalArgvFromCommand as Z, STATEFUL_ACTIONS as Zn, decideTurnStopping as Zt, packageRowsFromPnpmLock as _, rebindAttemptKey as _n, sanitizeUrl as _r, evaluateHostLock as _t, createProofManifest as a, goalCompletionDenial as an, semanticActionFromCommand as ar, ALPHA2_HOST_PACKAGES as at, resolveInstalledHostLock as b, CONFIRM_LINE_PATTERN as bn, selectHostCohort as bt, sessionQuery as c, effectuateBoundary as cn, validateActionTarget as cr, EXPECTED_HOST_PACKAGES as ct, combineHostPolicy as d, currentContractDigest as dn, classifyTaskIntent as dr, HOST_COHORTS as dt, isWholeTaskCompletionClaim as en, SUPPORTED_EVIDENCE_ADAPTERS as er, parseShellCommand as et, hostLockContextFromComposedDump as f, createProjection as fn, classifyUserInteraction as fr, LEGACY_HOST_COHORTS as ft, packageRowsFromActiveGraph as g, proposeRebindV042 as gn, sanitizeClauseText as gr, evaluateHostCapability as gt, inspectTargetHostGraph as h, proposeRebindOutcome as hn, normalizeClause as hr, evaluateExternalWaitCapability as ht, canonicalProjection as i, progressFingerprint as in, requestedTargetMatchesResolved as ir, ALPHA2_DSHMARKET_139_HOST_PACKAGES as it, executeRevalidatedGitEffect as j, extractMethod as jn, RC1_HOST_PACKAGES as jt, commitTreeSnapshotDigest as k, classifyClause as kn, RC015_RC2_HOST_PACKAGES as kt, validateProofManifest as l, isCurrentAcceptedBoundary as ln, COMMAND_SURFACE_MANIFEST as lr, GOAL_HOST_PACKAGES as lt, injectActiveProfileHostLock as m, proposeRebind as mn, digestStrings as mr, bindLiveGoalCapability as mt, PROOF_PROTOCOL_VERSION as n, latestRootInstruction as nn, isStatefulAction as nr, ACTIVE_HOST_COHORT_IDS as nt, proofDigest as o, hasCurrentCertificate as on, semanticActionFromText as or, BASE_HOST_PACKAGES as ot, hostLockRowsFromComposedDump as p, confirmRebind as pn, canonicalizePath as pr, bindExecutableIdentity as pt, extractTextContent as q, ACTION_MANIFEST_VERSION as qn, NO_PROGRESS_RECORD_PREFIX as qt, bindProofToProjection as r, observeAssistantOutcome as rn, requestedTargetAuthorizesMutation as rr, ACTIVE_HOST_LAUNCHER_VERSION as rt, proofEvidenceConstraints as s, availableBoundaryQualifications as sn, validateActionManifest as sr, DEFAULT_HOST_LOCK as st, PROOF_KINDS as t, latestAssistantText as tn, actionCompatible as tr, ACTIVE_HOST_COHORT_ID as tt, HostProfileError as u, qualifyBoundary as un, validateManifest as ur, HOST_CAPABILITY_PACKAGE_GROUPS as ut, readActiveHostGraph as v, rebindResponse as vn, sha256 as vr, evaluateToolSurfaceCapability as vt, SessionApiError as w, evidenceAvailabilityReason as wn, SUPPORTED_HOST_VERSIONS as wt, verifyComposedHostLockDump as x, isFrozenV042RebindResponse as xn, LATEST_SUPPORTED_HOST_VERSION as xt, resolveActiveProfileHostLock as y, replayRebindResult as yn, hostVersionFromPackages as yt, previewFirstStepInjection as z, kindOfScope as zn, openItems as zt };
+export { parsePwshCommand as $, STOP_PROTOCOL_VERSION as $n, isRootPauseRequest as $t, createGitPrestateEnvelope as A, extractArtifactPaths as An, RC015_HOST_PACKAGES as At, CAPTURE_V042_NOTICE as B, maskCodeSpans as Bn, recoveryDigest as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, deriveItemDiagnosis as Cn, SUPPORTED_HOST_RANGE as Ct, GIT_COMMAND_TEMPLATES as D, captureClause as Dn, parseHostVersion as Dt, GIT_COMMAND_MANIFEST_IDS as E, relevantEvidence as En, evaluateMinimumHostVersion as Et, verifiedLinearCommitReadback as F, interpretClause as Fn, certifyCheckpoint as Ft, supersedeItem as G, npmEscapedPackageName as Gn, isVerifyingCapability as Gt, PROTOCOL_V4_NOTICE as H, semanticActionOfScope as Hn, bindingSatisfies as Ht, FIRST_STEP_GUIDANCE as I, interpretMessage as In, DEFAULT_RECOVERY_CHAR_BUDGET as It, extractToolSubject as J, BOUNDED_ARTIFACT_TYPES as Jn, NO_PROGRESS_TURNS_BEFORE_STOP as Jt, evidenceFromPersistedToolResult as K, ACTION_MANIFEST as Kn, CONTROL_RECORD_PREFIX as Kt, claimedBatchHasRealRootInput as L, isExecutableItem as Ln, MIN_RECOVERY_CHAR_BUDGET as Lt, gitCommandMatchesTarget as M, extractOperation as Mn, ALPHA3_HOST_PACKAGES as Mt, parseGitCommandManifest as N, isInformationalMessage as Nn, authorityCaptureCounts as Nt, commitIndexSnapshotDigest as O, captureItem as On, satisfiesSupportedHostRange as Ot, revalidateGitPrestate as P, segmentClauses as Pn, segmentAuthorityBlocks as Pt, isRunExecutable as Q, STATEFUL_ACTIONS as Qn, decisionBoundaryKey as Qt, lifecyclePhase as R, isOpenObligation as Rn, closingHint as Rt, SESSION_API_UNSUPPORTED as S, parseConfirmationMessage as Sn, MIN_SUPPORTED_HOST_VERSION as St, snapshotSessionEvents as T, itemDiagnosis as Tn, compareHostVersions as Tt, PROTOCOL_V5_NOTICE as U, statefulActionsOfScope as Un, evidenceCoverage as Ut, PROTOCOL_V3_NOTICE as V, namedActions as Vn, renderRecoveryPacket as Vt, deriveProjection as W, canonicalRegistryBase as Wn, evidenceMatchesItem as Wt, withDurability as X, CERTIFICATE_VERSION_V2 as Xn, decideTurnBoundary as Xt, isDeterministicCheck as Y, CERTIFICATE_VERSION as Yn, classifyCompletionClaim as Yt, canonicalArgvFromCommand as Z, SEMANTIC_ACTIONS as Zn, decideTurnStopping as Zt, packageRowsFromPnpmLock as _, rebindAttemptKey as _n, digestStrings as _r, evaluateHostLock as _t, createProofManifest as a, goalCompletionDenial as an, requestedIdentityKey as ar, ALPHA2_HOST_PACKAGES as at, resolveInstalledHostLock as b, CONFIRM_LINE_PATTERN as bn, sanitizeUrl as br, selectHostCohort as bt, sessionQuery as c, effectuateBoundary as cn, semanticActionFromCommand as cr, EXPECTED_HOST_PACKAGES as ct, combineHostPolicy as d, currentContractDigest as dn, validateActionTarget as dr, HOST_COHORTS as dt, isWholeTaskCompletionClaim as en, STOP_PROTOCOL_VERSION_V2 as er, parseShellCommand as et, hostLockContextFromComposedDump as f, createProjection as fn, COMMAND_SURFACE_MANIFEST as fr, LEGACY_HOST_COHORTS as ft, packageRowsFromActiveGraph as g, proposeRebindV042 as gn, canonicalizePath as gr, evaluateHostCapability as gt, inspectTargetHostGraph as h, proposeRebindOutcome as hn, classifyUserInteraction as hr, evaluateExternalWaitCapability as ht, canonicalProjection as i, progressFingerprint as in, isStatefulAction as ir, ALPHA2_DSHMARKET_139_HOST_PACKAGES as it, executeRevalidatedGitEffect as j, extractMethod as jn, RC1_HOST_PACKAGES as jt, commitTreeSnapshotDigest as k, classifyClause as kn, RC015_RC2_HOST_PACKAGES as kt, validateProofManifest as l, isCurrentAcceptedBoundary as ln, semanticActionFromText as lr, GOAL_HOST_PACKAGES as lt, injectActiveProfileHostLock as m, proposeRebind as mn, classifyTaskIntent as mr, bindLiveGoalCapability as mt, PROOF_PROTOCOL_VERSION as n, latestRootInstruction as nn, actionCompatible as nr, ACTIVE_HOST_COHORT_IDS as nt, proofDigest as o, hasCurrentCertificate as on, requestedTargetAuthorizesMutation as or, BASE_HOST_PACKAGES as ot, hostLockRowsFromComposedDump as p, confirmRebind as pn, validateManifest as pr, bindExecutableIdentity as pt, extractTextContent as q, ACTION_MANIFEST_VERSION as qn, NO_PROGRESS_RECORD_PREFIX as qt, bindProofToProjection as r, observeAssistantOutcome as rn, boundedArtifactChoiceMatches as rr, ACTIVE_HOST_LAUNCHER_VERSION as rt, proofEvidenceConstraints as s, availableBoundaryQualifications as sn, requestedTargetMatchesResolved as sr, DEFAULT_HOST_LOCK as st, PROOF_KINDS as t, latestAssistantText as tn, SUPPORTED_EVIDENCE_ADAPTERS as tr, ACTIVE_HOST_COHORT_ID as tt, HostProfileError as u, qualifyBoundary as un, validateActionManifest as ur, HOST_CAPABILITY_PACKAGE_GROUPS as ut, readActiveHostGraph as v, rebindResponse as vn, normalizeClause as vr, evaluateToolSurfaceCapability as vt, SessionApiError as w, evidenceAvailabilityReason as wn, SUPPORTED_HOST_VERSIONS as wt, verifyComposedHostLockDump as x, isFrozenV042RebindResponse as xn, sha256 as xr, LATEST_SUPPORTED_HOST_VERSION as xt, resolveActiveProfileHostLock as y, replayRebindResult as yn, sanitizeClauseText as yr, hostVersionFromPackages as yt, previewFirstStepInjection as z, kindOfScope as zn, openItems as zt };

@@ -106,6 +106,27 @@ export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): Unifie
       attempt_fingerprint: fingerprint(p, item, 'root_condition_pending'),
     }
   }
+  if (kind === 'inquiry') {
+    // 0.6.0 D06-02: the inquiry lane is judged before any target capture, so
+    // an inquiry whose change-verb maps to a stateful action is still answered
+    // by delivery, never routed through target clarification or rebind.
+    const closable = p.boundaryProtocol === 5
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable',
+      repairability: 'unsupported',
+      missing_fields: [],
+      missing_facets: [],
+      next_action: {
+        kind: 'report_only',
+        resume_condition: closable
+          ? 'Deliver the actual answer; the host-confirmed final response of a completed turn closes this item.'
+          : 'Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this.',
+      },
+      attempt_fingerprint: fingerprint(p, item, closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable'),
+    }
+  }
   if (action !== 'generic_run' && !item.legacyFlags?.length && item.targetCaptureStatus === 'clarification_required') {
     const missingFields = item.targetCaptureReasonCode ? [TARGET_FIELD_REASONS[item.targetCaptureReasonCode] ?? item.targetCaptureReasonCode] : []
     return {
@@ -124,27 +145,6 @@ export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): Unifie
     }
   }
   if (action === 'generic_run' || item.legacyFlags?.length) {
-    if (kind === 'inquiry') {
-      // Inquiries stay obligations but are not machine-certifiable: report
-      // honestly instead of dragging the user through a pointless rebind.
-      // Under a v5 boundary the obligation has a real closing path: the
-      // host-confirmed delivery of the final answer marks it answered.
-      const closable = p.boundaryProtocol === 5
-      return {
-        ...base,
-        certification: 'unsupported',
-        reason_code: closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable',
-        repairability: 'unsupported',
-        missing_fields: [],
-        next_action: {
-          kind: 'report_only',
-          resume_condition: closable
-            ? 'Deliver the actual answer; the host-confirmed final response of a completed turn closes this item.'
-            : 'Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this.',
-        },
-        attempt_fingerprint: fingerprint(p, item, closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable'),
-      }
-    }
     return {
       ...base,
       certification: 'unsupported',
@@ -154,7 +154,7 @@ export function deriveItemDiagnosis(p: GuardProjection, item: GuardItem): Unifie
       next_action: {
         kind: 'report_only',
         required_input: 'a concrete supported action and target for this obligation',
-        resume_condition: 'A fresh root-user instruction naming a supported action and exact target replaces the generic obligation; identical re-phrasing changes nothing.',
+        resume_condition: 'A rebind proposal mapping this obligation to a concrete supported action and target is the only thing that replaces it; after the durable confirmation the original is superseded atomically. Similar re-phrasing changes nothing.',
       },
       attempt_fingerprint: fingerprint(p, item, 'generic_run_non_certifiable'),
     }

@@ -30,7 +30,9 @@ describe('A20: synthetic incident regression', () => {
     let p = replay(events)
     const investigation = [...p.items.values()].find((item) => item.normalizedText.includes('是否有更新'))
     expect(investigation).toBeDefined()
-    expect(investigation!.semanticAction ?? 'generic_run').toBe('generic_run')
+    // 0.6.0: the question keeps the delivery lane regardless of which action
+    // word its text carries — it is never routed to target clarification.
+    expect(investigation!.taskKind).toBe('inquiry')
     expect(investigation!.status).toBe('pending')
 
     // 2) A gainful proposal confirmed together with trailing content.

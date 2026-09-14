@@ -27,6 +27,30 @@ export interface GoalRef {
   revision: number
 }
 
+/**
+ * 0.6.0 source span (C01): a UTF-8 byte half-open interval `[start, end)`
+ * inside the ORIGINAL root message text (before any normalization), bound to
+ * that message's content digest. Offsets are byte offsets computed with
+ * TextEncoder — never string indices — so Python and TypeScript agree on the
+ * same positions.
+ */
+export interface SourceSpan {
+  /** Index of the message part the span anchors to (0 = text). */
+  partIndex: number
+  start: number
+  end: number
+  class: 'instruction' | 'adoption' | 'question' | 'constraint'
+}
+
+/** 0.6.0 per-message coverage summary (C01), bounded to the last 16 messages. */
+export interface MessageCoverage {
+  seq: number
+  rawTextSha256: string
+  byteLength: number
+  /** Number of obligation spans the message contributed to items. */
+  coveredSpans: number
+}
+
 export interface WaitAuthorization {
   kind: 'root_explicit_wait' | 'user_decision_item'
   id: string
@@ -107,6 +131,13 @@ export interface GuardItem {
   waitAuthorization?: WaitAuthorization
   deferAuthorization?: DeferAuthorization
   persistenceAuthorization?: PersistenceAuthorization
+  /**
+   * 0.6.0 C01 provenance: the content digest of the original root message
+   * text and the UTF-8 byte spans inside it that this item's clause came
+   * from. Absent on legacy items, which keep their historical reading.
+   */
+  rawTextSha256?: string
+  spans?: SourceSpan[]
   /**
    * 0.6.0 work-unit assignment (C04), present only for obligations captured
    * after a v5 protocol boundary in a non-delegated session. Legacy items keep
@@ -285,6 +316,8 @@ export interface GuardProjection {
    * scope, and whether delivery/unit semantics are active.
    */
   boundaryProtocol?: 5
+  /** 0.6.0 C01 coverage summaries, one per captured root message (last 16). */
+  coverage: MessageCoverage[]
   sessionRefDigest: string
   hostLockDigest: string
   hostStatus: HostStatus
@@ -359,6 +392,7 @@ export function createProjection(): GuardProjection {
     boundaries: [],
     externalOperations: new Map(),
     units: new Map(),
+    coverage: [],
     sessionRefDigest: '11'.repeat(32),
     hostLockDigest: '22'.repeat(32),
     hostStatus: 'supported',

@@ -237,6 +237,11 @@ const REQUESTED_IDENTITY_KEY: Readonly<Partial<Record<SemanticAction, string>>> 
   restart: 'service_id', publish: 'artifact_id',
 }
 
+/** The single identity field a root instruction must name for this action. */
+export function requestedIdentityKey(action: SemanticAction): string | undefined {
+  return REQUESTED_IDENTITY_KEY[action]
+}
+
 function stableTargetValue(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableTargetValue).join(',')}]`
   if (value && typeof value === 'object') {
@@ -249,15 +254,73 @@ function stableTargetValue(value: unknown): string {
 }
 
 /**
+ * The 0.6.0 bounded file-choice vocabulary (C07/S03): artifact-type nouns a
+ * root instruction may use instead of an exact path. The assistant may pick
+ * the exact file INSIDE the captured scope and inside the type, and the
+ * choice is frozen by the resolution producer before any effect. An absent
+ * extension set (`file`) admits any file the producer accepts.
+ */
+export const BOUNDED_ARTIFACT_TYPES: Readonly<Record<string, ReadonlySet<string> | null>> = {
+  document: new Set(['md', 'markdown', 'txt']),
+  readme: new Set(['md', 'rst', 'txt']),
+  report: new Set(['md', 'txt']),
+  file: null,
+}
+
+function extensionOf(path: string): string {
+  const base = path.split(/[\\/]/).pop() ?? ''
+  const dot = base.lastIndexOf('.')
+  return dot > 0 ? base.slice(dot + 1).toLowerCase() : ''
+}
+
+function normalizeSlashes(value: string): string {
+  return value.replace(/\\/g, '/')
+}
+
+/** Whether `artifact` lives inside `scope` (or exactly at it), slash-normalized. */
+function insideScope(artifact: string, scope: string): boolean {
+  if (scope === 'scope' || scope === '') return false
+  const normalizedArtifact = normalizeSlashes(artifact)
+  const normalizedScope = normalizeSlashes(scope).replace(/\/+$/, '')
+  if (normalizedArtifact === normalizedScope) return false
+  return normalizedArtifact.startsWith(`${normalizedScope}/`)
+}
+
+/**
+ * Whether a bounded-choice requested target authorizes this resolved target:
+ * the resolved artifact must live inside the captured scope and match the
+ * captured type. The exact file name is the assistant's bounded decision,
+ * frozen by resolution — never a root-named identity substitution.
+ */
+export function boundedArtifactChoiceMatches(
+  action: SemanticAction,
+  requested: TargetTuple | undefined,
+  resolved: TargetTuple | undefined,
+): boolean {
+  if (action !== 'create' && action !== 'modify') return false
+  const type = requested?.artifact_type
+  const scope = requested?.scope
+  if (typeof type !== 'string' || typeof scope !== 'string' || !(type in BOUNDED_ARTIFACT_TYPES)) return false
+  const artifact = resolved?.artifact_id
+  if (typeof artifact !== 'string' || !artifact) return false
+  if (!insideScope(artifact, scope)) return false
+  const allowed = BOUNDED_ARTIFACT_TYPES[type]
+  return allowed === null || allowed.has(extensionOf(artifact))
+}
+
+/**
  * Compare identities captured from the root instruction with a complete
  * adapter-resolved target. Requested targets are partial by design: only
  * explicitly named identities (plus the active repository scope) are frozen.
+ * A bounded artifact choice (scope + type, C07) matches when the resolved
+ * exact file is inside the scope and of the captured type.
  */
 export function requestedTargetMatchesResolved(
   action: StatefulAction,
   requested: TargetTuple | undefined,
   resolved: TargetTuple | undefined,
 ): boolean {
+  if (boundedArtifactChoiceMatches(action, requested, resolved)) return true
   const identityKey = REQUESTED_IDENTITY_KEY[action]
   if (!identityKey || !requested || !resolved || !Object.hasOwn(requested, identityKey)) return false
   const allowed = new Set(ACTION_MANIFEST.actions[action].resolvedTargetKeys)
@@ -287,6 +350,10 @@ export function requestedTargetAuthorizesMutation(
   requested: TargetTuple | undefined,
   resolved: TargetTuple | undefined,
 ): boolean {
+  // A bounded artifact choice names scope + type instead of an exact file
+  // (C07); the resolved exact file must sit inside both, and the resolution
+  // producer froze it before any effect.
+  if (boundedArtifactChoiceMatches(action, requested, resolved)) return true
   const required = MUTATION_AUTHORITY_KEYS[action]
   return !!requested
     && required.every((key) => Object.hasOwn(requested, key))

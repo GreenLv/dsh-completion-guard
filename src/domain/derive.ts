@@ -13,10 +13,11 @@ import { evidenceFromPersistedToolResult, extractTextContent, withDurability } f
 import { isStatefulAction, requestedTargetMatchesResolved } from './protocol-manifest.js'
 import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
 import { supersedeItem } from './supersession.js'
-import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItemKind } from './types.js'
+import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItemKind, type SourceSpan } from './types.js'
 import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
 import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
 import { explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensNewUnit, currentUnitHasOpenWork } from './work-unit.js'
+import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 
 interface PendingCall {
   name: string
@@ -183,9 +184,23 @@ function captureRootText(
   unitId?: string,
 ): void {
   const blocks = segmentAuthorityBlocks(text, priorRootMessages)
+  // 0.6.0 C01 provenance: current messages bind their items to UTF-8 byte
+  // spans of the original text and the message's content digest. Legacy
+  // messages keep their historical reading and gain no spans.
+  const provenance = legacy ? undefined : { rawTextSha256: sha256(text), rawText: text }
+  let coveredSpans = 0
+  let blockCursor = 0
   for (const block of blocks) {
     if (!block.capture) continue
-    insertItems(
+    let blockOffset: number | undefined
+    if (provenance) {
+      const at = provenance.rawText.indexOf(block.text, blockCursor)
+      if (at >= 0) {
+        blockCursor = at + 1
+        blockOffset = utf8ByteOffset(provenance.rawText, at)
+      }
+    }
+    coveredSpans += insertItems(
       projection,
       block.text,
       `${prefix}:${block.blockId}`,
@@ -195,7 +210,17 @@ function captureRootText(
       block.kind === 'instruction' || block.authority === 'root_adoption',
       coordinationSplit,
       unitId,
+      provenance ? { ...provenance, blockOffset, blockText: block.text, blockAuthority: block.authority } : undefined,
     )
+  }
+  if (provenance) {
+    projection.coverage.push({
+      seq,
+      rawTextSha256: provenance.rawTextSha256,
+      byteLength: utf8ByteLength(provenance.rawText),
+      coveredSpans,
+    })
+    if (projection.coverage.length > 16) projection.coverage.shift()
   }
   priorRootMessages.push(text)
   if (priorRootMessages.length > 16) priorRootMessages.shift()
@@ -217,19 +242,40 @@ function insertItems(
   legacyAuthorityProven = false,
   coordinationSplit = true,
   unitId?: string,
-): void {
+  provenance?: { rawTextSha256: string; rawText: string; blockOffset?: number; blockText: string; blockAuthority: string },
+): number {
   const before = new Set(projection.items.keys())
+  let coveredSpans = 0
+  // Scopes are resolved in stack order, not text order, so each segment takes
+  // the first occurrence of its verbatim text that no earlier segment claimed.
+  const usedOccurrences = new Set<number>()
   for (const segment of segmentClauses(text, { coordinationSplit })) {
     // Session-layer clauses (progression phrases, meta questions) inside an
     // otherwise actionable message never become contract items.
     if (classifyUserInteraction(segment.body) === 'conversational') continue
     if (segment.kind === 'requirement' && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue
+    let span: SourceSpan | undefined
+    if (provenance) {
+      let at = provenance.blockText.indexOf(segment.text)
+      while (at >= 0 && usedOccurrences.has(at)) at = provenance.blockText.indexOf(segment.text, at + 1)
+      if (at >= 0) {
+        usedOccurrences.add(at)
+        const start = (provenance.blockOffset ?? 0) + utf8ByteOffset(provenance.blockText, at)
+        span = {
+          partIndex: 0,
+          start,
+          end: start + utf8ByteLength(segment.text),
+          class: spanClassOf(segment.kind, segment.interpretation.directive, provenance.blockAuthority),
+        }
+      }
+    }
+    if (span) coveredSpans += 1
     if (segment.paths.length === 0) {
-      insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope', unitId)
+      insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
       continue
     }
     for (const path of segment.paths) {
-      insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact', unitId)
+      insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
     }
   }
   // A new unconditional root instruction on the same action and target
@@ -271,6 +317,7 @@ function insertItems(
       item.authority = authority
     }
   }
+  return coveredSpans
 }
 
 function insert(
@@ -280,6 +327,7 @@ function insert(
   subject: string,
   surface: 'artifact' | 'scope',
   unitId?: string,
+  provenance?: { rawTextSha256: string; span?: SourceSpan },
 ): void {
   const revision = projection.contractRevision + 1
   const id = nextId(projection.items, segment.kind)
@@ -290,6 +338,10 @@ function insert(
     segment.interpretation,
   )
   if (unitId !== undefined) item.unitId = unitId
+  if (provenance) {
+    item.rawTextSha256 = provenance.rawTextSha256
+    if (provenance.span) item.spans = [provenance.span]
+  }
   const duplicate = [...projection.items.values()].find(
     (existing) => existing.kind === segment.kind
       && existing.status === 'pending'

@@ -44,6 +44,9 @@ describe('A08: intent layer separates inquiries from actions without dropping ei
     const p = replay(events)
     const diagnosis = deriveItemDiagnosis(p, [...p.items.values()][0])
     expect(diagnosis.task_kind).toBe('action')
+    // 皮肤中心 is not an artifact-type noun, so the clause keeps its honest
+    // generic reading; a document noun would have opened the bounded-choice
+    // modify lane (see the v060 bounded-choice tests).
     expect(diagnosis.reason_code).toBe('generic_run_non_certifiable')
     expect(diagnosis.repairability).toBe('user_input_required')
   })
