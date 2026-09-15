@@ -70,6 +70,8 @@ export interface FirstStepPreviewInput {
   boundaryPresent: boolean
   /** The session is a delegated/subagent session, never a root conversation. */
   delegated: boolean
+  /** 0.6.1 (W060-05): the effective responsibility tier shapes the guidance. */
+  policy?: 'standard' | 'strict' | 'release'
 }
 
 /**
@@ -92,16 +94,30 @@ export function previewFirstStepInjection(
   if (input.boundaryV5Present) return undefined
   return {
     boundary: PROTOCOL_V5_NOTICE,
-    guidance: FIRST_STEP_GUIDANCE,
+    guidance: firstStepGuidance(input.policy ?? 'standard'),
   }
 }
 
 /**
  * Compact first-step guidance: protection has started, what it protects, and
- * the working order for stateful actions. It is not a task, asks no question,
- * and contains no recovery wording.
+ * when the guarded producer path is needed. 0.6.1 (W060-05): the stateful
+ * workflow is stated CONDITIONALLY — only an obligation whose own clause
+ * demands a certified stateful action runs through prepare/producer/checkpoint.
+ * The 0.6.0 text demanded that order for every stateful action unconditionally,
+ * which ordinary business work correctly read as a Guard approval gate.
+ * Ordinary answers, investigations, and ordinary tool work are never gated, and
+ * missing Guard evidence is never a reason to repeat a completed action.
  */
-export const FIRST_STEP_GUIDANCE = 'Context Guard is now protecting this session: requirements from your messages stay open until they are certified with matching durable evidence. Before a stateful action (write, install, commit, push, publish, restart), call context_guard_prepare to see the supported command shape and required resolution/effect/state order; collect evidence with the guarded tools, then close items with context_guard_checkpoint. Ordinary answers and investigations need no certification.'
+export function firstStepGuidance(policy: 'standard' | 'strict' | 'release' = 'standard'): string {
+  const strict = policy === 'strict'
+    ? ' Under strict policy, a verification the user explicitly requested (a visual readback or a complete-scope check) must be discharged by a real readback fact.'
+    : ''
+  return 'Context Guard is now protecting this session: requirements from your messages stay open until they are certified with matching durable evidence. Ordinary answers, investigations, and ordinary tool work need no Guard approval. When a requirement itself calls for a certified stateful action (install, apply, create, modify, restart, commit, push, publish, pull, fetch), call context_guard_prepare before it to see the supported command shape and the required resolution/effect/state order, run the action through the guarded path, and close items with context_guard_checkpoint; never repeat an already-completed action to mint missing evidence.'
+    + strict
+    + ' Ordinary answers and investigations need no certification.'
+}
+
+export const FIRST_STEP_GUIDANCE: string = firstStepGuidance('standard')
 
 /**
  * Lifecycle phase derived from durable facts. `enabled` is the log-derived

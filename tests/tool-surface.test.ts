@@ -72,6 +72,7 @@ const EXPECTED_TOOLS = [
   'context_guard_evidence',
   'context_guard_action',
   'context_guard_prepare',
+  'context_guard_interpret',
   'context_guard_release',
   'context_guard_external_operation',
 ]

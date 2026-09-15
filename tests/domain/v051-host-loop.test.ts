@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -165,6 +165,18 @@ interface LoopHost {
 }
 
 
+/**
+ * Every host this file starts is tracked and disposed after each test. The
+ * JSONL persistence backend holds real file handles for in-flight writes; a
+ * host left undisposed lets Node garbage-collect such a handle at process
+ * exit, which fails the whole run with an unhandled ERR_INVALID_STATE.
+ */
+const liveHosts: LoopHost[] = []
+
+async function disposeHost(host: LoopHost): Promise<void> {
+  try { await host.fiber.dispose?.() } catch { /* teardown is best-effort */ }
+}
+
 async function startLoopHost(
   sessionRoot = mkdtempSync(join(tmpdir(), 'cg-host-loop-')),
   options: { createAgent?: boolean } = {},
@@ -232,7 +244,9 @@ async function startLoopHost(
     ? undefined
     : await (service('agentLoop') as { create: (id: string, options?: unknown) => Promise<unknown> })
       .create('loop-host-agent', { cwd: '/work/repo', provider: 'deterministic-fixture', model: 'fixture-model' })
-  return { ctx, agent: created as LoopHost['agent'], sessionRoot, observed, llmCalls, hooks, fiber: fiber as LoopHost['fiber'] }
+  const host: LoopHost = { ctx, agent: created as LoopHost['agent'], sessionRoot, observed, llmCalls, hooks, fiber: fiber as LoopHost['fiber'] }
+  liveHosts.push(host)
+  return host
 }
 
 /** Enqueue one root message through the loop and run the turn to idle. */
@@ -256,6 +270,12 @@ async function runTurn(host: LoopHost, text: string) {
 const roundMessages = (host: LoopHost) =>
   host.agent.session.snapshotEvents().filter((event) => event.type === 'user/message'
     && (event.data as { source?: { kind?: string } })?.source?.kind !== 'plugin')
+
+afterEach(async () => {
+  while (liveHosts.length > 0) {
+    await disposeHost(liveHosts.pop()!)
+  }
+})
 
 describe('the real agent loop over the fixture host', () => {
   it('admits a root message and lets production write the round event', async () => {

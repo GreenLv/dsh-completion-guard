@@ -62,6 +62,103 @@ The two scope facts decided on 2026-09-14 (candidate-only v2 plus open parity;
 attributed as an approved scope reduction) are recorded in
 [SEMANTIC_COMPATIBILITY.md](SEMANTIC_COMPATIBILITY.md).
 
+## 0.6.0 publication facts (verified 2026-09-15)
+
+The "not established" list of the 2026-09-14 source-candidate section below was
+written before publication and is superseded by the following readback, recorded
+the same day it was performed. The historical section text is kept as written.
+
+- The annotated tag `v0.6.0` resolves to commit
+  `cc5cbc6d408664172d9383de7c83c55ec6dfd602`, and the GitHub Release `v0.6.0`
+  targets the same commit.
+- The npm registry carries `dsh-completion-guard@0.6.0`; its registry
+  `dist.integrity` is
+  `sha512-xIV5wAmDhdXGr7xlpOAceaVJUYgkxmqO2/7zuIat95T+QH2k0e09oYRGokUpH18NNNC2p6UVqnjO8fcpp1V58Q==`
+  and `dist.shasum` is `4573474855d2f36c011cb64cc7139ec2bf68d613`.
+- The byte-level comparison of the published artifact against the release
+  receipt's frozen tgz belongs to the release archive and is not re-derived
+  here.
+
+## 0.6.1 source candidate (2026-09-15)
+
+This section records a **source and deterministic** claim only. It is not a
+release, not an artifact acceptance, and not a native-platform result; each of
+those is a separate fact that, when established, gets its own section and its
+own frozen-artifact identity.
+
+Established at this point:
+
+- The five W060-01–05 repairs from the Windows 0.6.0 session review
+  (`docs/WINDOWS_0_6_0_REPAIR_PLAN.md`) are implemented and covered by
+  dedicated positive/negative suites:
+  `tests/domain/v061-attachment-interpretation.test.ts`,
+  `tests/domain/v061-conservative-interpretation.test.ts`,
+  `tests/domain/v061-discovery-pagination.test.ts`,
+  `tests/domain/v061-evidence-contract.test.ts`, and
+  `tests/domain/v061-ordinary-observation.test.ts`, alongside the full
+  pre-existing regression matrix. The suites include the review rounds'
+  counterexamples: an answer that states the images were not viewed closes no
+  asset; a replayed log without interpretation records keeps assets `pending`;
+  an OLD asset closes through the turn that explicitly re-interpreted it, and
+  the closing turn must be the interpreting turn; a receipt contradicting the
+  call, item, revision, or asset identity is an `interpretation_receipt_mismatch`
+  integrity violation that records nothing, and so is a transplanted result
+  whose call turn and receipt turn disagree, while a valid-identity receipt
+  with a MISSING turn association simply records nothing and keeps the log
+  valid; a real order containing a relative wh-clause ("Create a file where
+  logs are stored") stays executable; unknown requests stay unresolved
+  regardless of wording, under the final interpretation contract: a
+  grammatical declarative can express a task requirement, so no surface
+  shape proves a clause is closable information — the review rounds'
+  holdouts all stay unresolved and unanswered ("Please sanitize inputs
+  that are untrusted", "请处理被遮挡的面板", "Have these inputs
+  sanitized", "处理被遮挡的面板", "处理没有标签的输入", "Sanitize inputs
+  I have received", the long-attributive "处理被异常宽大…遮挡的面板",
+  "I need you to sanitize these inputs", "Our requirement is to sanitize
+  all inputs", "避免面板被遮挡", "没有标签的输入也要处理", "Sanitize all
+  inputs", and declarative contexts like "设置面板被遮挡。请修复登录页。"
+  whose undecidable context stays pending) — while clauses with POSITIVE
+  information grounds (questions, quoted actions, past/aspect reports as the
+  clause's entire predicate such as "我刚才已经推送过了") keep closing
+  through their own turn's answer, a bare whole-message acknowledgment
+  ("当然。") is session talk that is never captured, and an unresolved
+  clause — including explanation/investigation openers and every holdout
+  above — is closable only in parts: the implemented structured-interpretation
+  pathway (`context_guard_interpret`) requires a span partition
+  (information_spans/unknown_spans) validated against the full input spans,
+  and only the information sub-item closes with that turn's answer while
+  every unknown/undeclared sub-span stays pending ("Explain the issue,
+  sanitize all inputs" keeps the sanitize demand open); a verbatim concrete
+  clarification supersedes an unresolved clause; a successful command whose
+  text merely contains quoted
+  action text flags nothing; and a git effect that already holds (push with
+  the remote at the local head, pull/fetch already up to date) is refused
+  with `effect_already_applied` before any command runs. The test host lifecycle
+  now disposes every started loop host, which removes the intermittent
+  FileHandle garbage-collection failure of the full-suite run.
+- Compatibility boundaries hold: the asset obligation's contract text is
+  byte-identical to 0.6.0 (replayed contract digests do not move, recorded
+  certificates still verify); asset closure requires a per-asset
+  `context_guard_interpret` record plus the turn's trusted delivery, so logs
+  written by 0.6.0 replay with their assets `pending` — the same status 0.6.0
+  produced; new fields, the interpretation tool, and reason codes are
+  additive; legacy sessions keep their historical reading; and no digest
+  domain was reused.
+- The full local deterministic matrix (this section's top lists it in
+  `NEXT_VERSION_REPAIR_NOTES.md` and the repository instructions) and byte-identical
+  repeated builds of the candidate dist. The dist differs from the 0.6.0
+  base until the 0.6.1 candidate is committed.
+
+Not established here, and deliberately not claimed:
+
+- No 0.6.1 tgz has been packed with `scripts/release-pack.mjs`, so there is no
+  frozen artifact digest for 0.6.1.
+- No native macOS or Windows Web/Headless run has been executed against a
+  0.6.1 artifact; the v5-session, attachment, discovery, and
+  unattributed-observation behaviours above have deterministic coverage only.
+- No tag, npm publication, GitHub Release, or consumer installation exists for
+  0.6.1 in this state.
+
 ## 0.6.0 source candidate (2026-09-14)
 
 This section records a **source and deterministic** claim only. It is not a

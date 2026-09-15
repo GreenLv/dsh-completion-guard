@@ -49,13 +49,49 @@ const TARGET_FIELD_REASONS: Record<string, string> = {
   requested_target_registry_missing_or_invalid: 'registry',
 }
 
+/**
+ * The evidence roles the item's OWN obligation contract requires (0.6.1,
+ * W060-04). A stateful change needs the full resolution/effect/state chain; a
+ * read-only verification (inspect, test, verify, generic readback) needs ONE
+ * matching fact in the `effect` role — exactly the manifest `simpleRecord`
+ * accepts. Asking every obligation for all three roles made prepare and
+ * diagnosis demand a change chain a read-only verification can never produce.
+ */
+function requiredEvidenceRoles(item: GuardItem): Array<'resolution' | 'effect' | 'state'> {
+  return isStatefulAction(item.semanticAction ?? 'generic_run')
+    ? ['resolution', 'effect', 'state']
+    : ['effect']
+}
+
 function evidenceFacets(p: GuardProjection, item: GuardItem): Array<'resolution' | 'effect' | 'state'> {
   const present = new Set<'resolution' | 'effect' | 'state'>()
   for (const evidence of p.evidence.values()) {
     if (!relevantEvidence(p, item, evidence)) continue
     if (evidence.evidenceRole) present.add(evidence.evidenceRole)
   }
-  return (['resolution', 'effect', 'state'] as const).filter((facet) => !present.has(facet))
+  return requiredEvidenceRoles(item).filter((facet) => !present.has(facet))
+}
+
+/**
+ * An ordinary shell command whose TEXT ANCHORED at command position to this
+ * obligation's action completed successfully, but which failed closed
+ * parsing, so per-command execution cannot be established (0.6.1, W060-05).
+ * Only the pre-existing head-anchored action signal counts: the guard does
+ * NOT scan compound text for actions, because quoted data and short-circuit
+ * control flow would fabricate observations. A failed command is not a
+ * signal either.
+ */
+function unattributedExecutionOf(p: GuardProjection, item: GuardItem): GuardEvidence | undefined {
+  const action = item.semanticAction
+  if (!action || action === 'generic_run') return undefined
+  for (const evidence of p.evidence.values()) {
+    if (evidence.outcome !== 'success') continue
+    if (evidence.parseStatus === undefined || evidence.parseStatus === 'supported') continue
+    if (!['bash', 'pwsh', 'shell'].includes(evidence.toolName)) continue
+    if (evidence.semanticAction !== undefined && evidence.semanticAction !== 'generic_run'
+      && actionCompatible(action, evidence.semanticAction)) return evidence
+  }
+  return undefined
 }
 
 /**
@@ -124,7 +160,26 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
     // 0.6.0 D06-02: the inquiry lane is judged before any target capture, so
     // an inquiry whose change-verb maps to a stateful action is still answered
     // by delivery, never routed through target clarification or rebind.
+    // 0.6.1 (W060-01): an attachment obligation additionally needs its own
+    // interpretation record before its turn's answer can close it.
     const closable = p.boundaryProtocol === 5
+    if (item.asset !== undefined && !p.interpretationFacts.some((fact) => fact.itemId === item.id)) {
+      return {
+        ...base,
+        certification: 'unsupported',
+        reason_code: 'asset_interpretation_required',
+        repairability: 'unsupported',
+        missing_fields: [],
+        missing_facets: [],
+        next_action: {
+          kind: 'report_only',
+          tool: 'context_guard_interpret',
+          required_input: `the item ID of the interpreted attachment (${item.id})`,
+          resume_condition: 'Read the attachment, record it with context_guard_interpret for this item, and deliver the actual answer; the host-confirmed final response of a completed turn then closes this item. The record proves the asset was read, never that the interpretation is correct.',
+        },
+        attempt_fingerprint: fingerprint(p, item, 'asset_interpretation_required'),
+      }
+    }
     return {
       ...base,
       certification: 'unsupported',
@@ -139,6 +194,42 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
           : 'Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this.',
       },
       attempt_fingerprint: fingerprint(p, item, closable ? 'inquiry_awaiting_delivery' : 'inquiry_non_certifiable'),
+    }
+  }
+  // 0.6.1 (W060-02): the interpretation lane is judged before any target or
+  // evidence machinery, so a conservatively-downgraded clause is never
+  // re-read as executable work.
+  if (item.authorityDisposition === 'informational') {
+    const closable = p.boundaryProtocol === 5
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: closable ? 'information_awaiting_delivery' : 'information_non_certifiable',
+      repairability: 'unsupported',
+      missing_fields: [],
+      missing_facets: [],
+      next_action: {
+        kind: 'report_only',
+        resume_condition: closable
+          ? 'The trusted final response of this turn closes the recorded statement; it certifies the answer was delivered, never its accuracy.'
+          : 'The recorded statement stays open as uncertified information; no confirmation, rebind, or execution changes this.',
+      },
+      attempt_fingerprint: fingerprint(p, item, closable ? 'information_awaiting_delivery' : 'information_non_certifiable'),
+    }
+  }
+  if (item.authorityDisposition === 'unresolved') {
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: 'interpretation_unresolved',
+      repairability: 'none',
+      missing_fields: [],
+      missing_facets: [],
+      next_action: {
+        kind: 'report_only',
+        resume_condition: 'The clause could not be read as a concrete instruction; it stays recorded, non-executable, and never closes by delivery. A new explicit root instruction naming a supported action supersedes it.',
+      },
+      attempt_fingerprint: fingerprint(p, item, 'interpretation_unresolved'),
     }
   }
   if (action !== 'generic_run' && !item.legacyFlags?.length && item.targetCaptureStatus === 'clarification_required') {
@@ -187,9 +278,37 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
       attempt_fingerprint: fingerprint(p, item, 'adapter_unavailable'),
     }
   }
+  // An ordinary shell command beginning with this action completed earlier,
+  // but the command could not be securely parsed, so whether it actually
+  // performed the action CANNOT BE ESTABLISHED (0.6.1, W060-05). The verdict
+  // claims nothing about execution — it records the guard's inability to
+  // attribute compound-shell effects. The obligation stays uncertified:
+  // check actual current state read-only first, never repeat the action to
+  // mint evidence, never assert the action never ran. It fires only while NO
+  // attributable role evidence exists — once a producer-chain fact is present
+  // the item follows its normal evidence path.
+  const statefulChain = isStatefulAction(action)
+  const hasAttributableEvidence = requiredEvidenceRoles(item).some((role) => !missing_facets.includes(role))
+  const unattributed = hasAttributableEvidence ? undefined : unattributedExecutionOf(p, item)
+  if (unattributed) {
+    return {
+      ...base,
+      certification: 'unsupported',
+      reason_code: 'execution_unattributable',
+      repairability: 'historical_gap',
+      missing_fields: [],
+      next_action: {
+        kind: 'report_only',
+        resume_condition: 'An ordinary shell command beginning with this action succeeded earlier in the session, but the command could not be securely parsed, so whether it performed the action cannot be established. Check the actual current state with a read-only command first. The obligation stays uncertified; perform the action through the guarded producer path only if the state shows it has not happened and the instruction still calls for it; never repeat an action to mint evidence, and do not assert it never ran.',
+      },
+      attempt_fingerprint: fingerprint(p, item, 'execution_unattributable'),
+    }
+  }
   // An effect already recorded without its resolution prestate is a
   // historical gap: readback honestly, never re-execute to mint evidence.
-  if (missing_facets.includes('resolution') && !missing_facets.includes('effect')) {
+  // Stateful-only (0.6.1, W060-04): a read-only verification never has a
+  // change-chain prestate to lose, so it can never fall into this lane.
+  if (statefulChain && missing_facets.includes('resolution') && !missing_facets.includes('effect')) {
     return {
       ...base,
       certification: 'unsupported',
@@ -212,7 +331,9 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
     next_action: {
       kind: 'collect_evidence',
       tool: 'context_guard_prepare',
-      resume_condition: 'Collect the matching durable evidence in resolution/effect/state order, then checkpoint.',
+      resume_condition: statefulChain
+        ? 'Collect the matching durable evidence in resolution/effect/state order, then checkpoint.'
+        : 'Collect the single matching durable verification fact, then checkpoint.',
     },
     attempt_fingerprint: fingerprint(p, item, 'missing_evidence'),
   }

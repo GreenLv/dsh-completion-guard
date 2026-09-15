@@ -147,23 +147,62 @@ export function deriveTrustedDeliveries(events: readonly DerivedEnvelope[]): Tru
  * slot is information (an inquiry or an explanation request). Execution,
  * constraints, and unknowns are never closed by delivery, and neither are
  * questions from earlier messages.
+ *
+ * An ATTACHMENT obligation (one with an `asset` identity) closes through its
+ * CURRENT interpretation instead of its original message (0.6.1 W060-01
+ * review): a re-interpreted old asset would otherwise never close, because
+ * its root message can no longer belong to a live turn. The binding is the
+ * interpretation fact itself — the delivery must be the answer of the turn
+ * that recorded the interpretation, and the fact must exist at the delivery
+ * watermark. The final answer — even a real one — still never interprets
+ * images on the model's behalf.
  */
 export function informationItemIdsForDelivery(
-  items: ReadonlyMap<string, { status: string; unitId?: string; sourceMessageId: string; taskKind?: string; authorityDisposition?: string; kind: string }>,
+  items: ReadonlyMap<string, { status: string; unitId?: string; sourceMessageId: string; taskKind?: string; authorityDisposition?: string; kind: string; asset?: unknown }>,
   delivery: TrustedDelivery,
   turnRootInputSeqs: ReadonlySet<number>,
   eligibleUnitIds: ReadonlySet<string> | undefined,
+  interpretationFacts?: ReadonlyArray<{ itemId: string; turn: number; resultSeq: number }>,
 ): string[] {
   const closed: string[] = []
   for (const [itemId, item] of items) {
     if (item.status !== 'pending') continue
     if (item.kind === 'prohibition') continue
-    if (eligibleUnitIds !== undefined && (item.unitId === undefined || !eligibleUnitIds.has(item.unitId))) continue
-    const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
-    if (!sourceSeq || !turnRootInputSeqs.has(Number(sourceSeq[1]))) continue
+    const isAssetObligation = item.asset !== undefined && item.asset !== null
+    // Unit discipline binds every obligation that was captured INTO a unit.
+    // A unit-less item reaches its own gate below: assets keep it (a
+    // unit-less opening asset closes only through its current
+    // interpretation), and any other unit-less item is pre-v5 and already
+    // excluded from delivery closure by the derivation's boundary check.
+    if (item.unitId !== undefined && eligibleUnitIds !== undefined && !eligibleUnitIds.has(item.unitId)) continue
     const informationSlot = item.taskKind === 'inquiry'
       || (item.authorityDisposition === 'informational' && item.kind === 'requirement')
-    if (informationSlot) closed.push(itemId)
+    const isAssetObligation2 = item.asset !== undefined && item.asset !== null
+    if (isAssetObligation) {
+      const interpretedThisTurn = (interpretationFacts ?? []).some((fact) =>
+        fact.itemId === itemId && fact.turn === delivery.turn && fact.resultSeq <= delivery.turnEndSeq)
+      if (!interpretedThisTurn) continue
+      closed.push(itemId)
+      continue
+    }
+    if (informationSlot) {
+      // Two closable routes for an information obligation: an EXPLICIT
+      // interpretation partition recorded for it this turn (a sub-item of a
+      // superseded unresolved clause — review round 10), or the clause's own
+      // root message belonging to the delivered turn (a grammatical
+      // question, a past report, an output request). A whole-item
+      // confirmation without a partition never closes anything.
+      const interpretedThisTurn = (interpretationFacts ?? []).some((fact) =>
+        fact.itemId === itemId && fact.turn === delivery.turn && fact.resultSeq <= delivery.turnEndSeq)
+      const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
+      if (!interpretedThisTurn && (!sourceSeq || !turnRootInputSeqs.has(Number(sourceSeq[1])))) continue
+      closed.push(itemId)
+      continue
+    }
+    // Non-asset, non-informational, unresolved WITHOUT a partition: stays
+    // pending. A whole-item interpretation confirmation is forbidden —
+    // reading a clause does not answer its execution or unknown demands.
+    continue
   }
   void delivery
   return closed

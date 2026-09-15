@@ -129,13 +129,25 @@ describe('v0.5.1 unified instruction interpretation', () => {
       for (const text of [
         '先测试；若我之后确认才推送。',
         'Run the tests; push only after I confirm.',
-        '除非我明确说可以，否则不要合并。',
         '如果测试全绿，就发布 0.5.1。',
       ]) {
         const conditional = items([text]).find((item) => item.authorityDisposition === 'conditional_wait')
         expect(conditional, text).toBeDefined()
         expect(isOpenObligation(conditional!), text).toBe(false)
       }
+    })
+
+    it('reads "除非…否则不要…" as one condition-bearing constraint, not phantom work (0.6.1)', () => {
+      // 0.5.1 re-read the leftover condition arm ("除非我明确说可以，否则") as a
+      // conditional duty because it carried no action verb. 0.6.1 consumes the
+      // arm into the ban it governs: the sentence is exactly one constraint,
+      // and nothing executable or phantom remains.
+      const derived = items(['除非我明确说可以，否则不要合并。'])
+      expect(derived).toHaveLength(1)
+      const ban = derived[0]!
+      expect(ban.kind).toBe('prohibition')
+      expect(ban.condition).toBe('除非我明确说可以')
+      expect(derived.every((item) => !isOpenObligation(item))).toBe(true)
     })
 
     it('never upgrades narration into authorization', () => {
@@ -150,11 +162,13 @@ describe('v0.5.1 unified instruction interpretation', () => {
       expect(obligations([text]).some((item) => item.semanticAction === 'push')).toBe(false)
     })
 
-    it('explaining a command is not executing it', () => {
+    it('explaining a command is not executing it (0.6.1: unresolved, closable only via the interpretation route)', () => {
       for (const text of ['解释 git push 的作用，不执行。', 'Explain what `pnpm publish` does.']) {
         const derived = items([text])
-        expect(derived.some((item) => item.authorityDisposition === 'informational'), text).toBe(true)
+        // The explanation reading wins: never an executable push/publish duty.
         expect(obligations([text]).some((item) => item.semanticAction === 'push' || item.semanticAction === 'publish'), text).toBe(false)
+        expect(derived.every((item) => !isOpenObligation(item)), text).toBe(true)
+        expect(derived.every((item) => item.authorityDisposition !== 'executable_now'), text).toBe(true)
       }
     })
 

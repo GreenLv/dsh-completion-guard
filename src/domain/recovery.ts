@@ -109,11 +109,15 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
       ? 'Collect matching evidence; checkpoint'
       : diagnosis.repairability === 'historical_gap'
         ? 'Read back observed state; do not re-execute'
-          : diagnosis.next_action.kind === 'clarify_target'
-            ? 'Supply the exact target; then collect evidence and checkpoint'
-              : diagnosis.certification === 'unsupported'
-                ? 'Deliver honestly; stays uncertified unless a fresh instruction names a supported action'
-                  : 'Restore audited host/adapter capability'
+          : diagnosis.repairability === 'none'
+            ? 'Recorded as unresolved; only a fresh explicit instruction resolves it'
+              : diagnosis.next_action.tool === 'context_guard_interpret'
+                ? 'Read the attachment; record context_guard_interpret; then answer'
+                  : diagnosis.next_action.kind === 'clarify_target'
+                    ? 'Supply the exact target; then collect evidence and checkpoint'
+                      : diagnosis.certification === 'unsupported'
+                        ? 'Deliver honestly; stays uncertified unless a fresh instruction names a supported action'
+                          : 'Restore audited host/adapter capability'
     if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_action.resume_condition ?? remedy}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++
   }
   // Each category gets a slot before optional diagnostics can consume space.

@@ -74,7 +74,7 @@ export interface GitEffectRunner {
 
 export interface GitEffectExecution {
   status: 'executed' | 'rejected'
-  reasonCode?: GitPrestateCheck['reasonCode'] | 'repository_missing'
+  reasonCode?: GitPrestateCheck['reasonCode'] | 'repository_missing' | 'effect_already_applied'
 }
 
 export interface LinearCommitReadback {
@@ -343,6 +343,23 @@ export async function executeRevalidatedGitEffect(
   if (!target.repository) return { status: 'rejected', reasonCode: 'repository_missing' }
   const checked = revalidateGitPrestate(resolved, manifest, target, currentStateTuple)
   if (!checked.valid) return { status: 'rejected', ...(checked.reasonCode ? { reasonCode: checked.reasonCode } : {}) }
+  // An effect that ALREADY holds must not be re-run or certified through this
+  // path (0.6.1 review): after an out-of-chain action the live state can look
+  // internally consistent, and a no-op re-run would launder the unattributed
+  // execution into producer evidence. Refuse instead of executing.
+  const text = (key: string): string | undefined => {
+    const value = currentStateTuple[key]
+    return typeof value === 'string' ? value : value === undefined ? undefined : Buffer.from(value).toString('utf8')
+  }
+  if (manifest.action === 'push' && text('source_oid') !== undefined && text('source_oid') === text('destination_oid')) {
+    return { status: 'rejected', reasonCode: 'effect_already_applied' }
+  }
+  if (manifest.action === 'pull' && text('pre_head_oid') !== undefined && text('pre_head_oid') === text('upstream_oid')) {
+    return { status: 'rejected', reasonCode: 'effect_already_applied' }
+  }
+  if (manifest.action === 'fetch' && text('tracking_oid') !== undefined && text('tracking_oid') === text('upstream_oid')) {
+    return { status: 'rejected', reasonCode: 'effect_already_applied' }
+  }
   await runner('git', manifest.argv.slice(1), target.repository)
   return { status: 'executed' }
 }

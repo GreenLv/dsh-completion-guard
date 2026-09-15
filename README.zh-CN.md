@@ -8,10 +8,10 @@
 
 ## 快速开始
 
-将已发布的 **0.6.0** 安装到 DSH 的 Web 运行环境：
+**0.6.1** 在注册表可用后，可安装到 DSH 的 Web 运行环境。候选与平台结果见[验收记录](docs/LOCAL_ACCEPTANCE.md)：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.6.0
+dsh plugin --profile web add dsh-completion-guard@0.6.1
 ```
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -28,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。已发布的 0.5.3 包在 DSH `0.1.5-rc.2` 上分别通过 macOS 和 Windows 原生验收；两次运行均在[验收记录](docs/LOCAL_ACCEPTANCE.md)中绑定同一份精确制品。0.6.0 候选尚未进行自己的原生验收与发布，因此它的源码与确定性证据不能等同于任何已安装制品结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。各版本的原生验收与发布证据在[验收记录](docs/LOCAL_ACCEPTANCE.md)中按版本绑定其精确制品字节单独记录；任何版本的源码与确定性证据都不能等同于该版本已安装制品的结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -49,7 +49,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.6.0 仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
+0.6.1 仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
 
 插件市场与 npm 安装现在统一发布按新到旧排列的精确并集 `0.1.5-rc.2 || 0.1.5-rc.1`。更早版本、未注册的稳定版 `0.1.5` 以及未来版本都不会被宣称为受支持。进入版本集合后仍必须匹配完整的 33 包 DSH 核心图；缺失、混装或未知图会 fail closed。
 
@@ -112,11 +112,15 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 
 用 `bindings: []` 调用 `context_guard_checkpoint` 可查询诊断。默认最多展示八个当前要求/限制和十条证据，插件 JSON 不超过 12 KiB。`pagination` 给出总数及各列表独立的 `next_cursor`，首页不代表完整合同。`item_ids`、`evidence_ids` 可按 ID 查询；`evidence_scope: "history"` 可查看完整证据历史，其中不可引用项会明确标记。翻页时保持查询条件不变，合同或证据快照变化后需重新查询。超长行提供 `detail_id`，用 `detail_offset` 取分片；后续分片需把首次返回的 `snapshot` 作为 `detail_snapshot` 传回。分页只改变展示，不会减少认证时检查的要求。
 
-## 0.6.0 为普通工作带来的变化
+## 0.6.1 为普通工作带来的变化
 
 以下是你实际会注意到的行为。新协议边界之前的一切保持原有含义，不会被重新解释。
 
-**提问不再留下永久待办。** 问答或讲解由宿主自身的记录关闭：正常完成 turn 的最后一条 assistant 消息。状态汇报、草稿、中间回复、其它 turn 的回答、子代理回答和被中断的 turn 都不会关闭它。"已交付"只说明回答到达了你，不说明它正确，也不说明有任何工作被执行。
+**提问不再留下永久待办。** 自动识别的疑问由宿主自身的记录关闭：正常完成 turn 的最后一条 assistant 消息。状态汇报、草稿、中间回复、其它 turn 的回答、子代理回答和被中断的 turn 都不会关闭它。"已交付"只说明回答到达了你，不说明它正确，也不说明有任何工作被执行。
+
+无法判定的解释或混合请求需要通过 `context_guard_interpret` 显式划分信息与未知跨度。只有信息部分可由解释 turn 的回答关闭；未知和未申报部分保持 pending。Guard 校验结构与重放身份，语义划分的正确性仍由模型负责。
+
+**附带的截图或图片是要回答的问题，不是要执行的命令。** 每个附件保留自己的身份，其关闭需要两个事实：显式的解释记录（实际读取附件后用 `context_guard_interpret` 传入 item ID）加上记录解释的 turn 的回答。一张包含提交按钮的图片不构成提交授权；声称"尚未查看图片"的回答什么也关不了。附图与真实修改分开关闭，明确要求的视觉验证仍需要自己的回读事实。
 
 **文档"更新"由对象决定，而不是动词。** "更新文档"变成一次有界修改：具体文件由助手在你指令捕获到的目录与文件类型内决定。Guard 无法识别为文件的对象会保持诚实的"无法判定"状态，而不是被强行归为某个动作或被静默关闭。
 
@@ -153,7 +157,7 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 发布绝不隐式发生。消息里的 "release" 关键词、加载的 Skill 或一次安装都不会采用任何东西；只有这条命令会：
 
 ```text
-/context-guard release adopt {"operations":["npm_publish"],"candidate":{"ref":"refs/heads/main","fullSha40":"<40 位十六进制>","version":"0.6.0","artifactDigest":"<64 位十六进制>"}}
+/context-guard release adopt {"operations":["npm_publish"],"candidate":{"ref":"refs/heads/main","fullSha40":"<40 位十六进制>","version":"0.6.1","artifactDigest":"<64 位十六进制>"}}
 ```
 
 采用之后，`/context-guard release` 报告契约、候选、逐操作覆盖范围、已消费内容和仍在执行中的操作。每个操作只消耗一次预约记录：效果前写入，效果后依据可信回读结算。错候选 SHA、错 ref、错制品摘要或版本、过期票据、已消费票据、仍在执行中的请求重试和不透明 runner 都会在任何副作用之前被拒绝。
@@ -172,7 +176,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 0.4.0 明确对齐了 Codex Context Guard 0.10.0 的共享证据规则：证据必须对应仍未完成的工作，并证明用户实际要求的操作、目标和结果。这只是有边界的行为对齐，不表示两个产品拥有相同功能。
 
-0.6.0 实现了与本版配套的 Codex Context Guard 0.14.0 计划共享的 C01–C12 契约：来源跨度与覆盖、统一解释视图、可信回答交付、带必需后代闭包的工作单元、逐动作条件、责任分档、有界目标解析、原子澄清、证明能力矩阵、显式发布票据、新鲜投影和统一迁移诊断。逐条实现状态、通俗对照与注明日期的差异台账见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
+0.6.x 实现了与本版配套的 Codex Context Guard 0.14.0 计划共享的 C01–C12 契约：来源跨度与覆盖、统一解释视图、可信回答交付、带必需后代闭包的工作单元、逐动作条件、责任分档、有界目标解析、原子澄清、证明能力矩阵、显式发布票据、新鲜投影和统一迁移诊断。逐条实现状态、通俗对照与注明日期的差异台账见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
 
 有两项共享资产是刻意未完成的，写成已完成就是失实：上游仓库在本版发布时尚未落地冻结的 v2 一致性 fixture，因此这里的 v2 文件是 **DSH 产出的候选**而非字节镜像，`UPSTREAM_PIN.json` 仍只绑定未变的 v1 镜像。跨语言 parity 与正式镜像因此仍待完成，差异台账按此记录。
 

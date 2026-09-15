@@ -80,6 +80,39 @@ export interface VerificationContract {
   operation?: GuardOperation
 }
 
+/**
+ * 0.6.1 (W060-01): the durable identity of one non-text root input part. The
+ * asset obligation binds the exact message sequence, part index and content
+ * digest of the ORIGINAL input — never a model description of it — so an
+ * interpretation can only ever be recorded against the asset it interpreted.
+ */
+export interface AssetObligation {
+  /** Sequence of the root message that carried the part. */
+  messageSeq: number
+  /** Index of the non-text part inside that message. */
+  partIndex: number
+  /** sha256 of the canonical JSON of the part: the media identity. */
+  mediaSha256: string
+}
+
+/**
+ * 0.6.1 (W060-01): one durable per-asset interpretation record, derived from a
+ * confirmed `context_guard_interpret` result that replay re-validated against
+ * the contract (call arguments, item, revision, asset identity). It is the
+ * model's explicit declaration that it read THAT obligation's asset in THAT
+ * host turn; it never proves the interpretation is correct, and it closes
+ * nothing by itself — an asset obligation closes only when a delivery of the
+ * interpretation's own turn exists. Absent from logs written before this
+ * entrypoint existed, which is what keeps upgrade replays from retroactively
+ * interpreting old assets.
+ */
+export interface AssetInterpretationFact {
+  itemId: string
+  resultSeq: number
+  /** The host turn the interpretation happened in. */
+  turn: number
+}
+
 export interface GuardItem {
   id: string
   revision: number
@@ -156,6 +189,23 @@ export interface GuardItem {
    * keeps its own history.
    */
   clarifiesItemId?: string
+  /**
+   * 0.6.1 (W060-01 review round 10): set on the sub-items created when an
+   * unresolved clause is superseded by its recorded interpretation
+   * partition. Names the superseded unresolved obligation; the information
+   * sub-items close through the interpreting turn's delivery, while unknown
+   * and undeclared sub-spans stay pending.
+   */
+  interpretedFromUnresolved?: string
+  /**
+   * 0.6.1 (W060-01): present only on an asset-interpretation obligation. The
+   * item's information slot closes through the SAME trusted-delivery fact as
+   * any inquiry of its turn; the closing answers the request that carried the
+   * asset, never the correctness of the interpretation, and visual-comparison
+   * proof (strict surface 'visual') stays a separate obligation. Absent on
+   * every other item, so legacy and ordinary text items are unchanged.
+   */
+  asset?: AssetObligation
 }
 
 export interface GuardEvidence {
@@ -384,6 +434,12 @@ export interface GuardProjection {
    */
   trustedSelections: import('./host-selection.js').TrustedSelection[]
   /**
+   * 0.6.1 (W060-01): the derived per-asset interpretation records (bounded to
+   * the last 64), one per confirmed `context_guard_interpret` result. Derived,
+   * never written by a caller.
+   */
+  interpretationFacts: AssetInterpretationFact[]
+  /**
    * 0.6.0 C07 sandbox approvals, derived from the host's own
    * `approval/asked` + `approval/decided` audit pair (last 16). Recorded for
    * provenance only: an approval is never a target authority.
@@ -471,6 +527,7 @@ export function createProjection(): GuardProjection {
     releaseStateDamaged: false,
     policy: 'standard',
     trustedSelections: [],
+    interpretationFacts: [],
     approvals: [],
     sessionRefDigest: '11'.repeat(32),
     hostLockDigest: '22'.repeat(32),

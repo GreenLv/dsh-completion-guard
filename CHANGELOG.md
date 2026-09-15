@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.1 (2026-09-15)
+
+Repairs attachment handling, conservative request interpretation, discovery pagination and evidence guidance after the Windows 0.6.0 review.
+
+- **Attachments can be answered without inventing an execution action (W060-01).** Each asset needs an explicit `context_guard_interpret` record and a completed answer from the interpreting turn. This also lets a later turn handle an old attachment. Replay checks the item, revision, asset identity and call/result turn pair. Contradictions corrupt the projection; missing turn association records nothing. Asset receipts cannot carry clause partition fields. The record is the model's interpretation declaration, not independent proof of visual accuracy.
+- **Unknown requests stay pending (W060-02).** Unrecognized clauses no longer default to execution. Explanation and mixed requests can use `context_guard_interpret` with `information_spans` and `unknown_spans`. The tool checks bounds and overlap; replay requires the receipt to match the submitted partition. Information children close with that turn's answer. Unknown and undeclared regions stay pending. Semantic classification remains the model's responsibility. Root clarification, confirmed rebind and clear remain available. Ordinary acknowledgments such as “当然。” are conversation, not obligations.
+- **Discovery is paginated (W060-03).** `context_guard_prepare` lists eight items per page in stable order, with a revision-bound cursor and an explicit `semantic_action` filter. Follow `next_cursor` to traverse the applicable current-unit set; restart discovery when the revision changes. Historical items remain accessible by ID.
+- **Read-only checks require one effect-role fact (W060-04).** Prepare and diagnosis now agree with the certifier. Stateful work still requires resolution, effect and state evidence; a read-only check no longer reports a missing historical prestate.
+- **Unattributable shell effects remain uncertified (W060-05).** A matching command-head signal produces `execution_unattributable`, asking for read-only inspection without asserting that the action ran or did not run. Compound text is not scanned for proof. Guarded push, pull and fetch refuse an already-applied ref state before invoking the runner, reporting `action_already_applied` rather than minting replacement evidence. Ordinary work does not require additional Guard approval.
+
+### Compatibility and validation scope
+
+The new interpretation records and reasons are additive. Attachment capture text retains its 0.6.0 bytes; an old log without interpretation records keeps pending attachments. Source checks, CI, frozen-artifact acceptance and native Web/Headless acceptance are separate results recorded in [LOCAL_ACCEPTANCE](docs/LOCAL_ACCEPTANCE.md). The local test-host cleanup now disposes persistence hosts explicitly to prevent FileHandle garbage-collection errors. No platform or publication result is implied by this changelog.
+
 ## 0.6.0 third repair round after targeted review (2026-09-14)
 
 Two findings from the targeted review of `fcc3813`, both fixed.

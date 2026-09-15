@@ -59,6 +59,15 @@ export type DirectiveClass =
   | 'informational'
   /** A factual statement, not an instruction. */
   | 'narrative'
+  /**
+   * 0.6.1 (W060-02): the conservative default. A clause the rules cannot
+   * positively read as an order, a statement, or a question — including an
+   * order whose action word is outside the resolvable vocabulary — stays
+   * recorded as unresolved: non-executable, never closed by delivery, never
+   * reinterpreted, replaceable only through an explicit clarification, a
+   * confirmed rebind, or the root's clear command.
+   */
+  | 'unresolved'
 
 /** Who is expected to perform the action. */
 export type Executee = 'agent' | 'user' | 'unresolved'
@@ -104,6 +113,8 @@ const ACCEPTANCE_LEAD = /^(?:验收|验证|确认|确保|核对|检查|verify|co
 export function kindOfScope(directive: DirectiveClass, body = ''): GuardItemKind {
   if (directive === 'prohibition') return 'prohibition'
   if (directive === 'directive' && ACCEPTANCE_LEAD.test(body.trim())) return 'acceptance'
+  // An unresolved reading keeps its recorded obligation lane: the clause stays
+  // visible as a requirement that no rule may execute or auto-close.
   return 'requirement'
 }
 
@@ -172,10 +183,17 @@ const ACTION_VERB = new RegExp(ACTION_VERB_PATTERN, 'i')
 const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|部署|安装|升级|提交|下载|上传|拉取|同步|重启|测试|检查|验证|确认|修复|更新|清理|整理|记录|构建|编译|重构|迁移|删除|回滚|发布|推送|合并|继续|恢复|还原|回滚|实现|\b(?:build|create|write|modify|change|edit|run|fix|update|install|push|publish|test|verify|check|commit|deploy|migrate|remove|delete|restart|revert|refactor|inspect|fetch|pull|implement)\b/i
 
 /** Explanatory framings: an action named afterwards is an object, not an order. */
-const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|科普|什么意思|是什么意思|有什么(?:作用|影响|区别)|\bexplain\b|\bdescribe\b|\bclarify\b|\bwhat\s+does\b|\bwhat\s+is\b|\bhow\s+does\b|\bmeaning\s+of\b/i
+const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|科普|什么意思|是什么意思|有什么(?:作用|影响|区别)|\bexplain\b|\bdescribe\b|\bclarify\b|\btell\b|\bhow\s+to\b|\bwhat\s+does\b|\bwhat\s+is\b|\bhow\s+does\b|\bmeaning\s+of\b/i
 
 /** Interrogative framings that make a scope a question rather than an order. */
-const QUESTION_SCOPE = /[？?]|是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|能否|可否|要不要|该不该|由谁|是谁|\b(?:whether|which|why|should|could|would)\b/i
+/**
+ * Interrogative framings that make a scope a question rather than an order.
+ * The bare English wh-words are matched only at the START of a scope ("What
+ * changed in the build"), where they are genuine interrogatives; a mid-clause
+ * match would misread the relative clause of a real order ("Create a file
+ * where logs are stored") as a question — the 0.6.1 review regression.
+ */
+const QUESTION_SCOPE = /[？?]|是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|能否|可否|要不要|该不该|由谁|是谁|^\s*(?:what|how|when|where|who|which|whether|why)\b|\b(?:whether|which|why|should|could|would)\b/i
 
 const NEGATORS: ReadonlyArray<readonly [string, 'zh' | 'en']> = [
   ['不要', 'zh'], ['不用', 'zh'], ['不得', 'zh'], ['不许', 'zh'], ['不准', 'zh'], ['不能', 'zh'],
@@ -260,6 +278,20 @@ const NARRATIVE_ASPECT = /(?:完了|好了|过了)|(?:已经|已|刚刚|刚才|�
 const NARRATIVE_DIRECTIVE = /请|需要你|帮我|麻烦|务必|\b(?:please|must)\b/i
 
 const UNRESOLVED_SCOPE = /^(?:看看|看一下|瞅瞅|研究一下|了解|随便|maybe|perhaps|somehow|figure\s+out)/i
+
+/**
+ * POSITIVE statement evidence (0.6.1 review): a clause with no resolvable
+ * action reads as a statement only when one of these structural markers is
+ * present — a passive (被/受到/遭到), a negator or progress marker
+ * ("不要"/"没有"/"尚未"/"还没"/"从未"), or an English declarative shape
+ * (finite aux/copula, or an article/possessive-led subject, which an
+ * imperative can never start with). Everything else defaults to `unresolved`:
+ * an unknown request ("Please sanitize these inputs", "处理这个问题") must
+ * never degrade to information, where the turn's answer would auto-close it —
+ * and no vocabulary can be complete, so the default never consults one.
+ */
+
+
 
 /**
  * A completed confirmation receipt: the root reports that the event it was
@@ -613,8 +645,17 @@ function scopeOf(raw: string, options: InterpretOptions = {}): SplitScope[] {
           directive: 'prohibition',
           ...(conditionText ? { condition: conditionText } : {}),
         } })
+        // The condition arm the ban already absorbed ("除非我明确说可以，否则")
+        // is not an instruction of its own: when the head before the negator
+        // carries no action verb beyond the consumed condition, it is not
+        // re-pushed. Re-reading it as a duty (0.5.1) manufactured a phantom
+        // obligation out of pure condition text.
+        if (head && (clauseStart < 0 || firstActionVerb(maskCodeSpans(head)) >= 0)) {
+          pending.push({ text: head, offset })
+        }
+      } else if (head) {
+        pending.push({ text: head, offset })
       }
-      if (head) pending.push({ text: head, offset })
       continue
     }
 
@@ -1053,30 +1094,82 @@ function stripConnectors(text: string): string {
   return text.replace(new RegExp(`^${CONNECTOR_PATTERN}\\s*`, 'i'), '').trim()
 }
 
-/** Classify a non-negated scope. */
+/**
+ * Whether a past/aspect marker is the clause's ENTIRE predicate: the span
+ * extends to the end of the clause (only particles and punctuation may
+ * follow), so no modifier ("…的"), attributive chain, or coordinated demand
+ * can hide behind the report (0.6.1 review round 8: distance thresholds and
+ * coordinator lists cannot enumerate modifiers).
+ */
+function mainClauseTailReport(masked: string): boolean {
+  for (const pattern of [NARRATIVE_PAST, NARRATIVE_ASPECT]) {
+    const match = pattern.exec(masked)
+    if (!match) continue
+    if (/^[^，。；！？\s]*的/u.test(masked.slice(match.index + match[0].length))) continue
+    // Only completion particles and sentence punctuation may follow the
+    // aspect span — anything else is unidentified content after the report.
+    if (/^(?:了|过)?[。，；！？、\s.!?]*$/u.test(masked.slice(match.index + match[0].length))) return true
+  }
+  return false
+}
+
 function classifyPositive(text: string): DirectiveClass {
   const masked = maskCodeSpans(text)
   const visibleVerb = firstActionVerb(masked)
   // An action that exists only inside a code span is quoted data.
   if (visibleVerb < 0 && firstActionVerb(text) >= 0) return 'informational'
-  const explain = EXPLAIN_VERB.exec(masked)
-  if (explain) {
-    const verb = firstActionVerb(masked)
-    if (verb < 0 || verb >= explain.index) return 'informational'
-  }
+  // A grammatically positive question is by construction a request for
+  // information — the one surface shape that can never be an executed duty
+  // (C03/S01). Everything else needs the positive grounds below or the
+  // structured interpretation route.
   if (QUESTION_SCOPE.test(masked)) return 'informational'
-  if (UNRESOLVED_SCOPE.test(masked)) return 'informational'
-  if ((NARRATIVE_PAST.test(masked) || NARRATIVE_ASPECT.test(masked)) && !NARRATIVE_DIRECTIVE.test(masked)) return 'narrative'
+
+  // 0.6.1 review round 8: the ONLY surface rule that can still grant the
+  // closable information lane is a grammatically positive question — a
+  // question is by construction a request for information. Explanation and
+  // investigation openers ("Explain the issue", "Figure out the issue",
+  // "看看…") cannot own the whole clause ("Explain the issue, sanitize all
+  // inputs", "Figure out the issue & sanitize all inputs"), and past/aspect
+  // markers count only when the report is the ENTIRE predicate — the aspect
+  // span extends to the clause end, so nothing (a modifier "…的", an
+  // attributive chain, a coordinated demand) can hide behind it
+  // ("清理已经生成了的缓存" stays undecidable; "我刚才已经推送过了" is a
+  // report). Everything else is UNDECIDABLE and stays `unresolved`; the
+  // structured interpretation entry (`context_guard_interpret`) is the
+  // verifiable route that records the request type against the full input
+  // spans, after which the interpreting turn's answer closes it.
+  // A past/aspect report as the clause's ENTIRE predicate positively
+  // identifies a statement about what already happened — for verb-bearing
+  // and verbless clauses alike. A completion receipt ("收到我的确认了") is
+  // likewise a positive report of a past fact and outranks the completion
+  // ambiguity below.
+  if (mainClauseTailReport(masked) && !NARRATIVE_DIRECTIVE.test(masked)) return 'narrative'
   if (CONFIRMATION_RECEIPT.test(masked.trim())) return 'narrative'
+  if (visibleVerb < 0) {
+    return 'unresolved'
+  }
+  // An explanation opener is an explanation ABOUT the action ("解释 git
+  // push 的作用") — never the executable action itself, and never
+  // auto-closable: an explanation clause may or may not chain a demand
+  // ("Explain the issue, sanitize all inputs"), which no surface rule can
+  // decide, so it stays unresolved and is closable only through the
+  // structured interpretation route above.
+  const explain = EXPLAIN_VERB.exec(masked)
+  if (explain && (visibleVerb < 0 || visibleVerb >= explain.index)) return 'unresolved'
+  // A CLAUSE-FINAL completion particle ("把配置更新了") is ambiguous
+  // between a completed report and a completed imperative: undecidable, so
+  // the clause can neither auto-close by delivery nor release a held
+  // reservation. 通过/经过-style words ending in 过 do not count.
+  if (/了[。，；！？、\s.!?]*$/u.test(masked)) return 'unresolved'
   return 'directive'
 }
 
 // ---------------------------------------------------------------------------
-// Executee and disposition
+// // Executee and disposition
 // ---------------------------------------------------------------------------
 
 function executeeOf(text: string, directive: DirectiveClass): Executee {
-  if (directive === 'informational' || directive === 'narrative' || directive === 'conditional') return 'unresolved'
+  if (directive !== 'directive') return 'unresolved'
   const masked = maskCodeSpans(text)
   if (USER_ACTOR_PATTERNS.some((pattern) => pattern.test(masked))) return 'user'
   if (AGENT_ACTOR_PATTERNS.some((pattern) => pattern.test(masked))) return 'agent'
@@ -1091,9 +1184,10 @@ function isOutputRequest(text: string): boolean {
 
 function dispositionOf(scope: SplitScope, executee: Executee): AuthorityDisposition {
   if (scope.directive === 'prohibition') return 'prohibition'
+  if (scope.directive === 'unresolved') return 'unresolved'
   if (scope.directive === 'informational' || scope.directive === 'narrative') return 'informational'
   // The condition clause itself orders nothing; it becomes visible as the
-  // guarded action's `condition`, never as work on its own.
+  // guarded action's `condition`, never as work of its own.
   if (scope.directive === 'conditional') return 'conditional_wait'
   if (scope.condition) return 'conditional_wait'
   if (executee === 'user') return 'human_actor'
@@ -1169,7 +1263,8 @@ export function interpretClause(text: string, options: InterpretOptions = {}): S
   }
   if (scopes.length === 1) return interpret(scopes[0])
   const directive: DirectiveClass = scopes.some((scope) => scope.directive === 'directive') ? 'directive'
-    : scopes.some((scope) => scope.directive === 'prohibition') ? 'prohibition' : 'informational'
+    : scopes.some((scope) => scope.directive === 'prohibition') ? 'prohibition'
+    : scopes.some((scope) => scope.directive === 'unresolved') ? 'unresolved' : 'informational'
   return interpret({ text: normalized, body: scopes.map((scope) => scope.body).join('；'), directive })
 }
 

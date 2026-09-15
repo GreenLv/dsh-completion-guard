@@ -84,11 +84,14 @@ it('R8: earlier assistant is not final when host has a later step',()=>{
  expect(deriveTrustedDeliveries([{seq:1,type:'assistant/message',data:{turn:1,step:1,message:{content:[{type:'text',text:'intermediate'}]}}},{seq:2,type:'step/start',data:{turn:1,step:2}},{seq:3,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}}])).toEqual([])
 })
 it('R9: a certified answered inquiry must survive checkpoint replay',async()=>{
- const events:any[]=[notice(0,PROTOCOL_V5_NOTICE),{seq:1,type:'turn/start',data:{turn:1}},{seq:2,type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'请解释这个流程'}]}},{seq:3,type:'assistant/message',data:{turn:1,step:1,message:{content:[{type:'text',text:'流程说明。'}]}}},{seq:4,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}}]
+ // 0.6.1: an explanation request is an unresolved clause until the model
+ // records its interpretation through the structured pathway; the recorded
+ // fact plus this turn's delivery closes it.
+ const events:any[]=[notice(0,PROTOCOL_V5_NOTICE),{seq:1,type:'turn/start',data:{turn:1}},{seq:2,type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'请解释这个流程'}]}},{seq:3,type:'tool/call',data:{turn:1,callId:'interp',name:'context_guard_interpret',arguments:JSON.stringify({item_id:'R001',information_spans:[{start:0,end:21}],unknown_spans:[]})}},{seq:4,type:'tool/result',data:{turn:1,message:{source:{callId:'interp'},content:[{type:'text',text:JSON.stringify({status:'recorded',item_id:'R001',item_revision:1,kind:'clause',spans:[{part_index:0,start:0,end:21}],information_spans:[{start:0,end:21}],unknown_spans:[]})}]}}},{seq:5,type:'assistant/message',data:{turn:1,step:1,message:{content:[{type:'text',text:'流程说明。'}]}}},{seq:6,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}}]
  const p=deriveProjection(events,config,scope,true).projection
  const result:any=await createCheckpointTool(()=>p,()=>{}).execute({bindings:[]},undefined as never)
  expect(result.status).toBe('certified')
- const replay=deriveProjection([...events,{seq:5,type:'tool/call',data:{callId:'cp',name:'context_guard_checkpoint',arguments:'{"bindings":[]}'}},{seq:6,type:'tool/result',data:{message:{source:{callId:'cp'},content:[{type:'text',text:JSON.stringify(result)}]}}}],config,scope,true).projection
+ const replay=deriveProjection([...events,{seq:7,type:'tool/call',data:{callId:'cp',name:'context_guard_checkpoint',arguments:'{"bindings":[]}'}},{seq:8,type:'tool/result',data:{message:{source:{callId:'cp'},content:[{type:'text',text:JSON.stringify(result)}]}}}],config,scope,true).projection
  console.log('R9',replay.integrity,replay.integrityViolations)
  expect(replay.integrity).toBe('valid')
 })

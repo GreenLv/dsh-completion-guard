@@ -1,0 +1,119 @@
+{
+  "schema": "repository-reader-review/v1",
+  "status": "passed",
+  "audience": {
+    "role": "DSH users installing or upgrading the candidate",
+    "prior_knowledge": "careful_upgrader"
+  },
+  "documents": [
+    {
+      "path": "README.md",
+      "role": "readme",
+      "language": "en",
+      "sha256": "09196a813bb2b54a65aae23ac0ef3e6db6df875112eaa49fc132fe463e8bb4f8"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "role": "readme",
+      "language": "zh-CN",
+      "sha256": "be472d12a83b27df4b68fd3c4691e9ed5d79eb2bfa6b5c24ccebcb70a5350bdd"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "role": "changelog",
+      "language": "en",
+      "sha256": "ec820d14ee13cf23a759f00ccf9d7e2b781be3966ebe5f3270cbaf704666bc30"
+    },
+    {
+      "path": "CHANGELOG.zh-CN.md",
+      "role": "changelog",
+      "language": "zh-CN",
+      "sha256": "a5fce0127576c8290eefec22a9867be7ee0d93156f05480f4ebe5a218254c53f"
+    }
+  ],
+  "document_set_sha256": "2ca80bfe00c908b7882ace25224ba881707287e8be0ea06078f63dad76d16e17",
+  "method": {
+    "kind": "cold_read",
+    "implementation_context_used": false,
+    "claim_ledger_used": false
+  },
+  "checks": [
+    {
+      "id": "document_role",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "README leads through install, host-lock, activation and operation. Changelog explains the five 0.6.1 changes without recounting the repair dialogue."
+    },
+    {
+      "id": "reader_outcome",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "The reader can find conditional registry installation, the supported host-lock verdict and the new interpretation workflow; unknown regions remain pending."
+    },
+    {
+      "id": "term_onboarding",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "Interpretation and evidence roles are introduced beside the user-visible result; exact tool names identify the actionable interface."
+    },
+    {
+      "id": "evidence_boundary",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "Candidate text no longer calls 0.6.1 published. Interpretation declarations are distinguished from semantic correctness and native/publication evidence."
+    },
+    {
+      "id": "density_and_order",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "The concise 0.6.1 notes lead with behavior and then compatibility limits; the README retains its runnable first-use path."
+    },
+    {
+      "id": "language_independence",
+      "required": true,
+      "status": "passed",
+      "evidence_paths": [
+        "README.md",
+        "README.zh-CN.md",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md"
+      ],
+      "note": "English and Chinese entry paths and 0.6.1 notes were read separately and retain matching installation, interpretation and evidence boundaries."
+    }
+  ],
+  "findings": [],
+  "limitations": [
+    "Historical changelog sections were retained; the cold read covers the README paths and the 0.6.1 entries.",
+    "Native host acceptance and publication are not established by this reader receipt."
+  ]
+}

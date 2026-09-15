@@ -12,9 +12,11 @@ const PUNCT = String.raw`[\s。，、；：！？．,;:!?\-*"'“”‘’()（�
 /**
  * Session-layer phrases that acknowledge or advance the conversation without
  * stating a task. Longer forms come first so the alternation consumes them
- * before their prefixes.
+ * before their prefixes. A bare whole-message acknowledgment ("当然。",
+ * "Of course.") is session talk: it is never captured as an obligation, so it
+ * can never block certification either.
  */
-const PROGRESSION_SOURCE = String.raw`(?:继续执行|继续吧|请继续|继续|接着做|接着|下一步|没问题|知道了|明白了|了解|好的?|是的?|对的?|收到|可以|行|嗯+|continue|go on|go ahead|keep going|proceed|okay|ok|yes|sure|right|next)`
+const PROGRESSION_SOURCE = String.raw`(?:继续执行|继续吧|请继续|继续|接着做|接着|下一步|没问题|知道了|明白了|了解|好的?|是的?|对的?|收到|可以|行|嗯+|当然|那当然|continue|go on|go ahead|keep going|proceed|okay|ok|yes|sure|right|next|of course)`
 
 const PROGRESSION_WHOLE = new RegExp(`^${PUNCT}*${PROGRESSION_SOURCE}${PUNCT}*$`, 'i')
 const PROGRESSION_LEAD = new RegExp(`^${PROGRESSION_SOURCE}${PUNCT}+`, 'i')

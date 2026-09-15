@@ -20,6 +20,7 @@ import { recoveryDigest, renderRecoveryPacket } from './domain/recovery.js'
 import { createCheckpointTool } from './tools/checkpoint.js'
 import { createBoundaryTool } from './tools/boundary.js'
 import { createPrepareTool } from './tools/prepare.js'
+import { createInterpretTool } from './tools/interpret.js'
 import { createReleaseTool } from './tools/release.js'
 import { GIT_COMMAND_TEMPLATES, type GitAdapterAction } from './domain/git-adapter.js'
 import {
@@ -933,6 +934,15 @@ export function apply(ctx: Context, rawConfig: {
         return durable
       },
     }))
+    agent.ctx.tools.register(createInterpretTool({
+      getProjection: () => runtime.projection,
+      refreshProjection: async () => {
+        const durable = await ctx.sessions.flush(agent.session)
+        runtime.setDurability(durable)
+        runtime.sync()
+        return durable
+      },
+    }))
     agent.ctx.tools.register(createReleaseTool({
       getProjection: () => runtime.projection,
       fetcher: evidenceOptions.fetcher,
@@ -971,7 +981,7 @@ export function apply(ctx: Context, rawConfig: {
     const delegated = isDelegatedSession(agent.session)
     let boundaryPending = !runtime.protocolV5Present
     const firstStep = previewFirstStepInjection(
-      { activation: config.activation, enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryPresent: runtime.protocolV4Present, delegated },
+      { activation: config.activation, enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryPresent: runtime.protocolV4Present, delegated, policy: runtime.projection.policy },
       claimedBatchHasRealRootInput(decision.messages),
     )
     if (firstStep) {

@@ -4,6 +4,7 @@ import type { GuardProjection } from '../domain/types.js'
 import { deriveItemDiagnosis, evidenceAvailabilityReason, relevantEvidence } from '../domain/diagnostics.js'
 import { actionPreparation } from './action-preparation.js'
 import { ACTION_MANIFEST, isStatefulAction, type StatefulAction } from '../domain/protocol-manifest.js'
+import { unitDescendantIds } from '../domain/work-unit.js'
 
 export interface PrepareToolOptions {
   getProjection: () => GuardProjection | undefined
@@ -25,10 +26,47 @@ interface PrepareArgs {
   semantic_action?: string
   requested_target?: Record<string, unknown>
   planned_operation?: string
+  page_cursor?: string
 }
 
 /** Discovery pages stay bounded like checkpoint pages. */
 const DISCOVERY_ITEM_LIMIT = 8
+
+/** Opaque pagination cursor for discovery: bound to the projection revision. */
+interface DiscoveryCursor {
+  v: 1
+  /** The contract revision the page was listed against. */
+  r: number
+  /** The declared semantic_action filter (null when none). */
+  f: string | null
+  /** Sort key of the last item on the previous page: [revision, id]. */
+  k: [number, string]
+}
+
+const encodeCursor = (cursor: DiscoveryCursor): string =>
+  Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
+
+/**
+ * The items discovery lists for the CURRENT work: under a v5 boundary that is
+ * the current unit's closure plus its required descendants (the same scope a
+ * v2 certificate answers for, prohibitions included because a standing
+ * constraint is never finished work) plus every pre-v5 obligation, which keeps
+ * their birth rules and must never be silently dropped. A legacy session lists
+ * the whole session. Switched-away sibling units keep their own history and
+ * are reached by item ID, not re-listed here (0.6.1, W060-03).
+ */
+function discoveryItemIds(p: GuardProjection): string[] {
+  const pending = [...p.items.values()]
+    .filter((item) => item.status === 'pending')
+    .sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id))
+  if (p.boundaryProtocol !== 5) return pending.map((item) => item.id)
+  const closureUnits = new Set<string>([
+    ...(p.currentUnitId !== undefined ? [p.currentUnitId, ...unitDescendantIds(p, p.currentUnitId)] : []),
+  ])
+  return pending
+    .filter((item) => item.unitId === undefined || (item.unitId !== undefined && closureUnits.has(item.unitId)))
+    .map((item) => item.id)
+}
 
 /**
  * Thin READ-ONLY preparation surface (v0.5/0.6): before any stateful action it
@@ -42,13 +80,14 @@ const DISCOVERY_ITEM_LIMIT = 8
 export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
   return defineTool({
     name: 'context_guard_prepare',
-    description: 'Read-only pre-action preparation: report the supported command shape, required resolution/effect/state evidence order, existing references, and exact missing target fields for one contract item. Omit item_id to list current open items with their IDs. Performs no action and grants no authority.',
+    description: 'Read-only pre-action preparation: report the supported command shape, required evidence order, existing references, and exact missing target fields for one contract item. Omit item_id to list current open items with their IDs; a stateful change needs resolution/effect/state, a read-only verification needs one matching fact. Pagination follows page_cursor (bound to the contract revision) and semantic_action filters the listing. Performs no action and grants no authority.',
     parameters: {
       item_id: { type: 'string' },
       item_revision: { type: 'number' },
       semantic_action: { type: 'string' },
       requested_target: { type: 'object', additionalProperties: true },
       planned_operation: { type: 'string' },
+      page_cursor: { type: 'string' },
     },
     output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     async execute(rawArgs) {
@@ -69,20 +108,63 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       const p = options.getProjection()
       if (!p || !p.enabled || p.integrity !== 'valid') return { status: 'unknown', reason_code: 'guard_unavailable' }
 
-      // Discovery: a bounded current-item list so a fresh session never has to
-      // guess an item ID. The listing is display-only; every field it shows is
-      // re-validated when the item is actually prepared or checkpointed.
+      // Discovery: a bounded, FULLY TRAVERSABLE current-item list so a fresh
+      // session never has to guess an item ID (0.6.1, W060-03). Stable order,
+      // fixed page size, and a cursor bound to the contract revision: a
+      // projection change between pages invalidates the cursor explicitly
+      // instead of silently skipping or repeating items. The only filter is
+      // `semantic_action` (exact match); it is part of the cursor, so page two
+      // always continues the same filtered listing. The listing is
+      // display-only; every field it shows is re-validated when the item is
+      // actually prepared or checkpointed.
       if (args.item_id === undefined) {
-        const open = [...p.items.values()]
-          .filter((item) => item.status === 'pending')
-          .sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id))
+        const filter = args.semantic_action ?? null
+        // Cursor refusals stay minimal: `undefined` is not a lossless JSON
+        // value, so optional fields are spread in only when defined.
+        const invalidCursor = (reason_code: string, note?: string) => ({
+          status: 'rejected' as const,
+          reason_code,
+          mode: 'discovery' as const,
+          contract_revision: p.contractRevision,
+          ...(note !== undefined ? { note } : { note: 'Re-run discovery without page_cursor to list from the first page.' }),
+        })
+        let startAfter: DiscoveryCursor['k'] | undefined
+        if (args.page_cursor !== undefined) {
+          let parsed: DiscoveryCursor | undefined
+          try {
+            if (args.page_cursor.length <= 1024) {
+              const value = JSON.parse(Buffer.from(args.page_cursor, 'base64url').toString('utf8')) as DiscoveryCursor
+              if (value?.v === 1 && Number.isSafeInteger(value.r) && (value.f === null || typeof value.f === 'string')
+                && Array.isArray(value.k) && Number.isSafeInteger(value.k[0]) && typeof value.k[1] === 'string') parsed = value
+            }
+          } catch { parsed = undefined }
+          if (!parsed) return invalidCursor('discovery_cursor_malformed')
+          if (parsed.r !== p.contractRevision) {
+            return invalidCursor('discovery_cursor_stale', `The contract changed (cursor revision ${parsed.r}, current ${p.contractRevision}). Re-run discovery without page_cursor; items are never skipped by a stale page.`)
+          }
+          if ((parsed.f ?? null) !== (filter ?? null)) return invalidCursor('discovery_cursor_filter_mismatch')
+          startAfter = parsed.k
+        }
+        const eligible = discoveryItemIds(p)
+          .map((id) => p.items.get(id)!)
+          .filter((item) => filter === null || (item.semanticAction ?? 'generic_run') === filter)
+        const startIndex = startAfter === undefined
+          ? 0
+          : eligible.findIndex((item) => item.revision === startAfter![0] && item.id === startAfter![1]) + 1
+        if (startAfter !== undefined && startIndex <= 0) {
+          return invalidCursor('discovery_cursor_stale', 'The cursor names an item no longer in the current listing. Re-run discovery without page_cursor.')
+        }
+        const page = eligible.slice(startIndex, startIndex + DISCOVERY_ITEM_LIMIT)
+        const hasMore = startIndex + page.length < eligible.length
         return {
           status: 'prepared',
           mode: 'discovery',
           durability: p.durabilityWatermark,
           contract_revision: p.contractRevision,
-          total_open: open.length,
-          items: open.slice(0, DISCOVERY_ITEM_LIMIT).map((item) => {
+          total_open: eligible.length,
+          listed: page.length,
+          has_more: hasMore,
+          items: page.map((item) => {
             const diagnosis = deriveItemDiagnosis(p, item)
             return {
               id: item.id,
@@ -94,7 +176,14 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
               text: item.normalizedText,
             }
           }),
-          note: 'Re-run with one item_id to prepare that item. Preparation performs no action.',
+          ...(hasMore ? {
+            next_cursor: encodeCursor({
+              v: 1, r: p.contractRevision, f: filter,
+              k: [page[page.length - 1]!.revision, page[page.length - 1]!.id],
+            }),
+          } : {}),
+          ...(filter !== null ? { filtered_by: { semantic_action: filter } } : {}),
+          note: 'Re-run with one item_id to prepare that item, or pass page_cursor for the next page. Preparation performs no action.',
         }
       }
 
@@ -117,9 +206,15 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
           resolved_target: evidence.resolvedTarget, tool_result_seq: evidence.toolResultSeq,
         }))
 
-      const requiredOrder = manifestEntry?.stateful
+      // The evidence order comes from the SAME obligation contract the
+      // diagnosis uses (0.6.1, W060-04): a stateful change needs the full
+      // resolution/effect/state producer chain; a read-only verification needs
+      // exactly one matching fact in the `effect` role, which is the manifest
+      // the certifier accepts. Wording below must not promise roles the
+      // certifier would refuse.
+      const requiredOrder = plannedAction && isStatefulAction(plannedAction)
         ? ['resolution (prestate facts from a trusted read)', 'effect (the exact planned change)', 'state (independent post-state readback)']
-        : ['state (matching durable evidence for the requested verification)']
+        : ['effect (one matching durable verification fact)']
 
       // Every stateful action shares one descriptor source, so prepare output,
       // the producer's missing-input diagnosis, and the required order cannot

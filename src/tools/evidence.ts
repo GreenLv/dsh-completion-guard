@@ -806,15 +806,15 @@ async function executeGuardAction(
   executableIdentity?: ExecutableIdentity,
   resolutionCallId?: string,
   agent?: { session: unknown },
-): Promise<'completed' | 'handoff_pending' | 'unavailable'> {
+): Promise<{ status: 'completed' | 'handoff_pending' | 'unavailable'; reasonCode?: string }> {
   const target = resolution.target
   if (action === 'install' || action === 'apply') {
     const tgzPath = requireString(resolution.commandManifest, 'tgz_path')
     const identity = tgzPath ? await tgzIdentity(tgzPath) : undefined
     if (!executableIdentity || !tgzPath || !identity || identity.name !== target.package_id || identity.version !== target.version
-      || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return 'unavailable'
+      || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return { status: 'unavailable' }
     await runCommand(roots, executableIdentity, ['plugin', '--profile', roots.profile.name, 'add', `file:${tgzPath}`], undefined, signal)
-    return 'completed'
+    return { status: 'completed' }
   }
   if (action === 'publish') {
     const tgzPath = requireString(resolution.commandManifest, 'tgz_path')
@@ -823,47 +823,47 @@ async function executeGuardAction(
       ? canonicalRegistryBase(target.registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry })
       : undefined
     if (!executableIdentity || !tgzPath || !identity || identity.name !== target.artifact_id || identity.version !== target.version
-      || identity.integrity !== target.integrity_digest || !registry || registry !== target.registry) return 'unavailable'
+      || identity.integrity !== target.integrity_digest || !registry || registry !== target.registry) return { status: 'unavailable' }
     await runCommand(roots, executableIdentity, ['publish', tgzPath, '--registry', registry, '--ignore-scripts'], undefined, signal)
-    return 'completed'
+    return { status: 'completed' }
   }
   if (action === 'restart') {
     const capabilities = await marketCapabilities(roots, signal)
-    if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return 'unavailable'
-    if (!sameMarketProvider(target.pre_generation, capabilities.generation)) return 'unavailable'
+    if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return { status: 'unavailable' }
+    if (!sameMarketProvider(target.pre_generation, capabilities.generation)) return { status: 'unavailable' }
     if (capabilities.generation !== target.pre_generation) {
-      return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? 'completed' : 'unavailable'
+      return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? { status: 'completed' } : { status: 'unavailable' }
     }
-    if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return 'handoff_pending'
+    if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return { status: 'handoff_pending' }
     if (!roots.persistRestartIntent || !await roots.persistRestartIntent(agent, {
       resolutionCallId,
       serviceId: String(target.service_id),
       preGeneration: String(target.pre_generation),
-    })) return 'unavailable'
+    })) return { status: 'unavailable' }
     const response = await (roots.fetcher ?? fetch)(`${roots.marketOrigin}/dsh-market/api/v1/restart`, {
       method: 'POST', signal, redirect: 'error',
       headers: { accept: 'application/json', 'content-type': 'application/json', origin: roots.marketOrigin },
       body: '{}',
     })
-    if (!response.ok) return 'unavailable'
+    if (!response.ok) return { status: 'unavailable' }
     const body = record(await response.json())
     // The old process is expected to terminate before its tool/result is
     // durable. Even if it survives long enough to return, this is only a
     // handoff acknowledgement; a restored process must observe the new bootId
     // before minting effect evidence.
-    return body?.schema === MARKET_SCHEMA ? 'handoff_pending' : 'unavailable'
+    return body?.schema === MARKET_SCHEMA ? { status: 'handoff_pending' } : { status: 'unavailable' }
   }
   if (action === 'commit' || action === 'push' || action === 'pull' || action === 'fetch') {
     const binding = resolution.gitBinding
     const repository = requireString(resolution.target as RecordValue, 'repository')
-    if (!executableIdentity || !binding || !repository) return 'unavailable'
+    if (!executableIdentity || !binding || !repository) return { status: 'unavailable' }
     const targetIdentity: GitTargetIdentity = {
       repository,
       ...(typeof resolution.target.remote === 'string' ? { remote: resolution.target.remote } : {}),
       ...(typeof resolution.target.refspec === 'string' ? { refspec: resolution.target.refspec } : {}),
     }
     const current = await gitPrestate(binding.manifest, repository, signal, executableIdentity.realpath)
-    if (!current) return 'unavailable'
+    if (!current) return { status: 'unavailable' }
     const executed = await executeRevalidatedGitEffect(
       binding.envelope,
       binding.manifest,
@@ -871,7 +871,7 @@ async function executeGuardAction(
       current,
       async (_file, argv, workingDirectory) => runCommand(roots, executableIdentity, argv, workingDirectory, signal),
     )
-    if (executed.status !== 'executed') return 'unavailable'
+    if (executed.status !== 'executed') return { status: 'unavailable', reasonCode: executed.reasonCode }
     if (action === 'commit') {
       const commit = verifiedLinearCommitReadback(
         await gitBytes(repository, ['rev-list', '--parents', '-n', '1', 'HEAD'], signal, executableIdentity.realpath),
@@ -880,12 +880,12 @@ async function executeGuardAction(
       const postTree = commit
         ? commitTreeSnapshotDigest(await gitBytes(repository, ['ls-tree', '-r', '-z', commit.postHeadOid], signal, executableIdentity.realpath))
         : undefined
-      if (!commit || postTree !== resolution.target.change_set_digest) return 'unavailable'
+      if (!commit || postTree !== resolution.target.change_set_digest) return { status: 'unavailable' }
     } else if (action === 'push') {
       const remoteOid = binding.manifest.remote && binding.manifest.destinationRef
         ? await exactRemoteOid(repository, binding.manifest.remote, binding.manifest.destinationRef, signal, executableIdentity.realpath)
         : undefined
-      if (!remoteOid || remoteOid !== resolution.target.local_oid) return 'unavailable'
+      if (!remoteOid || remoteOid !== resolution.target.local_oid) return { status: 'unavailable' }
     } else {
       const upstream = String(resolution.target.upstream_oid ?? '')
       const trackingRef = binding.manifest.action === 'fetch'
@@ -894,13 +894,13 @@ async function executeGuardAction(
           ? `refs/remotes/${binding.manifest.remote}/${binding.manifest.sourceRef.slice('refs/heads/'.length)}`
           : undefined
       const tracking = trackingRef ? oid(await git(repository, ['rev-parse', '--verify', trackingRef], signal, executableIdentity.realpath)) : undefined
-      if (!tracking || tracking !== upstream) return 'unavailable'
-      if (action === 'pull' && oid(await git(repository, ['rev-parse', 'HEAD'], signal, executableIdentity.realpath)) !== upstream) return 'unavailable'
-      if (action === 'fetch' && oid(await git(repository, ['rev-parse', 'HEAD'], signal, executableIdentity.realpath)) !== resolution.target.pre_head_oid) return 'unavailable'
+      if (!tracking || tracking !== upstream) return { status: 'unavailable' }
+      if (action === 'pull' && oid(await git(repository, ['rev-parse', 'HEAD'], signal, executableIdentity.realpath)) !== upstream) return { status: 'unavailable' }
+      if (action === 'fetch' && oid(await git(repository, ['rev-parse', 'HEAD'], signal, executableIdentity.realpath)) !== resolution.target.pre_head_oid) return { status: 'unavailable' }
     }
-    return 'completed'
+    return { status: 'completed' }
   }
-  return 'unavailable'
+  return { status: 'unavailable' }
 }
 
 async function gitBytes(repository: string, args: string[], signal: AbortSignal, file = 'git'): Promise<Buffer> {
@@ -1363,7 +1363,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
         releaseContractId = decision.contractId
       }
       try {
-        const status = await executeGuardAction(
+        const outcome = await executeGuardAction(
           action,
           resolution,
           roots,
@@ -1380,7 +1380,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
           // `unavailable` here means every pre-effect check refused, so no
           // command ran: that is a PROVEN no-effect. Anything else is an
           // attempted effect whose result only a readback can establish.
-          const readback = status === 'completed'
+          const readback = outcome.status === 'completed'
             ? await publishReadback(resolution.target, roots, exec.signal)
             : undefined
           await roots.releaseSettle({
@@ -1388,14 +1388,16 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
             operation: releaseOperation,
             callId: args.resolution_call_id,
             ...(releaseContractId !== undefined ? { contractId: releaseContractId } : {}),
-            effect: status === 'completed' ? 'completed' : status === 'unavailable' ? 'not_effected' : 'unknown',
+            effect: outcome.status === 'completed' ? 'completed' : outcome.status === 'unavailable' ? 'not_effected' : 'unknown',
             readback: readback === undefined ? 'unavailable' : { kind: 'npm_integrity', identity: readback },
           })
         }
         return {
-          status,
-          reason_code: status === 'completed' ? 'action_completed'
-            : status === 'handoff_pending' ? 'restart_handoff_pending' : 'action_execution_failed',
+          status: outcome.status,
+          reason_code: outcome.status === 'completed' ? 'action_completed'
+            : outcome.status === 'handoff_pending' ? 'restart_handoff_pending'
+            : outcome.reasonCode === 'effect_already_applied' ? 'action_already_applied'
+            : 'action_execution_failed',
           ...identity,
         }
       } catch {

@@ -8,10 +8,10 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-Install the published **0.6.0** release into the DSH Web environment:
+Once **0.6.1** is available in the registry, install it into the DSH Web environment. Candidate and platform results are recorded in [LOCAL_ACCEPTANCE](docs/LOCAL_ACCEPTANCE.md):
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.6.0
+dsh plugin --profile web add dsh-completion-guard@0.6.1
 ```
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -28,7 +28,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. The published 0.5.3 package passed separate macOS and Windows native acceptance on DSH `0.1.5-rc.2`; both runs are bound to its exact bytes in the [acceptance record](docs/LOCAL_ACCEPTANCE.md). The 0.6.0 candidate has not yet had its own native or publication run, so treat its source and deterministic evidence as separate from any installed-artifact claim. Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
+On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. Native acceptance and publication evidence is recorded per version, bound to that version's exact bytes, in the [acceptance record](docs/LOCAL_ACCEPTANCE.md); a version's source and deterministic evidence never substitutes for its own installed-artifact claim. Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, mixed, duplicated, or different from a checked setup.
 
 Restart DSH Web, open a session, and enable the Guard:
 
@@ -49,7 +49,7 @@ Activation is opt-in by default. `status` shows whether the Guard is on, its sta
 
 ## Status and compatibility
 
-Version 0.6.0 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+Version 0.6.1 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
 
 Package discovery and npm installation now publish the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
 
@@ -112,17 +112,27 @@ Use `context_guard_rebind` to propose an exact, complete split of the old text. 
 
 The default `context_guard_checkpoint` call uses `bindings: []` for diagnosis. It shows at most eight current items/constraints and ten evidence rows, within 12 KiB of plugin JSON. `pagination` reports totals and a separate `next_cursor` for each list; the first page is not the whole contract. Use `item_ids` or `evidence_ids` to focus a query, or `evidence_scope: "history"` for the complete evidence history, including rows marked unavailable. Keep the query unchanged when following a cursor; a changed contract or evidence snapshot requires a fresh query. Large rows expose `detail_id`; retrieve chunks with `detail_offset` and return the first response's `snapshot` as `detail_snapshot` on later chunks. All queries remain read-only and never shrink the certification set.
 
-## What 0.6.0 changes for ordinary work
+## What 0.6.1 changes for ordinary work
 
 The following behaviours are what you will actually notice. Everything before
 the new protocol boundary keeps its old meaning; nothing is re-read.
 
-**Asking a question no longer leaves a permanent to-do.** A question or an
-explanation is closed by the host's own record: the final assistant message of a
+**Asking a question no longer leaves a permanent to-do.** An automatically recognized question is closed by the host's own record: the final assistant message of a
 turn that completed normally. A status summary, a draft, an intermediate reply,
 another turn's answer, a subagent's answer, or an interrupted turn never closes
 it. "Answered" means the answer reached you — it says nothing about whether it
 was correct or whether any work was done.
+
+Unresolved explanation or mixed requests need an explicit span partition through `context_guard_interpret`. The caller identifies information and unknown spans; only information spans can close with the interpreting turn's answer. Unknown and undeclared spans stay pending. The guard checks structure and replay identity, while the model remains responsible for the semantic classification.
+
+**An attached screenshot or image is a question to answer, not a command to
+run.** Each attachment keeps its own identity and closes only through two
+facts: an explicit interpretation record (`context_guard_interpret` with the
+item ID, after actually reading the attachment) and the answer of the turn
+that recorded the interpretation. A picture of a commit button never authorizes a commit; an
+answer that says the images were not viewed closes nothing. Images plus real
+modifications close separately, and an explicitly requested visual
+verification still needs its own readback.
 
 **A document "update" is decided by the object, not the verb.** "Update the
 docs" becomes a bounded modification whose exact file you leave to the
@@ -180,7 +190,7 @@ A release is never implicit. A "release" keyword in a message, a loaded Skill,
 or an installation does not adopt anything; only this command does:
 
 ```text
-/context-guard release adopt {"operations":["npm_publish"],"candidate":{"ref":"refs/heads/main","fullSha40":"<40 hex characters>","version":"0.6.0","artifactDigest":"<64 hex characters>"}}
+/context-guard release adopt {"operations":["npm_publish"],"candidate":{"ref":"refs/heads/main","fullSha40":"<40 hex characters>","version":"0.6.1","artifactDigest":"<64 hex characters>"}}
 ```
 
 After adoption, `/context-guard release` reports the contract, its candidate, its
@@ -213,7 +223,7 @@ This project began as a DSH port of deterministic behavior from [`GreenLv/codex-
 
 Version 0.4.0 was deliberately aligned with the shared evidence rules in Codex Context Guard 0.10.0: proof must belong to work that is still open and must show the operation, target, and result the user actually requested. This is a limited behavior-level alignment, not a claim that the two products have the same features.
 
-The 0.6.0 line implements the C01–C12 shared contract that pairs this release with a planned Codex Context Guard 0.14.0: source spans and coverage, one interpretation view, trusted answer delivery, work units with a required-descendant closure, per-action conditions, responsibility tiers, bounded target resolution, atomic clarification, the proof capability matrix, explicit release tickets, fresh projections, and unified migration diagnostics. The plain-language comparison, the implementation status per contract, and the dated delta ledger are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
+The 0.6.x line implements the C01–C12 shared contract that pairs this release with a planned Codex Context Guard 0.14.0: source spans and coverage, one interpretation view, trusted answer delivery, work units with a required-descendant closure, per-action conditions, responsibility tiers, bounded target resolution, atomic clarification, the proof capability matrix, explicit release tickets, fresh projections, and unified migration diagnostics. The plain-language comparison, the implementation status per contract, and the dated delta ledger are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
 
 Two shared artifacts are deliberately incomplete, and calling them done would be false. The upstream repository had not landed a frozen v2 conformance fixture at the time of this release, so the v2 fixture here is a **DSH-authored candidate** rather than a byte mirror, and `UPSTREAM_PIN.json` still pins only the unchanged v1 fixtures. Cross-language parity and the canonical mirror therefore remain open; the delta ledger records them as such.
 

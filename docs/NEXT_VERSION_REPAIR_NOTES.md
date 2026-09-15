@@ -1,6 +1,22 @@
 # 下个版本：准备工具、Git 取证与问答残留
 
-状态：局部修复已随 0.5.3 发布（2026-09-14）；本页记录的后续语义设计已随 0.6.0 实现（2026-09-14），实现状态与验收边界见下节与[语义兼容说明](SEMANTIC_COMPATIBILITY.md)。本页以 0.5.2 为事故修复基线；精确制品与平台结果见[验收记录](LOCAL_ACCEPTANCE.md#053-published-release-2026-09-14)。
+状态：局部修复已随 0.5.3 发布（2026-09-14）；本页记录的 0.6.0 语义设计已实现（2026-09-14），0.6.1 修复已实现（2026-09-15），实现状态与验收边界见下节与[语义兼容说明](SEMANTIC_COMPATIBILITY.md)。本页以 0.5.2 为事故修复基线；精确制品与平台结果见[验收记录](LOCAL_ACCEPTANCE.md)。
+
+## 0.6.1 修复（2026-09-15）
+
+对一次真实 Windows 0.6.0 会话的只读回放复核确认了五项缺陷（来源与根因见仓库内 `docs/WINDOWS_0_6_0_REPAIR_PLAN.md`；该计划是本批修复的规划依据，原始材料保留在仓库外）。五项均已从统一解释、能力合同与状态转换层修复，不依赖事故句子白名单，不通过删除未知项或放宽证据校验使测试通过：
+
+- **W060-01 附件解释死路**：非文本根输入按逐资产身份保留为信息义务，其关闭需要**逐资产解释记录**（新入口 `context_guard_interpret`）**加**记录所在 turn 的可信交付，两者缺一不可。记录绑定**调用与结果一致的 turn 对**（调用 turn 随 `tool/call` 记录，重放要求回执 turn 与之相等）；重放在事件自身水位把回执对照合同重新校验（调用 item ID、条目 revision、资产身份）：身份矛盾或 turn 对不一致（中断 turn 的调用、回执被移植进后来回答）记 `interpretation_receipt_mismatch` 完整性违规；身份有效但 turn 关联缺失则仅不产生记录、日志保持 valid。解释 turn 的交付也是旧附件的关闭通路（其根消息已不可能属于活 turn）；仅存在一条 final 不关闭任何未经解释记录的图片义务。在入口存在之前写入的日志重放时附件保持 `pending`（与 0.6.0 相同），只能由当前解释事件关闭。回答交付、视觉证明与执行认证保持分离。
+- **W060-02 默认执行语义**：遵循复核最终解释合同——**语法上的陈述句也可以表达任务要求**，任何表面句式都不能证明子句是可关闭的信息。无可解析动作且无**正面信息依据**的子句默认 `unresolved`（保留、可见、永不执行、不被交付关闭；经逐字具体澄清、确认重绑定或 clear 解决，澄清通路已接受 unresolved）。正面信息依据 = 可识别的信息请求形态：疑问句、引用动作、产出物请求、过去/完成体报告，且依据必须**独占整个子句**——信息跨度之后衔接新要求（"Figure out the issue and sanitize all inputs"、"Figure out the issue & sanitize all inputs"、"Explain the issue, sanitize all inputs"）、报告处于定语（"清理已经生成了的缓存"，无长度阈值）或从句（"Sanitize inputs that were supplied by users"）时整句不可判定、保持 unresolved 并保留其中的执行子项。解释/调查开头同样不自动进入可关闭通道。**结构化解释通路已实现，为跨度划分合同**：`context_guard_interpret` 泛化后同时服务资产义务与 unresolved 子句义务——调用方提交 information_spans/unknown_spans 划分，守护程序对照完整输入跨度校验覆盖与关联；**重放把回执绑定到持久化的调用参数并要求二者划分完全一致**，重画划分（把已提交的 unknown 跨度改成 information 声明）即 `interpretation_receipt_mismatch` 完整性违规，不产生记录、不取代任何条目；仅 information 子项由解释 turn 的交付关闭，unknown 与未申报子跨度保持 pending。整项确认回执不产生关闭资格。整句应答（"当然。"）属会话层不捕获。裸英文 wh-词只在子句开头算疑问标记，从句关系词不把真实指令降级。普通祈使句读法不变；仅提及动作的陈述不再释放等待保留。
+- **W060-03 发现结果截断**：prepare 的 discovery 改为固定页大小、稳定排序、绑定合同 revision 的 cursor 分页，revision 变化显式失效；`semantic_action` 为唯一声明筛选并随 cursor 携带；v5 会话下列表范围为当前单元闭包加必需后代加 pre-v5 义务。
+- **W060-04 只读证据角色不一致**：prepare、诊断与认证器共用同一义务合同——stateful 需要 resolution/effect/state，只读验证需要单条 effect 角色事实；historical-gap 判定仅限 stateful。
+- **W060-05 普通 Git 观察事实**：对动作与命令头锚定信号一致、且无可归属生产者证据的义务，诊断为 `execution_unattributable`——该命令是否执行了此动作**无法确立**：只读核实现状、保持未认证、不重做、不断言未发生。Guard 不扫描复合命令文本（引号数据与短路控制流会虚构观察，整体成功不证明分段执行）。受保护 git 链现在拒绝重放已成立的动作：push（远端已在本地 head）、pull（HEAD 已在 upstream）、fetch（tracking 已更新）在执行任何命令前以 `effect_already_applied` 拒绝，动作工具报告 `action_already_applied`——链外执行不能经空转重跑洗白为生产者证据。首次提示的条件化措辞取代对所有 stateful 动作的无条件 Guard 前置要求。
+
+本节初稿曾宣称上一版实现"附件按 turn 交付关闭"与"按段动作观察"；复核以反例否决后已按上述设计重做，反例保留为 `tests/domain/v061-*.test.ts` 常驻回归。
+
+有意排除的范围：action-event 与 state-outcome 义务的显式区分（需要新的公开义务类型与捕获合同，超出补丁版本兼容边界，列为后续独立能力）；`git_tag` 与 GitHub Release producer 路由缺口维持既有 backlog 状态。
+
+0.6.1 的确定性证据边界见[验收记录](LOCAL_ACCEPTANCE.md)的对应小节：它覆盖本地确定性矩阵，不包含也未宣称原生平台验收、精确制品冻结或发布读回。
 
 ## 0.6.0 实现结论（2026-09-14）
 
@@ -25,7 +41,7 @@
 
 - 上游尚未落地冻结的 v2 fixture，因此本仓库的 v2 文件是候选身份，跨语言 parity 与正式镜像待上游落地后按精确 commit 重镜像并刷新 `UPSTREAM_PIN.json`。**协调者已于 2026-09-14 裁定阶段性退出**：该项归上游所有，列为跨仓库待办，不作为 DSH 侧退出条件。
 - 发布档可保护表面仅 `npm_publish`。`git_tag` 与 GitHub Release 路由记为 `release_operation_unrouted` / `attribution: scope_reduction`（缺少 Guard 自有路由，属可实现缺口，并经协调者批准缩小本轮公开范围）；只有复合 runner 记为不透明宿主边界。补建这两条路由是后续版本的工作项。
-- 0.6.0 候选的原生 macOS/Windows 验收、精确制品冻结、tag、npm 与 GitHub Release 均未执行，属于后续独立阶段。
+- 0.6.0 的发布事实已按阶段核对（2026-09-15）：annotated tag `v0.6.0` 指向 `cc5cbc6d408664172d9383de7c83c55ec6dfd602`，GitHub Release `v0.6.0` 绑定同一提交，npm 注册表存在 `dsh-completion-guard@0.6.0`（registry `dist.integrity` 已读回记录）。该版本的原生 macOS/Windows 验收与精确制品验收按[验收记录](LOCAL_ACCEPTANCE.md)的版本小节为准；发布回执冻结的制品字节比对属于发布档案，不在仓库内重写。
 
 ## 已实施的局部修复
 
@@ -78,4 +94,4 @@ resolution 缺少输入时，evidence 在探测可执行程序前返回 resoluti
 
 本轮局部修复使用宿主注册、诊断和取证测试，以及仓库映射所要求的本地检查。更新 dist 只代表生成源码产物；旧 0.5.2 制品和已加载插件不变。0.5.3 的 CI、冻结制品、双平台隔离原生验收和公开发布已独立完成，具体范围见验收记录；日常环境安装不在这些结果之内。
 
-0.6.0 的确定性证据包括仓库完整矩阵（typecheck、lint、vitest、release-pack、stats、build、pack:check、文档 audit 及其单测、`git diff --check` 与 dist 一致性）。它不包含原生平台验收：候选尚未冻结为精确制品，也尚未在 macOS/Windows 的 Web 与 Headless 上运行。Codex 本轮仅新增问题与设计文档，不修改其运行时；上游没有新增可用于镜像的 v2 规范或 fixture。
+0.6.0 的确定性证据包括仓库完整矩阵（typecheck、lint、vitest、release-pack、stats、build、pack:check、文档 audit 及其单测、`git diff --check` 与 dist 一致性）。确定性证据永远不等于原生平台验收：任何版本是否已在 macOS/Windows 的 Web 与 Headless 上完成原生运行、是否冻结为精确制品，以[验收记录](LOCAL_ACCEPTANCE.md)按版本记录的事实为准。Codex 本轮仅新增问题与设计文档，不修改其运行时；上游没有新增可用于镜像的 v2 规范或 fixture。
