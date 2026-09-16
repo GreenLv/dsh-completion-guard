@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.2 - 2026-09-16
+
+### Changes
+
+- Ordinary tasks without a certification adapter now report the capability
+  limit without asking the user to restate the request or rebind it as another
+  action. Prepare, checkpoint, recovery and status share the same diagnosis.
+- Shell evidence distinguishes the historical outcome from declared process
+  results and operation attribution. Checkpoint exposes the source and conflict
+  flag. Existing outcome rules and digest inputs remain unchanged; opaque
+  compound commands do not gain per-operation success from their final exit.
+- Recovery retains the dependency-free removal condition even at the smallest
+  supported budget. Metadata, content, directory and dependency status remain
+  separate; this adds no removal executor or automatic safety gate.
+- Bounded Codex comparisons now include disposable prompt-ledger lifecycle
+  cases for pending, user wait, missing-proof correction and identical mixed
+  results. These are function-level measurements, not native acceptance or
+  full product parity. See [the result contract](docs/CROSS_END_RESULT_CONTRACT.md).
+- Retired duplicate repair notes and the superseded 0.6.1 planning document;
+  historical citations point to their exact Git snapshot. Current limitations
+  remain in the semantic compatibility document and release plan.
+
+### Validation
+
+This is a source release candidate. Local checks and remaining CI,
+native T06, exact-artifact and publication gates are recorded in
+[local acceptance](docs/LOCAL_ACCEPTANCE.md) and the
+[release plan](docs/RELEASE_PLAN_0_6_2.md).
+
 ## 0.6.1 (2026-09-15)
 
 Repairs attachment handling, conservative request interpretation, discovery pagination and evidence guidance after the Windows 0.6.0 review.
@@ -343,7 +372,7 @@ old meaning; nothing is re-read or re-labelled.
 
 ### Planned
 
-- Track answer delivery separately from execution certification. The design and remaining semantic coverage are recorded in [next-version repair notes](docs/NEXT_VERSION_REPAIR_NOTES.md); question closure is not changed by this patch.
+- Track answer delivery separately from execution certification. The design and remaining semantic coverage are recorded in [next-version repair notes](https://github.com/GreenLv/dsh-completion-guard/blob/d11009d8f755ecee7d288cff18250c7b372cfd2a/docs/NEXT_VERSION_REPAIR_NOTES.md); question closure is not changed by this patch.
 
 ## 0.5.2 - 2026-09-11
 

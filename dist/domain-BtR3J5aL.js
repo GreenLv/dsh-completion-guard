@@ -2587,6 +2587,109 @@ function reasonClassOf(reasonCode) {
 }
 
 //#endregion
+//#region src/domain/capability-semantics.ts
+/**
+* Whether the item's obligation has a certification path in this cohort at
+* all. A generic_run item names no concrete action: the manifest still has a
+* generic entry (the guard may run and observe ordinary commands) but no
+* user-level completion contract can be certified from it, so the item is
+* uncertifiable while ordinary execution remains entirely permitted.
+*/
+function actionHasCertificationPath(action, legacyMigration) {
+	if (legacyMigration) return false;
+	if (action === "generic_run") return false;
+	if (!isStatefulAction(action)) return true;
+	return ACTION_MANIFEST.actions[action].evidenceProducer === "supported";
+}
+/** The capability classification of an item's own obligation contract. */
+function capabilityFactOf(item) {
+	const action = item.semanticAction ?? "generic_run";
+	const legacyMigration = (item.legacyFlags?.length ?? 0) > 0;
+	const certifiable = actionHasCertificationPath(action, legacyMigration);
+	if (item.kind === "prohibition") return {
+		actionSupported: false,
+		certifiable: false,
+		gap: "constraint",
+		remedy: "none",
+		blockingReasonCodes: []
+	};
+	if (!certifiable) return {
+		actionSupported: action !== "generic_run",
+		certifiable: false,
+		gap: legacyMigration ? "legacy_migration_required" : "missing_adapter",
+		remedy: legacyMigration ? "fresh_root_instruction" : "report_uncertified_capability_gap",
+		blockingReasonCodes: []
+	};
+	return {
+		actionSupported: true,
+		certifiable: true,
+		gap: "none",
+		remedy: "collect_evidence",
+		blockingReasonCodes: []
+	};
+}
+/**
+* `partial_failure` may be reported only from a credible structured
+* per-operation result, and only for the exact declared subset. `unknown`
+* stays unknown: the guard never reconstructs a per-operation verdict from
+* stderr text, and never widens a declared subset into a claim about the rest.
+*/
+function partialFailureOf(facts) {
+	const declared = facts.declaredOperationResults;
+	if (!declared?.length) return void 0;
+	if (facts.operationAttribution !== "declared_per_operation") return void 0;
+	const failed = declared.filter((entry) => entry.outcome === "failure");
+	if (!failed.length) return void 0;
+	if (declared.some((entry) => entry.outcome === "unknown")) return void 0;
+	return { failed };
+}
+/** The one-line consequence of a gap kind, shared so no lane re-invents it. */
+function capabilityConsequence(gap) {
+	switch (gap) {
+		case "missing_adapter": return "No certification adapter exists for the exact action this obligation names. Complete the work honestly, keep the observable result, and report it as uncertified; do not claim a certificate, and do not demand that the user restate the request as some other supported action.";
+		case "interpretation_unknown": return "The clause was not read as a concrete instruction. It stays recorded, non-executable, and never closes by delivery; a fresh explicit root instruction naming a concrete action supersedes it.";
+		case "legacy_migration_required": return "A pre-0.5 obligation carries no concrete action. Only its own migration path replaces it: a fresh root instruction naming the action and target, followed by the rebind proposal that maps this item onto that recorded instruction.";
+		case "target_missing": return "The action is supported, but an identity only the root can choose was never named. Supply exactly that field; the recorded obligation keeps its own meaning.";
+		case "input_ambiguous": return "Several targets match. The root must select one before any stateful step; the guard never guesses.";
+		case "historical_preevidence_missing": return "The observed effect has no recorded pre-evidence. Record the current state as a read-only fact; never repeat the action to mint the missing prestate.";
+		case "operation_unattributable": return "The console could not attribute the effect to this obligation. Check the actual current state with a read-only command first, keep the obligation uncertified, never repeat the action to mint evidence, and do not assert that it never ran.";
+		case "condition_pending": return "A declared condition or wait has not been released. Keep the obligation pending; do not execute it or collect effect evidence before release.";
+		case "delivery_pending": return "Deliver the actual answer; the host-confirmed final response of a completed turn closes this obligation, and it certifies delivery only.";
+		case "host_unavailable": return "The audited host cohort is unavailable. Restore it; keep pending work visible at a qualified safe boundary.";
+		case "constraint": return "Keep this constraint enforced; it is not a completion evidence obligation.";
+		case "closed": return "No further binding is needed.";
+		case "none": return "Collect the matching durable evidence in its required order, then checkpoint.";
+	}
+}
+/**
+* D062-03: the applicable condition every removal-like outcome must carry.
+* "Clean" or "no longer listed" never proves "no dependants", so a completed
+* subset stays reported as the subset it is. These are the execution-side
+* facts the guard can name but cannot observe; it states them instead of
+* inventing a generic remover or promising an automatic block.
+*/
+const DEPENDENCY_FREE_ONLY_CONDITION = [
+	"git_unique_content",
+	"dirty_or_untracked_or_ignored_entries",
+	"task_process_cwd",
+	"open_handles_and_running_processes",
+	"runtime_links_and_external_consumers",
+	"recovery_basis"
+];
+/** Whether one candidate object may enter the automatic removal set. */
+function admissibleForRemoval(status) {
+	return status === "dependency_free";
+}
+/** Only an object proven dependency-free AND fully removed may read as done. */
+function removalIsComplete(report, status) {
+	return status === "dependency_free" && report.metadataRemoved === "yes" && report.contentRemoved === "yes" && report.directoryRemoved === "yes";
+}
+/** A partially removed object or an unknown dependant is never "no impact". */
+function removalIsPartiallyKnown(report, status) {
+	return status !== "dependency_free" || report.contentRemoved === "partial" || report.directoryRemoved !== "yes" || report.metadataRemoved !== "yes";
+}
+
+//#endregion
 //#region src/domain/diagnostics.ts
 /** Bounded, honest task-kind classification for a captured item. */
 function taskKindOf(item) {
@@ -2626,8 +2729,12 @@ function evidenceFacets(p, item) {
 }
 /**
 * An ordinary shell command whose TEXT ANCHORED at command position to this
-* obligation's action completed successfully, but which failed closed
-* parsing, so per-command execution cannot be established (0.6.1, W060-05).
+* obligation's action completed successfully, but whose effect on the
+* obligation could not be attributed (0.6.1 W060-05; layered by 0.6.2
+* D062-02). The signal is the same either way — the operation-attribution
+* fact when the fact carries one, and the frozen parse status otherwise:
+* a command whose effect cannot be attributed cannot certify an obligation.
+*
 * Only the pre-existing head-anchored action signal counts: the guard does
 * NOT scan compound text for actions, because quoted data and short-circuit
 * control flow would fabricate observations. A failed command is not a
@@ -2638,7 +2745,7 @@ function unattributedExecutionOf(p, item) {
 	if (!action || action === "generic_run") return void 0;
 	for (const evidence of p.evidence.values()) {
 		if (evidence.outcome !== "success") continue;
-		if (evidence.parseStatus === void 0 || evidence.parseStatus === "supported") continue;
+		if (!(evidence.processFacts ? evidence.processFacts.operationAttribution === "unknown" : evidence.parseStatus !== void 0 && evidence.parseStatus !== "supported")) continue;
 		if (![
 			"bash",
 			"pwsh",
@@ -2646,6 +2753,17 @@ function unattributedExecutionOf(p, item) {
 		].includes(evidence.toolName)) continue;
 		if (evidence.semanticAction !== void 0 && evidence.semanticAction !== "generic_run" && actionCompatible(action, evidence.semanticAction)) return evidence;
 	}
+}
+/**
+* The honest wording for an unattributable shell effect (0.6.2 D062-02). The
+* two causes are DIFFERENT facts and must not share one sentence: a command
+* that failed closed parsing was not securely parsed, while a compound runner
+* whose operation layer is unknown simply has no independent per-operation
+* result. Both refuse to claim execution either way, and both forbid
+* re-running the action to mint evidence.
+*/
+function unattributedExecutionCondition(evidence) {
+	return `${evidence.parseStatus === void 0 || evidence.parseStatus === "supported" ? "An ordinary shell command beginning with this action ran earlier in the session as an opaque multi-operation script, and the host declared no independent per-operation result, so whether it performed this action cannot be established" : "An ordinary shell command beginning with this action succeeded earlier in the session, but the command could not be securely parsed, so whether it performed the action cannot be established"}. Check the actual current state with a read-only command first. The obligation stays uncertified; perform the action through the guarded producer path only if the state shows it has not happened and the instruction still calls for it; never repeat an action to mint evidence, and do not assert it never ran.`;
 }
 /**
 * The pure repair judge. It decides between: fixable from existing evidence,
@@ -2676,33 +2794,60 @@ function judgeItemDiagnosis(p, item) {
 		task_kind: kind,
 		missing_facets
 	};
-	if (item.kind === "prohibition") return {
-		...base,
+	/**
+	* 0.6.2 D062-01: every verdict carries the shared capability fact for its own
+	* gap. The per-lane override only names the gap KIND; the consequence text
+	* and the reachable-remedy rules stay in one place, so a new branch cannot
+	* drift into demanding user input for a capability this build lacks.
+	*/
+	const verdict = (override) => {
+		const capability = {
+			actionSupported: capabilityFactOf(item).actionSupported,
+			certifiable: override.certifiable ?? false,
+			gap: override.gap,
+			remedy: override.remedy,
+			blockingReasonCodes: override.reason_code === "missing_evidence" || override.reason_code === "certified" || override.reason_code === "answer_delivered" ? [] : [override.reason_code]
+		};
+		const { certifiable: _certifiable, remedy: _remedy, gap: _gap, missing_facets: overrideFacets,...rest } = override;
+		return {
+			...base,
+			...rest,
+			...overrideFacets !== void 0 ? { missing_facets: overrideFacets } : {},
+			capability
+		};
+	};
+	if (item.kind === "prohibition") return verdict({
+		gap: "constraint",
+		remedy: "none",
 		certification: "unsupported",
 		reason_code: "prohibition_active",
 		repairability: "none",
 		missing_fields: [],
 		next_action: {
 			kind: "none",
-			resume_condition: "Keep this constraint enforced; it is not a completion evidence obligation."
+			resume_condition: capabilityConsequence("constraint")
 		},
 		attempt_fingerprint: fingerprint(p, item, "prohibition_active")
-	};
+	});
 	const action = item.semanticAction ?? "generic_run";
-	if (item.status === "passed") return {
-		...base,
+	if (item.status === "passed") return verdict({
+		gap: "closed",
+		remedy: "none",
+		certifiable: true,
 		certification: "supported",
 		reason_code: "certified",
 		repairability: "none",
 		missing_fields: [],
 		next_action: {
 			kind: "none",
-			resume_condition: "No further binding needed."
+			resume_condition: capabilityConsequence("closed")
 		},
 		attempt_fingerprint: fingerprint(p, item, "certified")
-	};
-	if (item.status === "answered") return {
-		...base,
+	});
+	if (item.status === "answered") return verdict({
+		gap: "closed",
+		remedy: "none",
+		certifiable: true,
 		certification: "supported",
 		reason_code: "answer_delivered",
 		repairability: "none",
@@ -2713,9 +2858,10 @@ function judgeItemDiagnosis(p, item) {
 			resume_condition: "The host-confirmed final answer was delivered; no further binding needed."
 		},
 		attempt_fingerprint: fingerprint(p, item, "answer_delivered")
-	};
-	if (item.status === "pending" && item.waitAuthorization?.kind === "root_explicit_wait") return {
-		...base,
+	});
+	if (item.status === "pending" && item.waitAuthorization?.kind === "root_explicit_wait") return verdict({
+		gap: "condition_pending",
+		remedy: "await_root_input",
 		certification: "unavailable",
 		reason_code: "root_condition_pending",
 		repairability: "user_input_required",
@@ -2723,14 +2869,15 @@ function judgeItemDiagnosis(p, item) {
 		missing_facets: [],
 		next_action: {
 			kind: "none",
-			resume_condition: `Wait for the matching trusted root input: ${item.resumeEvent ?? item.condition ?? item.normalizedText}. Keep this obligation pending; do not execute it or collect effect evidence before release.`
+			resume_condition: `Wait for the matching trusted root input: ${item.resumeEvent ?? item.condition ?? item.normalizedText}. ${capabilityConsequence("condition_pending")}`
 		},
 		attempt_fingerprint: fingerprint(p, item, "root_condition_pending")
-	};
+	});
 	if (kind === "inquiry") {
 		const closable = p.boundaryProtocol === 5;
-		if (item.asset !== void 0 && !p.interpretationFacts.some((fact) => fact.itemId === item.id)) return {
-			...base,
+		if (item.asset !== void 0 && !p.interpretationFacts.some((fact) => fact.itemId === item.id)) return verdict({
+			gap: "delivery_pending",
+			remedy: "record_interpretation",
 			certification: "unsupported",
 			reason_code: "asset_interpretation_required",
 			repairability: "unsupported",
@@ -2743,9 +2890,10 @@ function judgeItemDiagnosis(p, item) {
 				resume_condition: "Read the attachment, record it with context_guard_interpret for this item, and deliver the actual answer; the host-confirmed final response of a completed turn then closes this item. The record proves the asset was read, never that the interpretation is correct."
 			},
 			attempt_fingerprint: fingerprint(p, item, "asset_interpretation_required")
-		};
-		return {
-			...base,
+		});
+		return verdict({
+			gap: closable ? "delivery_pending" : "interpretation_unknown",
+			remedy: closable ? "deliver_answer" : "report_uncertified",
 			certification: "unsupported",
 			reason_code: closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable",
 			repairability: "unsupported",
@@ -2756,12 +2904,13 @@ function judgeItemDiagnosis(p, item) {
 				resume_condition: closable ? "Deliver the actual answer; the host-confirmed final response of a completed turn closes this item." : "Complete the investigation and report the actual answer; the item stays recorded as uncertified. No confirmation or rebind changes this."
 			},
 			attempt_fingerprint: fingerprint(p, item, closable ? "inquiry_awaiting_delivery" : "inquiry_non_certifiable")
-		};
+		});
 	}
 	if (item.authorityDisposition === "informational") {
 		const closable = p.boundaryProtocol === 5;
-		return {
-			...base,
+		return verdict({
+			gap: closable ? "delivery_pending" : "interpretation_unknown",
+			remedy: closable ? "deliver_answer" : "report_uncertified",
 			certification: "unsupported",
 			reason_code: closable ? "information_awaiting_delivery" : "information_non_certifiable",
 			repairability: "unsupported",
@@ -2772,10 +2921,11 @@ function judgeItemDiagnosis(p, item) {
 				resume_condition: closable ? "The trusted final response of this turn closes the recorded statement; it certifies the answer was delivered, never its accuracy." : "The recorded statement stays open as uncertified information; no confirmation, rebind, or execution changes this."
 			},
 			attempt_fingerprint: fingerprint(p, item, closable ? "information_awaiting_delivery" : "information_non_certifiable")
-		};
+		});
 	}
-	if (item.authorityDisposition === "unresolved") return {
-		...base,
+	if (item.authorityDisposition === "unresolved") return verdict({
+		gap: "interpretation_unknown",
+		remedy: "fresh_root_instruction",
 		certification: "unsupported",
 		reason_code: "interpretation_unresolved",
 		repairability: "none",
@@ -2783,14 +2933,16 @@ function judgeItemDiagnosis(p, item) {
 		missing_facets: [],
 		next_action: {
 			kind: "report_only",
-			resume_condition: "The clause could not be read as a concrete instruction; it stays recorded, non-executable, and never closes by delivery. A new explicit root instruction naming a supported action supersedes it."
+			resume_condition: capabilityConsequence("interpretation_unknown")
 		},
 		attempt_fingerprint: fingerprint(p, item, "interpretation_unresolved")
-	};
+	});
 	if (action !== "generic_run" && !item.legacyFlags?.length && item.targetCaptureStatus === "clarification_required") {
 		const missingFields = item.targetCaptureReasonCode ? [TARGET_FIELD_REASONS[item.targetCaptureReasonCode] ?? item.targetCaptureReasonCode] : [];
-		return {
-			...base,
+		return verdict({
+			gap: "target_missing",
+			remedy: "supply_target",
+			certifiable: true,
 			certification: "needs_target",
 			reason_code: "target_clarification_required",
 			repairability: "user_input_required",
@@ -2802,23 +2954,27 @@ function judgeItemDiagnosis(p, item) {
 				resume_condition: "A root-user instruction supplying the exact target re-enables certification."
 			},
 			attempt_fingerprint: fingerprint(p, item, "target_clarification_required")
-		};
+		});
 	}
-	if (action === "generic_run" || item.legacyFlags?.length) return {
-		...base,
-		certification: "unsupported",
-		reason_code: "generic_run_non_certifiable",
-		repairability: "user_input_required",
-		missing_fields: [],
-		next_action: {
-			kind: "report_only",
-			required_input: "a concrete supported action and target for this obligation",
-			resume_condition: "A rebind proposal mapping this obligation to a concrete supported action and target is the only thing that replaces it; after the durable confirmation the original is superseded atomically. Similar re-phrasing changes nothing."
-		},
-		attempt_fingerprint: fingerprint(p, item, "generic_run_non_certifiable")
-	};
-	if (p.hostStatus !== "supported") return {
-		...base,
+	if (action === "generic_run" || item.legacyFlags?.length) {
+		const legacyMigration = (item.legacyFlags?.length ?? 0) > 0;
+		return verdict({
+			gap: legacyMigration ? "legacy_migration_required" : "missing_adapter",
+			remedy: legacyMigration ? "fresh_root_instruction" : "report_uncertified_capability_gap",
+			certification: "unsupported",
+			reason_code: "generic_run_non_certifiable",
+			repairability: legacyMigration ? "historical_gap" : "unsupported",
+			missing_fields: [],
+			next_action: {
+				kind: "report_only",
+				resume_condition: capabilityConsequence(legacyMigration ? "legacy_migration_required" : "missing_adapter")
+			},
+			attempt_fingerprint: fingerprint(p, item, "generic_run_non_certifiable")
+		});
+	}
+	if (p.hostStatus !== "supported") return verdict({
+		gap: "host_unavailable",
+		remedy: "restore_host",
 		certification: "unavailable",
 		reason_code: "host_unavailable",
 		repairability: "unsupported",
@@ -2828,9 +2984,10 @@ function judgeItemDiagnosis(p, item) {
 			resume_condition: "Restore the audited host cohort; keep pending work visible at a qualified safe boundary."
 		},
 		attempt_fingerprint: fingerprint(p, item, "host_unavailable")
-	};
-	if (ACTION_MANIFEST.actions[action].evidenceProducer !== "supported") return {
-		...base,
+	});
+	if (ACTION_MANIFEST.actions[action].evidenceProducer !== "supported") return verdict({
+		gap: "missing_adapter",
+		remedy: "restore_host",
 		certification: "unavailable",
 		reason_code: "adapter_unavailable",
 		repairability: "unsupported",
@@ -2840,22 +2997,25 @@ function judgeItemDiagnosis(p, item) {
 			resume_condition: "The audited adapter for this action is unavailable in the installed cohort."
 		},
 		attempt_fingerprint: fingerprint(p, item, "adapter_unavailable")
-	};
+	});
 	const statefulChain = isStatefulAction(action);
-	if (requiredEvidenceRoles(item).some((role) => !missing_facets.includes(role)) ? void 0 : unattributedExecutionOf(p, item)) return {
-		...base,
+	const unattributed = requiredEvidenceRoles(item).some((role) => !missing_facets.includes(role)) ? void 0 : unattributedExecutionOf(p, item);
+	if (unattributed) return verdict({
+		gap: "operation_unattributable",
+		remedy: "readback_only",
 		certification: "unsupported",
 		reason_code: "execution_unattributable",
 		repairability: "historical_gap",
 		missing_fields: [],
 		next_action: {
 			kind: "report_only",
-			resume_condition: "An ordinary shell command beginning with this action succeeded earlier in the session, but the command could not be securely parsed, so whether it performed the action cannot be established. Check the actual current state with a read-only command first. The obligation stays uncertified; perform the action through the guarded producer path only if the state shows it has not happened and the instruction still calls for it; never repeat an action to mint evidence, and do not assert it never ran."
+			resume_condition: unattributedExecutionCondition(unattributed)
 		},
 		attempt_fingerprint: fingerprint(p, item, "execution_unattributable")
-	};
-	if (statefulChain && missing_facets.includes("resolution") && !missing_facets.includes("effect")) return {
-		...base,
+	});
+	if (statefulChain && missing_facets.includes("resolution") && !missing_facets.includes("effect")) return verdict({
+		gap: "historical_preevidence_missing",
+		remedy: "readback_only",
 		certification: "unsupported",
 		reason_code: "historical_evidence_gap",
 		repairability: "historical_gap",
@@ -2865,9 +3025,11 @@ function judgeItemDiagnosis(p, item) {
 			resume_condition: "Record the observed state as read-only fact; do not repeat the action to mint missing prestate evidence."
 		},
 		attempt_fingerprint: fingerprint(p, item, "historical_evidence_gap")
-	};
-	return {
-		...base,
+	});
+	return verdict({
+		gap: "none",
+		remedy: "collect_evidence",
+		certifiable: true,
 		certification: "needs_evidence",
 		reason_code: "missing_evidence",
 		repairability: "agent_repairable",
@@ -2878,7 +3040,7 @@ function judgeItemDiagnosis(p, item) {
 			resume_condition: statefulChain ? "Collect the matching durable evidence in resolution/effect/state order, then checkpoint." : "Collect the single matching durable verification fact, then checkpoint."
 		},
 		attempt_fingerprint: fingerprint(p, item, "missing_evidence")
-	};
+	});
 }
 function fingerprint(p, item, reason) {
 	return sha256(JSON.stringify([
@@ -2926,6 +3088,27 @@ function relevantEvidence(p, item, evidence) {
 	if (isStatefulAction(action)) return requestedTargetMatchesResolved(action, item.requestedTarget, evidence.resolvedTarget);
 	const value = (entry) => JSON.stringify(entry && typeof entry === "object" && "v" in entry ? entry.v : entry);
 	return !!item.requestedTarget && Object.entries(item.requestedTarget).every(([key, entry]) => evidence.resolvedTarget && value(entry) === value(evidence.resolvedTarget[key]));
+}
+/**
+* The bounded, one-phrase form of a reachable remedy (0.6.2 D062-01). The
+* capability consequence above is the full explanation; a bounded page lists
+* many items, so it uses this phrase and leaves the prose to the detail and
+* preparation surfaces. Both come from the SAME capability fact.
+*/
+function capabilityRemedyPhrase(remedy) {
+	switch (remedy) {
+		case "none": return "No further action needed";
+		case "collect_evidence": return "Collect matching evidence; then checkpoint";
+		case "supply_target": return "Supply the exact target; then collect evidence";
+		case "await_root_input": return "Wait for the trusted root input; keep pending";
+		case "deliver_answer": return "Deliver the actual answer";
+		case "record_interpretation": return "Read the attachment; record context_guard_interpret";
+		case "report_uncertified": return "Report honestly; stays uncertified";
+		case "report_uncertified_capability_gap": return "Report as uncertified";
+		case "restore_host": return "Restore the audited host/adapter capability";
+		case "readback_only": return "Read back the current state; do not re-execute";
+		case "fresh_root_instruction": return "Report the actual outcome as uncertified";
+	}
 }
 
 //#endregion
@@ -5015,6 +5198,63 @@ const DEFAULT_RECOVERY_CHAR_BUDGET = 4e3;
 const MIN_RECOVERY_CHAR_BUDGET = 512;
 const COMPLETION_RULE = "Supported actions certify through matching durable evidence (checkpoint). Investigations and explanations outside the supported set can be delivered honestly but stay uncertified. A qualified safe end preserves pending work; it is not completion.";
 /**
+* 0.6.2 D062-03: the standing condition a removal or cleanup outcome must keep.
+* The guard cannot observe another process's cwd or handles, so it states the
+* condition instead of inferring "no dependants" from a clean tree, an empty
+* `git worktree list`, or a directory that merely looks empty. This is one
+* shared wording, not an incident phrase list, and it never claims the plugin
+* can block a dangerous removal on its own.
+*/
+const CLEANUP_CONDITION_RULE = "A removal counts only for the objects PROVEN dependency-free; report metadata, content and directory removal separately from dependency status (" + DEPENDENCY_FREE_ONLY_CONDITION.join(", ") + "), keep unknown-dependency objects and failures visible, and never repeat a blocked delete, kill a holder, or restart to force it.";
+/**
+* The same condition at a medium budget (0.6.2 review): shorter than the full
+* rule, and still explicit that an unknown dependant forbids the claim.
+*/
+const CLEANUP_CONDITION_RULE_SHORT = "Removal counts only for objects PROVEN dependency-free; unknown dependants stay visible and are never deleted.";
+/**
+* The same condition at emergency budget (0.6.2 review). A packet with fewer
+* than 1000 characters cannot carry the longer sentences AND its own rules, so
+* the condition is compressed — but it is NEVER omitted: the one thing a compact
+* packet must not lose is that an unknown dependant forbids a removal claim.
+*/
+const CLEANUP_CONDITION_RULE_COMPACT = "Removal requires proven no-dependants.";
+/**
+* Pick the longest form of the condition the packet's budget can actually
+* afford. The caller reserves this line's length before any optional row, so
+* the condition is never the text that gets clipped.
+*/
+function cleanupConditionFor(budget) {
+	if (budget >= DEFAULT_RECOVERY_CHAR_BUDGET) return CLEANUP_CONDITION_RULE;
+	if (budget >= 1e3) return CLEANUP_CONDITION_RULE_SHORT;
+	return CLEANUP_CONDITION_RULE_COMPACT;
+}
+/**
+* Whether this gap needs the cleanup condition spelled out. The condition
+* belongs to every uncertifiable lane that could describe removal-like work —
+* which the guard cannot identify from text — so it rides the CAPABILITY
+* limitation itself, never a vocabulary of destructive verbs.
+*/
+function carriesCleanupCondition(gap) {
+	return gap === "missing_adapter" || gap === "legacy_migration_required" || gap === "historical_preevidence_missing" || gap === "operation_unattributable" || gap === "interpretation_unknown";
+}
+/** One reachable-remedy phrase per remedy kind, shared by every lane. */
+function remedyText(remedy, fallback) {
+	switch (remedy) {
+		case "collect_evidence": return "Collect matching evidence; checkpoint";
+		case "readback_only": return "Read back observed state; do not re-execute";
+		case "none": return "Recorded as unresolved; only a fresh explicit instruction resolves it";
+		case "record_interpretation": return "Read the attachment; record context_guard_interpret; then answer";
+		case "supply_target": return "Supply the exact target; then collect evidence and checkpoint";
+		case "await_root_input": return "Wait for the trusted root input; keep the obligation pending";
+		case "deliver_answer": return "Deliver the actual answer; a completed turn closes it";
+		case "report_uncertified": return "Deliver honestly; stays uncertified unless a fresh instruction names a supported action";
+		case "restore_host": return "Restore audited host/adapter capability";
+		case "fresh_root_instruction": return "Report the actual outcome as uncertified; only a fresh explicit instruction reaches its migration lane";
+		case "report_uncertified_capability_gap": return "Report the observable result as uncertified; this build has no adapter for the action";
+	}
+	return fallback;
+}
+/**
 * An actionable one-line hint for how an open item's verification contract can
 * be closed. It never weakens the contract; it only names the missing facet so
 * the agent can produce the right evidence shape instead of reverse-engineering
@@ -5067,14 +5307,25 @@ function renderRecoveryPacket(projection, options = {}) {
 	const items = openItems(projection).sort((a, b) => Number(b.kind === "prohibition") - Number(a.kind === "prohibition") || b.revision - a.revision || a.id.localeCompare(b.id));
 	const rejected$1 = options.rejectedBindings ?? (projection.lastCheckpointRejectionRevision === projection.contractRevision ? projection.lastCheckpointRejections : []) ?? [];
 	const compact = budget < 1e3;
-	const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact ? "Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion." : COMPLETION_RULE];
+	const COMPLETION_RULE_COMPACT = "Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion.";
+	const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact ? COMPLETION_RULE_COMPACT : COMPLETION_RULE];
+	const completionRuleIndex = 1;
+	if (items.some((item) => carriesCleanupCondition(deriveItemDiagnosis(projection, item).capability.gap))) lines.push(cleanupConditionFor(budget));
 	const pointer = "Details/omissions: context_guard_checkpoint (item_ids, evidence_scope=history, cursor).";
 	const evidence = [...projection.evidence.values()].filter((e) => items.some((item) => relevantEvidence(projection, item, e))).sort((a, b) => b.toolResultSeq - a.toolResultSeq || a.id.localeCompare(b.id));
 	const footer = (count$1, refusals$1, shown$1) => `${items.length - count$1} items folded; ${rejected$1.length - refusals$1} rejections folded; ${evidence.length - shown$1} relevant evidence rows folded. Full ledger remains enforced.`;
-	let remaining = budget - lines.join("\n").length - 87 - footer(0, 0, 0).length - 3;
+	const reserve = () => lines.join("\n").length + 87 + footer(0, 0, 0).length + 3;
+	let remaining = budget - reserve();
 	const add = (line, cap) => {
 		if (remaining < 30) return false;
 		const text = clip(line, Math.min(cap, remaining));
+		if (!compact && remaining - (text.length + 1) < 246) {
+			const current = lines[completionRuleIndex];
+			if (current.length > 103) {
+				remaining += current.length - 103;
+				lines[completionRuleIndex] = COMPLETION_RULE_COMPACT;
+			}
+		}
 		lines.push(text);
 		remaining -= text.length + 1;
 		return true;
@@ -5091,8 +5342,9 @@ function renderRecoveryPacket(projection, options = {}) {
 			if (add(`[${clip(item.id, 20)}] root_condition_pending; wait for trusted root: ${item.resumeEvent ?? item.condition ?? item.normalizedText}; do not execute before release`, compact ? 160 : 310)) count++;
 			return;
 		}
-		const remedy = diagnosis.repairability === "agent_repairable" ? "Collect matching evidence; checkpoint" : diagnosis.repairability === "historical_gap" ? "Read back observed state; do not re-execute" : diagnosis.repairability === "none" ? "Recorded as unresolved; only a fresh explicit instruction resolves it" : diagnosis.next_action.tool === "context_guard_interpret" ? "Read the attachment; record context_guard_interpret; then answer" : diagnosis.next_action.kind === "clarify_target" ? "Supply the exact target; then collect evidence and checkpoint" : diagnosis.certification === "unsupported" ? "Deliver honestly; stays uncertified unless a fresh instruction names a supported action" : "Restore audited host/adapter capability";
-		if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${compact ? remedy : diagnosis.next_action.resume_condition ?? remedy}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++;
+		const remedy = remedyText(diagnosis.capability.remedy, diagnosis.next_action.resume_condition ?? "No further action needed.");
+		const body = compact ? remedy : diagnosis.next_action.resume_condition ?? remedy;
+		if (add(`[${clip(item.id, 20)}] ${diagnosis.reason_code}; ${body}; ${clip(item.normalizedText, 70)}`, compact ? 110 : 310)) count++;
 	};
 	if (constraints[0]) constraint(constraints[0]);
 	if (work[0]) requirement(work[0]);
@@ -9566,6 +9818,153 @@ function extractTerminalFacts(textContent) {
 		marked
 	};
 }
+/**
+* 0.6.2 D062-02: one trusted structured producer declaration, if the host
+* rendered per-operation results. Absence is the honest common case: the
+* pinned DSH renderers declare a whole-result terminal marker only, so no
+* per-operation producer exists and the attribution stays `unknown`.
+*/
+function declaredOperationResults(meta) {
+	const declared = asRecord$2(asRecord$2(meta)?.contextGuardProcess)?.operationResults;
+	if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return void 0;
+	const rows = [];
+	for (const raw of declared) {
+		const row = asRecord$2(raw);
+		const action = typeof row?.action === "string" ? row.action : void 0;
+		const outcome = row?.outcome;
+		if (!action || outcome !== "success" && outcome !== "failure" && outcome !== "unknown") return void 0;
+		rows.push({
+			action,
+			outcome
+		});
+	}
+	return rows;
+}
+/**
+* The trusted run-level declaration in `meta.contextGuardProcess`. This is the
+* highest-priority source: it is the run's own statement about the process, so
+* an explicit `exitCode` here outranks the generic `meta.exitCode`.
+*/
+function declaredStructuredTerminal(meta) {
+	const record = asRecord$2(asRecord$2(meta)?.contextGuardProcess);
+	if (!record) return void 0;
+	const rawExit = record.exitCode ?? record.exit_code;
+	const signal = record.signal;
+	if (signal !== void 0 && signal !== null) return {
+		...typeof rawExit === "number" ? { exitCode: rawExit } : {},
+		signal: true
+	};
+	if (typeof rawExit === "number") return {
+		exitCode: rawExit,
+		signal: false
+	};
+}
+/**
+* The HISTORICAL terminal-fact rule, unchanged since 0.6.1: the generic
+* structured `meta` fact, else the rendered text markers. It deliberately does
+* NOT read the trusted `contextGuardProcess` run declaration — that source is
+* new in 0.6.2 and reading it here would change the frozen `outcome` of
+* already-recorded evidence, which is a summary input and therefore historical
+* (0.6.2 review of D062-02).
+*/
+function legacyTerminalFacts(meta, textContent) {
+	return structuredTerminalFacts(meta) ?? extractTerminalFacts(textContent);
+}
+/**
+* The terminal facts the DERIVED layer reads, in priority order (0.6.2 D062-02
+* review): the trusted run declaration first, then the generic structured fact,
+* then the rendered markers. This never feeds the frozen `outcome`; it feeds
+* `processFacts` only, which states its own `source` and whether it disagrees
+* with the frozen reading.
+*/
+function resolveDeclaredTerminalFacts(meta, textContent) {
+	const namespace = declaredStructuredTerminal(meta);
+	if (namespace) return {
+		facts: {
+			exitCode: namespace.exitCode,
+			negative: namespace.signal,
+			marked: true
+		},
+		source: "run_declaration"
+	};
+	const structured = structuredTerminalFacts(meta);
+	if (structured) return {
+		facts: structured,
+		source: "structured_meta"
+	};
+	return {
+		facts: extractTerminalFacts(textContent),
+		source: "rendered_markers"
+	};
+}
+/**
+* The one outcome rule for a shell result, shared by the frozen evidence field
+* and the derived reading. Their different fact sources may yield different verdicts.
+* The bundled DSH session shell renderers (`dsh-tool-bash` / `dsh-tool-pwsh`)
+* append markers only for negative terminal facts or non-zero exits, so a
+* completed foreground result with no marker is a clean success for those two
+* registered tools alone; the generic `shell` alias has no verified renderer
+* contract and an unclassifiable marker stays `unknown`.
+*/
+function shellOutcome(surface, terminal, resultError, backgrounded) {
+	if (backgrounded) return "unknown";
+	if (resultError || terminal.negative) return "failure";
+	if (terminal.exitCode === void 0) return (surface === "bash" || surface === "pwsh") && !terminal.marked ? "success" : "unknown";
+	return terminal.exitCode === 0 ? "success" : "failure";
+}
+/**
+* The layered shell reading (0.6.2 D062-02; source priority fixed by the
+* 0.6.2 review). Every field is derived from the same persisted result the
+* historical `outcome` was derived from, so replay is deterministic and no
+* historical fact is reinterpreted:
+*
+* - `hostToolReturned` is the host's own return, nothing more;
+* - `declaredExitCode` is `'unknown'` unless a real fact declared it, and an
+*   unmarked success is NOT a read exit code of 0;
+* - `operationAttribution` stays `'unknown'` for an opaque compound runner, so
+*   the last command's success can never cover an earlier failure;
+* - `outcome` uses the same evaluator with independently selected facts; a
+*   disagreement with the historical field is explicitly reported.
+*
+* SOURCE PRIORITY for the process terminal facts, highest first:
+*
+*   1. the trusted `contextGuardProcess` namespace — the run's OWN declaration
+*      of what the process did. An explicit `exitCode` here is read as declared
+*      even when the generic `meta.exitCode` says something else; the namespace
+*      is the more specific statement and never loses to the generic one.
+*   2. any other structured terminal fact the renderer put in `meta`
+*      (`meta.exitCode` / `meta.exit_code` / `meta.signal`).
+*   3. the rendered text markers of the audited renderers.
+*
+* A namespace declaration never overrides the frozen `outcome`, because the
+* frozen value is the historical record and this batch must not rewrite it; the
+* derived layer records its source and conflict flag instead of changing history.
+*/
+function shellProcessFacts(meta, textContent, frozenOutcome, resultError, surface, backgrounded, parseStatus$1) {
+	const { facts: terminal, source } = resolveDeclaredTerminalFacts(meta, textContent);
+	const declaredOperations = declaredOperationResults(meta);
+	const operationAttribution = declaredOperations ? "declared_per_operation" : parseStatus$1 === "supported" && !backgrounded ? "single_operation" : "unknown";
+	const outcome = shellOutcome(surface, terminal, resultError, backgrounded);
+	let outcomeReason;
+	if (backgrounded) outcomeReason = "backgrounded";
+	else if (resultError) outcomeReason = "host_error_flag";
+	else if (terminal.negative) outcomeReason = "declared_negative_marker";
+	else if (terminal.exitCode !== void 0) outcomeReason = "declared_exit_code";
+	else if (outcome === "success") outcomeReason = "unmarked_renderer_success";
+	else if (terminal.marked) outcomeReason = "marker_unclassified";
+	else outcomeReason = "text_scan_inconclusive";
+	return {
+		hostToolReturned: resultError ? "error" : "result",
+		declaredExitCode: terminal.exitCode ?? "unknown",
+		terminalMarkerRead: terminal.marked,
+		outcome,
+		outcomeReason,
+		source,
+		frozenOutcomeConflict: outcome !== frozenOutcome,
+		operationAttribution,
+		...declaredOperations ? { declaredOperationResults: declaredOperations } : {}
+	};
+}
 function metaUrls(meta) {
 	const record = asRecord$2(meta);
 	if (!record) return [];
@@ -9775,19 +10174,21 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		case "shell":
 		case "pwsh": {
 			const command = typeof args.command === "string" ? args.command : "";
-			const terminal = structuredTerminalFacts(result.meta) ?? extractTerminalFacts(result.textContent);
 			const backgrounded = args.run_in_background === true;
 			const commandDetails = analyzeCommand(command, typeof args.workdir === "string" ? args.workdir : defaultCwd, call.name);
 			const commandCwd = typeof args.workdir === "string" ? args.workdir : defaultCwd;
 			const action = structured?.semanticAction ?? semanticActionFromCommand(command);
 			const deterministic = commandDetails.status === "supported" && !backgrounded && isDeterministicCheck(command);
-			const unmarkedSuccessAllowed = (call.name === "bash" || call.name === "pwsh") && !terminal.marked;
-			const outcome = backgrounded ? "unknown" : result.error || terminal.negative ? "failure" : terminal.exitCode === void 0 ? unmarkedSuccessAllowed ? "success" : "unknown" : terminal.exitCode === 0 ? "success" : "failure";
+			const terminal = legacyTerminalFacts(result.meta, result.textContent);
+			const surface = call.name;
+			const outcome = shellOutcome(surface, terminal, result.error, backgrounded);
+			const processFacts = shellProcessFacts(result.meta, result.textContent, outcome, result.error, surface, backgrounded, parseStatus(commandDetails).parseStatus);
 			const subject = {
 				capabilities: ["shell", ...deterministic ? ["deterministic-check"] : []],
 				subjects: unique(commandDetails.subjects),
 				surfaces: ["scope"],
 				outcome,
+				processFacts,
 				executables: commandDetails.executables,
 				operations: commandDetails.operations,
 				semanticAction: action,
@@ -9849,6 +10250,15 @@ function evidenceFromPersistedToolResult(call, result, epoch, evidenceId, defaul
 		...subject.reasonCode ? { reasonCode: subject.reasonCode } : {},
 		...subject.adapterId ? { adapterId: subject.adapterId } : {},
 		...subject.adapterVersion ? { adapterVersion: subject.adapterVersion } : {},
+		...subject.processFacts ? { processFacts: subject.processFacts.hostToolReturned === (result.error ? "error" : "result") ? subject.processFacts : {
+			...subject.processFacts,
+			hostToolReturned: result.error ? "error" : "result",
+			...result.error ? {
+				outcome: "failure",
+				outcomeReason: "host_error_flag"
+			} : {},
+			frozenOutcomeConflict: (result.error ? "failure" : subject.processFacts.outcome) !== outcome
+		} } : {},
 		...subject.externalOperationRef ? { externalOperationRef: {
 			...subject.externalOperationRef,
 			epoch
@@ -12816,4 +13226,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { extractToolSubject as $, isFrozenV042RebindResponse as $n, sha256 as $r, proofDigest as $t, lifecyclePhase as A, decisionBoundaryKey as An, STATEFUL_ACTIONS as Ar, compareHostVersions as At, RELEASE_RESERVATION_PREFIX as B, effectuateBoundary as Bn, semanticActionFromCommand as Br, certifyCheckpoint as Bt, gitCommandMatchesTarget as C, isVerifyingCapability as Cn, npmEscapedPackageName as Cr, evaluateToolSurfaceCapability as Ct, FIRST_STEP_GUIDANCE as D, classifyCompletionClaim as Dn, CERTIFICATE_VERSION as Dr, MIN_SUPPORTED_HOST_VERSION as Dt, verifiedLinearCommitReadback as E, NO_PROGRESS_TURNS_BEFORE_STOP as En, BOUNDED_ARTIFACT_TYPES as Er, LATEST_SUPPORTED_HOST_VERSION as Et, PROTOCOL_V4_NOTICE as F, observeAssistantOutcome as Fn, boundedArtifactChoiceMatches as Fr, RC015_HOST_PACKAGES as Ft, readbackSettlesContract as G, confirmRebind as Gn, validateManifest as Gr, PROOF_PROTOCOL_VERSION as Gt, contractById as H, qualifyBoundary as Hn, validateActionManifest as Hr, PROOF_KINDS as Ht, PROTOCOL_V5_NOTICE as I, progressFingerprint as In, isStatefulAction as Ir, RC1_HOST_PACKAGES as It, releasePreEffectDecision as J, proposeRebindV042 as Jn, canonicalizePath as Jr, bindProofV2ToProjection as Jt, releaseContractFor as K, proposeRebind as Kn, classifyTaskIntent as Kr, PROOF_PROTOCOL_VERSION_V2 as Kt, deriveProjection as L, goalCompletionDenial as Ln, requestedIdentityKey as Lr, ALPHA3_HOST_PACKAGES as Lt, CAPTURE_V042_NOTICE as M, isWholeTaskCompletionClaim as Mn, STOP_PROTOCOL_VERSION_V2 as Mr, parseHostVersion as Mt, DEFAULT_DELEGATION_TOOL_NAMES as N, latestAssistantText as Nn, SUPPORTED_EVIDENCE_ADAPTERS as Nr, satisfiesSupportedHostRange as Nt, claimedBatchHasRealRootInput as O, decideTurnBoundary as On, CERTIFICATE_VERSION_V2 as Or, SUPPORTED_HOST_RANGE as Ot, PROTOCOL_V3_NOTICE as P, latestRootInstruction as Pn, actionCompatible as Pr, RC015_RC2_HOST_PACKAGES as Pt, extractTextContent as Q, CONFIRM_LINE_PATTERN as Qn, sanitizeUrl as Qr, proofCapabilityReport as Qt, RELEASE_OPERATIONS as R, hasCurrentCertificate as Rn, requestedTargetAuthorizesMutation as Rr, authorityCaptureCounts as Rt, executeRevalidatedGitEffect as S, evidenceMatchesItem as Sn, canonicalRegistryBase as Sr, evaluateHostLock as St, revalidateGitPrestate as T, NO_PROGRESS_RECORD_PREFIX as Tn, ACTION_MANIFEST_VERSION as Tr, selectHostCohort as Tt, inFlightReservation as U, currentContractDigest as Un, validateActionTarget as Ur, PROOF_KINDS_V2 as Ut, RELEASE_SETTLEMENT_PREFIX as V, isCurrentAcceptedBoundary as Vn, semanticActionFromText as Vr, PROOF_CAPABILITY_MATRIX as Vt, normalizeReleaseContract as W, createProjection as Wn, COMMAND_SURFACE_MANIFEST as Wr, PROOF_MANIFEST_DOMAIN_V2 as Wt, supersedeItem as X, rebindResponse as Xn, normalizeClause as Xr, createProofManifest as Xt, reservationFor as Y, rebindAttemptKey as Yn, digestStrings as Yr, canonicalProjection as Yt, evidenceFromPersistedToolResult as Z, replayRebindResult as Zn, sanitizeClauseText as Zr, createProofManifestV2 as Zt, GIT_COMMAND_MANIFEST_IDS as _, openItems as _n, kindOfScope as _r, LEGACY_HOST_COHORTS as _t, injectActiveProfileHostLock as a, requiredSubjectsOf as an, captureClause as ar, parseShellCommand as at, commitTreeSnapshotDigest as b, bindingSatisfies as bn, semanticActionOfScope as br, evaluateExternalWaitCapability as bt, packageRowsFromPnpmLock as c, sessionQueryV2 as cn, extractArtifactPaths as cr, ACTIVE_HOST_LAUNCHER_VERSION as ct, resolveInstalledHostLock as d, certifiableOpenItems as dn, isInformationalMessage as dr, BASE_HOST_PACKAGES as dt, proofDigestV2 as en, parseConfirmationMessage as er, isDeterministicCheck as et, verifyComposedHostLockDump as f, certificateClosure as fn, segmentClauses as fr, DEFAULT_HOST_LOCK as ft, snapshotSessionEvents as g, closingHint as gn, isOpenObligation as gr, HOST_COHORTS as gt, SessionApiError as h, MIN_RECOVERY_CHAR_BUDGET as hn, isExecutableItem as hr, HOST_CAPABILITY_PACKAGE_GROUPS as ht, hostLockRowsFromComposedDump as i, proofV2Rejection as in, relevantEvidence as ir, parsePwshCommand as it, previewFirstStepInjection as j, isRootPauseRequest as jn, STOP_PROTOCOL_VERSION as jr, evaluateMinimumHostVersion as jt, firstStepGuidance as k, decideTurnStopping as kn, SEMANTIC_ACTIONS as kr, SUPPORTED_HOST_VERSIONS as kt, readActiveHostGraph as l, validateProofManifest as ln, extractMethod as lr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as lt, SESSION_EVENT_ENVELOPE_INVALID as m, DEFAULT_RECOVERY_CHAR_BUDGET as mn, interpretMessage as mr, GOAL_HOST_PACKAGES as mt, combineHostPolicy as n, proofHostSurfacesOf as nn, evidenceAvailabilityReason as nr, canonicalArgvFromCommand as nt, inspectTargetHostGraph as o, scopeCoverageDigest as on, captureItem as or, ACTIVE_HOST_COHORT_ID as ot, SESSION_API_UNSUPPORTED as p, unitDescendantIds as pn, interpretClause as pr, EXPECTED_HOST_PACKAGES as pt, releaseCoverage as q, proposeRebindOutcome as qn, classifyUserInteraction as qr, bindProofToProjection as qt, hostLockContextFromComposedDump as r, proofOperationMatches as rn, itemDiagnosis as rr, isRunExecutable as rt, packageRowsFromActiveGraph as s, sessionQuery as sn, classifyClause as sr, ACTIVE_HOST_COHORT_IDS as st, HostProfileError as t, proofEvidenceConstraints as tn, deriveItemDiagnosis as tr, withDurability as tt, resolveActiveProfileHostLock as u, validateProofManifestV2 as un, extractOperation as ur, ALPHA2_HOST_PACKAGES as ut, GIT_COMMAND_TEMPLATES as v, recoveryDigest as vn, maskCodeSpans as vr, bindExecutableIdentity as vt, parseGitCommandManifest as w, CONTROL_RECORD_PREFIX as wn, ACTION_MANIFEST as wr, hostVersionFromPackages as wt, createGitPrestateEnvelope as x, evidenceCoverage as xn, statefulActionsOfScope as xr, evaluateHostCapability as xt, commitIndexSnapshotDigest as y, renderRecoveryPacket as yn, namedActions as yr, bindLiveGoalCapability as yt, RELEASE_OPERATION_SURFACES as z, availableBoundaryQualifications as zn, requestedTargetMatchesResolved as zr, segmentAuthorityBlocks as zt };
+export { extractToolSubject as $, proposeRebindV042 as $n, requestedTargetMatchesResolved as $r, proofDigest as $t, lifecyclePhase as A, NO_PROGRESS_RECORD_PREFIX as An, isOpenObligation as Ar, compareHostVersions as At, RELEASE_RESERVATION_PREFIX as B, observeAssistantOutcome as Bn, BOUNDED_ARTIFACT_TYPES as Br, certifyCheckpoint as Bt, gitCommandMatchesTarget as C, recoveryDigest as Cn, extractMethod as Cr, evaluateToolSurfaceCapability as Ct, FIRST_STEP_GUIDANCE as D, evidenceMatchesItem as Dn, interpretClause as Dr, MIN_SUPPORTED_HOST_VERSION as Dt, verifiedLinearCommitReadback as E, evidenceCoverage as En, segmentClauses as Er, LATEST_SUPPORTED_HOST_VERSION as Et, PROTOCOL_V4_NOTICE as F, decisionBoundaryKey as Fn, statefulActionsOfScope as Fr, RC015_HOST_PACKAGES as Ft, readbackSettlesContract as G, effectuateBoundary as Gn, STOP_PROTOCOL_VERSION as Gr, PROOF_PROTOCOL_VERSION as Gt, contractById as H, goalCompletionDenial as Hn, CERTIFICATE_VERSION_V2 as Hr, PROOF_KINDS as Ht, PROTOCOL_V5_NOTICE as I, isRootPauseRequest as In, canonicalRegistryBase as Ir, RC1_HOST_PACKAGES as It, releasePreEffectDecision as J, currentContractDigest as Jn, actionCompatible as Jr, bindProofV2ToProjection as Jt, releaseContractFor as K, isCurrentAcceptedBoundary as Kn, STOP_PROTOCOL_VERSION_V2 as Kr, PROOF_PROTOCOL_VERSION_V2 as Kt, deriveProjection as L, isWholeTaskCompletionClaim as Ln, npmEscapedPackageName as Lr, ALPHA3_HOST_PACKAGES as Lt, CAPTURE_V042_NOTICE as M, classifyCompletionClaim as Mn, maskCodeSpans as Mr, parseHostVersion as Mt, DEFAULT_DELEGATION_TOOL_NAMES as N, decideTurnBoundary as Nn, namedActions as Nr, satisfiesSupportedHostRange as Nt, claimedBatchHasRealRootInput as O, isVerifyingCapability as On, interpretMessage as Or, SUPPORTED_HOST_RANGE as Ot, PROTOCOL_V3_NOTICE as P, decideTurnStopping as Pn, semanticActionOfScope as Pr, RC015_RC2_HOST_PACKAGES as Pt, extractTextContent as Q, proposeRebindOutcome as Qn, requestedTargetAuthorizesMutation as Qr, proofCapabilityReport as Qt, RELEASE_OPERATIONS as R, latestAssistantText as Rn, ACTION_MANIFEST as Rr, authorityCaptureCounts as Rt, executeRevalidatedGitEffect as S, openItems as Sn, extractArtifactPaths as Sr, evaluateHostLock as St, revalidateGitPrestate as T, bindingSatisfies as Tn, isInformationalMessage as Tr, selectHostCohort as Tt, inFlightReservation as U, hasCurrentCertificate as Un, SEMANTIC_ACTIONS as Ur, PROOF_KINDS_V2 as Ut, RELEASE_SETTLEMENT_PREFIX as V, progressFingerprint as Vn, CERTIFICATE_VERSION as Vr, PROOF_CAPABILITY_MATRIX as Vt, normalizeReleaseContract as W, availableBoundaryQualifications as Wn, STATEFUL_ACTIONS as Wr, PROOF_MANIFEST_DOMAIN_V2 as Wt, supersedeItem as X, confirmRebind as Xn, isStatefulAction as Xr, createProofManifest as Xt, reservationFor as Y, createProjection as Yn, boundedArtifactChoiceMatches as Yr, canonicalProjection as Yt, evidenceFromPersistedToolResult as Z, proposeRebind as Zn, requestedIdentityKey as Zr, createProofManifestV2 as Zt, GIT_COMMAND_MANIFEST_IDS as _, DEFAULT_RECOVERY_CHAR_BUDGET as _n, removalIsComplete as _r, LEGACY_HOST_COHORTS as _t, injectActiveProfileHostLock as a, validateManifest as ai, requiredSubjectsOf as an, parseConfirmationMessage as ar, parseShellCommand as at, commitTreeSnapshotDigest as b, cleanupConditionFor as bn, captureItem as br, evaluateExternalWaitCapability as bt, packageRowsFromPnpmLock as c, canonicalizePath as ci, sessionQueryV2 as cn, evidenceAvailabilityReason as cr, ACTIVE_HOST_LAUNCHER_VERSION as ct, resolveInstalledHostLock as d, sanitizeClauseText as di, certifiableOpenItems as dn, DEPENDENCY_FREE_ONLY_CONDITION as dr, BASE_HOST_PACKAGES as dt, semanticActionFromCommand as ei, proofDigestV2 as en, rebindAttemptKey as er, isDeterministicCheck as et, verifyComposedHostLockDump as f, sanitizeUrl as fi, certificateClosure as fn, actionHasCertificationPath as fr, DEFAULT_HOST_LOCK as ft, snapshotSessionEvents as g, CLEANUP_CONDITION_RULE_SHORT as gn, partialFailureOf as gr, HOST_COHORTS as gt, SessionApiError as h, CLEANUP_CONDITION_RULE_COMPACT as hn, capabilityFactOf as hr, HOST_CAPABILITY_PACKAGE_GROUPS as ht, hostLockRowsFromComposedDump as i, COMMAND_SURFACE_MANIFEST as ii, proofV2Rejection as in, isFrozenV042RebindResponse as ir, parsePwshCommand as it, previewFirstStepInjection as j, NO_PROGRESS_TURNS_BEFORE_STOP as jn, kindOfScope as jr, evaluateMinimumHostVersion as jt, firstStepGuidance as k, CONTROL_RECORD_PREFIX as kn, isExecutableItem as kr, SUPPORTED_HOST_VERSIONS as kt, readActiveHostGraph as l, digestStrings as li, validateProofManifest as ln, itemDiagnosis as lr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as lt, SESSION_EVENT_ENVELOPE_INVALID as m, CLEANUP_CONDITION_RULE as mn, capabilityConsequence as mr, GOAL_HOST_PACKAGES as mt, combineHostPolicy as n, validateActionManifest as ni, proofHostSurfacesOf as nn, replayRebindResult as nr, canonicalArgvFromCommand as nt, inspectTargetHostGraph as o, classifyTaskIntent as oi, scopeCoverageDigest as on, capabilityRemedyPhrase as or, ACTIVE_HOST_COHORT_ID as ot, SESSION_API_UNSUPPORTED as p, sha256 as pi, unitDescendantIds as pn, admissibleForRemoval as pr, EXPECTED_HOST_PACKAGES as pt, releaseCoverage as q, qualifyBoundary as qn, SUPPORTED_EVIDENCE_ADAPTERS as qr, bindProofToProjection as qt, hostLockContextFromComposedDump as r, validateActionTarget as ri, proofOperationMatches as rn, CONFIRM_LINE_PATTERN as rr, isRunExecutable as rt, packageRowsFromActiveGraph as s, classifyUserInteraction as si, sessionQuery as sn, deriveItemDiagnosis as sr, ACTIVE_HOST_COHORT_IDS as st, HostProfileError as t, semanticActionFromText as ti, proofEvidenceConstraints as tn, rebindResponse as tr, withDurability as tt, resolveActiveProfileHostLock as u, normalizeClause as ui, validateProofManifestV2 as un, relevantEvidence as ur, ALPHA2_HOST_PACKAGES as ut, GIT_COMMAND_TEMPLATES as v, MIN_RECOVERY_CHAR_BUDGET as vn, removalIsPartiallyKnown as vr, bindExecutableIdentity as vt, parseGitCommandManifest as w, renderRecoveryPacket as wn, extractOperation as wr, hostVersionFromPackages as wt, createGitPrestateEnvelope as x, closingHint as xn, classifyClause as xr, evaluateHostCapability as xt, commitIndexSnapshotDigest as y, carriesCleanupCondition as yn, captureClause as yr, bindLiveGoalCapability as yt, RELEASE_OPERATION_SURFACES as z, latestRootInstruction as zn, ACTION_MANIFEST_VERSION as zr, segmentAuthorityBlocks as zt };

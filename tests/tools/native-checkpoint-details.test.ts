@@ -30,9 +30,13 @@ it.each(['short', 'long'])('retrieves a %s Windows test template through the nat
   expect(name).toBe('context_guard_checkpoint')
   return tool.execute(args, undefined as never)
  }
- const page = await tool.execute({ bindings: [] }, undefined as never) as { open_items: Array<{ omitted?: boolean; binding_template?: unknown }> }
+ const page = await tool.execute({ bindings: [] }, undefined as never) as { open_items: Array<{ omitted?: boolean; binding_template?: unknown; detail_id?: string }> }
  expect(page.open_items[0].omitted === true).toBe(length === 'long')
- if (length === 'long') expect(page.open_items[0].binding_template).toBeUndefined()
+ // 0.6.2 D062-01: a summarized row KEEPS the binding_template, because a
+ // caller that must close this item needs it; only optional prose is dropped,
+ // and the row stays explicitly marked omitted and retrievable by detail_id.
+ expect(page.open_items[0].binding_template).toBeDefined()
+ if (length === 'long') expect(page.open_items[0].detail_id).toBeDefined()
  const binding = await readProbeTestBinding(call, page)
  expect(binding).toMatchObject({ semantic_action: 'test', evidence_ids: ['E0001'] })
  expect(await tool.execute({ bindings: [binding] }, undefined as never)).toMatchObject({ status: 'certified', certificate: expect.any(Object) })

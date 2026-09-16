@@ -153,18 +153,27 @@ export function createContextGuardCommand(
         return { kind: 'error', text: 'Usage: /context-guard on|off|clear|status|diagnose|migration|release status|release adopt <json>|release revoke <id>' }
       }
       const passed = [...projection.items.values()].filter((item) => item.status === 'passed').length
-      // Three-way diagnosis statistics: certified, repairable-missing-evidence,
-      // and not-certifiable-by-current-adapters. Historical uncertified items
-      // stay visible; the guard never shrinks the certification scope.
+      // 0.6.2 D062-01: the status split follows the shared capability remedy,
+      // so a capability this build simply lacks is never reported as a user
+      // input gap. Historical uncertified items stay visible; the guard never
+      // shrinks the certification scope.
       let certifiable_missing_evidence = 0
       let unsupported = 0
+      let input_required = 0
+      let capability_limited = 0
       const reason_classes: Record<string, number> = {}
       for (const item of projection.items.values()) {
         if (item.status !== 'pending') continue
         const diagnosis = deriveItemDiagnosis(projection, item)
         reason_classes[diagnosis.reason_class] = (reason_classes[diagnosis.reason_class] ?? 0) + 1
-        if (diagnosis.repairability === 'agent_repairable') certifiable_missing_evidence += 1
-        else if (diagnosis.certification === 'unsupported') unsupported += 1
+        switch (diagnosis.capability.remedy) {
+          case 'collect_evidence': certifiable_missing_evidence += 1; break
+          case 'supply_target':
+          case 'await_root_input': input_required += 1; break
+          case 'fresh_root_instruction':
+          case 'restore_host': capability_limited += 1; break
+          default: unsupported += 1
+        }
       }
       const migration = migrationReport(projection)
       const response = {
@@ -177,7 +186,7 @@ export function createContextGuardCommand(
         contract_revision: projection.contractRevision,
         pending: pendingCount(projection),
         passed,
-        diagnosis: { certified: passed, certifiable_missing_evidence, unsupported, reason_classes },
+        diagnosis: { certified: passed, certifiable_missing_evidence, input_required, capability_limited, unsupported, reason_classes },
         evidence: projection.evidence.size,
         integrity: projection.integrity,
         last_source_seq: projection.lastObservedSourceSeq,

@@ -13,6 +13,8 @@ export interface PageQuery {
 }
 const LANES = ['open_items', 'active_constraints', 'rejected_bindings', 'available_evidence', 'available_qualifications'] as const
 const MAX_BYTES = 12288
+/** Inline item-row bytes; a larger row is summarized, never silently dropped. */
+const ITEM_ROW_BUDGET = 1850
 const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8')
 const digest = (value: unknown) => sha256(JSON.stringify(value))
 const lookup = (id: string) => id.length <= 128 ? id : `sha256:${sha256(id)}`
@@ -73,11 +75,19 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
       passed: [...p.items.values()].filter(i => i.status === 'passed').length,
       superseded: [...p.items.values()].filter(i => i.status === 'superseded').length },
     detail_query: 'Use detail_id and detail_offset; evidence_scope=history includes non-citable evidence.' }
+  // 0.6.2 D062-01: an item row carries the shared capability fact, so a row
+  // that fits inline may be up to 1850 bytes. 0.6.2 also stops the truncation
+  // from silently DROPPING a `binding_template`: a caller that must close an
+  // item needs that template, so the summarized form keeps the template and
+  // drops only the optional prose. The omitted row stays explicitly marked and
+  // fully retrievable by `detail_id`, and the 12 KiB page budget still caps
+  // every page.
   const summarize = (row: Record<string, unknown>) => {
-    if (size(row) <= 1800) return row
+    if (size(row) <= ITEM_ROW_BUDGET) return row
     return { id: String(row.id ?? row.item_id).slice(0, 128), reason_code: row.reason_code, certifiable: row.certifiable,
       next_step: typeof row.next_step === 'string' ? row.next_step.slice(0, 240) : undefined,
       adapter_disposition: row.adapter_disposition,
+      ...(row.binding_template !== undefined ? { binding_template: row.binding_template } : {}),
       omitted: true, detail_id: lookup(String(row.id ?? row.item_id)) }
   }
   for (const key of LANES) {

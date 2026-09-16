@@ -1,0 +1,40 @@
+{
+  "recordingVersion": "1",
+  "product": "codex-context-guard",
+  "productVersion": "0.13.9",
+  "moduleSha256": "4b895aad4b54ec6dc4d8dfcad47a244b91461db3922a7624bbffd612e9166fa7",
+  "stateConstruction": "in-memory synthetic state; the requirement's contract is built by the module's own clause_metadata/verification_contract",
+  "cases": [
+    {
+      "id": "proofs-without-bound-evidence",
+      "entry": "derive_ordinary_proofs",
+      "status": "executed",
+      "result": [],
+      "note": "an enforced contract with NO bound evidence derives zero proofs"
+    },
+    {
+      "id": "checkpoint-without-unique-evidence",
+      "entry": "_auto_complete_checkpoint",
+      "status": "executed",
+      "result": null,
+      "note": "no unique evidence: completion is refused (None), never fabricated"
+    },
+    {
+      "id": "stop-on-unusable-state",
+      "entry": "handle_stop",
+      "status": "executed",
+      "result": {
+        "continue": false,
+        "stopReason": "Context Guard stopped completion because private task state could not be reconstructed safely.",
+        "systemMessage": "Context Guard private-state integrity failed. Review the preserved corrupt state and immutable prompt ledger."
+      },
+      "note": "an unusable private state is a hard stop: the module refuses to certify anything"
+    },
+    {
+      "id": "handle_stop",
+      "entry": "handle_stop",
+      "status": "not_executed",
+      "note": "requires the durable authoritative prompt ledger owned by a real session; this probe creates and reads no Codex session, so correction, pending and wait behaviour stays unmeasured here and is NOT claimed as compared."
+    }
+  ]
+}

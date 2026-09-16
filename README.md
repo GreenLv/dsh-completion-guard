@@ -8,7 +8,9 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-Once **0.6.1** is available in the registry, install it into the DSH Web environment. Candidate and platform results are recorded in [LOCAL_ACCEPTANCE](docs/LOCAL_ACCEPTANCE.md):
+**0.6.2** is the current source candidate; it is not published yet, so the
+registry command below still installs the newest published version. Candidate
+and platform results are recorded in [LOCAL_ACCEPTANCE](docs/LOCAL_ACCEPTANCE.md):
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.6.1
@@ -49,7 +51,7 @@ Activation is opt-in by default. `status` shows whether the Guard is on, its sta
 
 ## Status and compatibility
 
-Version 0.6.1 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+Version 0.6.2 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
 
 Package discovery and npm installation now publish the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
 
@@ -111,6 +113,37 @@ Read-only evidence collection and actions that change packages, files, services,
 Use `context_guard_rebind` to propose an exact, complete split of the old text. If the action or target needs clarification, first ask the root user for an explicit instruction that includes the original clause; the proposal can reference that new item's ID. The tool returns a proposal ID and a comparison. The user applies it with the confirmation line `确认重绑定 <proposal ID>` as the first line of a reply; an explanation request or a new task after a blank line keeps its own meaning, and a new task is captured normally. A confirmation buried in a sentence, quotes, or a code block, or followed by a reversal, does nothing. Splitting a requirement into equally uncertifiable pieces returns “no certification gain” instead of asking for a pointless confirmation. Unsupported parts remain pending, and a qualified safe end does not mean all work is complete.
 
 The default `context_guard_checkpoint` call uses `bindings: []` for diagnosis. It shows at most eight current items/constraints and ten evidence rows, within 12 KiB of plugin JSON. `pagination` reports totals and a separate `next_cursor` for each list; the first page is not the whole contract. Use `item_ids` or `evidence_ids` to focus a query, or `evidence_scope: "history"` for the complete evidence history, including rows marked unavailable. Keep the query unchanged when following a cursor; a changed contract or evidence snapshot requires a fresh query. Large rows expose `detail_id`; retrieve chunks with `detail_offset` and return the first response's `snapshot` as `detail_snapshot` on later chunks. All queries remain read-only and never shrink the certification set.
+
+## What 0.6.2 changes for ordinary work
+
+Three things you will notice, and one thing you will not.
+
+**The Guard no longer asks you to re-word a request it cannot certify.** When a
+task names a concrete action this build has no certification adapter for — a
+directory cleanup, a rename, a removal — the Guard reports that capability
+limit and leaves the work uncertified. It does not ask you for more input and it
+does not propose a rebind, because neither would change what can be certified.
+Work that the Guard cannot certify is still your work; it is simply reported as
+such. A rebind stays what it always was: a way to replace a recorded obligation
+with a real root instruction that names a supported action and target.
+
+**A successful tool call is no longer read as more than it says.** Every shell
+result now separates what the host returned, what the console actually declared
+about the exit status, whether the effect could be attributed to your task's own
+operation, and the business outcome. If no exit status was read, the Guard says
+`unknown` rather than assuming `0`; a compound script whose last command
+succeeded is not evidence that its earlier commands did.
+
+**A cleanup result keeps its condition.** "Remove it" is only satisfied for the
+objects proven to have no dependants. The recovery guidance states that
+condition, keeps unknown dependants visible, and reports registry removal,
+content removal and directory removal separately instead of summarising a
+partial result as done. This version does not add a remover, kill a process, or
+promise to block a condition the host cannot see.
+
+What does not change: ordinary answers, investigations and ordinary tool work
+still need no Guard approval, and the Guard never turns its own missing
+capability into a claim that you did not authorize the work.
 
 ## What 0.6.1 changes for ordinary work
 

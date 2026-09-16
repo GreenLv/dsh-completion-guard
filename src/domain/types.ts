@@ -242,6 +242,18 @@ export interface GuardEvidence {
   adapterVersion?: string
   externalOperationRef?: ExternalOperation
   /**
+   * 0.6.2 D062-02: the LAYERED reading of a shell result, kept beside — never
+   * instead of — the frozen `outcome`/`parseStatus` pair. It separates four
+   * different claims the historical single `outcome` conflated: what the host
+   * tool call returned, what the console actually declared about the process
+   * (an exit code and its signal, or `unknown` when none was read), how far the
+   * effect could be attributed to this obligation's own operation, and the
+   * resulting business outcome. It is derived at replay from the same bytes, is
+   * excluded from every historical digest and certificate domain, and never
+   * rewrites an old `outcome`. Only shell-tool facts carry it.
+   */
+  processFacts?: import('./capability-semantics.js').DerivedProcessFacts
+  /**
    * 0.6.0 C04: this fact came from a delegated subagent/task round-trip. A
    * delegated result is BOUNDED evidence for the parent unit — it is recorded
    * and visible, and it can never close a parent obligation or a parent unit

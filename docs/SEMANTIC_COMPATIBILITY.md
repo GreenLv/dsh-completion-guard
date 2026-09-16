@@ -243,6 +243,21 @@ as done:
   digest-v3 vectors remain the only byte-level cross-language agreement
   evidence, and they are unchanged.
 
+0.6.2 adds one more explicitly incomplete shared artifact, and describes it the
+same way:
+
+- **D062-04 uses measured, bounded cross-end cases.** Contract and proof
+  recordings are supplemented by `codex-0.13.9.lifecycle.json`: the recorder
+  creates disposable synthetic prompt ledgers through Codex's own entrypoints,
+  then exercises silent pending, missing-proof correction, user wait and the
+  same opaque mixed-result command used by DSH. These are function-level
+  lifecycle checks, not native application acceptance or full product parity.
+  See [the result contract](CROSS_END_RESULT_CONTRACT.md). No upstream mirror,
+  digest domain or pin changes.
+- **Deferred capability:** an explicit distinction between action-event and
+  state-outcome obligations needs a separate public contract; it is not added
+  by 0.6.2. The existing v2 mirror and release-producer gaps above remain open.
+
 The consequence is stated plainly: this repository does not claim "C01–C12
 core alignment" with Codex Context Guard. It claims that its own C01–C12
 implementation is present and covered by production-chain tests, and that the

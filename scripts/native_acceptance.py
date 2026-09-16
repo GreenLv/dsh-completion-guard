@@ -318,6 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--preflight", action="store_true",
                         help="check local inputs and output paths without installing or starting hosts")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    parser.add_argument("--t06", action="store_true", help="include owned held-handle cleanup fixture")
     parser.add_argument("--run-url")
     parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound"), default="portable_artifact")
     parser.add_argument("--runtime-root", type=Path)
@@ -371,6 +372,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                                          "headless": args.target_headless_profile.resolve()}
                                         if args.target_web_profile else None,
                                         None if args.web_market_version == "none" else args.web_market_version)
+    if args.t06:
+        probe_path = Path(__file__).with_name("native_cleanup_probe.py")
+        spec = importlib.util.spec_from_file_location("dsh_native_cleanup_probe", probe_path)
+        probe = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(probe)
+        try:
+            observation = probe.run_probe()
+            result["gates"].append(gate("t06_owned_handle_cleanup", args.artifact_sha256,
+                                        passed=True, note=json.dumps(observation, sort_keys=True)))
+        except (OSError, RuntimeError) as exc:
+            result["gates"].append(gate("t06_owned_handle_cleanup", args.artifact_sha256,
+                                        passed=False, note=type(exc).__name__ + ": " + str(exc)))
+            result["status"] = "failed"
     write_result(args.output, result)
     if args.transfer_receipt:
         if not args.transport_url or result["artifact"]["sha256"] != args.artifact_sha256:

@@ -1,0 +1,85 @@
+{
+  "recordingVersion": "1",
+  "productVersion": "0.13.9",
+  "moduleSha256": "4b895aad4b54ec6dc4d8dfcad47a244b91461db3922a7624bbffd612e9166fa7",
+  "stateConstruction": "product-owned prompt entrypoint in disposable synthetic ledger",
+  "cases": [
+    {
+      "id": "silent-pending",
+      "prompt": "清理构建缓存目录",
+      "reply": "已报告可观察结果，未认证。",
+      "run": null,
+      "promptVerified": true,
+      "toolEvidenceCount": 0,
+      "proofCount": 0,
+      "checkpoint": null,
+      "silent": true,
+      "correction": false,
+      "pending": 1,
+      "outcome": "silent_end_owner_ambiguous",
+      "reasonCodes": [
+        "no_completion_or_remaining_work_claim",
+        "owner_ambiguous"
+      ]
+    },
+    {
+      "id": "correction",
+      "prompt": "Verify /repo/report.md exists.",
+      "reply": "Everything is complete.",
+      "run": null,
+      "promptVerified": true,
+      "toolEvidenceCount": 0,
+      "proofCount": 0,
+      "checkpoint": null,
+      "silent": false,
+      "correction": true,
+      "pending": 1,
+      "outcome": "visible_correction",
+      "reasonCodes": [
+        "current_unit_whole_completion",
+        "deterministic_obligations_pending",
+        "wrong_whole_completion"
+      ]
+    },
+    {
+      "id": "user-wait",
+      "prompt": "等待我确认后再推送。",
+      "reply": "等待你的确认。",
+      "run": null,
+      "promptVerified": true,
+      "toolEvidenceCount": 0,
+      "proofCount": 0,
+      "checkpoint": null,
+      "silent": true,
+      "correction": false,
+      "pending": 1,
+      "outcome": "silent_yield_preserve_pending",
+      "reasonCodes": [
+        "remaining_action_owned_by_user",
+        "protocol_waiting_boundary"
+      ]
+    },
+    {
+      "id": "mixed-results",
+      "prompt": "清理工作树",
+      "reply": "部分移除，仍有失败对象，未认证。",
+      "run": {
+        "command": "git worktree remove a; git worktree remove b; git worktree list",
+        "output": "removed a\nremove of b failed\n",
+        "exit_code": 0
+      },
+      "promptVerified": true,
+      "toolEvidenceCount": 1,
+      "proofCount": 0,
+      "checkpoint": null,
+      "silent": true,
+      "correction": false,
+      "pending": 1,
+      "outcome": "silent_end_assistant_pending_actions",
+      "reasonCodes": [
+        "assistant_actionable_work_remains",
+        "assistant_pending_actions"
+      ]
+    }
+  ]
+}

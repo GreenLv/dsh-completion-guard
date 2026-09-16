@@ -1,0 +1,87 @@
+{
+  "recordingVersion": "1",
+  "product": "codex-context-guard",
+  "productVersion": "0.13.9",
+  "stopProtocolVersion": "4.0.0",
+  "proofProtocolVersion": "1.0.0",
+  "clauseClassifierVersion": "3.3.0",
+  "moduleSha256": "4b895aad4b54ec6dc4d8dfcad47a244b91461db3922a7624bbffd612e9166fa7",
+  "entryPoints": {
+    "contract": "verification_contract(item_id, text, state, asset_ids, clauses=clause_metadata(text))",
+    "proofs": "derive_ordinary_proofs(state)",
+    "checkpoint": "_auto_complete_checkpoint(...)",
+    "stop": "handle_stop(...)"
+  },
+  "executedHere": [
+    "clause_metadata",
+    "verification_contract"
+  ],
+  "readOnly": [
+    "derive_ordinary_proofs",
+    "_auto_complete_checkpoint",
+    "handle_stop"
+  ],
+  "note": "Facts measured by executing the real entry points against an installed module. This is a function-level probe, not a native Codex task acceptance, and it does not generalise to every phrasing.",
+  "cases": [
+    {
+      "id": "cleanup-zh",
+      "text": "清理构建缓存目录",
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "cleanup-en",
+      "text": "delete the build output directory",
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "archive-zh",
+      "text": "把工作树归档到 backup/archived",
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "readonly-check",
+      "text": "运行 pnpm test",
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "test_verify"
+      ]
+    },
+    {
+      "id": "commit-push-zh",
+      "text": "提交并推送变更",
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "remote_push"
+      ]
+    },
+    {
+      "id": "prohibition-zh",
+      "text": "不要推送",
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "remote_push"
+      ]
+    }
+  ]
+}

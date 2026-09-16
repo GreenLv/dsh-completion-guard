@@ -1,5 +1,6 @@
 export * from './canonicalize.js'
 export * from './boundary.js'
+export * from './capability-semantics.js'
 export * from './capture.js'
 export * from './checkpoint.js'
 export * from './confirm-parse.js'

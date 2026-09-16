@@ -48,7 +48,17 @@ describe('A08: intent layer separates inquiries from actions without dropping ei
     // generic reading; a document noun would have opened the bounded-choice
     // modify lane (see the v060 bounded-choice tests).
     expect(diagnosis.reason_code).toBe('generic_run_non_certifiable')
-    expect(diagnosis.repairability).toBe('user_input_required')
+    // 0.6.2 D062-01: this build has no certification adapter for the concrete
+    // action, so the verdict is a capability fact, never a demand for user
+    // input or a request to restate the work as install/modify.
+    expect(diagnosis.repairability).toBe('unsupported')
+    expect(diagnosis.capability.gap).toBe('missing_adapter')
+    // The remedy is the capability report, not a request for a new
+    // instruction: the user's instruction is complete.
+    expect(diagnosis.capability.remedy).toBe('report_uncertified_capability_gap')
+    expect(diagnosis.capability.remedy).not.toBe('fresh_root_instruction')
+    expect(diagnosis.next_action.required_input).toBeUndefined()
+    expect(JSON.stringify(diagnosis)).not.toContain('context_guard_rebind')
   })
 })
 

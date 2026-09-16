@@ -2,6 +2,7 @@ import { sanitizeUrl, sha256 } from './canonicalize.js'
 import { evaluateToolSurfaceCapability, type HostLockEvaluation, type HostToolSurface } from './host-lock.js'
 import { parsePwshCommand, parseShellCommand, isRunExecutable } from './shell-parse.js'
 import { SEMANTIC_ACTIONS, SUPPORTED_EVIDENCE_ADAPTERS, semanticActionFromCommand, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
+import type { DerivedProcessFacts, ProcessFactSource, ProcessOutcomeReason } from './capability-semantics.js'
 import type { EvidenceOutcome, EvidenceParseStatus, EvidenceRole, ExpectedTransition, GuardEvidence, GuardOperation, TargetTuple } from './types.js'
 
 export interface ToolCallInput {
@@ -314,6 +315,160 @@ function extractTerminalFacts(textContent: string): TerminalFacts {
   return { exitCode, negative, marked }
 }
 
+/**
+ * 0.6.2 D062-02: one trusted structured producer declaration, if the host
+ * rendered per-operation results. Absence is the honest common case: the
+ * pinned DSH renderers declare a whole-result terminal marker only, so no
+ * per-operation producer exists and the attribution stays `unknown`.
+ */
+function declaredOperationResults(meta: unknown): DerivedProcessFacts['declaredOperationResults'] {
+  const declared = asRecord(asRecord(meta)?.contextGuardProcess)?.operationResults
+  if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return undefined
+  const rows: NonNullable<DerivedProcessFacts['declaredOperationResults']> = []
+  for (const raw of declared) {
+    const row = asRecord(raw)
+    const action = typeof row?.action === 'string' ? row.action : undefined
+    const outcome = row?.outcome
+    if (!action || (outcome !== 'success' && outcome !== 'failure' && outcome !== 'unknown')) return undefined
+    rows.push({ action, outcome })
+  }
+  return rows
+}
+
+/**
+ * The trusted run-level declaration in `meta.contextGuardProcess`. This is the
+ * highest-priority source: it is the run's own statement about the process, so
+ * an explicit `exitCode` here outranks the generic `meta.exitCode`.
+ */
+function declaredStructuredTerminal(meta: unknown): { exitCode?: number; signal: boolean } | undefined {
+  const record = asRecord(asRecord(meta)?.contextGuardProcess)
+  if (!record) return undefined
+  const rawExit = record.exitCode ?? record.exit_code
+  const signal = record.signal
+  if (signal !== undefined && signal !== null) return { ...(typeof rawExit === 'number' ? { exitCode: rawExit } : {}), signal: true }
+  if (typeof rawExit === 'number') return { exitCode: rawExit, signal: false }
+  return undefined
+}
+
+/**
+ * The HISTORICAL terminal-fact rule, unchanged since 0.6.1: the generic
+ * structured `meta` fact, else the rendered text markers. It deliberately does
+ * NOT read the trusted `contextGuardProcess` run declaration — that source is
+ * new in 0.6.2 and reading it here would change the frozen `outcome` of
+ * already-recorded evidence, which is a summary input and therefore historical
+ * (0.6.2 review of D062-02).
+ */
+function legacyTerminalFacts(meta: unknown, textContent: string): TerminalFacts {
+  return structuredTerminalFacts(meta) ?? extractTerminalFacts(textContent)
+}
+
+/**
+ * The terminal facts the DERIVED layer reads, in priority order (0.6.2 D062-02
+ * review): the trusted run declaration first, then the generic structured fact,
+ * then the rendered markers. This never feeds the frozen `outcome`; it feeds
+ * `processFacts` only, which states its own `source` and whether it disagrees
+ * with the frozen reading.
+ */
+function resolveDeclaredTerminalFacts(meta: unknown, textContent: string): { facts: TerminalFacts; source: ProcessFactSource } {
+  const namespace = declaredStructuredTerminal(meta)
+  if (namespace) return { facts: { exitCode: namespace.exitCode, negative: namespace.signal, marked: true }, source: 'run_declaration' }
+  const structured = structuredTerminalFacts(meta)
+  if (structured) return { facts: structured, source: 'structured_meta' }
+  return { facts: extractTerminalFacts(textContent), source: 'rendered_markers' }
+}
+
+/**
+ * The one outcome rule for a shell result, shared by the frozen evidence field
+ * and the derived reading. Their different fact sources may yield different verdicts.
+ * The bundled DSH session shell renderers (`dsh-tool-bash` / `dsh-tool-pwsh`)
+ * append markers only for negative terminal facts or non-zero exits, so a
+ * completed foreground result with no marker is a clean success for those two
+ * registered tools alone; the generic `shell` alias has no verified renderer
+ * contract and an unclassifiable marker stays `unknown`.
+ */
+function shellOutcome(
+  surface: 'bash' | 'pwsh' | 'shell',
+  terminal: TerminalFacts,
+  resultError: unknown,
+  backgrounded: boolean,
+): 'success' | 'failure' | 'unknown' {
+  if (backgrounded) return 'unknown'
+  if (resultError || terminal.negative) return 'failure'
+  if (terminal.exitCode === undefined) {
+    return (surface === 'bash' || surface === 'pwsh') && !terminal.marked ? 'success' : 'unknown'
+  }
+  return terminal.exitCode === 0 ? 'success' : 'failure'
+}
+
+/**
+ * The layered shell reading (0.6.2 D062-02; source priority fixed by the
+ * 0.6.2 review). Every field is derived from the same persisted result the
+ * historical `outcome` was derived from, so replay is deterministic and no
+ * historical fact is reinterpreted:
+ *
+ * - `hostToolReturned` is the host's own return, nothing more;
+ * - `declaredExitCode` is `'unknown'` unless a real fact declared it, and an
+ *   unmarked success is NOT a read exit code of 0;
+ * - `operationAttribution` stays `'unknown'` for an opaque compound runner, so
+ *   the last command's success can never cover an earlier failure;
+ * - `outcome` uses the same evaluator with independently selected facts; a
+ *   disagreement with the historical field is explicitly reported.
+ *
+ * SOURCE PRIORITY for the process terminal facts, highest first:
+ *
+ *   1. the trusted `contextGuardProcess` namespace — the run's OWN declaration
+ *      of what the process did. An explicit `exitCode` here is read as declared
+ *      even when the generic `meta.exitCode` says something else; the namespace
+ *      is the more specific statement and never loses to the generic one.
+ *   2. any other structured terminal fact the renderer put in `meta`
+ *      (`meta.exitCode` / `meta.exit_code` / `meta.signal`).
+ *   3. the rendered text markers of the audited renderers.
+ *
+ * A namespace declaration never overrides the frozen `outcome`, because the
+ * frozen value is the historical record and this batch must not rewrite it; the
+ * derived layer records its source and conflict flag instead of changing history.
+ */
+function shellProcessFacts(
+  meta: unknown,
+  textContent: string,
+  frozenOutcome: EvidenceOutcome,
+  resultError: unknown,
+  surface: 'bash' | 'pwsh' | 'shell',
+  backgrounded: boolean,
+  parseStatus: EvidenceParseStatus,
+): DerivedProcessFacts {
+  const { facts: terminal, source } = resolveDeclaredTerminalFacts(meta, textContent)
+  const declaredOperations = declaredOperationResults(meta)
+  const operationAttribution: DerivedProcessFacts['operationAttribution'] = declaredOperations
+    ? 'declared_per_operation'
+    : parseStatus === 'supported' && !backgrounded
+      ? 'single_operation'
+      : 'unknown'
+  const outcome = shellOutcome(surface, terminal, resultError, backgrounded)
+  let outcomeReason: ProcessOutcomeReason
+  if (backgrounded) outcomeReason = 'backgrounded'
+  else if (resultError) outcomeReason = 'host_error_flag'
+  else if (terminal.negative) outcomeReason = 'declared_negative_marker'
+  else if (terminal.exitCode !== undefined) outcomeReason = 'declared_exit_code'
+  else if (outcome === 'success') outcomeReason = 'unmarked_renderer_success'
+  else if (terminal.marked) outcomeReason = 'marker_unclassified'
+  else outcomeReason = 'text_scan_inconclusive'
+  return {
+    hostToolReturned: resultError ? 'error' : 'result',
+    declaredExitCode: terminal.exitCode ?? 'unknown',
+    terminalMarkerRead: terminal.marked,
+    outcome,
+    outcomeReason,
+    source,
+    // A divergence is reported, never resolved by rewriting the historical
+    // field: the frozen `outcome` keeps the 0.6.1 rule even when the run's own
+    // declaration disagrees with it.
+    frozenOutcomeConflict: outcome !== frozenOutcome,
+    operationAttribution,
+    ...(declaredOperations ? { declaredOperationResults: declaredOperations } : {}),
+  }
+}
+
 function metaUrls(meta: unknown): string[] {
   const record = asRecord(meta)
   if (!record) return []
@@ -388,6 +543,8 @@ export interface ToolSubject {
   reasonCode?: string
   adapterId?: string
   adapterVersion?: string
+  /** 0.6.2 D062-02: the layered shell reading, present only for shell tools. */
+  processFacts?: DerivedProcessFacts
   externalOperationRef?: import('./types.js').ExternalOperation
 }
 
@@ -535,7 +692,6 @@ export function extractToolSubject(
     case 'shell':
     case 'pwsh': {
       const command = typeof args.command === 'string' ? args.command : ''
-      const terminal = structuredTerminalFacts(result.meta) ?? extractTerminalFacts(result.textContent)
       const backgrounded = args.run_in_background === true
       const commandDetails = analyzeCommand(command, typeof args.workdir === 'string' ? args.workdir : defaultCwd, call.name)
       const commandCwd = typeof args.workdir === 'string' ? args.workdir : defaultCwd
@@ -550,19 +706,23 @@ export function extractToolSubject(
       // rather than being promoted to success (0.1.5-rc.1 added the
       // persistent-renderer `[Command finished with exit code N]` and
       // `[Command timed out or OOM]` markers).
-      const unmarkedSuccessAllowed = (call.name === 'bash' || call.name === 'pwsh') && !terminal.marked
-      const outcome: EvidenceOutcome = backgrounded
-        ? 'unknown'
-        : result.error || terminal.negative
-          ? 'failure'
-          : terminal.exitCode === undefined
-            ? (unmarkedSuccessAllowed ? 'success' : 'unknown')
-            : terminal.exitCode === 0 ? 'success' : 'failure'
+      // 0.6.2 D062-02: the frozen `outcome` keeps the HISTORICAL rule, so
+      // already-recorded evidence digests do not move. The derived layer reads
+      // the trusted run declaration first and reports its own verdict, its
+      // source, and whether it disagrees with the frozen reading.
+      const terminal = legacyTerminalFacts(result.meta, result.textContent)
+      const surface = call.name as 'bash' | 'pwsh' | 'shell'
+      const outcome = shellOutcome(surface, terminal, result.error, backgrounded)
+      const processFacts = shellProcessFacts(
+        result.meta, result.textContent, outcome, result.error, surface,
+        backgrounded, parseStatus(commandDetails).parseStatus,
+      )
       const subject: ToolSubject = {
         capabilities: ['shell', ...(deterministic ? ['deterministic-check'] : [])],
         subjects: unique(commandDetails.subjects),
         surfaces: ['scope'],
         outcome,
+        processFacts,
         executables: commandDetails.executables,
         operations: commandDetails.operations,
         semanticAction: action,
@@ -629,6 +789,25 @@ export function evidenceFromPersistedToolResult(
     ...(subject.reasonCode ? { reasonCode: subject.reasonCode } : {}),
     ...(subject.adapterId ? { adapterId: subject.adapterId } : {}),
     ...(subject.adapterVersion ? { adapterVersion: subject.adapterVersion } : {}),
+    // 0.6.2 D062-02: the layered shell reading is DERIVED and excluded from
+    // every frozen digest/certificate domain. The host result's own error flag
+    // is the ONE thing this wrapper may add on top of the subject's reading: the
+    // wrapper is what knows about it, and both the frozen field above and the
+    // layered reading must show it. Every other derived field — including a
+    // trusted run declaration's exit code — preserves the independent derived
+    // verdict and its conflict flag.
+    ...(subject.processFacts ? {
+      processFacts: subject.processFacts.hostToolReturned === (result.error ? 'error' : 'result')
+        ? subject.processFacts
+        : {
+            ...subject.processFacts,
+            hostToolReturned: result.error ? 'error' as const : 'result' as const,
+            // The host result's own error flag is the one fact this wrapper
+            // adds; it applies to both layers, and the conflict flag follows.
+            ...(result.error ? { outcome: 'failure' as const, outcomeReason: 'host_error_flag' as const } : {}),
+            frozenOutcomeConflict: (result.error ? 'failure' : subject.processFacts.outcome) !== outcome,
+          },
+    } : {}),
     ...(subject.externalOperationRef ? { externalOperationRef: { ...subject.externalOperationRef, epoch } } : {}),
   }
 }

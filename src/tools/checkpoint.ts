@@ -2,7 +2,7 @@ import { checkpointPage, type PageQuery } from './checkpoint-page.js'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { itemDiagnosis, relevantEvidence, evidenceAvailabilityReason } from '../domain/diagnostics.js'
+import { capabilityRemedyPhrase, deriveItemDiagnosis, itemDiagnosis, relevantEvidence, evidenceAvailabilityReason } from '../domain/diagnostics.js'
 import { certifyCheckpoint } from '../domain/checkpoint.js'
 import { ACTION_MANIFEST, isStatefulAction } from '../domain/protocol-manifest.js'
 import { availableBoundaryQualifications } from '../domain/boundary.js'
@@ -128,7 +128,9 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
   const action = item.semanticAction ?? 'generic_run'
   const spec = ACTION_MANIFEST.actions[action]
   const template = bindingTemplate(projection, item)
-  return {
+  const diagnosis = deriveItemDiagnosis(projection, item)
+  const compact = itemDiagnosis(projection, item)
+  const row = {
     id: item.id,
     revision: item.revision,
     status: item.status,
@@ -139,9 +141,27 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
     kind: item.kind,
     semantic_action: action,
     requested_target: targetForTool(item.requestedTarget),
-    ...itemDiagnosis(projection, item),
-    producer_disposition: ACTION_MANIFEST.actions[action].evidenceProducer,
+    certifiable: compact.certifiable,
+    reason_code: diagnosis.reason_code,
+    // The bounded page keeps the item row small: the remedy phrase is the
+    // machine-readable capability remedy (0.6.2 D062-01), not the full
+    // resume-condition prose, which the detail/prepare surfaces carry. A
+    // declared ROOT WAIT is the exception — its exact resume event is the one
+    // fact a caller must not lose, so that condition travels verbatim.
+    next_step: diagnosis.capability.remedy === 'await_root_input'
+      ? (diagnosis.next_action.resume_condition ?? capabilityRemedyPhrase(diagnosis.capability.remedy)).slice(0, 240)
+      : capabilityRemedyPhrase(diagnosis.capability.remedy),
     ...(item.targetCaptureStatus ? { target_capture_status: item.targetCaptureStatus } : {}),
+    // 0.6.2 D062-01: the shared capability fact travels with the item, so a
+    // consumer learns WHY certification is unavailable and WHICH remedy is
+    // reachable instead of inferring a user-input gap from one enum.
+    capability: {
+      action_supported: diagnosis.capability.actionSupported,
+      certifiable: diagnosis.capability.certifiable,
+      gap: diagnosis.capability.gap,
+      remedy: diagnosis.capability.remedy,
+    },
+    producer_disposition: ACTION_MANIFEST.actions[action].evidenceProducer,
     ...(item.targetCaptureReasonCode ? { target_capture_reason_code: item.targetCaptureReasonCode } : {}),
     predicate: {
       predicate_id: spec.predicateId,
@@ -152,7 +172,8 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
       pred_params_kind: 'inline',
     },
     ...(template ? { binding_template: template } : {}),
-  } as Record<string, JsonValue>
+  }
+  return row as Record<string, JsonValue>
 }
 
 export function createCheckpointTool(
@@ -389,6 +410,33 @@ export function createCheckpointTool(
           ...(evidence.adapterVersion ? { adapter_version: evidence.adapterVersion } : {}),
           adapter_disposition: evidenceAvailabilityReason(evidence) === undefined ? 'citable' as const : 'unavailable' as const,
           ...(evidenceAvailabilityReason(evidence) ? { reason_code: evidenceAvailabilityReason(evidence) } : {}),
+          // 0.6.2 D062-02: the derived layers, so a caller never reads the old
+          // `outcome: success` as "an exit code of 0 was read". These are
+          // display/consumer facts, excluded from every certificate domain.
+          //
+          // `source` and `frozen_outcome_conflict` are part of the contract, not
+          // optional decoration: the frozen `outcome` deliberately keeps the
+          // pre-0.6.2 rule, so a caller that sees `process_outcome` differ from
+          // `outcome` must be able to learn WHICH source declared it and that
+          // the two readings disagree (0.6.2 review). Omitting them left the
+          // caller with two unexplained values.
+          ...(evidence.processFacts ? {
+            process_facts: {
+              host_tool_returned: evidence.processFacts.hostToolReturned,
+              declared_exit_code: evidence.processFacts.declaredExitCode === 'unknown' ? 'unknown' as const : evidence.processFacts.declaredExitCode,
+              terminal_marker_read: evidence.processFacts.terminalMarkerRead,
+              process_outcome: evidence.processFacts.outcome,
+              outcome_reason: evidence.processFacts.outcomeReason,
+              source: evidence.processFacts.source,
+              frozen_outcome_conflict: evidence.processFacts.frozenOutcomeConflict,
+              operation_attribution: evidence.processFacts.operationAttribution,
+              ...(evidence.processFacts.declaredOperationResults ? {
+                declared_operation_results: evidence.processFacts.declaredOperationResults.map((row) => ({
+                  action: row.action, outcome: row.outcome,
+                })),
+              } : {}),
+            },
+          } : {}),
         }))
       return checkpointPage(projection, args, {
         status: result.status,

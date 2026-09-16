@@ -1,5 +1,43 @@
 # Local Acceptance
 
+## 0.6.2 lifecycle and documentation consolidation (2026-09-16)
+
+The coordinator added a third Codex recording (`--mode lifecycle`) using
+product-owned prompt ingestion and disposable synthetic ledgers. Its four
+cases measure silent pending, missing-proof correction, user wait and one
+opaque mixed-result command. DSH receives the same recorded prompt/command
+bytes; its checkpoints remain incomplete and its boundary decisions preserve
+pending/wait. See [the result contract](CROSS_END_RESULT_CONTRACT.md).
+
+The earlier in-memory-only probes remain historical evidence, including their
+unexecuted ledger-dependent branch. That limitation is resolved by the later
+lifecycle recording, not by rewriting the old result. T06 now has an owned
+held-handle OS fixture behind `native_acceptance.py --t06`; the source probe
+passed on macOS. Windows and exact-artifact results are not yet claimed.
+
+Duplicate repair notes and the superseded 0.6.1 plan were removed. Historical
+references point to their exact Git snapshot; current semantic and release
+limitations remain in maintained documents.
+
+## 0.6.2 release-preparation recheck (2026-09-16)
+
+The coordinating Codex run on macOS (Node 25.1.0, Python 3.12.2) independently
+passed the full local Vitest suite: 70 files, 1092 tests passed, one skipped.
+The previously reported eight `host-target-preflight` failures did not reproduce;
+that file separately passed all 46 tests. This establishes the result in this
+execution environment, not the root cause of the earlier DSH failures or
+Node 22/24 and Windows portability.
+
+Typecheck passed; lint reported 27 warnings and no errors. Release-pack tests
+passed 2/2; stats tests passed 10/10; build and pack dry-run passed. Rebuilt
+`dist` matched the staged runtime bytes. Documentation audit reported zero
+errors/warnings, 81 Python tests passed, and both Codex recording checks were
+current. The recorder tests are now included in candidate CI's static job.
+
+The uncommitted candidate is not frozen, installed, or published. D062-04 was partial at that checkpoint; subsequent disposable-ledger probes above close its bounded lifecycle gap. T06/exact-artifact native acceptance and candidate CI remain pending. See the
+[0.6.2 release plan](RELEASE_PLAN_0_6_2.md) for the remaining ordered gates.
+
+
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
 
 ### Third repair round after targeted review (2026-09-14)
@@ -79,6 +117,23 @@ the same day it was performed. The historical section text is kept as written.
   receipt's frozen tgz belongs to the release archive and is not re-derived
   here.
 
+## 0.6.2 source candidate (2026-09-16)
+
+Development baseline: `d11009d8f755ecee7d288cff18250c7b372cfd2a`. The
+capability, process-layer and recovery fixes are covered by
+`v062-capability-and-layers.test.ts`; the seven review findings were repaired,
+including frozen-outcome preservation and checkpoint source/conflict output.
+The later lifecycle recording and source probe are described above.
+
+Earlier DSH runs reported eight `host-target-preflight` failures. The Codex
+full run passed those cases; the environment-dependent cause is unconfirmed.
+Do not carry the earlier speculative realpath/module-shadow diagnosis forward
+as an established production defect.
+
+Current source tests do not establish candidate CI, native Web/Headless or a
+frozen tgz. The ordered remaining gates are in the release plan. Historical
+release bytes and their native results below do not certify this candidate.
+
 ## 0.6.1 source candidate (2026-09-15)
 
 This section records a **source and deterministic** claim only. It is not a
@@ -89,7 +144,7 @@ own frozen-artifact identity.
 Established at this point:
 
 - The five W060-01–05 repairs from the Windows 0.6.0 session review
-  (`docs/WINDOWS_0_6_0_REPAIR_PLAN.md`) are implemented and covered by
+  ([historical plan](https://github.com/GreenLv/dsh-completion-guard/blob/d11009d8f755ecee7d288cff18250c7b372cfd2a/docs/WINDOWS_0_6_0_REPAIR_PLAN.md)) are implemented and covered by
   dedicated positive/negative suites:
   `tests/domain/v061-attachment-interpretation.test.ts`,
   `tests/domain/v061-conservative-interpretation.test.ts`,
@@ -145,7 +200,7 @@ Established at this point:
   additive; legacy sessions keep their historical reading; and no digest
   domain was reused.
 - The full local deterministic matrix (this section's top lists it in
-  `NEXT_VERSION_REPAIR_NOTES.md` and the repository instructions) and byte-identical
+  [historical notes](https://github.com/GreenLv/dsh-completion-guard/blob/d11009d8f755ecee7d288cff18250c7b372cfd2a/docs/NEXT_VERSION_REPAIR_NOTES.md) and the repository instructions) and byte-identical
   repeated builds of the candidate dist. The dist differs from the 0.6.0
   base until the 0.6.1 candidate is committed.
 
@@ -199,7 +254,7 @@ The local deterministic checks and [exact-candidate CI](https://github.com/Green
 
 Anonymous readback verified the annotated tag target, npm version and latest tag, embedded commit, registry integrity and downloaded package bytes. The GitHub Release title and bilingual body match the reviewed candidate. All seven attachments match the accepted files: package, checksum, artifact manifest, and the separate macOS/Windows annexes and transfer receipts. Windows result hashes were also matched to the original remote files before publication.
 
-This section and the updated main-branch installation instructions are post-release documentation; the tag and npm package retain their original bytes. The patch fixes prepare serialization and Git input guidance. The answer-delivery design remains future work in [the repair notes](NEXT_VERSION_REPAIR_NOTES.md).
+This section and the updated main-branch installation instructions are post-release documentation; the tag and npm package retain their original bytes. The patch fixes prepare serialization and Git input guidance. The answer-delivery design remains future work in [the repair notes](https://github.com/GreenLv/dsh-completion-guard/blob/d11009d8f755ecee7d288cff18250c7b372cfd2a/docs/NEXT_VERSION_REPAIR_NOTES.md).
 
 ## 0.5.2 published release (2026-09-11)
 

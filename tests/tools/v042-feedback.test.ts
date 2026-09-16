@@ -20,10 +20,13 @@ describe('0.4.2 bounded feedback regressions', () => {
     p.items.set('R001', captureClause('更新皮肤中心并在本地仓库记录', 'm1', 'R001', 1))
     const result = await createCheckpointTool(() => p, () => {}).execute({ bindings: [] }, undefined as never)
     expect(result).toMatchObject({ status: 'incomplete', open_items: [{ certifiable: false, reason_code: 'generic_run_non_certifiable' }] })
-    // 0.6.0 D06-05: the generic diagnosis names the ONE real replacement
-    // mechanism (a confirmed rebind mapping), never a phantom auto-replacement.
-    expect(JSON.stringify(result)).toContain('rebind proposal mapping this obligation')
-    expect(JSON.stringify(result)).toContain('superseded atomically')
+    // 0.6.2 D062-01: this build has no certification adapter for the concrete
+    // action, so the answer states the capability limit. It must not ask the
+    // user for input, must not point at a mechanism that cannot change
+    // certification, and must not tell the model to call a Guard tool.
+    expect(JSON.stringify(result)).toContain('"gap":"missing_adapter"')
+    expect(JSON.stringify(result)).toContain('"remedy":"report_uncertified_capability_gap"')
+    expect(JSON.stringify(result)).not.toContain('rebind proposal mapping this obligation')
     expect(JSON.stringify(result)).not.toContain('context_guard_rebind')
     expect(renderRecoveryPacket(p)).not.toContain('whitelisted executable')
   })
