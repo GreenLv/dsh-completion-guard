@@ -18,7 +18,7 @@ it('requires a completed successful foreground command before requesting a test 
 })
 
 it.each(['short', 'long'])('retrieves a %s Windows test template through the native driver and certifies it', async length => {
- const { readProbeTestBinding } = await import(probeModule)
+ const { readProbeTestBinding, readProbeItem } = await import(probeModule)
  const cwd = 'C:\\Users\\green\\AppData\\Local\\Temp\\' + (length === 'long' ? 'isolated-home-'.repeat(18) : '') + 'dsh-guard-host-abcdefgh\\work'
  const p = deriveProjection([
   { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run pnpm test.' }] } },
@@ -40,4 +40,10 @@ it.each(['short', 'long'])('retrieves a %s Windows test template through the nat
  const binding = await readProbeTestBinding(call, page)
  expect(binding).toMatchObject({ semantic_action: 'test', evidence_ids: ['E0001'] })
  expect(await tool.execute({ bindings: [binding] }, undefined as never)).toMatchObject({ status: 'certified', certificate: expect.any(Object) })
+ // Model the persisted passed row: default checkpoint pages exclude it, but
+ // explicit item queries and every detail continuation must retain its scope.
+ const item = [...p.items.values()][0]
+ item.status = 'passed'
+ const passedPage = await tool.execute({ bindings: [], item_ids: [item.id] }, undefined as never)
+ expect((await readProbeItem(call, passedPage, item.id)).status).toBe('passed')
 })

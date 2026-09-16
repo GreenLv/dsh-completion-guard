@@ -35,7 +35,7 @@ export async function readProbeItem(call, page, itemId) {
   let snapshot
   let text = ''
   for (let count = 0; count < 128; count++) {
-    const detail = await call('context_guard_checkpoint', { bindings: [], detail_id: row.detail_id,
+    const detail = await call('context_guard_checkpoint', { bindings: [], item_ids: [itemId], detail_id: row.detail_id,
       detail_offset: offset, ...(snapshot ? { detail_snapshot: snapshot } : {}) })
     assert.equal(typeof detail.detail_chunk, 'string')
     if (snapshot) assert.equal(detail.snapshot, snapshot)
