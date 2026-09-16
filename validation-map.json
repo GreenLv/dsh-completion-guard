@@ -298,7 +298,9 @@
         "scripts/native_acceptance.py",
         "scripts/native_host_acceptance.py",
         "scripts/native_host_probe.mjs",
-        "tests/native_acceptance_test.py"
+        "tests/native_acceptance_test.py",
+        "scripts/native_cleanup_probe.py",
+        "tests/native_cleanup_probe_test.py"
       ],
       "gates": [
         "full_candidate"
@@ -328,6 +330,25 @@
       ],
       "invalidates": [
         "candidate_matrix"
+      ],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
+      "id": "cross_end_oracle",
+      "paths": [
+        "scripts/record_cross_end_oracle.py",
+        "tests/record_cross_end_oracle_test.py",
+        "tests/fixtures/cross-end/**",
+        "tests/domain/v062-codex-oracle.test.ts"
+      ],
+      "gates": [
+        "contract_tests",
+        "focused_tests"
+      ],
+      "invalidates": [
+        "candidate_matrix",
+        "cross_repository_contract"
       ],
       "contracts": [],
       "peer_gates": {}
