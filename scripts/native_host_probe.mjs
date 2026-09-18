@@ -243,6 +243,7 @@ export function apply(ctx, config) {
       })
       // 0.6.3 native incident checks: real host delivery and persisted tools;
       // no business mutation and no model request are performed here.
+      failedCase = 'mixed_request_and_cross_repository'
       await root('Check whether an update exists and install the package.')
       let incidentPage = await call('context_guard_checkpoint', { bindings: [] })
       const incidentRows = await Promise.all(incidentPage.open_items.map(row => readProbeItem(call, incidentPage, row.id)))
@@ -250,7 +251,8 @@ export function apply(ctx, config) {
       assert.ok(incident)
       assert.equal(incident.status, 'pending')
       const incidentPrepare = await call('context_guard_prepare', { item_id: incident.id, semantic_action: 'install' })
-      assert.equal(incidentPrepare.status, 'incompatible')
+      assert.notEqual(incidentPrepare.compatibility.status, 'compatible')
+      assert.ok(incidentPrepare.compatibility.reason_codes.includes('item_not_executable'))
       assert.equal(incidentPage.status, 'incomplete')
       const repositoryA = join(config.workRoot, 'repository-a')
       const repositoryB = join(config.workRoot, 'repository-b')
