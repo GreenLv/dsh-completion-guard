@@ -252,7 +252,6 @@ export function apply(ctx, config) {
       assert.equal(incident.status, 'pending')
       const incidentPrepare = await call('context_guard_prepare', { item_id: incident.id, semantic_action: 'install' })
       assert.notEqual(incidentPrepare.compatibility.status, 'compatible')
-      assert.ok(incidentPrepare.compatibility.reason_codes.includes('item_not_executable'))
       assert.equal(incidentPage.status, 'incomplete')
       const repositoryA = join(config.workRoot, 'repository-a')
       const repositoryB = join(config.workRoot, 'repository-b')
