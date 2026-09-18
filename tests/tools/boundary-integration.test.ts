@@ -20,7 +20,7 @@ function toolCall(session: Session, id: string, name: string, args: unknown): vo
 function toolResult(session: Session, id: string, value: unknown, meta?: unknown): void {
   append(session, 'tool/result', {
     turn: 1, step: session.seq,
-    message: { role: 'user', content: [{ type: 'tool-result', toolCallId: id, content: [{ type: 'text', text: JSON.stringify(value) }] }], source: { kind: 'tool', callId: id } },
+    message: { role: 'user', content: [{ type: 'tool-result', toolCallId: id, isError: false, content: [{ type: 'text', text: JSON.stringify(value) }] }], source: { kind: 'tool', callId: id } },
     ...(meta ? { meta } : {}),
   }, { surfaceOp: 'append' })
 }

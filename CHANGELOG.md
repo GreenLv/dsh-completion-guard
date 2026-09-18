@@ -17,10 +17,11 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Preserve exact relative file and directory constraints through the root-time Session locator and canonical filesystem readback. Current v6 certificates bind that locator in version 4; opaque test or measurement targets keep their distinct identity.
 - Keep a sourced successful mutation of a forbidden file as a completion violation, even when the allowed edit also succeeds. A final-answer claim alone is not treated as a host mutation.
 - Add a synthetic Session replay CLI for source-to-core and Stop/Goal diagnosis. It is not a real-model or native-platform acceptance run.
+- Treat a structured host error as failure even when renderer text appears successful; malformed or ambiguous host returns stay unknown. The v0.7 native profile checks real host registration and ordinary evidence, with a local mock registry for the preserved adopted-release gate.
 
 ### Validation
 
-The source and built bytes passed the shared core fixtures and the complete local deterministic matrix, including Git commits and pushes confined to disposable test fixtures, TypeScript typecheck, lint, a byte-stable build, release-packer tests, statistics tests, documentation checks, and a package inventory check. Independent synthetic Session and actual local filesystem observer replays exercised positive and negative Stop and Goal paths; they are not real-model or native-platform acceptance. The canonical release packer requires a clean product Git worktree; clean-source artifact and CI results are separate follow-up evidence. Real-model, cross-platform native acceptance, daily installation and publication remain unverified.
+Earlier candidate bytes passed the shared core fixtures and complete local deterministic matrix, including Git commits and pushes confined to disposable test fixtures. The structured-host-result repair and versioned native driver require fresh source, package and native checks; their exact results are recorded in the coordinated handoff. Independent synthetic Session and actual local filesystem observer replays exercised positive and negative Stop and Goal paths; they are not real-model or native-platform acceptance. The canonical release packer requires a clean product Git worktree. Daily installation and publication remain unverified.
 
 ## 0.6.3 - 2026-09-18
 

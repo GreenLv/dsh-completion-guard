@@ -13,7 +13,7 @@ import { actionPreparation } from './action-preparation.js'
 import { ACTION_MANIFEST, type StatefulAction } from '../domain/protocol-manifest.js'
 import { canonicalRegistryBase, npmEscapedPackageName } from '../domain/registry.js'
 import type { EvidenceRole, ExpectedTransition, TargetTuple } from '../domain/types.js'
-import { evidenceFromPersistedToolResult, extractTextContent } from '../domain/evidence.js'
+import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus } from '../domain/evidence.js'
 import {
   commitIndexSnapshotDigest,
   commitTreeSnapshotDigest,
@@ -394,7 +394,7 @@ function findEffect(events: readonly unknown[], callId: string): PersistedEffect
     if (event.type === 'tool/result' && eventCallId(event) === callId && call) {
       const data = record(event.data)
       call.resultSeq = seq
-      call.error = data?.error
+      call.error = persistedToolResultStatus(data, callId) !== 'clean' ? { name: 'HostResultError', code: 'HOST_RESULT_UNTRUSTED' } : undefined
       call.meta = data?.meta
       const message = record(data?.message)
       call.textContent = extractTextContent((message?.content as unknown[] | undefined) ?? [])
@@ -429,7 +429,7 @@ function actionResultCompleted(events: readonly unknown[], callId: string): bool
     if (!event || event.type !== 'tool/result' || eventCallId(event) !== callId) continue
     const outer = messageMeta(event)
     const meta = record(outer?.contextGuardAction)
-    return meta?.status === 'completed'
+    return meta?.status === 'completed' && persistedToolResultStatus(event.data, callId) === 'clean'
   }
   return false
 }

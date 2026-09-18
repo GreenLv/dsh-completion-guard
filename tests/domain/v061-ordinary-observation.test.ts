@@ -42,7 +42,7 @@ function session(rootInputs: string[], runs: Array<{ command: string; outcome: '
   for (const [index, run] of runs.entries()) {
     events.push(
       env('tool/call', { turn: 1, callId: `sh-${index}`, name: tool, arguments: JSON.stringify({ command: run.command, workdir: '/repo' }) }),
-      env('tool/result', { turn: 1, message: { source: { callId: `sh-${index}` }, content: [{ type: 'text', text: run.outcome === 'success' ? 'ok' : '[exit code: 1]' }] } }),
+      env('tool/result', { turn: 1, message: { source: { callId: `sh-${index}` }, content: [{ type: 'tool-result', toolCallId: `sh-${index}`, isError: false, content: [{ type: 'text', text: run.outcome === 'success' ? 'ok' : '[exit code: 1]' }] }] } }),
     )
   }
   events.push(env('turn/end', { turn: 1, reason: { kind: 'completed' } }))
@@ -124,13 +124,13 @@ describe('0.6.1 W060-05: unattributable commands stay unknown — no fabrication
       env('turn/start', { turn: 1 }),
       env('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: '提交变更' }] }),
       env('tool/call', { turn: 1, callId: 'sh-0', name: 'pwsh', arguments: JSON.stringify({ command: 'git commit -F message.txt; git push origin main', workdir: '/repo' }) }),
-      env('tool/result', { turn: 1, message: { source: { callId: 'sh-0' }, content: [{ type: 'text', text: 'ok' }] } }),
+      env('tool/result', { turn: 1, message: { source: { callId: 'sh-0' }, content: [{ type: 'tool-result', toolCallId: 'sh-0', isError: false, content: [{ type: 'text', text: 'ok' }] }] } }),
       env('tool/call', { turn: 1, callId: 'prod-0', name: 'context_guard_evidence', arguments: JSON.stringify({ semantic_action: 'commit', evidence_role: 'resolution' }) }),
       env('tool/result', { turn: 1, meta: { contextGuard: {
         adapterId: 'context-guard.git.v1', adapterVersion: '1.0.0',
         semanticAction: 'commit', evidenceRole: 'resolution',
         resolvedTarget: { repository: '/repo', branch: 'main', change_set_digest: { k: 's', v: 'digest' }, pre_head_oid: { k: 's', v: `${'aa'.repeat(20)}` } },
-      } }, message: { source: { callId: 'prod-0' }, content: [{ type: 'text', text: '{}' }] } }),
+      } }, message: { source: { callId: 'prod-0' }, content: [{ type: 'tool-result', toolCallId: 'prod-0', isError: false, content: [{ type: 'text', text: '{}' }] }] } }),
       env('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]
     const { projection } = deriveProjection(events, { activation: 'always' as const }, scope, true, auditedLock('windows'))

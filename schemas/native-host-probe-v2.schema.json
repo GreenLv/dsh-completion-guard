@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GreenLv/dsh-completion-guard/schemas/native-host-probe-v2.schema.json",
+  "title": "DSH Completion Guard 0.7 native host probe",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "nonce", "pid", "mode", "driver_sha256", "status", "cases", "real_model_request"],
+  "properties": {
+    "schema": { "const": "dsh-native-host-probe/v2" },
+    "nonce": { "type": "string", "minLength": 1 },
+    "pid": { "type": "integer", "minimum": 1 },
+    "mode": { "enum": ["initial", "restart"] },
+    "driver_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["passed", "failed"] },
+    "real_model_request": { "const": false },
+    "cases": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "status", "positive", "negative"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^v070_[a-z0-9_]+$" },
+          "status": { "enum": ["passed", "failed"] },
+          "positive": { "type": "boolean" },
+          "negative": { "type": "boolean" },
+          "operation": { "type": "string" },
+          "error_code": { "type": "string" },
+          "last_tool": { "type": ["object", "null"] }
+        }
+      }
+    }
+  }
+}

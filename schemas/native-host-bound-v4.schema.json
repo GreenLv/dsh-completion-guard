@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GreenLv/dsh-completion-guard/schemas/native-host-bound-v4.schema.json",
+  "title": "DSH Completion Guard 0.7 host-bound native annex",
+  "type": "object",
+  "required": ["schema", "status", "product", "gate_profile", "repository", "runtime_tree_sha256", "artifact", "platform", "gates", "cleanup", "run", "unperformed_actions", "capability_skips", "host_lock_policy", "host_driver_sha256", "host_lock_digests", "market_interface"],
+  "properties": {
+    "schema": { "const": "native-acceptance/v2" },
+    "status": { "const": "passed" },
+    "product": { "const": "dsh_completion_guard" },
+    "gate_profile": { "const": "dsh-host-bound/v4" },
+    "repository": {
+      "type": "object", "required": ["url", "commit"],
+      "properties": { "url": { "type": "string" }, "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" } }
+    },
+    "runtime_tree_sha256": { "type": "null" },
+    "artifact": {
+      "type": "object", "required": ["filename", "sha256", "size_bytes", "file_count", "git_head"],
+      "properties": {
+        "filename": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "size_bytes": { "type": "integer", "minimum": 1 }, "file_count": { "type": "integer", "minimum": 1 },
+        "git_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "platform": { "type": "object", "required": ["os", "shell", "toolchain"],
+      "properties": { "os": { "enum": ["macos", "windows", "linux"] }, "shell": { "const": "python-subprocess" },
+        "toolchain": { "type": "object" } } },
+    "gates": { "type": "array", "minItems": 34, "maxItems": 34,
+      "items": { "type": "object", "required": ["id", "required", "status", "subject", "exit_code", "evidence"],
+        "properties": { "id": { "type": "string" }, "required": { "const": true }, "status": { "const": "passed" },
+          "exit_code": { "const": 0 }, "subject": { "type": "object" }, "evidence": { "type": "object" } } } },
+    "cleanup": { "type": "object", "required": ["status", "remaining_ids"],
+      "properties": { "status": { "const": "passed" }, "remaining_ids": { "const": [] } } },
+    "run": { "type": "object", "required": ["started_at", "finished_at"] },
+    "unperformed_actions": { "type": "array", "uniqueItems": true },
+    "capability_skips": { "const": ["real_model_request"] },
+    "host_lock_policy": { "const": "dsh-core/v1" },
+    "host_driver_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "host_lock_digests": { "type": "object", "required": ["web", "headless"],
+      "properties": { "web": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "headless": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } },
+    "market_interface": { "type": "object" }
+  }
+}

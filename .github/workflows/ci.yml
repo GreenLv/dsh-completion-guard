@@ -60,7 +60,7 @@ jobs:
         run: git diff --exit-code -- dist
       - run: pnpm run pack:check
       - run: python scripts/audit_repository_documentation.py .
-      - run: python -m unittest tests/audit_repository_documentation_test.py tests/validation_selection_test.py tests/required_jobs_test.py tests/selected_validation_test.py tests/native_acceptance_test.py tests/workflow_contract_test.py tests/record_cross_end_oracle_test.py tests/native_cleanup_probe_test.py
+      - run: python -m unittest tests/audit_repository_documentation_test.py tests/validation_selection_test.py tests/required_jobs_test.py tests/selected_validation_test.py tests/native_acceptance_test.py tests/validate_native_v070_test.py tests/workflow_contract_test.py tests/record_cross_end_oracle_test.py tests/native_cleanup_probe_test.py
       - name: Check candidate commit whitespace
         run: git diff-tree --check --root -r HEAD
       - name: Freeze one canonical candidate artifact

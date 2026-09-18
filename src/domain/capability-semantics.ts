@@ -170,6 +170,8 @@ export type ProcessOutcomeReason =
   | 'declared_negative_marker'
   /** The host result itself carried the error flag. */
   | 'host_error_flag'
+  /** A persisted return exists, but its nested status or call identity is ambiguous. */
+  | 'host_result_untrusted'
   /** The audited session renderer appends markers only for negative facts, so
    * an unmarked completed foreground result is a clean success for that
    * renderer alone. */

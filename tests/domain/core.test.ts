@@ -434,7 +434,7 @@ describe('domain core', () => {
     const events = [
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '验收：确认项目测试通过' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'pnpm typecheck', workdir: '/work' }) } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Done in 1.2s' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'Done in 1.2s' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
     const derived = deriveProjection(events, ALWAYS, { cwd: '/work' }, true, POSIX_TERMINAL_HOST)
     expect(derived.projection.enabled).toBe(true)
@@ -563,9 +563,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: 'verify the generated file src/app.ts' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'read', arguments: '{"file_path":"src/app.ts"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c1' } }, meta: { path: 'src/app.ts' } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c1' } }, meta: { path: 'src/app.ts' } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [{ item_id: 'A001', evidence_ids: ['E0001'] }] }) } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: JSON.stringify({ status: 'incomplete', contract_revision: 1, open_items: ['A001'], rejected_bindings: [] }) }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: JSON.stringify({ status: 'incomplete', contract_revision: 1, open_items: ['A001'], rejected_bindings: [] }) }] }], source: { kind: 'tool', callId: 'c2' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: '' }, true)
     expect(derived.projection.checkpoints).toHaveLength(0)
@@ -847,9 +847,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: '{}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -864,9 +864,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"printf \\"%s\\" \\"guard-test\\" > guard-demo.txt","workdir":"C:\\\\work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -881,11 +881,11 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"pwd","workdir":"C:\\\\work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'pwsh', arguments: JSON.stringify({ command: '[System.IO.File]::WriteAllText((Join-Path (Get-Location) "guard-demo.txt"), "guard-test")', workdir: 'C:\\work' }) } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c2' } } } },
       { seq: 6, type: 'tool/call', data: { turn: 1, step: 3, callId: 'c3', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
-      { seq: 7, type: 'tool/result', data: { turn: 1, step: 3, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c3', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c3' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+      { seq: 7, type: 'tool/result', data: { turn: 1, step: 3, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c3', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c3' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -900,7 +900,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 pnpm 运行测试' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{ "command": "pnpm test", "workdir": "/work" }' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -953,11 +953,11 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"echo guard-demo.txt","workdir":"C:\\\\work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'pwsh', arguments: JSON.stringify({ command: '[System.IO.File]::WriteAllText((Join-Path (Get-Location) "guard-demo.txt"), "guard-test")', workdir: 'C:\\work' }) } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c2' } } } },
       { seq: 6, type: 'tool/call', data: { turn: 1, step: 3, callId: 'c3', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
-      { seq: 7, type: 'tool/result', data: { turn: 1, step: 3, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c3', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c3' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+      { seq: 7, type: 'tool/result', data: { turn: 1, step: 3, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c3', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c3' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -972,7 +972,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 pnpm 运行测试' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"echo \\"ignored; pnpm test\\"","workdir":"/work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1003,9 +1003,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 PowerShell 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: '{"command":"Set-Content -LiteralPath guard-demo.txt -Value \'guard-test\'","workdir":"C:\\\\work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'created' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1064,9 +1064,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 PowerShell 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: '{"command":"Write-Output \\"Set-Content C:\\\\work\\\\guard-demo.txt now\\""}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Set-Content C:\\work\\guard-demo.txt now' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'Set-Content C:\\work\\guard-demo.txt now' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"C:\\work\\guard-demo.txt"}' } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'guard-test' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: 'C:\\work\\guard-demo.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1116,9 +1116,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 node 运行 script.js' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"node script.js","workdir":"/work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{"file_path":"/work/script.js"}' } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: '/work/script.js' } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c2' } }, meta: { path: '/work/script.js' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1183,7 +1183,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 node 运行 script.js' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"node script.js","workdir":"/work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true, POSIX_TERMINAL_HOST)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1198,7 +1198,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 bash 创建 guard-demo.txt' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"printf \\"%s\\" \\"guard-test\\" > guard-demo.txt","workdir":"C:\\\\work"}' } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: '[exit code: 0]' }] }], source: { kind: 'tool', callId: 'c1' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1575,7 +1575,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件，重启 DSH' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId, name: 'bash', arguments: JSON.stringify({ command }) } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: callId, content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId } } } },
     ])
     const derived = deriveProjection(make('python scripts/apply-dsh-plugins.py --apply 2>&1', 'c1'), OPT_IN, { cwd }, true)
     const items = [...derived.projection.items.values()].filter((i) => i.kind === 'requirement')
@@ -1597,9 +1597,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '拉取远端最近的两个更新，同步更新插件' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'git pull --ff-only 2>&1' }) } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Updating..' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'Updating..' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'bash', arguments: JSON.stringify({ command: 'python scripts/apply-dsh-plugins.py --apply 2>&1' }) } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId: 'c2' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1613,9 +1613,9 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '使用 pwsh 提交并推送本地变更' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'pwsh', arguments: JSON.stringify({ command: 'git commit -am "wrap" 2>&1', workdir: 'C:\\work' }) } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'committed' }] }], source: { kind: 'tool', callId: 'c1' } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'committed' }] }], source: { kind: 'tool', callId: 'c1' } } } },
       { seq: 4, type: 'tool/call', data: { turn: 1, step: 2, callId: 'c2', name: 'pwsh', arguments: JSON.stringify({ command: 'git push origin main 2>&1', workdir: 'C:\\work' }) } },
-      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'pushed' }] }], source: { kind: 'tool', callId: 'c2' } } } },
+      { seq: 5, type: 'tool/result', data: { turn: 1, step: 2, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c2', content: [{ type: 'text', text: 'pushed' }] }], source: { kind: 'tool', callId: 'c2' } } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: 'C:\\work' }, true)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')
@@ -1643,7 +1643,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: 'Install package fixture@1.0.0 in profile web.' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId, name: 'bash', arguments: JSON.stringify({ command }) } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId } } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: callId, content: [{ type: 'text', text: 'done' }] }], source: { kind: 'tool', callId } } } },
     ])
     for (const command of ['dsh plugin --profile web add dsh-dream-skin@0.3.1 2>&1', 'grep -n dsh-dream-skin config/dsh/plugins.toml']) {
       const derived = deriveProjection(make(command, 'c1'), OPT_IN, { cwd }, true)
@@ -1694,7 +1694,7 @@ describe('domain core', () => {
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件' }], source: { kind: 'user' } } },
       { seq: 2, type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: '/work/other.txt' }) } },
-      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c1' } }, meta: { path: '/work/other.txt' } } },
+      { seq: 3, type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'user', content: [{ type: 'tool-result', isError: false, toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] }], source: { kind: 'tool', callId: 'c1' } }, meta: { path: '/work/other.txt' } } },
     ]
     const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true, POSIX_FILESYSTEM_HOST)
     const item = [...derived.projection.items.values()].find((i) => i.kind === 'requirement')

@@ -6,6 +6,9 @@ import { projectSessionCoreV2 } from '../src/core-v2/session.js'
 import { createCheckpointTool } from '../src/tools/checkpoint.js'
 import { goalCompletionDenial } from '../src/domain/goal-gate.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
+import { Context } from '@deepseek-ai/cordis'
+import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
+import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 
 const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
 
@@ -54,6 +57,14 @@ describe('v6 adopted Goal current closure', () => {
     const issued = await tool.execute(args as never, undefined as never) as Record<string, unknown>
     expect(issued.status).toBe('certified')
     expect((issued.certificate as Record<string, unknown>).certificate_version).toBe('4')
+    const context = new Context()
+    new SystemPrompt(context, {})
+    const hostTools = new ToolRuntime(context)
+    hostTools.register(createCheckpointTool(() => projection, () => {}))
+    const materialized = await hostTools.execute({ callId: 'checkpoint-v4-host' as never,
+      name: 'context_guard_checkpoint', arguments: args, signal: new AbortController().signal })
+    expect(materialized.isError, JSON.stringify(materialized.error)).toBe(false)
+    expect((materialized.value as Record<string, unknown>).status).toBe('certified')
     call('checkpoint', 'context_guard_checkpoint', args, 2)
     result('checkpoint', JSON.stringify(issued), 2)
     const accepted = derive()

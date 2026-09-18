@@ -7,7 +7,7 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { snapshotSessionEvents } from '../domain/session-events.js'
 import { canonicalArgvFromCommand } from '../domain/shell-parse.js'
-import { extractTextContent } from '../domain/evidence.js'
+import { extractTextContent, persistedToolResultStatus } from '../domain/evidence.js'
 import type { GuardProjection } from '../domain/types.js'
 
 const execFileAsync = promisify(execFile)
@@ -74,7 +74,8 @@ export function createNativeFileObserver(host: {
       const message = record(result.message)
       const source = record(message?.source)
       if (source?.kind !== 'tool' || source.callId !== args.effect_call_id) return missing('native_effect_missing')
-      if (result.error !== undefined || (Array.isArray(message?.content) && message.content.some((block) => record(block)?.isError === true))) return missing('native_effect_failed')
+      const resultStatus = persistedToolResultStatus(result, args.effect_call_id)
+      if (resultStatus !== 'clean') return missing(resultStatus === 'failure' ? 'native_effect_failed' : 'native_effect_untrusted')
       let effectArgs: RecordValue | undefined
       try { effectArgs = record(JSON.parse(String(call.arguments))) } catch { return missing('native_effect_arguments_invalid') }
       const filePath = effectArgs?.file_path
@@ -152,8 +153,9 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
       if (!call || !result || duplicate || callSeq >= resultSeq || call.turn !== result.turn || call.step !== result.step
         || (call.name !== 'bash' && call.name !== 'pwsh')) return missing('native_effect_missing')
       const message = record(result.message); const source = record(message?.source)
-      if (source?.kind !== 'tool' || source.callId !== args.effect_call_id || result.error !== undefined
-        || (Array.isArray(message?.content) && message.content.some((block) => record(block)?.isError === true))) return missing('native_effect_failed')
+      if (source?.kind !== 'tool' || source.callId !== args.effect_call_id) return missing('native_effect_missing')
+      const resultStatus = persistedToolResultStatus(result, args.effect_call_id)
+      if (resultStatus !== 'clean') return missing(resultStatus === 'failure' ? 'native_effect_failed' : 'native_effect_untrusted')
       let effectArgs: RecordValue | undefined
       try { effectArgs = record(JSON.parse(String(call.arguments))) } catch { return missing('native_effect_arguments_invalid') }
       const command = effectArgs?.command; const repository = effectArgs?.workdir

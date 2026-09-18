@@ -16,6 +16,8 @@ export interface ToolCallInput {
 export interface ToolResultInput {
   seq: number
   error?: unknown
+  /** A persisted return exists but its tool-result identity or status is not trustworthy. */
+  untrusted?: boolean
   meta?: unknown
   textContent: string
 }
@@ -49,6 +51,44 @@ export function extractTextContent(content: readonly unknown[]): string {
     }
   }
   return parts.join('\n')
+}
+
+/**
+ * DSH persists the host return flag on a nested `tool-result` block. The
+ * surrounding message or event need not carry an `error` field (approval and
+ * sandbox denials are examples). Never let a renderer's missing exit marker
+ * override that structured return, or accept an ambiguous nested return as
+ * a clean result for another call.
+ */
+export function persistedToolResultStatus(
+  data: unknown, callId: string,
+  kind: 'tool/result' | 'tool/ptc-dispatch' = 'tool/result',
+  matchedStart = false,
+): 'clean' | 'failure' | 'unknown' {
+  const result = asRecord(data)
+  if (!result) return 'unknown'
+  if (result.error !== undefined || result.isError === true) return 'failure'
+  const message = asRecord(result.message)
+  if (message?.isError === true) return 'failure'
+  const content = Array.isArray(message?.content) ? message.content : Array.isArray(result.content) ? result.content : []
+  const returns = content.map(asRecord).filter((block): block is Record<string, unknown> => block?.type === 'tool-result')
+  if (returns.length > 1) return 'unknown'
+  if (returns.length === 0) {
+    // The SDK's ordinary tool/result always has one nested return. A plain
+    // renderer block cannot authenticate a JSON receipt or a successful test.
+    // PTC dispatch is a separate native event shape, with an explicit flag and
+    // an already matched dispatch-start rather than a nested tool-result.
+    return kind === 'tool/ptc-dispatch' && matchedStart && result.subCallId === callId
+      && result.isError === false ? 'clean' : 'unknown'
+  }
+  for (const block of returns) {
+    const nestedCallId = block.toolCallId ?? block.callId
+    if (nestedCallId !== callId) return 'unknown'
+    if (block.isError === true) return 'failure'
+    if (block.isError !== false) return 'unknown'
+  }
+  if (kind === 'tool/ptc-dispatch' && (!matchedStart || result.subCallId !== callId)) return 'unknown'
+  return 'clean'
 }
 
 function metaPaths(meta: unknown): string[] {
@@ -864,7 +904,7 @@ export function evidenceFromPersistedToolResult(
   hostLock?: HostLockEvaluation,
 ): GuardEvidence {
   const subject = extractToolSubject(call, result, defaultCwd, hostLock)
-  const outcome: EvidenceOutcome = result.error ? 'failure' : (subject.outcome ?? 'success')
+  const outcome: EvidenceOutcome = result.untrusted ? 'unknown' : result.error ? 'failure' : (subject.outcome ?? 'success')
   return {
     id: evidenceId,
     epoch,
@@ -909,7 +949,13 @@ export function evidenceFromPersistedToolResult(
     // trusted run declaration's exit code — preserves the independent derived
     // verdict and its conflict flag.
     ...(subject.processFacts ? {
-      processFacts: subject.processFacts.hostToolReturned === (result.error ? 'error' : 'result')
+      processFacts: result.untrusted ? {
+        ...subject.processFacts,
+        hostToolReturned: 'result' as const,
+        outcome: 'unknown' as const,
+        outcomeReason: 'host_result_untrusted' as const,
+        frozenOutcomeConflict: subject.processFacts.outcome !== 'unknown',
+      } : subject.processFacts.hostToolReturned === (result.error ? 'error' : 'result')
         ? subject.processFacts
         : {
             ...subject.processFacts,

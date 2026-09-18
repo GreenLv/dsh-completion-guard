@@ -2765,12 +2765,12 @@ function semanticMethod(text) {
 * and two different readings never collide.
 */
 function fingerprintOf(source) {
-	let hash$1 = 2166136261;
+	let hash$2 = 2166136261;
 	for (let index$1 = 0; index$1 < source.length; index$1 += 1) {
-		hash$1 ^= source.charCodeAt(index$1);
-		hash$1 = Math.imul(hash$1, 16777619) >>> 0;
+		hash$2 ^= source.charCodeAt(index$1);
+		hash$2 = Math.imul(hash$2, 16777619) >>> 0;
 	}
-	return `i${hash$1.toString(16).padStart(8, "0")}`;
+	return `i${hash$2.toString(16).padStart(8, "0")}`;
 }
 /** Interpret one already-segmented clause. */
 function interpretClause(text, options = {}) {
@@ -6158,8 +6158,8 @@ function decisionBoundaryKey(projection) {
 }
 function progressFingerprint(projection) {
 	const open = [...projection.items.values()].filter((item) => item.status === "pending").map((item) => `${item.id}:${item.revision}:${item.normalizedText}`).sort();
-	const evidence = [...projection.evidence.values()].filter((row) => row.epoch === projection.epoch && row.outcome === "success").map((row) => row.id).sort();
-	const qualifications = availableBoundaryQualifications(projection).map((row) => `${row.id}:${row.status}`).sort();
+	const evidence = [...projection.evidence.values()].filter((row$1) => row$1.epoch === projection.epoch && row$1.outcome === "success").map((row$1) => row$1.id).sort();
+	const qualifications = availableBoundaryQualifications(projection).map((row$1) => `${row$1.id}:${row$1.status}`).sort();
 	return JSON.stringify({
 		epoch: projection.epoch,
 		contractRevision: projection.contractRevision,
@@ -6272,11 +6272,11 @@ function currentActionBases(projection, enforceCore = true) {
 		if (!action || action === "generic_run") continue;
 		if (action !== "test" && action !== "verify") continue;
 		if (!/^m\d+(?::|$)/.test(item.sourceMessageId)) continue;
-		const sourceSeq = Number(/^m(\d+)/.exec(item.sourceMessageId)?.[1] ?? -1);
+		const sourceSeq$1 = Number(/^m(\d+)/.exec(item.sourceMessageId)?.[1] ?? -1);
 		const scope = item.requestedTarget?.scope;
 		if (typeof scope !== "string") continue;
-		if (![...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq && fact.outcome === "success" && fact.parseStatus === "supported" && fact.toolName === "context_guard_observe_test_readiness" && fact.readinessForItemId === item.id && fact.readinessPredicate === (action === "test" ? "test_passed" : "verification_passed") && fact.subjects.includes(scope) && typeof fact.readinessManifestSha256 === "string" && (action !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.epoch === fact.epoch && effect.toolResultSeq < fact.toolResultSeq && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath))))) continue;
-		const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq && fact.semanticAction === action && fact.evidenceRole === "effect" && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0];
+		if (![...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq$1 && fact.outcome === "success" && fact.parseStatus === "supported" && fact.toolName === "context_guard_observe_test_readiness" && fact.readinessForItemId === item.id && fact.readinessPredicate === (action === "test" ? "test_passed" : "verification_passed") && fact.subjects.includes(scope) && typeof fact.readinessManifestSha256 === "string" && (action !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.epoch === fact.epoch && effect.toolResultSeq < fact.toolResultSeq && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath))))) continue;
+		const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq$1 && fact.semanticAction === action && fact.evidenceRole === "effect" && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0];
 		if (latestRun?.outcome === "success" && latestRun.parseStatus === "supported" && latestRun.processFacts?.outcome === "success" && latestRun.processFacts.operationAttribution === "single_operation") continue;
 		basis.push({
 			itemId: item.id,
@@ -6832,14 +6832,14 @@ function hostLockDigest(manifest) {
 		const byName = byUtf8(a.name, b.name);
 		return byName !== 0 ? byName : Buffer.compare(typedToken(a.value), typedToken(b.value));
 	});
-	for (const row of sortedRows) {
-		requireExactKeys(row, CAPABILITY_KEYS, "capability row");
-		if (typeof row.name !== "string" || !DYNAMIC_KEY_RE.test(row.name)) throw new DigestError(`capability name must match snake_case grammar: ${String(row.name)}`);
-		const token = typedToken(row.value);
-		const marker = `${row.name}\u0000${token.toString("hex")}`;
-		if (seen.has(marker)) throw new DigestError(`duplicate capability row: ${row.name}`);
+	for (const row$1 of sortedRows) {
+		requireExactKeys(row$1, CAPABILITY_KEYS, "capability row");
+		if (typeof row$1.name !== "string" || !DYNAMIC_KEY_RE.test(row$1.name)) throw new DigestError(`capability name must match snake_case grammar: ${String(row$1.name)}`);
+		const token = typedToken(row$1.value);
+		const marker = `${row$1.name}\u0000${token.toString("hex")}`;
+		if (seen.has(marker)) throw new DigestError(`duplicate capability row: ${row$1.name}`);
 		seen.add(marker);
-		parts.push(optField(`cap:${row.name}`, token, (v) => v));
+		parts.push(optField(`cap:${row$1.name}`, token, (v) => v));
 		count += 1;
 	}
 	const rawPackages = manifest.packages;
@@ -7035,9 +7035,9 @@ function bindingDigest(records, allowlist) {
 		const byItem = byUtf8(a.item, b.item);
 		return byItem !== 0 ? byItem : byUtf8(a.semanticAction, b.semanticAction);
 	});
-	for (const row of rows) parts.push(field("binding", typedToken({
+	for (const row$1 of rows) parts.push(field("binding", typedToken({
 		k: "x",
-		v: row.digest
+		v: row$1.digest
 	})));
 	checkFieldCount(records.length);
 	return sha256Hex(Buffer.concat(parts));
@@ -7541,7 +7541,7 @@ function openItems(projection) {
 */
 function recoveryDigest(packet, projection) {
 	const items = openItems(projection);
-	const evidence = [...projection.evidence.values()].filter((row) => items.some((item) => relevantEvidence(projection, item, row)));
+	const evidence = [...projection.evidence.values()].filter((row$1) => items.some((item) => relevantEvidence(projection, item, row$1)));
 	return sha256(JSON.stringify({
 		packet,
 		revision: projection.contractRevision,
@@ -7609,7 +7609,7 @@ function renderRecoveryPacket(projection, options = {}) {
 		for (const item of constraints.slice(1, 4)) constraint(item);
 		for (const binding of rejected$1.slice(0, 4)) if (add(`rejected ${clip(binding.itemId, 30)}: ${clip(binding.reasonCode ?? binding.reason, 120)}`, 170)) refusals++;
 		for (const item of work.slice(0, 4)) if (itemDiagnosis(projection, item).certifiable) add(`closing hint [${clip(item.id, 20)}]: ${closingHint(projection, item)}`, 240);
-		for (const row of evidence.slice(0, 4)) if (add(`evidence ${clip(row.id, 40)} action=${row.semanticAction} role=${row.evidenceRole ?? "effect"}`, 140)) shown++;
+		for (const row$1 of evidence.slice(0, 4)) if (add(`evidence ${clip(row$1.id, 40)} action=${row$1.semanticAction} role=${row$1.evidenceRole ?? "effect"}`, 140)) shown++;
 	}
 	lines.push(footer(count, refusals, shown), pointer);
 	return lines.join("\n");
@@ -8317,8 +8317,8 @@ function evidenceProblem(projection, item, binding) {
 		offendingEvidenceIds: missing
 	};
 	if (item.reboundFrom) {
-		const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
-		const tooEarly = binding.evidenceIds.filter((id) => !sourceSeq || projection.evidence.get(id).toolResultSeq < Number(sourceSeq[1]));
+		const sourceSeq$1 = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+		const tooEarly = binding.evidenceIds.filter((id) => !sourceSeq$1 || projection.evidence.get(id).toolResultSeq < Number(sourceSeq$1[1]));
 		if (tooEarly.length) return {
 			itemId: item.id,
 			reason: "evidence predates the authoritative root clause used by this replacement",
@@ -8752,7 +8752,7 @@ function simpleRecord(projection, item, binding) {
 	} };
 	if (action === "test" && (effect.toolName === "bash" || effect.toolName === "pwsh")) {
 		const process$1 = effect.processFacts;
-		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row) => row.outcome === "success"))) return { rejected: {
+		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row$1) => row$1.outcome === "success"))) return { rejected: {
 			itemId: item.id,
 			reason: "test process outcome is not attributable to the required operation",
 			reasonCode: "operation_unattributable"
@@ -10443,11 +10443,11 @@ const ALPHA2_HOST_PACKAGES = [
 * identities and the dshmarket 1.39.0 identity is the authoritative row from
 * the 2026-09-01 alpha.3 annex audit. Guard 0.4.0 supports this combination.
 */
-const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row) => row.name === "dshmarket" ? {
+const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row$1) => row$1.name === "dshmarket" ? {
 	name: "dshmarket",
 	version: "1.39.0",
 	integrity: ALPHA3_HOST_PACKAGES.find((entry) => entry.name === "dshmarket").integrity
-} : row);
+} : row$1);
 /**
 * Historical audited host cohort registry. Every entry keeps the exact package
 * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
@@ -10651,7 +10651,7 @@ const HOST_COHORTS = [...LEGACY_HOST_COHORTS, defineCohort("dsh-0.1.5-rc.2", ["0
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
-	packages: cohort.packages.filter((row) => row.name !== "dshmarket"),
+	packages: cohort.packages.filter((row$1) => row$1.name !== "dshmarket"),
 	capabilities: [
 		{
 			name: "host_cohort",
@@ -10690,7 +10690,7 @@ const EXPECTED_HOST_PACKAGES = HOST_COHORTS[0].packages;
 * cohort rows rather than hardcoded, so a cohort bump cannot leave a stale
 * literal behind in the target-inspection path.
 */
-const ACTIVE_HOST_LAUNCHER_VERSION = EXPECTED_HOST_PACKAGES.find((row) => row.name === "@deepseek-ai/dsh")?.version;
+const ACTIVE_HOST_LAUNCHER_VERSION = EXPECTED_HOST_PACKAGES.find((row$1) => row$1.name === "@deepseek-ai/dsh")?.version;
 const packageNames = (...names) => new Set(names);
 const BASE_HOST_PACKAGES = packageNames("@deepseek-ai/cordis", "@deepseek-ai/dsh-agent", "@deepseek-ai/dsh-commands", "@deepseek-ai/dsh-llm", "@deepseek-ai/dsh-session", "@deepseek-ai/dsh-tools");
 const GOAL_HOST_PACKAGES = packageNames("@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal");
@@ -10712,7 +10712,7 @@ const HOST_CAPABILITY_PACKAGE_GROUPS = {
 * unknown, and an unknown version is not treated as supported.
 */
 function hostVersionFromPackages(rows) {
-	return rows.find((row) => row.name === "@deepseek-ai/dsh")?.version;
+	return rows.find((row$1) => row$1.name === "@deepseek-ai/dsh")?.version;
 }
 /**
 * Atomically select the audited cohort for one supplied package graph. A
@@ -10724,9 +10724,9 @@ function hostVersionFromPackages(rows) {
 * consistently.
 */
 function selectHostCohort(rows, platform) {
-	rows = rows.filter((row) => row.name !== "dshmarket");
-	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)));
-	if (rows.some((row) => !registryNames.has(row.name))) return {
+	rows = rows.filter((row$1) => row$1.name !== "dshmarket");
+	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$1) => row$1.name)));
+	if (rows.some((row$1) => !registryNames.has(row$1.name))) return {
 		cohort: HOST_COHORTS[0],
 		consistent: false,
 		reasonCode: "host_cohort_unknown_package"
@@ -10736,12 +10736,12 @@ function selectHostCohort(rows, platform) {
 		consistent: false,
 		reasonCode: "host_cohort_unbound_identity"
 	};
-	const bound = rows.filter((row) => row.version !== void 0 && row.integrity !== void 0);
+	const bound = rows.filter((row$1) => row$1.version !== void 0 && row$1.integrity !== void 0);
 	const unboundCount = rows.length - bound.length;
-	const versionMatches = bound.map((row) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version)));
-	const identityMatches = bound.map((row, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)));
+	const versionMatches = bound.map((row$1) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row$1.name && p.version === row$1.version)));
+	const identityMatches = bound.map((row$1, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row$1.name && p.version === row$1.version && p.integrity === row$1.integrity)));
 	const candidates = HOST_COHORTS.filter((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
-	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row) => row.name === expected.name).length === 1))[0] ?? candidates[0];
+	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row$1) => row$1.name === expected.name).length === 1))[0] ?? candidates[0];
 	if (consistentCohort !== void 0 && unboundCount === 0) {
 		if (platform && !consistentCohort.acceptedPlatforms.includes(platform)) return {
 			cohort: consistentCohort,
@@ -10749,8 +10749,8 @@ function selectHostCohort(rows, platform) {
 			reasonCode: "host_cohort_platform_not_audited"
 		};
 		const suppliedCounts = /* @__PURE__ */ new Map();
-		for (const row of rows) suppliedCounts.set(row.name, (suppliedCounts.get(row.name) ?? 0) + 1);
-		if (!(consistentCohort.packages.every((row) => (suppliedCounts.get(row.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
+		for (const row$1 of rows) suppliedCounts.set(row$1.name, (suppliedCounts.get(row$1.name) ?? 0) + 1);
+		if (!(consistentCohort.packages.every((row$1) => (suppliedCounts.get(row$1.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
 			cohort: consistentCohort,
 			consistent: false,
 			reasonCode: "host_cohort_incomplete_graph"
@@ -10777,13 +10777,13 @@ function selectHostCohort(rows, platform) {
 	};
 }
 function stableRows(rows) {
-	return [...rows].map((row) => ({ ...row })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
+	return [...rows].map((row$1) => ({ ...row$1 })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
 }
 function statusForPackages(id, rows, requiredNames, cohort) {
 	const requiredPackages = [...requiredNames].sort();
-	const relevant = rows.filter((row) => requiredNames.has(row.name));
+	const relevant = rows.filter((row$1) => requiredNames.has(row$1.name));
 	const counts = /* @__PURE__ */ new Map();
-	for (const row of relevant) counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
+	for (const row$1 of relevant) counts.set(row$1.name, (counts.get(row$1.name) ?? 0) + 1);
 	const missingPackages = requiredPackages.filter((name) => !counts.has(name));
 	const digest$1 = safeHostLockDigest(relevant, { capabilityId: id }, cohort);
 	if ([...counts.values()].some((count) => count > 1)) return {
@@ -10802,10 +10802,10 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		missingPackages,
 		reasonCode: "host_capability_missing"
 	};
-	const expected = new Map(cohort.packages.map((row) => [row.name, row]));
-	for (const row of relevant) {
-		const pinned = expected.get(row.name);
-		if (!row.version || !row.integrity) return {
+	const expected = new Map(cohort.packages.map((row$1) => [row$1.name, row$1]));
+	for (const row$1 of relevant) {
+		const pinned = expected.get(row$1.name);
+		if (!row$1.version || !row$1.integrity) return {
 			id,
 			status: "unavailable",
 			digest: digest$1,
@@ -10813,7 +10813,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 			missingPackages,
 			reasonCode: "host_capability_missing"
 		};
-		if (row.version !== pinned.version) return {
+		if (row$1.version !== pinned.version) return {
 			id,
 			status: "unsupported",
 			digest: digest$1,
@@ -10821,7 +10821,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 			missingPackages,
 			reasonCode: "host_capability_version_mismatch"
 		};
-		if (row.integrity !== pinned.integrity) return {
+		if (row$1.integrity !== pinned.integrity) return {
 			id,
 			status: "unsupported",
 			digest: digest$1,
@@ -10845,19 +10845,19 @@ function cohortForEvaluation(evaluation) {
 	return HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
 }
 function evaluateHostLock(rows, context = {}) {
-	const supplied = stableRows(rows.filter((row) => row.name !== "dshmarket"));
+	const supplied = stableRows(rows.filter((row$1) => row$1.name !== "dshmarket"));
 	const selection = selectHostCohort(supplied, context.platform);
 	const cohort = selection.cohort;
 	const capabilities = capabilityEvaluations(supplied, cohort);
 	const counts = /* @__PURE__ */ new Map();
-	for (const row of supplied) counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
+	for (const row$1 of supplied) counts.set(row$1.name, (counts.get(row$1.name) ?? 0) + 1);
 	const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name));
 	const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size;
 	const digest$1 = safeHostLockDigest(supplied, context, cohort);
 	const base = statusForPackages("base", supplied, BASE_HOST_PACKAGES, cohort);
-	const missingPackages = cohort.packages.map((row) => row.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
-	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row) => row.name)));
-	const unknown = supplied.find((row) => !registryNames.has(row.name));
+	const missingPackages = cohort.packages.map((row$1) => row$1.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
+	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$1) => row$1.name)));
+	const unknown = supplied.find((row$1) => !registryNames.has(row$1.name));
 	const hostVersionValue = context.hostVersion ?? hostVersionFromPackages(supplied);
 	const hostVersion = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
 	const baseResult = {
@@ -10877,7 +10877,7 @@ function evaluateHostLock(rows, context = {}) {
 		status: "unsupported",
 		reasonCode: "host_lock_unknown_package"
 	};
-	if (supplied.some((row) => (counts.get(row.name) ?? 0) > 1)) return {
+	if (supplied.some((row$1) => (counts.get(row$1.name) ?? 0) > 1)) return {
 		...baseResult,
 		status: "unavailable",
 		goalAvailable: false,
@@ -11095,10 +11095,10 @@ function safeHostLockDigest(packages, context = {}, cohort) {
 		});
 	} catch {
 		const bounded = {
-			packages: packages.map((row) => [
-				String(row.name),
-				row.version ?? null,
-				row.integrity ?? null
+			packages: packages.map((row$1) => [
+				String(row$1.name),
+				row$1.version ?? null,
+				row$1.integrity ?? null
 			]),
 			platform: context.platform ?? null,
 			profileKind: context.profileKind ?? null,
@@ -11763,6 +11763,30 @@ function extractTextContent(content) {
 	}
 	return parts.join("\n");
 }
+/**
+* DSH persists the host return flag on a nested `tool-result` block. The
+* surrounding message or event need not carry an `error` field (approval and
+* sandbox denials are examples). Never let a renderer's missing exit marker
+* override that structured return, or accept an ambiguous nested return as
+* a clean result for another call.
+*/
+function persistedToolResultStatus(data, callId, kind = "tool/result", matchedStart = false) {
+	const result = asRecord$2(data);
+	if (!result) return "unknown";
+	if (result.error !== void 0 || result.isError === true) return "failure";
+	const message = asRecord$2(result.message);
+	if (message?.isError === true) return "failure";
+	const returns = (Array.isArray(message?.content) ? message.content : Array.isArray(result.content) ? result.content : []).map(asRecord$2).filter((block$1) => block$1?.type === "tool-result");
+	if (returns.length > 1) return "unknown";
+	if (returns.length === 0) return kind === "tool/ptc-dispatch" && matchedStart && result.subCallId === callId && result.isError === false ? "clean" : "unknown";
+	for (const block$1 of returns) {
+		if ((block$1.toolCallId ?? block$1.callId) !== callId) return "unknown";
+		if (block$1.isError === true) return "failure";
+		if (block$1.isError !== false) return "unknown";
+	}
+	if (kind === "tool/ptc-dispatch" && (!matchedStart || result.subCallId !== callId)) return "unknown";
+	return "clean";
+}
 function metaPaths(meta) {
 	const record = asRecord$2(meta);
 	if (!record) return [];
@@ -11956,9 +11980,9 @@ function declaredOperationResults(meta) {
 	if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return void 0;
 	const rows = [];
 	for (const raw of declared) {
-		const row = asRecord$2(raw);
-		const action = typeof row?.action === "string" ? row.action : void 0;
-		const outcome = row?.outcome;
+		const row$1 = asRecord$2(raw);
+		const action = typeof row$1?.action === "string" ? row$1.action : void 0;
+		const outcome = row$1?.outcome;
 		if (!action || outcome !== "success" && outcome !== "failure" && outcome !== "unknown") return void 0;
 		rows.push({
 			action,
@@ -12522,7 +12546,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 }
 function evidenceFromPersistedToolResult(call, result, epoch, evidenceId, defaultCwd, hostLock) {
 	const subject = extractToolSubject(call, result, defaultCwd, hostLock);
-	const outcome = result.error ? "failure" : subject.outcome ?? "success";
+	const outcome = result.untrusted ? "unknown" : result.error ? "failure" : subject.outcome ?? "success";
 	return {
 		id: evidenceId,
 		epoch,
@@ -12559,7 +12583,13 @@ function evidenceFromPersistedToolResult(call, result, epoch, evidenceId, defaul
 		...subject.readinessSelectedPath ? { readinessSelectedPath: subject.readinessSelectedPath } : {},
 		...subject.readinessScriptName ? { readinessScriptName: subject.readinessScriptName } : {},
 		...subject.readinessInputSha256 ? { readinessInputSha256: subject.readinessInputSha256 } : {},
-		...subject.processFacts ? { processFacts: subject.processFacts.hostToolReturned === (result.error ? "error" : "result") ? subject.processFacts : {
+		...subject.processFacts ? { processFacts: result.untrusted ? {
+			...subject.processFacts,
+			hostToolReturned: "result",
+			outcome: "unknown",
+			outcomeReason: "host_result_untrusted",
+			frozenOutcomeConflict: subject.processFacts.outcome !== "unknown"
+		} : subject.processFacts.hostToolReturned === (result.error ? "error" : "result") ? subject.processFacts : {
 			...subject.processFacts,
 			hostToolReturned: result.error ? "error" : "result",
 			...result.error ? {
@@ -12668,10 +12698,10 @@ function deriveTrustedDeliveries(events) {
 		if (end.kind !== "completed") continue;
 		if (facts.steps.size === 0) continue;
 		const finalStep = Math.max(...facts.steps);
-		const inFinalStep = facts.assistants.filter((row) => row.step === finalStep && row.seq < end.seq && !row.interrupted && row.text.trim().length > 0);
+		const inFinalStep = facts.assistants.filter((row$1) => row$1.step === finalStep && row$1.seq < end.seq && !row$1.interrupted && row$1.text.trim().length > 0);
 		if (inFinalStep.length === 0) continue;
 		const final = inFinalStep.reduce((left, right) => right.seq > left.seq ? right : left);
-		if (facts.assistants.some((row) => row.seq > final.seq && row.seq < end.seq)) continue;
+		if (facts.assistants.some((row$1) => row$1.seq > final.seq && row$1.seq < end.seq)) continue;
 		deliveries.push({
 			turn,
 			turnEndSeq: end.seq,
@@ -12714,8 +12744,8 @@ function informationItemIdsForDelivery(items, delivery, turnRootInputSeqs, eligi
 		}
 		if (informationSlot) {
 			const interpretedThisTurn = (interpretationFacts ?? []).some((fact) => fact.itemId === itemId && fact.turn === delivery.turn && fact.resultSeq <= delivery.turnEndSeq);
-			const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
-			if (!interpretedThisTurn && (!sourceSeq || !turnRootInputSeqs.has(Number(sourceSeq[1])))) continue;
+			const sourceSeq$1 = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+			if (!interpretedThisTurn && (!sourceSeq$1 || !turnRootInputSeqs.has(Number(sourceSeq$1[1])))) continue;
 			closed.push(itemId);
 			continue;
 		}
@@ -12799,8 +12829,11 @@ function deriveTrustedSelections(events, options) {
 		const call = pending.get(callId);
 		if (!call) continue;
 		pending.delete(callId);
-		if (data.error !== void 0) continue;
-		const selected = parseSelectionAnswer(data.message?.content, call.shape.options);
+		if (persistedToolResultStatus(data, callId) !== "clean") continue;
+		const selected = parseSelectionAnswer([{
+			type: "text",
+			text: extractTextContent(Array.isArray(data.message?.content) ? data.message.content : [])
+		}], call.shape.options);
 		if (!selected) continue;
 		selections.push({
 			callId,
@@ -14555,8 +14588,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				if (reviewItemIds.has(itemId)) continue;
 				const item = projection.items.get(itemId);
 				if (!item || item.status !== "pending") continue;
-				const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
-				if (!sourceSeq || Number(sourceSeq[1]) <= v5BoundarySeq) continue;
+				const sourceSeq$1 = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+				if (!sourceSeq$1 || Number(sourceSeq$1[1]) <= v5BoundarySeq) continue;
 				item.status = "answered";
 				item.answeredBy = {
 					turn: delivery.turn,
@@ -14707,7 +14740,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 									...settlement,
 									settledAtSeq: event.seq
 								};
-								const key = (row) => `${row.contractId}\u0000${row.operation}\u0000${row.callId}`;
+								const key = (row$1) => `${row$1.contractId}\u0000${row$1.operation}\u0000${row$1.callId}`;
 								const index$1 = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned));
 								if (index$1 < 0) projection.releaseSettlements.push(pinned);
 								else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index$1].outcome]) projection.releaseSettlements[index$1] = pinned;
@@ -14852,6 +14885,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				const data = asRecord(event.data);
 				const callId = String(data?.callId ?? "");
 				const call = {
+					origin: "tool/call",
 					name: String(data?.name ?? ""),
 					arguments: String(data?.arguments ?? ""),
 					rootCallId: typeof data?.rootCallId === "string" ? data.rootCallId : void 0,
@@ -14911,6 +14945,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				const subCallId = String(data?.subCallId ?? "");
 				const rawArguments = data?.arguments;
 				pendingCalls.set(subCallId, {
+					origin: "tool/ptc-dispatch-start",
 					name: String(data?.name ?? ""),
 					arguments: typeof rawArguments === "string" ? rawArguments : JSON.stringify(rawArguments ?? ""),
 					rootCallId: typeof data?.rootCallId === "string" ? data.rootCallId : void 0
@@ -14929,8 +14964,9 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				if (!call) break;
 				pendingCalls.delete(callId);
 				const textContent = extractTextContent((isDispatch ? data?.content : void 0) ?? message?.content ?? []);
+				const hostResultStatus = persistedToolResultStatus(data, callId, event.type, call.origin === "tool/ptc-dispatch-start");
 				if (call.name === "context_guard_rebind") {
-					if (!call.rootCallId && !data?.error) {
+					if (!call.rootCallId && hostResultStatus === "clean") {
 						const rebindArgs = parseArguments(call.arguments);
 						const recordedResponse = parseArguments(textContent);
 						replayRebindResult(projection, rebindArgs, recordedResponse);
@@ -14942,6 +14978,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					break;
 				}
 				if (call.name === "context_guard_checkpoint") {
+					if (hostResultStatus !== "clean") break;
 					const recorded = parseArguments(textContent);
 					if (recorded.status !== "certified") {
 						if ((call.bindings?.length ?? 0) > 0) {
@@ -15000,7 +15037,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					break;
 				}
 				if (call.name === "context_guard_interpret") {
-					if (!call.rootCallId && !data?.error) {
+					if (!call.rootCallId && hostResultStatus === "clean") {
 						const callArgs = parseArguments(call.arguments);
 						const requested = typeof callArgs.item_id === "string" ? callArgs.item_id.trim() : "";
 						const recorded = parseArguments(textContent);
@@ -15041,6 +15078,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					break;
 				}
 				if (call.name === "context_guard_boundary") {
+					if (hostResultStatus !== "clean") break;
 					const recorded = parseArguments(textContent);
 					const candidate = call.boundaryRequest ? qualifyBoundary(projection, call.boundaryRequest) : void 0;
 					const boundary = asRecord(recorded.boundary);
@@ -15067,10 +15105,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					rootCallId: call.rootCallId
 				}, {
 					seq: event.seq,
-					error: data?.error ?? (isDispatch && data?.isError || data?.message && typeof data.message === "object" && data.message.isError === true ? {
-						name: "code",
-						code: "DISPATCH_ERROR"
-					} : void 0),
+					error: hostResultStatus === "failure" ? asRecord(data?.error) ?? {
+						name: "HostResultError",
+						code: "HOST_RESULT_ERROR"
+					} : void 0,
+					untrusted: hostResultStatus === "unknown",
 					meta: data?.meta,
 					textContent
 				}, epoch, `E${String(evidenceCounter).padStart(4, "0")}`, scope.cwd || void 0, hostLock), durableConfirmed);
@@ -15079,11 +15118,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					delegatedSubtask: true
 				} : baseEvidence;
 				projection.evidence.set(evidence.id, evidence);
-				if (delegated && call.unitIdAtCall !== void 0) recordDelegation(projection, call.unitIdAtCall, {
+				if (delegated && call.unitIdAtCall !== void 0 && hostResultStatus !== "unknown") recordDelegation(projection, call.unitIdAtCall, {
 					callId,
 					resultSeq: event.seq,
 					toolName: call.name,
-					status: data?.error !== void 0 ? "failed" : "completed"
+					status: hostResultStatus === "failure" ? "failed" : "completed"
 				});
 				if (evidence.externalOperationRef) projection.externalOperations.set(evidence.externalOperationRef.id, evidence.externalOperationRef);
 				break;
@@ -15908,10 +15947,10 @@ function validate(value, schema, path$1) {
 	if (kinds.length && !kinds.some(matches)) throw new Error(`${path$1}: wrong_type`);
 	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
 		const fields = schema.properties ?? {};
-		const row = value;
-		if (schema.additionalProperties === false && Object.keys(row).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
-		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row))) throw new Error(`${path$1}: missing_fields`);
-		for (const [key, child] of Object.entries(row)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
+		const row$1 = value;
+		if (schema.additionalProperties === false && Object.keys(row$1).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
+		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row$1))) throw new Error(`${path$1}: missing_fields`);
+		for (const [key, child] of Object.entries(row$1)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
 	} else if (Array.isArray(value) && schema.items) for (const child of value) validate(child, schema.items, `${path$1}[]`);
 	else if (typeof value === "string") {
 		if (value.length < (schema.minLength ?? 0) || typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) throw new Error(`${path$1}: invalid_string`);
@@ -15933,7 +15972,7 @@ function validateCoreSnapshot(value, schema) {
 //#endregion
 //#region src/core-v2/project.ts
 const rules = patterns;
-const hash = (bytes$1) => createHash("sha256").update(bytes$1).digest("hex");
+const hash$1 = (bytes$1) => createHash("sha256").update(bytes$1).digest("hex");
 const bytes = (value) => Buffer.from(value, "utf8");
 const canonical = (value) => {
 	if (value === null || typeof value === "boolean") return JSON.stringify(value);
@@ -15957,10 +15996,10 @@ const listed = (value) => value;
 const index = (rows, watermark) => {
 	const result = /* @__PURE__ */ new Map();
 	const seen = /* @__PURE__ */ new Set();
-	for (const row of rows) {
-		if (seen.has(row.id)) throw new Error("duplicate_identity");
-		seen.add(row.id);
-		if (row.seq <= watermark) result.set(row.id, row);
+	for (const row$1 of rows) {
+		if (seen.has(row$1.id)) throw new Error("duplicate_identity");
+		seen.add(row$1.id);
+		if (row$1.seq <= watermark) result.set(row$1.id, row$1);
 	}
 	return result;
 };
@@ -15998,15 +16037,15 @@ function projectCoreV2(snapshot) {
 		if ((source.target === null || source.target === void 0) !== (source.target_kind === null || source.target_kind === void 0)) throw new Error("selection_target_kind_pair_required");
 		if ((source.locator_base !== void 0 || source.locator_flavor !== void 0) && source.kind !== "root") throw new Error("locator_base_requires_root");
 		if (source.locator_base === void 0 !== (source.locator_flavor === void 0)) throw new Error("locator_base_flavor_pair_required");
-		if (source.kind === "root" && (source.text === null || bytes(source.text).length !== source.byte_length || hash(bytes(source.text)) !== source.sha256)) throw new Error("root_source_identity_mismatch");
+		if (source.kind === "root" && (source.text === null || bytes(source.text).length !== source.byte_length || hash$1(bytes(source.text)) !== source.sha256)) throw new Error("root_source_identity_mismatch");
 	}
-	const unitRows = new Map(listed(snapshot.units).map((row) => [row.id, row]));
+	const unitRows = new Map(listed(snapshot.units).map((row$1) => [row$1.id, row$1]));
 	if (unitRows.size !== listed(snapshot.units).length || !unitRows.has(unit)) throw new Error("unit_identity_invalid");
-	for (const row of unitRows.values()) {
-		const source = sources.get(row.source_id);
-		if (!source || source.kind !== "root" || source.unit !== row.id) throw new Error("unit_source_invalid");
-		const visited = new Set([row.id]);
-		let parent = row.parent_id;
+	for (const row$1 of unitRows.values()) {
+		const source = sources.get(row$1.source_id);
+		if (!source || source.kind !== "root" || source.unit !== row$1.id) throw new Error("unit_source_invalid");
+		const visited = new Set([row$1.id]);
+		let parent = row$1.parent_id;
 		while (parent !== null) {
 			if (visited.has(parent) || !unitRows.has(parent)) throw new Error("unit_parent_invalid");
 			visited.add(parent);
@@ -16017,8 +16056,8 @@ function projectCoreV2(snapshot) {
 	let growing = true;
 	while (growing) {
 		growing = false;
-		for (const row of unitRows.values()) if (row.required && units.has(row.parent_id) && !units.has(row.id)) {
-			units.add(row.id);
+		for (const row$1 of unitRows.values()) if (row$1.required && units.has(row$1.parent_id) && !units.has(row$1.id)) {
+			units.add(row$1.id);
 			growing = true;
 		}
 	}
@@ -16037,7 +16076,7 @@ function projectCoreV2(snapshot) {
 	}
 	const requirements = index(listed(snapshot.requirements), watermark);
 	const facts = index(listed(snapshot.facts), watermark);
-	const current = new Map([...requirements].filter(([, row]) => units.has(row.unit) && (row.unit !== unit || row.revision === revision)));
+	const current = new Map([...requirements].filter(([, row$1]) => units.has(row$1.unit) && (row$1.unit !== unit || row$1.revision === revision)));
 	if ([...current.values()].some((r) => r.parent_id !== null && !requirements.has(r.parent_id))) throw new Error("requirement_parent_missing");
 	const validFacts = /* @__PURE__ */ new Map();
 	for (const [key, fact] of facts) {
@@ -16063,7 +16102,7 @@ function projectCoreV2(snapshot) {
 	const invalidated = /* @__PURE__ */ new Set();
 	for (const fact of validFacts.values()) for (const id of fact.invalidates) if (validFacts.has(id) && validFacts.get(id).seq < fact.seq) invalidated.add(id);
 	for (const id of invalidated) validFacts.delete(id);
-	const conditions = new Map(listed(snapshot.conditions).map((row) => [row.id, row]));
+	const conditions = new Map(listed(snapshot.conditions).map((row$1) => [row$1.id, row$1]));
 	if (conditions.size !== listed(snapshot.conditions).length) throw new Error("duplicate_condition");
 	const released = /* @__PURE__ */ new Set();
 	for (const [key, condition] of conditions) {
@@ -16217,6 +16256,542 @@ function projectCoreV2(snapshot) {
 		goal_complete_allowed: !snapshot.goal_contract_adopted || certifiable,
 		release_state: snapshot.release_state
 	};
+}
+
+//#endregion
+//#region src/core-v2/session.ts
+const hash = (value) => createHash("sha256").update(value, "utf8").digest("hex");
+const windowsAbsolute = (value) => /^[A-Za-z]:\\/.test(value) && !value.includes("/") && !value.slice(3).includes("\\\\") && !value.slice(3).includes(":") && !value.split("\\").some((part) => part === "." || part === "..");
+const posixAbsolute = (value) => value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") && posix.normalize(value) === value;
+const portableResolve = (base, value) => {
+	if (windowsAbsolute(value)) return !base || windowsAbsolute(base) ? value : void 0;
+	if (posixAbsolute(value)) return !base || posixAbsolute(base) ? value : void 0;
+	if (!base || value.includes("\\") || value.includes(":") || value.split("/").some((part) => !part || part === "." || part === "..")) return void 0;
+	if (posixAbsolute(base)) return posix.resolve(base, value);
+};
+const portableRelativeWithin = (base, target) => {
+	if (posixAbsolute(base) && posixAbsolute(target)) {
+		const suffix = posix.relative(base, target);
+		return suffix && suffix !== ".." && !suffix.startsWith("../") ? suffix : void 0;
+	}
+};
+const portableContains = (base, target) => portableRelativeWithin(base, target) !== void 0;
+const isResume = (text) => /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(text.trim());
+const row = (value) => value && typeof value === "object" ? value : {};
+const rootText = (event) => {
+	const data = row(event.data);
+	return Array.isArray(data.content) ? data.content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("") : "";
+};
+const sourceSeq = (item) => {
+	const match = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+	return match ? Number(match[1]) : void 0;
+};
+const targetOf = (item) => {
+	if (item.taskKind === "inquiry" || item.authorityDisposition === "informational") return item.normalizedText;
+	const tuple = item.requestedTarget ?? {};
+	return typeof tuple.artifact_id === "string" ? tuple.artifact_id : typeof tuple.repository === "string" ? tuple.repository : typeof item.verification.subject === "string" ? item.verification.subject : typeof tuple.scope === "string" ? tuple.scope : void 0;
+};
+const kindOf = (item) => {
+	if (item.kind === "prohibition") return "constraint";
+	if (item.taskKind === "context") return "unknown";
+	if (item.taskKind === "inquiry" || item.authorityDisposition === "informational") return "information";
+	if (item.needsReview || item.semanticAction === "generic_run") return "unknown";
+	if (item.verification.surface === "visual") return "proof";
+	if (item.semanticAction && ["executable_now", "conditional_wait"].includes(item.authorityDisposition ?? "")) return "execution";
+	if (item.verification.surface === "scope") return "proof";
+	return "execution";
+};
+const sourceSpan = (item, text, peers) => {
+	const own = item.spans?.find((part) => part.partIndex === 0);
+	if (!own) return void 0;
+	const bytes$1 = Buffer.from(text, "utf8");
+	let end = own.end;
+	const next = peers.flatMap((peer) => peer.spans ?? []).filter((part) => part.partIndex === 0 && part.start >= end).sort((a, b) => a.start - b.start)[0];
+	if (next && /^[\s，,。.!！?？;；:：]*$/u.test(bytes$1.subarray(end, next.start).toString("utf8"))) end = next.start;
+	if (/^[\s，,。.!！?？;；:：]*$/u.test(bytes$1.subarray(end).toString("utf8"))) end = bytes$1.length;
+	return {
+		start: own.start,
+		end
+	};
+};
+/** Convert only real session sources and derived facts. Missing spans, calls, or
+* readback remain unknown/insufficient; this adapter never fabricates them. */
+function sessionCoreSnapshot(events, projection) {
+	const unit = projection.currentUnitId;
+	if (projection.boundaryProtocol !== 6 || !unit || projection.durabilityWatermark !== "confirmed") return void 0;
+	const roots = events.filter((event) => event.type === "user/message" && row(row(event.data).source).kind === "user");
+	const currentItems = [...projection.items.values()].filter((item) => item.unitId === unit && item.status !== "superseded");
+	const refs = new Set(projection.units.get(unit)?.rootInputRefs.map((ref) => ref.seq) ?? []);
+	const usedRoots = roots.filter((event) => refs.has(event.seq));
+	if (!usedRoots.length) return void 0;
+	const latestRoot = usedRoots.at(-1);
+	const turn = String(row(latestRoot.data).turn ?? projection.hostTurn ?? 1);
+	const rootBySeq = new Map(usedRoots.map((root) => [root.seq, root]));
+	if (!currentItems.every((item) => {
+		const root = rootBySeq.get(sourceSeq(item) ?? -1);
+		return root && item.rawTextSha256 === hash(rootText(root));
+	})) return void 0;
+	const sources = usedRoots.map((root) => {
+		const text = rootText(root);
+		return {
+			id: `root:${root.seq}`,
+			seq: root.seq,
+			kind: "root",
+			unit,
+			revision: 1,
+			sha256: hash(text),
+			byte_length: Buffer.byteLength(text, "utf8"),
+			text,
+			call_id: null,
+			turn: String(row(root.data).turn ?? turn),
+			...projection.rootLocatorContexts.get(root.seq) ? {
+				locator_base: projection.rootLocatorContexts.get(root.seq).base,
+				locator_flavor: projection.rootLocatorContexts.get(root.seq).flavor
+			} : {}
+		};
+	});
+	const requirements = [];
+	const facts = [];
+	const actions = [];
+	const conditions = [];
+	const coverage = [];
+	for (const root of usedRoots) {
+		const text = rootText(root), digest$1 = hash(text), byteLength = Buffer.byteLength(text, "utf8");
+		const span = (start, end) => ({
+			source_id: `root:${root.seq}`,
+			start,
+			end,
+			sha256: digest$1
+		});
+		const sortedSpans = currentItems.filter((item) => sourceSeq(item) === root.seq).flatMap((item) => {
+			const own = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+			return own ? [own] : [];
+		}).sort((a, b) => a.start - b.start || a.end - b.end);
+		let cursor = 0;
+		for (const s of sortedSpans) {
+			if (s.start > cursor) coverage.push({
+				source: span(cursor, s.start),
+				kind: "unknown"
+			});
+			if (s.end > Math.max(cursor, s.start)) coverage.push({
+				source: span(Math.max(cursor, s.start), s.end),
+				kind: "interpreted"
+			});
+			cursor = Math.max(cursor, s.end);
+		}
+		if (sortedSpans.length && cursor < byteLength) coverage.push({
+			source: span(cursor, byteLength),
+			kind: "unknown"
+		});
+		if (!sortedSpans.length && byteLength) if (isResume(text)) {
+			coverage.push({
+				source: span(0, byteLength),
+				kind: "interpreted"
+			});
+			requirements.push({
+				id: `intent:${root.seq}`,
+				unit,
+				revision: 1,
+				seq: root.seq,
+				source: span(0, byteLength),
+				kind: "unknown",
+				action: "resume_control",
+				target: text,
+				predicate: "intent_observed",
+				scope_sha256: digest$1,
+				required: false,
+				status: "pending",
+				parent_id: null,
+				evidence_kind: "none",
+				condition_ids: [],
+				target_origin: {
+					root_constraint: text,
+					root_constraint_source: span(0, byteLength),
+					implementation_choice: text,
+					host_selection: text,
+					resolved: text,
+					observed: text,
+					constraint_kind: "exact",
+					subject_kind: "opaque",
+					selection_source_id: null
+				}
+			});
+		} else coverage.push({
+			source: span(0, byteLength),
+			kind: "unknown"
+		});
+	}
+	const sourceByCall = /* @__PURE__ */ new Map();
+	const calls = /* @__PURE__ */ new Map();
+	const results = /* @__PURE__ */ new Map();
+	for (const event of events) {
+		if (event.type === "tool/call") {
+			const id = row(event.data).callId;
+			if (typeof id === "string") calls.set(id, [...calls.get(id) ?? [], event]);
+		}
+		if (event.type === "tool/result") {
+			const source = row(row(row(event.data).message).source);
+			if (source.kind !== "tool" || typeof source.callId !== "string") continue;
+			results.set(source.callId, [...results.get(source.callId) ?? [], event]);
+		}
+	}
+	for (const [id, callRows] of calls) {
+		const resultRows = results.get(id);
+		if (callRows.length !== 1 || resultRows?.length !== 1) continue;
+		const call = callRows[0], result = resultRows[0];
+		if (call.seq >= result.seq || row(call.data).turn !== row(result.data).turn || row(call.data).step !== row(result.data).step) continue;
+		sourceByCall.set(id, {
+			call,
+			result
+		});
+	}
+	const attached = /* @__PURE__ */ new Set();
+	for (const item of currentItems) {
+		const root = rootBySeq.get(sourceSeq(item) ?? -1);
+		if (!root) continue;
+		const text = rootText(root), digest$1 = hash(text);
+		const span = (start, end) => ({
+			source_id: `root:${root.seq}`,
+			start,
+			end,
+			sha256: digest$1
+		});
+		const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+		if (!itemSpan) continue;
+		const kind = kindOf(item);
+		const named = targetOf(item);
+		const raw = Buffer.from(text, "utf8");
+		const namedBytes = named ? Buffer.from(named, "utf8") : void 0;
+		const atWithin = namedBytes ? raw.subarray(itemSpan.start, itemSpan.end).indexOf(namedBytes) : -1;
+		const at = atWithin >= 0 ? itemSpan.start + atWithin : -1;
+		const ownText = raw.subarray(itemSpan.start, itemSpan.end).toString("utf8");
+		const fileReadback = item.interpretationFingerprint?.startsWith("v6-file-readback:") === true;
+		const referents = kind === "constraint" ? currentItems.flatMap((candidate) => {
+			if (candidate.taskKind !== "context" || sourceSeq(candidate) !== root.seq) return [];
+			const own = sourceSpan(candidate, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+			const path$1 = candidate.requestedTarget?.artifact_id;
+			const base = projection.rootLocatorContexts.get(root.seq)?.base;
+			if (!own || own.end > itemSpan.start || typeof path$1 !== "string" || !base || !portableContains(base, path$1)) return [];
+			const literal = portableRelativeWithin(base, path$1);
+			if (!literal || literal.startsWith("../") || literal.includes("\\")) return [];
+			const offset = raw.subarray(own.start, own.end).indexOf(Buffer.from(literal, "utf8"));
+			return offset < 0 ? [] : [{
+				path: path$1,
+				literal,
+				start: own.start + offset,
+				end: own.start + offset + Buffer.byteLength(literal, "utf8")
+			}];
+		}) : [];
+		const forbiddenFile = item.semanticAction === "generic_run" && referents.length === 1 ? referents[0] : void 0;
+		const ambiguousForbiddenFile = item.semanticAction === "generic_run" && referents.length > 1;
+		const directoryLiteral = /(?:在\s+)?([^\s，,。.!?？]+)\s+范围内/u.exec(ownText)?.[1];
+		const directoryAt = directoryLiteral ? itemSpan.start + raw.subarray(itemSpan.start, itemSpan.end).indexOf(Buffer.from(directoryLiteral, "utf8")) : -1;
+		const rootBase = projection.rootLocatorContexts.get(root.seq)?.base;
+		const relativeName = rootBase && named ? portableRelativeWithin(rootBase, named) : void 0;
+		const relativePaths = relativeName && !relativeName.startsWith("../") && ownText.includes(relativeName) ? [relativeName] : [];
+		const relativeLiteral = at < 0 && named && item.semanticAction === "modify" ? relativePaths.find((literal) => named.endsWith(`/${literal}`)) : void 0;
+		const relativeAt = relativeLiteral ? itemSpan.start + raw.subarray(itemSpan.start, itemSpan.end).indexOf(Buffer.from(relativeLiteral, "utf8")) : -1;
+		const scopeValue = typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : typeof item.requestedTarget?.artifact_id === "string" ? item.requestedTarget.artifact_id : void 0;
+		const editScope = directoryLiteral && scopeValue ? portableResolve(scopeValue, directoryLiteral) : scopeValue;
+		const editChoices = item.semanticAction === "modify" && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === "string" ? [...projection.evidence.values()].filter((fact) => fact.semanticAction === "modify" && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.subjects.length === 1 && typeof fact.subjects[0] === "string" && portableContains(editScope, fact.subjects[0])) : [];
+		const selectedEdit = editChoices.length === 1 ? editChoices[0] : void 0;
+		const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success" && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.outcome === "success" && effect.subjects.includes(fact.subjects[0]) && effect.toolResultSeq < fact.toolResultSeq)) : [];
+		const selectedReadback = readbackChoices.length === 1 ? readbackChoices[0] : void 0;
+		const subjectKind = forbiddenFile || fileReadback || [
+			"modify",
+			"create",
+			"commit",
+			"push"
+		].includes(item.semanticAction ?? "") ? "filesystem" : "opaque";
+		const trimmed = ownText.trim();
+		const guarded = Boolean(item.condition || item.waitAuthorization || item.authorityDisposition === "conditional_wait");
+		const leading = Buffer.byteLength(ownText.slice(0, ownText.indexOf(trimmed)), "utf8");
+		const ownConstraintSpan = {
+			start: itemSpan.start + leading,
+			end: itemSpan.start + leading + Buffer.byteLength(trimmed, "utf8")
+		};
+		const constraintSpan = at >= 0 && namedBytes ? {
+			start: at,
+			end: at + namedBytes.length
+		} : ownConstraintSpan;
+		const needsReadiness = item.semanticAction === "test" || item.semanticAction === "verify" && !fileReadback;
+		const readinessPredicate = item.semanticAction === "test" ? "test_passed" : "verification_passed";
+		const selectedReadiness = needsReadiness && !guarded ? [...projection.evidence.values()].find((fact) => {
+			const pair = sourceByCall.get(fact.callId);
+			const assessmentEffect = item.semanticAction !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.toolResultSeq < fact.toolResultSeq && effect.epoch === fact.epoch && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath));
+			return fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect && fact.toolName === "context_guard_observe_test_readiness" && fact.outcome === "success" && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === "string" && fact.subjects.includes(item.requestedTarget.scope);
+		}) : void 0;
+		const selectedScope = selectedReadiness && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0;
+		const target = forbiddenFile?.path ?? selectedScope ?? selectedEdit?.subjects[0] ?? selectedReadback?.subjects[0] ?? (relativeLiteral && named ? named : at >= 0 && named ? named : trimmed);
+		if (!target) continue;
+		const knownForbiddenEffect = forbiddenFile && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.subjects.includes(target) && [
+			"write",
+			"write_file",
+			"edit",
+			"edit_file"
+		].includes(fact.toolName) && fact.operations?.some((operation) => ["create", "modify"].includes(operation.op) && operation.path === target));
+		const uncertainForbiddenEffect = forbiddenFile && !knownForbiddenEffect && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.subjects.includes(target) && ([
+			"write",
+			"write_file",
+			"edit",
+			"edit_file"
+		].includes(fact.toolName) || [
+			"bash",
+			"pwsh",
+			"shell"
+		].includes(fact.toolName) && !fact.operations?.some((operation) => operation.op === "read" && operation.path === target)));
+		const unattributedHostCall = forbiddenFile && !knownForbiddenEffect && [...sourceByCall.values()].some(({ call }) => {
+			if (call.seq <= root.seq || ![
+				"bash",
+				"pwsh",
+				"shell"
+			].includes(String(row(call.data).name))) return false;
+			const args = row(call.data).arguments;
+			return typeof args === "string" && args.includes(target);
+		});
+		const permittedFileTargets = new Set(currentItems.filter((candidate) => candidate.kind !== "prohibition" && ["modify", "create"].includes(candidate.semanticAction ?? "") && typeof candidate.requestedTarget?.artifact_id === "string").map((candidate) => candidate.requestedTarget.artifact_id));
+		const unresolvedPhysicalAlias = forbiddenFile && !knownForbiddenEffect && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && [
+			"write",
+			"write_file",
+			"edit",
+			"edit_file"
+		].includes(fact.toolName) && fact.subjects.some((path$1) => path$1 !== target && !permittedFileTargets.has(path$1)));
+		const requirementSource = span(itemSpan.start, itemSpan.end);
+		const predicate = forbiddenFile ? "no_mutation" : item.taskKind === "context" ? "context_recorded" : kind === "information" ? "answer_delivered" : item.semanticAction === "test" ? testOutcomePredicate(item.normalizedText) : fileReadback ? "file_content_checked" : item.semanticAction === "verify" ? assessmentOutcomePredicate(item.normalizedText) : item.semanticAction === "modify" ? "file_modified" : item.semanticAction === "create" ? "file_created" : item.semanticAction === "commit" ? "commit_observed" : item.semanticAction === "push" ? "push_observed" : `${item.semanticAction ?? "unknown"}_observed`;
+		const evidenceKind = kind === "information" ? "delivery" : kind === "constraint" || kind === "unknown" ? "none" : fileReadback ? "state_outcome" : item.semanticAction === "test" || item.semanticAction === "verify" ? "action_event" : "state_outcome";
+		const conditionId = guarded ? `condition:${item.id}` : void 0;
+		if (conditionId) conditions.push({
+			id: conditionId,
+			requirement_id: item.id,
+			source: requirementSource,
+			kind: item.waitAuthorization || /(?:确认|审批|批准|许可|approval|confirmation|permission)/iu.test(item.condition ?? "") ? "user_input" : "predicate",
+			status: "pending",
+			operation_id: null,
+			fact_ids: []
+		});
+		requirements.push({
+			id: item.id,
+			unit,
+			revision: 1,
+			seq: root.seq,
+			source: requirementSource,
+			kind,
+			action: item.taskKind === "context" ? "reported_context" : kind === "information" ? "answer" : item.semanticAction === "test" ? "test_verify" : fileReadback ? "readback" : item.semanticAction === "verify" ? assessmentAction(item.normalizedText) : item.semanticAction ?? "unknown",
+			target,
+			predicate,
+			scope_sha256: digest$1,
+			required: item.taskKind !== "context",
+			status: item.needsReview || ambiguousForbiddenFile || uncertainForbiddenEffect || unattributedHostCall || unresolvedPhysicalAlias ? "legacy_review" : item.status === "pending" ? "pending" : "satisfied",
+			parent_id: null,
+			evidence_kind: evidenceKind,
+			condition_ids: conditionId ? [conditionId] : [],
+			target_origin: {
+				root_constraint: forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral ?? (selectedScope || selectedEdit || selectedReadback ? trimmed : target),
+				root_constraint_source: span(forbiddenFile ? forbiddenFile.start : directoryLiteral ? directoryAt : relativeLiteral ? relativeAt : selectedScope || selectedEdit || selectedReadback ? ownConstraintSpan.start : constraintSpan.start, forbiddenFile ? forbiddenFile.end : directoryLiteral ? directoryAt + Buffer.byteLength(directoryLiteral, "utf8") : relativeLiteral ? relativeAt + Buffer.byteLength(relativeLiteral, "utf8") : selectedScope || selectedEdit || selectedReadback ? ownConstraintSpan.end : constraintSpan.end),
+				implementation_choice: kind === "constraint" ? null : target,
+				host_selection: kind === "constraint" ? null : target,
+				resolved: target,
+				observed: kind === "constraint" ? null : target,
+				subject_kind: subjectKind,
+				constraint_kind: forbiddenFile ? "exact" : directoryLiteral ? "directory" : relativeLiteral ? "exact" : selectedScope || selectedEdit || selectedReadback ? "work_unit" : "exact",
+				...(forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? { resolved_constraint: portableResolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral) } : {},
+				selection_source_id: kind === "constraint" ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}` : relativeLiteral ? (() => {
+					const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === "modify" && entry.evidenceRole === "effect" && entry.outcome === "success" && entry.subjects.includes(target) && sourceByCall.has(entry.callId));
+					return fact ? `call:${fact.callId}` : null;
+				})() : null
+			}
+		});
+		if (kind === "information" && item.answeredBy) {
+			const delivery = events.find((event) => event.seq === item.answeredBy?.responseSeq && event.type === "assistant/message");
+			if (delivery && item.answeredBy.turn === Number(turn)) {
+				const deliveryId = `delivery:${delivery.seq}`;
+				const deliveredText = Array.isArray(row(row(delivery.data).message).content) ? row(row(delivery.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
+				if (!sources.some((source) => source.id === deliveryId)) sources.push({
+					id: deliveryId,
+					seq: delivery.seq,
+					kind: "final_delivery",
+					unit,
+					revision: 1,
+					sha256: hash(deliveredText),
+					byte_length: Buffer.byteLength(deliveredText, "utf8"),
+					text: null,
+					call_id: null,
+					turn
+				});
+				facts.push({
+					id: `fact:${deliveryId}`,
+					seq: delivery.seq,
+					unit,
+					revision: 1,
+					source_id: deliveryId,
+					call_source_id: null,
+					kind: "delivery",
+					target,
+					predicate,
+					outcome: "success",
+					operation_id: null,
+					requirement_id: item.id,
+					condition_id: null,
+					invalidates: []
+				});
+			}
+		}
+		for (const evidence of guarded ? [] : projection.evidence.values()) {
+			const inTestScope = needsReadiness && typeof item.requestedTarget?.scope === "string" && evidence.subjects.includes(item.requestedTarget.scope);
+			if (evidence.epoch !== projection.epoch || !evidence.subjects.includes(target) && !inTestScope || evidence.toolResultSeq <= root.seq || attached.has(evidence.id) && !fileReadback) continue;
+			if (kind === "constraint" && (!forbiddenFile || evidence.evidenceRole !== "effect" || ![
+				"write",
+				"write_file",
+				"edit",
+				"edit_file"
+			].includes(evidence.toolName) || !evidence.operations?.some((operation) => ["create", "modify"].includes(operation.op) && operation.path === target))) continue;
+			if (subjectKind === "filesystem" && (directoryLiteral || relativeLiteral || selectedReadback) && evidence.toolName === "context_guard_observe_file" && (!rootBase || evidence.nativeCanonicalBase !== rootBase || evidence.nativeCanonicalPath !== target)) continue;
+			if (needsReadiness && evidence.toolName !== "context_guard_observe_test_readiness" && evidence.semanticAction !== item.semanticAction) continue;
+			if (fileReadback && (evidence.evidenceRole !== "state" || evidence.toolName !== "context_guard_observe_file")) continue;
+			if (evidence.toolName === "context_guard_observe_test_readiness" && evidence.readinessForItemId !== item.id) continue;
+			if (evidence.evidenceRole === "state" && evidence.toolName !== "context_guard_observe_test_readiness") {
+				if (![...projection.evidence.values()].find((fact) => fact.callId === evidence.causedByCallId && fact.epoch === evidence.epoch && fact.outcome === "success" && fact.toolResultSeq < evidence.toolResultSeq && fact.subjects.includes(target) && fact.semanticAction === evidence.semanticAction) || !["context_guard_observe_file", "context_guard_observe_git"].includes(evidence.toolName)) continue;
+			}
+			const pair = sourceByCall.get(evidence.callId);
+			const crossesNewConstraint = kind === "constraint" && forbiddenFile && pair && pair.call.seq <= root.seq && pair.result.seq >= root.seq;
+			if (!pair || pair.result.seq !== evidence.toolResultSeq || pair.call.seq <= root.seq && !crossesNewConstraint) continue;
+			const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId);
+			const outcome = hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
+			const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`;
+			const callName = String(row(pair.call.data).name ?? "");
+			let callArgs = {};
+			try {
+				callArgs = row(JSON.parse(String(row(pair.call.data).arguments ?? "")));
+			} catch {}
+			const fileCall = [
+				"read",
+				"read_file",
+				"write",
+				"write_file",
+				"edit",
+				"edit_file"
+			].includes(callName);
+			const filePath = callArgs.file_path;
+			const fileCallTarget = fileCall && typeof filePath === "string" && filePath ? portableResolve(rootBase, filePath) : void 0;
+			const hostTarget = fileCall ? fileCallTarget : evidence.subjects[0];
+			if (!hostTarget || fileCall && evidence.parseStatus !== "supported") continue;
+			if (!sources.some((source) => source.id === callId)) {
+				const callTurn = String(row(pair.call.data).turn ?? turn);
+				const resultTurn = String(row(pair.result.data).turn ?? callTurn);
+				const originRoot = usedRoots.filter((candidate) => candidate.seq <= pair.call.seq && String(row(candidate.data).turn ?? turn) === callTurn).at(-1);
+				const callBytes = String(row(pair.call.data).arguments ?? "");
+				const resultBytes = Array.isArray(row(row(pair.result.data).message).content) ? row(row(pair.result.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
+				sources.push({
+					id: callId,
+					seq: pair.call.seq,
+					kind: "host_call",
+					unit,
+					revision: 1,
+					sha256: hash(callBytes),
+					byte_length: Buffer.byteLength(callBytes, "utf8"),
+					text: null,
+					call_id: evidence.callId,
+					turn: callTurn,
+					target: hostTarget,
+					target_kind: subjectKind,
+					...originRoot ? { origin_root_source_id: `root:${originRoot.seq}` } : {}
+				});
+				sources.push({
+					id: resultId,
+					seq: pair.result.seq,
+					kind: "host_result",
+					unit,
+					revision: 1,
+					sha256: hash(resultBytes),
+					byte_length: Buffer.byteLength(resultBytes, "utf8"),
+					text: null,
+					call_id: evidence.callId,
+					turn: resultTurn
+				});
+			}
+			const factKind = evidence.toolName === "context_guard_observe_test_readiness" ? "readiness" : evidence.evidenceRole === "state" ? "state_outcome" : "action_event";
+			facts.push({
+				id: fileReadback ? `${evidence.id}:${item.id}` : evidence.id,
+				seq: pair.result.seq,
+				unit,
+				revision: 1,
+				source_id: resultId,
+				call_source_id: callId,
+				kind: factKind,
+				target: hostTarget,
+				predicate: forbiddenFile ? "mutation_applied" : factKind === "readiness" ? "inputs_ready" : predicate,
+				outcome,
+				operation_id: null,
+				requirement_id: item.id,
+				condition_id: null,
+				invalidates: []
+			});
+			if (!fileReadback) attached.add(evidence.id);
+		}
+		for (const base of currentActionBases(projection, false).filter((base$1) => base$1.itemId === item.id)) {
+			const ready = facts.filter((fact) => fact.requirement_id === item.id && fact.kind === "readiness" && fact.outcome === "success").map((fact) => fact.id);
+			if (!ready.length) continue;
+			actions.push({
+				schema: "current-action-basis/v1",
+				requirement_id: item.id,
+				unit,
+				revision: 1,
+				seq: Number(base.asOf),
+				source: requirementSource,
+				scope_sha256: digest$1,
+				action: item.semanticAction === "test" ? "test_verify" : item.semanticAction === "verify" ? assessmentAction(item.normalizedText) : item.semanticAction,
+				target,
+				predicate,
+				owner: "assistant",
+				relation: "direct",
+				readiness_fact_ids: ready,
+				state: "current"
+			});
+		}
+	}
+	const latestText = rootText(latestRoot), latestDigest = hash(latestText);
+	const resume = isResume(latestText);
+	return {
+		schema: "core-observation/v2",
+		unit,
+		revision: 1,
+		as_of: events.at(-1)?.seq ?? latestRoot.seq,
+		turn,
+		units: [{
+			id: unit,
+			parent_id: null,
+			required: true,
+			source_id: `root:${usedRoots[0].seq}`
+		}],
+		sources,
+		requirements,
+		facts,
+		actions,
+		conditions,
+		coverage,
+		intent: resume ? {
+			source: {
+				source_id: `root:${latestRoot.seq}`,
+				start: 0,
+				end: Buffer.byteLength(latestText, "utf8"),
+				sha256: latestDigest
+			},
+			kind: "resume"
+		} : {
+			source: null,
+			kind: "none"
+		},
+		completion_claim: false,
+		proof_violation: false,
+		corrections_used: 0,
+		progress_changed: true,
+		goal_contract_adopted: projection.goalCompletionAdopted,
+		release_state: projection.releaseContracts.some((entry) => entry.revokedAtSeq === void 0) ? "adopted" : "not_adopted"
+	};
+}
+function projectSessionCoreV2(events, projection) {
+	const snapshot = sessionCoreSnapshot(events, projection);
+	return snapshot ? projectCoreV2(snapshot) : void 0;
 }
 
 //#endregion
@@ -16489,7 +17064,7 @@ function gitCommandMatchesTarget(manifest, target) {
 	return true;
 }
 function hashTuple(fields) {
-	const hash$1 = createHash("sha256");
+	const hash$2 = createHash("sha256");
 	for (const key of Object.keys(fields).sort()) {
 		const keyBytes = Buffer.from(key, "utf8");
 		const raw = fields[key];
@@ -16497,9 +17072,9 @@ function hashTuple(fields) {
 		const lengths = Buffer.allocUnsafe(8);
 		lengths.writeUInt32BE(keyBytes.length, 0);
 		lengths.writeUInt32BE(value.length, 4);
-		hash$1.update(lengths).update(keyBytes).update(value);
+		hash$2.update(lengths).update(keyBytes).update(value);
 	}
-	return hash$1.digest("hex");
+	return hash$2.digest("hex");
 }
 function parseNulRecords(bytes$1) {
 	if (bytes$1.byteLength === 0 || bytes$1[bytes$1.byteLength - 1] !== 0) return void 0;
@@ -16689,7 +17264,7 @@ function snapshotSessionEvents(session) {
 * `packageRowsFromPnpmLock` would make an unrelated cohort re-ordering look like
 * a lock-reading change.
 */
-const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row) => row.name)))].sort((a, b) => a.localeCompare(b));
+const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$1) => row$1.name)))].sort((a, b) => a.localeCompare(b));
 const HOST_LOCK_MARKER_BEGIN = "# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>";
 const HOST_LOCK_MARKER_END = "# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<";
 var HostProfileError = class extends Error {
@@ -16852,7 +17427,7 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 				rows.push({ name });
 				continue;
 			}
-			const candidates = locked.filter((row) => row.name === name && row.version === version && row.integrity);
+			const candidates = locked.filter((row$1) => row$1.name === name && row$1.version === version && row$1.integrity);
 			if (candidates.length !== 1) {
 				rows.push({
 					name,
@@ -16877,8 +17452,8 @@ function readActiveHostGraph(runtimeRoot, profileRoot) {
 	const profileLockPath = join(profile, "pnpm-lock.yaml");
 	const runtimeRows = packageRowsFromActiveGraph(readFileSync(mapPath, "utf8"), readFileSync(lockPath, "utf8"), join(runtime, "node_modules"));
 	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
-	const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`));
-	return [...runtimeRows, ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ""}\u0000${row.integrity ?? ""}`))];
+	const runtimeKeys = new Set(runtimeRows.map((row$1) => `${row$1.name}\u0000${row$1.version ?? ""}\u0000${row$1.integrity ?? ""}`));
+	return [...runtimeRows, ...profileRows.filter((row$1) => !runtimeKeys.has(`${row$1.name}\u0000${row$1.version ?? ""}\u0000${row$1.integrity ?? ""}`))];
 }
 function pathPresent(path$1) {
 	try {
@@ -16949,7 +17524,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
 	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
-	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row) => row.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row$1) => row$1.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
@@ -16958,7 +17533,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 		if (typeof record.url !== "string" || realpathSync(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
 		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
 		const patch = installed.dsh?.bundle?.patch;
-		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row) => row.version === host.version && row.integrity);
+		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$1) => row$1.version === host.version && row$1.integrity);
 		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
 		return locked[0];
 	});
@@ -17043,10 +17618,10 @@ function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot
 	lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`);
 	lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`);
 	lines.push("    hostLockPackages:");
-	for (const row of rows) {
-		lines.push(`      - name: ${yamlQuote(row.name)}`);
-		lines.push(`        version: ${yamlQuote(row.version ?? "")}`);
-		lines.push(`        integrity: ${yamlQuote(row.integrity ?? "")}`);
+	for (const row$1 of rows) {
+		lines.push(`      - name: ${yamlQuote(row$1.name)}`);
+		lines.push(`        version: ${yamlQuote(row$1.version ?? "")}`);
+		lines.push(`        integrity: ${yamlQuote(row$1.integrity ?? "")}`);
 	}
 	lines.push(HOST_LOCK_MARKER_END);
 	return `${lines.join("\n")}\n`;
@@ -17104,7 +17679,7 @@ function injectActiveProfileHostLock(input) {
 	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
-	const managed = renderManagedPatch(input.evaluation.packages.filter((row) => row.version && row.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
+	const managed = renderManagedPatch(input.evaluation.packages.filter((row$1) => row$1.version && row$1.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
 	writeFileSync(temporary, next, {
@@ -17167,13 +17742,13 @@ function hostLockRowsFromComposedDump(text) {
 			if (/^\s{4}\S/.test(entry[index$1])) break;
 			continue;
 		}
-		const row = { name: parseYamlScalar(nameMatch[1]) };
+		const row$1 = { name: parseYamlScalar(nameMatch[1]) };
 		for (let cursor = index$1 + 1; cursor < entry.length; cursor += 1) {
 			if (/^\s{6}- name:/.test(entry[cursor]) || /^\s{4}\S/.test(entry[cursor])) break;
 			const field$1 = entry[cursor].match(/^\s{8}(version|integrity):\s*(.+?)\s*$/);
-			if (field$1) row[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
+			if (field$1) row$1[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
 		}
-		rows.push(row);
+		rows.push(row$1);
 	}
 	return rows;
 }
@@ -17222,4 +17797,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { releaseCoverage as $, unitDescendantIds as $n, interpretClause as $r, bindProofToProjection as $t, firstStepGuidanceV6 as A, STOP_PROTOCOL_VERSION as Ai, evidenceMatchesItem as An, captureItem as Ar, hostVersionFromPackages as At, applyUpgradeEligibility as B, semanticActionFromText as Bi, decideTurnStopping as Bn, classifyTaskIntent as Br, RC015_RC2_HOST_PACKAGES as Bt, gitCommandMatchesTarget as C, ACTION_MANIFEST as Ci, cleanupConditionFor as Cn, admissibleForRemoval as Cr, LEGACY_HOST_COHORTS as Ct, FIRST_STEP_GUIDANCE as D, CERTIFICATE_VERSION_V2 as Di, renderRecoveryPacket as Dn, removalIsComplete as Dr, evaluateHostCapability as Dt, verifiedLinearCommitReadback as E, CERTIFICATE_VERSION as Ei, recoveryDigest as En, partialFailureOf as Er, evaluateExternalWaitCapability as Et, DEFAULT_DELEGATION_TOOL_NAMES as F, isStatefulAction as Fi, assessmentAction as Fn, extractOperation as Fr, SUPPORTED_HOST_VERSIONS as Ft, RELEASE_OPERATION_SURFACES as G, canonicalizePath as Gi, latestRootInstruction as Gn, clarifiedSpanOf as Gr, segmentAuthorityBlocks as Gt, legacyRecordsNeedingReview as H, validateActionTarget as Hi, isRootPauseRequest as Hn, GRANTED_QUALIFICATION as Hr, RC1_HOST_PACKAGES as Ht, PROTOCOL_V3_NOTICE as I, requestedIdentityKey as Ii, assessmentOutcomePredicate as In, isInformationalMessage as Ir, compareHostVersions as It, contractById as J, sanitizeClauseText as Ji, testOutcomePredicate as Jn, clauseIsProtected as Jr, PROOF_KINDS as Jt, RELEASE_RESERVATION_PREFIX as K, digestStrings as Ki, observeAssistantOutcome as Kn, clauseAsksOwnQuestion as Kr, certifyCheckpoint as Kt, PROTOCOL_V4_NOTICE as L, requestedTargetAuthorizesMutation as Li, classifyCompletionClaim as Ln, segmentClauses as Lr, evaluateMinimumHostVersion as Lt, previewFirstStepInjection as M, SUPPORTED_EVIDENCE_ADAPTERS as Mi, CONTROL_RECORD_PREFIX as Mn, environmentDefaultRepositoryTarget as Mr, LATEST_SUPPORTED_HOST_VERSION as Mt, projectCoreV2 as N, actionCompatible as Ni, NO_PROGRESS_RECORD_PREFIX as Nn, extractArtifactPaths as Nr, MIN_SUPPORTED_HOST_VERSION as Nt, claimedBatchHasRealRootInput as O, SEMANTIC_ACTIONS as Oi, bindingSatisfies as On, removalIsPartiallyKnown as Or, evaluateHostLock as Ot, CAPTURE_V042_NOTICE as P, boundedArtifactChoiceMatches as Pi, NO_PROGRESS_TURNS_BEFORE_STOP as Pn, extractMethod as Pr, SUPPORTED_HOST_RANGE as Pt, releaseContractFor as Q, certificateClosure as Qn, hasQuestionScope as Qr, PROOF_PROTOCOL_VERSION_V2 as Qt, PROTOCOL_V5_NOTICE as R, requestedTargetMatchesResolved as Ri, currentActionBases as Rn, canonicalRegistryBase as Rr, parseHostVersion as Rt, executeRevalidatedGitEffect as S, verbIsNegated as Si, carriesCleanupCondition as Sn, actionHasCertificationPath as Sr, HOST_COHORTS as St, revalidateGitPrestate as T, BOUNDED_ARTIFACT_TYPES as Ti, openItems as Tn, capabilityFactOf as Tr, bindLiveGoalCapability as Tt, rootLocatorFlavor as U, COMMAND_SURFACE_MANIFEST as Ui, isWholeTaskCompletionClaim as Un, LEGACY_QUALIFICATION as Ur, ALPHA3_HOST_PACKAGES as Ut, deriveProjection as V, validateActionManifest as Vi, decisionBoundaryKey as Vn, classifyUserInteraction as Vr, RC015_HOST_PACKAGES as Vt, RELEASE_OPERATIONS as W, validateManifest as Wi, latestAssistantText as Wn, actionVerbMatches as Wr, authorityCaptureCounts as Wt, normalizeReleaseContract as X, sha256 as Xi, hasCurrentCertificate as Xn, governedClauseRestrictsExecution as Xr, PROOF_MANIFEST_DOMAIN_V2 as Xt, inFlightReservation as Y, sanitizeUrl as Yi, goalCompletionDenial as Yn, explanationHasActionResidue as Yr, PROOF_KINDS_V2 as Yt, readbackSettlesContract as Z, certifiableOpenItems as Zn, hasOrderedCoordination as Zr, PROOF_PROTOCOL_VERSION as Zt, GIT_COMMAND_MANIFEST_IDS as _, reportingHeadGoverns as _i, CLEANUP_CONDITION_RULE as _n, deriveItemDiagnosis as _r, BASE_HOST_PACKAGES as _t, injectActiveProfileHostLock as a, isOpenObligation as ai, proofDigest as an, createProjection as ar, extractToolSubject as at, commitTreeSnapshotDigest as b, splitTextFragments as bi, DEFAULT_RECOVERY_CHAR_BUDGET as bn, relevantEvidence as br, GOAL_HOST_PACKAGES as bt, packageRowsFromPnpmLock as c, itemHoldsExecutionAuthority as ci, proofHostSurfacesOf as cn, proposeRebindOutcome as cr, canonicalArgvFromCommand as ct, resolveInstalledHostLock as d, maskCodeSpans as di, requiredSubjectsOf as dn, rebindResponse as dr, parseShellCommand as dt, interpretMessage as ei, bindProofV2ToProjection as en, availableBoundaryQualifications as er, releasePreEffectDecision as et, verifyComposedHostLockDump as f, maskQuotedSpans as fi, scopeCoverageDigest as fn, replayRebindResult as fr, ACTIVE_HOST_COHORT_ID as ft, snapshotSessionEvents as g, questionHeadsClause as gi, validateProofManifestV2 as gn, capabilityRemedyPhrase as gr, ALPHA2_HOST_PACKAGES as gt, SessionApiError as h, qualificationOfClause as hi, validateProofManifest as hn, parseConfirmationMessage as hr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as ht, hostLockRowsFromComposedDump as i, isInformationalFragment as ii, proofCapabilityReport as in, currentContractDigest as ir, extractTextContent as it, lifecyclePhase as j, STOP_PROTOCOL_VERSION_V2 as ji, isVerifyingCapability as jn, classifyClause as jr, selectHostCohort as jt, firstStepGuidance as k, STATEFUL_ACTIONS as ki, evidenceCoverage as kn, captureClause as kr, evaluateToolSurfaceCapability as kt, readActiveHostGraph as l, kindOfScope as li, proofOperationMatches as ln, proposeRebindV042 as lr, isRunExecutable as lt, SESSION_EVENT_ENVELOPE_INVALID as m, opensWithDirective as mi, sessionQueryV2 as mn, isFrozenV042RebindResponse as mr, ACTIVE_HOST_LAUNCHER_VERSION as mt, combineHostPolicy as n, isExecutableItem as ni, createProofManifest as nn, isCurrentAcceptedBoundary as nr, supersedeItem as nt, inspectTargetHostGraph as o, isQuestionScopeNeedingReview as oi, proofDigestV2 as on, confirmRebind as or, isDeterministicCheck as ot, SESSION_API_UNSUPPORTED as p, namedActions as pi, sessionQuery as pn, CONFIRM_LINE_PATTERN as pr, ACTIVE_HOST_COHORT_IDS as pt, RELEASE_SETTLEMENT_PREFIX as q, normalizeClause as qi, progressFingerprint as qn, clauseIsGoverned as qr, PROOF_CAPABILITY_MATRIX as qt, hostLockContextFromComposedDump as r, isExplanationScope as ri, createProofManifestV2 as rn, qualifyBoundary as rr, evidenceFromPersistedToolResult as rt, packageRowsFromActiveGraph as s, isRestatement as si, proofEvidenceConstraints as sn, proposeRebind as sr, withDurability as st, HostProfileError as t, introducesActionClause as ti, canonicalProjection as tn, effectuateBoundary as tr, reservationFor as tt, resolveActiveProfileHostLock as u, legacyQuestionReadingIsInformational as ui, proofV2Rejection as un, rebindAttemptKey as ur, parsePwshCommand as ut, GIT_COMMAND_TEMPLATES as v, restatedContentOf as vi, CLEANUP_CONDITION_RULE_COMPACT as vn, evidenceAvailabilityReason as vr, DEFAULT_HOST_LOCK as vt, parseGitCommandManifest as w, ACTION_MANIFEST_VERSION as wi, closingHint as wn, capabilityConsequence as wr, bindExecutableIdentity as wt, createGitPrestateEnvelope as x, statefulActionsOfScope as xi, MIN_RECOVERY_CHAR_BUDGET as xn, DEPENDENCY_FREE_ONLY_CONDITION as xr, HOST_CAPABILITY_PACKAGE_GROUPS as xt, commitIndexSnapshotDigest as y, semanticActionOfScope as yi, CLEANUP_CONDITION_RULE_SHORT as yn, itemDiagnosis as yr, EXPECTED_HOST_PACKAGES as yt, PROTOCOL_V6_NOTICE as z, semanticActionFromCommand as zi, decideTurnBoundary as zn, npmEscapedPackageName as zr, satisfiesSupportedHostRange as zt };
+export { readbackSettlesContract as $, sha256 as $i, hasCurrentCertificate as $n, governedClauseRestrictsExecution as $r, PROOF_MANIFEST_DOMAIN_V2 as $t, firstStepGuidanceV6 as A, CERTIFICATE_VERSION_V2 as Ai, renderRecoveryPacket as An, removalIsComplete as Ar, evaluateHostCapability as At, PROTOCOL_V5_NOTICE as B, requestedTargetAuthorizesMutation as Bi, classifyCompletionClaim as Bn, segmentClauses as Br, evaluateMinimumHostVersion as Bt, gitCommandMatchesTarget as C, splitTextFragments as Ci, DEFAULT_RECOVERY_CHAR_BUDGET as Cn, relevantEvidence as Cr, GOAL_HOST_PACKAGES as Ct, FIRST_STEP_GUIDANCE as D, ACTION_MANIFEST_VERSION as Di, closingHint as Dn, capabilityConsequence as Dr, bindExecutableIdentity as Dt, verifiedLinearCommitReadback as E, ACTION_MANIFEST as Ei, cleanupConditionFor as En, admissibleForRemoval as Er, LEGACY_HOST_COHORTS as Et, projectCoreV2 as F, SUPPORTED_EVIDENCE_ADAPTERS as Fi, CONTROL_RECORD_PREFIX as Fn, environmentDefaultRepositoryTarget as Fr, LATEST_SUPPORTED_HOST_VERSION as Ft, rootLocatorFlavor as G, validateActionTarget as Gi, isRootPauseRequest as Gn, GRANTED_QUALIFICATION as Gr, RC1_HOST_PACKAGES as Gt, applyUpgradeEligibility as H, semanticActionFromCommand as Hi, decideTurnBoundary as Hn, npmEscapedPackageName as Hr, satisfiesSupportedHostRange as Ht, CAPTURE_V042_NOTICE as I, actionCompatible as Ii, NO_PROGRESS_RECORD_PREFIX as In, extractArtifactPaths as Ir, MIN_SUPPORTED_HOST_VERSION as It, RELEASE_RESERVATION_PREFIX as J, canonicalizePath as Ji, latestRootInstruction as Jn, clarifiedSpanOf as Jr, segmentAuthorityBlocks as Jt, RELEASE_OPERATIONS as K, COMMAND_SURFACE_MANIFEST as Ki, isWholeTaskCompletionClaim as Kn, LEGACY_QUALIFICATION as Kr, ALPHA3_HOST_PACKAGES as Kt, DEFAULT_DELEGATION_TOOL_NAMES as L, boundedArtifactChoiceMatches as Li, NO_PROGRESS_TURNS_BEFORE_STOP as Ln, extractMethod as Lr, SUPPORTED_HOST_RANGE as Lt, previewFirstStepInjection as M, STATEFUL_ACTIONS as Mi, evidenceCoverage as Mn, captureClause as Mr, evaluateToolSurfaceCapability as Mt, projectSessionCoreV2 as N, STOP_PROTOCOL_VERSION as Ni, evidenceMatchesItem as Nn, captureItem as Nr, hostVersionFromPackages as Nt, claimedBatchHasRealRootInput as O, BOUNDED_ARTIFACT_TYPES as Oi, openItems as On, capabilityFactOf as Or, bindLiveGoalCapability as Ot, sessionCoreSnapshot as P, STOP_PROTOCOL_VERSION_V2 as Pi, isVerifyingCapability as Pn, classifyClause as Pr, selectHostCohort as Pt, normalizeReleaseContract as Q, sanitizeUrl as Qi, goalCompletionDenial as Qn, explanationHasActionResidue as Qr, PROOF_KINDS_V2 as Qt, PROTOCOL_V3_NOTICE as R, isStatefulAction as Ri, assessmentAction as Rn, extractOperation as Rr, SUPPORTED_HOST_VERSIONS as Rt, executeRevalidatedGitEffect as S, semanticActionOfScope as Si, CLEANUP_CONDITION_RULE_SHORT as Sn, itemDiagnosis as Sr, EXPECTED_HOST_PACKAGES as St, revalidateGitPrestate as T, verbIsNegated as Ti, carriesCleanupCondition as Tn, actionHasCertificationPath as Tr, HOST_COHORTS as Tt, deriveProjection as U, semanticActionFromText as Ui, decideTurnStopping as Un, classifyTaskIntent as Ur, RC015_RC2_HOST_PACKAGES as Ut, PROTOCOL_V6_NOTICE as V, requestedTargetMatchesResolved as Vi, currentActionBases as Vn, canonicalRegistryBase as Vr, parseHostVersion as Vt, legacyRecordsNeedingReview as W, validateActionManifest as Wi, decisionBoundaryKey as Wn, classifyUserInteraction as Wr, RC015_HOST_PACKAGES as Wt, contractById as X, normalizeClause as Xi, progressFingerprint as Xn, clauseIsGoverned as Xr, PROOF_CAPABILITY_MATRIX as Xt, RELEASE_SETTLEMENT_PREFIX as Y, digestStrings as Yi, observeAssistantOutcome as Yn, clauseAsksOwnQuestion as Yr, certifyCheckpoint as Yt, inFlightReservation as Z, sanitizeClauseText as Zi, testOutcomePredicate as Zn, clauseIsProtected as Zr, PROOF_KINDS as Zt, GIT_COMMAND_MANIFEST_IDS as _, opensWithDirective as _i, sessionQueryV2 as _n, isFrozenV042RebindResponse as _r, ACTIVE_HOST_LAUNCHER_VERSION as _t, injectActiveProfileHostLock as a, isExecutableItem as ai, createProofManifest as an, isCurrentAcceptedBoundary as ar, evidenceFromPersistedToolResult as at, commitTreeSnapshotDigest as b, reportingHeadGoverns as bi, CLEANUP_CONDITION_RULE as bn, deriveItemDiagnosis as br, BASE_HOST_PACKAGES as bt, packageRowsFromPnpmLock as c, isOpenObligation as ci, proofDigest as cn, createProjection as cr, isDeterministicCheck as ct, resolveInstalledHostLock as d, itemHoldsExecutionAuthority as di, proofHostSurfacesOf as dn, proposeRebindOutcome as dr, canonicalArgvFromCommand as dt, hasOrderedCoordination as ei, PROOF_PROTOCOL_VERSION as en, certifiableOpenItems as er, releaseContractFor as et, verifyComposedHostLockDump as f, kindOfScope as fi, proofOperationMatches as fn, proposeRebindV042 as fr, isRunExecutable as ft, snapshotSessionEvents as g, namedActions as gi, sessionQuery as gn, CONFIRM_LINE_PATTERN as gr, ACTIVE_HOST_COHORT_IDS as gt, SessionApiError as h, maskQuotedSpans as hi, scopeCoverageDigest as hn, replayRebindResult as hr, ACTIVE_HOST_COHORT_ID as ht, hostLockRowsFromComposedDump as i, introducesActionClause as ii, canonicalProjection as in, effectuateBoundary as ir, supersedeItem as it, lifecyclePhase as j, SEMANTIC_ACTIONS as ji, bindingSatisfies as jn, removalIsPartiallyKnown as jr, evaluateHostLock as jt, firstStepGuidance as k, CERTIFICATE_VERSION as ki, recoveryDigest as kn, partialFailureOf as kr, evaluateExternalWaitCapability as kt, readActiveHostGraph as l, isQuestionScopeNeedingReview as li, proofDigestV2 as ln, confirmRebind as lr, persistedToolResultStatus as lt, SESSION_EVENT_ENVELOPE_INVALID as m, maskCodeSpans as mi, requiredSubjectsOf as mn, rebindResponse as mr, parseShellCommand as mt, combineHostPolicy as n, interpretClause as ni, bindProofToProjection as nn, unitDescendantIds as nr, releasePreEffectDecision as nt, inspectTargetHostGraph as o, isExplanationScope as oi, createProofManifestV2 as on, qualifyBoundary as or, extractTextContent as ot, SESSION_API_UNSUPPORTED as p, legacyQuestionReadingIsInformational as pi, proofV2Rejection as pn, rebindAttemptKey as pr, parsePwshCommand as pt, RELEASE_OPERATION_SURFACES as q, validateManifest as qi, latestAssistantText as qn, actionVerbMatches as qr, authorityCaptureCounts as qt, hostLockContextFromComposedDump as r, interpretMessage as ri, bindProofV2ToProjection as rn, availableBoundaryQualifications as rr, reservationFor as rt, packageRowsFromActiveGraph as s, isInformationalFragment as si, proofCapabilityReport as sn, currentContractDigest as sr, extractToolSubject as st, HostProfileError as t, hasQuestionScope as ti, PROOF_PROTOCOL_VERSION_V2 as tn, certificateClosure as tr, releaseCoverage as tt, resolveActiveProfileHostLock as u, isRestatement as ui, proofEvidenceConstraints as un, proposeRebind as ur, withDurability as ut, GIT_COMMAND_TEMPLATES as v, qualificationOfClause as vi, validateProofManifest as vn, parseConfirmationMessage as vr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as vt, parseGitCommandManifest as w, statefulActionsOfScope as wi, MIN_RECOVERY_CHAR_BUDGET as wn, DEPENDENCY_FREE_ONLY_CONDITION as wr, HOST_CAPABILITY_PACKAGE_GROUPS as wt, createGitPrestateEnvelope as x, restatedContentOf as xi, CLEANUP_CONDITION_RULE_COMPACT as xn, evidenceAvailabilityReason as xr, DEFAULT_HOST_LOCK as xt, commitIndexSnapshotDigest as y, questionHeadsClause as yi, validateProofManifestV2 as yn, capabilityRemedyPhrase as yr, ALPHA2_HOST_PACKAGES as yt, PROTOCOL_V4_NOTICE as z, requestedIdentityKey as zi, assessmentOutcomePredicate as zn, isInformationalMessage as zr, compareHostVersions as zt };

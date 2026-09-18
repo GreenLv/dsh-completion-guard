@@ -3,6 +3,7 @@ import { posix } from 'node:path'
 import type { GuardProjection, DerivedEnvelope, GuardItem } from '../domain/types.js'
 import { assessmentAction, assessmentOutcomePredicate, currentActionBases, testOutcomePredicate } from '../domain/stop-policy.js'
 import { projectCoreV2 } from './project.js'
+import { persistedToolResultStatus } from '../domain/evidence.js'
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
 // A persisted root and host call keep their own path syntax. Using the running
@@ -341,12 +342,10 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       const crossesNewConstraint = kind === 'constraint' && forbiddenFile && pair
         && pair.call.seq <= root.seq && pair.result.seq >= root.seq
       if (!pair || pair.result.seq !== evidence.toolResultSeq || (pair.call.seq <= root.seq && !crossesNewConstraint)) continue
-      const resultMessage = row(pair.result.data).message
-      const resultBlocks = row(resultMessage).content
-      const hostError = row(pair.result.data).error !== undefined || row(resultMessage).isError === true
-        || (Array.isArray(resultBlocks) && resultBlocks.some((block) => row(block).isError === true))
-      const outcome = hostError || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
+      const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId)
+      const outcome = hostResultStatus === 'failure' || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
         : evidence.outcome !== 'success' || evidence.processFacts?.outcome === 'unknown'
+          || hostResultStatus === 'unknown'
           || (evidence.evidenceRole === 'effect' && evidence.processFacts && evidence.processFacts.operationAttribution !== 'single_operation')
           || evidence.parseStatus !== 'supported' ? 'unknown' : 'success'
       const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`

@@ -238,7 +238,7 @@ describe('0.6.0 C09/S09: the proof entry is a production chain, not a rule libra
       const tampered = deriveProjection([
         ...(f.session.snapshotEvents() as never[]).slice(0, -2),
         { seq: 900, type: 'tool/call', data: { callId: 'goal-cert', name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [binding], proof: { ...proof, proofSha256: '0'.repeat(64) } }) } },
-        { seq: 901, type: 'tool/result', data: { message: { source: { callId: 'goal-cert' }, content: [{ type: 'text', text: JSON.stringify(good) }] } } },
+        { seq: 901, type: 'tool/result', data: { message: { source: { callId: 'goal-cert' }, content: [{ type: 'tool-result', toolCallId: 'goal-cert', isError: false, content: [{ type: 'text', text: JSON.stringify(good) }] }] } } },
       ] as never, { activation: 'opt-in' }, { cwd: process.cwd() }, true).projection
       expect(tampered.integrity).toBe('corrupt')
       expect(tampered.checkpoints).toHaveLength(0)

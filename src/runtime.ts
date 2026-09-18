@@ -70,7 +70,10 @@ import { resolveAuditedRef } from './tools/evidence.js'
 import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 
 export const name = 'context-guard'
-export const inject = ['sessions', 'commands'] as const
+// Native readback and test-readiness tools require the host filesystem. Cordis
+// refuses a service property read that was not declared in `inject`; without
+// this declaration, session-start aborted halfway through tool registration.
+export const inject = ['sessions', 'commands', 'fs'] as const
 
 /**
  * GuardRuntime

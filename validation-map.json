@@ -327,6 +327,12 @@
         "scripts/native_acceptance.py",
         "scripts/native_host_acceptance.py",
         "scripts/native_host_probe.mjs",
+        "scripts/native_host_probe_v070.mjs",
+        "scripts/native_release_fixture_v070.mjs",
+        "schemas/native-host-probe-v2.schema.json",
+        "schemas/native-host-bound-v4.schema.json",
+        "scripts/validate_native_v070.py",
+        "tests/validate_native_v070_test.py",
         "tests/native_acceptance_test.py",
         "scripts/native_cleanup_probe.py",
         "tests/native_cleanup_probe_test.py"

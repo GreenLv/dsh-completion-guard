@@ -1,4 +1,5 @@
 import type { DerivedEnvelope } from './types.js'
+import { extractTextContent, persistedToolResultStatus } from './evidence.js'
 
 /**
  * Trusted host-native selection adapter (0.6.0 DS06-D, C07/S06).
@@ -120,8 +121,9 @@ export function deriveTrustedSelections(events: readonly DerivedEnvelope[], opti
     const call = pending.get(callId)
     if (!call) continue
     pending.delete(callId)
-    if (data.error !== undefined) continue
-    const selected = parseSelectionAnswer(data.message?.content, call.shape.options)
+    if (persistedToolResultStatus(data, callId) !== 'clean') continue
+    const content = Array.isArray(data.message?.content) ? data.message.content : []
+    const selected = parseSelectionAnswer([{ type: 'text', text: extractTextContent(content) }], call.shape.options)
     if (!selected) continue
     selections.push({
       callId,

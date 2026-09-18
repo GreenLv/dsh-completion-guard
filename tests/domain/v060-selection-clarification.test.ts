@@ -16,7 +16,8 @@ const notice = (): DerivedEnvelope => ({ seq: seq++, type: 'user/message', data:
 const user = (text: string): DerivedEnvelope => ({ seq: seq++, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
 const toolCall = (callId: string, name: string, args: unknown): DerivedEnvelope => ({ seq: seq++, type: 'tool/call', data: { callId, name, arguments: JSON.stringify(args) } })
 const toolResult = (callId: string, payload: unknown, isError = false): DerivedEnvelope => ({ seq: seq++, type: 'tool/result', data: {
-  message: { source: { callId }, content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] },
+  message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError,
+    content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] }] },
   ...(isError ? { error: { name: 'x', code: 'Y' } } : {}),
 } })
 const approvalAsked = (id: string, toolName: string): DerivedEnvelope => ({ seq: seq++, type: 'approval/asked', data: { id, toolName } })

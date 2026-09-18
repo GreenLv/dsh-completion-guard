@@ -8,6 +8,7 @@ import { createBoundaryTool } from '../../src/tools/boundary.js'
 import { createPrepareTool } from '../../src/tools/prepare.js'
 import { createExternalOperationTool } from '../../src/tools/external-operation.js'
 import { createActionTool, createEvidenceTool } from '../../src/tools/evidence.js'
+import { createNativeFileObserver, createNativeGitObserver, createTestReadinessObserver } from '../../src/tools/observe.js'
 import { createProjection } from '../../src/domain/types.js'
 import { captureClause } from '../../src/domain/capture.js'
 import { GIT_COMMAND_TEMPLATES } from '../../src/domain/git-adapter.js'
@@ -73,6 +74,9 @@ function registry(options: { withAction?: boolean } = {}) {
   }))
   runtime.register(createExternalOperationTool(() => undefined, () => ({ status: 'supported', digest: 'a'.repeat(64) })))
   runtime.register(createEvidenceTool({}))
+  runtime.register(createNativeFileObserver({}))
+  runtime.register(createNativeGitObserver({}))
+  runtime.register(createTestReadinessObserver({ getProjection: () => projection }))
   runtime.register(createActionTool({}))
   return { runtime, projection }
 }

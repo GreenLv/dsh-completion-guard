@@ -293,7 +293,7 @@ def preflight_inputs(args: argparse.Namespace) -> Any:
             raise NativeRunError("package manifest name or gitHead does not match the candidate")
     for command in ("node", "npm", "tar"):
         resolve_executable(command)
-    if args.gate_profile != "host_bound":
+    if args.gate_profile == "portable_artifact":
         return None
     helper = Path(__file__).with_name("native_host_acceptance.py")
     spec = importlib.util.spec_from_file_location("native_host_acceptance", helper)
@@ -301,7 +301,8 @@ def preflight_inputs(args: argparse.Namespace) -> Any:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module.preflight_host_inputs(root, args.runtime_root.resolve(),
-                                 {"web": args.web_cohort, "headless": args.headless_cohort})
+                                 {"web": args.web_cohort, "headless": args.headless_cohort},
+                                 "v070" if args.gate_profile == "host_bound_v070" else "legacy")
     for profile in (args.target_web_profile, args.target_headless_profile):
         if profile is not None and not profile.is_dir():
             raise NativeRunError("target profile directory is missing")
@@ -320,7 +321,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--t06", action="store_true", help="include owned held-handle cleanup fixture")
     parser.add_argument("--run-url")
-    parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound"), default="portable_artifact")
+    parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound", "host_bound_v070"), default="portable_artifact")
     parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--web-cohort")
     parser.add_argument("--web-market-version", help="exact target version, or none")
@@ -332,11 +333,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not HEX64.fullmatch(args.artifact_sha256) or not HEX40.fullmatch(args.source_commit):
         parser.error("artifact SHA-256 and source commit must be full lowercase digests")
-    if args.gate_profile == "host_bound" and args.runtime_root is None:
+    if args.gate_profile != "portable_artifact" and args.runtime_root is None:
         parser.error("host_bound requires --runtime-root pointing to the audited DSH installation")
-    if args.gate_profile == "host_bound" and not (args.web_cohort and args.headless_cohort):
+    if args.gate_profile != "portable_artifact" and not (args.web_cohort and args.headless_cohort):
         parser.error("host_bound requires explicit --web-cohort and --headless-cohort")
-    if args.gate_profile == "host_bound" and (not args.web_market_version or
+    if args.gate_profile != "portable_artifact" and (not args.web_market_version or
             (args.web_market_version != "none" and not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", args.web_market_version))):
         parser.error("host_bound requires --web-market-version VERSION (or none)")
     if bool(args.target_web_profile) != bool(args.target_headless_profile):
@@ -360,7 +361,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.repo_root.resolve(), args.artifact.resolve(), args.artifact_sha256,
         args.source_commit, args.run_url,
     )
-    if args.gate_profile == "host_bound":
+    if args.gate_profile != "portable_artifact":
         # Pass this module's checked artifact helpers without relying on the
         # caller's sys.path or loading an arbitrary external runner.
         from types import SimpleNamespace
@@ -371,7 +372,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                         {"web": args.target_web_profile.resolve(),
                                          "headless": args.target_headless_profile.resolve()}
                                         if args.target_web_profile else None,
-                                        None if args.web_market_version == "none" else args.web_market_version)
+                                        None if args.web_market_version == "none" else args.web_market_version,
+                                        "v070" if args.gate_profile == "host_bound_v070" else "legacy")
     if args.t06:
         probe_path = Path(__file__).with_name("native_cleanup_probe.py")
         spec = importlib.util.spec_from_file_location("dsh_native_cleanup_probe", probe_path)

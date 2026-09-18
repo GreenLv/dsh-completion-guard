@@ -23,7 +23,7 @@ it.each(['short', 'long'])('retrieves a %s Windows test template through the nat
  const p = deriveProjection([
   { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run pnpm test.' }] } },
   { seq: 2, type: 'tool/call', data: { callId: 'native-12345-1', name: 'pwsh', arguments: JSON.stringify({ command: 'pnpm test' }) } },
-  { seq: 3, type: 'tool/result', data: { message: { source: { callId: 'native-12345-1' }, content: [{ type: 'text', text: '> node fixture.cjs' }] } } },
+  { seq: 3, type: 'tool/result', data: { message: { source: { callId: 'native-12345-1' }, content: [{ type: 'tool-result', toolCallId: 'native-12345-1', isError: false, content: [{ type: 'text', text: '> node fixture.cjs' }] }] } } },
  ], { activation: 'always' }, { cwd }, true, evaluateHostLock(RC015_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).projection
  const tool = createCheckpointTool(() => p, () => {})
  const call = async (name: string, args: never) => {

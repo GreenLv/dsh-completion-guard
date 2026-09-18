@@ -47,7 +47,7 @@ function v042ProposalFlow(text = HISTORICAL_TEXT) {
   const recorded = { status: 'proposed', proposal,
     next_step: `Root user must reply exactly: 确认重绑定 ${proposal.id}. This changes the contract only and grants no execution permission.` }
   events.push({ seq: 2, type: 'tool/call', data: { callId: 'proposal', name: 'context_guard_rebind', arguments: JSON.stringify(args) } })
-  events.push({ seq: 3, type: 'tool/result', data: { message: { source: { callId: 'proposal' }, content: [{ type: 'text', text: JSON.stringify(recorded) }] } } })
+  events.push({ seq: 3, type: 'tool/result', data: { message: { source: { callId: 'proposal' }, content: [{ type: 'tool-result', toolCallId: 'proposal', isError: false, content: [{ type: 'text', text: JSON.stringify(recorded) }] }] } } })
   return { events, old, result: { proposal }, args }
 }
 
@@ -98,7 +98,7 @@ describe('historical v0.4.2 rebind replay compatibility (frozen validator)', () 
     const args = { operation: 'withdraw' as const, proposal_id: result.proposal.id }
     const recorded = { status: 'withdrawn', proposal_id: result.proposal.id, digest: result.proposal.digest }
     events.push({ seq: 4, type: 'tool/call', data: { callId: 'withdraw', name: 'context_guard_rebind', arguments: JSON.stringify(args) } },
-      { seq: 5, type: 'tool/result', data: { message: { source: { callId: 'withdraw' }, content: [{ type: 'text', text: JSON.stringify(recorded) }] } } },
+      { seq: 5, type: 'tool/result', data: { message: { source: { callId: 'withdraw' }, content: [{ type: 'tool-result', toolCallId: 'withdraw', isError: false, content: [{ type: 'text', text: JSON.stringify(recorded) }] }] } } },
       user(6, `确认重绑定 ${result.proposal.id}`))
     expect(replay(events).items.get(old.id)?.status).toBe('pending')
   })
@@ -126,7 +126,7 @@ describe('v0.4.2 tamper resistance under the 0.5 validator', () => {
     const evolved = { ...response, next_step: '（新版文案）Root user must reply with the control line.' }
     const evolvedEvents = [...events,
       { seq: 3, type: 'tool/call', data: { callId: 'c', name: tool.name, arguments: JSON.stringify(args) } },
-      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'c' }, content: [{ type: 'text', text: JSON.stringify(evolved) }] } } } as DerivedEnvelope,
+      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'c' }, content: [{ type: 'tool-result', toolCallId: 'c', isError: false, content: [{ type: 'text', text: JSON.stringify(evolved) }] }] } } } as DerivedEnvelope,
       user(5, `确认重绑定 ${response.proposal.id}`)]
     const confirmed = replay(evolvedEvents)
     expect(confirmed.items.get(items[0].id)?.supersededByItems).toEqual([items[1].id])
@@ -135,7 +135,7 @@ describe('v0.4.2 tamper resistance under the 0.5 validator', () => {
     const tampered = { ...response, proposal: { ...response.proposal, clauses: ['篡改'] } }
     const tamperedEvents = [...events,
       { seq: 3, type: 'tool/call', data: { callId: 'c', name: tool.name, arguments: JSON.stringify(args) } },
-      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'c' }, content: [{ type: 'text', text: JSON.stringify(tampered) }] } } } as DerivedEnvelope,
+      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'c' }, content: [{ type: 'tool-result', toolCallId: 'c', isError: false, content: [{ type: 'text', text: JSON.stringify(tampered) }] }] } } } as DerivedEnvelope,
       user(5, `确认重绑定 ${response.proposal.id}`)]
     expect(replay(tamperedEvents).items.get(items[0].id)?.status).toBe('pending')
   })

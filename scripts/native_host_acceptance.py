@@ -7,6 +7,7 @@ CI/artifact preconditions are supplied to native_acceptance.py by its caller.
 from __future__ import annotations
 
 import io
+import hashlib
 import tarfile
 import json
 import os
@@ -28,6 +29,29 @@ PROBE_CASES = {
     "nonempty_test_certificate", "package_update_rebind_certificate", "generic_pending_and_rebind_no_gain_refusal",
     "history_pagination_roundtrip", "compact_and_persisted_resume", "qualified_pending_boundary",
 }
+PROBE_V070_CASES = {
+    "v070_root_v6_delivery", "v070_ordinary_file_edit_readback",
+    "v070_ordinary_test_and_checkpoint", "v070_future_vs_current_stop",
+    "v070_short_resume_and_persistence", "v070_legacy_migration",
+    "v070_goal_adoption_current_closure", "v070_explicit_release_minimum",
+    "v070_history_compaction_restart",
+}
+PROBE_V070_DRIVER_FILES = (
+    "native_host_probe.mjs", "native_host_probe_v070.mjs", "native_release_fixture_v070.mjs",
+)
+
+
+def probe_driver_digest(root: Path, protocol: str) -> str:
+    """Bind the complete v0.7 driver dependency set; v3 keeps its old identity."""
+    if protocol != "v070":
+        return hashlib.sha256((root / "scripts" / "native_host_probe.mjs").read_bytes()).hexdigest()
+    digest = hashlib.sha256(b"dsh.native-probe.v070\n")
+    for name in PROBE_V070_DRIVER_FILES:
+        path = root / "scripts" / name
+        if path.is_symlink() or not path.is_file():
+            raise RuntimeError("v0.7 probe driver dependency unavailable")
+        digest.update(name.encode("utf-8") + b"\0" + hashlib.sha256(path.read_bytes()).hexdigest().encode("ascii") + b"\n")
+    return digest.hexdigest()
 
 
 class HostCommandError(RuntimeError):
@@ -138,17 +162,53 @@ def package_fixture(root: Path, version: str) -> Path:
     return path
 
 
-def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = False) -> bool:
-    expected = {'persisted_restart_resume'} if restart else PROBE_CASES
-    return (isinstance(value, dict) and value.get("schema") == "dsh-native-host-probe/v1"
+def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = False,
+                   protocol: str = "legacy") -> bool:
+    if protocol not in ("legacy", "v070"):
+        return False
+    expected = ({'v070_persisted_restart_resume'} if restart else PROBE_V070_CASES) if protocol == "v070" \
+        else ({'persisted_restart_resume'} if restart else PROBE_CASES)
+    schema = "dsh-native-host-probe/v2" if protocol == "v070" else "dsh-native-host-probe/v1"
+    if protocol == "v070":
+        if not isinstance(value, dict) or set(value) != {"schema", "nonce", "pid", "mode", "driver_sha256", "status", "cases", "real_model_request"}:
+            return False
+        if not isinstance(value.get("mode"), str) or type(value.get("pid")) is not int or not isinstance(value.get("cases"), list):
+            return False
+        for row in value.get("cases", []):
+            if (not isinstance(row, dict) or not {"id", "status", "positive", "negative"}.issubset(row)
+                    or not set(row).issubset({"id", "status", "positive", "negative", "operation", "error_code", "last_tool"})):
+                return False
+    return (isinstance(value, dict) and value.get("schema") == schema
             and value.get("nonce") == nonce and value.get("driver_sha256") == driver_digest
             and value.get("mode", "initial") == ("restart" if restart else "initial")
             and value.get("status") == "passed" and value.get("real_model_request") is False
             and isinstance(value.get("pid"), int) and value["pid"] > 0
             and isinstance(value.get("cases"), list)
             and len(value["cases"]) == len(expected)
+            and all(isinstance(row, dict) for row in value["cases"])
             and {row.get("id") for row in value["cases"]} == expected
-            and all(row.get("status") == "passed" for row in value["cases"]))
+            and all(isinstance(row, dict) and row.get("status") == "passed"
+                    and (protocol != "v070" or (row.get("positive") is True and row.get("negative") is True))
+                    for row in value["cases"]))
+
+
+def safe_probe_failures(value: dict[str, Any]) -> list[dict[str, str | None]]:
+    """Never copy raw model, host, or tool text into the public annex."""
+    allowed = {"bash", "pwsh", "read", "write", "edit", "context_guard_checkpoint",
+               "context_guard_evidence", "context_guard_action", "context_guard_observe_file",
+               "context_guard_observe_git", "context_guard_observe_test_readiness"}
+    output = []
+    for row in value.get("cases", []):
+        if not isinstance(row, dict) or row.get("status") == "passed":
+            continue
+        tool = row.get("last_tool")
+        name = tool.get("name") if isinstance(tool, dict) else None
+        code = row.get("error_code")
+        identifier = row.get("id")
+        output.append({"id": identifier if isinstance(identifier, str) and identifier in PROBE_V070_CASES else None,
+                       "status": "failed", "error_code": code if isinstance(code, str) and code.isupper() and len(code) <= 60 else None,
+                       "tool": name if isinstance(name, str) and name in allowed else None})
+    return output
 
 
 def free_loopback_port() -> int:
@@ -269,13 +329,16 @@ def verify_target_graph(actual: list[dict[str, str]], expected: list[dict[str, s
 
 
 def preflight_host_inputs(root: Path, runtime_root: Path,
-                          targets: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any]]:
+                          targets: dict[str, str], protocol: str = "legacy") -> tuple[dict[str, Any], dict[str, Any]]:
     """Read launcher/cohort inputs before any package installation or host start."""
     cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
     if not cli.is_file():
         raise RuntimeError("runtime root has no DSH launcher")
-    if not (root / "scripts" / "native_host_probe.mjs").is_file():
+    probe_name = "native_host_probe_v070.mjs" if protocol == "v070" else "native_host_probe.mjs"
+    if not (root / "scripts" / probe_name).is_file():
         raise RuntimeError("native host probe is missing")
+    if protocol == "v070":
+        probe_driver_digest(root, protocol)
     manifest = json.loads((cli.parent.parent / "package.json").read_text(encoding="utf-8"))
     cohorts = json.loads((root / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))["cohorts"]
     selected = select_target_cohorts(cohorts, manifest["version"], targets)
@@ -316,8 +379,8 @@ def preflight_link_access() -> None:
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any], targets: dict[str, str] | None = None,
                     target_profiles: dict[str, Path] | None = None,
-                    web_market_version: str | None = None) -> dict[str, Any]:
-    result["gate_profile"] = "host_bound_core"
+                    web_market_version: str | None = None, protocol: str = "legacy") -> dict[str, Any]:
+    result["gate_profile"] = "dsh-host-bound/v4" if protocol == "v070" else "host_bound_core"
     result["host_lock_policy"] = "dsh-core/v1"
     result["market_interface"] = {"status": "not_requested" if web_market_version is None else "unavailable",
                                   "target_version": web_market_version, "api_schema": None, "api_version": None,
@@ -333,8 +396,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     fixture_old = package_fixture(temporary, "1.0.0")
     fixture_new = package_fixture(temporary, "2.0.0")
     cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
-    probe = root / "scripts" / "native_host_probe.mjs"
-    driver_digest = api.sha256(probe)
+    probe = root / "scripts" / ("native_host_probe_v070.mjs" if protocol == "v070" else "native_host_probe.mjs")
+    driver_digest = probe_driver_digest(root, protocol)
     processes: list[subprocess.Popen] = []
     log_handles = []
     gates = result["gates"]
@@ -350,7 +413,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         gates.append(api.gate(id, digest, passed=True))
 
     try:
-        runtime_manifest, selected = preflight_host_inputs(root, runtime_root, targets or {})
+        runtime_manifest, selected = preflight_host_inputs(root, runtime_root, targets or {}, protocol)
         # Optional daily targets are read-only inputs, never destinations.
         # A caller supplying one must supply both; no silent fixture fallback.
         if target_profiles and set(target_profiles) != {"web", "headless"}:
@@ -421,7 +484,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             receipt = temporary / f"{profile}-probe"
             overlay = temporary / f"{profile}-probe.patch.yml"
             overlays.append(overlay)
-            config = {"runtimeRoot": str(runtime_root), "workRoot": str(work), "nonce": nonce, "output": str(receipt), "profile": profile, "fixtureTgz": str(fixture_new)}
+            config = {"runtimeRoot": str(runtime_root), "workRoot": str(work), "nonce": nonce, "output": str(receipt), "profile": profile,
+                      "profileRoot": str(profile_root), "hostPackages": packages, "fixtureTgz": str(fixture_new)}
             # JSON is valid YAML. Isolated Headless loads its real base services
             # with the interactive task driver disabled; no model is requested.
             patches = [{"id": "context-guard", "config": {"activation": "always",
@@ -455,8 +519,10 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     value = json.loads(path.read_text(encoding="utf-8"))
                     if exclude and value.get("pid") in exclude:
                         continue
-                    if not validate_probe(value, nonce, driver_digest, restart=bool(exclude)):
-                        result["host_probe_failures"] = [{"id": row.get("id"), "status": row.get("status"), "error_code": row.get("error_code"), "operation": row.get("operation"), "last_tool": row.get("last_tool")} for row in value.get("cases", []) if row.get("status") != "passed"]
+                    if not validate_probe(value, nonce, driver_digest, restart=bool(exclude), protocol=protocol):
+                        result["host_probe_failures"] = safe_probe_failures(value) if protocol == "v070" else [
+                            {"id": row.get("id"), "status": row.get("status"), "error_code": row.get("error_code")}
+                            for row in value.get("cases", []) if isinstance(row, dict) and row.get("status") != "passed"]
                         raise RuntimeError("real host probe failed or returned an incomplete case set")
                     extra_pids[value["pid"]] = overlay
                     return value

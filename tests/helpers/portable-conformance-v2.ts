@@ -148,7 +148,7 @@ export function translateEvents(fixtureCase: V2Case): DerivedEnvelope[] {
         events.push({ seq: seq++, type: 'tool/call', data: { callId: String(event.callId), name: 'question', arguments: JSON.stringify({
           question_id: event.questionId, question: event.question, options: event.options,
         }) } })
-        events.push({ seq: seq++, type: 'tool/result', data: { message: { source: { callId: String(event.callId) }, content: [{ type: 'text', text: JSON.stringify({ answer: event.answer }) }] } } })
+        events.push({ seq: seq++, type: 'tool/result', data: { message: { source: { callId: String(event.callId) }, content: [{ type: 'tool-result', toolCallId: String(event.callId), isError: false, content: [{ type: 'text', text: JSON.stringify({ answer: event.answer }) }] }] } } })
         break
       case 'approval':
         events.push({ seq: seq++, type: 'approval/asked', data: { id: String(event.id), toolName: String(event.toolName ?? 'bash') } })
@@ -196,7 +196,7 @@ export function translateEvents(fixtureCase: V2Case): DerivedEnvelope[] {
         // production parser turns it into a qualified read fact.
         events.push({ seq: seq++, type: 'tool/call', data: { callId: String(event.callId ?? 'v2-read'), name: 'read_file', arguments: JSON.stringify({ file_path: String(event.path ?? '') }) } })
         events.push({ seq: seq++, type: 'tool/result', data: {
-          message: { source: { callId: String(event.callId ?? 'v2-read') }, content: [{ type: 'text', text: String(event.text ?? 'contents') }] },
+          message: { source: { callId: String(event.callId ?? 'v2-read') }, content: [{ type: 'tool-result', toolCallId: String(event.callId ?? 'v2-read'), isError: false, content: [{ type: 'text', text: String(event.text ?? 'contents') }] }] },
           meta: { path: String(event.path ?? '') },
         } })
         break
@@ -208,7 +208,7 @@ export function translateEvents(fixtureCase: V2Case): DerivedEnvelope[] {
       case 'delegation':
         events.push({ seq: seq++, type: 'tool/call', data: { callId: String(event.callId), name: String(event.name ?? 'subagent'), arguments: JSON.stringify({ prompt: String(event.prompt ?? '') }) } })
         events.push({ seq: seq++, type: 'tool/result', data: {
-          message: { source: { callId: String(event.callId) }, content: [{ type: 'text', text: String(event.text ?? '') }] },
+          message: { source: { callId: String(event.callId) }, content: [{ type: 'tool-result', toolCallId: String(event.callId), isError: false, content: [{ type: 'text', text: String(event.text ?? '') }] }] },
           ...(event.error ? { error: { name: 'delegation', code: 'DELEGATION_FAILED' } } : {}),
         } })
         break
@@ -284,7 +284,7 @@ function buildCaseEvents(fixtureCase: V2Case): { events: DerivedEnvelope[]; prob
       const result = certifyCheckpoint(projection, [], `C${projection.checkpoints.length + 1}`, false)
       const callId = `v2-cp-${events.length}`
       events.push({ seq: seq++, type: 'tool/call', data: { callId, name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' } })
-      events.push({ seq: seq++, type: 'tool/result', data: { message: { source: { callId }, content: [{ type: 'text', text: JSON.stringify({
+      events.push({ seq: seq++, type: 'tool/result', data: { message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: JSON.stringify({
         status: result.status,
         ...(result.checkpoint ? { certificate: {
           stop_protocol_version: result.checkpoint.stopProtocolVersion, certificate_version: result.checkpoint.certificateVersion,
@@ -295,7 +295,7 @@ function buildCaseEvents(fixtureCase: V2Case): { events: DerivedEnvelope[]; prob
           goal_ref: result.checkpoint.goalRef ?? null,
           ...(result.checkpoint.unitId !== undefined ? { unit_id: result.checkpoint.unitId, unit_closure_digest: result.checkpoint.unitClosureDigest } : {}),
         } } : {}),
-      }) }] } } })
+      }) }] }] } } })
       continue
     }
     emit(event)

@@ -321,6 +321,7 @@ export function createCheckpointTool(
               contract_sha256: { type: 'string' }, open_digest: { type: 'string' }, evidence_sha256: { type: 'string' },
               binding_digest: { type: 'string' }, certification_digest: { type: 'string' },
               unit_id: { type: 'string' }, unit_closure_digest: { type: 'string' },
+              root_locator_identity: { type: 'string' },
               native_observations: { type: 'object', additionalProperties: false, properties: {
                 schema: { type: 'string', required: true }, digests: { type: 'array', required: true, items: { type: 'string' } },
               } },

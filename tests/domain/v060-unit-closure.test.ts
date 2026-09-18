@@ -27,7 +27,7 @@ const assistant = (turn: number, step: number, text: string): DerivedEnvelope =>
 } })
 const toolCall = (callId: string, name: string, args: unknown): DerivedEnvelope => ({ seq: seq++, type: 'tool/call', data: { callId, name, arguments: JSON.stringify(args) } })
 const toolResult = (callId: string, payload: unknown, isError = false): DerivedEnvelope => ({ seq: seq++, type: 'tool/result', data: {
-  message: { source: { callId }, content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] },
+  message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] }] },
   ...(isError ? { error: { name: 'x', code: 'Y' } } : {}),
 } })
 
@@ -74,7 +74,7 @@ function pushEvidence() {
       callId, name: 'context_guard_evidence', arguments: JSON.stringify({ semantic_action: 'push', evidence_role: role }),
     } })
     events.push({ seq: localSeq++, type: 'tool/result', data: {
-      message: { source: { callId }, content: [{ type: 'text', text: '{}' }] },
+      message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: '{}' }] }] },
       meta: { contextGuard: {
         adapterId: 'context-guard.git.v1', adapterVersion: '1.0.0', semanticAction: 'push', evidenceRole: role,
         resolvedTarget: shape.resolved, ...(observed ? { observedState: observed } : {}), ...extra,

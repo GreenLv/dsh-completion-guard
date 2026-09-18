@@ -224,7 +224,8 @@ class NativeSessionAdapter {
     const callId = `portable-call-${++this.calls}`
     this.append('tool/call', { callId, name, arguments: JSON.stringify(args) })
     this.append('tool/result', {
-      message: { source: { callId }, content: textContent(options.text ?? '{}') },
+      message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false,
+        content: textContent(options.text ?? '{}') }] },
       ...(options.meta === undefined ? {} : { meta: options.meta }),
       ...(options.error === undefined ? {} : { error: options.error }),
     })
@@ -358,9 +359,9 @@ class NativeSessionAdapter {
       state_evidence_ids: binding.stateEvidenceIds,
     })) }
     this.append('tool/call', { callId, name: 'context_guard_checkpoint', arguments: JSON.stringify(args) })
-    this.append('tool/result', { message: { source: { callId }, content: textContent(JSON.stringify({
+    this.append('tool/result', { message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: textContent(JSON.stringify({
       status: result.status, ...(result.checkpoint ? { certificate: recordedCertificate ?? checkpointJson(result.checkpoint) } : {}),
-    })) } })
+    })) }] } })
     return this.projection()
   }
 
@@ -381,9 +382,9 @@ class NativeSessionAdapter {
     this.append('tool/call', { callId, name: 'context_guard_boundary', arguments: JSON.stringify({
       disposition: request.disposition, qualification_kind: request.qualificationKind, qualification_ids: request.qualificationIds,
     }) })
-    this.append('tool/result', { message: { source: { callId }, content: textContent(JSON.stringify({
+    this.append('tool/result', { message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: textContent(JSON.stringify({
       status: candidate.persistedResult, boundary: { candidate_sha256: candidate.candidateSha256 },
-    })) } })
+    })) }] } })
     return this.projection()
   }
 }

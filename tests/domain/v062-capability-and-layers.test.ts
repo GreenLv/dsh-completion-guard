@@ -65,7 +65,7 @@ function session(rootInputs: string[], runs: ShellRun[], platform: 'posix' | 'wi
       turn: 1,
       ...(run.error !== undefined ? { error: run.error } : {}),
       ...(run.meta !== undefined ? { meta: run.meta } : {}),
-      message: { source: { callId: `sh-${index}` }, content: [{ type: 'text', text: run.text ?? 'ok' }] },
+      message: { source: { callId: `sh-${index}` }, content: [{ type: 'tool-result', toolCallId: `sh-${index}`, isError: false, content: [{ type: 'text', text: run.text ?? 'ok' }] }] },
     }))
   }
   events.push(env('turn/end', { turn: 1, reason: { kind: 'completed' } }))
@@ -290,7 +290,7 @@ describe('0.6.2 T02: host return, declared exit status, attribution and business
       notice(), env('turn/start', { turn: 1 }),
       env('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: '运行 pnpm test' }] }),
       env('tool/call', { turn: 1, callId: 'sh-0', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test', workdir: '/repo', run_in_background: true }) }),
-      env('tool/result', { turn: 1, message: { source: { callId: 'sh-0' }, content: [{ type: 'text', text: 'started\n[exit code: 0]' }] } }),
+      env('tool/result', { turn: 1, message: { source: { callId: 'sh-0' }, content: [{ type: 'tool-result', toolCallId: 'sh-0', isError: false, content: [{ type: 'text', text: 'started\n[exit code: 0]' }] }] } }),
       env('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]
     const { projection } = deriveProjection(events, { activation: 'always' as const }, scope, true, auditedLock('posix'))

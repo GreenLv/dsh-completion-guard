@@ -9,7 +9,7 @@ import { segmentAuthorityBlocks } from './contract-segment.js'
 import { sessionRefDigest } from './digest.js'
 import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from './host-lock.js'
 import { hasCurrentCertificate } from './goal-gate.js'
-import { evidenceFromPersistedToolResult, extractTextContent, withDurability } from './evidence.js'
+import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from './evidence.js'
 import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, type SemanticAction } from './protocol-manifest.js'
 import {
   interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans, splitTextFragments,
@@ -33,6 +33,7 @@ import {
 } from './release.js'
 
 interface PendingCall {
+  origin: 'tool/call' | 'tool/ptc-dispatch-start'
   name: string
   arguments: string
   rootCallId?: string
@@ -1737,6 +1738,7 @@ export function deriveProjection(
         const data = asRecord(event.data)
         const callId = String(data?.callId ?? '')
         const call: PendingCall = {
+          origin: 'tool/call',
           name: String(data?.name ?? ''),
           arguments: String(data?.arguments ?? ''),
           rootCallId: typeof data?.rootCallId === 'string' ? data.rootCallId : undefined,
@@ -1800,6 +1802,7 @@ export function deriveProjection(
         const subCallId = String(data?.subCallId ?? '')
         const rawArguments = data?.arguments
         pendingCalls.set(subCallId, {
+          origin: 'tool/ptc-dispatch-start',
           name: String(data?.name ?? ''),
           arguments: typeof rawArguments === 'string' ? rawArguments : JSON.stringify(rawArguments ?? ''),
           rootCallId: typeof data?.rootCallId === 'string' ? data.rootCallId : undefined,
@@ -1819,12 +1822,13 @@ export function deriveProjection(
         pendingCalls.delete(callId)
         const dispatchContent = isDispatch ? (data?.content as unknown[] | undefined) : undefined
         const textContent = extractTextContent(dispatchContent ?? (message?.content as unknown[] | undefined) ?? [])
+        const hostResultStatus = persistedToolResultStatus(data, callId, event.type, call.origin === 'tool/ptc-dispatch-start')
         if (call.name === 'context_guard_rebind') {
           // Proposal registration is replay bookkeeping and runs in every
           // rebuild; the confirmation itself stays durable-gated inside
           // confirmRebind, so a pending proposal can never authorize without
           // a durable root event.
-          if (!call.rootCallId && !data?.error) {
+          if (!call.rootCallId && hostResultStatus === 'clean') {
             const rebindArgs = parseArguments(call.arguments) as unknown as RebindArgs
             const recordedResponse = parseArguments(textContent)
             replayRebindResult(projection, rebindArgs, recordedResponse)
@@ -1838,6 +1842,7 @@ export function deriveProjection(
           break
         }
         if (call.name === 'context_guard_checkpoint') {
+          if (hostResultStatus !== 'clean') break
           // A checkpoint is restored only when the history already recorded it
           // as certified AND the re-derived evidence still certifies it. Any
           // other combination fails closed; a persisted "incomplete" is never
@@ -1929,7 +1934,7 @@ export function deriveProjection(
           // bound to a host turn, so a delivery can be attributed to it. A
           // receipt that contradicts any of that is log tampering or
           // derivation drift and fails closed instead of recording a fact.
-          if (!call.rootCallId && !data?.error) {
+          if (!call.rootCallId && hostResultStatus === 'clean') {
             const callArgs = parseArguments(call.arguments)
             const requested = typeof callArgs.item_id === 'string' ? callArgs.item_id.trim() : ''
             const recorded = parseArguments(textContent)
@@ -2005,6 +2010,7 @@ export function deriveProjection(
           break
         }
         if (call.name === 'context_guard_boundary') {
+          if (hostResultStatus !== 'clean') break
           const recorded = parseArguments(textContent)
           const candidate = call.boundaryRequest ? qualifyBoundary(projection, call.boundaryRequest) : undefined
           const boundary = asRecord(recorded.boundary)
@@ -2033,9 +2039,11 @@ export function deriveProjection(
             arguments: call.arguments,
             rootCallId: call.rootCallId,
           },
-          { seq: event.seq, error: data?.error ?? ((isDispatch && data?.isError)
-            || (data?.message && typeof data.message === 'object' && (data.message as { isError?: unknown }).isError === true)
-            ? { name: 'code', code: 'DISPATCH_ERROR' } : undefined), meta: data?.meta, textContent },
+          { seq: event.seq,
+            error: hostResultStatus === 'failure'
+              ? (asRecord(data?.error) ?? { name: 'HostResultError', code: 'HOST_RESULT_ERROR' }) : undefined,
+            untrusted: hostResultStatus === 'unknown',
+            meta: data?.meta, textContent },
           epoch,
           `E${String(evidenceCounter).padStart(4, '0')}`,
           scope.cwd || undefined,
@@ -2047,12 +2055,12 @@ export function deriveProjection(
         // from the audited tool identity — never by a caller.
         const evidence = delegated ? { ...baseEvidence, delegatedSubtask: true as const } : baseEvidence
         projection.evidence.set(evidence.id, evidence)
-        if (delegated && call.unitIdAtCall !== undefined) {
+        if (delegated && call.unitIdAtCall !== undefined && hostResultStatus !== 'unknown') {
           recordDelegation(projection, call.unitIdAtCall, {
             callId,
             resultSeq: event.seq,
             toolName: call.name,
-            status: data?.error !== undefined ? 'failed' : 'completed',
+            status: hostResultStatus === 'failure' ? 'failed' : 'completed',
           })
         }
         if (evidence.externalOperationRef) {

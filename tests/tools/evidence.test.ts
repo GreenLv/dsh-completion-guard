@@ -213,6 +213,35 @@ describe('0.6.0 C10: the release ticket gate runs before any publish effect', ()
     return { root, registry, executableIdentity, session, resolution, label }
   }
 
+  it.each([
+    ['clean', false, true],
+    ['nested failure', true, false],
+    ['missing nested return', null, false],
+  ] as const)('release effect completion meta requires a %s host result', async (label, failed, accepted) => {
+    const fixture = await publishFixture(`status-${label.replaceAll(' ', '-')}`)
+    try {
+      const effectCallId = 'release-effect-status'
+      call(fixture.session, effectCallId, 'context_guard_action', {
+        semantic_action: 'publish', resolution_call_id: `status-${label.replaceAll(' ', '-')}-resolution`,
+        target_digest: fixture.resolution.target_digest, contract_item_id: 'R001', contract_item_revision: 1,
+      })
+      append(fixture.session, 'tool/result', {
+        turn: 1, step: fixture.session.seq,
+        message: failed === null
+          ? { source: { kind: 'tool', callId: effectCallId }, content: [{ type: 'text', text: '{"status":"completed"}' }] }
+          : createToolResultMessage({ callId: effectCallId as never,
+            content: [{ type: 'text', text: '{"status":"completed"}' }], isError: failed }),
+        meta: { contextGuardAction: { status: 'completed' } },
+      }, { surfaceOp: 'append' })
+      const outcome = await runProducer(fixture.session, 'release-effect-readback', {
+        semantic_action: 'publish', evidence_role: 'effect',
+        resolution_call_id: `status-${label.replaceAll(' ', '-')}-resolution`, effect_call_id: effectCallId,
+      }, { readExecutableIdentity: async () => fixture.executableIdentity })
+      expect(outcome.status).toBe(accepted ? 'supported' : 'unavailable')
+      if (!accepted) expect(outcome.reason_code).toBe('persisted_effect_mismatch')
+    } finally { await rm(fixture.root, { recursive: true, force: true }) }
+  })
+
   it('FOLLOWUP F04: the real publish producer observes the registry required by the contract', async()=>{
  const f=await publishFixture('registry-observation');
  try { let observed:any; const tool=createActionTool({prepareMutation:async()=>true,authorizeMutation:()=>({status:'authorized',reasonCode:'test'}),readExecutableIdentity:async()=>f.executableIdentity,releaseGate:async request=>{observed=request.observed;return {status:'denied',reasonCode:'test_stop_before_effect'}}});

@@ -403,6 +403,63 @@ class HostBoundEntrypointTests(unittest.TestCase):
         self.assertFalse(self.host.validate_probe({**receipt, "cases": []}, "nonce", "a" * 64))
         self.assertFalse(self.host.validate_probe({**receipt, "cases": receipt["cases"][:-1]}, "nonce", "a" * 64))
 
+    def test_v070_probe_requires_distinct_profile_complete_paired_cases_and_restart(self):
+        cases = [{"id": id, "status": "passed", "positive": True, "negative": True}
+                 for id in self.host.PROBE_V070_CASES]
+        receipt = {"schema": "dsh-native-host-probe/v2", "nonce": "nonce", "driver_sha256": "a" * 64,
+                   "mode": "initial", "status": "passed", "pid": 100, "real_model_request": False,
+                   "cases": cases}
+        validate = lambda value, restart=False: self.host.validate_probe(value, "nonce", "a" * 64,
+                                                                          restart=restart, protocol="v070")
+        self.assertTrue(validate(receipt))
+        self.assertFalse(self.host.validate_probe(receipt, "nonce", "a" * 64))
+        self.assertFalse(validate({**receipt, "schema": "dsh-native-host-probe/v1"}))
+        self.assertFalse(validate({**receipt, "cases": cases[:-1]}))
+        self.assertFalse(validate({**receipt, "cases": cases + [cases[0]]}))
+        self.assertFalse(validate({**receipt, "cases": [{**cases[0], "negative": False}, *cases[1:]]}))
+        self.assertFalse(validate({**receipt, "cases": [{**cases[0], "positive": False}, *cases[1:]]}))
+        self.assertFalse(validate({**receipt, "cases": [{**cases[0], "status": "failed"}, *cases[1:]]}))
+        self.assertFalse(validate({**receipt, "cases": [None, *cases[1:]]}))
+        self.assertFalse(validate({**receipt, "real_model_request": True}))
+        restarted = {**receipt, "mode": "restart", "cases": [{"id": "v070_persisted_restart_resume",
+                       "status": "passed", "positive": True, "negative": True}]}
+        self.assertTrue(validate(restarted, restart=True))
+        self.assertFalse(validate(restarted))
+
+    def test_v070_driver_identity_binds_all_three_source_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            for name in self.host.PROBE_V070_DRIVER_FILES:
+                (scripts / name).write_text(name, encoding="utf-8")
+            original = self.host.probe_driver_digest(root, "v070")
+            for name in self.host.PROBE_V070_DRIVER_FILES:
+                path = scripts / name
+                prior = path.read_bytes()
+                path.write_bytes(prior + b"changed")
+                self.assertNotEqual(self.host.probe_driver_digest(root, "v070"), original)
+                path.write_bytes(prior)
+            (scripts / self.host.PROBE_V070_DRIVER_FILES[-1]).unlink()
+            with self.assertRaisesRegex(RuntimeError, "dependency unavailable"):
+                self.host.probe_driver_digest(root, "v070")
+
+        root = SCRIPT.parents[1]
+        probe = (root / "scripts" / "native_host_probe_v070.mjs").resolve().as_uri()
+        observed = subprocess.check_output(["node", "--input-type=module", "-e",
+                                            f"import {{ driverDigest }} from {json.dumps(probe)}; process.stdout.write(driverDigest())"],
+                                           text=True)
+        self.assertEqual(observed, self.host.probe_driver_digest(root, "v070"))
+
+    def test_v070_failed_probe_diagnostic_drops_raw_tool_text(self):
+        output = self.host.safe_probe_failures({"cases": [{
+            "id": "v070_ordinary_test_and_checkpoint", "status": "failed",
+            "error_code": "PROBE_ASSERTION_FAILED", "operation": "private path",
+            "last_tool": {"name": "bash", "error_message": "secret or private path"},
+        }]})
+        self.assertEqual(output, [{"id": "v070_ordinary_test_and_checkpoint", "status": "failed",
+                                   "error_code": "PROBE_ASSERTION_FAILED", "tool": "bash"}])
+
     def test_probe_resolves_dependencies_from_real_pnpm_package_location(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

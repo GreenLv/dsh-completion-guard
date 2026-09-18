@@ -13,7 +13,7 @@ function toolCall(seq: number, callId: string, name: string, args: unknown): Der
   return { seq, type: 'tool/call', data: { callId, name, arguments: JSON.stringify(args) } }
 }
 function toolResult(seq: number, callId: string, value: unknown): DerivedEnvelope {
-  return { seq, type: 'tool/result', data: { message: { source: { callId }, content: [{ type: 'text', text: JSON.stringify(value) }] } } }
+  return { seq, type: 'tool/result', data: { message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: JSON.stringify(value) }] }] } } }
 }
 
 /** A gainful proposal: the later root clarification gives the clause a real action. */

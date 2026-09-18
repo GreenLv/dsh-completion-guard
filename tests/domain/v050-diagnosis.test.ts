@@ -178,7 +178,7 @@ describe('A17: identical rejected retries collapse onto a stable unchanged answe
     const eventsWithAttempt: DerivedEnvelope[] = [
       ...base,
       { seq: 2, type: 'tool/call', data: { callId: 'r1', name: 'context_guard_rebind', arguments: JSON.stringify(args) } },
-      { seq: 3, type: 'tool/result', data: { message: { source: { callId: 'r1' }, content: [{ type: 'text', text: JSON.stringify(first) }] } } },
+      { seq: 3, type: 'tool/result', data: { message: { source: { callId: 'r1' }, content: [{ type: 'tool-result', toolCallId: 'r1', isError: false, content: [{ type: 'text', text: JSON.stringify(first) }] }] } } },
     ]
     const reloaded = replay(eventsWithAttempt)
     const tool2 = createRebindTool(() => reloaded, async () => true)

@@ -48,7 +48,7 @@ describe('A20: synthetic incident regression', () => {
     // Persist the proposal through its real tool call/result pair.
     events.push(
       { seq: 3, type: 'tool/call', data: { callId: 'propose-a', name: 'context_guard_rebind', arguments: JSON.stringify(proposeArgs) } },
-      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'propose-a' }, content: [{ type: 'text', text: JSON.stringify(proposed) }] } } },
+      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'propose-a' }, content: [{ type: 'tool-result', toolCallId: 'propose-a', isError: false, content: [{ type: 'text', text: JSON.stringify(proposed) }] }] } } },
     )
 
     // The mixed durable message: control line, blank line, follow-up task.

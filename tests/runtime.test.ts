@@ -281,7 +281,7 @@ describe('runtime derivation', () => {
     }
     events.push(
       { seq: 3, type: 'tool/call', data: { callId: 'checkpoint-goal', name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) } },
-      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'checkpoint-goal' }, content: [{ type: 'text', text: JSON.stringify({ status: 'certified', certificate }) }] } } },
+      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'checkpoint-goal' }, content: [{ type: 'tool-result', toolCallId: 'checkpoint-goal', isError: false, content: [{ type: 'text', text: JSON.stringify({ status: 'certified', certificate }) }] }] } } },
       { seq: 5, type: 'goal/change', data: { operation: 'complete', goal: { id: 'certified-goal', revision: 1, phase: 'complete' } } },
     )
     const replayed = deriveProjection(events as never, OPT_IN, {}, true).projection

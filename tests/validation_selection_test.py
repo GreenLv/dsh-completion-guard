@@ -99,6 +99,14 @@ class ValidationSelectionTests(unittest.TestCase):
         self.assertTrue(plan["full_required"])
         self.assertEqual(plan["gates"], ["full_candidate"])
 
+    def test_new_native_profile_paths_are_mapped(self) -> None:
+        for path in ("scripts/native_host_probe_v070.mjs", "scripts/native_release_fixture_v070.mjs",
+                     "schemas/native-host-probe-v2.schema.json", "schemas/native-host-bound-v4.schema.json",
+                     "scripts/validate_native_v070.py", "tests/validate_native_v070_test.py"):
+            plan = self.classify(path)
+            self.assertEqual(plan["unknown_paths"], [])
+            self.assertIn("native_artifact", plan["invalidates"])
+
     def test_overlapping_rules_are_additive(self) -> None:
         plan = self.classify("cordis.patch.yml")
         self.assertIn("host_lock_tests", plan["gates"])
