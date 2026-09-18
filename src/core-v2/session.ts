@@ -1,10 +1,41 @@
 import { createHash } from 'node:crypto'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { posix } from 'node:path'
 import type { GuardProjection, DerivedEnvelope, GuardItem } from '../domain/types.js'
 import { assessmentAction, assessmentOutcomePredicate, currentActionBases, testOutcomePredicate } from '../domain/stop-policy.js'
 import { projectCoreV2 } from './project.js'
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
+// A persisted root and host call keep their own path syntax. Using the running
+// Node platform here would silently turn a POSIX fixture/remote path into a
+// Windows drive path (or the reverse) before any host identity proof exists.
+const windowsAbsolute = (value: string): boolean => /^[A-Za-z]:\\/.test(value) && !value.includes('/')
+  && !value.slice(3).includes('\\\\') && !value.slice(3).includes(':')
+  && !value.split('\\').some((part) => part === '.' || part === '..')
+const posixAbsolute = (value: string): boolean => value.startsWith('/') && !value.startsWith('//')
+  && !value.includes('\\') && posix.normalize(value) === value
+const portableResolve = (base: string | undefined, value: string): string | undefined => {
+  // An explicit absolute target still belongs to the root-time locator
+  // flavor. A Windows host must not interpret a synthetic POSIX /work path as
+  // its current drive, or vice versa.
+  if (windowsAbsolute(value)) return !base || windowsAbsolute(base) ? value : undefined
+  if (posixAbsolute(value)) return !base || posixAbsolute(base) ? value : undefined
+  if (!base || value.includes('\\') || value.includes(':') || value.split('/').some((part) => !part || part === '.' || part === '..')) return undefined
+  if (posixAbsolute(base)) return posix.resolve(base, value)
+  // Windows relative locators remain unavailable in shared core/v2. Do not
+  // manufacture a POSIX selection from a drive-rooted Session header.
+  return undefined
+}
+const portableRelativeWithin = (base: string, target: string): string | undefined => {
+  if (posixAbsolute(base) && posixAbsolute(target)) {
+    const suffix = posix.relative(base, target)
+    return suffix && suffix !== '..' && !suffix.startsWith('../') ? suffix : undefined
+  }
+  // The shared core currently has no Windows relative/directory locator
+  // authority. In particular win32.relative would silently grant case and
+  // separator aliases without the host's physical path proof.
+  return undefined
+}
+const portableContains = (base: string, target: string): boolean => portableRelativeWithin(base, target) !== undefined
 const isResume = (text: string): boolean => /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(text.trim())
 const row = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {}
 const rootText = (event: DerivedEnvelope): string => {
@@ -69,7 +100,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     return { id: `root:${root.seq}`, seq: root.seq, kind: 'root', unit, revision: 1, sha256: hash(text),
       byte_length: Buffer.byteLength(text, 'utf8'), text, call_id: null, turn: String(row(root.data).turn ?? turn),
       ...(projection.rootLocatorContexts.get(root.seq) ? { locator_base: projection.rootLocatorContexts.get(root.seq)!.base,
-        locator_flavor: 'posix' } : {}) }
+        locator_flavor: projection.rootLocatorContexts.get(root.seq)!.flavor } : {}) }
   })
   const requirements: Array<Record<string, unknown>> = []
   const facts: Array<Record<string, unknown>> = []
@@ -145,8 +176,8 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       const own = sourceSpan(candidate, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq))
       const path = candidate.requestedTarget?.artifact_id
       const base = projection.rootLocatorContexts.get(root.seq)?.base
-      if (!own || own.end > itemSpan.start || typeof path !== 'string' || !base || !path.startsWith(`${base}/`)) return []
-      const literal = relative(base, path)
+      if (!own || own.end > itemSpan.start || typeof path !== 'string' || !base || !portableContains(base, path)) return []
+      const literal = portableRelativeWithin(base, path)!
       if (!literal || literal.startsWith('../') || literal.includes('\\')) return []
       const offset = raw.subarray(own.start, own.end).indexOf(Buffer.from(literal, 'utf8'))
       return offset < 0 ? [] : [{ path, literal, start: own.start + offset, end: own.start + offset + Buffer.byteLength(literal, 'utf8') }]
@@ -160,19 +191,19 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     // effect selects the absolute implementation target; the host call and
     // resulting fact, rather than cwd inference, establish that choice.
     const rootBase = projection.rootLocatorContexts.get(root.seq)?.base
-    const relativeName = rootBase && named?.startsWith(`${rootBase}/`) ? relative(rootBase, named) : undefined
+    const relativeName = rootBase && named ? portableRelativeWithin(rootBase, named) : undefined
     const relativePaths = relativeName && !relativeName.startsWith('../') && ownText.includes(relativeName) ? [relativeName] : []
     const relativeLiteral = at < 0 && named && item.semanticAction === 'modify'
       ? relativePaths.find((literal) => named.endsWith(`/${literal}`)) : undefined
     const relativeAt = relativeLiteral ? itemSpan.start + raw.subarray(itemSpan.start, itemSpan.end).indexOf(Buffer.from(relativeLiteral, 'utf8')) : -1
     const scopeValue = typeof item.requestedTarget?.scope === 'string' ? item.requestedTarget.scope
       : typeof item.requestedTarget?.artifact_id === 'string' ? item.requestedTarget.artifact_id : undefined
-    const editScope = directoryLiteral && scopeValue ? resolve(scopeValue, directoryLiteral) : scopeValue
+    const editScope = directoryLiteral && scopeValue ? portableResolve(scopeValue, directoryLiteral) : scopeValue
     const editChoices = item.semanticAction === 'modify' && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === 'string'
       ? [...projection.evidence.values()].filter((fact) => fact.semanticAction === 'modify' && fact.evidenceRole === 'effect'
         && fact.outcome === 'success' && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq
         && fact.subjects.length === 1 && typeof fact.subjects[0] === 'string'
-        && fact.subjects[0].startsWith(`${editScope.replace(/\/$/u, '')}/`)) : []
+        && portableContains(editScope, fact.subjects[0])) : []
     const selectedEdit = editChoices.length === 1 ? editChoices[0] : undefined
     const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) =>
       fact.evidenceRole === 'state' && fact.toolName === 'context_guard_observe_file' && fact.outcome === 'success'
@@ -261,7 +292,9 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         implementation_choice: kind === 'constraint' ? null : target,
         host_selection: kind === 'constraint' ? null : target, resolved: target, observed: kind === 'constraint' ? null : target, subject_kind: subjectKind,
         constraint_kind: forbiddenFile ? 'exact' : directoryLiteral ? 'directory' : relativeLiteral ? 'exact' : selectedScope || selectedEdit || selectedReadback ? 'work_unit' : 'exact',
-        ...((forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? { resolved_constraint: resolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral!) } : {}),
+        ...((forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? {
+          resolved_constraint: portableResolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral!),
+        } : {}),
         selection_source_id: kind === 'constraint' ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}`
           : relativeLiteral ? (() => { const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === 'modify'
             && entry.evidenceRole === 'effect' && entry.outcome === 'success' && entry.subjects.includes(target) && sourceByCall.has(entry.callId))
@@ -323,7 +356,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       const fileCall = ['read','read_file','write','write_file','edit','edit_file'].includes(callName)
       const filePath = callArgs.file_path
       const fileCallTarget = fileCall && typeof filePath === 'string' && filePath
-        ? isAbsolute(filePath) ? resolve(filePath) : rootBase ? resolve(rootBase, filePath) : undefined : undefined
+        ? portableResolve(rootBase, filePath) : undefined
       // Ordinary file calls select their target in persisted arguments. Guard
       // readback calls instead select the target through their verified observer
       // result; shell/Git evidence uses the parsed host command/workdir. Never

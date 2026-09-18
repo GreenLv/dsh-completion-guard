@@ -50,6 +50,13 @@ describe('core/v2 upstream source mirrors', () => {
     expect(receipt.canonical_commit).toMatch(/^[0-9a-f]{40}$/)
   })
 
+  it('checks out runtime JSON mirrors with exact LF bytes on every platform', () => {
+    for (const path of ['src/core-v2/intent.json', 'src/core-v2/observation.schema.json']) {
+      const attribute = execFileSync('git', ['check-attr', 'eol', '--', path], { cwd: repo, encoding: 'utf8' }).trim()
+      expect(attribute).toBe(`${path}: eol: lf`)
+    }
+  })
+
   it('rejects a commit-bound identity without a full real commit ID', () => {
     fixture((root, manifest) => {
       manifest.status = 'commit-bound-source-mirror'

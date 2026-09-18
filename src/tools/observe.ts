@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
-import { join } from 'node:path'
+import { posix, win32 } from 'node:path'
 import { promisify } from 'node:util'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -94,7 +94,12 @@ export function createNativeFileObserver(host: {
           const base = await host.fs.resolve(cwd, { signal: exec.signal })
           const path = host.fs.processPath(target)
           const root = host.fs.processPath(base)
-          if (host.fs.contains(base, target) && path.startsWith('/') && root.startsWith('/')) {
+          const absoluteFlavor = (value: string) => value.startsWith('/') && !value.startsWith('//')
+            && !value.includes('\\') && posix.normalize(value) === value ? 'posix'
+            : /^[A-Za-z]:\\/.test(value) && !value.includes('/') && !value.slice(3).includes('\\\\')
+              && !value.slice(3).includes(':') && !value.split('\\').some((part) => part === '.' || part === '..')
+              ? 'windows' : undefined
+          if (host.fs.contains(base, target) && absoluteFlavor(path) && absoluteFlavor(path) === absoluteFlavor(root)) {
             canonicalPath = path; canonicalBase = root
           }
         }
@@ -164,6 +169,11 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
       try {
         const top = await git('rev-parse', '--show-toplevel')
         if (!top || await realpath(top) !== await realpath(repository)) return missing('native_git_repository_mismatch')
+        // Git may print forward slashes on Windows even when the persisted
+        // host call selected a backslash path. The realpath comparison proves
+        // they are the same repository; keep the call's display identity in
+        // the readback fact so a later binding cannot select a different repo.
+        const observedRepository = repository
         const branch = await git('symbolic-ref', '--short', 'HEAD')
         const postOid = await git('rev-parse', 'HEAD')
         if (!/^[0-9a-f]{40,64}$/.test(postOid)) return missing('native_git_readback_unavailable')
@@ -172,7 +182,7 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
           const parentOid = await git('rev-parse', 'HEAD^')
           const treeOid = await git('rev-parse', 'HEAD^{tree}')
           return { status: 'observed' as const, reason_code: 'git_commit_observed', effect_call_id: args.effect_call_id,
-            action: gitAction, repository: top, branch, remote: '', refspec: '', post_oid: postOid, parent_oid: parentOid, tree_oid: treeOid }
+            action: gitAction, repository: observedRepository, branch, remote: '', refspec: '', post_oid: postOid, parent_oid: parentOid, tree_oid: treeOid }
         }
         const remote = argv[2]; const refspec = argv[3]
         if (argv.length !== 4 || !remote || !/^refs\/heads\/[^:]+:refs\/heads\/[^:]+$/.test(refspec)) return missing('native_git_refspec_unsupported')
@@ -185,7 +195,7 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
           || (output.includes('[new branch]') && output.includes(`-> ${destinationName}`))
         if (remoteOid !== localOid || !reportedUpdate) return missing('native_git_push_readback_mismatch')
         return { status: 'observed' as const, reason_code: 'git_push_observed', effect_call_id: args.effect_call_id,
-          action: gitAction, repository: top, branch, remote, refspec, post_oid: remoteOid, parent_oid: '', tree_oid: '' }
+          action: gitAction, repository: observedRepository, branch, remote, refspec, post_oid: remoteOid, parent_oid: '', tree_oid: '' }
       } catch { return missing('native_git_readback_unavailable') }
     },
   })
@@ -260,7 +270,11 @@ export function createTestReadinessObserver(host: {
         }
       }
       try {
-        const target = await host.fs.resolve(join(scope, 'package.json'), { signal: exec.signal })
+        if (/^[A-Za-z]:/.test(scope) && (!/^[A-Za-z]:\\/.test(scope) || scope.includes('/')))
+          return missing('readiness_scope_unavailable')
+        const manifestPath = /^[A-Za-z]:\\/.test(scope) ? win32.join(scope, 'package.json')
+          : posix.join(scope, 'package.json')
+        const target = await host.fs.resolve(manifestPath, { signal: exec.signal })
         const before = await host.fs.stat(target, exec.signal)
         if (!before || before.type !== 'file' || (before.size !== undefined && before.size > 2_000_000)) return missing('readiness_manifest_unavailable')
         const raw = await host.fs.readText(target, exec.signal)

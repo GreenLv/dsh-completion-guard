@@ -525,8 +525,8 @@ export interface GuardProjection {
    */
   boundaryProtocol?: 5 | 6
   v6BoundarySeq?: number
-  /** Root-time POSIX locator bases from the durable Session header, never a later tool cwd. */
-  rootLocatorContexts: Map<number, { base: string; sha256: string }>
+  /** Root-time locator bases from the durable Session header, never a later tool cwd. Windows relative resolution remains unavailable. */
+  rootLocatorContexts: Map<number, { base: string; flavor: 'posix' | 'windows'; sha256: string }>
   /** V6 identity domain binds root bytes, original locator base and Session identity. */
   rootLocatorIdentity?: string
   /** Shared core/v2 projection from confirmed Session sources; absent when the adapter lacks exact source coverage. */

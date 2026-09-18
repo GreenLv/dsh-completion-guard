@@ -17,6 +17,7 @@ import { currentActionBases, decideTurnBoundary } from '../src/domain/stop-polic
 import { createCheckpointTool } from '../src/tools/checkpoint.js'
 import { createPrepareTool } from '../src/tools/prepare.js'
 import { projectSessionCoreV2 } from '../src/core-v2/session.js'
+import { requestedTargetMatchesResolved } from '../src/domain/protocol-manifest.js'
 
 const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
 const gitExec = promisify(execFile)
@@ -157,6 +158,9 @@ describe('native host file result and independent readback', () => {
     const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: work }, true, HOST).projection
     const item = [...projection.items.values()].find((row) => row.semanticAction === 'commit')!
     expect(item).toBeDefined()
+    expect(item.requestedTarget?.repository, JSON.stringify(item.requestedTarget)).toBe(work)
+    expect(requestedTargetMatchesResolved('commit', item.requestedTarget, { repository: work, branch: 'main' }),
+      JSON.stringify({ requested: item.requestedTarget, resolved: { repository: work, branch: 'main' } })).toBe(true)
     const effect = [...projection.evidence.values()].find((row) => row.callId === 'native-commit')!
     const state = [...projection.evidence.values()].find((row) => row.callId === 'git-readback')!
     const commitBinding = { itemId: item.id, evidenceIds: [effect.id, state.id], semanticAction: 'commit' as const,

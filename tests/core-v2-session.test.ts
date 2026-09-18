@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
+import { deriveProjection, PROTOCOL_V6_NOTICE, rootLocatorFlavor } from '../src/domain/derive.js'
 import { projectSessionCoreV2, sessionCoreSnapshot } from '../src/core-v2/session.js'
 import type { DerivedEnvelope } from '../src/domain/types.js'
 import { replayRawV2 } from '../src/raw-replay.js'
@@ -7,6 +7,7 @@ import { createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createTestReadinessObserver } from '../src/tools/observe.js'
+import { requestedTargetMatchesResolved } from '../src/domain/protocol-manifest.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 import { currentActionBases, decideTurnBoundary } from '../src/domain/stop-policy.js'
 import { createHash } from 'node:crypto'
@@ -21,6 +22,42 @@ function replay(root: string) {
   return { events, projection }
 }
 describe('Session to core/v2 host adapter', () => {
+  it('classifies immutable root bases without ambient drive, case or separator normalization', () => {
+    expect(rootLocatorFlavor('/work')).toBe('posix')
+    expect(rootLocatorFlavor('C:\\Work')).toBe('windows')
+    for (const unknown of ['C:Work', '\\Work', 'C:/Work', 'C:\\Work\\..\\Other',
+      'C:\\Work\\\\Other', '\\\\server\\share', '/work\\other']) expect(rootLocatorFlavor(unknown)).toBeUndefined()
+  })
+  it.skipIf(process.platform !== 'win32')('projects a real Windows Session header with its drive flavor', () => {
+    const cwd = process.cwd()
+    expect(rootLocatorFlavor(cwd)).toBe('windows')
+    const id = SessionId('real-windows-root-flavor')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Modify ${cwd}\\A.txt.` }],
+      source: { kind: 'user' } }), { surfaceOp: 'append' })
+    const events = session.snapshotEvents() as never
+    const projection = deriveProjection(events, { activation: 'always' }, { cwd }, true, HOST).projection
+    projection.durabilityWatermark = 'confirmed'
+    const root = (sessionCoreSnapshot(events, projection)?.sources as Array<Record<string, unknown>>)
+      ?.find((source) => source.kind === 'root' && String(source.text).startsWith('Modify'))
+    expect(root).toMatchObject({ locator_base: cwd, locator_flavor: 'windows' })
+  })
+  it('keeps a root-named Windows drive repository as one absolute identity', () => {
+    const cwd = 'D:\\a\\_temp\\dsh-native-git-AbCd12\\work'
+    const id = SessionId('windows-absolute-repository')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
+    session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Commit changes in repository ${cwd}.` }],
+      source: { kind: 'user' } }), { surfaceOp: 'append' })
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
+    const item = [...projection.items.values()].find((entry) => entry.semanticAction === 'commit')!
+    expect(item.requestedTarget?.repository).toBe(cwd)
+    expect(requestedTargetMatchesResolved('commit', item.requestedTarget, { repository: cwd, branch: 'main' })).toBe(true)
+    expect(requestedTargetMatchesResolved('commit', item.requestedTarget, { repository: cwd.toLowerCase(), branch: 'main' })).toBe(false)
+    expect(requestedTargetMatchesResolved('commit', item.requestedTarget, { repository: cwd.replaceAll('\\', '/'), branch: 'main' })).toBe(false)
+  })
   it('projects exact root bytes and a pending edit without fabricating a state fact', () => {
     const { events, projection } = replay('Modify /work/alpha.txt.')
     const snapshot = sessionCoreSnapshot(events, projection)!

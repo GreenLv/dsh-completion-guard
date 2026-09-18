@@ -1223,14 +1223,23 @@ function insert(
  * `tool/result`, `tool/ptc-dispatch-start`, `tool/ptc-dispatch`, and
  * `compaction/summary`.
  */
+export function rootLocatorFlavor(cwd: string): 'posix' | 'windows' | undefined {
+  const posixBase = cwd.startsWith('/') && !cwd.startsWith('//') && !cwd.includes('\\')
+    && !cwd.includes('//') && !cwd.split('/').some((part) => part === '.' || part === '..')
+  const windowsBase = /^[A-Za-z]:\\/.test(cwd) && !cwd.includes('/')
+    && !cwd.slice(3).includes('\\\\') && !cwd.slice(3).includes(':')
+    && !cwd.split('\\').some((part) => part === '.' || part === '..')
+  return windowsBase ? 'windows' : posixBase ? 'posix' : undefined
+}
+
 function refreshRootLocatorContext(
   projection: GuardProjection, sourceEvents: readonly DerivedEnvelope[], scope: DeriveScope, asOf: number,
 ): void {
   projection.rootLocatorContexts.clear()
   projection.rootLocatorIdentity = undefined
-  if (projection.boundaryProtocol !== 6 || !scope.sessionHeader || typeof scope.cwd !== 'string'
-    || !scope.cwd.startsWith('/') || scope.cwd.startsWith('//') || scope.cwd.split('/').includes('..')
-    || scope.cwd.split('/').includes('.') || scope.cwd.includes('//')) return
+  if (projection.boundaryProtocol !== 6 || !scope.sessionHeader || typeof scope.cwd !== 'string') return
+  const flavor = rootLocatorFlavor(scope.cwd)
+  if (!flavor) return
   const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : []
   for (const ref of refs) {
     if (ref.seq > asOf) continue
@@ -1240,7 +1249,7 @@ function refreshRootLocatorContext(
     const content = asRecord(source.data)?.content
     const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === 'text')
       .map((part) => String(asRecord(part)?.text ?? '')).join('') : ''
-    projection.rootLocatorContexts.set(ref.seq, { base: scope.cwd,
+    projection.rootLocatorContexts.set(ref.seq, { base: scope.cwd, flavor,
       sha256: sha256(`dsh.root-locator.v1\0${JSON.stringify([projection.sessionRefDigest, ref.seq, sha256(raw), scope.cwd])}`) })
   }
   if (projection.rootLocatorContexts.size) projection.rootLocatorIdentity = sha256(`dsh.root-locator-set.v1\0${JSON.stringify(
