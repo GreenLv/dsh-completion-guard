@@ -1,0 +1,144 @@
+{
+  "schema": "multi-repository-plan-freeze/v1",
+  "subject": {
+    "kind": "plan_spec",
+    "paths": [
+      "docs/CORE_ALIGNMENT_CONTRACT_V2.md",
+      "docs/DEVELOPMENT_PLAN_0_7_0.md"
+    ],
+    "sha256": "d9b19bddfa99fff432e1001b762543049a02fcd62060821bfc8b19b4514c7f96",
+    "version": "070-014-plan.2"
+  },
+  "owners": {
+    "mutation_owner": "coordinator",
+    "reviewers": [
+      "mechanism_review",
+      "codex_next_audit"
+    ]
+  },
+  "review_contract": {
+    "lenses": [
+      "authority",
+      "identity",
+      "state_effect_readback",
+      "canonicalization",
+      "platform_feasibility",
+      "migration_versioning",
+      "verification_release_boundary"
+    ],
+    "blocking_severities": [
+      "P1"
+    ],
+    "scope_reopened": false,
+    "scope_reopen_reason": null
+  },
+  "baselines": [
+    {
+      "id": "dsh_source",
+      "kind": "mutable",
+      "value": "0.6.3 at 1735cfadecf0feddfa07bd811fa0297a49c7fd88; workflow/test-only baseline advanced; no 0.7.0 runtime implementation",
+      "refreshed_at": "2026-09-18"
+    },
+    {
+      "id": "codex_source",
+      "kind": "mutable",
+      "value": "0.13.9 at ce667adefd716f829fb1fb070b3089e789ed74c3; no 0.14.0 runtime implementation",
+      "refreshed_at": "2026-09-18"
+    },
+    {
+      "id": "stop_incident",
+      "kind": "mutable",
+      "value": "CGI-20260918-codex-future-observation-stop; Codex 0.13.9 macOS observed and isolated Hook reproduction; no DSH/Windows reproduction or runtime repair",
+      "refreshed_at": "2026-09-18"
+    }
+  ],
+  "issues": [
+    {
+      "id": "D070-R01",
+      "severity": "P1",
+      "status": "resolved",
+      "lens": "platform_feasibility",
+      "summary": "将效果前发布拒绝限定于Guard控制入口及契约预检，明确普通opaque通道无拦截保证/不可认证。",
+      "invalidates": [
+        "normative_spec",
+        "implementation_annex"
+      ]
+    },
+    {
+      "id": "CG14-R01",
+      "severity": "P1",
+      "status": "resolved",
+      "lens": "state_effect_readback",
+      "summary": "继续提示的actionable前提与虚假完成/proof纠正分离，合计每turn一次预算。",
+      "invalidates": [
+        "normative_spec",
+        "implementation_annex"
+      ]
+    },
+    {
+      "id": "CG14-R02",
+      "severity": "P1",
+      "status": "resolved",
+      "lens": "authority",
+      "summary": "显式release profile仍进入发布模式；空契约相关发布fail-closed。",
+      "invalidates": [
+        "normative_spec",
+        "implementation_annex"
+      ]
+    },
+    {
+      "id": "CG14-R03",
+      "severity": "P2",
+      "status": "resolved",
+      "lens": "platform_feasibility",
+      "summary": "P0加入两宿主真实工具事件、来源信任、readback、水位及平台能力清单。",
+      "invalidates": [
+        "normative_spec",
+        "implementation_annex"
+      ]
+    },
+    {
+      "id": "CG14-STOP-R01",
+      "severity": "P1",
+      "status": "resolved",
+      "lens": "state_effect_readback",
+      "summary": "Planning gap closed with AC05.1 action provenance/as-of facts, separate persistence/resume reasons and external-operation registration, plus A13 positive/negative production-path acceptance. Runtime incident remains reproduced and awaits implementation.",
+      "invalidates": [
+        "normative_spec",
+        "implementation_annex"
+      ]
+    },
+    {
+      "id": "D070-STOP-R01",
+      "severity": "P2",
+      "status": "resolved",
+      "lens": "verification_release_boundary",
+      "summary": "D070-00 explicitly freezes AC05.1 fields/version identities and A13 independent oracle at P0; M2 wires the frozen contract rather than defining it late.",
+      "invalidates": [
+        "implementation_annex"
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "id": "structural_docs",
+      "status": "passed",
+      "evidence": "DSH repository audit: 29 Markdown files, zero errors/warnings; documentation unit tests 3/3 and release-pack tests 2/2 passed. Codex scoped audit: 2 Markdown files, zero errors/warnings; full validate-skills passed 36 skills. Native/product implementation acceptance is not claimed."
+    },
+    {
+      "id": "shared_copy",
+      "status": "passed",
+      "evidence": "Byte-identical shared planning copies; SHA256 523f9239168fb11d8daf72d6c3348b3121caa1b05aaa7f32afd3692952c477d5."
+    },
+    {
+      "id": "independent_review",
+      "status": "passed",
+      "evidence": "Plan.1 seven-lens review retained for unchanged contract. Incident reopened authority/state-effect/verification and affected migration only. mechanism_review and codex_next_audit independently read final bytes; D070-STOP-R01 corrected and rechecked. No open P1. Planning freeze only; product P0 and runtime implementation remain pending. Prior subject cd86da843acbc38190307e8e604ddab6a3e464be857f4baa9da4b4b3db3bb755."
+    }
+  ],
+  "freeze_decision": {
+    "status": "frozen",
+    "subject_sha256": "d9b19bddfa99fff432e1001b762543049a02fcd62060821bfc8b19b4514c7f96",
+    "open_p1_ids": []
+  }
+}
