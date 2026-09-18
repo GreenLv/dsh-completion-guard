@@ -58,6 +58,17 @@ change the installed plugin runtime or grant release authority.
 
 ## Coordination and reader quality
 
+- For repeated implementation/review handbacks, use the failure-family closure
+  mode of `multi-repository-development-orchestration` when available, including
+  in this single repository. Otherwise apply the same local rule: a claimed fix
+  followed by another violation of the same invariant needs a shared-cause and
+  entry/field matrix review before another freeze recommendation. Batch findings,
+  retain unaffected passing evidence, and continue once the finite agreed gates
+  pass; new reproducible contract failures remain blockers.
+- Use `node tests/run-repair-families.mjs --list` to select the affected named
+  bundle; see `tests/repair-families.md` for production paths and coverage limits.
+  These bundles do not replace the full candidate matrix at freeze.
+
 - Keep a single coordinating owner and one writer per candidate worktree.
   An authorized external harness may implement a complete batch and return
   its diff and evidence for concentrated acceptance; do not add another review

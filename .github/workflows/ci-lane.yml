@@ -33,3 +33,5 @@ jobs:
         working-directory: tests/fixtures/host-composition
         run: pnpm install --ignore-workspace --frozen-lockfile
       - run: pnpm test
+      - name: Test repair-family runner portability
+        run: node --test tests/repair-families.node.mjs
