@@ -1,4 +1,4 @@
-import { PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE } from './derive.js'
+import { PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE, PROTOCOL_V6_NOTICE } from './derive.js'
 /**
  * Runtime-owned startup lifecycle. It expresses the activation strategy of a
  * session, never contract or certification state: `armed` means protection is
@@ -60,6 +60,8 @@ export interface FirstStepPreviewInput {
   enabled: boolean
   /** The durable log already contains a v5 (0.6) Guard boundary. */
   boundaryV5Present?: boolean
+  boundaryV6Present?: boolean
+  targetProtocol?: 5 | 6
   /** The durable log already contains a v4 (or newer) Guard boundary. */
   boundaryPresent: boolean
   /** The session is a delegated/subagent session, never a root conversation. */
@@ -84,10 +86,10 @@ export function previewFirstStepInjection(
 ): FirstStepInjection | undefined {
   if (!input.enabled || input.delegated) return undefined
   if (!claimedRealInput) return undefined
-  if (input.boundaryV5Present) return undefined
+  if (input.targetProtocol === 6 ? input.boundaryV6Present : input.boundaryV5Present) return undefined
   return {
-    boundary: PROTOCOL_V5_NOTICE,
-    guidance: firstStepGuidance(input.policy ?? 'standard'),
+    boundary: input.targetProtocol === 6 ? PROTOCOL_V6_NOTICE : PROTOCOL_V5_NOTICE,
+    guidance: input.targetProtocol === 6 ? firstStepGuidanceV6(input.policy ?? 'standard') : firstStepGuidance(input.policy ?? 'standard'),
   }
 }
 /**
@@ -109,6 +111,11 @@ export function firstStepGuidance(policy: 'standard' | 'strict' | 'release' = 's
     + ' Ordinary answers and investigations need no certification.'
 }
 export const FIRST_STEP_GUIDANCE: string = firstStepGuidance('standard')
+export function firstStepGuidanceV6(policy: 'standard' | 'strict' | 'release' = 'standard'): string {
+  return 'Context Guard records requirements and verifies completion from persisted host tool results and independent readback. Run ordinary edits, tests, and Git work with host tools; use read-only Guard observers and context_guard_checkpoint when a requirement needs certified completion. Older Guard action and evidence records remain historical and do not authorize or certify current ordinary work.'
+    + (policy === 'strict' ? ' Explicit visual or complete-scope proof still requires a real readback.' : '')
+    + ' Goal completion protection applies only after explicit /context-guard on adoption; an adopted release contract keeps its separate release checks.'
+}
 /**
  * Lifecycle phase derived from durable facts. `enabled` is the log-derived
  * enablement (`always`, or the explicit `on`/`off` command sequence), and

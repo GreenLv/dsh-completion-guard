@@ -113,8 +113,8 @@ describe('Goal readback against the host GoalView type', () => {
     const item = captureClause('持续推进，直到迁移脚本全部跑完为止。', 'm1', 'R001', 1, { cwd: '/work' })
     projection.items.set(item.id, item)
     projection.contractRevision = 1
-    // Without the goal this input earns Guard's one correction steer.
-    expect(decideTurnBoundary(projection)).toMatchObject({ action: 'continue', reason: 'protocol_correction_steer' })
+    // A generic persistence phrase does not establish an actionable current step.
+    expect(decideTurnBoundary(projection)).toMatchObject({ action: 'stop', reason: 'safe_yield_pending_preserved' })
 
     const runtime = runtimeWithGoal(() => view({ phase: 'paused', activation: 'disarmed' }), { id: 'goal-1', revision: 3, phase: 'active' })
     Object.assign(runtime.projection, {

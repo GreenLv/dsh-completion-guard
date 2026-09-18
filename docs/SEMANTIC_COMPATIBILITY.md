@@ -39,6 +39,17 @@ Authority rules:
   DSH v0.1.0 port. It is a historical fact, not the current alignment claim;
   current status lives in this document and the delta ledger.
 
+## 0.7.0 core/v2 source mirror
+
+`tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json` separately binds ten
+shared core/v2 upstream source files to Codex Context Guard commit
+`20b938d5728d9d6a27386268a79ceeb2be5c39ce` and records eight mirror
+entries, including the packaged runtime JSON copies. The mirror validator checks
+the committed upstream file bytes and local copies. The earlier v1/digest pin
+above remains byte-for-byte unchanged. This is a shared source and conformance
+identity; complete product behavior, installed state and release acceptance are
+separate claims.
+
 ## 0.6.3 core-alignment delta
 
 The 0.6.2 core-alignment review reproduced three domain defects — a question

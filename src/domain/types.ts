@@ -61,6 +61,9 @@ export type NeedsReviewReason =
    * untouched; only its eligibility as a CURRENT pass is refused.
    */
   | 'legacy_missing_execution_qualification'
+  | 'legacy_v6_generic_action'
+  | 'legacy_v6_ordinary_certification'
+  | 'legacy_v6_text_wait'
 
 export interface NeedsReviewFact {
   reason: NeedsReviewReason
@@ -208,7 +211,7 @@ export interface GuardItem {
   authority?: 'root_instruction' | 'root_adoption' | 'legacy_authority_unclassified'
   legacyFlags?: Array<'legacy_generic_run' | 'legacy_authority_unclassified'>
   /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
-  taskKind?: 'inquiry' | 'action'
+  taskKind?: 'inquiry' | 'action' | 'context'
   /**
    * v0.5.1 interpretation layer, derived from the same source bytes as
    * {@link normalizedText} by `domain/semantics.ts`. These fields record what
@@ -324,6 +327,19 @@ export interface GuardEvidence {
   reasonCode?: string
   adapterId?: string
   adapterVersion?: string
+  /** Current-version native readback is causally tied to a persisted host effect call. */
+  causedByCallId?: string
+  nativeCanonicalPath?: string
+  nativeCanonicalBase?: string
+  nativeGitTreeOid?: string
+  nativeGitParentOid?: string
+  readinessForItemId?: string
+  readinessPredicate?: string
+  readinessManifestSha256?: string
+  readinessEffectCallId?: string
+  readinessSelectedPath?: string
+  readinessScriptName?: string
+  readinessInputSha256?: string
   externalOperationRef?: ExternalOperation
   /**
    * 0.6.2 D062-02: the LAYERED reading of a shell result, kept beside — never
@@ -394,10 +410,16 @@ export interface GuardCheckpoint {
   openDigest: string
   evidenceSha256: string
   bindingDigest: string
+  /** v3 DSH-native certificate extension; older certificate bytes stay intact. */
+  nativeObservations?: { schema: 'dsh.native-observation/v1' | 'dsh.native-observation/v2'; digests: string[] }
+  /** V6-only, root-time Session locator identity; outside historical digest_v3. */
+  rootLocatorIdentity?: string
   bindings: EvidenceBinding[]
   goalRef?: GoalRef
   certificationDigest: string
   result: 'certified' | 'incomplete' | 'unknown'
+  /** Derived persisted result watermark; excluded from historical certificate bytes. */
+  recordedAtSeq?: number
   /**
    * 0.6.0 v2 certificate (v5 sessions only): the unit whose closure was
    * certified. Version-1 certificates keep the whole-session contract and
@@ -480,6 +502,8 @@ export interface ExternalOperation {
 
 export interface GuardProjection {
   enabled: boolean
+  /** Explicit root /context-guard on adoption, never inferred from installation or always observation. */
+  goalCompletionAdopted: boolean
   epoch: number
   contractRevision: number
   rebindProposals: Map<string, import('./rebind.js').RebindProposal>
@@ -499,7 +523,15 @@ export interface GuardProjection {
    * `undefined` (legacy) before it. Determines certificate version, closure
    * scope, and whether delivery/unit semantics are active.
    */
-  boundaryProtocol?: 5
+  boundaryProtocol?: 5 | 6
+  v6BoundarySeq?: number
+  /** Root-time POSIX locator bases from the durable Session header, never a later tool cwd. */
+  rootLocatorContexts: Map<number, { base: string; sha256: string }>
+  /** V6 identity domain binds root bytes, original locator base and Session identity. */
+  rootLocatorIdentity?: string
+  /** Shared core/v2 projection from confirmed Session sources; absent when the adapter lacks exact source coverage. */
+  coreV2?: Record<string, unknown>
+  coreV2Reason?: 'source_not_projectable' | 'projection_failed'
   /** 0.6.0 responsibility tier (C06), from the effective configuration. */
   policy: 'standard' | 'strict' | 'release'
   /** 0.6.0 C01 coverage summaries, one per captured root message (last 16). */
@@ -606,6 +638,7 @@ export interface GuardProjection {
 export function createProjection(): GuardProjection {
   return {
     enabled: false,
+    goalCompletionAdopted: false,
     epoch: 0,
     contractRevision: 0,
     rebindProposals: new Map(),
@@ -615,6 +648,7 @@ export function createProjection(): GuardProjection {
     boundaries: [],
     externalOperations: new Map(),
     units: new Map(),
+    rootLocatorContexts: new Map(),
     coverage: [],
     releaseContracts: [],
     releaseReservations: [],
@@ -667,6 +701,7 @@ export interface DeriveResult {
   protocolV4Present: boolean
   /** True when the durable log carries the 0.6 first-step protocol boundary. */
   boundaryV5: boolean
+  boundaryV6: boolean
 }
 
 export interface DerivedEnvelope {

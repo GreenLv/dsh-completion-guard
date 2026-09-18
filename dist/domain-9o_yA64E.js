@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import * as path from "node:path";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -54,8 +54,8 @@ function sanitizeClauseText(text) {
 	value = value.replace(PLAIN_KEY, (_match) => `${_match.slice(0, 3)}-<redacted>`);
 	value = value.replace(/https?:\/\/[^\s'"`，。)]+[?#][^\s'"`，。)]*/g, (match) => {
 		const cut = Math.min(...["?", "#"].map((marker) => {
-			const index = match.indexOf(marker);
-			return index === -1 ? Infinity : index;
+			const index$1 = match.indexOf(marker);
+			return index$1 === -1 ? Infinity : index$1;
 		}));
 		return cut === Infinity ? match : `${match.slice(0, cut)}\u2026`;
 	});
@@ -63,8 +63,8 @@ function sanitizeClauseText(text) {
 }
 function sanitizeUrl(value) {
 	const cut = Math.min(...["?", "#"].map((marker) => {
-		const index = value.indexOf(marker);
-		return index === -1 ? Infinity : index;
+		const index$1 = value.indexOf(marker);
+		return index$1 === -1 ? Infinity : index$1;
 	}));
 	return cut === Infinity ? value : value.slice(0, cut);
 }
@@ -193,7 +193,7 @@ function validateManifest(manifest = COMMAND_SURFACE_MANIFEST) {
 			message: "must not be empty"
 		});
 		const sorted = [...values].map((value) => value.toLowerCase()).sort();
-		if (sorted.some((value, index) => index > 0 && value === sorted[index - 1])) issues.push({
+		if (sorted.some((value, index$1) => index$1 > 0 && value === sorted[index$1 - 1])) issues.push({
 			path: name,
 			message: "contains duplicates"
 		});
@@ -513,12 +513,12 @@ function semanticActionFromCommand(command) {
 function isStatefulAction(action) {
 	return STATEFUL_ACTIONS.includes(action);
 }
-function actionCompatible(required, observed) {
-	return ACTION_MANIFEST.compatibility[required].includes(observed);
+function actionCompatible(required$1, observed) {
+	return ACTION_MANIFEST.compatibility[required$1].includes(observed);
 }
-function hasExactKeys(tuple, required) {
-	if (!tuple) return required.length === 0;
-	return Object.keys(tuple).length === required.length && required.every((key) => Object.hasOwn(tuple, key));
+function hasExactKeys(tuple, required$1) {
+	if (!tuple) return required$1.length === 0;
+	return Object.keys(tuple).length === required$1.length && required$1.every((key) => Object.hasOwn(tuple, key));
 }
 function validateActionTarget(action, resolved, observed) {
 	const spec = ACTION_MANIFEST.actions[action];
@@ -590,13 +590,13 @@ function insideScope(artifact, scope) {
 */
 function boundedArtifactChoiceMatches(action, requested, resolved) {
 	if (action !== "create" && action !== "modify") return false;
-	const type = requested?.artifact_type;
+	const type$1 = requested?.artifact_type;
 	const scope = requested?.scope;
-	if (typeof type !== "string" || typeof scope !== "string" || !(type in BOUNDED_ARTIFACT_TYPES)) return false;
+	if (typeof type$1 !== "string" || typeof scope !== "string" || !(type$1 in BOUNDED_ARTIFACT_TYPES)) return false;
 	const artifact = resolved?.artifact_id;
 	if (typeof artifact !== "string" || !artifact) return false;
 	if (!insideScope(artifact, scope)) return false;
-	const allowed = BOUNDED_ARTIFACT_TYPES[type];
+	const allowed = BOUNDED_ARTIFACT_TYPES[type$1];
 	return allowed === null || allowed.has(extensionOf(artifact));
 }
 /**
@@ -652,8 +652,8 @@ const MUTATION_AUTHORITY_KEYS = {
 /** A mutation requires every user-selectable identity field, not a partial match. */
 function requestedTargetAuthorizesMutation(action, requested, resolved) {
 	if (boundedArtifactChoiceMatches(action, requested, resolved)) return true;
-	const required = MUTATION_AUTHORITY_KEYS[action];
-	return !!requested && required.every((key) => Object.hasOwn(requested, key)) && requestedTargetMatchesResolved(action, requested, resolved);
+	const required$1 = MUTATION_AUTHORITY_KEYS[action];
+	return !!requested && required$1.every((key) => Object.hasOwn(requested, key)) && requestedTargetMatchesResolved(action, requested, resolved);
 }
 function validateActionManifest() {
 	const issues = [];
@@ -724,7 +724,7 @@ function computeMaskedSpans(text) {
 		}
 		const end = text.indexOf("`", cursor + 1);
 		if (end < 0) break;
-		for (let index = cursor; index <= end; index += 1) characters[index] = " ";
+		for (let index$1 = cursor; index$1 <= end; index$1 += 1) characters[index$1] = " ";
 		cursor = end + 1;
 	}
 	return characters.join("");
@@ -899,7 +899,7 @@ const CJK_SUBORDINATE_BOUNDARY = /为了|用来|以便|从而|进而|用于/u;
 function conditionMarkerIsClauseLevel(masked, markerIndex) {
 	const english = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked);
 	const cjk = CJK_SUBORDINATE_BOUNDARY.exec(masked);
-	const starts = [english?.index, cjk?.index].filter((index) => index !== void 0);
+	const starts = [english?.index, cjk?.index].filter((index$1) => index$1 !== void 0);
 	if (starts.length === 0) return true;
 	return Math.min(...starts) >= markerIndex;
 }
@@ -1086,8 +1086,8 @@ function maskQuotedSpans(text) {
 	return quotedSpans(text).masked;
 }
 /** Whether the offset lies inside a quoted span. */
-function insideQuote(masked, index) {
-	return quotedSpans(masked).inside[index] === true;
+function insideQuote(masked, index$1) {
+	return quotedSpans(masked).inside[index$1] === true;
 }
 /**
 * Whether the clause's OWN span asks something, even when no governed head was
@@ -1650,13 +1650,13 @@ function splitTextFragments(text, from = 0) {
 	const fragments = [];
 	let cursor = from;
 	let start = from;
-	const boundaryAt = (index) => {
-		const character = text[index];
-		if (FRAGMENT_SEPARATORS.has(character)) return index + 1;
-		const match = CONJUNCT_BOUNDARY.exec(text.slice(index));
-		if (match && match.index === 0) return index + match[0].length;
-		if ((character === "并" || character === "且") && introducesActionClause(text.slice(index + 1))) return index + 1;
-		if ((character === "并" || character === "且") && QUESTION_CONTENT.test(text.slice(0, index)) && !QUESTION_CONTENT.test(text.slice(index + 1))) return index + 1;
+	const boundaryAt = (index$1) => {
+		const character = text[index$1];
+		if (FRAGMENT_SEPARATORS.has(character)) return index$1 + 1;
+		const match = CONJUNCT_BOUNDARY.exec(text.slice(index$1));
+		if (match && match.index === 0) return index$1 + match[0].length;
+		if ((character === "并" || character === "且") && introducesActionClause(text.slice(index$1 + 1))) return index$1 + 1;
+		if ((character === "并" || character === "且") && QUESTION_CONTENT.test(text.slice(0, index$1)) && !QUESTION_CONTENT.test(text.slice(index$1 + 1))) return index$1 + 1;
 	};
 	while (cursor < text.length) {
 		const after = boundaryAt(cursor);
@@ -1762,8 +1762,8 @@ function unmaskCode(masked) {
 function partitionClauseParts(scope, parts) {
 	if (/[。！？!?；;\n\r]/u.test(parts[0].text)) return void 0;
 	const informational = parts.map((part) => isInformationalFragment(fragmentMasked(scope, part)));
-	if (informational.some((flag, index) => !flag && firstNegation(fragmentMasked(scope, parts[index])) !== void 0)) return;
-	const work = informational.map((flag, index) => !flag && bearsLiveAction(fragmentMasked(scope, parts[index])));
+	if (informational.some((flag, index$1) => !flag && firstNegation(fragmentMasked(scope, parts[index$1])) !== void 0)) return;
+	const work = informational.map((flag, index$1) => !flag && bearsLiveAction(fragmentMasked(scope, parts[index$1])));
 	if (!work.some(Boolean) || !informational.some(Boolean)) return void 0;
 	if (informational.every(Boolean)) return void 0;
 	const segments = [];
@@ -2047,18 +2047,18 @@ const QUESTION_OPENER = /^(?:what|which|who|whom|whose|when|where|why|how|whethe
 * reading cannot resolve must never let the sentence's own question mark decide
 * an execution range it does not cover.
 */
-function sentencePeriodEnd(text, index) {
-	if (text[index] !== ".") return false;
-	if (!/\s/u.test(text[index + 1] ?? "")) return false;
-	const rest = text.slice(index + 1).replace(/^\s+/u, "");
+function sentencePeriodEnd(text, index$1) {
+	if (text[index$1] !== ".") return false;
+	if (!/\s/u.test(text[index$1 + 1] ?? "")) return false;
+	const rest = text.slice(index$1 + 1).replace(/^\s+/u, "");
 	if (!rest) return false;
-	if (!ABBREVIATION_BEFORE_PERIOD.test(text.slice(0, index + 1))) return true;
+	if (!ABBREVIATION_BEFORE_PERIOD.test(text.slice(0, index$1 + 1))) return true;
 	if (QUESTION_OPENER.test(rest)) return true;
 	return !CONTINUES_SENTENCE.test(rest);
 }
-function isWordBoundary(text, index) {
-	if (index <= 0) return true;
-	return !/[\p{L}\p{N}_]/u.test(text[index - 1]);
+function isWordBoundary(text, index$1) {
+	if (index$1 <= 0) return true;
+	return !/[\p{L}\p{N}_]/u.test(text[index$1 - 1]);
 }
 /**
 * The first negator in `text` at or after `from`.
@@ -2078,29 +2078,29 @@ function firstNegation(text, from = 0) {
 	}
 }
 /** Match a negator at exactly `index`, the longest alternative winning. */
-function negatorAt(text, index) {
+function negatorAt(text, index$1) {
 	const lower = text.toLowerCase();
-	const candidates = NEGATORS.filter(([token]) => lower.startsWith(token, index)).sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]));
+	const candidates = NEGATORS.filter(([token]) => lower.startsWith(token, index$1)).sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]));
 	for (const [token] of candidates) {
 		const bu = token.indexOf("不");
 		if (bu >= 0) {
-			const at = index + bu;
+			const at = index$1 + bu;
 			if (text[at - 1] !== void 0 && text[at - 1] === text[at + 1]) continue;
 		}
-		if (token === "不" && /[\u3400-\u9fff]/.test(text[index + 1] ?? "")) {
-			const isQuestionForm = text[index + 1] === "是" || text[index + 1] === "错";
-			const opensClause = !/[\u3400-\u9fffA-Za-z0-9_]/.test(text[index - 1] ?? "");
-			const joinedToAction = firstActionVerb(text, index + 1, index + 5) >= 0;
+		if (token === "不" && /[\u3400-\u9fff]/.test(text[index$1 + 1] ?? "")) {
+			const isQuestionForm = text[index$1 + 1] === "是" || text[index$1 + 1] === "错";
+			const opensClause = !/[\u3400-\u9fffA-Za-z0-9_]/.test(text[index$1 - 1] ?? "");
+			const joinedToAction = firstActionVerb(text, index$1 + 1, index$1 + 5) >= 0;
 			if (isQuestionForm && !opensClause && !joinedToAction) continue;
 		}
 		if (token.length === 1 && /[\u3400-\u9fff]/.test(token)) {
-			if (!/[\p{Script=Han}\p{L}\p{N}]/u.test(text[index + 1] ?? "")) continue;
+			if (!/[\p{Script=Han}\p{L}\p{N}]/u.test(text[index$1 + 1] ?? "")) continue;
 		}
 		if (/^[a-z]/.test(token)) {
-			if (!isWordBoundary(text, index)) continue;
-			if (/[\p{L}\p{N}_-]/u.test(text[index + token.length] ?? "")) continue;
-			const after = text[index + token.length] ?? "";
-			if (/[./@\\]/u.test(after) && !/\s/u.test(text[index + token.length + 1] ?? "")) continue;
+			if (!isWordBoundary(text, index$1)) continue;
+			if (/[\p{L}\p{N}_-]/u.test(text[index$1 + token.length] ?? "")) continue;
+			const after = text[index$1 + token.length] ?? "";
+			if (/[./@\\]/u.test(after) && !/\s/u.test(text[index$1 + token.length + 1] ?? "")) continue;
 		}
 		return token;
 	}
@@ -2142,23 +2142,23 @@ function actionVerbMatches(text, offset = 0, before = text.length) {
 * not read as bans; a contrast or list separator between the negator and the
 * verb ends its scope ("不仅…而且运行" keeps the run positive).
 */
-function verbIsNegated(text, index) {
-	const ceiling = Math.min(index, 12);
+function verbIsNegated(text, index$1) {
+	const ceiling = Math.min(index$1, 12);
 	for (let back = 1; back <= ceiling; back += 1) {
-		const at = index - back;
+		const at = index$1 - back;
 		const token = negatorAt(text, at);
-		if (!token || at + token.length > index) continue;
+		if (!token || at + token.length > index$1) continue;
 		if (at > 0 && /[\u3400-\u9fff]/.test(text[at - 1])) continue;
-		if (/[，,、；;。！!？?\n\r]/.test(text.slice(at + token.length, index))) continue;
+		if (/[，,、；;。！!？?\n\r]/.test(text.slice(at + token.length, index$1))) continue;
 		return true;
 	}
 	return false;
 }
 /** True when an unnegated operation verb occurs inside `[from, to)`. */
 function hasPositiveVerb(text, from, to) {
-	const index = firstActionVerb(text, from, to);
-	if (index < 0) return false;
-	return !verbIsNegated(text, index);
+	const index$1 = firstActionVerb(text, from, to);
+	if (index$1 < 0) return false;
+	return !verbIsNegated(text, index$1);
 }
 /**
 * The verb a negator bans. A Chinese negator may put an adverb between itself
@@ -2175,7 +2175,7 @@ function bannedVerbIndex(text, afterNegator, before) {
 	const candidates = actionVerbMatches(text, afterNegator, before);
 	for (const candidate of actionVerbMatches(text, 0, afterNegator)) candidates.push(candidate);
 	if (candidates.length === 0) return -1;
-	return candidates.map((candidate) => candidate.index).reduce((best, index) => Math.abs(index - afterNegator) < Math.abs(best - afterNegator) ? index : best);
+	return candidates.map((candidate) => candidate.index).reduce((best, index$1) => Math.abs(index$1 - afterNegator) < Math.abs(best - afterNegator) ? index$1 : best);
 }
 /**
 * A resumption condition: everything a scope says before the event that ends
@@ -2474,8 +2474,8 @@ function conditionSplit(text, conditionPrefix, verb, options = {}) {
 	return scopes;
 }
 /** Index just past the last clause separator at or before `index`. */
-function lastBoundaryIndex(text, index) {
-	let cursor = index;
+function lastBoundaryIndex(text, index$1) {
+	let cursor = index$1;
 	while (cursor > 0) {
 		const character = text[cursor - 1];
 		if (character === "在") break;
@@ -2521,9 +2521,9 @@ function conditionCandidates(text, lower, masked, conditionPrefix) {
 	const candidates = [];
 	for (const [token, kind] of CONDITION_MARKERS) {
 		if (kind !== "prefix" || token === "在") continue;
-		const index = prefixIndexOf(clause, token);
-		if (index < 0) continue;
-		const absolute = clauseStart + index;
+		const index$1 = prefixIndexOf(clause, token);
+		if (index$1 < 0) continue;
+		const absolute = clauseStart + index$1;
 		if (firstNegation(masked.slice(absolute))) continue;
 		let after = firstActionVerb(masked, absolute + token.length);
 		if (after < 0) {
@@ -2599,9 +2599,9 @@ function prefixConditionIndex(lower) {
 	let best;
 	for (const [token, kind] of CONDITION_MARKERS) {
 		if (kind !== "prefix" || token === "在") continue;
-		const index = prefixIndexOf(head, token);
-		if (index < 0) continue;
-		if (best === void 0 || index < best) best = index;
+		const index$1 = prefixIndexOf(head, token);
+		if (index$1 < 0) continue;
+		if (best === void 0 || index$1 < best) best = index$1;
 	}
 	return best;
 }
@@ -2765,12 +2765,12 @@ function semanticMethod(text) {
 * and two different readings never collide.
 */
 function fingerprintOf(source) {
-	let hash = 2166136261;
-	for (let index = 0; index < source.length; index += 1) {
-		hash ^= source.charCodeAt(index);
-		hash = Math.imul(hash, 16777619) >>> 0;
+	let hash$1 = 2166136261;
+	for (let index$1 = 0; index$1 < source.length; index$1 += 1) {
+		hash$1 ^= source.charCodeAt(index$1);
+		hash$1 = Math.imul(hash$1, 16777619) >>> 0;
 	}
-	return `i${hash.toString(16).padStart(8, "0")}`;
+	return `i${hash$1.toString(16).padStart(8, "0")}`;
 }
 /** Interpret one already-segmented clause. */
 function interpretClause(text, options = {}) {
@@ -3208,8 +3208,8 @@ function utf8ByteLength(text) {
 	return encoder.encode(text).length;
 }
 /** Byte offset of `index` inside `text`: the UTF-8 length of the prefix. */
-function utf8ByteOffset(text, index) {
-	return utf8ByteLength(text.slice(0, index));
+function utf8ByteOffset(text, index$1) {
+	return utf8ByteLength(text.slice(0, index$1));
 }
 /**
 * The coverage class of one captured clause: a prohibition is a constraint,
@@ -3512,8 +3512,8 @@ function repositoryCandidates(text) {
 function namesSeveralRepositories(text) {
 	const candidates = repositoryCandidates(text);
 	if (new Set(candidates.map((candidate) => candidate.value.replace(/[\\/]+$/, ""))).size < 2) return false;
-	for (let index = 1; index < candidates.length; index += 1) {
-		const between = text.slice(candidates[index - 1].end, candidates[index].start);
+	for (let index$1 = 1; index$1 < candidates.length; index$1 += 1) {
+		const between = text.slice(candidates[index$1 - 1].end, candidates[index$1].start);
 		if (!REPOSITORY_ALTERNATIVE_JOIN.test(between)) continue;
 		if (!REPOSITORY_ALTERNATIVE_COORDINATOR.test(between)) continue;
 		return true;
@@ -3587,7 +3587,7 @@ const BOUNDED_TYPE_NOUNS = [
 ];
 function boundedArtifactTypeOf(text) {
 	const masked = text;
-	for (const [pattern, type] of BOUNDED_TYPE_NOUNS) if (pattern.test(masked)) return type;
+	for (const [pattern, type$1] of BOUNDED_TYPE_NOUNS) if (pattern.test(masked)) return type$1;
 }
 /** A bounded choice needs a real path scope; the 'scope' sentinel is not one. */
 function scopeIsPath(subject) {
@@ -4618,7 +4618,7 @@ function judgeItemDiagnosis(p, item) {
 		attempt_fingerprint: fingerprint(p, item, "root_condition_pending")
 	});
 	if (kind === "inquiry") {
-		const closable = p.boundaryProtocol === 5;
+		const closable = p.boundaryProtocol !== void 0 && p.boundaryProtocol >= 5;
 		if (item.asset !== void 0 && !p.interpretationFacts.some((fact) => fact.itemId === item.id)) return verdict({
 			gap: "delivery_pending",
 			remedy: "record_interpretation",
@@ -4651,7 +4651,7 @@ function judgeItemDiagnosis(p, item) {
 		});
 	}
 	if (item.authorityDisposition === "informational") {
-		const closable = p.boundaryProtocol === 5;
+		const closable = p.boundaryProtocol !== void 0 && p.boundaryProtocol >= 5;
 		return verdict({
 			gap: closable ? "delivery_pending" : "interpretation_unknown",
 			remedy: closable ? "deliver_answer" : "report_uncertified",
@@ -4994,10 +4994,10 @@ function proposeRebindOutcome(p, args) {
 	const clarificationItemIds = args.clarification_item_ids ?? [];
 	const shape = validateProposalShape(item, args);
 	if (shape) return shape;
-	for (const [index, id] of clarificationItemIds.entries()) {
+	for (const [index$1, id] of clarificationItemIds.entries()) {
 		if (!id) continue;
 		const clarified = p.items.get(id);
-		const clause = args.clauses[index];
+		const clause = args.clauses[index$1];
 		if (!clarified || clarified.id === item.id || clarified.status !== "pending" || clarified.reboundFrom || clarified.revision <= item.revision || clarified.sourceMessageId === item.sourceMessageId || clarified.authority !== "root_instruction" || clarified.legacyFlags?.length || clarified.kind !== item.kind || !clarified.normalizedText.includes(clause.trim()) || !preservesIdentity(item, clarified) || /GUI|界面|视觉|截图|颜色|效果|布局/i.test(clause) && clarified.semanticAction !== "generic_run") return {
 			ok: false,
 			reasonCode: "unsupported_clarification"
@@ -5027,8 +5027,8 @@ function proposeRebindOutcome(p, args) {
 	};
 }
 function buildCandidates(p, item, clauses, clarificationItemIds) {
-	return clauses.map((clause, index) => {
-		const root = p.items.get(clarificationItemIds[index] ?? "");
+	return clauses.map((clause, index$1) => {
+		const root = p.items.get(clarificationItemIds[index$1] ?? "");
 		const captured = root ?? captureItem(item.kind, clause, item.sourceMessageId, "candidate", item.revision, item.verification.subject ?? "scope", item.verification.surface === "artifact" ? "artifact" : "scope", item.verification.method, item.verification.operation);
 		return {
 			sourceText: clause,
@@ -5057,15 +5057,15 @@ function proposalBody(p, item, clauses, clarificationItemIds, candidates) {
 }
 /** Bounded alignment facts for a mismatched partition, budget-aware. */
 function boundedSource(text) {
-	const sha = sha256(text);
+	const sha$1 = sha256(text);
 	if (Buffer.byteLength(text, "utf8") <= 4096) return {
 		length: text.length,
-		sha256: sha,
+		sha256: sha$1,
 		text
 	};
 	return {
 		length: text.length,
-		sha256: sha,
+		sha256: sha$1,
 		head: text.slice(0, 200),
 		tail: text.slice(-200)
 	};
@@ -5079,10 +5079,10 @@ function proposeRebindV042(p, args) {
 	const item = p.items.get(args.item_id ?? "");
 	const clarificationItemIds = args.clarification_item_ids ?? [];
 	if (validateProposalShape(item, args)) return void 0;
-	for (const [index, id] of clarificationItemIds.entries()) {
+	for (const [index$1, id] of clarificationItemIds.entries()) {
 		if (!id) continue;
 		const clarified = p.items.get(id);
-		const clause = args.clauses[index];
+		const clause = args.clauses[index$1];
 		if (!clarified || clarified.id === item.id || clarified.status !== "pending" || clarified.reboundFrom || clarified.revision <= item.revision || clarified.sourceMessageId === item.sourceMessageId || clarified.authority !== "root_instruction" || clarified.legacyFlags?.length || clarified.kind !== item.kind || !clarified.normalizedText.includes(clause.trim()) || !preservesIdentity(item, clarified) || /GUI|界面|视觉|截图|颜色|效果|布局/i.test(clause) && clarified.semanticAction !== "generic_run") return void 0;
 	}
 	const candidates = buildCandidates(p, item, args.clauses, clarificationItemIds);
@@ -5358,8 +5358,8 @@ function confirmRebind(p, proposalId, eventId, durable) {
 		return true;
 	}
 	const revision = p.contractRevision + 1;
-	const replacements = proposal.clauses.map((clause, index) => {
-		const clarified = p.items.get(proposal.clarificationItemIds[index] ?? "");
+	const replacements = proposal.clauses.map((clause, index$1) => {
+		const clarified = p.items.get(proposal.clarificationItemIds[index$1] ?? "");
 		if (clarified) return {
 			...clarified,
 			reboundFrom: {
@@ -5368,7 +5368,7 @@ function confirmRebind(p, proposalId, eventId, durable) {
 				confirmationEvent: eventId
 			}
 		};
-		const captured = captureItem(old.kind, clause, old.sourceMessageId, `${old.kind[0].toUpperCase()}:${proposal.id}:${index + 1}`, revision, old.verification.subject ?? "scope", old.verification.surface === "artifact" ? "artifact" : "scope", old.verification.method ?? extractMethod(clause), old.verification.operation ?? extractOperation(clause));
+		const captured = captureItem(old.kind, clause, old.sourceMessageId, `${old.kind[0].toUpperCase()}:${proposal.id}:${index$1 + 1}`, revision, old.verification.subject ?? "scope", old.verification.surface === "artifact" ? "artifact" : "scope", old.verification.method ?? extractMethod(clause), old.verification.operation ?? extractOperation(clause));
 		if (captured.semanticAction !== old.semanticAction) captured.semanticAction = "generic_run";
 		return {
 			...captured,
@@ -5404,6 +5404,7 @@ function confirmRebind(p, proposalId, eventId, durable) {
 function createProjection() {
 	return {
 		enabled: false,
+		goalCompletionAdopted: false,
 		epoch: 0,
 		contractRevision: 0,
 		rebindProposals: /* @__PURE__ */ new Map(),
@@ -5413,6 +5414,7 @@ function createProjection() {
 		boundaries: [],
 		externalOperations: /* @__PURE__ */ new Map(),
 		units: /* @__PURE__ */ new Map(),
+		rootLocatorContexts: /* @__PURE__ */ new Map(),
 		coverage: [],
 		releaseContracts: [],
 		releaseReservations: [],
@@ -5928,7 +5930,7 @@ function certifiableOpenItems(projection) {
 */
 function needsReviewObligations(projection) {
 	const ordering = (a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1);
-	const units = projection.boundaryProtocol === 5 && projection.currentUnitId !== void 0 ? new Set([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)]) : void 0;
+	const units = projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5 && projection.currentUnitId !== void 0 ? new Set([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)]) : void 0;
 	return [...projection.items.values()].filter((item) => {
 		if (item.needsReview === void 0) return false;
 		if (item.unitId === void 0) return true;
@@ -5948,7 +5950,7 @@ function needsReviewObligations(projection) {
 * switch from being blocked by history.
 */
 function unitClosureItemIds(projection, unitId) {
-	if (projection.boundaryProtocol !== 5) return [];
+	if (projection.boundaryProtocol === void 0 || projection.boundaryProtocol < 5) return [];
 	const inClosure = new Set([unitId, ...unitDescendantIds(projection, unitId)]);
 	return certifiableOpenItems(projection).filter((item) => item.unitId !== void 0 && inClosure.has(item.unitId)).map((item) => item.id);
 }
@@ -5960,7 +5962,7 @@ function isBlanketProhibition(action, requested) {
 }
 /** The ancestor obligations that act as standing constraints on this unit. */
 function standingAncestorConstraints(projection, unitId) {
-	if (projection.boundaryProtocol !== 5) return [];
+	if (projection.boundaryProtocol === void 0 || projection.boundaryProtocol < 5) return [];
 	const ancestors = unitAncestorIds(projection, unitId);
 	if (ancestors.length === 0) return [];
 	return visiblePendingItems(projection).filter((item) => {
@@ -6002,7 +6004,7 @@ function ancestorConstraintForBinding(projection, item, resolvedTarget) {
 * must never silently shrink their scope (migration table, P0 §6).
 */
 function certificateClosure(projection) {
-	if (projection.boundaryProtocol === 5) {
+	if (projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5) {
 		const legacyIds = certifiableOpenItems(projection).filter((item) => item.unitId === void 0).map((item) => item.id);
 		const unitIds = projection.currentUnitId !== void 0 ? unitClosureItemIds(projection, projection.currentUnitId) : [];
 		return {
@@ -6015,22 +6017,25 @@ function certificateClosure(projection) {
 
 //#endregion
 //#region src/domain/goal-gate.ts
-function hasCurrentCertificate(projection) {
+function hasCurrentCertificate(projection, historicalReplay = false) {
 	const checkpoint = projection.checkpoints.at(-1);
 	let reason;
 	if (projection.integrity !== "valid") reason = "integrity_invalid";
 	else if (needsReviewObligations(projection).length > 0) reason = "legacy_record_needs_review";
 	else if (projection.hostStatus !== "supported") reason = "host_lock_unsupported";
 	else if (!checkpoint || checkpoint.result !== "certified") reason = "certificate_missing";
+	else if (projection.boundaryProtocol === 6 && (checkpoint.recordedAtSeq === void 0 || checkpoint.recordedAtSeq <= (projection.v6BoundarySeq ?? -1))) reason = "legacy_certificate_in_v6_session";
 	else if (checkpoint.epoch !== projection.epoch) reason = "stale_epoch";
 	else if (checkpoint.sessionRefDigest !== projection.sessionRefDigest) reason = "foreign_session";
+	else if (projection.boundaryProtocol === 6 && (checkpoint.certificateVersion !== "4" || !projection.rootLocatorIdentity || checkpoint.rootLocatorIdentity !== projection.rootLocatorIdentity)) reason = "stale_root_locator_identity";
 	else if (checkpoint.hostLockDigest !== projection.hostLockDigest) reason = "stale_host_lock";
 	else if (checkpoint.contractRevision !== projection.contractRevision) reason = "stale_contract_revision";
-	else if (projection.boundaryProtocol === 5) {
-		if (checkpoint.certificateVersion !== "2") reason = "legacy_certificate_in_v5_session";
-		else if (checkpoint.unitId !== projection.currentUnitId) reason = "stale_unit_ref";
-	} else if (checkpoint.certificateVersion !== "1") reason = "certificate_version_unavailable";
 	else if (projection.currentGoalRef ? checkpoint.goalRef?.id !== projection.currentGoalRef.id || checkpoint.goalRef.revision !== projection.currentGoalRef.revision : checkpoint.goalRef !== void 0) reason = "stale_goal_ref";
+	else if (projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5) {
+		if (checkpoint.certificateVersion !== "2" && checkpoint.certificateVersion !== "3" && checkpoint.certificateVersion !== "4") reason = "legacy_certificate_in_v5_session";
+		else if (checkpoint.unitId !== projection.currentUnitId) reason = "stale_unit_ref";
+	} else if (checkpoint.certificateVersion !== "1" && checkpoint.certificateVersion !== "3") reason = "certificate_version_unavailable";
+	if (!reason && projection.boundaryProtocol === 6 && !historicalReplay && projection.coreV2?.certifiable !== true) reason = projection.coreV2 ? "current_closure_unmet" : "core_projection_missing";
 	projection.certificateStatusReason = reason;
 	return reason === void 0;
 }
@@ -6054,6 +6059,7 @@ function goalCompletionDenial(projection, toolName, argumentsValue, configuredTo
 	if (toolName !== configuredToolName || typeof argumentsValue !== "object" || argumentsValue === null) return void 0;
 	if (argumentsValue.action !== "complete") return void 0;
 	if (!projection.enabled) return void 0;
+	if (projection.boundaryProtocol === 6 && !projection.goalCompletionAdopted) return void 0;
 	const args = argumentsValue;
 	if (projection.hostStatus !== "supported") return `Context Guard denial [stale_host]: host lock is unsupported or unavailable (${projection.hostReasonCode ?? "unknown_host"}).`;
 	if (!projection.currentGoalRef) return "Context Guard denial [no_goal]: no current Goal reference is available.";
@@ -6061,6 +6067,7 @@ function goalCompletionDenial(projection, toolName, argumentsValue, configuredTo
 	if (hasCurrentCertificate(projection)) return void 0;
 	if (projection.certificateStatusReason === "stale_host_lock") return "Context Guard denial [stale_host]: the completion certificate belongs to a different host identity.";
 	if (projection.certificateStatusReason === "stale_goal_ref") return "Context Guard denial [stale_goal_ref]: the completion certificate belongs to a different Goal reference.";
+	if (projection.certificateStatusReason === "current_closure_unmet" || projection.certificateStatusReason === "core_projection_missing") return "Context Guard denial [current_closure_unmet]: the current required work is not verified complete.";
 	return projection.integrity === "valid" ? "Context Guard denial [certificate_missing]: a current completion certificate is required." : "Context Guard denial [certificate_missing]: integrity is unknown or corrupt, so no current certificate is usable.";
 }
 
@@ -6198,6 +6205,49 @@ function classifyCompletionClaim(text) {
 	if (isWholeTaskCompletionClaim(normalized)) return "complete";
 	return "report";
 }
+/** A concrete, current root-owned action, with host capability and no pending
+* condition. Historical generic text and old qualifications are not upgraded. */
+function testOutcomePredicate(text) {
+	return /(?:回归测试|regression\s+tests?)/iu.test(text) ? "regression_test_result" : /(?:focused\s+tests?|针对[^，,。.!?？]{0,32}?的?\s*测试)/iu.test(text) ? "focused_test_result" : "test_passed";
+}
+function assessmentOutcomePredicate(text) {
+	return /(?:内存|memory)/iu.test(text) ? "current_memory_measurement_result" : /(?:延迟|时延|latency)/iu.test(text) ? "latency_measurement_result" : "verification_passed";
+}
+function assessmentAction(text) {
+	return /(?:内存|memory)/iu.test(text) ? "measure_current_memory_cost" : "evaluate_current_effect";
+}
+function currentActionBases(projection, enforceCore = true) {
+	if (projection.hostStatus !== "supported") return [];
+	const basis = [];
+	for (const item of projection.items.values()) {
+		if (item.status !== "pending" || item.kind === "prohibition" || item.authority !== "root_instruction" || item.authorityDisposition !== "executable_now" || item.legacyFlags?.length || item.waitAuthorization || item.condition || item.targetCaptureStatus === "clarification_required") continue;
+		const action = item.semanticAction;
+		if (!action || action === "generic_run") continue;
+		if (action !== "test" && action !== "verify") continue;
+		if (!/^m\d+(?::|$)/.test(item.sourceMessageId)) continue;
+		const sourceSeq = Number(/^m(\d+)/.exec(item.sourceMessageId)?.[1] ?? -1);
+		const scope = item.requestedTarget?.scope;
+		if (typeof scope !== "string") continue;
+		if (![...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq && fact.outcome === "success" && fact.parseStatus === "supported" && fact.toolName === "context_guard_observe_test_readiness" && fact.readinessForItemId === item.id && fact.readinessPredicate === (action === "test" ? "test_passed" : "verification_passed") && fact.subjects.includes(scope) && typeof fact.readinessManifestSha256 === "string" && (action !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.epoch === fact.epoch && effect.toolResultSeq < fact.toolResultSeq && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath))))) continue;
+		const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq && fact.semanticAction === action && fact.evidenceRole === "effect" && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0];
+		if (latestRun?.outcome === "success" && latestRun.parseStatus === "supported" && latestRun.processFacts?.outcome === "success" && latestRun.processFacts.operationAttribution === "single_operation") continue;
+		basis.push({
+			itemId: item.id,
+			action,
+			sourceMessageId: item.sourceMessageId,
+			unmetPredicate: action === "test" ? testOutcomePredicate(item.normalizedText) : assessmentOutcomePredicate(item.normalizedText),
+			owner: "assistant",
+			readiness: "ready",
+			asOf: projection.lastObservedSourceSeq
+		});
+	}
+	if (projection.boundaryProtocol === 6 && enforceCore) {
+		if (!projection.coreV2) return [];
+		const current = Array.isArray(projection.coreV2.current_actions) ? projection.coreV2.current_actions : [];
+		return basis.filter((entry) => current.some((value) => value && typeof value === "object" && value.requirement_id === entry.itemId));
+	}
+	return basis;
+}
 /** Assistant prose is retained only as a bounded diagnostic observation. */
 function observeAssistantOutcome(text) {
 	const disposition = classifyCompletionClaim(text);
@@ -6225,7 +6275,7 @@ function observeAssistantOutcome(text) {
 * one fallback correction; subsequent attempts safe-yield. An active, armed
 * Goal remains exclusively owned by the host Goal Round Driver.
 */
-function decideTurnBoundary(projection) {
+function decideTurnBoundary(projection, latestRootText = "") {
 	if (!projection.enabled) return {
 		action: "stop",
 		reason: "guard_disabled"
@@ -6277,16 +6327,31 @@ function decideTurnBoundary(projection) {
 		action: "stop",
 		reason: projection.currentGoalPhase === "paused" ? "goal_paused_by_user_safe_yield" : "goal_not_continuable_safe_yield"
 	};
-	if ([...projection.items.values()].some((item) => item.status === "pending" && item.persistenceAuthorization)) {
-		const key = `${projection.epoch}:${projection.contractRevision}`;
-		const attempts = projection.persistenceCorrectionAttempts.get(key) ?? 0;
-		if (attempts < 1) {
-			projection.persistenceCorrectionAttempts.set(key, attempts + 1);
-			return {
-				action: "continue",
-				reason: "protocol_correction_steer"
-			};
-		}
+	const actions = currentActionBases(projection);
+	const explicitPersistence = [...projection.items.values()].some((item) => item.authority === "root_instruction" && !item.legacyFlags?.length && item.persistenceAuthorization?.kind === "root_explicit_persistence");
+	const shortResume = /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(latestRootText.trim());
+	if (actions.length && (explicitPersistence || shortResume)) {
+		const hostTurn = decisionBoundaryKey(projection);
+		if (hostTurn === void 0) return {
+			action: "stop",
+			reason: "correction_identity_unavailable"
+		};
+		const fingerprint$1 = `correction:${progressFingerprint(projection)}`;
+		const claims = projection.noProgressClaims.get(fingerprint$1) ?? /* @__PURE__ */ new Map();
+		const boundaryKey = String(hostTurn);
+		if (claims.has(boundaryKey) || claims.size > 0) return {
+			action: "stop",
+			reason: "protocol_correction_already_issued"
+		};
+		return {
+			action: "continue",
+			reason: explicitPersistence ? "explicit_user_persistence" : "resume_with_actionable_work",
+			noProgressClaim: {
+				fingerprint: fingerprint$1,
+				boundaryKey,
+				attempt: 1
+			}
+		};
 	}
 	return {
 		action: "stop",
@@ -6307,8 +6372,8 @@ function decideTurnStopping(projection, _assistantText, _turn, _maxAttempts) {
 * mentioned inside a longer instruction is not a control request.
 */
 function latestRootInstruction(events) {
-	for (let index = events.length - 1; index >= 0; index -= 1) {
-		const event = events[index];
+	for (let index$1 = events.length - 1; index$1 >= 0; index$1 -= 1) {
+		const event = events[index$1];
 		if (event.type !== "user/message") continue;
 		const data = event.data;
 		if (data.source?.kind !== "user") continue;
@@ -6328,13 +6393,74 @@ function isRootPauseRequest(text) {
 	return PAUSE_REQUEST.test(text);
 }
 function latestAssistantText(events) {
-	for (let index = events.length - 1; index >= 0; index--) {
-		const event = events[index];
+	for (let index$1 = events.length - 1; index$1 >= 0; index$1--) {
+		const event = events[index$1];
 		if (event.type !== "assistant/message") continue;
 		const text = event.data.message?.content?.filter((block$1) => block$1.type === "text").map((block$1) => block$1.text ?? "").join("\n") ?? "";
 		if (text.trim()) return text;
 	}
 	return "";
+}
+
+//#endregion
+//#region src/domain/native-observation.ts
+/** DSH-specific, versioned identity for a host effect and a later observer. */
+const NATIVE_OBSERVATION_SCHEMA = "dsh.native-observation/v1";
+const NATIVE_OBSERVATION_SCHEMA_V2 = "dsh.native-observation/v2";
+function sha(domain, value) {
+	return createHash("sha256").update(`${domain}\n${value}`, "utf8").digest("hex");
+}
+function nativeObservationDigest(effect, state) {
+	return sha("dsh.native-observation.v1", JSON.stringify([
+		effect.id,
+		effect.callId,
+		effect.toolName,
+		effect.toolResultSeq,
+		effect.outcome,
+		effect.subjects,
+		effect.resolvedTarget ?? null,
+		effect.processFacts?.outcome ?? null,
+		state.id,
+		state.callId,
+		state.toolName,
+		state.toolResultSeq,
+		state.outcome,
+		state.causedByCallId ?? null,
+		state.subjects,
+		state.resolvedTarget ?? null,
+		state.observedState ?? null,
+		state.nativeGitParentOid ?? null,
+		state.nativeGitTreeOid ?? null
+	]));
+}
+function nativeObservationDigestV2(effect, state, rootLocatorIdentity) {
+	return sha("dsh.native-observation.v2-root-locator", JSON.stringify([
+		rootLocatorIdentity,
+		nativeObservationDigest(effect, state),
+		state.nativeCanonicalPath ?? null,
+		state.nativeCanonicalBase ?? null
+	]));
+}
+function nativeBindingDigest(legacyBindingDigest, observationDigests) {
+	return sha("dsh.binding-digest.v4", JSON.stringify([legacyBindingDigest, [...observationDigests].sort()]));
+}
+function nativeCertificationDigest(legacyCertificationDigest, bindingDigest$1, observationDigests) {
+	return sha("dsh.certification-digest.v5", JSON.stringify([
+		NATIVE_OBSERVATION_SCHEMA,
+		legacyCertificationDigest,
+		bindingDigest$1,
+		[...observationDigests].sort()
+	]));
+}
+/** V6 root capture identity is a separate domain; historical v3 bytes remain stable. */
+function locatorCertificationDigest(baseCertificationDigest, bindingDigest$1, observationDigests, rootLocatorIdentity) {
+	return sha("dsh.certification-digest.v6-root-locator", JSON.stringify([
+		NATIVE_OBSERVATION_SCHEMA_V2,
+		rootLocatorIdentity,
+		baseCertificationDigest,
+		bindingDigest$1,
+		[...observationDigests].sort()
+	]));
 }
 
 //#endregion
@@ -7972,13 +8098,13 @@ function bindProofV2ToProjection(projection, manifest) {
 			continue;
 		}
 		if (item.verification.surface !== void 0 && item.verification.surface !== obligation.surface) errors.push("proof_surface_unbound");
-		const required = requiredSubjectsOf(item);
-		if (required.length > 0) {
-			if (!obligation.subjectIds.every((subject) => required.includes(subject))) {
+		const required$1 = requiredSubjectsOf(item);
+		if (required$1.length > 0) {
+			if (!obligation.subjectIds.every((subject) => required$1.includes(subject))) {
 				errors.push("proof_subject_unbound");
 				continue;
 			}
-			if (!required.every((subject) => obligation.subjectIds.includes(subject))) {
+			if (!required$1.every((subject) => obligation.subjectIds.includes(subject))) {
 				errors.push("proof_scope_incomplete");
 				continue;
 			}
@@ -8015,20 +8141,20 @@ function bindProofV2ToProjection(projection, manifest) {
 			cited.push(evidence);
 		}
 		if (cited.length === 0 && obligation.evidenceIds.length > 0) continue;
-		if (required.length > 0 && !required.every((subject) => cited.some((fact) => fact.subjects.includes(subject)))) {
+		if (required$1.length > 0 && !required$1.every((subject) => cited.some((fact) => fact.subjects.includes(subject)))) {
 			errors.push("proof_scope_incomplete");
 			continue;
 		}
 		if (obligation.kind === "input_asset_check") {
 			const firstCheck = Math.min(...cited.map((fact) => fact.toolResultSeq));
-			if ([...projection.evidence.values()].some((fact) => fact.evidenceRole === "effect" && required.some((subject) => fact.subjects.includes(subject)) && fact.toolResultSeq < firstCheck)) {
+			if ([...projection.evidence.values()].some((fact) => fact.evidenceRole === "effect" && required$1.some((subject) => fact.subjects.includes(subject)) && fact.toolResultSeq < firstCheck)) {
 				errors.push("proof_input_check_after_effect");
 				continue;
 			}
 		}
 		if (obligation.kind === "scope_coverage") {
 			const covered = [...new Set(cited.flatMap((fact) => fact.subjects))].sort();
-			if (obligation.expectedScopeDigest !== void 0 && obligation.expectedScopeDigest !== scopeCoverageDigest(required)) {
+			if (obligation.expectedScopeDigest !== void 0 && obligation.expectedScopeDigest !== scopeCoverageDigest(required$1)) {
 				errors.push("proof_scope_digest_unbound");
 				continue;
 			}
@@ -8416,6 +8542,138 @@ function richStatefulRecord(projection, item, binding) {
 	}
 	return { record };
 }
+/** Native file effects have no Guard-issued execution resolution. The host's
+* persisted write/edit result and a later exact FS-provider readback are the
+* two independent facts. Historical three-role bindings keep their old path. */
+function nativeFileRecord(projection, item, binding) {
+	const action = item.semanticAction;
+	if (action !== "create" && action !== "modify") return { rejected: {
+		itemId: item.id,
+		reason: "native file adapter unavailable for this action",
+		reasonCode: "stateful_adapter_unavailable"
+	} };
+	if (action === "create") return { rejected: {
+		itemId: item.id,
+		reason: "native write did not preserve an independent absent prestate",
+		reasonCode: "evidence_insufficient"
+	} };
+	if (binding.semanticAction !== action || !tuplesEqual(binding.requestedTarget, item.requestedTarget)) return { rejected: {
+		itemId: item.id,
+		reason: "native action or requested target differs from the requirement",
+		reasonCode: "requested_target_mismatch"
+	} };
+	if (!requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) return { rejected: {
+		itemId: item.id,
+		reason: "native target differs from the root constraint",
+		reasonCode: "requested_resolved_target_mismatch"
+	} };
+	const effect = binding.effectEvidenceId ? projection.evidence.get(binding.effectEvidenceId) : void 0;
+	const stateId = binding.stateEvidenceIds?.[0];
+	const state = stateId ? projection.evidence.get(stateId) : void 0;
+	if (!effect || !state || binding.stateEvidenceIds?.length !== 1 || binding.evidenceIds.length !== 2 || !binding.evidenceIds.includes(effect.id) || !binding.evidenceIds.includes(state.id)) return { rejected: {
+		itemId: item.id,
+		reason: "native effect and independent readback are required",
+		reasonCode: "effect_only_insufficient_state_readback"
+	} };
+	const effectTool = ["edit", "edit_file"];
+	const path$1 = binding.resolvedTarget?.artifact_id;
+	const digest$1 = state.observedState?.post_digest;
+	if (typeof path$1 !== "string" || typeof digest$1 !== "string" || !/^[0-9a-f]{64}$/.test(digest$1) || effect.outcome !== "success" || state.outcome !== "success" || !effectTool.includes(effect.toolName) || state.toolName !== "context_guard_observe_file" || state.causedByCallId !== effect.callId || effect.toolResultSeq >= state.toolResultSeq || !effect.subjects.includes(path$1) || !state.subjects.includes(path$1) || state.semanticAction !== action || state.evidenceRole !== "state" || !tuplesEqual(binding.observedState, { post_digest: digest$1 })) return { rejected: {
+		itemId: item.id,
+		reason: "native effect/readback lineage or state does not match",
+		reasonCode: "binding_state_cross_pairing"
+	} };
+	if (item.requestedTarget?.pre_digest !== void 0 || item.requestedTarget?.change_set_digest !== void 0) return { rejected: {
+		itemId: item.id,
+		reason: "required pre-effect identity was not observed",
+		reasonCode: "evidence_insufficient"
+	} };
+	if (!bindingSatisfies(projection, item, binding.evidenceIds)) return { rejected: {
+		itemId: item.id,
+		reason: "native facts do not satisfy the verification facets",
+		reasonCode: "binding_missing_required_facet"
+	} };
+	const rootSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+	const rootBase = rootSeq ? projection.rootLocatorContexts.get(Number(rootSeq[1]))?.base : void 0;
+	if (projection.boundaryProtocol === 6 && projection.rootLocatorIdentity && (state.nativeCanonicalPath !== path$1 || !rootBase || state.nativeCanonicalBase !== rootBase)) return { rejected: {
+		itemId: item.id,
+		reason: "native file readback lacks canonical root-time path identity",
+		reasonCode: "native_canonical_path_unavailable"
+	} };
+	return {
+		nativeDigest: projection.boundaryProtocol === 6 && projection.rootLocatorIdentity ? nativeObservationDigestV2(effect, state, projection.rootLocatorIdentity) : nativeObservationDigest(effect, state),
+		record: {
+			item: item.id,
+			semanticAction: action,
+			requestedTarget: binding.requestedTarget,
+			resolvedTarget: binding.resolvedTarget,
+			observedState: { post_digest: digest$1 },
+			predId: `pred.${action}.v1`,
+			predVersion: 1,
+			predParamsKind: "inline",
+			predParams: { post_digest: digest$1 },
+			predParamsAllowlist: "product",
+			effectEvidenceId: effect.id,
+			stateEvidenceIds: [state.id]
+		}
+	};
+}
+function nativeGitRecord(projection, item, binding) {
+	const action = item.semanticAction;
+	if (action !== "commit" && action !== "push") return { rejected: {
+		itemId: item.id,
+		reason: "native Git adapter unavailable for this action",
+		reasonCode: "stateful_adapter_unavailable"
+	} };
+	if (binding.semanticAction !== action || !tuplesEqual(binding.requestedTarget, item.requestedTarget) || !requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) return { rejected: {
+		itemId: item.id,
+		reason: "native Git target differs from the requirement",
+		reasonCode: "requested_resolved_target_mismatch"
+	} };
+	const effect = binding.effectEvidenceId ? projection.evidence.get(binding.effectEvidenceId) : void 0;
+	const state = binding.stateEvidenceIds?.length === 1 ? projection.evidence.get(binding.stateEvidenceIds[0]) : void 0;
+	if (!effect || !state || binding.evidenceIds.length !== 2 || !binding.evidenceIds.includes(effect.id) || !binding.evidenceIds.includes(state.id)) return { rejected: {
+		itemId: item.id,
+		reason: "native Git effect and readback required",
+		reasonCode: "effect_only_insufficient_state_readback"
+	} };
+	const repo = binding.resolvedTarget?.repository;
+	const postOid = state.observedState?.post_head_oid;
+	const process$1 = effect.processFacts;
+	if (typeof repo !== "string" || typeof postOid !== "string" || !/^[0-9a-f]{40,64}$/.test(postOid) || effect.toolName !== "bash" && effect.toolName !== "pwsh" || state.toolName !== "context_guard_observe_git" || effect.semanticAction !== action || state.semanticAction !== action || effect.outcome !== "success" || state.outcome !== "success" || process$1?.outcome !== "success" || process$1.operationAttribution !== "single_operation" || state.causedByCallId !== effect.callId || effect.toolResultSeq >= state.toolResultSeq || !effect.subjects.includes(repo) && effect.resolvedTarget?.repository !== repo || !state.subjects.includes(repo) || state.evidenceRole !== "state") return { rejected: {
+		itemId: item.id,
+		reason: "native Git effect/readback lineage is incomplete",
+		reasonCode: "binding_state_cross_pairing"
+	} };
+	if (action === "commit") {
+		if (typeof state.nativeGitParentOid !== "string" || typeof state.nativeGitTreeOid !== "string" || binding.observedState?.post_head_oid !== postOid || Object.keys(binding.observedState ?? {}).length !== 1 || binding.resolvedTarget?.branch !== state.resolvedTarget?.branch || item.requestedTarget?.change_set_digest !== void 0 || item.requestedTarget?.pre_head_oid !== void 0) return { rejected: {
+			itemId: item.id,
+			reason: "native commit identity, branch or prestate is not proven",
+			reasonCode: "evidence_insufficient"
+		} };
+	} else if (state.observedState?.remote_oid !== postOid || binding.observedState?.remote_oid !== postOid || binding.resolvedTarget?.local_oid !== postOid || binding.resolvedTarget?.remote !== state.resolvedTarget?.remote || binding.resolvedTarget?.refspec !== state.resolvedTarget?.refspec || binding.observedState?.post_head_oid !== postOid) return { rejected: {
+		itemId: item.id,
+		reason: "native push readback does not bind the exact remote/refspec",
+		reasonCode: "binding_state_cross_pairing"
+	} };
+	return {
+		nativeDigest: projection.boundaryProtocol === 6 && projection.rootLocatorIdentity ? nativeObservationDigestV2(effect, state, projection.rootLocatorIdentity) : nativeObservationDigest(effect, state),
+		record: {
+			item: item.id,
+			semanticAction: action,
+			requestedTarget: binding.requestedTarget,
+			resolvedTarget: binding.resolvedTarget,
+			observedState: binding.observedState,
+			predId: `pred.${action}.v1`,
+			predVersion: 1,
+			predParamsKind: "inline",
+			predParams: {},
+			predParamsAllowlist: "product",
+			effectEvidenceId: effect.id,
+			stateEvidenceIds: [state.id]
+		}
+	};
+}
 function simpleRecord(projection, item, binding) {
 	if (!bindingSatisfies(projection, item, binding.evidenceIds)) return { rejected: {
 		itemId: item.id,
@@ -8445,6 +8703,14 @@ function simpleRecord(projection, item, binding) {
 		reason: "effect evidence is missing from the cited evidence set",
 		reasonCode: "evidence_missing"
 	} };
+	if (action === "test" && (effect.toolName === "bash" || effect.toolName === "pwsh")) {
+		const process$1 = effect.processFacts;
+		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row) => row.outcome === "success"))) return { rejected: {
+			itemId: item.id,
+			reason: "test process outcome is not attributable to the required operation",
+			reasonCode: "operation_unattributable"
+		} };
+	}
 	if ((effect.evidenceRole ?? "effect") !== "effect") return { rejected: {
 		itemId: item.id,
 		reason: "non-stateful evidence is paired to a non-effect role",
@@ -8501,8 +8767,19 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		openItems: certifiableOpenItems(projection).map((item) => item.id),
 		rejectedBindings: []
 	};
+	if (projection.boundaryProtocol === 6 && projection.durabilityWatermark === "confirmed" && projection.coreV2?.certifiable !== true) return {
+		status: "incomplete",
+		contractRevision: projection.contractRevision,
+		openItems: certifiableOpenItems(projection).map((item) => item.id),
+		rejectedBindings: [{
+			itemId: "*",
+			reason: "the current shared-core closure is not verified complete",
+			reasonCode: "current_closure_unmet"
+		}]
+	};
 	const rejectedBindings = [];
 	const records = [];
+	const nativeDigests = [];
 	const referencedFacts = [];
 	for (const binding of bindings) {
 		const item = projection.items.get(binding.itemId);
@@ -8585,12 +8862,21 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 			});
 			continue;
 		}
-		const built = isStatefulAction(item.semanticAction ?? "generic_run") ? richStatefulRecord(projection, item, binding) : simpleRecord(projection, item, binding);
+		if (projection.boundaryProtocol === 6 && item.unitId !== void 0 && item.semanticAction !== "publish" && binding.resolutionEvidenceId) {
+			rejectedBindings.push({
+				itemId: item.id,
+				reason: "ordinary current work cannot inherit the retired Guard resolution chain",
+				reasonCode: "legacy_evidence_non_authoritative"
+			});
+			continue;
+		}
+		const built = isStatefulAction(item.semanticAction ?? "generic_run") ? binding.resolutionEvidenceId ? richStatefulRecord(projection, item, binding) : item.semanticAction === "commit" || item.semanticAction === "push" ? nativeGitRecord(projection, item, binding) : nativeFileRecord(projection, item, binding) : simpleRecord(projection, item, binding);
 		if (built.rejected) {
 			rejectedBindings.push(built.rejected);
 			continue;
 		}
 		records.push(built.record);
+		if ("nativeDigest" in built && typeof built.nativeDigest === "string") nativeDigests.push(built.nativeDigest);
 		referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact));
 	}
 	const unreusable = needsReviewObligations(projection);
@@ -8612,7 +8898,7 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		openItems: closure.itemIds,
 		rejectedBindings
 	};
-	if (projection.boundaryProtocol === 5 && closure.unitId === void 0) return {
+	if (projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5 && closure.unitId === void 0) return {
 		status: "incomplete",
 		contractRevision: projection.contractRevision,
 		openItems: closure.itemIds,
@@ -8626,9 +8912,10 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		const contractSha256 = currentContractDigest(projection);
 		const openDigest = digestStrings(closure.itemIds);
 		const evidenceSha256 = evidenceSha256Digest(referencedFacts);
-		const bindingDigest$1 = bindingDigest(records, resolveAllowlist("product"));
-		const checkpoint = projection.boundaryProtocol === 5 ? (() => {
-			const certification = certificationDigestV2({
+		const legacyBindingDigest = bindingDigest(records, resolveAllowlist("product"));
+		const bindingDigest$1 = nativeDigests.length ? nativeBindingDigest(legacyBindingDigest, nativeDigests) : legacyBindingDigest;
+		const checkpoint = projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5 ? (() => {
+			const baseCertification = certificationDigestV2({
 				stopProtocolVersion: STOP_PROTOCOL_VERSION_V2,
 				certificateVersion: CERTIFICATE_VERSION_V2,
 				epoch: projection.epoch,
@@ -8639,13 +8926,15 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 				unitId: closure.unitId,
 				unitClosureDigest: openDigest,
 				evidenceSha256,
-				bindingDigest: bindingDigest$1,
+				bindingDigest: legacyBindingDigest,
 				goalRef: projection.currentGoalRef ?? null
 			});
+			const locatorIdentity = projection.boundaryProtocol === 6 ? projection.rootLocatorIdentity : void 0;
+			const certification = locatorIdentity ? locatorCertificationDigest(baseCertification, bindingDigest$1, nativeDigests, locatorIdentity) : nativeDigests.length ? nativeCertificationDigest(baseCertification, bindingDigest$1, nativeDigests) : baseCertification;
 			return {
 				id,
 				stopProtocolVersion: STOP_PROTOCOL_VERSION_V2,
-				certificateVersion: CERTIFICATE_VERSION_V2,
+				certificateVersion: locatorIdentity ? "4" : nativeDigests.length ? "3" : CERTIFICATE_VERSION_V2,
 				epoch: projection.epoch,
 				sessionRefDigest: projection.sessionRefDigest,
 				hostLockDigest: projection.hostLockDigest,
@@ -8658,11 +8947,16 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 				...projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {},
 				unitId: closure.unitId,
 				unitClosureDigest: openDigest,
+				...nativeDigests.length ? { nativeObservations: {
+					schema: locatorIdentity ? NATIVE_OBSERVATION_SCHEMA_V2 : NATIVE_OBSERVATION_SCHEMA,
+					digests: nativeDigests
+				} } : {},
+				...locatorIdentity ? { rootLocatorIdentity: locatorIdentity } : {},
 				certificationDigest: certification,
 				result: "certified"
 			};
 		})() : (() => {
-			const certification = certificationDigest({
+			const baseCertification = certificationDigest({
 				stopProtocolVersion: STOP_PROTOCOL_VERSION,
 				certificateVersion: CERTIFICATE_VERSION,
 				epoch: projection.epoch,
@@ -8673,12 +8967,13 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 				...projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {},
 				openDigest,
 				evidenceSha256,
-				bindingDigest: bindingDigest$1
+				bindingDigest: legacyBindingDigest
 			});
+			const certification = nativeDigests.length ? nativeCertificationDigest(baseCertification, bindingDigest$1, nativeDigests) : baseCertification;
 			return {
 				id,
 				stopProtocolVersion: STOP_PROTOCOL_VERSION,
-				certificateVersion: CERTIFICATE_VERSION,
+				certificateVersion: nativeDigests.length ? "3" : CERTIFICATE_VERSION,
 				epoch: projection.epoch,
 				sessionRefDigest: projection.sessionRefDigest,
 				hostLockDigest: projection.hostLockDigest,
@@ -8689,6 +8984,10 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 				bindingDigest: bindingDigest$1,
 				bindings,
 				...projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {},
+				...nativeDigests.length ? { nativeObservations: {
+					schema: NATIVE_OBSERVATION_SCHEMA,
+					digests: nativeDigests
+				} } : {},
 				certificationDigest: certification,
 				result: "certified"
 			};
@@ -8734,11 +9033,11 @@ function bindingActionPlanProblem(projection, item, binding) {
 		hint: closingHint(projection, item)
 	};
 	const ordered = [...closures].sort((a, b) => a.order - b.order);
-	for (const [index, planned] of plan.entries()) {
-		const closure = ordered[index];
+	for (const [index$1, planned] of plan.entries()) {
+		const closure = ordered[index$1];
 		if (!closure || closure.action !== planned.action) return {
 			itemId: item.id,
-			reason: `action closure ${index + 1} must be '${planned.action}' in the clause's order`,
+			reason: `action closure ${index$1 + 1} must be '${planned.action}' in the clause's order`,
 			reasonCode: "action_plan_order_mismatch"
 		};
 		if (planned.targetCaptureStatus !== "resolved") return {
@@ -9747,9 +10046,9 @@ function comparePrerelease(a, b) {
 	if (a.length === 0) return 1;
 	if (b.length === 0) return -1;
 	const length = Math.max(a.length, b.length);
-	for (let index = 0; index < length; index += 1) {
-		const left = a[index];
-		const right = b[index];
+	for (let index$1 = 0; index$1 < length; index$1 += 1) {
+		const left = a[index$1];
+		const right = b[index$1];
 		if (left === void 0) return -1;
 		if (right === void 0) return 1;
 		const leftNumeric = /^\d+$/.test(left);
@@ -10393,7 +10692,7 @@ function selectHostCohort(rows, platform) {
 	const bound = rows.filter((row) => row.version !== void 0 && row.integrity !== void 0);
 	const unboundCount = rows.length - bound.length;
 	const versionMatches = bound.map((row) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version)));
-	const identityMatches = bound.map((row, index) => versionMatches[index].filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)));
+	const identityMatches = bound.map((row, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)));
 	const candidates = HOST_COHORTS.filter((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
 	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row) => row.name === expected.name).length === 1))[0] ?? candidates[0];
 	if (consistentCohort !== void 0 && unboundCount === 0) {
@@ -10414,8 +10713,8 @@ function selectHostCohort(rows, platform) {
 			consistent: true
 		};
 	}
-	const matchingIndices = identityMatches.flatMap((matches, index) => matches.length > 0 ? [index] : []);
-	const mixtureCovered = HOST_COHORTS.filter((cohort) => matchingIndices.every((index) => identityMatches[index].includes(cohort)));
+	const matchingIndices = identityMatches.flatMap((matches, index$1) => matches.length > 0 ? [index$1] : []);
+	const mixtureCovered = HOST_COHORTS.filter((cohort) => matchingIndices.every((index$1) => identityMatches[index$1].includes(cohort)));
 	let reasonCode;
 	if (matchingIndices.length > 0 && mixtureCovered.length === 0) reasonCode = "host_cohort_mixed_graph";
 	else if (bound.length > 0 && versionMatches.some((matches) => matches.length === 0)) reasonCode = "host_cohort_version_mismatch";
@@ -10650,9 +10949,9 @@ function evaluateHostCapability(evaluation, request) {
 		missingPackages: [],
 		reasonCode: profileKind ? "host_capability_request_unsupported" : "host_capability_context_missing"
 	};
-	const required = new Set(BASE_HOST_PACKAGES);
-	for (const group of groups) for (const name of HOST_CAPABILITY_PACKAGE_GROUPS[group]) required.add(name);
-	const result = statusForPackages(`action.${request.action}.${platform ?? "native"}.${profileKind ?? "unknown"}`, evaluation.packages, required, cohortForEvaluation(evaluation));
+	const required$1 = new Set(BASE_HOST_PACKAGES);
+	for (const group of groups) for (const name of HOST_CAPABILITY_PACKAGE_GROUPS[group]) required$1.add(name);
+	const result = statusForPackages(`action.${request.action}.${platform ?? "native"}.${profileKind ?? "unknown"}`, evaluation.packages, required$1, cohortForEvaluation(evaluation));
 	if (evaluation.status !== "supported") return {
 		...result,
 		status: evaluation.status,
@@ -10667,9 +10966,9 @@ function evaluateHostCapability(evaluation, request) {
 * do not support background jobs can still use unrelated Guard actions.
 */
 function evaluateExternalWaitCapability(evaluation) {
-	const required = new Set(BASE_HOST_PACKAGES);
-	for (const name of HOST_CAPABILITY_PACKAGE_GROUPS.jobs) required.add(name);
-	const result = statusForPackages("boundary.external_wait.jobs", evaluation.packages, required, cohortForEvaluation(evaluation));
+	const required$1 = new Set(BASE_HOST_PACKAGES);
+	for (const name of HOST_CAPABILITY_PACKAGE_GROUPS.jobs) required$1.add(name);
+	const result = statusForPackages("boundary.external_wait.jobs", evaluation.packages, required$1, cohortForEvaluation(evaluation));
 	if (evaluation.status !== "supported") return {
 		...result,
 		status: evaluation.status,
@@ -10705,9 +11004,9 @@ function evaluateToolSurfaceCapability(evaluation, surface) {
 	if (surface === "filesystem") groups.push("filesystem");
 	if (surface === "bash") groups.push("terminal_posix");
 	if (surface === "pwsh") groups.push("terminal_windows");
-	const required = new Set(BASE_HOST_PACKAGES);
-	for (const group of groups) for (const name of HOST_CAPABILITY_PACKAGE_GROUPS[group]) required.add(name);
-	const result = statusForPackages(`tool.${surface}.${platform ?? "native"}`, evaluation.packages, required, cohortForEvaluation(evaluation));
+	const required$1 = new Set(BASE_HOST_PACKAGES);
+	for (const group of groups) for (const name of HOST_CAPABILITY_PACKAGE_GROUPS[group]) required$1.add(name);
+	const result = statusForPackages(`tool.${surface}.${platform ?? "native"}`, evaluation.packages, required$1, cohortForEvaluation(evaluation));
 	if (evaluation.status !== "supported") return {
 		...result,
 		status: evaluation.status,
@@ -10847,32 +11146,32 @@ const STATEMENT_OPS = new Set([
 */
 function tokenizeShell(command) {
 	const tokens = [];
-	let index = 0;
+	let index$1 = 0;
 	let malformed = false;
 	const length = command.length;
-	while (index < length) {
-		const char = command[index];
+	while (index$1 < length) {
+		const char = command[index$1];
 		if (char === "\n" || char === "\r") {
 			tokens.push({
 				kind: "op",
 				value: "\n",
 				quoted: false
 			});
-			index += char === "\r" && command[index + 1] === "\n" ? 2 : 1;
+			index$1 += char === "\r" && command[index$1 + 1] === "\n" ? 2 : 1;
 			continue;
 		}
 		if (char === " " || char === "	") {
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
-		const two = command.slice(index, index + 2);
+		const two = command.slice(index$1, index$1 + 2);
 		if (TWO_CHAR_OPS.has(two)) {
 			tokens.push({
 				kind: "op",
 				value: two,
 				quoted: false
 			});
-			index += 2;
+			index$1 += 2;
 			continue;
 		}
 		if (char === ";" || char === "|" || char === "&" || char === "(" || char === ")" || char === "<" || char === ">") {
@@ -10881,61 +11180,61 @@ function tokenizeShell(command) {
 				value: char,
 				quoted: false
 			});
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
 		let word = "";
 		let quoted = false;
 		let quote = null;
-		while (index < length) {
-			const current = command[index];
+		while (index$1 < length) {
+			const current = command[index$1];
 			if (quote === "'") {
 				if (current === "'") {
 					quote = null;
-					index += 1;
+					index$1 += 1;
 					continue;
 				}
 				quoted = true;
 				word += current;
-				index += 1;
+				index$1 += 1;
 				continue;
 			}
 			if (quote === "\"") {
 				if (current === "\"") {
 					quote = null;
-					index += 1;
+					index$1 += 1;
 					continue;
 				}
 				quoted = true;
-				if (current === "\\" && index + 1 < length) {
-					word += command[index + 1];
-					index += 2;
+				if (current === "\\" && index$1 + 1 < length) {
+					word += command[index$1 + 1];
+					index$1 += 2;
 					continue;
 				}
 				word += current;
-				index += 1;
+				index$1 += 1;
 				continue;
 			}
 			if (current === "'") {
 				quote = "'";
-				index += 1;
+				index$1 += 1;
 				continue;
 			}
 			if (current === "\"") {
 				quote = "\"";
-				index += 1;
+				index$1 += 1;
 				continue;
 			}
-			if (current === "\\" && index + 1 < length) {
-				word += command[index + 1];
-				index += 2;
+			if (current === "\\" && index$1 + 1 < length) {
+				word += command[index$1 + 1];
+				index$1 += 2;
 				continue;
 			}
 			if (current === " " || current === "	" || current === "\n" || current === "\r") break;
 			if (current === ";" || current === "|" || current === "&" || current === "(" || current === ")" || current === "<" || current === ">") break;
-			if (TWO_CHAR_OPS.has(command.slice(index, index + 2))) break;
+			if (TWO_CHAR_OPS.has(command.slice(index$1, index$1 + 2))) break;
 			word += current;
-			index += 1;
+			index$1 += 1;
 		}
 		if (quote !== null) {
 			malformed = true;
@@ -11016,20 +11315,20 @@ function parseShellCommand(command) {
 		malformed: false
 	};
 	const writePaths = [];
-	for (let index = 0; index < tokens.length; index += 1) {
-		const token = tokens[index];
-		if (token.kind === "word" && /^\d+$/.test(token.value) && tokens[index + 1]?.kind === "op" && tokens[index + 1]?.value === ">&" && tokens[index + 2]?.kind === "word" && /^\d+$/.test(tokens[index + 2].value)) {
-			index += 2;
+	for (let index$1 = 0; index$1 < tokens.length; index$1 += 1) {
+		const token = tokens[index$1];
+		if (token.kind === "word" && /^\d+$/.test(token.value) && tokens[index$1 + 1]?.kind === "op" && tokens[index$1 + 1]?.value === ">&" && tokens[index$1 + 2]?.kind === "word" && /^\d+$/.test(tokens[index$1 + 2].value)) {
+			index$1 += 2;
 			continue;
 		}
-		if (token.kind === "word" && /^\d+$/.test(token.value) && tokens[index + 1]?.kind === "op" && (tokens[index + 1]?.value === ">" || tokens[index + 1]?.value === ">>")) return unsupported("file-descriptor-prefixed file redirect is not in the v0.1 subset");
+		if (token.kind === "word" && /^\d+$/.test(token.value) && tokens[index$1 + 1]?.kind === "op" && (tokens[index$1 + 1]?.value === ">" || tokens[index$1 + 1]?.value === ">>")) return unsupported("file-descriptor-prefixed file redirect is not in the v0.1 subset");
 		if (token.kind === "op") {
 			if (token.value === ">") {
-				const next = tokens[index + 1];
+				const next = tokens[index$1 + 1];
 				if (!next || next.kind !== "word") return unsupported("redirect target is not a literal word");
 				if (!isLiteralPath(next.value)) return unsupported("non-literal redirect path");
 				writePaths.push(next.value);
-				index += 1;
+				index$1 += 1;
 				continue;
 			}
 			if (token.value === ">>" || token.value === "<" || token.value === "<<" || token.value === "<&" || token.value === ">&") return unsupported(`redirect '${token.value}' is not in the v0.1 subset`);
@@ -11114,33 +11413,33 @@ const PWSH_CMDLETS = {
 /** PowerShell tokenizer: quoted strings (backtick-escaped) are one word. */
 function tokenizePwsh(command) {
 	const words = [];
-	let index = 0;
+	let index$1 = 0;
 	let malformed = false;
 	const length = command.length;
-	while (index < length) {
-		const char = command[index];
+	while (index$1 < length) {
+		const char = command[index$1];
 		if (char === " " || char === "	" || char === "\n" || char === "\r") {
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
 		if (char === "'" || char === "\"") {
 			const quote = char;
 			let word$1 = "";
 			let closed = false;
-			index += 1;
-			while (index < length) {
-				const current = command[index];
+			index$1 += 1;
+			while (index$1 < length) {
+				const current = command[index$1];
 				if (current === "`") {
 					malformed = true;
 					break;
 				}
 				if (current === quote) {
 					closed = true;
-					index += 1;
+					index$1 += 1;
 					break;
 				}
 				word$1 += current;
-				index += 1;
+				index$1 += 1;
 			}
 			if (!closed) malformed = true;
 			words.push({
@@ -11150,12 +11449,12 @@ function tokenizePwsh(command) {
 			continue;
 		}
 		let word = "";
-		while (index < length) {
-			const current = command[index];
+		while (index$1 < length) {
+			const current = command[index$1];
 			if (current === " " || current === "	" || current === "\n" || current === "\r") break;
 			if (current === "`") malformed = true;
 			word += current;
-			index += 1;
+			index$1 += 1;
 			if (malformed) break;
 		}
 		words.push({
@@ -11172,12 +11471,12 @@ function tokenizePwsh(command) {
 function readPwshUnsupported(command) {
 	let inSingle = false;
 	let inDouble = false;
-	let index = 0;
-	while (index < command.length) {
-		const char = command[index];
+	let index$1 = 0;
+	while (index$1 < command.length) {
+		const char = command[index$1];
 		if (inSingle) {
 			if (char === "'") inSingle = false;
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
 		if (inDouble) {
@@ -11190,17 +11489,17 @@ function readPwshUnsupported(command) {
 				reason: "variable or subexpression"
 			};
 			if (char === "\"") inDouble = false;
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
 		if (char === "'") {
 			inSingle = true;
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
 		if (char === "\"") {
 			inDouble = true;
-			index += 1;
+			index$1 += 1;
 			continue;
 		}
 		if (char === "`") return {
@@ -11216,10 +11515,10 @@ function readPwshUnsupported(command) {
 			reason: "unquoted newline"
 		};
 		if (char === "&") {
-			const previous = command[index - 1] ?? "";
-			const next = command[index + 1] ?? "";
+			const previous = command[index$1 - 1] ?? "";
+			const next = command[index$1 + 1] ?? "";
 			if (previous === ">" && /[0-9]/.test(next)) {
-				index += 1;
+				index$1 += 1;
 				continue;
 			}
 			return {
@@ -11231,7 +11530,7 @@ function readPwshUnsupported(command) {
 			unsupported: true,
 			reason: `structure character '${char}'`
 		};
-		index += 1;
+		index$1 += 1;
 	}
 	if (/^\s*\./.test(command)) return {
 		unsupported: true,
@@ -11292,8 +11591,8 @@ function parsePwshCommand(command) {
 	}
 	const paths = [];
 	let expected = null;
-	for (let index = 1; index < words.length; index += 1) {
-		const token = words[index];
+	for (let index$1 = 1; index$1 < words.length; index$1 += 1) {
+		const token = words[index$1];
 		const low = token.value.toLowerCase();
 		if (token.value.startsWith("-")) {
 			if (spec.pathParams.includes(low)) {
@@ -11570,19 +11869,19 @@ const TERMINAL_EXIT_MARKER = /^\[(?:exit code|shell exited: code|command finishe
 const TERMINAL_NEGATIVE_MARKER = /^\[(?:timed out[^\]]*|sandbox[^\]]*|killed by signal[^\]]*|shell killed by signal[^\]]*|shell exited|command timed out or oom|interrupted[^\]]*)\]$/;
 function extractTerminalFacts(textContent) {
 	const lines = textContent.split(/\r?\n/);
-	let index = lines.length - 1;
-	while (index >= 0 && lines[index].trim() === "") index -= 1;
-	const resetStripped = index >= 0 && PERSISTENT_RESET_LINE.test(lines[index].trim());
+	let index$1 = lines.length - 1;
+	while (index$1 >= 0 && lines[index$1].trim() === "") index$1 -= 1;
+	const resetStripped = index$1 >= 0 && PERSISTENT_RESET_LINE.test(lines[index$1].trim());
 	if (resetStripped) {
-		index -= 1;
-		while (index >= 0 && lines[index].trim() === "") index -= 1;
+		index$1 -= 1;
+		while (index$1 >= 0 && lines[index$1].trim() === "") index$1 -= 1;
 	}
 	const timeoutIntroAtHead = resetStripped && lines.length > 0 && PERSISTENT_TIMEOUT_INTRO.test(lines[0].trim());
 	let exitCode;
 	let negative = timeoutIntroAtHead;
 	let marked = timeoutIntroAtHead;
-	while (index >= 0) {
-		const line = lines[index].trim().toLowerCase();
+	while (index$1 >= 0) {
+		const line = lines[index$1].trim().toLowerCase();
 		const exitMatch = line.match(TERMINAL_EXIT_MARKER);
 		if (exitMatch) {
 			if (exitCode === void 0) exitCode = Number(exitMatch[1]);
@@ -11591,7 +11890,7 @@ function extractTerminalFacts(textContent) {
 			negative = true;
 			marked = true;
 		} else break;
-		index -= 1;
+		index$1 -= 1;
 	}
 	return {
 		exitCode,
@@ -11804,8 +12103,166 @@ function unique(values) {
 function resolveSubjectPaths(values, cwd) {
 	return cwd ? values.map((value) => resolveCommandPath(value, cwd)) : values;
 }
+/** A file tool acts on its call argument. Presentation metadata may describe
+* that same file, but cannot introduce another operation target. A differing
+* display path needs an independent filesystem identity readback before it
+* can be trusted as an alias. */
+function nativeFileSubjects(args, meta, cwd) {
+	const callTargets = unique(resolveSubjectPaths(argsPaths(args), cwd));
+	const displayed = unique(resolveSubjectPaths(metaPaths(meta), cwd));
+	const coherent = callTargets.length === 1 && displayed.every((path$1) => path$1 === callTargets[0]);
+	return {
+		subjects: unique([...callTargets, ...displayed]),
+		operationTargets: coherent ? callTargets : [],
+		coherent
+	};
+}
 function extractToolSubject(call, result, defaultCwd, hostLock) {
 	const args = parseArguments$1(call.arguments);
+	if (call.name === "context_guard_observe_file") {
+		const native = asRecord$2(asRecord$2(result.meta)?.contextGuardNativeFile);
+		const effectCallId = native?.effectCallId;
+		const path$1 = native?.path;
+		const digest$1 = native?.sha256;
+		if (typeof effectCallId === "string" && typeof path$1 === "string" && typeof digest$1 === "string" && /^[0-9a-f]{64}$/.test(digest$1) && (native?.action === "create" || native?.action === "modify")) return {
+			capabilities: ["filesystem-read"],
+			subjects: [path$1],
+			surfaces: ["artifact"],
+			operations: [{
+				op: "read",
+				path: path$1
+			}],
+			semanticAction: native.action,
+			evidenceRole: "state",
+			resolvedTarget: { artifact_id: path$1 },
+			observedState: { post_digest: digest$1 },
+			parseStatus: "supported",
+			adapterId: "context-guard.native-file.v1",
+			adapterVersion: "1.0.0",
+			causedByCallId: effectCallId,
+			...typeof native.canonicalPath === "string" && typeof native.canonicalBase === "string" ? {
+				nativeCanonicalPath: native.canonicalPath,
+				nativeCanonicalBase: native.canonicalBase
+			} : {}
+		};
+		return {
+			capabilities: [],
+			subjects: [],
+			surfaces: [],
+			outcome: "unknown",
+			parseStatus: "adapter_unavailable",
+			reasonCode: "native_file_readback_unavailable"
+		};
+	}
+	if (call.name === "context_guard_observe_git") {
+		const native = asRecord$2(asRecord$2(result.meta)?.contextGuardNativeGit);
+		const action = native?.action;
+		const repository = native?.repository;
+		const postOid = native?.postOid;
+		const cause = native?.effectCallId;
+		if ((action === "commit" || action === "push") && typeof repository === "string" && typeof cause === "string" && typeof postOid === "string" && /^[0-9a-f]{40,64}$/.test(postOid)) {
+			const remote = native?.remote;
+			const refspec = native?.refspec;
+			const parentOid = native?.parentOid;
+			const treeOid = native?.treeOid;
+			if (action === "commit" && (typeof parentOid !== "string" || typeof treeOid !== "string" || !/^[0-9a-f]{40,64}$/.test(parentOid) || !/^[0-9a-f]{40,64}$/.test(treeOid))) return {
+				capabilities: [],
+				subjects: [],
+				surfaces: [],
+				outcome: "unknown",
+				parseStatus: "adapter_unavailable",
+				reasonCode: "native_git_readback_unavailable"
+			};
+			if (action === "push" && (typeof remote !== "string" || typeof refspec !== "string")) return {
+				capabilities: [],
+				subjects: [],
+				surfaces: [],
+				outcome: "unknown",
+				parseStatus: "adapter_unavailable",
+				reasonCode: "native_git_readback_unavailable"
+			};
+			return {
+				capabilities: ["git-readback"],
+				subjects: [repository],
+				surfaces: ["scope"],
+				operations: [{
+					op: "read",
+					path: repository
+				}],
+				semanticAction: action,
+				evidenceRole: "state",
+				resolvedTarget: {
+					repository,
+					...action === "push" ? {
+						remote,
+						refspec
+					} : { branch: native?.branch }
+				},
+				observedState: {
+					post_head_oid: postOid,
+					...action === "push" ? { remote_oid: postOid } : {}
+				},
+				...action === "commit" ? {
+					nativeGitParentOid: parentOid,
+					nativeGitTreeOid: treeOid
+				} : {},
+				parseStatus: "supported",
+				adapterId: "context-guard.native-git.v1",
+				adapterVersion: "1.0.0",
+				causedByCallId: cause
+			};
+		}
+		return {
+			capabilities: [],
+			subjects: [],
+			surfaces: [],
+			outcome: "unknown",
+			parseStatus: "adapter_unavailable",
+			reasonCode: "native_git_readback_unavailable"
+		};
+	}
+	if (call.name === "context_guard_observe_test_readiness") {
+		const ready = asRecord$2(asRecord$2(result.meta)?.contextGuardTestReadiness);
+		const assessment = ready?.predicate === "verification_passed";
+		if (typeof ready?.itemId === "string" && typeof ready.scope === "string" && (ready.predicate === "test_passed" || assessment) && typeof ready.manifestSha256 === "string" && /^[0-9a-f]{64}$/.test(ready.manifestSha256)) {
+			if (assessment && (typeof ready.effectCallId !== "string" || typeof ready.selectedPath !== "string" || !ready.selectedPath || !["test", "benchmark"].includes(String(ready.scriptName)) || typeof ready.inputSha256 !== "string" || !/^[0-9a-f]{64}$/.test(ready.inputSha256) || ready.effectCallId === "" && ready.inputSha256 !== ready.manifestSha256)) return {
+				capabilities: [],
+				subjects: [],
+				surfaces: [],
+				outcome: "unknown",
+				parseStatus: "adapter_unavailable",
+				reasonCode: "assessment_readiness_unavailable"
+			};
+			return {
+				capabilities: ["test-input-readiness"],
+				subjects: [ready.scope],
+				surfaces: ["scope"],
+				semanticAction: "verify",
+				evidenceRole: "state",
+				resolvedTarget: { scope: ready.scope },
+				parseStatus: "supported",
+				adapterId: "context-guard.test-readiness.v1",
+				adapterVersion: "1.0.0",
+				readinessForItemId: ready.itemId,
+				readinessPredicate: ready.predicate,
+				readinessManifestSha256: ready.manifestSha256,
+				...assessment ? {
+					readinessEffectCallId: ready.effectCallId,
+					readinessSelectedPath: ready.selectedPath,
+					readinessScriptName: ready.scriptName,
+					readinessInputSha256: ready.inputSha256
+				} : {}
+			};
+		}
+		return {
+			capabilities: [],
+			subjects: [],
+			surfaces: [],
+			outcome: "unknown",
+			parseStatus: "adapter_unavailable",
+			reasonCode: "test_readiness_unavailable"
+		};
+	}
 	if (call.name === "context_guard_external_operation") {
 		const external = asRecord$2(asRecord$2(result.meta)?.contextGuardExternalOperation);
 		const status = external?.status;
@@ -11889,12 +12346,12 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 	switch (call.name) {
 		case "read":
 		case "read_file": {
-			const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd));
+			const { subjects, operationTargets, coherent } = nativeFileSubjects(args, result.meta, defaultCwd);
 			return capabilityGatedSubject({
 				capabilities: ["filesystem-read"],
 				subjects,
 				surfaces: ["artifact"],
-				operations: subjects.map((path$1) => ({
+				operations: operationTargets.map((path$1) => ({
 					op: "read",
 					path: path$1
 				})),
@@ -11902,51 +12359,63 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 				evidenceRole: structured?.evidenceRole ?? "effect",
 				resolvedTarget: structured?.resolvedTarget ?? { scope: defaultCwd ?? "scope" },
 				...structured?.observedState ? { observedState: structured.observedState } : {},
-				parseStatus: "supported",
+				parseStatus: coherent ? "supported" : "adapter_unavailable",
+				...coherent ? {} : {
+					outcome: "unknown",
+					reasonCode: "native_file_target_unverified"
+				},
 				adapterId: structured?.adapterId ?? "dsh.read.v1",
 				adapterVersion: structured?.adapterVersion ?? "1.0.0"
 			}, "filesystem", hostLock);
 		}
 		case "write":
 		case "write_file": {
-			const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd));
+			const { subjects, operationTargets, coherent } = nativeFileSubjects(args, result.meta, defaultCwd);
 			return capabilityGatedSubject({
 				capabilities: ["filesystem-write"],
 				subjects,
 				surfaces: ["artifact"],
-				operations: subjects.map((path$1) => ({
+				operations: operationTargets.map((path$1) => ({
 					op: "create",
 					path: path$1
 				})),
 				semanticAction: structured?.semanticAction ?? "create",
 				evidenceRole: structured?.evidenceRole ?? "effect",
 				resolvedTarget: structured?.resolvedTarget ?? {
-					...subjects[0] ? { artifact_id: subjects[0] } : {},
+					...operationTargets[0] ? { artifact_id: operationTargets[0] } : {},
 					scope: defaultCwd ?? "scope"
 				},
-				parseStatus: "supported",
+				parseStatus: coherent ? "supported" : "adapter_unavailable",
+				...coherent ? {} : {
+					outcome: "unknown",
+					reasonCode: "native_file_target_unverified"
+				},
 				adapterId: structured?.adapterId ?? "dsh.write.v1",
 				adapterVersion: structured?.adapterVersion ?? "1.0.0"
 			}, "filesystem", hostLock);
 		}
 		case "edit":
 		case "edit_file": {
-			const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd));
+			const { subjects, operationTargets, coherent } = nativeFileSubjects(args, result.meta, defaultCwd);
 			return capabilityGatedSubject({
 				capabilities: ["filesystem-edit"],
 				subjects,
 				surfaces: ["artifact"],
-				operations: subjects.map((path$1) => ({
+				operations: operationTargets.map((path$1) => ({
 					op: "modify",
 					path: path$1
 				})),
 				semanticAction: structured?.semanticAction ?? "modify",
 				evidenceRole: structured?.evidenceRole ?? "effect",
 				resolvedTarget: structured?.resolvedTarget ?? {
-					...subjects[0] ? { artifact_id: subjects[0] } : {},
+					...operationTargets[0] ? { artifact_id: operationTargets[0] } : {},
 					scope: defaultCwd ?? "scope"
 				},
-				parseStatus: "supported",
+				parseStatus: coherent ? "supported" : "adapter_unavailable",
+				...coherent ? {} : {
+					outcome: "unknown",
+					reasonCode: "native_file_target_unverified"
+				},
 				adapterId: structured?.adapterId ?? "dsh.edit.v1",
 				adapterVersion: structured?.adapterVersion ?? "1.0.0"
 			}, "filesystem", hostLock);
@@ -12031,6 +12500,18 @@ function evidenceFromPersistedToolResult(call, result, epoch, evidenceId, defaul
 		...subject.reasonCode ? { reasonCode: subject.reasonCode } : {},
 		...subject.adapterId ? { adapterId: subject.adapterId } : {},
 		...subject.adapterVersion ? { adapterVersion: subject.adapterVersion } : {},
+		...subject.causedByCallId ? { causedByCallId: subject.causedByCallId } : {},
+		...subject.nativeCanonicalPath ? { nativeCanonicalPath: subject.nativeCanonicalPath } : {},
+		...subject.nativeCanonicalBase ? { nativeCanonicalBase: subject.nativeCanonicalBase } : {},
+		...subject.nativeGitTreeOid ? { nativeGitTreeOid: subject.nativeGitTreeOid } : {},
+		...subject.nativeGitParentOid ? { nativeGitParentOid: subject.nativeGitParentOid } : {},
+		...subject.readinessForItemId ? { readinessForItemId: subject.readinessForItemId } : {},
+		...subject.readinessPredicate ? { readinessPredicate: subject.readinessPredicate } : {},
+		...subject.readinessManifestSha256 ? { readinessManifestSha256: subject.readinessManifestSha256 } : {},
+		...subject.readinessEffectCallId ? { readinessEffectCallId: subject.readinessEffectCallId } : {},
+		...subject.readinessSelectedPath ? { readinessSelectedPath: subject.readinessSelectedPath } : {},
+		...subject.readinessScriptName ? { readinessScriptName: subject.readinessScriptName } : {},
+		...subject.readinessInputSha256 ? { readinessInputSha256: subject.readinessInputSha256 } : {},
 		...subject.processFacts ? { processFacts: subject.processFacts.hostToolReturned === (result.error ? "error" : "result") ? subject.processFacts : {
 			...subject.processFacts,
 			hostToolReturned: result.error ? "error" : "result",
@@ -12859,6 +13340,7 @@ const PROTOCOL_V4_NOTICE = "Context Guard protocol boundary: v4.0.0";
 * fail direction on rollback is closed, never a misread.
 */
 const PROTOCOL_V5_NOTICE = "Context Guard protocol boundary: v5.0.0";
+const PROTOCOL_V6_NOTICE = "Context Guard protocol boundary: v6.0.0";
 function isProtocolBoundaryNotice(event, notice = PROTOCOL_V3_NOTICE) {
 	if (event.type !== "user/message") return false;
 	const data = asRecord(event.data);
@@ -12920,7 +13402,7 @@ function supersedeClauseByPartition(projection, item, receipt) {
 	if (!information || !unknown) return [];
 	for (const span of [...information, ...unknown]) if (span.start < extent.start || span.end > extent.end) return [];
 	const ordered = [...information, ...unknown].sort((left, right) => left.start - right.start || left.end - right.end);
-	for (let index = 1; index < ordered.length; index += 1) if (ordered[index].start < ordered[index - 1].end) return [];
+	for (let index$1 = 1; index$1 < ordered.length; index$1 += 1) if (ordered[index$1].start < ordered[index$1 - 1].end) return [];
 	const complement = [];
 	let cursor = extent.start;
 	for (const span of ordered) {
@@ -13047,8 +13529,8 @@ function clauseCallReceiptMatches(callInformation, callUnknown, recorded, item) 
 	const spans = item.spans ?? [];
 	const echoed = recorded.spans;
 	if (!Array.isArray(echoed) || echoed.length !== spans.length) return false;
-	if (!spans.every((span, index) => {
-		const echo = asRecord(echoed[index]);
+	if (!spans.every((span, index$1) => {
+		const echo = asRecord(echoed[index$1]);
 		return echo !== void 0 && echo.part_index === span.partIndex && echo.start === span.start && echo.end === span.end;
 	})) return false;
 	if (callInformation === void 0 || callUnknown === void 0 || callInformation.length === 0) return false;
@@ -13056,7 +13538,7 @@ function clauseCallReceiptMatches(callInformation, callUnknown, recorded, item) 
 	const allCall = [...callInformation, ...callUnknown];
 	for (const span of allCall) if (span.start < extent.start || span.end > extent.end) return false;
 	const orderedCall = [...allCall].sort((left, right) => left.start - right.start || left.end - right.end);
-	for (let index = 1; index < orderedCall.length; index += 1) if (orderedCall[index].start < orderedCall[index - 1].end) return false;
+	for (let index$1 = 1; index$1 < orderedCall.length; index$1 += 1) if (orderedCall[index$1].start < orderedCall[index$1 - 1].end) return false;
 	const receiptInformation = readPartitionSpans(recorded.information_spans);
 	const receiptUnknown = readPartitionSpans(recorded.unknown_spans);
 	if (receiptInformation === void 0 || receiptUnknown === void 0) return false;
@@ -13108,6 +13590,8 @@ function recordedCertificateMatches(recorded, checkpoint) {
 		certification_digest: checkpoint.certificationDigest,
 		goal_ref: checkpoint.goalRef ?? null
 	};
+	if (checkpoint.nativeObservations) exact.native_observations = checkpoint.nativeObservations;
+	if (checkpoint.rootLocatorIdentity) exact.root_locator_identity = checkpoint.rootLocatorIdentity;
 	if (checkpoint.unitId !== void 0) {
 		exact.unit_id = checkpoint.unitId;
 		exact.unit_closure_digest = checkpoint.unitClosureDigest;
@@ -13122,7 +13606,7 @@ function recordedCertificateMatches(recorded, checkpoint) {
 	const expectedKeys = Object.keys(exact).sort();
 	const actualKeys = Object.keys(normalized).sort();
 	if (expectedKeys.length !== actualKeys.length) return false;
-	return expectedKeys.every((key, index) => key === actualKeys[index] && stableJson(normalized[key]) === stableJson(exact[key]));
+	return expectedKeys.every((key, index$1) => key === actualKeys[index$1] && stableJson(normalized[key]) === stableJson(exact[key]));
 }
 /**
 * The proof binding state the log itself implies for one checkpoint call. This
@@ -13153,7 +13637,7 @@ function sameStringSet(recorded, expected) {
 	if (!Array.isArray(recorded)) return false;
 	const left = [...new Set(recorded.filter((entry) => typeof entry === "string"))].sort();
 	const right = [...new Set(expected)].sort();
-	return left.length === right.length && left.every((value, index) => value === right[index]);
+	return left.length === right.length && left.every((value, index$1) => value === right[index$1]);
 }
 /**
 * Freeze the closure certificate the adopter relied on, resolved AT the
@@ -13206,6 +13690,8 @@ function restoreHistoricalCheckpoint(recorded, bindings, id) {
 		openDigest: stringField("open_digest"),
 		evidenceSha256: stringField("evidence_sha256"),
 		bindingDigest: stringField("binding_digest"),
+		...asRecord(recorded.native_observations) ? { nativeObservations: recorded.native_observations } : {},
+		...stringField("root_locator_identity") ? { rootLocatorIdentity: stringField("root_locator_identity") } : {},
 		bindings,
 		...goal ? { goalRef: {
 			id: goal.id,
@@ -13289,6 +13775,272 @@ function captureRootText(projection, text, seq, scope, legacy, priorRootMessages
 	priorRootMessages.push(text);
 	if (priorRootMessages.length > 16) priorRootMessages.shift();
 }
+/** V6 records the speech act at the clause head before action words inside its
+* object are considered. A nominal explanation is an answerable obligation;
+* a second independent finite command remains work. A how/why complement or
+* quoted command is governed by the explanation and cannot become authority. */
+function segmentsForBoundary(text, coordinationSplit, v6) {
+	const ordinary = segmentClauses(text, { coordinationSplit });
+	if (!v6) return ordinary;
+	const refined = [];
+	const asProhibition = (clause) => {
+		if (!clause || !/^(?:\s*)(?:(?:本轮|本次任务|在本轮|在本次任务|in\s+this\s+task)\s*)?(?:禁止|严禁|不得|不要|不准|do\s+not\b|must\s+not\b)/iu.test(maskQuotedSpans(clause.text))) return void 0;
+		return {
+			...clause,
+			kind: "prohibition",
+			interpretation: {
+				...clause.interpretation,
+				directive: "prohibition",
+				authorityDisposition: "prohibition",
+				immediatelyExecutable: false,
+				fingerprint: `v6-ban:${sha256(clause.text)}`
+			}
+		};
+	};
+	const asTest = (clause, inheritedCommand = false) => {
+		if ([
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(clause.interpretation.authorityDisposition)) return void 0;
+		const visible = maskQuotedSpans(clause.text);
+		if (!/^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu.test(visible) && !(inheritedCommand && /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu.test(visible))) return void 0;
+		if (!inheritedCommand && clause.interpretation.authorityDisposition !== "executable_now") return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "directive",
+				executee: "agent",
+				authorityDisposition: "executable_now",
+				immediatelyExecutable: true,
+				qualification: {
+					status: "granted",
+					reason: "plain_instruction"
+				},
+				fingerprint: `v6-test:${sha256(clause.text)}`
+			}
+		};
+	};
+	const asArtifactEdit = (clause) => {
+		if ([
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(clause.interpretation.authorityDisposition)) return void 0;
+		if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(maskQuotedSpans(clause.body))) return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "directive",
+				executee: "agent",
+				authorityDisposition: "executable_now",
+				immediatelyExecutable: true,
+				qualification: {
+					status: "granted",
+					reason: "plain_instruction"
+				},
+				fingerprint: `${clause.paths.length ? "v6-artifact-edit" : "v6-work-unit-edit"}:${sha256(clause.text)}`
+			}
+		};
+	};
+	const asFileReadback = (clause) => {
+		if ([
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(clause.interpretation.authorityDisposition)) return void 0;
+		if (!/^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(maskQuotedSpans(clause.body))) return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "directive",
+				executee: "agent",
+				authorityDisposition: "executable_now",
+				immediatelyExecutable: true,
+				qualification: {
+					status: "granted",
+					reason: "plain_instruction"
+				},
+				fingerprint: `v6-file-readback:${sha256(clause.text)}`
+			}
+		};
+	};
+	const asReport = (clause) => {
+		if (["prohibition", "conditional_wait"].includes(clause.interpretation.authorityDisposition)) return void 0;
+		if (!/^(?:\s*)(?:报告|汇报|report\b)\s*(?:数值|结果|数据|the\s+result\b|a\s+number\b)/iu.test(maskQuotedSpans(clause.body))) return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "informational",
+				executee: "unresolved",
+				authorityDisposition: "informational",
+				immediatelyExecutable: false,
+				fingerprint: `v6-report:${sha256(clause.text)}`
+			}
+		};
+	};
+	const asContext = (clause) => {
+		const visible = maskQuotedSpans(clause.body).trim();
+		const reported = /^(?:[^，,。.!?？]{1,32}?)(?:日志|报告|记录|注释|消息|log\b|report\b|record\b|comment\b|message\b)\s*(?:还|也)?(?:提到|显示|指出|记载|mentions?|shows?|reports?)/iu.test(visible);
+		const connector = /^(?:(?:但|但是|不过|however\b)\s*)?(?:本轮|本次任务|in\s+this\s+task)\s*$/iu.test(visible);
+		if (!reported && !connector) return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "unresolved",
+				authorityDisposition: "unresolved",
+				immediatelyExecutable: false,
+				fingerprint: `v6-context:${sha256(clause.text)}`
+			}
+		};
+	};
+	for (const segment of ordinary) {
+		const coordinated = /(?:并|和|\band\b)\s*(?=(?:运行|执行|跑完|跑|完成|检查|核对|报告|汇报|run|perform|check|verify|report|(?:现有|对应的?)?回归测试|(?:its\s+)?focused\s+test))/iu.exec(maskQuotedSpans(segment.text));
+		if (coordinated && segment.kind === "requirement") {
+			const leftText = segment.text.slice(0, coordinated.index);
+			const rightText = segment.text.slice(coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length);
+			const left = segmentClauses(leftText)[0];
+			const right = segmentClauses(rightText)[0];
+			const promotedLeft = left ? asArtifactEdit(left) ?? left : void 0;
+			const promotedRight = right ? asTest(right, true) ?? asFileReadback(right) ?? asReport(right) : void 0;
+			if (promotedLeft && promotedRight && promotedLeft.interpretation.authorityDisposition === "executable_now") {
+				refined.push({
+					...promotedLeft,
+					text: segment.text.slice(0, coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length)
+				}, promotedRight);
+				continue;
+			}
+		}
+		const standaloneBan = asProhibition(segment);
+		if (standaloneBan) {
+			refined.push(standaloneBan);
+			continue;
+		}
+		const standaloneTest = asTest(segment);
+		if (standaloneTest) {
+			refined.push(standaloneTest);
+			continue;
+		}
+		const standaloneEdit = asArtifactEdit(segment);
+		if (standaloneEdit) {
+			refined.push(standaloneEdit);
+			continue;
+		}
+		const standaloneReadback = asFileReadback(segment);
+		if (standaloneReadback) {
+			refined.push(standaloneReadback);
+			continue;
+		}
+		const standaloneReport = asReport(segment);
+		if (standaloneReport) {
+			refined.push(standaloneReport);
+			continue;
+		}
+		const standaloneContext = asContext(segment);
+		if (standaloneContext) {
+			refined.push(standaloneContext);
+			continue;
+		}
+		const visible = maskQuotedSpans(segment.text);
+		const coordinatedTest = /(?:并且|并|和|及|\band\b|\bthen\b)\s*((?:(?:运行|执行|开展|run|perform)\s*(?:the\s+)?(?:focused\s+)?)?(?:tests?|测试))[。.!！?？\s]*$/iu.exec(visible);
+		if (coordinatedTest && segment.kind === "requirement" && !/^(?:\s*)(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)/iu.test(visible)) {
+			const tailStart = coordinatedTest.index + coordinatedTest[0].indexOf(coordinatedTest[1]);
+			const prefix = segment.text.slice(0, tailStart);
+			const tail = segment.text.slice(tailStart);
+			const head$1 = segmentClauses(prefix)[0];
+			const test = segmentClauses(tail)[0];
+			const promoted = test ? asTest(test, true) : void 0;
+			if (head$1 && promoted && (head$1.interpretation.authorityDisposition === "executable_now" || /^(?:\s*)(?:完成|按|按照|修复|修改|please\s+fix|fix\b)/iu.test(visible))) {
+				refined.push({
+					...head$1,
+					text: prefix,
+					interpretation: {
+						...head$1.interpretation,
+						text: prefix
+					}
+				}, {
+					...promoted,
+					text: tail,
+					interpretation: {
+						...promoted.interpretation,
+						text: tail
+					}
+				});
+				continue;
+			}
+		}
+		if (segment.kind !== "requirement" || segment.interpretation.directive !== "unresolved") {
+			refined.push(segment);
+			continue;
+		}
+		const head = /^\s*(?:(?:先|首先|first\b)\s*)?(?:请|please\s+)?(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)\s*/iu.exec(visible);
+		if (!head) {
+			refined.push(segment);
+			continue;
+		}
+		const complement = visible.slice(head[0].length);
+		if (/^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim())) {
+			refined.push(segment);
+			continue;
+		}
+		const parts = splitTextFragments(segment.text);
+		const first = parts[0];
+		if (!first) {
+			refined.push(segment);
+			continue;
+		}
+		const firstComplement = maskQuotedSpans(first.text).slice(head[0].length).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
+		if (!firstComplement || /[`“”"']/.test(first.text)) {
+			refined.push(segment);
+			continue;
+		}
+		const nominal = /(?:流程|方案|步骤|过程|方法|方式|作用|原因|架构|设计|结果|概念|原理|process|plan|steps?|procedure|method|approach|effect|reason|design|architecture|result|concept|principle)[，,。.!！?？\s]*$/iu.test(firstComplement);
+		const pureNoRecognizedAction = segment.interpretation.directive === "unresolved" && segmentClauses(first.text)[0]?.interpretation.directive === "unresolved" && !/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement);
+		if (!nominal && !pureNoRecognizedAction) {
+			refined.push(segment);
+			continue;
+		}
+		const independent = parts.slice(1).map((part) => {
+			const clause = segmentClauses(part.text)[0];
+			return {
+				part,
+				clause: asProhibition(clause) ?? (clause ? asArtifactEdit(clause) : void 0) ?? clause
+			};
+		});
+		if (independent.some(({ clause }) => !clause || !["executable_now", "prohibition"].includes(clause.interpretation.authorityDisposition))) {
+			if (parts.length > 1) {
+				refined.push(segment);
+				continue;
+			}
+		}
+		const firstEnd = parts[1]?.offset ?? segment.text.length;
+		const informationText = segment.text.slice(0, firstEnd);
+		const informationBody = first.text.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
+		refined.push({
+			...segment,
+			text: informationText,
+			body: informationBody,
+			paths: [],
+			interpretation: {
+				...segment.interpretation,
+				text: informationText,
+				body: informationBody,
+				directive: "informational",
+				executee: "unresolved",
+				immediatelyExecutable: false,
+				authorityDisposition: "informational",
+				fingerprint: `v6-info:${sha256(informationText)}`
+			}
+		});
+		for (const { part, clause } of independent) if (clause) refined.push(clause);
+	}
+	return refined;
+}
 /**
 * Insert every independently tracked clause from one user message. Compound
 * instructions are segmented and each distinct artifact path becomes its own
@@ -13299,7 +14051,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 	const before = new Set(projection.items.keys());
 	let coveredSpans = 0;
 	const usedOccurrences = /* @__PURE__ */ new Set();
-	for (const segment of segmentClauses(text, { coordinationSplit })) {
+	for (const segment of segmentsForBoundary(text, coordinationSplit, projection.boundaryProtocol === 6 && !legacy)) {
 		if (classifyUserInteraction(segment.body) === "conversational") continue;
 		if (segment.kind === "requirement" && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue;
 		let span;
@@ -13398,7 +14150,7 @@ function markNeedsReview(item, reason, revision) {
 	if (item.needsReview) return;
 	item.needsReview = {
 		reason,
-		checkId: ELIGIBILITY_CHECK_ID,
+		checkId: reason.startsWith("legacy_v6_") ? "eligibility:0.7.0" : ELIGIBILITY_CHECK_ID,
 		recordedAtRevision: revision
 	};
 }
@@ -13439,18 +14191,33 @@ function legacyRecordsNeedingReview(projection) {
 * record never leaks in.
 */
 function eligibilityReviewReasons(projection) {
-	const closureUnits = projection.boundaryProtocol === 5 && projection.currentUnitId !== void 0 ? new Set([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)]) : void 0;
+	const closureUnits = projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5 && projection.currentUnitId !== void 0 ? new Set([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)]) : void 0;
 	const findings = [];
 	for (const item of projection.items.values()) {
 		if (item.status === "superseded") continue;
 		if (closureUnits !== void 0 && item.unitId !== void 0 && !closureUnits.has(item.unitId)) continue;
 		if (item.needsReview) continue;
+		const informationReading = item.directive === "informational" || item.authorityDisposition === "informational" || item.taskKind === "inquiry";
+		const bornSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)?.[1];
+		if (projection.v6BoundarySeq !== void 0 && bornSeq !== void 0 && Number(bornSeq) < projection.v6BoundarySeq) {
+			if (item.semanticAction === "generic_run" && !informationReading) {
+				findings.push([item.id, "legacy_v6_generic_action"]);
+				continue;
+			}
+			if (item.waitAuthorization || item.authorityDisposition === "conditional_wait") {
+				findings.push([item.id, "legacy_v6_text_wait"]);
+				continue;
+			}
+			if (item.kind !== "prohibition" && !informationReading && ["answered", "passed"].includes(item.status)) {
+				findings.push([item.id, "legacy_v6_ordinary_certification"]);
+				continue;
+			}
+		}
 		const recordedVersion = item.stateVersion;
 		if (recordedVersion !== void 0 && recordedVersion !== 1) {
 			findings.push([item.id, "unknown_state_version"]);
 			continue;
 		}
-		const informationReading = item.directive === "informational" || item.authorityDisposition === "informational" || item.taskKind === "inquiry";
 		if (informationReading && informationReadingNamesWork(item.normalizedText)) {
 			findings.push([item.id, "legacy_mixed_information_scope"]);
 			continue;
@@ -13595,6 +14362,64 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 	const method = extractMethod(segment.body);
 	const operation = extractOperation(segment.body);
 	const item = captureItem(segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation, segment.interpretation);
+	if (projection.boundaryProtocol === 6 && segment.interpretation.directive === "informational") item.taskKind = "inquiry";
+	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-test:")) {
+		item.semanticAction = "test";
+		item.requestedTarget = { scope: subject };
+		item.targetCaptureStatus = "resolved";
+		item.taskKind = "action";
+	}
+	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-artifact-edit:") && surface === "artifact") {
+		item.semanticAction = "modify";
+		item.requestedTarget = { artifact_id: subject };
+		item.targetCaptureStatus = "resolved";
+		item.taskKind = "action";
+	}
+	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-work-unit-edit:") && surface === "scope") {
+		item.semanticAction = "modify";
+		item.requestedTarget = { scope: subject };
+		item.targetCaptureStatus = "resolved";
+		item.taskKind = "action";
+	}
+	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-file-readback:")) {
+		item.semanticAction = "verify";
+		item.requestedTarget = { scope: subject };
+		item.targetCaptureStatus = "resolved";
+		item.taskKind = "action";
+	}
+	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-context:")) {
+		item.taskKind = "context";
+		item.status = "passed";
+		delete item.semanticAction;
+	}
+	const visibleSpeech = maskQuotedSpans(segment.body).trim();
+	const temporal = /^(?:明天|未来|将来|下周|下个月|稍后|tomorrow\b|later\b|next\s+(?:week|month)\b)[\s,，]*(?:再)?/iu.exec(visibleSpeech);
+	const approval = /^(?:等|待|收到)[^，,。.!?？]{0,24}(?:确认|审批|批准|许可)[^，,。.!?？]{0,8}(?:后|再)[\s,，]*|^after\s+(?:the\s+)?(?:approval|confirmation|permission)[\s,，]*/iu.exec(visibleSpeech);
+	const preface = approval ?? temporal;
+	const mainSpeech = preface ? visibleSpeech.slice(preface[0].length) : visibleSpeech;
+	const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(mainSpeech);
+	if (projection.boundaryProtocol === 6 && segment.kind === "requirement" && segment.interpretation.authorityDisposition !== "informational" && assessmentHead && !segment.interpretation.fingerprint.startsWith("v6-file-readback:")) {
+		item.semanticAction = "verify";
+		item.requestedTarget = { scope: subject };
+		item.targetCaptureStatus = "resolved";
+		item.taskKind = "action";
+		if (item.authorityDisposition === "unresolved" && !preface) {
+			item.authorityDisposition = "executable_now";
+			item.executionQualification = {
+				status: "granted",
+				reason: "plain_instruction"
+			};
+		}
+	}
+	if (projection.boundaryProtocol === 6 && preface && assessmentHead && segment.kind === "requirement") {
+		item.condition = preface[0].trim();
+		item.authorityDisposition = "conditional_wait";
+		item.executionQualification = {
+			status: "restricted",
+			reason: "governed_scope",
+			governedBy: approval ? "user_input" : "time_predicate"
+		};
+	}
 	if (unitId !== void 0) item.unitId = unitId;
 	resolveInheritedGitTarget(projection, item);
 	if (provenance) {
@@ -13614,6 +14439,29 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 * `tool/result`, `tool/ptc-dispatch-start`, `tool/ptc-dispatch`, and
 * `compaction/summary`.
 */
+function refreshRootLocatorContext(projection, sourceEvents, scope, asOf) {
+	projection.rootLocatorContexts.clear();
+	projection.rootLocatorIdentity = void 0;
+	if (projection.boundaryProtocol !== 6 || !scope.sessionHeader || typeof scope.cwd !== "string" || !scope.cwd.startsWith("/") || scope.cwd.startsWith("//") || scope.cwd.split("/").includes("..") || scope.cwd.split("/").includes(".") || scope.cwd.includes("//")) return;
+	const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : [];
+	for (const ref of refs) {
+		if (ref.seq > asOf) continue;
+		const source = sourceEvents.find((event) => event.seq === ref.seq && event.type === "user/message" && asRecord(asRecord(event.data)?.source)?.kind === "user");
+		if (!source) continue;
+		const content = asRecord(source.data)?.content;
+		const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === "text").map((part) => String(asRecord(part)?.text ?? "")).join("") : "";
+		projection.rootLocatorContexts.set(ref.seq, {
+			base: scope.cwd,
+			sha256: sha256(`dsh.root-locator.v1\0${JSON.stringify([
+				projection.sessionRefDigest,
+				ref.seq,
+				sha256(raw),
+				scope.cwd
+			])}`)
+		});
+	}
+	if (projection.rootLocatorContexts.size) projection.rootLocatorIdentity = sha256(`dsh.root-locator-set.v1\0${JSON.stringify([...projection.rootLocatorContexts].sort((a, b) => a[0] - b[0]).map(([seq, context]) => [seq, context.sha256]))}`);
+}
 function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLock = DEFAULT_HOST_LOCK) {
 	const projection = createProjection();
 	projection.policy = config.policy ?? "standard";
@@ -13629,10 +14477,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	let enablementTransitioned = false;
 	let lastCompactionSeq = -1;
 	const pendingCalls = /* @__PURE__ */ new Map();
-	const v5BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
+	const v5BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq;
+	const v6BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq;
 	const v4BoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq;
-	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
-	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq;
+	const protocolBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq;
+	const captureBoundarySeq = sourceEvents.find((event) => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq;
 	const priorRootMessages = [];
 	let realRootInputSeen = false;
 	const trustedDeliveries = (v5BoundarySeq !== void 0 ? deriveTrustedDeliveries(sourceEvents) : []).filter((delivery) => delivery.turnEndSeq > v5BoundarySeq);
@@ -13677,11 +14526,14 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				if (data?.name !== "context-guard") break;
 				if (asRecord(data.source)?.kind !== "user") break;
 				const subcommand = typeof data.args === "string" ? data.args.trim().split(/\s+/, 1)[0] : "";
-				if (subcommand === "on" && !enabled) {
-					enabled = true;
-					epoch += 1;
-					enablementTransitioned = true;
-					projection.epoch = epoch;
+				if (subcommand === "on") {
+					projection.goalCompletionAdopted = true;
+					if (!enabled) {
+						enabled = true;
+						epoch += 1;
+						enablementTransitioned = true;
+						projection.epoch = epoch;
+					}
 				} else if (subcommand === "off") enabled = false;
 				else if (subcommand === "clear") {
 					const revision = projection.contractRevision + 1;
@@ -13732,8 +14584,13 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				break;
 			}
 			case "user/message": {
+				if (isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE)) {
+					projection.boundaryProtocol = 6;
+					projection.v6BoundarySeq = event.seq;
+					break;
+				}
 				if (isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) {
-					projection.boundaryProtocol = 5;
+					if (projection.boundaryProtocol !== 6) projection.boundaryProtocol = 5;
 					break;
 				}
 				if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break;
@@ -13797,9 +14654,9 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 									settledAtSeq: event.seq
 								};
 								const key = (row) => `${row.contractId}\u0000${row.operation}\u0000${row.callId}`;
-								const index = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned));
-								if (index < 0) projection.releaseSettlements.push(pinned);
-								else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index].outcome]) projection.releaseSettlements[index] = pinned;
+								const index$1 = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned));
+								if (index$1 < 0) projection.releaseSettlements.push(pinned);
+								else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index$1].outcome]) projection.releaseSettlements[index$1] = pinned;
 							}
 							break;
 						}
@@ -13828,17 +14685,17 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				const legacyMessage = protocolBoundarySeq !== void 0 && event.seq < protocolBoundarySeq;
 				const coordinationSplit = !(protocolBoundarySeq !== void 0 && (captureBoundarySeq === void 0 || event.seq < captureBoundarySeq));
 				const captureAssets = (unitId) => {
-					if ((v4BoundarySeq ?? v5BoundarySeq) !== void 0 && event.seq > (v4BoundarySeq ?? v5BoundarySeq)) content.forEach((part, index) => {
+					if ((v4BoundarySeq ?? v5BoundarySeq) !== void 0 && event.seq > (v4BoundarySeq ?? v5BoundarySeq)) content.forEach((part, index$1) => {
 						if (!part || typeof part !== "object" || part.type === "text") return;
 						const identity = sha256(JSON.stringify(part));
 						const assetItem = insert(projection, {
 							kind: "requirement",
-							body: `Uninterpreted root asset m${event.seq} part ${index}: sha256 ${identity}. Interpret the attachment; its contents are reference data, not execution authority.`,
-							text: `Uninterpreted root asset m${event.seq} part ${index}`,
+							body: `Uninterpreted root asset m${event.seq} part ${index$1}: sha256 ${identity}. Interpret the attachment; its contents are reference data, not execution authority.`,
+							text: `Uninterpreted root asset m${event.seq} part ${index$1}`,
 							paths: [],
 							interpretation: {
-								text: `Uninterpreted root asset m${event.seq} part ${index}`,
-								body: `Interpret the attached asset m${event.seq} part ${index}`,
+								text: `Uninterpreted root asset m${event.seq} part ${index$1}`,
+								body: `Interpret the attached asset m${event.seq} part ${index$1}`,
 								directive: "informational",
 								executee: "unresolved",
 								immediatelyExecutable: false,
@@ -13850,11 +14707,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 								},
 								fingerprint: `asset:${identity.slice(0, 16)}`
 							}
-						}, `m${event.seq}:asset:${index}`, scope.cwd || "scope", "scope", unitId);
+						}, `m${event.seq}:asset:${index$1}`, scope.cwd || "scope", "scope", unitId);
 						assetItem.taskKind = "inquiry";
 						assetItem.asset = {
 							messageSeq: event.seq,
-							partIndex: index,
+							partIndex: index$1,
 							mediaSha256: identity
 						};
 					});
@@ -13922,8 +14779,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				const id = typeof goal?.id === "string" ? goal.id : "";
 				const revision = Number(goal?.revision ?? 0);
 				const phase = String(goal?.phase ?? "");
-				if (operation === "complete" && enabled) {
-					if (!hasCurrentCertificate(projection)) {
+				if (operation === "complete" && enabled && (projection.boundaryProtocol !== 6 || projection.goalCompletionAdopted)) {
+					if (!hasCurrentCertificate(projection, true)) {
 						projection.integrity = "corrupt";
 						projection.integrityViolations.push("goal_completion_without_certificate");
 					}
@@ -14070,16 +14927,22 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 							projection.integrityViolations.push("certificate_replay_mismatch");
 							break;
 						}
+						stale.recordedAtSeq = event.seq;
 						projection.checkpoints.push(stale);
 						projection.certificateStatusReason = "stale_host_lock";
 						break;
 					}
 					const id = `C${projection.checkpoints.length + 1}`;
+					refreshRootLocatorContext(projection, sourceEvents, scope, event.seq);
 					const result = certifyCheckpoint(projection, call.bindings ?? [], id, false);
 					if (result.status !== "certified" || !result.checkpoint || !recordedCertificateMatches(recorded.certificate, result.checkpoint)) {
 						projection.integrity = "corrupt";
 						projection.integrityViolations.push("certificate_replay_mismatch");
-					} else certifyCheckpoint(projection, call.bindings ?? [], id, true);
+					} else {
+						certifyCheckpoint(projection, call.bindings ?? [], id, true);
+						const accepted = projection.checkpoints.at(-1);
+						if (accepted?.id === id) accepted.recordedAtSeq = event.seq;
+					}
 					break;
 				}
 				if (call.name === "context_guard_interpret") {
@@ -14150,7 +15013,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					rootCallId: call.rootCallId
 				}, {
 					seq: event.seq,
-					error: data?.error ?? (isDispatch && data?.isError ? {
+					error: data?.error ?? (isDispatch && data?.isError || data?.message && typeof data.message === "object" && data.message.isError === true ? {
 						name: "code",
 						code: "DISPATCH_ERROR"
 					} : void 0),
@@ -14176,6 +15039,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	}
 	projection.enabled = enabled;
 	projection.epoch = epoch;
+	refreshRootLocatorContext(projection, sourceEvents, scope, sourceEvents.at(-1)?.seq ?? 0);
 	applyUpgradeEligibility(projection);
 	if (interpretationFacts.length > 64) interpretationFacts.splice(0, interpretationFacts.length - 64);
 	projection.interpretationFacts = interpretationFacts;
@@ -14230,7 +15094,1074 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 		lastCompactionSeq,
 		realRootInputSeen,
 		protocolV4Present: v4BoundarySeq !== void 0,
-		boundaryV5: v5BoundarySeq !== void 0
+		boundaryV5: v5BoundarySeq !== void 0,
+		boundaryV6: v6BoundarySeq !== void 0
+	};
+}
+
+//#endregion
+//#region src/core-v2/intent.json
+var patterns = {
+	"USER_PERSISTENCE_RE": "\\b(?:(?:do\\s+not|don't|never)\\s+(?:stop|pause|yield|end)\\s+(?:working|on\\s+(?:this|the)\\s+(?:task|work)|while\\s+.{0,24}remains?|until\\s+.{0,64}(?:done|complete[dn]?|finish(?:ed|es)?))|(?:keep\\s+(?:going|working)|continue\\s+(?:working\\s+)?).{0,40}(?:until|through\\s+to).{0,40}(?:done|complete[dn]?|finished))\\b|(?:不要|不得|别|切勿|不能).{0,12}(?:停止|停下|停|暂停|中止|结束).{0,32}(?:直到|直至).{0,32}(?:完成|结束)|(?:持续|继续|一直).{0,24}(?:执行|推进|工作).{0,32}(?:直到|直至).{0,32}(?:完成|结束)|(?:不要|不得|别|切勿).{0,24}(?:工作|任务|事项).{0,24}(?:仍|还|尚).{0,8}(?:可执行|未完成).{0,16}(?:停止|结束)",
+	"EXECUTION_RESUME_RE": "^(?:请|你|您|帮我|麻烦)?\\s*(?:继续(?:执行|推进|工作)|继续(?=\\s*[。.!！]?\\s*$)|按(?:照)?(?:你(?:的)?|刚刚|现在|上述|之前|这个|该|既定|和|与|\\s)*(?:计划|建议)(?:继续)?执行)|^(?:please\\s+)?(?:continue(?=\\s*[。.!！]?\\s*$)|continue\\s+(?:working|executing)|continue\\s+(?:(?:the|this|whole|entire|release|remaining)\\s+)*plan|(?:proceed|execute)\\s+(?:with\\s+)?(?:the\\s+)?(?:plan|recommendations))\\b"
+};
+
+//#endregion
+//#region src/core-v2/observation.schema.json
+var observation_schema_default = {
+	$schema: "https://json-schema.org/draft/2020-12/schema",
+	$id: "urn:context-guard:core-observation:v2",
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		"schema": { "const": "core-observation/v2" },
+		"unit": {
+			"type": "string",
+			"minLength": 1
+		},
+		"revision": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 9007199254740991
+		},
+		"as_of": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 9007199254740991
+		},
+		"turn": {
+			"type": "string",
+			"minLength": 1
+		},
+		"sources": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"seq": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"kind": { "enum": [
+						"root",
+						"host_call",
+						"host_result",
+						"final_delivery",
+						"external_lifecycle",
+						"candidate"
+					] },
+					"unit": {
+						"type": "string",
+						"minLength": 1
+					},
+					"revision": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"sha256": {
+						"type": "string",
+						"pattern": "^[0-9a-f]{64}$"
+					},
+					"byte_length": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"call_id": { "type": ["string", "null"] },
+					"text": { "type": ["string", "null"] },
+					"turn": {
+						"type": "string",
+						"minLength": 1
+					},
+					"target": {
+						"type": "string",
+						"minLength": 1
+					},
+					"target_kind": { "enum": ["filesystem", "opaque"] },
+					"origin_root_source_id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"locator_base": {
+						"type": "string",
+						"minLength": 1
+					},
+					"locator_flavor": { "enum": ["posix", "windows"] }
+				},
+				"required": [
+					"id",
+					"seq",
+					"kind",
+					"unit",
+					"revision",
+					"sha256",
+					"byte_length",
+					"call_id",
+					"text",
+					"turn"
+				]
+			}
+		},
+		"requirements": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"unit": {
+						"type": "string",
+						"minLength": 1
+					},
+					"revision": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"seq": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"source": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"source_id": {
+								"type": "string",
+								"minLength": 1
+							},
+							"start": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"end": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"sha256": {
+								"type": "string",
+								"pattern": "^[0-9a-f]{64}$"
+							}
+						},
+						"required": [
+							"source_id",
+							"start",
+							"end",
+							"sha256"
+						]
+					},
+					"kind": { "enum": [
+						"information",
+						"execution",
+						"constraint",
+						"unknown",
+						"proof"
+					] },
+					"action": {
+						"type": "string",
+						"minLength": 1
+					},
+					"target": {
+						"type": "string",
+						"minLength": 1
+					},
+					"predicate": {
+						"type": "string",
+						"minLength": 1
+					},
+					"scope_sha256": {
+						"type": "string",
+						"minLength": 1
+					},
+					"required": { "type": "boolean" },
+					"status": { "enum": [
+						"pending",
+						"satisfied",
+						"legacy_review"
+					] },
+					"parent_id": { "type": ["string", "null"] },
+					"evidence_kind": { "enum": [
+						"action_event",
+						"state_outcome",
+						"delivery",
+						"none"
+					] },
+					"condition_ids": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"minLength": 1
+						}
+					},
+					"target_origin": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"root_constraint": {
+								"type": "string",
+								"minLength": 1
+							},
+							"subject_kind": { "enum": ["filesystem", "opaque"] },
+							"resolved_constraint": {
+								"type": "string",
+								"minLength": 1
+							},
+							"implementation_choice": {
+								"type": ["string", "null"],
+								"minLength": 1
+							},
+							"host_selection": {
+								"type": ["string", "null"],
+								"minLength": 1
+							},
+							"resolved": {
+								"type": "string",
+								"minLength": 1
+							},
+							"observed": {
+								"type": ["string", "null"],
+								"minLength": 1
+							},
+							"root_constraint_source": {
+								"type": "object",
+								"additionalProperties": false,
+								"properties": {
+									"source_id": {
+										"type": "string",
+										"minLength": 1
+									},
+									"start": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 9007199254740991
+									},
+									"end": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 9007199254740991
+									},
+									"sha256": {
+										"type": "string",
+										"pattern": "^[0-9a-f]{64}$"
+									}
+								},
+								"required": [
+									"source_id",
+									"start",
+									"end",
+									"sha256"
+								]
+							},
+							"constraint_kind": { "enum": [
+								"exact",
+								"directory",
+								"work_unit"
+							] },
+							"selection_source_id": {
+								"type": ["string", "null"],
+								"minLength": 1
+							}
+						},
+						"required": [
+							"root_constraint",
+							"subject_kind",
+							"implementation_choice",
+							"host_selection",
+							"resolved",
+							"observed",
+							"root_constraint_source",
+							"constraint_kind",
+							"selection_source_id"
+						]
+					}
+				},
+				"required": [
+					"id",
+					"unit",
+					"revision",
+					"seq",
+					"source",
+					"kind",
+					"action",
+					"target",
+					"predicate",
+					"scope_sha256",
+					"required",
+					"status",
+					"parent_id",
+					"evidence_kind",
+					"condition_ids",
+					"target_origin"
+				]
+			}
+		},
+		"facts": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"seq": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"unit": {
+						"type": "string",
+						"minLength": 1
+					},
+					"revision": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"source_id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"call_source_id": { "type": ["string", "null"] },
+					"kind": { "enum": [
+						"action_event",
+						"state_outcome",
+						"delivery",
+						"readiness",
+						"external_operation"
+					] },
+					"target": {
+						"type": "string",
+						"minLength": 1
+					},
+					"predicate": {
+						"type": "string",
+						"minLength": 1
+					},
+					"outcome": { "enum": [
+						"success",
+						"partial",
+						"failure",
+						"unknown"
+					] },
+					"operation_id": { "type": ["string", "null"] },
+					"requirement_id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"condition_id": { "type": ["string", "null"] },
+					"invalidates": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"minLength": 1
+						}
+					}
+				},
+				"required": [
+					"id",
+					"seq",
+					"unit",
+					"revision",
+					"source_id",
+					"call_source_id",
+					"kind",
+					"target",
+					"predicate",
+					"outcome",
+					"operation_id",
+					"requirement_id",
+					"condition_id",
+					"invalidates"
+				]
+			}
+		},
+		"actions": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"schema": { "const": "current-action-basis/v1" },
+					"requirement_id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"unit": {
+						"type": "string",
+						"minLength": 1
+					},
+					"revision": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"seq": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"source": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"source_id": {
+								"type": "string",
+								"minLength": 1
+							},
+							"start": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"end": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"sha256": {
+								"type": "string",
+								"pattern": "^[0-9a-f]{64}$"
+							}
+						},
+						"required": [
+							"source_id",
+							"start",
+							"end",
+							"sha256"
+						]
+					},
+					"scope_sha256": {
+						"type": "string",
+						"minLength": 1
+					},
+					"action": {
+						"type": "string",
+						"minLength": 1
+					},
+					"target": {
+						"type": "string",
+						"minLength": 1
+					},
+					"predicate": {
+						"type": "string",
+						"minLength": 1
+					},
+					"owner": { "enum": [
+						"assistant",
+						"user",
+						"external",
+						"unknown"
+					] },
+					"relation": { "enum": [
+						"direct",
+						"verification_substep",
+						"readback_substep"
+					] },
+					"readiness_fact_ids": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"minLength": 1
+						}
+					},
+					"state": { "enum": [
+						"current",
+						"completed",
+						"future_observation",
+						"capability_unavailable",
+						"evidence_insufficient",
+						"user_wait",
+						"external_wait",
+						"unknown"
+					] }
+				},
+				"required": [
+					"schema",
+					"requirement_id",
+					"unit",
+					"revision",
+					"seq",
+					"source",
+					"scope_sha256",
+					"action",
+					"target",
+					"predicate",
+					"owner",
+					"relation",
+					"readiness_fact_ids",
+					"state"
+				]
+			}
+		},
+		"intent": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"source": { "anyOf": [{
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"source_id": {
+							"type": "string",
+							"minLength": 1
+						},
+						"start": {
+							"type": "integer",
+							"minimum": 0,
+							"maximum": 9007199254740991
+						},
+						"end": {
+							"type": "integer",
+							"minimum": 0,
+							"maximum": 9007199254740991
+						},
+						"sha256": {
+							"type": "string",
+							"pattern": "^[0-9a-f]{64}$"
+						}
+					},
+					"required": [
+						"source_id",
+						"start",
+						"end",
+						"sha256"
+					]
+				}, { "type": "null" }] },
+				"kind": { "enum": [
+					"none",
+					"resume",
+					"persistence",
+					"persistence_and_resume"
+				] }
+			},
+			"required": ["source", "kind"]
+		},
+		"completion_claim": { "type": "boolean" },
+		"proof_violation": { "type": "boolean" },
+		"corrections_used": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 9007199254740991
+		},
+		"progress_changed": { "type": "boolean" },
+		"goal_contract_adopted": { "type": "boolean" },
+		"release_state": { "enum": [
+			"not_adopted",
+			"adopted",
+			"reserved",
+			"consumed",
+			"unknown"
+		] },
+		"coverage": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"source": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"source_id": {
+								"type": "string",
+								"minLength": 1
+							},
+							"start": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"end": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"sha256": {
+								"type": "string",
+								"pattern": "^[0-9a-f]{64}$"
+							}
+						},
+						"required": [
+							"source_id",
+							"start",
+							"end",
+							"sha256"
+						]
+					},
+					"kind": { "enum": ["interpreted", "unknown"] }
+				},
+				"required": ["source", "kind"]
+			}
+		},
+		"units": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"parent_id": { "type": ["string", "null"] },
+					"required": { "type": "boolean" },
+					"source_id": {
+						"type": "string",
+						"minLength": 1
+					}
+				},
+				"required": [
+					"id",
+					"parent_id",
+					"required",
+					"source_id"
+				]
+			}
+		},
+		"conditions": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"requirement_id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"source": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"source_id": {
+								"type": "string",
+								"minLength": 1
+							},
+							"start": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"end": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"sha256": {
+								"type": "string",
+								"pattern": "^[0-9a-f]{64}$"
+							}
+						},
+						"required": [
+							"source_id",
+							"start",
+							"end",
+							"sha256"
+						]
+					},
+					"kind": { "enum": [
+						"user_input",
+						"external_dependency",
+						"predicate"
+					] },
+					"status": { "enum": ["pending", "released"] },
+					"operation_id": { "type": ["string", "null"] },
+					"fact_ids": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"minLength": 1
+						}
+					}
+				},
+				"required": [
+					"id",
+					"requirement_id",
+					"source",
+					"kind",
+					"status",
+					"operation_id",
+					"fact_ids"
+				]
+			}
+		}
+	},
+	required: [
+		"schema",
+		"unit",
+		"revision",
+		"as_of",
+		"turn",
+		"sources",
+		"requirements",
+		"facts",
+		"actions",
+		"intent",
+		"completion_claim",
+		"proof_violation",
+		"corrections_used",
+		"progress_changed",
+		"goal_contract_adopted",
+		"release_state",
+		"coverage",
+		"units",
+		"conditions"
+	]
+};
+
+//#endregion
+//#region src/core-v2/schema.ts
+function validate(value, schema, path$1) {
+	if (Array.isArray(schema.anyOf)) {
+		for (const option of schema.anyOf) try {
+			validate(value, option, path$1);
+			return;
+		} catch {}
+		throw new Error(`${path$1}: no_matching_schema`);
+	}
+	if ("const" in schema && value !== schema.const) throw new Error(`${path$1}: wrong_constant`);
+	if (Array.isArray(schema.enum) && !schema.enum.includes(value)) throw new Error(`${path$1}: unknown_enum`);
+	const kinds = Array.isArray(schema.type) ? schema.type : schema.type === void 0 ? [] : [schema.type];
+	const matches = (kind) => {
+		switch (kind) {
+			case "null": return value === null;
+			case "boolean": return typeof value === "boolean";
+			case "integer": return typeof value === "number" && Number.isSafeInteger(value);
+			case "string": return typeof value === "string";
+			case "array": return Array.isArray(value);
+			case "object": return value !== null && typeof value === "object" && !Array.isArray(value);
+			default: return false;
+		}
+	};
+	if (kinds.length && !kinds.some(matches)) throw new Error(`${path$1}: wrong_type`);
+	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+		const fields = schema.properties ?? {};
+		const row = value;
+		if (schema.additionalProperties === false && Object.keys(row).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
+		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row))) throw new Error(`${path$1}: missing_fields`);
+		for (const [key, child] of Object.entries(row)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
+	} else if (Array.isArray(value) && schema.items) for (const child of value) validate(child, schema.items, `${path$1}[]`);
+	else if (typeof value === "string") {
+		if (value.length < (schema.minLength ?? 0) || typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) throw new Error(`${path$1}: invalid_string`);
+		for (let i = 0; i < value.length; i++) {
+			const c = value.charCodeAt(i);
+			if (c >= 55296 && c <= 56319) {
+				if (!(value.charCodeAt(++i) >= 56320 && value.charCodeAt(i) <= 57343)) throw new Error(`${path$1}: invalid_string`);
+			} else if (c >= 56320 && c <= 57343) throw new Error(`${path$1}: invalid_string`);
+		}
+	} else if (typeof value === "number") {
+		if (typeof schema.minimum === "number" && value < schema.minimum || typeof schema.maximum === "number" && value > schema.maximum) throw new Error(`${path$1}: number_out_of_range`);
+	}
+}
+/** Validate the frozen core observation schema without adding a JSON Schema runtime dependency. */
+function validateCoreSnapshot(value, schema) {
+	validate(value, schema, "$");
+}
+
+//#endregion
+//#region src/core-v2/project.ts
+const rules = patterns;
+const hash = (bytes$1) => createHash("sha256").update(bytes$1).digest("hex");
+const bytes = (value) => Buffer.from(value, "utf8");
+const canonical = (value) => {
+	if (value === null || typeof value === "boolean") return JSON.stringify(value);
+	if (typeof value === "string") {
+		for (let i = 0; i < value.length; i++) {
+			const code = value.charCodeAt(i);
+			if (code >= 55296 && code <= 56319) {
+				if (!(value.charCodeAt(++i) >= 56320 && value.charCodeAt(i) <= 57343)) throw new Error("noncanonical_value");
+			} else if (code >= 56320 && code <= 57343) throw new Error("noncanonical_value");
+		}
+		return JSON.stringify(value);
+	}
+	if (typeof value === "number" && Number.isSafeInteger(value)) return JSON.stringify(value);
+	if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+	if (value && typeof value === "object") return `{${Object.keys(value).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))).map((key) => `${canonical(key)}:${canonical(value[key])}`).join(",")}}`;
+	throw new Error("noncanonical_value");
+};
+const same = (a, b) => canonical(a) === canonical(b);
+const spanText = (span, source) => Buffer.from(bytes(source.text)).subarray(span.start, span.end).toString("utf8");
+const listed = (value) => value;
+const index = (rows, watermark) => {
+	const result = /* @__PURE__ */ new Map();
+	const seen = /* @__PURE__ */ new Set();
+	for (const row of rows) {
+		if (seen.has(row.id)) throw new Error("duplicate_identity");
+		seen.add(row.id);
+		if (row.seq <= watermark) result.set(row.id, row);
+	}
+	return result;
+};
+const sourceMatches = (span, sources, root = false) => {
+	const source = sources.get(span.source_id);
+	if (!source || root && source.kind !== "root" || span.sha256 !== source.sha256 || span.start < 0 || span.start >= span.end || span.end > source.byte_length) return false;
+	if (source.text !== null) {
+		const raw = bytes(source.text);
+		const decoder = new TextDecoder("utf-8", { fatal: true });
+		for (const point of [span.start, span.end]) try {
+			decoder.decode(raw.subarray(0, point));
+		} catch {
+			return false;
+		}
+	}
+	return true;
+};
+const utf8Compare = (a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+const sortedUnique = (value) => [...new Set(value)].sort(utf8Compare);
+/** Pure, host-neutral core/v2 projection. The adapter owns event trust and durability. */
+function projectCoreV2(snapshot) {
+	validateCoreSnapshot(snapshot, observation_schema_default);
+	canonical(snapshot);
+	if (snapshot.schema !== "core-observation/v2") throw new Error("unsupported_core_schema");
+	const watermark = snapshot.as_of;
+	const unit = snapshot.unit;
+	const revision = snapshot.revision;
+	const sources = index(listed(snapshot.sources), watermark);
+	for (const source of sources.values()) {
+		if (source.target !== null && source.target !== void 0 && source.kind !== "host_call") throw new Error("selection_target_requires_host_call");
+		if (source.origin_root_source_id !== null && source.origin_root_source_id !== void 0) {
+			const origin = sources.get(source.origin_root_source_id);
+			if (source.kind !== "host_call" || !origin || origin.kind !== "root" || origin.unit !== source.unit || origin.seq > source.seq || origin.turn !== source.turn) throw new Error("host_call_origin_root_mismatch");
+		}
+		if ((source.target === null || source.target === void 0) !== (source.target_kind === null || source.target_kind === void 0)) throw new Error("selection_target_kind_pair_required");
+		if ((source.locator_base !== void 0 || source.locator_flavor !== void 0) && source.kind !== "root") throw new Error("locator_base_requires_root");
+		if (source.locator_base === void 0 !== (source.locator_flavor === void 0)) throw new Error("locator_base_flavor_pair_required");
+		if (source.kind === "root" && (source.text === null || bytes(source.text).length !== source.byte_length || hash(bytes(source.text)) !== source.sha256)) throw new Error("root_source_identity_mismatch");
+	}
+	const unitRows = new Map(listed(snapshot.units).map((row) => [row.id, row]));
+	if (unitRows.size !== listed(snapshot.units).length || !unitRows.has(unit)) throw new Error("unit_identity_invalid");
+	for (const row of unitRows.values()) {
+		const source = sources.get(row.source_id);
+		if (!source || source.kind !== "root" || source.unit !== row.id) throw new Error("unit_source_invalid");
+		const visited = new Set([row.id]);
+		let parent = row.parent_id;
+		while (parent !== null) {
+			if (visited.has(parent) || !unitRows.has(parent)) throw new Error("unit_parent_invalid");
+			visited.add(parent);
+			parent = unitRows.get(parent).parent_id;
+		}
+	}
+	const units = new Set([unit]);
+	let growing = true;
+	while (growing) {
+		growing = false;
+		for (const row of unitRows.values()) if (row.required && units.has(row.parent_id) && !units.has(row.id)) {
+			units.add(row.id);
+			growing = true;
+		}
+	}
+	const coverageErrors = [], unknownCoverage = [];
+	for (const [key, source] of sources) {
+		if (source.kind !== "root" || !units.has(source.unit) || source.unit === unit && source.revision !== revision) continue;
+		const spans = listed(snapshot.coverage).filter((c) => c.source.source_id === key).sort((a, b) => a.source.start - b.source.start);
+		let cursor = 0;
+		for (const coverage of spans) {
+			const span = coverage.source;
+			if (!sourceMatches(span, sources, true) || span.start !== cursor) coverageErrors.push(key);
+			cursor = span.end;
+			if (coverage.kind === "unknown") unknownCoverage.push(key);
+		}
+		if (cursor !== source.byte_length) coverageErrors.push(key);
+	}
+	const requirements = index(listed(snapshot.requirements), watermark);
+	const facts = index(listed(snapshot.facts), watermark);
+	const current = new Map([...requirements].filter(([, row]) => units.has(row.unit) && (row.unit !== unit || row.revision === revision)));
+	if ([...current.values()].some((r) => r.parent_id !== null && !requirements.has(r.parent_id))) throw new Error("requirement_parent_missing");
+	const validFacts = /* @__PURE__ */ new Map();
+	for (const [key, fact] of facts) {
+		const source = sources.get(fact.source_id);
+		if (!source || source.seq > fact.seq || source.unit !== fact.unit || source.revision !== fact.revision) continue;
+		if ([
+			"action_event",
+			"state_outcome",
+			"readiness"
+		].includes(fact.kind)) {
+			const call = sources.get(fact.call_source_id);
+			if (!call || call.kind !== "host_call" || source.kind !== "host_result" || !call.call_id || call.call_id !== source.call_id || call.target !== fact.target || !call.target_kind || call.seq >= source.seq || call.unit !== fact.unit || call.revision !== fact.revision) continue;
+			const originId = call.origin_root_source_id;
+			const factRequirement = current.get(fact.requirement_id);
+			if (originId && factRequirement && factRequirement.kind !== "constraint" && sources.get(originId).seq < sources.get(factRequirement.source.source_id).seq) continue;
+		} else if (source.kind !== {
+			delivery: "final_delivery",
+			external_operation: "external_lifecycle"
+		}[fact.kind]) continue;
+		validFacts.set(key, fact);
+	}
+	const historicalEffectFacts = new Map(validFacts);
+	const invalidated = /* @__PURE__ */ new Set();
+	for (const fact of validFacts.values()) for (const id of fact.invalidates) if (validFacts.has(id) && validFacts.get(id).seq < fact.seq) invalidated.add(id);
+	for (const id of invalidated) validFacts.delete(id);
+	const conditions = new Map(listed(snapshot.conditions).map((row) => [row.id, row]));
+	if (conditions.size !== listed(snapshot.conditions).length) throw new Error("duplicate_condition");
+	const released = /* @__PURE__ */ new Set();
+	for (const [key, condition] of conditions) {
+		const req = current.get(condition.requirement_id);
+		if (!req || !sourceMatches(condition.source, sources, true) || condition.source.source_id !== req.source.source_id) continue;
+		if (condition.status === "released" && condition.fact_ids.some((id) => {
+			const f = validFacts.get(id);
+			return f && f.condition_id === key && f.requirement_id === req.id && f.outcome === "success";
+		})) released.add(key);
+	}
+	for (const coverage of listed(snapshot.coverage)) {
+		const span = coverage.source, source = sources.get(span.source_id);
+		if (!source || !units.has(source.unit) || coverage.kind !== "interpreted") continue;
+		const covered = [...current.values()].filter((r) => r.source.source_id === span.source_id && r.source.start < span.end && r.source.end > span.start).map((r) => [r.source.start, r.source.end]).sort((a, b) => a[0] - b[0]);
+		let cursor = span.start;
+		for (const [start, end] of covered) {
+			if (start > cursor) break;
+			cursor = Math.max(cursor, end);
+		}
+		if (cursor < span.end) coverageErrors.push(span.source_id);
+	}
+	const predicates = {}, delivery = [];
+	for (const [key, req] of current) {
+		const source = sources.get(req.source.source_id);
+		const sourceValid = sourceMatches(req.source, sources, true) && source?.unit === req.unit && source?.revision === req.revision;
+		const origin = req.target_origin, constraint = origin.root_constraint, targetSpan = origin.root_constraint_source, targetSource = sources.get(targetSpan.source_id);
+		let rootTargetValid = sourceMatches(targetSpan, sources, true) && targetSource?.unit === req.unit && targetSource?.revision === req.revision && targetSource !== void 0 && spanText(targetSpan, targetSource) === constraint;
+		const constraintKind = origin.constraint_kind, resolvedConstraint = origin.resolved_constraint, relativeConstraint = resolvedConstraint !== void 0;
+		const base = targetSource?.locator_base, flavor = targetSource?.locator_flavor;
+		const relativeLiteral = constraintKind === "directory" && constraint.endsWith("/") ? constraint.slice(0, -1) : constraint;
+		const subjectKind = origin.subject_kind, filesystemSubject = subjectKind === "filesystem";
+		if (([
+			"local_edit",
+			"local_commit",
+			"remote_push"
+		].includes(req.action) || [...validFacts.values()].some((fact) => fact.requirement_id === key && fact.kind === "readiness" && fact.predicate === "file_exists")) && !filesystemSubject) rootTargetValid = false;
+		const targetIsAbsolute = req.target.startsWith("/") && !req.target.startsWith("//") && posix.normalize(req.target) === req.target || /^[A-Za-z]:[\\/][^:]+$/.test(req.target);
+		if (relativeConstraint && !filesystemSubject) rootTargetValid = false;
+		if (relativeConstraint) {
+			if (!(flavor === "posix" && typeof base === "string" && base.startsWith("/") && posix.normalize(base) === base && !base.startsWith("//") && !constraint.startsWith("/") && !constraint.startsWith("\\") && !relativeLiteral.includes(":") && !relativeLiteral.includes("\\") && !/^[~$%]/.test(relativeLiteral) && !constraint.endsWith("//") && relativeLiteral.split("/").every((part) => part !== "" && part !== "." && part !== "..") && posix.join(base, relativeLiteral) === resolvedConstraint && ["exact", "directory"].includes(constraintKind))) rootTargetValid = false;
+		} else if (["exact", "directory"].includes(constraintKind) && filesystemSubject && !(constraint.startsWith("/") || constraint.length >= 3 && [":\\", ":/"].includes(constraint.slice(1, 3)))) rootTargetValid = false;
+		const selectionSourceId = origin.selection_source_id;
+		const selection = selectionSourceId ? sources.get(selectionSourceId) : void 0;
+		const selectedByHost = Boolean(selection && selection.kind === "host_call" && selection.target === req.target && selection.target_kind === subjectKind && selection.unit === req.unit && selection.revision === req.revision && source && source.seq <= selection.seq && selection.seq <= watermark && [...validFacts.values()].some((fact) => fact.call_source_id === selectionSourceId && fact.target === req.target && fact.requirement_id === req.id));
+		const rootTargetAllowed = constraintKind === "exact" ? relativeConstraint ? resolvedConstraint === req.target && (selectedByHost || req.kind === "constraint") : constraint === req.target : constraintKind === "directory" ? Boolean((relativeConstraint ? resolvedConstraint : constraint.replace(/\/$/, "")) && req.target.startsWith(`${relativeConstraint ? resolvedConstraint : constraint.replace(/\/$/, "")}/`) && !req.target.split("/").includes("..") && (relativeConstraint ? selectedByHost || req.kind === "constraint" : constraint.endsWith("/"))) : selectedByHost;
+		const typedHostConflict = [...validFacts.values()].some((fact) => fact.requirement_id === key && fact.target === req.target && [
+			"readiness",
+			"action_event",
+			"state_outcome"
+		].includes(fact.kind) && sources.get(fact.call_source_id)?.target_kind !== subjectKind);
+		const targetValid = rootTargetValid && origin.resolved === req.target && (req.kind === "constraint" ? origin.observed === null : origin.observed === req.target) && rootTargetAllowed && !typedHostConflict && (!filesystemSubject || targetIsAbsolute) && (!filesystemSubject || !(["exact", "directory"].includes(constraintKind) && !relativeConstraint && !targetIsAbsolute)) && (constraintKind !== "work_unit" || selectedByHost) && (req.kind === "constraint" ? origin.implementation_choice === null && origin.host_selection === null : origin.implementation_choice === req.target && origin.host_selection === req.target);
+		if (req.status === "legacy_review" || !sourceValid || !targetValid) {
+			predicates[key] = "legacy_review";
+			continue;
+		}
+		if (req.kind === "constraint") {
+			const mutationFacts = req.predicate === "no_mutation" ? [...historicalEffectFacts.values()].filter((fact) => fact.requirement_id === key && fact.unit === req.unit && fact.revision === req.revision && fact.target === req.target && fact.kind === "action_event" && fact.predicate === "mutation_applied" && fact.outcome === "success" && sources.get(fact.call_source_id)?.target === req.target && sources.get(fact.call_source_id)?.target_kind === subjectKind) : [];
+			const rootSeq = sources.get(req.source.source_id).seq;
+			const originBound = (fact) => {
+				const call = sources.get(fact.call_source_id);
+				return call.origin_root_source_id ? sources.get(call.origin_root_source_id).seq : call.seq;
+			};
+			const violated = mutationFacts.some((fact) => originBound(fact) >= rootSeq && sources.get(fact.call_source_id).seq > rootSeq && fact.seq <= watermark);
+			const crossing = mutationFacts.some((fact) => originBound(fact) < rootSeq && rootSeq <= fact.seq || sources.get(fact.call_source_id).seq <= rootSeq && rootSeq <= fact.seq);
+			predicates[key] = violated ? "constraint_violated" : crossing ? "constraint_unresolved" : "constraint_active";
+			continue;
+		}
+		let matched = [...validFacts.values()].filter((f) => f.unit === req.unit && f.revision === req.revision && f.target === req.target && f.predicate === req.predicate && f.requirement_id === key && f.kind === req.evidence_kind && f.seq >= req.seq).sort((a, b) => a.seq - b.seq);
+		matched = matched.length ? matched.slice(-1).filter((f) => f.outcome === "success") : [];
+		if (req.kind === "information") {
+			matched = matched.filter((f) => f.kind === "delivery" && sources.get(f.source_id)?.turn === snapshot.turn);
+			if (matched.length) delivery.push(key);
+		} else matched = matched.filter((f) => ["action_event", "state_outcome"].includes(f.kind));
+		predicates[key] = matched.length && req.kind !== "unknown" ? "satisfied" : "insufficient";
+	}
+	const actions = [], rejected$1 = [];
+	for (const candidate of listed(snapshot.actions)) {
+		if (candidate.seq > watermark) continue;
+		const req = current.get(candidate.requirement_id);
+		let valid = Boolean(req && candidate.schema === "current-action-basis/v1" && candidate.state === "current" && candidate.owner === "assistant" && !["generic_work", "unknown"].includes(candidate.action) && predicates[req.id] === "insufficient" && ["execution", "proof"].includes(req.kind) && sourceMatches(candidate.source, sources, true) && same(candidate.source, req.source) && [
+			"unit",
+			"revision",
+			"scope_sha256",
+			"target",
+			"predicate"
+		].every((k) => candidate[k] === req[k]) && candidate.seq >= req.seq && req.condition_ids.every((id) => released.has(id)));
+		if (valid && req) valid = candidate.relation === "direct" && candidate.action === req.action || candidate.relation === "verification_substep" && req.predicate === "test_passed" && candidate.action === "test_verify" || candidate.relation === "readback_substep" && req.predicate === "state_matches" && candidate.action === "readback";
+		const ready = candidate.readiness_fact_ids;
+		valid = valid && ready.length > 0 && ready.every((id) => {
+			const f = validFacts.get(id);
+			return f && f.kind === "readiness" && f.outcome === "success" && f.requirement_id === candidate.requirement_id && f.unit === candidate.unit && f.revision === candidate.revision && f.target === candidate.target;
+		});
+		if (valid) actions.push(Object.fromEntries([
+			"requirement_id",
+			"unit",
+			"revision",
+			"action",
+			"target",
+			"predicate",
+			"owner",
+			"source",
+			"seq"
+		].map((k) => [k, candidate[k]])));
+		else rejected$1.push({
+			requirement_id: candidate.requirement_id,
+			reason: "action_basis_insufficient"
+		});
+	}
+	const intent = snapshot.intent, intentSpan = intent.source, intentSource = intentSpan ? sources.get(intentSpan.source_id) : void 0;
+	const intentValid = Boolean(intentSpan && sourceMatches(intentSpan, sources, true) && intentSource?.unit === unit && intentSource.revision === revision);
+	const speech = (intentValid ? spanText(intentSpan, intentSource).trim() : "").replace(/```[\s\S]*?```|`[^`]*`|“[^”]*”|‘[^’]*’|"[^"]*"/g, "").replace(/^\s*>.*$/gm, "");
+	const resumeMatch = new RegExp(rules.EXECUTION_RESUME_RE, "i").test(speech);
+	const persistenceMatch = new RegExp(rules.USER_PERSISTENCE_RE, "is").test(speech);
+	const persistence = Boolean(intentValid && persistenceMatch && ["persistence", "persistence_and_resume"].includes(intent.kind));
+	const resumed = Boolean(intentValid && resumeMatch && ["resume", "persistence_and_resume"].includes(intent.kind) && actions.length);
+	const external = sortedUnique([...validFacts.values()].filter((f) => f.unit && units.has(f.unit) && f.kind === "external_operation" && f.outcome === "unknown" && f.operation_id && current.has(f.requirement_id) && f.revision === current.get(f.requirement_id).revision && conditions.has(f.condition_id) && !released.has(f.condition_id) && conditions.get(f.condition_id).kind === "external_dependency" && conditions.get(f.condition_id).operation_id === f.operation_id && current.get(f.requirement_id).condition_ids.includes(f.condition_id)).map((f) => f.operation_id));
+	const missing = [...current].filter(([key, r]) => r.required && !["satisfied", "constraint_active"].includes(predicates[key])).map(([key]) => key).sort(utf8Compare);
+	const represented = new Set([...current.values()].map((r) => r.source.source_id));
+	const missingSources = [...sources].filter(([key, s]) => s.kind === "root" && units.has(s.unit) && (s.unit !== unit || s.revision === revision) && !represented.has(key));
+	const certifiable = !missing.length && !coverageErrors.length && !unknownCoverage.length && !missingSources.length;
+	const reasons = [];
+	if (snapshot.completion_claim && !certifiable) reasons.push("wrong_whole_completion");
+	if (snapshot.proof_violation) reasons.push("explicit_proof_unsatisfied");
+	if (actions.length && persistence) reasons.push("explicit_user_persistence");
+	if (resumed) reasons.push("resume_with_actionable_work");
+	const correction = Boolean(reasons.length && snapshot.corrections_used === 0 && snapshot.progress_changed);
+	return {
+		schema: "core-state/v2",
+		unit,
+		revision,
+		as_of: watermark,
+		coverage: snapshot.coverage,
+		predicates,
+		delivery: delivery.sort(utf8Compare),
+		facts: [...validFacts.keys()].sort(utf8Compare),
+		current_actions: actions,
+		rejected_actions: rejected$1,
+		unmet_requirements: missing,
+		certifiable,
+		coverage_errors: sortedUnique(coverageErrors),
+		unknown_coverage: sortedUnique(unknownCoverage),
+		target_origins: Object.fromEntries([...current].map(([key, r]) => [key, r.target_origin])),
+		conditions: Object.fromEntries([...conditions].map(([key]) => [key, released.has(key) ? "released" : "pending"])),
+		explicit_user_persistence: persistence,
+		resume_with_actionable_work: resumed,
+		registered_external_operations: external,
+		ordinary_path_interference: false,
+		stop: correction ? "bounded_correction" : external.length && !actions.length ? "typed_wait" : "ordinary_end",
+		reason_codes: reasons,
+		correction_count: Number(correction),
+		goal_complete_allowed: !snapshot.goal_contract_adopted || certifiable,
+		release_state: snapshot.release_state
 	};
 }
 
@@ -14290,10 +16221,10 @@ function claimedBatchHasRealRootInput(messages) {
 function previewFirstStepInjection(input, claimedRealInput) {
 	if (!input.enabled || input.delegated) return void 0;
 	if (!claimedRealInput) return void 0;
-	if (input.boundaryV5Present) return void 0;
+	if (input.targetProtocol === 6 ? input.boundaryV6Present : input.boundaryV5Present) return void 0;
 	return {
-		boundary: PROTOCOL_V5_NOTICE,
-		guidance: firstStepGuidance(input.policy ?? "standard")
+		boundary: input.targetProtocol === 6 ? PROTOCOL_V6_NOTICE : PROTOCOL_V5_NOTICE,
+		guidance: input.targetProtocol === 6 ? firstStepGuidanceV6(input.policy ?? "standard") : firstStepGuidance(input.policy ?? "standard")
 	};
 }
 /**
@@ -14310,6 +16241,9 @@ function firstStepGuidance(policy = "standard") {
 	return "Context Guard is now protecting this session: requirements from your messages stay open until they are certified with matching durable evidence. Ordinary answers, investigations, and ordinary tool work need no Guard approval. When a requirement itself calls for a certified stateful action (install, apply, create, modify, restart, commit, push, publish, pull, fetch), call context_guard_prepare before it to see the supported command shape and the required resolution/effect/state order, run the action through the guarded path, and close items with context_guard_checkpoint; never repeat an already-completed action to mint missing evidence." + (policy === "strict" ? " Under strict policy, a verification the user explicitly requested (a visual readback or a complete-scope check) must be discharged by a real readback fact." : "") + " Ordinary answers and investigations need no certification.";
 }
 const FIRST_STEP_GUIDANCE = firstStepGuidance("standard");
+function firstStepGuidanceV6(policy = "standard") {
+	return "Context Guard records requirements and verifies completion from persisted host tool results and independent readback. Run ordinary edits, tests, and Git work with host tools; use read-only Guard observers and context_guard_checkpoint when a requirement needs certified completion. Older Guard action and evidence records remain historical and do not authorize or certify current ordinary work." + (policy === "strict" ? " Explicit visual or complete-scope proof still requires a real readback." : "") + " Goal completion protection applies only after explicit /context-guard on adoption; an adopted release contract keeps its separate release checks.";
+}
 /**
 * Lifecycle phase derived from durable facts. `enabled` is the log-derived
 * enablement (`always`, or the explicit `on`/`off` command sequence), and
@@ -14409,9 +16343,9 @@ const GIT_COMMAND_TEMPLATES = {
 	}
 };
 function parseGitCommandManifest(command, surface) {
-	const canonical = canonicalArgvFromCommand(command, surface);
-	if (canonical.status !== "supported") return rejected("shell_command_unsupported");
-	const argv = canonical.argv;
+	const canonical$1 = canonicalArgvFromCommand(command, surface);
+	if (canonical$1.status !== "supported") return rejected("shell_command_unsupported");
+	const argv = canonical$1.argv;
 	if (argv[0]?.toLowerCase() !== "git") return rejected("git_alias_or_subcommand_forbidden");
 	if (argv[1]?.startsWith("-")) return rejected("git_global_option_forbidden");
 	const subcommand = argv[1]?.toLowerCase();
@@ -14501,7 +16435,7 @@ function gitCommandMatchesTarget(manifest, target) {
 	return true;
 }
 function hashTuple(fields) {
-	const hash = createHash("sha256");
+	const hash$1 = createHash("sha256");
 	for (const key of Object.keys(fields).sort()) {
 		const keyBytes = Buffer.from(key, "utf8");
 		const raw = fields[key];
@@ -14509,13 +16443,13 @@ function hashTuple(fields) {
 		const lengths = Buffer.allocUnsafe(8);
 		lengths.writeUInt32BE(keyBytes.length, 0);
 		lengths.writeUInt32BE(value.length, 4);
-		hash.update(lengths).update(keyBytes).update(value);
+		hash$1.update(lengths).update(keyBytes).update(value);
 	}
-	return hash.digest("hex");
+	return hash$1.digest("hex");
 }
-function parseNulRecords(bytes) {
-	if (bytes.byteLength === 0 || bytes[bytes.byteLength - 1] !== 0) return void 0;
-	return Buffer.from(bytes).toString("utf8").slice(0, -1).split("\0");
+function parseNulRecords(bytes$1) {
+	if (bytes$1.byteLength === 0 || bytes$1[bytes$1.byteLength - 1] !== 0) return void 0;
+	return Buffer.from(bytes$1).toString("utf8").slice(0, -1).split("\0");
 }
 /**
 * Normalize the read-only `git ls-files --stage -z` surface. Only stage-zero
@@ -14671,13 +16605,13 @@ var SessionApiError = class extends Error {
 */
 function assertEventEnvelopes(events) {
 	let expected;
-	for (let index = 0; index < events.length; index += 1) {
-		const event = events[index];
-		if (!event || typeof event !== "object" || Array.isArray(event)) throw new SessionApiError(`snapshot event ${index} is not an object`, SESSION_EVENT_ENVELOPE_INVALID);
+	for (let index$1 = 0; index$1 < events.length; index$1 += 1) {
+		const event = events[index$1];
+		if (!event || typeof event !== "object" || Array.isArray(event)) throw new SessionApiError(`snapshot event ${index$1} is not an object`, SESSION_EVENT_ENVELOPE_INVALID);
 		const record = event;
-		if (typeof record.type !== "string" || record.type.length === 0) throw new SessionApiError(`snapshot event ${index} has no event type`, SESSION_EVENT_ENVELOPE_INVALID);
-		if (typeof record.seq !== "number" || !Number.isSafeInteger(record.seq) || record.seq < 0) throw new SessionApiError(`snapshot event ${index} has no sequence number`, SESSION_EVENT_ENVELOPE_INVALID);
-		if (expected !== void 0 && record.seq !== expected) throw new SessionApiError(`snapshot event ${index} breaks sequence contiguity`, SESSION_EVENT_ENVELOPE_INVALID);
+		if (typeof record.type !== "string" || record.type.length === 0) throw new SessionApiError(`snapshot event ${index$1} has no event type`, SESSION_EVENT_ENVELOPE_INVALID);
+		if (typeof record.seq !== "number" || !Number.isSafeInteger(record.seq) || record.seq < 0) throw new SessionApiError(`snapshot event ${index$1} has no sequence number`, SESSION_EVENT_ENVELOPE_INVALID);
+		if (expected !== void 0 && record.seq !== expected) throw new SessionApiError(`snapshot event ${index$1} breaks sequence contiguity`, SESSION_EVENT_ENVELOPE_INVALID);
 		expected = record.seq + 1;
 	}
 }
@@ -14733,11 +16667,11 @@ function packageRowsFromPnpmLock(text, names = CRITICAL_NAMES) {
 	const snapshotsStart = lines.findIndex((line) => line === "snapshots:");
 	if (packagesStart < 0) return [];
 	const end = snapshotsStart > packagesStart ? snapshotsStart : lines.length;
-	for (let index = packagesStart + 1; index < end; index += 1) {
-		const match = lines[index].match(/^  '?((?:@[^/'\s]+\/)?[^@'\s]+)@([^':\s]+)'?:\s*$/);
+	for (let index$1 = packagesStart + 1; index$1 < end; index$1 += 1) {
+		const match = lines[index$1].match(/^  '?((?:@[^/'\s]+\/)?[^@'\s]+)@([^':\s]+)'?:\s*$/);
 		if (!match || !names.includes(match[1])) continue;
 		let integrity;
-		for (let cursor = index + 1; cursor < lines.length && !/^  \S/.test(lines[cursor]); cursor += 1) {
+		for (let cursor = index$1 + 1; cursor < lines.length && !/^  \S/.test(lines[cursor]); cursor += 1) {
 			const resolution = lines[cursor].match(/^    resolution: \{[^}]*\bintegrity: ([^,}\s]+)[^}]*\}\s*$/);
 			if (resolution) {
 				integrity = resolution[1];
@@ -14945,7 +16879,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 	}
 	const bundles = manifest.dsh?.profile?.bundles;
 	const names = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"];
-	if (!Array.isArray(bundles) || bundles.length !== names.length || bundles.some((name, index) => name !== names[index])) throw new HostProfileError("target_profile_bundles_unsupported", "not the installation-owned Headless bundle tuple");
+	if (!Array.isArray(bundles) || bundles.length !== names.length || bundles.some((name, index$1) => name !== names[index$1])) throw new HostProfileError("target_profile_bundles_unsupported", "not the installation-owned Headless bundle tuple");
 	const modules = realpathSync(join(runtime, "node_modules"));
 	const mapText = readFileSync(join(modules, ".package-map.json"), "utf8");
 	const lockText = readFileSync(join(runtime, "pnpm-lock.yaml"), "utf8");
@@ -15077,10 +17011,10 @@ function stripManagedPatch(text) {
 }
 function activationFromPatch(text) {
 	const lines = text.split(/\r?\n/);
-	const entries = lines.flatMap((line, index) => /^- id:\s*["']?context-guard["']?\s*$/.test(line) ? [index] : []).map((start) => {
+	const entries = lines.flatMap((line, index$1) => /^- id:\s*["']?context-guard["']?\s*$/.test(line) ? [index$1] : []).map((start) => {
 		let end = lines.length;
-		for (let index = start + 1; index < lines.length; index += 1) if (lines[index].startsWith("- ")) {
-			end = index;
+		for (let index$1 = start + 1; index$1 < lines.length; index$1 += 1) if (lines[index$1].startsWith("- ")) {
+			end = index$1;
 			break;
 		}
 		return lines.slice(start + 1, end).join("\n");
@@ -15103,12 +17037,12 @@ function activationFromManagedPatch(text) {
 /** Preserve template comments while replacing a sole top-level `[]` sentinel. */
 function normalizeEmptyPatchBase(text) {
 	const lines = text.split(/\r?\n/);
-	const meaningful = lines.flatMap((line, index) => {
+	const meaningful = lines.flatMap((line, index$1) => {
 		const trimmed = line.trim();
-		return trimmed && !trimmed.startsWith("#") ? [index] : [];
+		return trimmed && !trimmed.startsWith("#") ? [index$1] : [];
 	});
 	if (meaningful.length !== 1 || lines[meaningful[0]].trim() !== "[]") return text;
-	return lines.filter((_line, index) => index !== meaningful[0]).join("\n");
+	return lines.filter((_line, index$1) => index$1 !== meaningful[0]).join("\n");
 }
 /** Atomically inject a repeatable managed patch into the selected profile only. */
 function injectActiveProfileHostLock(input) {
@@ -15136,7 +17070,7 @@ function parseYamlScalar(value) {
 	if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1).replace(/''/g, "'");
 	return trimmed;
 }
-function parseYamlField(entry, index, value) {
+function parseYamlField(entry, index$1, value) {
 	const indicator = value.trim();
 	if (![
 		">",
@@ -15147,8 +17081,8 @@ function parseYamlField(entry, index, value) {
 		"|+"
 	].includes(indicator)) return parseYamlScalar(value);
 	const parts = [];
-	for (let cursor = index + 1; cursor < entry.length; cursor += 1) {
-		const indentation = (entry[index].match(/^\s*/)?.[0].length ?? 8) + 2;
+	for (let cursor = index$1 + 1; cursor < entry.length; cursor += 1) {
+		const indentation = (entry[index$1].match(/^\s*/)?.[0].length ?? 8) + 2;
 		const blockLine = entry[cursor].match(/* @__PURE__ */ new RegExp(`^\\s{${indentation}}(.*)$`));
 		if (!blockLine) break;
 		parts.push(blockLine[1]);
@@ -15159,12 +17093,12 @@ function parseYamlField(entry, index, value) {
 function hostLockRowsFromComposedDump(text) {
 	const lines = text.split(/\r?\n/);
 	const starts = [];
-	for (let index = 0; index < lines.length; index += 1) if (/^- id:\s*["']?context-guard["']?\s*$/.test(lines[index])) starts.push(index);
+	for (let index$1 = 0; index$1 < lines.length; index$1 += 1) if (/^- id:\s*["']?context-guard["']?\s*$/.test(lines[index$1])) starts.push(index$1);
 	if (starts.length !== 1) return [];
 	const start = starts[0];
 	let end = lines.length;
-	for (let index = start + 1; index < lines.length; index += 1) if (lines[index].startsWith("- ")) {
-		end = index;
+	for (let index$1 = start + 1; index$1 < lines.length; index$1 += 1) if (lines[index$1].startsWith("- ")) {
+		end = index$1;
 		break;
 	}
 	const entry = lines.slice(start, end);
@@ -15173,14 +17107,14 @@ function hostLockRowsFromComposedDump(text) {
 	const hostIndex = entry.findIndex((line) => /^\s{4}hostLockPackages:\s*$/.test(line));
 	if (hostIndex < 0) return [];
 	const rows = [];
-	for (let index = hostIndex + 1; index < entry.length; index += 1) {
-		const nameMatch = entry[index].match(/^\s{6}- name:\s*(.+?)\s*$/);
+	for (let index$1 = hostIndex + 1; index$1 < entry.length; index$1 += 1) {
+		const nameMatch = entry[index$1].match(/^\s{6}- name:\s*(.+?)\s*$/);
 		if (!nameMatch) {
-			if (/^\s{4}\S/.test(entry[index])) break;
+			if (/^\s{4}\S/.test(entry[index$1])) break;
 			continue;
 		}
 		const row = { name: parseYamlScalar(nameMatch[1]) };
-		for (let cursor = index + 1; cursor < entry.length; cursor += 1) {
+		for (let cursor = index$1 + 1; cursor < entry.length; cursor += 1) {
 			if (/^\s{6}- name:/.test(entry[cursor]) || /^\s{4}\S/.test(entry[cursor])) break;
 			const field$1 = entry[cursor].match(/^\s{8}(version|integrity):\s*(.+?)\s*$/);
 			if (field$1) row[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
@@ -15191,12 +17125,12 @@ function hostLockRowsFromComposedDump(text) {
 }
 function hostLockContextFromComposedDump(text) {
 	const lines = text.split(/\r?\n/);
-	const starts = lines.flatMap((line, index) => /^- id:\s*["']?context-guard["']?\s*$/.test(line) ? [index] : []);
+	const starts = lines.flatMap((line, index$1) => /^- id:\s*["']?context-guard["']?\s*$/.test(line) ? [index$1] : []);
 	if (starts.length !== 1) return {};
 	const start = starts[0];
 	let end = lines.length;
-	for (let index = start + 1; index < lines.length; index += 1) if (lines[index].startsWith("- ")) {
-		end = index;
+	for (let index$1 = start + 1; index$1 < lines.length; index$1 += 1) if (lines[index$1].startsWith("- ")) {
+		end = index$1;
 		break;
 	}
 	const entry = lines.slice(start, end);
@@ -15221,10 +17155,10 @@ function verifyComposedHostLockDump(text, expected, roots) {
 		"hostLockRuntimeRoot",
 		"hostLockProfileRoot"
 	]) {
-		const matches = entry.flatMap((line, index$1) => line.startsWith(`    ${key}:`) ? [index$1] : []);
+		const matches = entry.flatMap((line, index$2) => line.startsWith(`    ${key}:`) ? [index$2] : []);
 		if (matches.length !== 1) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
-		const index = matches[0];
-		settings[key] = parseYamlField(entry, index, entry[index].slice(entry[index].indexOf(":") + 1));
+		const index$1 = matches[0];
+		settings[key] = parseYamlField(entry, index$1, entry[index$1].slice(entry[index$1].indexOf(":") + 1));
 	}
 	if (settings.hostLockPolicy !== "dsh-core/v1" || !isAbsolute(settings.hostLockRuntimeRoot) || !isAbsolute(settings.hostLockProfileRoot) || roots && (resolve(settings.hostLockRuntimeRoot) !== resolve(roots.runtimeRoot) || resolve(settings.hostLockProfileRoot) !== resolve(roots.profileRoot))) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
 	const context = hostLockContextFromComposedDump(text);
@@ -15234,4 +17168,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { evidenceFromPersistedToolResult as $, proposeRebind as $n, isRestatement as $r, createProofManifestV2 as $t, lifecyclePhase as A, requestedTargetMatchesResolved as Ai, NO_PROGRESS_TURNS_BEFORE_STOP as An, canonicalRegistryBase as Ar, SUPPORTED_HOST_RANGE as At, RELEASE_OPERATIONS as B, sanitizeClauseText as Bi, progressFingerprint as Bn, clauseIsProtected as Br, authorityCaptureCounts as Bt, gitCommandMatchesTarget as C, STOP_PROTOCOL_VERSION_V2 as Ci, renderRecoveryPacket as Cn, classifyClause as Cr, evaluateHostCapability as Ct, FIRST_STEP_GUIDANCE as D, isStatefulAction as Di, isVerifyingCapability as Dn, extractOperation as Dr, selectHostCohort as Dt, verifiedLinearCommitReadback as E, boundedArtifactChoiceMatches as Ei, evidenceMatchesItem as En, extractMethod as Er, hostVersionFromPackages as Et, PROTOCOL_V4_NOTICE as F, COMMAND_SURFACE_MANIFEST as Fi, isRootPauseRequest as Fn, LEGACY_QUALIFICATION as Fr, satisfiesSupportedHostRange as Ft, inFlightReservation as G, unitDescendantIds as Gn, interpretClause as Gr, PROOF_KINDS_V2 as Gt, RELEASE_RESERVATION_PREFIX as H, sha256 as Hi, hasCurrentCertificate as Hn, governedClauseRestrictsExecution as Hr, certifyCheckpoint as Ht, PROTOCOL_V5_NOTICE as I, validateManifest as Ii, isWholeTaskCompletionClaim as In, actionVerbMatches as Ir, RC015_RC2_HOST_PACKAGES as It, releaseContractFor as J, isCurrentAcceptedBoundary as Jn, isExecutableItem as Jr, PROOF_PROTOCOL_VERSION_V2 as Jt, normalizeReleaseContract as K, availableBoundaryQualifications as Kn, interpretMessage as Kr, PROOF_MANIFEST_DOMAIN_V2 as Kt, applyUpgradeEligibility as L, canonicalizePath as Li, latestAssistantText as Ln, clarifiedSpanOf as Lr, RC015_HOST_PACKAGES as Lt, CAPTURE_V042_NOTICE as M, semanticActionFromText as Mi, decideTurnBoundary as Mn, classifyTaskIntent as Mr, compareHostVersions as Mt, DEFAULT_DELEGATION_TOOL_NAMES as N, validateActionManifest as Ni, decideTurnStopping as Nn, classifyUserInteraction as Nr, evaluateMinimumHostVersion as Nt, claimedBatchHasRealRootInput as O, requestedIdentityKey as Oi, CONTROL_RECORD_PREFIX as On, isInformationalMessage as Or, LATEST_SUPPORTED_HOST_VERSION as Ot, PROTOCOL_V3_NOTICE as P, validateActionTarget as Pi, decisionBoundaryKey as Pn, GRANTED_QUALIFICATION as Pr, parseHostVersion as Pt, supersedeItem as Q, confirmRebind as Qn, isQuestionScopeNeedingReview as Qr, createProofManifest as Qt, deriveProjection as R, digestStrings as Ri, latestRootInstruction as Rn, clauseAsksOwnQuestion as Rr, RC1_HOST_PACKAGES as Rt, executeRevalidatedGitEffect as S, STOP_PROTOCOL_VERSION as Si, recoveryDigest as Sn, captureItem as Sr, evaluateExternalWaitCapability as St, revalidateGitPrestate as T, actionCompatible as Ti, evidenceCoverage as Tn, extractArtifactPaths as Tr, evaluateToolSurfaceCapability as Tt, RELEASE_SETTLEMENT_PREFIX as U, certifiableOpenItems as Un, hasOrderedCoordination as Ur, PROOF_CAPABILITY_MATRIX as Ut, RELEASE_OPERATION_SURFACES as V, sanitizeUrl as Vi, goalCompletionDenial as Vn, explanationHasActionResidue as Vr, segmentAuthorityBlocks as Vt, contractById as W, certificateClosure as Wn, hasQuestionScope as Wr, PROOF_KINDS as Wt, releasePreEffectDecision as X, currentContractDigest as Xn, isInformationalFragment as Xr, bindProofV2ToProjection as Xt, releaseCoverage as Y, qualifyBoundary as Yn, isExplanationScope as Yr, bindProofToProjection as Yt, reservationFor as Z, createProjection as Zn, isOpenObligation as Zr, canonicalProjection as Zt, GIT_COMMAND_MANIFEST_IDS as _, BOUNDED_ARTIFACT_TYPES as _i, MIN_RECOVERY_CHAR_BUDGET as _n, capabilityFactOf as _r, HOST_CAPABILITY_PACKAGE_GROUPS as _t, injectActiveProfileHostLock as a, namedActions as ai, proofOperationMatches as an, CONFIRM_LINE_PATTERN as ar, isRunExecutable as at, commitTreeSnapshotDigest as b, SEMANTIC_ACTIONS as bi, closingHint as bn, removalIsPartiallyKnown as br, bindExecutableIdentity as bt, packageRowsFromPnpmLock as c, questionHeadsClause as ci, scopeCoverageDigest as cn, capabilityRemedyPhrase as cr, ACTIVE_HOST_COHORT_ID as ct, resolveInstalledHostLock as d, semanticActionOfScope as di, validateProofManifest as dn, itemDiagnosis as dr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as dt, itemHoldsExecutionAuthority as ei, proofCapabilityReport as en, proposeRebindOutcome as er, extractTextContent as et, verifyComposedHostLockDump as f, splitTextFragments as fi, validateProofManifestV2 as fn, relevantEvidence as fr, ALPHA2_HOST_PACKAGES as ft, snapshotSessionEvents as g, ACTION_MANIFEST_VERSION as gi, DEFAULT_RECOVERY_CHAR_BUDGET as gn, capabilityConsequence as gr, GOAL_HOST_PACKAGES as gt, SessionApiError as h, ACTION_MANIFEST as hi, CLEANUP_CONDITION_RULE_SHORT as hn, admissibleForRemoval as hr, EXPECTED_HOST_PACKAGES as ht, hostLockRowsFromComposedDump as i, maskQuotedSpans as ii, proofHostSurfacesOf as in, replayRebindResult as ir, canonicalArgvFromCommand as it, previewFirstStepInjection as j, semanticActionFromCommand as ji, classifyCompletionClaim as jn, npmEscapedPackageName as jr, SUPPORTED_HOST_VERSIONS as jt, firstStepGuidance as k, requestedTargetAuthorizesMutation as ki, NO_PROGRESS_RECORD_PREFIX as kn, segmentClauses as kr, MIN_SUPPORTED_HOST_VERSION as kt, readActiveHostGraph as l, reportingHeadGoverns as li, sessionQuery as ln, deriveItemDiagnosis as lr, ACTIVE_HOST_COHORT_IDS as lt, SESSION_EVENT_ENVELOPE_INVALID as m, verbIsNegated as mi, CLEANUP_CONDITION_RULE_COMPACT as mn, actionHasCertificationPath as mr, DEFAULT_HOST_LOCK as mt, combineHostPolicy as n, legacyQuestionReadingIsInformational as ni, proofDigestV2 as nn, rebindAttemptKey as nr, isDeterministicCheck as nt, inspectTargetHostGraph as o, opensWithDirective as oi, proofV2Rejection as on, isFrozenV042RebindResponse as or, parsePwshCommand as ot, SESSION_API_UNSUPPORTED as p, statefulActionsOfScope as pi, CLEANUP_CONDITION_RULE as pn, DEPENDENCY_FREE_ONLY_CONDITION as pr, BASE_HOST_PACKAGES as pt, readbackSettlesContract as q, effectuateBoundary as qn, introducesActionClause as qr, PROOF_PROTOCOL_VERSION as qt, hostLockContextFromComposedDump as r, maskCodeSpans as ri, proofEvidenceConstraints as rn, rebindResponse as rr, withDurability as rt, packageRowsFromActiveGraph as s, qualificationOfClause as si, requiredSubjectsOf as sn, parseConfirmationMessage as sr, parseShellCommand as st, HostProfileError as t, kindOfScope as ti, proofDigest as tn, proposeRebindV042 as tr, extractToolSubject as tt, resolveActiveProfileHostLock as u, restatedContentOf as ui, sessionQueryV2 as un, evidenceAvailabilityReason as ur, ACTIVE_HOST_LAUNCHER_VERSION as ut, GIT_COMMAND_TEMPLATES as v, CERTIFICATE_VERSION as vi, carriesCleanupCondition as vn, partialFailureOf as vr, HOST_COHORTS as vt, parseGitCommandManifest as w, SUPPORTED_EVIDENCE_ADAPTERS as wi, bindingSatisfies as wn, environmentDefaultRepositoryTarget as wr, evaluateHostLock as wt, createGitPrestateEnvelope as x, STATEFUL_ACTIONS as xi, openItems as xn, captureClause as xr, bindLiveGoalCapability as xt, commitIndexSnapshotDigest as y, CERTIFICATE_VERSION_V2 as yi, cleanupConditionFor as yn, removalIsComplete as yr, LEGACY_HOST_COHORTS as yt, legacyRecordsNeedingReview as z, normalizeClause as zi, observeAssistantOutcome as zn, clauseIsGoverned as zr, ALPHA3_HOST_PACKAGES as zt };
+export { releasePreEffectDecision as $, availableBoundaryQualifications as $n, interpretMessage as $r, bindProofV2ToProjection as $t, firstStepGuidanceV6 as A, STOP_PROTOCOL_VERSION_V2 as Ai, isVerifyingCapability as An, classifyClause as Ar, selectHostCohort as At, applyUpgradeEligibility as B, validateActionManifest as Bi, decisionBoundaryKey as Bn, classifyUserInteraction as Br, RC015_HOST_PACKAGES as Bt, gitCommandMatchesTarget as C, ACTION_MANIFEST_VERSION as Ci, closingHint as Cn, capabilityConsequence as Cr, bindExecutableIdentity as Ct, FIRST_STEP_GUIDANCE as D, SEMANTIC_ACTIONS as Di, bindingSatisfies as Dn, removalIsPartiallyKnown as Dr, evaluateHostLock as Dt, verifiedLinearCommitReadback as E, CERTIFICATE_VERSION_V2 as Ei, renderRecoveryPacket as En, removalIsComplete as Er, evaluateHostCapability as Et, DEFAULT_DELEGATION_TOOL_NAMES as F, requestedIdentityKey as Fi, assessmentOutcomePredicate as Fn, isInformationalMessage as Fr, compareHostVersions as Ft, RELEASE_RESERVATION_PREFIX as G, digestStrings as Gi, observeAssistantOutcome as Gn, clauseAsksOwnQuestion as Gr, certifyCheckpoint as Gt, legacyRecordsNeedingReview as H, COMMAND_SURFACE_MANIFEST as Hi, isWholeTaskCompletionClaim as Hn, LEGACY_QUALIFICATION as Hr, ALPHA3_HOST_PACKAGES as Ht, PROTOCOL_V3_NOTICE as I, requestedTargetAuthorizesMutation as Ii, classifyCompletionClaim as In, segmentClauses as Ir, evaluateMinimumHostVersion as It, inFlightReservation as J, sanitizeUrl as Ji, goalCompletionDenial as Jn, explanationHasActionResidue as Jr, PROOF_KINDS_V2 as Jt, RELEASE_SETTLEMENT_PREFIX as K, normalizeClause as Ki, progressFingerprint as Kn, clauseIsGoverned as Kr, PROOF_CAPABILITY_MATRIX as Kt, PROTOCOL_V4_NOTICE as L, requestedTargetMatchesResolved as Li, currentActionBases as Ln, canonicalRegistryBase as Lr, parseHostVersion as Lt, previewFirstStepInjection as M, actionCompatible as Mi, NO_PROGRESS_RECORD_PREFIX as Mn, extractArtifactPaths as Mr, MIN_SUPPORTED_HOST_VERSION as Mt, projectCoreV2 as N, boundedArtifactChoiceMatches as Ni, NO_PROGRESS_TURNS_BEFORE_STOP as Nn, extractMethod as Nr, SUPPORTED_HOST_RANGE as Nt, claimedBatchHasRealRootInput as O, STATEFUL_ACTIONS as Oi, evidenceCoverage as On, captureClause as Or, evaluateToolSurfaceCapability as Ot, CAPTURE_V042_NOTICE as P, isStatefulAction as Pi, assessmentAction as Pn, extractOperation as Pr, SUPPORTED_HOST_VERSIONS as Pt, releaseCoverage as Q, unitDescendantIds as Qn, interpretClause as Qr, bindProofToProjection as Qt, PROTOCOL_V5_NOTICE as R, semanticActionFromCommand as Ri, decideTurnBoundary as Rn, npmEscapedPackageName as Rr, satisfiesSupportedHostRange as Rt, executeRevalidatedGitEffect as S, ACTION_MANIFEST as Si, cleanupConditionFor as Sn, admissibleForRemoval as Sr, LEGACY_HOST_COHORTS as St, revalidateGitPrestate as T, CERTIFICATE_VERSION as Ti, recoveryDigest as Tn, partialFailureOf as Tr, evaluateExternalWaitCapability as Tt, RELEASE_OPERATIONS as U, validateManifest as Ui, latestAssistantText as Un, actionVerbMatches as Ur, authorityCaptureCounts as Ut, deriveProjection as V, validateActionTarget as Vi, isRootPauseRequest as Vn, GRANTED_QUALIFICATION as Vr, RC1_HOST_PACKAGES as Vt, RELEASE_OPERATION_SURFACES as W, canonicalizePath as Wi, latestRootInstruction as Wn, clarifiedSpanOf as Wr, segmentAuthorityBlocks as Wt, readbackSettlesContract as X, certifiableOpenItems as Xn, hasOrderedCoordination as Xr, PROOF_PROTOCOL_VERSION as Xt, normalizeReleaseContract as Y, sha256 as Yi, hasCurrentCertificate as Yn, governedClauseRestrictsExecution as Yr, PROOF_MANIFEST_DOMAIN_V2 as Yt, releaseContractFor as Z, certificateClosure as Zn, hasQuestionScope as Zr, PROOF_PROTOCOL_VERSION_V2 as Zt, GIT_COMMAND_MANIFEST_IDS as _, restatedContentOf as _i, CLEANUP_CONDITION_RULE_COMPACT as _n, evidenceAvailabilityReason as _r, DEFAULT_HOST_LOCK as _t, injectActiveProfileHostLock as a, isQuestionScopeNeedingReview as ai, proofDigestV2 as an, confirmRebind as ar, isDeterministicCheck as at, commitTreeSnapshotDigest as b, statefulActionsOfScope as bi, MIN_RECOVERY_CHAR_BUDGET as bn, DEPENDENCY_FREE_ONLY_CONDITION as br, HOST_CAPABILITY_PACKAGE_GROUPS as bt, packageRowsFromPnpmLock as c, kindOfScope as ci, proofOperationMatches as cn, proposeRebindV042 as cr, isRunExecutable as ct, resolveInstalledHostLock as d, maskQuotedSpans as di, scopeCoverageDigest as dn, replayRebindResult as dr, ACTIVE_HOST_COHORT_ID as dt, introducesActionClause as ei, canonicalProjection as en, effectuateBoundary as er, reservationFor as et, verifyComposedHostLockDump as f, namedActions as fi, sessionQuery as fn, CONFIRM_LINE_PATTERN as fr, ACTIVE_HOST_COHORT_IDS as ft, snapshotSessionEvents as g, reportingHeadGoverns as gi, CLEANUP_CONDITION_RULE as gn, deriveItemDiagnosis as gr, BASE_HOST_PACKAGES as gt, SessionApiError as h, questionHeadsClause as hi, validateProofManifestV2 as hn, capabilityRemedyPhrase as hr, ALPHA2_HOST_PACKAGES as ht, hostLockRowsFromComposedDump as i, isOpenObligation as ii, proofDigest as in, createProjection as ir, extractToolSubject as it, lifecyclePhase as j, SUPPORTED_EVIDENCE_ADAPTERS as ji, CONTROL_RECORD_PREFIX as jn, environmentDefaultRepositoryTarget as jr, LATEST_SUPPORTED_HOST_VERSION as jt, firstStepGuidance as k, STOP_PROTOCOL_VERSION as ki, evidenceMatchesItem as kn, captureItem as kr, hostVersionFromPackages as kt, readActiveHostGraph as l, legacyQuestionReadingIsInformational as li, proofV2Rejection as ln, rebindAttemptKey as lr, parsePwshCommand as lt, SESSION_EVENT_ENVELOPE_INVALID as m, qualificationOfClause as mi, validateProofManifest as mn, parseConfirmationMessage as mr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as mt, combineHostPolicy as n, isExplanationScope as ni, createProofManifestV2 as nn, qualifyBoundary as nr, evidenceFromPersistedToolResult as nt, inspectTargetHostGraph as o, isRestatement as oi, proofEvidenceConstraints as on, proposeRebind as or, withDurability as ot, SESSION_API_UNSUPPORTED as p, opensWithDirective as pi, sessionQueryV2 as pn, isFrozenV042RebindResponse as pr, ACTIVE_HOST_LAUNCHER_VERSION as pt, contractById as q, sanitizeClauseText as qi, testOutcomePredicate as qn, clauseIsProtected as qr, PROOF_KINDS as qt, hostLockContextFromComposedDump as r, isInformationalFragment as ri, proofCapabilityReport as rn, currentContractDigest as rr, extractTextContent as rt, packageRowsFromActiveGraph as s, itemHoldsExecutionAuthority as si, proofHostSurfacesOf as sn, proposeRebindOutcome as sr, canonicalArgvFromCommand as st, HostProfileError as t, isExecutableItem as ti, createProofManifest as tn, isCurrentAcceptedBoundary as tr, supersedeItem as tt, resolveActiveProfileHostLock as u, maskCodeSpans as ui, requiredSubjectsOf as un, rebindResponse as ur, parseShellCommand as ut, GIT_COMMAND_TEMPLATES as v, semanticActionOfScope as vi, CLEANUP_CONDITION_RULE_SHORT as vn, itemDiagnosis as vr, EXPECTED_HOST_PACKAGES as vt, parseGitCommandManifest as w, BOUNDED_ARTIFACT_TYPES as wi, openItems as wn, capabilityFactOf as wr, bindLiveGoalCapability as wt, createGitPrestateEnvelope as x, verbIsNegated as xi, carriesCleanupCondition as xn, actionHasCertificationPath as xr, HOST_COHORTS as xt, commitIndexSnapshotDigest as y, splitTextFragments as yi, DEFAULT_RECOVERY_CHAR_BUDGET as yn, relevantEvidence as yr, GOAL_HOST_PACKAGES as yt, PROTOCOL_V6_NOTICE as z, semanticActionFromText as zi, decideTurnStopping as zn, classifyTaskIntent as zr, RC015_RC2_HOST_PACKAGES as zt };

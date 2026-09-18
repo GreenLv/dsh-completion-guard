@@ -23,7 +23,7 @@ import type { GuardProjection } from './types.js'
 
 export interface MigrationReport {
   /** The rule set in force for NEW work in this session. */
-  ruleMode: 'v5' | 'legacy-v4'
+  ruleMode: 'v6' | 'v5' | 'legacy-v4'
   /** The certificate version a new certificate in this session will carry. */
   certificateVersion: string
   /** The Stop protocol identity that goes with that certificate version. */
@@ -55,7 +55,8 @@ export const PRESERVED_DIGEST_DOMAINS: readonly string[] = [
 ]
 
 export function migrationReport(projection: GuardProjection): MigrationReport {
-  const v5 = projection.boundaryProtocol === 5
+  const v6 = projection.boundaryProtocol === 6
+  const v5 = projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5
   const legacyItemIds = certifiableOpenItems(projection)
     .filter((item) => item.unitId === undefined)
     .map((item) => item.id)
@@ -63,8 +64,10 @@ export function migrationReport(projection: GuardProjection): MigrationReport {
   const reasonCodes: string[] = []
   if (!v5) reasonCodes.push('legacy_session_keeps_v4_contract')
   if (v5 && legacyItemIds.length > 0) reasonCodes.push('pre_v5_obligations_retained_in_closure')
+  if (v6) reasonCodes.push('v6_ordinary_host_facts_and_legacy_review')
+  if (v6 && projection.coreV2Reason) reasonCodes.push(`core_v2_${projection.coreV2Reason}`)
   return {
-    ruleMode: v5 ? 'v5' : 'legacy-v4',
+    ruleMode: v6 ? 'v6' : v5 ? 'v5' : 'legacy-v4',
     certificateVersion: v5 ? CERTIFICATE_VERSION_V2 : CERTIFICATE_VERSION,
     stopProtocolVersion: v5 ? STOP_PROTOCOL_VERSION_V2 : STOP_PROTOCOL_VERSION,
     unitClosure: v5,
@@ -76,7 +79,9 @@ export function migrationReport(projection: GuardProjection): MigrationReport {
     // Without the boundary there is nothing new to roll back: the session is
     // already running the historical contract.
     rollbackRequiresStateSnapshot: v5,
-    rollbackInstruction: v5
+    rollbackInstruction: v6
+      ? 'Restore a pre-v6 state snapshot before running 0.6.x. The v6 boundary, native-observation digest and migration review must not be read as v5 current authority or downgraded by hand.'
+      : v5
       ? 'Restore the 0.5.x state snapshot before starting the older binary. Replaying a v5 log with 0.5.x fails closed with certificate_replay_mismatch; never migrate new-schema data down by hand.'
       : 'No rollback action is required for this session: it has not written a v5 boundary.',
     reasonCodes,

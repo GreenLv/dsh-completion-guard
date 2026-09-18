@@ -195,6 +195,76 @@ export interface AssistantOutcomeObservation {
   reasonCode: string
 }
 
+export interface CurrentActionBasis {
+  itemId: string
+  action: string
+  sourceMessageId: string
+  unmetPredicate: string
+  owner: 'assistant'
+  readiness: 'ready'
+  asOf: number
+}
+
+/** A concrete, current root-owned action, with host capability and no pending
+ * condition. Historical generic text and old qualifications are not upgraded. */
+export function testOutcomePredicate(text: string): string {
+  return /(?:回归测试|regression\s+tests?)/iu.test(text) ? 'regression_test_result'
+    : /(?:focused\s+tests?|针对[^，,。.!?？]{0,32}?的?\s*测试)/iu.test(text) ? 'focused_test_result' : 'test_passed'
+}
+
+export function assessmentOutcomePredicate(text: string): string {
+  return /(?:内存|memory)/iu.test(text) ? 'current_memory_measurement_result'
+    : /(?:延迟|时延|latency)/iu.test(text) ? 'latency_measurement_result' : 'verification_passed'
+}
+
+export function assessmentAction(text: string): string {
+  return /(?:内存|memory)/iu.test(text) ? 'measure_current_memory_cost' : 'evaluate_current_effect'
+}
+
+export function currentActionBases(projection: GuardProjection, enforceCore = true): CurrentActionBasis[] {
+  if (projection.hostStatus !== 'supported') return []
+  const basis: CurrentActionBasis[] = []
+  for (const item of projection.items.values()) {
+    if (item.status !== 'pending' || item.kind === 'prohibition' || item.authority !== 'root_instruction'
+      || item.authorityDisposition !== 'executable_now' || item.legacyFlags?.length
+      || item.waitAuthorization || item.condition || item.targetCaptureStatus === 'clarification_required') continue
+    const action = item.semanticAction
+    if (!action || action === 'generic_run') continue
+    if (action !== 'test' && action !== 'verify') continue // other actions need their own concrete readiness adapter
+    if (!/^m\d+(?::|$)/.test(item.sourceMessageId)) continue
+    const sourceSeq = Number(/^m(\d+)/.exec(item.sourceMessageId)?.[1] ?? -1)
+    const scope = item.requestedTarget?.scope
+    if (typeof scope !== 'string') continue
+    const readiness = [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch
+      && fact.toolResultSeq >= sourceSeq && fact.outcome === 'success' && fact.parseStatus === 'supported'
+      && fact.toolName === 'context_guard_observe_test_readiness' && fact.readinessForItemId === item.id
+      && fact.readinessPredicate === (action === 'test' ? 'test_passed' : 'verification_passed') && fact.subjects.includes(scope)
+      && typeof fact.readinessManifestSha256 === 'string'
+      && (action !== 'verify' || (!fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256)
+        || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId
+        && effect.epoch === fact.epoch && effect.toolResultSeq < fact.toolResultSeq && effect.outcome === 'success'
+        && effect.parseStatus === 'supported' && effect.semanticAction === 'modify' && effect.evidenceRole === 'effect'
+        && effect.operations?.some((operation) => operation.op === 'modify' && operation.path === fact.readinessSelectedPath))))
+    if (!readiness) continue
+    const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch
+      && fact.toolResultSeq >= sourceSeq && fact.semanticAction === action && fact.evidenceRole === 'effect'
+      && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0]
+    const alreadyRan = latestRun?.outcome === 'success' && latestRun.parseStatus === 'supported'
+      && latestRun.processFacts?.outcome === 'success' && latestRun.processFacts.operationAttribution === 'single_operation'
+    if (alreadyRan) continue
+    basis.push({ itemId: item.id, action, sourceMessageId: item.sourceMessageId,
+      unmetPredicate: action === 'test' ? testOutcomePredicate(item.normalizedText) : assessmentOutcomePredicate(item.normalizedText),
+      owner: 'assistant', readiness: 'ready', asOf: projection.lastObservedSourceSeq })
+  }
+  if (projection.boundaryProtocol === 6 && enforceCore) {
+    if (!projection.coreV2) return []
+    const current = Array.isArray(projection.coreV2.current_actions) ? projection.coreV2.current_actions : []
+    return basis.filter((entry) => current.some((value) => value && typeof value === 'object'
+      && (value as Record<string, unknown>).requirement_id === entry.itemId))
+  }
+  return basis
+}
+
 /** Assistant prose is retained only as a bounded diagnostic observation. */
 export function observeAssistantOutcome(text: string): AssistantOutcomeObservation {
   const disposition = classifyCompletionClaim(text)
@@ -211,7 +281,7 @@ export function observeAssistantOutcome(text: string): AssistantOutcomeObservati
  * one fallback correction; subsequent attempts safe-yield. An active, armed
  * Goal remains exclusively owned by the host Goal Round Driver.
  */
-export function decideTurnBoundary(projection: GuardProjection): TurnStoppingDecision {
+export function decideTurnBoundary(projection: GuardProjection, latestRootText = ''): TurnStoppingDecision {
   if (!projection.enabled) return { action: 'stop', reason: 'guard_disabled' }
   if (projection.integrity !== 'valid') return { action: 'stop', reason: 'integrity_invalid_safe_yield' }
   if (hasCurrentCertificate(projection)) return { action: 'stop', reason: 'current_certificate' }
@@ -262,13 +332,19 @@ export function decideTurnBoundary(projection: GuardProjection): TurnStoppingDec
         : 'goal_not_continuable_safe_yield',
     }
   }
-  if ([...projection.items.values()].some((item) => item.status === 'pending' && item.persistenceAuthorization)) {
-    const key = `${projection.epoch}:${projection.contractRevision}`
-    const attempts = projection.persistenceCorrectionAttempts.get(key) ?? 0
-    if (attempts < 1) {
-      projection.persistenceCorrectionAttempts.set(key, attempts + 1)
-      return { action: 'continue', reason: 'protocol_correction_steer' }
-    }
+  const actions = currentActionBases(projection)
+  const explicitPersistence = [...projection.items.values()].some((item) => item.authority === 'root_instruction'
+    && !item.legacyFlags?.length && item.persistenceAuthorization?.kind === 'root_explicit_persistence')
+  const shortResume = /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(latestRootText.trim())
+  if (actions.length && (explicitPersistence || shortResume)) {
+    const hostTurn = decisionBoundaryKey(projection)
+    if (hostTurn === undefined) return { action: 'stop', reason: 'correction_identity_unavailable' }
+    const fingerprint = `correction:${progressFingerprint(projection)}`
+    const claims = projection.noProgressClaims.get(fingerprint) ?? new Map<string, number>()
+    const boundaryKey = String(hostTurn)
+    if (claims.has(boundaryKey) || claims.size > 0) return { action: 'stop', reason: 'protocol_correction_already_issued' }
+    return { action: 'continue', reason: explicitPersistence ? 'explicit_user_persistence' : 'resume_with_actionable_work',
+      noProgressClaim: { fingerprint, boundaryKey, attempt: 1 } }
   }
   return { action: 'stop', reason: 'safe_yield_pending_preserved' }
 }

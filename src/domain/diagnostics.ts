@@ -235,7 +235,7 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
     // by delivery, never routed through target clarification or rebind.
     // 0.6.1 (W060-01): an attachment obligation additionally needs its own
     // interpretation record before its turn's answer can close it.
-    const closable = p.boundaryProtocol === 5
+    const closable = p.boundaryProtocol !== undefined && p.boundaryProtocol >= 5
     if (item.asset !== undefined && !p.interpretationFacts.some((fact) => fact.itemId === item.id)) {
       return verdict({
         gap: 'delivery_pending', remedy: 'record_interpretation',
@@ -274,7 +274,7 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
   // evidence machinery, so a conservatively-downgraded clause is never
   // re-read as executable work.
   if (item.authorityDisposition === 'informational') {
-    const closable = p.boundaryProtocol === 5
+    const closable = p.boundaryProtocol !== undefined && p.boundaryProtocol >= 5
     return verdict({
       gap: closable ? 'delivery_pending' : 'interpretation_unknown',
       remedy: closable ? 'deliver_answer' : 'report_uncertified',

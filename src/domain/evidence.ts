@@ -543,6 +543,18 @@ export interface ToolSubject {
   reasonCode?: string
   adapterId?: string
   adapterVersion?: string
+  causedByCallId?: string
+  nativeCanonicalPath?: string
+  nativeCanonicalBase?: string
+  nativeGitTreeOid?: string
+  nativeGitParentOid?: string
+  readinessForItemId?: string
+  readinessPredicate?: string
+  readinessManifestSha256?: string
+  readinessEffectCallId?: string
+  readinessSelectedPath?: string
+  readinessScriptName?: string
+  readinessInputSha256?: string
   /** 0.6.2 D062-02: the layered shell reading, present only for shell tools. */
   processFacts?: DerivedProcessFacts
   externalOperationRef?: import('./types.js').ExternalOperation
@@ -579,6 +591,19 @@ function resolveSubjectPaths(values: string[], cwd: string | undefined): string[
   return cwd ? values.map((value) => resolveCommandPath(value, cwd)) : values
 }
 
+/** A file tool acts on its call argument. Presentation metadata may describe
+ * that same file, but cannot introduce another operation target. A differing
+ * display path needs an independent filesystem identity readback before it
+ * can be trusted as an alias. */
+function nativeFileSubjects(args: Record<string, unknown>, meta: unknown, cwd: string | undefined): {
+  subjects: string[]; operationTargets: string[]; coherent: boolean
+} {
+  const callTargets = unique(resolveSubjectPaths(argsPaths(args), cwd))
+  const displayed = unique(resolveSubjectPaths(metaPaths(meta), cwd))
+  const coherent = callTargets.length === 1 && displayed.every((path) => path === callTargets[0])
+  return { subjects: unique([...callTargets, ...displayed]), operationTargets: coherent ? callTargets : [], coherent }
+}
+
 export function extractToolSubject(
   call: ToolCallInput,
   result: ToolResultInput,
@@ -586,6 +611,75 @@ export function extractToolSubject(
   hostLock?: HostLockEvaluation,
 ): ToolSubject {
   const args = parseArguments(call.arguments)
+  if (call.name === 'context_guard_observe_file') {
+    const native = asRecord(asRecord(result.meta)?.contextGuardNativeFile)
+    const effectCallId = native?.effectCallId
+    const path = native?.path
+    const digest = native?.sha256
+    if (typeof effectCallId === 'string' && typeof path === 'string' && typeof digest === 'string'
+      && /^[0-9a-f]{64}$/.test(digest) && (native?.action === 'create' || native?.action === 'modify')) {
+      return {
+        capabilities: ['filesystem-read'], subjects: [path], surfaces: ['artifact'],
+        operations: [{ op: 'read', path }], semanticAction: native.action,
+        evidenceRole: 'state', resolvedTarget: { artifact_id: path }, observedState: { post_digest: digest },
+        parseStatus: 'supported', adapterId: 'context-guard.native-file.v1', adapterVersion: '1.0.0',
+        causedByCallId: effectCallId,
+        ...(typeof native.canonicalPath === 'string' && typeof native.canonicalBase === 'string'
+          ? { nativeCanonicalPath: native.canonicalPath, nativeCanonicalBase: native.canonicalBase } : {}),
+      }
+    }
+    return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'native_file_readback_unavailable' }
+  }
+  if (call.name === 'context_guard_observe_git') {
+    const native = asRecord(asRecord(result.meta)?.contextGuardNativeGit)
+    const action = native?.action
+    const repository = native?.repository
+    const postOid = native?.postOid
+    const cause = native?.effectCallId
+    if ((action === 'commit' || action === 'push') && typeof repository === 'string' && typeof cause === 'string'
+      && typeof postOid === 'string' && /^[0-9a-f]{40,64}$/.test(postOid)) {
+      const remote = native?.remote; const refspec = native?.refspec
+      const parentOid = native?.parentOid; const treeOid = native?.treeOid
+      if (action === 'commit' && (typeof parentOid !== 'string' || typeof treeOid !== 'string'
+        || !/^[0-9a-f]{40,64}$/.test(parentOid) || !/^[0-9a-f]{40,64}$/.test(treeOid))) {
+        return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'native_git_readback_unavailable' }
+      }
+      if (action === 'push' && (typeof remote !== 'string' || typeof refspec !== 'string')) {
+        return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'native_git_readback_unavailable' }
+      }
+      return {
+        capabilities: ['git-readback'], subjects: [repository], surfaces: ['scope'], operations: [{ op: 'read', path: repository }],
+        semanticAction: action, evidenceRole: 'state',
+        resolvedTarget: { repository, ...(action === 'push' ? { remote: remote as string, refspec: refspec as string } : { branch: native?.branch as string }) },
+        observedState: { post_head_oid: postOid, ...(action === 'push' ? { remote_oid: postOid } : {}) },
+        ...(action === 'commit' ? { nativeGitParentOid: parentOid as string, nativeGitTreeOid: treeOid as string } : {}),
+        parseStatus: 'supported', adapterId: 'context-guard.native-git.v1', adapterVersion: '1.0.0', causedByCallId: cause,
+      }
+    }
+    return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'native_git_readback_unavailable' }
+  }
+  if (call.name === 'context_guard_observe_test_readiness') {
+    const ready = asRecord(asRecord(result.meta)?.contextGuardTestReadiness)
+    const assessment = ready?.predicate === 'verification_passed'
+    if (typeof ready?.itemId === 'string' && typeof ready.scope === 'string'
+      && (ready.predicate === 'test_passed' || assessment)
+      && typeof ready.manifestSha256 === 'string' && /^[0-9a-f]{64}$/.test(ready.manifestSha256)) {
+      if (assessment && (typeof ready.effectCallId !== 'string'
+        || typeof ready.selectedPath !== 'string' || !ready.selectedPath
+        || !['test', 'benchmark'].includes(String(ready.scriptName))
+        || typeof ready.inputSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(ready.inputSha256)
+        || (ready.effectCallId === '' && ready.inputSha256 !== ready.manifestSha256))) {
+        return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'assessment_readiness_unavailable' }
+      }
+      return { capabilities: ['test-input-readiness'], subjects: [ready.scope], surfaces: ['scope'],
+        semanticAction: 'verify', evidenceRole: 'state', resolvedTarget: { scope: ready.scope },
+        parseStatus: 'supported', adapterId: 'context-guard.test-readiness.v1', adapterVersion: '1.0.0',
+        readinessForItemId: ready.itemId, readinessPredicate: ready.predicate as string, readinessManifestSha256: ready.manifestSha256,
+        ...(assessment ? { readinessEffectCallId: ready.effectCallId as string, readinessSelectedPath: ready.selectedPath as string,
+          readinessScriptName: ready.scriptName as string, readinessInputSha256: ready.inputSha256 as string } : {}) }
+    }
+    return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'test_readiness_unavailable' }
+  }
   if (call.name === 'context_guard_external_operation') {
     const external = asRecord(asRecord(result.meta)?.contextGuardExternalOperation)
     const status = external?.status
@@ -645,12 +739,12 @@ export function extractToolSubject(
   switch (call.name) {
     case 'read':
     case 'read_file': {
-      const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
+      const { subjects, operationTargets, coherent } = nativeFileSubjects(args, result.meta, defaultCwd)
       return capabilityGatedSubject({
         capabilities: ['filesystem-read'],
         subjects,
         surfaces: ['artifact'],
-        operations: subjects.map((path) => ({ op: 'read', path })),
+        operations: operationTargets.map((path) => ({ op: 'read', path })),
         semanticAction: structured?.semanticAction ?? 'verify',
         evidenceRole: structured?.evidenceRole ?? 'effect',
         // The artifact identity remains in the bounded subject/operation tuple.
@@ -659,33 +753,39 @@ export function extractToolSubject(
         // ignored cross-branch artifact field into the binding record.
         resolvedTarget: structured?.resolvedTarget ?? { scope: defaultCwd ?? 'scope' },
         ...(structured?.observedState ? { observedState: structured.observedState } : {}),
-        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.read.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
+        parseStatus: coherent ? 'supported' : 'adapter_unavailable',
+        ...(coherent ? {} : { outcome: 'unknown', reasonCode: 'native_file_target_unverified' }),
+        adapterId: structured?.adapterId ?? 'dsh.read.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
       }, 'filesystem', hostLock)
     }
     case 'write':
     case 'write_file': {
-      const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
+      const { subjects, operationTargets, coherent } = nativeFileSubjects(args, result.meta, defaultCwd)
       return capabilityGatedSubject({
         capabilities: ['filesystem-write'],
         subjects,
         surfaces: ['artifact'],
-        operations: subjects.map((path) => ({ op: 'create', path })),
+        operations: operationTargets.map((path) => ({ op: 'create', path })),
         semanticAction: structured?.semanticAction ?? 'create', evidenceRole: structured?.evidenceRole ?? 'effect',
-        resolvedTarget: structured?.resolvedTarget ?? { ...(subjects[0] ? { artifact_id: subjects[0] } : {}), scope: defaultCwd ?? 'scope' },
-        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.write.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
+        resolvedTarget: structured?.resolvedTarget ?? { ...(operationTargets[0] ? { artifact_id: operationTargets[0] } : {}), scope: defaultCwd ?? 'scope' },
+        parseStatus: coherent ? 'supported' : 'adapter_unavailable',
+        ...(coherent ? {} : { outcome: 'unknown', reasonCode: 'native_file_target_unverified' }),
+        adapterId: structured?.adapterId ?? 'dsh.write.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
       }, 'filesystem', hostLock)
     }
     case 'edit':
     case 'edit_file': {
-      const subjects = unique(resolveSubjectPaths([...metaPaths(result.meta), ...argsPaths(args)], defaultCwd))
+      const { subjects, operationTargets, coherent } = nativeFileSubjects(args, result.meta, defaultCwd)
       return capabilityGatedSubject({
         capabilities: ['filesystem-edit'],
         subjects,
         surfaces: ['artifact'],
-        operations: subjects.map((path) => ({ op: 'modify', path })),
+        operations: operationTargets.map((path) => ({ op: 'modify', path })),
         semanticAction: structured?.semanticAction ?? 'modify', evidenceRole: structured?.evidenceRole ?? 'effect',
-        resolvedTarget: structured?.resolvedTarget ?? { ...(subjects[0] ? { artifact_id: subjects[0] } : {}), scope: defaultCwd ?? 'scope' },
-        parseStatus: 'supported', adapterId: structured?.adapterId ?? 'dsh.edit.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
+        resolvedTarget: structured?.resolvedTarget ?? { ...(operationTargets[0] ? { artifact_id: operationTargets[0] } : {}), scope: defaultCwd ?? 'scope' },
+        parseStatus: coherent ? 'supported' : 'adapter_unavailable',
+        ...(coherent ? {} : { outcome: 'unknown', reasonCode: 'native_file_target_unverified' }),
+        adapterId: structured?.adapterId ?? 'dsh.edit.v1', adapterVersion: structured?.adapterVersion ?? '1.0.0',
       }, 'filesystem', hostLock)
     }
     case 'bash':
@@ -789,6 +889,18 @@ export function evidenceFromPersistedToolResult(
     ...(subject.reasonCode ? { reasonCode: subject.reasonCode } : {}),
     ...(subject.adapterId ? { adapterId: subject.adapterId } : {}),
     ...(subject.adapterVersion ? { adapterVersion: subject.adapterVersion } : {}),
+    ...(subject.causedByCallId ? { causedByCallId: subject.causedByCallId } : {}),
+    ...(subject.nativeCanonicalPath ? { nativeCanonicalPath: subject.nativeCanonicalPath } : {}),
+    ...(subject.nativeCanonicalBase ? { nativeCanonicalBase: subject.nativeCanonicalBase } : {}),
+    ...(subject.nativeGitTreeOid ? { nativeGitTreeOid: subject.nativeGitTreeOid } : {}),
+    ...(subject.nativeGitParentOid ? { nativeGitParentOid: subject.nativeGitParentOid } : {}),
+    ...(subject.readinessForItemId ? { readinessForItemId: subject.readinessForItemId } : {}),
+    ...(subject.readinessPredicate ? { readinessPredicate: subject.readinessPredicate } : {}),
+    ...(subject.readinessManifestSha256 ? { readinessManifestSha256: subject.readinessManifestSha256 } : {}),
+    ...(subject.readinessEffectCallId ? { readinessEffectCallId: subject.readinessEffectCallId } : {}),
+    ...(subject.readinessSelectedPath ? { readinessSelectedPath: subject.readinessSelectedPath } : {}),
+    ...(subject.readinessScriptName ? { readinessScriptName: subject.readinessScriptName } : {}),
+    ...(subject.readinessInputSha256 ? { readinessInputSha256: subject.readinessInputSha256 } : {}),
     // 0.6.2 D062-02: the layered shell reading is DERIVED and excluded from
     // every frozen digest/certificate domain. The host result's own error flag
     // is the ONE thing this wrapper may add on top of the subject's reading: the

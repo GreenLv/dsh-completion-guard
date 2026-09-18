@@ -1251,7 +1251,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
   const roots = normalizedRoots(options)
   return defineTool({
     name: ACTION_TOOL,
-    description: 'Execute one explicit Guard-owned mutation after re-reading a persisted resolution and exact target digest. This tool changes package, Git, registry, or Web service state; its result echoes the bounded target and command-manifest digest.',
+    description: 'Compatibility entry for older sessions. Ordinary mutations return a migration diagnosis without side effects; only an explicitly adopted registry publication can use the controlled release path.',
     parameters: {
       semantic_action: { type: 'string', required: true, enum: ['install', 'apply', 'restart', 'publish', 'commit', 'push', 'pull', 'fetch'] },
       resolution_call_id: { type: 'string', required: true },
@@ -1278,6 +1278,9 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       const action = args.semantic_action as StatefulAction
       const agent = exec.agent
       const empty = { resolved_target: {}, target_digest: '', command_manifest_digest: '' }
+      if (action !== 'publish') {
+        return { status: 'unavailable' as const, reason_code: 'ordinary_action_migrated_to_host_tools', ...empty }
+      }
       if (!agent || !['install', 'apply', 'restart', 'publish', 'commit', 'push', 'pull', 'fetch'].includes(action)) {
         return { status: 'unavailable' as const, reason_code: 'action_adapter_unavailable', ...empty }
       }
@@ -1438,7 +1441,7 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
   const roots = normalizedRoots(options)
   return defineTool({
     name: PRODUCER_TOOL,
-    description: 'Create one trusted stateful resolution/effect/state fact from the live resource and persisted DSH tool events. Unsupported adapters fail closed.',
+    description: 'Observe a controlled registry publish. Ordinary work uses native host tools and read-only observers; older producer calls return migration diagnostics.',
     parameters: {
       semantic_action: { type: 'string', required: true, enum: ['install', 'apply', 'create', 'modify', 'restart', 'commit', 'push', 'publish', 'pull', 'fetch'] },
       evidence_role: { type: 'string', required: true, enum: ['resolution', 'effect', 'state'] },
@@ -1507,6 +1510,8 @@ export function createEvidenceTool(options: EvidenceToolRoots = {}): ToolDefinit
     async execute(args, exec) {
       const action = args.semantic_action as StatefulAction
       const role = args.evidence_role as EvidenceRole
+      if (['install', 'apply', 'create', 'modify', 'restart', 'commit', 'push', 'pull', 'fetch'].includes(action)) return unavailable(action, role, 'ordinary_evidence_migrated_to_host_facts', undefined,
+        'Use the native host tool and its persisted result; request only a read-only Guard observer when an independent state fact is needed. Do not repeat an earlier effect.')
       if (!(SUPPORTED as readonly string[]).includes(action)) return unavailable(action, role, 'adapter_unavailable_for_pinned_host')
       if (roots.hostCapability?.(action).status !== 'supported' && roots.hostCapability) {
         return unavailable(action, role, 'host_capability_unavailable')

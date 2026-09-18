@@ -1,7 +1,7 @@
 import { needsReviewObligations } from './closure.js'
 import type { GuardProjection } from './types.js'
 
-export function hasCurrentCertificate(projection: GuardProjection): boolean {
+export function hasCurrentCertificate(projection: GuardProjection, historicalReplay = false): boolean {
   const checkpoint = projection.checkpoints.at(-1)
   let reason: string | undefined
   if (projection.integrity !== 'valid') reason = 'integrity_invalid'
@@ -12,19 +12,25 @@ export function hasCurrentCertificate(projection: GuardProjection): boolean {
   else if (needsReviewObligations(projection).length > 0) reason = 'legacy_record_needs_review'
   else if (projection.hostStatus !== 'supported') reason = 'host_lock_unsupported'
   else if (!checkpoint || checkpoint.result !== 'certified') reason = 'certificate_missing'
+  else if (projection.boundaryProtocol === 6 && (checkpoint.recordedAtSeq === undefined || checkpoint.recordedAtSeq <= (projection.v6BoundarySeq ?? -1))) reason = 'legacy_certificate_in_v6_session'
   else if (checkpoint.epoch !== projection.epoch) reason = 'stale_epoch'
   else if (checkpoint.sessionRefDigest !== projection.sessionRefDigest) reason = 'foreign_session'
+  else if (projection.boundaryProtocol === 6 && (checkpoint.certificateVersion !== '4'
+    || !projection.rootLocatorIdentity || checkpoint.rootLocatorIdentity !== projection.rootLocatorIdentity)) reason = 'stale_root_locator_identity'
   else if (checkpoint.hostLockDigest !== projection.hostLockDigest) reason = 'stale_host_lock'
   else if (checkpoint.contractRevision !== projection.contractRevision) reason = 'stale_contract_revision'
-  else if (projection.boundaryProtocol === 5) {
-    // v5 sessions certify through unit-closure certificates only; a version-1
-    // record keeps its historical meaning and is never current authority here.
-    if (checkpoint.certificateVersion !== '2') reason = 'legacy_certificate_in_v5_session'
-    else if (checkpoint.unitId !== projection.currentUnitId) reason = 'stale_unit_ref'
-  } else if (checkpoint.certificateVersion !== '1') reason = 'certificate_version_unavailable'
   else if (projection.currentGoalRef
     ? checkpoint.goalRef?.id !== projection.currentGoalRef.id || checkpoint.goalRef.revision !== projection.currentGoalRef.revision
     : checkpoint.goalRef !== undefined) reason = 'stale_goal_ref'
+  else if (projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5) {
+    // v5 sessions certify through unit-closure certificates only; a version-1
+    // record keeps its historical meaning and is never current authority here.
+    if (checkpoint.certificateVersion !== '2' && checkpoint.certificateVersion !== '3' && checkpoint.certificateVersion !== '4') reason = 'legacy_certificate_in_v5_session'
+    else if (checkpoint.unitId !== projection.currentUnitId) reason = 'stale_unit_ref'
+  } else if (checkpoint.certificateVersion !== '1' && checkpoint.certificateVersion !== '3') reason = 'certificate_version_unavailable'
+  if (!reason && projection.boundaryProtocol === 6 && !historicalReplay && projection.coreV2?.certifiable !== true) {
+    reason = projection.coreV2 ? 'current_closure_unmet' : 'core_projection_missing'
+  }
   projection.certificateStatusReason = reason
   return reason === undefined
 }
@@ -55,6 +61,7 @@ export function goalCompletionDenial(
   const action = (argumentsValue as { action?: unknown }).action
   if (action !== 'complete') return undefined
   if (!projection.enabled) return undefined
+  if (projection.boundaryProtocol === 6 && !projection.goalCompletionAdopted) return undefined
   const args = argumentsValue as { goal_id?: unknown; revision?: unknown }
   if (projection.hostStatus !== 'supported') {
     return `Context Guard denial [stale_host]: host lock is unsupported or unavailable (${projection.hostReasonCode ?? 'unknown_host'}).`
@@ -69,6 +76,9 @@ export function goalCompletionDenial(
   }
   if (projection.certificateStatusReason === 'stale_goal_ref') {
     return 'Context Guard denial [stale_goal_ref]: the completion certificate belongs to a different Goal reference.'
+  }
+  if (projection.certificateStatusReason === 'current_closure_unmet' || projection.certificateStatusReason === 'core_projection_missing') {
+    return 'Context Guard denial [current_closure_unmet]: the current required work is not verified complete.'
   }
   return projection.integrity === 'valid'
     ? 'Context Guard denial [certificate_missing]: a current completion certificate is required.'

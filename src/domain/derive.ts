@@ -12,7 +12,7 @@ import { hasCurrentCertificate } from './goal-gate.js'
 import { evidenceFromPersistedToolResult, extractTextContent, withDurability } from './evidence.js'
 import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, type SemanticAction } from './protocol-manifest.js'
 import {
-  interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans,
+  interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans, splitTextFragments,
 } from './semantics.js'
 import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
 import { supersedeItem } from './supersession.js'
@@ -89,6 +89,7 @@ export const PROTOCOL_V4_NOTICE = 'Context Guard protocol boundary: v4.0.0'
  * fail direction on rollback is closed, never a misread.
  */
 export const PROTOCOL_V5_NOTICE = 'Context Guard protocol boundary: v5.0.0'
+export const PROTOCOL_V6_NOTICE = 'Context Guard protocol boundary: v6.0.0'
 
 function isProtocolBoundaryNotice(event: DerivedEnvelope, notice = PROTOCOL_V3_NOTICE): boolean {
   if (event.type !== 'user/message') return false
@@ -370,6 +371,8 @@ function recordedCertificateMatches(recorded: unknown, checkpoint: GuardCheckpoi
     certification_digest: checkpoint.certificationDigest,
     goal_ref: checkpoint.goalRef ?? null,
   }
+  if (checkpoint.nativeObservations) exact.native_observations = checkpoint.nativeObservations
+  if (checkpoint.rootLocatorIdentity) exact.root_locator_identity = checkpoint.rootLocatorIdentity
   // v2 certificates bind their unit closure; the identity comparison is exact
   // on those fields too, so a certificate for another unit never replays.
   if (checkpoint.unitId !== undefined) {
@@ -453,6 +456,8 @@ function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings
     openDigest: stringField('open_digest')!,
     evidenceSha256: stringField('evidence_sha256')!,
     bindingDigest: stringField('binding_digest')!,
+    ...(asRecord(recorded.native_observations) ? { nativeObservations: recorded.native_observations as GuardCheckpoint['nativeObservations'] } : {}),
+    ...(stringField('root_locator_identity') ? { rootLocatorIdentity: stringField('root_locator_identity') } : {}),
     bindings,
     ...(goal ? { goalRef: { id: goal.id as string, revision: goal.revision as number } } : {}),
     ...(typeof recorded.unit_id === 'string' ? { unitId: recorded.unit_id, unitClosureDigest: stringField('unit_closure_digest') } : {}),
@@ -554,6 +559,151 @@ function captureRootText(
   if (priorRootMessages.length > 16) priorRootMessages.shift()
 }
 
+/** V6 records the speech act at the clause head before action words inside its
+ * object are considered. A nominal explanation is an answerable obligation;
+ * a second independent finite command remains work. A how/why complement or
+ * quoted command is governed by the explanation and cannot become authority. */
+function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boolean): ClauseSegment[] {
+  const ordinary = segmentClauses(text, { coordinationSplit })
+  if (!v6) return ordinary
+  const refined: ClauseSegment[] = []
+  const asProhibition = (clause: ClauseSegment | undefined): ClauseSegment | undefined => {
+    if (!clause || !/^(?:\s*)(?:(?:本轮|本次任务|在本轮|在本次任务|in\s+this\s+task)\s*)?(?:禁止|严禁|不得|不要|不准|do\s+not\b|must\s+not\b)/iu.test(maskQuotedSpans(clause.text))) return undefined
+    return { ...clause, kind: 'prohibition', interpretation: { ...clause.interpretation,
+      directive: 'prohibition', authorityDisposition: 'prohibition', immediatelyExecutable: false,
+      fingerprint: `v6-ban:${sha256(clause.text)}` } }
+  }
+  const asTest = (clause: ClauseSegment, inheritedCommand = false): ClauseSegment | undefined => {
+    if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
+    const visible = maskQuotedSpans(clause.text)
+    const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu
+    const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu
+    if (!testHead.test(visible) && !(inheritedCommand && inheritedTest.test(visible))) return undefined
+    if (!inheritedCommand && clause.interpretation.authorityDisposition !== 'executable_now') return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive',
+      executee: 'agent', authorityDisposition: 'executable_now', immediatelyExecutable: true,
+      qualification: { status: 'granted', reason: 'plain_instruction' },
+      fingerprint: `v6-test:${sha256(clause.text)}` } }
+  }
+  const asArtifactEdit = (clause: ClauseSegment): ClauseSegment | undefined => {
+    if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
+    if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(maskQuotedSpans(clause.body))) return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive',
+      executee: 'agent', authorityDisposition: 'executable_now', immediatelyExecutable: true,
+      qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `${clause.paths.length ? 'v6-artifact-edit' : 'v6-work-unit-edit'}:${sha256(clause.text)}` } }
+  }
+  const asFileReadback = (clause: ClauseSegment): ClauseSegment | undefined => {
+    if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
+    if (!/^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(maskQuotedSpans(clause.body))) return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive', executee: 'agent',
+      authorityDisposition: 'executable_now', immediatelyExecutable: true,
+      qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `v6-file-readback:${sha256(clause.text)}` } }
+  }
+  const asReport = (clause: ClauseSegment): ClauseSegment | undefined => {
+    if (['prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
+    if (!/^(?:\s*)(?:报告|汇报|report\b)\s*(?:数值|结果|数据|the\s+result\b|a\s+number\b)/iu.test(maskQuotedSpans(clause.body))) return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'informational', executee: 'unresolved',
+      authorityDisposition: 'informational', immediatelyExecutable: false, fingerprint: `v6-report:${sha256(clause.text)}` } }
+  }
+  const asContext = (clause: ClauseSegment): ClauseSegment | undefined => {
+    const visible = maskQuotedSpans(clause.body).trim()
+    const reported = /^(?:[^，,。.!?？]{1,32}?)(?:日志|报告|记录|注释|消息|log\b|report\b|record\b|comment\b|message\b)\s*(?:还|也)?(?:提到|显示|指出|记载|mentions?|shows?|reports?)/iu.test(visible)
+    const connector = /^(?:(?:但|但是|不过|however\b)\s*)?(?:本轮|本次任务|in\s+this\s+task)\s*$/iu.test(visible)
+    if (!reported && !connector) return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'unresolved',
+      authorityDisposition: 'unresolved', immediatelyExecutable: false, fingerprint: `v6-context:${sha256(clause.text)}` } }
+  }
+  for (const segment of ordinary) {
+    // Coordination creates separate required outcomes when the second member
+    // has its own test, readback, or report object. Preserve the original
+    // fragments for exact coverage; the left verb does not subsume the right.
+    const coordinated = /(?:并|和|\band\b)\s*(?=(?:运行|执行|跑完|跑|完成|检查|核对|报告|汇报|run|perform|check|verify|report|(?:现有|对应的?)?回归测试|(?:its\s+)?focused\s+test))/iu.exec(maskQuotedSpans(segment.text))
+    if (coordinated && segment.kind === 'requirement') {
+      const leftText = segment.text.slice(0, coordinated.index)
+      const rightText = segment.text.slice(coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)![0].length)
+      const left = segmentClauses(leftText)[0]
+      const right = segmentClauses(rightText)[0]
+      const promotedLeft = left ? asArtifactEdit(left) ?? left : undefined
+      const promotedRight = right ? asTest(right, true) ?? asFileReadback(right) ?? asReport(right) : undefined
+      if (promotedLeft && promotedRight && promotedLeft.interpretation.authorityDisposition === 'executable_now') {
+        refined.push({ ...promotedLeft, text: segment.text.slice(0, coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)![0].length) }, promotedRight)
+        continue
+      }
+    }
+    const standaloneBan = asProhibition(segment)
+    if (standaloneBan) { refined.push(standaloneBan); continue }
+    const standaloneTest = asTest(segment)
+    if (standaloneTest) { refined.push(standaloneTest); continue }
+    const standaloneEdit = asArtifactEdit(segment)
+    if (standaloneEdit) { refined.push(standaloneEdit); continue }
+    const standaloneReadback = asFileReadback(segment)
+    if (standaloneReadback) { refined.push(standaloneReadback); continue }
+    const standaloneReport = asReport(segment)
+    if (standaloneReport) { refined.push(standaloneReport); continue }
+    const standaloneContext = asContext(segment)
+    if (standaloneContext) { refined.push(standaloneContext); continue }
+    // A finite test request coordinated with a repair remains its own action.
+    // The conjunction is retained by the first span, so the root is covered
+    // exactly once and no action is inferred from a quoted or negated echo.
+    const visible = maskQuotedSpans(segment.text)
+    const coordinatedTest = /(?:并且|并|和|及|\band\b|\bthen\b)\s*((?:(?:运行|执行|开展|run|perform)\s*(?:the\s+)?(?:focused\s+)?)?(?:tests?|测试))[。.!！?？\s]*$/iu.exec(visible)
+    if (coordinatedTest && segment.kind === 'requirement' && !/^(?:\s*)(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)/iu.test(visible)) {
+      const tailStart = coordinatedTest.index + coordinatedTest[0].indexOf(coordinatedTest[1]!)
+      const prefix = segment.text.slice(0, tailStart)
+      const tail = segment.text.slice(tailStart)
+      const head = segmentClauses(prefix)[0]
+      const test = segmentClauses(tail)[0]
+      const promoted = test ? asTest(test, true) : undefined
+      if (head && promoted && (head.interpretation.authorityDisposition === 'executable_now'
+        || /^(?:\s*)(?:完成|按|按照|修复|修改|please\s+fix|fix\b)/iu.test(visible))) {
+        refined.push({ ...head, text: prefix, interpretation: { ...head.interpretation, text: prefix } },
+          { ...promoted, text: tail, interpretation: { ...promoted.interpretation, text: tail } })
+        continue
+      }
+    }
+    if (segment.kind !== 'requirement' || segment.interpretation.directive !== 'unresolved') {
+      refined.push(segment)
+      continue
+    }
+    const head = /^\s*(?:(?:先|首先|first\b)\s*)?(?:请|please\s+)?(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)\s*/iu.exec(visible)
+    if (!head) { refined.push(segment); continue }
+    const complement = visible.slice(head[0].length)
+    // A subordinate question or infinitive may govern every following verb.
+    if (/^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim())) {
+      refined.push(segment); continue
+    }
+    const parts = splitTextFragments(segment.text)
+    const first = parts[0]
+    if (!first) { refined.push(segment); continue }
+    const firstVisible = maskQuotedSpans(first.text)
+    const firstComplement = firstVisible.slice(head[0].length).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, '').trim()
+    if (!firstComplement || /[`“”"']/.test(first.text)) { refined.push(segment); continue }
+    const nominal = /(?:流程|方案|步骤|过程|方法|方式|作用|原因|架构|设计|结果|概念|原理|process|plan|steps?|procedure|method|approach|effect|reason|design|architecture|result|concept|principle)[，,。.!！?？\s]*$/iu.test(firstComplement)
+    const pureNoRecognizedAction = segment.interpretation.directive === 'unresolved'
+      && segmentClauses(first.text)[0]?.interpretation.directive === 'unresolved'
+      && !/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement)
+    if (!nominal && !pureNoRecognizedAction) { refined.push(segment); continue }
+    const independent = parts.slice(1).map((part) => {
+      const clause = segmentClauses(part.text)[0]
+      return { part, clause: asProhibition(clause) ?? (clause ? asArtifactEdit(clause) : undefined) ?? clause }
+    })
+    if (independent.some(({ clause }) => !clause || !['executable_now', 'prohibition'].includes(clause.interpretation.authorityDisposition))) {
+      // An unclassified continuation might still be inside the explanation.
+      if (parts.length > 1) { refined.push(segment); continue }
+    }
+    const firstEnd = parts[1]?.offset ?? segment.text.length
+    const informationText = segment.text.slice(0, firstEnd)
+    const informationBody = first.text.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, '').trim()
+    refined.push({ ...segment, text: informationText, body: informationBody, paths: [], interpretation: {
+      ...segment.interpretation, text: informationText, body: informationBody, directive: 'informational',
+      executee: 'unresolved', immediatelyExecutable: false, authorityDisposition: 'informational',
+      fingerprint: `v6-info:${sha256(informationText)}`,
+    } })
+    for (const { part, clause } of independent) if (clause) refined.push(clause)
+  }
+  return refined
+}
+
 /**
  * Insert every independently tracked clause from one user message. Compound
  * instructions are segmented and each distinct artifact path becomes its own
@@ -578,7 +728,7 @@ function insertItems(
   // Scopes are resolved in stack order, not text order, so each segment takes
   // the first occurrence of its verbatim text that no earlier segment claimed.
   const usedOccurrences = new Set<number>()
-  for (const segment of segmentClauses(text, { coordinationSplit })) {
+  for (const segment of segmentsForBoundary(text, coordinationSplit, projection.boundaryProtocol === 6 && !legacy)) {
     // Session-layer clauses (progression phrases, meta questions) inside an
     // otherwise actionable message never become contract items.
     if (classifyUserInteraction(segment.body) === 'conversational') continue
@@ -711,7 +861,7 @@ const ELIGIBILITY_CHECK_ID = 'eligibility:0.6.3'
  */
 function markNeedsReview(item: GuardItem, reason: NeedsReviewReason, revision: number): void {
   if (item.needsReview) return
-  item.needsReview = { reason, checkId: ELIGIBILITY_CHECK_ID, recordedAtRevision: revision }
+  item.needsReview = { reason, checkId: reason.startsWith('legacy_v6_') ? 'eligibility:0.7.0' : ELIGIBILITY_CHECK_ID, recordedAtRevision: revision }
 }
 
 /**
@@ -759,7 +909,7 @@ export function legacyRecordsNeedingReview(projection: GuardProjection): Array<{
  * record never leaks in.
  */
 function eligibilityReviewReasons(projection: GuardProjection): Array<[string, NeedsReviewReason]> {
-  const closureUnits = projection.boundaryProtocol === 5 && projection.currentUnitId !== undefined
+  const closureUnits = projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5 && projection.currentUnitId !== undefined
     ? new Set<string>([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)])
     : undefined
   const findings: Array<[string, NeedsReviewReason]> = []
@@ -767,14 +917,26 @@ function eligibilityReviewReasons(projection: GuardProjection): Array<[string, N
     if (item.status === 'superseded') continue
     if (closureUnits !== undefined && item.unitId !== undefined && !closureUnits.has(item.unitId)) continue
     if (item.needsReview) continue
+    const informationReading = item.directive === 'informational'
+      || item.authorityDisposition === 'informational'
+      || item.taskKind === 'inquiry'
+    // A v6 boundary preserves the bytes and old terminal status, but never
+    // turns an earlier generic, text-derived wait, or Guard-produced ordinary
+    // certificate into a fact about current work. Check before status filtering.
+    const bornSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)?.[1]
+    if (projection.v6BoundarySeq !== undefined && bornSeq !== undefined && Number(bornSeq) < projection.v6BoundarySeq) {
+      if (item.semanticAction === 'generic_run' && !informationReading) { findings.push([item.id, 'legacy_v6_generic_action']); continue }
+      if (item.waitAuthorization || item.authorityDisposition === 'conditional_wait') { findings.push([item.id, 'legacy_v6_text_wait']); continue }
+      if (item.kind !== 'prohibition' && !informationReading
+        && ['answered', 'passed'].includes(item.status)) {
+        findings.push([item.id, 'legacy_v6_ordinary_certification']); continue
+      }
+    }
     const recordedVersion = (item as { stateVersion?: unknown }).stateVersion
     if (recordedVersion !== undefined && recordedVersion !== 1) {
       findings.push([item.id, 'unknown_state_version'])
       continue
     }
-    const informationReading = item.directive === 'informational'
-      || item.authorityDisposition === 'informational'
-      || item.taskKind === 'inquiry'
     if (informationReading && informationReadingNamesWork(item.normalizedText)) {
       findings.push([item.id, 'legacy_mixed_information_scope'])
       continue
@@ -980,6 +1142,62 @@ function insert(
     segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation,
     segment.interpretation,
   )
+  if (projection.boundaryProtocol === 6 && segment.interpretation.directive === 'informational') item.taskKind = 'inquiry'
+  if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-test:')) {
+    item.semanticAction = 'test'
+    item.requestedTarget = { scope: subject }
+    item.targetCaptureStatus = 'resolved'
+    item.taskKind = 'action'
+  }
+  if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-artifact-edit:') && surface === 'artifact') {
+    item.semanticAction = 'modify'
+    item.requestedTarget = { artifact_id: subject }
+    item.targetCaptureStatus = 'resolved'
+    item.taskKind = 'action'
+  }
+  if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-work-unit-edit:') && surface === 'scope') {
+    item.semanticAction = 'modify'
+    item.requestedTarget = { scope: subject }
+    item.targetCaptureStatus = 'resolved'
+    item.taskKind = 'action'
+  }
+  if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-file-readback:')) {
+    item.semanticAction = 'verify'
+    item.requestedTarget = { scope: subject }
+    item.targetCaptureStatus = 'resolved'
+    item.taskKind = 'action'
+  }
+  if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-context:')) {
+    item.taskKind = 'context'
+    item.status = 'passed'
+    delete item.semanticAction
+  }
+  // The matrix verb of an evaluation request governs the earlier change word
+  // in its object. A temporal/approval preface restricts that action until a
+  // sourced release; a file becoming readable cannot satisfy the preface.
+  const visibleSpeech = maskQuotedSpans(segment.body).trim()
+  const temporal = /^(?:明天|未来|将来|下周|下个月|稍后|tomorrow\b|later\b|next\s+(?:week|month)\b)[\s,，]*(?:再)?/iu.exec(visibleSpeech)
+  const approval = /^(?:等|待|收到)[^，,。.!?？]{0,24}(?:确认|审批|批准|许可)[^，,。.!?？]{0,8}(?:后|再)[\s,，]*|^after\s+(?:the\s+)?(?:approval|confirmation|permission)[\s,，]*/iu.exec(visibleSpeech)
+  const preface = approval ?? temporal
+  const mainSpeech = preface ? visibleSpeech.slice(preface[0].length) : visibleSpeech
+  const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(mainSpeech)
+  if (projection.boundaryProtocol === 6 && segment.kind === 'requirement'
+    && segment.interpretation.authorityDisposition !== 'informational'
+    && assessmentHead && !segment.interpretation.fingerprint.startsWith('v6-file-readback:')) {
+    item.semanticAction = 'verify'
+    item.requestedTarget = { scope: subject }
+    item.targetCaptureStatus = 'resolved'
+    item.taskKind = 'action'
+    if (item.authorityDisposition === 'unresolved' && !preface) {
+      item.authorityDisposition = 'executable_now'
+      item.executionQualification = { status: 'granted', reason: 'plain_instruction' }
+    }
+  }
+  if (projection.boundaryProtocol === 6 && preface && assessmentHead && segment.kind === 'requirement') {
+    item.condition = preface[0].trim()
+    item.authorityDisposition = 'conditional_wait'
+    item.executionQualification = { status: 'restricted', reason: 'governed_scope', governedBy: approval ? 'user_input' : 'time_predicate' }
+  }
   if (unitId !== undefined) item.unitId = unitId
   resolveInheritedGitTarget(projection, item)
   if (provenance) {
@@ -1005,6 +1223,30 @@ function insert(
  * `tool/result`, `tool/ptc-dispatch-start`, `tool/ptc-dispatch`, and
  * `compaction/summary`.
  */
+function refreshRootLocatorContext(
+  projection: GuardProjection, sourceEvents: readonly DerivedEnvelope[], scope: DeriveScope, asOf: number,
+): void {
+  projection.rootLocatorContexts.clear()
+  projection.rootLocatorIdentity = undefined
+  if (projection.boundaryProtocol !== 6 || !scope.sessionHeader || typeof scope.cwd !== 'string'
+    || !scope.cwd.startsWith('/') || scope.cwd.startsWith('//') || scope.cwd.split('/').includes('..')
+    || scope.cwd.split('/').includes('.') || scope.cwd.includes('//')) return
+  const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : []
+  for (const ref of refs) {
+    if (ref.seq > asOf) continue
+    const source = sourceEvents.find((event) => event.seq === ref.seq && event.type === 'user/message'
+      && asRecord(asRecord(event.data)?.source)?.kind === 'user')
+    if (!source) continue
+    const content = asRecord(source.data)?.content
+    const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === 'text')
+      .map((part) => String(asRecord(part)?.text ?? '')).join('') : ''
+    projection.rootLocatorContexts.set(ref.seq, { base: scope.cwd,
+      sha256: sha256(`dsh.root-locator.v1\0${JSON.stringify([projection.sessionRefDigest, ref.seq, sha256(raw), scope.cwd])}`) })
+  }
+  if (projection.rootLocatorContexts.size) projection.rootLocatorIdentity = sha256(`dsh.root-locator-set.v1\0${JSON.stringify(
+    [...projection.rootLocatorContexts].sort((a, b) => a[0] - b[0]).map(([seq, context]) => [seq, context.sha256]))}`)
+}
+
 export function deriveProjection(
   sourceEvents: readonly DerivedEnvelope[],
   config: DeriveConfig,
@@ -1026,10 +1268,11 @@ export function deriveProjection(
   let enablementTransitioned = false
   let lastCompactionSeq = -1
   const pendingCalls = new Map<string, PendingCall>()
-  const v5BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
+  const v5BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq
+  const v6BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq
   const v4BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE))?.seq
-  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
-  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE))?.seq
+  const protocolBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq
+  const captureBoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq
   const priorRootMessages: string[] = []
   let realRootInputSeen = false
   // 0.6.0 trusted delivery (C03), applied at the WATERMARK of the turn end that
@@ -1112,11 +1355,14 @@ export function deriveProjection(
         const source = asRecord(data.source)
         if (source?.kind !== 'user') break
         const subcommand = typeof data.args === 'string' ? data.args.trim().split(/\s+/, 1)[0] : ''
-        if (subcommand === 'on' && !enabled) {
-          enabled = true
-          epoch += 1
-          enablementTransitioned = true
-          projection.epoch = epoch
+        if (subcommand === 'on') {
+          projection.goalCompletionAdopted = true
+          if (!enabled) {
+            enabled = true
+            epoch += 1
+            enablementTransitioned = true
+            projection.epoch = epoch
+          }
         } else if (subcommand === 'off') {
           enabled = false
         } else if (subcommand === 'clear') {
@@ -1191,11 +1437,16 @@ export function deriveProjection(
         break
       }
       case 'user/message': {
+        if (isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE)) {
+          projection.boundaryProtocol = 6
+          projection.v6BoundarySeq = event.seq
+          break
+        }
         if (isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE)) {
           // The v5 cut takes effect AT the notice: a certificate recorded before
           // it keeps the whole-session contract and version-1 identity and must
           // never be re-derived under the new rules.
-          projection.boundaryProtocol = 5
+          if (projection.boundaryProtocol !== 6) projection.boundaryProtocol = 5
           break
         }
         if (isProtocolBoundaryNotice(event) || isProtocolBoundaryNotice(event, CAPTURE_V042_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V4_NOTICE)) break
@@ -1458,8 +1709,8 @@ export function deriveProjection(
         const id = typeof goal?.id === 'string' ? goal.id : ''
         const revision = Number(goal?.revision ?? 0)
         const phase = String(goal?.phase ?? '')
-        if (operation === 'complete' && enabled) {
-          if (!hasCurrentCertificate(projection)) {
+        if (operation === 'complete' && enabled && (projection.boundaryProtocol !== 6 || projection.goalCompletionAdopted)) {
+          if (!hasCurrentCertificate(projection, true)) {
             projection.integrity = 'corrupt'
             projection.integrityViolations.push('goal_completion_without_certificate')
           }
@@ -1639,17 +1890,24 @@ export function deriveProjection(
               projection.integrityViolations.push('certificate_replay_mismatch')
               break
             }
+            stale.recordedAtSeq = event.seq
             projection.checkpoints.push(stale)
             projection.certificateStatusReason = 'stale_host_lock'
             break
           }
           const id = `C${projection.checkpoints.length + 1}`
+          // A v6 certificate binds the root locator as it stood when this
+          // result was persisted. Compute it before replay, not only after the
+          // entire log has been folded (which would reject a valid v4 record).
+          refreshRootLocatorContext(projection, sourceEvents, scope, event.seq)
           const result = certifyCheckpoint(projection, call.bindings ?? [], id, false)
           if (result.status !== 'certified' || !result.checkpoint || !recordedCertificateMatches(recorded.certificate, result.checkpoint)) {
             projection.integrity = 'corrupt'
             projection.integrityViolations.push('certificate_replay_mismatch')
           } else {
             certifyCheckpoint(projection, call.bindings ?? [], id, true)
+            const accepted = projection.checkpoints.at(-1)
+            if (accepted?.id === id) accepted.recordedAtSeq = event.seq
           }
           break
         }
@@ -1766,7 +2024,9 @@ export function deriveProjection(
             arguments: call.arguments,
             rootCallId: call.rootCallId,
           },
-          { seq: event.seq, error: data?.error ?? (isDispatch && data?.isError ? { name: 'code', code: 'DISPATCH_ERROR' } : undefined), meta: data?.meta, textContent },
+          { seq: event.seq, error: data?.error ?? ((isDispatch && data?.isError)
+            || (data?.message && typeof data.message === 'object' && (data.message as { isError?: unknown }).isError === true)
+            ? { name: 'code', code: 'DISPATCH_ERROR' } : undefined), meta: data?.meta, textContent },
           epoch,
           `E${String(evidenceCounter).padStart(4, '0')}`,
           scope.cwd || undefined,
@@ -1797,6 +2057,7 @@ export function deriveProjection(
   }
   projection.enabled = enabled
   projection.epoch = epoch
+  refreshRootLocatorContext(projection, sourceEvents, scope, sourceEvents.at(-1)?.seq ?? 0)
   // 0.6.3 K4: the upgrade eligibility check runs BEFORE any terminal filtering,
   // so a record 0.6.2 closed as `answered` is still re-read and, when its own
   // text orders work, marked `needs_review` for the CURRENT layer.
@@ -1848,5 +2109,5 @@ export function deriveProjection(
       return expected !== undefined && expected !== settlement.readback.identity
     })
   }
-  return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined, boundaryV5: v5BoundarySeq !== undefined }
+  return { projection, compacted, enablementTransitioned, lastCompactionSeq, realRootInputSeen, protocolV4Present: v4BoundarySeq !== undefined, boundaryV5: v5BoundarySeq !== undefined, boundaryV6: v6BoundarySeq !== undefined }
 }

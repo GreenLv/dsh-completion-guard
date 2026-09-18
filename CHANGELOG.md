@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.7.0 - Unreleased source candidate
+
+### Highlights
+
+- Ordinary edits, tests and Git operations use the host’s tools. Guard keeps the requirement, observes persisted results and exact readback, and certifies only the matching completed predicate.
+- Stop distinguishes a ready current action from a future observation or insufficient evidence. A short resume can advance a ready action once; an older generic task or prose-derived wait is not promoted during recovery.
+- Goal completion protection requires explicit `/context-guard on` adoption in new v6 sessions; a later failed required outcome prevents an older certificate from completing the current Goal. Adopted release contracts and explicit proof requirements retain their independent checks.
+
+### Changes
+
+- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `20b938d5728d9d6a27386268a79ceeb2be5c39ce`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
+- Retire ordinary Guard action/evidence execution and use read-only file, Git and package-script readiness observers. An assessment may select stable existing inputs without requiring another edit; a root time or approval condition remains pending until separately satisfied. Native observations use a separate versioned digest domain; historical v3 encoders and certificates are preserved.
+- Preserve exact relative file and directory constraints through the root-time Session locator and canonical filesystem readback. Current v6 certificates bind that locator in version 4; opaque test or measurement targets keep their distinct identity.
+- Keep a sourced successful mutation of a forbidden file as a completion violation, even when the allowed edit also succeeds. A final-answer claim alone is not treated as a host mutation.
+- Add a synthetic Session replay CLI for source-to-core and Stop/Goal diagnosis. It is not a real-model or native-platform acceptance run.
+
+### Validation
+
+The source and built bytes passed the shared core fixtures and the complete local deterministic matrix, including Git commits and pushes confined to disposable test fixtures, TypeScript typecheck, lint, a byte-stable build, release-packer tests, statistics tests, documentation checks, and a package inventory check. Independent synthetic Session and actual local filesystem observer replays exercised positive and negative Stop and Goal paths; they are not real-model or native-platform acceptance. The canonical release packer requires a clean product Git worktree; clean-source artifact and CI results are separate follow-up evidence. Real-model, cross-platform native acceptance, daily installation and publication remain unverified.
+
 ## 0.6.3 - 2026-09-18
 
 Repairs execution authority, target identity, preparation consistency and legacy

@@ -75,7 +75,10 @@
         "docs/SEMANTIC_COMPATIBILITY.md",
         "docs/UPSTREAM_BASE.md",
         "docs/upstream-deltas.json",
-        "tests/fixtures/conformance/**"
+        "tests/fixtures/conformance/UPSTREAM_PIN.json",
+        "tests/fixtures/conformance/context_guard_semantics_v1*",
+        "tests/fixtures/conformance/context_guard_semantics_v2.candidate.json",
+        "tests/fixtures/conformance/digest_v3/**"
       ],
       "gates": [
         "contract_tests",
@@ -96,11 +99,37 @@
       }
     },
     {
+      "id": "core_v2_conformance",
+      "paths": [
+        "docs/SEMANTIC_COMPATIBILITY.md",
+        "scripts/verify-core-v2-mirror.mjs",
+        "tests/fixtures/conformance/core_v2/**"
+      ],
+      "gates": [
+        "contract_tests",
+        "focused_tests"
+      ],
+      "invalidates": [
+        "candidate_matrix",
+        "cross_repository_contract"
+      ],
+      "contracts": [
+        "core_v2"
+      ],
+      "peer_gates": {
+        "codex_context_guard": [
+          "contract_tests"
+        ]
+      }
+    },
+    {
       "id": "conformance_tests",
       "paths": [
         "tests/domain/digest-v3.test.ts",
         "tests/domain/portable-semantics.test.ts",
-        "tests/helpers/portable-conformance.ts"
+        "tests/helpers/portable-conformance.ts",
+        "tests/core-v2*.test.ts",
+        "scripts/replay_raw_v2.mjs"
       ],
       "gates": [
         "contract_tests",

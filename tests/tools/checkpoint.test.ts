@@ -57,6 +57,9 @@ describe('checkpoint tool registration', () => {
       outcome: 'success', capabilities: ['shell', 'deterministic-check'], subjects: ['/repo'], surfaces: ['scope'],
       boundedSummarySha256: '11'.repeat(32), executables: ['pnpm'], operations: [{ op: 'run', path: '/repo' }],
       semanticAction: 'test', evidenceRole: 'effect', resolvedTarget: { scope: '/repo', executable: 'pnpm' }, observedState: {},
+      processFacts: { hostToolReturned: 'result', declaredExitCode: 'unknown', terminalMarkerRead: false,
+        outcome: 'success', outcomeReason: 'unmarked_renderer_success', source: 'rendered_markers',
+        frozenOutcomeConflict: false, operationAttribution: 'single_operation' },
       parseStatus: 'supported', adapterId: 'dsh.bash.v1', adapterVersion: '1.0.0',
     })
     const tool = createCheckpointTool(() => projection, () => {}, async () => true)

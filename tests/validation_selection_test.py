@@ -53,6 +53,22 @@ class ValidationSelectionTests(unittest.TestCase):
         self.assertEqual(plan["contracts"], ["context_guard_semantics_v1", "digest_v3"])
         self.assertEqual(plan["peer_gates"], {"codex_context_guard": ["contract_tests"]})
 
+    def test_new_core_v2_scripts_select_contract_gates(self) -> None:
+        mirror = self.classify("scripts/verify-core-v2-mirror.mjs")
+        self.assertEqual(mirror["unknown_paths"], [])
+        self.assertEqual(mirror["contracts"], ["core_v2"])
+        self.assertIn("contract_tests", mirror["gates"])
+        self.assertEqual(mirror["peer_gates"], {"codex_context_guard": ["contract_tests"]})
+        core_fixture = self.classify("tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json")
+        self.assertEqual(core_fixture["contracts"], ["core_v2"])
+        self.assertEqual(core_fixture["unknown_paths"], [])
+        core_test = self.classify("tests/core-v2-mirror.test.ts")
+        self.assertIn("contract_tests", core_test["gates"])
+        replay = self.classify("scripts/replay_raw_v2.mjs")
+        self.assertEqual(replay["unknown_paths"], [])
+        self.assertIn("contract_tests", replay["gates"])
+        self.assertIn("focused_tests", replay["gates"])
+
     def test_host_lock_selects_native_focused_gate(self) -> None:
         plan = self.classify("src/domain/host-lock.ts")
         self.assertIn("host_lock_tests", plan["gates"])

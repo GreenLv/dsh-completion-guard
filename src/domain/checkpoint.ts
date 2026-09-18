@@ -1,4 +1,5 @@
 import { digestStrings, sha256 } from './canonicalize.js'
+import { NATIVE_OBSERVATION_SCHEMA, NATIVE_OBSERVATION_SCHEMA_V2, locatorCertificationDigest, nativeBindingDigest, nativeCertificationDigest, nativeObservationDigest, nativeObservationDigestV2 } from './native-observation.js'
 import { currentContractDigest } from './contract-digest.js'
 import {
   bindingDigest as deriveBindingDigest, bindingStateClosure, certificationDigest, certificationDigestV2,
@@ -300,6 +301,111 @@ function richStatefulRecord(projection: GuardProjection, item: GuardItem, bindin
   return { record }
 }
 
+/** Native file effects have no Guard-issued execution resolution. The host's
+ * persisted write/edit result and a later exact FS-provider readback are the
+ * two independent facts. Historical three-role bindings keep their old path. */
+function nativeFileRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; nativeDigest?: string; rejected?: RejectedBinding } {
+  const action = item.semanticAction
+  if (action !== 'create' && action !== 'modify') return { rejected: { itemId: item.id, reason: 'native file adapter unavailable for this action', reasonCode: 'stateful_adapter_unavailable' } }
+  if (action === 'create') return { rejected: { itemId: item.id, reason: 'native write did not preserve an independent absent prestate', reasonCode: 'evidence_insufficient' } }
+  if (binding.semanticAction !== action || !tuplesEqual(binding.requestedTarget, item.requestedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'native action or requested target differs from the requirement', reasonCode: 'requested_target_mismatch' } }
+  }
+  if (!requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'native target differs from the root constraint', reasonCode: 'requested_resolved_target_mismatch' } }
+  }
+  const effect = binding.effectEvidenceId ? projection.evidence.get(binding.effectEvidenceId) : undefined
+  const stateId = binding.stateEvidenceIds?.[0]
+  const state = stateId ? projection.evidence.get(stateId) : undefined
+  if (!effect || !state || binding.stateEvidenceIds?.length !== 1 || binding.evidenceIds.length !== 2
+    || !binding.evidenceIds.includes(effect.id) || !binding.evidenceIds.includes(state.id)) {
+    return { rejected: { itemId: item.id, reason: 'native effect and independent readback are required', reasonCode: 'effect_only_insufficient_state_readback' } }
+  }
+  const effectTool = ['edit', 'edit_file']
+  const path = binding.resolvedTarget?.artifact_id
+  const digest = state.observedState?.post_digest
+  if (typeof path !== 'string' || typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)
+    || effect.outcome !== 'success' || state.outcome !== 'success'
+    || !effectTool.includes(effect.toolName) || state.toolName !== 'context_guard_observe_file'
+    || state.causedByCallId !== effect.callId || effect.toolResultSeq >= state.toolResultSeq
+    || !effect.subjects.includes(path) || !state.subjects.includes(path)
+    || state.semanticAction !== action || state.evidenceRole !== 'state'
+    || !tuplesEqual(binding.observedState, { post_digest: digest })) {
+    return { rejected: { itemId: item.id, reason: 'native effect/readback lineage or state does not match', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  // A file state cannot retroactively prove create/no-overwrite preconditions.
+  // The native adapter certifies the observed write/edit action and post-state
+  // only; a root predicate requiring a particular prestate needs a producer
+  // that froze that prestate before the effect.
+  if (item.requestedTarget?.pre_digest !== undefined || item.requestedTarget?.change_set_digest !== undefined) {
+    return { rejected: { itemId: item.id, reason: 'required pre-effect identity was not observed', reasonCode: 'evidence_insufficient' } }
+  }
+  if (!bindingSatisfies(projection, item, binding.evidenceIds)) {
+    return { rejected: { itemId: item.id, reason: 'native facts do not satisfy the verification facets', reasonCode: 'binding_missing_required_facet' } }
+  }
+  const rootSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
+  const rootBase = rootSeq ? projection.rootLocatorContexts.get(Number(rootSeq[1]))?.base : undefined
+  if (projection.boundaryProtocol === 6 && projection.rootLocatorIdentity
+    && (state.nativeCanonicalPath !== path || !rootBase || state.nativeCanonicalBase !== rootBase)) {
+    return { rejected: { itemId: item.id, reason: 'native file readback lacks canonical root-time path identity', reasonCode: 'native_canonical_path_unavailable' } }
+  }
+  return { nativeDigest: projection.boundaryProtocol === 6 && projection.rootLocatorIdentity
+    ? nativeObservationDigestV2(effect, state, projection.rootLocatorIdentity) : nativeObservationDigest(effect, state), record: {
+    item: item.id, semanticAction: action,
+    requestedTarget: binding.requestedTarget as Record<string, Typed>,
+    resolvedTarget: binding.resolvedTarget as Record<string, Typed>,
+    observedState: { post_digest: digest },
+    predId: `pred.${action}.v1`, predVersion: 1,
+    predParamsKind: 'inline', predParams: { post_digest: digest }, predParamsAllowlist: 'product',
+    effectEvidenceId: effect.id, stateEvidenceIds: [state.id],
+  } }
+}
+
+function nativeGitRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; nativeDigest?: string; rejected?: RejectedBinding } {
+  const action = item.semanticAction
+  if (action !== 'commit' && action !== 'push') return { rejected: { itemId: item.id, reason: 'native Git adapter unavailable for this action', reasonCode: 'stateful_adapter_unavailable' } }
+  if (binding.semanticAction !== action || !tuplesEqual(binding.requestedTarget, item.requestedTarget)
+    || !requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'native Git target differs from the requirement', reasonCode: 'requested_resolved_target_mismatch' } }
+  }
+  const effect = binding.effectEvidenceId ? projection.evidence.get(binding.effectEvidenceId) : undefined
+  const state = binding.stateEvidenceIds?.length === 1 ? projection.evidence.get(binding.stateEvidenceIds[0]!) : undefined
+  if (!effect || !state || binding.evidenceIds.length !== 2 || !binding.evidenceIds.includes(effect.id)
+    || !binding.evidenceIds.includes(state.id)) return { rejected: { itemId: item.id, reason: 'native Git effect and readback required', reasonCode: 'effect_only_insufficient_state_readback' } }
+  const repo = binding.resolvedTarget?.repository
+  const postOid = state.observedState?.post_head_oid
+  const process = effect.processFacts
+  if (typeof repo !== 'string' || typeof postOid !== 'string' || !/^[0-9a-f]{40,64}$/.test(postOid)
+    || (effect.toolName !== 'bash' && effect.toolName !== 'pwsh') || state.toolName !== 'context_guard_observe_git'
+    || effect.semanticAction !== action || state.semanticAction !== action
+    || effect.outcome !== 'success' || state.outcome !== 'success'
+    || process?.outcome !== 'success' || process.operationAttribution !== 'single_operation'
+    || state.causedByCallId !== effect.callId || effect.toolResultSeq >= state.toolResultSeq
+    || !effect.subjects.includes(repo) && effect.resolvedTarget?.repository !== repo
+    || !state.subjects.includes(repo) || state.evidenceRole !== 'state') {
+    return { rejected: { itemId: item.id, reason: 'native Git effect/readback lineage is incomplete', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  if (action === 'commit') {
+    if (typeof state.nativeGitParentOid !== 'string' || typeof state.nativeGitTreeOid !== 'string'
+      || binding.observedState?.post_head_oid !== postOid || Object.keys(binding.observedState ?? {}).length !== 1
+      || binding.resolvedTarget?.branch !== state.resolvedTarget?.branch
+      || item.requestedTarget?.change_set_digest !== undefined || item.requestedTarget?.pre_head_oid !== undefined) {
+      return { rejected: { itemId: item.id, reason: 'native commit identity, branch or prestate is not proven', reasonCode: 'evidence_insufficient' } }
+    }
+  } else if (state.observedState?.remote_oid !== postOid || binding.observedState?.remote_oid !== postOid
+    || binding.resolvedTarget?.local_oid !== postOid || binding.resolvedTarget?.remote !== state.resolvedTarget?.remote
+    || binding.resolvedTarget?.refspec !== state.resolvedTarget?.refspec || binding.observedState?.post_head_oid !== postOid) {
+    return { rejected: { itemId: item.id, reason: 'native push readback does not bind the exact remote/refspec', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  return { nativeDigest: projection.boundaryProtocol === 6 && projection.rootLocatorIdentity
+    ? nativeObservationDigestV2(effect, state, projection.rootLocatorIdentity) : nativeObservationDigest(effect, state), record: {
+    item: item.id, semanticAction: action, requestedTarget: binding.requestedTarget as Record<string, Typed>,
+    resolvedTarget: binding.resolvedTarget as Record<string, Typed>, observedState: binding.observedState as Record<string, Typed>,
+    predId: `pred.${action}.v1`, predVersion: 1, predParamsKind: 'inline', predParams: {}, predParamsAllowlist: 'product',
+    effectEvidenceId: effect.id, stateEvidenceIds: [state.id],
+  } }
+}
+
 function simpleRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; rejected?: RejectedBinding } {
   if (!bindingSatisfies(projection, item, binding.evidenceIds)) {
     return { rejected: { itemId: item.id, reason: 'evidence does not match the current verification contract', reasonCode: 'binding_missing_required_facet', hint: closingHint(projection, item, binding.evidenceIds) } }
@@ -317,6 +423,16 @@ function simpleRecord(projection: GuardProjection, item: GuardItem, binding: Evi
   const effect = projection.evidence.get(binding.effectEvidenceId)
   if (!effect || !binding.evidenceIds.includes(effect.id)) {
     return { rejected: { itemId: item.id, reason: 'effect evidence is missing from the cited evidence set', reasonCode: 'evidence_missing' } }
+  }
+  if (action === 'test' && (effect.toolName === 'bash' || effect.toolName === 'pwsh')) {
+    const process = effect.processFacts
+    if (!process || process.outcome !== 'success'
+      || (process.operationAttribution !== 'single_operation'
+        && !(process.operationAttribution === 'declared_per_operation'
+          && process.declaredOperationResults?.length
+          && process.declaredOperationResults.every((row) => row.outcome === 'success')))) {
+      return { rejected: { itemId: item.id, reason: 'test process outcome is not attributable to the required operation', reasonCode: 'operation_unattributable' } }
+    }
   }
   if ((effect.evidenceRole ?? 'effect') !== 'effect') {
     return { rejected: { itemId: item.id, reason: 'non-stateful evidence is paired to a non-effect role', reasonCode: 'binding_role_mismatch' } }
@@ -358,8 +474,21 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
   if (projection.integrity !== 'valid' || projection.hostStatus !== 'supported') {
     return { status: 'unknown', contractRevision: projection.contractRevision, openItems: certifiableOpenItems(projection).map((item) => item.id), rejectedBindings: [] }
   }
+  // The live v6 signing tool runs only after the Session watermark has been
+  // flushed and its shared-core projection is current. A legacy binding can
+  // still be individually valid while a later required outcome has failed;
+  // it must not mint a new certificate for that incomplete closure. Historical
+  // replay derives at the checkpoint's event watermark before the runtime
+  // attaches coreV2, and continues to verify the recorded certificate bytes.
+  if (projection.boundaryProtocol === 6 && projection.durabilityWatermark === 'confirmed'
+    && projection.coreV2?.certifiable !== true) {
+    return { status: 'incomplete', contractRevision: projection.contractRevision,
+      openItems: certifiableOpenItems(projection).map((item) => item.id),
+      rejectedBindings: [{ itemId: '*', reason: 'the current shared-core closure is not verified complete', reasonCode: 'current_closure_unmet' }] }
+  }
   const rejectedBindings: RejectedBinding[] = []
   const records: BindingRecord[] = []
+  const nativeDigests: string[] = []
   const referencedFacts: EvidenceFact[] = []
   for (const binding of bindings) {
     const item = projection.items.get(binding.itemId)
@@ -423,9 +552,16 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     if ((item.semanticAction ?? 'generic_run') === 'generic_run') {
       rejectedBindings.push({ itemId: item.id, reason: 'generic run evidence cannot prove a user-level completion contract', reasonCode: 'generic_run_non_certifiable' }); continue
     }
-    const built = isStatefulAction(item.semanticAction ?? 'generic_run') ? richStatefulRecord(projection, item, binding) : simpleRecord(projection, item, binding)
+    if (projection.boundaryProtocol === 6 && item.unitId !== undefined && item.semanticAction !== 'publish' && binding.resolutionEvidenceId) {
+      rejectedBindings.push({ itemId: item.id, reason: 'ordinary current work cannot inherit the retired Guard resolution chain', reasonCode: 'legacy_evidence_non_authoritative' }); continue
+    }
+    const built = isStatefulAction(item.semanticAction ?? 'generic_run')
+      ? binding.resolutionEvidenceId ? richStatefulRecord(projection, item, binding)
+        : item.semanticAction === 'commit' || item.semanticAction === 'push' ? nativeGitRecord(projection, item, binding) : nativeFileRecord(projection, item, binding)
+      : simpleRecord(projection, item, binding)
     if (built.rejected) { rejectedBindings.push(built.rejected); continue }
     records.push(built.record!)
+    if ('nativeDigest' in built && typeof built.nativeDigest === 'string') nativeDigests.push(built.nativeDigest)
     referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact))
   }
   // The certified scope comes from the single closure implementation: the
@@ -451,7 +587,7 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
   const closure = certificateClosure(projection)
   const open = closure.itemIds.filter((itemId) => !bindings.some((binding) => binding.itemId === itemId))
   if (rejectedBindings.length || open.length) return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: closure.itemIds, rejectedBindings }
-  if (projection.boundaryProtocol === 5 && closure.unitId === undefined) {
+  if (projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5 && closure.unitId === undefined) {
     // Unreachable in a live session (the v5 boundary is written with the first
     // real input, which opens U001); failing closed keeps a unit-less v2
     // certificate from ever existing.
@@ -465,37 +601,45 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     const contractSha256 = currentContractDigest(projection)
     const openDigest = digestStrings(closure.itemIds)
     const evidenceSha256 = evidenceSha256Digest(referencedFacts)
-    const bindingDigest = deriveBindingDigest(records, resolveAllowlist('product'))
-    const checkpoint: GuardCheckpoint = projection.boundaryProtocol === 5
+    const legacyBindingDigest = deriveBindingDigest(records, resolveAllowlist('product'))
+    const bindingDigest = nativeDigests.length ? nativeBindingDigest(legacyBindingDigest, nativeDigests) : legacyBindingDigest
+    const checkpoint: GuardCheckpoint = projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5
       ? (() => {
-        const certification = certificationDigestV2({
+        const baseCertification = certificationDigestV2({
           stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: CERTIFICATE_VERSION_V2, epoch: projection.epoch,
           sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
           contractRevision: projection.contractRevision, contractSha256,
-          unitId: closure.unitId!, unitClosureDigest: openDigest, evidenceSha256, bindingDigest,
+          unitId: closure.unitId!, unitClosureDigest: openDigest, evidenceSha256, bindingDigest: legacyBindingDigest,
           goalRef: projection.currentGoalRef ?? null,
         })
+        const locatorIdentity = projection.boundaryProtocol === 6 ? projection.rootLocatorIdentity : undefined
+        const certification = locatorIdentity ? locatorCertificationDigest(baseCertification, bindingDigest, nativeDigests, locatorIdentity)
+          : nativeDigests.length ? nativeCertificationDigest(baseCertification, bindingDigest, nativeDigests) : baseCertification
         return {
-          id, stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: CERTIFICATE_VERSION_V2, epoch: projection.epoch,
+          id, stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: locatorIdentity ? '4' : nativeDigests.length ? '3' : CERTIFICATE_VERSION_V2, epoch: projection.epoch,
           sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
           contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
           ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
           unitId: closure.unitId!, unitClosureDigest: openDigest,
+          ...(nativeDigests.length ? { nativeObservations: { schema: locatorIdentity ? NATIVE_OBSERVATION_SCHEMA_V2 : NATIVE_OBSERVATION_SCHEMA, digests: nativeDigests } } : {}),
+          ...(locatorIdentity ? { rootLocatorIdentity: locatorIdentity } : {}),
           certificationDigest: certification, result: 'certified' as const,
         }
       })()
       : (() => {
-        const certification = certificationDigest({
+        const baseCertification = certificationDigest({
           stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
           sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
           contractRevision: projection.contractRevision, contractSha256,
-          ...(projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {}), openDigest, evidenceSha256, bindingDigest,
+          ...(projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {}), openDigest, evidenceSha256, bindingDigest: legacyBindingDigest,
         })
+        const certification = nativeDigests.length ? nativeCertificationDigest(baseCertification, bindingDigest, nativeDigests) : baseCertification
         return {
-          id, stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
+          id, stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: nativeDigests.length ? '3' : CERTIFICATE_VERSION, epoch: projection.epoch,
           sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
           contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
           ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
+          ...(nativeDigests.length ? { nativeObservations: { schema: NATIVE_OBSERVATION_SCHEMA, digests: nativeDigests } } : {}),
           certificationDigest: certification, result: 'certified' as const,
         }
       })()

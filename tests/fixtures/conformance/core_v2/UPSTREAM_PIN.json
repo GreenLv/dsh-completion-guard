@@ -1,0 +1,112 @@
+{
+  "pinVersion": "2",
+  "status": "commit-bound-source-mirror",
+  "description": "Exact source-mirror identity for shared core/v2. This commit pin identifies upstream source bytes and local mirror bytes, not product runtime equivalence, publication, installation, or native acceptance.",
+  "upstream": {
+    "product": "codex-context-guard",
+    "repository": "https://github.com/GreenLv/codex-context-guard",
+    "canonical_commit": "20b938d5728d9d6a27386268a79ceeb2be5c39ce"
+  },
+  "canonical_commit": "20b938d5728d9d6a27386268a79ceeb2be5c39ce",
+  "mirrored_at": "2026-09-18",
+  "legacy_v1_pin_path": "tests/fixtures/conformance/UPSTREAM_PIN.json",
+  "files": [
+    {
+      "sha256": "84fbf66bd2ce23f579d880998fff806667750e9f0c3f5a3e0fe3d550c93ba341",
+      "source_path": "assets/core-intent-v2.json",
+      "role": "mirrored",
+      "mirrors": [
+        {
+          "path": "tests/fixtures/conformance/core_v2/core-intent-v2.json",
+          "sha256": "84fbf66bd2ce23f579d880998fff806667750e9f0c3f5a3e0fe3d550c93ba341"
+        },
+        {
+          "path": "src/core-v2/intent.json",
+          "sha256": "84fbf66bd2ce23f579d880998fff806667750e9f0c3f5a3e0fe3d550c93ba341"
+        }
+      ]
+    },
+    {
+      "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f",
+      "source_path": "assets/core-observation-v2.schema.json",
+      "role": "mirrored",
+      "mirrors": [
+        {
+          "path": "tests/fixtures/conformance/core_v2/core-observation-v2.schema.json",
+          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+        },
+        {
+          "path": "tests/fixtures/conformance/core_v2/observation.schema.json",
+          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+        },
+        {
+          "path": "src/core-v2/observation.schema.json",
+          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+        }
+      ]
+    },
+    {
+      "sha256": "15d38d7f64e1f26aef0ef48a9c1b1eb36bda00497b2d8f20a30fcf6a04f3d39b",
+      "source_path": "docs/CORE_V2_WIRE.md",
+      "role": "reference_identity",
+      "mirrors": []
+    },
+    {
+      "sha256": "cc2bd3754ea69d6eab888999b494f1a4f9fd0e5feaac6aa891ca13df9a98be80",
+      "source_path": "docs/CORE_V2_HOST_CAPABILITIES.md",
+      "role": "reference_identity",
+      "mirrors": []
+    },
+    {
+      "sha256": "817a0545548ab9157f41c5423babfb3f71e34cd70861c6d7719e9de0f075e809",
+      "source_path": "scripts/cg_core_v2.py",
+      "role": "reference_identity",
+      "mirrors": []
+    },
+    {
+      "sha256": "c1388e7d7790bfe168f9e43ccfa806e63c04df27afed6a705db0e5c7503d04d4",
+      "source_path": "scripts/cg_core_v2_schema.py",
+      "role": "reference_identity",
+      "mirrors": []
+    },
+    {
+      "sha256": "7971cdb78916e847c6c257c21a3c31b2e113e77403a89cf1715ff71fbff2fb2a",
+      "source_path": "tests/fixtures/conformance/core_v2/independent-oracle.json",
+      "role": "mirrored",
+      "mirrors": [
+        {
+          "path": "tests/fixtures/conformance/core_v2/independent-oracle.json",
+          "sha256": "7971cdb78916e847c6c257c21a3c31b2e113e77403a89cf1715ff71fbff2fb2a"
+        }
+      ]
+    },
+    {
+      "sha256": "8696ffc43be4ea74c0de511b6ed363c332a7ac1fbbc4d88119b0399834816978",
+      "source_path": "tests/fixtures/conformance/core_v2/events.json",
+      "role": "mirrored",
+      "mirrors": [
+        {
+          "path": "tests/fixtures/conformance/core_v2/events.json",
+          "sha256": "8696ffc43be4ea74c0de511b6ed363c332a7ac1fbbc4d88119b0399834816978"
+        }
+      ]
+    },
+    {
+      "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f",
+      "source_path": "tests/fixtures/conformance/core_v2/observation.schema.json",
+      "role": "mirrored",
+      "mirrors": [
+        {
+          "path": "tests/fixtures/conformance/core_v2/observation.schema.json",
+          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+        }
+      ]
+    },
+    {
+      "source_path": "docs/CORE_ALIGNMENT_CONTRACT_V2.md",
+      "sha256": "523f9239168fb11d8daf72d6c3348b3121caa1b05aaa7f32afd3692952c477d5",
+      "role": "reference_identity",
+      "mirrors": []
+    }
+  ]
+}

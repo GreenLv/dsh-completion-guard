@@ -18,6 +18,7 @@ import { goalCompletionDenial, hasCurrentCertificate } from '../src/domain/goal-
 import { recoveryDigest, renderRecoveryPacket } from '../src/domain/recovery.js'
 import { captureClause } from '../src/domain/capture.js'
 import { createProjection } from '../src/domain/types.js'
+import { progressFingerprint } from '../src/domain/stop-policy.js'
 import { createContextGuardCommand } from '../src/commands/context-guard.js'
 import { qualifyBoundary } from '../src/domain/boundary.js'
 import { createBoundaryTool } from '../src/tools/boundary.js'
@@ -224,6 +225,7 @@ describe('runtime derivation', () => {
 
     const projection = createProjection()
     projection.enabled = true
+    projection.goalCompletionAdopted = true
     projection.epoch = 1
     projection.contractRevision = 1
     projection.currentGoalRef = { id: 'goal-pinned', revision: 3 }
@@ -786,9 +788,17 @@ describe('production turn-stopping integration', () => {
   it('steers exactly once for root persistence and yields to an active armed Goal', async () => {
     const projection = createProjection()
     projection.enabled = true
-    const item = captureClause('持续推进，直到迁移脚本全部跑完为止。', 'm1', 'R001', 1, { cwd: '/work' })
+    const item = captureClause('运行 pnpm test。', 'm1', 'R001', 1, { cwd: '/work' })
+    const persistence = captureClause('持续推进，直到本轮测试完成为止。', 'm2', 'R002', 1, { cwd: '/work' })
     projection.items.set(item.id, item)
+    projection.items.set(persistence.id, persistence)
     projection.contractRevision = 1
+    projection.hostTurn = 1
+    projection.evidence.set('E-ready', { id: 'E-ready', epoch: 0, callId: 'ready-1', rootCallId: 'ready-1',
+      toolName: 'context_guard_observe_test_readiness', toolResultSeq: 3, outcome: 'success',
+      capabilities: ['test-input-readiness'], subjects: ['/work'], surfaces: ['scope'], boundedSummarySha256: 'a'.repeat(64),
+      semanticAction: 'verify', evidenceRole: 'state', parseStatus: 'supported', readinessForItemId: item.id,
+      readinessPredicate: 'test_passed', readinessManifestSha256: 'b'.repeat(64) })
     const runtime = projectionRuntime(projection)
     const steered: unknown[] = []
     const agent = steeringAgent(steered)
@@ -797,8 +807,9 @@ describe('production turn-stopping integration', () => {
       hostSupported: true,
       readExternalOperation: () => undefined,
     }
-    expect(await handleGuardTurnStopping(agent, runtime, access)).toBe('protocol_correction_steer')
-    expect(await handleGuardTurnStopping(agent, runtime, access)).toBe('safe_yield_pending_preserved')
+    expect(await handleGuardTurnStopping(agent, runtime, access)).toBe('explicit_user_persistence')
+    projection.noProgressClaims.set(`correction:${progressFingerprint(projection)}`, new Map([['1', 1]]))
+    expect(await handleGuardTurnStopping(agent, runtime, access)).toBe('protocol_correction_already_issued')
     expect(steered).toHaveLength(1)
     expect(JSON.stringify(steered[0])).toContain(PROTOCOL_CORRECTION_NOTICE)
 

@@ -1,7 +1,7 @@
-import { $ as evidenceFromPersistedToolResult, $n as proposeRebind, $r as isRestatement, $t as createProofManifestV2, A as lifecyclePhase, Ai as requestedTargetMatchesResolved, An as NO_PROGRESS_TURNS_BEFORE_STOP, Ar as canonicalRegistryBase, At as SUPPORTED_HOST_RANGE, B as RELEASE_OPERATIONS, Bi as sanitizeClauseText, Bn as progressFingerprint, Br as clauseIsProtected, Bt as authorityCaptureCounts, C as gitCommandMatchesTarget, Ci as STOP_PROTOCOL_VERSION_V2, Cn as renderRecoveryPacket, Cr as classifyClause, Ct as evaluateHostCapability, D as FIRST_STEP_GUIDANCE, Di as isStatefulAction, Dn as isVerifyingCapability, Dr as extractOperation, Dt as selectHostCohort, E as verifiedLinearCommitReadback, Ei as boundedArtifactChoiceMatches, En as evidenceMatchesItem, Er as extractMethod, Et as hostVersionFromPackages, F as PROTOCOL_V4_NOTICE, Fi as COMMAND_SURFACE_MANIFEST, Fn as isRootPauseRequest, Fr as LEGACY_QUALIFICATION, Ft as satisfiesSupportedHostRange, G as inFlightReservation, Gn as unitDescendantIds, Gr as interpretClause, Gt as PROOF_KINDS_V2, H as RELEASE_RESERVATION_PREFIX, Hi as sha256, Hn as hasCurrentCertificate, Hr as governedClauseRestrictsExecution, Ht as certifyCheckpoint, I as PROTOCOL_V5_NOTICE, Ii as validateManifest, In as isWholeTaskCompletionClaim, Ir as actionVerbMatches, It as RC015_RC2_HOST_PACKAGES, J as releaseContractFor, Jn as isCurrentAcceptedBoundary, Jr as isExecutableItem, Jt as PROOF_PROTOCOL_VERSION_V2, K as normalizeReleaseContract, Kn as availableBoundaryQualifications, Kr as interpretMessage, Kt as PROOF_MANIFEST_DOMAIN_V2, L as applyUpgradeEligibility, Li as canonicalizePath, Ln as latestAssistantText, Lr as clarifiedSpanOf, Lt as RC015_HOST_PACKAGES, M as CAPTURE_V042_NOTICE, Mi as semanticActionFromText, Mn as decideTurnBoundary, Mr as classifyTaskIntent, Mt as compareHostVersions, N as DEFAULT_DELEGATION_TOOL_NAMES, Ni as validateActionManifest, Nn as decideTurnStopping, Nr as classifyUserInteraction, Nt as evaluateMinimumHostVersion, O as claimedBatchHasRealRootInput, Oi as requestedIdentityKey, On as CONTROL_RECORD_PREFIX, Or as isInformationalMessage, Ot as LATEST_SUPPORTED_HOST_VERSION, P as PROTOCOL_V3_NOTICE, Pi as validateActionTarget, Pn as decisionBoundaryKey, Pr as GRANTED_QUALIFICATION, Pt as parseHostVersion, Q as supersedeItem, Qn as confirmRebind, Qr as isQuestionScopeNeedingReview, Qt as createProofManifest, R as deriveProjection, Ri as digestStrings, Rn as latestRootInstruction, Rr as clauseAsksOwnQuestion, Rt as RC1_HOST_PACKAGES, S as executeRevalidatedGitEffect, Si as STOP_PROTOCOL_VERSION, Sn as recoveryDigest, Sr as captureItem, St as evaluateExternalWaitCapability, T as revalidateGitPrestate, Ti as actionCompatible, Tn as evidenceCoverage, Tr as extractArtifactPaths, Tt as evaluateToolSurfaceCapability, U as RELEASE_SETTLEMENT_PREFIX, Un as certifiableOpenItems, Ur as hasOrderedCoordination, Ut as PROOF_CAPABILITY_MATRIX, V as RELEASE_OPERATION_SURFACES, Vi as sanitizeUrl, Vn as goalCompletionDenial, Vr as explanationHasActionResidue, Vt as segmentAuthorityBlocks, W as contractById, Wn as certificateClosure, Wr as hasQuestionScope, Wt as PROOF_KINDS, X as releasePreEffectDecision, Xn as currentContractDigest, Xr as isInformationalFragment, Xt as bindProofV2ToProjection, Y as releaseCoverage, Yn as qualifyBoundary, Yr as isExplanationScope, Yt as bindProofToProjection, Z as reservationFor, Zn as createProjection, Zr as isOpenObligation, Zt as canonicalProjection, _ as GIT_COMMAND_MANIFEST_IDS, _i as BOUNDED_ARTIFACT_TYPES, _n as MIN_RECOVERY_CHAR_BUDGET, _r as capabilityFactOf, _t as HOST_CAPABILITY_PACKAGE_GROUPS, a as injectActiveProfileHostLock, ai as namedActions, an as proofOperationMatches, ar as CONFIRM_LINE_PATTERN, at as isRunExecutable, b as commitTreeSnapshotDigest, bi as SEMANTIC_ACTIONS, bn as closingHint, br as removalIsPartiallyKnown, bt as bindExecutableIdentity, c as packageRowsFromPnpmLock, ci as questionHeadsClause, cn as scopeCoverageDigest, cr as capabilityRemedyPhrase, ct as ACTIVE_HOST_COHORT_ID, d as resolveInstalledHostLock, di as semanticActionOfScope, dn as validateProofManifest, dr as itemDiagnosis, dt as ALPHA2_DSHMARKET_139_HOST_PACKAGES, ei as itemHoldsExecutionAuthority, en as proofCapabilityReport, er as proposeRebindOutcome, et as extractTextContent, f as verifyComposedHostLockDump, fi as splitTextFragments, fn as validateProofManifestV2, fr as relevantEvidence, ft as ALPHA2_HOST_PACKAGES, g as snapshotSessionEvents, gi as ACTION_MANIFEST_VERSION, gn as DEFAULT_RECOVERY_CHAR_BUDGET, gr as capabilityConsequence, gt as GOAL_HOST_PACKAGES, h as SessionApiError, hi as ACTION_MANIFEST, hn as CLEANUP_CONDITION_RULE_SHORT, hr as admissibleForRemoval, ht as EXPECTED_HOST_PACKAGES, i as hostLockRowsFromComposedDump, ii as maskQuotedSpans, in as proofHostSurfacesOf, ir as replayRebindResult, it as canonicalArgvFromCommand, j as previewFirstStepInjection, ji as semanticActionFromCommand, jn as classifyCompletionClaim, jr as npmEscapedPackageName, jt as SUPPORTED_HOST_VERSIONS, k as firstStepGuidance, ki as requestedTargetAuthorizesMutation, kn as NO_PROGRESS_RECORD_PREFIX, kr as segmentClauses, kt as MIN_SUPPORTED_HOST_VERSION, l as readActiveHostGraph, li as reportingHeadGoverns, ln as sessionQuery, lr as deriveItemDiagnosis, lt as ACTIVE_HOST_COHORT_IDS, m as SESSION_EVENT_ENVELOPE_INVALID, mi as verbIsNegated, mn as CLEANUP_CONDITION_RULE_COMPACT, mr as actionHasCertificationPath, mt as DEFAULT_HOST_LOCK, n as combineHostPolicy, ni as legacyQuestionReadingIsInformational, nn as proofDigestV2, nr as rebindAttemptKey, nt as isDeterministicCheck, o as inspectTargetHostGraph, oi as opensWithDirective, on as proofV2Rejection, or as isFrozenV042RebindResponse, ot as parsePwshCommand, p as SESSION_API_UNSUPPORTED, pi as statefulActionsOfScope, pn as CLEANUP_CONDITION_RULE, pr as DEPENDENCY_FREE_ONLY_CONDITION, pt as BASE_HOST_PACKAGES, q as readbackSettlesContract, qn as effectuateBoundary, qr as introducesActionClause, qt as PROOF_PROTOCOL_VERSION, r as hostLockContextFromComposedDump, ri as maskCodeSpans, rn as proofEvidenceConstraints, rr as rebindResponse, rt as withDurability, s as packageRowsFromActiveGraph, si as qualificationOfClause, sn as requiredSubjectsOf, sr as parseConfirmationMessage, st as parseShellCommand, t as HostProfileError, ti as kindOfScope, tn as proofDigest, tr as proposeRebindV042, tt as extractToolSubject, u as resolveActiveProfileHostLock, ui as restatedContentOf, un as sessionQueryV2, ur as evidenceAvailabilityReason, ut as ACTIVE_HOST_LAUNCHER_VERSION, v as GIT_COMMAND_TEMPLATES, vi as CERTIFICATE_VERSION, vn as carriesCleanupCondition, vr as partialFailureOf, vt as HOST_COHORTS, w as parseGitCommandManifest, wi as SUPPORTED_EVIDENCE_ADAPTERS, wn as bindingSatisfies, wr as environmentDefaultRepositoryTarget, wt as evaluateHostLock, x as createGitPrestateEnvelope, xi as STATEFUL_ACTIONS, xn as openItems, xr as captureClause, xt as bindLiveGoalCapability, y as commitIndexSnapshotDigest, yi as CERTIFICATE_VERSION_V2, yn as cleanupConditionFor, yr as removalIsComplete, yt as LEGACY_HOST_COHORTS, z as legacyRecordsNeedingReview, zi as normalizeClause, zn as observeAssistantOutcome, zr as clauseIsGoverned, zt as ALPHA3_HOST_PACKAGES } from "./domain-BUA1lLjs.js";
+import { $ as releasePreEffectDecision, $n as availableBoundaryQualifications, $r as interpretMessage, $t as bindProofV2ToProjection, A as firstStepGuidanceV6, Ai as STOP_PROTOCOL_VERSION_V2, An as isVerifyingCapability, Ar as classifyClause, At as selectHostCohort, B as applyUpgradeEligibility, Bi as validateActionManifest, Bn as decisionBoundaryKey, Br as classifyUserInteraction, Bt as RC015_HOST_PACKAGES, C as gitCommandMatchesTarget, Ci as ACTION_MANIFEST_VERSION, Cn as closingHint, Cr as capabilityConsequence, Ct as bindExecutableIdentity, D as FIRST_STEP_GUIDANCE, Di as SEMANTIC_ACTIONS, Dn as bindingSatisfies, Dr as removalIsPartiallyKnown, Dt as evaluateHostLock, E as verifiedLinearCommitReadback, Ei as CERTIFICATE_VERSION_V2, En as renderRecoveryPacket, Er as removalIsComplete, Et as evaluateHostCapability, F as DEFAULT_DELEGATION_TOOL_NAMES, Fi as requestedIdentityKey, Fn as assessmentOutcomePredicate, Fr as isInformationalMessage, Ft as compareHostVersions, G as RELEASE_RESERVATION_PREFIX, Gi as digestStrings, Gn as observeAssistantOutcome, Gr as clauseAsksOwnQuestion, Gt as certifyCheckpoint, H as legacyRecordsNeedingReview, Hi as COMMAND_SURFACE_MANIFEST, Hn as isWholeTaskCompletionClaim, Hr as LEGACY_QUALIFICATION, Ht as ALPHA3_HOST_PACKAGES, I as PROTOCOL_V3_NOTICE, Ii as requestedTargetAuthorizesMutation, In as classifyCompletionClaim, Ir as segmentClauses, It as evaluateMinimumHostVersion, J as inFlightReservation, Ji as sanitizeUrl, Jn as goalCompletionDenial, Jr as explanationHasActionResidue, Jt as PROOF_KINDS_V2, K as RELEASE_SETTLEMENT_PREFIX, Ki as normalizeClause, Kn as progressFingerprint, Kr as clauseIsGoverned, Kt as PROOF_CAPABILITY_MATRIX, L as PROTOCOL_V4_NOTICE, Li as requestedTargetMatchesResolved, Ln as currentActionBases, Lr as canonicalRegistryBase, Lt as parseHostVersion, M as previewFirstStepInjection, Mi as actionCompatible, Mn as NO_PROGRESS_RECORD_PREFIX, Mr as extractArtifactPaths, Mt as MIN_SUPPORTED_HOST_VERSION, N as projectCoreV2, Ni as boundedArtifactChoiceMatches, Nn as NO_PROGRESS_TURNS_BEFORE_STOP, Nr as extractMethod, Nt as SUPPORTED_HOST_RANGE, O as claimedBatchHasRealRootInput, Oi as STATEFUL_ACTIONS, On as evidenceCoverage, Or as captureClause, Ot as evaluateToolSurfaceCapability, P as CAPTURE_V042_NOTICE, Pi as isStatefulAction, Pn as assessmentAction, Pr as extractOperation, Pt as SUPPORTED_HOST_VERSIONS, Q as releaseCoverage, Qn as unitDescendantIds, Qr as interpretClause, Qt as bindProofToProjection, R as PROTOCOL_V5_NOTICE, Ri as semanticActionFromCommand, Rn as decideTurnBoundary, Rr as npmEscapedPackageName, Rt as satisfiesSupportedHostRange, S as executeRevalidatedGitEffect, Si as ACTION_MANIFEST, Sn as cleanupConditionFor, Sr as admissibleForRemoval, St as LEGACY_HOST_COHORTS, T as revalidateGitPrestate, Ti as CERTIFICATE_VERSION, Tn as recoveryDigest, Tr as partialFailureOf, Tt as evaluateExternalWaitCapability, U as RELEASE_OPERATIONS, Ui as validateManifest, Un as latestAssistantText, Ur as actionVerbMatches, Ut as authorityCaptureCounts, V as deriveProjection, Vi as validateActionTarget, Vn as isRootPauseRequest, Vr as GRANTED_QUALIFICATION, Vt as RC1_HOST_PACKAGES, W as RELEASE_OPERATION_SURFACES, Wi as canonicalizePath, Wn as latestRootInstruction, Wr as clarifiedSpanOf, Wt as segmentAuthorityBlocks, X as readbackSettlesContract, Xn as certifiableOpenItems, Xr as hasOrderedCoordination, Xt as PROOF_PROTOCOL_VERSION, Y as normalizeReleaseContract, Yi as sha256, Yn as hasCurrentCertificate, Yr as governedClauseRestrictsExecution, Yt as PROOF_MANIFEST_DOMAIN_V2, Z as releaseContractFor, Zn as certificateClosure, Zr as hasQuestionScope, Zt as PROOF_PROTOCOL_VERSION_V2, _ as GIT_COMMAND_MANIFEST_IDS, _i as restatedContentOf, _n as CLEANUP_CONDITION_RULE_COMPACT, _r as evidenceAvailabilityReason, _t as DEFAULT_HOST_LOCK, a as injectActiveProfileHostLock, ai as isQuestionScopeNeedingReview, an as proofDigestV2, ar as confirmRebind, at as isDeterministicCheck, b as commitTreeSnapshotDigest, bi as statefulActionsOfScope, bn as MIN_RECOVERY_CHAR_BUDGET, br as DEPENDENCY_FREE_ONLY_CONDITION, bt as HOST_CAPABILITY_PACKAGE_GROUPS, c as packageRowsFromPnpmLock, ci as kindOfScope, cn as proofOperationMatches, cr as proposeRebindV042, ct as isRunExecutable, d as resolveInstalledHostLock, di as maskQuotedSpans, dn as scopeCoverageDigest, dr as replayRebindResult, dt as ACTIVE_HOST_COHORT_ID, ei as introducesActionClause, en as canonicalProjection, er as effectuateBoundary, et as reservationFor, f as verifyComposedHostLockDump, fi as namedActions, fn as sessionQuery, fr as CONFIRM_LINE_PATTERN, ft as ACTIVE_HOST_COHORT_IDS, g as snapshotSessionEvents, gi as reportingHeadGoverns, gn as CLEANUP_CONDITION_RULE, gr as deriveItemDiagnosis, gt as BASE_HOST_PACKAGES, h as SessionApiError, hi as questionHeadsClause, hn as validateProofManifestV2, hr as capabilityRemedyPhrase, ht as ALPHA2_HOST_PACKAGES, i as hostLockRowsFromComposedDump, ii as isOpenObligation, in as proofDigest, ir as createProjection, it as extractToolSubject, j as lifecyclePhase, ji as SUPPORTED_EVIDENCE_ADAPTERS, jn as CONTROL_RECORD_PREFIX, jr as environmentDefaultRepositoryTarget, jt as LATEST_SUPPORTED_HOST_VERSION, k as firstStepGuidance, ki as STOP_PROTOCOL_VERSION, kn as evidenceMatchesItem, kr as captureItem, kt as hostVersionFromPackages, l as readActiveHostGraph, li as legacyQuestionReadingIsInformational, ln as proofV2Rejection, lr as rebindAttemptKey, lt as parsePwshCommand, m as SESSION_EVENT_ENVELOPE_INVALID, mi as qualificationOfClause, mn as validateProofManifest, mr as parseConfirmationMessage, mt as ALPHA2_DSHMARKET_139_HOST_PACKAGES, n as combineHostPolicy, ni as isExplanationScope, nn as createProofManifestV2, nr as qualifyBoundary, nt as evidenceFromPersistedToolResult, o as inspectTargetHostGraph, oi as isRestatement, on as proofEvidenceConstraints, or as proposeRebind, ot as withDurability, p as SESSION_API_UNSUPPORTED, pi as opensWithDirective, pn as sessionQueryV2, pr as isFrozenV042RebindResponse, pt as ACTIVE_HOST_LAUNCHER_VERSION, q as contractById, qi as sanitizeClauseText, qn as testOutcomePredicate, qr as clauseIsProtected, qt as PROOF_KINDS, r as hostLockContextFromComposedDump, ri as isInformationalFragment, rn as proofCapabilityReport, rr as currentContractDigest, rt as extractTextContent, s as packageRowsFromActiveGraph, si as itemHoldsExecutionAuthority, sn as proofHostSurfacesOf, sr as proposeRebindOutcome, st as canonicalArgvFromCommand, t as HostProfileError, ti as isExecutableItem, tn as createProofManifest, tr as isCurrentAcceptedBoundary, tt as supersedeItem, u as resolveActiveProfileHostLock, ui as maskCodeSpans, un as requiredSubjectsOf, ur as rebindResponse, ut as parseShellCommand, v as GIT_COMMAND_TEMPLATES, vi as semanticActionOfScope, vn as CLEANUP_CONDITION_RULE_SHORT, vr as itemDiagnosis, vt as EXPECTED_HOST_PACKAGES, w as parseGitCommandManifest, wi as BOUNDED_ARTIFACT_TYPES, wn as openItems, wr as capabilityFactOf, wt as bindLiveGoalCapability, x as createGitPrestateEnvelope, xi as verbIsNegated, xn as carriesCleanupCondition, xr as actionHasCertificationPath, xt as HOST_COHORTS, y as commitIndexSnapshotDigest, yi as splitTextFragments, yn as DEFAULT_RECOVERY_CHAR_BUDGET, yr as relevantEvidence, yt as GOAL_HOST_PACKAGES, z as PROTOCOL_V6_NOTICE, zi as semanticActionFromText, zn as decideTurnStopping, zr as classifyTaskIntent, zt as RC015_RC2_HOST_PACKAGES } from "./domain-9o_yA64E.js";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
-import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { boundContextSummary, createToolResultMessage, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { execFile } from "node:child_process";
 import { constants, existsSync, readFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzip } from "node:zlib";
-import { SESSION_FORMAT_VERSION } from "@deepseek-ai/dsh-session";
+import { SESSION_FORMAT_VERSION, Session, SessionId } from "@deepseek-ai/dsh-session";
 
 //#region src/tools/rebind.ts
 function createRebindTool(getProjection, prepare) {
@@ -60,6 +60,528 @@ function createRebindTool(getProjection, prepare) {
 			};
 		}
 	});
+}
+
+//#endregion
+//#region src/core-v2/session.ts
+const hash = (value) => createHash("sha256").update(value, "utf8").digest("hex");
+const isResume = (text) => /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(text.trim());
+const row = (value) => value && typeof value === "object" ? value : {};
+const rootText = (event) => {
+	const data = row(event.data);
+	return Array.isArray(data.content) ? data.content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("") : "";
+};
+const sourceSeq = (item) => {
+	const match = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+	return match ? Number(match[1]) : void 0;
+};
+const targetOf = (item) => {
+	if (item.taskKind === "inquiry" || item.authorityDisposition === "informational") return item.normalizedText;
+	const tuple$1 = item.requestedTarget ?? {};
+	return typeof tuple$1.artifact_id === "string" ? tuple$1.artifact_id : typeof tuple$1.repository === "string" ? tuple$1.repository : typeof item.verification.subject === "string" ? item.verification.subject : typeof tuple$1.scope === "string" ? tuple$1.scope : void 0;
+};
+const kindOf = (item) => {
+	if (item.kind === "prohibition") return "constraint";
+	if (item.taskKind === "context") return "unknown";
+	if (item.taskKind === "inquiry" || item.authorityDisposition === "informational") return "information";
+	if (item.needsReview || item.semanticAction === "generic_run") return "unknown";
+	if (item.verification.surface === "visual") return "proof";
+	if (item.semanticAction && ["executable_now", "conditional_wait"].includes(item.authorityDisposition ?? "")) return "execution";
+	if (item.verification.surface === "scope") return "proof";
+	return "execution";
+};
+const sourceSpan = (item, text, peers) => {
+	const own = item.spans?.find((part) => part.partIndex === 0);
+	if (!own) return void 0;
+	const bytes = Buffer.from(text, "utf8");
+	let end = own.end;
+	const next = peers.flatMap((peer) => peer.spans ?? []).filter((part) => part.partIndex === 0 && part.start >= end).sort((a, b) => a.start - b.start)[0];
+	if (next && /^[\s，,。.!！?？;；:：]*$/u.test(bytes.subarray(end, next.start).toString("utf8"))) end = next.start;
+	if (/^[\s，,。.!！?？;；:：]*$/u.test(bytes.subarray(end).toString("utf8"))) end = bytes.length;
+	return {
+		start: own.start,
+		end
+	};
+};
+/** Convert only real session sources and derived facts. Missing spans, calls, or
+* readback remain unknown/insufficient; this adapter never fabricates them. */
+function sessionCoreSnapshot(events, projection) {
+	const unit = projection.currentUnitId;
+	if (projection.boundaryProtocol !== 6 || !unit || projection.durabilityWatermark !== "confirmed") return void 0;
+	const roots = events.filter((event) => event.type === "user/message" && row(row(event.data).source).kind === "user");
+	const currentItems = [...projection.items.values()].filter((item) => item.unitId === unit && item.status !== "superseded");
+	const refs = new Set(projection.units.get(unit)?.rootInputRefs.map((ref) => ref.seq) ?? []);
+	const usedRoots = roots.filter((event) => refs.has(event.seq));
+	if (!usedRoots.length) return void 0;
+	const latestRoot = usedRoots.at(-1);
+	const turn = String(row(latestRoot.data).turn ?? projection.hostTurn ?? 1);
+	const rootBySeq = new Map(usedRoots.map((root) => [root.seq, root]));
+	if (!currentItems.every((item) => {
+		const root = rootBySeq.get(sourceSeq(item) ?? -1);
+		return root && item.rawTextSha256 === hash(rootText(root));
+	})) return void 0;
+	const sources = usedRoots.map((root) => {
+		const text = rootText(root);
+		return {
+			id: `root:${root.seq}`,
+			seq: root.seq,
+			kind: "root",
+			unit,
+			revision: 1,
+			sha256: hash(text),
+			byte_length: Buffer.byteLength(text, "utf8"),
+			text,
+			call_id: null,
+			turn: String(row(root.data).turn ?? turn),
+			...projection.rootLocatorContexts.get(root.seq) ? {
+				locator_base: projection.rootLocatorContexts.get(root.seq).base,
+				locator_flavor: "posix"
+			} : {}
+		};
+	});
+	const requirements = [];
+	const facts = [];
+	const actions = [];
+	const conditions = [];
+	const coverage = [];
+	for (const root of usedRoots) {
+		const text = rootText(root), digest$2 = hash(text), byteLength = Buffer.byteLength(text, "utf8");
+		const span = (start, end) => ({
+			source_id: `root:${root.seq}`,
+			start,
+			end,
+			sha256: digest$2
+		});
+		const sortedSpans = currentItems.filter((item) => sourceSeq(item) === root.seq).flatMap((item) => {
+			const own = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+			return own ? [own] : [];
+		}).sort((a, b) => a.start - b.start || a.end - b.end);
+		let cursor = 0;
+		for (const s of sortedSpans) {
+			if (s.start > cursor) coverage.push({
+				source: span(cursor, s.start),
+				kind: "unknown"
+			});
+			if (s.end > Math.max(cursor, s.start)) coverage.push({
+				source: span(Math.max(cursor, s.start), s.end),
+				kind: "interpreted"
+			});
+			cursor = Math.max(cursor, s.end);
+		}
+		if (sortedSpans.length && cursor < byteLength) coverage.push({
+			source: span(cursor, byteLength),
+			kind: "unknown"
+		});
+		if (!sortedSpans.length && byteLength) if (isResume(text)) {
+			coverage.push({
+				source: span(0, byteLength),
+				kind: "interpreted"
+			});
+			requirements.push({
+				id: `intent:${root.seq}`,
+				unit,
+				revision: 1,
+				seq: root.seq,
+				source: span(0, byteLength),
+				kind: "unknown",
+				action: "resume_control",
+				target: text,
+				predicate: "intent_observed",
+				scope_sha256: digest$2,
+				required: false,
+				status: "pending",
+				parent_id: null,
+				evidence_kind: "none",
+				condition_ids: [],
+				target_origin: {
+					root_constraint: text,
+					root_constraint_source: span(0, byteLength),
+					implementation_choice: text,
+					host_selection: text,
+					resolved: text,
+					observed: text,
+					constraint_kind: "exact",
+					subject_kind: "opaque",
+					selection_source_id: null
+				}
+			});
+		} else coverage.push({
+			source: span(0, byteLength),
+			kind: "unknown"
+		});
+	}
+	const sourceByCall = /* @__PURE__ */ new Map();
+	const calls = /* @__PURE__ */ new Map();
+	const results = /* @__PURE__ */ new Map();
+	for (const event of events) {
+		if (event.type === "tool/call") {
+			const id = row(event.data).callId;
+			if (typeof id === "string") calls.set(id, [...calls.get(id) ?? [], event]);
+		}
+		if (event.type === "tool/result") {
+			const source = row(row(row(event.data).message).source);
+			if (source.kind !== "tool" || typeof source.callId !== "string") continue;
+			results.set(source.callId, [...results.get(source.callId) ?? [], event]);
+		}
+	}
+	for (const [id, callRows] of calls) {
+		const resultRows = results.get(id);
+		if (callRows.length !== 1 || resultRows?.length !== 1) continue;
+		const call = callRows[0], result = resultRows[0];
+		if (call.seq >= result.seq || row(call.data).turn !== row(result.data).turn || row(call.data).step !== row(result.data).step) continue;
+		sourceByCall.set(id, {
+			call,
+			result
+		});
+	}
+	const attached = /* @__PURE__ */ new Set();
+	for (const item of currentItems) {
+		const root = rootBySeq.get(sourceSeq(item) ?? -1);
+		if (!root) continue;
+		const text = rootText(root), digest$2 = hash(text);
+		const span = (start, end) => ({
+			source_id: `root:${root.seq}`,
+			start,
+			end,
+			sha256: digest$2
+		});
+		const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+		if (!itemSpan) continue;
+		const kind = kindOf(item);
+		const named = targetOf(item);
+		const raw = Buffer.from(text, "utf8");
+		const namedBytes = named ? Buffer.from(named, "utf8") : void 0;
+		const atWithin = namedBytes ? raw.subarray(itemSpan.start, itemSpan.end).indexOf(namedBytes) : -1;
+		const at = atWithin >= 0 ? itemSpan.start + atWithin : -1;
+		const ownText = raw.subarray(itemSpan.start, itemSpan.end).toString("utf8");
+		const fileReadback = item.interpretationFingerprint?.startsWith("v6-file-readback:") === true;
+		const referents = kind === "constraint" ? currentItems.flatMap((candidate) => {
+			if (candidate.taskKind !== "context" || sourceSeq(candidate) !== root.seq) return [];
+			const own = sourceSpan(candidate, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+			const path = candidate.requestedTarget?.artifact_id;
+			const base = projection.rootLocatorContexts.get(root.seq)?.base;
+			if (!own || own.end > itemSpan.start || typeof path !== "string" || !base || !path.startsWith(`${base}/`)) return [];
+			const literal = relative(base, path);
+			if (!literal || literal.startsWith("../") || literal.includes("\\")) return [];
+			const offset = raw.subarray(own.start, own.end).indexOf(Buffer.from(literal, "utf8"));
+			return offset < 0 ? [] : [{
+				path,
+				literal,
+				start: own.start + offset,
+				end: own.start + offset + Buffer.byteLength(literal, "utf8")
+			}];
+		}) : [];
+		const forbiddenFile = item.semanticAction === "generic_run" && referents.length === 1 ? referents[0] : void 0;
+		const ambiguousForbiddenFile = item.semanticAction === "generic_run" && referents.length > 1;
+		const directoryLiteral = /(?:在\s+)?([^\s，,。.!?？]+)\s+范围内/u.exec(ownText)?.[1];
+		const directoryAt = directoryLiteral ? itemSpan.start + raw.subarray(itemSpan.start, itemSpan.end).indexOf(Buffer.from(directoryLiteral, "utf8")) : -1;
+		const rootBase = projection.rootLocatorContexts.get(root.seq)?.base;
+		const relativeName = rootBase && named?.startsWith(`${rootBase}/`) ? relative(rootBase, named) : void 0;
+		const relativePaths = relativeName && !relativeName.startsWith("../") && ownText.includes(relativeName) ? [relativeName] : [];
+		const relativeLiteral = at < 0 && named && item.semanticAction === "modify" ? relativePaths.find((literal) => named.endsWith(`/${literal}`)) : void 0;
+		const relativeAt = relativeLiteral ? itemSpan.start + raw.subarray(itemSpan.start, itemSpan.end).indexOf(Buffer.from(relativeLiteral, "utf8")) : -1;
+		const scopeValue = typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : typeof item.requestedTarget?.artifact_id === "string" ? item.requestedTarget.artifact_id : void 0;
+		const editScope = directoryLiteral && scopeValue ? resolve(scopeValue, directoryLiteral) : scopeValue;
+		const editChoices = item.semanticAction === "modify" && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === "string" ? [...projection.evidence.values()].filter((fact) => fact.semanticAction === "modify" && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.subjects.length === 1 && typeof fact.subjects[0] === "string" && fact.subjects[0].startsWith(`${editScope.replace(/\/$/u, "")}/`)) : [];
+		const selectedEdit = editChoices.length === 1 ? editChoices[0] : void 0;
+		const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success" && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.outcome === "success" && effect.subjects.includes(fact.subjects[0]) && effect.toolResultSeq < fact.toolResultSeq)) : [];
+		const selectedReadback = readbackChoices.length === 1 ? readbackChoices[0] : void 0;
+		const subjectKind = forbiddenFile || fileReadback || [
+			"modify",
+			"create",
+			"commit",
+			"push"
+		].includes(item.semanticAction ?? "") ? "filesystem" : "opaque";
+		const trimmed = ownText.trim();
+		const guarded = Boolean(item.condition || item.waitAuthorization || item.authorityDisposition === "conditional_wait");
+		const leading = Buffer.byteLength(ownText.slice(0, ownText.indexOf(trimmed)), "utf8");
+		const ownConstraintSpan = {
+			start: itemSpan.start + leading,
+			end: itemSpan.start + leading + Buffer.byteLength(trimmed, "utf8")
+		};
+		const constraintSpan = at >= 0 && namedBytes ? {
+			start: at,
+			end: at + namedBytes.length
+		} : ownConstraintSpan;
+		const needsReadiness = item.semanticAction === "test" || item.semanticAction === "verify" && !fileReadback;
+		const readinessPredicate = item.semanticAction === "test" ? "test_passed" : "verification_passed";
+		const selectedReadiness = needsReadiness && !guarded ? [...projection.evidence.values()].find((fact) => {
+			const pair = sourceByCall.get(fact.callId);
+			const assessmentEffect = item.semanticAction !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.toolResultSeq < fact.toolResultSeq && effect.epoch === fact.epoch && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath));
+			return fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect && fact.toolName === "context_guard_observe_test_readiness" && fact.outcome === "success" && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === "string" && fact.subjects.includes(item.requestedTarget.scope);
+		}) : void 0;
+		const selectedScope = selectedReadiness && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0;
+		const target = forbiddenFile?.path ?? selectedScope ?? selectedEdit?.subjects[0] ?? selectedReadback?.subjects[0] ?? (relativeLiteral && named ? named : at >= 0 && named ? named : trimmed);
+		if (!target) continue;
+		const knownForbiddenEffect = forbiddenFile && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.subjects.includes(target) && [
+			"write",
+			"write_file",
+			"edit",
+			"edit_file"
+		].includes(fact.toolName) && fact.operations?.some((operation) => ["create", "modify"].includes(operation.op) && operation.path === target));
+		const uncertainForbiddenEffect = forbiddenFile && !knownForbiddenEffect && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.subjects.includes(target) && ([
+			"write",
+			"write_file",
+			"edit",
+			"edit_file"
+		].includes(fact.toolName) || [
+			"bash",
+			"pwsh",
+			"shell"
+		].includes(fact.toolName) && !fact.operations?.some((operation) => operation.op === "read" && operation.path === target)));
+		const unattributedHostCall = forbiddenFile && !knownForbiddenEffect && [...sourceByCall.values()].some(({ call }) => {
+			if (call.seq <= root.seq || ![
+				"bash",
+				"pwsh",
+				"shell"
+			].includes(String(row(call.data).name))) return false;
+			const args = row(call.data).arguments;
+			return typeof args === "string" && args.includes(target);
+		});
+		const permittedFileTargets = new Set(currentItems.filter((candidate) => candidate.kind !== "prohibition" && ["modify", "create"].includes(candidate.semanticAction ?? "") && typeof candidate.requestedTarget?.artifact_id === "string").map((candidate) => candidate.requestedTarget.artifact_id));
+		const unresolvedPhysicalAlias = forbiddenFile && !knownForbiddenEffect && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && [
+			"write",
+			"write_file",
+			"edit",
+			"edit_file"
+		].includes(fact.toolName) && fact.subjects.some((path) => path !== target && !permittedFileTargets.has(path)));
+		const requirementSource = span(itemSpan.start, itemSpan.end);
+		const predicate = forbiddenFile ? "no_mutation" : item.taskKind === "context" ? "context_recorded" : kind === "information" ? "answer_delivered" : item.semanticAction === "test" ? testOutcomePredicate(item.normalizedText) : fileReadback ? "file_content_checked" : item.semanticAction === "verify" ? assessmentOutcomePredicate(item.normalizedText) : item.semanticAction === "modify" ? "file_modified" : item.semanticAction === "create" ? "file_created" : item.semanticAction === "commit" ? "commit_observed" : item.semanticAction === "push" ? "push_observed" : `${item.semanticAction ?? "unknown"}_observed`;
+		const evidenceKind = kind === "information" ? "delivery" : kind === "constraint" || kind === "unknown" ? "none" : fileReadback ? "state_outcome" : item.semanticAction === "test" || item.semanticAction === "verify" ? "action_event" : "state_outcome";
+		const conditionId = guarded ? `condition:${item.id}` : void 0;
+		if (conditionId) conditions.push({
+			id: conditionId,
+			requirement_id: item.id,
+			source: requirementSource,
+			kind: item.waitAuthorization || /(?:确认|审批|批准|许可|approval|confirmation|permission)/iu.test(item.condition ?? "") ? "user_input" : "predicate",
+			status: "pending",
+			operation_id: null,
+			fact_ids: []
+		});
+		requirements.push({
+			id: item.id,
+			unit,
+			revision: 1,
+			seq: root.seq,
+			source: requirementSource,
+			kind,
+			action: item.taskKind === "context" ? "reported_context" : kind === "information" ? "answer" : item.semanticAction === "test" ? "test_verify" : fileReadback ? "readback" : item.semanticAction === "verify" ? assessmentAction(item.normalizedText) : item.semanticAction ?? "unknown",
+			target,
+			predicate,
+			scope_sha256: digest$2,
+			required: item.taskKind !== "context",
+			status: item.needsReview || ambiguousForbiddenFile || uncertainForbiddenEffect || unattributedHostCall || unresolvedPhysicalAlias ? "legacy_review" : item.status === "pending" ? "pending" : "satisfied",
+			parent_id: null,
+			evidence_kind: evidenceKind,
+			condition_ids: conditionId ? [conditionId] : [],
+			target_origin: {
+				root_constraint: forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral ?? (selectedScope || selectedEdit || selectedReadback ? trimmed : target),
+				root_constraint_source: span(forbiddenFile ? forbiddenFile.start : directoryLiteral ? directoryAt : relativeLiteral ? relativeAt : selectedScope || selectedEdit || selectedReadback ? ownConstraintSpan.start : constraintSpan.start, forbiddenFile ? forbiddenFile.end : directoryLiteral ? directoryAt + Buffer.byteLength(directoryLiteral, "utf8") : relativeLiteral ? relativeAt + Buffer.byteLength(relativeLiteral, "utf8") : selectedScope || selectedEdit || selectedReadback ? ownConstraintSpan.end : constraintSpan.end),
+				implementation_choice: kind === "constraint" ? null : target,
+				host_selection: kind === "constraint" ? null : target,
+				resolved: target,
+				observed: kind === "constraint" ? null : target,
+				subject_kind: subjectKind,
+				constraint_kind: forbiddenFile ? "exact" : directoryLiteral ? "directory" : relativeLiteral ? "exact" : selectedScope || selectedEdit || selectedReadback ? "work_unit" : "exact",
+				...(forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? { resolved_constraint: resolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral) } : {},
+				selection_source_id: kind === "constraint" ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}` : relativeLiteral ? (() => {
+					const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === "modify" && entry.evidenceRole === "effect" && entry.outcome === "success" && entry.subjects.includes(target) && sourceByCall.has(entry.callId));
+					return fact ? `call:${fact.callId}` : null;
+				})() : null
+			}
+		});
+		if (kind === "information" && item.answeredBy) {
+			const delivery = events.find((event) => event.seq === item.answeredBy?.responseSeq && event.type === "assistant/message");
+			if (delivery && item.answeredBy.turn === Number(turn)) {
+				const deliveryId = `delivery:${delivery.seq}`;
+				const deliveredText = Array.isArray(row(row(delivery.data).message).content) ? row(row(delivery.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
+				if (!sources.some((source) => source.id === deliveryId)) sources.push({
+					id: deliveryId,
+					seq: delivery.seq,
+					kind: "final_delivery",
+					unit,
+					revision: 1,
+					sha256: hash(deliveredText),
+					byte_length: Buffer.byteLength(deliveredText, "utf8"),
+					text: null,
+					call_id: null,
+					turn
+				});
+				facts.push({
+					id: `fact:${deliveryId}`,
+					seq: delivery.seq,
+					unit,
+					revision: 1,
+					source_id: deliveryId,
+					call_source_id: null,
+					kind: "delivery",
+					target,
+					predicate,
+					outcome: "success",
+					operation_id: null,
+					requirement_id: item.id,
+					condition_id: null,
+					invalidates: []
+				});
+			}
+		}
+		for (const evidence of guarded ? [] : projection.evidence.values()) {
+			const inTestScope = needsReadiness && typeof item.requestedTarget?.scope === "string" && evidence.subjects.includes(item.requestedTarget.scope);
+			if (evidence.epoch !== projection.epoch || !evidence.subjects.includes(target) && !inTestScope || evidence.toolResultSeq <= root.seq || attached.has(evidence.id) && !fileReadback) continue;
+			if (kind === "constraint" && (!forbiddenFile || evidence.evidenceRole !== "effect" || ![
+				"write",
+				"write_file",
+				"edit",
+				"edit_file"
+			].includes(evidence.toolName) || !evidence.operations?.some((operation) => ["create", "modify"].includes(operation.op) && operation.path === target))) continue;
+			if (subjectKind === "filesystem" && (directoryLiteral || relativeLiteral || selectedReadback) && evidence.toolName === "context_guard_observe_file" && (!rootBase || evidence.nativeCanonicalBase !== rootBase || evidence.nativeCanonicalPath !== target)) continue;
+			if (needsReadiness && evidence.toolName !== "context_guard_observe_test_readiness" && evidence.semanticAction !== item.semanticAction) continue;
+			if (fileReadback && (evidence.evidenceRole !== "state" || evidence.toolName !== "context_guard_observe_file")) continue;
+			if (evidence.toolName === "context_guard_observe_test_readiness" && evidence.readinessForItemId !== item.id) continue;
+			if (evidence.evidenceRole === "state" && evidence.toolName !== "context_guard_observe_test_readiness") {
+				if (![...projection.evidence.values()].find((fact) => fact.callId === evidence.causedByCallId && fact.epoch === evidence.epoch && fact.outcome === "success" && fact.toolResultSeq < evidence.toolResultSeq && fact.subjects.includes(target) && fact.semanticAction === evidence.semanticAction) || !["context_guard_observe_file", "context_guard_observe_git"].includes(evidence.toolName)) continue;
+			}
+			const pair = sourceByCall.get(evidence.callId);
+			const crossesNewConstraint = kind === "constraint" && forbiddenFile && pair && pair.call.seq <= root.seq && pair.result.seq >= root.seq;
+			if (!pair || pair.result.seq !== evidence.toolResultSeq || pair.call.seq <= root.seq && !crossesNewConstraint) continue;
+			const resultMessage = row(pair.result.data).message;
+			const resultBlocks = row(resultMessage).content;
+			const outcome = row(pair.result.data).error !== void 0 || row(resultMessage).isError === true || Array.isArray(resultBlocks) && resultBlocks.some((block) => row(block).isError === true) || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
+			const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`;
+			const callName = String(row(pair.call.data).name ?? "");
+			let callArgs = {};
+			try {
+				callArgs = row(JSON.parse(String(row(pair.call.data).arguments ?? "")));
+			} catch {}
+			const fileCall = [
+				"read",
+				"read_file",
+				"write",
+				"write_file",
+				"edit",
+				"edit_file"
+			].includes(callName);
+			const filePath = callArgs.file_path;
+			const fileCallTarget = fileCall && typeof filePath === "string" && filePath ? isAbsolute(filePath) ? resolve(filePath) : rootBase ? resolve(rootBase, filePath) : void 0 : void 0;
+			const hostTarget = fileCall ? fileCallTarget : evidence.subjects[0];
+			if (!hostTarget || fileCall && evidence.parseStatus !== "supported") continue;
+			if (!sources.some((source) => source.id === callId)) {
+				const callTurn = String(row(pair.call.data).turn ?? turn);
+				const resultTurn = String(row(pair.result.data).turn ?? callTurn);
+				const originRoot = usedRoots.filter((candidate) => candidate.seq <= pair.call.seq && String(row(candidate.data).turn ?? turn) === callTurn).at(-1);
+				const callBytes = String(row(pair.call.data).arguments ?? "");
+				const resultBytes = Array.isArray(row(row(pair.result.data).message).content) ? row(row(pair.result.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
+				sources.push({
+					id: callId,
+					seq: pair.call.seq,
+					kind: "host_call",
+					unit,
+					revision: 1,
+					sha256: hash(callBytes),
+					byte_length: Buffer.byteLength(callBytes, "utf8"),
+					text: null,
+					call_id: evidence.callId,
+					turn: callTurn,
+					target: hostTarget,
+					target_kind: subjectKind,
+					...originRoot ? { origin_root_source_id: `root:${originRoot.seq}` } : {}
+				});
+				sources.push({
+					id: resultId,
+					seq: pair.result.seq,
+					kind: "host_result",
+					unit,
+					revision: 1,
+					sha256: hash(resultBytes),
+					byte_length: Buffer.byteLength(resultBytes, "utf8"),
+					text: null,
+					call_id: evidence.callId,
+					turn: resultTurn
+				});
+			}
+			const factKind = evidence.toolName === "context_guard_observe_test_readiness" ? "readiness" : evidence.evidenceRole === "state" ? "state_outcome" : "action_event";
+			facts.push({
+				id: fileReadback ? `${evidence.id}:${item.id}` : evidence.id,
+				seq: pair.result.seq,
+				unit,
+				revision: 1,
+				source_id: resultId,
+				call_source_id: callId,
+				kind: factKind,
+				target: hostTarget,
+				predicate: forbiddenFile ? "mutation_applied" : factKind === "readiness" ? "inputs_ready" : predicate,
+				outcome,
+				operation_id: null,
+				requirement_id: item.id,
+				condition_id: null,
+				invalidates: []
+			});
+			if (!fileReadback) attached.add(evidence.id);
+		}
+		for (const base of currentActionBases(projection, false).filter((base$1) => base$1.itemId === item.id)) {
+			const ready = facts.filter((fact) => fact.requirement_id === item.id && fact.kind === "readiness" && fact.outcome === "success").map((fact) => fact.id);
+			if (!ready.length) continue;
+			actions.push({
+				schema: "current-action-basis/v1",
+				requirement_id: item.id,
+				unit,
+				revision: 1,
+				seq: Number(base.asOf),
+				source: requirementSource,
+				scope_sha256: digest$2,
+				action: item.semanticAction === "test" ? "test_verify" : item.semanticAction === "verify" ? assessmentAction(item.normalizedText) : item.semanticAction,
+				target,
+				predicate,
+				owner: "assistant",
+				relation: "direct",
+				readiness_fact_ids: ready,
+				state: "current"
+			});
+		}
+	}
+	const latestText = rootText(latestRoot), latestDigest = hash(latestText);
+	const resume = isResume(latestText);
+	return {
+		schema: "core-observation/v2",
+		unit,
+		revision: 1,
+		as_of: events.at(-1)?.seq ?? latestRoot.seq,
+		turn,
+		units: [{
+			id: unit,
+			parent_id: null,
+			required: true,
+			source_id: `root:${usedRoots[0].seq}`
+		}],
+		sources,
+		requirements,
+		facts,
+		actions,
+		conditions,
+		coverage,
+		intent: resume ? {
+			source: {
+				source_id: `root:${latestRoot.seq}`,
+				start: 0,
+				end: Buffer.byteLength(latestText, "utf8"),
+				sha256: latestDigest
+			},
+			kind: "resume"
+		} : {
+			source: null,
+			kind: "none"
+		},
+		completion_claim: false,
+		proof_violation: false,
+		corrections_used: 0,
+		progress_changed: true,
+		goal_contract_adopted: projection.goalCompletionAdopted,
+		release_state: projection.releaseContracts.some((entry) => entry.revokedAtSeq === void 0) ? "adopted" : "not_adopted"
+	};
+}
+function projectSessionCoreV2(events, projection) {
+	const snapshot = sessionCoreSnapshot(events, projection);
+	return snapshot ? projectCoreV2(snapshot) : void 0;
 }
 
 //#endregion
@@ -117,18 +639,18 @@ function checkpointPage(p, query, full) {
 	}
 	const rows = Object.fromEntries(LANES.map((key) => [key, full[key] ?? []]));
 	if (item_ids?.length) {
-		rows.open_items = rows.open_items.filter((row) => item_ids.includes(String(row.id)));
-		rows.active_constraints = rows.active_constraints.filter((row) => item_ids.includes(String(row.id)));
-		rows.rejected_bindings = rows.rejected_bindings.filter((row) => item_ids.includes(String(row.item_id)));
+		rows.open_items = rows.open_items.filter((row$1) => item_ids.includes(String(row$1.id)));
+		rows.active_constraints = rows.active_constraints.filter((row$1) => item_ids.includes(String(row$1.id)));
+		rows.rejected_bindings = rows.rejected_bindings.filter((row$1) => item_ids.includes(String(row$1.item_id)));
 	}
-	if (evidence_ids?.length) rows.available_evidence = rows.available_evidence.filter((row) => evidence_ids.includes(String(row.id)));
+	if (evidence_ids?.length) rows.available_evidence = rows.available_evidence.filter((row$1) => evidence_ids.includes(String(row$1.id)));
 	if (lane && offset > rows[lane].length) return invalid("invalid_cursor_offset");
 	if (detail_id) {
 		if (!Number.isSafeInteger(detail_offset) || detail_offset < 0) return invalid("invalid_detail_offset");
 		if (detail_offset > 0 && query.detail_snapshot !== identity) return invalid("stale_detail_snapshot");
-		const matches = LANES.flatMap((key) => rows[key].filter((row) => row.id === detail_id || row.item_id === detail_id || lookup(String(row.id ?? row.item_id)) === detail_id).map((row) => ({
+		const matches = LANES.flatMap((key) => rows[key].filter((row$1) => row$1.id === detail_id || row$1.item_id === detail_id || lookup(String(row$1.id ?? row$1.item_id)) === detail_id).map((row$1) => ({
 			kind: key,
-			...row
+			...row$1
 		})));
 		const data = JSON.stringify(matches);
 		if (detail_offset > data.length) return invalid("invalid_detail_offset");
@@ -145,8 +667,8 @@ function checkpointPage(p, query, full) {
 		};
 	}
 	const reasons = /* @__PURE__ */ new Map();
-	for (const row of [...rows.open_items, ...rows.rejected_bindings]) {
-		const reason = String(row.reason_code ?? "missing_evidence").slice(0, 160);
+	for (const row$1 of [...rows.open_items, ...rows.rejected_bindings]) {
+		const reason = String(row$1.reason_code ?? "missing_evidence").slice(0, 160);
 		reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
 	}
 	const output = {
@@ -179,25 +701,25 @@ function checkpointPage(p, query, full) {
 		},
 		detail_query: "Use detail_id and detail_offset; evidence_scope=history includes non-citable evidence."
 	};
-	const summarize = (row) => {
-		if (size(row) <= ITEM_ROW_BUDGET) return row;
+	const summarize = (row$1) => {
+		if (size(row$1) <= ITEM_ROW_BUDGET) return row$1;
 		return {
-			id: String(row.id ?? row.item_id).slice(0, 128),
-			reason_code: row.reason_code,
-			certifiable: row.certifiable,
-			next_step: typeof row.next_step === "string" ? row.next_step.slice(0, 240) : void 0,
-			adapter_disposition: row.adapter_disposition,
-			...row.binding_template !== void 0 ? { binding_template: row.binding_template } : {},
+			id: String(row$1.id ?? row$1.item_id).slice(0, 128),
+			reason_code: row$1.reason_code,
+			certifiable: row$1.certifiable,
+			next_step: typeof row$1.next_step === "string" ? row$1.next_step.slice(0, 240) : void 0,
+			adapter_disposition: row$1.adapter_disposition,
+			...row$1.binding_template !== void 0 ? { binding_template: row$1.binding_template } : {},
 			omitted: true,
-			detail_id: lookup(String(row.id ?? row.item_id))
+			detail_id: lookup(String(row$1.id ?? row$1.item_id))
 		};
 	};
 	for (const key of LANES) {
 		const start = lane === key ? offset : 0;
 		const cap = lane && lane !== key ? 0 : key === "open_items" ? Math.min(limit, 8) : key === "active_constraints" ? Math.min(limit, 8 - output.open_items.length) : limit;
 		const selected = [];
-		for (const row of rows[key].slice(start, start + cap)) {
-			const candidate = summarize(row);
+		for (const row$1 of rows[key].slice(start, start + cap)) {
+			const candidate = summarize(row$1);
 			if (size({
 				...output,
 				[key]: [...selected, candidate]
@@ -638,6 +1160,21 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 							certification_digest: { type: "string" },
 							unit_id: { type: "string" },
 							unit_closure_digest: { type: "string" },
+							native_observations: {
+								type: "object",
+								additionalProperties: false,
+								properties: {
+									schema: {
+										type: "string",
+										required: true
+									},
+									digests: {
+										type: "array",
+										required: true,
+										items: { type: "string" }
+									}
+								}
+							},
 							goal_ref: { oneOf: [{
 								type: "object",
 								additionalProperties: false,
@@ -757,9 +1294,9 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 					source: evidence.processFacts.source,
 					frozen_outcome_conflict: evidence.processFacts.frozenOutcomeConflict,
 					operation_attribution: evidence.processFacts.operationAttribution,
-					...evidence.processFacts.declaredOperationResults ? { declared_operation_results: evidence.processFacts.declaredOperationResults.map((row) => ({
-						action: row.action,
-						outcome: row.outcome
+					...evidence.processFacts.declaredOperationResults ? { declared_operation_results: evidence.processFacts.declaredOperationResults.map((row$1) => ({
+						action: row$1.action,
+						outcome: row$1.outcome
 					})) } : {}
 				} } : {}
 			}));
@@ -771,12 +1308,12 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 				open_items: (args.item_ids?.length ? args.item_ids : result.openItems).map((id) => projection.items.get(id)).filter((item) => Boolean(item)).sort((a, b) => b.revision - a.revision || a.id.localeCompare(b.id)).map((item) => openItemForTool(projection, item)),
 				active_constraints: [...projection.items.values()].filter((item) => item.kind === "prohibition" && item.status === "pending").map((item) => openItemForTool(projection, item)),
 				available_evidence,
-				available_qualifications: availableBoundaryQualifications(projection).map((row) => ({
-					id: row.id,
-					kind: row.kind,
-					disposition: row.disposition,
-					source: row.source,
-					status: row.status
+				available_qualifications: availableBoundaryQualifications(projection).map((row$1) => ({
+					id: row$1.id,
+					kind: row$1.kind,
+					disposition: row$1.disposition,
+					source: row$1.source,
+					status: row$1.status
 				})),
 				rejected_bindings: result.rejectedBindings.map((binding) => ({
 					item_id: binding.itemId,
@@ -796,6 +1333,8 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 					open_digest: result.checkpoint.openDigest,
 					evidence_sha256: result.checkpoint.evidenceSha256,
 					binding_digest: result.checkpoint.bindingDigest,
+					...result.checkpoint.nativeObservations ? { native_observations: result.checkpoint.nativeObservations } : {},
+					...result.checkpoint.rootLocatorIdentity ? { root_locator_identity: result.checkpoint.rootLocatorIdentity } : {},
 					certification_digest: result.checkpoint.certificationDigest,
 					...result.checkpoint.unitId !== void 0 ? {
 						unit_id: result.checkpoint.unitId,
@@ -916,12 +1455,12 @@ function createBoundaryTool(getProjection, prepare, onRejected) {
 			return {
 				status: candidate.persistedResult,
 				reason_code: candidate.reasonCode,
-				available_qualifications: availableBoundaryQualifications(projection).map((row) => ({
-					id: row.id,
-					kind: row.kind,
-					disposition: row.disposition,
-					source: row.source,
-					status: row.status
+				available_qualifications: availableBoundaryQualifications(projection).map((row$1) => ({
+					id: row$1.id,
+					kind: row$1.kind,
+					disposition: row$1.disposition,
+					source: row$1.source,
+					status: row$1.status
 				})),
 				boundary: {
 					id: candidate.id,
@@ -1235,7 +1774,7 @@ const encodeCursor = (cursor) => Buffer.from(JSON.stringify(cursor), "utf8").toS
 */
 function discoveryItemIds(p) {
 	const pending = [...p.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id));
-	if (p.boundaryProtocol !== 5) return pending.map((item) => item.id);
+	if (p.boundaryProtocol === void 0 || p.boundaryProtocol < 5) return pending.map((item) => item.id);
 	const closureUnits = new Set([...p.currentUnitId !== void 0 ? [p.currentUnitId, ...unitDescendantIds(p, p.currentUnitId)] : []]);
 	return pending.filter((item) => item.unitId === void 0 || item.unitId !== void 0 && closureUnits.has(item.unitId)).map((item) => item.id);
 }
@@ -1251,7 +1790,7 @@ function discoveryItemIds(p) {
 function createPrepareTool(options) {
 	return defineTool({
 		name: "context_guard_prepare",
-		description: "Read-only pre-action preparation: report the supported command shape, required evidence order, existing references, and exact missing target fields for one contract item. Omit item_id to list current open items with their IDs; a stateful change needs resolution/effect/state, a read-only verification needs one matching fact. Pagination follows page_cursor (bound to the contract revision) and semantic_action filters the listing. Performs no action and grants no authority.",
+		description: "Read-only diagnosis of open contract items. Ordinary changes use native host tools and observed facts; this tool never grants execution permission. Omit item_id for a paginated item list.",
 		parameters: {
 			item_id: { type: "string" },
 			item_revision: { type: "number" },
@@ -1292,6 +1831,27 @@ function createPrepareTool(options) {
 				status: "unknown",
 				reason_code: "guard_unavailable"
 			};
+			if (p.boundaryProtocol === 6 && args.item_id !== void 0) {
+				const current = p.items.get(args.item_id);
+				if (!current) return {
+					status: "rejected",
+					reason_code: "item_not_found"
+				};
+				if (args.item_revision !== void 0 && args.item_revision !== current.revision) return {
+					status: "rejected",
+					reason_code: "item_revision_mismatch"
+				};
+				if (current.semanticAction !== "publish") return {
+					status: "observed",
+					reason_code: "ordinary_execution_host_owned",
+					item: {
+						id: current.id,
+						revision: current.revision,
+						status: current.status
+					},
+					next_step: "Use the host tool for ordinary work. Guard can observe its persisted result and independent readback; no Guard preparation or qualification is required."
+				};
+			}
 			if (args.item_id === void 0) {
 				const filter = args.semantic_action ?? null;
 				const invalidCursor = (reason_code, note) => ({
@@ -1349,7 +1909,7 @@ function createPrepareTool(options) {
 						k: [page[page.length - 1].revision, page[page.length - 1].id]
 					}) } : {},
 					...filter !== null ? { filtered_by: { semantic_action: filter } } : {},
-					note: "Re-run with one item_id to prepare that item, or pass page_cursor for the next page. Preparation performs no action."
+					note: "Re-run with one item_id for a read-only diagnosis, or pass page_cursor for the next page."
 				};
 			}
 			const item = p.items.get(args.item_id ?? "");
@@ -1498,9 +2058,9 @@ function parsePartition(args, extent) {
 		if (!Array.isArray(raw)) return void 0;
 		const spans = [];
 		for (const entry of raw) {
-			const record$1 = entry;
-			const start = record$1?.start;
-			const end = record$1?.end;
+			const record$2 = entry;
+			const start = record$2?.start;
+			const end = record$2?.end;
 			if (typeof start !== "number" || !Number.isSafeInteger(start) || typeof end !== "number" || !Number.isSafeInteger(end) || start >= end) return void 0;
 			spans.push({
 				start,
@@ -1630,7 +2190,7 @@ function createInterpretTool(options) {
 
 //#endregion
 //#region src/tools/evidence.ts
-const execFileAsync = promisify(execFile);
+const execFileAsync$1 = promisify(execFile);
 const PRODUCER_VERSION = "1.0.0";
 const PRODUCER_TOOL = "context_guard_evidence";
 const ACTION_TOOL = "context_guard_action";
@@ -1649,17 +2209,17 @@ const SUPPORTED = [
 const RESTART_INTENT_PREFIX = "Context Guard restart intent v1: ";
 function restartIntent(events, resolutionCallId, target) {
 	for (const raw of events) {
-		const event = record(raw);
+		const event = record$1(raw);
 		if (!event || event.type !== "user/message") continue;
-		const data = record(event.data);
-		const source = record(data?.source);
+		const data = record$1(event.data);
+		const source = record$1(data?.source);
 		if (source?.kind !== "plugin" || source.plugin !== "context-guard" || source.form !== "notice") continue;
 		const content = Array.isArray(data?.content) ? data.content : [];
-		const block = content.length === 1 ? record(content[0]) : void 0;
+		const block = content.length === 1 ? record$1(content[0]) : void 0;
 		const text = typeof block?.text === "string" ? block.text : "";
 		if (!text.startsWith(RESTART_INTENT_PREFIX)) continue;
 		try {
-			const value = record(JSON.parse(text.slice(33)));
+			const value = record$1(JSON.parse(text.slice(33)));
 			if (value?.resolution_call_id === resolutionCallId && value.service_id === target.service_id && value.pre_generation === target.pre_generation) return true;
 		} catch {}
 	}
@@ -1687,7 +2247,7 @@ function installedProfile(moduleUrl = import.meta.url) {
 		directory = parent;
 	}
 }
-function record(value) {
+function record$1(value) {
 	return value && typeof value === "object" ? value : void 0;
 }
 function stable(value) {
@@ -1711,7 +2271,7 @@ function jsonExpectedTransition(transition) {
 	};
 }
 function tuple(value) {
-	return record(value);
+	return record$1(value);
 }
 function adapterId(action) {
 	if (["create", "modify"].includes(action)) return "context-guard.artifact.v1";
@@ -1760,29 +2320,29 @@ function supported(action, role, resolved, observed = {}, commandManifest = {}, 
 	};
 }
 function messageMeta(event) {
-	return record(record(event.data)?.meta);
+	return record$1(record$1(event.data)?.meta);
 }
 function producerMeta(event) {
-	return record(messageMeta(event)?.contextGuard);
+	return record$1(messageMeta(event)?.contextGuard);
 }
 function eventCallId(event) {
-	const data = record(event.data);
+	const data = record$1(event.data);
 	if (event.type === "tool/call") return typeof data?.callId === "string" ? data.callId : void 0;
-	const source = record(record(data?.message)?.source);
+	const source = record$1(record$1(data?.message)?.source);
 	return typeof source?.callId === "string" ? source.callId : void 0;
 }
 function findResolution(events, callId, action) {
 	let selector;
 	let commandManifest;
 	for (const raw of events) {
-		const event = record(raw);
+		const event = record$1(raw);
 		if (!event || eventCallId(event) !== callId) continue;
 		if (event.type === "tool/call") {
-			const data = record(event.data);
+			const data = record$1(event.data);
 			try {
-				const args = record(JSON.parse(String(data?.arguments ?? "{}")));
-				selector = record(args?.selector);
-				commandManifest = record(args?.command_manifest);
+				const args = record$1(JSON.parse(String(data?.arguments ?? "{}")));
+				selector = record$1(args?.selector);
+				commandManifest = record$1(args?.command_manifest);
 			} catch {
 				return;
 			}
@@ -1792,13 +2352,13 @@ function findResolution(events, callId, action) {
 		const meta = producerMeta(event);
 		if (meta?.semanticAction !== action || meta.evidenceRole !== "resolution" || meta.adapterVersion !== (action === "restart" ? "2.0.0" : PRODUCER_VERSION) || !selector || !commandManifest) return void 0;
 		const target = tuple(meta.resolvedTarget);
-		const rawBinding = record(meta.gitBinding);
-		const rawManifest = record(rawBinding?.manifest);
-		const rawPrestate = record(rawBinding?.prestate);
-		const rawEnvelope = record(rawBinding?.envelope);
-		const rawExecutable = record(meta.executableIdentity);
-		const rawExpected = record(meta.expectedTransition);
-		const expectedParameters$1 = record(rawExpected?.parameters);
+		const rawBinding = record$1(meta.gitBinding);
+		const rawManifest = record$1(rawBinding?.manifest);
+		const rawPrestate = record$1(rawBinding?.prestate);
+		const rawEnvelope = record$1(rawBinding?.envelope);
+		const rawExecutable = record$1(meta.executableIdentity);
+		const rawExpected = record$1(meta.expectedTransition);
+		const expectedParameters$1 = record$1(rawExpected?.parameters);
 		const expectedTransition = rawExpected && typeof rawExpected.predicateId === "string" && rawExpected.version === 1 && rawExpected.predParamsKind === "inline" && expectedParameters$1 ? rawExpected : void 0;
 		const expectedTransitionDigest = typeof meta.expectedTransitionDigest === "string" ? meta.expectedTransitionDigest : void 0;
 		const interpreterIdentityValid = rawExecutable && (rawExecutable.interpreterRealpath === void 0 && rawExecutable.interpreterVersion === void 0 || typeof rawExecutable.interpreterRealpath === "string" && typeof rawExecutable.interpreterVersion === "string");
@@ -1822,14 +2382,14 @@ function findResolution(events, callId, action) {
 function findEffect(events, callId) {
 	let call;
 	for (const raw of events) {
-		const event = record(raw);
+		const event = record$1(raw);
 		if (!event) continue;
 		const seq = typeof event.seq === "number" ? event.seq : -1;
 		if (event.type === "tool/call" && eventCallId(event) === callId) {
-			const data = record(event.data);
+			const data = record$1(event.data);
 			let args = {};
 			try {
-				args = record(JSON.parse(String(data?.arguments ?? "{}"))) ?? {};
+				args = record$1(JSON.parse(String(data?.arguments ?? "{}"))) ?? {};
 			} catch {
 				args = {};
 			}
@@ -1842,23 +2402,23 @@ function findEffect(events, callId) {
 			};
 		}
 		if (event.type === "tool/result" && eventCallId(event) === callId && call) {
-			const data = record(event.data);
+			const data = record$1(event.data);
 			call.resultSeq = seq;
 			call.error = data?.error;
 			call.meta = data?.meta;
-			call.textContent = extractTextContent(record(data?.message)?.content ?? []);
+			call.textContent = extractTextContent(record$1(data?.message)?.content ?? []);
 			return call;
 		}
 	}
 }
 function actionCallMatches(events, callId, action, resolutionCallId, target) {
 	for (const raw of events) {
-		const event = record(raw);
+		const event = record$1(raw);
 		if (!event || event.type !== "tool/call" || eventCallId(event) !== callId) continue;
-		const data = record(event.data);
+		const data = record$1(event.data);
 		if (data?.name !== ACTION_TOOL) return false;
 		try {
-			const args = record(JSON.parse(String(data.arguments ?? "{}")));
+			const args = record$1(JSON.parse(String(data.arguments ?? "{}")));
 			return args?.semantic_action === action && args.resolution_call_id === resolutionCallId && args.target_digest === digest(target) && typeof args.contract_item_id === "string" && Number.isSafeInteger(args.contract_item_revision);
 		} catch {
 			return false;
@@ -1868,15 +2428,15 @@ function actionCallMatches(events, callId, action, resolutionCallId, target) {
 }
 function actionResultCompleted(events, callId) {
 	for (const raw of events) {
-		const event = record(raw);
+		const event = record$1(raw);
 		if (!event || event.type !== "tool/result" || eventCallId(event) !== callId) continue;
-		return record(messageMeta(event)?.contextGuardAction)?.status === "completed";
+		return record$1(messageMeta(event)?.contextGuardAction)?.status === "completed";
 	}
 	return false;
 }
 function plannedEffectDigest(manifest) {
 	const name$1 = typeof manifest.planned_tool === "string" ? manifest.planned_tool : void 0;
-	const args = record(manifest.planned_arguments);
+	const args = record$1(manifest.planned_arguments);
 	return name$1 && args ? digest({
 		name: name$1,
 		arguments: args
@@ -1884,7 +2444,7 @@ function plannedEffectDigest(manifest) {
 }
 function plannedEffect(manifest) {
 	const name$1 = typeof manifest.planned_tool === "string" ? manifest.planned_tool : void 0;
-	const args = record(manifest.planned_arguments);
+	const args = record$1(manifest.planned_arguments);
 	return name$1 && args ? {
 		name: name$1,
 		arguments: args,
@@ -1917,7 +2477,7 @@ function effectDigest(effect) {
 	});
 }
 function cwdOf(agent) {
-	const header = record(agent.session.header);
+	const header = record$1(agent.session.header);
 	return typeof header?.cwd === "string" ? header.cwd : void 0;
 }
 function pathOf(selector, cwd) {
@@ -1935,7 +2495,7 @@ async function fileDigest(path) {
 }
 async function readJson(path) {
 	try {
-		return record(JSON.parse(await readFile(path, "utf8")));
+		return record$1(JSON.parse(await readFile(path, "utf8")));
 	} catch {
 		return;
 	}
@@ -1959,7 +2519,7 @@ async function tgzIdentity(path) {
 		if (name$1 === "package/package.json") {
 			if (manifest || size$1 > 1024 * 1024) return void 0;
 			try {
-				manifest = record(JSON.parse(tar.subarray(bodyStart, bodyEnd).toString("utf8")));
+				manifest = record$1(JSON.parse(tar.subarray(bodyStart, bodyEnd).toString("utf8")));
 			} catch {
 				return;
 			}
@@ -1969,7 +2529,7 @@ async function tgzIdentity(path) {
 	if (typeof manifest?.name !== "string" || typeof manifest.version !== "string") return void 0;
 	const gitHead = typeof manifest.gitHead === "string" && /^[0-9a-f]{40}$/.test(manifest.gitHead) ? manifest.gitHead : void 0;
 	const repositoryField = manifest.repository;
-	const repository = typeof repositoryField === "string" ? repositoryField : record(repositoryField) && typeof record(repositoryField)?.url === "string" ? String(record(repositoryField).url) : void 0;
+	const repository = typeof repositoryField === "string" ? repositoryField : record$1(repositoryField) && typeof record$1(repositoryField)?.url === "string" ? String(record$1(repositoryField).url) : void 0;
 	return {
 		name: manifest.name,
 		version: manifest.version,
@@ -2037,10 +2597,10 @@ async function marketCapabilities(roots, signal) {
 		redirect: "error"
 	});
 	if (!response.ok) return void 0;
-	const value = record(await response.json());
+	const value = record$1(await response.json());
 	if (value?.schema !== MARKET_SCHEMA || value.apiVersion !== 1 || value.marketVersion !== binding.version || value.profile !== binding.profile || value.bootId !== binding.bootId) return void 0;
-	const features = record(value.features);
-	const restart = record(value.restart);
+	const features = record$1(value.features);
+	const restart = record$1(value.restart);
 	if (features?.restart !== true || restart?.supported !== true || restart.managedBy !== "market") return void 0;
 	const provider = createHash("sha256").update(JSON.stringify([
 		MARKET_SCHEMA,
@@ -2112,9 +2672,9 @@ async function registryIntegrity(registry, packageId, version, roots, signal) {
 		redirect: "error"
 	});
 	if (!response.ok) return void 0;
-	const value = record(await response.json());
-	const release = record(record(value?.versions)?.[version]);
-	const dist = record(release?.dist);
+	const value = record$1(await response.json());
+	const release = record$1(record$1(value?.versions)?.[version]);
+	const dist = record$1(release?.dist);
 	return value?.name === packageId && release?.name === packageId && release.version === version && typeof dist?.integrity === "string" ? dist.integrity : void 0;
 }
 function windowsBatchCommand(file, args) {
@@ -2130,7 +2690,7 @@ async function windowsCommandInterpreter(signal) {
 		const interpreterRealpath = await realpath(configured);
 		const systemInterpreter = await realpath(resolve(systemRoot, "System32", "cmd.exe"));
 		if (basename(interpreterRealpath).toLowerCase() !== "cmd.exe" || interpreterRealpath.toLowerCase() !== systemInterpreter.toLowerCase()) return void 0;
-		const { stdout, stderr } = await execFileAsync(interpreterRealpath, [
+		const { stdout, stderr } = await execFileAsync$1(interpreterRealpath, [
 			"/d",
 			"/v:off",
 			"/c",
@@ -2153,7 +2713,7 @@ async function execAuditedFile(file, args, options, interpreter) {
 	if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(file)) {
 		const command = windowsBatchCommand(file, args);
 		if (!command || !interpreter) throw new Error("unsafe Windows batch invocation");
-		return execFileAsync(interpreter.interpreterRealpath, [
+		return execFileAsync$1(interpreter.interpreterRealpath, [
 			"/d",
 			"/v:off",
 			"/s",
@@ -2166,7 +2726,7 @@ async function execAuditedFile(file, args, options, interpreter) {
 			windowsVerbatimArguments: true
 		});
 	}
-	return execFileAsync(file, args, {
+	return execFileAsync$1(file, args, {
 		...options,
 		encoding: "utf8"
 	});
@@ -2268,7 +2828,7 @@ async function executeGuardAction(action, resolution, roots, signal, executableI
 			body: "{}"
 		});
 		if (!response.ok) return { status: "unavailable" };
-		return record(await response.json())?.schema === MARKET_SCHEMA ? { status: "handoff_pending" } : { status: "unavailable" };
+		return record$1(await response.json())?.schema === MARKET_SCHEMA ? { status: "handoff_pending" } : { status: "unavailable" };
 	}
 	if (action === "commit" || action === "push" || action === "pull" || action === "fetch") {
 		const binding = resolution.gitBinding;
@@ -2321,7 +2881,7 @@ async function executeGuardAction(action, resolution, roots, signal, executableI
 	return { status: "unavailable" };
 }
 async function gitBytes(repository, args, signal, file = "git") {
-	const { stdout } = await execFileAsync(file, args, {
+	const { stdout } = await execFileAsync$1(file, args, {
 		cwd: repository,
 		encoding: "buffer",
 		signal,
@@ -2423,11 +2983,11 @@ async function gitPrestate(manifest, repository, signal, file = "git") {
 		} : void 0;
 	}
 }
-function requireString(row, key) {
-	return typeof row[key] === "string" && row[key] ? row[key] : void 0;
+function requireString(row$1, key) {
+	return typeof row$1[key] === "string" && row$1[key] ? row$1[key] : void 0;
 }
-function hasExactKeys(row, keys) {
-	const actual = Object.keys(row).sort();
+function hasExactKeys(row$1, keys) {
+	const actual = Object.keys(row$1).sort();
 	const expected = [...keys].sort();
 	return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 }
@@ -2441,12 +3001,12 @@ function pickTarget(target, keys) {
 async function expectedTransitionForResolution(action, target, commandManifest) {
 	let parameters;
 	if (action === "create") {
-		const plannedArguments = record(commandManifest.planned_arguments);
+		const plannedArguments = record$1(commandManifest.planned_arguments);
 		const content = typeof plannedArguments?.content === "string" ? plannedArguments.content : void 0;
 		if (content === void 0) return void 0;
 		parameters = { post_digest: createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex") };
 	} else if (action === "modify") {
-		const plannedArguments = record(commandManifest.planned_arguments);
+		const plannedArguments = record$1(commandManifest.planned_arguments);
 		const oldString = requireString(plannedArguments ?? {}, "old_string");
 		const newString = typeof plannedArguments?.new_string === "string" ? plannedArguments.new_string : void 0;
 		const artifact = typeof target.artifact_id === "string" ? target.artifact_id : void 0;
@@ -2523,8 +3083,8 @@ async function resolveTarget(action, selector, commandManifest, cwd, roots, sign
 		const service = requireString(selector, "service_id");
 		if (service !== "dsh-web" || commandManifest.manifest_id !== "dshmarket.restart.v1" || !ACTION_MANIFEST.actions.restart.commandManifestIds.includes("dshmarket.restart.v1") || Object.keys(commandManifest).length !== 1) return void 0;
 		const capabilities = await marketCapabilities(roots, signal);
-		const features = record(capabilities?.features);
-		const restart = record(capabilities?.restart);
+		const features = record$1(capabilities?.features);
+		const restart = record$1(capabilities?.restart);
 		if (features?.restart !== true || restart?.supported !== true || restart.managedBy !== "market") return void 0;
 		return { target: {
 			service_id: service,
@@ -2766,7 +3326,7 @@ function createActionTool(options = {}) {
 	const roots = normalizedRoots(options);
 	return defineTool({
 		name: ACTION_TOOL,
-		description: "Execute one explicit Guard-owned mutation after re-reading a persisted resolution and exact target digest. This tool changes package, Git, registry, or Web service state; its result echoes the bounded target and command-manifest digest.",
+		description: "Compatibility entry for older sessions. Ordinary mutations return a migration diagnosis without side effects; only an explicitly adopted registry publication can use the controlled release path.",
 		parameters: {
 			semantic_action: {
 				type: "string",
@@ -2853,6 +3413,11 @@ function createActionTool(options = {}) {
 				resolved_target: {},
 				target_digest: "",
 				command_manifest_digest: ""
+			};
+			if (action !== "publish") return {
+				status: "unavailable",
+				reason_code: "ordinary_action_migrated_to_host_tools",
+				...empty
 			};
 			if (!agent || ![
 				"install",
@@ -3022,7 +3587,7 @@ function createEvidenceTool(options = {}) {
 	const roots = normalizedRoots(options);
 	return defineTool({
 		name: PRODUCER_TOOL,
-		description: "Create one trusted stateful resolution/effect/state fact from the live resource and persisted DSH tool events. Unsupported adapters fail closed.",
+		description: "Observe a controlled registry publish. Ordinary work uses native host tools and read-only observers; older producer calls return migration diagnostics.",
 		parameters: {
 			semantic_action: {
 				type: "string",
@@ -3228,6 +3793,17 @@ function createEvidenceTool(options = {}) {
 		async execute(args, exec) {
 			const action = args.semantic_action;
 			const role = args.evidence_role;
+			if ([
+				"install",
+				"apply",
+				"create",
+				"modify",
+				"restart",
+				"commit",
+				"push",
+				"pull",
+				"fetch"
+			].includes(action)) return unavailable(action, role, "ordinary_evidence_migrated_to_host_facts", void 0, "Use the native host tool and its persisted result; request only a read-only Guard observer when an independent state fact is needed. Do not repeat an earlier effect.");
 			if (!SUPPORTED.includes(action)) return unavailable(action, role, "adapter_unavailable_for_pinned_host");
 			if (roots.hostCapability?.(action).status !== "supported" && roots.hostCapability) return unavailable(action, role, "host_capability_unavailable");
 			const agent = exec.agent;
@@ -3236,9 +3812,9 @@ function createEvidenceTool(options = {}) {
 				if (role === "resolution") {
 					const recipe = actionPreparation(action);
 					{
-						const manifest = record(args.command_manifest);
-						const plannedArgs = record(manifest?.planned_arguments);
-						const selector = record(args.selector);
+						const manifest = record$1(args.command_manifest);
+						const plannedArgs = record$1(manifest?.planned_arguments);
+						const selector = record$1(args.selector);
 						const needsManifestId = [
 							"install",
 							"apply",
@@ -3258,10 +3834,10 @@ function createEvidenceTool(options = {}) {
 					const executable$1 = executableFor(action);
 					const executableBinding = executable$1 ? await (roots.readExecutableIdentity ?? executableIdentity)(executable$1, exec.signal) : void 0;
 					if (executable$1 && !executableBinding) return unavailable(action, role, "executable_identity_unavailable");
-					const resolved = await resolveTarget(action, record(args.selector) ?? {}, record(args.command_manifest) ?? {}, cwdOf(agent), roots, exec.signal, executableBinding);
+					const resolved = await resolveTarget(action, record$1(args.selector) ?? {}, record$1(args.command_manifest) ?? {}, cwdOf(agent), roots, exec.signal, executableBinding);
 					if (!resolved) return unavailable(action, role, action === "restart" && !roots.verifyMarketInstance ? "market_instance_binding_unavailable" : "resolution_unavailable");
 					const gitBinding = resolved.gitBinding ? JSON.parse(JSON.stringify(resolved.gitBinding)) : void 0;
-					const commandManifest = record(args.command_manifest) ?? {};
+					const commandManifest = record$1(args.command_manifest) ?? {};
 					const expectedTransition = await expectedTransitionForResolution(action, resolved.target, commandManifest);
 					if (!expectedTransition) return unavailable(action, role, "expected_transition_unavailable");
 					return supported(action, role, resolved.target, {}, commandManifest, gitBinding, executableBinding, expectedTransition);
@@ -3435,6 +4011,511 @@ function createReleaseTool(options) {
 }
 
 //#endregion
+//#region src/tools/observe.ts
+const execFileAsync = promisify(execFile);
+const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+/** Read-only, post-effect file observer. The path comes from a persisted native edit call. */
+function createNativeFileObserver(host) {
+	return defineTool({
+		name: "context_guard_observe_file",
+		description: "Read back the exact UTF-8 file after an already persisted native write or edit. This tool does not modify files or authorize the edit.",
+		parameters: { effect_call_id: {
+			type: "string",
+			required: true
+		} },
+		output: {
+			schema: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					status: {
+						type: "string",
+						required: true,
+						enum: ["observed", "unavailable"]
+					},
+					reason_code: {
+						type: "string",
+						required: true
+					},
+					effect_call_id: {
+						type: "string",
+						required: true
+					},
+					path: {
+						type: "string",
+						required: true
+					},
+					sha256: {
+						type: "string",
+						required: true
+					},
+					action: {
+						type: "string",
+						required: true,
+						enum: [
+							"create",
+							"modify",
+							"unknown"
+						]
+					},
+					canonical_path: { type: "string" },
+					canonical_base: { type: "string" }
+				}
+			},
+			render: (_args, value) => [{
+				type: "text",
+				text: JSON.stringify(value)
+			}],
+			presentationMeta: (_args, value) => value.status === "observed" ? { contextGuardNativeFile: {
+				effectCallId: value.effect_call_id,
+				path: value.path,
+				sha256: value.sha256,
+				action: value.action,
+				...value.canonical_path ? { canonicalPath: value.canonical_path } : {},
+				...value.canonical_base ? { canonicalBase: value.canonical_base } : {}
+			} } : { contextGuardNativeFileUnavailable: { reasonCode: value.reason_code } }
+		},
+		async execute(args, exec) {
+			const missing = (reason) => ({
+				status: "unavailable",
+				reason_code: reason,
+				effect_call_id: args.effect_call_id,
+				path: "",
+				sha256: "",
+				action: "unknown"
+			});
+			const agent = exec.agent;
+			if (!agent || !host.fs || !host.flush) return missing("host_fs_unavailable");
+			if (!await host.flush(agent.session)) return missing("native_effect_not_durable");
+			let call;
+			let result;
+			let callSeq = -1;
+			let resultSeq = -1;
+			let duplicate = false;
+			for (const raw of snapshotSessionEvents(agent.session)) {
+				const event = record(raw);
+				const data = record(event?.data);
+				if (event?.type === "tool/call" && data?.callId === args.effect_call_id) {
+					if (call) duplicate = true;
+					call = data;
+					callSeq = Number(event.seq);
+				}
+				if (event?.type === "tool/result" && record(record(data?.message)?.source)?.callId === args.effect_call_id) {
+					if (result) duplicate = true;
+					result = data;
+					resultSeq = Number(event.seq);
+				}
+			}
+			if (!call || !result || duplicate || callSeq >= resultSeq || call.turn !== result.turn || call.step !== result.step || ![
+				"write",
+				"write_file",
+				"edit",
+				"edit_file"
+			].includes(String(call.name))) return missing("native_effect_missing");
+			const message = record(result.message);
+			const source = record(message?.source);
+			if (source?.kind !== "tool" || source.callId !== args.effect_call_id) return missing("native_effect_missing");
+			if (result.error !== void 0 || Array.isArray(message?.content) && message.content.some((block) => record(block)?.isError === true)) return missing("native_effect_failed");
+			let effectArgs;
+			try {
+				effectArgs = record(JSON.parse(String(call.arguments)));
+			} catch {
+				return missing("native_effect_arguments_invalid");
+			}
+			const filePath = effectArgs?.file_path;
+			if (typeof filePath !== "string" || !filePath) return missing("native_effect_target_missing");
+			const action = String(call.name).startsWith("write") ? "create" : "modify";
+			const cwd = record(agent.session.header)?.cwd;
+			try {
+				const target = await host.fs.resolve(filePath, {
+					...typeof cwd === "string" ? { cwd } : {},
+					signal: exec.signal
+				});
+				const before = await host.fs.stat(target, exec.signal);
+				if (!before || before.type !== "file" || before.size !== void 0 && before.size > 2e7) return missing("native_file_readback_unavailable");
+				const content = await host.fs.readText(target, exec.signal);
+				const after = await host.fs.stat(target, exec.signal);
+				if (!after || after.type !== "file" || before.version !== after.version) return missing("native_file_readback_raced");
+				let canonicalPath;
+				let canonicalBase;
+				if (typeof cwd === "string" && host.fs.processPath && host.fs.contains) {
+					const base = await host.fs.resolve(cwd, { signal: exec.signal });
+					const path = host.fs.processPath(target);
+					const root = host.fs.processPath(base);
+					if (host.fs.contains(base, target) && path.startsWith("/") && root.startsWith("/")) {
+						canonicalPath = path;
+						canonicalBase = root;
+					}
+				}
+				return {
+					status: "observed",
+					reason_code: "file_state_observed",
+					effect_call_id: args.effect_call_id,
+					path: target.displayPath,
+					sha256: createHash("sha256").update(content, "utf8").digest("hex"),
+					action,
+					...canonicalPath && canonicalBase ? {
+						canonical_path: canonicalPath,
+						canonical_base: canonicalBase
+					} : {}
+				};
+			} catch {
+				return missing("native_file_readback_unavailable");
+			}
+		}
+	});
+}
+/** Fixed-argv Git readback for a persisted native shell commit/push result. */
+function createNativeGitObserver(host) {
+	return defineTool({
+		name: "context_guard_observe_git",
+		description: "Read back a repository after a persisted native Git command; performs only fixed Git queries.",
+		parameters: { effect_call_id: {
+			type: "string",
+			required: true
+		} },
+		output: {
+			schema: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					status: {
+						type: "string",
+						required: true,
+						enum: ["observed", "unavailable"]
+					},
+					reason_code: {
+						type: "string",
+						required: true
+					},
+					effect_call_id: {
+						type: "string",
+						required: true
+					},
+					action: {
+						type: "string",
+						required: true,
+						enum: [
+							"commit",
+							"push",
+							"unknown"
+						]
+					},
+					repository: {
+						type: "string",
+						required: true
+					},
+					branch: {
+						type: "string",
+						required: true
+					},
+					remote: {
+						type: "string",
+						required: true
+					},
+					refspec: {
+						type: "string",
+						required: true
+					},
+					post_oid: {
+						type: "string",
+						required: true
+					},
+					parent_oid: {
+						type: "string",
+						required: true
+					},
+					tree_oid: {
+						type: "string",
+						required: true
+					}
+				}
+			},
+			render: (_args, value) => [{
+				type: "text",
+				text: JSON.stringify(value)
+			}],
+			presentationMeta: (_args, value) => value.status === "observed" ? { contextGuardNativeGit: {
+				effectCallId: value.effect_call_id,
+				action: value.action,
+				repository: value.repository,
+				branch: value.branch,
+				remote: value.remote,
+				refspec: value.refspec,
+				postOid: value.post_oid,
+				parentOid: value.parent_oid,
+				treeOid: value.tree_oid
+			} } : { contextGuardNativeGitUnavailable: { reasonCode: value.reason_code } }
+		},
+		async execute(args, exec) {
+			const missing = (reason) => ({
+				status: "unavailable",
+				reason_code: reason,
+				effect_call_id: args.effect_call_id,
+				action: "unknown",
+				repository: "",
+				branch: "",
+				remote: "",
+				refspec: "",
+				post_oid: "",
+				parent_oid: "",
+				tree_oid: ""
+			});
+			const session = exec.agent?.session;
+			if (!session || !host.flush || !await host.flush(session)) return missing("native_effect_not_durable");
+			let call;
+			let result;
+			let callSeq = -1;
+			let resultSeq = -1;
+			let duplicate = false;
+			for (const raw of snapshotSessionEvents(session)) {
+				const event = record(raw);
+				const data = record(event?.data);
+				if (event?.type === "tool/call" && data?.callId === args.effect_call_id) {
+					if (call) duplicate = true;
+					call = data;
+					callSeq = Number(event.seq);
+				}
+				if (event?.type === "tool/result" && record(record(data?.message)?.source)?.callId === args.effect_call_id) {
+					if (result) duplicate = true;
+					result = data;
+					resultSeq = Number(event.seq);
+				}
+			}
+			if (!call || !result || duplicate || callSeq >= resultSeq || call.turn !== result.turn || call.step !== result.step || call.name !== "bash" && call.name !== "pwsh") return missing("native_effect_missing");
+			const message = record(result.message);
+			const source = record(message?.source);
+			if (source?.kind !== "tool" || source.callId !== args.effect_call_id || result.error !== void 0 || Array.isArray(message?.content) && message.content.some((block) => record(block)?.isError === true)) return missing("native_effect_failed");
+			let effectArgs;
+			try {
+				effectArgs = record(JSON.parse(String(call.arguments)));
+			} catch {
+				return missing("native_effect_arguments_invalid");
+			}
+			const command = effectArgs?.command;
+			const repository = effectArgs?.workdir;
+			if (typeof command !== "string" || typeof repository !== "string" || !repository) return missing("native_git_target_missing");
+			const parsed = canonicalArgvFromCommand(command, call.name);
+			const argv = parsed.argv;
+			if (parsed.status !== "supported" || argv[0] !== "git") return missing("native_git_command_unsupported");
+			const action = argv[1];
+			if (action !== "commit" && action !== "push") return missing("native_git_command_unsupported");
+			const gitAction = action;
+			const output = Array.isArray(message?.content) ? extractTextContent(message.content) : "";
+			const git$1 = async (...query) => (await execFileAsync("git", [
+				"-C",
+				repository,
+				...query
+			], {
+				encoding: "utf8",
+				timeout: 5e3,
+				maxBuffer: 1024 * 1024
+			})).stdout.trim();
+			try {
+				const top = await git$1("rev-parse", "--show-toplevel");
+				if (!top || await realpath(top) !== await realpath(repository)) return missing("native_git_repository_mismatch");
+				const branch = await git$1("symbolic-ref", "--short", "HEAD");
+				const postOid = await git$1("rev-parse", "HEAD");
+				if (!/^[0-9a-f]{40,64}$/.test(postOid)) return missing("native_git_readback_unavailable");
+				if (action === "commit") {
+					if (argv.length !== 4 || argv[2] !== "-m" || !argv[3] || !(/* @__PURE__ */ new RegExp(`\\b${postOid.slice(0, 7)}[0-9a-f]*\\b`)).test(output)) return missing("native_git_effect_output_unbound");
+					const parentOid = await git$1("rev-parse", "HEAD^");
+					const treeOid = await git$1("rev-parse", "HEAD^{tree}");
+					return {
+						status: "observed",
+						reason_code: "git_commit_observed",
+						effect_call_id: args.effect_call_id,
+						action: gitAction,
+						repository: top,
+						branch,
+						remote: "",
+						refspec: "",
+						post_oid: postOid,
+						parent_oid: parentOid,
+						tree_oid: treeOid
+					};
+				}
+				const remote = argv[2];
+				const refspec = argv[3];
+				if (argv.length !== 4 || !remote || !/^refs\/heads\/[^:]+:refs\/heads\/[^:]+$/.test(refspec)) return missing("native_git_refspec_unsupported");
+				const [src, dst] = refspec.split(":");
+				const localOid = await git$1("rev-parse", src);
+				const remoteOid = (await git$1("ls-remote", "--exit-code", remote, dst)).split(/\s+/)[0];
+				const destinationName = dst.slice(11);
+				const reportedUpdate = output.includes(localOid.slice(0, 7)) || output.includes("[new branch]") && output.includes(`-> ${destinationName}`);
+				if (remoteOid !== localOid || !reportedUpdate) return missing("native_git_push_readback_mismatch");
+				return {
+					status: "observed",
+					reason_code: "git_push_observed",
+					effect_call_id: args.effect_call_id,
+					action: gitAction,
+					repository: top,
+					branch,
+					remote,
+					refspec,
+					post_oid: remoteOid,
+					parent_oid: "",
+					tree_oid: ""
+				};
+			} catch {
+				return missing("native_git_readback_unavailable");
+			}
+		}
+	});
+}
+/** Specific package-script readiness, with a stable changed input for an
+* assessment. The observer never executes the script or infers success. */
+function createTestReadinessObserver(host) {
+	return defineTool({
+		name: "context_guard_observe_test_readiness",
+		description: "Read a pending test or assessment script and its concrete inputs; never runs the script.",
+		parameters: { item_id: {
+			type: "string",
+			required: true
+		} },
+		output: {
+			schema: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					status: {
+						type: "string",
+						required: true,
+						enum: ["ready", "unavailable"]
+					},
+					reason_code: {
+						type: "string",
+						required: true
+					},
+					item_id: {
+						type: "string",
+						required: true
+					},
+					scope: {
+						type: "string",
+						required: true
+					},
+					manifest_sha256: {
+						type: "string",
+						required: true
+					},
+					predicate: {
+						type: "string",
+						required: true
+					},
+					script_name: {
+						type: "string",
+						required: true
+					},
+					selected_path: {
+						type: "string",
+						required: true
+					},
+					effect_call_id: {
+						type: "string",
+						required: true
+					},
+					input_sha256: {
+						type: "string",
+						required: true
+					}
+				}
+			},
+			render: (_args, value) => [{
+				type: "text",
+				text: JSON.stringify(value)
+			}],
+			presentationMeta: (_args, value) => value.status === "ready" ? { contextGuardTestReadiness: {
+				itemId: value.item_id,
+				scope: value.scope,
+				manifestSha256: value.manifest_sha256,
+				predicate: value.predicate,
+				scriptName: value.script_name,
+				selectedPath: value.selected_path,
+				effectCallId: value.effect_call_id,
+				inputSha256: value.input_sha256
+			} } : { contextGuardTestReadinessUnavailable: { reasonCode: value.reason_code } }
+		},
+		async execute(args, exec) {
+			const missing = (reason) => ({
+				status: "unavailable",
+				reason_code: reason,
+				item_id: args.item_id,
+				scope: "",
+				manifest_sha256: "",
+				predicate: "",
+				script_name: "",
+				selected_path: "",
+				effect_call_id: "",
+				input_sha256: ""
+			});
+			if (!exec.agent?.session || !host.flush || !host.fs || !await host.flush(exec.agent.session)) return missing("readiness_host_unavailable");
+			const projection = host.getProjection();
+			const item = projection?.items.get(args.item_id);
+			if (!item || item.status !== "pending" || !["test", "verify"].includes(item.semanticAction ?? "") || item.authority !== "root_instruction" || item.authorityDisposition !== "executable_now" || item.legacyFlags?.length || item.waitAuthorization || item.condition || typeof item.requestedTarget?.scope !== "string") return missing("readiness_item_unsupported");
+			const scope = item.requestedTarget.scope;
+			const assessment = item.semanticAction === "verify";
+			const scriptName = assessment && /(?:吞吐|性能|时延|延迟|throughput|performance|latency)/iu.test(item.normalizedText) ? "benchmark" : "test";
+			let selectedPath = "", effectCallId = "", inputSha256 = "";
+			if (assessment) {
+				const unitStart = item.unitId ? projection?.units.get(item.unitId)?.openedAtSeq : void 0;
+				if (unitStart === void 0) return missing("assessment_unit_unavailable");
+				const changes = [...projection?.evidence.values() ?? []].filter((fact) => fact.epoch === projection?.epoch && fact.toolResultSeq >= unitStart && fact.outcome === "success" && fact.parseStatus === "supported" && fact.semanticAction === "modify" && fact.evidenceRole === "effect").flatMap((fact) => (fact.operations ?? []).filter((op) => op.op === "modify" && typeof op.path === "string").map((op) => ({
+					path: op.path,
+					callId: fact.callId
+				})));
+				const paths = [...new Set(changes.map((change) => change.path))];
+				if (paths.length > 1) return missing("assessment_input_ambiguous");
+				if (paths.length === 1) {
+					const change = changes.find((entry) => entry.path === paths[0]);
+					selectedPath = change.path;
+					effectCallId = change.callId;
+					try {
+						const changed = await host.fs.resolve(selectedPath, { signal: exec.signal });
+						const before = await host.fs.stat(changed, exec.signal);
+						if (!before || before.type !== "file" || before.size !== void 0 && before.size > 2e7) return missing("assessment_input_unavailable");
+						const raw = await host.fs.readText(changed, exec.signal);
+						const after = await host.fs.stat(changed, exec.signal);
+						if (!after || after.type !== "file" || before.version !== after.version) return missing("assessment_input_raced");
+						inputSha256 = createHash("sha256").update(raw, "utf8").digest("hex");
+					} catch {
+						return missing("assessment_input_unavailable");
+					}
+				}
+			}
+			try {
+				const target = await host.fs.resolve(join(scope, "package.json"), { signal: exec.signal });
+				const before = await host.fs.stat(target, exec.signal);
+				if (!before || before.type !== "file" || before.size !== void 0 && before.size > 2e6) return missing("readiness_manifest_unavailable");
+				const raw = await host.fs.readText(target, exec.signal);
+				const after = await host.fs.stat(target, exec.signal);
+				if (!after || after.type !== "file" || before.version !== after.version) return missing("readiness_manifest_raced");
+				const manifest = record(JSON.parse(raw));
+				if (typeof record(manifest?.scripts)?.[scriptName] !== "string" || !String(record(manifest?.scripts)?.[scriptName]).trim()) return missing("readiness_script_missing");
+				if (assessment && !selectedPath) {
+					selectedPath = target.displayPath;
+					inputSha256 = createHash("sha256").update(raw, "utf8").digest("hex");
+				}
+				return {
+					status: "ready",
+					reason_code: assessment ? "assessment_inputs_ready" : "package_test_script_ready",
+					item_id: args.item_id,
+					scope,
+					manifest_sha256: createHash("sha256").update(raw, "utf8").digest("hex"),
+					predicate: assessment ? "verification_passed" : "test_passed",
+					script_name: scriptName,
+					selected_path: selectedPath,
+					effect_call_id: effectCallId,
+					input_sha256: inputSha256
+				};
+			} catch {
+				return missing("readiness_manifest_unavailable");
+			}
+		}
+	});
+}
+
+//#endregion
 //#region src/tools/external-operation.ts
 function createExternalOperationTool(read, capability) {
 	return defineTool({
@@ -3525,14 +4606,17 @@ const PRESERVED_DIGEST_DOMAINS = [
 	"ccg.proofManifest.v1"
 ];
 function migrationReport(projection) {
-	const v5 = projection.boundaryProtocol === 5;
+	const v6 = projection.boundaryProtocol === 6;
+	const v5 = projection.boundaryProtocol !== void 0 && projection.boundaryProtocol >= 5;
 	const legacyItemIds = certifiableOpenItems(projection).filter((item) => item.unitId === void 0).map((item) => item.id);
 	const closure = v5 ? certificateClosure(projection) : { itemIds: [] };
 	const reasonCodes = [];
 	if (!v5) reasonCodes.push("legacy_session_keeps_v4_contract");
 	if (v5 && legacyItemIds.length > 0) reasonCodes.push("pre_v5_obligations_retained_in_closure");
+	if (v6) reasonCodes.push("v6_ordinary_host_facts_and_legacy_review");
+	if (v6 && projection.coreV2Reason) reasonCodes.push(`core_v2_${projection.coreV2Reason}`);
 	return {
-		ruleMode: v5 ? "v5" : "legacy-v4",
+		ruleMode: v6 ? "v6" : v5 ? "v5" : "legacy-v4",
 		certificateVersion: v5 ? CERTIFICATE_VERSION_V2 : CERTIFICATE_VERSION,
 		stopProtocolVersion: v5 ? STOP_PROTOCOL_VERSION_V2 : STOP_PROTOCOL_VERSION,
 		unitClosure: v5,
@@ -3542,7 +4626,7 @@ function migrationReport(projection) {
 		preservedDigestDomains: [...PRESERVED_DIGEST_DOMAINS],
 		historyOnlyCertificateVersions: v5 ? [CERTIFICATE_VERSION] : [],
 		rollbackRequiresStateSnapshot: v5,
-		rollbackInstruction: v5 ? "Restore the 0.5.x state snapshot before starting the older binary. Replaying a v5 log with 0.5.x fails closed with certificate_replay_mismatch; never migrate new-schema data down by hand." : "No rollback action is required for this session: it has not written a v5 boundary.",
+		rollbackInstruction: v6 ? "Restore a pre-v6 state snapshot before running 0.6.x. The v6 boundary, native-observation digest and migration review must not be read as v5 current authority or downgraded by hand." : v5 ? "Restore the 0.5.x state snapshot before starting the older binary. Replaying a v5 log with 0.5.x fails closed with certificate_replay_mismatch; never migrate new-schema data down by hand." : "No rollback action is required for this session: it has not written a v5 boundary.",
 		reasonCodes
 	};
 }
@@ -4596,14 +5680,14 @@ function resolveConfig(config) {
 		if (!Array.isArray(config.hostLockPackages)) throw new TypeError("hostLockPackages must be an array");
 		hostLockPackages = config.hostLockPackages.map((entry) => {
 			if (!entry || typeof entry !== "object") throw new TypeError("hostLockPackages entries must be objects");
-			const row = entry;
-			if (typeof row.name !== "string" || !row.name) throw new TypeError("hostLockPackages.name must be a non-empty string");
-			if (row.version !== void 0 && typeof row.version !== "string") throw new TypeError("hostLockPackages.version must be a string");
-			if (row.integrity !== void 0 && typeof row.integrity !== "string") throw new TypeError("hostLockPackages.integrity must be a string");
+			const row$1 = entry;
+			if (typeof row$1.name !== "string" || !row$1.name) throw new TypeError("hostLockPackages.name must be a non-empty string");
+			if (row$1.version !== void 0 && typeof row$1.version !== "string") throw new TypeError("hostLockPackages.version must be a string");
+			if (row$1.integrity !== void 0 && typeof row$1.integrity !== "string") throw new TypeError("hostLockPackages.integrity must be a string");
 			return {
-				name: row.name,
-				...row.version ? { version: row.version } : {},
-				...row.integrity ? { integrity: row.integrity } : {}
+				name: row$1.name,
+				...row$1.version ? { version: row$1.version } : {},
+				...row$1.integrity ? { integrity: row$1.integrity } : {}
 			};
 		});
 	}
@@ -4884,13 +5968,13 @@ async function handleGuardTurnStopping(agent, runtime, access$1) {
 		}
 		return "root_pause_routed";
 	}
-	const decision = decideTurnBoundary(runtime.projection);
+	const decision = decideTurnBoundary(runtime.projection, rootInstruction?.text);
 	if (decision.noProgressClaim) {
-		const record$1 = `${NO_PROGRESS_RECORD_PREFIX}${JSON.stringify(decision.noProgressClaim)}`;
+		const record$2 = `${NO_PROGRESS_RECORD_PREFIX}${JSON.stringify(decision.noProgressClaim)}`;
 		agent.session.append("user/message", createUserMessage({
 			content: [{
 				type: "text",
-				text: record$1
+				text: record$2
 			}],
 			source: {
 				kind: "plugin",
@@ -4966,8 +6050,8 @@ async function handleGuardTurnStopping(agent, runtime, access$1) {
 		return "boundary_host_lock_unsupported";
 	}
 	const requalify = boundary.disposition === "external_wait" ? async () => access$1.externalWaitCapability?.status === "supported" && boundary.qualificationIds.every((id) => {
-		const row = access$1.readExternalOperation(id);
-		return row?.status === "running" || row?.status === "pending";
+		const row$1 = access$1.readExternalOperation(id);
+		return row$1?.status === "running" || row$1?.status === "pending";
 	}) : void 0;
 	const effect = await effectuateBoundary(boundary, {
 		...access$1.goalAccess ?? {
@@ -5024,6 +6108,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	let observedContractRevision = -1;
 	let protocolV4Present = false;
 	let protocolV5Present = false;
+	let protocolV6Present = false;
 	let realRootInputSeen = false;
 	let lifecycle = "armed";
 	const continuationAttempts = projection.continuationAttempts;
@@ -5068,8 +6153,16 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts;
 		projection.lastRecoveryDigest = priorRecoveryDigest;
 		projection.durabilityWatermark = durabilityWatermark;
+		if (projection.boundaryProtocol === 6 && durabilityWatermark === "confirmed") try {
+			projection.coreV2 = projectSessionCoreV2(session.snapshotEvents(), projection);
+			projection.coreV2Reason = projection.coreV2 ? void 0 : "source_not_projectable";
+		} catch {
+			projection.coreV2 = void 0;
+			projection.coreV2Reason = "projection_failed";
+		}
 		protocolV4Present = derived.protocolV4Present;
 		protocolV5Present = derived.boundaryV5;
+		protocolV6Present = derived.boundaryV6;
 		realRootInputSeen = derived.realRootInputSeen;
 		lifecycle = lifecyclePhase({
 			enabled: projection.enabled,
@@ -5119,6 +6212,9 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		},
 		get protocolV5Present() {
 			return protocolV5Present;
+		},
+		get protocolV6Present() {
+			return protocolV6Present;
 		},
 		sync,
 		setEnabled,
@@ -5275,8 +6371,8 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				runtime.sync();
 				const projection = runtime.projection;
 				if (!(projection.policy === "release" || projection.releaseContracts.length > 0)) return {
-					status: "granted",
-					reasonCode: "release_profile_not_adopted"
+					status: "denied",
+					reasonCode: "release_contract_not_adopted"
 				};
 				const observed = { ...request.observed };
 				const declaredRef = releaseContractFor(projection, request.operation)?.candidate.ref;
@@ -5353,6 +6449,16 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 			}
 		};
 		agent.ctx.tools.register(createEvidenceTool(evidenceOptions));
+		agent.ctx.tools.register(createNativeFileObserver({
+			fs: ctx.fs,
+			flush: (session) => ctx.sessions.flush(session)
+		}));
+		agent.ctx.tools.register(createNativeGitObserver({ flush: (session) => ctx.sessions.flush(session) }));
+		agent.ctx.tools.register(createTestReadinessObserver({
+			getProjection: () => runtime.projection,
+			fs: ctx.fs,
+			flush: (session) => ctx.sessions.flush(session)
+		}));
 		agent.ctx.tools.register(createActionTool(evidenceOptions));
 		agent.ctx.tools.register(createPrepareTool({
 			getProjection: () => runtime.projection,
@@ -5405,11 +6511,13 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 		if (decision.kind !== "enter") return decision;
 		const injected = [];
 		const delegated = isDelegatedSession(agent.session);
-		let boundaryPending = !runtime.protocolV5Present;
+		let boundaryPending = !runtime.protocolV6Present;
 		const firstStep = previewFirstStepInjection({
 			activation: config.activation,
 			enabled: runtime.projection.enabled,
 			boundaryV5Present: runtime.protocolV5Present,
+			boundaryV6Present: runtime.protocolV6Present,
+			targetProtocol: 6,
 			boundaryPresent: runtime.protocolV4Present,
 			delegated,
 			policy: runtime.projection.policy
@@ -5427,7 +6535,7 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 			if (recovery && digest$2 !== runtime.projection.lastRecoveryDigest) {
 				runtime.projection.lastRecoveryDigest = digest$2;
 				if (boundaryPending && !delegated) {
-					injected.push(pluginNoticeMessage(PROTOCOL_V5_NOTICE, "Context Guard recorded a replay version boundary"));
+					injected.push(pluginNoticeMessage(PROTOCOL_V6_NOTICE, "Context Guard recorded a replay version boundary"));
 					boundaryPending = false;
 				}
 				injected.push(createUserMessage({
@@ -5467,9 +6575,9 @@ function readExternalOperation(ctx, agent, id) {
 	for (const owner of [agent.ctx, ctx]) try {
 		const service = owner.get?.("jobs") ?? owner.jobs;
 		if (!service || typeof service !== "object") continue;
-		const row = typeof service.get === "function" ? service.get(id, agent) : void 0;
-		if (!row) return void 0;
-		const raw = String(row.status ?? "unknown");
+		const row$1 = typeof service.get === "function" ? service.get(id, agent) : void 0;
+		if (!row$1) return void 0;
+		const raw = String(row$1.status ?? "unknown");
 		return {
 			id,
 			status: raw === "running" ? "running" : raw === "stopping" ? "pending" : raw === "completed" ? "completed" : raw === "killed" || raw === "failed" ? "failed" : "unknown",
@@ -5505,9 +6613,9 @@ function hasPinnedUpdateGoalTool(agent) {
 	try {
 		const tool = agent.ctx.tools?.get?.("update_goal", agent);
 		if (!tool || typeof tool !== "object") return false;
-		const row = tool;
-		if (row.name !== "update_goal" || typeof row.execute !== "function") return false;
-		const parameters = row.parameters;
+		const row$1 = tool;
+		if (row$1.name !== "update_goal" || typeof row$1.execute !== "function") return false;
+		const parameters = row$1.parameters;
 		if (!parameters || parameters.type !== "object" || !parameters.properties || typeof parameters.properties !== "object") return false;
 		const fields = parameters.properties;
 		const requiredNames = parameters.required;
@@ -5548,12 +6656,12 @@ function optionalGoalService(ctx, agent) {
 }
 function normalizeGoalState(value) {
 	if (!value || typeof value !== "object") return void 0;
-	const record$1 = value;
-	const goal = record$1.goal && typeof record$1.goal === "object" ? record$1.goal : record$1;
+	const record$2 = value;
+	const goal = record$2.goal && typeof record$2.goal === "object" ? record$2.goal : record$2;
 	const id = goal.id;
 	const revision = goal.revision;
 	const phase = goal.phase;
-	const activation = record$1.activation ?? goal.activation;
+	const activation = record$2.activation ?? goal.activation;
 	if (typeof id !== "string" || typeof revision !== "number") return void 0;
 	if (![
 		"active",
@@ -5571,4 +6679,112 @@ function normalizeGoalState(value) {
 }
 
 //#endregion
-export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ACTIVE_HOST_COHORT_ID, ACTIVE_HOST_COHORT_IDS, ACTIVE_HOST_LAUNCHER_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, BOUNDED_ARTIFACT_TYPES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, CLEANUP_CONDITION_RULE, CLEANUP_CONDITION_RULE_COMPACT, CLEANUP_CONDITION_RULE_SHORT, COMMAND_SURFACE_MANIFEST, CONFIRM_LINE_PATTERN, CONTROL_RECORD_PREFIX, Config, DEFAULT_DELEGATION_TOOL_NAMES, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, DEPENDENCY_FREE_ONLY_CONDITION, EXPECTED_HOST_PACKAGES, FIRST_STEP_GUIDANCE, GIT_COMMAND_MANIFEST_IDS, GIT_COMMAND_TEMPLATES, GOAL_HOST_PACKAGES, GRANTED_QUALIFICATION, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, LATEST_SUPPORTED_HOST_VERSION, LEGACY_HOST_COHORTS, LEGACY_QUALIFICATION, MIN_RECOVERY_CHAR_BUDGET, MIN_SUPPORTED_HOST_VERSION, NO_PROGRESS_RECORD_PREFIX, NO_PROGRESS_TURNS_BEFORE_STOP, PROOF_CAPABILITY_MATRIX, PROOF_KINDS, PROOF_KINDS_V2, PROOF_MANIFEST_DOMAIN_V2, PROOF_PROTOCOL_VERSION, PROOF_PROTOCOL_VERSION_V2, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE, RC015_HOST_PACKAGES, RC015_RC2_HOST_PACKAGES, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, SESSION_API_UNSUPPORTED, SESSION_EVENT_ENVELOPE_INVALID, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2, SUPPORTED_EVIDENCE_ADAPTERS, SUPPORTED_HOST_RANGE, SUPPORTED_HOST_VERSIONS, SessionApiError, actionCompatible, actionHasCertificationPath, actionVerbMatches, admissibleForRemoval, apply, applyUpgradeEligibility, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindProofV2ToProjection, bindingSatisfies, boundedArtifactChoiceMatches, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, capabilityConsequence, capabilityFactOf, capabilityRemedyPhrase, captureClause, captureItem, carriesCleanupCondition, certifyCheckpoint, claimedBatchHasRealRootInput, clarifiedSpanOf, classifyClause, classifyCompletionClaim, classifyTaskIntent, classifyUserInteraction, clauseAsksOwnQuestion, clauseIsGoverned, clauseIsProtected, cleanupConditionFor, closingHint, combineHostPolicy, commitIndexSnapshotDigest, commitTreeSnapshotDigest, compareHostVersions, confirmRebind, createGitPrestateEnvelope, createProjection, createProofManifest, createProofManifestV2, currentContractDigest, decideTurnBoundary, decideTurnStopping, decisionBoundaryKey, deriveItemDiagnosis, deriveProjection, digestStrings, effectuateBoundary, environmentDefaultRepositoryTarget, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateMinimumHostVersion, evaluateToolSurfaceCapability, evidenceAvailabilityReason, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, explanationHasActionResidue, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, firstStepGuidance, gitCommandMatchesTarget, goalCompletionDenial, governedClauseRestrictsExecution, hasCurrentCertificate, hasOrderedCoordination, hasQuestionScope, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, hostVersionFromPackages, inject, injectActiveProfileHostLock, inspectTargetHostGraph, interpretClause, interpretMessage, introducesActionClause, isCurrentAcceptedBoundary, isDeterministicCheck, isExecutableItem, isExplanationScope, isFrozenV042RebindResponse, isInformationalFragment, isInformationalMessage, isOpenObligation, isQuestionScopeNeedingReview, isRestatement, isRootPauseRequest, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, itemDiagnosis, itemHoldsExecutionAuthority, kindOfScope, latestAssistantText, latestRootInstruction, legacyQuestionReadingIsInformational, legacyRecordsNeedingReview, lifecyclePhase, maskCodeSpans, maskQuotedSpans, name, namedActions, normalizeClause, observeAssistantOutcome, openItems, opensWithDirective, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseConfirmationMessage, parseGitCommandManifest, parseHostVersion, parsePwshCommand, parseShellCommand, partialFailureOf, previewFirstStepInjection, progressFingerprint, proofCapabilityReport, proofDigest, proofDigestV2, proofEvidenceConstraints, proofHostSurfacesOf, proofOperationMatches, proofV2Rejection, proposeRebind, proposeRebindOutcome, proposeRebindV042, qualificationOfClause, qualifyBoundary, questionHeadsClause, readActiveHostGraph, rebindAttemptKey, rebindResponse, recoveryDigest, relevantEvidence, removalIsComplete, removalIsPartiallyKnown, renderRecoveryPacket, replayRebindResult, reportingHeadGoverns, requestedIdentityKey, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, requiredSubjectsOf, resolveActiveProfileHostLock, resolveInstalledHostLock, restatedContentOf, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, satisfiesSupportedHostRange, scopeCoverageDigest, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, semanticActionOfScope, sessionQuery, sessionQueryV2, sha256, snapshotSessionEvents, splitTextFragments, statefulActionsOfScope, supersedeItem, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, validateProofManifestV2, verbIsNegated, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };
+//#region src/raw-replay.ts
+/** Local synthetic replay using the actual Session, derivation and registered
+* Stop handler. It neither executes tools nor asserts a real model outcome. */
+async function replayRawV2(input) {
+	const cwd = input.cwd ?? "/work";
+	const id = SessionId("raw-v2-replay");
+	const session = Session.create(id, void 0, {
+		version: SESSION_FORMAT_VERSION,
+		isSeeded: false,
+		id,
+		createdAt: 1,
+		cwd
+	});
+	session.append("user/message", createUserMessage({
+		content: [{
+			type: "text",
+			text: PROTOCOL_V6_NOTICE
+		}],
+		source: {
+			kind: "plugin",
+			plugin: "context-guard",
+			form: "notice",
+			summary: "v6 replay boundary"
+		}
+	}), { surfaceOp: "append" });
+	session.append("turn/start", { turn: 1 });
+	session.append("user/message", createUserMessage({
+		content: [{
+			type: "text",
+			text: input.root
+		}],
+		source: { kind: "user" }
+	}), { surfaceOp: "append" });
+	const appendEvent = session.append.bind(session);
+	for (const event of input.events ?? []) {
+		if (event.type === "turn/end") throw new Error("turn/end is emitted only after the Stop callback in this replay");
+		appendEvent(event.type, event.data, event.type === "tool/call" ? void 0 : { surfaceOp: "append" });
+	}
+	session.append("assistant/message", {
+		turn: 1,
+		step: 1,
+		message: {
+			role: "assistant",
+			content: [{
+				type: "text",
+				text: input.final
+			}]
+		}
+	}, { surfaceOp: "append" });
+	const lock = evaluateHostLock(EXPECTED_HOST_PACKAGES, {
+		platform: "posix",
+		profileKind: "web"
+	});
+	const steers = [];
+	const agent = {
+		session,
+		steer: (message) => {
+			steers.push(message);
+		}
+	};
+	const runtime = createRuntime(agent, { activation: "always" }, lock, () => void 0);
+	runtime.setDurability(true);
+	runtime.sync();
+	const snapshot = sessionCoreSnapshot(session.snapshotEvents(), runtime.projection);
+	const stopCore = runtime.projection.coreV2 ?? null;
+	const stop = await handleGuardTurnStopping(agent, runtime, {
+		flush: async () => true,
+		hostSupported: true,
+		readExternalOperation: () => void 0
+	});
+	session.append("turn/end", {
+		turn: 1,
+		reason: { kind: "completed" }
+	});
+	runtime.sync();
+	const projection = runtime.projection;
+	const postSnapshot = sessionCoreSnapshot(session.snapshotEvents(), projection);
+	return {
+		stop_core_snapshot: snapshot ?? null,
+		stop_core_projection: stopCore,
+		stop,
+		post_turn_core_snapshot: postSnapshot ?? null,
+		post_turn_core_projection: projection.coreV2 ?? null,
+		goal_complete_denial: goalCompletionDenial(projection, "update_goal", {
+			action: "complete",
+			goal_id: projection.currentGoalRef?.id,
+			revision: projection.currentGoalRef?.revision
+		}) ?? null,
+		assistant_observation: observeAssistantOutcome(input.final),
+		steers: steers.length,
+		items: [...projection.items.values()].map((item) => ({
+			id: item.id,
+			status: item.status,
+			action: item.semanticAction,
+			authority: item.authority,
+			disposition: item.authorityDisposition,
+			review: item.needsReview?.reason ?? null
+		})),
+		durable_seq: session.seq,
+		event_types: session.snapshotEvents().map((event) => ({
+			seq: event.seq,
+			type: event.type
+		})),
+		boundary_protocol: projection.boundaryProtocol
+	};
+}
+
+//#endregion
+export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ACTIVE_HOST_COHORT_ID, ACTIVE_HOST_COHORT_IDS, ACTIVE_HOST_LAUNCHER_VERSION, ALPHA2_DSHMARKET_139_HOST_PACKAGES, ALPHA2_HOST_PACKAGES, ALPHA3_HOST_PACKAGES, BASE_HOST_PACKAGES, BOUNDED_ARTIFACT_TYPES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, CLEANUP_CONDITION_RULE, CLEANUP_CONDITION_RULE_COMPACT, CLEANUP_CONDITION_RULE_SHORT, COMMAND_SURFACE_MANIFEST, CONFIRM_LINE_PATTERN, CONTROL_RECORD_PREFIX, Config, DEFAULT_DELEGATION_TOOL_NAMES, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, DEPENDENCY_FREE_ONLY_CONDITION, EXPECTED_HOST_PACKAGES, FIRST_STEP_GUIDANCE, GIT_COMMAND_MANIFEST_IDS, GIT_COMMAND_TEMPLATES, GOAL_HOST_PACKAGES, GRANTED_QUALIFICATION, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HostProfileError, LATEST_SUPPORTED_HOST_VERSION, LEGACY_HOST_COHORTS, LEGACY_QUALIFICATION, MIN_RECOVERY_CHAR_BUDGET, MIN_SUPPORTED_HOST_VERSION, NO_PROGRESS_RECORD_PREFIX, NO_PROGRESS_TURNS_BEFORE_STOP, PROOF_CAPABILITY_MATRIX, PROOF_KINDS, PROOF_KINDS_V2, PROOF_MANIFEST_DOMAIN_V2, PROOF_PROTOCOL_VERSION, PROOF_PROTOCOL_VERSION_V2, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE, PROTOCOL_V6_NOTICE, RC015_HOST_PACKAGES, RC015_RC2_HOST_PACKAGES, RC1_HOST_PACKAGES, SEMANTIC_ACTIONS, SESSION_API_UNSUPPORTED, SESSION_EVENT_ENVELOPE_INVALID, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2, SUPPORTED_EVIDENCE_ADAPTERS, SUPPORTED_HOST_RANGE, SUPPORTED_HOST_VERSIONS, SessionApiError, actionCompatible, actionHasCertificationPath, actionVerbMatches, admissibleForRemoval, apply, applyUpgradeEligibility, assessmentAction, assessmentOutcomePredicate, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindProofV2ToProjection, bindingSatisfies, boundedArtifactChoiceMatches, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, capabilityConsequence, capabilityFactOf, capabilityRemedyPhrase, captureClause, captureItem, carriesCleanupCondition, certifyCheckpoint, claimedBatchHasRealRootInput, clarifiedSpanOf, classifyClause, classifyCompletionClaim, classifyTaskIntent, classifyUserInteraction, clauseAsksOwnQuestion, clauseIsGoverned, clauseIsProtected, cleanupConditionFor, closingHint, combineHostPolicy, commitIndexSnapshotDigest, commitTreeSnapshotDigest, compareHostVersions, confirmRebind, createGitPrestateEnvelope, createProjection, createProofManifest, createProofManifestV2, currentActionBases, currentContractDigest, decideTurnBoundary, decideTurnStopping, decisionBoundaryKey, deriveItemDiagnosis, deriveProjection, digestStrings, effectuateBoundary, environmentDefaultRepositoryTarget, evaluateExternalWaitCapability, evaluateHostCapability, evaluateHostLock, evaluateMinimumHostVersion, evaluateToolSurfaceCapability, evidenceAvailabilityReason, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, explanationHasActionResidue, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, firstStepGuidance, firstStepGuidanceV6, gitCommandMatchesTarget, goalCompletionDenial, governedClauseRestrictsExecution, hasCurrentCertificate, hasOrderedCoordination, hasQuestionScope, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, hostVersionFromPackages, inject, injectActiveProfileHostLock, inspectTargetHostGraph, interpretClause, interpretMessage, introducesActionClause, isCurrentAcceptedBoundary, isDeterministicCheck, isExecutableItem, isExplanationScope, isFrozenV042RebindResponse, isInformationalFragment, isInformationalMessage, isOpenObligation, isQuestionScopeNeedingReview, isRestatement, isRootPauseRequest, isRunExecutable, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, itemDiagnosis, itemHoldsExecutionAuthority, kindOfScope, latestAssistantText, latestRootInstruction, legacyQuestionReadingIsInformational, legacyRecordsNeedingReview, lifecyclePhase, maskCodeSpans, maskQuotedSpans, name, namedActions, normalizeClause, observeAssistantOutcome, openItems, opensWithDirective, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseConfirmationMessage, parseGitCommandManifest, parseHostVersion, parsePwshCommand, parseShellCommand, partialFailureOf, previewFirstStepInjection, progressFingerprint, projectCoreV2, proofCapabilityReport, proofDigest, proofDigestV2, proofEvidenceConstraints, proofHostSurfacesOf, proofOperationMatches, proofV2Rejection, proposeRebind, proposeRebindOutcome, proposeRebindV042, qualificationOfClause, qualifyBoundary, questionHeadsClause, readActiveHostGraph, rebindAttemptKey, rebindResponse, recoveryDigest, relevantEvidence, removalIsComplete, removalIsPartiallyKnown, renderRecoveryPacket, replayRawV2, replayRebindResult, reportingHeadGoverns, requestedIdentityKey, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, requiredSubjectsOf, resolveActiveProfileHostLock, resolveInstalledHostLock, restatedContentOf, revalidateGitPrestate, sanitizeClauseText, sanitizeUrl, satisfiesSupportedHostRange, scopeCoverageDigest, segmentAuthorityBlocks, segmentClauses, selectHostCohort, semanticActionFromCommand, semanticActionFromText, semanticActionOfScope, sessionQuery, sessionQueryV2, sha256, snapshotSessionEvents, splitTextFragments, statefulActionsOfScope, supersedeItem, testOutcomePredicate, validateActionManifest, validateActionTarget, validateManifest, validateProofManifest, validateProofManifestV2, verbIsNegated, verifiedLinearCommitReadback, verifyComposedHostLockDump, withDurability };

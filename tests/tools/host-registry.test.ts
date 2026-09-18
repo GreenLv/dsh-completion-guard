@@ -140,7 +140,7 @@ it.each(CASES)('$tool materializes through the real DSH ToolRuntime output contr
   expect(code, `${tool} is not registered in the runtime`).not.toBe('UNKNOWN_TOOL')
 })
 
-it.each(['resolution', 'effect', 'state'])('materializes missing %s inputs through the host registry', async (evidence_role) => {
+it.each(['resolution', 'effect', 'state'])('retires ordinary %s producer inputs through the host registry', async (evidence_role) => {
   const { runtime } = registry()
   const response = await runtime.execute({
     callId: `missing-${evidence_role}` as never,
@@ -153,8 +153,7 @@ it.each(['resolution', 'effect', 'state'])('materializes missing %s inputs throu
   expect(response.isError).toBe(false)
   const value = (response as unknown as { value: Record<string, unknown> }).value
   expect(value).toMatchObject({ status: 'unavailable',
-    reason_code: evidence_role === 'resolution' ? 'resolution_input_missing' : 'producer_reference_missing',
-    missing_fields: expect.any(Array), next_step: expect.any(String),
+    reason_code: 'ordinary_evidence_migrated_to_host_facts', next_step: expect.any(String),
   })
 })
 

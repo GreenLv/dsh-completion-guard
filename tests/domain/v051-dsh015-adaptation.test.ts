@@ -258,14 +258,13 @@ describe('turn-stopping durability and Goal ownership (T07)', () => {
     expect(decideTurnBoundary(projection)).toMatchObject({ action: 'stop', reason: 'goal_not_continuable_safe_yield' })
   })
 
-  it('still spends exactly one steer when no Goal owns the continuation', async () => {
+  it('does not spend a steer on generic persistence when no Goal owns a concrete step', async () => {
     const steered: unknown[] = []
     const runtime = projectionRuntime(persistentProjection())
     const access = { flush: async () => true, hostSupported: true, readExternalOperation: () => undefined }
-    expect(await handleGuardTurnStopping(steeringAgent(steered), runtime, access)).toBe('protocol_correction_steer')
     expect(await handleGuardTurnStopping(steeringAgent(steered), runtime, access)).toBe('safe_yield_pending_preserved')
-    expect(steered).toHaveLength(1)
-    expect(JSON.stringify(steered[0])).toContain(boundContextSummary('requesting the one allowed protocol correction step'))
+    expect(await handleGuardTurnStopping(steeringAgent(steered), runtime, access)).toBe('safe_yield_pending_preserved')
+    expect(steered).toHaveLength(0)
   })
 
   it('exposes no Goal resume capability to the boundary effector', async () => {

@@ -321,6 +321,9 @@ export function createCheckpointTool(
               contract_sha256: { type: 'string' }, open_digest: { type: 'string' }, evidence_sha256: { type: 'string' },
               binding_digest: { type: 'string' }, certification_digest: { type: 'string' },
               unit_id: { type: 'string' }, unit_closure_digest: { type: 'string' },
+              native_observations: { type: 'object', additionalProperties: false, properties: {
+                schema: { type: 'string', required: true }, digests: { type: 'array', required: true, items: { type: 'string' } },
+              } },
               goal_ref: { oneOf: [
                 { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, revision: { type: 'integer' } } },
                 { type: 'null' },
@@ -467,6 +470,8 @@ export function createCheckpointTool(
           open_digest: result.checkpoint.openDigest,
           evidence_sha256: result.checkpoint.evidenceSha256,
           binding_digest: result.checkpoint.bindingDigest,
+          ...(result.checkpoint.nativeObservations ? { native_observations: result.checkpoint.nativeObservations } : {}),
+          ...(result.checkpoint.rootLocatorIdentity ? { root_locator_identity: result.checkpoint.rootLocatorIdentity } : {}),
           certification_digest: result.checkpoint.certificationDigest,
           ...(result.checkpoint.unitId !== undefined ? {
             unit_id: result.checkpoint.unitId,

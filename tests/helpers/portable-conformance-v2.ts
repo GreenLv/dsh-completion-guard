@@ -65,7 +65,7 @@ export interface V2Case {
     release_contracts?: number
     release_in_flight?: number
     release_gate_denials?: string[]
-    migration?: { rule_mode: 'v5' | 'legacy-v4'; certificate_version: string; unit_closure: boolean }
+    migration?: { rule_mode: 'v6' | 'v5' | 'legacy-v4'; certificate_version: string; unit_closure: boolean }
     /** The proof binding outcome the production binder must report. */
     proof_state?: { status: 'absent' | 'bound' | 'rejected' | 'invalid'; reason_codes?: string[] }
   }
@@ -247,7 +247,7 @@ export interface V2Result {
   /** Reason codes the release gate returned for each declared probe. */
   release_gate_denials: string[]
   /** Migration facts the production report states for this session. */
-  migration: { rule_mode: 'v5' | 'legacy-v4'; certificate_version: string; unit_closure: boolean }
+  migration: { rule_mode: 'v6' | 'v5' | 'legacy-v4'; certificate_version: string; unit_closure: boolean }
   /** The production proof binder's outcome for the declared proof. */
   proof_state: { status: 'absent' | 'bound' | 'rejected' | 'invalid'; reason_codes: string[] }
 }

@@ -12,7 +12,8 @@ import {
   type GuardProjection,
 } from './domain/types.js'
 import { CONTROL_RECORD_PREFIX, isRootPauseRequest, latestRootInstruction, NO_PROGRESS_RECORD_PREFIX, progressFingerprint } from './domain/stop-policy.js'
-import { deriveProjection, PROTOCOL_V5_NOTICE } from './domain/derive.js'
+import { deriveProjection, PROTOCOL_V6_NOTICE } from './domain/derive.js'
+import { projectSessionCoreV2 } from './core-v2/session.js'
 import { itemHoldsExecutionAuthority } from './domain/semantics.js'
 import { claimedBatchHasRealRootInput, lifecyclePhase, previewFirstStepInjection, type LifecyclePhase } from './domain/lifecycle.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
@@ -23,6 +24,7 @@ import { createBoundaryTool } from './tools/boundary.js'
 import { createPrepareTool } from './tools/prepare.js'
 import { createInterpretTool } from './tools/interpret.js'
 import { createReleaseTool } from './tools/release.js'
+import { createNativeFileObserver, createNativeGitObserver, createTestReadinessObserver } from './tools/observe.js'
 import { GIT_COMMAND_TEMPLATES, type GitAdapterAction } from './domain/git-adapter.js'
 import {
   createActionTool,
@@ -87,6 +89,7 @@ export interface GuardRuntime {
   readonly protocolV4Present: boolean
   /** The durable log already carries the 0.6 first-step protocol boundary. */
   readonly protocolV5Present: boolean
+  readonly protocolV6Present?: boolean
   sync(): void
   setEnabled(_enabled: boolean): void
   setDurability(confirmed: boolean): void
@@ -398,7 +401,7 @@ export async function handleGuardTurnStopping(
     return 'root_pause_routed'
   }
 
-  const decision = decideTurnBoundary(runtime.projection)
+  const decision = decideTurnBoundary(runtime.projection, rootInstruction?.text)
   // Spend the no-progress budget in the log, not in memory: the record is what
   // makes the bound survive a reload and what makes a replayed decision
   // idempotent, because the attempt it claims is stored in a set.
@@ -555,6 +558,7 @@ export function createRuntime(
   let observedContractRevision = -1
   let protocolV4Present = false
   let protocolV5Present = false
+  let protocolV6Present = false
   let realRootInputSeen = false
   let lifecycle: LifecyclePhase = 'armed'
   const continuationAttempts = projection.continuationAttempts
@@ -613,11 +617,21 @@ export function createRuntime(
     projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts
     projection.lastRecoveryDigest = priorRecoveryDigest
     projection.durabilityWatermark = durabilityWatermark
+    if (projection.boundaryProtocol === 6 && durabilityWatermark === 'confirmed') {
+      try {
+        projection.coreV2 = projectSessionCoreV2(session.snapshotEvents() as never, projection)
+        projection.coreV2Reason = projection.coreV2 ? undefined : 'source_not_projectable'
+      } catch {
+        projection.coreV2 = undefined
+        projection.coreV2Reason = 'projection_failed'
+      }
+    }
     // Startup lifecycle facts for the first-step injection decision and the
     // status surface: the v4 boundary and the real-input observation are both
     // derived from the same durable log as the contract.
     protocolV4Present = derived.protocolV4Present
     protocolV5Present = derived.boundaryV5
+    protocolV6Present = derived.boundaryV6
     realRootInputSeen = derived.realRootInputSeen
     lifecycle = lifecyclePhase({ enabled: projection.enabled, realInputSeen: realRootInputSeen })
     // A newly observed epoch means enablement transitioned since the last
@@ -674,6 +688,7 @@ export function createRuntime(
     get lifecycle() { return lifecycle },
     get protocolV4Present() { return protocolV4Present },
     get protocolV5Present() { return protocolV5Present },
+    get protocolV6Present() { return protocolV6Present },
     sync,
     setEnabled,
     setDurability,
@@ -884,7 +899,7 @@ export function apply(ctx: Context, rawConfig: {
         runtime.sync()
         const projection = runtime.projection
         const applicable = projection.policy === 'release' || projection.releaseContracts.length > 0
-        if (!applicable) return { status: 'granted', reasonCode: 'release_profile_not_adopted' }
+        if (!applicable) return { status: 'denied', reasonCode: 'release_contract_not_adopted' }
         // The candidate identity comes from trusted readers: the action tool
         // read the artifact, and the runtime resolves the ref an ADOPTED
         // CONTRACT names, because that contract is the only closed, reachable
@@ -969,6 +984,16 @@ export function apply(ctx: Context, rawConfig: {
       },
     }
     agent.ctx.tools.register(createEvidenceTool(evidenceOptions))
+    agent.ctx.tools.register(createNativeFileObserver({
+      fs: (ctx as unknown as Parameters<typeof createNativeFileObserver>[0]).fs,
+      flush: (session) => ctx.sessions.flush(session as Session),
+    }))
+    agent.ctx.tools.register(createNativeGitObserver({ flush: (session) => ctx.sessions.flush(session as never) }))
+    agent.ctx.tools.register(createTestReadinessObserver({
+      getProjection: () => runtime.projection,
+      fs: (ctx as unknown as Parameters<typeof createTestReadinessObserver>[0]).fs,
+      flush: (session) => ctx.sessions.flush(session as Session),
+    }))
     agent.ctx.tools.register(createActionTool(evidenceOptions))
     agent.ctx.tools.register(createPrepareTool({
       getProjection: () => runtime.projection,
@@ -1032,9 +1057,9 @@ export function apply(ctx: Context, rawConfig: {
     if (decision.kind !== 'enter') return decision
     const injected: ReturnType<typeof createUserMessage>[] = []
     const delegated = isDelegatedSession(agent.session)
-    let boundaryPending = !runtime.protocolV5Present
+    let boundaryPending = !runtime.protocolV6Present
     const firstStep = previewFirstStepInjection(
-      { activation: config.activation, enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryPresent: runtime.protocolV4Present, delegated, policy: runtime.projection.policy },
+      { activation: config.activation, enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryV6Present: runtime.protocolV6Present, targetProtocol: 6, boundaryPresent: runtime.protocolV4Present, delegated, policy: runtime.projection.policy },
       claimedBatchHasRealRootInput(decision.messages),
     )
     if (firstStep) {
@@ -1060,7 +1085,7 @@ export function apply(ctx: Context, rawConfig: {
         // cut: duties and certificates before it keep their historical rules.
         // At most one boundary rides per step, never one per injection path.
         if (boundaryPending && !delegated) {
-          injected.push(pluginNoticeMessage(PROTOCOL_V5_NOTICE, 'Context Guard recorded a replay version boundary'))
+          injected.push(pluginNoticeMessage(PROTOCOL_V6_NOTICE, 'Context Guard recorded a replay version boundary'))
           boundaryPending = false
         }
         injected.push(createUserMessage({

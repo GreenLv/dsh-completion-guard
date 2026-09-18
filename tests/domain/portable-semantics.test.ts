@@ -17,10 +17,16 @@ describe('portable Context Guard semantic fixture', () => {
     expect(fixture.cases).toHaveLength(37)
     for (const testCase of fixture.cases) {
       const actual = runPortableCase(testCase)
+      // The v1 fixture preserves the pre-0.7 Stop expectation for a generic
+      // persistence sentence. It remains a historical vector; v2 requires a
+      // concrete current action and therefore yields without a correction.
+      const expected = testCase.id === 'stop-protocol-correction-once'
+        ? { ...testCase.expect, force_continue: false, reason_codes: ['uncertain_fail_closed', 'completion_without_certificate'] }
+        : testCase.expect
       expect.soft(actual, testCase.id).toMatchObject({
-        ...testCase.expect,
-        reason_codes: expect.arrayContaining(testCase.expect.reason_codes),
-        ...(testCase.expect.offendingEvidenceIds ? { offendingEvidenceIds: expect.arrayContaining(testCase.expect.offendingEvidenceIds) } : {}),
+        ...expected,
+        reason_codes: expect.arrayContaining(expected.reason_codes),
+        ...(expected.offendingEvidenceIds ? { offendingEvidenceIds: expect.arrayContaining(expected.offendingEvidenceIds) } : {}),
       })
     }
   })
@@ -66,8 +72,8 @@ describe('portable Context Guard semantic fixture', () => {
     const completionClaim = deriveOne()
     const negatedClaim = deriveOne()
     expect([...completionClaim.items.values()][0].persistenceAuthorization?.kind).toBe('root_explicit_persistence')
-    expect(stopPolicy.decideTurnStopping(completionClaim, '任务已完成', 1, 3)).toEqual({ action: 'continue', reason: 'protocol_correction_steer' })
-    expect(stopPolicy.decideTurnStopping(negatedClaim, '任务尚未完成', 1, 3)).toEqual({ action: 'continue', reason: 'protocol_correction_steer' })
+    expect(stopPolicy.decideTurnStopping(completionClaim, '任务已完成', 1, 3)).toEqual({ action: 'stop', reason: 'safe_yield_pending_preserved' })
+    expect(stopPolicy.decideTurnStopping(negatedClaim, '任务尚未完成', 1, 3)).toEqual({ action: 'stop', reason: 'safe_yield_pending_preserved' })
     expect(stopPolicy.decideTurnStopping(completionClaim, '任意第二次文案', 2, 3)).toEqual({ action: 'stop', reason: 'safe_yield_pending_preserved' })
   })
 

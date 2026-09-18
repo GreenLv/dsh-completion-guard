@@ -88,7 +88,7 @@ function discoveryItemIds(p: GuardProjection): string[] {
   const pending = [...p.items.values()]
     .filter((item) => item.status === 'pending')
     .sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id))
-  if (p.boundaryProtocol !== 5) return pending.map((item) => item.id)
+  if (p.boundaryProtocol === undefined || p.boundaryProtocol < 5) return pending.map((item) => item.id)
   const closureUnits = new Set<string>([
     ...(p.currentUnitId !== undefined ? [p.currentUnitId, ...unitDescendantIds(p, p.currentUnitId)] : []),
   ])
@@ -109,7 +109,7 @@ function discoveryItemIds(p: GuardProjection): string[] {
 export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
   return defineTool({
     name: 'context_guard_prepare',
-    description: 'Read-only pre-action preparation: report the supported command shape, required evidence order, existing references, and exact missing target fields for one contract item. Omit item_id to list current open items with their IDs; a stateful change needs resolution/effect/state, a read-only verification needs one matching fact. Pagination follows page_cursor (bound to the contract revision) and semantic_action filters the listing. Performs no action and grants no authority.',
+    description: 'Read-only diagnosis of open contract items. Ordinary changes use native host tools and observed facts; this tool never grants execution permission. Omit item_id for a paginated item list.',
     parameters: {
       item_id: { type: 'string' },
       item_revision: { type: 'number' },
@@ -136,6 +136,16 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       }
       const p = options.getProjection()
       if (!p || !p.enabled || p.integrity !== 'valid') return { status: 'unknown', reason_code: 'guard_unavailable' }
+      if (p.boundaryProtocol === 6 && args.item_id !== undefined) {
+        const current = p.items.get(args.item_id)
+        if (!current) return { status: 'rejected', reason_code: 'item_not_found' } as Record<string, JsonValue>
+        if (args.item_revision !== undefined && args.item_revision !== current.revision) return { status: 'rejected', reason_code: 'item_revision_mismatch' } as Record<string, JsonValue>
+        if (current.semanticAction !== 'publish') return {
+          status: 'observed', reason_code: 'ordinary_execution_host_owned',
+          item: { id: current.id, revision: current.revision, status: current.status },
+          next_step: 'Use the host tool for ordinary work. Guard can observe its persisted result and independent readback; no Guard preparation or qualification is required.',
+        } as Record<string, JsonValue>
+      }
 
       // Discovery: a bounded, FULLY TRAVERSABLE current-item list so a fresh
       // session never has to guess an item ID (0.6.1, W060-03). Stable order,
@@ -212,7 +222,7 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
             }),
           } : {}),
           ...(filter !== null ? { filtered_by: { semantic_action: filter } } : {}),
-          note: 'Re-run with one item_id to prepare that item, or pass page_cursor for the next page. Preparation performs no action.',
+          note: 'Re-run with one item_id for a read-only diagnosis, or pass page_cursor for the next page.',
         }
       }
 

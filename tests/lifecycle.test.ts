@@ -3,9 +3,9 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from '../src/runtime.js'
-import { deriveProjection, PROTOCOL_V3_NOTICE, PROTOCOL_V5_NOTICE } from '../src/domain/derive.js'
+import { deriveProjection, PROTOCOL_V3_NOTICE, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { certifyCheckpoint } from '../src/domain/checkpoint.js'
-import { FIRST_STEP_GUIDANCE } from '../src/domain/lifecycle.js'
+import { firstStepGuidanceV6 } from '../src/domain/lifecycle.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
 // The audited rc.1 active cohort is the test lock (0.5.0 support policy).
@@ -159,8 +159,8 @@ describe('A01: fresh empty sessions stay silent at T0', () => {
       const data = (message as { content?: Array<{ text?: string }> }).content ?? []
       return data[0]?.text
     })
-    expect(texts[0]).toBe(PROTOCOL_V5_NOTICE)
-    expect(texts[1]).toBe(FIRST_STEP_GUIDANCE)
+    expect(texts[0]).toBe(PROTOCOL_V6_NOTICE)
+    expect(texts[1]).toBe(firstStepGuidanceV6())
     expect(texts[2]).toContain('guard-demo.txt')
 
     // Persisting the step makes the boundary durable ahead of the root input.
@@ -173,7 +173,7 @@ describe('A01: fresh empty sessions stay silent at T0', () => {
     // The next step never injects a second boundary; the revision-change
     // reminder may flow once, but the v5 cut happens exactly once.
     const again = await runPreStep(ctx, agent, [createUserMessage({ content: [{ type: 'text', text: '继续' }], source: { kind: 'user' } })])
-    expect(again.messages.filter((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text === PROTOCOL_V5_NOTICE)).toHaveLength(0)
+    expect(again.messages.filter((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text === PROTOCOL_V6_NOTICE)).toHaveLength(0)
   })
 })
 
@@ -227,7 +227,7 @@ describe('A03/A04: rejected, canceled, filtered, and non-root batches never acti
 
     const retried = await runPreStep(ctx, agent, claimed)
     expect(retried.messages).toHaveLength(3)
-    expect((retried.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V5_NOTICE)
+    expect((retried.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V6_NOTICE)
   })
 
   it('plugin, tool, and imported batches do not root-activate; delegated sessions never inject', async () => {
@@ -309,7 +309,7 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     const resumed = await runPreStep(ctx, agent, claimed)
     expect(resumed.messages).toHaveLength(2)
     const texts = resumed.messages.map((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text)
-    expect(texts.filter((text) => text === PROTOCOL_V5_NOTICE)).toHaveLength(0)
+    expect(texts.filter((text) => text === PROTOCOL_V6_NOTICE)).toHaveLength(0)
     expect(texts.some((text) => String(text).includes('recovered after compaction or resume'))).toBe(true)
   })
 
@@ -333,7 +333,7 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     // The first 0.6 write is the explicit cut: v5 boundary, then the recovery
     // packet, then the claimed input.
     expect(decision.messages).toHaveLength(3)
-    expect((decision.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V5_NOTICE)
+    expect((decision.messages[0] as { content: Array<{ text: string }> }).content[0].text).toBe(PROTOCOL_V6_NOTICE)
     persistStep(session, decision.messages)
     const after = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
     expect(after.boundaryV5).toBe(true)

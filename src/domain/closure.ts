@@ -51,7 +51,7 @@ export function certifiableOpenItems(projection: GuardProjection): GuardItem[] {
  */
 export function needsReviewObligations(projection: GuardProjection): GuardItem[] {
   const ordering = (a: GuardItem, b: GuardItem): number => (a.revision - b.revision) || (a.id < b.id ? -1 : 1)
-  const units = projection.boundaryProtocol === 5 && projection.currentUnitId !== undefined
+  const units = projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5 && projection.currentUnitId !== undefined
     ? new Set<string>([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)])
     : undefined
   return [...projection.items.values()]
@@ -85,7 +85,7 @@ export function unitClosureItemIds(projection: GuardProjection, unitId: string):
   // Units only exist under a v5 boundary. A legacy session certifies the whole
   // session, so asking for a unit closure there is a caller error, not a
   // silently-shrunk scope: report nothing rather than inventing a scope.
-  if (projection.boundaryProtocol !== 5) return []
+  if (projection.boundaryProtocol === undefined || projection.boundaryProtocol < 5) return []
   const inClosure = new Set<string>([unitId, ...unitDescendantIds(projection, unitId)])
   return certifiableOpenItems(projection)
     .filter((item) => item.unitId !== undefined && inClosure.has(item.unitId))
@@ -111,7 +111,7 @@ function isBlanketProhibition(action: StatefulAction, requested: TargetTuple | u
 function standingAncestorConstraints(projection: GuardProjection, unitId: string): GuardItem[] {
   // Ancestor lineage is a v5 unit concept: a legacy session has no units and
   // therefore no ancestor constraints to inherit.
-  if (projection.boundaryProtocol !== 5) return []
+  if (projection.boundaryProtocol === undefined || projection.boundaryProtocol < 5) return []
   const ancestors = unitAncestorIds(projection, unitId)
   if (ancestors.length === 0) return []
   return visiblePendingItems(projection).filter((item) => {
@@ -213,7 +213,7 @@ export function ancestorConstraintForBinding(
  * must never silently shrink their scope (migration table, P0 §6).
  */
 export function certificateClosure(projection: GuardProjection): { unitId?: string; itemIds: string[] } {
-  if (projection.boundaryProtocol === 5) {
+  if (projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5) {
     const legacyIds = certifiableOpenItems(projection)
       .filter((item) => item.unitId === undefined)
       .map((item) => item.id)

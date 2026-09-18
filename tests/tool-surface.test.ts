@@ -70,6 +70,9 @@ const EXPECTED_TOOLS = [
   'context_guard_checkpoint',
   'context_guard_boundary',
   'context_guard_evidence',
+  'context_guard_observe_file',
+  'context_guard_observe_git',
+  'context_guard_observe_test_readiness',
   'context_guard_action',
   'context_guard_prepare',
   'context_guard_interpret',
@@ -169,7 +172,7 @@ describe('registered tool surface', () => {
       { agent: undefined },
     )
     expect(result.status).toBe('unavailable')
-    expect(result.reason_code).toBe('action_adapter_unavailable')
+    expect(result.reason_code).toBe('ordinary_action_migrated_to_host_tools')
   })
 
   it('refuses a mutating tool call carrying a foreign agent', async () => {
