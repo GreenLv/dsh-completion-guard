@@ -1,0 +1,236 @@
+{
+  "recordingVersion": "1",
+  "product": "dsh-completion-guard",
+  "productVersion": "0.6.2",
+  "baselineCommit": "63326f22d40407099baa70c8947c37029749588e",
+  "moduleEntry": "dist/domain/index.js",
+  "moduleSha256": "dbae0d178199e19626862f328b6f5409b7cf6799aad22e7b1425953b0bc689e5",
+  "moduleHashes": {
+    "dist/domain/index.d.ts": "9aa3f376c2749923bca89aa711ae03f331f2930886dc942226926ee27c26eb46",
+    "dist/domain/index.js": "dbae0d178199e19626862f328b6f5409b7cf6799aad22e7b1425953b0bc689e5",
+    "dist/domain-BtR3J5aL.js": "6f3483cf25ad2c839ed04ce0475c8af1ffb467499f9b530628e7a02c50416094",
+    "dist/index-CZSt3D0G.d.ts": "16d78205ce820122e17ec9b021753626e41c26421d4ae5c6bb123d83528c9040",
+    "dist/index.d.ts": "98bbcb3191466c7ef5384115b6533c5812c892b1c80985c7208ac7a013a111cf",
+    "dist/index.js": "2fb73e35c71132d615a256b47908c48fa07126233f790df0772aa25caa0100fd"
+  },
+  "entryPoint": "deriveProjection(events, config, scope, true)",
+  "executedHere": [
+    "deriveProjection"
+  ],
+  "note": "Records emitted by executing the committed 0.6.2 build. Nothing in this file was written by the 0.6.3 batch: the 0.6.3 upgrade-eligibility evidence reads them as the earlier release left them.",
+  "scope": {
+    "cwd": "/repo-a",
+    "sessionHeader": {
+      "version": 3,
+      "id": "legacy-birth",
+      "createdAt": 1
+    }
+  },
+  "cases": [
+    {
+      "caseId": "legacy-0.6.2-mixed-chinese",
+      "why": "The reproduced F062-01 defect on the older protocol: the whole mixed clause is ONE information range, still pending.",
+      "turn": {
+        "text": "更新插件，检查是否存在更新，安装新主题，记录变更。",
+        "answer": "已是最新版本。",
+        "v5Notice": false
+      },
+      "boundaryProtocol": null,
+      "records": [
+        {
+          "id": "R001",
+          "revision": 1,
+          "kind": "requirement",
+          "sourceMessageId": "m1:block:3ec8faf8c5e50aa3",
+          "normalizedText": "更新插件，检查是否存在更新，安装新主题，记录变更。",
+          "textSha256": "c7359bdc4d6276f640d20836a0a90f72da94c1a5470932289beb231065c44324",
+          "status": "pending",
+          "verification": {
+            "enforced": true,
+            "surface": "scope",
+            "subject": "/repo-a",
+            "operation": "verify"
+          },
+          "semanticAction": "install",
+          "requestedTarget": {
+            "package_id": "题"
+          },
+          "targetCaptureStatus": "resolved",
+          "taskKind": "inquiry",
+          "authority": "root_instruction",
+          "directive": "informational",
+          "executee": "unresolved",
+          "authorityDisposition": "informational",
+          "interpretationFingerprint": "i325eac34",
+          "spans": [
+            {
+              "partIndex": 0,
+              "start": 0,
+              "end": 75,
+              "class": "question"
+            }
+          ],
+          "rawTextSha256": "c7359bdc4d6276f640d20836a0a90f72da94c1a5470932289beb231065c44324"
+        }
+      ]
+    },
+    {
+      "caseId": "legacy-0.6.2-mixed-chinese-v5",
+      "why": "The same defect on a session that announced the v5 boundary: the earlier release CLOSED the whole mixed clause, so this record carries status=answered and a delivered answeredBy.",
+      "turn": {
+        "text": "更新插件，检查是否存在更新，安装新主题，记录变更。",
+        "answer": "已是最新版本。",
+        "v5Notice": true
+      },
+      "boundaryProtocol": 5,
+      "records": [
+        {
+          "id": "R001",
+          "revision": 1,
+          "kind": "requirement",
+          "sourceMessageId": "m2:block:3ec8faf8c5e50aa3",
+          "normalizedText": "更新插件，检查是否存在更新，安装新主题，记录变更。",
+          "textSha256": "c7359bdc4d6276f640d20836a0a90f72da94c1a5470932289beb231065c44324",
+          "status": "answered",
+          "verification": {
+            "enforced": true,
+            "surface": "scope",
+            "subject": "/repo-a",
+            "operation": "verify"
+          },
+          "semanticAction": "install",
+          "requestedTarget": {
+            "package_id": "题"
+          },
+          "targetCaptureStatus": "resolved",
+          "taskKind": "inquiry",
+          "authority": "root_instruction",
+          "directive": "informational",
+          "executee": "unresolved",
+          "authorityDisposition": "informational",
+          "interpretationFingerprint": "i325eac34",
+          "spans": [
+            {
+              "partIndex": 0,
+              "start": 0,
+              "end": 75,
+              "class": "question"
+            }
+          ],
+          "rawTextSha256": "c7359bdc4d6276f640d20836a0a90f72da94c1a5470932289beb231065c44324",
+          "unitId": "U001",
+          "answeredBy": {
+            "turn": 1,
+            "responseSeq": 3,
+            "responseSha256": "b4f9b581282115dec203b474f2c9e386a90cf40a231dd2aebc81f35e1dfb81ba"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "legacy-0.6.2-mixed-english-v5",
+      "why": "The same answered shape with an unpunctuated English conjunction.",
+      "turn": {
+        "text": "Check whether an update exists and install the package.",
+        "answer": "An update exists.",
+        "v5Notice": true
+      },
+      "boundaryProtocol": 5,
+      "records": [
+        {
+          "id": "R001",
+          "revision": 1,
+          "kind": "requirement",
+          "sourceMessageId": "m2:block:6387620b952acb30",
+          "normalizedText": "Check whether an update exists and install the package.",
+          "textSha256": "3d1bfce884df8dceb238204198554e0fb0f48391f86381e8b77124d8ecf78d2d",
+          "status": "answered",
+          "verification": {
+            "enforced": true,
+            "surface": "scope",
+            "subject": "/repo-a",
+            "operation": "run"
+          },
+          "semanticAction": "install",
+          "requestedTarget": {},
+          "targetCaptureStatus": "clarification_required",
+          "targetCaptureReasonCode": "requested_target_package_id_missing",
+          "taskKind": "inquiry",
+          "authority": "root_instruction",
+          "directive": "informational",
+          "executee": "unresolved",
+          "authorityDisposition": "informational",
+          "interpretationFingerprint": "i97a66fdc",
+          "spans": [
+            {
+              "partIndex": 0,
+              "start": 0,
+              "end": 55,
+              "class": "question"
+            }
+          ],
+          "rawTextSha256": "3d1bfce884df8dceb238204198554e0fb0f48391f86381e8b77124d8ecf78d2d",
+          "unitId": "U001",
+          "answeredBy": {
+            "turn": 1,
+            "responseSeq": 3,
+            "responseSha256": "e32010e1d4c4ac59727366b1aed1522d3b884e165781f15a56c786e3ed48eab8"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "legacy-0.6.2-pure-question-v5",
+      "why": "The successful control: a supported pure-question record closed by its own answer, which must keep its birth rule and must NOT be flagged.",
+      "turn": {
+        "text": "检查是否有更新吗？",
+        "answer": "已是最新版本。",
+        "v5Notice": true
+      },
+      "boundaryProtocol": 5,
+      "records": [
+        {
+          "id": "R001",
+          "revision": 1,
+          "kind": "requirement",
+          "sourceMessageId": "m2:block:8627166d71ab162a",
+          "normalizedText": "检查是否有更新吗？",
+          "textSha256": "9120f7c3589dc0ca8973d561d00633edf7b65537eb1f75e31c281810e64a71bc",
+          "status": "answered",
+          "verification": {
+            "enforced": true,
+            "surface": "scope",
+            "subject": "/repo-a",
+            "operation": "verify"
+          },
+          "semanticAction": "generic_run",
+          "requestedTarget": {
+            "scope": "/repo-a"
+          },
+          "targetCaptureStatus": "resolved",
+          "taskKind": "inquiry",
+          "authority": "root_instruction",
+          "directive": "informational",
+          "executee": "unresolved",
+          "authorityDisposition": "informational",
+          "interpretationFingerprint": "i091378bc",
+          "spans": [
+            {
+              "partIndex": 0,
+              "start": 0,
+              "end": 27,
+              "class": "question"
+            }
+          ],
+          "rawTextSha256": "9120f7c3589dc0ca8973d561d00633edf7b65537eb1f75e31c281810e64a71bc",
+          "unitId": "U001",
+          "answeredBy": {
+            "turn": 1,
+            "responseSeq": 3,
+            "responseSha256": "b4f9b581282115dec203b474f2c9e386a90cf40a231dd2aebc81f35e1dfb81ba"
+          }
+        }
+      ]
+    }
+  ]
+}

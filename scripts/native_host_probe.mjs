@@ -172,9 +172,12 @@ export function apply(ctx, config) {
         // host callback, whose supported capability has no reasonCode.
         for (const semantic_action of ['test', 'commit', 'push']) {
           const prepared = await call('context_guard_prepare', { item_id: template.item_id, semantic_action })
-          assert.equal(prepared.status, 'prepared')
-          assert.equal(prepared.host_capability.status, 'supported')
-          if (semantic_action !== 'test') assert.ok(prepared.evidence_input_contract.steps.length > 0)
+          assert.equal(prepared.status, semantic_action === 'test' ? 'prepared' : 'incompatible')
+          if (semantic_action === 'test') assert.equal(prepared.host_capability.status, 'supported')
+          if (semantic_action !== 'test') {
+            assert.equal(prepared.compatibility.item_action, 'test')
+            assert.equal(prepared.evidence_input_contract, undefined)
+          }
         }
         const missingResolution = await call('context_guard_evidence', { semantic_action: 'commit', evidence_role: 'resolution' })
         assert.equal(missingResolution.reason_code, 'resolution_input_missing')
@@ -238,6 +241,29 @@ export function apply(ctx, config) {
         assert.equal(refusal.reason_code, 'no_certification_gain')
         assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       })
+      // 0.6.3 native incident checks: real host delivery and persisted tools;
+      // no business mutation and no model request are performed here.
+      await root('Check whether an update exists and install the package.')
+      let incidentPage = await call('context_guard_checkpoint', { bindings: [] })
+      const incidentRows = await Promise.all(incidentPage.open_items.map(row => readProbeItem(call, incidentPage, row.id)))
+      const incident = incidentRows.find(row => row.text?.includes('Check whether an update exists'))
+      assert.ok(incident)
+      assert.equal(incident.status, 'pending')
+      const incidentPrepare = await call('context_guard_prepare', { item_id: incident.id, semantic_action: 'install' })
+      assert.equal(incidentPrepare.status, 'incompatible')
+      assert.equal(incidentPage.status, 'incomplete')
+      const repositoryA = join(config.workRoot, 'repository-a')
+      const repositoryB = join(config.workRoot, 'repository-b')
+      await root(`提交仓库 ${repositoryA} 分支 main。`)
+      await root(`提交仓库 ${repositoryB} 分支 main。提交。`)
+      incidentPage = await call('context_guard_checkpoint', { bindings: [] })
+      const repositoryRows = await Promise.all(incidentPage.open_items.map(row => readProbeItem(call, incidentPage, row.id)))
+      const selectedB = repositoryRows.find(row => row.semantic_action === 'commit' && row.text?.includes(repositoryB))
+      assert.ok(selectedB)
+      assert.equal(selectedB.requested_target.repository, repositoryB)
+      const wrongRepository = await call('context_guard_prepare', { item_id: selectedB.id, semantic_action: 'commit', requested_target: { repository: repositoryA, branch: 'main' } })
+      assert.equal(wrongRepository.status, 'incompatible')
+      assert.equal((await call('context_guard_checkpoint', { bindings: [] })).status, 'incomplete')
       await check('history_pagination_roundtrip', async () => {
         const page = await call('context_guard_checkpoint', { bindings: [], evidence_scope: 'history', limit: 1 })
         assert.ok(page.available_evidence.length > 0)

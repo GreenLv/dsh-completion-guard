@@ -47,8 +47,23 @@ describe('a path written in the instruction is captured whole', () => {
     expect(targetOf('Push repository / remote origin').repository).not.toBe('/')
   })
 
-  it('keeps the working directory as the fallback only when no path is named', () => {
-    expect(targetOf('Push the current branch to remote origin')).toMatchObject({ repository: '/work' })
+  it('records the working directory as environment context, never as a resolved selection', () => {
+    // 0.6.3 K2 correction: 0.6.2 asserted here that an unnamed repository was
+    // `resolved` to the session directory. That reading was the defect — the
+    // session's start directory is environment context, and promoting it to the
+    // request target authorizes a mutation the root never selected. The
+    // directory is still RECORDED (a later obligation of the same work unit may
+    // legitimately inherit an explicit choice), but it never resolves authority.
+    const unnamed = captureClause('Push the current branch to remote origin', 'm1', 'R001', 1, { cwd: '/work' })
+    expect(unnamed.requestedTarget).toMatchObject({ repository: '/work' })
+    expect(unnamed.targetSource).toEqual({ kind: 'environment_default' })
+    expect(unnamed.targetCaptureStatus).toBe('clarification_required')
+    expect(unnamed.targetCaptureReasonCode).toBe('requested_target_repository_missing')
+    // An explicit "current repository" DOES select it: the root named the
+    // object and a trusted host directory snapshot resolves it.
+    const selected = captureClause('Push the current repository', 'm2', 'R002', 2, { cwd: '/work' })
+    expect(selected.targetSource).toEqual({ kind: 'explicit_current_repository' })
+    expect(selected.targetCaptureStatus).toBe('resolved')
   })
 })
 

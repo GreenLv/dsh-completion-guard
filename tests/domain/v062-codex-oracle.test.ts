@@ -242,7 +242,7 @@ describe('0.6.2 D062-04: cross-end comparison uses recorded real Codex entry-poi
     // remedy. This is the only lane in the taxonomy that maps to user input.
     const projection = createProjection()
     projection.enabled = true
-    const item = captureClause('在仓库提交变更', 'm1', 'R001', 1)
+    const item = captureClause('在仓库提交变更', 'm1', 'R001', 1, { cwd: '/repo' })
     expect(item.targetCaptureStatus).toBe('clarification_required')
     projection.items.set(item.id, item)
     const diagnosis = deriveItemDiagnosis(projection, item)

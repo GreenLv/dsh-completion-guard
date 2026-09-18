@@ -1,0 +1,153 @@
+{
+  "recordingVersion": "1",
+  "product": "codex-context-guard",
+  "productVersion": "0.13.9",
+  "moduleSha256": "4b895aad4b54ec6dc4d8dfcad47a244b91461db3922a7624bbffd612e9166fa7",
+  "entryPoint": "_reply_only_request_shape(text) plus clause_metadata/verification_contract",
+  "executedHere": [
+    "_reply_only_request_shape",
+    "clause_metadata",
+    "verification_contract"
+  ],
+  "note": "Facts measured by executing the real entry points against an installed module. The delivery judgement decides only whether the turn's final answer may close the request; it is not an obligation projection, and this is a function-level probe, not a native Codex task acceptance.",
+  "cases": [
+    {
+      "id": "mixed-comma-run-zh",
+      "text": "更新插件，检查是否存在更新，安装新主题，记录变更。",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "local_edit",
+        "ambiguous",
+        "unspecified",
+        "unspecified"
+      ]
+    },
+    {
+      "id": "mixed-comma-run-en",
+      "text": "Install the package, check whether an update exists, and write a report.",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified",
+        "local_review",
+        "unspecified"
+      ]
+    },
+    {
+      "id": "mixed-conjunction-zh",
+      "text": "检查是否有更新并安装新主题。",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "ambiguous"
+      ]
+    },
+    {
+      "id": "mixed-conjunction-en",
+      "text": "Check whether an update exists and install the package.",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "local_review"
+      ]
+    },
+    {
+      "id": "pure-question-zh",
+      "text": "检查一下插件是否有更新吗？",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "ambiguous"
+      ]
+    },
+    {
+      "id": "pure-question-en",
+      "text": "Is there any update for the plugin?",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "suggestion-particle-zh",
+      "text": "安装新主题吧。",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "conditional-tail-en",
+      "text": "Install the package if available.",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "quoted-command-zh",
+      "text": "说明 `git push origin main` 的作用，然后更新 README。",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "remote_push",
+        "local_edit"
+      ]
+    },
+    {
+      "id": "plain-directive-zh",
+      "text": "更新插件。",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "local_edit"
+      ]
+    },
+    {
+      "id": "plain-directive-en",
+      "text": "Install the package.",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "unspecified"
+      ]
+    },
+    {
+      "id": "unnamed-repository-zh",
+      "text": "提交并推送变更",
+      "reply_only_request_shape": false,
+      "contract_mode": "legacy_fallback",
+      "contract_reason": "no_deterministic_contract",
+      "obligations": 0,
+      "clause_operations": [
+        "remote_push"
+      ]
+    }
+  ]
+}

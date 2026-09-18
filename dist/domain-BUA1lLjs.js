@@ -70,135 +70,6 @@ function sanitizeUrl(value) {
 }
 
 //#endregion
-//#region src/domain/conversation.ts
-/**
-* Punctuation and whitespace that may surround a bare progression phrase
-* without turning it into sentence content.
-*/
-const PUNCT = String.raw`[\s。，、；：！？．,;:!?\-*"'“”‘’()（）.…～~]`;
-/**
-* Session-layer phrases that acknowledge or advance the conversation without
-* stating a task. Longer forms come first so the alternation consumes them
-* before their prefixes. A bare whole-message acknowledgment ("当然。",
-* "Of course.") is session talk: it is never captured as an obligation, so it
-* can never block certification either.
-*/
-const PROGRESSION_SOURCE = String.raw`(?:继续执行|继续吧|请继续|继续|接着做|接着|下一步|没问题|知道了|明白了|了解|好的?|是的?|对的?|收到|可以|行|嗯+|当然|那当然|continue|go on|go ahead|keep going|proceed|okay|ok|yes|sure|right|next|of course)`;
-const PROGRESSION_WHOLE = new RegExp(`^${PUNCT}*${PROGRESSION_SOURCE}${PUNCT}*$`, "i");
-const PROGRESSION_LEAD = new RegExp(`^${PROGRESSION_SOURCE}${PUNCT}+`, "i");
-const PROGRESSION_ANYWHERE = new RegExp(PROGRESSION_SOURCE, "gi");
-/**
-* Clause-leading prohibition keywords. A message that opens with one is a
-* captured prohibition, never a meta comment.
-*/
-const PROHIBITION_LEAD = /^(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得)/i;
-/**
-* Question markers: a question mark, an interrogative pronoun/particle, or an
-* explicit request-for-answer phrase.
-*/
-const QUESTION_TERMS = /[？?]|什么|为什么|怎么|如何|是否|是不是|哪|谁|啥|吗|呢|对不对|正常吗|bug吗|有问题吗|有必要|合理吗|可否|能否|能不能|请问|问一下/;
-/**
-* Meta-comment/objection leads (no question mark required). `不是` requires
-* trailing punctuation so negated statements ("不是都要推送") stay fail-closed.
-*/
-const META_COMMENT_LEAD = /^(?:不是[，,。；;：:\s]|你(?:这|光|啥|怎么|什么|到底|就)|我(?:只是|就是|想|问|建议|认为|觉得)|这(?:有|什么)意义|有什么用|有什么意义)/;
-/** Diagnostic/inspection verbs: mentioning them alone is never a task feature. */
-const META_VERBS = /确认下|看看|看一下|想问|确认|验证|检查|查看|分析|解释|说明|排查|定位|诊断|评估|考虑|建议|讨论|复查|核对|盘点|复盘|问|看/g;
-/**
-* Operation verbs that indicate a real task effect. English verbs are
-* word-bounded so "latest" does not contain "test". The classifier vocabulary
-* is intentionally independent from the command-surface manifest.
-*/
-const OPERATION_VERBS = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|整理|总结|记录|更新|修复|改进|解决|处理|推送|发布|安装|升级|提交|下载|上传|拉取|同步|部署|重启|测试|写|\b(?:build|create|write|modify|run|fix|update|install|push|publish|test)\b/gi;
-const NEGATIONS = /没有|并无|不存在|无需|不用|不需要|尚未|还未|没|未|不是/;
-function excludedRanges(text) {
-	const ranges = [];
-	for (const pattern of [PROGRESSION_ANYWHERE, META_VERBS]) {
-		pattern.lastIndex = 0;
-		for (const match of text.matchAll(pattern)) {
-			const start = match.index;
-			ranges.push([start, start + match[0].length]);
-		}
-	}
-	return ranges;
-}
-/** The negation filter is scoped to the clause (sentence or comma segment). */
-function isNegatedInClause(text, verbStart) {
-	const clause = text.slice(0, verbStart).split(/[。！？；.!?;，,\r\n]/).pop() ?? "";
-	return NEGATIONS.test(clause);
-}
-function hasOperationVerb(text) {
-	const excluded = excludedRanges(text);
-	for (const match of text.matchAll(OPERATION_VERBS)) {
-		const start = match.index;
-		if (excluded.some(([from, to]) => start >= from && start < to)) continue;
-		if (isNegatedInClause(text, start)) continue;
-		return true;
-	}
-	return false;
-}
-function hasStrongTaskFeature(text) {
-	if (extractArtifactPaths(text).length > 0) return true;
-	if (extractMethod(text) !== void 0) return true;
-	return hasOperationVerb(text);
-}
-/**
-* Classify a direct user message (or one clause of it) as an actionable
-* `instruction` or a session-layer `conversational` utterance. Only
-* conversational results drop capture, so the classifier fails closed:
-* everything it cannot confidently recognize as session-layer talk stays an
-* instruction and is captured exactly as before.
-*
-* Order matters: progression and prohibition leads first, then strong task
-* features (artifact path, explicit method, or a non-negated operation verb
-* outside progression/meta spans), then the meta-question and meta-comment
-* forms, and finally a progression lead over a featureless remainder.
-*/
-function classifyUserInteraction(text) {
-	const normalized = normalizeClause(text);
-	if (!normalized) return "instruction";
-	if (PROGRESSION_WHOLE.test(normalized)) return "conversational";
-	if (PROHIBITION_LEAD.test(normalized)) return "instruction";
-	if (hasStrongTaskFeature(normalized)) return "instruction";
-	if (QUESTION_TERMS.test(normalized)) return "conversational";
-	if (META_COMMENT_LEAD.test(normalized)) return "conversational";
-	if (PROGRESSION_LEAD.test(normalized)) return "conversational";
-	return "instruction";
-}
-/**
-* Inquiry verbs: the operation verb appears as the OBJECT of an
-* investigation rather than an imperative ("是否有更新", "check whether…").
-* The clause asks about state; it does not order a change.
-*/
-const INQUIRY_PATTERNS = [
-	/(?:是否|有没有|有没|是否存在|是不是已经?|可曾|曾否)[^。！？；，,]{0,12}(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启|生成|写入)/,
-	/(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启)(?:了)?(?:吗|么|没有|没)\s*[?？]?\s*$/,
-	/^(?:检查|看看|查看|确认|了解|查一下|帮忙看)[^。！？；]{0,16}(?:是否|有没有|是否已经)/,
-	/\b(?:is|are)\s+there\s+(?:any|an?)?\s*(?:update|updates|upgrade|commit|push|change|fix)/i,
-	/\bcheck\s+(?:whether|if)\b/i,
-	/\bwhether\b[^.?!]{0,24}\b(?:update|upgrade|commit|push|install|change)/i
-];
-/**
-* Imperative leads that keep an ACTION reading even when the clause also
-* contains an inquiry verb ("更新后检查" orders a change first).
-*/
-const ACTION_LEAD = /^(?:请\s*)?(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|同步|拉取|下载|重启|生成|写入|创建|新建|运行|执行|部署)\b|^(?:please\s+)?(?:update|upgrade|commit|push|publish|install|modify|delete|fix|deploy|run|create)\b/i;
-/**
-* Separate intent layer (v0.5): whether the captured work is an inquiry about
-* state or an ordered change. Intent NEVER drops capture or weakens
-* protection — an inquiry keeps its original obligation; it only changes what
-* certification support the diagnosis reports (inquiries are not machine
-* certifiable by the current adapters and must not be re-bound).
-*/
-function classifyTaskIntent(text) {
-	const normalized = normalizeClause(text);
-	if (!normalized) return "action";
-	if (ACTION_LEAD.test(normalized)) return "action";
-	for (const pattern of INQUIRY_PATTERNS) if (pattern.test(normalized)) return "inquiry";
-	return "action";
-}
-
-//#endregion
 //#region src/domain/manifest.ts
 const COMMAND_SURFACE_MANIFEST = {
 	fileTools: [
@@ -800,54 +671,20 @@ function validateActionManifest() {
 }
 
 //#endregion
-//#region src/domain/registry.ts
-const MAX_REGISTRY_URL_LENGTH = 2048;
-const ENCODED_SEPARATOR_OR_CONTROL = /%(?:0[0-9a-f]|1[0-9a-f]|7f|2f|5c)/i;
-const ENCODED_DOT = /%2e/i;
-function rawPath(value) {
-	const authorityStart = value.indexOf("//");
-	if (authorityStart < 0) return "";
-	const afterAuthority = value.slice(authorityStart + 2);
-	const slash = afterAuthority.indexOf("/");
-	return slash < 0 ? "" : afterAuthority.slice(slash);
-}
-function hasControlOrBackslash(value) {
-	return [...value].some((character) => {
-		const code = character.charCodeAt(0);
-		return character === "\\" || code <= 31 || code === 127;
-	});
-}
-function safePath(path$1) {
-	if (!path$1 || path$1 === "/") return true;
-	if (path$1.includes("//") || ENCODED_SEPARATOR_OR_CONTROL.test(path$1) || ENCODED_DOT.test(path$1)) return false;
-	return (path$1.endsWith("/") ? path$1.slice(0, -1) : path$1).split("/").slice(1).every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
-}
-/**
-* Canonical npm registry base. The canonical value is the only value persisted
-* into requested/resolved/state tuples and is reused verbatim for npm argv.
-*/
-function canonicalRegistryBase(value, options = {}) {
-	if (!value || value.length > MAX_REGISTRY_URL_LENGTH || value !== value.trim() || hasControlOrBackslash(value) || !safePath(rawPath(value))) return void 0;
-	let parsed;
-	try {
-		parsed = new URL(value);
-	} catch {
-		return;
-	}
-	const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
-	if (parsed.protocol !== "https:" && !(options.allowLoopbackHttp && parsed.protocol === "http:" && loopback)) return void 0;
-	if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.hostname.endsWith(".")) return void 0;
-	if (!safePath(parsed.pathname)) return void 0;
-	parsed.pathname = `${parsed.pathname.replace(/\/+$/, "")}/`;
-	return parsed.toString();
-}
-/** npm's packument route preserves @ and escapes the scope separator. */
-function npmEscapedPackageName(packageId) {
-	return encodeURIComponent(packageId).replace(/^%40/i, "@").replace(/%2F/gi, "%2f");
-}
-
-//#endregion
 //#region src/domain/semantics.ts
+/**
+* 0.6.3 K1 regression probe: the 0.6.2 question rule, kept SOLELY so the fixed
+* defect has a test that fails against the old reading.
+*
+* 0.6.2 declared a clause information as soon as a question marker appeared
+* anywhere inside it (`QUESTION_SCOPE.test(masked)`). This function is that
+* rule, verbatim. It is not used by any production path — the current reading
+* is {@link hasQuestionScope} — and its only caller is the regression test that
+* pins the difference between the two readings on the recorded defect input.
+*/
+function legacyQuestionReadingIsInformational(masked) {
+	return QUESTION_SCOPE.test(masked);
+}
 /** A clause whose head verb demands a verification rather than a change. */
 const ACCEPTANCE_LEAD = /^(?:验收|验证|确认|确保|核对|检查|verify|confirm|ensure|check)/i;
 /**
@@ -944,7 +781,7 @@ const CJK_VERB_WORDS = [...CJK_VERBS].sort((a, b) => b.length - a.length);
 const ACTION_VERB_PATTERN = `(?:${COMMAND_SURFACE_MANIFEST.operationVerbs.map((entry) => entry.pattern.split("|").map((alternative) => /^[A-Za-z]/.test(alternative.trim()) ? `\\b${alternative.trim()}\\b` : alternative.trim()).join("|")).join("|")}|${CJK_VERB_PATTERN})`;
 const ACTION_VERB = new RegExp(ACTION_VERB_PATTERN, "i");
 /** Operation verbs beyond the guard action surface (local work and diagnosis). */
-const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|部署|安装|升级|提交|下载|上传|拉取|同步|重启|测试|检查|验证|确认|修复|更新|清理|整理|记录|构建|编译|重构|迁移|删除|回滚|发布|推送|合并|继续|恢复|还原|回滚|实现|\b(?:build|create|write|modify|change|edit|run|fix|update|install|push|publish|test|verify|check|commit|deploy|migrate|remove|delete|restart|revert|refactor|inspect|fetch|pull|implement)\b/i;
+const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|拟定|部署|安装|升级|提交|下载|上传|拉取|同步|重启|测试|检查|验证|确认|修复|更新|清理|整理|记录|构建|编译|重构|迁移|轮换|刷新|清空|扩容|缩容|删除|回滚|发布|推送|合并|继续|恢复|还原|回滚|实现|\b(?:build|create|write|modify|change|edit|run|fix|update|install|push|publish|test|verify|check|commit|deploy|migrate|remove|delete|restart|revert|refactor|inspect|fetch|pull|implement|draft|emit|produce|log)\b/i;
 /** Explanatory framings: an action named afterwards is an object, not an order. */
 const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|科普|什么意思|是什么意思|有什么(?:作用|影响|区别)|\bexplain\b|\bdescribe\b|\bclarify\b|\btell\b|\bhow\s+to\b|\bwhat\s+does\b|\bwhat\s+is\b|\bhow\s+does\b|\bmeaning\s+of\b/i;
 /** Interrogative framings that make a scope a question rather than an order. */
@@ -956,6 +793,1043 @@ const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|�
 * where logs are stored") as a question — the 0.6.1 review regression.
 */
 const QUESTION_SCOPE = /[？?]|是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|能否|可否|要不要|该不该|由谁|是谁|^\s*(?:what|how|when|where|who|which|whether|why)\b|\b(?:whether|which|why|should|could|would)\b/i;
+/**
+* The interrogative ending. A clause whose head is an action verb is decided by
+* how it ENDS: "检查是否有更新吗？" asks about the world, while "检查是否存在
+* 更新。" orders a check.
+*
+* 吗 and the question mark ask on their own. 呢 and 吧 do NOT: both soften a
+* suggestion ("安装这个主题呢。", "安装新主题吧。"), so treating either as an
+* interrogative turned a pure order into a closable information request — the
+* reviewer's zero-tool counterexample. 呢 still ends a question when the clause
+* carries its own interrogative content ("主题是不是需要更新呢？"); 吧 never
+* does. A clause whose own opening word is a question (怎么/如何) is handled by
+* {@link INFO_OPENING} and {@link QUESTION_LEAD}.
+*/
+const QUESTION_ENDING = /(?:吗|[？?])[。，、；;.!]*$/u;
+/** The softening particles that ask only when the rest of the clause asks too. */
+const SOFT_ENDING = /(?:呢|吧)[。，、；;.!]*$/u;
+const QUESTION_MARKER = /[？?]|是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|能否|可否|要不要|该不该|由谁|是谁/u;
+/** Whether the clause closes on a genuine interrogative. */
+function endsOnInterrogative(masked) {
+	if (QUESTION_ENDING.test(masked)) return true;
+	return SOFT_ENDING.test(masked) && QUESTION_MARKER.test(masked.replace(/[呢吧][。，、；;.!]*$/u, ""));
+}
+/**
+/**
+* An English clause whose INTERROGATIVE is the object of its own action rather
+* than the clause's question: "Create a file recording whether the tests
+* passed", "Write a report indicating whether deployment succeeded". The
+* embedded whether/if/wh-word follows the action, so the clause orders work and
+* the interrogative only says WHAT the artifact must record.
+*/
+const ENGLISH_INTERROGATIVE_TRIGGER = /\b(?:whether|if|what|which|why|how|when|where|who)\b/i;
+/**
+* Whether an English clause opens with a verb that takes the interrogative as
+* its OWN object and continues with `if`: "Check if the remote has new
+* commits", "Verify if the build passed". The head is the verb plus the "if";
+* anything else after that verb is its object clause, not a condition.
+*/
+function interrogativeTakesIfObject(masked) {
+	if (!investigationHeadTakesIf(masked)) return false;
+	const head = /^\s*(?:please\s+)?(check|verify|confirm|see|determine|inspect|review|test)\s+(?:if|whether|when|where|why|how|what|which)\b/i.exec(masked);
+	const verb = firstActionVerb(masked);
+	const verbOffset = head[0].search(/check|verify|confirm|see|determine|inspect|review|test/i);
+	if (verbOffset < 0) return false;
+	return verb < 0 || verb === verbOffset;
+}
+/**
+* Whether the clause OPENS with an investigation verb whose object is the
+* interrogative `if`/`whether`/…, whatever else the clause contains. This is the
+* head-level form of {@link interrogativeTakesIfObject}, used by the condition
+* splitter: a clause that starts this way is an investigation, so its `if` is not
+* a condition on a separate instruction.
+*/
+function investigationHeadTakesIf(masked) {
+	if (/^\s*(?:please\s+)?(check|verify|confirm|see|determine|inspect|review|test)\s+(?:if|whether|when|where|why|how|what|which)\b/i.exec(masked) === null) return false;
+	const verb = firstActionVerb(masked);
+	if (verb >= 0 && verbIsNegated(masked, verb)) return false;
+	const boundary = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked);
+	return boundary === null || 0 < boundary.index;
+}
+/**
+/**
+* A boundary that opens an ENGLISH subordinate span: every `to <verb>` purpose
+* clause, a relative pronoun, a progressive participle, and the prepositional
+* or temporal openers that introduce one. A question word behind such a
+* boundary belongs to the subordinate clause, so it never makes the whole
+* clause a question. This is structural, not a verb list: an unknown main verb
+* ("Archive /tmp/logs to show what changed", "Compress /tmp/logs to check the
+* status") is still read correctly, which is what the earlier vocabulary-based
+* gate could not do.
+*
+* The comparative is `than`, NOT `tha[nt]`: `then` is a sequencing connective,
+* and reading it as a boundary made "Then check whether the disk is full." look
+* like a subordinate span whose question word belonged to a purpose clause — so
+* the English clause lost the investigation lane while the Chinese spelling kept
+* it (hold-out 7).
+*/
+const ENGLISH_SUBORDINATE_BOUNDARY = /\bto\s+[a-z]+|\b(?:which|who|whom|whose|that|than)\b|\b[a-z]+ing\b|\b(?:after|before|until|unless|while|once|during|about|for|regarding|concerning)\b/i;
+/**
+* Whether an English interrogative word ASKS the clause, rather than sitting in
+* its subordinate span. A wh-word that is followed by a subordinate boundary
+* ("... recording whether the tests passed", "... to show what changed") is the
+* object of that span, so the clause stays work.
+*/
+/**
+* Whether an investigation head opens the clause rather than sitting inside a
+* subordinate span. A head behind a purpose or relative boundary is that span's
+* verb ("Compress /tmp/logs TO CHECK the status"), so it asks nothing (review 4).
+*/
+function headOpensClause(pattern, masked) {
+	const match = pattern.exec(masked);
+	if (match === null) return false;
+	const boundary = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked);
+	if (boundary !== null && boundary.index < match.index) return false;
+	const verb = firstActionVerb(masked);
+	return verb < 0 || match.index <= verb;
+}
+/**
+* Whether a condition marker guards the CLAUSE rather than sitting inside a
+* purpose or relative span. "Create /tmp/check.sh to determine if the service is
+* running" orders a creation; the `if` belongs to the purpose clause, so the
+* creation is not conditional (review 4).
+*/
+const CJK_SUBORDINATE_BOUNDARY = /为了|用来|以便|从而|进而|用于/u;
+function conditionMarkerIsClauseLevel(masked, markerIndex) {
+	const english = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked);
+	const cjk = CJK_SUBORDINATE_BOUNDARY.exec(masked);
+	const starts = [english?.index, cjk?.index].filter((index) => index !== void 0);
+	if (starts.length === 0) return true;
+	return Math.min(...starts) >= markerIndex;
+}
+function englishInterrogativeIsMatrix(masked) {
+	const trigger = ENGLISH_INTERROGATIVE_TRIGGER.exec(masked);
+	if (!trigger) return true;
+	const boundary = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked);
+	return boundary === null || trigger.index <= boundary.index;
+}
+/**
+* Request and sequencing words that may precede an instruction head without
+* becoming one: "先检查是否有新版本" is still the investigation "检查是否有新
+* 版本". A preface is consumed only in front of an investigation opener, so
+* "先提交" stays an order. The English sequencing words are here for the same
+* reason as the Chinese ones: "Then check whether the disk is full." is the
+* investigation "check whether …", and leaving the preface out made the English
+* clause an acceptance obligation while the Chinese spelling stayed an
+* information request (review 5 follow-up / hold-out 7).
+*/
+const REQUEST_PREFACE = "(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|并且|并|以及|then\\b|also\\b|next\\b|first\\b|finally\\b|now\\b|please\\b|kindly\\b)?";
+/** Investigation openers: how an information request about state is phrased. */
+const INVESTIGATION_HEAD = "(?:看看|看一下|瞅瞅|查一下|检查|查看|确认|核对|了解|验证|check\\b|verify\\b|confirm\\b|see\\b|find\\s+out|determine\\b)";
+/** The interrogative a clause can open or close on: "怎么装？", "whether …". */
+const QUESTION_WORD = "(?:怎么|怎样|如何|为什么|为何|什么|哪些|哪一种|哪个|是否|是不是|能否|可否|要不要|该不该|由谁|是谁|谁|何时|什么时候|几时|多久|多少|what|how|when|where|who|whom|whose|which|whether|why)";
+/** The states a question about a change asks about ("是否有更新"). */
+const CHANGE_STATE = "(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启|生成|写入|创建|部署|添加|变更|改动|new\\s+commits?|update[sd]?|upgrade[sd]?|commit(?:s|ted)?|push(?:ed)?|publish(?:ed)?|install(?:ed)?|change[sd]?|fix(?:ed)?)";
+/** Chinese question words need no word boundary; an English one does. */
+const QUESTION_WORD_TAIL = "(?![A-Za-z0-9_])";
+/** The same alternation as a pattern, for a caller that only needs to test. */
+const QUESTION_WORD_PATTERN = new RegExp(QUESTION_WORD, "iu");
+const QUESTION_LEAD = new RegExp(`^\\s*${QUESTION_WORD}${QUESTION_WORD_TAIL}`, "iu");
+/**
+* An investigation word, the object it investigates (if any), and a
+* question about that object's state: 检查是否…, 检查一下插件是否有更新,
+* check whether…. The verb states HOW the question is answered, so the clause
+* asks about the world rather than ordering a change.
+*/
+const INVESTIGATION_THEN_QUESTION = new RegExp(`^\\s*${REQUEST_PREFACE}\\s*${INVESTIGATION_HEAD}[^。！？；，,]{0,24}?(?:是否|是不是|有没有|有没|能否|可否|要不要|该不该|为什么|为何|怎么|如何)${QUESTION_WORD_TAIL}`, "iu");
+/**
+* A question about a change's state: "…是否有更新", "…有没有安装成功",
+* "whether the remote has new commits". The change verb is the object of the
+* question, so the clause asks rather than orders.
+*/
+const QUESTION_ABOUT_CHANGE = new RegExp(`(?:是否|是不是|有没有|有没|能否|can\\s+you\\s+see|whether)\\s*(?:已经|已|还|仍然)?\\s*(?:有|存在|出来|成功)?\\s*${CHANGE_STATE}${QUESTION_WORD_TAIL}`, "iu");
+const INVESTIGATION_OF_STATE = new RegExp(`${INVESTIGATION_HEAD}\\s*(?:一下|下)?\\s*(?:for|about|on|the|a|an|new|current|latest|有没(?:有)?|关于)?\\s*(?:for|about|on|the|a|an|new|current|latest|有没(?:有)?)?\\s*(?:for|about|on|the|a|an|new|current|latest)?\\s*(?:状态|版本|更新|变更|改动|发布|提交|结果|日志|配置|权限|依赖|端口|缓存|status|state|version|update|upgrade|release|commit|change|result|logs?|config(?:uration)?|permissions?|dependencies|port|cache)${QUESTION_WORD_TAIL}`, "iu");
+/**
+* An investigation whose head word IS an investigation, followed immediately by
+* the interrogative: "How do I install this?" / "看看怎么弄". An investigation
+* word that merely sits inside an object ("仔细检查生成的几个文件") is not the
+* clause's head, and one whose object happens to be a question word is not a
+* question about method.
+*/
+const INFO_OPENING = new RegExp(`^\\s*${REQUEST_PREFACE}\\s*${INVESTIGATION_HEAD}\\s*${QUESTION_WORD}${QUESTION_WORD_TAIL}`, "iu");
+/**
+* A reported question: a reporting verb hands the question to the assistant
+* ("Tell me what changed in the build and why"). The clause asks, so the
+* answering turn closes it — no execution obligation is created.
+*/
+const REPORTED_QUESTION = new RegExp(`(?:^|[^A-Za-z0-9_])(?:(?:tell|explain|describe|show)\\b|(?:解释|说明|描述|讲解|讲讲|说一下|告诉我))[^。！？；]{0,24}?${QUESTION_WORD}${QUESTION_WORD_TAIL}`, "iu");
+/**
+* Whether a clause asks for information rather than ordering work (0.6.3 K1).
+*
+* 0.6.2 treated the mere presence of a question marker anywhere in a clause as
+* "the whole clause is a question", so one 是否 inside a comma-run of
+* instructions ("更新插件，检查是否存在更新，安装新主题，记录变更。") turned
+* every execution obligation beside it into closable information. The reading
+* is now grammatical — head verb, interrogative position, negation — so a
+* relative or purpose clause inside an order ("Create a file where logs are
+* stored", "更新皮肤中心，看看为什么失败") is never a question, while a real
+* request for an answer ("How do I install this?", "检查是否有更新吗？",
+* "check whether the remote has new commits") still is.
+*/
+function hasQuestionScope(masked) {
+	return isInformationalFragment(masked);
+}
+/**
+* True when the fragment is a pure request for information.
+*
+* A fragment that names an action counts as a question only when it ENDS on
+* the interrogative ("检查一下插件是否有更新吗？") or asks through the verb
+* itself ("检查是否存在更新", "check whether the remote has new commits"). An
+* order whose object merely contains question content ("更新皮肤中心，看看为
+* 什么失败") stays an order. A fragment that names no action is information
+* whenever it asks at all, which keeps "what changed in the build and why" and
+* "How do I install this?" in the answerable lane.
+*/
+/**
+* A REPORTING or EXPLANATION head: the verbs whose complement is the rest of the
+* sentence ("Explain how I can install foo and restart service api.",
+* "说明一下如何回滚并重新部署服务"). English reporting verbs and their Chinese
+* counterparts are both closed grammatical classes.
+*/
+const REPORTING_HEAD = new RegExp(`^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:tell|explain|describe|show|wonder|ask|know|recall|decide|determine|establish|find\\s+out|figure\\s+out)\\b|^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:解释|说明|描述|讲解|讲讲|说一下|告诉我|想问|问一下|想知道|了解一下|不确定|不清楚|不清楚|不知道)`, "iu");
+/**
+* Whether an explanation head GOVERNS its sentence.
+*
+* Everything coordinated inside the sentence the explanation heads is the OBJECT
+* of the explanation, however it is phrased and however long it is: a finite
+* complement ("how I can install …"), a `whether` complement, an infinitive, a
+* list with a long object — all of it is what the root asked to have explained.
+* The scope is therefore structural: it is the SENTENCE, bounded by the sentence
+* splitter, not a pattern with a window. A sentence break ends the governance, so
+* a following sentence can be a real instruction ("Explain the deploy. Then
+* restart service api." stays authorizable), and a question that merely stands
+* beside an order ("What changed and archive the logs?") has no explanation head
+* and keeps its order.
+*/
+function reportingHeadGoverns(masked) {
+	return headOpensClause(REPORTING_HEAD, masked);
+}
+/**
+* Whether a clause is the scope of a QUESTION — any question, not only a reported
+* one: a question word ("How do I install …"), an interrogative auxiliary
+* ("Can you …"), an investigation ("Check whether …") or an explanation
+* ("Explain how …").
+*
+* A question head GOVERNS its clause: everything coordinated inside it is part of
+* what the root asked, so the clause must not be split into an executable child.
+* When such a clause ALSO carries an action of its own it is undecided — the
+* action may be exactly what the question is about — so nothing in it is
+* authority. Exported so the mutation gate and preparation consume the SAME
+* qualification the reading produced instead of re-guessing scope from the split
+* text, and so the rule is testable on its own.
+*/
+function isQuestionScopeNeedingReview(text) {
+	const masked = maskCodeSpans(text);
+	return governedReadingOf(masked) !== void 0 && governedClauseRestrictsExecution(masked);
+}
+/**
+* A temporal interrogative: the clause asks WHEN, so its `when` is the question
+* word, not a condition marker. A finite conditional clause states its own
+* subject and verb instead ("when the tests pass").
+*/
+function isTemporalQuestion(masked) {
+	if (!/[？?]\s*$/u.test(masked.trim())) return false;
+	return /^\s*(?:when|何时|什么时候|什么时候)\s*(?:should|do|does|did|can|could|would|will|is|are|was|were|have|has|had|i|we|you|they|he|she|it|to)\b/iu.test(masked) || /^\s*(?:何时|什么时候|何时)/u.test(masked);
+}
+/**
+* The quoted spans of a text, in every style the products accept: straight and
+* curly double quotes, single quotes (opened only at a word boundary, so an
+* English apostrophe never swallows a clause), and the CJK brackets 「」 and 『』.
+*
+* A quote OWNS its content and its punctuation: what it contains is never the
+* clause's own reading or its own work, and a sentence mark inside it never ends
+* the enclosing clause. `inside` is a per-code-unit map aligned with the input, so
+* a scanner can ask whether an offset sits inside a quote.
+*/
+/** The characters after which a single quote OPENS a quotation rather than being
+*  an apostrophe ("'Install foo…'", "the user's file"). */
+const QUOTE_OPENING_BOUNDARY = /* @__PURE__ */ new Set(" 	\n:：,，、(（[【—");
+/** Whether a single quote at the offset opens a quotation instead of an apostrophe. */
+function isQuoteOpeningBoundary(text, cursor) {
+	if (cursor === 0) return true;
+	return QUOTE_OPENING_BOUNDARY.has(text[cursor - 1]);
+}
+function quotedSpans(text) {
+	const inside = Array.from({ length: text.length }, () => false);
+	let masked = "";
+	let closer;
+	for (let cursor = 0; cursor < text.length; cursor += 1) {
+		const character = text[cursor];
+		if (closer !== void 0) {
+			inside[cursor] = true;
+			masked += " ";
+			if (character === closer) closer = void 0;
+			continue;
+		}
+		const opens = character === "\"" ? "\"" : character === "“" ? "”" : character === "「" ? "」" : character === "『" ? "』" : character === "‘" ? "’" : character === "'" && isQuoteOpeningBoundary(text, cursor) ? "'" : void 0;
+		if (opens !== void 0) {
+			closer = opens;
+			inside[cursor] = true;
+			masked += " ";
+			continue;
+		}
+		masked += character;
+	}
+	return {
+		masked,
+		inside
+	};
+}
+/** Blank out every quoted span of the text. */
+function maskQuotedSpans(text) {
+	return quotedSpans(text).masked;
+}
+/** Whether the offset lies inside a quoted span. */
+function insideQuote(masked, index) {
+	return quotedSpans(masked).inside[index] === true;
+}
+/**
+* Whether the clause's OWN span asks something, even when no governed head was
+* recognised. This is the fail-closed half of the qualification: a clause whose
+* question content the reader could not classify (`I wonder whether …`, a
+* postposed 是否可行, a stray question mark) is still a scope that cannot host
+* execution authority. Code spans, quotes and subordinate spans do not count:
+* their content belongs to them, not to the clause.
+*/
+function clauseAsksOwnQuestion(text) {
+	const own = withoutSubordinateQuestions(maskCodeSpans(maskQuotedSpans(text)));
+	if (REBIND_DIRECTIVE.test(own.trim())) return false;
+	if (/[？?]/u.test(own)) return true;
+	const marker = GOVERNED_QUESTION_MARKER.exec(own);
+	if (marker === null) return false;
+	if (!/^[A-Za-z]/.test(marker[0])) return true;
+	const head = own.replace(/^[\s,，、；;]*(?:(?:并且|以及|而后|然后|接着|并|且|和|与|及)|(?:and|then|but|also|next|so)\b)?[\s,]*/iu, "");
+	const reported = /\b(?:wonder|wonders|wondering|ask|asks|asking|unsure|know|knows|recall|decide|decides|determine|determines|figure\s+out|find\s+out|establish|confirm|verify|check|see|not\s+sure|no\s+idea)\b/iu.test(own.slice(0, marker.index));
+	return GOVERNED_QUESTION_MARKER.exec(head)?.index === 0 || INTERROGATIVE_AUXILIARY_LEAD.test(own.trim()) || reportingHeadGoverns(own) || reported;
+}
+/**
+* Whether the clause is a DIRECTIVE: an imperative in the root's voice. The action
+* must OPEN the clause once the request preface is consumed ("重启 api 服务。",
+* "Then restart service api.", "请更新插件"), and the clause must not be a report
+* or a third-party statement ("The technicians restart service api every night.",
+* "日志显示运维人员重启 api 服务。").
+*/
+function opensWithDirective(masked) {
+	const own = maskCodeSpans(maskQuotedSpans(masked));
+	if (REBIND_DIRECTIVE.test(own.trim())) return true;
+	const stripped = stripDirectivePreface(own);
+	const verb = firstActionVerb(stripped);
+	const fronted = verb > 0 && /^(?:(?:由|让|请|给|对|把|将|在|从|按|按照|根据|依|替|帮)[^，,。；;！!？?]*|(?:明天|今天|后天|今晚|明早|现在|马上|立即|稍后|待会儿?|之后|以后|下周|本周|最近|尽快)[^，,。；;！!？?]*)$/u.test(stripped.slice(0, verb));
+	if (verb !== 0 && !fronted) return false;
+	if (mainClauseTailReport(stripped) || NARRATIVE_DIRECTIVE.test(stripped)) return false;
+	if (descriptivePredicate(stripped)) return false;
+	return true;
+}
+/**
+* Whether the clause's MATRIX predicate is descriptive. The test reads the clause up
+* to its first English relative/interrogative marker, so a relative clause
+* ("Create a file where logs are stored") is not mistaken for a copula.
+*/
+function descriptivePredicate(stripped) {
+	const matrix = stripped.split(/[，,；;。！!？?]|\b(?:which|who|whom|whose|that|where|when|why)\b/iu)[0] ?? stripped;
+	return DESCRIPTIVE_PREDICATE.test(matrix);
+}
+/**
+* The copulas and descriptive links that turn an action-headed clause into a
+* statement. Narrow on purpose: a modal or a bare verb is not one of them.
+*/
+const DESCRIPTIVE_PREDICATE = /(?:\p{Script=Han}|[^\p{L}])是(?:一种|一个|属于)?|(?:\p{Script=Han}|[^\p{L}])(?:属于|意味着|表示|表明|导致|会造成)|\b(?:is|are|was|were|means|causes|requires|leads\s+to)\b/iu;
+/**
+* The content a restatement introduces: the Y of "把 X 明确为 Y" / "record X as Y".
+* Everything the restatement AUTHORIZES comes from this span, and nothing else.
+*/
+function restatedContentOf(text) {
+	const own = maskCodeSpans(maskQuotedSpans(text));
+	const marker = /(?:明确为|明确成|指定为|标记为|记为|设为|认作|重绑定为)/u.exec(own);
+	if (marker !== null) {
+		const restated$1 = own.slice(marker.index + marker[0].length).trim();
+		return restated$1 === "" ? void 0 : restated$1;
+	}
+	const english = /\bas\b([\s\S]*)$/iu.exec(own);
+	if (english === null) return void 0;
+	const restated = (english[1] ?? "").trim();
+	return restated === "" ? void 0 : restated;
+}
+/**
+* Whether the restated content is a canonical operation SPEC: it OPENS with an
+* operation the capture layer can act on (an imperative head, or a head token that
+* resolves to a semantic action), without asking a question and without a
+* descriptive predicate. Naming an action somewhere inside prose is not enough.
+*/
+function restatedContentIsOperation(content) {
+	const body = content.replace(/^[\s,，、；;：:。.!！?？"'“”‘’「」『』]+/u, "").trim();
+	if (body === "") return false;
+	if (clauseAsksOwnQuestion(body)) return false;
+	if (descriptivePredicate(body)) return false;
+	if (firstActionVerb(body) === 0) return true;
+	const head = semanticActionFromText(/^[A-Za-z][A-Za-z0-9_@.-]*/u.exec(body)?.[0] ?? body.slice(0, 2));
+	return head !== "generic_run" && head !== void 0;
+}
+/** The span a restatement CLARIFIES: everything before its marker. */
+function clarifiedSpanOf(text) {
+	const own = maskCodeSpans(maskQuotedSpans(text));
+	const marker = /(?:明确为|明确成|指定为|标记为|记为|设为|认作|重绑定为)/u.exec(own);
+	if (marker !== null) {
+		const clarified$1 = own.slice(0, marker.index).trim();
+		return clarified$1 === "" ? void 0 : clarified$1;
+	}
+	const english = /\bas\b/iu.exec(own);
+	if (english === null) return void 0;
+	const clarified = own.slice(0, english.index).trim();
+	return clarified === "" ? void 0 : clarified;
+}
+/** Whether the clause is an explicit re-statement of what an obligation means. */
+function isRestatement(text) {
+	return REBIND_DIRECTIVE.test(maskCodeSpans(maskQuotedSpans(text)).trim());
+}
+/**
+* The closed phrasing of an explicit re-statement: the root says what an earlier
+* obligation is to mean. This is a directive even though its own verb is not an
+* operation ("把 X 明确为 …", "clarify X as …").
+*/
+const REBIND_DIRECTIVE = /^\s*(?:请|麻烦|帮我)?\s*(?:把|将)[^。！？；，,]{1,40}?(?:明确为|明确成|指定为|标记为|记为|设为|认作|重绑定为)|^\s*(?:please\s+)?(?:clarify|treat|interpret|record|rebind)\b[^.!?]{0,48}?\bas\b/iu;
+/** Consume the request prefaces a directive may carry in either language. */
+function stripDirectivePreface(text) {
+	let body = text.replace(/^[\s,，、；;：:。.!！?？]+/u, "");
+	for (let step = 0; step < 4; step += 1) {
+		const next = body.replace(/^(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|帮忙|并且|并|以及|同时|顺便|而后|且|和|与|及)\s*/u, "").replace(/^(?:and|then|also|next|first|finally|now|please|kindly|but|so)\b[\s,]*/iu, "").trim();
+		if (next === body) break;
+		body = next;
+	}
+	return body;
+}
+/**
+* Whether the clause is a PROTECTED scope: a question, an explanation, an
+* investigation, a reported question, a quote, or any span whose own question
+* content the head reader could not classify. A protected scope is indivisible —
+* no separator opens a child of it — and nothing inside it is execution authority.
+*/
+function clauseIsProtected(text) {
+	return governedReadingOf(maskCodeSpans(maskQuotedSpans(text))) !== void 0 || clauseAsksOwnQuestion(text);
+}
+/** A clause nobody has questioned: its own reading is the authorization. */
+const GRANTED_QUALIFICATION = {
+	status: "granted",
+	reason: "plain_instruction"
+};
+/** A record captured before the qualification existed: never granted by default. */
+const LEGACY_QUALIFICATION = {
+	status: "restricted",
+	reason: "legacy_missing_qualification"
+};
+/** The question content of a clause that is not inside a quoted code span. */
+const GOVERNED_QUESTION_MARKER = /是否|有没有|有没|能否|可否|要不要|该不该|为什么|为何|怎么|怎样|如何|什么|哪些|哪一种|哪个|谁|何时|什么时候|几时|多久|多少|吗|([\p{Script=Han}])不\1|\b(?:whether|what|which|who|whom|whose|when|where|why|how)\b/iu;
+/** Purpose and relative spans, which carry their own content rather than the clause's. */
+const SUBORDINATE_PURPOSE_ZH = /(?:为了|用来|以便|从而|进而|用于|好让)[\s\S]*$/u;
+const SUBORDINATE_PURPOSE_EN = /\b(?:showing|recording|noting|checking|to|in order to)\s+[\s\S]*$/iu;
+/**
+* The clause text whose question content is the CLAUSE's own rather than a
+* subordinate span's object. A purpose or participial span is set aside only when
+* it carries the question content itself ("打包日志以便确认哪些请求失败",
+* "Create a report showing whether the tests passed") — never when the question is
+* the clause's own and an infinitive follows it ("Confirm whether it is safe to
+* install foo and restart service api."), where setting the span aside would drop
+* the actions into the answer lane.
+*/
+function withoutSubordinateQuestions(masked) {
+	const strip = (pattern) => {
+		masked = masked.replace(pattern, (span) => GOVERNED_QUESTION_MARKER.test(span) ? "" : span);
+	};
+	strip(SUBORDINATE_PURPOSE_ZH);
+	strip(SUBORDINATE_PURPOSE_EN);
+	return masked;
+}
+/**
+* The governed reading of a clause, or `undefined` when the clause is a plain
+* statement or instruction. The head tests are the closed grammatical classes the
+* earlier rounds established; nothing here looks for a state word, an actor or a
+* vocabulary verb, because absence of a pattern is never evidence of anything.
+*/
+function governedReadingOf(masked) {
+	const own = withoutSubordinateQuestions(masked);
+	if (reportingHeadGoverns(own)) return {
+		head: "reporting",
+		...markerOf(own)
+	};
+	if (INVESTIGATION_HEAD_PATTERN.test(own)) {
+		const head = INVESTIGATION_HEAD_PATTERN.exec(own);
+		if (markerOf(own).marker !== void 0 || FIRST_COORDINATOR.test(own.slice(head[0].length))) return {
+			head: "investigation",
+			...markerOf(own)
+		};
+		return;
+	}
+	const condition = prefixConditionIndex(own.toLowerCase());
+	const conditioned = condition !== void 0 && conditionMarkerIsClauseLevel(masked, condition) && !isTemporalQuestion(masked) ? own.slice(0, condition) : own;
+	if (QUESTION_LEAD.test(conditioned) || INTERROGATIVE_AUXILIARY_LEAD.test(conditioned.trim()) || A_NOT_A_LEAD.test(conditioned) || QUESTION_WITH_SUBJECT.test(conditioned)) {
+		if (INTERROGATIVE_AUXILIARY_LEAD.test(conditioned.trim()) && !QUESTION_LEAD.test(conditioned) && !/[？?]\s*$/u.test(conditioned.trim()) && !A_NOT_A_LEAD.test(conditioned) && !QUESTION_WITH_SUBJECT.test(conditioned)) return void 0;
+		const own$1 = markerOf(conditioned);
+		return {
+			head: "question",
+			marker: own$1.marker ?? 0,
+			markerLength: own$1.marker === void 0 ? 1 : own$1.markerLength
+		};
+	}
+	if (/吗[\s。！？?]*$/u.test(own.trim()) || /呢[\s。！？?]*[？?][\s。！？?]*$/u.test(own.trim())) {
+		const marker$1 = GOVERNED_QUESTION_MARKER.exec(own);
+		return {
+			head: "question",
+			marker: marker$1?.index ?? 0,
+			markerLength: marker$1?.[0].length ?? 1
+		};
+	}
+	if (!englishInterrogativeIsMatrix(conditioned)) return void 0;
+	const marker = GOVERNED_QUESTION_MARKER.exec(conditioned);
+	if (marker) {
+		const prefix = conditioned.slice(0, marker.index);
+		if (/^[A-Za-z]/.test(marker[0])) {
+			if (prefix.replace(/^[\s,，、；;]*(?:and|then|but|so)\b[\s,]*/iu, "").trim() !== "") return void 0;
+		} else if (/^[\s,，、；;]*(?:并且|以及|并|且|和|与|及)/u.test(prefix) && !opensWithGovernedHead(prefix.replace(/^[\s,，、；;]*(?:并且|以及|并|且|和|与|及)/u, ""))) return;
+		else {
+			const joined = coordinationInside(prefix);
+			if (joined !== null && opensWithWork(prefix.slice(joined.index + joined[0].length)) && !/[？?]\s*$/u.test(conditioned.trim())) return void 0;
+		}
+		return {
+			head: "question",
+			marker: marker.index,
+			markerLength: marker[0].length
+		};
+	}
+}
+/** The clause's own question word, when it has one. */
+function markerOf(own) {
+	const marker = GOVERNED_QUESTION_MARKER.exec(own);
+	return marker ? {
+		marker: marker.index,
+		markerLength: marker[0].length
+	} : { markerLength: 0 };
+}
+/**
+* Whether a QUESTION/EXPLANATION/INVESTIGATION head governs the clause: the one
+* governance predicate every layer consumes (the partitioner, the classifier, the
+* reading, and — through the stored qualification — the gate and preparation).
+*/
+function questionHeadsClause(masked) {
+	return governedReadingOf(masked) !== void 0;
+}
+/** Whether the clause's own reading is a governed scope. */
+function clauseIsGoverned(masked) {
+	return governedReadingOf(maskCodeSpans(masked)) !== void 0;
+}
+/** The qualification the reader records for one clause. */
+function qualificationOfClause(text) {
+	const masked = maskCodeSpans(text);
+	const own = maskQuotedSpans(masked).trim();
+	if (REBIND_DIRECTIVE.test(own)) {
+		const restated = restatedContentOf(own);
+		if (restated === void 0 || isRestatement(restated)) return {
+			status: "restricted",
+			reason: "unproven_scope"
+		};
+		if (qualificationOfClause(restated).status === "granted") return GRANTED_QUALIFICATION;
+		return restatedContentIsOperation(restated) ? GRANTED_QUALIFICATION : {
+			status: "restricted",
+			reason: "unproven_scope"
+		};
+	}
+	const reading = governedReadingOf(maskQuotedSpans(masked));
+	if (reading !== void 0) return {
+		status: "restricted",
+		reason: "governed_scope",
+		governedBy: reading.head
+	};
+	if (clauseAsksOwnQuestion(text)) return {
+		status: "restricted",
+		reason: "unproven_scope"
+	};
+	if (!opensWithDirective(withoutSubordinateQuestions(maskQuotedSpans(masked)))) return {
+		status: "restricted",
+		reason: "unproven_scope"
+	};
+	return GRANTED_QUALIFICATION;
+}
+/**
+* Whether the text OPENS with an action: the piece a coordination introduces
+* ("并安装依赖", "and update the README") is a predicate, while "和皮肤" joins two
+* objects. The head detection is the project's own action reader, so an object
+* whose name is also a work verb ("是否需要更新") is not mistaken for one.
+*/
+function opensWithWork(text) {
+	const head = text.replace(/^[\s,，、；;：:]*(?:(?:并且|以及|而后|然后|接着|并|且|和|与|及)|(?:and|then|but|also|next|so)\b)?[\s,]*(?:一下|下|一遍|一次|个)?[\s,]*/iu, "");
+	return firstActionVerb(head) === 0 || introducesActionClause(head);
+}
+/** An action named by the text, whatever vocabulary it comes from. */
+function namesWork(text) {
+	return firstActionVerb(text) >= 0 || introducesActionClause(text) || namesActionSpan(text);
+}
+/**
+* Whether a GOVERNED clause carries work that its own question does not bound, so
+* that the clause must stay undecided rather than enter the answer lane.
+*
+* The test is structural and vocabulary-free in the direction that matters:
+*
+* - a coordination AFTER the clause's own question word puts the coordinated part
+*   inside the question's scope ("…是否安装 foo 并重启 api 服务"), so the whole
+*   clause is undecided whatever the verbs are;
+* - material BEFORE the question word that carries an action is the questioned
+*   span itself ("检查一下[安装 foo 并重启 api 服务]是否安全"), so it is undecided;
+* - a governed head with no question word of its own is undecided as soon as it
+*   names an action ("Check the safety of installing foo and restart service
+*   api.", "Explain the incident, rotate every credential").
+*
+* A pure question — the object list of "检查一下本地插件和皮肤是否有更新", a state
+* question like "检查是否有新版本。" — carries none of these and stays answerable.
+*/
+function governedClauseRestrictsExecution(text) {
+	const masked = maskCodeSpans(text);
+	const reading = governedReadingOf(maskQuotedSpans(masked));
+	if (reading === void 0) return clauseAsksOwnQuestion(text);
+	const own = withoutSubordinateQuestions(masked);
+	if (reading.marker === void 0) {
+		if (reading.head === "reporting") return true;
+		const body = headBodyOf(own);
+		return namesWork(body) || coordinationInside(body) !== null;
+	}
+	if (reading.head === "reporting") {
+		if (opensWithWork(own.slice(reading.marker + reading.markerLength)) || opensWithWork(headBodyOf(own.slice(0, reading.marker)))) return true;
+	}
+	const markerEnd = reading.marker + reading.markerLength;
+	const tail = own.slice(markerEnd);
+	const after = coordinationInside(tail);
+	if (after !== null) {
+		const rest = tail.slice(after.index + after[0].length).trim();
+		if (!BARE_QUESTION_CONTINUATION.test(tail.trim()) && !BARE_QUESTION_CONTINUATION.test(rest)) return true;
+	}
+	const questioned = own.slice(0, reading.marker);
+	const inside = coordinationInside(questioned);
+	if (inside === null) return false;
+	const left = headBodyOf(questioned.slice(0, inside.index));
+	const right = questioned.slice(inside.index + inside[0].length);
+	return opensWithWork(left) || opensWithWork(right);
+}
+/** An investigation whose complement is the declarative clause after `that`. */
+const INVESTIGATION_THAT = new RegExp(`^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:${INVESTIGATION_HEAD})\\s+that\\b`, "iu");
+/**
+* The first coordinator that really joins two parts: a leading conjunction is a
+* preface ("并且检查是否存在冲突。"), and a mark with nothing after it belongs to the
+* sentence rather than to a coordinated part ("检查是否存在更新；").
+*/
+function coordinationInside(own) {
+	const pattern = new RegExp(FIRST_COORDINATOR.source, "giu");
+	let match;
+	while ((match = pattern.exec(own)) !== null) {
+		const before = own.slice(0, match.index).trim();
+		const rest = own.slice(match.index + match[0].length).trim();
+		if (before !== "" && rest !== "") return match;
+		if (match[0].length === 0) break;
+	}
+	return null;
+}
+/** The clause text with its own governed head removed, so the head is not read as work. */
+function headBodyOf(text) {
+	const head = INVESTIGATION_HEAD_PATTERN.exec(text) ?? REPORTING_HEAD.exec(text);
+	return head === null ? text : text.slice(head[0].length);
+}
+/**
+* The comma/delimiter-bounded clause the cursor sits in: the piece a governed
+* reading is decided on, so a question in one clause never swallows the order in
+* the clause before it.
+*/
+function clauseAround(masked, cursor) {
+	const marks = /[，,、；;。！!？?\n\r]/gu;
+	let start = 0;
+	for (const match of masked.matchAll(marks)) {
+		if (match.index >= cursor) break;
+		start = match.index + match[0].length;
+	}
+	let end = masked.length;
+	for (const match of masked.matchAll(marks)) if (match.index >= cursor) {
+		end = match.index;
+		break;
+	}
+	if (/^[？?！!。.]+[\s]*$/u.test(masked.slice(end))) end = masked.length;
+	return masked.slice(start, end);
+}
+/**
+* Whether the text is ONE clause: no delimiter inside it other than the sentence
+* mark that closes it. A governed clause is indivisible; a run of clauses is not,
+* because each piece qualifies itself.
+*/
+function isSingleClause(text) {
+	const inner = maskQuotedSpans(text).trim().replace(/[。．.！!？?；;]+$/u, "");
+	return !/[，,、；;。！!？?\n\r]/u.test(inner);
+}
+/**
+* Whether the text OPENS with a governed head (a question, an explanation or an
+* investigation that asks). Such a head governs its own sentence, so nothing
+* coordinated inside that sentence opens an execution child of its own.
+*/
+function opensWithGovernedHead(masked) {
+	const own = withoutSubordinateQuestions(masked.replace(/^[\s,，、；;]*(?:and|then|but|so)\b[\s,]*/iu, ""));
+	return reportingHeadGoverns(own) || INVESTIGATION_HEAD_PATTERN.test(own) || QUESTION_LEAD.test(own) || INTERROGATIVE_AUXILIARY_LEAD.test(own.trim()) || A_NOT_A_LEAD.test(own) || QUESTION_WITH_SUBJECT.test(own);
+}
+/** The UTF-16 code units that may join two predicates of ONE clause. */
+function isCoordinatorMark(character) {
+	return character === "并" || character === "且";
+}
+/**
+* The first coordinator inside one clause, in either language.
+*/
+const FIRST_COORDINATOR = /(?:^|[^A-Za-z0-9_])(?:and|then|but)\b|,|，|、|；|;|并且|以及|并|且|和|与|及/iu;
+/** Whether the text OPENS with an investigation imperative. */
+const INVESTIGATION_HEAD_LEAD = new RegExp(`^\\s*(?:${INVESTIGATION_HEAD})`, "iu");
+/** The investigation imperatives that can head a clause. */
+const INVESTIGATION_HEAD_PATTERN = new RegExp(`^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:${INVESTIGATION_HEAD})`, "iu");
+/**
+* Whether a coordinated part after the first is an ORDERED part rather than the
+* question's own continuation. A bare interrogative adverb ("and why", "为什么")
+* continues the question; anything else is a second instruction, so the clause is
+* not a pure information request.
+*/
+const BARE_QUESTION_CONTINUATION = /^[\s，,、；;：:]*(?:and\s+)?(?:why|how|what|which|who|whom|whose|when|where|whether|为什么|为何|怎么|如何|哪里|哪儿|哪些|什么|何时|谁)[.。！？!?]?$/iu;
+function hasOrderedCoordination(masked) {
+	return splitTextFragments(masked).slice(1).some((part) => part.text.trim() !== "" && !BARE_QUESTION_CONTINUATION.test(part.text.trim()));
+}
+/**
+* The Chinese A-不-A question form, whose 不 is the interrogative's reduplication
+* and not a negator: 需不需要, 可不可以, 对不对, 是不是, 要不要, 该不该. It heads the
+* clause when nothing precedes it, and it asks about the clause it closes when it
+* follows a topic ("这份文档可不可以更新？").
+*/
+const A_NOT_A_LEAD = /^\s*(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|帮忙|并且|并|以及)?\s*([\p{Script=Han}])不\1/u;
+/** A question whose subject pronoun stands before the interrogative ("你们如何…"). */
+const QUESTION_WITH_SUBJECT = /^\s*(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|并且|并|以及)?\s*(?:你们|我们|你|我|他们|她们|它们|大家|团队|咱们)\s*(?:怎么|如何|怎样|为什么|为何|什么|哪些|哪|谁)/u;
+/** @deprecated Use {@link isQuestionScopeNeedingReview}: the rule is not limited to explanations. */
+const isExplanationScope = isQuestionScopeNeedingReview;
+/**
+* Whether a coordinated part of the explanation's sentence opens with an action
+* of its own. Those are exactly the parts whose membership in the explanation
+* cannot be decided from the surface, so they make the sentence undecided instead
+* of answerable or executable. `masked` has code spans blanked, so an action that
+* only appears inside backticks contributes nothing.
+*/
+function explanationHasActionResidue(masked) {
+	return splitTextFragments(masked).slice(1).some((part) => part.text.trim() !== "" && fragmentOrdersWorkOnItsOwn(part.text));
+}
+function isInformationalFragment(masked) {
+	if (!englishInterrogativeIsMatrix(masked)) return false;
+	if (questionHeadsClause(masked)) {
+		if (explanationHasActionResidue(masked)) return false;
+		if (firstActionVerb(headBodyOf(masked)) === 0) return false;
+		if (hasOrderedCoordination(masked)) return false;
+		if (firstActionVerb(masked) < 0 && !QUESTION_WORD_PATTERN.test(masked)) return false;
+		return true;
+	}
+	if (interrogativeTakesIfObject(masked)) return true;
+	if (INVESTIGATION_THAT.test(masked)) return true;
+	if (headOpensClause(INFO_OPENING, masked)) return true;
+	if (QUESTION_LEAD.test(masked)) return true;
+	if (fragmentOrdersWorkOnItsOwn(masked)) return false;
+	if (endsOnInterrogative(masked)) {
+		if (questionCoversWholeClause(masked)) return true;
+		return !executionResidueBeforeQuestion(masked);
+	}
+	if (headOpensClause(REPORTED_QUESTION, masked)) return true;
+	if (headOpensClause(INVESTIGATION_THEN_QUESTION, masked)) return true;
+	if (headOpensClause(INVESTIGATION_OF_STATE, masked)) return true;
+	return !firstActionVerb(masked) && QUESTION_ABOUT_CHANGE.test(masked);
+}
+/** The coordinating conjunctions that open a continued fragment. */
+const COORDINATED_OPENING = /^(?:(?:并且|而且|以及|而后|随后|然后|接着|并|且)|(?:and|then|also|but|however|yet)\b)/iu;
+/**
+* Question CONTENT: the words that make a clause ask about something, without the
+* bare question mark. Punctuation says where a sentence ends; content says
+* whether the clause is a question at all.
+*/
+const QUESTION_CONTENT = /是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|哪个|多少|多久|能否|可否|要不要|该不该|由谁|是谁|吗|呢|\b(?:what|which|who|whom|whose|when|where|why|how|whether)\b/iu;
+/** An interrogative auxiliary that opens the fragment ("Is there any update?"). */
+const INTERROGATIVE_AUXILIARY_LEAD = /^(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/iu;
+/** Chinese text, for the stray-question-mark rule. */
+const HAS_HAN$1 = /[\u3400-\u9fff]/u;
+/**
+* Whether a fragment orders work ON ITS OWN, regardless of the mark that ends it
+* and regardless of whether the splitter left a coordinating conjunction on its
+* head.
+*
+* Two things have to hold: the fragment asks nothing (no question word and no
+* interrogative auxiliary), and it carries an action head — a Chinese action
+* head, a verb the vocabulary knows, or a Latin word the vocabulary does NOT
+* know ("archive the logs?"). The unknown case is the one that kept escaping: a
+* question word earlier in the message, or the sentence's own question mark,
+* must never hand a clause with its own verb to the answer lane (review 5 F2,
+* review 6 F1). A coordinated clause that is still an INVESTIGATION asks even
+* behind the conjunction ("然后检查是否有新版本"), so the question forms are
+* excluded first.
+*/
+function fragmentOrdersWorkOnItsOwn(masked) {
+	const trimmed = masked.trim();
+	if (!trimmed) return false;
+	const opening = COORDINATED_OPENING.exec(trimmed);
+	const rest = opening ? trimmed.slice(opening[0].length).replace(/^[\s，,、；;：:]+/u, "") : trimmed;
+	if (!rest) return false;
+	const question = QUESTION_CONTENT.exec(rest);
+	if (question) {
+		const before = rest.slice(0, question.index);
+		if (!before.trim()) return false;
+		if (!((introducesActionClause(before) || firstActionVerb(before) === 0) && !INVESTIGATION_HEAD_LEAD.test(before))) return false;
+	}
+	if (INTERROGATIVE_AUXILIARY_LEAD.test(rest)) return false;
+	if (headOpensClause(INVESTIGATION_OF_STATE, rest)) return false;
+	if (headOpensClause(INVESTIGATION_THEN_QUESTION, rest)) return false;
+	if (headOpensClause(REPORTED_QUESTION, rest)) return false;
+	if (headOpensClause(INFO_OPENING, rest)) return false;
+	if (QUESTION_LEAD.test(rest)) return false;
+	if (introducesActionClause(rest)) return true;
+	if (firstActionVerb(rest) === 0) return true;
+	if (HAS_HAN$1.test(rest) && /[？?]$/u.test(rest)) return true;
+	return /^[A-Za-z][A-Za-z0-9_.-]*/.test(rest);
+}
+/** A yes/no question asks about the whole clause it closes. */
+function questionCoversWholeClause(masked) {
+	if (/(?:吗|呢)\s*[？?]?\s*$/u.test(masked)) return true;
+	return INTERROGATIVE_AUXILIARY_LEAD.test(masked.trim());
+}
+/**
+* The text before the clause's LAST question word, tested with the same
+* structural rule that decides whether a fragment orders work of its own. This
+* is the execution residue a trailing question does not govern.
+*/
+function executionResidueBeforeQuestion(masked) {
+	const words = /什么|为什么|怎么|如何|哪些|哪一种|哪个|多少|多久|是否|是不是|能否|可否|要不要|该不该|由谁|是谁|\b(?:what|which|who|whom|whose|when|where|why|how|whether)\b/giu;
+	let last;
+	for (const match of masked.matchAll(words)) last = match.index;
+	if (last === void 0 || last === 0) return false;
+	return fragmentOrdersWorkOnItsOwn(masked.slice(0, last));
+}
+/** Boundaries that open a new coordinated fragment inside one clause run. */
+const FRAGMENT_SEPARATORS = new Set([
+	"，",
+	",",
+	"、",
+	"；",
+	";"
+]);
+/**
+* An English coordinating conjunction used with NO punctuation. It opens the
+* next fragment, so a mixed clause survives its own lack of commas.
+*/
+const CONJUNCT_BOUNDARY = /(?:^|[^A-Za-z0-9_])(?:and|then|but|however|yet|also)\b|(?:并且|以及|而后|随后)/iu;
+/** Openings that continue a coordinated instruction list across a boundary. */
+const FRAGMENT_SUBORDINATORS = [
+	"但是",
+	"不过",
+	"然而",
+	"同时",
+	"并且",
+	"而且",
+	"以及",
+	"然后",
+	"接着",
+	"而是",
+	"但",
+	"而",
+	"也",
+	"并",
+	"且",
+	"又",
+	"再",
+	"but",
+	"and",
+	"then",
+	"also",
+	"however",
+	"yet"
+];
+function splitTextFragments(text, from = 0) {
+	const fragments = [];
+	let cursor = from;
+	let start = from;
+	const boundaryAt = (index) => {
+		const character = text[index];
+		if (FRAGMENT_SEPARATORS.has(character)) return index + 1;
+		const match = CONJUNCT_BOUNDARY.exec(text.slice(index));
+		if (match && match.index === 0) return index + match[0].length;
+		if ((character === "并" || character === "且") && introducesActionClause(text.slice(index + 1))) return index + 1;
+		if ((character === "并" || character === "且") && QUESTION_CONTENT.test(text.slice(0, index)) && !QUESTION_CONTENT.test(text.slice(index + 1))) return index + 1;
+	};
+	while (cursor < text.length) {
+		const after = boundaryAt(cursor);
+		if (after === void 0) {
+			cursor += 1;
+			continue;
+		}
+		let next = after;
+		while (next < text.length && /\s/u.test(text[next])) next += 1;
+		let head = next;
+		for (const token of [...FRAGMENT_SUBORDINATORS].sort((left, right) => right.length - left.length)) if (text.startsWith(token, next)) {
+			head = next + token.length;
+			break;
+		}
+		pushFragment(fragments, text, start, head);
+		start = head;
+		cursor = head;
+	}
+	pushFragment(fragments, text, start, text.length);
+	return fragments;
+}
+/**
+* Record one fragment, trimmed of the separators that joined it to its
+* neighbours. Trimming only moves the offset, so every character still belongs
+* to exactly one fragment and a span audit keeps its exact positions.
+*/
+function pushFragment(fragments, text, from, to) {
+	const raw = text.slice(from, to);
+	const body = raw.trim().replace(/^[\s，,、；;]+/u, "").replace(/[\s，,、；;]*(?:and|then|but|however|yet|also)$/iu, "").replace(/[\s，,、；;]*(?:并且|且|并|以及|而后|随后)$/u, "").replace(/[\s，,、；;]+$/u, "");
+	if (!body) return;
+	fragments.push({
+		text: body,
+		offset: from + raw.indexOf(body)
+	});
+}
+/**
+* Whether the text after a coordinating conjunction opens a DISTINCT
+* instruction: its own action head, optionally behind a connector and an
+* actor. This is the rule the sentence splitter already used to decide that a
+* conjunction joins two instructions rather than two objects, exposed so the
+* fragment splitter cannot contradict it.
+*/
+function introducesActionClause(text) {
+	const trimmed = text.replace(/^[\s，,、；;：:]+/u, "");
+	return CROSS_CLAUSE_HEAD.test(trimmed) || DISTINCT_CLAUSE_HEAD.test(trimmed);
+}
+/**
+* The masked text of one fragment. Fragments are trimmed, so their own reading
+* is taken from their own bytes: a question ending that belongs to a LATER
+* fragment ("更新插件，安装新主题，检查是否有更新吗？") never decides an
+* earlier one, and the comma that joined them is not part of either.
+*/
+function fragmentMasked(scope, fragment) {
+	return maskCodeSpans(scope.text.slice(fragment.offset, fragment.offset + fragment.text.length));
+}
+/** The scope a directive run is recorded from, with its own source offsets. */
+function directiveScopeOf(text, masked, offset) {
+	return {
+		text,
+		body: stripConnectors(text),
+		directive: classifyPositive(text, masked),
+		start: offset
+	};
+}
+/**
+* Whether a fragment states work of its own: it names a non-negated action verb
+* anywhere inside it. A fragment that only names the OBJECT of the verb before
+* it ("安装新主题和更新检查") is part of that instruction, not a second one,
+* so the directive run stays one obligation.
+*/
+function bearsAction(masked) {
+	for (const candidate of actionVerbMatches(masked)) if (!verbIsNegated(masked, candidate.index)) return true;
+	return false;
+}
+/**
+* Whether a fragment states work of its own OUTSIDE quoted data. The action
+* vocabulary has no entry for "explain" and the pure-information route needs a
+* real question, so an explanation whose only action sits inside a code span
+* falls through to `unresolved` — never to `informational`, which delivery would
+* auto-close. Reading the quote as a live order here would misclassify the
+* clause in the other direction.
+*/
+function bearsLiveAction(masked) {
+	return bearsAction(masked) || bearsAction(unmaskCode(masked));
+}
+/** The fragment with its quoted spans removed entirely, so only live words remain. */
+function unmaskCode(masked) {
+	return masked.replace(/`[^`]*`/g, " ");
+}
+/**
+* Partition a directive run at its fragment boundaries (0.6.3 K1).
+*
+* A clause that orders work AND asks for information is two obligations, not
+* one: "install the package, check whether an update exists, and write a
+* report" must keep the install and the write beside a closable answer.
+* Fragments that only continue the same instruction (a conjunct object list,
+* an explanatory tail) are merged back, so the split is driven by the grammar
+* of each fragment rather than by the punctuation between them.
+*
+* Returns `undefined` when the run is a single obligation, which keeps every
+* ordinary instruction byte-identical to 0.6.2.
+*/
+function partitionClauseParts(scope, parts) {
+	if (/[。！？!?；;\n\r]/u.test(parts[0].text)) return void 0;
+	const informational = parts.map((part) => isInformationalFragment(fragmentMasked(scope, part)));
+	if (informational.some((flag, index) => !flag && firstNegation(fragmentMasked(scope, parts[index])) !== void 0)) return;
+	const work = informational.map((flag, index) => !flag && bearsLiveAction(fragmentMasked(scope, parts[index])));
+	if (!work.some(Boolean) || !informational.some(Boolean)) return void 0;
+	if (informational.every(Boolean)) return void 0;
+	const segments = [];
+	let cursor = 0;
+	while (cursor < parts.length) {
+		if (informational[cursor]) {
+			let end$1 = cursor;
+			while (end$1 + 1 < parts.length && informational[end$1 + 1]) end$1 += 1;
+			const first = parts[cursor];
+			const last$1 = parts[end$1];
+			segments.push({
+				text: scope.text.slice(first.offset, last$1.offset + last$1.text.length),
+				offset: first.offset,
+				informational: true
+			});
+			cursor = end$1 + 1;
+			continue;
+		}
+		let start = cursor;
+		while (start > 0 && !informational[start - 1] && !work[start - 1]) start -= 1;
+		let end = cursor;
+		while (end + 1 < parts.length && !informational[end + 1] && (work[end + 1] || !work[start])) end += 1;
+		const last = parts[end];
+		segments.push({
+			text: scope.text.slice(parts[start].offset, last.offset + last.text.length),
+			offset: parts[start].offset,
+			informational: false
+		});
+		cursor = end + 1;
+	}
+	return segments.length > 1 ? segments : void 0;
+}
+/**
+* Re-partition an informational scope (0.6.3 K1).
+*
+* An information span must cover a COMPLETE, execution-free information range.
+* When a clause was read as information only because a question marker appeared
+* somewhere inside it, the parts that order work are restored as their own
+* clauses and the information scope is reduced to the fragments that really
+* ask. Nothing is dropped: whatever the reading cannot positively classify
+* stays `unresolved` through {@link classifyPositive}, which keeps the
+* remaining obligation visible instead of swallowing it into the answer lane.
+*
+* Returns `undefined` when the whole scope really is a pure information
+* request, which is the common case and stays byte-identical to 0.6.2.
+*/
+function refineInformationalScope(scope, masked) {
+	const fragments = splitTextFragments(scope.text);
+	if (fragments.length < 2) return void 0;
+	const fragmentAsks = fragments.map((fragment) => isInformationalFragment(fragmentMasked(scope, fragment)));
+	const informationalClause = isInformationalFragment(masked);
+	const boundary = fragmentAsks.findIndex((asks) => asks !== informationalClause);
+	if (boundary < 0) return void 0;
+	const scopes = [];
+	const headText = scope.text.slice(0, fragments[boundary].offset).replace(/[\s，,、；;]+$/u, "");
+	if (headText.trim()) scopes.push({
+		text: headText,
+		body: stripConnectors(headText),
+		directive: informationalClause ? "informational" : scope.directive,
+		...scope.condition ? { condition: scope.condition } : {},
+		start: 0
+	});
+	const tail = fragments[boundary];
+	scopes.push(directiveScopeOf(scope.text.slice(tail.offset), masked.slice(tail.offset), tail.offset));
+	return scopes;
+}
 const NEGATORS = [
 	["不要", "zh"],
 	["不用", "zh"],
@@ -1043,7 +1917,7 @@ const CROSS_CLAUSE_HEAD = /^\s*(?:检查|查看|确认|验证|测试|运行|执�
 * than the second half of one action. "并确认全部通过" completes the action
 * before it, so 确认 is deliberately absent here.
 */
-const DISTINCT_CLAUSE_HEAD = /^\s*(?:检查|查看|测试|验证|运行|执行|安装|应用|更新|升级|提交|推送|发布|部署|重启|重新启动|创建|新建|生成|修改|编辑|拉取|抓取|删除|回滚|清理|整理)/u;
+const DISTINCT_CLAUSE_HEAD = /^\s*(?:检查|查看|测试|验证|运行|执行|安装|应用|更新|升级|提交|推送|发布|部署|重启|重新启动|创建|新建|生成|修改|编辑|拉取|抓取|删除|回滚|清理|整理|记录|编写|撰写|实现)/u;
 /**
 * A place clause that follows a coordinating conjunction: the shape of "并在
 * 本地仓库记录", where the conjunction joins an action to where it happens
@@ -1132,6 +2006,56 @@ const SENTENCE_END = new Set([
 	"\n",
 	"\r"
 ]);
+/**
+* An abbreviation whose own final period MAY continue the sentence: "e.g.",
+* "i.e.", "cf.", "etc.", "vs.", "no.", "fig.", "approx.", the honorifics, and
+* any dotted initialism ("a.m."). English abbreviations are a CLOSED class, so
+* this is a protection list rather than a list of the words that may start a
+* sentence — which is what the earlier repair got wrong: it decided the boundary
+* from the NEXT word, so a lower-case request preface ("Install the package.
+* please report what changed?") kept the run whole and the trailing question mark
+* swallowed the install (review 5 F1).
+*/
+const ABBREVIATION_BEFORE_PERIOD = /(?:^|[^A-Za-z])(?:e\.g|i\.e|c\.f|cf|etc|vs|no|fig|eq|approx|Mr|Mrs|Ms|Dr|St|Jr|Sr|[A-Za-z]\.[A-Za-z])\.$/i;
+/**
+* Text that CONTINUES a sentence rather than starting one: a lower-case word, a
+* digit, or a closing mark. This is the second half of the abbreviation rule —
+* an abbreviation's period also ends a sentence when what follows opens a new
+* one, and `etc.` at the end of a list is the ordinary case (review 6 F2).
+*/
+const CONTINUES_SENTENCE = /^[\p{Ll}\p{Nd}]/u;
+/**
+* A question opening. It is the tie-breaker for an abbreviation followed by a
+* lower-case word: "e.g. the log" continues the sentence, while "etc. what
+* changed?" starts a new one, because a question that follows an abbreviation
+* must not be delivered with the execution range before it (review 6 F2).
+*/
+const QUESTION_OPENER = /^(?:what|which|who|whom|whose|when|where|why|how|whether|is|are|was|were|do|does|did|can|could|should|would|will|has|have|had|什么|为什么|怎么|如何|是否|是不是|哪|谁|哪个|哪些)/iu;
+/**
+* Whether an ASCII full stop at `index` ends a sentence.
+*
+* The 0.6.3 K1 repair found that `。`, `！` and `？` split a run while `.` did
+* not, so "Install the package. What changed?" stayed ONE run, ended
+* interrogatively and was read as pure information — the order was dropped and
+* the record closed as answered. A period ends a sentence whenever whitespace
+* and further text follow it, WHATEVER that text looks like, so no word list can
+* widen the question's delivery range. Two things can keep the run whole: a
+* period with no space after it (a decimal, a version number, a file name), and a
+* period that belongs to an abbreviation AND is followed by a lower-case word,
+* a digit or a closing mark. An abbreviation followed by a capital, a CJK
+* character or an opening quote is a sentence end, because a boundary the
+* reading cannot resolve must never let the sentence's own question mark decide
+* an execution range it does not cover.
+*/
+function sentencePeriodEnd(text, index) {
+	if (text[index] !== ".") return false;
+	if (!/\s/u.test(text[index + 1] ?? "")) return false;
+	const rest = text.slice(index + 1).replace(/^\s+/u, "");
+	if (!rest) return false;
+	if (!ABBREVIATION_BEFORE_PERIOD.test(text.slice(0, index + 1))) return true;
+	if (QUESTION_OPENER.test(rest)) return true;
+	return !CONTINUES_SENTENCE.test(rest);
+}
 function isWordBoundary(text, index) {
 	if (index <= 0) return true;
 	return !/[\p{L}\p{N}_]/u.test(text[index - 1]);
@@ -1158,6 +2082,17 @@ function negatorAt(text, index) {
 	const lower = text.toLowerCase();
 	const candidates = NEGATORS.filter(([token]) => lower.startsWith(token, index)).sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]));
 	for (const [token] of candidates) {
+		const bu = token.indexOf("不");
+		if (bu >= 0) {
+			const at = index + bu;
+			if (text[at - 1] !== void 0 && text[at - 1] === text[at + 1]) continue;
+		}
+		if (token === "不" && /[\u3400-\u9fff]/.test(text[index + 1] ?? "")) {
+			const isQuestionForm = text[index + 1] === "是" || text[index + 1] === "错";
+			const opensClause = !/[\u3400-\u9fffA-Za-z0-9_]/.test(text[index - 1] ?? "");
+			const joinedToAction = firstActionVerb(text, index + 1, index + 5) >= 0;
+			if (isQuestionForm && !opensClause && !joinedToAction) continue;
+		}
 		if (token.length === 1 && /[\u3400-\u9fff]/.test(token)) {
 			if (!/[\p{Script=Han}\p{L}\p{N}]/u.test(text[index + 1] ?? "")) continue;
 		}
@@ -1347,7 +2282,9 @@ function scopeOf(raw, options = {}) {
 		const earliestNegation = negationBansAction ? negationIndex : -1;
 		const earliestNegationToken = negationBansAction ? negation.token : "";
 		const locativePrefix = conditionPrefix !== void 0 && text[conditionPrefix] === "在" && /^在.{1,24}?(?:记录|保存|写入|提交|运行|执行|测试|检查|验证|完成)/u.test(text.slice(conditionPrefix, earliestVerb));
-		if (conditionPrefix !== void 0 && earliestNegation < 0 && !locativePrefix) {
+		const temporalQuestion = conditionPrefix !== void 0 && isTemporalQuestion(masked);
+		const openInvestigationComplement = conditionPrefix !== void 0 && clauseIsGoverned(masked);
+		if (conditionPrefix !== void 0 && earliestNegation < 0 && !locativePrefix && !temporalQuestion && !openInvestigationComplement && !investigationHeadTakesIf(masked) && conditionMarkerIsClauseLevel(masked, conditionPrefix)) {
 			const conditional = conditionSplit(text, conditionPrefix, earliestVerb, options);
 			if (conditional) {
 				for (const scope of conditional) push({
@@ -1397,7 +2334,7 @@ function scopeOf(raw, options = {}) {
 			offset: offset + end
 		});
 		if (head) {
-			const inherited = conditionPrefix !== void 0 && conditionPrefix < head.length ? text.slice(conditionPrefix, head.length).replace(/^[\s，,、；;：:]+/, "").trim() : "";
+			const inherited = conditionPrefix !== void 0 && conditionPrefix < head.length && conditionMarkerIsClauseLevel(masked, conditionPrefix) ? text.slice(conditionPrefix, head.length).replace(/^[\s，,、；;：:]+/, "").trim() : "";
 			push({
 				offset,
 				scope: {
@@ -1415,7 +2352,30 @@ function scopeOf(raw, options = {}) {
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;
-	}).map((entry) => entry.scope).filter((scope) => /[\p{L}\p{N}]/u.test(scope.body) && /[\p{L}\p{N}]/u.test(scope.text));
+	}).map((entry) => entry.scope).filter((scope) => /[\p{L}\p{N}]/u.test(scope.body) && /[\p{L}\p{N}]/u.test(scope.text)).flatMap((scope) => {
+		if (isSingleClause(scope.text) && clauseIsProtected(scope.text) || opensWithGovernedHead(scope.text)) return [scope];
+		const parts = splitTextFragments(scope.text);
+		if (parts.length > 1) {
+			const partitioned = partitionClauseParts(scope, parts);
+			if (partitioned) return partitioned.flatMap((part) => {
+				if (!part.informational) return [directiveScopeOf(part.text, maskCodeSpans(part.text), part.offset)];
+				const information = informationScopeOf(scope, part);
+				return refineInformationalScope(information, maskCodeSpans(information.text)) ?? [information];
+			});
+		}
+		if (scope.directive !== "informational") return [scope];
+		return refineInformationalScope(scope, maskCodeSpans(scope.text)) ?? [scope];
+	});
+}
+/** The scope a partition records its information span with. */
+function informationScopeOf(scope, part) {
+	return {
+		text: part.text,
+		body: stripConnectors(part.text),
+		directive: "informational",
+		...scope.condition ? { condition: scope.condition } : {},
+		start: part.offset
+	};
 }
 function positiveScopeEnd(masked, options = {}) {
 	const limit = masked.length;
@@ -1423,8 +2383,21 @@ function positiveScopeEnd(masked, options = {}) {
 	while (cursor < limit && (masked[cursor] === "，" || masked[cursor] === "," || masked[cursor] === "、" || masked[cursor] === "并" || masked[cursor] === "且" || /\s/u.test(masked[cursor]))) cursor += 1;
 	while (cursor < limit) {
 		const character = masked.slice(cursor, cursor + 1);
-		if (SENTENCE_END.has(character)) return cursor + 1;
-		if (character === "；" || character === ";") return cursor + 1;
+		if (SENTENCE_END.has(character) || character === "；" || character === ";" || character === "." && sentencePeriodEnd(masked, cursor)) {
+			if (insideQuote(masked, cursor)) {
+				cursor += 1;
+				continue;
+			}
+			return cursor + 1;
+		}
+		if (opensWithGovernedHead(masked)) {
+			cursor += 1;
+			continue;
+		}
+		if (isCoordinatorMark(character) && clauseIsProtected(clauseAround(masked, cursor))) {
+			cursor += 1;
+			continue;
+		}
 		if (!(character === "，" || character === "," || character === "、" || character === "并" || character === "且")) {
 			cursor += 1;
 			continue;
@@ -1702,11 +2675,15 @@ function mainClauseTailReport(masked) {
 	}
 	return false;
 }
-function classifyPositive(text) {
-	const masked = maskCodeSpans(text);
+function classifyPositive(text, preMasked) {
+	const masked = preMasked ?? maskCodeSpans(text);
+	if (governedClauseRestrictsExecution(masked)) return "unresolved";
+	if (clauseIsGoverned(masked) && governedReadingOf(masked)?.marker !== void 0) return "informational";
+	if (clauseAsksOwnQuestion(masked)) return "unresolved";
 	const visibleVerb = firstActionVerb(masked);
-	if (visibleVerb < 0 && firstActionVerb(text) >= 0) return "informational";
-	if (QUESTION_SCOPE.test(masked)) return "informational";
+	if (hasQuestionScope(masked)) return "informational";
+	if (visibleVerb < 0) return "unresolved";
+	if (interrogativeTakesIfObject(masked) && !explanationHasActionResidue(masked)) return "informational";
 	if (mainClauseTailReport(masked) && !NARRATIVE_DIRECTIVE.test(masked)) return "narrative";
 	if (CONFIRMATION_RECEIPT.test(masked.trim())) return "narrative";
 	if (visibleVerb < 0) return "unresolved";
@@ -1738,7 +2715,7 @@ function dispositionOf(scope, executee) {
 	return "executable_now";
 }
 function resumeEventOf(scope) {
-	const match = RESUME_MARKER.exec(scope.condition ?? scope.text);
+	const match = RESUME_MARKER.exec(maskQuotedSpans(scope.condition ?? scope.text));
 	return match ? match[0].trim() : void 0;
 }
 function interpret(scope) {
@@ -1748,7 +2725,9 @@ function interpret(scope) {
 		...scope,
 		condition: resumption
 	} : scope;
-	const authorityDisposition = dispositionOf(conditioned, executee);
+	const qualification = qualificationOfClause(scope.text);
+	const rawDisposition = dispositionOf(conditioned, executee);
+	const authorityDisposition = qualification.status === "restricted" && rawDisposition === "executable_now" ? "unresolved" : rawDisposition;
 	const resumeEvent = scope.directive === "directive" ? resumeEventOf(conditioned) : void 0;
 	const method = scope.directive === "prohibition" ? void 0 : semanticMethod(scope.body);
 	return {
@@ -1758,8 +2737,9 @@ function interpret(scope) {
 		executee,
 		...conditioned.condition ? { condition: conditioned.condition } : {},
 		...resumeEvent ? { resumeEvent } : {},
-		immediatelyExecutable: authorityDisposition === "executable_now",
+		immediatelyExecutable: authorityDisposition === "executable_now" && qualification.status === "granted",
 		authorityDisposition,
+		qualification,
 		...method ? { method } : {},
 		fingerprint: fingerprintOf([
 			scope.text,
@@ -1767,6 +2747,8 @@ function interpret(scope) {
 			scope.directive,
 			executee,
 			authorityDisposition,
+			qualification.status,
+			qualification.reason,
 			conditioned.condition ?? "",
 			resumeEvent ?? "",
 			method ?? ""
@@ -1826,6 +2808,25 @@ function isExecutableItem(item) {
 	if (item.authorityDisposition === void 0) return true;
 	if (item.authorityDisposition !== "executable_now") return false;
 	return item.executee === void 0 || item.executee === "agent";
+}
+/**
+* The ONE authority predicate the mutation gate and preparation both consume.
+*
+* A record holds execution authority only when the reader GRANTED it a
+* qualification: a record with no qualification at all (captured before the
+* qualification existed) is refused rather than read from its stored
+* disposition, and a restricted record — anything a question, explanation,
+* investigation, reported question or quote governs — keeps its work as an
+* undecided obligation that authorizes nothing. Within a granted reading, the
+* disposition still decides: a prohibition, a wait, a human actor, a condition or
+* an information range is never a mutation. An `unresolved` GRANTED reading keeps
+* the historical path documented for unrecognised instruction forms.
+*/
+function itemHoldsExecutionAuthority(item) {
+	if (item.executionQualification === void 0) return false;
+	if (item.executionQualification.status !== "granted") return false;
+	if (item.authorityDisposition === void 0) return true;
+	return item.authorityDisposition === "executable_now" || item.authorityDisposition === "unresolved";
 }
 /** Whether an item is an open obligation for certification purposes. */
 function isOpenObligation(item) {
@@ -1912,6 +2913,284 @@ function statefulActionsOfScope(body) {
 /** Actions this interpretation names, in source order (diagnostics only). */
 function namedActions(text) {
 	return interpretMessage(text).map((scope) => semanticActionOfScope(scope.body)).filter((action) => action !== "generic_run");
+}
+
+//#endregion
+//#region src/domain/conversation.ts
+/**
+* Punctuation and whitespace that may surround a bare progression phrase
+* without turning it into sentence content.
+*/
+const PUNCT = String.raw`[\s。，、；：！？．,;:!?\-*"'“”‘’()（）.…～~]`;
+/**
+* Session-layer phrases that acknowledge or advance the conversation without
+* stating a task. Longer forms come first so the alternation consumes them
+* before their prefixes. A bare whole-message acknowledgment ("当然。",
+* "Of course.") is session talk: it is never captured as an obligation, so it
+* can never block certification either.
+*/
+const PROGRESSION_SOURCE = String.raw`(?:继续执行|继续吧|请继续|继续|接着做|接着|下一步|没问题|知道了|明白了|了解|好的?|是的?|对的?|收到|可以|行|嗯+|当然|那当然|continue|go on|go ahead|keep going|proceed|okay|ok|yes|sure|right|next|of course)`;
+const PROGRESSION_WHOLE = new RegExp(`^${PUNCT}*${PROGRESSION_SOURCE}${PUNCT}*$`, "i");
+const PROGRESSION_LEAD = new RegExp(`^${PROGRESSION_SOURCE}${PUNCT}+`, "i");
+const PROGRESSION_ANYWHERE = new RegExp(PROGRESSION_SOURCE, "gi");
+/**
+* Clause-leading prohibition keywords. A message that opens with one is a
+* captured prohibition, never a meta comment.
+*/
+const PROHIBITION_LEAD = /^(?:(?:do not|don't|never)(?![A-Za-z0-9_./@\\-])|禁止|不要|不得)/i;
+/**
+* Question markers: a question mark, an interrogative pronoun/particle, or an
+* explicit request-for-answer phrase.
+*/
+const QUESTION_TERMS = /[？?]|什么|为什么|怎么|如何|是否|是不是|哪|谁|啥|吗|呢|对不对|正常吗|bug吗|有问题吗|有必要|合理吗|可否|能否|能不能|请问|问一下/;
+/**
+* Meta-comment/objection leads (no question mark required). `不是` requires
+* trailing punctuation so negated statements ("不是都要推送") stay fail-closed.
+*/
+const META_COMMENT_LEAD = /^(?:不是[，,。；;：:\s]|你(?:这|光|啥|怎么|什么|到底|就)|我(?:只是|就是|想|问|建议|认为|觉得)|这(?:有|什么)意义|有什么用|有什么意义)/;
+/** Diagnostic/inspection verbs: mentioning them alone is never a task feature. */
+const META_VERBS = /确认下|看看|看一下|想问|确认|验证|检查|查看|分析|解释|说明|排查|定位|诊断|评估|考虑|建议|讨论|复查|核对|盘点|复盘|问|看/g;
+/**
+* Operation verbs that indicate a real task effect. English verbs are
+* word-bounded so "latest" does not contain "test". The classifier vocabulary
+* is intentionally independent from the command-surface manifest.
+*/
+const OPERATION_VERBS = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|整理|总结|记录|更新|修复|改进|解决|处理|推送|发布|安装|升级|提交|下载|上传|拉取|同步|部署|重启|测试|写|\b(?:build|create|write|modify|run|fix|update|install|push|publish|test)\b/gi;
+const NEGATIONS = /没有|并无|不存在|无需|不用|不需要|尚未|还未|没|未|不是/;
+function excludedRanges(text) {
+	const ranges = [];
+	for (const pattern of [PROGRESSION_ANYWHERE, META_VERBS]) {
+		pattern.lastIndex = 0;
+		for (const match of text.matchAll(pattern)) {
+			const start = match.index;
+			ranges.push([start, start + match[0].length]);
+		}
+	}
+	return ranges;
+}
+/** The negation filter is scoped to the clause (sentence or comma segment). */
+function isNegatedInClause(text, verbStart) {
+	const clause = text.slice(0, verbStart).split(/[。！？；.!?;，,\r\n]/).pop() ?? "";
+	return NEGATIONS.test(clause);
+}
+function hasOperationVerb(text) {
+	const excluded = excludedRanges(text);
+	for (const match of text.matchAll(OPERATION_VERBS)) {
+		const start = match.index;
+		if (excluded.some(([from, to]) => start >= from && start < to)) continue;
+		if (isNegatedInClause(text, start)) continue;
+		return true;
+	}
+	return false;
+}
+function hasStrongTaskFeature(text) {
+	if (extractArtifactPaths(text).length > 0) return true;
+	if (extractMethod(text) !== void 0) return true;
+	return hasOperationVerb(text);
+}
+/**
+* Classify a direct user message (or one clause of it) as an actionable
+* `instruction` or a session-layer `conversational` utterance. Only
+* conversational results drop capture, so the classifier fails closed:
+* everything it cannot confidently recognize as session-layer talk stays an
+* instruction and is captured exactly as before.
+*
+* Order matters: progression and prohibition leads first, then strong task
+* features (artifact path, explicit method, or a non-negated operation verb
+* outside progression/meta spans), then the meta-question and meta-comment
+* forms, and finally a progression lead over a featureless remainder.
+*/
+/**
+* The message with every subordinate purpose span blanked out.
+*
+* A purpose clause is introduced by 为了/用来/以便/从而/进而/用于 or by an English
+* `to <verb>`. The question words inside it belong to that span, so they must not
+* be read as the message's own question. Only the span is masked, so an ordinary
+* question elsewhere in the message is still seen.
+*/
+const SUBORDINATE_SPAN = /(?:为了|用来|以便|从而|进而|用于)[\s\S]*$|\bto\s+[a-z]+[\s\S]*$/iu;
+function withoutSubordinateSpans(text) {
+	return text.replace(SUBORDINATE_SPAN, "");
+}
+/**
+* Question words that make a FRAGMENT an information request, English included.
+* A bare question mark is deliberately NOT one: it belongs to the sentence, so a
+* clause whose own head is an instruction keeps ordering work even when the
+* sentence ends with "?".
+*/
+const FRAGMENT_QUESTION = /什么|为什么|怎么|如何|是否|是不是|哪|谁|啥|吗|呢|对不对|可否|能否|能不能|\b(?:what|which|who|whom|whose|when|where|why|how|whether)\b/i;
+/** An interrogative auxiliary that opens the fragment ("Is it done?"). */
+const QUESTION_AUXILIARY_LEAD = /^(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/i;
+/**
+* English sentence heads that describe rather than order: determiners, pronouns
+* and existentials. They are a closed grammatical class, so a Latin clause that
+* opens with one is a statement ("The build failed"), not an unknown action.
+*/
+const ENGLISH_DESCRIPTIVE_HEAD = /^(?:the|a|an|this|that|these|those|it|its|they|them|their|we|our|you|your|i|my|he|she|his|her|there|here|nothing|nobody|someone|something|everyone|everything)\b/i;
+/** A fragment written in Chinese, whatever Latin term it opens with. */
+const HAS_HAN = /[\u3400-\u9fff]/u;
+/** A request preface or coordinating conjunction that opens a continued clause. */
+const SPOKEN_PREFIX = /^(?:(?:please|kindly|now|then|also|and|but|however|yet)\b[\s,]*|(?:请|麻烦|帮我|帮忙|那么|然后|接着|随后|首先|先|再|也|并且|而且|以及|而后|并|且)[\s，,]*)/i;
+/**
+* Whether one fragment orders work of its own.
+*
+* A fragment that asks nothing and still names an action is work the capture
+* layer has to see. A Latin clause with its own head counts even when its verb is
+* outside every vocabulary — `What changed, and archive the logs?` must keep the
+* archive rather than disappear because the sentence asks a question (review 5
+* F2) — while a Chinese statement that merely opens with a Latin term, and an
+* English description that opens with a determiner or a pronoun, stay talk.
+*/
+function fragmentOrdersWork(fragment) {
+	let body = fragment.trim();
+	for (let step = 0; step < 3 && body; step += 1) {
+		const next = body.replace(SPOKEN_PREFIX, "").trim();
+		if (next === body) break;
+		body = next;
+	}
+	if (!body) return false;
+	const question = FRAGMENT_QUESTION.exec(body);
+	if (question) {
+		const before = body.slice(0, question.index).trim();
+		if (!before) return false;
+		if (/^[A-Za-z]/.test(before) && !ENGLISH_DESCRIPTIVE_HEAD.test(before)) return true;
+		return actionHeadOf(before);
+	}
+	if (QUESTION_AUXILIARY_LEAD.test(body)) return false;
+	return actionHeadOf(body);
+}
+/**
+* The action-head test both layers share: a known operation verb, a Chinese
+* action head, a Chinese clause that ends on a stray question mark, or a Latin
+* head that is not a determiner/pronoun.
+*/
+function actionHeadOf(text) {
+	if (hasOperationVerb(text)) return true;
+	if (introducesActionClause(text)) return true;
+	if (HAS_HAN.test(text) && /[？?]$/u.test(text)) return true;
+	if (HAS_HAN.test(text)) return false;
+	return /^[A-Za-z][A-Za-z0-9_.-]*/.test(text) && !ENGLISH_DESCRIPTIVE_HEAD.test(text);
+}
+/**
+* Whether the message orders anything once its question-bearing fragments are
+* set aside. A conversational verdict drops capture entirely, so it may only be
+* reached when EVERY fragment either asks or says nothing: a question earlier in
+* the message must not delete a later instruction (review 5 F2).
+*
+* The decomposition is the SEMANTIC layer's own: a fragment is split first at
+* sentence punctuation and then by `splitTextFragments`, which is the same rule
+* the capture path uses for coordinators and list separators. Splitting only on
+* punctuation made the comma the whole difference between a kept obligation and
+* a deleted one — `What changed and archive the logs?` lost the archive that
+* `What changed, and archive the logs?` kept (review 6 F1).
+*/
+function ordersWorkBesideQuestion(text) {
+	const sentences = [];
+	const separators = /[，,；;。！!？?\n\r]+/gu;
+	let cursor = 0;
+	for (const match of text.matchAll(separators)) {
+		sentences.push(text.slice(cursor, match.index + match[0].length));
+		cursor = match.index + match[0].length;
+	}
+	if (cursor < text.length) sentences.push(text.slice(cursor));
+	return sentences.filter((sentence) => sentence.trim() !== "").some((sentence) => {
+		if (governedClauseRestrictsExecution(sentence)) return true;
+		return splitTextFragments(sentence).some((fragment) => fragment.text.trim() !== "" && fragmentOrdersWork(fragment.text));
+	});
+}
+function classifyUserInteraction(text) {
+	const normalized = normalizeClause(text);
+	if (!normalized) return "instruction";
+	if (PROGRESSION_WHOLE.test(normalized)) return "conversational";
+	if (PROHIBITION_LEAD.test(normalized)) return "instruction";
+	if (hasStrongTaskFeature(normalized)) return "instruction";
+	const questionScope = withoutSubordinateSpans(normalized);
+	if (QUESTION_TERMS.test(questionScope)) {
+		if (ordersWorkBesideQuestion(questionScope)) return "instruction";
+		return "conversational";
+	}
+	if (META_COMMENT_LEAD.test(normalized)) return "conversational";
+	if (PROGRESSION_LEAD.test(normalized)) return "conversational";
+	return "instruction";
+}
+/**
+* Inquiry verbs: the operation verb appears as the OBJECT of an
+* investigation rather than an imperative ("是否有更新", "check whether…").
+* The clause asks about state; it does not order a change.
+*/
+const INQUIRY_PATTERNS = [
+	/(?:是否|有没有|有没|是否存在|是不是已经?|可曾|曾否)[^。！？；，,]{0,12}(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启|生成|写入)/,
+	/(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启)(?:了)?(?:吗|么|没有|没)\s*[?？]?\s*$/,
+	/^(?:检查|看看|查看|确认|了解|查一下|帮忙看)[^。！？；]{0,16}(?:是否|有没有|是否已经)/,
+	/\b(?:is|are)\s+there\s+(?:any|an?)?\s*(?:update|updates|upgrade|commit|push|change|fix)/i,
+	/\bcheck\s+(?:whether|if)\b/i,
+	/\bwhether\b[^.?!]{0,24}\b(?:update|upgrade|commit|push|install|change)/i
+];
+/**
+* Imperative leads that keep an ACTION reading even when the clause also
+* contains an inquiry verb ("更新后检查" orders a change first).
+*/
+const ACTION_LEAD = /^(?:请\s*)?(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|同步|拉取|下载|重启|生成|写入|创建|新建|运行|执行|部署)\b|^(?:please\s+)?(?:update|upgrade|commit|push|publish|install|modify|delete|fix|deploy|run|create)\b/i;
+/**
+* Separate intent layer (v0.5): whether the captured work is an inquiry about
+* state or an ordered change. Intent NEVER drops capture or weakens
+* protection — an inquiry keeps its original obligation; it only changes what
+* certification support the diagnosis reports (inquiries are not machine
+* certifiable by the current adapters and must not be re-bound).
+*/
+function classifyTaskIntent(text) {
+	const normalized = normalizeClause(text);
+	if (!normalized) return "action";
+	if (ACTION_LEAD.test(normalized)) return "action";
+	for (const pattern of INQUIRY_PATTERNS) if (pattern.test(normalized)) return "inquiry";
+	return "action";
+}
+
+//#endregion
+//#region src/domain/registry.ts
+const MAX_REGISTRY_URL_LENGTH = 2048;
+const ENCODED_SEPARATOR_OR_CONTROL = /%(?:0[0-9a-f]|1[0-9a-f]|7f|2f|5c)/i;
+const ENCODED_DOT = /%2e/i;
+function rawPath(value) {
+	const authorityStart = value.indexOf("//");
+	if (authorityStart < 0) return "";
+	const afterAuthority = value.slice(authorityStart + 2);
+	const slash = afterAuthority.indexOf("/");
+	return slash < 0 ? "" : afterAuthority.slice(slash);
+}
+function hasControlOrBackslash(value) {
+	return [...value].some((character) => {
+		const code = character.charCodeAt(0);
+		return character === "\\" || code <= 31 || code === 127;
+	});
+}
+function safePath(path$1) {
+	if (!path$1 || path$1 === "/") return true;
+	if (path$1.includes("//") || ENCODED_SEPARATOR_OR_CONTROL.test(path$1) || ENCODED_DOT.test(path$1)) return false;
+	return (path$1.endsWith("/") ? path$1.slice(0, -1) : path$1).split("/").slice(1).every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+}
+/**
+* Canonical npm registry base. The canonical value is the only value persisted
+* into requested/resolved/state tuples and is reused verbatim for npm argv.
+*/
+function canonicalRegistryBase(value, options = {}) {
+	if (!value || value.length > MAX_REGISTRY_URL_LENGTH || value !== value.trim() || hasControlOrBackslash(value) || !safePath(rawPath(value))) return void 0;
+	let parsed;
+	try {
+		parsed = new URL(value);
+	} catch {
+		return;
+	}
+	const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+	if (parsed.protocol !== "https:" && !(options.allowLoopbackHttp && parsed.protocol === "http:" && loopback)) return void 0;
+	if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.hostname.endsWith(".")) return void 0;
+	if (!safePath(parsed.pathname)) return void 0;
+	parsed.pathname = `${parsed.pathname.replace(/\/+$/, "")}/`;
+	return parsed.toString();
+}
+/** npm's packument route preserves @ and escapes the scope separator. */
+function npmEscapedPackageName(packageId) {
+	return encodeURIComponent(packageId).replace(/^%40/i, "@").replace(/%2F/gi, "%2f");
 }
 
 //#endregion
@@ -2035,7 +3314,7 @@ function unquoteTargetToken(value) {
 */
 function labeledToken(text, labels) {
 	const label = new RegExp(`(?:${labels})`, "iu");
-	const after = new RegExp(`^(?![\\p{L}\\p{N}_])\\s*(?:[:=：]|为|是)?\\s*(${TARGET_TOKEN})`, "iu");
+	const after = new RegExp(`^(?:\\s*(?:[:=：]|为|是)\\s*|\\s+)(${TARGET_TOKEN})`, "iu");
 	const OTHER_LABEL = /^(?:to|from|on|into|with|at|using|version|profile|registry|remote|refspec|branch|service|repository|repo|包|插件|制品|服务|仓库|版本|配置档|远端|分支|注册表)$/i;
 	let cursor = 0;
 	while (cursor <= text.length) {
@@ -2048,22 +3327,225 @@ function labeledToken(text, labels) {
 	}
 }
 /**
+* Where a labelled field's VALUE sits in the text, so a value that another
+* field owns can be excluded from a later bare-object reading. The object
+* grammar and the field grammar overlap: "提交分支 release" names a BRANCH, and
+* without this range the bare-object reader would offer "release" as the
+* repository.
+*/
+/** Values that are another field's label or an action, never an identity candidate. */
+const IDENTITY_STOP = /^(?:the|a|an|this|that|and|or|to|from|on|into|with|at|using|service|package|plugin|artifact|repository|repo|restart|reload|apply|install|包|插件|制品|服务|仓库|重启|重新启动|应用|安装|和|或|以及)$/iu;
+/**
+* EVERY value a label introduces in the span, normalized exactly as
+* {@link labeledToken} normalizes its own result, and including a coordinated
+* continuation list ("service api or worker" names two candidates).
+*/
+function labeledTokens(text, labels) {
+	const label = new RegExp(`(?:${labels})`, "giu");
+	const after = new RegExp(`^(?:\\s*(?:[:=：]|为|是)\\s*|\\s+)(${TARGET_TOKEN})`, "iu");
+	const continuation = new RegExp(`^\\s*(?:or|and|或|和|以及|、|,|/)\\s*(${TARGET_TOKEN})`, "iu");
+	const found = [];
+	for (const match of text.matchAll(label)) {
+		let cursor = match.index + match[0].length;
+		let token = after.exec(text.slice(cursor));
+		while (token) {
+			const value = unquoteTargetToken(token[1]);
+			if (value && !IDENTITY_STOP.test(value)) found.push(value);
+			cursor += token[0].length;
+			token = continuation.exec(text.slice(cursor));
+		}
+	}
+	return [...new Set(found)];
+}
+/**
+* Every identity candidate a span names for a SERVICE, across the surface forms the
+* extractor accepts: the label-first form ("service api"), the verb-object form
+* ("restart api service") and the noun-suffix form ("api 服务"), each with its
+* coordinated continuations. The uniqueness check and the extractor therefore share
+* one grammar and one normalization.
+*/
+function serviceCandidates(text) {
+	const suffixed = [...text.matchAll(/([A-Za-z][A-Za-z0-9_-]*|\p{Script=Han}{1,6})\s*(?:服务|service)/giu)].map((match) => unquoteTargetToken(match[1])).filter((value) => value !== void 0 && !IDENTITY_STOP.test(value));
+	for (const group of [
+		labeledTokens(text, "service(?:_id)?|服务"),
+		actionObjectTokens(text, "restart|reload|重启|重新启动", "service|服务"),
+		[...new Set(suffixed)]
+	]) if (group.length > 1) return group;
+	return [];
+}
+/** Every identity candidate a span names for a PACKAGE, same grammar as the extractor. */
+function packageCandidates(text) {
+	const normalize = (value) => splitPackageSpec(value).packageId ?? value.trim();
+	const groups = [[...new Set(labeledTokens(text, IDENTITY_LABELS.package).map(normalize))].filter((value) => value !== ""), [...new Set(actionObjectTokens(text, IDENTITY_LABELS.install, IDENTITY_LABELS.package).map(normalize))].filter((value) => value !== "")];
+	for (const group of groups) if (group.length > 1) return group;
+	return [];
+}
+function labeledTokenRange(text, labels) {
+	const label = new RegExp(`(?:${labels})`, "iu");
+	const after = new RegExp(`^(?:\\s*(?:[:=：]|为|是)\\s*|\\s+)(${TARGET_TOKEN})`, "iu");
+	const OTHER_LABEL = /^(?:to|from|on|into|with|at|using|version|profile|registry|remote|refspec|branch|service|repository|repo|包|插件|制品|服务|仓库|版本|配置档|远端|分支|注册表)$/i;
+	let cursor = 0;
+	while (cursor <= text.length) {
+		const match = label.exec(text.slice(cursor));
+		if (!match) return void 0;
+		cursor = cursor + match.index + match[0].length;
+		const token = after.exec(text.slice(cursor));
+		const value = unquoteTargetToken(token?.[1]);
+		if (value && !OTHER_LABEL.test(value)) {
+			const at = token ? cursor + token[0].indexOf(token[1]) : cursor;
+			return {
+				value,
+				start: at,
+				end: at + (token?.[1]?.length ?? value.length)
+			};
+		}
+		if (cursor >= text.length) return void 0;
+	}
+}
+/**
+* The values a labelled field already claims. A bare-object reader must not
+* re-read one of them as the object of the action.
+*/
+function labeledFieldValues(text) {
+	const values = /* @__PURE__ */ new Set();
+	for (const labels of [
+		"branch|分支",
+		"remote|远端",
+		"refspec|引用规范"
+	]) {
+		const found = labeledTokenRange(text, labels);
+		if (found) values.add(found.value);
+	}
+	return values;
+}
+/**
 * The object a verb acts on. The verb is matched first, then — separately — an
 * optional noun that has to end at a word boundary, and only the text AFTER
 * that noun is the target. Matching the noun and the token in one pattern let
 * the noun eat a prefix of the real word ("repository" consumed as "repo" +
 * "sitory"), which captured "sitory" as a repository name.
 */
-function actionObjectToken(text, verbs, nouns) {
-	const verb = new RegExp(`(?:${verbs})`, "iu").exec(text);
-	if (!verb) return void 0;
-	let cursor = verb.index + verb[0].length;
+/** Fields a git instruction names BESIDES its repository. */
+const GIT_SECONDARY_LABEL = "branch|分支|remote|远端|refspec|引用规范";
+/**
+* The repository candidates a clause names, in order. A candidate is a path or a
+* Latin name that is spelled like a repository and is not a value another field
+* already claims (`分支 main`, `remote origin`, `refspec refs/heads/main`). The
+* current-repository deixis counts as a candidate too, so "当前仓库 与 /repo-c"
+* offers two.
+*
+* An extension is NOT evidence of identity: a repository can be called
+* `/repo-b.js`, and the root said 仓库. Filtering candidates by file extension
+* made the first-object reading and the ambiguity rule contradict each other —
+* `/repo-a` was accepted as a repository while `/repo-b.js` was silently dropped
+* (review 6 F3). A file argument in another clause is excluded by the join rule
+* instead: "提交仓库 /repo-a，运行 /tmp/script.sh" is not a coordinator list.
+*/
+const REPOSITORY_TOKEN_SCAN = /[/\\~][^\s，,、；;。！？!?]+|[A-Za-z][A-Za-z0-9._-]*/gu;
+const CURRENT_REPOSITORY_PHRASE = /当前(?:目录|文件夹|仓库|项目|工作区)|这个仓库|该仓库|本仓库|this\s+(?:repo|repository|project)|current\s+(?:repo|repository|directory|project|workspace)/iu;
+/**
+* What may sit BETWEEN two candidates of the same clause when the clause offers
+* them as alternatives: a coordinator, optionally followed by the field label
+* again ("/repo-b 和仓库 /repo-c"). Language form must not change the
+* authorization boundary, so the enumeration mark needs no surrounding space and
+* a repeated label is stepped over (review 5 F3).
+*/
+const REPOSITORY_ALTERNATIVE_JOIN = /^\s*(?:、|,|，|与|和|及|或|and|or)?\s*(?:repository|repo|仓库)?\s*$/iu;
+const REPOSITORY_ALTERNATIVE_COORDINATOR = /、|,|，|与|和|及|或|\b(?:and|or)\b/iu;
+/**
+* A coordinator GLUED inside one scanned token ("/repo-b和/repo-c"). Han
+* characters are legal path characters, so the scan cannot exclude them; the
+* token is split at a coordinator that is followed by a repository start instead.
+*/
+const GLUED_ALTERNATIVE = /(?:与|和|及|或)(?=[/\\~A-Za-z])/u;
+function isRepositoryCandidate(value, claimed) {
+	if (claimed.has(value)) return false;
+	return looksLikeRepositoryName(value);
+}
+function repositoryCandidates(text) {
+	const claimed = labeledFieldValues(text);
+	const candidates = [];
+	for (const match of text.matchAll(REPOSITORY_TOKEN_SCAN)) {
+		const value = match[0];
+		const at = match.index;
+		const glued = GLUED_ALTERNATIVE.exec(value);
+		if (glued) {
+			const left = value.slice(0, glued.index);
+			const right = value.slice(glued.index + glued[0].length);
+			if (isRepositoryCandidate(left, claimed) && isRepositoryCandidate(right, claimed)) {
+				candidates.push({
+					value: left,
+					start: at,
+					end: at + left.length
+				});
+				candidates.push({
+					value: right,
+					start: at + glued.index + glued[0].length,
+					end: at + value.length
+				});
+				continue;
+			}
+		}
+		if (!isRepositoryCandidate(value, claimed)) continue;
+		candidates.push({
+			value,
+			start: at,
+			end: at + value.length
+		});
+	}
+	const current = CURRENT_REPOSITORY_PHRASE.exec(text);
+	if (current) candidates.push({
+		value: "<current-repository>",
+		start: current.index,
+		end: current.index + current[0].length
+	});
+	return candidates.sort((left, right) => left.start - right.start);
+}
+/**
+* Whether the clause OFFERS several repositories rather than naming one. Two
+* distinct candidates that a coordinator joins are alternatives: reporting
+* either one would be a guess about which repository the root meant, so the
+* capture records a clarification instead. Repetitions of the same repository are
+* not alternatives, and a clause that names one repository, one branch or one
+* remote is unaffected.
+*/
+function namesSeveralRepositories(text) {
+	const candidates = repositoryCandidates(text);
+	if (new Set(candidates.map((candidate) => candidate.value.replace(/[\\/]+$/, ""))).size < 2) return false;
+	for (let index = 1; index < candidates.length; index += 1) {
+		const between = text.slice(candidates[index - 1].end, candidates[index].start);
+		if (!REPOSITORY_ALTERNATIVE_JOIN.test(between)) continue;
+		if (!REPOSITORY_ALTERNATIVE_COORDINATOR.test(between)) continue;
+		return true;
+	}
+	return false;
+}
+function actionObjectToken(text, verbs, nouns, skipLabels) {
+	return actionObjectTokens(text, verbs, nouns, skipLabels)[0];
+}
+/** Every object a verb of this kind introduces, in source order, normalized once. */
+function actionObjectTokens(text, verbs, nouns, skipLabels) {
+	const pattern = new RegExp(`(?:${verbs})`, "giu");
+	const found = [];
+	for (const match of text.matchAll(pattern)) {
+		const token = objectTokenAfter(text, match.index + match[0].length, nouns, skipLabels);
+		if (token) found.push(token);
+	}
+	return [...new Set(found)];
+}
+/** The object token that follows a verb, read exactly as the singular form does. */
+function objectTokenAfter(text, from, nouns, skipLabels) {
+	let cursor = from;
+	if (skipLabels) {
+		const secondary = new RegExp(`^\\s*(?:${skipLabels})(?![\\p{L}\\p{N}_])`, "iu").exec(text.slice(cursor));
+		if (secondary) cursor += secondary[0].length;
+	}
 	const noun = new RegExp(`^\\s*(?:${nouns})(?![\\p{L}\\p{N}_])`, "iu").exec(text.slice(cursor));
 	if (noun) cursor += noun[0].length;
 	else cursor += text.slice(cursor).match(/^\s*[\p{Script=Han}]{0,2}\s*/u)?.[0].length ?? 0;
 	const rest = text.slice(cursor).replace(/^\s*(?:[:=：]|为)?\s*/u, "");
 	const token = unquoteTargetToken(new RegExp(`^(${TARGET_TOKEN})`, "u").exec(rest)?.[1]);
-	if (!token || /^(?:the|a|an|this|that|to|from|in|on|into|with|package|plugin|artifact|service|repository|repo|包|插件|制品|服务|仓库)$/i.test(token)) return void 0;
+	if (!token || IDENTITY_STOP.test(token)) return void 0;
 	return token;
 }
 /** The verbs that name each repository-facing action, for unlabelled objects. */
@@ -2180,81 +3662,289 @@ function CJK_ACTION_WORD_AT(text, before) {
 	};
 	return best?.word;
 }
+/**
+* Whether the root named the repository explicitly rather than relying on the
+* session's environment. A path is explicit; a bare word is explicit only when
+* the action's own object grammar produced it ("push repo-a"), never when it is
+* the ambient working directory.
+*/
+function repositoryNamedExplicitly(text, action, subject) {
+	const labeled = labeledToken(text, IDENTITY_LABELS.repository);
+	if (labeled && looksLikeRepositoryName(labeled)) return {
+		repository: labeled,
+		kind: "explicit_label"
+	};
+	if (/当前(?:目录|文件夹|仓库|项目|工作区)|这个仓库|该仓库|本仓库|this\s+(?:repo|repository|project)|current\s+(?:repo|repository|directory|project|workspace)/i.test(text)) return subject !== "scope" ? {
+		repository: subject,
+		kind: "explicit_current_repository"
+	} : void 0;
+	const claimed = labeledFieldValues(text);
+	const object = actionObjectToken(text, GIT_OBJECT_VERB[action], "repository|repo|仓库", GIT_SECONDARY_LABEL);
+	if (object && !claimed.has(object) && looksLikeRepositoryName(object)) return {
+		repository: object,
+		kind: "explicit_path"
+	};
+}
+/**
+* A branch label's value, or undefined when the "value" is prose. The Chinese
+* label 分支 also introduces a possessive phrase ("分支的改动"), whose head noun
+* is not a branch name.
+*/
+function branchName(value) {
+	if (value === void 0) return void 0;
+	if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value)) return void 0;
+	return value;
+}
+/**
+* A Latin identity label's value, or undefined when the "value" is prose. The
+* Chinese labels 分支/远端 also introduce possessive or locative phrases
+* ("分支的改动"), whose head noun is not a branch, remote or refspec name.
+*/
+function latinIdentityValue(value) {
+	if (value === void 0) return void 0;
+	if (/[\p{Script=Han}]/u.test(value)) return void 0;
+	if (!/^[A-Za-z0-9]/.test(value)) return void 0;
+	return value;
+}
+/**
+* Whether a captured token names a repository rather than trailing prose. A
+* path is unambiguous; a bare word has to be Latin-script, so 改动/变更/代码 and
+* other Chinese noun phrases never become a repository identity.
+*/
+/** Fields a git instruction names besides its repository; never a repository. */
+const GIT_TARGET_STOP_WORDS = /^(?:the|a|an|this|that|these|those|to|from|in|on|into|with|and|or|then|also|but|my|our|your|all|any|some|change|changes|changed|commit|commits|push|pushes|pull|fetch|update|updates|branch|remote|refspec|origin|upstream|main|master|develop|trunk|head|repository|repo|tags?|branch(?:es)?|远程|远端|分支|引用规范|仓库)$/i;
+function looksLikeRepositoryName(value) {
+	if (GIT_TARGET_STOP_WORDS.test(value)) return false;
+	if (/[\\/]/.test(value) || /^[.~]/.test(value)) return true;
+	if (/^[A-Za-z]:/.test(value)) return true;
+	if (!/^[\p{L}\p{N}@._-]+$/u.test(value)) return false;
+	return !/[\p{Script=Han}]/u.test(value);
+}
+/** The target capture for one action, with the source of its identity. */
+/**
+* Whether a span names more than one candidate for the action's identity field,
+* judged WITHIN one surface form with the extractor's own grammar and normalization —
+* so the enumeration cannot invent a pair by mixing forms, and cannot miss the
+* label-first list ("service api or worker") the extractor actually reads.
+*/
+function restatedSpanAmbiguous(action, text) {
+	return identityFieldLabels(action).some((labels) => fieldCandidates(action, labels, text).length > 1);
+}
+/**
+* The label grammar of each identity field, per action. The enumerator reads a field
+* with the SAME labels the extractor uses and with the same normalization, so a
+* coordinated list after one label is seen as two candidates.
+*/
+function identityFieldLabels(action) {
+	const { service, package: pkg, artifact, version, profile, registry, repository, branch, remote, refspec } = IDENTITY_LABELS;
+	switch (action) {
+		case "restart": return [service];
+		case "install":
+		case "apply": return [
+			pkg,
+			version,
+			profile
+		];
+		case "publish": return [
+			artifact,
+			version,
+			registry
+		];
+		case "commit":
+		case "push":
+		case "pull":
+		case "fetch": return [
+			repository,
+			branch,
+			remote,
+			refspec
+		];
+		default: return [];
+	}
+}
+/** The distinct candidates a span names for ONE identity field. */
+/**
+* The label grammar of every identity field, shared by the EXTRACTOR and the
+* uniqueness enumeration — one definition, so the two can never drift. Latin labels
+* carry a word boundary: without it a path like `/repo-a` would be read as the `repo`
+* label and its next token as a second candidate.
+*/
+const IDENTITY_LABELS = {
+	service: "(?<![\\p{Script=Latin}\\p{N}@/_.-])service(?:_id)?|服务",
+	package: "(?<![\\p{Script=Latin}\\p{N}@/_.-])(?:package|plugin)|包|插件",
+	artifact: "(?<![\\p{Script=Latin}\\p{N}@/_.-])(?:package|artifact)|包|制品",
+	version: "(?<![\\p{Script=Latin}\\p{N}@/_.-])version|版本",
+	profile: "(?<![\\p{Script=Latin}\\p{N}@/_.-])profile|配置(?:档|文件)?",
+	registry: "(?<![\\p{Script=Latin}\\p{N}@/_.-])registry|注册表|仓库地址",
+	repository: "(?<![\\p{Script=Latin}\\p{N}@/_.-])(?:repository|repo)|仓库",
+	branch: "(?<![\\p{Script=Latin}\\p{N}@/_.-])branch|分支",
+	remote: "(?<![\\p{Script=Latin}\\p{N}@/_.-])remote|远端",
+	refspec: "(?<![\\p{Script=Latin}\\p{N}@/_.-])refspec|引用规范",
+	install: "(?<![\\p{Script=Latin}\\p{N}@/_.-])(?:install|add|apply|安装|应用)",
+	restart: "(?<![\\p{Script=Latin}\\p{N}@/_.-])(?:restart|reload|重启|重新启动)",
+	publish: "(?<![\\p{Script=Latin}\\p{N}@/_.-])(?:publish|release|发布)"
+};
+/** Every version a package spec in the span names (`foo@1.0.0` -> `1.0.0`). */
+function identitySpecVersions(text) {
+	const found = [];
+	const raw = [
+		...labeledTokens(text, IDENTITY_LABELS.package),
+		...labeledTokens(text, IDENTITY_LABELS.artifact),
+		...actionObjectTokens(text, IDENTITY_LABELS.install, IDENTITY_LABELS.package),
+		...actionObjectTokens(text, IDENTITY_LABELS.publish, IDENTITY_LABELS.artifact)
+	];
+	for (const value of raw) {
+		const version = splitPackageSpec(value).version;
+		if (version) found.push(version);
+	}
+	return found;
+}
+/** The identity normalizer of one field: never a blanket lowercase. */
+function fieldNormalizer(labels) {
+	if (labels === IDENTITY_LABELS.package || labels === IDENTITY_LABELS.artifact) return (value) => {
+		const spec = splitPackageSpec(value);
+		const id = spec.packageId ?? value.trim();
+		return spec.version ? `${id}@${spec.version}` : id;
+	};
+	if (labels === IDENTITY_LABELS.registry) return (value) => canonicalRegistryBase(value) ?? value.trim();
+	return (value) => value.trim();
+}
+function fieldCandidates(action, labels, text) {
+	const normalize = fieldNormalizer(labels);
+	const groups = [[...new Set(labeledTokens(text, labels).map(normalize))]];
+	if (labels === IDENTITY_LABELS.version) {
+		const union = [...new Set([...groups[0], ...identitySpecVersions(text).map(normalize)])];
+		if (union.length > 1) return union;
+		groups[0] = union;
+	}
+	if (labels === IDENTITY_LABELS.service) groups.push(serviceCandidates(text));
+	if (labels === IDENTITY_LABELS.package) groups.push(packageCandidates(text));
+	for (const group of groups) {
+		const distinct = [...new Set(group.filter((value) => value !== ""))];
+		if (distinct.length > 1) return distinct;
+	}
+	return groups[0].filter((value) => value !== "");
+}
 function captureRequestedTarget(action, text, subject, surface) {
 	if (action === "create" || action === "modify") {
-		if (surface === "artifact") return { target: {
-			artifact_id: subject,
-			scope: parentScope(subject)
-		} };
+		if (surface === "artifact") return {
+			target: {
+				artifact_id: subject,
+				scope: parentScope(subject)
+			},
+			source: { kind: "explicit_path" }
+		};
 		const artifactType = boundedArtifactTypeOf(text);
-		if (artifactType && scopeIsPath(subject)) return { target: {
-			scope: subject,
-			artifact_type: artifactType
-		} };
+		if (artifactType && scopeIsPath(subject)) return {
+			target: {
+				scope: subject,
+				artifact_type: artifactType
+			},
+			source: { kind: "explicit_path" }
+		};
 		return {
 			target: {},
 			reasonCode: "requested_target_artifact_id_missing"
 		};
 	}
 	if (action === "install" || action === "apply") {
-		const parsed = splitPackageSpec(actionObjectToken(text, action === "install" ? "install|add|安装" : "apply|应用", "package|plugin|包|插件"));
+		const parsed = splitPackageSpec(actionObjectToken(text, IDENTITY_LABELS.install, IDENTITY_LABELS.package));
 		if (!parsed.packageId) return {
 			target: {},
 			reasonCode: "requested_target_package_id_missing"
 		};
-		const profile = labeledToken(text, "profile|配置(?:档|文件)?");
-		const version = parsed.version ?? labeledToken(text, "version|版本");
-		return { target: {
-			package_id: parsed.packageId,
-			...version ? { version } : {},
-			...profile ? { profile } : {}
-		} };
+		const profile = labeledToken(text, IDENTITY_LABELS.profile);
+		const version = parsed.version ?? labeledToken(text, IDENTITY_LABELS.version);
+		return {
+			source: { kind: "explicit_label" },
+			target: {
+				package_id: parsed.packageId,
+				...version ? { version } : {},
+				...profile ? { profile } : {}
+			}
+		};
 	}
 	if (action === "restart") {
-		const service = labeledToken(text, "service(?:_id)?|服务") ?? actionObjectToken(text, "restart|reload|重启|重新启动", "service|服务");
-		return service ? { target: { service_id: service } } : {
+		const service = labeledToken(text, IDENTITY_LABELS.service) ?? actionObjectToken(text, IDENTITY_LABELS.restart, IDENTITY_LABELS.service);
+		return service ? {
+			target: { service_id: service },
+			source: { kind: "explicit_label" }
+		} : {
 			target: {},
 			reasonCode: "requested_target_service_id_missing"
 		};
 	}
 	if (action === "publish") {
-		const parsed = splitPackageSpec(actionObjectToken(text, "publish|release|发布", "package|artifact|包|制品"));
+		const parsed = splitPackageSpec(actionObjectToken(text, IDENTITY_LABELS.publish, IDENTITY_LABELS.artifact));
 		if (!parsed.packageId) return {
 			target: {},
 			reasonCode: "requested_target_artifact_id_missing"
 		};
-		const version = parsed.version ?? labeledToken(text, "version|版本");
-		const registry = canonicalRegistryBase(labeledToken(text, "registry|注册表|仓库地址") ?? "");
+		const version = parsed.version ?? labeledToken(text, IDENTITY_LABELS.version);
+		const registry = canonicalRegistryBase(labeledToken(text, IDENTITY_LABELS.registry) ?? "");
 		if (!registry) return {
 			target: {},
 			reasonCode: "requested_target_registry_missing_or_invalid"
 		};
-		return { target: {
-			artifact_id: parsed.packageId,
-			...version ? { version } : {},
-			registry
-		} };
+		return {
+			source: { kind: "explicit_label" },
+			target: {
+				artifact_id: parsed.packageId,
+				...version ? { version } : {},
+				registry
+			}
+		};
 	}
 	if (action === "pull" || action === "fetch" || action === "commit" || action === "push") {
-		const repository = labeledToken(text, "repository|repo|仓库") ?? actionObjectToken(text, GIT_OBJECT_VERB[action], "repository|repo|仓库") ?? (subject !== "scope" ? subject : void 0);
-		if (!repository) return {
-			target: {},
-			reasonCode: "requested_target_repository_missing"
+		const branch = branchName(latinIdentityValue(labeledToken(text, IDENTITY_LABELS.branch)));
+		const remote = latinIdentityValue(labeledToken(text, IDENTITY_LABELS.remote));
+		const explicitRefspec = latinIdentityValue(labeledToken(text, IDENTITY_LABELS.refspec));
+		const refspec = explicitRefspec !== void 0 && (/:/.test(explicitRefspec) || /^refs?\//i.test(explicitRefspec)) ? explicitRefspec : action !== "commit" && branch !== void 0 ? branch : void 0;
+		const named = repositoryNamedExplicitly(text, action, subject);
+		if (namesSeveralRepositories(text)) return {
+			source: { kind: "environment_default" },
+			reasonCode: "requested_target_repository_ambiguous",
+			target: {
+				...action === "commit" && branch ? { branch } : {},
+				...action !== "commit" && remote ? { remote } : {},
+				...action !== "commit" && refspec ? { refspec } : {}
+			}
 		};
-		const branch = labeledToken(text, "branch|分支");
-		const remote = labeledToken(text, "remote|远端");
-		const refspec = labeledToken(text, "refspec|引用规范") ?? (action !== "commit" ? branch : void 0);
-		return { target: {
-			repository,
-			...action === "commit" && branch ? { branch } : {},
-			...action !== "commit" && remote ? { remote } : {},
-			...action !== "commit" && refspec ? { refspec } : {}
-		} };
+		if (!named) return {
+			source: { kind: "environment_default" },
+			target: {
+				...action === "commit" && branch ? { branch } : {},
+				...action !== "commit" && remote ? { remote } : {},
+				...action !== "commit" && refspec ? { refspec } : {}
+			}
+		};
+		return {
+			source: { kind: named.kind },
+			target: {
+				repository: named.repository,
+				...action === "commit" && branch ? { branch } : {},
+				...action !== "commit" && remote ? { remote } : {},
+				...action !== "commit" && refspec ? { refspec } : {}
+			}
+		};
 	}
-	return { target: surface === "artifact" ? {
-		artifact_id: subject,
-		scope: parentScope(subject)
-	} : { scope: subject } };
+	return {
+		source: { kind: surface === "artifact" ? "explicit_path" : "environment_default" },
+		target: surface === "artifact" ? {
+			artifact_id: subject,
+			scope: parentScope(subject)
+		} : { scope: subject }
+	};
+}
+/**
+* The repository an obligation resolves to when the root wrote no repository
+* at all (0.6.3 K2). The environment default is preserved so a later
+* work-unit inheritance decision can evaluate it, but it is never reported as
+* a resolved user selection.
+*/
+function environmentDefaultRepositoryTarget(action, subject) {
+	if (!(action === "pull" || action === "fetch" || action === "commit" || action === "push")) return void 0;
+	return scopeIsPath(subject) || subject.startsWith("/") || /^[A-Za-z]:[\\/]/.test(subject) ? { repository: subject } : void 0;
 }
 const EXTENSION_TAIL = new RegExp(`\\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cpp|h|hpp|cs|rb|php|vue|svelte|md|mdx|json|jsonc|yml|yaml|toml|ini|cfg|sh|bash|zsh|fish|ps1|html|css|scss|less|sql|txt|lock|mod|sum|env|patch|diff|pkl|tf|hcl|proto)(?:$|[^A-Za-z0-9])`, "i");
 function isArtifactCandidate(value) {
@@ -2297,9 +3987,31 @@ function segmentClauses(text, options = {}) {
 function captureItem(kind, body, sourceMessageId, id, revision, subject, surface, method, operation, interpretation) {
 	const sanitized = sanitizeClauseText(body);
 	const unsupportedVisual = /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized);
-	let semanticAction = unsupportedVisual ? "generic_run" : semanticActionOfScope(sanitized, interpretation?.text ?? sanitized, kind === "prohibition");
+	const actionText = isRestatement(sanitized) ? restatedContentOf(sanitized) ?? sanitized : sanitized;
+	let semanticAction = unsupportedVisual ? "generic_run" : semanticActionOfScope(actionText, interpretation?.text ?? sanitized, kind === "prohibition");
 	if (semanticAction === "generic_run" && !unsupportedVisual && interpretation?.directive === "directive" && headVerbIsChangeWord(sanitized) && boundedArtifactTypeOf(sanitized) !== void 0) semanticAction = "modify";
-	const capturedTarget = captureRequestedTarget(semanticAction, sanitized, subject, surface);
+	const restated = isRestatement(sanitized) ? restatedContentOf(sanitized) ?? sanitized : void 0;
+	const clarified = restated === void 0 ? sanitized : clarifiedSpanOf(sanitized) ?? sanitized;
+	const capturedFull = captureRequestedTarget(semanticAction, clarified, subject, surface);
+	const capturedTarget = capturedFull.reasonCode === void 0 && restatedSpanAmbiguous(semanticAction, clarified) ? {
+		target: capturedFull.target,
+		reasonCode: "requested_target_field_ambiguous"
+	} : restated === void 0 ? capturedFull : (() => {
+		const spanTarget = captureRequestedTarget(semanticAction, restated, subject, surface);
+		const spanFields = Object.keys(spanTarget.target);
+		const spanAmbiguous = restatedSpanAmbiguous(semanticAction, restated);
+		const fullAmbiguous = restatedSpanAmbiguous(semanticAction, clarified);
+		const inherited = !fullAmbiguous && capturedFull.reasonCode === void 0 ? Object.fromEntries(Object.entries(capturedFull.target).filter(([field$1]) => !spanFields.includes(field$1))) : {};
+		const reasonCode = spanAmbiguous || spanFields.length === 0 && fullAmbiguous ? "requested_target_field_ambiguous" : spanFields.length > 0 ? spanTarget.reasonCode : Object.keys(inherited).length > 0 ? void 0 : capturedFull.reasonCode;
+		return {
+			target: {
+				...inherited,
+				...spanTarget.target
+			},
+			...reasonCode !== void 0 ? { reasonCode } : {},
+			...spanTarget.source ?? (spanFields.length === 0 ? capturedFull.source : void 0) ? { source: spanTarget.source ?? capturedFull.source } : {}
+		};
+	})();
 	const effectiveOperation = semanticAction === "verify" ? "verify" : operation;
 	const item = {
 		id,
@@ -2322,49 +4034,81 @@ function captureItem(kind, body, sourceMessageId, id, revision, subject, surface
 		},
 		semanticAction,
 		requestedTarget: capturedTarget.target,
-		targetCaptureStatus: capturedTarget.reasonCode ? "clarification_required" : "resolved",
-		...capturedTarget.reasonCode ? { targetCaptureReasonCode: capturedTarget.reasonCode } : {},
+		...capturedTarget.reasonCode ? {
+			targetCaptureStatus: "clarification_required",
+			targetCaptureReasonCode: capturedTarget.reasonCode
+		} : capturedTarget.source?.kind === "environment_default" && environmentDefaultRepositoryTarget(semanticAction, subject) !== void 0 ? {
+			requestedTarget: {
+				...environmentDefaultRepositoryTarget(semanticAction, subject),
+				...capturedTarget.target
+			},
+			targetSource: capturedTarget.source,
+			targetCaptureStatus: "clarification_required",
+			targetCaptureReasonCode: "requested_target_repository_missing"
+		} : {
+			targetCaptureStatus: "resolved",
+			...capturedTarget.source ? { targetSource: capturedTarget.source } : {}
+		},
 		taskKind: kind === "prohibition" ? void 0 : classifyTaskIntent(sanitized),
 		authority: "root_instruction",
-		...kind === "requirement" ? buildActionPlan(sanitized, subject, surface, semanticAction) : {},
+		...kind === "requirement" ? buildActionPlan(actionText, subject, surface, semanticAction, restated === void 0 ? void 0 : capturedFull) : {},
 		...interpretation ? {
 			directive: interpretation.directive,
 			executee: interpretation.executee,
 			authorityDisposition: interpretation.authorityDisposition,
+			executionQualification: interpretation.qualification,
 			...interpretation.condition ? { condition: interpretation.condition } : {},
 			...interpretation.resumeEvent ? { resumeEvent: interpretation.resumeEvent } : {},
 			interpretationFingerprint: interpretation.fingerprint
 		} : {}
 	};
-	if ((interpretation ? interpretation.authorityDisposition !== "executable_now" && (interpretation.resumeEvent !== void 0 || interpretation.authorityDisposition === "conditional_wait") : false) || /(?:等待|暂停|等).{0,12}(?:用户|你|您|我).{0,12}(?:选择|确认|输入)(?:.{0,8}(?:后|再)?继续)?|收到.{0,8}(?:用户|你|您|我)?的?确认.{0,8}(?:后)?再继续|\bwait for (?:the )?(?:user|your)\b|\bcontinue only after (?:the )?(?:user's?|your) confirmation\b/i.test(sanitized)) item.waitAuthorization = {
+	const heuristics = maskQuotedSpans(sanitized);
+	if ((interpretation ? interpretation.authorityDisposition !== "executable_now" && (interpretation.resumeEvent !== void 0 || interpretation.authorityDisposition === "conditional_wait") : false) || /(?:等待|暂停|等).{0,12}(?:用户|你|您|我).{0,12}(?:选择|确认|输入)(?:.{0,8}(?:后|再)?继续)?|收到.{0,8}(?:用户|你|您|我)?的?确认.{0,8}(?:后)?再继续|\bwait for (?:the )?(?:user|your)\b|\bcontinue only after (?:the )?(?:user's?|your) confirmation\b/i.test(heuristics)) item.waitAuthorization = {
 		kind: "root_explicit_wait",
 		id: `wait:${id}:${sha256(sanitized).slice(0, 12)}`
 	};
-	else if (/(?:请选择|请决定|需要用户决定)|\b(?:please choose|user decision required)\b/i.test(sanitized)) item.waitAuthorization = {
+	else if (/(?:请选择|请决定|需要用户决定)|\b(?:please choose|user decision required)\b/i.test(heuristics)) item.waitAuthorization = {
 		kind: "user_decision_item",
 		id: `decision:${id}:${sha256(sanitized).slice(0, 12)}`
 	};
-	if (/(?:明确|允许|授权).{0,8}(?:延期|延后|移出范围)|(?:先)?延期(?:到|至).{1,24}(?:迭代|版本|里程碑|日期)|本(?:次|个)?迭代(?:暂时|暂)?不做|\b(?:explicitly )?(?:defer|remove from scope)\b|\bdefer\b.{0,24}\b(?:next iteration|milestone|release)\b|\bout of scope for (?:this|the current) iteration\b/i.test(sanitized)) item.deferAuthorization = {
+	if (/(?:明确|允许|授权).{0,8}(?:延期|延后|移出范围)|(?:先)?延期(?:到|至).{1,24}(?:迭代|版本|里程碑|日期)|本(?:次|个)?迭代(?:暂时|暂)?不做|\b(?:explicitly )?(?:defer|remove from scope)\b|\bdefer\b.{0,24}\b(?:next iteration|milestone|release)\b|\bout of scope for (?:this|the current) iteration\b/i.test(heuristics)) item.deferAuthorization = {
 		kind: "root_explicit_defer",
 		id: `defer:${id}:${sha256(sanitized).slice(0, 12)}`
 	};
-	if (/(?:持续推进|继续推进).{0,40}(?:直到|直至).{1,80}(?:为止|完成|结束)|(?:不要|不得|别)停.{0,40}(?:直到|直至)|\b(?:keep working|continue working|do not stop|don't stop)\b.{0,80}\b(?:until|unless)\b/i.test(sanitized)) item.persistenceAuthorization = {
+	if (/(?:持续推进|继续推进).{0,40}(?:直到|直至).{1,80}(?:为止|完成|结束)|(?:不要|不得|别)停.{0,40}(?:直到|直至)|\b(?:keep working|continue working|do not stop|don't stop)\b.{0,80}\b(?:until|unless)\b/i.test(heuristics)) item.persistenceAuthorization = {
 		kind: "root_explicit_persistence",
 		id: `persist:${id}:${sha256(sanitized).slice(0, 12)}`
 	};
 	return item;
 }
 /** The stateful actions a clause names, with the target captured for each. */
-function buildActionPlan(body, subject, surface, primary) {
+function buildActionPlan(body, subject, surface, primary, inherit) {
 	const actions = statefulActionsOfScope(body);
 	if (actions.length === 0 && isStatefulAction(primary)) actions.push(primary);
 	if (actions.length <= 1) return {};
 	return { actionPlan: actions.map((action) => {
 		const captured = captureRequestedTarget(action, body, subject, surface);
+		const environmentDefault = captured.source?.kind === "environment_default" ? environmentDefaultRepositoryTarget(action, subject) : void 0;
+		const planFields = Object.keys(captured.target);
+		const inherited = inherit !== void 0 && !inherit.reasonCode ? Object.fromEntries(Object.entries(inherit.target).filter(([field$1]) => !planFields.includes(field$1))) : {};
+		const reasonCode = restatedSpanAmbiguous(action, body) ? "requested_target_field_ambiguous" : captured.reasonCode ?? (planFields.length === 0 && Object.keys(inherited).length === 0 ? inherit?.reasonCode : void 0);
+		if (environmentDefault !== void 0) return {
+			action,
+			requestedTarget: {
+				...environmentDefault,
+				...inherited,
+				...captured.target
+			},
+			targetCaptureStatus: "clarification_required",
+			targetCaptureReasonCode: "requested_target_repository_missing"
+		};
 		return {
 			action,
-			requestedTarget: captured.target,
-			targetCaptureStatus: captured.reasonCode ? "clarification_required" : "resolved",
+			requestedTarget: {
+				...inherited,
+				...captured.target
+			},
+			targetCaptureStatus: reasonCode ? "clarification_required" : "resolved",
 			...captured.reasonCode ? { targetCaptureReasonCode: captured.reasonCode } : {}
 		};
 	}) };
@@ -3938,11 +5682,344 @@ async function effectuateBoundary(boundary, access) {
 }
 
 //#endregion
+//#region src/domain/work-unit.ts
+/**
+* Work-unit derivation rules (0.6.0, C04). Units are derived from the durable
+* message stream — nothing is ever written to the log — so the classification
+* below must stay deterministic and conservative: an ambiguous relation keeps
+* the current unit rather than inventing a new one, and a mis-assigned
+* obligation is recoverable through clarification, never through a silent
+* unit rewrite.
+*
+* The rules are the frozen P0 §3 C04 decision, in evaluation order:
+*
+* 1. The session's first root task message opens U001.
+* 2. A message explicitly linked to the current unit (item-ID reference,
+*    rebind control, a direct answer while an inquiry is open) stays in it.
+* 3. When the current unit has no open executable obligations left, a
+*    directive-bearing message opens a new unit; the old one is switched away,
+*    never retroactively closed.
+* 4. While the current unit still has open work, only an EXPLICIT switch
+*    marker (closed vocabulary, fixture-pinned) opens a new unit; anything
+*    else stays in the current unit.
+* 5. A DELEGATION-marked message opens a CHILD unit of the current unit. The
+*    child's open obligations are required descendants of the parent's
+*    closure (C04), so the parent cannot be certified while the delegated
+*    work is open, and the delegated result itself never closes the parent.
+*/
+/** Explicit task-switch markers; a closed vocabulary pinned by the v2 fixture. */
+const SWITCH_MARKER = new RegExp([
+	"^(?:另外|此外|另一(?:件事|个任务|个话题)|换个?话题|下一个任务|新任务|下一个问题|先做(?:另一|别的))[：:，,。。\\s]",
+	"^(?:now\\s+a\\s+)?(?:different|new|separate)\\s+task\\b",
+	"^next\\s+task\\b",
+	"^(?:on\\s+a\\s+related\\s+note|by\\s+the\\s+way)\\b"
+].join("|"), "i");
+/**
+* Explicit delegation markers; the same closed-vocabulary discipline as the
+* switch markers, pinned by the v2 fixture. Only a root message that actually
+* hands work to a subagent/subtask opens a child unit — "let the subagent …",
+* "delegate … to a subagent", "spawn a subagent …".
+*/
+const DELEGATION_MARKER = new RegExp([
+	"(?:让|由|交给|委派给?|派给|安排)(?:一个)?(?:子代理|子任务|子会话|小助手)",
+	"(?:子代理|子任务|子会话)(?:去|来|负责|执行|完成)",
+	"\\bdelegate\\s+(?:this|it|the\\s+\\w+|\\w+)\\s+to\\s+(?:a\\s+|the\\s+)?(?:subagent|sub-agent|child\\s+agent)\\b",
+	"\\b(?:spawn|dispatch|hand\\s+(?:this|it)\\s+off\\s+to)\\s+(?:a\\s+|the\\s+)?(?:subagent|sub-agent|child\\s+agent)\\b",
+	"\\bsub-?agent\\s+(?:should|must|to)\\s+\\w+"
+].join("|"), "i");
+/**
+* Whether a root message opens a new work unit rather than joining the
+* current one. `directiveBearing` says the message produced (or would
+* produce) requirement/acceptance work; `openWorkInCurrentUnit` is evaluated
+* against the state BEFORE the message is captured.
+*/
+function opensNewUnit(projection, text, directiveBearing, openWorkInCurrentUnit) {
+	if (!directiveBearing) return false;
+	if (DELEGATION_MARKER.test(text)) return true;
+	if (SWITCH_MARKER.test(text)) return true;
+	return !openWorkInCurrentUnit;
+}
+/**
+* Whether this message opens a child (delegated) unit of the current unit
+* rather than a sibling. Only meaningful together with {@link opensNewUnit}.
+*/
+function opensChildUnit(projection, text) {
+	return projection.currentUnitId !== void 0 && DELEGATION_MARKER.test(text);
+}
+/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
+const ITEM_REFERENCE = /\b([RAPU]\d{3})\b/g;
+/**
+* Whether the message explicitly links itself to the current unit's items.
+*
+* A reference counts only when it names an item that still exists as live work:
+* an ID that never existed, or one already `passed`/`superseded`, is history and
+* cannot pull a new instruction back into an old unit. A live item binds when it
+* belongs to the current unit's lineage — the current unit, an ancestor, or a
+* required descendant — while a unit-less (pre-v5) obligation is always a
+* legitimate continuation target.
+*/
+function explicitlyLinkedToCurrentUnit(projection, text) {
+	const current = projection.currentUnitId;
+	const lineage = current === void 0 ? void 0 : new Set([
+		current,
+		...unitAncestorIds(projection, current),
+		...unitDescendantIds(projection, current)
+	]);
+	for (const match of text.matchAll(ITEM_REFERENCE)) {
+		const item = projection.items.get(match[1]);
+		if (!item) continue;
+		if (item.status === "passed" || item.status === "superseded") continue;
+		if (lineage === void 0 || item.unitId === void 0) return true;
+		if (lineage.has(item.unitId)) return true;
+	}
+	return false;
+}
+/** The next unit identity in the session's sequence. */
+function nextUnitId(projection) {
+	let max = 0;
+	for (const unitId of projection.units.keys()) {
+		const num = Number(unitId.slice(1));
+		if (Number.isInteger(num) && num > max) max = num;
+	}
+	return `U${String(max + 1).padStart(3, "0")}`;
+}
+/**
+* Open a work unit.
+*
+* A SIBLING unit (no parent) becomes current and switches the previous current
+* unit away: that is a task switch, and the old unit's residual work stays
+* visible but no longer blocks the new task.
+*
+* A CHILD unit (delegated sub-unit) does NOT become current. The parent keeps
+* owning the session's certified scope, so the parent's own obligations are
+* never dropped when it delegates part of the work — the child's obligations
+* join the parent's closure as required descendants instead (C04). The child
+* is only ever created under an existing parent; a stray parent id would
+* create an orphan lineage, so it is dropped.
+*/
+function openUnit(projection, seq, headline, parentUnitId) {
+	const unitId = nextUnitId(projection);
+	const parent = parentUnitId !== void 0 && projection.units.has(parentUnitId) ? parentUnitId : void 0;
+	if (parent === void 0) {
+		const previous = projection.currentUnitId !== void 0 ? projection.units.get(projection.currentUnitId) : void 0;
+		if (previous && previous.switchedAwayAtSeq === void 0) previous.switchedAwayAtSeq = seq;
+		projection.currentUnitId = unitId;
+	}
+	const unit = {
+		unitId,
+		openedAtSeq: seq,
+		rootInputRefs: [{ seq }],
+		headline,
+		...parent !== void 0 ? { parentUnitId: parent } : {}
+	};
+	projection.units.set(unitId, unit);
+	return unit;
+}
+/** Fold one later root message into the current unit's input references. */
+function foldIntoCurrentUnit(projection, seq) {
+	const unit = projection.currentUnitId !== void 0 ? projection.units.get(projection.currentUnitId) : void 0;
+	if (unit) unit.rootInputRefs.push({ seq });
+}
+/**
+* The ancestors of `unitId`, nearest first. Lineage is derived from the
+* derived `parentUnitId` chain; a cycle (impossible from the derivation, but
+* possible in a hand-built projection) terminates instead of hanging.
+*/
+function unitAncestorIds(projection, unitId) {
+	const ancestors = [];
+	const seen = new Set([unitId]);
+	let cursor = projection.units.get(unitId)?.parentUnitId;
+	while (cursor !== void 0 && !seen.has(cursor)) {
+		ancestors.push(cursor);
+		seen.add(cursor);
+		cursor = projection.units.get(cursor)?.parentUnitId;
+	}
+	return ancestors;
+}
+/**
+* Every required descendant of `unitId`, in stable unit order: the units whose
+* `parentUnitId` chain reaches `unitId`. The closure of a unit includes the
+* open obligations of this set (C04).
+*/
+function unitDescendantIds(projection, unitId) {
+	const descendants = [];
+	const seen = new Set([unitId]);
+	const queue = [unitId];
+	while (queue.length > 0) {
+		const current = queue.shift();
+		for (const unit of projection.units.values()) {
+			if (unit.parentUnitId !== current || seen.has(unit.unitId)) continue;
+			seen.add(unit.unitId);
+			descendants.push(unit.unitId);
+			queue.push(unit.unitId);
+		}
+	}
+	return descendants.sort();
+}
+/** Record one delegated round-trip inside a unit as bounded audit evidence. */
+function recordDelegation(projection, unitId, ref) {
+	const unit = projection.units.get(unitId);
+	if (!unit) return;
+	const refs = unit.delegationRefs ?? [];
+	if (refs.some((entry) => entry.callId === ref.callId)) return;
+	refs.push({ ...ref });
+	unit.delegationRefs = refs;
+}
+/**
+* Whether the current unit still holds open executable work — the rule-3
+* handover test, evaluated BEFORE the new message's items are inserted.
+*
+* This is the SAME closure the certificate uses: the current unit's own open
+* work plus the open work of every required descendant unit. A parent whose own
+* items are all passed but whose delegated child is still open has not finished,
+* so an ordinary follow-up must not be treated as a handover to a new sibling
+* task — that would silently exclude the child from the certified scope.
+*/
+function currentUnitHasOpenWork(projection) {
+	const current = projection.currentUnitId;
+	if (current === void 0) return false;
+	const closure = new Set([current, ...unitDescendantIds(projection, current)]);
+	return [...projection.items.values()].some((item) => item.status === "pending" && item.unitId !== void 0 && closure.has(item.unitId) && item.kind !== "prohibition");
+}
+
+//#endregion
+//#region src/domain/closure.ts
+/**
+* The single open-closure implementation (0.6.0, C02/C04/D06-03/D06-07).
+*
+* Before 0.6.0, checkpoint, recovery, diagnostics, and the Goal gate each
+* filtered pending obligations with their own slightly different rule, and the
+* answers could disagree. Every question about "what is open" now goes through
+* this module:
+*
+* - {@link visiblePendingItems} — everything still pending, constraints first
+*   in spirit: display surfaces (recovery, status, checkpoint pages) show
+*   prohibitions too, because a constraint is never finished work.
+* - {@link certifiableOpenItems} — the obligations a completion certificate
+*   answers for: pending, not a prohibition. Prohibitions are standing
+*   constraints, never counted work; `answered` items closed by a trusted
+*   delivery are no longer open; `passed` and `superseded` never were.
+* - {@link unitClosureItemIds} — the v5 unit closure: the certified scope of
+*   one work unit, which is the unit's OWN open obligations PLUS the open
+*   obligations of every required descendant unit.
+* - {@link ancestorConstraints} / {@link ancestorConstraintForBinding} — the
+*   ancestor units' standing constraints (prohibitions and unsatisfied
+*   conditions) that stay in force for a descendant's matching obligations.
+*
+* Legacy sessions (no v5 boundary) have no units: they certify the whole
+* session, exactly what {@link certifiableOpenItems} returns.
+*/
+/** Every pending item, in stable display order. Constraints stay visible. */
+function visiblePendingItems(projection) {
+	return [...projection.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1));
+}
+/** The obligations a completion certificate answers for: open work, no constraints. */
+function certifiableOpenItems(projection) {
+	return visiblePendingItems(projection).filter((item) => item.kind !== "prohibition");
+}
+/**
+* 0.6.3 K4: the records in the certificate's own scope that the upgrade
+* eligibility check refused to inherit. They are NOT reopened as current debt
+* and no business effect is repeated — they block the CURRENT conclusion until
+* the root resolves them, which is what makes an old misreading stop being
+* silently carried forward. The scan deliberately includes records the
+* terminal filter would skip (`answered`), because that filter is exactly what
+* hid the 0.6.2 mixed-request misreading.
+*/
+function needsReviewObligations(projection) {
+	const ordering = (a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1);
+	const units = projection.boundaryProtocol === 5 && projection.currentUnitId !== void 0 ? new Set([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)]) : void 0;
+	return [...projection.items.values()].filter((item) => {
+		if (item.needsReview === void 0) return false;
+		if (item.unitId === void 0) return true;
+		if (units === void 0) return false;
+		return units.has(item.unitId);
+	}).sort(ordering);
+}
+/**
+* The certifiable open obligations inside one work unit's closure: the unit's
+* own open work plus the open work of every required descendant unit.
+*
+* A delegated child unit is REQUIRED work of its parent (C04): the parent has
+* not finished while the sub-unit it handed work to still has open
+* obligations, so the parent's certificate must answer for them too. The
+* reverse is deliberately not true — a child may be certified while unrelated
+* residual work exists in an ancestor or a sibling, which is what keeps a task
+* switch from being blocked by history.
+*/
+function unitClosureItemIds(projection, unitId) {
+	if (projection.boundaryProtocol !== 5) return [];
+	const inClosure = new Set([unitId, ...unitDescendantIds(projection, unitId)]);
+	return certifiableOpenItems(projection).filter((item) => item.unitId !== void 0 && inClosure.has(item.unitId)).map((item) => item.id);
+}
+/** Whether a prohibition declares no identity at all — a blanket ban on the action. */
+function isBlanketProhibition(action, requested) {
+	const key = requestedIdentityKey(action);
+	if (!key) return false;
+	return !requested || !Object.hasOwn(requested, key);
+}
+/** The ancestor obligations that act as standing constraints on this unit. */
+function standingAncestorConstraints(projection, unitId) {
+	if (projection.boundaryProtocol !== 5) return [];
+	const ancestors = unitAncestorIds(projection, unitId);
+	if (ancestors.length === 0) return [];
+	return visiblePendingItems(projection).filter((item) => {
+		if (item.unitId === void 0 || !ancestors.includes(item.unitId)) return false;
+		if (item.kind === "prohibition") return true;
+		return item.authorityDisposition === "conditional_wait" || item.waitAuthorization !== void 0;
+	});
+}
+/**
+* The ancestor constraint that blocks certifying `item` against a resolved
+* target, if any. This is the authoritative judge used by the certifier: the
+* ancestor constraint is compared with the SAME conservative identity rule the
+* mutation authorization uses, so a ban or an unsatisfied condition cannot be
+* discharged by certifying a descendant obligation that resolves the target
+* the ancestor constrained.
+*/
+function ancestorConstraintForBinding(projection, item, resolvedTarget) {
+	if (item.unitId === void 0) return void 0;
+	const action = item.semanticAction;
+	if (!action || action === "generic_run" || !isStatefulAction(action)) return void 0;
+	for (const constraint of standingAncestorConstraints(projection, item.unitId)) {
+		if (constraint.id === item.id || constraint.semanticAction !== action) continue;
+		if (!(constraint.kind === "prohibition" && isBlanketProhibition(action, constraint.requestedTarget) || requestedTargetMatchesResolved(action, constraint.requestedTarget, resolvedTarget))) continue;
+		return {
+			constraintId: constraint.id,
+			constraintUnitId: constraint.unitId,
+			itemId: item.id,
+			kind: constraint.kind === "prohibition" ? "prohibition" : "condition",
+			reasonCode: constraint.kind === "prohibition" ? "ancestor_prohibition_active" : "ancestor_condition_unsatisfied"
+		};
+	}
+}
+/**
+* The closure a completion certificate must answer for right now.
+*
+* Legacy sessions certify the whole session. v5 sessions certify the current
+* work unit's closure PLUS every pre-v5 obligation: items captured before the
+* boundary carry no unit and keep their birth rules, so a unit certificate
+* must never silently shrink their scope (migration table, P0 §6).
+*/
+function certificateClosure(projection) {
+	if (projection.boundaryProtocol === 5) {
+		const legacyIds = certifiableOpenItems(projection).filter((item) => item.unitId === void 0).map((item) => item.id);
+		const unitIds = projection.currentUnitId !== void 0 ? unitClosureItemIds(projection, projection.currentUnitId) : [];
+		return {
+			unitId: projection.currentUnitId,
+			itemIds: [...legacyIds, ...unitIds]
+		};
+	}
+	return { itemIds: certifiableOpenItems(projection).map((item) => item.id) };
+}
+
+//#endregion
 //#region src/domain/goal-gate.ts
 function hasCurrentCertificate(projection) {
 	const checkpoint = projection.checkpoints.at(-1);
 	let reason;
 	if (projection.integrity !== "valid") reason = "integrity_invalid";
+	else if (needsReviewObligations(projection).length > 0) reason = "legacy_record_needs_review";
 	else if (projection.hostStatus !== "supported") reason = "host_lock_unsupported";
 	else if (!checkpoint || checkpoint.result !== "certified") reason = "certificate_missing";
 	else if (checkpoint.epoch !== projection.epoch) reason = "stale_epoch";
@@ -5310,6 +7387,12 @@ function renderRecoveryPacket(projection, options = {}) {
 	const COMPLETION_RULE_COMPACT = "Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion.";
 	const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact ? COMPLETION_RULE_COMPACT : COMPLETION_RULE];
 	const completionRuleIndex = 1;
+	const needsReview = needsReviewObligations(projection);
+	if (needsReview.length > 0) {
+		const shown$1 = needsReview.slice(0, 2).map((item) => `[${clip(item.id, 20)}] ${item.needsReview.reason}`).join("; ");
+		const more = needsReview.length > 2 ? ` (+${needsReview.length - 2} more)` : "";
+		lines.push(`NEEDS REVIEW: ${shown$1}${more} — a record from an earlier rule set cannot be inherited; resolve it with the root before certifying.`);
+	}
 	if (items.some((item) => carriesCleanupCondition(deriveItemDiagnosis(projection, item).capability.gap))) lines.push(cleanupConditionFor(budget));
 	const pointer = "Details/omissions: context_guard_checkpoint (item_ids, evidence_scope=history, cursor).";
 	const evidence = [...projection.evidence.values()].filter((e) => items.some((item) => relevantEvidence(projection, item, e))).sort((a, b) => b.toolResultSeq - a.toolResultSeq || a.id.localeCompare(b.id));
@@ -5357,319 +7440,6 @@ function renderRecoveryPacket(projection, options = {}) {
 	}
 	lines.push(footer(count, refusals, shown), pointer);
 	return lines.join("\n");
-}
-
-//#endregion
-//#region src/domain/work-unit.ts
-/**
-* Work-unit derivation rules (0.6.0, C04). Units are derived from the durable
-* message stream — nothing is ever written to the log — so the classification
-* below must stay deterministic and conservative: an ambiguous relation keeps
-* the current unit rather than inventing a new one, and a mis-assigned
-* obligation is recoverable through clarification, never through a silent
-* unit rewrite.
-*
-* The rules are the frozen P0 §3 C04 decision, in evaluation order:
-*
-* 1. The session's first root task message opens U001.
-* 2. A message explicitly linked to the current unit (item-ID reference,
-*    rebind control, a direct answer while an inquiry is open) stays in it.
-* 3. When the current unit has no open executable obligations left, a
-*    directive-bearing message opens a new unit; the old one is switched away,
-*    never retroactively closed.
-* 4. While the current unit still has open work, only an EXPLICIT switch
-*    marker (closed vocabulary, fixture-pinned) opens a new unit; anything
-*    else stays in the current unit.
-* 5. A DELEGATION-marked message opens a CHILD unit of the current unit. The
-*    child's open obligations are required descendants of the parent's
-*    closure (C04), so the parent cannot be certified while the delegated
-*    work is open, and the delegated result itself never closes the parent.
-*/
-/** Explicit task-switch markers; a closed vocabulary pinned by the v2 fixture. */
-const SWITCH_MARKER = new RegExp([
-	"^(?:另外|此外|另一(?:件事|个任务|个话题)|换个?话题|下一个任务|新任务|下一个问题|先做(?:另一|别的))[：:，,。。\\s]",
-	"^(?:now\\s+a\\s+)?(?:different|new|separate)\\s+task\\b",
-	"^next\\s+task\\b",
-	"^(?:on\\s+a\\s+related\\s+note|by\\s+the\\s+way)\\b"
-].join("|"), "i");
-/**
-* Explicit delegation markers; the same closed-vocabulary discipline as the
-* switch markers, pinned by the v2 fixture. Only a root message that actually
-* hands work to a subagent/subtask opens a child unit — "let the subagent …",
-* "delegate … to a subagent", "spawn a subagent …".
-*/
-const DELEGATION_MARKER = new RegExp([
-	"(?:让|由|交给|委派给?|派给|安排)(?:一个)?(?:子代理|子任务|子会话|小助手)",
-	"(?:子代理|子任务|子会话)(?:去|来|负责|执行|完成)",
-	"\\bdelegate\\s+(?:this|it|the\\s+\\w+|\\w+)\\s+to\\s+(?:a\\s+|the\\s+)?(?:subagent|sub-agent|child\\s+agent)\\b",
-	"\\b(?:spawn|dispatch|hand\\s+(?:this|it)\\s+off\\s+to)\\s+(?:a\\s+|the\\s+)?(?:subagent|sub-agent|child\\s+agent)\\b",
-	"\\bsub-?agent\\s+(?:should|must|to)\\s+\\w+"
-].join("|"), "i");
-/**
-* Whether a root message opens a new work unit rather than joining the
-* current one. `directiveBearing` says the message produced (or would
-* produce) requirement/acceptance work; `openWorkInCurrentUnit` is evaluated
-* against the state BEFORE the message is captured.
-*/
-function opensNewUnit(projection, text, directiveBearing, openWorkInCurrentUnit) {
-	if (!directiveBearing) return false;
-	if (DELEGATION_MARKER.test(text)) return true;
-	if (SWITCH_MARKER.test(text)) return true;
-	return !openWorkInCurrentUnit;
-}
-/**
-* Whether this message opens a child (delegated) unit of the current unit
-* rather than a sibling. Only meaningful together with {@link opensNewUnit}.
-*/
-function opensChildUnit(projection, text) {
-	return projection.currentUnitId !== void 0 && DELEGATION_MARKER.test(text);
-}
-/** An explicit reference to a contract item identity (R001/A001/P001/U001). */
-const ITEM_REFERENCE = /\b([RAPU]\d{3})\b/g;
-/**
-* Whether the message explicitly links itself to the current unit's items.
-*
-* A reference counts only when it names an item that still exists as live work:
-* an ID that never existed, or one already `passed`/`superseded`, is history and
-* cannot pull a new instruction back into an old unit. A live item binds when it
-* belongs to the current unit's lineage — the current unit, an ancestor, or a
-* required descendant — while a unit-less (pre-v5) obligation is always a
-* legitimate continuation target.
-*/
-function explicitlyLinkedToCurrentUnit(projection, text) {
-	const current = projection.currentUnitId;
-	const lineage = current === void 0 ? void 0 : new Set([
-		current,
-		...unitAncestorIds(projection, current),
-		...unitDescendantIds(projection, current)
-	]);
-	for (const match of text.matchAll(ITEM_REFERENCE)) {
-		const item = projection.items.get(match[1]);
-		if (!item) continue;
-		if (item.status === "passed" || item.status === "superseded") continue;
-		if (lineage === void 0 || item.unitId === void 0) return true;
-		if (lineage.has(item.unitId)) return true;
-	}
-	return false;
-}
-/** The next unit identity in the session's sequence. */
-function nextUnitId(projection) {
-	let max = 0;
-	for (const unitId of projection.units.keys()) {
-		const num = Number(unitId.slice(1));
-		if (Number.isInteger(num) && num > max) max = num;
-	}
-	return `U${String(max + 1).padStart(3, "0")}`;
-}
-/**
-* Open a work unit.
-*
-* A SIBLING unit (no parent) becomes current and switches the previous current
-* unit away: that is a task switch, and the old unit's residual work stays
-* visible but no longer blocks the new task.
-*
-* A CHILD unit (delegated sub-unit) does NOT become current. The parent keeps
-* owning the session's certified scope, so the parent's own obligations are
-* never dropped when it delegates part of the work — the child's obligations
-* join the parent's closure as required descendants instead (C04). The child
-* is only ever created under an existing parent; a stray parent id would
-* create an orphan lineage, so it is dropped.
-*/
-function openUnit(projection, seq, headline, parentUnitId) {
-	const unitId = nextUnitId(projection);
-	const parent = parentUnitId !== void 0 && projection.units.has(parentUnitId) ? parentUnitId : void 0;
-	if (parent === void 0) {
-		const previous = projection.currentUnitId !== void 0 ? projection.units.get(projection.currentUnitId) : void 0;
-		if (previous && previous.switchedAwayAtSeq === void 0) previous.switchedAwayAtSeq = seq;
-		projection.currentUnitId = unitId;
-	}
-	const unit = {
-		unitId,
-		openedAtSeq: seq,
-		rootInputRefs: [{ seq }],
-		headline,
-		...parent !== void 0 ? { parentUnitId: parent } : {}
-	};
-	projection.units.set(unitId, unit);
-	return unit;
-}
-/** Fold one later root message into the current unit's input references. */
-function foldIntoCurrentUnit(projection, seq) {
-	const unit = projection.currentUnitId !== void 0 ? projection.units.get(projection.currentUnitId) : void 0;
-	if (unit) unit.rootInputRefs.push({ seq });
-}
-/**
-* The ancestors of `unitId`, nearest first. Lineage is derived from the
-* derived `parentUnitId` chain; a cycle (impossible from the derivation, but
-* possible in a hand-built projection) terminates instead of hanging.
-*/
-function unitAncestorIds(projection, unitId) {
-	const ancestors = [];
-	const seen = new Set([unitId]);
-	let cursor = projection.units.get(unitId)?.parentUnitId;
-	while (cursor !== void 0 && !seen.has(cursor)) {
-		ancestors.push(cursor);
-		seen.add(cursor);
-		cursor = projection.units.get(cursor)?.parentUnitId;
-	}
-	return ancestors;
-}
-/**
-* Every required descendant of `unitId`, in stable unit order: the units whose
-* `parentUnitId` chain reaches `unitId`. The closure of a unit includes the
-* open obligations of this set (C04).
-*/
-function unitDescendantIds(projection, unitId) {
-	const descendants = [];
-	const seen = new Set([unitId]);
-	const queue = [unitId];
-	while (queue.length > 0) {
-		const current = queue.shift();
-		for (const unit of projection.units.values()) {
-			if (unit.parentUnitId !== current || seen.has(unit.unitId)) continue;
-			seen.add(unit.unitId);
-			descendants.push(unit.unitId);
-			queue.push(unit.unitId);
-		}
-	}
-	return descendants.sort();
-}
-/** Record one delegated round-trip inside a unit as bounded audit evidence. */
-function recordDelegation(projection, unitId, ref) {
-	const unit = projection.units.get(unitId);
-	if (!unit) return;
-	const refs = unit.delegationRefs ?? [];
-	if (refs.some((entry) => entry.callId === ref.callId)) return;
-	refs.push({ ...ref });
-	unit.delegationRefs = refs;
-}
-/**
-* Whether the current unit still holds open executable work — the rule-3
-* handover test, evaluated BEFORE the new message's items are inserted.
-*
-* This is the SAME closure the certificate uses: the current unit's own open
-* work plus the open work of every required descendant unit. A parent whose own
-* items are all passed but whose delegated child is still open has not finished,
-* so an ordinary follow-up must not be treated as a handover to a new sibling
-* task — that would silently exclude the child from the certified scope.
-*/
-function currentUnitHasOpenWork(projection) {
-	const current = projection.currentUnitId;
-	if (current === void 0) return false;
-	const closure = new Set([current, ...unitDescendantIds(projection, current)]);
-	return [...projection.items.values()].some((item) => item.status === "pending" && item.unitId !== void 0 && closure.has(item.unitId) && item.kind !== "prohibition");
-}
-
-//#endregion
-//#region src/domain/closure.ts
-/**
-* The single open-closure implementation (0.6.0, C02/C04/D06-03/D06-07).
-*
-* Before 0.6.0, checkpoint, recovery, diagnostics, and the Goal gate each
-* filtered pending obligations with their own slightly different rule, and the
-* answers could disagree. Every question about "what is open" now goes through
-* this module:
-*
-* - {@link visiblePendingItems} — everything still pending, constraints first
-*   in spirit: display surfaces (recovery, status, checkpoint pages) show
-*   prohibitions too, because a constraint is never finished work.
-* - {@link certifiableOpenItems} — the obligations a completion certificate
-*   answers for: pending, not a prohibition. Prohibitions are standing
-*   constraints, never counted work; `answered` items closed by a trusted
-*   delivery are no longer open; `passed` and `superseded` never were.
-* - {@link unitClosureItemIds} — the v5 unit closure: the certified scope of
-*   one work unit, which is the unit's OWN open obligations PLUS the open
-*   obligations of every required descendant unit.
-* - {@link ancestorConstraints} / {@link ancestorConstraintForBinding} — the
-*   ancestor units' standing constraints (prohibitions and unsatisfied
-*   conditions) that stay in force for a descendant's matching obligations.
-*
-* Legacy sessions (no v5 boundary) have no units: they certify the whole
-* session, exactly what {@link certifiableOpenItems} returns.
-*/
-/** Every pending item, in stable display order. Constraints stay visible. */
-function visiblePendingItems(projection) {
-	return [...projection.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1));
-}
-/** The obligations a completion certificate answers for: open work, no constraints. */
-function certifiableOpenItems(projection) {
-	return visiblePendingItems(projection).filter((item) => item.kind !== "prohibition");
-}
-/**
-* The certifiable open obligations inside one work unit's closure: the unit's
-* own open work plus the open work of every required descendant unit.
-*
-* A delegated child unit is REQUIRED work of its parent (C04): the parent has
-* not finished while the sub-unit it handed work to still has open
-* obligations, so the parent's certificate must answer for them too. The
-* reverse is deliberately not true — a child may be certified while unrelated
-* residual work exists in an ancestor or a sibling, which is what keeps a task
-* switch from being blocked by history.
-*/
-function unitClosureItemIds(projection, unitId) {
-	if (projection.boundaryProtocol !== 5) return [];
-	const inClosure = new Set([unitId, ...unitDescendantIds(projection, unitId)]);
-	return certifiableOpenItems(projection).filter((item) => item.unitId !== void 0 && inClosure.has(item.unitId)).map((item) => item.id);
-}
-/** Whether a prohibition declares no identity at all — a blanket ban on the action. */
-function isBlanketProhibition(action, requested) {
-	const key = requestedIdentityKey(action);
-	if (!key) return false;
-	return !requested || !Object.hasOwn(requested, key);
-}
-/** The ancestor obligations that act as standing constraints on this unit. */
-function standingAncestorConstraints(projection, unitId) {
-	if (projection.boundaryProtocol !== 5) return [];
-	const ancestors = unitAncestorIds(projection, unitId);
-	if (ancestors.length === 0) return [];
-	return visiblePendingItems(projection).filter((item) => {
-		if (item.unitId === void 0 || !ancestors.includes(item.unitId)) return false;
-		if (item.kind === "prohibition") return true;
-		return item.authorityDisposition === "conditional_wait" || item.waitAuthorization !== void 0;
-	});
-}
-/**
-* The ancestor constraint that blocks certifying `item` against a resolved
-* target, if any. This is the authoritative judge used by the certifier: the
-* ancestor constraint is compared with the SAME conservative identity rule the
-* mutation authorization uses, so a ban or an unsatisfied condition cannot be
-* discharged by certifying a descendant obligation that resolves the target
-* the ancestor constrained.
-*/
-function ancestorConstraintForBinding(projection, item, resolvedTarget) {
-	if (item.unitId === void 0) return void 0;
-	const action = item.semanticAction;
-	if (!action || action === "generic_run" || !isStatefulAction(action)) return void 0;
-	for (const constraint of standingAncestorConstraints(projection, item.unitId)) {
-		if (constraint.id === item.id || constraint.semanticAction !== action) continue;
-		if (!(constraint.kind === "prohibition" && isBlanketProhibition(action, constraint.requestedTarget) || requestedTargetMatchesResolved(action, constraint.requestedTarget, resolvedTarget))) continue;
-		return {
-			constraintId: constraint.id,
-			constraintUnitId: constraint.unitId,
-			itemId: item.id,
-			kind: constraint.kind === "prohibition" ? "prohibition" : "condition",
-			reasonCode: constraint.kind === "prohibition" ? "ancestor_prohibition_active" : "ancestor_condition_unsatisfied"
-		};
-	}
-}
-/**
-* The closure a completion certificate must answer for right now.
-*
-* Legacy sessions certify the whole session. v5 sessions certify the current
-* work unit's closure PLUS every pre-v5 obligation: items captured before the
-* boundary carry no unit and keep their birth rules, so a unit certificate
-* must never silently shrink their scope (migration table, P0 §6).
-*/
-function certificateClosure(projection) {
-	if (projection.boundaryProtocol === 5) {
-		const legacyIds = certifiableOpenItems(projection).filter((item) => item.unitId === void 0).map((item) => item.id);
-		const unitIds = projection.currentUnitId !== void 0 ? unitClosureItemIds(projection, projection.currentUnitId) : [];
-		return {
-			unitId: projection.currentUnitId,
-			itemIds: [...legacyIds, ...unitIds]
-		};
-	}
-	return { itemIds: certifiableOpenItems(projection).map((item) => item.id) };
 }
 
 //#endregion
@@ -6823,6 +8593,17 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		records.push(built.record);
 		referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact));
 	}
+	const unreusable = needsReviewObligations(projection);
+	if (unreusable.length > 0) return {
+		status: "incomplete",
+		contractRevision: projection.contractRevision,
+		openItems: [...new Set([...certificateClosure(projection).itemIds, ...unreusable.map((item) => item.id)])],
+		rejectedBindings: unreusable.map((item) => ({
+			itemId: item.id,
+			reason: `a record captured under earlier rules cannot be inherited (${item.needsReview.reason}); resolve it with the root before certifying`,
+			reasonCode: "legacy_record_needs_review"
+		}))
+	};
 	const closure = certificateClosure(projection);
 	const open = closure.itemIds.filter((itemId) => !bindings.some((binding) => binding.itemId === itemId));
 	if (rejectedBindings.length || open.length) return {
@@ -11182,6 +12963,11 @@ function supersedeClauseByPartition(projection, item, receipt) {
 			directive: informational ? "informational" : void 0,
 			executee: "unresolved",
 			authorityDisposition: informational ? "informational" : "unresolved",
+			executionQualification: item.executionQualification?.status === "granted" ? { ...item.executionQualification } : {
+				status: "restricted",
+				reason: "inherited_restriction",
+				...item.executionQualification?.governedBy ? { governedBy: item.executionQualification.governedBy } : {}
+			},
 			interpretationFingerprint: `partition:${item.id}:${span.start}:${span.end}`,
 			rawTextSha256,
 			spans: [{
@@ -11577,6 +13363,16 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			break;
 		}
 	}
+	for (let round = 0; round < 8; round += 1) {
+		const unresolved = [...projection.items].filter(([id, item]) => !before.has(id) && item.targetSource?.kind === "environment_default");
+		if (unresolved.length === 0) break;
+		let resolvedAny = false;
+		for (const [, item] of unresolved) {
+			resolveInheritedGitTarget(projection, item);
+			if (item.targetSource?.kind === "unit_inherited") resolvedAny = true;
+		}
+		if (!resolvedAny) break;
+	}
 	for (const [id, item] of projection.items) {
 		if (before.has(id)) continue;
 		if (legacy) if (legacyAuthorityProven && item.semanticAction !== void 0 && item.semanticAction !== "generic_run" && item.targetCaptureStatus === "resolved") {
@@ -11591,6 +13387,208 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 	}
 	return coveredSpans;
 }
+/** The 0.6.3 eligibility check identity for a legacy record's own reading. */
+const ELIGIBILITY_CHECK_ID = "eligibility:0.6.3";
+/**
+* Mark one item as needing review (0.6.3 K4). Idempotent: the first reason and
+* its recorded revision stay, so a reload of the same log produces the same
+* fact and never re-marks or re-dates it.
+*/
+function markNeedsReview(item, reason, revision) {
+	if (item.needsReview) return;
+	item.needsReview = {
+		reason,
+		checkId: ELIGIBILITY_CHECK_ID,
+		recordedAtRevision: revision
+	};
+}
+/**
+* Whether a record's own reading still names work of its own, which makes an
+* information reading of it unsafe to inherit (0.6.3 K4, F062-01).
+*
+* The check re-reads the record's OWN bytes with the current scope rules and
+* asks whether a comma/semicolon run of them orders anything. It never rewrites
+* the record and never re-decides the historical answer: it decides only
+* whether today's eligibility layer may treat that answer as a current pass.
+*/
+function informationReadingNamesWork(text) {
+	const masked = maskCodeSpans(text);
+	if (!legacyQuestionReadingIsInformational(masked)) return false;
+	const scopes = interpretMessage(masked);
+	if (scopes.length === 0) return false;
+	return scopes.some((scope) => scope.authorityDisposition !== "informational");
+}
+/**
+* The pure upgrade-eligibility predicate: the records in the current closure
+* scope that may NOT be inherited as a current pass, with the reason that
+* disqualifies each. Exported so the rule can be tested and read back directly,
+* never to let a caller skip it.
+*/
+function legacyRecordsNeedingReview(projection) {
+	return eligibilityReviewReasons(projection).map(([itemId, reason]) => ({
+		itemId,
+		reason
+	}));
+}
+/**
+* The eligibility findings for the current closure scope, as `[itemId, reason]`
+* pairs. The scope is the current unit plus its required descendants, plus every
+* unit-less (pre-v5) record, which keeps its birth rules; the selection is made
+* on the RECORD's own scope and never on a terminal status, so an item already
+* `answered` or `passed` inside the scope is still seen while another unit's
+* record never leaks in.
+*/
+function eligibilityReviewReasons(projection) {
+	const closureUnits = projection.boundaryProtocol === 5 && projection.currentUnitId !== void 0 ? new Set([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)]) : void 0;
+	const findings = [];
+	for (const item of projection.items.values()) {
+		if (item.status === "superseded") continue;
+		if (closureUnits !== void 0 && item.unitId !== void 0 && !closureUnits.has(item.unitId)) continue;
+		if (item.needsReview) continue;
+		const recordedVersion = item.stateVersion;
+		if (recordedVersion !== void 0 && recordedVersion !== 1) {
+			findings.push([item.id, "unknown_state_version"]);
+			continue;
+		}
+		const informationReading = item.directive === "informational" || item.authorityDisposition === "informational" || item.taskKind === "inquiry";
+		if (informationReading && informationReadingNamesWork(item.normalizedText)) {
+			findings.push([item.id, "legacy_mixed_information_scope"]);
+			continue;
+		}
+		if ((item.semanticAction === "commit" || item.semanticAction === "push" || item.semanticAction === "pull" || item.semanticAction === "fetch") && item.targetCaptureStatus === "resolved" && item.targetSource === void 0) {
+			findings.push([item.id, "legacy_environment_default_target"]);
+			continue;
+		}
+		if (item.executionQualification === void 0 && !informationReading) findings.push([item.id, "legacy_missing_execution_qualification"]);
+	}
+	return findings;
+}
+/**
+* Apply the 0.6.3 eligibility pass to an already-derived projection.
+*
+* This is the upgrade entry: it re-checks the records a session already holds
+* after an EVENT-SOURCED reading has been applied to them. It is idempotent —
+* a project already marked keeps its original reason and revision — and it is
+* the same function the derivation runs, so a replay and an in-place upgrade
+* cannot disagree.
+*/
+function applyUpgradeEligibility(projection) {
+	for (const [itemId, reason] of eligibilityReviewReasons(projection)) {
+		const item = projection.items.get(itemId);
+		if (item) markNeedsReview(item, reason, projection.contractRevision);
+	}
+}
+/**
+* The identity two repository references share when they are the same object.
+* A textual path is compared with its trailing separators removed, so three
+* clauses that all name /repo-b collapse onto one candidate. Comparison is
+* deliberately conservative: only spellings of the same path collapse, and a
+* different path stays a different candidate.
+*/
+function canonicalRepositoryKey(repository) {
+	return repository.trim().replace(/[\\/]+$/, "");
+}
+/**
+* The git actions whose named repository is one and the same user selection.
+* "推送仓库 /work/repo" authorizes the commit of that same repository too, so a
+* later short reference ("提交并推送") inherits the selection rather than
+* asking again or falling back to the session directory.
+*/
+const GIT_TARGET_ACTIONS = [
+	"commit",
+	"push",
+	"pull",
+	"fetch"
+];
+/**
+* Resolve a git obligation whose clause named no repository (0.6.3 K2).
+*
+* The session working directory is environment context, so it never becomes
+* the user's choice by itself. A later "提交并推送" may instead inherit the
+* repository from the SAME work unit when exactly ONE candidate holds an
+* auditable user selection (an explicit name or path, a confirmed host
+* selection, or a target that was itself inherited from one).
+*
+* A candidate has to be a POSITIVE, still-authorized work object, which is what
+* an earlier round of this batch got wrong: a prohibition that names /repo-b
+* forbids pushing THERE and never selects it. So a source must be a pending,
+* non-legacy requirement whose disposition is `executable_now`, with no wait or
+* condition and a resolved target, and candidates are compared by repository
+* IDENTITY rather than per item, so three clauses naming /repo-b are one
+* candidate. Two or more distinct repositories stay ambiguous and produce a
+* minimal clarification request; none leaves the target missing.
+*/
+function resolveInheritedGitTarget(projection, item) {
+	if (item.targetSource?.kind !== "environment_default") return;
+	if (!item.semanticAction || !GIT_TARGET_ACTIONS.includes(item.semanticAction)) return;
+	const candidates = [];
+	for (const [otherId, other] of projection.items) {
+		if (otherId === item.id || other.status !== "pending") continue;
+		if (other.kind !== "requirement") continue;
+		if (!other.semanticAction || !GIT_TARGET_ACTIONS.includes(other.semanticAction)) continue;
+		if (other.authorityDisposition !== void 0 && other.authorityDisposition !== "executable_now") continue;
+		if (other.waitAuthorization !== void 0) continue;
+		if (other.legacyFlags?.length) continue;
+		if (other.targetCaptureStatus !== "resolved") continue;
+		if (other.unitId !== item.unitId) continue;
+		const source = other.targetSource?.kind;
+		if (source === void 0 || source === "environment_default") continue;
+		if (typeof other.requestedTarget?.repository !== "string") continue;
+		candidates.push(other);
+	}
+	const repositories = /* @__PURE__ */ new Map();
+	for (const candidate of candidates) {
+		const key = canonicalRepositoryKey(candidate.requestedTarget.repository);
+		const group = repositories.get(key);
+		if (group) group.push(candidate);
+		else repositories.set(key, [candidate]);
+	}
+	if (repositories.size === 1) {
+		const group = [...repositories.values()][0];
+		const source = group[0];
+		const identityField = requestedIdentityKey(item.semanticAction ?? "generic_run");
+		const accepted = new Set(ACTION_MANIFEST.actions[item.semanticAction ?? "generic_run"].resolvedTargetKeys);
+		const environmentDefaultIdentity = item.targetSource?.kind === "environment_default" && item.requestedTarget?.[identityField ?? ""] !== void 0;
+		const merged = {};
+		for (const [key, value] of Object.entries(item.requestedTarget ?? {})) {
+			if (!accepted.has(key)) continue;
+			if (key === identityField && environmentDefaultIdentity) continue;
+			merged[key] = value;
+		}
+		let ambiguousField;
+		for (const key of accepted) {
+			if (Object.hasOwn(merged, key)) continue;
+			const values = group.map((candidate) => candidate.requestedTarget?.[key]).filter((value) => value !== void 0);
+			if (values.length === 0) continue;
+			if (new Set(values.map((value) => key === "repository" && typeof value === "string" ? canonicalRepositoryKey(value) : JSON.stringify(value))).size > 1) {
+				ambiguousField = key;
+				continue;
+			}
+			merged[key] = values[0];
+		}
+		if (ambiguousField !== void 0) {
+			item.requestedTarget = merged;
+			item.targetCaptureStatus = "clarification_required";
+			item.targetCaptureReasonCode = "requested_target_field_ambiguous";
+			return;
+		}
+		if (identityField === void 0 || merged[identityField] === void 0) {
+			item.targetCaptureStatus = "clarification_required";
+			item.targetCaptureReasonCode = "requested_target_repository_missing";
+			return;
+		}
+		item.requestedTarget = merged;
+		item.targetSource = {
+			kind: "unit_inherited",
+			inheritedFrom: source.id
+		};
+		item.targetCaptureStatus = "resolved";
+		delete item.targetCaptureReasonCode;
+		return;
+	}
+	item.targetCaptureStatus = "clarification_required";
+	item.targetCaptureReasonCode = repositories.size > 1 ? "requested_target_repository_ambiguous" : "requested_target_repository_missing";
+}
 function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance) {
 	const revision = projection.contractRevision + 1;
 	const id = nextId(projection.items, segment.kind);
@@ -11598,6 +13596,7 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 	const operation = extractOperation(segment.body);
 	const item = captureItem(segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation, segment.interpretation);
 	if (unitId !== void 0) item.unitId = unitId;
+	resolveInheritedGitTarget(projection, item);
 	if (provenance) {
 		item.rawTextSha256 = provenance.rawTextSha256;
 		if (provenance.span) item.spans = [provenance.span];
@@ -11638,6 +13637,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	let realRootInputSeen = false;
 	const trustedDeliveries = (v5BoundarySeq !== void 0 ? deriveTrustedDeliveries(sourceEvents) : []).filter((delivery) => delivery.turnEndSeq > v5BoundarySeq);
 	let deliveryCursor = 0;
+	const reviewedItemIds = (view) => eligibilityReviewReasons(view).map(([id]) => id);
 	const interpretationFacts = [];
 	const applyDeliveriesUpTo = (seq) => {
 		while (deliveryCursor < trustedDeliveries.length && trustedDeliveries[deliveryCursor].turnEndSeq <= seq) {
@@ -11647,7 +13647,9 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 			if (!inputSeqs) continue;
 			const owningUnitId = turnUnitIds.get(delivery.turn);
 			const eligibleUnitIds = owningUnitId === void 0 ? void 0 : new Set([owningUnitId, ...unitDescendantIds(projection, owningUnitId)]);
+			const reviewItemIds = new Set(reviewedItemIds(projection));
 			for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds, interpretationFacts)) {
+				if (reviewItemIds.has(itemId)) continue;
 				const item = projection.items.get(itemId);
 				if (!item || item.status !== "pending") continue;
 				const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
@@ -11841,6 +13843,11 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 								executee: "unresolved",
 								immediatelyExecutable: false,
 								authorityDisposition: "informational",
+								qualification: {
+									status: "restricted",
+									reason: "governed_scope",
+									governedBy: "attachment"
+								},
 								fingerprint: `asset:${identity.slice(0, 16)}`
 							}
 						}, `m${event.seq}:asset:${index}`, scope.cwd || "scope", "scope", unitId);
@@ -12169,6 +14176,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	}
 	projection.enabled = enabled;
 	projection.epoch = epoch;
+	applyUpgradeEligibility(projection);
 	if (interpretationFacts.length > 64) interpretationFacts.splice(0, interpretationFacts.length - 64);
 	projection.interpretationFacts = interpretationFacts;
 	projection.trustedSelections = deriveTrustedSelections(sourceEvents, { questionToolNames: DEFAULT_QUESTION_TOOL_NAMES });
@@ -13226,4 +15234,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { extractToolSubject as $, proposeRebindV042 as $n, requestedTargetMatchesResolved as $r, proofDigest as $t, lifecyclePhase as A, NO_PROGRESS_RECORD_PREFIX as An, isOpenObligation as Ar, compareHostVersions as At, RELEASE_RESERVATION_PREFIX as B, observeAssistantOutcome as Bn, BOUNDED_ARTIFACT_TYPES as Br, certifyCheckpoint as Bt, gitCommandMatchesTarget as C, recoveryDigest as Cn, extractMethod as Cr, evaluateToolSurfaceCapability as Ct, FIRST_STEP_GUIDANCE as D, evidenceMatchesItem as Dn, interpretClause as Dr, MIN_SUPPORTED_HOST_VERSION as Dt, verifiedLinearCommitReadback as E, evidenceCoverage as En, segmentClauses as Er, LATEST_SUPPORTED_HOST_VERSION as Et, PROTOCOL_V4_NOTICE as F, decisionBoundaryKey as Fn, statefulActionsOfScope as Fr, RC015_HOST_PACKAGES as Ft, readbackSettlesContract as G, effectuateBoundary as Gn, STOP_PROTOCOL_VERSION as Gr, PROOF_PROTOCOL_VERSION as Gt, contractById as H, goalCompletionDenial as Hn, CERTIFICATE_VERSION_V2 as Hr, PROOF_KINDS as Ht, PROTOCOL_V5_NOTICE as I, isRootPauseRequest as In, canonicalRegistryBase as Ir, RC1_HOST_PACKAGES as It, releasePreEffectDecision as J, currentContractDigest as Jn, actionCompatible as Jr, bindProofV2ToProjection as Jt, releaseContractFor as K, isCurrentAcceptedBoundary as Kn, STOP_PROTOCOL_VERSION_V2 as Kr, PROOF_PROTOCOL_VERSION_V2 as Kt, deriveProjection as L, isWholeTaskCompletionClaim as Ln, npmEscapedPackageName as Lr, ALPHA3_HOST_PACKAGES as Lt, CAPTURE_V042_NOTICE as M, classifyCompletionClaim as Mn, maskCodeSpans as Mr, parseHostVersion as Mt, DEFAULT_DELEGATION_TOOL_NAMES as N, decideTurnBoundary as Nn, namedActions as Nr, satisfiesSupportedHostRange as Nt, claimedBatchHasRealRootInput as O, isVerifyingCapability as On, interpretMessage as Or, SUPPORTED_HOST_RANGE as Ot, PROTOCOL_V3_NOTICE as P, decideTurnStopping as Pn, semanticActionOfScope as Pr, RC015_RC2_HOST_PACKAGES as Pt, extractTextContent as Q, proposeRebindOutcome as Qn, requestedTargetAuthorizesMutation as Qr, proofCapabilityReport as Qt, RELEASE_OPERATIONS as R, latestAssistantText as Rn, ACTION_MANIFEST as Rr, authorityCaptureCounts as Rt, executeRevalidatedGitEffect as S, openItems as Sn, extractArtifactPaths as Sr, evaluateHostLock as St, revalidateGitPrestate as T, bindingSatisfies as Tn, isInformationalMessage as Tr, selectHostCohort as Tt, inFlightReservation as U, hasCurrentCertificate as Un, SEMANTIC_ACTIONS as Ur, PROOF_KINDS_V2 as Ut, RELEASE_SETTLEMENT_PREFIX as V, progressFingerprint as Vn, CERTIFICATE_VERSION as Vr, PROOF_CAPABILITY_MATRIX as Vt, normalizeReleaseContract as W, availableBoundaryQualifications as Wn, STATEFUL_ACTIONS as Wr, PROOF_MANIFEST_DOMAIN_V2 as Wt, supersedeItem as X, confirmRebind as Xn, isStatefulAction as Xr, createProofManifest as Xt, reservationFor as Y, createProjection as Yn, boundedArtifactChoiceMatches as Yr, canonicalProjection as Yt, evidenceFromPersistedToolResult as Z, proposeRebind as Zn, requestedIdentityKey as Zr, createProofManifestV2 as Zt, GIT_COMMAND_MANIFEST_IDS as _, DEFAULT_RECOVERY_CHAR_BUDGET as _n, removalIsComplete as _r, LEGACY_HOST_COHORTS as _t, injectActiveProfileHostLock as a, validateManifest as ai, requiredSubjectsOf as an, parseConfirmationMessage as ar, parseShellCommand as at, commitTreeSnapshotDigest as b, cleanupConditionFor as bn, captureItem as br, evaluateExternalWaitCapability as bt, packageRowsFromPnpmLock as c, canonicalizePath as ci, sessionQueryV2 as cn, evidenceAvailabilityReason as cr, ACTIVE_HOST_LAUNCHER_VERSION as ct, resolveInstalledHostLock as d, sanitizeClauseText as di, certifiableOpenItems as dn, DEPENDENCY_FREE_ONLY_CONDITION as dr, BASE_HOST_PACKAGES as dt, semanticActionFromCommand as ei, proofDigestV2 as en, rebindAttemptKey as er, isDeterministicCheck as et, verifyComposedHostLockDump as f, sanitizeUrl as fi, certificateClosure as fn, actionHasCertificationPath as fr, DEFAULT_HOST_LOCK as ft, snapshotSessionEvents as g, CLEANUP_CONDITION_RULE_SHORT as gn, partialFailureOf as gr, HOST_COHORTS as gt, SessionApiError as h, CLEANUP_CONDITION_RULE_COMPACT as hn, capabilityFactOf as hr, HOST_CAPABILITY_PACKAGE_GROUPS as ht, hostLockRowsFromComposedDump as i, COMMAND_SURFACE_MANIFEST as ii, proofV2Rejection as in, isFrozenV042RebindResponse as ir, parsePwshCommand as it, previewFirstStepInjection as j, NO_PROGRESS_TURNS_BEFORE_STOP as jn, kindOfScope as jr, evaluateMinimumHostVersion as jt, firstStepGuidance as k, CONTROL_RECORD_PREFIX as kn, isExecutableItem as kr, SUPPORTED_HOST_VERSIONS as kt, readActiveHostGraph as l, digestStrings as li, validateProofManifest as ln, itemDiagnosis as lr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as lt, SESSION_EVENT_ENVELOPE_INVALID as m, CLEANUP_CONDITION_RULE as mn, capabilityConsequence as mr, GOAL_HOST_PACKAGES as mt, combineHostPolicy as n, validateActionManifest as ni, proofHostSurfacesOf as nn, replayRebindResult as nr, canonicalArgvFromCommand as nt, inspectTargetHostGraph as o, classifyTaskIntent as oi, scopeCoverageDigest as on, capabilityRemedyPhrase as or, ACTIVE_HOST_COHORT_ID as ot, SESSION_API_UNSUPPORTED as p, sha256 as pi, unitDescendantIds as pn, admissibleForRemoval as pr, EXPECTED_HOST_PACKAGES as pt, releaseCoverage as q, qualifyBoundary as qn, SUPPORTED_EVIDENCE_ADAPTERS as qr, bindProofToProjection as qt, hostLockContextFromComposedDump as r, validateActionTarget as ri, proofOperationMatches as rn, CONFIRM_LINE_PATTERN as rr, isRunExecutable as rt, packageRowsFromActiveGraph as s, classifyUserInteraction as si, sessionQuery as sn, deriveItemDiagnosis as sr, ACTIVE_HOST_COHORT_IDS as st, HostProfileError as t, semanticActionFromText as ti, proofEvidenceConstraints as tn, rebindResponse as tr, withDurability as tt, resolveActiveProfileHostLock as u, normalizeClause as ui, validateProofManifestV2 as un, relevantEvidence as ur, ALPHA2_HOST_PACKAGES as ut, GIT_COMMAND_TEMPLATES as v, MIN_RECOVERY_CHAR_BUDGET as vn, removalIsPartiallyKnown as vr, bindExecutableIdentity as vt, parseGitCommandManifest as w, renderRecoveryPacket as wn, extractOperation as wr, hostVersionFromPackages as wt, createGitPrestateEnvelope as x, closingHint as xn, classifyClause as xr, evaluateHostCapability as xt, commitIndexSnapshotDigest as y, carriesCleanupCondition as yn, captureClause as yr, bindLiveGoalCapability as yt, RELEASE_OPERATION_SURFACES as z, latestRootInstruction as zn, ACTION_MANIFEST_VERSION as zr, segmentAuthorityBlocks as zt };
+export { evidenceFromPersistedToolResult as $, proposeRebind as $n, isRestatement as $r, createProofManifestV2 as $t, lifecyclePhase as A, requestedTargetMatchesResolved as Ai, NO_PROGRESS_TURNS_BEFORE_STOP as An, canonicalRegistryBase as Ar, SUPPORTED_HOST_RANGE as At, RELEASE_OPERATIONS as B, sanitizeClauseText as Bi, progressFingerprint as Bn, clauseIsProtected as Br, authorityCaptureCounts as Bt, gitCommandMatchesTarget as C, STOP_PROTOCOL_VERSION_V2 as Ci, renderRecoveryPacket as Cn, classifyClause as Cr, evaluateHostCapability as Ct, FIRST_STEP_GUIDANCE as D, isStatefulAction as Di, isVerifyingCapability as Dn, extractOperation as Dr, selectHostCohort as Dt, verifiedLinearCommitReadback as E, boundedArtifactChoiceMatches as Ei, evidenceMatchesItem as En, extractMethod as Er, hostVersionFromPackages as Et, PROTOCOL_V4_NOTICE as F, COMMAND_SURFACE_MANIFEST as Fi, isRootPauseRequest as Fn, LEGACY_QUALIFICATION as Fr, satisfiesSupportedHostRange as Ft, inFlightReservation as G, unitDescendantIds as Gn, interpretClause as Gr, PROOF_KINDS_V2 as Gt, RELEASE_RESERVATION_PREFIX as H, sha256 as Hi, hasCurrentCertificate as Hn, governedClauseRestrictsExecution as Hr, certifyCheckpoint as Ht, PROTOCOL_V5_NOTICE as I, validateManifest as Ii, isWholeTaskCompletionClaim as In, actionVerbMatches as Ir, RC015_RC2_HOST_PACKAGES as It, releaseContractFor as J, isCurrentAcceptedBoundary as Jn, isExecutableItem as Jr, PROOF_PROTOCOL_VERSION_V2 as Jt, normalizeReleaseContract as K, availableBoundaryQualifications as Kn, interpretMessage as Kr, PROOF_MANIFEST_DOMAIN_V2 as Kt, applyUpgradeEligibility as L, canonicalizePath as Li, latestAssistantText as Ln, clarifiedSpanOf as Lr, RC015_HOST_PACKAGES as Lt, CAPTURE_V042_NOTICE as M, semanticActionFromText as Mi, decideTurnBoundary as Mn, classifyTaskIntent as Mr, compareHostVersions as Mt, DEFAULT_DELEGATION_TOOL_NAMES as N, validateActionManifest as Ni, decideTurnStopping as Nn, classifyUserInteraction as Nr, evaluateMinimumHostVersion as Nt, claimedBatchHasRealRootInput as O, requestedIdentityKey as Oi, CONTROL_RECORD_PREFIX as On, isInformationalMessage as Or, LATEST_SUPPORTED_HOST_VERSION as Ot, PROTOCOL_V3_NOTICE as P, validateActionTarget as Pi, decisionBoundaryKey as Pn, GRANTED_QUALIFICATION as Pr, parseHostVersion as Pt, supersedeItem as Q, confirmRebind as Qn, isQuestionScopeNeedingReview as Qr, createProofManifest as Qt, deriveProjection as R, digestStrings as Ri, latestRootInstruction as Rn, clauseAsksOwnQuestion as Rr, RC1_HOST_PACKAGES as Rt, executeRevalidatedGitEffect as S, STOP_PROTOCOL_VERSION as Si, recoveryDigest as Sn, captureItem as Sr, evaluateExternalWaitCapability as St, revalidateGitPrestate as T, actionCompatible as Ti, evidenceCoverage as Tn, extractArtifactPaths as Tr, evaluateToolSurfaceCapability as Tt, RELEASE_SETTLEMENT_PREFIX as U, certifiableOpenItems as Un, hasOrderedCoordination as Ur, PROOF_CAPABILITY_MATRIX as Ut, RELEASE_OPERATION_SURFACES as V, sanitizeUrl as Vi, goalCompletionDenial as Vn, explanationHasActionResidue as Vr, segmentAuthorityBlocks as Vt, contractById as W, certificateClosure as Wn, hasQuestionScope as Wr, PROOF_KINDS as Wt, releasePreEffectDecision as X, currentContractDigest as Xn, isInformationalFragment as Xr, bindProofV2ToProjection as Xt, releaseCoverage as Y, qualifyBoundary as Yn, isExplanationScope as Yr, bindProofToProjection as Yt, reservationFor as Z, createProjection as Zn, isOpenObligation as Zr, canonicalProjection as Zt, GIT_COMMAND_MANIFEST_IDS as _, BOUNDED_ARTIFACT_TYPES as _i, MIN_RECOVERY_CHAR_BUDGET as _n, capabilityFactOf as _r, HOST_CAPABILITY_PACKAGE_GROUPS as _t, injectActiveProfileHostLock as a, namedActions as ai, proofOperationMatches as an, CONFIRM_LINE_PATTERN as ar, isRunExecutable as at, commitTreeSnapshotDigest as b, SEMANTIC_ACTIONS as bi, closingHint as bn, removalIsPartiallyKnown as br, bindExecutableIdentity as bt, packageRowsFromPnpmLock as c, questionHeadsClause as ci, scopeCoverageDigest as cn, capabilityRemedyPhrase as cr, ACTIVE_HOST_COHORT_ID as ct, resolveInstalledHostLock as d, semanticActionOfScope as di, validateProofManifest as dn, itemDiagnosis as dr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as dt, itemHoldsExecutionAuthority as ei, proofCapabilityReport as en, proposeRebindOutcome as er, extractTextContent as et, verifyComposedHostLockDump as f, splitTextFragments as fi, validateProofManifestV2 as fn, relevantEvidence as fr, ALPHA2_HOST_PACKAGES as ft, snapshotSessionEvents as g, ACTION_MANIFEST_VERSION as gi, DEFAULT_RECOVERY_CHAR_BUDGET as gn, capabilityConsequence as gr, GOAL_HOST_PACKAGES as gt, SessionApiError as h, ACTION_MANIFEST as hi, CLEANUP_CONDITION_RULE_SHORT as hn, admissibleForRemoval as hr, EXPECTED_HOST_PACKAGES as ht, hostLockRowsFromComposedDump as i, maskQuotedSpans as ii, proofHostSurfacesOf as in, replayRebindResult as ir, canonicalArgvFromCommand as it, previewFirstStepInjection as j, semanticActionFromCommand as ji, classifyCompletionClaim as jn, npmEscapedPackageName as jr, SUPPORTED_HOST_VERSIONS as jt, firstStepGuidance as k, requestedTargetAuthorizesMutation as ki, NO_PROGRESS_RECORD_PREFIX as kn, segmentClauses as kr, MIN_SUPPORTED_HOST_VERSION as kt, readActiveHostGraph as l, reportingHeadGoverns as li, sessionQuery as ln, deriveItemDiagnosis as lr, ACTIVE_HOST_COHORT_IDS as lt, SESSION_EVENT_ENVELOPE_INVALID as m, verbIsNegated as mi, CLEANUP_CONDITION_RULE_COMPACT as mn, actionHasCertificationPath as mr, DEFAULT_HOST_LOCK as mt, combineHostPolicy as n, legacyQuestionReadingIsInformational as ni, proofDigestV2 as nn, rebindAttemptKey as nr, isDeterministicCheck as nt, inspectTargetHostGraph as o, opensWithDirective as oi, proofV2Rejection as on, isFrozenV042RebindResponse as or, parsePwshCommand as ot, SESSION_API_UNSUPPORTED as p, statefulActionsOfScope as pi, CLEANUP_CONDITION_RULE as pn, DEPENDENCY_FREE_ONLY_CONDITION as pr, BASE_HOST_PACKAGES as pt, readbackSettlesContract as q, effectuateBoundary as qn, introducesActionClause as qr, PROOF_PROTOCOL_VERSION as qt, hostLockContextFromComposedDump as r, maskCodeSpans as ri, proofEvidenceConstraints as rn, rebindResponse as rr, withDurability as rt, packageRowsFromActiveGraph as s, qualificationOfClause as si, requiredSubjectsOf as sn, parseConfirmationMessage as sr, parseShellCommand as st, HostProfileError as t, kindOfScope as ti, proofDigest as tn, proposeRebindV042 as tr, extractToolSubject as tt, resolveActiveProfileHostLock as u, restatedContentOf as ui, sessionQueryV2 as un, evidenceAvailabilityReason as ur, ACTIVE_HOST_LAUNCHER_VERSION as ut, GIT_COMMAND_TEMPLATES as v, CERTIFICATE_VERSION as vi, carriesCleanupCondition as vn, partialFailureOf as vr, HOST_COHORTS as vt, parseGitCommandManifest as w, SUPPORTED_EVIDENCE_ADAPTERS as wi, bindingSatisfies as wn, environmentDefaultRepositoryTarget as wr, evaluateHostLock as wt, createGitPrestateEnvelope as x, STATEFUL_ACTIONS as xi, openItems as xn, captureClause as xr, bindLiveGoalCapability as xt, commitIndexSnapshotDigest as y, CERTIFICATE_VERSION_V2 as yi, cleanupConditionFor as yn, removalIsComplete as yr, LEGACY_HOST_COHORTS as yt, legacyRecordsNeedingReview as z, normalizeClause as zi, observeAssistantOutcome as zn, clauseIsGoverned as zr, ALPHA3_HOST_PACKAGES as zt };

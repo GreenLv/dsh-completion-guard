@@ -1,5 +1,6 @@
 import { normalizeClause } from './canonicalize.js'
 import { extractArtifactPaths, extractMethod } from './capture.js'
+import { governedClauseRestrictsExecution, introducesActionClause, splitTextFragments } from './semantics.js'
 
 export type UserInteractionKind = 'instruction' | 'conversational'
 
@@ -101,13 +102,150 @@ function hasStrongTaskFeature(text: string): boolean {
  * outside progression/meta spans), then the meta-question and meta-comment
  * forms, and finally a progression lead over a featureless remainder.
  */
+/**
+ * The message with every subordinate purpose span blanked out.
+ *
+ * A purpose clause is introduced by 为了/用来/以便/从而/进而/用于 or by an English
+ * `to <verb>`. The question words inside it belong to that span, so they must not
+ * be read as the message's own question. Only the span is masked, so an ordinary
+ * question elsewhere in the message is still seen.
+ */
+const SUBORDINATE_SPAN = /(?:为了|用来|以便|从而|进而|用于)[\s\S]*$|\bto\s+[a-z]+[\s\S]*$/iu
+function withoutSubordinateSpans(text: string): string {
+  return text.replace(SUBORDINATE_SPAN, '')
+}
+
+/**
+ * Question words that make a FRAGMENT an information request, English included.
+ * A bare question mark is deliberately NOT one: it belongs to the sentence, so a
+ * clause whose own head is an instruction keeps ordering work even when the
+ * sentence ends with "?".
+ */
+const FRAGMENT_QUESTION = /什么|为什么|怎么|如何|是否|是不是|哪|谁|啥|吗|呢|对不对|可否|能否|能不能|\b(?:what|which|who|whom|whose|when|where|why|how|whether)\b/i
+/** An interrogative auxiliary that opens the fragment ("Is it done?"). */
+const QUESTION_AUXILIARY_LEAD = /^(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/i
+/**
+ * English sentence heads that describe rather than order: determiners, pronouns
+ * and existentials. They are a closed grammatical class, so a Latin clause that
+ * opens with one is a statement ("The build failed"), not an unknown action.
+ */
+const ENGLISH_DESCRIPTIVE_HEAD = /^(?:the|a|an|this|that|these|those|it|its|they|them|their|we|our|you|your|i|my|he|she|his|her|there|here|nothing|nobody|someone|something|everyone|everything)\b/i
+/** A fragment written in Chinese, whatever Latin term it opens with. */
+const HAS_HAN = /[\u3400-\u9fff]/u
+/** A request preface or coordinating conjunction that opens a continued clause. */
+const SPOKEN_PREFIX = /^(?:(?:please|kindly|now|then|also|and|but|however|yet)\b[\s,]*|(?:请|麻烦|帮我|帮忙|那么|然后|接着|随后|首先|先|再|也|并且|而且|以及|而后|并|且)[\s，,]*)/i
+
+/**
+ * Whether one fragment orders work of its own.
+ *
+ * A fragment that asks nothing and still names an action is work the capture
+ * layer has to see. A Latin clause with its own head counts even when its verb is
+ * outside every vocabulary — `What changed, and archive the logs?` must keep the
+ * archive rather than disappear because the sentence asks a question (review 5
+ * F2) — while a Chinese statement that merely opens with a Latin term, and an
+ * English description that opens with a determiner or a pronoun, stay talk.
+ */
+function fragmentOrdersWork(fragment: string): boolean {
+  let body = fragment.trim()
+  for (let step = 0; step < 3 && body; step += 1) {
+    const next = body.replace(SPOKEN_PREFIX, '').trim()
+    if (next === body) break
+    body = next
+  }
+  if (!body) return false
+  // Question content only makes the fragment talk when nothing orders work
+  // BEFORE it. Reading the whole fragment as a question let a later question —
+  // even one behind an abbreviation and a polite preface — delete the order in
+  // front of it ("Archive the logs etc. 请说明一下哪些请求失败了？"), which produced
+  // NO item at all rather than a visible obligation. This mirrors the semantic
+  // layer's residue rule on purpose: the two layers must agree about what is
+  // work, or the classifier deletes what the reader would have kept.
+  const question = FRAGMENT_QUESTION.exec(body)
+  if (question) {
+    const before = body.slice(0, question.index).trim()
+    if (!before) return false
+    // A Latin head in front of the question is an order the question does not
+    // govern, whatever prose follows it ("Archive the logs etc. 请说明一下…").
+    if (/^[A-Za-z]/.test(before) && !ENGLISH_DESCRIPTIVE_HEAD.test(before)) return true
+    return actionHeadOf(before)
+  }
+  if (QUESTION_AUXILIARY_LEAD.test(body)) return false
+  return actionHeadOf(body)
+}
+
+/**
+ * The action-head test both layers share: a known operation verb, a Chinese
+ * action head, a Chinese clause that ends on a stray question mark, or a Latin
+ * head that is not a determiner/pronoun.
+ */
+function actionHeadOf(text: string): boolean {
+  if (hasOperationVerb(text)) return true
+  if (introducesActionClause(text)) return true
+  if (HAS_HAN.test(text) && /[？?]$/u.test(text)) return true
+  if (HAS_HAN.test(text)) return false
+  return /^[A-Za-z][A-Za-z0-9_.-]*/.test(text) && !ENGLISH_DESCRIPTIVE_HEAD.test(text)
+}
+
+/**
+ * Whether the message orders anything once its question-bearing fragments are
+ * set aside. A conversational verdict drops capture entirely, so it may only be
+ * reached when EVERY fragment either asks or says nothing: a question earlier in
+ * the message must not delete a later instruction (review 5 F2).
+ *
+ * The decomposition is the SEMANTIC layer's own: a fragment is split first at
+ * sentence punctuation and then by `splitTextFragments`, which is the same rule
+ * the capture path uses for coordinators and list separators. Splitting only on
+ * punctuation made the comma the whole difference between a kept obligation and
+ * a deleted one — `What changed and archive the logs?` lost the archive that
+ * `What changed, and archive the logs?` kept (review 6 F1).
+ */
+function ordersWorkBesideQuestion(text: string): boolean {
+  // The sentence keeps its own closing mark: stripping it hid the Chinese
+  // stray-question-mark rule from the fragment test, and the whole message was
+  // then dropped ("什么变了并归档日志？" produced no item at all).
+  const sentences: string[] = []
+  const separators = /[，,；;。！!？?\n\r]+/gu
+  let cursor = 0
+  for (const match of text.matchAll(separators)) {
+    sentences.push(text.slice(cursor, match.index + match[0].length))
+    cursor = match.index + match[0].length
+  }
+  if (cursor < text.length) sentences.push(text.slice(cursor))
+  return sentences
+    .filter((sentence) => sentence.trim() !== '')
+    .some((sentence) => {
+      // A clause the READER governs is work the capture layer must see: the
+      // semantic layer keeps it as an undecided obligation, so dropping the
+      // message here would delete it. The classifier and the reader therefore
+      // consume the same predicate, exactly as the gate and preparation do
+      // ("审计员是否替换凭据并轮换密钥。", where the question governs the clause so
+      // the coordination is never treated as the question's own subject).
+      if (governedClauseRestrictsExecution(sentence)) return true
+      return splitTextFragments(sentence)
+        .some((fragment) => fragment.text.trim() !== '' && fragmentOrdersWork(fragment.text))
+    })
+}
+
 export function classifyUserInteraction(text: string): UserInteractionKind {
   const normalized = normalizeClause(text)
   if (!normalized) return 'instruction'
   if (PROGRESSION_WHOLE.test(normalized)) return 'conversational'
   if (PROHIBITION_LEAD.test(normalized)) return 'instruction'
   if (hasStrongTaskFeature(normalized)) return 'instruction'
-  if (QUESTION_TERMS.test(normalized)) return 'conversational'
+  // A question term inside a PURPOSE span does not make the message
+  // meta-talk: "打包日志以便确认哪些请求失败" asks the assistant to package
+  // logs whose purpose mentions a question. Dropping it would destroy a real
+  // obligation, so the subordinate span is masked before the question test and
+  // the message stays an instruction.
+  const questionScope = withoutSubordinateSpans(normalized)
+  if (QUESTION_TERMS.test(questionScope)) {
+    // A question term only makes the message session talk when the REST of it
+    // orders nothing. A question earlier in the message must never delete a
+    // later instruction, and an unrecognised main verb is still work the capture
+    // layer has to see (review 5 F2).
+    if (ordersWorkBesideQuestion(questionScope)) return 'instruction'
+    return 'conversational'
+  }
   if (META_COMMENT_LEAD.test(normalized)) return 'conversational'
   if (PROGRESSION_LEAD.test(normalized)) return 'conversational'
   return 'instruction'

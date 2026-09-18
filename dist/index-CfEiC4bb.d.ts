@@ -140,11 +140,24 @@ interface ScopeInterpretation {
   /** True only for an explicit, agent-owned, unconditional instruction. */
   immediatelyExecutable: boolean;
   authorityDisposition: AuthorityDisposition;
+  /** The 0.6.3 execution qualification this reading establishes. */
+  qualification: ExecutionQualification;
   /** Explicitly named tool/method, when the scope names one. */
   method?: string;
   /** Stable identity of this interpretation, reproducible from the same bytes. */
   fingerprint: string;
 }
+/**
+* 0.6.3 K1 regression probe: the 0.6.2 question rule, kept SOLELY so the fixed
+* defect has a test that fails against the old reading.
+*
+* 0.6.2 declared a clause information as soon as a question marker appeared
+* anywhere inside it (`QUESTION_SCOPE.test(masked)`). This function is that
+* rule, verbatim. It is not used by any production path — the current reading
+* is {@link hasQuestionScope} — and its only caller is the regression test that
+* pins the difference between the two readings on the recorded defect input.
+*/
+declare function legacyQuestionReadingIsInformational(masked: string): boolean;
 /**
 * The contract kind a scope maps to. A prohibition and an acceptance keep their
 * own lanes; everything else is a requirement. Acceptance is decided from the
@@ -153,6 +166,182 @@ interface ScopeInterpretation {
 */
 declare function kindOfScope(directive: DirectiveClass, body?: string): GuardItemKind;
 declare function maskCodeSpans(text: string): string;
+/**
+* Whether a clause asks for information rather than ordering work (0.6.3 K1).
+*
+* 0.6.2 treated the mere presence of a question marker anywhere in a clause as
+* "the whole clause is a question", so one 是否 inside a comma-run of
+* instructions ("更新插件，检查是否存在更新，安装新主题，记录变更。") turned
+* every execution obligation beside it into closable information. The reading
+* is now grammatical — head verb, interrogative position, negation — so a
+* relative or purpose clause inside an order ("Create a file where logs are
+* stored", "更新皮肤中心，看看为什么失败") is never a question, while a real
+* request for an answer ("How do I install this?", "检查是否有更新吗？",
+* "check whether the remote has new commits") still is.
+*/
+declare function hasQuestionScope(masked: string): boolean;
+/**
+* Whether an explanation head GOVERNS its sentence.
+*
+* Everything coordinated inside the sentence the explanation heads is the OBJECT
+* of the explanation, however it is phrased and however long it is: a finite
+* complement ("how I can install …"), a `whether` complement, an infinitive, a
+* list with a long object — all of it is what the root asked to have explained.
+* The scope is therefore structural: it is the SENTENCE, bounded by the sentence
+* splitter, not a pattern with a window. A sentence break ends the governance, so
+* a following sentence can be a real instruction ("Explain the deploy. Then
+* restart service api." stays authorizable), and a question that merely stands
+* beside an order ("What changed and archive the logs?") has no explanation head
+* and keeps its order.
+*/
+declare function reportingHeadGoverns(masked: string): boolean;
+/**
+* Whether a clause is the scope of a QUESTION — any question, not only a reported
+* one: a question word ("How do I install …"), an interrogative auxiliary
+* ("Can you …"), an investigation ("Check whether …") or an explanation
+* ("Explain how …").
+*
+* A question head GOVERNS its clause: everything coordinated inside it is part of
+* what the root asked, so the clause must not be split into an executable child.
+* When such a clause ALSO carries an action of its own it is undecided — the
+* action may be exactly what the question is about — so nothing in it is
+* authority. Exported so the mutation gate and preparation consume the SAME
+* qualification the reading produced instead of re-guessing scope from the split
+* text, and so the rule is testable on its own.
+*/
+declare function isQuestionScopeNeedingReview(text: string): boolean;
+/**
+* 0.6.3 (narrowed contract): the execution qualification of one reading.
+*
+* Recognising an ACTION and holding AUTHORITY to run it are separate facts. The
+* reader decides, ONCE per clause and BEFORE any partition, whether the clause is
+* a `granted` plain instruction or a `restricted` governed scope (a question, an
+* explanation, an investigation, a reported question, or a quote). Every child the
+* partition later produces INHERITS that decision; nothing downstream — not the
+* projection, not recovery, not preparation — may upgrade a child to executable by
+* re-reading its own words (the earlier rounds' fail-open direction).
+*
+* `restricted` is not "no work": a restricted clause that names an action keeps it
+* as an undecided obligation ({@link AuthorityDisposition} `unresolved`) which no
+* answer closes and no certificate covers.
+*/
+type QualificationStatus = "granted" | "restricted";
+type QualificationReason = "plain_instruction" | "governed_scope" | "unproven_scope" | "inherited_restriction" | "legacy_missing_qualification";
+interface ExecutionQualification {
+  status: QualificationStatus;
+  reason: QualificationReason;
+  /** The governing head that restricted the clause, when one exists. */
+  governedBy?: string;
+}
+/** Blank out every quoted span of the text. */
+declare function maskQuotedSpans(text: string): string;
+/**
+* Whether the clause's OWN span asks something, even when no governed head was
+* recognised. This is the fail-closed half of the qualification: a clause whose
+* question content the reader could not classify (`I wonder whether …`, a
+* postposed 是否可行, a stray question mark) is still a scope that cannot host
+* execution authority. Code spans, quotes and subordinate spans do not count:
+* their content belongs to them, not to the clause.
+*/
+declare function clauseAsksOwnQuestion(text: string): boolean;
+/**
+* Whether the clause is a DIRECTIVE: an imperative in the root's voice. The action
+* must OPEN the clause once the request preface is consumed ("重启 api 服务。",
+* "Then restart service api.", "请更新插件"), and the clause must not be a report
+* or a third-party statement ("The technicians restart service api every night.",
+* "日志显示运维人员重启 api 服务。").
+*/
+declare function opensWithDirective(masked: string): boolean;
+/**
+* The content a restatement introduces: the Y of "把 X 明确为 Y" / "record X as Y".
+* Everything the restatement AUTHORIZES comes from this span, and nothing else.
+*/
+declare function restatedContentOf(text: string): string | undefined;
+/** The span a restatement CLARIFIES: everything before its marker. */
+declare function clarifiedSpanOf(text: string): string | undefined;
+/** Whether the clause is an explicit re-statement of what an obligation means. */
+declare function isRestatement(text: string): boolean;
+/**
+* Whether the clause is a PROTECTED scope: a question, an explanation, an
+* investigation, a reported question, a quote, or any span whose own question
+* content the head reader could not classify. A protected scope is indivisible —
+* no separator opens a child of it — and nothing inside it is execution authority.
+*/
+declare function clauseIsProtected(text: string): boolean;
+/** A clause nobody has questioned: its own reading is the authorization. */
+declare const GRANTED_QUALIFICATION: ExecutionQualification;
+/** A record captured before the qualification existed: never granted by default. */
+declare const LEGACY_QUALIFICATION: ExecutionQualification;
+/**
+* Whether a QUESTION/EXPLANATION/INVESTIGATION head governs the clause: the one
+* governance predicate every layer consumes (the partitioner, the classifier, the
+* reading, and — through the stored qualification — the gate and preparation).
+*/
+declare function questionHeadsClause(masked: string): boolean;
+/** Whether the clause's own reading is a governed scope. */
+declare function clauseIsGoverned(masked: string): boolean;
+/** The qualification the reader records for one clause. */
+declare function qualificationOfClause(text: string): ExecutionQualification;
+/**
+* Whether a GOVERNED clause carries work that its own question does not bound, so
+* that the clause must stay undecided rather than enter the answer lane.
+*
+* The test is structural and vocabulary-free in the direction that matters:
+*
+* - a coordination AFTER the clause's own question word puts the coordinated part
+*   inside the question's scope ("…是否安装 foo 并重启 api 服务"), so the whole
+*   clause is undecided whatever the verbs are;
+* - material BEFORE the question word that carries an action is the questioned
+*   span itself ("检查一下[安装 foo 并重启 api 服务]是否安全"), so it is undecided;
+* - a governed head with no question word of its own is undecided as soon as it
+*   names an action ("Check the safety of installing foo and restart service
+*   api.", "Explain the incident, rotate every credential").
+*
+* A pure question — the object list of "检查一下本地插件和皮肤是否有更新", a state
+* question like "检查是否有新版本。" — carries none of these and stays answerable.
+*/
+declare function governedClauseRestrictsExecution(text: string): boolean;
+declare function hasOrderedCoordination(masked: string): boolean;
+/** @deprecated Use {@link isQuestionScopeNeedingReview}: the rule is not limited to explanations. */
+declare const isExplanationScope: (text: string) => boolean;
+/**
+* Whether a coordinated part of the explanation's sentence opens with an action
+* of its own. Those are exactly the parts whose membership in the explanation
+* cannot be decided from the surface, so they make the sentence undecided instead
+* of answerable or executable. `masked` has code spans blanked, so an action that
+* only appears inside backticks contributes nothing.
+*/
+declare function explanationHasActionResidue(masked: string): boolean;
+declare function isInformationalFragment(masked: string): boolean;
+declare function splitTextFragments(text: string, from?: number): Array<{
+  text: string;
+  offset: number;
+}>;
+/**
+* Whether the text after a coordinating conjunction opens a DISTINCT
+* instruction: its own action head, optionally behind a connector and an
+* actor. This is the rule the sentence splitter already used to decide that a
+* conjunction joins two instructions rather than two objects, exposed so the
+* fragment splitter cannot contradict it.
+*/
+declare function introducesActionClause(text: string): boolean;
+/**
+* Every action word in `[offset, before)`, ordered by position, with the words
+* that are only a prefix of a longer action removed (the 升 of 升级, the 然 of
+* 然后). The remaining candidates are the verbs an instruction can be about.
+*/
+declare function actionVerbMatches(text: string, offset?: number, before?: number): Array<{
+  index: number;
+  length: number;
+}>;
+/**
+* True when a negator's scope covers the verb starting at `index`.
+*
+* The negator has to be phrase-initial, so the 不 of 手动 and the 无 of 无论 are
+* not read as bans; a contrast or list separator between the negator and the
+* verb ends its scope ("不仅…而且运行" keeps the run positive).
+*/
+declare function verbIsNegated(text: string, index: number): boolean;
 /** Interpret one already-segmented clause. */
 declare function interpretClause(text: string, options?: InterpretOptions): ScopeInterpretation;
 /** Interpret a whole message into independent scopes, in source order. */
@@ -171,6 +360,23 @@ declare function isExecutableItem(item: {
   executee?: Executee;
   authorityDisposition?: AuthorityDisposition;
   waitAuthorization?: unknown;
+}): boolean;
+/**
+* The ONE authority predicate the mutation gate and preparation both consume.
+*
+* A record holds execution authority only when the reader GRANTED it a
+* qualification: a record with no qualification at all (captured before the
+* qualification existed) is refused rather than read from its stored
+* disposition, and a restricted record — anything a question, explanation,
+* investigation, reported question or quote governs — keeps its work as an
+* undecided obligation that authorizes nothing. Within a granted reading, the
+* disposition still decides: a prohibition, a wait, a human actor, a condition or
+* an information range is never a mutation. An `unresolved` GRANTED reading keeps
+* the historical path documented for unrecognised instruction forms.
+*/
+declare function itemHoldsExecutionAuthority(item: {
+  executionQualification?: ExecutionQualification;
+  authorityDisposition?: AuthorityDisposition;
 }): boolean;
 /** Whether an item is an open obligation for certification purposes. */
 declare function isOpenObligation(item: GuardItem): boolean;
@@ -621,6 +827,21 @@ type GuardItemStatus = "pending" | "answered" | "passed" | "superseded";
 type GuardIntegrity = "valid" | "unknown" | "corrupt";
 type EvidenceOutcome = "success" | "failure" | "unknown" | "durability-unknown";
 type GuardOperation = "create" | "write" | "modify" | "read" | "run" | "verify";
+/**
+* 0.6.3 K2: where an obligation's requested target came from. A target is a
+* user SELECTION only when the root named it or a trusted host selection made
+* it; an environment default (the session working directory, a recent tool
+* path, a model-supplied selector) resolves and corroborates a target the root
+* already allowed, and never manufactures root authority. An inherited target
+* comes from another obligation of the same work unit whose own source is
+* auditable.
+*/
+type TargetSourceKind = "explicit_label" | "explicit_path" | "explicit_current_repository" | "host_selection" | "unit_inherited" | "environment_default";
+interface TargetSource {
+  kind: TargetSourceKind;
+  /** Source message id of the obligation a `unit_inherited` target came from. */
+  inheritedFrom?: string;
+}
 type TargetValue = boolean | number | string | {
   k: "b" | "i" | "s" | "e" | "x";
   v: unknown;
@@ -630,7 +851,25 @@ type EvidenceRole = "resolution" | "effect" | "state";
 type EvidenceParseStatus = "supported" | "unsupported_statement_operator" | "unsupported_command" | "malformed_quote" | "adapter_unavailable";
 type HostStatus = "supported" | "unsupported" | "unavailable";
 type TargetCaptureStatus = "resolved" | "clarification_required";
-type TargetCaptureReasonCode = "requested_target_package_id_missing" | "requested_target_artifact_id_missing" | "requested_target_repository_missing" | "requested_target_service_id_missing" | "requested_target_registry_missing_or_invalid";
+/**
+* 0.6.3 K4: why a record captured under the rules of an EARLIER release can no
+* longer be reused as a current pass. The record itself is never rewritten —
+* its historical status (including `answered`) stays the historical fact it
+* was — but the current eligibility layer refuses to inherit it and the
+* obstruction blocks new certificates and Goal completion until the root
+* resolves it. It is deliberately a hard block, not a warning: 0.6.2 published
+* a mixed request as answered, and a warning would have left exactly that
+* misreading in force.
+*/
+type NeedsReviewReason = "legacy_mixed_information_scope" | "legacy_environment_default_target" | "unknown_state_version" | "legacy_missing_execution_qualification";
+interface NeedsReviewFact {
+  reason: NeedsReviewReason;
+  /** Stable identity of the eligibility check that raised it. */
+  checkId: string;
+  /** When the check was applied: this is an upgrade fact, not a birth fact. */
+  recordedAtRevision: number;
+}
+type TargetCaptureReasonCode = "requested_target_package_id_missing" | "requested_target_artifact_id_missing" | "requested_target_repository_missing" | "requested_target_repository_ambiguous" | "requested_target_field_ambiguous" | "requested_target_service_id_missing" | "requested_target_registry_missing_or_invalid";
 interface GoalRef {
   id: string;
   revision: number;
@@ -733,6 +972,17 @@ interface GuardItem {
   requestedTarget?: TargetTuple;
   targetCaptureStatus?: TargetCaptureStatus;
   targetCaptureReasonCode?: TargetCaptureReasonCode;
+  /**
+  * 0.6.3 K2 provenance of {@link requestedTarget}. Absent on items captured by
+  * 0.6.2 and earlier, whose target reading is historical and evaluated by the
+  * upgrade eligibility check rather than re-interpreted.
+  */
+  targetSource?: TargetSource;
+  /**
+  * 0.6.3 K4: set by the upgrade eligibility check when this record cannot be
+  * inherited as a current pass. It never overwrites the historical status.
+  */
+  needsReview?: NeedsReviewFact;
   authority?: "root_instruction" | "root_adoption" | "legacy_authority_unclassified";
   legacyFlags?: Array<"legacy_generic_run" | "legacy_authority_unclassified">;
   /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
@@ -747,6 +997,14 @@ interface GuardItem {
   directive?: DirectiveClass;
   executee?: Executee;
   authorityDisposition?: AuthorityDisposition;
+  /**
+  * 0.6.3 (narrowed contract): whether this reading may host execution authority.
+  * Established ONCE by the reader, before any partition, and inherited by every
+  * child the partition produces. Absent on records captured before the
+  * qualification existed: the gate and preparation refuse those rather than
+  * reading their stored disposition as permission.
+  */
+  executionQualification?: ExecutionQualification;
   /** The unresolved condition guarding a `conditional_wait` item. */
   condition?: string;
   /** The event that ends a human wait, when the source names one. */
@@ -1249,6 +1507,13 @@ interface CaptureScope {
   /** Session working directory; used as the scope subject when no artifact path is named. */
   cwd?: string;
 }
+/**
+* The repository an obligation resolves to when the root wrote no repository
+* at all (0.6.3 K2). The environment default is preserved so a later
+* work-unit inheritance decision can evaluate it, but it is never reported as
+* a resolved user selection.
+*/
+declare function environmentDefaultRepositoryTarget(action: SemanticAction, subject: string): TargetTuple | undefined;
 declare function extractArtifactPaths(text: string): string[];
 /**
 * Split a single human message into independently tracked clauses. Sentence
@@ -1341,18 +1606,6 @@ declare function isFrozenV042RebindResponse(recorded: unknown): boolean;
 //#endregion
 //#region src/domain/conversation.d.ts
 type UserInteractionKind = "instruction" | "conversational";
-/**
-* Classify a direct user message (or one clause of it) as an actionable
-* `instruction` or a session-layer `conversational` utterance. Only
-* conversational results drop capture, so the classifier fails closed:
-* everything it cannot confidently recognize as session-layer talk stays an
-* instruction and is captured exactly as before.
-*
-* Order matters: progression and prohibition leads first, then strong task
-* features (artifact path, explicit method, or a non-negated operation verb
-* outside progression/meta spans), then the meta-question and meta-comment
-* forms, and finally a progression lead over a featureless remainder.
-*/
 declare function classifyUserInteraction(text: string): UserInteractionKind;
 type TaskIntent = "inquiry" | "action";
 /**
@@ -1681,6 +1934,26 @@ declare const PROTOCOL_V4_NOTICE = "Context Guard protocol boundary: v4.0.0";
 * fail direction on rollback is closed, never a misread.
 */
 declare const PROTOCOL_V5_NOTICE = "Context Guard protocol boundary: v5.0.0";
+/**
+* The pure upgrade-eligibility predicate: the records in the current closure
+* scope that may NOT be inherited as a current pass, with the reason that
+* disqualifies each. Exported so the rule can be tested and read back directly,
+* never to let a caller skip it.
+*/
+declare function legacyRecordsNeedingReview(projection: GuardProjection): Array<{
+  itemId: string;
+  reason: NeedsReviewReason;
+}>;
+/**
+* Apply the 0.6.3 eligibility pass to an already-derived projection.
+*
+* This is the upgrade entry: it re-checks the records a session already holds
+* after an EVENT-SOURCED reading has been applied to them. It is idempotent —
+* a project already marked keeps its original reason and revision — and it is
+* the same function the derivation runs, so a replay and an in-place upgrade
+* cannot disagree.
+*/
+declare function applyUpgradeEligibility(projection: GuardProjection): void;
 /**
 * Pure, deterministic re-derivation of the guard projection from the DSH
 * native event log. Context Guard never writes custom session events, so every
@@ -2628,4 +2901,4 @@ declare function latestAssistantText(events: readonly {
 //#region src/domain/supersession.d.ts
 declare function supersedeItem(items: Map<string, GuardItem>, oldId: string, replacement: GuardItem): boolean;
 //#endregion
-export { ProofSurface as $, ScopeInterpretation as $a, GuardItemStatus as $i, deriveProjection as $n, TaskIntent as $r, GIT_COMMAND_MANIFEST_IDS as $t, MIN_RECOVERY_CHAR_BUDGET as A, CapabilityFact as Aa, AssetObligation as Ai, ToolCallInput as An, semanticActionFromText as Ao, evaluateExternalWaitCapability as Ar, ClaimedMessage as At, PROOF_KINDS as B, ProcessOutcomeReason as Ba, EvidenceBinding as Bi, Repairability as Bn, ParsedHostVersion as Br, HostProfileError as Bt, RC015_RC2_HOST_PACKAGES as C, confirmRebind as Ca, GoalActivationState as Ci, ShellParseStatus as Cn, actionCompatible as Co, HostLockStatus as Cr, evidenceMatchesItem as Ct, CLEANUP_CONDITION_RULE_COMPACT as D, rebindAttemptKey as Da, isCurrentAcceptedBoundary as Di, parseShellCommand as Dn, requestedTargetAuthorizesMutation as Do, LEGACY_HOST_COHORTS as Dr, ManifestIssue as Dt, CLEANUP_CONDITION_RULE as E, proposeRebindV042 as Ea, effectuateBoundary as Ei, parsePwshCommand as En, requestedIdentityKey as Eo, HostToolSurface as Er, CommandSurfaceManifest as Et, openItems as F, DependencyStatus as Fa, DelegationRef as Fi, extractToolSubject as Fn, normalizeClause as Fo, selectHostCohort as Fr, claimedBatchHasRealRootInput as Ft, ProofHostSurface as G, capabilityFactOf as Ga, ExternalOperation as Gi, evidenceAvailabilityReason as Gn, parseHostVersion as Gr, injectActiveProfileHostLock as Gt, PROOF_MANIFEST_DOMAIN_V2 as H, actionHasCertificationPath as Ha, EvidenceParseStatus as Hi, UnifiedItemDiagnosis as Hn, SUPPORTED_HOST_VERSIONS as Hr, combineHostPolicy as Ht, recoveryDigest as I, DerivedProcessFacts as Ia, DeriveConfig as Ii, isDeterministicCheck as In, sanitizeClauseText as Io, HostVersionDecision as Ir, firstStepGuidance as It, ProofKindV2 as J, removalIsPartiallyKnown as Ja, GuardCheckpoint as Ji, CAPTURE_V042_NOTICE as Jn, AuthorityBlock as Jr, packageRowsFromPnpmLock as Jt, ProofKind as K, partialFailureOf as Ka, GoalRef as Ki, itemDiagnosis as Kn, satisfiesSupportedHostRange as Kr, inspectTargetHostGraph as Kt, renderRecoveryPacket as L, OperationAttribution as La, DeriveResult as Li, withDurability as Ln, sanitizeUrl as Lo, HostVersionStatus as Lr, lifecyclePhase as Lt, carriesCleanupCondition as M, CapabilityRemedy as Ma, BoundaryDisposition as Mi, ToolSubject as Mn, validateActionTarget as Mo, evaluateHostLock as Mr, FirstStepInjection as Mt, cleanupConditionFor as N, DEPENDENCY_FREE_ONLY_CONDITION as Na, BoundaryQualificationKind as Ni, evidenceFromPersistedToolResult as Nn, canonicalizePath as No, evaluateToolSurfaceCapability as Nr, FirstStepPreviewInput as Nt, CLEANUP_CONDITION_RULE_SHORT as O, rebindResponse as Oa, qualifyBoundary as Oi, goalCompletionDenial as On, requestedTargetMatchesResolved as Oo, bindExecutableIdentity as Or, OperationVerbEntry as Ot, closingHint as P, DeclaredOperationResult as Pa, DeferAuthorization as Pi, extractTextContent as Pn, digestStrings as Po, hostVersionFromPackages as Pr, LifecyclePhase as Pt, ProofObligationV2 as Q, InterpretOptions as Qa, GuardItemKind as Qi, PROTOCOL_V5_NOTICE as Qn, segmentAuthorityBlocks as Qr, verifyComposedHostLockDump as Qt, ALPHA3_HOST_PACKAGES as R, ProcessExitStatus as Ra, DeriveScope as Ri, CertificationSupport as Rn, sha256 as Ro, LATEST_SUPPORTED_HOST_VERSION as Rr, previewFirstStepInjection as Rt, snapshotSessionEvents as S, RebindProposal as Sa, BoundaryRequest as Si, ParsedShell as Sn, StatefulAction as So, HostLockEvaluation as Sr, evidenceCoverage as St, RC1_HOST_PACKAGES as T, proposeRebindOutcome as Ta, availableBoundaryQualifications as Ti, isRunExecutable as Tn, isStatefulAction as To, HostProfileKind as Tr, COMMAND_SURFACE_MANIFEST as Tt, PROOF_PROTOCOL_VERSION as U, admissibleForRemoval as Ua, EvidenceRole as Ui, capabilityRemedyPhrase as Un, compareHostVersions as Ur, hostLockContextFromComposedDump as Ut, PROOF_KINDS_V2 as V, RemovalOutcomeReport as Va, EvidenceOutcome as Vi, TaskKind as Vn, SUPPORTED_HOST_RANGE as Vr, TargetHostGraph as Vt, PROOF_PROTOCOL_VERSION_V2 as W, capabilityConsequence as Wa, ExpectedTransition as Wi, deriveItemDiagnosis as Wn, evaluateMinimumHostVersion as Wr, hostLockRowsFromComposedDump as Wt, ProofManifestV2 as X, DirectiveClass as Xa, GuardIntegrity as Xi, PROTOCOL_V3_NOTICE as Xn, AuthorityKind as Xr, resolveActiveProfileHostLock as Xt, ProofManifest as Y, AuthorityDisposition as Ya, GuardEvidence as Yi, DEFAULT_DELEGATION_TOOL_NAMES as Yn, AuthorityBlockKind as Yr, readActiveHostGraph as Yt, ProofObligation as Z, Executee as Za, GuardItem as Zi, PROTOCOL_V4_NOTICE as Zn, authorityCaptureCounts as Zr, resolveInstalledHostLock as Zt, progressFingerprint as _, ReleaseOperation as _a, extractOperation as _i, parseGitCommandManifest as _n, STATEFUL_ACTIONS as _o, HostCapabilityRequest as _r, sessionQueryV2 as _t, NO_PROGRESS_RECORD_PREFIX as a, SourceSpan as aa, isFrozenV042RebindResponse as ai, GitCommandRejected as an, maskCodeSpans as ao, AuditedExecutable as ar, createProofManifest as at, SessionApiError as b, ProposeOutcome as ba, BoundaryEffectuation as bi, CanonicalArgv as bn, SUPPORTED_EVIDENCE_ADAPTERS as bo, HostCohortSelectionReason as br, EvidenceFacetCoverage as bt, classifyCompletionClaim as c, TargetTuple as ca, RejectedBinding as ci, GitPrestateCheck as cn, statefulActionsOfScope as co, EXPECTED_HOST_PACKAGES as cr, proofDigest as ct, decisionBoundaryKey as d, WaitAuthorization as da, ClauseSegment as di, LinearCommitReadback as dn, ActionManifest as do, GOAL_HOST_PACKAGES as dr, proofHostSurfacesOf as dt, GuardOperation as ea, UserInteractionKind as ei, GIT_COMMAND_TEMPLATES as en, interpretClause as eo, ACTIVE_HOST_COHORT_ID as er, SessionQuery as et, isRootPauseRequest as f, WorkUnit as fa, captureClause as fi, commitIndexSnapshotDigest as fn, ActionSpec as fo, HOST_CAPABILITY_PACKAGE_GROUPS as fr, proofOperationMatches as ft, observeAssistantOutcome as g, ReleaseObservedIdentity as ga, extractMethod as gi, gitCommandMatchesTarget as gn, SEMANTIC_ACTIONS as go, HostCapabilityId as gr, sessionQuery as gt, latestRootInstruction as h, ReleaseGateDecision as ha, extractArtifactPaths as hi, executeRevalidatedGitEffect as hn, CERTIFICATE_VERSION_V2 as ho, HostCapabilityEvaluation as hr, scopeCoverageDigest as ht, CompletionDisposition as i, PersistenceAuthorization as ia, ParsedConfirmation as ii, GitCommandParseResult as in, kindOfScope as io, ALPHA2_HOST_PACKAGES as ir, canonicalProjection as it, RecoveryOptions as j, CapabilityGap as ja, BindingActionClosure as ji, ToolResultInput as jn, validateActionManifest as jo, evaluateHostCapability as jr, FIRST_STEP_GUIDANCE as jt, DEFAULT_RECOVERY_CHAR_BUDGET as k, replayRebindResult as ka, AssetInterpretationFact as ki, hasCurrentCertificate as kn, semanticActionFromCommand as ko, bindLiveGoalCapability as kr, validateManifest as kt, decideTurnBoundary as l, TargetValue as la, certifyCheckpoint as li, GitPrestateEnvelope as ln, ACTION_MANIFEST as lo, ExecutableIdentity as lr, proofDigestV2 as lt, latestAssistantText as m, PackageRow as ma, classifyClause as mi, createGitPrestateEnvelope as mn, CERTIFICATE_VERSION as mo, HostAuditProvenance as mr, requiredSubjectsOf as mt, AssistantOutcomeObservation as n, HostStatus as na, classifyUserInteraction as ni, GitCommandAccepted as nn, isExecutableItem as no, ACTIVE_HOST_LAUNCHER_VERSION as nr, bindProofToProjection as nt, NO_PROGRESS_TURNS_BEFORE_STOP as o, TargetCaptureReasonCode as oa, parseConfirmationMessage as oi, GitEffectExecution as on, namedActions as oo, BASE_HOST_PACKAGES as or, createProofManifestV2 as ot, isWholeTaskCompletionClaim as p, createProjection as pa, captureItem as pi, commitTreeSnapshotDigest as pn, BOUNDED_ARTIFACT_TYPES as po, HOST_COHORTS as pr, proofV2Rejection as pt, ProofKindCapability as q, removalIsComplete as qa, GuardBoundary as qi, relevantEvidence as qn, currentContractDigest as qr, packageRowsFromActiveGraph as qt, CONTROL_RECORD_PREFIX as r, MessageCoverage as ra, CONFIRM_LINE_PATTERN as ri, GitCommandManifest as rn, isOpenObligation as ro, ALPHA2_DSHMARKET_139_HOST_PACKAGES as rr, bindProofV2ToProjection as rt, TurnStoppingDecision as s, TargetCaptureStatus as sa, CheckpointResult as si, GitEffectRunner as sn, semanticActionOfScope as so, DEFAULT_HOST_LOCK as sr, proofCapabilityReport as st, supersedeItem as t, GuardProjection as ta, classifyTaskIntent as ti, GitAdapterAction as tn, interpretMessage as to, ACTIVE_HOST_COHORT_IDS as tr, SessionQueryV2 as tt, decideTurnStopping as u, VerificationContract as ua, CaptureScope as ui, GitTargetIdentity as un, ACTION_MANIFEST_VERSION as uo, ExecutableIdentityBinding as ur, proofEvidenceConstraints as ut, SESSION_API_UNSUPPORTED as v, ReleaseSettlement as va, isInformationalMessage as vi, revalidateGitPrestate as vn, STOP_PROTOCOL_VERSION as vo, HostCohort as vr, validateProofManifest as vt, RC015_HOST_PACKAGES as w, proposeRebind as wa, GoalBoundaryAccess as wi, canonicalArgvFromCommand as wn, boundedArtifactChoiceMatches as wo, HostPlatform as wr, isVerifyingCapability as wt, V3SessionLike as x, RebindArgs as xa, BoundaryQualification as xi, CanonicalCommandSurface as xn, SemanticAction as xo, HostLockContext as xr, bindingSatisfies as xt, SESSION_EVENT_ENVELOPE_INVALID as y, BoundedSource as ya, segmentClauses as yi, verifiedLinearCommitReadback as yn, STOP_PROTOCOL_VERSION_V2 as yo, HostCohortSelection as yr, validateProofManifestV2 as yt, PROOF_CAPABILITY_MATRIX as z, ProcessFactSource as za, DerivedEnvelope as zi, DiagnosisNextAction as zn, MIN_SUPPORTED_HOST_VERSION as zr, ActiveProfileHostLock as zt };
+export { ProofSurface as $, partialFailureOf as $a, GuardIntegrity as $i, applyUpgradeEligibility as $n, STATEFUL_ACTIONS as $o, authorityCaptureCounts as $r, GIT_COMMAND_MANIFEST_IDS as $t, MIN_RECOVERY_CHAR_BUDGET as A, confirmRebind as Aa, isCurrentAcceptedBoundary as Ai, ToolCallInput as An, itemHoldsExecutionAuthority as Ao, bindExecutableIdentity as Ar, ClaimedMessage as At, PROOF_KINDS as B, DEPENDENCY_FREE_ONLY_CONDITION as Ba, DeriveResult as Bi, Repairability as Bn, restatedContentOf as Bo, LATEST_SUPPORTED_HOST_VERSION as Br, HostProfileError as Bt, RC015_RC2_HOST_PACKAGES as C, ReleaseObservedIdentity as Ca, BoundaryEffectuation as Ci, ShellParseStatus as Cn, introducesActionClause as Co, HostLockContext as Cr, evidenceMatchesItem as Ct, CLEANUP_CONDITION_RULE_COMPACT as D, ProposeOutcome as Da, GoalBoundaryAccess as Di, parseShellCommand as Dn, isOpenObligation as Do, HostProfileKind as Dr, ManifestIssue as Dt, CLEANUP_CONDITION_RULE as E, BoundedSource as Ea, GoalActivationState as Ei, parsePwshCommand as En, isInformationalFragment as Eo, HostPlatform as Er, CommandSurfaceManifest as Et, openItems as F, rebindResponse as Fa, BoundaryDisposition as Fi, extractToolSubject as Fn, namedActions as Fo, evaluateToolSurfaceCapability as Fr, claimedBatchHasRealRootInput as Ft, ProofHostSurface as G, ProcessExitStatus as Ga, EvidenceParseStatus as Gi, evidenceAvailabilityReason as Gn, ACTION_MANIFEST as Go, compareHostVersions as Gr, injectActiveProfileHostLock as Gt, PROOF_MANIFEST_DOMAIN_V2 as H, DependencyStatus as Ha, DerivedEnvelope as Hi, UnifiedItemDiagnosis as Hn, splitTextFragments as Ho, ParsedHostVersion as Hr, combineHostPolicy as Ht, recoveryDigest as I, replayRebindResult as Ia, BoundaryQualificationKind as Ii, isDeterministicCheck as In, opensWithDirective as Io, hostVersionFromPackages as Ir, firstStepGuidance as It, ProofKindV2 as J, RemovalOutcomeReport as Ja, ExternalOperation as Ji, CAPTURE_V042_NOTICE as Jn, ActionSpec as Jo, satisfiesSupportedHostRange as Jr, packageRowsFromPnpmLock as Jt, ProofKind as K, ProcessFactSource as Ka, EvidenceRole as Ki, itemDiagnosis as Kn, ACTION_MANIFEST_VERSION as Ko, evaluateMinimumHostVersion as Kr, inspectTargetHostGraph as Kt, renderRecoveryPacket as L, CapabilityFact as La, DeferAuthorization as Li, withDurability as Ln, qualificationOfClause as Lo, selectHostCohort as Lr, lifecyclePhase as Lt, carriesCleanupCondition as M, proposeRebindOutcome as Ma, AssetInterpretationFact as Mi, ToolSubject as Mn, legacyQuestionReadingIsInformational as Mo, evaluateExternalWaitCapability as Mr, FirstStepInjection as Mt, cleanupConditionFor as N, proposeRebindV042 as Na, AssetObligation as Ni, evidenceFromPersistedToolResult as Nn, maskCodeSpans as No, evaluateHostCapability as Nr, FirstStepPreviewInput as Nt, CLEANUP_CONDITION_RULE_SHORT as O, RebindArgs as Oa, availableBoundaryQualifications as Oi, goalCompletionDenial as On, isQuestionScopeNeedingReview as Oo, HostToolSurface as Or, OperationVerbEntry as Ot, closingHint as P, rebindAttemptKey as Pa, BindingActionClosure as Pi, extractTextContent as Pn, maskQuotedSpans as Po, evaluateHostLock as Pr, LifecyclePhase as Pt, ProofObligationV2 as Q, capabilityFactOf as Qa, GuardEvidence as Qi, PROTOCOL_V5_NOTICE as Qn, SEMANTIC_ACTIONS as Qo, AuthorityKind as Qr, verifyComposedHostLockDump as Qt, ALPHA3_HOST_PACKAGES as R, CapabilityGap as Ra, DelegationRef as Ri, CertificationSupport as Rn, questionHeadsClause as Ro, HostVersionDecision as Rr, previewFirstStepInjection as Rt, snapshotSessionEvents as S, ReleaseGateDecision as Sa, segmentClauses as Si, ParsedShell as Sn, interpretMessage as So, HostCohortSelectionReason as Sr, evidenceCoverage as St, RC1_HOST_PACKAGES as T, ReleaseSettlement as Ta, BoundaryRequest as Ti, isRunExecutable as Tn, isExplanationScope as To, HostLockStatus as Tr, COMMAND_SURFACE_MANIFEST as Tt, PROOF_PROTOCOL_VERSION as U, DerivedProcessFacts as Ua, EvidenceBinding as Ui, capabilityRemedyPhrase as Un, statefulActionsOfScope as Uo, SUPPORTED_HOST_RANGE as Ur, hostLockContextFromComposedDump as Ut, PROOF_KINDS_V2 as V, DeclaredOperationResult as Va, DeriveScope as Vi, TaskKind as Vn, semanticActionOfScope as Vo, MIN_SUPPORTED_HOST_VERSION as Vr, TargetHostGraph as Vt, PROOF_PROTOCOL_VERSION_V2 as W, OperationAttribution as Wa, EvidenceOutcome as Wi, deriveItemDiagnosis as Wn, verbIsNegated as Wo, SUPPORTED_HOST_VERSIONS as Wr, hostLockRowsFromComposedDump as Wt, ProofManifestV2 as X, admissibleForRemoval as Xa, GuardBoundary as Xi, PROTOCOL_V3_NOTICE as Xn, CERTIFICATE_VERSION as Xo, AuthorityBlock as Xr, resolveActiveProfileHostLock as Xt, ProofManifest as Y, actionHasCertificationPath as Ya, GoalRef as Yi, DEFAULT_DELEGATION_TOOL_NAMES as Yn, BOUNDED_ARTIFACT_TYPES as Yo, currentContractDigest as Yr, readActiveHostGraph as Yt, ProofObligation as Z, capabilityConsequence as Za, GuardCheckpoint as Zi, PROTOCOL_V4_NOTICE as Zn, CERTIFICATE_VERSION_V2 as Zo, AuthorityBlockKind as Zr, resolveInstalledHostLock as Zt, progressFingerprint as _, VerificationContract as _a, environmentDefaultRepositoryTarget as _i, parseGitCommandManifest as _n, explanationHasActionResidue as _o, HostCapabilityEvaluation as _r, normalizeClause as _s, sessionQueryV2 as _t, NO_PROGRESS_RECORD_PREFIX as a, HostStatus as aa, CONFIRM_LINE_PATTERN as ai, GitCommandRejected as an, ExecutionQualification as ao, ALPHA2_DSHMARKET_139_HOST_PACKAGES as ar, actionCompatible as as, createProofManifest as at, SessionApiError as b, createProjection as ba, extractOperation as bi, CanonicalArgv as bn, hasQuestionScope as bo, HostCohort as br, sha256 as bs, EvidenceFacetCoverage as bt, classifyCompletionClaim as c, NeedsReviewReason as ca, parseConfirmationMessage as ci, GitPrestateCheck as cn, LEGACY_QUALIFICATION as co, BASE_HOST_PACKAGES as cr, requestedIdentityKey as cs, proofDigest as ct, decisionBoundaryKey as d, TargetCaptureReasonCode as da, certifyCheckpoint as di, LinearCommitReadback as dn, ScopeInterpretation as do, ExecutableIdentity as dr, semanticActionFromCommand as ds, proofHostSurfacesOf as dt, GuardItem as ea, segmentAuthorityBlocks as ei, GIT_COMMAND_TEMPLATES as en, removalIsComplete as eo, deriveProjection as er, STOP_PROTOCOL_VERSION as es, SessionQuery as et, isRootPauseRequest as f, TargetCaptureStatus as fa, CaptureScope as fi, commitIndexSnapshotDigest as fn, actionVerbMatches as fo, ExecutableIdentityBinding as fr, semanticActionFromText as fs, proofOperationMatches as ft, observeAssistantOutcome as g, TargetValue as ga, classifyClause as gi, gitCommandMatchesTarget as gn, clauseIsProtected as go, HostAuditProvenance as gr, digestStrings as gs, sessionQuery as gt, latestRootInstruction as h, TargetTuple as ha, captureItem as hi, executeRevalidatedGitEffect as hn, clauseIsGoverned as ho, HOST_COHORTS as hr, canonicalizePath as hs, scopeCoverageDigest as ht, CompletionDisposition as i, GuardProjection as ia, classifyUserInteraction as ii, GitCommandParseResult as in, Executee as io, ACTIVE_HOST_LAUNCHER_VERSION as ir, StatefulAction as is, canonicalProjection as it, RecoveryOptions as j, proposeRebind as ja, qualifyBoundary as ji, ToolResultInput as jn, kindOfScope as jo, bindLiveGoalCapability as jr, FIRST_STEP_GUIDANCE as jt, DEFAULT_RECOVERY_CHAR_BUDGET as k, RebindProposal as ka, effectuateBoundary as ki, hasCurrentCertificate as kn, isRestatement as ko, LEGACY_HOST_COHORTS as kr, validateManifest as kt, decideTurnBoundary as l, PersistenceAuthorization as la, CheckpointResult as li, GitPrestateEnvelope as ln, QualificationReason as lo, DEFAULT_HOST_LOCK as lr, requestedTargetAuthorizesMutation as ls, proofDigestV2 as lt, latestAssistantText as m, TargetSourceKind as ma, captureClause as mi, createGitPrestateEnvelope as mn, clauseAsksOwnQuestion as mo, HOST_CAPABILITY_PACKAGE_GROUPS as mr, validateActionTarget as ms, requiredSubjectsOf as mt, AssistantOutcomeObservation as n, GuardItemStatus as na, UserInteractionKind as ni, GitCommandAccepted as nn, AuthorityDisposition as no, ACTIVE_HOST_COHORT_ID as nr, SUPPORTED_EVIDENCE_ADAPTERS as ns, bindProofToProjection as nt, NO_PROGRESS_TURNS_BEFORE_STOP as o, MessageCoverage as oa, ParsedConfirmation as oi, GitEffectExecution as on, GRANTED_QUALIFICATION as oo, ALPHA2_HOST_PACKAGES as or, boundedArtifactChoiceMatches as os, createProofManifestV2 as ot, isWholeTaskCompletionClaim as p, TargetSource as pa, ClauseSegment as pi, commitTreeSnapshotDigest as pn, clarifiedSpanOf as po, GOAL_HOST_PACKAGES as pr, validateActionManifest as ps, proofV2Rejection as pt, ProofKindCapability as q, ProcessOutcomeReason as qa, ExpectedTransition as qi, relevantEvidence as qn, ActionManifest as qo, parseHostVersion as qr, packageRowsFromActiveGraph as qt, CONTROL_RECORD_PREFIX as r, GuardOperation as ra, classifyTaskIntent as ri, GitCommandManifest as rn, DirectiveClass as ro, ACTIVE_HOST_COHORT_IDS as rr, SemanticAction as rs, bindProofV2ToProjection as rt, TurnStoppingDecision as s, NeedsReviewFact as sa, isFrozenV042RebindResponse as si, GitEffectRunner as sn, InterpretOptions as so, AuditedExecutable as sr, isStatefulAction as ss, proofCapabilityReport as st, supersedeItem as t, GuardItemKind as ta, TaskIntent as ti, GitAdapterAction as tn, removalIsPartiallyKnown as to, legacyRecordsNeedingReview as tr, STOP_PROTOCOL_VERSION_V2 as ts, SessionQueryV2 as tt, decideTurnStopping as u, SourceSpan as ua, RejectedBinding as ui, GitTargetIdentity as un, QualificationStatus as uo, EXPECTED_HOST_PACKAGES as ur, requestedTargetMatchesResolved as us, proofEvidenceConstraints as ut, SESSION_API_UNSUPPORTED as v, WaitAuthorization as va, extractArtifactPaths as vi, revalidateGitPrestate as vn, governedClauseRestrictsExecution as vo, HostCapabilityId as vr, sanitizeClauseText as vs, validateProofManifest as vt, RC015_HOST_PACKAGES as w, ReleaseOperation as wa, BoundaryQualification as wi, canonicalArgvFromCommand as wn, isExecutableItem as wo, HostLockEvaluation as wr, isVerifyingCapability as wt, V3SessionLike as x, PackageRow as xa, isInformationalMessage as xi, CanonicalCommandSurface as xn, interpretClause as xo, HostCohortSelection as xr, bindingSatisfies as xt, SESSION_EVENT_ENVELOPE_INVALID as y, WorkUnit as ya, extractMethod as yi, verifiedLinearCommitReadback as yn, hasOrderedCoordination as yo, HostCapabilityRequest as yr, sanitizeUrl as ys, validateProofManifestV2 as yt, PROOF_CAPABILITY_MATRIX as z, CapabilityRemedy as za, DeriveConfig as zi, DiagnosisNextAction as zn, reportingHeadGoverns as zo, HostVersionStatus as zr, ActiveProfileHostLock as zt };

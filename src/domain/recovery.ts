@@ -4,6 +4,7 @@ import { evidenceCoverage } from './matching.js'
 import { deriveItemDiagnosis, itemDiagnosis, relevantEvidence } from './diagnostics.js'
 import { isStatefulAction } from './protocol-manifest.js'
 import { DEPENDENCY_FREE_ONLY_CONDITION, type CapabilityGap, type CapabilityRemedy } from './capability-semantics.js'
+import { needsReviewObligations } from './closure.js'
 
 export interface RecoveryOptions {
   rejectedBindings?: Array<{ itemId: string; reason: string; reasonCode?: string; offendingEvidenceIds?: string[] }>
@@ -155,6 +156,17 @@ export function renderRecoveryPacket(projection: GuardProjection, options: Recov
   const COMPLETION_RULE_COMPACT = 'Checkpoint required before completion. Qualified safe end preserves pending work; it is not completion.'
   const lines = [`Context Guard: ${items.length} pending; revision ${projection.contractRevision}.`, compact ? COMPLETION_RULE_COMPACT : COMPLETION_RULE]
   const completionRuleIndex = 1
+  // 0.6.3 K4: a record an earlier release closed, and which the upgrade
+  // eligibility layer refused to inherit, blocks the current certificate and
+  // Goal completion. Leaving it out of the packet would make that obstruction
+  // invisible on the operator's own surface, so one bounded row names it before
+  // any optional item row can spend the budget.
+  const needsReview = needsReviewObligations(projection)
+  if (needsReview.length > 0) {
+    const shown = needsReview.slice(0, 2).map((item) => `[${clip(item.id, 20)}] ${item.needsReview!.reason}`).join('; ')
+    const more = needsReview.length > 2 ? ` (+${needsReview.length - 2} more)` : ''
+    lines.push(`NEEDS REVIEW: ${shown}${more} — a record from an earlier rule set cannot be inherited; resolve it with the root before certifying.`)
+  }
   // 0.6.2 D062-03: the applicable "only dependency-free objects" condition is
   // stated ONCE per packet, before any optional row can consume the budget, so
   // it survives truncation instead of being clipped off the end of one item's

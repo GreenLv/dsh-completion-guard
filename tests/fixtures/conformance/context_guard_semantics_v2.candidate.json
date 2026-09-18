@@ -3,7 +3,7 @@
   "fixture": "context_guard_semantics_v2",
   "fixtureVersion": "2.0.0-candidate.1",
   "status": "dsh-candidate",
-  "description": "Platform-neutral 0.6.0 semantic conformance candidate. Canonical ownership follows the upstream repository: when the upstream lands the frozen v2 fixture, this file is replaced by a byte mirror and the pin is refreshed. Cases run through the production derive/delivery/closure/goal chains without fixture-ID branches. Every declared expectation is compared against a value the runner computes from the events and the production projection alone; the runner never reads this file's expectations to decide an actual result. Revision note (0.6.0 P2 repair): the S07-independent-task-switches-unit case declared interpreted for the same unresolved '更新皮肤中心' obligation that S03-non-file-object-stays-generic declares unknown; the independent reading is unknown, and the declaration was corrected instead of teaching the runner to agree with it.",
+  "description": "Platform-neutral 0.6.0 semantic conformance candidate. Canonical ownership follows the upstream repository: when the upstream lands the frozen v2 fixture, this file is replaced by a byte mirror and the pin is refreshed. Cases run through the production derive/delivery/closure/goal chains without fixture-ID branches. Every declared expectation is compared against a value the runner computes from the events and the production projection alone; the runner never reads this file's expectations to decide an actual result. Revision note (0.6.0 P2 repair): the S07-independent-task-switches-unit case declared interpreted for the same unresolved '更新皮肤中心' obligation that S03-non-file-object-stays-generic declares unknown; the independent reading is unknown, and the declaration was corrected instead of teaching the runner to agree with it. Revision note (0.6.3 K2 repair): S04-future-push-stays-evidence-gated declared missing_evidence for an unnamed-repository push; 0.6.3 stops promoting the session working directory into root authority, so the correct declaration is target_clarification_required. The declaration was corrected; the runner was not taught to agree with it.",
   "families": {
     "S01": "delivered questions close on the host-confirmed final answer only",
     "S02": "same-prefix variants keep execution and unknown spans open",
@@ -236,7 +236,7 @@
         "closure": "open",
         "delivery": null,
         "reason_codes": [
-          "missing_evidence"
+          "target_clarification_required"
         ]
       }
     },

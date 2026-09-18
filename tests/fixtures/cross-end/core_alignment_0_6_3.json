@@ -1,0 +1,399 @@
+{
+  "ledgerVersion": "4",
+  "description": "0.6.3 semantic projection ledger for the shared inputs of the DSH/Codex core-alignment batch. Every case states the DSH side measured through the production derivation, the Codex side read from a fixture recorded by executing the installed module's own entry points, and an explicit disposition. A case whose Codex side was not measured is never called aligned. Revision 3 (0.6.3 twelfth repair round): the DSH side of the two mixed-conjunction cases is recorded as one undecided obligation, because the later reviews established that a coordinated predicate inside an investigation complement may be the complement's own predicate and is therefore never authority by default.",
+  "codexSource": {
+    "product": "codex-context-guard",
+    "version": "0.13.9",
+    "moduleSha256": "4b895aad4b54ec6dc4d8dfcad47a244b91461db3922a7624bbffd612e9166fa7",
+    "shapeFixture": "tests/fixtures/cross-end/codex-0.13.9.shape.json",
+    "shapeEntryPoints": [
+      "_reply_only_request_shape",
+      "clause_metadata",
+      "verification_contract"
+    ],
+    "factsFixture": "tests/fixtures/cross-end/codex-0.13.9.facts.json",
+    "behaviourFixture": "tests/fixtures/cross-end/codex-0.13.9.behaviour.json",
+    "note": "The shape fixture was recorded in this batch by scripts/record_cross_end_oracle.py --mode shape, which executes the installed module's _reply_only_request_shape plus clause_metadata/verification_contract on these exact inputs. It is a function-level recording, not a native Codex host turn."
+  },
+  "dispositions": [
+    "aligned",
+    "partial-equivalent",
+    "not-aligned",
+    "not-applicable"
+  ],
+  "cases": [
+    {
+      "id": "mixed-comma-run-zh",
+      "text": "更新插件，检查是否存在更新，安装新主题，记录变更。",
+      "dshProjection": {
+        "executionObligations": 2,
+        "informationSpans": 1,
+        "informationTexts": [
+          "检查是否存在更新"
+        ],
+        "executionTexts": [
+          "更新插件",
+          "安装新主题，记录变更。"
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "One information range stays answered; the two execution clauses stay pending after a zero-tool final answer."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "local_edit",
+          "ambiguous",
+          "unspecified",
+          "unspecified"
+        ]
+      },
+      "disposition": "not-aligned",
+      "reason": "Measured disagreement in the DANGEROUS direction: the Codex reply-only judge refuses this input (false), while DSH treats the 是否存在 clause as an information range its own turn's answer closes. DSH is more permissive on the same bytes, so the two ends do not agree on what a final answer may close."
+    },
+    {
+      "id": "mixed-comma-run-en",
+      "text": "Install the package, check whether an update exists, and write a report.",
+      "dshProjection": {
+        "executionObligations": 2,
+        "informationSpans": 1,
+        "informationTexts": [
+          "check whether an update exists"
+        ],
+        "executionTexts": [
+          "Install the package",
+          "write a report."
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "Same shape as the Chinese run: the question closes, the two orders stay open."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "unspecified",
+          "local_review",
+          "unspecified"
+        ]
+      },
+      "disposition": "not-aligned",
+      "reason": "Same measured disagreement as mixed-comma-run-zh: Codex refuses the reply-only shape, DSH closes the embedded question with the turn's answer."
+    },
+    {
+      "id": "mixed-conjunction-zh",
+      "text": "检查是否有更新并安装新主题。",
+      "dshProjection": {
+        "executionObligations": 0,
+        "informationSpans": 0,
+        "undecidedObligations": 1,
+        "informationTexts": [],
+        "executionTexts": [],
+        "deliveryMayCloseExecution": false,
+        "note": "NARROWED CONTRACT (revision 4): a question and a coordinated action in ONE clause cannot be told apart reliably, so the whole clause is one UNDECIDED obligation. The previous revision recorded the state question as information and the second conjunct as an order the root gave; that automatic authorization is withdrawn. The install is still named (an action plan), no answer closes it, and it is not authority.",
+        "revisedBy": "narrowed-contract-2026 / fifteenth-round user-approved scope change"
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "ambiguous"
+        ]
+      },
+      "disposition": "partial-equivalent",
+      "reason": "Both ends refuse to authorize the installation: Codex extracts no obligation from the reply-only shape, while DSH keeps the clause as one undecided obligation with its action plan visible. The ends differ in mechanism, and under the narrowed contract DSH no longer records the install as executable work."
+    },
+    {
+      "id": "mixed-conjunction-en",
+      "text": "Check whether an update exists and install the package.",
+      "dshProjection": {
+        "executionObligations": 0,
+        "informationSpans": 0,
+        "undecidedObligations": 1,
+        "informationTexts": [],
+        "executionTexts": [],
+        "deliveryMayCloseExecution": false,
+        "note": "Tightened in the twelfth repair round: in English the complement of `whether` can itself be a subject + predicate (\"the deployment scripts install foo\"), and the surface cannot distinguish that from a noun phrase whose head is a vocabulary verb (\"an update exists\"). The safe reading is therefore one UNDECIDED obligation: the install is kept visible and no answer closes it, but it is not authority.",
+        "revisedBy": "review-12 / eighth repair round of the 0.6.3 core-alignment batch"
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "local_review"
+        ]
+      },
+      "disposition": "partial-equivalent",
+      "reason": "Same as mixed-conjunction-zh: Codex refuses closure, DSH keeps the install pending and answers only the question."
+    },
+    {
+      "id": "pure-question-zh",
+      "text": "检查一下插件是否有更新吗？",
+      "dshProjection": {
+        "executionObligations": 0,
+        "informationSpans": 1,
+        "informationTexts": [
+          "检查一下插件是否有更新吗？"
+        ],
+        "executionTexts": [],
+        "deliveryMayCloseExecution": "not-applicable",
+        "note": "One information obligation, closed by the turn's answer; no execution work exists."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "ambiguous"
+        ]
+      },
+      "disposition": "not-aligned",
+      "reason": "The positive control for the batch, and a measured difference: Codex's reply-only judge returns false for this yes/no question, so Codex would not close it through the answer at all, while DSH closes the information range. DSH accepts a supported question shape Codex's judge does not recognise."
+    },
+    {
+      "id": "pure-question-en",
+      "text": "Is there any update for the plugin?",
+      "dshProjection": {
+        "executionObligations": 0,
+        "informationSpans": 1,
+        "informationTexts": [
+          "Is there any update for the plugin?"
+        ],
+        "executionTexts": [],
+        "deliveryMayCloseExecution": "not-applicable",
+        "note": "One information obligation, closed by the turn's answer."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "unspecified"
+        ]
+      },
+      "disposition": "not-aligned",
+      "reason": "Same measured difference as pure-question-zh."
+    },
+    {
+      "id": "suggestion-particle-zh",
+      "text": "安装新主题吧。",
+      "dshProjection": {
+        "executionObligations": 1,
+        "informationSpans": 0,
+        "informationTexts": [],
+        "executionTexts": [
+          "安装新主题吧。"
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "The 吧 suggestion particle is not an interrogative, so the clause is an order that stays pending."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "unspecified"
+        ]
+      },
+      "disposition": "partial-equivalent",
+      "reason": "Both ends keep the installation open: Codex refuses the reply-only shape (false), DSH records it as executable work. The ends differ in what they record, but neither closes it."
+    },
+    {
+      "id": "conditional-tail-en",
+      "text": "Install the package if available.",
+      "dshProjection": {
+        "executionObligations": 0,
+        "informationSpans": 0,
+        "informationTexts": [],
+        "executionTexts": [
+          "Install the package"
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "The trailing if marks the action conditional; it is recorded and held, never executed or answered."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "unspecified"
+        ]
+      },
+      "disposition": "partial-equivalent",
+      "reason": "Both ends refuse closure: Codex refuses the reply-only shape, DSH holds the action as conditional_wait. Neither treats the final answer as completion."
+    },
+    {
+      "id": "quoted-command-zh",
+      "text": "说明 `git push origin main` 的作用，然后更新 README。",
+      "dshProjection": {
+        "executionObligations": 1,
+        "informationSpans": 0,
+        "informationTexts": [],
+        "executionTexts": [],
+        "deliveryMayCloseExecution": false,
+        "note": "The explanation of a quoted command stays unresolved, and the live order after 然后 is pending."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "remote_push",
+          "local_edit"
+        ]
+      },
+      "disposition": "not-aligned",
+      "reason": "Codex returns false for the reply-only shape while DSH commits to an unresolved explanation plus a pending order. The observable projections differ even though neither claims completion; no alignment is asserted."
+    },
+    {
+      "id": "plain-directive-zh",
+      "text": "更新插件。",
+      "dshProjection": {
+        "executionObligations": 1,
+        "informationSpans": 0,
+        "informationTexts": [],
+        "executionTexts": [
+          "更新插件。"
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "A plain order: one execution obligation, pending."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "local_edit"
+        ]
+      },
+      "disposition": "partial-equivalent",
+      "reason": "Both ends keep ordinary work open; Codex extracts no deterministic obligation and DSH records one pending requirement."
+    },
+    {
+      "id": "plain-directive-en",
+      "text": "Install the package.",
+      "dshProjection": {
+        "executionObligations": 1,
+        "informationSpans": 0,
+        "informationTexts": [],
+        "executionTexts": [
+          "Install the package."
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "A plain order: one execution obligation, pending."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "unspecified"
+        ]
+      },
+      "disposition": "partial-equivalent",
+      "reason": "Same as plain-directive-zh."
+    },
+    {
+      "id": "unnamed-repository-zh",
+      "text": "提交并推送变更",
+      "dshProjection": {
+        "executionObligations": 2,
+        "informationSpans": 0,
+        "informationTexts": [],
+        "executionTexts": [
+          "提交",
+          "推送变更"
+        ],
+        "deliveryMayCloseExecution": false,
+        "note": "Two execution obligations whose repository is the environment default, so each stays a target clarification."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/cross-end/codex-0.13.9.shape.json (recorded by scripts/record_cross_end_oracle.py --mode shape)",
+        "replyOnlyRequestShape": false,
+        "contractMode": "legacy_fallback",
+        "contractReason": "no_deterministic_contract",
+        "obligations": 0,
+        "clauseOperations": [
+          "remote_push"
+        ]
+      },
+      "disposition": "not-aligned",
+      "reason": "Both ends refuse to manufacture authority, by different mechanisms and with different observable results: Codex derives no deterministic contract at all (zero obligations), while DSH records two tagged actions and refuses the mutation because the target has no auditable source. A capability difference, not alignment."
+    },
+    {
+      "id": "shared-digest-and-fixture-contract",
+      "text": "not-a-case: the byte-mirrored fixtures and the digest v3 vectors",
+      "dshProjection": {
+        "executionObligations": "not-applicable",
+        "informationSpans": "not-applicable",
+        "informationTexts": [],
+        "executionTexts": [],
+        "deliveryMayCloseExecution": "not-applicable",
+        "note": "Byte mirrors and digest vectors, not a semantic input."
+      },
+      "codexSide": {
+        "measured": true,
+        "source": "tests/fixtures/conformance/UPSTREAM_PIN.json",
+        "canonicalCommit": "b59fcfe1aaf8ead3f0438bc67dc7f725c869a473",
+        "replyOnlyRequestShape": null,
+        "contractMode": null,
+        "contractReason": null,
+        "obligations": null,
+        "clauseOperations": []
+      },
+      "disposition": "aligned",
+      "reason": "Shared digest bytes and the mirrored portable fixture agree; the repository's digest-v3 and portable-conformance gates are the evidence, and neither input changed in 0.6.3."
+    }
+  ],
+  "notCompared": [
+    {
+      "capability": "cross-repository follow-up reference",
+      "reason": "Codex exposes no target-source entry point to execute, and this batch is not permitted to run a native Codex host session, so no Codex-side projection exists for it. It is recorded as not measured rather than not applicable."
+    },
+    {
+      "capability": "prepare/execute same-input compatibility",
+      "reason": "Codex has no prepare surface at all. The plan records this comparison as not applicable rather than unmeasured."
+    },
+    {
+      "capability": "legacy answered-record eligibility",
+      "reason": "Codex has no equivalent eligibility layer for previously-closed information records; recorded as not applicable."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "ledgerVersion": "2",
   "description": "Current, evidence-bounded delta ledger for behavior shared between codex-context-guard and dsh-completion-guard. It separates aligned behavior, partial host-native equivalents, missing shared behavior, and Codex-only lifecycle features.",
-  "updatedAt": "2026-09-14",
+  "updatedAt": "2026-09-16",
   "source": {
     "product": "codex-context-guard",
     "currentRelease": "v0.13.9",
@@ -17,12 +17,12 @@
   },
   "target": {
     "product": "dsh-completion-guard",
-    "currentRelease": "v0.6.0",
-    "currentReleaseHead": "not recorded here: the 0.6.0 source candidate is not yet frozen into an artifact, so no commit SHA is asserted in this ledger",
+    "currentRelease": "v0.6.3",
+    "currentReleaseHead": "not recorded here: the 0.6.3 source candidate is not yet frozen into an artifact, so no commit SHA is asserted in this ledger",
     "implementationBaseline": "ffc6fe9e1246a815f0bb630943c59d14b6505716",
-    "host": "DSH 0.1.5-rc.2 || 0.1.5-rc.1 / Cordis 4.0.2 (registry-derived cohort; native audit pending for 0.6.0)"
+    "host": "DSH 0.1.5-rc.2 || 0.1.5-rc.1 / Cordis 4.0.2 (registry-derived cohort; native audit pending for 0.6.3)"
   },
-  "alignmentClaim": "DSH 0.6.0 implements the C01-C12 shared contract of the paired 0.6.0/0.14.0 plans and covers it with production-chain tests. It does NOT claim core alignment with Codex Context Guard: the v2 conformance fixture exists only as a DSH-authored candidate because the upstream has not landed a frozen v2 specification, so the canonical mirror and the cross-language parity comparison remain open. The v1 fixtures, the digest-v3 vectors, and the frozen digest domains are unchanged.",
+  "alignmentClaim": "DSH 0.6.3 implements the C01-C12 shared contract of the paired 0.6.0/0.14.0 plans plus the K1-K4 core-alignment repairs, and covers it with production-chain tests. It does NOT claim core alignment with Codex Context Guard: the 0.6.2 review reproduced three domain defects and one inheritance defect that the recorded Codex behaviour does not share, the v2 conformance fixture still exists only as a DSH-authored candidate because the upstream has not landed a frozen v2 specification, and the mixed-request, cross-repository and prepare/execute families have no measured Codex counterpart. tests/fixtures/cross-end/core_alignment_0_6_3.json records each family's disposition case by case. The v1 fixtures, the digest-v3 vectors, and the frozen digest domains are unchanged.",
   "dispositions": [
     "aligned",
     "partial-equivalent",
@@ -149,14 +149,16 @@
     {
       "capability": "trusted-answer-delivery",
       "introducedBy": "shared C03 (0.6.0 / 0.14.0 plan)",
-      "disposition": "aligned",
-      "targetRelease": "dsh-completion-guard v0.6.0",
-      "plainLanguage": "A question or explanation is closed only by the host's own record of a normally completed turn whose final assistant message was not interrupted; delivery never implies correctness or execution.",
-      "implementation": "domain/delivery.ts derives the fact from assistant/message + turn/end; deriveProjection applies it to information-slot items of that turn's owning unit and its delegated sub-units.",
+      "disposition": "partial-equivalent",
+      "targetRelease": "dsh-completion-guard v0.6.3",
+      "plainLanguage": "A question or explanation is closed only by the host's own record of a normally completed turn whose final assistant message was not interrupted; delivery never implies correctness or execution. DSH bounds the closable range to a COMPLETE information range, which the recorded Codex reply-only judgement does not match on mixed inputs.",
+      "implementation": "domain/delivery.ts derives the fact from assistant/message + turn/end; deriveProjection applies it to information-slot items of that turn's owning unit and its delegated sub-units, after K1 has separated the execution obligations of the same clause.",
       "tests": [
         "tests/domain/v060-units-delivery.test.ts",
-        "tests/domain/v060-portable-v2.test.ts"
-      ]
+        "tests/domain/v060-portable-v2.test.ts",
+        "tests/domain/v063-core-alignment.test.ts"
+      ],
+      "note": "Downgraded from aligned in 0.6.3: the recorded Codex _reply_only_request_shape judgement returns false for the mixed comma-run inputs where 0.6.2 DSH would close the whole clause as answered. Alignment on this family is not established."
     },
     {
       "capability": "work-unit-required-descendant-closure",
@@ -220,6 +222,60 @@
         "tests/domain/v060-v2-runner-independence.test.ts"
       ],
       "dshOnlyReason": "Only the upstream repository can land the canonical v2 specification, schema and reference projection. Until it does, mirroring and parity cannot be established honestly."
+    },
+    {
+      "capability": "information-scope-preservation",
+      "introducedBy": "dsh-completion-guard v0.6.3 (K1; review F062-01)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.3",
+      "plainLanguage": "A question inside an instruction is a question; the work beside it stays work. An answer closes the information range it answers and nothing else. This is a DSH-side implementation of the shared contract; the Codex counterpart for this family is not measured.",
+      "implementation": "domain/semantics.ts classifies a clause as information only when an interrogative opens or ends it, and partitions a mixed clause into an information range plus its directive clauses.",
+      "tests": [
+        "tests/domain/v063-core-alignment.test.ts",
+        "tests/domain/v063-holdout.test.ts"
+      ],
+      "note": "The 0.6.2 rule is retained as legacyQuestionReadingIsInformational so the fixed defect keeps a failing-before regression."
+    },
+    {
+      "capability": "requested-target-provenance",
+      "introducedBy": "dsh-completion-guard v0.6.3 (K2; review F062-02)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.3",
+      "plainLanguage": "Work happens where you said it happens. The directory a session started in is context, not your choice. This is a DSH-side implementation of the shared contract; the Codex counterpart for this family is not measured.",
+      "implementation": "domain/capture.ts records TargetSource (explicit name/path, explicit current repository, host selection, unit inheritance, environment default); derive.ts resolves inheritance across the same work unit; runtime.ts refuses an environment-default target explicitly.",
+      "tests": [
+        "tests/domain/v063-core-alignment.test.ts",
+        "tests/domain/v063-holdout.test.ts",
+        "tests/domain/v051-target-identity.test.ts"
+      ],
+      "note": "Codex exposes no equivalent target-source entry point, so this family is recorded not-applicable rather than aligned."
+    },
+    {
+      "capability": "prepare-execute-shared-compatibility",
+      "introducedBy": "dsh-completion-guard v0.6.3 (K3; review F062-03)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.3",
+      "plainLanguage": "Preparation tells you what the Guard will actually accept for the item you asked about, and it will not hand you a recipe the execution gate would refuse. This is a DSH-side implementation of the shared contract; the Codex counterpart for this family is not measured.",
+      "implementation": "domain/compatibility.ts is the single pure judgement used by tools/prepare.ts and runtime.authorizeMutationFromProjection; it separates semantic compatibility, target compatibility, execution readiness and adapter capability.",
+      "tests": [
+        "tests/domain/v063-core-alignment.test.ts",
+        "tests/domain/v063-holdout.test.ts",
+        "tests/tools/v063-host-materialization.test.ts"
+      ],
+      "note": "Codex has no equivalent prepare surface; recorded not-applicable in the cross-end ledger."
+    },
+    {
+      "capability": "legacy-record-eligibility",
+      "introducedBy": "dsh-completion-guard v0.6.3 (K4)",
+      "disposition": "aligned",
+      "targetRelease": "dsh-completion-guard v0.6.3",
+      "plainLanguage": "An obligation recorded by an earlier version is never inherited as a pass. If its own text still orders work, it blocks a new certificate until you resolve it, and its history is preserved. This is a DSH-side implementation of the shared contract; the Codex counterpart for this family is not measured.",
+      "implementation": "derive.ts runs the eligibility pass before any terminal filtering; closure.ts exposes the blocking set; checkpoint.ts and goal-gate.ts refuse certification and Goal completion; delivery.ts does not close a flagged record.",
+      "tests": [
+        "tests/domain/v063-core-alignment.test.ts",
+        "tests/domain/v063-holdout.test.ts"
+      ],
+      "note": "Codex has no equivalent eligibility layer for previously-closed information records."
     }
   ]
 }

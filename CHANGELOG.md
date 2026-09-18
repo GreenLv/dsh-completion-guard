@@ -2,6 +2,71 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.6.3 - 2026-09-18
+
+Repairs execution authority, target identity, preparation consistency and legacy
+record eligibility. For publication status and same-artifact native evidence, use
+[the versioned release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.6.3).
+[Local acceptance](docs/LOCAL_ACCEPTANCE.md) records the source checks.
+
+### Changes
+
+- **Execution requires an independently recognized instruction.** Questions,
+  explanations, reported or quoted commands cannot grant execution authority.
+  Mixed requests whose action remains inside that scope stay unresolved and
+  cannot be closed by an ordinary answer. Write an independent instruction as
+  another sentence or semicolon-separated clause. Stored execution qualification
+  is inherited without promotion and consumed by both prepare and execution.
+  See the [contract revision](docs/CONTRACT_REVISION_0_6_3.md) for the intentional
+  compatibility change.
+- **The session working directory is no longer a target selection.** An
+  obligation's target now carries its provenance: an explicit name or path, a
+  phrase that selects the current repository, a trusted host selection, or a
+  unique selection inherited from another obligation of the same work unit. A
+  git action whose clause names no repository keeps that directory as
+  environment context only, so it stays a target clarification instead of
+  authorizing a mutation the root never chose. Several equally sourced
+  candidates stay ambiguous; a different repository is still refused.
+- **Preparation and execution answer the same compatibility question.**
+  `context_guard_prepare` evaluates the current item, action, revision and
+  target through the judgement the mutation gate enforces, reports
+  `incompatible` with the item's own action when the assumption is not what the
+  obligation records, and only ever returns a caller-named recipe labelled
+  `recipe_only`. A caller-supplied target that differs from the item's is
+  reported as a proposal, not as authority.
+- **Records captured under earlier rules are not inherited as passes.** An
+  upgrade eligibility check runs before any terminal filtering and covers
+  records the open-closure computation skips, including ones already
+  `answered`. A record whose own text still orders work, or whose git target has
+  no auditable source, is marked `needs_review`: its historical status is
+  preserved, nothing is re-executed, and the record blocks new certificates and
+  Goal completion instead of producing a warning. Unknown state versions are
+  reported rather than assumed compatible.
+- Codex alignment is restated honestly. A new recording executes the installed
+  Codex module's own reply-only delivery judge on twelve shared inputs
+  (`tests/fixtures/cross-end/codex-0.13.9.shape.json`), and the cross-end ledger
+  records each family's measured disposition. On this batch Codex refuses to
+  close all twelve, so the mixed-request and pure-question families are
+  `not-aligned` in the direction that matters, and the
+  `trusted-answer-delivery` claim is downgraded from `aligned`.
+- **Target uniqueness includes every identity field.** Candidate lists preserve
+  case where identity is case-sensitive, and package specs contribute both name
+  and version. Ordinary capture, restatements and every action-plan entry reject
+  conflicting choices. Restatements bind the new action and target together;
+  only omitted fields with unique sources can be inherited.
+
+### Upgrade and validation
+
+Write an intended action as an independent instruction when it shares a question
+or explanation's scope. Legacy records without execution qualification require
+review; no historical action is replayed. The exact supported DSH versions remain
+`0.1.5-rc.2 || 0.1.5-rc.1`.
+
+The final source suite passed 2140 tests with one skip. Historical repair rounds,
+contract changes and evidence limits are retained in
+[local acceptance](docs/LOCAL_ACCEPTANCE.md). These checks do not replace the
+exact-artifact native annexes attached to the versioned Release.
+
 ## 0.6.2 - 2026-09-16
 
 ### Changes

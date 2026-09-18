@@ -39,6 +39,33 @@ Authority rules:
   DSH v0.1.0 port. It is a historical fact, not the current alignment claim;
   current status lives in this document and the delta ledger.
 
+## 0.6.3 core-alignment delta
+
+The 0.6.2 core-alignment review reproduced three domain defects — a question
+marker swallowing a mixed request, the session directory promoted to a resolved
+request target, and preparation returning a recipe the execution gate refuses —
+and a fourth consequence: records an earlier version closed as answered were
+inherited as current passes. 0.6.3 repairs the source readings rather than the
+endpoint checks:
+
+| Capability | 0.6.3 disposition | Evidence |
+| --- | --- | --- |
+| information scope is complete and execution-free | implemented (DSH side) | `tests/domain/v063-core-alignment.test.ts`, `tests/domain/v063-holdout.test.ts` |
+| requested target has an auditable source | implemented (DSH side) | `tests/domain/v063-core-alignment.test.ts` (K2), `tests/domain/v051-target-identity.test.ts` |
+| prepare and execution share one compatibility judgement | implemented (DSH side) | `src/domain/compatibility.ts`, `tests/domain/v063-core-alignment.test.ts` (K3) |
+| earlier answered records are re-checked before terminal filtering | implemented (DSH side) | `tests/domain/v063-core-alignment.test.ts` (K4), `tests/domain/v063-holdout.test.ts` |
+| mixed-request obligation projection equals Codex | **not measured** | `tests/fixtures/cross-end/core_alignment_0_6_3.json` records it `not-applicable` |
+| cross-repository follow-up reference equals Codex | **not measured** | Codex exposes no equivalent target-source entry point |
+| prepare/execute consistency equals Codex | **not measured** | Codex has no equivalent prepare surface; recorded `not-applicable` |
+
+`docs/upstream-deltas.json` carries the same statements in the machine-readable
+ledger (refreshed 2026-09-16 for the 0.6.3 target; the Codex-side release
+comparison it names is unchanged), and
+`tests/fixtures/cross-end/core_alignment_0_6_3.json` is the case-level record. The `trusted-answer-delivery` entry was downgraded from `aligned` to
+`partial-equivalent`: the recorded Codex reply-only judgement returns false for
+the mixed inputs where DSH's delivery judgement would close the information
+range, so the two ends do not agree on that family.
+
 ## Digest v3
 
 Certificate, boundary, and evidence manifests bind to versioned canonical
@@ -152,7 +179,7 @@ Work-unit scope and correction attribution are also shared semantic gaps and sho
 
 ## 0.4.2 and 0.4.3 product boundaries
 
-The 0.4.2 release retained these exact mirrored fixtures and the recorded upstream pin. Its DSH-native rebinding, bounded checkpoint output, and recovery changes do not establish parity with later Codex releases. `upstream-deltas.json` is the dated 2026-09-03 comparison snapshot: its `currentRelease` fields name the releases compared then, not a live latest-version lookup. Refreshing that comparison requires a separate upstream audit; it does not happen merely because either product releases a newer version.
+The 0.4.2 release retained these exact mirrored fixtures and the recorded upstream pin. Its DSH-native rebinding, bounded checkpoint output, and recovery changes do not establish parity with later Codex releases. `upstream-deltas.json` is a dated comparison snapshot (refreshed 2026-09-16 for the 0.6.3 target; originally the 2026-09-03 audit): its `currentRelease` fields name the releases compared then, not a live latest-version lookup. Refreshing that comparison requires a separate upstream audit; it does not happen merely because either product releases a newer version.
 
 The 0.4.3 core policy changes DSH-specific manifest values, not the shared digest-v3 encoding or byte-mirrored fixtures. Core manifest version 2 and `dsh-core/v1` produce a fresh identity after actual-graph inspection. Legacy cohorts remain historical inputs. Market service adapter `context-guard.service.v2` uses version `2.0.0`; old restart credentials cannot become new-instance credentials. Package apply remains a disk-state operation, and unavailable restart work remains pending.
 
@@ -307,3 +334,24 @@ classes, release state, and migration facts.
 - The delta ledger separates source facts, plan status, implementation
   status, deterministic tests, native platform acceptance, and release
   readback; keep all six aligned when a capability moves.
+
+## 0.6.3 narrowed execution qualification (DSH-side)
+
+The DSH side now decides EXECUTION QUALIFICATION once per clause, before any
+partition: a clause whose own reading is a question, an explanation, an
+investigation, a reported question or a quoted scope is `restricted`, and one that
+asks nothing is `granted`. The qualification is stored on the item
+(`executionQualification`), inherited by every partition child, and consumed by
+both the mutation gate and `context_guard_prepare`; a record captured before the
+qualification exists is refused rather than read from its stored disposition and
+is flagged `legacy_missing_execution_qualification` by the upgrade check. The
+same-clause "prove the complement closed" rules of the earlier 0.6.3 revisions are
+removed, so there is exactly one authorization path.
+
+What this means for cross-end work: a question and a coordinated action in ONE
+clause is an UNDECIDED obligation on the DSH side, where earlier revisions recorded
+the action as an order. The machine-readable ledger
+`tests/fixtures/cross-end/core_alignment_0_6_3.json` records that reading at
+revision 4; the Codex side is unchanged, both ends still refuse to let an answer
+close the install, and no feature, runtime or release equivalence may be inferred
+from the shared fixture. See [CONTRACT_REVISION_0_6_3.md](CONTRACT_REVISION_0_6_3.md).

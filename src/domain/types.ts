@@ -9,16 +9,81 @@ export type GuardItemStatus = 'pending' | 'answered' | 'passed' | 'superseded'
 export type GuardIntegrity = 'valid' | 'unknown' | 'corrupt'
 export type EvidenceOutcome = 'success' | 'failure' | 'unknown' | 'durability-unknown'
 export type GuardOperation = 'create' | 'write' | 'modify' | 'read' | 'run' | 'verify'
+/**
+ * 0.6.3 K2: where an obligation's requested target came from. A target is a
+ * user SELECTION only when the root named it or a trusted host selection made
+ * it; an environment default (the session working directory, a recent tool
+ * path, a model-supplied selector) resolves and corroborates a target the root
+ * already allowed, and never manufactures root authority. An inherited target
+ * comes from another obligation of the same work unit whose own source is
+ * auditable.
+ */
+export type TargetSourceKind =
+  | 'explicit_label'
+  | 'explicit_path'
+  | 'explicit_current_repository'
+  | 'host_selection'
+  | 'unit_inherited'
+  | 'environment_default'
+
+export interface TargetSource {
+  kind: TargetSourceKind
+  /** Source message id of the obligation a `unit_inherited` target came from. */
+  inheritedFrom?: string
+}
+
 export type TargetValue = boolean | number | string | { k: 'b' | 'i' | 's' | 'e' | 'x'; v: unknown }
 export type TargetTuple = Record<string, TargetValue>
 export type EvidenceRole = 'resolution' | 'effect' | 'state'
 export type EvidenceParseStatus = 'supported' | 'unsupported_statement_operator' | 'unsupported_command' | 'malformed_quote' | 'adapter_unavailable'
 export type HostStatus = 'supported' | 'unsupported' | 'unavailable'
 export type TargetCaptureStatus = 'resolved' | 'clarification_required'
+/**
+ * 0.6.3 K4: why a record captured under the rules of an EARLIER release can no
+ * longer be reused as a current pass. The record itself is never rewritten —
+ * its historical status (including `answered`) stays the historical fact it
+ * was — but the current eligibility layer refuses to inherit it and the
+ * obstruction blocks new certificates and Goal completion until the root
+ * resolves it. It is deliberately a hard block, not a warning: 0.6.2 published
+ * a mixed request as answered, and a warning would have left exactly that
+ * misreading in force.
+ */
+export type NeedsReviewReason =
+  /** An information reading that still names work of its own (F062-01). */
+  | 'legacy_mixed_information_scope'
+  /** A resolved target with no auditable source: the 0.6.2 environment default (F062-02). */
+  | 'legacy_environment_default_target'
+  /** The record's own state version is unknown to this build. */
+  | 'unknown_state_version'
+  /**
+   * 0.6.3 (narrowed contract): the record predates execution qualification, so
+   * nobody may read its stored disposition as authority. Its history is preserved
+   * untouched; only its eligibility as a CURRENT pass is refused.
+   */
+  | 'legacy_missing_execution_qualification'
+
+export interface NeedsReviewFact {
+  reason: NeedsReviewReason
+  /** Stable identity of the eligibility check that raised it. */
+  checkId: string
+  /** When the check was applied: this is an upgrade fact, not a birth fact. */
+  recordedAtRevision: number
+}
 export type TargetCaptureReasonCode =
   | 'requested_target_package_id_missing'
   | 'requested_target_artifact_id_missing'
   | 'requested_target_repository_missing'
+  /**
+   * 0.6.3 K2: several equally sourced repository candidates exist in the
+   * current work unit and the root must select one.
+   */
+  | 'requested_target_repository_ambiguous'
+  /**
+   * 0.6.3 K2: the repository is unique but another identity field (branch,
+   * remote or refspec) differs across the candidates of that repository, so the
+   * field is a choice the root has not made yet.
+   */
+  | 'requested_target_field_ambiguous'
   | 'requested_target_service_id_missing'
   | 'requested_target_registry_missing_or_invalid'
 
@@ -129,6 +194,17 @@ export interface GuardItem {
   requestedTarget?: TargetTuple
   targetCaptureStatus?: TargetCaptureStatus
   targetCaptureReasonCode?: TargetCaptureReasonCode
+  /**
+   * 0.6.3 K2 provenance of {@link requestedTarget}. Absent on items captured by
+   * 0.6.2 and earlier, whose target reading is historical and evaluated by the
+   * upgrade eligibility check rather than re-interpreted.
+   */
+  targetSource?: TargetSource
+  /**
+   * 0.6.3 K4: set by the upgrade eligibility check when this record cannot be
+   * inherited as a current pass. It never overwrites the historical status.
+   */
+  needsReview?: NeedsReviewFact
   authority?: 'root_instruction' | 'root_adoption' | 'legacy_authority_unclassified'
   legacyFlags?: Array<'legacy_generic_run' | 'legacy_authority_unclassified'>
   /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
@@ -143,6 +219,14 @@ export interface GuardItem {
   directive?: import('./semantics.js').DirectiveClass
   executee?: import('./semantics.js').Executee
   authorityDisposition?: import('./semantics.js').AuthorityDisposition
+  /**
+   * 0.6.3 (narrowed contract): whether this reading may host execution authority.
+   * Established ONCE by the reader, before any partition, and inherited by every
+   * child the partition produces. Absent on records captured before the
+   * qualification existed: the gate and preparation refuse those rather than
+   * reading their stored disposition as permission.
+   */
+  executionQualification?: import('./semantics.js').ExecutionQualification
   /** The unresolved condition guarding a `conditional_wait` item. */
   condition?: string
   /** The event that ends a human wait, when the source names one. */

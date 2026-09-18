@@ -58,7 +58,7 @@ const diagnosisOf = (projection: ReturnType<typeof deriveProjection>['projection
 describe('0.6.1 W060-05: unattributable commands stay unknown — no fabrication, no redo', () => {
   it('a pwsh compound headed by git commit leaves the commit obligation execution_unattributable', () => {
     const { projection } = deriveProjection(
-      session(['提交并推送变更'], [{ command: 'git commit -F message.txt; git push origin main', outcome: 'success' }], 'windows'),
+      session(['提交并推送仓库 /repo 的变更'], [{ command: 'git commit -F message.txt; git push origin main', outcome: 'success' }], 'windows'),
       { activation: 'always' as const }, scope, true, auditedLock('windows'),
     )
     const diagnosis = diagnosisOf(projection, 'commit')
@@ -73,7 +73,7 @@ describe('0.6.1 W060-05: unattributable commands stay unknown — no fabrication
 
   it('quoted action text is data, never an observation (review repro)', () => {
     const { projection } = deriveProjection(
-      session(['提交并推送变更'], [{ command: `printf '%s' '; git commit -F msg; git push origin main;'; true`, outcome: 'success' }], 'windows'),
+      session(['提交并推送仓库 /repo 的变更'], [{ command: `printf '%s' '; git commit -F msg; git push origin main;'; true`, outcome: 'success' }], 'windows'),
       { activation: 'always' as const }, scope, true, auditedLock('windows'),
     )
     // The command head is printf: the guard has NO action signal and must not
@@ -84,7 +84,11 @@ describe('0.6.1 W060-05: unattributable commands stay unknown — no fabrication
 
   it('a read-only git inspection never fabricates an unattributed execution', () => {
     const { projection } = deriveProjection(
-      session(['提交变更'], [
+      // The root names its repository: this case is about the ABSENCE of an
+      // action signal in read-only git commands (0.6.3 K2 keeps the ambient
+      // working directory out of authorization, so an unnamed repository would
+      // stop at the target gap before the evidence lane under test).
+      session(['提交仓库 /repo 的变更'], [
         { command: 'git status', outcome: 'success' },
         { command: 'git log --oneline -5', outcome: 'success' },
       ], 'posix'),
@@ -107,7 +111,7 @@ describe('0.6.1 W060-05: unattributable commands stay unknown — no fabrication
 
   it('a failed compound command is not an observation of execution', () => {
     const { projection } = deriveProjection(
-      session(['提交变更'], [{ command: 'git commit -F message.txt; git push origin main', outcome: 'failure' }], 'windows'),
+      session(['提交仓库 /repo 的变更'], [{ command: 'git commit -F message.txt; git push origin main', outcome: 'failure' }], 'windows'),
       { activation: 'always' as const }, scope, true, auditedLock('windows'),
     )
     expect(diagnosisOf(projection, 'commit').reason_code).toBe('missing_evidence')

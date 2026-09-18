@@ -8,12 +8,13 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 
 ## Quick start
 
-**0.6.2** is the current source candidate; it is not published yet, so the
-registry command below still installs the newest published version. Candidate
-and platform results are recorded in [LOCAL_ACCEPTANCE](docs/LOCAL_ACCEPTANCE.md):
+For version **0.6.3**, use the command below after confirming that its
+[GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.6.3)
+is published. The release contains the exact artifact identity and platform evidence;
+[source acceptance](docs/LOCAL_ACCEPTANCE.md) records the development checks.
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.6.1
+dsh plugin --profile web add dsh-completion-guard@0.6.3
 ```
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -51,7 +52,7 @@ Activation is opt-in by default. `status` shows whether the Guard is on, its sta
 
 ## Status and compatibility
 
-Version 0.6.2 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+Version 0.6.3 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
 
 Package discovery and npm installation now publish the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
 
@@ -114,9 +115,52 @@ Use `context_guard_rebind` to propose an exact, complete split of the old text. 
 
 The default `context_guard_checkpoint` call uses `bindings: []` for diagnosis. It shows at most eight current items/constraints and ten evidence rows, within 12 KiB of plugin JSON. `pagination` reports totals and a separate `next_cursor` for each list; the first page is not the whole contract. Use `item_ids` or `evidence_ids` to focus a query, or `evidence_scope: "history"` for the complete evidence history, including rows marked unavailable. Keep the query unchanged when following a cursor; a changed contract or evidence snapshot requires a fresh query. Large rows expose `detail_id`; retrieve chunks with `detail_offset` and return the first response's `snapshot` as `detail_snapshot` on later chunks. All queries remain read-only and never shrink the certification set.
 
-## What 0.6.2 changes for ordinary work
+## What 0.6.3 changes for ordinary work
 
-Three things you will notice, and one thing you will not.
+Four things you will notice, and the one that matters most.
+
+**A question never deletes work beside it — and a mixed clause is no longer
+auto-authorized.** Separate clauses keep their own readings, so
+"更新插件，检查是否存在更新，安装新主题，记录变更。" is still an update, a
+question, an install and a record: the answer closes the question and the other
+three stay open. But when a question, an explanation, an investigation and an
+action share ONE clause, the Guard no longer guesses that the action is a
+separate instruction. It keeps the whole clause as one **undecided** obligation,
+which stays visible, cannot be closed by an ordinary answer, cannot take a
+completion certificate, and authorizes nothing — write the action as its own
+sentence to authorize it ("Check whether the cache is valid. Then install the
+package."). This is the deliberate narrowing recorded in
+[docs/CONTRACT_REVISION_0_6_3.md](docs/CONTRACT_REVISION_0_6_3.md): the earlier
+build tried to prove that such an action had left the question's scope, and every
+proof turned out to be a guess about vocabulary or word position. A purely
+informational request still closes with the answer it receives.
+
+**Where work happens is no longer assumed from where the session started.** When
+an instruction says which repository to change, the Guard records that choice
+and its source. When it does not, the session's working directory is kept as
+context only: a commit or push that never named a repository stays an explicit
+open question instead of being authorized against whichever directory the
+session happened to start in. A short follow-up such as "提交并推送" inherits the
+repository only when the current work unit holds exactly one repository the user
+already named; two candidates stay an explicit choice for you, and a repository
+called `/repo-a.js` is still a repository — a file extension is part of the name
+you gave, not proof of what kind of thing it is.
+
+**`context_guard_prepare` answers about the item you actually asked about.** It
+now reports whether your intended action, revision and target match the current
+obligation, using the same judgement the execution gate applies. If you assume a
+different action, it says so and names the item's own action instead of handing
+you a recipe the gate would refuse; an action manual is labelled `recipe_only`,
+and a target you supply that the obligation did not select is reported as a
+proposal, never as authority.
+
+**An obligation recorded by an earlier version is never inherited as a pass.**
+Upgrading to 0.6.3 re-reads the records that can still affect the current
+conclusion — including ones already marked answered — and flags any whose own
+text still orders work, or whose git target has no auditable source, as needing
+review. Their history is preserved byte for byte and nothing is re-executed, but
+they block a new certificate and a Goal completion until you resolve them, so a
+misreading an earlier version published cannot quietly become current truth.
 
 **The Guard no longer asks you to re-word a request it cannot certify.** When a
 task names a concrete action this build has no certification adapter for — a

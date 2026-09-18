@@ -41,6 +41,36 @@ export function certifiableOpenItems(projection: GuardProjection): GuardItem[] {
 }
 
 /**
+ * 0.6.3 K4: the records in the certificate's own scope that the upgrade
+ * eligibility check refused to inherit. They are NOT reopened as current debt
+ * and no business effect is repeated — they block the CURRENT conclusion until
+ * the root resolves them, which is what makes an old misreading stop being
+ * silently carried forward. The scan deliberately includes records the
+ * terminal filter would skip (`answered`), because that filter is exactly what
+ * hid the 0.6.2 mixed-request misreading.
+ */
+export function needsReviewObligations(projection: GuardProjection): GuardItem[] {
+  const ordering = (a: GuardItem, b: GuardItem): number => (a.revision - b.revision) || (a.id < b.id ? -1 : 1)
+  const units = projection.boundaryProtocol === 5 && projection.currentUnitId !== undefined
+    ? new Set<string>([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)])
+    : undefined
+  return [...projection.items.values()]
+    .filter((item) => {
+      if (item.needsReview === undefined) return false
+      // The scope is the same one a certificate answers for — the current unit
+      // and its required descendants — plus every unit-less (pre-v5) record,
+      // which keeps its birth rules. The selection is made on the RECORD's own
+      // scope, never on a terminal status: an item already `answered` or
+      // `passed` inside this scope must still be seen, while a reviewed record
+      // of another unit must not leak in (review P1/K4).
+      if (item.unitId === undefined) return true
+      if (units === undefined) return false
+      return units.has(item.unitId)
+    })
+    .sort(ordering)
+}
+
+/**
  * The certifiable open obligations inside one work unit's closure: the unit's
  * own open work plus the open work of every required descendant unit.
  *

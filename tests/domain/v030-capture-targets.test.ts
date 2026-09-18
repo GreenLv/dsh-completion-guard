@@ -168,7 +168,11 @@ describe('v0.3 production action target capture', () => {
     ['Push to remote origin.', undefined, 'requested_target_repository_missing'],
   ] as const)('fails closed when identity extraction needs clarification: %s', (message, cwd, reasonCode) => {
     const { item, projection } = deriveItem(message, cwd)
-    expect(item.requestedTarget).toEqual({})
+    // 0.6.3: the clause may still name NON-identity fields ("Push to remote
+    // origin." names its remote). They are recorded — inheritance fills around
+    // them instead of discarding the root's own selection — while the missing
+    // identity keeps the item a clarification, which is the fail-closed part.
+    expect(item.requestedTarget).not.toHaveProperty('repository')
     expect(item.targetCaptureStatus).toBe('clarification_required')
     expect(item.targetCaptureReasonCode).toBe(reasonCode)
 

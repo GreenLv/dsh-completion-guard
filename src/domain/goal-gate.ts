@@ -1,9 +1,15 @@
+import { needsReviewObligations } from './closure.js'
 import type { GuardProjection } from './types.js'
 
 export function hasCurrentCertificate(projection: GuardProjection): boolean {
   const checkpoint = projection.checkpoints.at(-1)
   let reason: string | undefined
   if (projection.integrity !== 'valid') reason = 'integrity_invalid'
+  // 0.6.3 K4: a record the upgrade eligibility check refused to inherit blocks
+  // the current conclusion even when a certificate exists. A certificate minted
+  // BEFORE the record was marked cannot be read as if the record had passed, so
+  // the fact is checked here as well as in the certifier.
+  else if (needsReviewObligations(projection).length > 0) reason = 'legacy_record_needs_review'
   else if (projection.hostStatus !== 'supported') reason = 'host_lock_unsupported'
   else if (!checkpoint || checkpoint.result !== 'certified') reason = 'certificate_missing'
   else if (checkpoint.epoch !== projection.epoch) reason = 'stale_epoch'

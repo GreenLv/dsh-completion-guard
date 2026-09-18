@@ -151,7 +151,7 @@ describe('0.6.2 T01: capability diagnosis distinguishes unknown, unsupported and
   })
 
   it('a genuinely absent target identity is the one case that asks the root for input', () => {
-    const item = captureClause('在仓库提交变更', 'm1', 'R001', 1)
+    const item = captureClause('在仓库提交变更', 'm1', 'R001', 1, { cwd: '/repo' })
     expect(item.targetCaptureStatus).toBe('clarification_required')
     const p = createProjection()
     p.enabled = true

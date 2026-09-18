@@ -1,5 +1,4 @@
 import { PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE } from './derive.js'
-
 /**
  * Runtime-owned startup lifecycle. It expresses the activation strategy of a
  * session, never contract or certification state: `armed` means protection is
@@ -9,20 +8,17 @@ import { PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE } from './derive.js'
  * root events, the current contract, and the evidence chain.
  */
 export type LifecyclePhase = 'armed' | 'active' | 'disabled'
-
 export interface FirstStepInjection {
   /** Versioned protocol boundary appended before this step's messages. */
   boundary: string
   /** Compact first-step guidance describing the activated protection. */
   guidance: string
 }
-
 /** One claimed pre-step message: a validated host `UserMessage`. */
 export interface ClaimedMessage {
   source?: { kind?: unknown; plugin?: unknown }
   content?: unknown
 }
-
 function claimedTextParts(content: unknown): { hasText: boolean; hasOtherParts: boolean } {
   if (!Array.isArray(content)) return { hasText: false, hasOtherParts: false }
   let hasText = false
@@ -39,7 +35,6 @@ function claimedTextParts(content: unknown): { hasText: boolean; hasOtherParts: 
   }
   return { hasText, hasOtherParts }
 }
-
 /**
  * Pure preview of one claimed pre-step batch. Messages claimed by the loop are
  * NOT yet persisted as `user/message` events at pre-step time, so this reads
@@ -59,7 +54,6 @@ export function claimedBatchHasRealRootInput(messages: readonly unknown[]): bool
   }
   return false
 }
-
 export interface FirstStepPreviewInput {
   activation: 'opt-in' | 'always'
   /** Log-derived enablement: an explicit `off` suppresses `always` until `on`. */
@@ -73,7 +67,6 @@ export interface FirstStepPreviewInput {
   /** 0.6.1 (W060-05): the effective responsibility tier shapes the guidance. */
   policy?: 'standard' | 'strict' | 'release'
 }
-
 /**
  * Pure decision for the first-step activation injection when protection is enabled. The
  * boundary must precede the first constrained root message inside the SAME
@@ -97,7 +90,6 @@ export function previewFirstStepInjection(
     guidance: firstStepGuidance(input.policy ?? 'standard'),
   }
 }
-
 /**
  * Compact first-step guidance: protection has started, what it protects, and
  * when the guarded producer path is needed. 0.6.1 (W060-05): the stateful
@@ -116,9 +108,7 @@ export function firstStepGuidance(policy: 'standard' | 'strict' | 'release' = 's
     + strict
     + ' Ordinary answers and investigations need no certification.'
 }
-
 export const FIRST_STEP_GUIDANCE: string = firstStepGuidance('standard')
-
 /**
  * Lifecycle phase derived from durable facts. `enabled` is the log-derived
  * enablement (`always`, or the explicit `on`/`off` command sequence), and

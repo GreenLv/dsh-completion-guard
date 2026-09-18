@@ -1,9 +1,15 @@
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
-import type { GuardProjection } from '../domain/types.js'
+import type { GuardItem, GuardProjection } from '../domain/types.js'
 import { deriveItemDiagnosis, evidenceAvailabilityReason, relevantEvidence } from '../domain/diagnostics.js'
 import { actionPreparation } from './action-preparation.js'
-import { ACTION_MANIFEST, isStatefulAction, type StatefulAction } from '../domain/protocol-manifest.js'
+import {
+  ACTION_MANIFEST, isStatefulAction, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved,
+  type SemanticAction, type StatefulAction,
+} from '../domain/protocol-manifest.js'
+import { actionHasAdapter, evaluateCompatibility } from '../domain/compatibility.js'
+import { itemHoldsExecutionAuthority } from '../domain/semantics.js'
+import type { TargetTuple } from '../domain/types.js'
 import { unitDescendantIds } from '../domain/work-unit.js'
 
 export interface PrepareToolOptions {
@@ -27,6 +33,29 @@ interface PrepareArgs {
   requested_target?: Record<string, unknown>
   planned_operation?: string
   page_cursor?: string
+}
+
+/**
+ * Whether a standing prohibition the gate would refuse now covers this
+ * hypothesis. It mirrors `authorizeMutationFromProjection`'s own check: a
+ * pending, root-authorized, non-legacy prohibition on the same action whose
+ * declared identity matches the target this preparation is about.
+ */
+function conflictsWithProhibition(
+  projection: GuardProjection,
+  action: StatefulAction,
+  item: GuardItem,
+): boolean {
+  const resolved = item.requestedTarget
+  if (resolved === undefined) return false
+  return [...projection.items.values()].some((candidate) => (
+    candidate.status === 'pending'
+    && candidate.kind === 'prohibition'
+    && (candidate.authority === 'root_instruction' || candidate.authority === 'root_adoption')
+    && !candidate.legacyFlags?.length
+    && candidate.semanticAction === action
+    && requestedTargetMatchesResolved(action, candidate.requestedTarget, resolved)
+  ))
 }
 
 /** Discovery pages stay bounded like checkpoint pages. */
@@ -193,9 +222,132 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
         return { status: 'rejected', reason_code: 'item_revision_mismatch', item_revision: item.revision }
       }
       const diagnosis = deriveItemDiagnosis(p, item)
+      const itemAction = (item.semanticAction ?? 'generic_run') as SemanticAction
       const plannedAction = (args.semantic_action ?? item.semanticAction) as StatefulAction | undefined
       const manifestEntry = plannedAction ? ACTION_MANIFEST.actions[plannedAction] : undefined
       if (plannedAction && !manifestEntry) return { status: 'rejected', reason_code: 'unsupported_action' }
+      // 0.6.3 K3: preparation reports the CURRENT item's compatibility through
+      // the same judgement the runtime enforces before any effect. An action or
+      // target the item does not read is refused here — with the item's own
+      // action named as the reachable path — instead of returning a `prepared`
+      // recipe the execution gate would refuse.
+      const compatibility = evaluateCompatibility({
+        action: (plannedAction ?? itemAction) as SemanticAction,
+        itemAction,
+        itemRevision: args.item_revision,
+        currentRevision: item.revision,
+        // 0.6.3 K3 (review counterexample): the SAME snapshot inputs the
+        // mutation gate reads. Omitting the projection-level facts made prepare
+        // report `compatible` while the gate denied with
+        // `mutation_host_lock_unavailable` for the same snapshot.
+        enabled: p.enabled,
+        integrity: p.integrity,
+        hostStatus: p.hostStatus,
+        itemKind: item.kind,
+        itemStatus: item.status,
+        authority: item.authority,
+        legacyFlags: item.legacyFlags,
+        authorityDisposition: item.authorityDisposition,
+        holdsExecutionAuthority: itemHoldsExecutionAuthority(item),
+        waitAuthorization: item.waitAuthorization,
+        reboundFrom: item.reboundFrom,
+        originalAuthority: item.reboundFrom
+          ? (() => {
+              const original = p.items.get(item.reboundFrom.itemId)
+              return original ? { semanticAction: original.semanticAction, requestedTarget: original.requestedTarget } : undefined
+            })()
+          : undefined,
+        targetCaptureStatus: item.targetCaptureStatus,
+        targetSourceKind: item.targetSource?.kind,
+        requestedTarget: item.requestedTarget,
+        // The same supplied target the gate will compare is what preparation
+        // compares. A caller target that differs from the obligation's own
+        // selection is therefore reported `incompatible`, exactly as the gate
+        // denies it — passing the obligation's target on BOTH sides made the
+        // comparison a tautology and let a wrong target read as compatible.
+        ...(args.requested_target !== undefined
+          ? { resolvedTarget: args.requested_target as TargetTuple }
+          : item.requestedTarget ? { resolvedTarget: item.requestedTarget } : {}),
+        // The gate authorizes with `requestedTargetAuthorizesMutation(OBLIGATION,
+        // CALLER TARGET, RESOLVED)`: COVERAGE comes from the obligation's own
+        // selection (a caller cannot supply the authority the root never gave)
+        // while the MATCH is against the target actually to be executed. Both
+        // sides therefore have to be distinct — passing the caller target as
+        // both made the coverage check a tautology and let a caller-supplied
+        // branch read as authorized (review 4).
+        ...(item.requestedTarget !== undefined
+          ? {
+              targetAuthorizes: plannedAction !== undefined && isStatefulAction(plannedAction)
+                ? requestedTargetAuthorizesMutation(
+                    plannedAction,
+                    item.requestedTarget,
+                    (args.requested_target as TargetTuple | undefined) ?? item.requestedTarget,
+                  )
+                : true,
+            }
+          : {}),
+        // 0.6.3 K3 (review P2): a standing prohibition the mutation gate refuses
+        // on must block the preparation verdict too. Without it prepare reported
+        // `compatible` while the SAME snapshot denied with
+        // `mutation_conflicting_prohibition`.
+        conflictingProhibition: plannedAction !== undefined && isStatefulAction(plannedAction)
+          && conflictsWithProhibition(p, plannedAction, item),
+        adapterSupported: actionHasAdapter((plannedAction ?? itemAction) as SemanticAction),
+      }, (requested, resolved) => (
+        plannedAction !== undefined && isStatefulAction(plannedAction)
+          ? requestedTargetMatchesResolved(plannedAction, requested, resolved)
+          : true
+      ))
+      const compatibilityView = {
+        status: compatibility.status,
+        assumed_action: compatibility.assumedAction,
+        ...(compatibility.itemAction !== undefined ? { item_action: compatibility.itemAction } : {}),
+        reason_codes: compatibility.reasonCodes,
+        semantics_compatible: compatibility.semanticsCompatible,
+        target_compatible: compatibility.targetCompatible,
+        certifiable: compatibility.certifiable,
+        ...(compatibility.requiredIdentityField !== undefined ? { required_identity_field: compatibility.requiredIdentityField } : {}),
+        note: compatibility.status === 'compatible'
+          ? 'This assumption matches the current obligation. Preparation itself still grants no authority.'
+          : compatibility.status === 'incompatible'
+            ? 'This assumption is not what this obligation records. Prepare again with the item action, or record a fresh root instruction that authorizes the action you intended.'
+            : 'This assumption matches the obligation, but this snapshot cannot execute yet. Clear the named condition first.',
+      }
+      if (compatibility.status === 'incompatible') {
+        return {
+          status: 'incompatible',
+          item: { id: item.id, revision: item.revision },
+          diagnosis,
+          compatibility: compatibilityView,
+          reason_code: compatibility.reasonCodes[0],
+          note: compatibilityView.note,
+        } as unknown as Record<string, JsonValue>
+      }
+      // A caller-supplied target that the item's own reading does not select is
+      // reported, never rendered as an executable recipe for the current item.
+      // Every stateful action shares one descriptor source, so prepare output,
+      // the producer's missing-input diagnosis, and the required order cannot
+      // drift apart. Producer-computed identities (prestate digests, OIDs,
+      // tgz integrity) are never listed as missing caller input.
+      const recipe = plannedAction && isStatefulAction(plannedAction) ? actionPreparation(plannedAction) : undefined
+      const missingTargetFields: string[] = recipe
+        ? recipe.selector_fields.filter((key) => !(item.requestedTarget?.[key] !== undefined || args.requested_target?.[key] !== undefined))
+        : []
+
+      // A caller-supplied target is a FIELD for the plan, not authority. When it
+      // differs from the target the item already selected, the response says so
+      // at field level and keeps the recipe recipe_only — it never presents the
+      // substitution as this item's authorized target.
+      const callerTargetProposedKeys = item.targetCaptureStatus === 'resolved'
+        ? Object.keys(args.requested_target ?? {}).filter((key) => {
+            const own = item.requestedTarget?.[key]
+            const selectedByItem = own !== undefined
+            const plannedByRecipe = recipe?.selector_fields.includes(key) === true
+            if (!selectedByItem && !plannedByRecipe) return false
+            const proposed = args.requested_target?.[key]
+            return proposed !== own && JSON.stringify(proposed) !== JSON.stringify(own)
+          })
+        : []
 
       const reusable = [...p.evidence.values()]
         .filter((evidence) => relevantEvidence(p, item, evidence) && evidenceAvailabilityReason(evidence) === undefined)
@@ -215,15 +367,6 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       const requiredOrder = plannedAction && isStatefulAction(plannedAction)
         ? ['resolution (prestate facts from a trusted read)', 'effect (the exact planned change)', 'state (independent post-state readback)']
         : ['effect (one matching durable verification fact)']
-
-      // Every stateful action shares one descriptor source, so prepare output,
-      // the producer's missing-input diagnosis, and the required order cannot
-      // drift apart. Producer-computed identities (prestate digests, OIDs,
-      // tgz integrity) are never listed as missing caller input.
-      const recipe = plannedAction && isStatefulAction(plannedAction) ? actionPreparation(plannedAction) : undefined
-      const missingTargetFields = recipe
-        ? recipe.selector_fields.filter((key) => !(item.requestedTarget?.[key] !== undefined || args.requested_target?.[key] !== undefined))
-        : []
 
       const capability = plannedAction && options.hostCapability
         ? options.hostCapability(plannedAction)
@@ -245,13 +388,19 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
         status: 'prepared',
         item: { id: item.id, revision: item.revision },
         diagnosis,
+        compatibility: compatibilityView,
         ...(plannedAction !== undefined ? { planned_action: plannedAction } : {}),
         ...(commandShape !== undefined ? { supported_command_shape: commandShape } : {}),
         required_evidence_order: requiredOrder,
         reusable_references: reusable,
         missing_target_fields: missingTargetFields,
         ...(capability ? { host_capability: { status: capability.status, ...(capability.reasonCode !== undefined ? { reason_code: capability.reasonCode } : {}) } } : {}),
-        ...(recipe ? { evidence_input_contract: {
+        ...(recipe ? {
+          // 0.6.3 K3: the descriptor is the caller's ASSUMED recipe. It is
+          // explicitly recipe_only — a manual for the action the caller named,
+          // never a statement that the current item is ready to execute it.
+          recipe_only: true,
+          evidence_input_contract: {
           selector_fields: recipe.selector_fields,
           optional_selector_fields: recipe.optional_selector_fields,
           command_manifest_fields: recipe.command_manifest_fields,
@@ -262,8 +411,17 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
           readback_fields: recipe.readback_fields,
           execution_surface: recipe.execution_surface,
           steps: recipe.steps,
-        } } : {}),
-        note: 'Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields.',
+        },
+        } : {}),
+        ...(callerTargetProposedKeys.length > 0 ? {
+          caller_target_is_proposal: {
+            fields: callerTargetProposedKeys,
+            note: 'The supplied requested_target differs from the target this obligation selected. It is recorded as the caller\'s proposal for the plan only; authorization still compares the obligation\'s own target.',
+          },
+        } : {}),
+        note: callerTargetProposedKeys.length > 0
+          ? 'Preparation performs no action. The supplied requested_target is NOT the target this obligation selected and is not authority; the recipe below is recipe_only. Resolve the item target through context_guard_evidence before executing.'
+          : 'Preparation performs no action. A default or guessed target is not user authority; explicit root instruction is required for missing target fields.',
       } as unknown as Record<string, JsonValue>
     },
   })

@@ -10,10 +10,13 @@ import { sessionRefDigest } from './digest.js'
 import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from './host-lock.js'
 import { hasCurrentCertificate } from './goal-gate.js'
 import { evidenceFromPersistedToolResult, extractTextContent, withDurability } from './evidence.js'
-import { isStatefulAction, requestedTargetMatchesResolved } from './protocol-manifest.js'
+import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, type SemanticAction } from './protocol-manifest.js'
+import {
+  interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans,
+} from './semantics.js'
 import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
 import { supersedeItem } from './supersession.js'
-import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type SourceSpan } from './types.js'
+import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type NeedsReviewReason, type SourceSpan, type TargetValue } from './types.js'
 import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
 import type { ReleaseContract } from './release.js'
 import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
@@ -214,6 +217,12 @@ function supersedeClauseByPartition(projection: GuardProjection, item: GuardItem
       directive: informational ? 'informational' : undefined,
       executee: 'unresolved',
       authorityDisposition: informational ? 'informational' : 'unresolved',
+      // A child INHERITS its parent's execution qualification: a partition may
+      // never promote a piece of a restricted scope into authority (0.6.3
+      // narrowed contract). The child's own disposition decides the rest.
+      executionQualification: item.executionQualification?.status === 'granted'
+        ? { ...item.executionQualification }
+        : { status: 'restricted' as const, reason: 'inherited_restriction' as const, ...(item.executionQualification?.governedBy ? { governedBy: item.executionQualification.governedBy } : {}) },
       interpretationFingerprint: `partition:${item.id}:${span.start}:${span.end}`,
       rawTextSha256,
       spans: [{ partIndex, start: span.start, end: span.end, class: 'instruction' }],
@@ -652,6 +661,23 @@ function insertItems(
       }
     }
   }
+  // 0.6.3 K2: a coordinated request may name its repository only once ("提交并
+  // 推送仓库 /repo"): every environment-default git obligation of this message
+  // re-evaluates inheritance now that the whole message is captured.
+  // Inheritance is an iterative fixpoint: "提交并推送仓库 /repo" names the
+  // repository on ONE clause, and the other clause of the same message inherits
+  // it, so each newly resolved obligation can unblock the next.
+  for (let round = 0; round < 8; round += 1) {
+    const unresolved = [...projection.items]
+      .filter(([id, item]) => !before.has(id) && item.targetSource?.kind === 'environment_default')
+    if (unresolved.length === 0) break
+    let resolvedAny = false
+    for (const [, item] of unresolved) {
+      resolveInheritedGitTarget(projection, item)
+      if (item.targetSource?.kind === 'unit_inherited') resolvedAny = true
+    }
+    if (!resolvedAny) break
+  }
   for (const [id, item] of projection.items) {
     if (before.has(id)) continue
     if (legacy) {
@@ -675,6 +701,268 @@ function insertItems(
   return coveredSpans
 }
 
+/** The 0.6.3 eligibility check identity for a legacy record's own reading. */
+const ELIGIBILITY_CHECK_ID = 'eligibility:0.6.3'
+
+/**
+ * Mark one item as needing review (0.6.3 K4). Idempotent: the first reason and
+ * its recorded revision stay, so a reload of the same log produces the same
+ * fact and never re-marks or re-dates it.
+ */
+function markNeedsReview(item: GuardItem, reason: NeedsReviewReason, revision: number): void {
+  if (item.needsReview) return
+  item.needsReview = { reason, checkId: ELIGIBILITY_CHECK_ID, recordedAtRevision: revision }
+}
+
+/**
+ * Whether a record's own reading still names work of its own, which makes an
+ * information reading of it unsafe to inherit (0.6.3 K4, F062-01).
+ *
+ * The check re-reads the record's OWN bytes with the current scope rules and
+ * asks whether a comma/semicolon run of them orders anything. It never rewrites
+ * the record and never re-decides the historical answer: it decides only
+ * whether today's eligibility layer may treat that answer as a current pass.
+ */
+function informationReadingNamesWork(text: string): boolean {
+  const masked = maskCodeSpans(text)
+  // The question is a MIGRATION question, so it has to be asked with both
+  // readings: the earlier release's rule decides whether this text was recorded
+  // as an information reading at all, and the CURRENT reading decides whether
+  // work survives in it. Testing only the current reading missed a record whose
+  // every fragment is work today ("Create a file recording whether the tests
+  // passed and install the package"), which the old rule nevertheless closed.
+  if (!legacyQuestionReadingIsInformational(masked)) return false
+  const scopes = interpretMessage(masked)
+  // No surviving reading at all: nothing was recorded that could be misread.
+  if (scopes.length === 0) return false
+  // A record that is information throughout is the supported pure-question
+  // shape and stays inheritable.
+  return scopes.some((scope) => scope.authorityDisposition !== 'informational')
+}
+
+/**
+ * The pure upgrade-eligibility predicate: the records in the current closure
+ * scope that may NOT be inherited as a current pass, with the reason that
+ * disqualifies each. Exported so the rule can be tested and read back directly,
+ * never to let a caller skip it.
+ */
+export function legacyRecordsNeedingReview(projection: GuardProjection): Array<{ itemId: string; reason: NeedsReviewReason }> {
+  return eligibilityReviewReasons(projection).map(([itemId, reason]) => ({ itemId, reason }))
+}
+
+/**
+ * The eligibility findings for the current closure scope, as `[itemId, reason]`
+ * pairs. The scope is the current unit plus its required descendants, plus every
+ * unit-less (pre-v5) record, which keeps its birth rules; the selection is made
+ * on the RECORD's own scope and never on a terminal status, so an item already
+ * `answered` or `passed` inside the scope is still seen while another unit's
+ * record never leaks in.
+ */
+function eligibilityReviewReasons(projection: GuardProjection): Array<[string, NeedsReviewReason]> {
+  const closureUnits = projection.boundaryProtocol === 5 && projection.currentUnitId !== undefined
+    ? new Set<string>([projection.currentUnitId, ...unitDescendantIds(projection, projection.currentUnitId)])
+    : undefined
+  const findings: Array<[string, NeedsReviewReason]> = []
+  for (const item of projection.items.values()) {
+    if (item.status === 'superseded') continue
+    if (closureUnits !== undefined && item.unitId !== undefined && !closureUnits.has(item.unitId)) continue
+    if (item.needsReview) continue
+    const recordedVersion = (item as { stateVersion?: unknown }).stateVersion
+    if (recordedVersion !== undefined && recordedVersion !== 1) {
+      findings.push([item.id, 'unknown_state_version'])
+      continue
+    }
+    const informationReading = item.directive === 'informational'
+      || item.authorityDisposition === 'informational'
+      || item.taskKind === 'inquiry'
+    if (informationReading && informationReadingNamesWork(item.normalizedText)) {
+      findings.push([item.id, 'legacy_mixed_information_scope'])
+      continue
+    }
+    const gitAction = item.semanticAction === 'commit' || item.semanticAction === 'push'
+      || item.semanticAction === 'pull' || item.semanticAction === 'fetch'
+    if (gitAction && item.targetCaptureStatus === 'resolved' && item.targetSource === undefined) {
+      findings.push([item.id, 'legacy_environment_default_target'])
+      continue
+    }
+    // 0.6.3 (narrowed contract), last resort: a record that predates execution
+    // qualification may not be inherited as a current pass. Only a record that
+    // CLAIMS an execution reading is flagged — a pure question keeps its birth
+    // rule — and its history is preserved untouched: nobody may read its stored
+    // disposition as authority.
+    if (item.executionQualification === undefined && !informationReading) {
+      findings.push([item.id, 'legacy_missing_execution_qualification'])
+    }
+  }
+  return findings
+}
+
+/**
+ * Apply the 0.6.3 eligibility pass to an already-derived projection.
+ *
+ * This is the upgrade entry: it re-checks the records a session already holds
+ * after an EVENT-SOURCED reading has been applied to them. It is idempotent —
+ * a project already marked keeps its original reason and revision — and it is
+ * the same function the derivation runs, so a replay and an in-place upgrade
+ * cannot disagree.
+ */
+export function applyUpgradeEligibility(projection: GuardProjection): void {
+  for (const [itemId, reason] of eligibilityReviewReasons(projection)) {
+    const item = projection.items.get(itemId)
+    if (item) markNeedsReview(item, reason, projection.contractRevision)
+  }
+}
+
+/**
+ * The identity two repository references share when they are the same object.
+ * A textual path is compared with its trailing separators removed, so three
+ * clauses that all name /repo-b collapse onto one candidate. Comparison is
+ * deliberately conservative: only spellings of the same path collapse, and a
+ * different path stays a different candidate.
+ */
+function canonicalRepositoryKey(repository: string): string {
+  return repository.trim().replace(/[\\/]+$/, '')
+}
+
+/**
+ * The git actions whose named repository is one and the same user selection.
+ * "推送仓库 /work/repo" authorizes the commit of that same repository too, so a
+ * later short reference ("提交并推送") inherits the selection rather than
+ * asking again or falling back to the session directory.
+ */
+const GIT_TARGET_ACTIONS: readonly SemanticAction[] = ['commit', 'push', 'pull', 'fetch']
+
+/**
+ * Resolve a git obligation whose clause named no repository (0.6.3 K2).
+ *
+ * The session working directory is environment context, so it never becomes
+ * the user's choice by itself. A later "提交并推送" may instead inherit the
+ * repository from the SAME work unit when exactly ONE candidate holds an
+ * auditable user selection (an explicit name or path, a confirmed host
+ * selection, or a target that was itself inherited from one).
+ *
+ * A candidate has to be a POSITIVE, still-authorized work object, which is what
+ * an earlier round of this batch got wrong: a prohibition that names /repo-b
+ * forbids pushing THERE and never selects it. So a source must be a pending,
+ * non-legacy requirement whose disposition is `executable_now`, with no wait or
+ * condition and a resolved target, and candidates are compared by repository
+ * IDENTITY rather than per item, so three clauses naming /repo-b are one
+ * candidate. Two or more distinct repositories stay ambiguous and produce a
+ * minimal clarification request; none leaves the target missing.
+ */
+function resolveInheritedGitTarget(projection: GuardProjection, item: GuardItem): void {
+  if (item.targetSource?.kind !== 'environment_default') return
+  if (!item.semanticAction || !GIT_TARGET_ACTIONS.includes(item.semanticAction)) return
+  // A candidate is a POSITIVE, still-authorized work object, never merely an
+  // item that happens to mention a path. A prohibition that names /repo-b
+  // forbids pushing THERE; it does not select it (review P1/K2), so a candidate
+  // must be a pending requirement whose disposition is executable, whose action
+  // is compatible with this obligation, and whose target is actually resolved.
+  const candidates: GuardItem[] = []
+  for (const [otherId, other] of projection.items) {
+    if (otherId === item.id || other.status !== 'pending') continue
+    if (other.kind !== 'requirement') continue
+    if (!other.semanticAction || !GIT_TARGET_ACTIONS.includes(other.semanticAction)) continue
+    if (other.authorityDisposition !== undefined && other.authorityDisposition !== 'executable_now') continue
+    if (other.waitAuthorization !== undefined) continue
+    if (other.legacyFlags?.length) continue
+    if (other.targetCaptureStatus !== 'resolved') continue
+    // Inheritance follows the unit's own work: another unit's repository is a
+    // different task and never applies here. Another clause of the SAME root
+    // message qualifies even when it was captured later ("提交并推送仓库 /repo"
+    // is one coordinated request whose repository the root named once).
+    if (other.unitId !== item.unitId) continue
+    const source = other.targetSource?.kind
+    if (source === undefined || source === 'environment_default') continue
+    const repository = other.requestedTarget?.repository
+    if (typeof repository !== 'string') continue
+    candidates.push(other)
+  }
+  // Uniqueness is judged PER FIELD, not per item count and not per repository
+  // alone. Three clauses that all name /repo-b are ONE repository (review
+  // P2/K2), but two clauses that name /repo-a with DIFFERENT branches do not
+  // agree about the branch: the repository is unique while the branch is still a
+  // choice, and inheriting the first source's branch would let the clause order
+  // decide which branch a later "提交。" authorizes (review 7 F3).
+  const repositories = new Map<string, GuardItem[]>()
+  for (const candidate of candidates) {
+    const key = canonicalRepositoryKey(candidate.requestedTarget!.repository as string)
+    const group = repositories.get(key)
+    if (group) group.push(candidate)
+    else repositories.set(key, [candidate])
+  }
+  if (repositories.size === 1) {
+    const group = [...repositories.values()][0]!
+    const source = group[0]!
+    // Only the SHARED identity is inherited: "推送仓库 /repo remote origin
+    // refspec main" authorizes that repository, never the push's own remote and
+    // refspec, which a commit obligation does not name.
+    const identityField = requestedIdentityKey(item.semanticAction ?? 'generic_run')
+    const accepted = new Set(ACTION_MANIFEST.actions[item.semanticAction ?? 'generic_run'].resolvedTargetKeys)
+    // Inheritance FILLS the fields this clause left unset; it never overwrites
+    // one the root named here. "提交分支 release。" selects the branch, so only
+    // the missing repository is inherited from the earlier /repo-b (review P1),
+    // and a field the obligation does not accept is still dropped.
+    //
+    // The item's captured target may still carry the ENVIRONMENT DEFAULT for
+    // the identity field; that placeholder is exactly what inheritance exists
+    // to replace, so it is not treated as a root selection.
+    const environmentDefaultIdentity = item.targetSource?.kind === 'environment_default'
+      && item.requestedTarget?.[identityField ?? ''] !== undefined
+    const merged: Record<string, TargetValue> = {}
+    for (const [key, value] of Object.entries(item.requestedTarget ?? {})) {
+      if (!accepted.has(key)) continue
+      if (key === identityField && environmentDefaultIdentity) continue
+      merged[key] = value
+    }
+    // A field is inheritable only when EVERY candidate of the group that names it
+    // agrees. A conflicting branch, remote or refspec is left unset, so the
+    // obligation stays a clarification and no caller can complete it from a
+    // choice the root never made.
+    let ambiguousField: string | undefined
+    for (const key of accepted) {
+      if (Object.hasOwn(merged, key)) continue
+      const values = group
+        .map((candidate) => candidate.requestedTarget?.[key])
+        .filter((value): value is TargetValue => value !== undefined)
+      if (values.length === 0) continue
+      // Identity fields are compared the way the group is formed: two spellings
+      // of the same repository (/repo-b and /repo-b/) agree about the
+      // repository. Every other field is compared exactly.
+      const distinct = new Set(values.map((value) => (key === 'repository' && typeof value === 'string'
+        ? canonicalRepositoryKey(value)
+        : JSON.stringify(value))))
+      if (distinct.size > 1) { ambiguousField = key; continue }
+      merged[key] = values[0]!
+    }
+    // The merged selection has to actually carry this obligation's identity: a
+    // source that cannot supply it is not a usable candidate and the item stays
+    // a clarification rather than becoming a resolved empty target.
+    if (ambiguousField !== undefined) {
+      // The fields the group DID agree about are kept, so the clarification names
+      // a repository and only the field in dispute is open.
+      item.requestedTarget = merged
+      item.targetCaptureStatus = 'clarification_required'
+      item.targetCaptureReasonCode = 'requested_target_field_ambiguous'
+      return
+    }
+    if (identityField === undefined || merged[identityField] === undefined) {
+      item.targetCaptureStatus = 'clarification_required'
+      item.targetCaptureReasonCode = 'requested_target_repository_missing'
+      return
+    }
+    item.requestedTarget = merged
+    item.targetSource = { kind: 'unit_inherited', inheritedFrom: source.id }
+    item.targetCaptureStatus = 'resolved'
+    delete item.targetCaptureReasonCode
+    return
+  }
+  item.targetCaptureStatus = 'clarification_required'
+  item.targetCaptureReasonCode = repositories.size > 1
+    ? 'requested_target_repository_ambiguous'
+    : 'requested_target_repository_missing'
+}
+
 function insert(
   projection: GuardProjection,
   segment: ClauseSegment,
@@ -693,6 +981,7 @@ function insert(
     segment.interpretation,
   )
   if (unitId !== undefined) item.unitId = unitId
+  resolveInheritedGitTarget(projection, item)
   if (provenance) {
     item.rawTextSha256 = provenance.rawTextSha256
     if (provenance.span) item.spans = [provenance.span]
@@ -757,6 +1046,11 @@ export function deriveProjection(
   const trustedDeliveries = (v5BoundarySeq !== undefined ? deriveTrustedDeliveries(sourceEvents) : [])
     .filter((delivery) => delivery.turnEndSeq > v5BoundarySeq!)
   let deliveryCursor = 0
+  // The upgrade eligibility check runs at the END of the derivation, but a
+  // delivery is applied at its own watermark while the loop is still running.
+  // The eligibility questions are pure functions of the records the watermark
+  // can already see, so the same check is applied to that prefix here.
+  const reviewedItemIds = (view: GuardProjection): string[] => eligibilityReviewReasons(view).map(([id]) => id)
   // 0.6.1 (W060-01): per-asset interpretation records derived from confirmed
   // `context_guard_interpret` results. Collected in loop order, so a delivery
   // is evaluated against exactly the facts its own watermark can see. Each
@@ -775,7 +1069,14 @@ export function deriveProjection(
       const eligibleUnitIds = owningUnitId === undefined
         ? undefined
         : new Set<string>([owningUnitId, ...unitDescendantIds(projection, owningUnitId)])
+      // 0.6.3 K4: a record the upgrade eligibility check refused to inherit is
+      // not closed by its turn's answer either. Without this the new information
+      // sub-item of a re-partitioned mixed clause would close while the record
+      // that raised the review stays blocking, and recovery would have to
+      // explain a delivery that "worked" and changed nothing.
+      const reviewItemIds = new Set(reviewedItemIds(projection))
       for (const itemId of informationItemIdsForDelivery(projection.items, delivery, inputSeqs, eligibleUnitIds, interpretationFacts)) {
+        if (reviewItemIds.has(itemId)) continue
         const item = projection.items.get(itemId)
         if (!item || item.status !== 'pending') continue
         const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
@@ -1061,6 +1362,9 @@ export function deriveProjection(
                   executee: 'unresolved',
                   immediatelyExecutable: false,
                   authorityDisposition: 'informational',
+                  // An asset is reference data: its reading carries no execution
+                  // qualification at all, so nothing in it can be authorized.
+                  qualification: { status: 'restricted', reason: 'governed_scope', governedBy: 'attachment' },
                   fingerprint: `asset:${identity.slice(0, 16)}`,
                 },
               }, `m${event.seq}:asset:${index}`, scope.cwd || 'scope', 'scope', unitId)
@@ -1493,6 +1797,10 @@ export function deriveProjection(
   }
   projection.enabled = enabled
   projection.epoch = epoch
+  // 0.6.3 K4: the upgrade eligibility check runs BEFORE any terminal filtering,
+  // so a record 0.6.2 closed as `answered` is still re-read and, when its own
+  // text orders work, marked `needs_review` for the CURRENT layer.
+  applyUpgradeEligibility(projection)
   // 0.6.1: publish the bounded interpretation ledger for diagnosis and tools.
   if (interpretationFacts.length > 64) interpretationFacts.splice(0, interpretationFacts.length - 64)
   projection.interpretationFacts = interpretationFacts

@@ -95,6 +95,9 @@ describe('0.6.0 C06: strict is a proof tier, not an extra approval', () => {
       verification: { enforced: true, surface: 'artifact', subject: '/repo' },
       semanticAction: 'modify', requestedTarget: { scope: '/repo', artifact_type: 'document' },
       targetCaptureStatus: 'resolved', taskKind: 'action', authority: 'root_instruction',
+      // A hand-built CURRENT item carries the 0.6.3 qualification production
+      // capture would have written; a record without one is refused.
+      executionQualification: { status: 'granted', reason: 'plain_instruction' },
     } as GuardItem
     const decisions = (['standard', 'strict', 'release'] as const).map((policy) =>
       authorizeMutationFromProjection(projectionWithPolicy(policy, [], [modifyItem]), request))

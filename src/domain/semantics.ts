@@ -95,10 +95,26 @@ export interface ScopeInterpretation {
   /** True only for an explicit, agent-owned, unconditional instruction. */
   immediatelyExecutable: boolean
   authorityDisposition: AuthorityDisposition
+  /** The 0.6.3 execution qualification this reading establishes. */
+  qualification: ExecutionQualification
   /** Explicitly named tool/method, when the scope names one. */
   method?: string
   /** Stable identity of this interpretation, reproducible from the same bytes. */
   fingerprint: string
+}
+
+/**
+ * 0.6.3 K1 regression probe: the 0.6.2 question rule, kept SOLELY so the fixed
+ * defect has a test that fails against the old reading.
+ *
+ * 0.6.2 declared a clause information as soon as a question marker appeared
+ * anywhere inside it (`QUESTION_SCOPE.test(masked)`). This function is that
+ * rule, verbatim. It is not used by any production path — the current reading
+ * is {@link hasQuestionScope} — and its only caller is the regression test that
+ * pins the difference between the two readings on the recorded defect input.
+ */
+export function legacyQuestionReadingIsInformational(masked: string): boolean {
+  return QUESTION_SCOPE.test(masked)
 }
 
 /** A clause whose head verb demands a verification rather than a change. */
@@ -180,7 +196,7 @@ const ACTION_VERB_PATTERN = `(?:${COMMAND_SURFACE_MANIFEST.operationVerbs
 const ACTION_VERB = new RegExp(ACTION_VERB_PATTERN, 'i')
 
 /** Operation verbs beyond the guard action surface (local work and diagnosis). */
-const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|部署|安装|升级|提交|下载|上传|拉取|同步|重启|测试|检查|验证|确认|修复|更新|清理|整理|记录|构建|编译|重构|迁移|删除|回滚|发布|推送|合并|继续|恢复|还原|回滚|实现|\b(?:build|create|write|modify|change|edit|run|fix|update|install|push|publish|test|verify|check|commit|deploy|migrate|remove|delete|restart|revert|refactor|inspect|fetch|pull|implement)\b/i
+const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|拟定|部署|安装|升级|提交|下载|上传|拉取|同步|重启|测试|检查|验证|确认|修复|更新|清理|整理|记录|构建|编译|重构|迁移|轮换|刷新|清空|扩容|缩容|删除|回滚|发布|推送|合并|继续|恢复|还原|回滚|实现|\b(?:build|create|write|modify|change|edit|run|fix|update|install|push|publish|test|verify|check|commit|deploy|migrate|remove|delete|restart|revert|refactor|inspect|fetch|pull|implement|draft|emit|produce|log)\b/i
 
 /** Explanatory framings: an action named afterwards is an object, not an order. */
 const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|科普|什么意思|是什么意思|有什么(?:作用|影响|区别)|\bexplain\b|\bdescribe\b|\bclarify\b|\btell\b|\bhow\s+to\b|\bwhat\s+does\b|\bwhat\s+is\b|\bhow\s+does\b|\bmeaning\s+of\b/i
@@ -194,6 +210,1387 @@ const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|�
  * where logs are stored") as a question — the 0.6.1 review regression.
  */
 const QUESTION_SCOPE = /[？?]|是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|能否|可否|要不要|该不该|由谁|是谁|^\s*(?:what|how|when|where|who|which|whether|why)\b|\b(?:whether|which|why|should|could|would)\b/i
+
+/**
+ * The interrogative ending. A clause whose head is an action verb is decided by
+ * how it ENDS: "检查是否有更新吗？" asks about the world, while "检查是否存在
+ * 更新。" orders a check.
+ *
+ * 吗 and the question mark ask on their own. 呢 and 吧 do NOT: both soften a
+ * suggestion ("安装这个主题呢。", "安装新主题吧。"), so treating either as an
+ * interrogative turned a pure order into a closable information request — the
+ * reviewer's zero-tool counterexample. 呢 still ends a question when the clause
+ * carries its own interrogative content ("主题是不是需要更新呢？"); 吧 never
+ * does. A clause whose own opening word is a question (怎么/如何) is handled by
+ * {@link INFO_OPENING} and {@link QUESTION_LEAD}.
+ */
+const QUESTION_ENDING = /(?:吗|[？?])[。，、；;.!]*$/u
+/** The softening particles that ask only when the rest of the clause asks too. */
+const SOFT_ENDING = /(?:呢|吧)[。，、；;.!]*$/u
+const QUESTION_MARKER = /[？?]|是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|能否|可否|要不要|该不该|由谁|是谁/u
+
+/** Whether the clause closes on a genuine interrogative. */
+function endsOnInterrogative(masked: string): boolean {
+  if (QUESTION_ENDING.test(masked)) return true
+  return SOFT_ENDING.test(masked) && QUESTION_MARKER.test(masked.replace(/[呢吧][。，、；;.!]*$/u, ''))
+}
+/**
+/**
+ * An English clause whose INTERROGATIVE is the object of its own action rather
+ * than the clause's question: "Create a file recording whether the tests
+ * passed", "Write a report indicating whether deployment succeeded". The
+ * embedded whether/if/wh-word follows the action, so the clause orders work and
+ * the interrogative only says WHAT the artifact must record.
+ */
+const ENGLISH_INTERROGATIVE_TRIGGER = /\b(?:whether|if|what|which|why|how|when|where|who)\b/i
+
+/**
+ * Whether an English clause opens with a verb that takes the interrogative as
+ * its OWN object and continues with `if`: "Check if the remote has new
+ * commits", "Verify if the build passed". The head is the verb plus the "if";
+ * anything else after that verb is its object clause, not a condition.
+ */
+function interrogativeTakesIfObject(masked: string): boolean {
+  if (!investigationHeadTakesIf(masked)) return false
+  // The clause's own action has to BE the matched head's verb, not a later action
+  // word: "Check if the lock file is current AND INSTALL the package." coordinates
+  // a second instruction, so the investigation reading covers only the asking part
+  // and the clause is partitioned (review 11).
+  const head = /^\s*(?:please\s+)?(check|verify|confirm|see|determine|inspect|review|test)\s+(?:if|whether|when|where|why|how|what|which)\b/i.exec(masked)!
+  const verb = firstActionVerb(masked)
+  const verbOffset = head[0].search(/check|verify|confirm|see|determine|inspect|review|test/i)
+  if (verbOffset < 0) return false
+  return verb < 0 || verb === verbOffset
+}
+
+/**
+ * Whether the clause OPENS with an investigation verb whose object is the
+ * interrogative `if`/`whether`/…, whatever else the clause contains. This is the
+ * head-level form of {@link interrogativeTakesIfObject}, used by the condition
+ * splitter: a clause that starts this way is an investigation, so its `if` is not
+ * a condition on a separate instruction.
+ */
+function investigationHeadTakesIf(masked: string): boolean {
+  const head = /^\s*(?:please\s+)?(check|verify|confirm|see|determine|inspect|review|test)\s+(?:if|whether|when|where|why|how|what|which)\b/i.exec(masked)
+  if (head === null) return false
+  // A negated or reserved investigation is a ban or a condition, not a
+  // question, so the verb itself has to be a positive, unreserved head.
+  const verb = firstActionVerb(masked)
+  if (verb >= 0 && verbIsNegated(masked, verb)) return false
+  // No subordinate boundary may stand between head and object: in
+  // "Create /tmp/check.sh to determine if the service is running" the `if`
+  // belongs to the purpose clause, so the clause orders a creation and is NOT
+  // conditional (review 4).
+  const boundary = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked)
+  return boundary === null || 0 < boundary.index
+}
+
+/**
+/**
+ * A boundary that opens an ENGLISH subordinate span: every `to <verb>` purpose
+ * clause, a relative pronoun, a progressive participle, and the prepositional
+ * or temporal openers that introduce one. A question word behind such a
+ * boundary belongs to the subordinate clause, so it never makes the whole
+ * clause a question. This is structural, not a verb list: an unknown main verb
+ * ("Archive /tmp/logs to show what changed", "Compress /tmp/logs to check the
+ * status") is still read correctly, which is what the earlier vocabulary-based
+ * gate could not do.
+ *
+ * The comparative is `than`, NOT `tha[nt]`: `then` is a sequencing connective,
+ * and reading it as a boundary made "Then check whether the disk is full." look
+ * like a subordinate span whose question word belonged to a purpose clause — so
+ * the English clause lost the investigation lane while the Chinese spelling kept
+ * it (hold-out 7).
+ */
+const ENGLISH_SUBORDINATE_BOUNDARY = /\bto\s+[a-z]+|\b(?:which|who|whom|whose|that|than)\b|\b[a-z]+ing\b|\b(?:after|before|until|unless|while|once|during|about|for|regarding|concerning)\b/i
+
+/**
+ * Whether an English interrogative word ASKS the clause, rather than sitting in
+ * its subordinate span. A wh-word that is followed by a subordinate boundary
+ * ("... recording whether the tests passed", "... to show what changed") is the
+ * object of that span, so the clause stays work.
+ */
+/**
+ * Whether an investigation head opens the clause rather than sitting inside a
+ * subordinate span. A head behind a purpose or relative boundary is that span's
+ * verb ("Compress /tmp/logs TO CHECK the status"), so it asks nothing (review 4).
+ */
+function headOpensClause(pattern: RegExp, masked: string): boolean {
+  const match = pattern.exec(masked)
+  if (match === null) return false
+  const boundary = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked)
+  if (boundary !== null && boundary.index < match.index) return false
+  const verb = firstActionVerb(masked)
+  return verb < 0 || match.index <= verb
+}
+
+/**
+ * Whether a condition marker guards the CLAUSE rather than sitting inside a
+ * purpose or relative span. "Create /tmp/check.sh to determine if the service is
+ * running" orders a creation; the `if` belongs to the purpose clause, so the
+ * creation is not conditional (review 4).
+ */
+const CJK_SUBORDINATE_BOUNDARY = /为了|用来|以便|从而|进而|用于/u
+function conditionMarkerIsClauseLevel(masked: string, markerIndex: number): boolean {
+  const english = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked)
+  const cjk = CJK_SUBORDINATE_BOUNDARY.exec(masked)
+  const starts = [english?.index, cjk?.index].filter((index): index is number => index !== undefined)
+  if (starts.length === 0) return true
+  return Math.min(...starts) >= markerIndex
+}
+
+function englishInterrogativeIsMatrix(masked: string): boolean {
+  const trigger = ENGLISH_INTERROGATIVE_TRIGGER.exec(masked)
+  if (!trigger) return true
+  const boundary = ENGLISH_SUBORDINATE_BOUNDARY.exec(masked)
+  // A boundary at the interrogative's OWN position is the interrogative itself
+  // ("Who owns …?", where `who` is both the trigger and a relative pronoun), not a
+  // subordinate span that swallows it.
+  return boundary === null || trigger.index <= boundary.index
+}
+/**
+ * Request and sequencing words that may precede an instruction head without
+ * becoming one: "先检查是否有新版本" is still the investigation "检查是否有新
+ * 版本". A preface is consumed only in front of an investigation opener, so
+ * "先提交" stays an order. The English sequencing words are here for the same
+ * reason as the Chinese ones: "Then check whether the disk is full." is the
+ * investigation "check whether …", and leaving the preface out made the English
+ * clause an acceptance obligation while the Chinese spelling stayed an
+ * information request (review 5 follow-up / hold-out 7).
+ */
+const REQUEST_PREFACE = '(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|并且|并|以及|then\\b|also\\b|next\\b|first\\b|finally\\b|now\\b|please\\b|kindly\\b)?'
+/** Investigation openers: how an information request about state is phrased. */
+const INVESTIGATION_HEAD = '(?:看看|看一下|瞅瞅|查一下|检查|查看|确认|核对|了解|验证|check\\b|verify\\b|confirm\\b|see\\b|find\\s+out|determine\\b)'
+/** The interrogative a clause can open or close on: "怎么装？", "whether …". */
+const QUESTION_WORD = '(?:怎么|怎样|如何|为什么|为何|什么|哪些|哪一种|哪个|是否|是不是|能否|可否|要不要|该不该|由谁|是谁|谁|何时|什么时候|几时|多久|多少|what|how|when|where|who|whom|whose|which|whether|why)'
+/** The states a question about a change asks about ("是否有更新"). */
+const CHANGE_STATE = '(?:更新|升级|提交|推送|发布|安装|修改|删除|修复|完成|同步|拉取|下载|重启|生成|写入|创建|部署|添加|变更|改动|new\\s+commits?|update[sd]?|upgrade[sd]?|commit(?:s|ted)?|push(?:ed)?|publish(?:ed)?|install(?:ed)?|change[sd]?|fix(?:ed)?)'
+
+/** Chinese question words need no word boundary; an English one does. */
+const QUESTION_WORD_TAIL = '(?![A-Za-z0-9_])'
+/** The same alternation as a pattern, for a caller that only needs to test. */
+const QUESTION_WORD_PATTERN = new RegExp(QUESTION_WORD, 'iu')
+const QUESTION_LEAD = new RegExp(`^\\s*${QUESTION_WORD}${QUESTION_WORD_TAIL}`, 'iu')
+/**
+ * An investigation word, the object it investigates (if any), and a
+ * question about that object's state: 检查是否…, 检查一下插件是否有更新,
+ * check whether…. The verb states HOW the question is answered, so the clause
+ * asks about the world rather than ordering a change.
+ */
+const INVESTIGATION_THEN_QUESTION = new RegExp(`^\\s*${REQUEST_PREFACE}\\s*${INVESTIGATION_HEAD}[^。！？；，,]{0,24}?(?:是否|是不是|有没有|有没|能否|可否|要不要|该不该|为什么|为何|怎么|如何)${QUESTION_WORD_TAIL}`, 'iu')
+/**
+ * A question about a change's state: "…是否有更新", "…有没有安装成功",
+ * "whether the remote has new commits". The change verb is the object of the
+ * question, so the clause asks rather than orders.
+ */
+const QUESTION_ABOUT_CHANGE = new RegExp(`(?:是否|是不是|有没有|有没|能否|can\\s+you\\s+see|whether)\\s*(?:已经|已|还|仍然)?\\s*(?:有|存在|出来|成功)?\\s*${CHANGE_STATE}${QUESTION_WORD_TAIL}`, 'iu')
+/**
+ * An investigation word applied to a state object: "Check for a new version",
+ * "看看有没有新版本", "verify the current version". The verb asks ABOUT the
+ * object rather than ordering a change to it, which is the same reading
+ * {@link QUESTION_ABOUT_CHANGE} gives the 是否 form.
+ */
+const STATE_OBJECT = '(?:状态|版本|更新|变更|改动|发布|提交|结果|日志|配置|权限|依赖|端口|缓存|status|state|version|update|upgrade|release|commit|change|result|logs?|config(?:uration)?|permissions?|dependencies|port|cache)'
+const INVESTIGATION_OF_STATE = new RegExp(`${INVESTIGATION_HEAD}\\s*(?:一下|下)?\\s*(?:for|about|on|the|a|an|new|current|latest|有没(?:有)?|关于)?\\s*(?:for|about|on|the|a|an|new|current|latest|有没(?:有)?)?\\s*(?:for|about|on|the|a|an|new|current|latest)?\\s*${STATE_OBJECT}${QUESTION_WORD_TAIL}`, 'iu')
+/**
+ * An investigation whose head word IS an investigation, followed immediately by
+ * the interrogative: "How do I install this?" / "看看怎么弄". An investigation
+ * word that merely sits inside an object ("仔细检查生成的几个文件") is not the
+ * clause's head, and one whose object happens to be a question word is not a
+ * question about method.
+ */
+const INFO_OPENING = new RegExp(`^\\s*${REQUEST_PREFACE}\\s*${INVESTIGATION_HEAD}\\s*${QUESTION_WORD}${QUESTION_WORD_TAIL}`, 'iu')
+/**
+ * A reported question: a reporting verb hands the question to the assistant
+ * ("Tell me what changed in the build and why"). The clause asks, so the
+ * answering turn closes it — no execution obligation is created.
+ */
+const REPORTED_QUESTION = new RegExp(`(?:^|[^A-Za-z0-9_])(?:(?:tell|explain|describe|show)\\b|(?:解释|说明|描述|讲解|讲讲|说一下|告诉我))[^。！？；]{0,24}?${QUESTION_WORD}${QUESTION_WORD_TAIL}`, 'iu')
+
+/**
+ * Whether a clause asks for information rather than ordering work (0.6.3 K1).
+ *
+ * 0.6.2 treated the mere presence of a question marker anywhere in a clause as
+ * "the whole clause is a question", so one 是否 inside a comma-run of
+ * instructions ("更新插件，检查是否存在更新，安装新主题，记录变更。") turned
+ * every execution obligation beside it into closable information. The reading
+ * is now grammatical — head verb, interrogative position, negation — so a
+ * relative or purpose clause inside an order ("Create a file where logs are
+ * stored", "更新皮肤中心，看看为什么失败") is never a question, while a real
+ * request for an answer ("How do I install this?", "检查是否有更新吗？",
+ * "check whether the remote has new commits") still is.
+ */
+export function hasQuestionScope(masked: string): boolean {
+  return isInformationalFragment(masked)
+}
+
+/**
+ * True when the fragment is a pure request for information.
+ *
+ * A fragment that names an action counts as a question only when it ENDS on
+ * the interrogative ("检查一下插件是否有更新吗？") or asks through the verb
+ * itself ("检查是否存在更新", "check whether the remote has new commits"). An
+ * order whose object merely contains question content ("更新皮肤中心，看看为
+ * 什么失败") stays an order. A fragment that names no action is information
+ * whenever it asks at all, which keeps "what changed in the build and why" and
+ * "How do I install this?" in the answerable lane.
+ */
+/**
+ * A REPORTING or EXPLANATION head: the verbs whose complement is the rest of the
+ * sentence ("Explain how I can install foo and restart service api.",
+ * "说明一下如何回滚并重新部署服务"). English reporting verbs and their Chinese
+ * counterparts are both closed grammatical classes.
+ */
+const REPORTING_HEAD = new RegExp(`^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:tell|explain|describe|show|wonder|ask|know|recall|decide|determine|establish|find\\s+out|figure\\s+out)\\b|^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:解释|说明|描述|讲解|讲讲|说一下|告诉我|想问|问一下|想知道|了解一下|不确定|不清楚|不清楚|不知道)`, 'iu')
+
+/**
+ * Whether an explanation head GOVERNS its sentence.
+ *
+ * Everything coordinated inside the sentence the explanation heads is the OBJECT
+ * of the explanation, however it is phrased and however long it is: a finite
+ * complement ("how I can install …"), a `whether` complement, an infinitive, a
+ * list with a long object — all of it is what the root asked to have explained.
+ * The scope is therefore structural: it is the SENTENCE, bounded by the sentence
+ * splitter, not a pattern with a window. A sentence break ends the governance, so
+ * a following sentence can be a real instruction ("Explain the deploy. Then
+ * restart service api." stays authorizable), and a question that merely stands
+ * beside an order ("What changed and archive the logs?") has no explanation head
+ * and keeps its order.
+ */
+export function reportingHeadGoverns(masked: string): boolean {
+  return headOpensClause(REPORTING_HEAD, masked)
+}
+
+/**
+ * Whether a clause is the scope of a QUESTION — any question, not only a reported
+ * one: a question word ("How do I install …"), an interrogative auxiliary
+ * ("Can you …"), an investigation ("Check whether …") or an explanation
+ * ("Explain how …").
+ *
+ * A question head GOVERNS its clause: everything coordinated inside it is part of
+ * what the root asked, so the clause must not be split into an executable child.
+ * When such a clause ALSO carries an action of its own it is undecided — the
+ * action may be exactly what the question is about — so nothing in it is
+ * authority. Exported so the mutation gate and preparation consume the SAME
+ * qualification the reading produced instead of re-guessing scope from the split
+ * text, and so the rule is testable on its own.
+ */
+export function isQuestionScopeNeedingReview(text: string): boolean {
+  const masked = maskCodeSpans(text)
+  return governedReadingOf(masked) !== undefined && governedClauseRestrictsExecution(masked)
+}
+
+/**
+ * A temporal interrogative: the clause asks WHEN, so its `when` is the question
+ * word, not a condition marker. A finite conditional clause states its own
+ * subject and verb instead ("when the tests pass").
+ */
+function isTemporalQuestion(masked: string): boolean {
+  if (!/[？?]\s*$/u.test(masked.trim())) return false
+  return /^\s*(?:when|何时|什么时候|什么时候)\s*(?:should|do|does|did|can|could|would|will|is|are|was|were|have|has|had|i|we|you|they|he|she|it|to)\b/iu.test(masked)
+    || /^\s*(?:何时|什么时候|何时)/u.test(masked)
+}
+
+// ---------------------------------------------------------------------------
+// Execution qualification: the single place where an execution reading is born
+// ---------------------------------------------------------------------------
+
+/**
+ * 0.6.3 (narrowed contract): the execution qualification of one reading.
+ *
+ * Recognising an ACTION and holding AUTHORITY to run it are separate facts. The
+ * reader decides, ONCE per clause and BEFORE any partition, whether the clause is
+ * a `granted` plain instruction or a `restricted` governed scope (a question, an
+ * explanation, an investigation, a reported question, or a quote). Every child the
+ * partition later produces INHERITS that decision; nothing downstream — not the
+ * projection, not recovery, not preparation — may upgrade a child to executable by
+ * re-reading its own words (the earlier rounds' fail-open direction).
+ *
+ * `restricted` is not "no work": a restricted clause that names an action keeps it
+ * as an undecided obligation ({@link AuthorityDisposition} `unresolved`) which no
+ * answer closes and no certificate covers.
+ */
+export type QualificationStatus = 'granted' | 'restricted'
+export type QualificationReason =
+  | 'plain_instruction'
+  | 'governed_scope'
+  /** A clause whose own question content was not classified, or that names no
+   *  recognised action: no positive evidence for an execution reading. */
+  | 'unproven_scope'
+  | 'inherited_restriction'
+  | 'legacy_missing_qualification'
+export interface ExecutionQualification {
+  status: QualificationStatus
+  reason: QualificationReason
+  /** The governing head that restricted the clause, when one exists. */
+  governedBy?: string
+}
+
+/**
+ * The quoted spans of a text, in every style the products accept: straight and
+ * curly double quotes, single quotes (opened only at a word boundary, so an
+ * English apostrophe never swallows a clause), and the CJK brackets 「」 and 『』.
+ *
+ * A quote OWNS its content and its punctuation: what it contains is never the
+ * clause's own reading or its own work, and a sentence mark inside it never ends
+ * the enclosing clause. `inside` is a per-code-unit map aligned with the input, so
+ * a scanner can ask whether an offset sits inside a quote.
+ */
+/** The characters after which a single quote OPENS a quotation rather than being
+ *  an apostrophe ("'Install foo…'", "the user's file"). */
+const QUOTE_OPENING_BOUNDARY = new Set(' \t\n:：,，、(（[【—')
+
+/** Whether a single quote at the offset opens a quotation instead of an apostrophe. */
+function isQuoteOpeningBoundary(text: string, cursor: number): boolean {
+  if (cursor === 0) return true
+  return QUOTE_OPENING_BOUNDARY.has(text[cursor - 1]!)
+}
+
+function quotedSpans(text: string): { masked: string; inside: boolean[] } {
+  const inside: boolean[] = Array.from({ length: text.length }, () => false)
+  let masked = ''
+  let closer: string | undefined
+  for (let cursor = 0; cursor < text.length; cursor += 1) {
+    const character = text[cursor]!
+    if (closer !== undefined) {
+      inside[cursor] = true
+      masked += ' '
+      if (character === closer) closer = undefined
+      continue
+    }
+    const opens = character === '"' ? '"'
+      : character === '“' ? '”'
+        : character === '「' ? '」'
+          : character === '『' ? '』'
+            : character === '‘' ? '’'
+              : character === "'" && isQuoteOpeningBoundary(text, cursor) ? "'"
+                : undefined
+    if (opens !== undefined) {
+      closer = opens
+      inside[cursor] = true
+      masked += ' '
+      continue
+    }
+    masked += character
+  }
+  return { masked, inside }
+}
+
+/** Blank out every quoted span of the text. */
+export function maskQuotedSpans(text: string): string {
+  return quotedSpans(text).masked
+}
+
+/** Whether the offset lies inside a quoted span. */
+function insideQuote(masked: string, index: number): boolean {
+  return quotedSpans(masked).inside[index] === true
+}
+
+/**
+ * Whether the clause's OWN span asks something, even when no governed head was
+ * recognised. This is the fail-closed half of the qualification: a clause whose
+ * question content the reader could not classify (`I wonder whether …`, a
+ * postposed 是否可行, a stray question mark) is still a scope that cannot host
+ * execution authority. Code spans, quotes and subordinate spans do not count:
+ * their content belongs to them, not to the clause.
+ */
+export function clauseAsksOwnQuestion(text: string): boolean {
+  const own = withoutSubordinateQuestions(maskCodeSpans(maskQuotedSpans(text)))
+  // An explicit restatement names its object as DATA ("把 X 明确为 Y"): what X says
+  // is not this clause's own question.
+  if (REBIND_DIRECTIVE.test(own.trim())) return false
+  if (/[？?]/u.test(own)) return true
+  const marker = GOVERNED_QUESTION_MARKER.exec(own)
+  if (marker === null) return false
+  if (!/^[A-Za-z]/.test(marker[0])) return true
+  // A LATIN interrogative mid-clause is a relative or purpose use ("Create a file
+  // where logs are stored") unless the clause opens with it, is carried by an
+  // interrogative auxiliary, or REPORTS it ("I wonder whether …").
+  const head = own.replace(/^[\s,，、；;]*(?:(?:并且|以及|而后|然后|接着|并|且|和|与|及)|(?:and|then|but|also|next|so)\b)?[\s,]*/iu, '')
+  const reported = /\b(?:wonder|wonders|wondering|ask|asks|asking|unsure|know|knows|recall|decide|decides|determine|determines|figure\s+out|find\s+out|establish|confirm|verify|check|see|not\s+sure|no\s+idea)\b/iu
+    .test(own.slice(0, marker.index))
+  return GOVERNED_QUESTION_MARKER.exec(head)?.index === 0
+    || INTERROGATIVE_AUXILIARY_LEAD.test(own.trim())
+    || reportingHeadGoverns(own)
+    || reported
+}
+
+/**
+ * Whether the clause is a DIRECTIVE: an imperative in the root's voice. The action
+ * must OPEN the clause once the request preface is consumed ("重启 api 服务。",
+ * "Then restart service api.", "请更新插件"), and the clause must not be a report
+ * or a third-party statement ("The technicians restart service api every night.",
+ * "日志显示运维人员重启 api 服务。").
+ */
+export function opensWithDirective(masked: string): boolean {
+  const own = maskCodeSpans(maskQuotedSpans(masked))
+  // An EXPLICIT root statement of what an obligation means is a new authorization
+  // in its own right: "把更新插件明确为 apply package demo@2.0.0 profile web" is the
+  // sanctioned clarification route, and the contract says an explicit root
+  // authorization establishes a new execution reading.
+  if (REBIND_DIRECTIVE.test(own.trim())) return true
+  const stripped = stripDirectivePreface(own)
+  const verb = firstActionVerb(stripped)
+  // An imperative may carry a fronted actor, locative or object phrase: "由你升级 …",
+  // "由我手动重启 …", "在仓库提交变更". Those prefixes are closed-class, so a
+  // third-party SUBJECT ("The technicians restart …", "日志显示运维人员重启 …") is
+  // still not a directive.
+  const fronted = verb > 0 && /^(?:(?:由|让|请|给|对|把|将|在|从|按|按照|根据|依|替|帮)[^，,。；;！!？?]*|(?:明天|今天|后天|今晚|明早|现在|马上|立即|稍后|待会儿?|之后|以后|下周|本周|最近|尽快)[^，,。；;！!？?]*)$/u.test(stripped.slice(0, verb))
+  if (verb !== 0 && !fronted) return false
+  if (mainClauseTailReport(stripped) || NARRATIVE_DIRECTIVE.test(stripped)) return false
+  // An action at the head is necessary but not sufficient: with a DESCRIPTIVE
+  // predicate the clause describes the action instead of ordering it
+  // ("重启 api 服务是一个危险操作。" / "Restart service api is dangerous.").
+  if (descriptivePredicate(stripped)) return false
+  return true
+}
+
+/**
+ * Whether the clause's MATRIX predicate is descriptive. The test reads the clause up
+ * to its first English relative/interrogative marker, so a relative clause
+ * ("Create a file where logs are stored") is not mistaken for a copula.
+ */
+function descriptivePredicate(stripped: string): boolean {
+  // Only the clause the action head belongs to can describe it: a copula in a
+  // FOLLOWING clause ("重启 api 服务，这是一个危险操作。") describes the action, it does
+  // not turn the action itself into a statement.
+  const matrix = stripped.split(/[，,；;。！!？?]|\b(?:which|who|whom|whose|that|where|when|why)\b/iu)[0] ?? stripped
+  return DESCRIPTIVE_PREDICATE.test(matrix)
+}
+
+/**
+ * The copulas and descriptive links that turn an action-headed clause into a
+ * statement. Narrow on purpose: a modal or a bare verb is not one of them.
+ */
+const DESCRIPTIVE_PREDICATE = /(?:\p{Script=Han}|[^\p{L}])是(?:一种|一个|属于)?|(?:\p{Script=Han}|[^\p{L}])(?:属于|意味着|表示|表明|导致|会造成)|\b(?:is|are|was|were|means|causes|requires|leads\s+to)\b/iu
+
+/**
+ * The content a restatement introduces: the Y of "把 X 明确为 Y" / "record X as Y".
+ * Everything the restatement AUTHORIZES comes from this span, and nothing else.
+ */
+export function restatedContentOf(text: string): string | undefined {
+  const own = maskCodeSpans(maskQuotedSpans(text))
+  const marker = /(?:明确为|明确成|指定为|标记为|记为|设为|认作|重绑定为)/u.exec(own)
+  if (marker !== null) {
+    const restated = own.slice(marker.index + marker[0].length).trim()
+    return restated === '' ? undefined : restated
+  }
+  const english = /\bas\b([\s\S]*)$/iu.exec(own)
+  if (english === null) return undefined
+  const restated = (english[1] ?? '').trim()
+  return restated === '' ? undefined : restated
+}
+
+/**
+ * Whether the restated content is a canonical operation SPEC: it OPENS with an
+ * operation the capture layer can act on (an imperative head, or a head token that
+ * resolves to a semantic action), without asking a question and without a
+ * descriptive predicate. Naming an action somewhere inside prose is not enough.
+ */
+function restatedContentIsOperation(content: string): boolean {
+  const body = content.replace(/^[\s,，、；;：:。.!！?？"'“”‘’「」『』]+/u, '').trim()
+  if (body === '') return false
+  if (clauseAsksOwnQuestion(body)) return false
+  if (descriptivePredicate(body)) return false
+  if (firstActionVerb(body) === 0) return true
+  const token = /^[A-Za-z][A-Za-z0-9_@.-]*/u.exec(body)?.[0] ?? body.slice(0, 2)
+  const head = semanticActionFromText(token)
+  return head !== 'generic_run' && head !== undefined
+}
+
+/** The span a restatement CLARIFIES: everything before its marker. */
+export function clarifiedSpanOf(text: string): string | undefined {
+  const own = maskCodeSpans(maskQuotedSpans(text))
+  const marker = /(?:明确为|明确成|指定为|标记为|记为|设为|认作|重绑定为)/u.exec(own)
+  if (marker !== null) {
+    const clarified = own.slice(0, marker.index).trim()
+    return clarified === '' ? undefined : clarified
+  }
+  const english = /\bas\b/iu.exec(own)
+  if (english === null) return undefined
+  const clarified = own.slice(0, english.index).trim()
+  return clarified === '' ? undefined : clarified
+}
+
+/** Whether the clause is an explicit re-statement of what an obligation means. */
+export function isRestatement(text: string): boolean {
+  return REBIND_DIRECTIVE.test(maskCodeSpans(maskQuotedSpans(text)).trim())
+}
+
+/**
+ * The closed phrasing of an explicit re-statement: the root says what an earlier
+ * obligation is to mean. This is a directive even though its own verb is not an
+ * operation ("把 X 明确为 …", "clarify X as …").
+ */
+const REBIND_DIRECTIVE = /^\s*(?:请|麻烦|帮我)?\s*(?:把|将)[^。！？；，,]{1,40}?(?:明确为|明确成|指定为|标记为|记为|设为|认作|重绑定为)|^\s*(?:please\s+)?(?:clarify|treat|interpret|record|rebind)\b[^.!?]{0,48}?\bas\b/iu
+
+/** Consume the request prefaces a directive may carry in either language. */
+function stripDirectivePreface(text: string): string {
+  let body = text.replace(/^[\s,，、；;：:。.!！?？]+/u, '')
+  for (let step = 0; step < 4; step += 1) {
+    const next = body
+      .replace(/^(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|帮忙|并且|并|以及|同时|顺便|而后|且|和|与|及)\s*/u, '')
+      .replace(/^(?:and|then|also|next|first|finally|now|please|kindly|but|so)\b[\s,]*/iu, '')
+      .trim()
+    if (next === body) break
+    body = next
+  }
+  return body
+}
+
+/**
+ * Whether the clause is a PROTECTED scope: a question, an explanation, an
+ * investigation, a reported question, a quote, or any span whose own question
+ * content the head reader could not classify. A protected scope is indivisible —
+ * no separator opens a child of it — and nothing inside it is execution authority.
+ */
+export function clauseIsProtected(text: string): boolean {
+  return governedReadingOf(maskCodeSpans(maskQuotedSpans(text))) !== undefined
+    || clauseAsksOwnQuestion(text)
+}
+
+/** A clause nobody has questioned: its own reading is the authorization. */
+export const GRANTED_QUALIFICATION: ExecutionQualification = { status: 'granted', reason: 'plain_instruction' }
+/** A record captured before the qualification existed: never granted by default. */
+export const LEGACY_QUALIFICATION: ExecutionQualification = { status: 'restricted', reason: 'legacy_missing_qualification' }
+
+/** The question content of a clause that is not inside a quoted code span. */
+const GOVERNED_QUESTION_MARKER = /是否|有没有|有没|能否|可否|要不要|该不该|为什么|为何|怎么|怎样|如何|什么|哪些|哪一种|哪个|谁|何时|什么时候|几时|多久|多少|吗|([\p{Script=Han}])不\1|\b(?:whether|what|which|who|whom|whose|when|where|why|how)\b/iu
+/** Purpose and relative spans, which carry their own content rather than the clause's. */
+const SUBORDINATE_PURPOSE_ZH = /(?:为了|用来|以便|从而|进而|用于|好让)[\s\S]*$/u
+const SUBORDINATE_PURPOSE_EN = /\b(?:showing|recording|noting|checking|to|in order to)\s+[\s\S]*$/iu
+
+/**
+ * The clause text whose question content is the CLAUSE's own rather than a
+ * subordinate span's object. A purpose or participial span is set aside only when
+ * it carries the question content itself ("打包日志以便确认哪些请求失败",
+ * "Create a report showing whether the tests passed") — never when the question is
+ * the clause's own and an infinitive follows it ("Confirm whether it is safe to
+ * install foo and restart service api."), where setting the span aside would drop
+ * the actions into the answer lane.
+ */
+function withoutSubordinateQuestions(masked: string): string {
+  const strip = (pattern: RegExp): void => {
+    masked = masked.replace(pattern, (span) => GOVERNED_QUESTION_MARKER.test(span) ? '' : span)
+  }
+  strip(SUBORDINATE_PURPOSE_ZH)
+  strip(SUBORDINATE_PURPOSE_EN)
+  return masked
+}
+
+interface GovernedReading {
+  head: 'reporting' | 'investigation' | 'question'
+  /** Offset of the clause's own question word, when it has one. */
+  marker?: number
+  markerLength: number
+}
+
+/**
+ * The governed reading of a clause, or `undefined` when the clause is a plain
+ * statement or instruction. The head tests are the closed grammatical classes the
+ * earlier rounds established; nothing here looks for a state word, an actor or a
+ * vocabulary verb, because absence of a pattern is never evidence of anything.
+ */
+function governedReadingOf(masked: string): GovernedReading | undefined {
+  const own = withoutSubordinateQuestions(masked)
+  // An explanation/reporting head governs its clause whatever follows: what it
+  // names is what the root asked to have explained, never an order of its own.
+  if (reportingHeadGoverns(own)) return { head: 'reporting', ...markerOf(own) }
+  // An investigation imperative governs when it ASKS (its own interrogative) or
+  // when it coordinates something further. A bare verification order with neither
+  // is an acceptance task, not a governed scope: "Verify the generated file" asks
+  // nobody a question and must stay work.
+  if (INVESTIGATION_HEAD_PATTERN.test(own)) {
+    const head = INVESTIGATION_HEAD_PATTERN.exec(own)!
+    if (markerOf(own).marker !== undefined || FIRST_COORDINATOR.test(own.slice(head[0].length))) {
+      return { head: 'investigation', ...markerOf(own) }
+    }
+    return undefined
+  }
+  // A clause-level CONDITION marker is not a question word: "Install the package
+  // when the tests pass." orders a conditional action, while "When should I
+  // install …?" asks one.
+  const condition = prefixConditionIndex(own.toLowerCase())
+  const conditioned = condition !== undefined && conditionMarkerIsClauseLevel(masked, condition)
+    && !isTemporalQuestion(masked)
+    ? own.slice(0, condition)
+    : own
+  if (QUESTION_LEAD.test(conditioned) || INTERROGATIVE_AUXILIARY_LEAD.test(conditioned.trim())
+    || A_NOT_A_LEAD.test(conditioned) || QUESTION_WITH_SUBJECT.test(conditioned)) {
+    // An auxiliary-led clause asks only when it closes on a question mark: "Does
+    // the release exist?" asks, while "Have these inputs sanitized" is a causative
+    // imperative.
+    if (INTERROGATIVE_AUXILIARY_LEAD.test(conditioned.trim()) && !QUESTION_LEAD.test(conditioned)
+      && !/[？?]\s*$/u.test(conditioned.trim()) && !A_NOT_A_LEAD.test(conditioned)
+      && !QUESTION_WITH_SUBJECT.test(conditioned)) return undefined
+    const own = markerOf(conditioned)
+    // An interrogative auxiliary or an A-不-A head IS the question content: the
+    // clause asks even though it carries no question word of its own ("Does the
+    // release exist?", "这份文档可不可以更新？").
+    return { head: 'question', marker: own.marker ?? 0, markerLength: own.marker === undefined ? 1 : own.markerLength }
+  }
+  // A sentence-final yes/no particle asks about the WHOLE clause, whatever stands
+  // before it ("这个 bug 需要修复吗？").
+  if (/吗[\s。！？?]*$/u.test(own.trim()) || /呢[\s。！？?]*[？?][\s。！？?]*$/u.test(own.trim())) {
+    const marker = GOVERNED_QUESTION_MARKER.exec(own)
+    return { head: 'question', marker: marker?.index ?? 0, markerLength: marker?.[0].length ?? 1 }
+  }
+  // An English interrogative behind a subordinate boundary belongs to the
+  // subordinate span, not to the clause ("Archive the logs that record which
+  // shard failed.").
+  if (!englishInterrogativeIsMatrix(conditioned)) return undefined
+  const marker = GOVERNED_QUESTION_MARKER.exec(conditioned)
+  if (marker) {
+    const prefix = conditioned.slice(0, marker.index)
+    if (/^[A-Za-z]/.test(marker[0])) {
+      // A LATIN interrogative behind a subject is a relative or purpose use
+      // ("Create a file where logs are stored"), unless the clause is carried by
+      // an interrogative auxiliary ("Is it safe to …?").
+      const head = prefix.replace(/^[\s,，、；;]*(?:and|then|but|so)\b[\s,]*/iu, '').trim()
+      if (head !== '') return undefined
+    } else if (/^[\s,，、；;]*(?:并且|以及|并|且|和|与|及)/u.test(prefix)
+      && !opensWithGovernedHead(prefix.replace(/^[\s,，、；;]*(?:并且|以及|并|且|和|与|及)/u, ''))) {
+      // The clause continues a previous ORDER ("创建文件 /tmp/x 并记录测试是否通过。"):
+      // the interrogative is that order's object, so the clause is work of its
+      // own. A continued clause that opens with a governed head is that head's
+      // question ("并且检查是否存在冲突。").
+      return undefined
+    } else {
+      const joined = coordinationInside(prefix)
+      // A Chinese interrogative that follows a coordination of PREDICATES belongs
+      // to the coordinated part, not to the clause's own question: "创建文件
+      // /tmp/x 并记录测试是否通过。" orders two things, while
+      // "确认本地插件和皮肤是否需要更新。" asks about a list of objects. It is the
+      // clause's question again when the clause closes on a question mark:
+      // "安装 foo 并重启 api 服务是否可行？".
+      if (joined !== null && opensWithWork(prefix.slice(joined.index + joined[0].length))
+        && !/[？?]\s*$/u.test(conditioned.trim())) return undefined
+    }
+    return { head: 'question', marker: marker.index, markerLength: marker[0].length }
+  }
+  return undefined
+}
+
+/** The clause's own question word, when it has one. */
+function markerOf(own: string): { marker?: number; markerLength: number } {
+  const marker = GOVERNED_QUESTION_MARKER.exec(own)
+  return marker ? { marker: marker.index, markerLength: marker[0].length } : { markerLength: 0 }
+}
+
+/**
+ * Whether a QUESTION/EXPLANATION/INVESTIGATION head governs the clause: the one
+ * governance predicate every layer consumes (the partitioner, the classifier, the
+ * reading, and — through the stored qualification — the gate and preparation).
+ */
+export function questionHeadsClause(masked: string): boolean {
+  return governedReadingOf(masked) !== undefined
+}
+
+/** Whether the clause's own reading is a governed scope. */
+export function clauseIsGoverned(masked: string): boolean {
+  return governedReadingOf(maskCodeSpans(masked)) !== undefined
+}
+
+/** The qualification the reader records for one clause. */
+export function qualificationOfClause(text: string): ExecutionQualification {
+  const masked = maskCodeSpans(text)
+  const own = maskQuotedSpans(masked).trim()
+  // A restatement ("把 X 明确为 Y", "record X as Y") authorizes nothing by itself:
+  // it may RECORD, CLASSIFY or FORBID its object ("把重启 api 服务记为待讨论事项。",
+  // "Record restart service api as a hypothetical example.",
+  // "把重启 api 服务明确为禁止操作。"). It is a directive only when the RESTATED
+  // CONTENT is itself an instruction — the root saying "treat this as <action to
+  // perform>" — which is the sanctioned clarification route.
+  if (REBIND_DIRECTIVE.test(own)) {
+    const restated = restatedContentOf(own)
+    if (restated === undefined || isRestatement(restated)) return { status: 'restricted', reason: 'unproven_scope' }
+    // The content must pass the SAME judgement a clause passes, and the item takes
+    // its action and target from that content, so the action named BEFORE the
+    // restatement ("把重启 api 服务明确为检查日志。") is never authorized.
+    const inner = qualificationOfClause(restated)
+    if (inner.status === 'granted') return GRANTED_QUALIFICATION
+    // A canonical OPERATION spec is also a directive — "apply package demo@2.0.0
+    // profile web", "inspect_remote_updates" — but only when its HEAD is the
+    // operation. Prose that merely mentions one ("需要讨论的重启操作", "解释重启流程",
+    // "a description of how technicians restart service api") stays restricted.
+    return restatedContentIsOperation(restated) ? GRANTED_QUALIFICATION : { status: 'restricted', reason: 'unproven_scope' }
+  }
+  const reading = governedReadingOf(maskQuotedSpans(masked))
+  if (reading !== undefined) return { status: 'restricted', reason: 'governed_scope', governedBy: reading.head }
+  // GRANTED is a POSITIVE finding, never a default: a clause that asks something
+  // the head reader could not classify, or that names no action the reader can
+  // recognise, is restricted. Storing a granted qualification is the only way an
+  // action becomes authorizable, so the absence of a match may never produce one.
+  if (clauseAsksOwnQuestion(text)) return { status: 'restricted', reason: 'unproven_scope' }
+  const directiveBody = withoutSubordinateQuestions(maskQuotedSpans(masked))
+  // Naming an action is NOT an instruction: "The technicians restart service api
+  // every night." and "日志显示运维人员重启 api 服务。" mention one. The positive
+  // evidence for an execution reading is a DIRECTIVE — the clause is an imperative
+  // in the root's voice, opening with the action after any request preface — and a
+  // report or a third-party statement is therefore restricted.
+  if (!opensWithDirective(directiveBody)) return { status: 'restricted', reason: 'unproven_scope' }
+  return GRANTED_QUALIFICATION
+}
+
+/**
+ * Whether the text OPENS with an action: the piece a coordination introduces
+ * ("并安装依赖", "and update the README") is a predicate, while "和皮肤" joins two
+ * objects. The head detection is the project's own action reader, so an object
+ * whose name is also a work verb ("是否需要更新") is not mistaken for one.
+ */
+function opensWithWork(text: string): boolean {
+  const head = text.replace(/^[\s,，、；;：:]*(?:(?:并且|以及|而后|然后|接着|并|且|和|与|及)|(?:and|then|but|also|next|so)\b)?[\s,]*(?:一下|下|一遍|一次|个)?[\s,]*/iu, '')
+  return firstActionVerb(head) === 0 || introducesActionClause(head)
+}
+
+/** An action named by the text, whatever vocabulary it comes from. */
+function namesWork(text: string): boolean {
+  return firstActionVerb(text) >= 0 || introducesActionClause(text) || namesActionSpan(text)
+}
+
+/**
+ * Whether a GOVERNED clause carries work that its own question does not bound, so
+ * that the clause must stay undecided rather than enter the answer lane.
+ *
+ * The test is structural and vocabulary-free in the direction that matters:
+ *
+ * - a coordination AFTER the clause's own question word puts the coordinated part
+ *   inside the question's scope ("…是否安装 foo 并重启 api 服务"), so the whole
+ *   clause is undecided whatever the verbs are;
+ * - material BEFORE the question word that carries an action is the questioned
+ *   span itself ("检查一下[安装 foo 并重启 api 服务]是否安全"), so it is undecided;
+ * - a governed head with no question word of its own is undecided as soon as it
+ *   names an action ("Check the safety of installing foo and restart service
+ *   api.", "Explain the incident, rotate every credential").
+ *
+ * A pure question — the object list of "检查一下本地插件和皮肤是否有更新", a state
+ * question like "检查是否有新版本。" — carries none of these and stays answerable.
+ */
+export function governedClauseRestrictsExecution(text: string): boolean {
+  const masked = maskCodeSpans(text)
+  const reading = governedReadingOf(maskQuotedSpans(masked))
+  // A protected scope whose head the reader could not classify is undecided: it
+  // keeps its obligation and authorizes nothing, exactly like a recognised one.
+  if (reading === undefined) return clauseAsksOwnQuestion(text)
+  const own = withoutSubordinateQuestions(masked)
+  if (reading.marker === undefined) {
+    // A governed head with no question word of its own is undecided as soon as the
+    // text it governs names work or coordinates predicates ("Explain the incident,
+    // rotate every credential", "Verify that the operator rotates the credentials
+    // and redeploys the service."), and a REPORTING head with no question word is
+    // never answerable at all. A bare verification order stays an acceptance task.
+    if (reading.head === 'reporting') return true
+    const body = headBodyOf(own)
+    return namesWork(body) || coordinationInside(body) !== null
+  }
+  // A reporting/explanation head whose complement OPENS work as its predicate is
+  // never answerable: what it names may be exactly what the root asked to have
+  // explained. A work word standing as the question's own object ("what changed in
+  // the build and why") does not make the question an order.
+  if (reading.head === 'reporting') {
+    const after = own.slice(reading.marker + reading.markerLength)
+    if (opensWithWork(after) || opensWithWork(headBodyOf(own.slice(0, reading.marker)))) return true
+  }
+  const markerEnd = reading.marker + reading.markerLength
+  // A coordination AFTER the clause's own question word puts the coordinated part
+  // inside the question's scope ("…是否安装 foo 并重启 api 服务"): undecided.
+  const tail = own.slice(markerEnd)
+  const after = coordinationInside(tail)
+  if (after !== null) {
+    const rest = tail.slice(after.index + after[0].length).trim()
+    if (!BARE_QUESTION_CONTINUATION.test(tail.trim()) && !BARE_QUESTION_CONTINUATION.test(rest)) return true
+  }
+  // A POSTPOSED question is undecided when the span it questions COORDINATES
+  // PREDICATES ("检查一下[安装 foo 并重启 api 服务]是否安全"). A span that merely names
+  // one operation inside its object — "检查部署脚本是否已经完成迁移。" — asks about
+  // that operation, and a coordination of OBJECTS ("本地插件和皮肤") asks about a
+  // list; both stay answerable.
+  const questioned = own.slice(0, reading.marker)
+  const inside = coordinationInside(questioned)
+  if (inside === null) return false
+  const left = headBodyOf(questioned.slice(0, inside.index))
+  const right = questioned.slice(inside.index + inside[0].length)
+  return opensWithWork(left) || opensWithWork(right)
+}
+
+
+/** An investigation whose complement is the declarative clause after `that`. */
+const INVESTIGATION_THAT = new RegExp(`^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:${INVESTIGATION_HEAD})\\s+that\\b`, 'iu')
+
+/**
+ * The first coordinator that really joins two parts: a leading conjunction is a
+ * preface ("并且检查是否存在冲突。"), and a mark with nothing after it belongs to the
+ * sentence rather than to a coordinated part ("检查是否存在更新；").
+ */
+function coordinationInside(own: string): RegExpExecArray | null {
+  const pattern = new RegExp(FIRST_COORDINATOR.source, 'giu')
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(own)) !== null) {
+    const before = own.slice(0, match.index).trim()
+    const rest = own.slice(match.index + match[0].length).trim()
+    if (before !== '' && rest !== '') return match
+    if (match[0].length === 0) break
+  }
+  return null
+}
+
+/** The clause text with its own governed head removed, so the head is not read as work. */
+function headBodyOf(text: string): string {
+  const head = INVESTIGATION_HEAD_PATTERN.exec(text) ?? REPORTING_HEAD.exec(text)
+  return head === null ? text : text.slice(head[0].length)
+}
+
+/**
+ * The comma/delimiter-bounded clause the cursor sits in: the piece a governed
+ * reading is decided on, so a question in one clause never swallows the order in
+ * the clause before it.
+ */
+function clauseAround(masked: string, cursor: number): string {
+  const marks = /[，,、；;。！!？?\n\r]/gu
+  let start = 0
+  for (const match of masked.matchAll(marks)) {
+    if (match.index >= cursor) break
+    start = match.index + match[0].length
+  }
+  let end = masked.length
+  for (const match of masked.matchAll(marks)) {
+    if (match.index >= cursor) { end = match.index; break }
+  }
+  // A sentence mark that CLOSES the run belongs to the clause, not to a boundary
+  // before it: "安装 foo 并重启 api 服务是否可行？" is one governed clause.
+  if (/^[？?！!。.]+[\s]*$/u.test(masked.slice(end))) end = masked.length
+  return masked.slice(start, end)
+}
+
+/**
+ * Whether the text is ONE clause: no delimiter inside it other than the sentence
+ * mark that closes it. A governed clause is indivisible; a run of clauses is not,
+ * because each piece qualifies itself.
+ */
+function isSingleClause(text: string): boolean {
+  // A quote owns its punctuation: a `.` inside "…" never closes the outer clause.
+  const inner = maskQuotedSpans(text).trim().replace(/[。．.！!？?；;]+$/u, '')
+  return !/[，,、；;。！!？?\n\r]/u.test(inner)
+}
+
+/**
+ * Whether the text OPENS with a governed head (a question, an explanation or an
+ * investigation that asks). Such a head governs its own sentence, so nothing
+ * coordinated inside that sentence opens an execution child of its own.
+ */
+function opensWithGovernedHead(masked: string): boolean {
+  const own = withoutSubordinateQuestions(masked.replace(/^[\s,，、；;]*(?:and|then|but|so)\b[\s,]*/iu, ''))
+  return reportingHeadGoverns(own)
+    || INVESTIGATION_HEAD_PATTERN.test(own)
+    || QUESTION_LEAD.test(own)
+    || INTERROGATIVE_AUXILIARY_LEAD.test(own.trim())
+    || A_NOT_A_LEAD.test(own)
+    || QUESTION_WITH_SUBJECT.test(own)
+}
+
+/** The UTF-16 code units that may join two predicates of ONE clause. */
+function isCoordinatorMark(character: string): boolean {
+  return character === '并' || character === '且'
+}
+
+
+/**
+ * The first coordinator inside one clause, in either language.
+ */
+const FIRST_COORDINATOR = /(?:^|[^A-Za-z0-9_])(?:and|then|but)\b|,|，|、|；|;|并且|以及|并|且|和|与|及/iu
+
+/** Whether the text OPENS with an investigation imperative. */
+const INVESTIGATION_HEAD_LEAD = new RegExp(`^\\s*(?:${INVESTIGATION_HEAD})`, 'iu')
+/** The investigation imperatives that can head a clause. */
+const INVESTIGATION_HEAD_PATTERN = new RegExp(`^\\s*(?:${REQUEST_PREFACE}\\s*)?(?:${INVESTIGATION_HEAD})`, 'iu')
+
+/**
+ * Whether a coordinated part after the first is an ORDERED part rather than the
+ * question's own continuation. A bare interrogative adverb ("and why", "为什么")
+ * continues the question; anything else is a second instruction, so the clause is
+ * not a pure information request.
+ */
+const BARE_QUESTION_CONTINUATION = /^[\s，,、；;：:]*(?:and\s+)?(?:why|how|what|which|who|whom|whose|when|where|whether|为什么|为何|怎么|如何|哪里|哪儿|哪些|什么|何时|谁)[.。！？!?]?$/iu
+export function hasOrderedCoordination(masked: string): boolean {
+  return splitTextFragments(masked)
+    .slice(1)
+    .some((part) => part.text.trim() !== '' && !BARE_QUESTION_CONTINUATION.test(part.text.trim()))
+}
+
+/**
+ * The Chinese A-不-A question form, whose 不 is the interrogative's reduplication
+ * and not a negator: 需不需要, 可不可以, 对不对, 是不是, 要不要, 该不该. It heads the
+ * clause when nothing precedes it, and it asks about the clause it closes when it
+ * follows a topic ("这份文档可不可以更新？").
+ */
+const A_NOT_A_LEAD = /^\s*(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|帮忙|并且|并|以及)?\s*([\p{Script=Han}])不\1/u
+
+/** A question whose subject pronoun stands before the interrogative ("你们如何…"). */
+const QUESTION_WITH_SUBJECT = /^\s*(?:那么|然后|接着|随后|首先|先|再|也|请|麻烦|帮我|并且|并|以及)?\s*(?:你们|我们|你|我|他们|她们|它们|大家|团队|咱们)\s*(?:怎么|如何|怎样|为什么|为何|什么|哪些|哪|谁)/u
+/** @deprecated Use {@link isQuestionScopeNeedingReview}: the rule is not limited to explanations. */
+export const isExplanationScope: (text: string) => boolean = isQuestionScopeNeedingReview
+
+/**
+ * Whether a coordinated part of the explanation's sentence opens with an action
+ * of its own. Those are exactly the parts whose membership in the explanation
+ * cannot be decided from the surface, so they make the sentence undecided instead
+ * of answerable or executable. `masked` has code spans blanked, so an action that
+ * only appears inside backticks contributes nothing.
+ */
+export function explanationHasActionResidue(masked: string): boolean {
+  const parts = splitTextFragments(masked)
+  return parts.slice(1).some((part) => part.text.trim() !== '' && fragmentOrdersWorkOnItsOwn(part.text))
+}
+
+export function isInformationalFragment(masked: string): boolean {
+  // An information request whose own opening word is the question ("How do I
+  // install this?", "What changed in the build"), a reported question ("Tell me
+  // what changed …"), or an investigation of a state question (检查是否有更新,
+  // check whether the remote has new commits).
+  // An English question word sitting behind a subordinate span is the OBJECT of
+  // that span, not the clause's question, so the clause is never an answerable
+  // information request. This has to be decided structurally and FIRST: the
+  // span's own main verb may be outside every vocabulary ("Archive /tmp/logs to
+  // show what changed", "Compress /tmp/logs to check the status"), and a gate
+  // that needs a known verb would call that span the head (review 4).
+  if (!englishInterrogativeIsMatrix(masked)) return false
+  // An explanation whose sentence also carries an ACTION residue is UNDECIDED:
+  // neither closable by an answer nor authorizable. Its complement may be finite
+  // ("how you install …", "why we install …") and no surface pattern can bound
+  // it, so the decisive question is structural — does a coordinated part open
+  // with an action of its own? If it does, nothing in this sentence is authority,
+  // because the action may well be what the root asked to have explained, and the
+  // absence of a protection pattern is never proof that it left that scope
+  // (review 9). A reported question with no action residue ("Tell me what changed
+  // in the build and why") keeps its closable lane.
+  if (questionHeadsClause(masked)) {
+    // A question that also coordinates an action of its own is UNDECIDED (the
+    // action may be what the question asks about, so nothing in it is authority).
+    if (explanationHasActionResidue(masked)) return false
+    // A clause that OPENS with an order is not made information by a question it
+    // later asks ("Deploy the build etc. please tell me why it failed?"), and
+    // neither is one whose coordination is an ordered part rather than the
+    // question's own continuation ("说明一下哪里失败了并归档日志。").
+    // A clause that OPENS with an order is not made information by a question it
+    // later asks ("Deploy the build etc. please tell me why it failed?"). The
+    // clause's own governed HEAD is not such an order, so the action test reads
+    // the text with the head removed before it is applied.
+    if (firstActionVerb(headBodyOf(masked)) === 0) return false
+    if (hasOrderedCoordination(masked)) return false
+    // An explanation of a QUOTED command names no readable action and asks
+    // nothing: it stays undecidable (0.6.1 W060-02) instead of entering the
+    // answer lane.
+    if (firstActionVerb(masked) < 0 && !QUESTION_WORD_PATTERN.test(masked)) return false
+    // Otherwise the question is what the clause is: answerable, and authority for
+    // nothing ("这份文档可不可以更新？", "Tell me what changed in the build and why.").
+    return true
+  }
+  // "Check if …" is an investigation whose interrogative object happens to be
+  // spelled `if`. At the FRAGMENT level that is an asking range; at the clause
+  // level {@link interrogativeTakesIfObject} refuses it once a second instruction
+  // is coordinated, so the partition can separate the two (review 11).
+  if (interrogativeTakesIfObject(masked)) return true
+  // An investigation of a DECLARATIVE clause ("Check that the migration completed")
+  // asks for a verification, so it stays answerable; with a coordination the clause
+  // is undecided instead (review 12).
+  if (INVESTIGATION_THAT.test(masked)) return true
+  if (headOpensClause(INFO_OPENING, masked)) return true
+  if (QUESTION_LEAD.test(masked)) return true
+  // A clause carrying its OWN instruction is an instruction, whatever mark ends
+  // the sentence: "What changed, and update the README?" asks AND orders, and the
+  // trailing question mark belongs to the sentence rather than to the ordering
+  // fragment, so the order has to survive. The same test decides the
+  // comma-less "What changed and archive the logs?" and a Chinese order behind a
+  // question ("什么变了并归档日志？").
+  if (fragmentOrdersWorkOnItsOwn(masked)) return false
+  if (endsOnInterrogative(masked)) {
+    // The question has to COVER the clause. A yes/no question (a final 吗/呢, or
+    // an English auxiliary) asks about the whole clause. A trailing wh-question
+    // asks about itself, so an action head BEFORE it is an execution residue the
+    // answer may not close: "Install the package etc. please tell me what
+    // changed?" keeps the install (review 7 F2). No preface word list decides
+    // this; the residue is read structurally.
+    if (questionCoversWholeClause(masked)) return true
+    return !executionResidueBeforeQuestion(masked)
+  }
+  // The remaining English shapes have to be HEADED by the question, not merely
+  // contain one. A purpose or relative clause behind the action ("Create a file
+  // /tmp/status.txt to show what changed", "Create a script … to check the
+  // status") is the action's object, so the clause stays work (review 3 F1).
+  if (headOpensClause(REPORTED_QUESTION, masked)) return true
+  if (headOpensClause(INVESTIGATION_THEN_QUESTION, masked)) return true
+  if (headOpensClause(INVESTIGATION_OF_STATE, masked)) return true
+  return !firstActionVerb(masked) && QUESTION_ABOUT_CHANGE.test(masked)
+}
+
+/** The coordinating conjunctions that open a continued fragment. */
+const COORDINATED_OPENING = /^(?:(?:并且|而且|以及|而后|随后|然后|接着|并|且)|(?:and|then|also|but|however|yet)\b)/iu
+/**
+ * Question CONTENT: the words that make a clause ask about something, without the
+ * bare question mark. Punctuation says where a sentence ends; content says
+ * whether the clause is a question at all.
+ */
+const QUESTION_CONTENT = /是否|是不是|为什么|为何|怎么|如何|什么|哪些|哪一种|哪个|多少|多久|能否|可否|要不要|该不该|由谁|是谁|吗|呢|\b(?:what|which|who|whom|whose|when|where|why|how|whether)\b/iu
+/** An interrogative auxiliary that opens the fragment ("Is there any update?"). */
+const INTERROGATIVE_AUXILIARY_LEAD = /^(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/iu
+/** Chinese text, for the stray-question-mark rule. */
+const HAS_HAN = /[\u3400-\u9fff]/u
+
+/**
+ * Whether a fragment orders work ON ITS OWN, regardless of the mark that ends it
+ * and regardless of whether the splitter left a coordinating conjunction on its
+ * head.
+ *
+ * Two things have to hold: the fragment asks nothing (no question word and no
+ * interrogative auxiliary), and it carries an action head — a Chinese action
+ * head, a verb the vocabulary knows, or a Latin word the vocabulary does NOT
+ * know ("archive the logs?"). The unknown case is the one that kept escaping: a
+ * question word earlier in the message, or the sentence's own question mark,
+ * must never hand a clause with its own verb to the answer lane (review 5 F2,
+ * review 6 F1). A coordinated clause that is still an INVESTIGATION asks even
+ * behind the conjunction ("然后检查是否有新版本"), so the question forms are
+ * excluded first.
+ */
+function fragmentOrdersWorkOnItsOwn(masked: string): boolean {
+  const trimmed = masked.trim()
+  if (!trimmed) return false
+  const opening = COORDINATED_OPENING.exec(trimmed)
+  const rest = opening
+    ? trimmed.slice(opening[0].length).replace(/^[\s，,、；;：:]+/u, '')
+    : trimmed
+  if (!rest) return false
+  // A fragment that ASKS about something is not an instruction, however many
+  // verbs it mentions ("主题是不是需要更新呢？", "Is there any update for the
+  // plugin?"). Question content, not punctuation, decides this: a bare "?" is
+  // exactly what must not protect an order.
+  // Question content makes the fragment ask when nothing ORDERS work before it.
+  // A fragment whose head is an action and whose interrogative follows is an
+  // instruction with a trailing question ("重启 api 服务是否安全" — the asking is
+  // the investigation's, this fragment orders the restart), while "这个 bug 需要
+  // 修复吗？" keeps asking because its head is not an action (review 11, and the
+  // yes/no controls of rounds 2/7).
+  const question = QUESTION_CONTENT.exec(rest)
+  if (question) {
+    const before = rest.slice(0, question.index)
+    if (!before.trim()) return false
+    // The clause's own INVESTIGATION head is not an order: "检查一下插件是否有更新
+    // 吗？" asks, while "重启 api 服务是否安全" orders the restart the question is
+    // about (review 11).
+    const ordersBefore = (introducesActionClause(before) || firstActionVerb(before) === 0)
+      && !INVESTIGATION_HEAD_LEAD.test(before)
+    if (!ordersBefore) return false
+  }
+  if (INTERROGATIVE_AUXILIARY_LEAD.test(rest)) return false
+  if (headOpensClause(INVESTIGATION_OF_STATE, rest)) return false
+  if (headOpensClause(INVESTIGATION_THEN_QUESTION, rest)) return false
+  if (headOpensClause(REPORTED_QUESTION, rest)) return false
+  if (headOpensClause(INFO_OPENING, rest)) return false
+  if (QUESTION_LEAD.test(rest)) return false
+  // The action has to be the fragment's HEAD, not a verb mentioned inside it.
+  if (introducesActionClause(rest)) return true
+  if (firstActionVerb(rest) === 0) return true
+  // A Chinese clause that ends on a question mark but carries no question
+  // content is an order with a stray mark ("归档日志？"), so it stays work.
+  if (HAS_HAN.test(rest) && /[？?]$/u.test(rest)) return true
+  // A Latin head the vocabulary does not know ("archive the logs?") is work too.
+  return /^[A-Za-z][A-Za-z0-9_.-]*/.test(rest)
+}
+
+
+/** A yes/no question asks about the whole clause it closes. */
+function questionCoversWholeClause(masked: string): boolean {
+  if (/(?:吗|呢)\s*[？?]?\s*$/u.test(masked)) return true
+  return INTERROGATIVE_AUXILIARY_LEAD.test(masked.trim())
+}
+
+/**
+ * Whether the interrogative's own fragment carries an action BEFORE it. The action
+ * may sit behind a modal or a state word ("需要安装多少依赖", "How many steps
+ * install foo"), so any action verb before the interrogative counts — this is the
+ * residue the question is ABOUT, which is what makes the clause a question scope
+ * rather than an order beside a question.
+ */
+function actionBeforeInterrogative(fragment: string): boolean {
+  const question = QUESTION_WORD_PATTERN.exec(fragment)
+  if (question === null) return false
+  const before = fragment.slice(0, question.index)
+  if (!before.trim()) return false
+  // The clause's own INVESTIGATION head is the verb the interrogative is the
+  // OBJECT of ("检查是否有更新吗？"), not an action the question is about, so it
+  // does not make the clause a question-before-action scope.
+  if (INVESTIGATION_HEAD_LEAD.test(before)) return false
+  return firstActionVerb(before) >= 0 || introducesActionClause(before)
+}
+
+/**
+ * The text before the clause's LAST question word, tested with the same
+ * structural rule that decides whether a fragment orders work of its own. This
+ * is the execution residue a trailing question does not govern.
+ */
+function executionResidueBeforeQuestion(masked: string): boolean {
+  const words = /什么|为什么|怎么|如何|哪些|哪一种|哪个|多少|多久|是否|是不是|能否|可否|要不要|该不该|由谁|是谁|\b(?:what|which|who|whom|whose|when|where|why|how|whether)\b/giu
+  let last: number | undefined
+  for (const match of masked.matchAll(words)) last = match.index
+  if (last === undefined || last === 0) return false
+  return fragmentOrdersWorkOnItsOwn(masked.slice(0, last))
+}
+
+/** Boundaries that open a new coordinated fragment inside one clause run. */
+const FRAGMENT_SEPARATORS = new Set(['，', ',', '、', '；', ';'])
+/**
+ * An English coordinating conjunction used with NO punctuation. It opens the
+ * next fragment, so a mixed clause survives its own lack of commas.
+ */
+const CONJUNCT_BOUNDARY = /(?:^|[^A-Za-z0-9_])(?:and|then|but|however|yet|also)\b|(?:并且|以及|而后|随后)/iu
+/** Openings that continue a coordinated instruction list across a boundary. */
+const FRAGMENT_SUBORDINATORS = [
+  '但是', '不过', '然而', '同时', '并且', '而且', '以及', '然后', '接着', '而是', '但', '而', '也', '并', '且', '又', '再',
+  'but', 'and', 'then', 'also', 'however', 'yet',
+]
+
+export function splitTextFragments(text: string, from: number = 0): Array<{ text: string; offset: number }> {
+  const fragments: Array<{ text: string; offset: number }> = []
+  let cursor = from
+  let start = from
+  const boundaryAt = (index: number): number | undefined => {
+    const character = text[index]!
+    if (FRAGMENT_SEPARATORS.has(character)) return index + 1
+    // 0.6.3 K1 repair (review counterexample): a coordinating conjunction is a
+    // clause boundary even with NO punctuation around it — "Check whether an
+    // update exists and install the package." and "检查是否有更新并安装新主
+    // 题。" are each a question plus an order. An English conjunction has to
+    // stand as its own word, so "handle" and "brand" are never boundaries; a
+    // bare 并/且 has to start a word, so the 并 of 合并 is not one either.
+    // The multi-character conjunctions are tried FIRST, so 并且 splits at 并
+    // rather than leaving a stray 且 behind.
+    const match = CONJUNCT_BOUNDARY.exec(text.slice(index))
+    if (match && match.index === 0) return index + match[0].length
+    // A bare 并/且 opens its own clause only when a DISTINCT instruction follows
+    // ("检查是否有更新并安装新主题"): as an adverb inside one action ("合并两个
+    // 分支") it merely continues it, and 合并 must never split.
+    if ((character === '并' || character === '且') && introducesActionClause(text.slice(index + 1))) {
+      return index + 1
+    }
+    // A coordinator that separates an ASKING clause from a clause that does not
+    // ask is a clause boundary whatever verb the second clause uses. Without
+    // this, the Chinese spelling of the invariant failed where the English one
+    // held: "什么变了并归档日志？" stayed one information range, because 归档 is
+    // outside the action vocabulary and the bare-conjunction rule above needs a
+    // known head. The question content must sit BEFORE the coordinator, so
+    // "合并两个分支" (no question at all) is untouched.
+    if ((character === '并' || character === '且')
+      && QUESTION_CONTENT.test(text.slice(0, index))
+      && !QUESTION_CONTENT.test(text.slice(index + 1))) {
+      return index + 1
+    }
+    return undefined
+  }
+  while (cursor < text.length) {
+    const after = boundaryAt(cursor)
+    if (after === undefined) { cursor += 1; continue }
+    let next = after
+    while (next < text.length && /\s/u.test(text[next]!)) next += 1
+    let head = next
+    for (const token of [...FRAGMENT_SUBORDINATORS].sort((left, right) => right.length - left.length)) {
+      if (text.startsWith(token, next)) { head = next + token.length; break }
+    }
+    pushFragment(fragments, text, start, head)
+    start = head
+    cursor = head
+  }
+  pushFragment(fragments, text, start, text.length)
+  return fragments
+}
+
+/**
+ * Record one fragment, trimmed of the separators that joined it to its
+ * neighbours. Trimming only moves the offset, so every character still belongs
+ * to exactly one fragment and a span audit keeps its exact positions.
+ */
+function pushFragment(fragments: Array<{ text: string; offset: number }>, text: string, from: number, to: number): void {
+  const raw = text.slice(from, to)
+  const body = raw.trim()
+    .replace(/^[\s，,、；;]+/u, '')
+    // A fragment ends where the NEXT fragment's conjunction begins: an
+    // unpunctuated "… exists and install …" leaves the "and" behind.
+    .replace(/[\s，,、；;]*(?:and|then|but|however|yet|also)$/iu, '')
+    .replace(/[\s，,、；;]*(?:并且|且|并|以及|而后|随后)$/u, '')
+    .replace(/[\s，,、；;]+$/u, '')
+  if (!body) return
+  fragments.push({ text: body, offset: from + raw.indexOf(body) })
+}
+
+/**
+ * Whether the text after a coordinating conjunction opens a DISTINCT
+ * instruction: its own action head, optionally behind a connector and an
+ * actor. This is the rule the sentence splitter already used to decide that a
+ * conjunction joins two instructions rather than two objects, exposed so the
+ * fragment splitter cannot contradict it.
+ */
+export function introducesActionClause(text: string): boolean {
+  const trimmed = text.replace(/^[\s，,、；;：:]+/u, '')
+  return CROSS_CLAUSE_HEAD.test(trimmed) || DISTINCT_CLAUSE_HEAD.test(trimmed)
+}
+
+/**
+ * The masked text of one fragment. Fragments are trimmed, so their own reading
+ * is taken from their own bytes: a question ending that belongs to a LATER
+ * fragment ("更新插件，安装新主题，检查是否有更新吗？") never decides an
+ * earlier one, and the comma that joined them is not part of either.
+ */
+function fragmentMasked(scope: SplitScope, fragment: { text: string; offset: number }): string {
+  return maskCodeSpans(scope.text.slice(fragment.offset, fragment.offset + fragment.text.length))
+}
+
+/** The scope a directive run is recorded from, with its own source offsets. */
+function directiveScopeOf(text: string, masked: string, offset: number): SplitScope {
+  return { text, body: stripConnectors(text), directive: classifyPositive(text, masked), start: offset }
+}
+
+/**
+ * Whether a fragment states work of its own: it names a non-negated action verb
+ * anywhere inside it. A fragment that only names the OBJECT of the verb before
+ * it ("安装新主题和更新检查") is part of that instruction, not a second one,
+ * so the directive run stays one obligation.
+ */
+function bearsAction(masked: string): boolean {
+  for (const candidate of actionVerbMatches(masked)) {
+    if (!verbIsNegated(masked, candidate.index)) return true
+  }
+  return false
+}
+
+/**
+ * Whether a fragment states work of its own OUTSIDE quoted data. The action
+ * vocabulary has no entry for "explain" and the pure-information route needs a
+ * real question, so an explanation whose only action sits inside a code span
+ * falls through to `unresolved` — never to `informational`, which delivery would
+ * auto-close. Reading the quote as a live order here would misclassify the
+ * clause in the other direction.
+ */
+function bearsLiveAction(masked: string): boolean {
+  return bearsAction(masked) || bearsAction(unmaskCode(masked))
+}
+
+/** The fragment with its quoted spans removed entirely, so only live words remain. */
+function unmaskCode(masked: string): string {
+  return masked.replace(/`[^`]*`/g, ' ')
+}
+
+interface ClausePart { text: string; offset: number; informational: boolean }
+
+/**
+ * Partition a directive run at its fragment boundaries (0.6.3 K1).
+ *
+ * A clause that orders work AND asks for information is two obligations, not
+ * one: "install the package, check whether an update exists, and write a
+ * report" must keep the install and the write beside a closable answer.
+ * Fragments that only continue the same instruction (a conjunct object list,
+ * an explanatory tail) are merged back, so the split is driven by the grammar
+ * of each fragment rather than by the punctuation between them.
+ *
+ * Returns `undefined` when the run is a single obligation, which keeps every
+ * ordinary instruction byte-identical to 0.6.2.
+ */
+function partitionClauseParts(scope: SplitScope, parts: ReadonlyArray<{ text: string; offset: number }>): ClausePart[] | undefined {
+  // A sentence boundary inside the run is not this partition's business: it is
+  // the caller's own split, and re-cutting it here would invent clauses the
+  // sentence splitter already decided against.
+  if (/[。！？!?；;\n\r]/u.test(parts[0]!.text)) return undefined
+  const informational: boolean[] = parts.map((part) => isInformationalFragment(fragmentMasked(scope, part)))
+  // A prohibition is decided by the negation branch, never by this partition:
+  // "按 P0—P4 完成本地实现、测试和文档，…，不推送、不正式发布。" must keep its
+  // constraint attached to the task it governs.
+  if (informational.some((flag, index) => !flag && firstNegation(fragmentMasked(scope, parts[index]!)) !== undefined)) {
+    return undefined
+  }
+  const work = informational.map((flag, index) => !flag && bearsLiveAction(fragmentMasked(scope, parts[index]!)))
+  // Only a clause that really mixes the two readings is split. A pure
+  // instruction stays exactly one obligation, exactly as 0.6.2 recorded it,
+  // however many coordinated actions it names.
+  if (!work.some(Boolean) || !informational.some(Boolean)) return undefined
+  // Every fragment asks, while the clause's own reading is not information:
+  // the question reaches the clause only through a bracketed marker it cannot
+  // see. The informational refinement makes that split.
+  if (informational.every(Boolean)) return undefined
+  const segments: ClausePart[] = []
+  let cursor = 0
+  while (cursor < parts.length) {
+    if (informational[cursor]) {
+      let end = cursor
+      while (end + 1 < parts.length && informational[end + 1]) end += 1
+      const first = parts[cursor]!
+      const last = parts[end]!
+      segments.push({
+        text: scope.text.slice(first.offset, last.offset + last.text.length),
+        offset: first.offset,
+        informational: true,
+      })
+      cursor = end + 1
+      continue
+    }
+    // A directive run: it may already have started on an earlier fragment, so
+    // its text reaches back to the character after the previous information
+    // span (or the start of the clause).
+    let start = cursor
+    while (start > 0 && !informational[start - 1] && !work[start - 1]) start -= 1
+    let end = cursor
+    while (end + 1 < parts.length && !informational[end + 1] && (work[end + 1] || !work[start])) end += 1
+    const last = parts[end]!
+    segments.push({
+      text: scope.text.slice(parts[start]!.offset, last.offset + last.text.length),
+      offset: parts[start]!.offset,
+      informational: false,
+    })
+    cursor = end + 1
+  }
+  return segments.length > 1 ? segments : undefined
+}
+
+/**
+ * Re-partition an informational scope (0.6.3 K1).
+ *
+ * An information span must cover a COMPLETE, execution-free information range.
+ * When a clause was read as information only because a question marker appeared
+ * somewhere inside it, the parts that order work are restored as their own
+ * clauses and the information scope is reduced to the fragments that really
+ * ask. Nothing is dropped: whatever the reading cannot positively classify
+ * stays `unresolved` through {@link classifyPositive}, which keeps the
+ * remaining obligation visible instead of swallowing it into the answer lane.
+ *
+ * Returns `undefined` when the whole scope really is a pure information
+ * request, which is the common case and stays byte-identical to 0.6.2.
+ */
+function refineInformationalScope(scope: SplitScope, masked: string): SplitScope[] | undefined {
+  const fragments = splitTextFragments(scope.text)
+  if (fragments.length < 2) return undefined
+  const fragmentAsks = fragments.map((fragment) => isInformationalFragment(fragmentMasked(scope, fragment)))
+  // The clause's own reading decides which run is the information range. An
+  // informational clause keeps the fragments BEFORE the first ordering one
+  // ("更新插件，检查是否有更新，安装…" answers only the question); a clause
+  // whose whole-clause reading is a directive keeps the fragments BEFORE the
+  // first asking one ("安装主题 A，检查是否有更新。" — the question reaches the
+  // clause only through a bracketed 是否, so the leading order is what it
+  // reads). Extending the information range over the other run instead would
+  // hand the answer lane a clause's worth of work.
+  const informationalClause = isInformationalFragment(masked)
+  const boundary = fragmentAsks.findIndex((asks) => asks !== informationalClause)
+  if (boundary < 0) return undefined
+  const scopes: SplitScope[] = []
+  const headText = scope.text.slice(0, fragments[boundary]!.offset).replace(/[\s，,、；;]+$/u, '')
+  if (headText.trim()) {
+    scopes.push({
+      text: headText,
+      body: stripConnectors(headText),
+      directive: informationalClause ? 'informational' : scope.directive,
+      ...(scope.condition ? { condition: scope.condition } : {}),
+      start: 0,
+    })
+  }
+  const tail = fragments[boundary]!
+  scopes.push(directiveScopeOf(scope.text.slice(tail.offset), masked.slice(tail.offset), tail.offset))
+  return scopes
+}
 
 const NEGATORS: ReadonlyArray<readonly [string, 'zh' | 'en']> = [
   ['不要', 'zh'], ['不用', 'zh'], ['不得', 'zh'], ['不许', 'zh'], ['不准', 'zh'], ['不能', 'zh'],
@@ -222,7 +1619,7 @@ const CROSS_CLAUSE_HEAD = /^\s*(?:检查|查看|确认|验证|测试|运行|执�
  * than the second half of one action. "并确认全部通过" completes the action
  * before it, so 确认 is deliberately absent here.
  */
-const DISTINCT_CLAUSE_HEAD = /^\s*(?:检查|查看|测试|验证|运行|执行|安装|应用|更新|升级|提交|推送|发布|部署|重启|重新启动|创建|新建|生成|修改|编辑|拉取|抓取|删除|回滚|清理|整理)/u
+const DISTINCT_CLAUSE_HEAD = /^\s*(?:检查|查看|测试|验证|运行|执行|安装|应用|更新|升级|提交|推送|发布|部署|重启|重新启动|创建|新建|生成|修改|编辑|拉取|抓取|删除|回滚|清理|整理|记录|编写|撰写|实现)/u
 /**
  * A place clause that follows a coordinating conjunction: the shape of "并在
  * 本地仓库记录", where the conjunction joins an action to where it happens
@@ -302,6 +1699,58 @@ const CONFIRMATION_RECEIPT = /^(?:我)?\s*(?:已|已经)?\s*(?:收到|得到|等
 
 const SENTENCE_END = new Set(['。', '！', '？', '!', '?', '\n', '\r'])
 
+/**
+ * An abbreviation whose own final period MAY continue the sentence: "e.g.",
+ * "i.e.", "cf.", "etc.", "vs.", "no.", "fig.", "approx.", the honorifics, and
+ * any dotted initialism ("a.m."). English abbreviations are a CLOSED class, so
+ * this is a protection list rather than a list of the words that may start a
+ * sentence — which is what the earlier repair got wrong: it decided the boundary
+ * from the NEXT word, so a lower-case request preface ("Install the package.
+ * please report what changed?") kept the run whole and the trailing question mark
+ * swallowed the install (review 5 F1).
+ */
+const ABBREVIATION_BEFORE_PERIOD = /(?:^|[^A-Za-z])(?:e\.g|i\.e|c\.f|cf|etc|vs|no|fig|eq|approx|Mr|Mrs|Ms|Dr|St|Jr|Sr|[A-Za-z]\.[A-Za-z])\.$/i
+/**
+ * Text that CONTINUES a sentence rather than starting one: a lower-case word, a
+ * digit, or a closing mark. This is the second half of the abbreviation rule —
+ * an abbreviation's period also ends a sentence when what follows opens a new
+ * one, and `etc.` at the end of a list is the ordinary case (review 6 F2).
+ */
+const CONTINUES_SENTENCE = /^[\p{Ll}\p{Nd}]/u
+/**
+ * A question opening. It is the tie-breaker for an abbreviation followed by a
+ * lower-case word: "e.g. the log" continues the sentence, while "etc. what
+ * changed?" starts a new one, because a question that follows an abbreviation
+ * must not be delivered with the execution range before it (review 6 F2).
+ */
+const QUESTION_OPENER = /^(?:what|which|who|whom|whose|when|where|why|how|whether|is|are|was|were|do|does|did|can|could|should|would|will|has|have|had|什么|为什么|怎么|如何|是否|是不是|哪|谁|哪个|哪些)/iu
+
+/**
+ * Whether an ASCII full stop at `index` ends a sentence.
+ *
+ * The 0.6.3 K1 repair found that `。`, `！` and `？` split a run while `.` did
+ * not, so "Install the package. What changed?" stayed ONE run, ended
+ * interrogatively and was read as pure information — the order was dropped and
+ * the record closed as answered. A period ends a sentence whenever whitespace
+ * and further text follow it, WHATEVER that text looks like, so no word list can
+ * widen the question's delivery range. Two things can keep the run whole: a
+ * period with no space after it (a decimal, a version number, a file name), and a
+ * period that belongs to an abbreviation AND is followed by a lower-case word,
+ * a digit or a closing mark. An abbreviation followed by a capital, a CJK
+ * character or an opening quote is a sentence end, because a boundary the
+ * reading cannot resolve must never let the sentence's own question mark decide
+ * an execution range it does not cover.
+ */
+function sentencePeriodEnd(text: string, index: number): boolean {
+  if (text[index] !== '.') return false
+  if (!/\s/u.test(text[index + 1] ?? '')) return false
+  const rest = text.slice(index + 1).replace(/^\s+/u, '')
+  if (!rest) return false
+  if (!ABBREVIATION_BEFORE_PERIOD.test(text.slice(0, index + 1))) return true
+  if (QUESTION_OPENER.test(rest)) return true
+  return !CONTINUES_SENTENCE.test(rest)
+}
+
 // ---------------------------------------------------------------------------
 // Scope splitting
 // ---------------------------------------------------------------------------
@@ -345,6 +1794,26 @@ function negatorAt(text: string, index: number): string | undefined {
     .sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]))
   for (const [token] of candidates) {
     // A bare Chinese negator needs a contiguous run, so "在不" / "不足" are not bans.
+    // A lone 不 inside a longer word is not a ban. 是不是/不是 after a topic and
+    // before a verb ("主题是不是需要更新呢？") is a question marker, while a ban
+    // is either opening its clause ("不要提交并推送") or joined to its verb
+    // ("但不推送").
+    // A-不-A is an interrogative, not a ban: 要不要/该不该/是不是/能不能/
+    // 可不可以 ask a yes/no question, so the 不 is the question's own reduplication
+    // (review 11). A real ban keeps 不 next to a DIFFERENT character ("不要安装",
+    // "不应该安装"). The test is on the 不 inside whichever negator matched, because
+    // 不要 is itself a negator token.
+    const bu = token.indexOf('不')
+    if (bu >= 0) {
+      const at = index + bu
+      if (text[at - 1] !== undefined && text[at - 1] === text[at + 1]) continue
+    }
+    if (token === '不' && /[\u3400-\u9fff]/.test(text[index + 1] ?? '')) {
+      const isQuestionForm = text[index + 1] === '是' || text[index + 1] === '错'
+      const opensClause = !/[\u3400-\u9fffA-Za-z0-9_]/.test(text[index - 1] ?? '')
+      const joinedToAction = firstActionVerb(text, index + 1, index + 5) >= 0
+      if (isQuestionForm && !opensClause && !joinedToAction) continue
+    }
     if (token.length === 1 && /[\u3400-\u9fff]/.test(token)) {
       if (!/[\p{Script=Han}\p{L}\p{N}]/u.test(text[index + 1] ?? '')) continue
     }
@@ -383,7 +1852,7 @@ function firstActionVerb(text: string, offset = 0, before = text.length): number
  * that are only a prefix of a longer action removed (the 升 of 升级, the 然 of
  * 然后). The remaining candidates are the verbs an instruction can be about.
  */
-function actionVerbMatches(text: string, offset = 0, before = text.length): Array<{ index: number; length: number }> {
+export function actionVerbMatches(text: string, offset: number = 0, before: number = text.length): Array<{ index: number; length: number }> {
   // Callers need the EARLIEST action, so both vocabularies are searched with
   // exec() — O(pattern) — rather than materialising every match in the text.
   // The whole span is searched: a long message is still the root's instruction.
@@ -405,7 +1874,7 @@ function actionVerbMatches(text: string, offset = 0, before = text.length): Arra
  * not read as bans; a contrast or list separator between the negator and the
  * verb ends its scope ("不仅…而且运行" keeps the run positive).
  */
-function verbIsNegated(text: string, index: number): boolean {
+export function verbIsNegated(text: string, index: number): boolean {
   const ceiling = Math.min(index, 12)
   for (let back = 1; back <= ceiling; back += 1) {
     const at = index - back
@@ -615,7 +2084,21 @@ function scopeOf(raw: string, options: InterpretOptions = {}): SplitScope[] {
     // never opens a conditional scope.
     const locativePrefix = conditionPrefix !== undefined && text[conditionPrefix] === '在'
       && /^在.{1,24}?(?:记录|保存|写入|提交|运行|执行|测试|检查|验证|完成)/u.test(text.slice(conditionPrefix, earliestVerb))
-    if (conditionPrefix !== undefined && earliestNegation < 0 && !locativePrefix) {
+    // "Check if …" is an investigation whose interrogative object happens to be
+  // spelled `if`; the condition splitter would otherwise cut it into a bare
+  // order plus a condition. The counterpart control is "Install the package if
+  // available", whose head is NOT an interrogation verb, so it keeps its
+  // conditional reading.
+  // "When should I install …?" is a QUESTION whose interrogative happens to be
+  // spelled `when`, and the condition splitter would otherwise cut it into a bare
+  // order plus a condition. Only a clause that asks this way is exempt: "When the
+  // tests pass, install the package." keeps its conditional reading (review 10).
+  const temporalQuestion = conditionPrefix !== undefined && isTemporalQuestion(masked)
+  // An investigation whose complement is OPEN ("Determine if we can install foo and
+  // restart service api safely.") asks about its actions: the `if` belongs to the
+  // complement, so it is not a condition on a separate instruction (review 11).
+  const openInvestigationComplement = conditionPrefix !== undefined && clauseIsGoverned(masked)
+  if (conditionPrefix !== undefined && earliestNegation < 0 && !locativePrefix && !temporalQuestion && !openInvestigationComplement && !investigationHeadTakesIf(masked) && conditionMarkerIsClauseLevel(masked, conditionPrefix)) {
     const conditional = conditionSplit(text, conditionPrefix, earliestVerb, options)
       if (conditional) {
         for (const scope of conditional) push({ scope, offset: offset + (scope.start ?? 0) })
@@ -664,7 +2147,12 @@ function scopeOf(raw: string, options: InterpretOptions = {}): SplitScope[] {
     const tail = text.slice(end).trim()
     if (tail) pending.push({ text: tail, offset: offset + end })
     if (head) {
+      // A condition marker that guards the clause is inherited by the scope; a
+      // marker sitting inside a purpose or relative span is not a condition at
+      // all ("Create /tmp/check.sh to determine if the service is running" — the
+      // creation is unconditional, review 4).
       const inherited = conditionPrefix !== undefined && conditionPrefix < head.length
+        && conditionMarkerIsClauseLevel(masked, conditionPrefix)
         ? text.slice(conditionPrefix, head.length).replace(/^[\s，,、；;：:]+/, '').trim()
         : ''
       push({
@@ -682,7 +2170,7 @@ function scopeOf(raw: string, options: InterpretOptions = {}): SplitScope[] {
   // One working item can be reached twice when a ban's span and the pending
   // tail overlap, so identical scopes at the same offset are stated once.
   const seen = new Set<string>()
-  return resolved
+  const ordered = resolved
     .sort((a, b) => a.offset - b.offset)
     .filter((entry) => {
       const key = `${entry.offset}\u0000${entry.scope.directive}\u0000${entry.scope.text}`
@@ -690,10 +2178,76 @@ function scopeOf(raw: string, options: InterpretOptions = {}): SplitScope[] {
       seen.add(key)
       return true
     })
+  // A scope with no action-bearing text states nothing: neither pure
+  // punctuation nor a conflict marker that only closed a previous ban.
+  const surviving = ordered
     .map((entry) => entry.scope)
-    // A scope with no action-bearing text states nothing: neither pure
-    // punctuation nor a conflict marker that only closed a previous ban.
     .filter((scope) => /[\p{L}\p{N}]/u.test(scope.body) && /[\p{L}\p{N}]/u.test(scope.text))
+  // 0.6.3 K1: an informational reading must cover a COMPLETE, execution-free
+  // information range. A clause that also orders work is partitioned again so
+  // the execution obligations survive beside the question.
+  return surviving.flatMap((scope) => {
+    // A question whose own object IS a coordinated list of actions governs that
+    // whole list: "Explain how to install foo and restart service api." asks
+    // about installing and restarting, so neither verb is authority (review 7
+    // F1). The same holds for the Chinese spelling (如何安装并重启服务). This has
+    // to be decided BEFORE partitioning, because partitioning is exactly what
+    // promoted the second verb of the question's object into an instruction.
+    // An explanation's sentence is decided as ONE scope, before any partition:
+    // its coordinated parts are either the question's own complement (a pure
+    // question keeps the closable lane) or an action residue that may equally be
+    // what the root asked to have explained (so the clause stays undecided and
+    // nothing in it is authority). Partitioning here is exactly what promoted the
+    // second verb of "Explain how to install foo and restart service api." into an
+    // instruction (review 9).
+    // A governed clause is decided as ONE obligation, BEFORE any partition: its
+    // coordinated parts are inside the governed scope, so partitioning here is
+    // exactly what invented an executable child out of a question's own content
+    // (the fail-open this contract removes). A separate clause in the same run is
+    // unaffected: it is its own delimiter-bounded piece, qualifies itself, and
+    // keeps its own reading.
+    if ((isSingleClause(scope.text) && clauseIsProtected(scope.text))
+      || opensWithGovernedHead(scope.text)) return [scope]
+    // 0.6.3 K1: an informational reading must cover a COMPLETE,
+    // execution-free information range. A clause that also orders work is
+    // partitioned again ("更新插件，检查是否存在更新，安装新主题，记录变
+    // 更。"), so the execution obligations survive beside the question while
+    // the answering turn closes only its own information range. A directive
+    // reading is never partitioned: a coordinated instruction keeps the single
+    // obligation 0.6.2 recorded for it, with its per-action plan.
+    // A clause that MIXES an answerable information range with work is two
+    // obligations whatever the clause's own majority reading was: 0.6.2 read
+    // the whole run as information when the question came first and as a
+    // directive when it came last, and both readings swallowed the other side.
+    const parts = splitTextFragments(scope.text)
+    if (parts.length > 1) {
+      const partitioned = partitionClauseParts(scope, parts)
+
+      if (partitioned) {
+        return partitioned.flatMap((part) => {
+          if (!part.informational) return [directiveScopeOf(part.text, maskCodeSpans(part.text), part.offset)]
+          const information = informationScopeOf(scope, part)
+          // An information span that still carries a boundary of its own (a
+          // connector, a comma) is reduced once more, so the recorded
+          // information text is only the asking part.
+          return refineInformationalScope(information, maskCodeSpans(information.text)) ?? [information]
+        })
+      }
+    }
+    if (scope.directive !== 'informational') return [scope]
+    return refineInformationalScope(scope, maskCodeSpans(scope.text)) ?? [scope]
+  })
+}
+
+/** The scope a partition records its information span with. */
+function informationScopeOf(scope: SplitScope, part: ClausePart): SplitScope {
+  return {
+    text: part.text,
+    body: stripConnectors(part.text),
+    directive: 'informational',
+    ...(scope.condition ? { condition: scope.condition } : {}),
+    start: part.offset,
+  }
 }
 
 /**
@@ -723,8 +2277,43 @@ function positiveScopeEnd(masked: string, options: InterpretOptions = {}): numbe
     || masked[cursor] === '并' || masked[cursor] === '且' || /\s/u.test(masked[cursor]!))) cursor += 1
   while (cursor < limit) {
     const character = masked.slice(cursor, cursor + 1)
-    if (SENTENCE_END.has(character)) return cursor + 1
-    if (character === '；' || character === ';') return cursor + 1
+    if (SENTENCE_END.has(character) || character === '；' || character === ';'
+      || (character === '.' && sentencePeriodEnd(masked, cursor))) {
+      // A quote (or a code span) owns its own punctuation: a sentence mark inside
+      // it never opens a clause of the parent scope, so the parent's qualification
+      // reaches the whole span.
+      if (insideQuote(masked, cursor)) {
+        cursor += 1
+        continue
+      }
+      return cursor + 1
+    }
+    // A clause that OPENS with a governed head governs its whole sentence: the
+    // question/explanation the root wrote covers everything coordinated inside it,
+    // commas included ("Explain how to install foo, then restart service api."
+    // stays one explanation). A governed head that opens a LATER clause governs
+    // only that clause, so the work before it keeps its own reading (0.6.3 K1).
+    if (opensWithGovernedHead(masked)) {
+      cursor += 1
+      continue
+    }
+    // A question head GOVERNS its clause: no separator opens a clause inside it,
+    // in any question form and in either language ("Explain how you install foo
+    // and restart service api.", "如何安装 foo 并重启 api 服务？",
+    // "How do I install foo and restart service api safely?"). Splitting here is
+    // exactly what produced an executable child that lost its parent's question
+    // scope (review 10). An explanation whose complement is complete before the
+    // coordinator ("说明 `git push origin main` 的作用，然后更新 README") keeps
+    // its next clause, and a sentence end always does.
+    // A governed clause is INDIVISIBLE at coordinators inside its own clause: the
+    // question/explanation/investigation head governs its clause, so a coordinated
+    // part is inside the governed scope and no separator may open an executable
+    // child of it. The clause here is the comma/delimiter-bounded piece the cursor
+    // sits in, so a question in a LATER clause never swallows an earlier order.
+    if (isCoordinatorMark(character) && clauseIsProtected(clauseAround(masked, cursor))) {
+      cursor += 1
+      continue
+    }
     // A comma, an enumeration mark, or a coordinating conjunction begins a
     // coordinated instruction: its own action is its own clause.
     const listSeparator = character === '，' || character === ',' || character === '、'
@@ -1113,16 +2702,39 @@ function mainClauseTailReport(masked: string): boolean {
   return false
 }
 
-function classifyPositive(text: string): DirectiveClass {
-  const masked = maskCodeSpans(text)
+function classifyPositive(text: string, preMasked?: string): DirectiveClass {
+  const masked = preMasked ?? maskCodeSpans(text)
+  // A question head GOVERNS its clause, so the clause is decided HERE, once, from
+  // the head that produced it — not re-guessed per fragment after a split. When
+  // the clause also carries an action of its own, the reading is UNDECIDED: the
+  // action may be exactly what the question asks about, so it is neither
+  // information nor an instruction (review 10). This is what carries the
+  // question's non-execution qualification into every child the clause would
+  // otherwise produce.
+  if (governedClauseRestrictsExecution(masked)) return 'unresolved'
+  // A governed clause that carries no work its question does not bound IS the
+  // answerable lane: the reader decided the governance, so the clause is answered
+  // rather than executed, whatever its head verb looks like in a work vocabulary.
+  if (clauseIsGoverned(masked) && governedReadingOf(masked)?.marker !== undefined) return 'informational'
+  // A protected scope whose question content the head reader could not classify is
+  // undecided, not answerable: the action may be exactly what it asks about.
+  if (clauseAsksOwnQuestion(masked)) return 'unresolved'
   const visibleVerb = firstActionVerb(masked)
-  // An action that exists only inside a code span is quoted data.
-  if (visibleVerb < 0 && firstActionVerb(text) >= 0) return 'informational'
   // A grammatically positive question is by construction a request for
   // information — the one surface shape that can never be an executed duty
-  // (C03/S01). Everything else needs the positive grounds below or the
-  // structured interpretation route.
-  if (QUESTION_SCOPE.test(masked)) return 'informational'
+  // (C03/S01). 0.6.3 K1 tightens what counts as one: the interrogative must
+  // OPEN or END the clause, so an embedded 是否/relative clause inside an order
+  // ("Create a file where logs are stored", "更新皮肤中心，看看为什么失败")
+  // no longer turns the whole clause into an answerable question. Everything
+  // else needs the positive grounds below or the structured interpretation
+  // route.
+  if (hasQuestionScope(masked)) return 'informational'
+  // An action that exists only inside a code span is quoted data. A clause whose
+  // only resolvable word is a QUOTED action has no live reading of its own — an
+  // explanation of a quoted command is undecidable by surface rules — so it
+  // stays `unresolved` instead of entering the answer lane, which 0.6.2 did for
+  // "解释 `git push` 的作用" and then closed after any final answer.
+  if (visibleVerb < 0) return 'unresolved'
 
   // 0.6.1 review round 8: the ONLY surface rule that can still grant the
   // closable information lane is a grammatically positive question — a
@@ -1143,6 +2755,16 @@ function classifyPositive(text: string): DirectiveClass {
   // and verbless clauses alike. A completion receipt ("收到我的确认了") is
   // likewise a positive report of a past fact and outranks the completion
   // ambiguity below.
+  // "Check if …" is an investigation whose interrogative object happens to be
+  // spelled `if`; the condition splitter would otherwise cut it into a bare
+  // order plus a condition. The counterpart control is "Install the package if
+  // available", whose head is NOT an interrogative-taking verb, so it keeps its
+  // conditional reading.
+  // …but a clause that COORDINATES a second instruction keeps it: the
+  // investigation reading covers only the asking part, so the clause is
+  // partitioned and `Check if the lock file is current and install the package.`
+  // keeps its install (review 11; the round-5 contract).
+  if (interrogativeTakesIfObject(masked) && !explanationHasActionResidue(masked)) return 'informational'
   if (mainClauseTailReport(masked) && !NARRATIVE_DIRECTIVE.test(masked)) return 'narrative'
   if (CONFIRMATION_RECEIPT.test(masked.trim())) return 'narrative'
   if (visibleVerb < 0) {
@@ -1196,7 +2818,9 @@ function dispositionOf(scope: SplitScope, executee: Executee): AuthorityDisposit
 }
 
 function resumeEventOf(scope: SplitScope): string | undefined {
-  const match = RESUME_MARKER.exec(scope.condition ?? scope.text)
+  // A quoted echo of a confirmation is DATA, not a reservation: the marker is read
+  // from the clause with its quoted spans blanked.
+  const match = RESUME_MARKER.exec(maskQuotedSpans(scope.condition ?? scope.text))
   return match ? match[0].trim() : undefined
 }
 
@@ -1209,7 +2833,15 @@ function interpret(scope: SplitScope): ScopeInterpretation {
     ? resumptionConditionOf(scope)
     : undefined
   const conditioned: SplitScope = resumption ? { ...scope, condition: resumption } : scope
-  const authorityDisposition = dispositionOf(conditioned, executee)
+  const qualification = qualificationOfClause(scope.text)
+  const rawDisposition = dispositionOf(conditioned, executee)
+  // The STORED qualification and the disposition may never disagree: a scope with
+  // no positive evidence for an execution reading is undecided, not executable.
+  // (A restricted scope that answers a question stays information, and a
+  // prohibition, a wait or a human action keeps its own disposition.)
+  const authorityDisposition: AuthorityDisposition = qualification.status === 'restricted' && rawDisposition === 'executable_now'
+    ? 'unresolved'
+    : rawDisposition
   const resumeEvent = scope.directive === 'directive' ? resumeEventOf(conditioned) : undefined
   const method = scope.directive === 'prohibition' ? undefined : semanticMethod(scope.body)
   return {
@@ -1219,11 +2851,13 @@ function interpret(scope: SplitScope): ScopeInterpretation {
     executee,
     ...(conditioned.condition ? { condition: conditioned.condition } : {}),
     ...(resumeEvent ? { resumeEvent } : {}),
-    immediatelyExecutable: authorityDisposition === 'executable_now',
+    immediatelyExecutable: authorityDisposition === 'executable_now' && qualification.status === 'granted',
     authorityDisposition,
+    qualification,
     ...(method ? { method } : {}),
     fingerprint: fingerprintOf([
       scope.text, scope.body, scope.directive, executee, authorityDisposition,
+      qualification.status, qualification.reason,
       conditioned.condition ?? '', resumeEvent ?? '', method ?? '',
     ].join('\u0000')),
   }
@@ -1297,6 +2931,29 @@ export function isExecutableItem(item: {
   if (item.authorityDisposition === undefined) return true
   if (item.authorityDisposition !== 'executable_now') return false
   return item.executee === undefined || item.executee === 'agent'
+}
+
+/**
+ * The ONE authority predicate the mutation gate and preparation both consume.
+ *
+ * A record holds execution authority only when the reader GRANTED it a
+ * qualification: a record with no qualification at all (captured before the
+ * qualification existed) is refused rather than read from its stored
+ * disposition, and a restricted record — anything a question, explanation,
+ * investigation, reported question or quote governs — keeps its work as an
+ * undecided obligation that authorizes nothing. Within a granted reading, the
+ * disposition still decides: a prohibition, a wait, a human actor, a condition or
+ * an information range is never a mutation. An `unresolved` GRANTED reading keeps
+ * the historical path documented for unrecognised instruction forms.
+ */
+export function itemHoldsExecutionAuthority(item: {
+  executionQualification?: ExecutionQualification
+  authorityDisposition?: AuthorityDisposition
+}): boolean {
+  if (item.executionQualification === undefined) return false
+  if (item.executionQualification.status !== 'granted') return false
+  if (item.authorityDisposition === undefined) return true
+  return item.authorityDisposition === 'executable_now' || item.authorityDisposition === 'unresolved'
 }
 
 /** Whether an item is an open obligation for certification purposes. */

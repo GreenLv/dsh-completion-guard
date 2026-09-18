@@ -287,14 +287,75 @@ def record_lifecycle(module, path: Path) -> dict:
             "cases": cases}
 
 
+# 0.6.3 T08: the shared semantic inputs of the core-alignment batch. Each is run
+# through the module's OWN reply-only delivery judge and clause classifier, so
+# the DSH side can be compared against a measured Codex fact instead of a claim.
+SHAPE_CASES: list[tuple[str, str]] = [
+    ("mixed-comma-run-zh", "更新插件，检查是否存在更新，安装新主题，记录变更。"),
+    ("mixed-comma-run-en", "Install the package, check whether an update exists, and write a report."),
+    ("mixed-conjunction-zh", "检查是否有更新并安装新主题。"),
+    ("mixed-conjunction-en", "Check whether an update exists and install the package."),
+    ("pure-question-zh", "检查一下插件是否有更新吗？"),
+    ("pure-question-en", "Is there any update for the plugin?"),
+    ("suggestion-particle-zh", "安装新主题吧。"),
+    ("conditional-tail-en", "Install the package if available."),
+    ("quoted-command-zh", "说明 `git push origin main` 的作用，然后更新 README。"),
+    ("plain-directive-zh", "更新插件。"),
+    ("plain-directive-en", "Install the package."),
+    ("unnamed-repository-zh", "提交并推送变更"),
+]
+
+
+def record_shape(module, path: Path) -> dict:
+    """Measure the reply-only delivery judgement and the clause classifier.
+
+    `_reply_only_request_shape` is the module's own gate for closing a request
+    through the turn's final answer alone. Recording it per input is what makes
+    the DSH/Codex comparison a measured fact rather than an inference: an input
+    the DSH side keeps executable while Codex would close it is the dangerous
+    direction, and it must be visible as such.
+    """
+    if not hasattr(module, "_reply_only_request_shape"):
+        print(f"the audited delivery judge is missing from {path}", file=sys.stderr)
+        raise SystemExit(2)
+    cases = []
+    for case_id, text in SHAPE_CASES:
+        clauses = module.clause_metadata(text)
+        contract = module.verification_contract("R001", text, {"assets": []}, [], clauses=clauses)
+        cases.append({
+            "id": case_id,
+            "text": text,
+            "reply_only_request_shape": bool(module._reply_only_request_shape(text)),
+            "contract_mode": contract.get("mode"),
+            "contract_reason": contract.get("reason"),
+            "obligations": len(contract.get("obligations") or []),
+            "clause_operations": [clause.get("operation") for clause in clauses.get("clauses", [])],
+        })
+    return {
+        "recordingVersion": "1",
+        "product": "codex-context-guard",
+        "productVersion": module.PRODUCT_VERSION,
+        "moduleSha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "entryPoint": "_reply_only_request_shape(text) plus clause_metadata/verification_contract",
+        "executedHere": ["_reply_only_request_shape", "clause_metadata", "verification_contract"],
+        "note": (
+            "Facts measured by executing the real entry points against an installed module. "
+            "The delivery judgement decides only whether the turn's final answer may close the "
+            "request; it is not an obligation projection, and this is a function-level probe, "
+            "not a native Codex task acceptance."
+        ),
+        "cases": cases,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--module", help="path to the Codex context_guard.py to probe")
     parser.add_argument("--codex-version", default="0.13.9", help="version to look up in the Codex plugin cache")
     parser.add_argument("--output", help="output path (default tests/fixtures/cross-end/codex-<version>.facts.json)")
     parser.add_argument("--check", action="store_true", help="compare without writing; exit 1 on drift")
-    parser.add_argument("--mode", choices=("contract", "behaviour", "lifecycle"), default="contract",
-                        help="contract facts (default) or result-behaviour facts")
+    parser.add_argument("--mode", choices=("contract", "behaviour", "lifecycle", "shape"), default="contract",
+                        help="contract facts (default), result-behaviour facts, lifecycle facts, or the reply-only shape probe")
     args = parser.parse_args()
 
     path = find_module(args.module, args.codex_version)
@@ -310,6 +371,9 @@ def main() -> int:
     elif args.mode == "behaviour":
         payload = record_behaviour(module, path)
         default_name = f"codex-{payload['productVersion']}.behaviour.json"
+    elif args.mode == "shape":
+        payload = record_shape(module, path)
+        default_name = f"codex-{payload['productVersion']}.shape.json"
     else:
         default_name = f"codex-{payload['productVersion']}.facts.json"
     output = Path(args.output) if args.output else OUTPUT_DIR / default_name

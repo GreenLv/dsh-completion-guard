@@ -70,6 +70,9 @@ describe('0.6.0 P2.3: trusted host selections (C07/S06)', () => {
         verification: { enforced: true, surface: 'scope', subject: '/repo' },
         semanticAction: 'modify', requestedTarget: { scope: '/repo', artifact_type: 'document' },
         targetCaptureStatus: 'resolved', taskKind: 'action', authority: 'root_instruction',
+        // A hand-built CURRENT item carries the 0.6.3 qualification production
+        // capture would have written; a record without one is refused.
+        executionQualification: { status: 'granted', reason: 'plain_instruction' },
       } as never)
       return p
     }

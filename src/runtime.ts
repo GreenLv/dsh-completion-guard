@@ -13,6 +13,7 @@ import {
 } from './domain/types.js'
 import { CONTROL_RECORD_PREFIX, isRootPauseRequest, latestRootInstruction, NO_PROGRESS_RECORD_PREFIX, progressFingerprint } from './domain/stop-policy.js'
 import { deriveProjection, PROTOCOL_V5_NOTICE } from './domain/derive.js'
+import { itemHoldsExecutionAuthority } from './domain/semantics.js'
 import { claimedBatchHasRealRootInput, lifecyclePhase, previewFirstStepInjection, type LifecyclePhase } from './domain/lifecycle.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
 import { decideTurnBoundary } from './domain/stop-policy.js'
@@ -53,6 +54,7 @@ import {
   type HostLockEvaluation,
 } from './domain/host-lock.js'
 import { requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, type StatefulAction } from './domain/protocol-manifest.js'
+import { actionHasAdapter, evaluateCompatibility } from './domain/compatibility.js'
 import {
   readbackSettlesContract, releaseContractFor, releasePreEffectDecision, reservationFor,
   type ReleaseSettlement,
@@ -112,6 +114,39 @@ export function authorizeMutationFromProjection(
     return { status: 'denied', reasonCode: 'mutation_contract_item_revision_mismatch' }
   }
   if (item.status !== 'pending') return { status: 'denied', reasonCode: 'mutation_contract_item_not_pending' }
+  // 0.6.3 K3: the SAME judgement `context_guard_prepare` renders is evaluated
+  // here before any effect, so preparation and execution cannot disagree about
+  // an item/action/target combination. The mutation denial codes below stay the
+  // historical names the execution lane already reports; the shared verdict
+  // only decides whether the assumption is even the item's own.
+  const compatibility = evaluateCompatibility({
+    action: request.action,
+    itemAction: item.semanticAction ?? 'generic_run',
+    itemRevision: request.contractItemRevision,
+    currentRevision: item.revision,
+    itemKind: item.kind,
+    itemStatus: item.status,
+    authority: item.authority,
+    legacyFlags: item.legacyFlags,
+    authorityDisposition: item.authorityDisposition,
+    waitAuthorization: item.waitAuthorization,
+    reboundFrom: item.reboundFrom,
+    originalAuthority: item.reboundFrom
+      ? (() => {
+          const original = projection.items.get(item.reboundFrom.itemId)
+          return original ? { semanticAction: original.semanticAction, requestedTarget: original.requestedTarget } : undefined
+        })()
+      : undefined,
+    targetCaptureStatus: item.targetCaptureStatus,
+    targetSourceKind: item.targetSource?.kind,
+    requestedTarget: item.requestedTarget,
+    adapterSupported: actionHasAdapter(request.action),
+  }, (requested, resolved) => requestedTargetMatchesResolved(request.action, requested, resolved))
+  if (compatibility.status === 'incompatible') {
+    return compatibility.reasonCodes.includes('action_not_compatible_with_item')
+      ? { status: 'denied', reasonCode: 'mutation_semantic_action_mismatch' }
+      : { status: 'denied', reasonCode: 'rebind_does_not_authorize_mutation' }
+  }
   // A root instruction that reserves the action for its own later confirmation
   // withholds execution authority: the obligation stays recorded and open, but
   // the mutation is refused until the root actually releases the wait. This is
@@ -146,6 +181,13 @@ export function authorizeMutationFromProjection(
   }
   if (item.semanticAction !== request.action) return { status: 'denied', reasonCode: 'mutation_semantic_action_mismatch' }
   if (item.targetCaptureStatus !== 'resolved') return { status: 'denied', reasonCode: 'mutation_target_clarification_required' }
+  // 0.6.3 K2: the session's own working directory is environment context, never
+  // a root selection. An obligation left on that default is refused explicitly
+  // so the refusal names the real gap instead of looking like a target
+  // mismatch, and so a caller cannot read the environment as authorization.
+  if (item.targetSource?.kind === 'environment_default') {
+    return { status: 'denied', reasonCode: 'mutation_target_environment_default' }
+  }
   // A bounded file choice (C07) may land inside a directory the user picked
   // through a trusted host question in the same unit: the answer is root
   // authority from an audited tool source, recorded separately from sandbox
@@ -172,6 +214,17 @@ export function authorizeMutationFromProjection(
   ))
   if (conflictingProhibition) {
     return { status: 'denied', reasonCode: 'mutation_conflicting_prohibition' }
+  }
+  // Last resort before authorizing (review 9): an explanation whose sentence
+  // mentions an action is not authority, because the action may be exactly what
+  // the root asked to have explained — the absence of a protection pattern is
+  // never proof that it left that scope. A question is barred for the same
+  // reason. An `unresolved` clause that is NOT an explanation's scope keeps the
+  // behaviour it always had, so an unrecognised instruction form is still
+  // evaluated on its action and target. Every earlier refusal keeps reporting the
+  // reason it always did.
+  if (!itemHoldsExecutionAuthority(item)) {
+    return { status: 'denied', reasonCode: 'mutation_item_not_executable' }
   }
   return { status: 'authorized', reasonCode: 'mutation_root_contract_authorized' }
 }

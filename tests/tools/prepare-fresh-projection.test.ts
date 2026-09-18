@@ -5,14 +5,11 @@ import { createRuntime, type GuardRuntime } from '../../src/runtime.js'
 import { createPrepareTool } from '../../src/tools/prepare.js'
 import { actionPreparation } from '../../src/tools/action-preparation.js'
 import { STATEFUL_ACTIONS, ACTION_MANIFEST } from '../../src/domain/protocol-manifest.js'
-import { createProjection } from '../../src/domain/types.js'
-
 function sessionWith(id: string): Session {
   return Session.create(SessionId(id), undefined, {
     version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId(id), createdAt: 1, cwd: '/fixture',
   })
 }
-
 function appendRootText(session: Session, text: string) {
   ;(session as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append(
     'user/message',
@@ -20,7 +17,6 @@ function appendRootText(session: Session, text: string) {
     { surfaceOp: 'append' },
   )
 }
-
 /**
  * The production wiring shape from `runtime.ts apply()`: flush, record the
  * durability watermark, re-derive, and only then answer the caller.
@@ -32,9 +28,7 @@ function productionRefresh(runtime: GuardRuntime, durable: boolean) {
     return durable
   }
 }
-
 const ALWAYS = { activation: 'always' as const }
-
 describe('0.6.0 P1: prepare sees the current step through the fresh-projection entry', () => {
   it('a root message persisted after the last sync is visible to prepare in the same turn', async () => {
     const session = sessionWith('prepare-same-turn')
@@ -43,7 +37,6 @@ describe('0.6.0 P1: prepare sees the current step through the fresh-projection e
     // Nothing is open yet: the step's root message has not been appended.
     const before = await createPrepareTool({ getProjection: () => runtime.projection }).execute({} as never, undefined as never) as { total_open: number }
     expect(before.total_open).toBe(0)
-
     appendRootText(session, '创建 report.txt')
     // D06-01: without the refresh entry the cached projection still misses the
     // item; with it, the same turn sees the correctly capturable ID.
@@ -62,7 +55,6 @@ describe('0.6.0 P1: prepare sees the current step through the fresh-projection e
     }).execute({ item_id: fresh.items[0]!.id } as never, undefined as never) as { status: string; item: { id: string } }
     expect(prepared).toMatchObject({ status: 'prepared', item: { id: 'R001' } })
   })
-
   it('a failed flush is reported instead of serving a stale projection', async () => {
     const session = sessionWith('prepare-flush-failure')
     appendRootText(session, '创建 report.txt')
@@ -78,7 +70,6 @@ describe('0.6.0 P1: prepare sees the current step through the fresh-projection e
     expect(targeted).toEqual({ status: 'unknown', reason_code: 'projection_durability_unavailable' })
     expect(isJsonValue(discovery)).toBe(true)
   })
-
   it('discovery stays bounded and names every current item identity', async () => {
     const session = sessionWith('prepare-discovery-bounded')
     for (let index = 1; index <= 9; index += 1) appendRootText(session, `创建 file${index}.txt`)
@@ -100,7 +91,6 @@ describe('0.6.0 P1: prepare sees the current step through the fresh-projection e
     expect(isJsonValue(response)).toBe(true)
   })
 })
-
 describe('0.6.0 P1: the durability watermark is runtime-owned liveness state', () => {
   it('survives rebuilds and records the latest flush outcome', () => {
     const session = sessionWith('watermark-persistence')
@@ -116,7 +106,6 @@ describe('0.6.0 P1: the durability watermark is runtime-owned liveness state', (
     expect(runtime.projection.durabilityWatermark).toBe('failed')
   })
 })
-
 describe('0.6.0 P1: one unified action descriptor drives every stateful preparation', () => {
   it.each(STATEFUL_ACTIONS)('%s keeps selector, producer, and readback identities consistent', (action) => {
     const descriptor = actionPreparation(action)
@@ -135,25 +124,28 @@ describe('0.6.0 P1: one unified action descriptor drives every stateful preparat
     expect(manifest.commandManifestIds).toEqual(descriptor.command_manifest_ids)
     expect(descriptor.steps.length).toBeGreaterThanOrEqual(4)
   })
-
   it('prepare emits the full input contract for every stateful action as lossless JSON', async () => {
-    const session = sessionWith('prepare-descriptor-contract')
-    const runtime = createRuntime({ session } as never, ALWAYS)
-    const tool = createPrepareTool({
-      getProjection: () => runtime.projection,
-      refreshProjection: productionRefresh(runtime, true),
-    })
-    for (const action of STATEFUL_ACTIONS) {
-      appendRootText(session, `统一描述符 ${action} target-${action}.txt`)
+    // One action per fresh session: each iteration asserts one descriptor
+    // contract, and an unrelated earlier obligation can never be the item the
+    // discovery list happens to end on.
+    for (const [index, action] of STATEFUL_ACTIONS.entries()) {
+      const session = sessionWith(`prepare-descriptor-contract-${index}`)
+      const runtime = createRuntime({ session } as never, ALWAYS)
+      const tool = createPrepareTool({
+        getProjection: () => runtime.projection,
+        refreshProjection: productionRefresh(runtime, true),
+      })
+      appendRootText(session, `统一描述符 ${action} 标识${action} repository /synthetic/workspace`)
       const response = await tool.execute({} as never, undefined as never) as {
-        status: string; total_open: number; items: Array<{ id: string }>
+        status: string; total_open: number; items: Array<{ id: string; semantic_action: string }>
         missing_target_fields?: string[]
         evidence_input_contract?: Record<string, unknown>
       }
       expect(response.status, action).toBe('prepared')
       expect(response.total_open, action).toBeGreaterThan(0)
+      const target = response.items.at(-1)!
       const prepared = await tool.execute({
-        item_id: response.items.at(-1)!.id, semantic_action: action,
+        item_id: target.id, semantic_action: action,
       } as never, undefined as never) as {
         status: string; missing_target_fields: string[]
         evidence_input_contract?: Record<string, unknown>

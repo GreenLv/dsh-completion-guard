@@ -100,7 +100,7 @@ describe('A14/A15: prepare reports capability, target gaps, and supported shapes
   })
 
   it('separates Git caller inputs from producer-computed identities', async () => {
-    const p = replay([user(1, '提交当前修改')])
+    const p = replay([user(1, '提交仓库 /repo 的变更')])
     const item = [...p.items.values()][0]
     const response = await prepare(p).execute({ item_id: item.id, semantic_action: 'commit',
       requested_target: { repository: '/repo', branch: 'main' },

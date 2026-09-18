@@ -7,7 +7,7 @@ import {
 } from './digest.js'
 import { bindingSatisfies, evidenceCoverage } from './matching.js'
 import { closingHint } from './recovery.js'
-import { certificateClosure, certifiableOpenItems, ancestorConstraintForBinding } from './closure.js'
+import { certificateClosure, certifiableOpenItems, needsReviewObligations, ancestorConstraintForBinding } from './closure.js'
 import { proofV2Rejection, type ProofObligationV2 } from './proof.js'
 import {
   ACTION_MANIFEST, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2,
@@ -431,6 +431,23 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
   // The certified scope comes from the single closure implementation: the
   // current unit plus any pre-v5 obligations under a v5 boundary, or the whole
   // session under the legacy contract.
+  // 0.6.3 K4: a record the upgrade eligibility check refused to inherit blocks
+  // the certificate ITSELF, not merely one binding. A record already `answered`
+  // carries no binding to reject, so a binding-level check could never see it —
+  // and that is exactly the state the 0.6.2 mixed-request misreading produced.
+  const unreusable = needsReviewObligations(projection)
+  if (unreusable.length > 0) {
+    return {
+      status: 'incomplete',
+      contractRevision: projection.contractRevision,
+      openItems: [...new Set([...certificateClosure(projection).itemIds, ...unreusable.map((item) => item.id)])],
+      rejectedBindings: unreusable.map((item) => ({
+        itemId: item.id,
+        reason: `a record captured under earlier rules cannot be inherited (${item.needsReview!.reason}); resolve it with the root before certifying`,
+        reasonCode: 'legacy_record_needs_review',
+      })),
+    }
+  }
   const closure = certificateClosure(projection)
   const open = closure.itemIds.filter((itemId) => !bindings.some((binding) => binding.itemId === itemId))
   if (rejectedBindings.length || open.length) return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: closure.itemIds, rejectedBindings }

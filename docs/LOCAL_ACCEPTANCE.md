@@ -1,5 +1,894 @@
 # Local Acceptance
 
+## 0.6.3 core-alignment batch (2026-09-16)
+
+Source candidate, uncommitted, not frozen, not installed, not published. macOS,
+Node v25.1.0, pnpm 11.22.0. Baseline `63326f22d40407099baa70c8947c37029749588e`
+(0.6.2); the four documents handed over with the batch were preserved untouched.
+
+### Reproduced defects and their regressions
+
+| Defect | Regression that exercises the old reading | Fixed behaviour |
+| --- | --- | --- |
+| F062-01 question marker swallowed the mixed request | `legacyQuestionReadingIsInformational` (the 0.6.2 rule, retained in `src/domain/semantics.ts`) returns true for the three recorded inputs, while the current reading keeps one information range and at least two execution obligations | `tests/domain/v063-core-alignment.test.ts` |
+| F062-02 session directory was a `resolved` request target | the recorded capture now yields `targetSource.kind = environment_default` and `targetCaptureStatus = clarification_required` instead of `resolved` | `tests/domain/v063-core-alignment.test.ts` (K2) |
+| F062-03 prepare rendered a recipe the gate refuses | the same item/action pair now returns `incompatible` with `action_not_compatible_with_item` and no `evidence_input_contract` | `tests/domain/v063-core-alignment.test.ts` (K3) |
+| K4 records an earlier version closed as answered were inherited | an answered mixed record is marked `needs_review` before terminal filtering and blocks the certificate and Goal completion | `tests/domain/v063-core-alignment.test.ts` (K4) |
+
+### Hold-out bookkeeping, stated exactly
+
+Fifty set files exist in this batch — thirty-five hold-out sets, fourteen
+reviewer-probe regression files and one self-review file — and they are not
+interchangeable:
+
+| Set | File | Status |
+| --- | --- | --- |
+| hold-out round 1 | `tests/domain/v063-holdout.test.ts` | **Now regression coverage.** It produced three findings; repairing two of them changed the source, and the third was an incorrect case in the set itself. Applying the plan's rule, the finding-affected cases stay as regressions and the set no longer counts as untuned hold-out evidence. |
+| independent review | `tests/domain/v063-review-regressions.test.ts` | **Regression coverage.** The reviewer's own nine failing probes, kept with the contract expectations the reviewer stated. |
+| second review | `tests/domain/v063-review2-regressions.test.ts` | **Regression coverage.** The second review's five failing probes and their positive controls — an embedded interrogative read as a clause question, a `check if …` condition, inheritance that fills rather than overwrites, a standing prohibition in preparation. |
+| third review | `tests/domain/v063-review3-regressions.test.ts` | **Regression coverage.** The third review's four failing probes with the controls that keep the repair from over-reaching — a purpose clause behind the action, a preface that moved the verb offset, a tautological preparation, and the work vocabulary. |
+| fourth review | `tests/domain/v063-review4-regressions.test.ts` | **Regression coverage.** The fourth review's four failing probes with the controls that keep the structural rule from over-reaching — a question with no subordinate span before it, a real conditional order, and an obligation that DID name the branch. |
+| hold-out round 2 | `tests/domain/v063-holdout-round2.test.ts` | **NOW REGRESSION COVERAGE.** Its nine findings drove source repairs in the first repair round, so it can no longer be hold-out evidence. |
+| hold-out round 3 | `tests/domain/v063-holdout-round3.test.ts` | **NOW REGRESSION COVERAGE.** Its findings drove the third repair round. |
+| hold-out round 4 | `tests/domain/v063-holdout-round4.test.ts` | **NOW REGRESSION COVERAGE.** Its findings drove the fourth repair round. |
+| hold-out round 5 | `tests/domain/v063-holdout-round5.test.ts` | **NOW REGRESSION COVERAGE.** It found the classifier defect (a purpose clause was masked before segmentation) and that repair changed the source. |
+| hold-out round 6 | `tests/domain/v063-holdout-round6.test.ts` | **NOW REGRESSION COVERAGE.** The fifth review then returned three source defects (F1-F3), and this set's own oracle was revised three times, so it cannot be untuned evidence. |
+| hold-out round 7 | `tests/domain/v063-holdout-round7.test.ts` | **NOW REGRESSION COVERAGE.** It found the `then` conflict (the English sequencing preface was also read as a comparative subordinate boundary, so `Then check whether the build passed.` was an acceptance order while the Chinese spelling was an information request) and that repair changed the source. Two of its own expectations were also wrong and are recorded in its header. |
+| fifth review | `tests/domain/v063-review5-regressions.test.ts` | **Regression coverage.** The fifth review's three defects and four failing assertions, with the probes that already passed. |
+| hold-out round 8 | `tests/domain/v063-holdout-round8.test.ts` | **NOW REGRESSION COVERAGE.** It found no defect of its own and its expectations were never revised, but the sixth review then returned three counterexamples against the same invariant and those repairs changed the source. |
+| sixth review | `tests/domain/v063-review6-regressions.test.ts` | **Regression coverage.** The sixth review's three defects and their controls. |
+| hold-out round 9 | `tests/domain/v063-holdout-round9.test.ts` | **NOW REGRESSION COVERAGE.** It found nothing of its own, but the seventh review then returned three counterexamples against the two-sided invariant and those repairs changed the source. |
+| seventh review | `tests/domain/v063-review7-regressions.test.ts` | **Regression coverage.** The seventh review's three defects, with both sides of the invariant: an explanation creates no authority, and a following order still does. |
+| hold-out round 10 | `tests/domain/v063-holdout-round10.test.ts` | **NOW REGRESSION COVERAGE.** It found nothing of its own, but the eighth review then found the explanation scope was still pattern-based and tightened the "and then" control, and that repair changed one of this set's shapes. |
+| eighth review | `tests/domain/v063-review8-regressions.test.ts` | **Regression coverage.** The eighth review's three counterexamples (a finite complement, a `whether` complement, a longer object), the tightened `and then` reading, the separate-instruction positive controls and the closed-complement controls. |
+| hold-out round 11 | `tests/domain/v063-holdout-round11.test.ts` | **NOW REGRESSION COVERAGE.** It found nothing of its own, but the ninth review then required that an explanation's scope never authorize an action it mentions, and that repair changed this set's own reading. |
+| ninth review | `tests/domain/v063-review9-regressions.test.ts` | **Regression coverage.** The ninth review's two counterexamples, the same heads followed by a real instruction, the multi-action plan refusal, and the two scope controls (an unrecognised instruction form keeps its path, a pure reported question keeps its closable lane). |
+| hold-out round 12 | `tests/domain/v063-holdout-round12.test.ts` | **NOW REGRESSION COVERAGE.** The tenth review then showed a bare question head must carry its non-execution qualification into every child, and that repair changed the source. |
+| tenth review | `tests/domain/v063-review10-regressions.test.ts` | **Regression coverage.** The tenth review's three question-scope counterexamples, the refusal decided against the obligation's own target, and the investigation-imperative contrast. |
+| hold-out rounds 13-17 | `tests/domain/v063-holdout-round13.test.ts` … `-round17.test.ts` | **REGRESSION COVERAGE.** Each of these sets found one or more source defects in the question-scope family while the family was being closed: a temporal interrogative read as a condition, the Chinese temporal and subject-prefixed heads, the interrogative vocabulary (`谁`, `怎样`, `何时`…), a question word that doubles as a relative pronoun, a verb-fronted interrogative, and the modal that can stand between the action and the interrogative. Every defect was repaired in the source; each set's own oracle corrections are recorded in its header. |
+| hold-out round 18 | `tests/domain/v063-holdout-round18.test.ts` | **NOW REGRESSION COVERAGE.** The eleventh review then showed an investigation imperative governs an OPEN complement, and that repair changed the source. |
+| eleventh review | `tests/domain/v063-review11-regressions.test.ts` | **Regression coverage.** The eleventh review's three investigation-complement counterexamples, the fact-stating contrast, the separate-instruction positive and the gate/preparation agreement. |
+| hold-out rounds 19-24 | `tests/domain/v063-holdout-round19.test.ts` … `-round24.test.ts` | **REGRESSION COVERAGE.** Closing the investigation boundary exposed six more defects of the same family, each repaired in the source: the `if`-complement taken by the condition splitter, the modal-bearing subordinators (能否/可否/能不能), the postposed Chinese interrogative, the yes/no interrogatives (是否/是不是), the Chinese A-不-A class (要不要/该不该/需不需要/可不可以/对不对), a question about a single action read as an instruction, and an OBJECT list (plugins AND skins) mistaken for an action list. Each set's own oracle corrections are recorded in its header. |
+| hold-out round 25 | `tests/domain/v063-holdout-round25.test.ts` | **NOW REGRESSION COVERAGE.** The twelfth review then showed a DECLARATIVE investigation complement carries its own actor, and that repair changed the source. |
+| twelfth review | `tests/domain/v063-review12-regressions.test.ts` | **Regression coverage.** The twelfth review's two actor-complement counterexamples, the state-question contrast, the separate-instruction positive and the gate/preparation agreement. |
+| hold-out rounds 26-28 | `tests/domain/v063-holdout-round26.test.ts` … `-round28.test.ts` | **REGRESSION COVERAGE.** Closing the actor boundary exposed three more defects of the same family, each repaired in the source: an investigation of a DECLARATIVE `that` clause was authorized, a coordination-free `that` verification was read as an instruction, and the Chinese subject rule needed an action predicate (the rotation verb was also missing from the work vocabulary) so that a state question about an OBJECT keeps its coordinated order. Each set's own oracle corrections are recorded in its header. |
+| hold-out round 29 | `tests/domain/v063-holdout-round29.test.ts` | **NOW REGRESSION COVERAGE.** The thirteenth review then inverted the complement rule (governing by default, closing only on positive proof of a state question), and that repair changed the source. |
+| thirteenth review | `tests/domain/v063-review13-regressions.test.ts` | **Regression coverage.** The thirteenth review's five counterexamples — an unrecognised predicate and a subject position after the subordinator — plus the proven-state contrasts and the separate instruction. |
+| self-review (fifth round) | `tests/domain/v063-repair5-regressions.test.ts` | **Regression coverage.** The three counterexamples found by adjacency self-review while the round-5 set was being written (the English sentence end, the coordinated ordering fragment, the two-repository clause), with the abbreviation, version, single-repository and preface controls. |
+| hold-out round 30 | `tests/domain/v063-holdout-round30.test.ts` | **NOW REGRESSION COVERAGE.** It required no source change of its own, but the fourteenth review then showed that closure still accepted a state WORD as proof, and that repair changed the source. |
+| fourteenth review | `tests/domain/v063-review14-regressions.test.ts` | **Regression coverage.** The fourteenth review's four counterexamples — a state word as an action's object or modifier, in both languages — plus the siblings of the same root cause (attributive, relative clause, causative, a Chinese predicate with an action object), the proven-state contrasts, the answerable lane and the plain order. |
+| hold-out rounds 31-34 | `tests/domain/v063-holdout-round31.test.ts` … `-round34.test.ts` | **REGRESSION COVERAGE.** Each of these sets found one or more source defects while the predicate proof was being closed: the English infinitive test firing on the `to` inside `up-to-date`, a lazy Chinese modifier strip that stopped at a possessive, a state-noun proof that could not name a mirror or a lease, a postposed interrogative whose questioned span carried a verb outside every vocabulary, a yes/no question with an explicit subject that authorized the order beside it, and a governed clause that the message classifier discarded as session talk. Every defect was repaired in the source; each set's own oracle corrections are recorded in its header. |
+| hold-out round 35 | `tests/domain/v063-holdout-round35.test.ts` | **The current independent set**, written after the fifteenth repair round with wording this batch has never used: the stative and adjective shapes, the subject question beside the imperative question, the classifier and the reader agreeing that a governed clause is work, the pure question that adds no obligation, and inheritance beside them. It required NO source change, so it is the untuned set. |
+
+Two hold-out round 1 expectations WERE changed during that round, so the earlier
+"no expectation was relaxed" claim was wrong and is corrected here: the
+conditional-request case was rewritten to assert the contract's conditional
+reading instead of an executable one, and one legacy case was replaced because
+the sentence it used is genuinely a pure information request rather than a mixed
+one. Both are corrections of an incorrect oracle, recorded rather than hidden;
+the case that a conjunction was read as a repository name was a real source
+defect and was repaired in `src/domain/capture.ts`.
+
+Hold-out round 2 initially produced nine failing assertions. Every one was
+repaired in the source, not in the expectations:
+
+- 呢 and 吧 were treated as interrogatives, so "安装这个主题呢。" closed as an
+  answer. Only 吗/？ ask on their own; 呢 asks only when the clause carries its
+  own interrogative content, and 吧 never does.
+- The state vocabulary was too narrow: "是否有新版本" and "Check for a new
+  version" did not read as state questions.
+- 并且 split as 并 + 且, leaving a stray fragment, and 以及/而后 were not
+  boundaries at all.
+- 是不是 was read as a negation, turning a question into a prohibition.
+- A request preface (先/然后/请) hid an investigation opener behind an action
+  verb, so "先检查是否有新版本" read as an order.
+- A targeted inheritance repair (below) returned to the informational-only clause
+  head, so a mixed clause starting with an order kept only a partial reading.
+
+### Targeted repair round after the independent review
+
+The review returned the batch with nine failing probes. The root causes and
+repairs:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `安装新主题吧。` and `Check whether an update exists and install the package.` closed after a zero-tool final answer | 吧/呢 counted as interrogatives; an unpunctuated English conjunction was not a boundary | `endsOnInterrogative` (only 吗/？ ask alone; 呢 needs question content; 吧 never), and a `CONJUNCT_BOUNDARY` that also covers 并且/以及/而后 and bare 并/且 followed by a distinct clause |
+| A prohibition naming `/repo-b` became the inherited target of a later commit | inheritance accepted any same-unit git item that mentioned a path | candidates must be pending, non-legacy requirements whose disposition is `executable_now`, with `targetCaptureStatus === 'resolved'` and no wait or condition |
+| `提交分支 release。` bound `release` as the repository | the bare-object reader stepped over the 分支 label but not its VALUE | `labeledTokenRange` records what each field already claims, and a claimed value is never re-read as the repository |
+| Three references to one repository reported ambiguity | uniqueness was counted per item | candidates are deduplicated by canonical repository identity |
+| A passed `needsReview` record of the current unit was outside the blocking set, and another unit's answered record was inside it | the blocking set used the pending-only closure plus every answered record | the set is selected by the record's own unit scope (current unit, required descendants, and unit-less legacy records), independent of terminal status |
+| An English unpunctuated mixed legacy record escaped the upgrade check | the check reused the current fragment splitter, which returned one fragment | the check tests the run's informational fragments against the whole-clause reading, so a historically mixed record is caught whatever rule produced it |
+| prepare reported `compatible` while execution denied with `mutation_host_lock_unavailable` | prepare did not pass the projection-level snapshot facts | `enabled`, `integrity` and `hostStatus` are passed to the shared judgement |
+
+After those repairs the reviewer's 11 probes pass, the round 2 hold-out set
+passes, and the pre-existing suite is unchanged.
+
+### Second repair round after the second independent review
+
+The batch was returned again with five failing probes covering three defects;
+all three were repaired in the source.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Create a file /tmp/test-status.txt recording whether the tests passed.` closed as `informational / answered` | an `whether`/`if` **inside the action's object** was read as the clause's own question (`INVESTIGATION_THEN_QUESTION` matched the investigation word mid-clause, and the embedded-interrogative rule fired on the whole clause) | the English investigation form has to open the clause, and an embedded interrogative is a question only when it is NOT behind the clause's action (`englishInterrogativeIsMatrix`); a leading interrogation verb followed by if/whether/when/… is handled as an interrogation instead of a condition (`interrogativeTakesIfObject`) |
+| `提交仓库 /repo-b 分支 main。` then `提交分支 release。` produced `branch: main` | inheritance copied the source's target over the item's, discarding a field the follow-up named | inheritance FILLS unset fields only; the item's own captured selection is kept, and its environment-default identity placeholder is excluded from what it "owns" |
+| prepare reported `compatible` while execution denied with `mutation_conflicting_prohibition` | `prepare` never passed the standing-prohibition input the shared judgement already supported | `prepare` computes the same prohibition conflict the gate does and passes it in, so the verdict is `blocked` |
+
+The second repair round also corrected two things the review did not name:
+`context_guard_prepare` was feeding the CALLER's proposed target into the
+compatibility judgement, which made a mere proposal read as `incompatible`; it
+now judges against the obligation's own target and reports the divergence as a
+proposal. And `推送分支 release` was recording `refspec: release`, because a bare
+label value was accepted as a refspec; a refspec must now be spelled like one (a
+`src:dst` pair or a ref path), while a branch named inside a transfer order is
+still that order's refspec.
+
+The reviewer's five probes are kept in
+`tests/domain/v063-review2-regressions.test.ts`, and round 3 is the replacement
+independent set.
+
+### Third repair round after the third independent review
+
+Four failing probes covering three defects; all three were repaired in the
+source.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Create a file /tmp/status.txt to show what changed.` and `Create a script /tmp/check.sh to check the status.` closed as `informational / answered` | `REPORTED_QUESTION` and `INVESTIGATION_OF_STATE` still matched ANYWHERE in the clause, so a purpose clause behind the action ("… to show what changed") was read as the clause's question; only the `whether` branch had been fixed | every English question branch now has to open the clause (`opensClause`), and `INFO_OPENING` is gated the same way |
+| `Please check if the package is installed.` became `pending / conditional_wait` | `interrogativeTakesIfObject` compared the verb's absolute character offset with the matched head's LENGTH, so a preface pushed it out of range and the condition splitter took over | the verb's offset is located inside the match itself, so a preface cannot move it |
+| prepare reported `compatible` for a target the gate denied | the previous round's fix passed the obligation's target as BOTH sides of the comparison, making it a tautology | preparation compares the SUPPLIED target exactly as the gate will, and uses the gate's own authorizing predicate, so an under-specified target is reported `blocked / target_not_authorizing` rather than compatible |
+
+The third repair round also extended the work vocabulary (`draft`, `emit`,
+`produce`, `log`, `起草`, `拟定`), without which a purpose clause attached to a
+verb outside the list fell through to `unresolved` and its question word still
+matched.
+
+The reviewer's probes are kept in
+`tests/domain/v063-review3-regressions.test.ts`, and round 4 is the replacement
+independent set.
+
+### Fourth repair round after the fourth independent review
+
+Four failing probes covering three defects; all three were repaired in the
+source.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Archive /tmp/logs to show what changed.` and `Compress /tmp/logs to check the status.` still closed as `informational / answered` | every earlier fix located the clause head by looking for a KNOWN action verb, so a purpose clause behind a verb outside the vocabulary kept its question word | the gate is structural now: a question word behind a subordinate span — `to <verb>`, a relative pronoun (`which`/`who`/`that`/`than`), a participle, or a prepositional opener (`after`/`before`/`about`/`for`/…), in English, or 为了/用来/以便/从而/进而/用于 in Chinese — belongs to that span whatever the main verb is (`headOpensClause`, `ENGLISH_SUBORDINATE_BOUNDARY`, `CJK_SUBORDINATE_BOUNDARY`). An unknown main verb now yields `unresolved`, never `answered` |
+| preparation reported a target verdict for a caller-supplied target the gate had already denied | the previous round's fix fed the CALLER's target in as the obligation's own selection as well, so the authorizing predicate compared a value with itself | preparation uses the gate's own `requestedTargetAuthorizesMutation` against the OBLIGATION's selection and reports `blocked / target_not_authorizing` when the obligation never named that field; an obligation that did name it stays authorizable from the caller's target |
+| `Create /tmp/check.sh to determine if the service is running.` became `pending / conditional_wait` | `if` inside the purpose span was read as a condition on the main clause, because the condition splitter does not know about subordinate spans | the condition marker counts only when it is not inside a subordinate span opened before it (`conditionMarkerIsClauseLevel`), so the purpose reading survives while `Install the package if available.` stays conditional |
+
+The reviewer's four probes are kept in
+`tests/domain/v063-review4-regressions.test.ts`, and round 5 is the replacement
+independent set.
+
+### Fifth repair round, found by adjacency self-review
+
+Round 5 found one source defect of its own (the interaction classifier masked
+question terms anywhere in the message, so `打包日志以便确认哪些请求失败。` was
+dropped before segmentation; subordinate spans are now masked before the
+question-term test and restored for everything else). Writing round 6 against
+the fixed source then exposed three MORE defects by adjacency — the English
+sentence boundary, the coordinated ordering fragment, and the two-repository
+clause. None of the three was returned by a reviewer; all three are in the
+fail-OPEN direction, so they are recorded with the same weight.
+
+| Defect | Root cause | Repair |
+| --- | --- | --- |
+| `Install the package. What changed?` was read as ONE information range: the order disappeared and the record closed as answered | the clause splitter treated `。`/`！`/`？`/`!`/`?` as sentence ends but never the ASCII `.`, so an English two-sentence message stayed one run and its interrogative ENDING decided the whole run. The Chinese spelling of the same message split correctly, which is how the asymmetry survived four rounds | an ASCII full stop is a sentence end when a new clause follows it — whitespace, then a capital or non-Latin letter, a quote or a bracket, or a lower-case word that opens a question or its own instruction (`sentencePeriodEnd`). A decimal, a version number (`0.6.3`), a file name (`README.md`) and an abbreviation whose continuation is an ordinary word (`See e.g. the log`) keep the run whole |
+| `What changed, and update the README?` answered the update away | the coordinated fragment ended the sentence, so `endsOnInterrogative` claimed it even though its own head is an instruction | a fragment that opens with a coordinating conjunction and then carries its own action head is an instruction (`coordinatedFragmentOrdersWork`); a coordinated clause that is still an investigation (`然后检查是否有新版本`) stays a question |
+| `提交仓库 /repo-b 与 /repo-c。` silently resolved to `/repo-b` | the labelled repository reader returns the FIRST value and never looked for a second candidate | a second repository-looking token joined by 与/和/及/或/、/,/and/or records `requested_target_repository_ambiguous` instead of a guess (`namesSeveralRepositories`); a file extension and a claimed field value (`分支 main`, `remote origin`) are not candidates |
+
+The three counterexamples are kept in
+`tests/domain/v063-repair5-regressions.test.ts`.
+
+### Sixth repair round after the fifth independent review
+
+The fifth review returned four failing assertions covering three defects. All
+three were repaired in the source, and the reviewer's probes are kept.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Install the package. please report what changed?` was ONE information range: the install was answered away | the sentence boundary was decided from the NEXT word (a word list of question words, conjunctions and verbs at offset 0), so a lower-case request preface left the run whole and the trailing `?` decided it | `sentencePeriodEnd` no longer reads the next word's class at all: a period followed by whitespace and further text ends the sentence, and only a period with no space after it or one that belongs to an abbreviation (`e.g.`, `i.e.`, `cf.`, `etc.`, honorifics, dotted initialisms) keeps the run whole — a closed class instead of an open word list |
+| `What changed, and archive the logs?` produced NO item | the whole-message interaction classifier returned `conversational` as soon as a question term appeared, before any decomposition, so the coordinated order never reached capture | a conversational verdict now has to show that every fragment either asks or says nothing (`ordersWorkBesideQuestion`); a fragment whose head is a Latin word that is not a question, a descriptive opener or a Chinese statement is work the capture layer sees, and the clause-level rule (`coordinatedFragmentOrdersWork`) treats the same head as an instruction |
+| `提交仓库 /repo-b、/repo-c。` and `提交仓库 /repo-b 和仓库 /repo-c。` still resolved to `/repo-b` | the alternative-repository rule required whitespace before the coordinator and matched the token immediately after it, so a glued enumeration mark and a repeated field label both hid the second candidate | candidates are enumerated by structure (`repositoryCandidates`): every repository-looking token plus the current-repository deixis, then a pair joined by a coordinator, an optional repeated field label, or a coordinator glued inside one token (Han characters are legal in paths, so the token is split instead of excluded) is an alternative |
+
+Writing round 7 after those repairs then found one more source defect of the same
+family: `then` was both a request preface and a "comparative" subordinate
+boundary, so `Then check whether the build passed.` stayed an acceptance order
+while the Chinese `然后检查是否有新版本。` was an information request. The
+boundary list now holds `than` only, and the English sequencing words join
+`REQUEST_PREFACE`, so a preface cannot change what a clause asks. Round 8 is the
+replacement independent set and required no further source change.
+
+### Seventh repair round after the sixth independent review
+
+The sixth review returned three counterexamples, all of the same invariant — an
+execution residue must survive whatever question, punctuation or abbreviation
+stands around it, and a name the root gave must not be re-judged by its
+extension. All three were repaired in the source.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `What changed and archive the logs?` produced NO item, while the comma spelling kept the archive | the session-talk classifier split fragments on punctuation only, so the coordinator was invisible to it and the semantic layer never ran | the classifier now decomposes with the SEMANTIC layer's own `splitTextFragments` (coordinators and list separators), and the clause layer's rule was generalized from "a coordinated fragment" to any fragment that asks nothing and carries its own action head (`fragmentOrdersWorkOnItsOwn`), with question CONTENT — not a bare `?` — deciding whether a fragment asks |
+| `Install the package etc. What changed?` was one information range | the abbreviation exception applied unconditionally, so `etc.` swallowed the sentence end and the trailing question mark decided the whole message | an abbreviation keeps the run whole only when what follows continues the sentence, and a question that follows it in either case opens a new one (`CONTINUES_SENTENCE`, `QUESTION_OPENER`) |
+| `提交仓库 /repo-b.js 与 /repo-c.js。` silently resolved to the first | the candidate list filtered out anything with a file extension while the first-object reader accepted it, so the two judgements contradicted each other | extensions are no longer identity evidence: a repository may be called `/repo-a.js`. A file argument in another clause is excluded by the join rule instead ("提交仓库 /repo-a，运行 /tmp/script.sh" is not a coordinator list) |
+
+Writing the Chinese half of the first finding also exposed a fourth gap in the same
+place: `什么变了并归档日志？` stayed one information range, because a bare 并
+split only before a KNOWN action head. A coordinator that separates an ASKING
+clause from a clause that does not ask is now a boundary whatever verb the second
+clause uses, so the unknown Chinese verb survives too. Round 9 is the replacement
+independent set and required no further source change.
+
+### Eighth repair round after the seventh independent review
+
+The seventh review returned three counterexamples and stated the requirement on
+both sides: an execution obligation must not be closed by an answer, and a request
+for an explanation must not become execution authority. All three were repaired in
+the source.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Explain how to install foo and restart service api.` produced a restart obligation that the production authorizer returned `authorized` for | the coordinator sits inside the question's own object ("how to install X AND restart Y"), but every decomposition rule treated the second verb phrase as an independent instruction | a question whose object IS a coordinated action list governs the whole list (`governsActionList`, checked before partitioning and inside the clause splitter). It requires a question head — a reported question, an investigation or a question word — plus an interrogative object (`how to <verb>`, 怎么/如何/…), so a question that merely stands beside an order still keeps the order, and `Explain the deploy. Then restart service api.` still authorizes the restart in English and Chinese |
+| `Install the package etc. please tell me what changed?` was again one information range | the abbreviation tie-breaker only recognised a question that STARTS with a question word, so the politeness preface hid it | the tie-breaker no longer looks for words at all: when a fragment is informational only because it ends interrogatively, a yes/no question (final 吗/呢, or an English auxiliary) covers the clause, while a trailing wh-question leaves any action head before it as a residue (`questionCoversWholeClause`, `executionResidueBeforeQuestion`) |
+| `提交仓库 /repo-a 分支 main。提交仓库 /repo-a 分支 release。提交。` made the last clause inherit `main` | candidates were deduplicated by repository alone and the first source's whole field set was copied, so clause order decided which branch a later clause authorized | uniqueness is judged PER FIELD: candidates are grouped by canonical repository, and a field is inherited only when every candidate of the group that names it agrees. A conflicting branch (or remote or refspec) is left unset, the clause keeps the fields that were agreed and reports `requested_target_field_ambiguous`, and authorization is denied rather than guessed |
+
+The self-review sweep that followed the repairs found one more instance of the
+same invariant, this time in the SESSION layer: `Archive the logs etc.
+请说明一下哪些请求失败了？` and `什么变了并归档日志？` produced NO item at all,
+because the classifier's fragment test called the whole fragment a question before
+the reader ever ran. The classifier now applies the same residue rule as the
+reader (question content only speaks for the text before it), keeps each
+sentence's own closing mark, and both cases are regressions.
+
+The repairs also completed two closed classes rather than patching samples: the
+reported-question head now includes the Chinese reporting verbs (解释/说明/描述/讲解/
+说说/告诉我), and the identity comparison treats two spellings of one repository as
+one value.
+
+### Ninth repair round after the eighth independent review
+
+The eighth review returned three counterexamples that all escaped the SAME
+approximation, and named the reason: the explanation scope was a PATTERN — it
+required `to <verb>` and a fixed character window — so a finite complement
+("how I CAN install …"), a `whether` complement and a longer object each let the
+scope escape and the coordinated action became authority again. It also tightened
+one control: `and then` can belong to the operation order BEING EXPLAINED, so it
+must not be read as an actual instruction.
+
+The repair replaces the pattern with the sentence:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Explain how I can install foo and restart service api.` | the scope needed an infinitive (`to <verb>`) | an explanation head governs its SENTENCE; the coordination belongs to the explanation exactly when the complement is still OPEN at the coordinator — an infinitive or a modal in English, a manner interrogative in Chinese (`OPEN_COMPLEMENT_BEFORE_COORDINATOR`). No phrase list, no window |
+| `Explain whether I should install foo and restart service api.` | the same | a `whether` complement with a modal is open, so it governs |
+| `Explain how to install the optional development package with its recommended configuration and restart service api.` | the object exceeded the character window | the window is gone: the test looks only at whether the complement was open where the coordinator appears |
+| `Explain how to deploy and then restart …` must not authorize | `and then` was read as a sequence instruction | while the complement is open, a coordinator — `and then` included — describes the explained operation order, so it creates no authority. The positive control is an explicitly SEPARATE instruction (its own sentence), in both languages |
+
+Two closed-complement controls are kept so the repair cannot over-reach:
+`Tell me what changed and install the package.` and `Explain the incident, rotate
+every credential and redeploy.` open a NEW predicate and keep their orders, and an
+explanation of a quoted command (`Explain \`git rebase\`.`) stays undecidable
+rather than answerable. Round 11 is the replacement independent set and required
+no further source change.
+
+### Tenth repair round after the ninth independent review
+
+The ninth review showed the explanation scope was still keyed on WORDS: the
+open-complement test looked for `to` or a modal, so a finite complement
+(`Explain how you install foo and restart service api.`) escaped it and the
+restart became authority. It named the rule that closes the family: **only proof
+that an action has LEFT the explanation's scope may grant execution authority, and
+a protection pattern that did not match is never that proof.**
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Explain how you install foo and restart service api.` | the scope decision required a modal or an infinitive in the complement | the decision is structural and needs no words: a sentence an explanation heads is decided as ONE scope before any partition, and it is `unresolved` whenever a coordinated part carries an action of its own (`isExplanationScope`). A pure reported question with no action residue keeps its closable lane, and an explanation of a quoted command stays undecidable |
+| `Explain why we install foo and restart service api.` | the same | the same rule; the complement's form no longer matters at all |
+| the restart must not authorize even though the clause is undecided | the gate authorized any pending requirement whose action and target matched, so a disposition of `unresolved` was not itself a bar | the mutation gate and `evaluateCompatibility` refuse an explanation's scope as a LAST RESORT, so every earlier refusal keeps reporting the reason it always did. The rule is scoped: an `unresolved` clause that is NOT an explanation's scope (an unrecognised instruction form such as `应用包 foo 版本 0.6.3 配置档 default。`) keeps the path it always had, and the action PLAN of an explanation is refused action by action |
+
+Round 12 is the replacement independent set and required no further source change.
+
+### Eleventh repair round after the tenth independent review
+
+The tenth review showed the protection still keyed on an EXPLANATION head: a bare
+question (`如何…？`, `How do I …?`, `Can you explain …?`) was decomposed into an
+information range plus a child that had LOST its parent question scope and was
+marked `executable_now`, so the gate's last-resort refusal never saw it. It also
+noted that some earlier negatives only looked safe because `api?` did not match the
+target `api` — a text artifact, not semantic protection. The requirement was
+explicit: **propagate the original question scope's non-execution qualification to
+the children and consume it at the authorization entry; do not re-guess scope from
+the split text.**
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `如何安装 foo 并重启 api 服务？` / `How do I install foo and restart service api safely?` / `Can you explain how to install foo and restart service api safely?` | only an explanation head was in the governing set, and the clause was partitioned before any qualification could be attached | a clause a QUESTION heads is decided ONCE from that head, before any partition or split, and is `unresolved` whenever it also carries an action (`questionHeadsClause`, `isQuestionScopeNeedingReview`). No child is created, so nothing can lose the qualification, and the gate and preparation consume the same predicate |
+| a target that matches must not change the verdict | the refusal depended on the child's own target matching | the rule is read from the item's own captured target and action plan, action by action, so a perfect target cannot hide it |
+| the boundary with the earlier reviews | an investigation imperative (`Check whether …`, `检查是否…`) coordinates two IMPERATIVES, so its second order must keep its authority | the governing set holds question words, auxiliaries, subject-prefixed and verb-fronted interrogatives, and explanation heads — never investigation imperatives. Order-headed mixed messages keep their partition and their execution |
+
+Closing the family exposed and fixed four more defects of the same shape, each
+recorded as its own round: a temporal interrogative read as a condition
+(`When should I install … ?`), a Chinese question whose subject pronoun stands
+before the interrogative (`你们如何安装 … 并重启 …`), missing members of the
+interrogative vocabulary (`谁`, `怎样`, `何时`, `多少`…), a question word that is
+also a relative pronoun (`Who owns … ?`, which `englishInterrogativeIsMatrix`
+treated as a subordinate boundary and therefore read as an instruction), and the
+modal that can stand between the action and the interrogative
+(`需要安装多少依赖并重启 …？`). Round 18 is the replacement independent set and
+required no further source change.
+
+### Twelfth repair round after the eleventh independent review
+
+The eleventh review showed the last gap of the family: an INVESTIGATION imperative
+was excluded from the governing set wholesale, so
+`Check whether it is safe to install foo and restart service api.` split at the
+coordinator and both actions became authority. The imperative head does not
+authorize its embedded actions: the root asked to CHECK whether installing and
+restarting is safe, should happen, or is needed.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Check whether it is safe to install foo and restart service api.` / `Check whether we should install foo and restart service api.` / `检查是否需要安装 foo 并重启 api 服务。` | the governing set held question words, auxiliaries and explanation heads but never an investigation whose complement is OPEN | the complement is now read STRUCTURALLY: the subordinator (`whether`/`if`, 是否/有没有/能否/…) must open the complement AND a modal or an infinitive must stand before the coordinator (`to install`, `we should install`, 需要安装). A complement that merely states a fact (`whether an update exists`) keeps the second order it always had |
+| the refusal must not depend on the target text | as before, the rule is read from the item's own captured target and action plan, action by action | unchanged, and now exercised on both sides of the boundary |
+
+Closing that boundary exposed six more defects of the same family, each repaired and
+recorded as its own round: an `if`-complement still taken by the condition splitter
+when a second instruction was coordinated (the head test and the clause test had
+been conflated), the Chinese modal-bearing subordinators (能否/可否/能不能), the
+POSTPOSED interrogative (`检查一下[安装 foo 并重启 api 服务]是否安全`), the yes/no
+interrogatives missing from the question vocabulary (是否/是不是), the Chinese
+A-不-A class read by the negation path as prohibitions (要不要/该不该/需不需要/
+可不可以/对不对), a question about a single action still read as an instruction, and
+an ordinary OBJECT list (`检查一下本地插件和皮肤是否有更新`, where 和 joins two nouns)
+mistaken for a coordination of actions. Round 25 is the replacement independent set
+and required no further source change.
+
+### Thirteenth repair round after the twelfth independent review
+
+The twelfth review closed the last gap of the family: an investigation's complement
+can have its OWN actor — a deployment script, a migration script, the operations
+staff — so a DECLARATIVE complement coordinates its own predicates and none of them
+is root authority. Requiring a modal or an infinitive in the complement was still a
+pattern, and a plain declarative complement escaped it.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Check whether the deployment scripts install foo and restart service api.` | the complement test only recognised a modal or an infinitive | a declarative complement is now read by the actor signal, per language: Chinese puts the subject BEFORE the subordinator and the action directly after it (确认[运维人员]是否[轮换密钥]…), English puts the subject after the subordinator and the action takes an object (whether [the deployment scripts] [install foo]). The Chinese side additionally requires an ACTION predicate in the complement, so a state question about an object (确认[缓存]是否[有效]并安装依赖) keeps its coordinated order |
+| `检查运维人员是否安装 foo 并重启 api 服务。` | the same | the same rule; the clause is one undecided obligation and every action in it is refused |
+| the refusal must not depend on the target text | unchanged: the rule is read from the item's own captured target and action plan, action by action | unchanged |
+
+Closing that boundary exposed three more defects of the same family, each repaired
+and recorded as its own round: an investigation of a DECLARATIVE `that` clause
+(`Verify that the operator rotates the credentials and redeploys the service`) was
+authorized, a coordination-free `that` verification was read as an instruction
+instead of an answerable check, and the Chinese subject rule needed the action
+predicate (which also required the rotation verb in the work vocabulary). The
+cross-end ledger records the tightened DSH reading for the English mixed-conjunction
+case (one undecided obligation) with revision 3. Round 29 is the replacement
+independent set and required no further source change.
+
+### Fourteenth repair round after the thirteenth independent review
+
+The thirteenth review showed the rule still needed evidence the surface cannot
+supply: the complement closed only when a KNOWN action predicate was recognised
+(`archive`, `归档` and `bootstrap` were not), and the Chinese subject only counted in
+one position (before the subordinator, while `是否有人安装…` and `是否由运维人员安装…`
+put it after). Two lines of attack, one root cause.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Check whether the operators archive the logs and restart service api.` / `检查运维人员是否归档日志并重启 api 服务。` / `… bootstrap the environment …` | closure required a recognised action predicate in the complement | the rule is INVERTED: an investigation's complement GOVERNS by default, and closing it requires positive proof that the question is about a STATE — the subordinator opens the complement, no actor of its own stands on either side of it, no modal or infinitive governs an action there, and the complement names a state (`complementIsProvenStateQuestion`). An unrecognised predicate is no longer evidence of anything |
+| `确认是否有人安装 foo 并重启 api 服务。` / `检查是否由运维人员安装 foo 并重启 api 服务。` | the subject had to stand before the subordinator | the actor test is position-independent: it looks on BOTH sides of the subordinator, and an actor introduced by 由 counts. A proven state question (`是否有新版本`, `缓存是否有效`, `whether the lock file is current`) keeps its coordinated order, and a coordination-free verification stays answerable |
+
+Round 30 is the replacement independent set and required no further source change.
+
+### Fifteenth repair round after the fourteenth independent review
+
+The fourteenth review returned the batch with one P1 and four counterexamples: the
+previous round still asked the surface for evidence it does not carry. Closure had
+been granted when a state WORD appeared anywhere in the complement and no word from an
+actor list stood in it, so a state word that is an action's OBJECT or MODIFIER was
+accepted as proof and the coordinated order was authorized.
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Check whether the technicians install available updates and restart service api.` / `Check whether the technicians archive completed jobs and restart service api.` / `检查程序是否安装更新并重启 api 服务。` / `确认小王是否更新依赖并重启 api 服务。` | closure was proven by the PRESENCE of a state word anywhere in the complement plus the ABSENCE of a word from an actor list — both are absence-of-pattern tests, and `available`/`completed`/`更新`/`依赖` were doing duty as an action's modifier or object | the proof is now the PREDICATE: the complement itself must be a state predication. Chinese places the subject before the subordinator, so the predicate follows it directly and needs no copula (`是否正常`, `是否已经完成`), or a stative verb (有/是/为/存在…) governs a state noun (`是否有新版本`, `是否有更新`). English places the subject after `whether`, so the predicate is the complement's LAST word and must be a state adjective reached through a copula (`is valid`, `is current`), with no action verb before it. The actor list is gone entirely — any actor, in any position, is irrelevant once the predicate is proven |
+| the refusal must not depend on the target text | unchanged: the rule is read from the item's own captured target and action plan, action by action | unchanged, and now exercised on both sides of the proof |
+
+Closing that proof exposed six more defects of the same family, each repaired and
+recorded as its own round, and each pinned by the set that found it:
+
+- the English infinitive test read the `to` inside `up-to-date` as a modal, so a copula
+  state question never closed;
+- the Chinese modifier strip was lazy and stopped at a possessive, so `有可用的镜像`
+  left `的镜像` and the coordinated order lost its authority;
+- the state-noun proof could not name ordinary state objects (`镜像`, `租约`), and the
+  Chinese predicate class could not name `为空`/`满`;
+- the POSTPOSED interrogative was recognized only when the action stood on the far side
+  of the coordinator, so `核对一下重启 api 服务并归档日志是否安全。` was read as an order —
+  and `classifyPositive` now decides the postposed form as undecided directly instead of
+  through a vocabulary-dependent residue test;
+- a yes/no question that states its own subject and carries no imperative at all
+  (`审计人是否加盖有效的印章并重启 api 服务。`) governed nothing, so the order coordinated
+  beside it was authorized; the yes/no subject form is now an investigation head, and a
+  separator no longer opens a clause inside a governed investigation;
+- and the message classifier discarded such a governed clause as session talk
+  (`审计员是不是替换凭据并轮换密钥。` produced NO obligation at all, so the order vanished
+  instead of staying visible and undecided); the classifier now consumes the reader's
+  own predicates, exactly as the gate and preparation do.
+
+Round 35 is the replacement independent set and required no further source change.
+
+### Sixteenth round: the contracted automatic authorization is withdrawn
+
+This round is a **user-approved contract change**, not a repair: the requirement that
+a coordinated second action inside one governed clause be auto-authorized is replaced
+by the narrowed contract in [CONTRACT_REVISION_0_6_3.md](CONTRACT_REVISION_0_6_3.md).
+The fourteen independent reviews that preceded it each showed that the closure it
+depended on could only be guessed (a state word, an actor list, a work verb, a
+position window); the new reading keeps the whole clause as ONE undecided obligation
+and refuses execution until the root writes the action as its own instruction.
+
+| Superseded (old contract) | Now (narrowed contract) | Keeper |
+| --- | --- | --- |
+| `Check whether an update exists and install the package.` keeps its install as an order | one undecided obligation; the install stays visible in its action plan and authorizes nothing | — |
+| `检查是否有新版本并且安装这个主题。` / `检查是否有更新并安装新主题。` keep the second order | same | — |
+| a "proven state question" (`检查服务是否正常并记录变更。`, `确认缓存是否有效并安装依赖。`, `Check whether the cache is valid and install the package.`, `Verify whether the lock file is current and install the package.`) closes its complement and keeps the coordinated order | same-clause coordination is undecided; there is no complement-closure proof any more | — |
+| an explanation whose complement is closed opens a new predicate (`说明…的作用，然后更新 README。`) | the explanation head governs its SENTENCE, so the same-sentence order is undecided | a separate sentence or clause still authorizes |
+| a trailing question mark keeps the order in front of it (`What changed, and update the README?`) | punctuation alone never authorizes: one undecided obligation | — |
+
+| Kept and re-pinned | Where |
+| --- | --- |
+| pure questions are answerable (`检查是否有新版本。`, `Is there any update for the plugin?`, an object-list question) | `tests/domain/v063-narrowed-contract.test.ts` |
+| a plain explicit instruction with a legal unique target is executable (`重启 api 服务。`) | same |
+| an instruction that clearly left the governed scope is executable (its own sentence, or its own clause: `检查是否存在更新；安装新主题；`) | same |
+| an undecided obligation is captured, cannot be closed by an ordinary answer, and cannot take a certificate | same |
+| the qualification is established once, inherited by partition children, and CONSUMED by the gate and preparation (the gate follows the stored field, not the item text) | same |
+| target ambiguity, K2 provenance, K3 prepare/execute agreement and K4 legacy fidelity | the existing suites, unchanged |
+
+The four counterexamples of the fourteenth review
+(`Check whether the technicians archive records that are complete and restart service api.`,
+`Check whether the technicians ensure the cache is valid and restart service api.`,
+`负责生产环境维护的运维人员是否安装 foo 并重启 api 服务。`,
+`负责生产环境维护的运维人员是不是安装 foo 并重启 api 服务。`) are pinned in that suite
+together with the group transformations the review asked for: subject substitution and
+lengthening, known and unknown verbs, object modifiers, relative clauses and nested
+complements, Chinese and English, punctuation and conjunction variants, the reading
+before and after the split and after a replay, and the main action plus every
+`actionPlan` action. Superseded expectations in the earlier hold-out and review files
+are relabelled **合同调整** in place rather than deleted; the two expectations that were
+my own oracle errors are labelled as such.
+
+Total independent sets in this batch: fifty set files (thirty-five hold-outs, fourteen
+reviewer-probe regression files and one self-review file).
+
+### Seventeenth round: qualification became a positive finding
+
+The concentrated review of the narrowed-contract batch returned three P1s about how
+the qualification is ESTABLISHED (delivery and consumption were already accepted):
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `I wonder whether the technicians restart service api.` was `granted` and authorized the restart | `qualificationOfClause` granted whenever no governed pattern matched — a default, not a finding | `granted` now requires POSITIVE evidence: no question content anywhere in the clause's own span and a recognised action. Every other reading is `restricted` (`unproven_scope`), so the reviewer's exact input is denied with `mutation_item_not_executable` |
+| `Explain this instruction: "Install foo. Restart service api."` re-qualified the second sentence inside the quote and authorized the restart | the qualification was computed AFTER the sentence split, so the quoted parent scope was already lost: the quoted `.` ended the clause | the parent span is established first: a quote (or code span) owns its own punctuation, so a mark inside it never opens a clause of the parent, and a protected clause is indivisible |
+| `安装 foo 并重启 api 服务是否可行。` split into two `granted` items and authorized the restart | a postposed interrogative was only recognised with a trailing `?`, so the coordinator split the clause | the protection now follows the clause's OWN question content (`clauseAsksOwnQuestion`), with or without the mark; the whole clause is one restricted obligation |
+
+Group transformations of the same invariant are pinned in
+`tests/domain/v063-narrowed-contract.test.ts`: several uncertainty heads
+(`I wonder`, `I am not sure`, `想问一下`), the quote styles and a longer quote, the
+postposed form with and without `?`, and the pure-quote control. Two further
+consequences are recorded rather than hidden: an order whose coordinated object carries
+an interrogative (`创建文件 /tmp/x 并记录测试是否通过。`) is now protected and undecided
+(relabelled 合同调整 in place), and an imperative whose verb is outside the action
+vocabulary is refused rather than guessed, so the purpose-clause control in the
+invariant suite uses a recognised verb.
+
+### Eighteenth round: a directive, not a mention; the parent scope first
+
+A second concentrated review of the narrowed contract returned two more P1s about
+ESTABLISHMENT, plus the quote-style gap:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `The technicians restart service api every night.` and `日志显示运维人员重启 api 服务。` authorized a restart | `granted` was established by `namesWork`, which only proves the text MENTIONS an action, not that the root ordered it | `granted` now requires a DIRECTIVE (`opensWithDirective`): an imperative in the root's voice — the action opens the clause after any request preface, or the clause opens with a closed-class actor/locative/time/object phrase (`由你…`, `在仓库…`, `按 P0—P4…`, `明天推送`) — and the clause is not a report. A statement is `restricted`, and the disposition is forced to agree with the stored qualification, so a restricted clause can no longer be `executable_now` |
+| `Explain this instruction: 'Install foo. Restart service api.'` and `解释这条指令：「安装 foo。重启 api 服务。」` re-qualified the restart inside the quote | only straight/curly double quotes were protected | every quote style is protected (`"…"`, `“…”`, a word-boundary `'…'`, `「…」`, `『…』`), and the wait/resume heuristics read the quote-blanked text, so a quoted echo of a confirmation no longer reserves anything |
+| (follow-on) the bare `应用包 foo 版本 0.6.3 配置档 default。` form lost its grant under the directive rule | an unrecognised operation word cannot be a positive directive finding | the sanctioned route is the root's explicit restatement (`把应用包 foo 版本 0.6.3 配置档 default 明确为 apply`), which is granted and keeps the K3/K4 fixtures meaningful; the retired boundary is recorded rather than hidden |
+
+Group transformations are pinned in `tests/domain/v063-narrowed-contract.test.ts`: statements
+that mention work (four), every quote style (four), directives that keep their authority
+(including a fronted actor or locative), and the explicit-restatement route.
+
+### Nineteenth round: authorization intent, not wording
+
+The third concentrated review closed the last two gaps in the positive findings:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `把重启 api 服务记为待讨论事项。`, `Record restart service api as a hypothetical example.`, `把重启 api 服务明确为禁止操作。` authorized the restart | the restatement route granted on its own wording ("明确为/记为/record … as"), but recording, classifying or forbidding an action is not ordering it | a restatement is granted only when its RESTATED CONTENT is itself an instruction (`restatedContentIsInstruction`: the content opens with an action the reader can identify, or resolves to an operation). A category, a topic or a ban is restricted |
+| `重启 api 服务是一个危险操作。` was executable | an action at the clause head was taken for an imperative, but here the action is the clause's SUBJECT | `opensWithDirective` now rejects a descriptive matrix predicate (`是/属于/意味着/导致…`, `is/are/means/causes…`), read only from the clause the action head belongs to, so a relative clause or a following clause cannot make an order look descriptive |
+
+Controls kept: `把更新插件明确为 apply package demo@2.0.0 profile web` and
+`把应用包 foo 版本 0.6.3 配置档 default 明确为 apply` remain granted (they restate an
+INSTRUCTION), `重启 api 服务。` remains executable, and a directive beside a description keeps
+its own authority while the description adds no action. All are pinned in
+`tests/domain/v063-narrowed-contract.test.ts`.
+
+### Twentieth round: the restatement is judged, and its authority is bound
+
+The fourth concentrated review showed the restatement route still took a shortcut
+("the content mentions an action") and handed the whole item one reusable grant:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `把重启 api 服务记为需要讨论的重启操作。`, `把重启 api 服务明确为解释重启流程。`, `Record restart service api as a description of how technicians restart service api.` authorized the restart | the content test accepted any action word anywhere in the restated span | the restated span (`restatedContentOf`) must now pass the SAME judgement a clause passes (`qualificationOfClause`) or be a canonical OPERATION spec whose HEAD is the operation (`restatedContentIsOperation`, which also rejects content that asks or describes). Prose that mentions an operation stays restricted |
+| `把重启 api 服务明确为检查日志。` authorized the restart even though the restated directive is `检查日志` | the qualification was a blanket `granted` for the item, whose action was still read from the pre-restatement text | capture now takes `semanticAction` and `actionPlan` from the RESTATED span (the target identity still comes from the whole clause, because a restatement clarifies the obligation it names). The item's identity is the inspection, so a restart mutation is denied — the action named before the restatement is never authorized |
+
+Pinned in `tests/domain/v063-narrowed-contract.test.ts` with the four reviewer inputs, the
+identity-binding assertion and the sanctioned-restatement controls.
+
+### Twenty-first round: the restatement binds its target too
+
+The fifth concentrated review found one binding defect in that repair:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `把重启 api 服务明确为重启 worker 服务。` and `Rebind restart service api as restart service worker.` still captured `service_id=api` and authorized the OLD target | capture took the ACTION from the restated span but the TARGET from the whole clause, so the pre-restatement target won | capture now binds action, `actionPlan` and TARGET together to the restated span: a field the new span names wins, and only the fields it OMITS are inherited from the clarified obligation — and only when that older selection is unambiguous. The old `api` target is denied, the new `worker` target is what the item authorizes, and `把应用包 foo 版本 0.6.3 配置档 default 明确为 apply` still inherits package/version/profile (pinned in `tests/domain/v063-narrowed-contract.test.ts`) |
+
+### Twenty-second round: per-span uniqueness, per-field merge
+
+The sixth concentrated review found the merge rule was still conditional and the
+uniqueness check was missing on both spans:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `把重启 api 服务或 worker 服务明确为 restart。` authorized `api` and `把重启 api 服务明确为重启 worker 服务或 cache 服务。` authorized `worker`, both `resolved` | neither span was checked for a UNIQUE selection: the extractor silently took the first candidate | `identityCandidates` counts the distinct candidates a span names for the action's identity field; two or more on EITHER span is reported as `requested_target_field_ambiguous` with `clarification_required`, so the gate refuses every candidate |
+| `把应用包 foo 版本 0.6.3 配置档 default 明确为 apply package foo version 0.6.4。` lost `profile=default` | inheritance ran only when the restated span named NOTHING | the merge is now PER FIELD: the restated span's own fields win, every field it OMITS is inherited from the clarified obligation while that older selection is unique. The main action and the `actionPlan` share the rule |
+
+### Twenty-third round: the enumeration shares the extractor's grammar
+
+The seventh concentrated review showed the candidate enumeration and the target
+extractor used different syntax:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Rebind restart service api or worker as restart.` authorized `api`, and `Rebind restart service api as restart service worker or cache.` authorized `worker`, both `resolved` | `identityCandidates` matched "name before `service`", while the extractor accepts `service <name>`; it read `restart` as a candidate, missed `api or worker`, and the shared-label list went unchecked | the candidate set is now enumerated with the EXTRACTOR's own parsers (`labeledTokens` with a coordinated continuation list, `actionObjectTokens`, and the noun-suffix scan), each normalized by the same helper, and ambiguity is judged within one surface form so mixing forms cannot invent a pair. `buildActionPlan` calls the same check per entry (`restatedSpanAmbiguous`), so the main action and the plan share one rule |
+
+### Twenty-fourth round: uniqueness covers every identity field
+
+The eighth concentrated review showed the audit stopped at the object name:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `把应用包 foo 版本 0.6.3 配置档 default 明确为 apply package foo version 0.6.4 or 0.6.5 profile default。` authorized `version=0.6.4`, and `… profile web or prod。` authorized `profile=web` | only service and package names were enumerated; version and profile were still read as single values | the enumeration now follows the action's whole identity contract (`identityFieldLabels`: service, package, version, profile, registry, repository, branch, remote, refspec), each field read with the extractor's labels and normalization, so a coordinated list after any label is ambiguous. The merge reads the CLARIFIED span rather than the whole clause, because the whole clause necessarily names both the old and the new value |
+
+Boundary recorded: the audit applies to the restatement merge, where two spans must be
+reconciled; a plain clause keeps the extractor's single reading (the fixture families
+that depend on it are unchanged).
+
+### Twenty-fifth round: the uniqueness result is consumed by every entry
+
+The ninth concentrated review showed the ordinary capture bypassed the audit:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `Restart service api or worker.` authorized `api` and `提交仓库 /repo-a 分支 main 或 release。` authorized `main`, both `resolved` | the plain branch took the extractor's single value; the audit ran only for a restatement | the ordinary capture, the restatement merge and every `actionPlan` entry now consume the same uniqueness result. The enumeration and the extractor share ONE label/verb definition (`IDENTITY_LABELS`) with boundaries, and a label's value must be separated from it, so a path (`/repo-a`), a compound token (`synthetic-plugin`) or a sub-path (`repo/sub`) is not read as a second candidate; earlier reason codes (an ambiguous repository, a missing field) are preserved |
+
+The 33 fixture rejections from the first attempt were traced to exactly those parse false
+positives and fixed there, not by skipping the ordinary entry; the positive controls
+(`重启 api 服务。`, `提交仓库 /repo-a 分支 main。`, the per-field inheritance and the install
+fixture form) all still resolve.
+
+### Twenty-sixth round: identity values keep their case
+
+The tenth concentrated review found the enumerators lowercased every candidate:
+
+| Reviewer finding | Root cause | Repair |
+| --- | --- | --- |
+| `提交仓库 /repo-a 分支 main 或 Main。` authorized `main` and `Push repository /repo-a remote origin refspec main:main or main:Main.` authorized `main:main`, both `resolved` | `labeledTokens` and `fieldCandidates` applied a blanket `toLowerCase()`, so two distinct git identities collapsed into one candidate | candidates keep their value; each field is normalized by its OWN rule (`fieldNormalizer`): packages through the package-spec parser, registries through their canonical form, and every git identity — repository, branch, remote, refspec — case-sensitively. A repeated EXACT value is still one candidate (`main 或 main` stays `resolved`), and the positive controls are unchanged |
+
+### Twenty-seventh round: package-spec tuples and the shared label set (closing checklist)
+
+The closing review fixed the last two items on its checklist:
+
+| Blocker | Root cause | Repair |
+| --- | --- | --- |
+| `foo@1.0.0 or foo@2.0.0` collapsed into one package name and authorized `1.0.0` (install, restated apply and publish), and `foo@1.0.0 version 2.0.0` was not refused as a conflict | the package candidate was normalized to its NAME only, and a version inside a spec never reached the version field | a package candidate is the whole SPEC (`id@version`), and the spec's version joins the labelled versions as ONE candidate set for the version field, so a same-name/different-version list and a spec/label conflict are both ambiguous, while an exactly repeated version stays unique |
+| `推送仓库 /repo-a 远端 origin 引用规范 main:main 或 main:release。` authorized `main:main` | the audit's label set lacked the Chinese `引用规范` that the extractor already accepted | the audit and the extractor now share the whole field-label set (repository, branch, remote, refspec incl. `引用规范`, package, artifact, version, profile, registry, service, plus the guarded verb forms), so no label can exist on one side only |
+
+The closing review's other fixed checks — qualification propagation, prohibition/wait/human
+actions, ordinary instructions, explicit follow-up authorization, the upgrade and
+certificate suites — reported no new blockers, and the repository-wide suite is green.
+
+### T06 evidence: a real 0.6.2 projection, upgraded by the production entry
+
+The earlier T06 evidence derived a log with the CURRENT reader and then assigned
+the old shape onto the result by hand, and its "history is preserved" case
+compared two snapshots with no operation between them. That is withdrawn; what
+replaces it:
+
+- `scripts/record_legacy_upgrade_fixture.mjs` EXECUTES the committed 0.6.2 build
+  (`deriveProjection` from the baseline `dist/`, extracted with
+  `git archive 63326f2 dist`) and stores the records that build emitted, with the
+  baseline commit and a SHA-256 for every module file. Re-running it is
+  deterministic; the recorded file is `tests/fixtures/upgrade/legacy-0.6.2.json`.
+  The recorder covers BOTH real protocols, because the earlier release behaves
+  differently on each: a session with no boundary notice leaves the mixed record
+  `pending`, and a session that announced the v5 boundary applies its delivery
+  pass and writes the record CLOSED — `status: answered` with a delivered
+  `answeredBy` (turn, response sequence and response digest). The v5 notice is
+  written out in the recorder so it never imports the current source; the sixth
+  review's own v5 comparison is what showed the first recording had omitted it.
+- `tests/domain/v063-legacy-upgrade.test.ts` loads those records as the persisted
+  state of an earlier session and runs `applyUpgradeEligibility` — the exported
+  entry `deriveProjection` itself calls — BETWEEN the two snapshots, so the diff
+  shows exactly what the upgrade changed: the eligibility fact and nothing else.
+  It asserts the recorded ID, revision, `normalizedText`, `textSha256`, spans,
+  status, action, target and `answeredBy` are untouched (including the CLOSED v5
+  records, whose delivered answer does not rescue them), that no certificate,
+  checkpoint or effect appears, that the flag blocks the certificate and the Goal
+  with `legacy_record_needs_review`, that a second upgrade keeps the original
+  reason and revision, and that the pure-question control is never flagged. The
+  unit attribution the v5 recording carries is part of the restored state, so the
+  record is in the eligibility scope exactly as it is in a live session.
+- What this file does NOT claim: it drives the eligibility entry over the
+  persisted records directly. Native host recovery — restoring a real profile and
+  replaying a real session through the runtime — remains unmeasured below.
+- `tests/domain/v063-upgrade-chain.test.ts` keeps only the durable-log cases and
+  labels every constructed record as predicate-level.
+
+### Evidence added in the repair round
+
+- `tests/domain/v063-review-regressions.test.ts` — the reviewer's nine failing
+  probes plus two positive controls, with the reviewer's own contract
+  expectations.
+- `tests/domain/v063-holdout-round2.test.ts` — 28 assertions across 19 cases in
+  wording families absent from every earlier set: 呢/吧 as particles, 并且/以及/
+  而后/then chains, an enumerated repository, a subdirectory that must not
+  collapse onto its parent, inheritance across an unrelated clause,
+  prepare/action agreement on stale revision, non-pending status and a
+  cross-family action, and eligibility scope across unit boundaries.
+- `tests/domain/v063-legacy-upgrade.test.ts` — the T06 evidence: records emitted
+  by executing the committed 0.6.2 build, upgraded by the production entry with
+  the before/after comparison bracketing that call. The construction and its
+  limits are described in the T06 section above.
+- `scripts/record_legacy_upgrade_fixture.mjs` +
+  `tests/fixtures/upgrade/legacy-0.6.2.json` — the recorder and the recording it
+  produces (baseline commit, every module hash, the records as the earlier
+  release left them).
+- `tests/domain/v063-upgrade-chain.test.ts` — the durable-log half of T06: the
+  v5 boundary, root message, completed turn and delivery, idempotent
+  re-derivation, the v4 (pre-v5) scope, and the predicate-level shapes a
+  recorder cannot emit, each labelled as such.
+- `tests/tools/v063-host-lifecycle.test.ts` — T07 over ONE durable log: the
+  registered tools materialized through the real `ToolRuntime`, their
+  call/result round-trips APPENDED to the log in the persisted wire shape, a
+  restart-style re-derivation, a `compaction/summary`, a second re-derivation,
+  the Recovery packet and digest from the post-compaction projection, the
+  production Stop decision, and the same refusals after the replay.
+- `tests/domain/v063-review2-regressions.test.ts` — the second review's five
+  failing probes plus positive controls (a conditional order, genuine
+  questions, a prohibition on another repository, a prohibition of another
+  action, an unset field still inheriting).
+- `tests/domain/v063-holdout-round3.test.ts` — the round-3 independent set
+  (28 assertions), now marked in its own header as regression coverage.
+- `tests/domain/v063-review3-regressions.test.ts` — the third review's four
+  failing probes plus the positive controls that keep the repairs from
+  over-reaching (a genuine question, an order with a preface, a complete
+  selector).
+- `tests/domain/v063-holdout-round4.test.ts` — the round-4 set (19 cases), now
+  marked in its own header as regression coverage.
+- `tests/domain/v063-review4-regressions.test.ts` — the fourth review's four
+  failing probes plus the positive controls that keep the structural rule from
+  over-reaching (a question with no subordinate span before it, a real
+  conditional order, an obligation that DID name the branch).
+- `tests/domain/v063-holdout-round5.test.ts` — the round-5 set, now marked in
+  its own header as regression coverage; it found the classifier defect.
+- `tests/domain/v063-repair5-regressions.test.ts` — the fifth repair round's
+  three self-review counterexamples (the English sentence end, the coordinated
+  ordering fragment, the two-repository clause) with the abbreviation, version,
+  single-repository and preface controls.
+- `tests/domain/v063-holdout-round6.test.ts` — the round-6 set (16 cases), now
+  regression coverage.
+- `tests/domain/v063-review5-regressions.test.ts` — the fifth review's four
+  failing assertions and three defects plus the probes that already passed.
+- `tests/domain/v063-holdout-round7.test.ts` — the round-7 set, now regression
+  coverage; it found the English `then` preface/boundary conflict.
+- `tests/domain/v063-holdout-round8.test.ts` — the round-8 set (16 cases), now
+  regression coverage.
+- `tests/domain/v063-review6-regressions.test.ts` — the sixth review's three
+  defects plus the controls that keep the repairs from over-reaching (a genuine
+  question, an abbreviation that continues its sentence, a claimed field value, a
+  file argument in another clause, two spellings of one repository).
+- `tests/domain/v063-holdout-round9.test.ts` — the round-9 set (19 cases), now
+  regression coverage.
+- `tests/domain/v063-review7-regressions.test.ts` — the seventh review's three
+  defects, with the explanation-versus-order pair in both languages and the
+  per-field inheritance controls.
+- `tests/domain/v063-holdout-round10.test.ts` — the round-10 set (17 cases), now
+  regression coverage.
+- `tests/domain/v063-review8-regressions.test.ts` — the eighth review's three
+  counterexamples plus the tightened `and then` reading, the separate-instruction
+  positive controls and the closed-complement controls.
+- `tests/domain/v063-holdout-round11.test.ts` — the round-11 set (18 cases), now
+  regression coverage.
+- `tests/domain/v063-review9-regressions.test.ts` — the ninth review's two
+  counterexamples plus the separate-instruction positives and the two scope
+  controls.
+- `tests/domain/v063-holdout-round12.test.ts` — the round-12 set (16 cases), now
+  regression coverage.
+- `tests/domain/v063-review10-regressions.test.ts` — the tenth review's question
+  scopes, the target-independent refusal and the imperative contrast.
+- `tests/domain/v063-holdout-round13.test.ts` … `-round17.test.ts` — the five sets
+  that closed the question-scope family, each recording the defect it found and any
+  oracle correction of its own.
+- `tests/domain/v063-holdout-round18.test.ts` — the round-18 set (11 cases), now
+  regression coverage.
+- `tests/domain/v063-review11-regressions.test.ts` — the eleventh review's
+  investigation-complement counterexamples and the contrasts that keep the rule
+  honest.
+- `tests/domain/v063-holdout-round19.test.ts` … `-round24.test.ts` — the six sets
+  that closed the investigation boundary, each recording the defect it found and any
+  oracle correction of its own.
+- `tests/domain/v063-holdout-round25.test.ts` — the round-25 set (12 cases), now
+  regression coverage.
+- `tests/domain/v063-review12-regressions.test.ts` — the twelfth review's
+  actor-complement counterexamples and their contrasts.
+- `tests/domain/v063-holdout-round26.test.ts` … `-round28.test.ts` — the three sets
+  that closed the actor boundary, each recording the defect it found and any oracle
+  correction of its own.
+- `tests/domain/v063-holdout-round29.test.ts` — the round-29 set (12 cases), now
+  regression coverage.
+- `tests/domain/v063-review13-regressions.test.ts` — the thirteenth review's five
+  counterexamples, the proven-state contrasts and the separate instruction.
+- `tests/domain/v063-holdout-round30.test.ts` — the round-30 set (17 cases), now
+  regression coverage.
+- `tests/domain/v063-review14-regressions.test.ts` — the fourteenth review's four
+  counterexamples, the siblings of the same root cause, the proven-state contrasts,
+  the answerable lane and the plain order.
+- `tests/domain/v063-holdout-round31.test.ts` … `-round34.test.ts` — the sets that
+  closed the predicate proof, each marked in its own header as regression coverage
+  with the defects it found and its own oracle corrections.
+- `tests/domain/v063-holdout-round35.test.ts` — the current independent set
+  (20 cases), the only set in this batch that required no source change.
+- `tests/fixtures/cross-end/codex-0.13.9.shape.json` — a NEW Codex recording
+  made in this batch by `scripts/record_cross_end_oracle.py --mode shape`, which
+  executed the installed module's `_reply_only_request_shape` plus
+  `clause_metadata`/`verification_contract` on twelve shared inputs and bound
+  the result to the module SHA-256 `4b895aad…`. T08 reads it, so the comparison
+  is measured rather than inferred: on this batch Codex's reply-only judge
+  returns false for all twelve, which is why the mixed-request and pure-question
+  families are recorded `not-aligned` — DSH closes a range Codex would not.
+
+### What remains unmeasured after this round
+
+- Native Codex host turns: the shape recording executes entry points, not a
+  session. No native Codex acceptance is claimed.
+- Cross-repository follow-up reference and prepare/execute comparison on the
+  Codex side: no equivalent entry point exists; recorded as not measured and not
+  applicable respectively.
+- Candidate CI, the frozen tgz, macOS/Windows exact-artifact acceptance,
+  real-model behaviour, plugin installation, DSH restart, tag, npm publication
+  and GitHub Release.
+
+### Known boundaries found while testing, and deliberately not repaired
+
+- A publish target's registry identity is the canonical base the repository's own
+  canonicalizer records (`https://registry.npmjs.org/`). A caller that supplies
+  the root's UNNORMALIZED spelling therefore does not match the obligation. Both
+  lanes agree — so T05 holds — and preparation reports the recorded identity, so
+  the workflow proceeds from the target it returns. Loosening the comparison
+  would change an identity predicate the gate shares, which this batch does not
+  do.
+- An English investigation behind a preface USED TO keep the pre-existing
+  `ACCEPTANCE_LEAD` lane; the fifth review's follow-up and round 7 showed that
+  made the English reading differ from the Chinese one, so it is repaired:
+  `Then check whether the disk is full.` is an information request, like
+  `然后检查是否有新版本。`.
+- An investigation's complement GOVERNS by default. It closes only on positive proof
+  that the complement PREDICATES a state — a Chinese state adjective, a stative verb
+  governing a state noun, or an English state adjective reached through a copula, with
+  no modal, infinitive or action verb in the way. A state WORD that is an action's
+  object or modifier (`install available updates`, `安装更新`, `更新依赖`) proves
+  nothing, an unrecognised predicate proves nothing, an actor anywhere proves nothing,
+  and the actor list the earlier rounds leaned on is gone: proof is positive, never the
+  absence of a protection pattern.
+- The proof vocabulary is itself a positive list, so a state the lists cannot name
+  (`有可用的镜像` before the round that added it) is refused rather than authorized.
+  The asymmetry is deliberate: an unprovable complement leaves its coordinated part
+  inside the question, where it is never authority.
+- A clause a QUESTION heads is one scope: it is never partitioned into an
+  executable child, and when it carries an action it is `unresolved`. An
+  investigation IMPERATIVE is different — `Check whether … and install …`
+  coordinates two orders — so its second order keeps its own authority — UNLESS its
+  complement is open (`Check whether it is safe TO INSTALL … AND restart …`,
+  `检查是否需要安装…并重启…`), in which case the actions are what the root asked to
+  have checked and none of them authorizes.
+- Only an EXPLICITLY executable reading authorizes. An explanation whose
+  sentence mentions an action is refused action by action, whatever its target
+  says, and a question is refused for the same reason; authority requires an
+  explicitly separate instruction. An `unresolved` clause that is not an
+  explanation's scope keeps the behaviour the gate always had, so an unrecognised
+  instruction form is still judged on its action and target rather than refused on
+  its disposition alone.
+- Inside the sentence an explanation heads, a coordinator belongs to the
+  explanation while its complement is open, so `Explain how to install X and then
+  restart Y` creates no authority even though a reader might take it as an
+  instruction. The safe direction is deliberate: an instruction must be its own
+  sentence (`Explain the deploy. Then restart service api.`).
+- A period ends a sentence whenever whitespace and further text follow it. The
+  only non-boundaries are a period with no space after it (a decimal, a version
+  number, a file name) and an abbreviation from the closed English class
+  (`e.g.`, `i.e.`, `cf.`, `etc.`, honorifics, dotted initialisms). An ordinary
+  lower-case word after a period therefore STARTS a new sentence, which is the
+  fail-closed direction.
+- A repository candidate must be spelled like one: a path or a Latin name that
+  is not a value another field already claims. An extension is NOT evidence of
+  identity — a repository may be called `/repo-a.js` — so a clause that offers
+  several candidates records the ambiguity instead of choosing, and two spellings
+  of the SAME path (`/repo-a` and `/repo-a/`) are one candidate. A file argument
+  in another clause is not a candidate because the join rule requires a
+  coordinator and nothing else between them.
+- A period that belongs to an abbreviation keeps the run whole only when what
+  follows continues the sentence; a question after it opens a new sentence.
+  (An earlier revision of this record claimed the 0.6.2 build never wrote
+  `answered` records for these shapes. That was wrong — it followed from a
+  recording made without the v5 boundary notice — and the recorded v5 fixture now
+  carries the closed records instead.)
+
+### Gates run
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| typecheck | `pnpm run typecheck` | exit 0 |
+| lint | `pnpm run lint` | exit 0; 27 warnings, 0 errors — the same count as the 0.6.2 baseline, so the batch adds no new warning |
+| unit/deterministic tests | `pnpm test` | 127 files, 2140 passed, 1 skipped |
+| release packer | `pnpm run test:release-pack` | 2/2 passed |
+| download stats | `pnpm run test:stats` | 10/10 passed |
+| build | `pnpm run build` | exit 0; 6 files, 1105.16 kB; two consecutive builds are byte-identical |
+| pack inventory | `pnpm run pack:check` | name `dsh-completion-guard`, version `0.6.3`, 35 files (the contract revision note is packaged) |
+| documentation audit | `python3 scripts/audit_repository_documentation.py .` | 27 markdown files, 0 errors, 0 warnings |
+| documentation audit test | `python3 -m pytest tests -q` | 84 passed |
+| whitespace | `git diff --check` | clean |
+| reviewer probes (supplementary evidence, not the acceptance) | the fourteen counterexample files under `/tmp/dsh-063-review`, `/private/tmp/dsh-063-independent-review`, `/private/tmp/dsh-063-review3`, `/private/tmp/dsh-063-review4`, `/tmp/dsh-063-review-20260917`, `/tmp/dsh-063-review-20260917-next`, `/tmp/dsh-063-review-20260917-r8`, `/tmp/dsh-063-review-20260917-r9`, `/tmp/dsh-063-review-20260917-r10`, `/tmp/dsh-063-review-20260917-r11`, `/tmp/dsh-063-review-20260917-r12`, `/tmp/dsh-063-review-20260917-r13`, `/tmp/dsh-063-review-20260917-r14` and `/tmp/dsh-063-review-20260917-r15`, run from `tests/domain/` | all fourteen files passed against the final source; every copy was removed afterwards |
+| recorded 0.6.2 fixture | `node scripts/record_legacy_upgrade_fixture.mjs --module-dir <baseline dist> --commit 63326f2… --output tests/fixtures/upgrade/legacy-0.6.2.json` | exit 0; re-running reproduces the committed fixture byte for byte |
+
+`NODE_PATH` was unset for the test runs. The DSH harness injects a `NODE_PATH`
+that points at the runtime store, and `tests/domain/host-target-preflight.test.ts`
+resolves a visible parent package through it and reports
+`target_profile_module_shadow` for eight of its 46 cases. With `NODE_PATH`
+unset — the environment every CI lane and the 0.6.2 recheck used — the file
+passes 46/46. This is an environment artifact of the developing session, not a
+repository defect, and it is recorded here rather than worked around in the
+source.
+
+### T01–T08 coverage
+
+- T01/T02 — `tests/domain/v063-core-alignment.test.ts` (paraphrase, punctuation,
+  word order, negation, condition, quoted command, unknown tail) and
+  `tests/domain/v063-holdout.test.ts`.
+- T03 — delivery closes only its own information range, including the zero-tool
+  final and the partial-completion counterexamples.
+- T04 — target provenance, unique inheritance, two-candidate ambiguity,
+  explicit-current-repository resolution, and a model-supplied target.
+- T05 — one compatibility judgement for prepare and the mutation gate, with the
+  same-snapshot equality and the revision/condition change counterexamples.
+- T06 — the pre-terminal eligibility check, its idempotence across a reload, and
+  the certificate/Goal block.
+- T07 — `tests/tools/v063-host-materialization.test.ts` drives the registered
+  tools through the real `ToolRuntime` output contract and reads the production
+  Stop decision; the producer-reference and boundary negatives stay refused.
+- T08 — `tests/domain/v063-cross-end-projection.test.ts` reads the recorded
+  Codex facts and the case-level ledger
+  `tests/fixtures/cross-end/core_alignment_0_6_3.json`. The mixed-request and
+  unnamed-repository families are `not-applicable`/`not-aligned`; nothing is
+  claimed as aligned without a measured Codex counterpart.
+
+Not executed, and not implied by the above: candidate CI, the frozen tgz,
+macOS/Windows exact-artifact acceptance, real-model behaviour, plugin
+installation, DSH restart, tag, npm publication and GitHub Release.
+
 ## 0.6.2 lifecycle and documentation consolidation (2026-09-16)
 
 The coordinator added a third Codex recording (`--mode lifecycle`) using
