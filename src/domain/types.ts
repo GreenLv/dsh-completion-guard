@@ -76,6 +76,7 @@ export type TargetCaptureReasonCode =
   | 'requested_target_package_id_missing'
   | 'requested_target_artifact_id_missing'
   | 'requested_target_repository_missing'
+  | 'requested_target_repository_invalid'
   /**
    * 0.6.3 K2: several equally sourced repository candidates exist in the
    * current work unit and the root must select one.

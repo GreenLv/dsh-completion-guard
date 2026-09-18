@@ -32,14 +32,19 @@ describe('a path written in the instruction is captured whole', () => {
     // Unlabelled: the path after the verb is itself the object. Reading the
     // session working directory here would bind the push to another repository.
     ['push /work/repo', '/work/repo'],
-    // Relative paths stay exactly as written; resolving them against the cwd
-    // would invent a path the human never wrote.
+    // A non-traversing relative path stays exactly as written; resolving it
+    // against cwd here would invent a path the human never wrote.
     ['Push repository ./repo remote origin refspec refs/heads/main.', './repo'],
-    ['Push repository ../repo', '../repo'],
     // Control: a relative path with no leading separator was already correct.
     ['Push repository repo/sub remote origin refspec refs/heads/main.', 'repo/sub'],
   ])('reads %s as %s', (instruction, expected) => {
     expect(targetOf(instruction)).toMatchObject({ repository: expected })
+  })
+
+  it('does not promote a parent traversal into a repository selection', () => {
+    const item = captureClause('Push repository ../repo', 'm1', 'R001', 1, { cwd: '/work' })
+    expect(item.targetCaptureStatus).toBe('clarification_required')
+    expect(item.requestedTarget?.repository).not.toBe('../repo')
   })
 
   it('does not read a lone separator as a path', () => {

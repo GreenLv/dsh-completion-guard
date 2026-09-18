@@ -94,15 +94,18 @@ interface CapturedRequestedTarget {
  * separator plus at least one more character — a lone "/" is punctuation, not
  * a path.
  */
-const TARGET_TAIL = '[\\p{L}\\p{N}@._/\\\\:+%?&=#\\[\\]-]'
-const TARGET_PATH = `[.~]*[\\\\/]${TARGET_TAIL}+`
-const TARGET_WORD = `[\\p{L}\\p{N}@]${TARGET_TAIL}*`
-const TARGET_TOKEN = `(?:\`[^\`]+\`|"[^"]+"|'[^']+'|${TARGET_PATH}|${TARGET_WORD})`
+const TARGET_TAIL = '[\\p{L}\\p{N}@._/\\\\:+%?&=#\\[\\]~\\-]'
+// Scan the whole unquoted lexeme before validating it. A prefix-only match
+// would turn C:\\Users\\RUNNER~1 or an unsupported suffix into a different,
+// seemingly authorized target. Spaces require an explicit quoted token.
+const TARGET_TOKEN = '(?:`[^`]+`|"[^"]+"|\'[^\']+\'|[\\p{L}\\p{N}@./~\\\\][^\\s，,、；;。！？!]+|[\\p{L}\\p{N}@./~\\\\])'
+const VALID_UNQUOTED_TARGET = new RegExp(`^${TARGET_TAIL}+$`, 'u')
 function unquoteTargetToken(value: string | undefined): string | undefined {
   if (!value) return undefined
   const trimmed = value.trim().replace(/[.,;，。；]+$/, '')
   const unquoted = /^(?:`([^`]+)`|"([^"]+)"|'([^']+)')$/.exec(trimmed)
-  return (unquoted?.[1] ?? unquoted?.[2] ?? unquoted?.[3] ?? trimmed) || undefined
+  if (unquoted) return unquoted[1] ?? unquoted[2] ?? unquoted[3]
+  return VALID_UNQUOTED_TARGET.test(trimmed) ? trimmed : undefined
 }
 /**
  * The value of a labelled field ("repository X", "版本：1.2.3").
@@ -111,7 +114,7 @@ function unquoteTargetToken(value: string | undefined): string | undefined {
  * word is skipped, so the literal word "repository" is never read as the label
  * "repo" followed by the value "sitory".
  */
-function labeledToken(text: string, labels: string): string | undefined {
+function labeledTokenRead(text: string, labels: string): { raw: string; value?: string; end: number } | undefined {
   const label = new RegExp(`(?:${labels})`, 'iu')
   const after = new RegExp(`^(?:\\s*(?:[:=：]|为|是)\\s*|\\s+)(${TARGET_TOKEN})`, 'iu')
   // A value that is itself another label ("repository /x to remote origin")
@@ -124,10 +127,13 @@ function labeledToken(text: string, labels: string): string | undefined {
     cursor = cursor + match.index + match[0].length
     const token = after.exec(text.slice(cursor))
     const value = unquoteTargetToken(token?.[1])
-    if (value && !OTHER_LABEL.test(value)) return value
+    if (token?.[1] && (!value || !OTHER_LABEL.test(value))) return { raw: token[1], ...(value ? { value } : {}), end: cursor + token[0].length }
     if (cursor >= text.length) return undefined
   }
   return undefined
+}
+function labeledToken(text: string, labels: string): string | undefined {
+  return labeledTokenRead(text, labels)?.value
 }
 /**
  * Where a labelled field's VALUE sits in the text, so a value that another
@@ -334,7 +340,7 @@ function actionObjectTokens(text: string, verbs: string, nouns: string, skipLabe
 }
 
 /** The object token that follows a verb, read exactly as the singular form does. */
-function objectTokenAfter(text: string, from: number, nouns: string, skipLabels?: string): string | undefined {
+function objectTokenReadAfter(text: string, from: number, nouns: string, skipLabels?: string): { raw: string; value?: string; end: number } | undefined {
   let cursor = from
   // 0.6.3 K2 repair (review counterexample): a clause may name a FIELD before
   // its object — "提交分支 release" names the BRANCH, not a repository called
@@ -347,10 +353,15 @@ function objectTokenAfter(text: string, from: number, nouns: string, skipLabels?
   const noun = new RegExp(`^\\s*(?:${nouns})(?![\\p{L}\\p{N}_])`, 'iu').exec(text.slice(cursor))
   if (noun) cursor += noun[0].length
   else cursor += (text.slice(cursor).match(/^\s*[\p{Script=Han}]{0,2}\s*/u)?.[0].length ?? 0)
-  const rest = text.slice(cursor).replace(/^\s*(?:[:=：]|为)?\s*/u, '')
-  const token = unquoteTargetToken(new RegExp(`^(${TARGET_TOKEN})`, 'u').exec(rest)?.[1])
-  if (!token || IDENTITY_STOP.test(token)) return undefined
-  return token
+  cursor += (text.slice(cursor).match(/^\s*(?:[:=：]|为)?\s*/u)?.[0].length ?? 0)
+  const raw = new RegExp(`^(${TARGET_TOKEN})`, 'u').exec(text.slice(cursor))?.[1]
+  if (!raw) return undefined
+  const value = unquoteTargetToken(raw)
+  if (value && IDENTITY_STOP.test(value)) return undefined
+  return { raw, ...(value ? { value } : {}), end: cursor + raw.length }
+}
+function objectTokenAfter(text: string, from: number, nouns: string, skipLabels?: string): string | undefined {
+  return objectTokenReadAfter(text, from, nouns, skipLabels)?.value
 }
 /** The verbs that name each repository-facing action, for unlabelled objects. */
 const GIT_OBJECT_VERB: Record<string, string> = {
@@ -504,10 +515,41 @@ function latinIdentityValue(value: string | undefined): string | undefined {
 const GIT_TARGET_STOP_WORDS = /^(?:the|a|an|this|that|these|those|to|from|in|on|into|with|and|or|then|also|but|my|our|your|all|any|some|change|changes|changed|commit|commits|push|pushes|pull|fetch|update|updates|branch|remote|refspec|origin|upstream|main|master|develop|trunk|head|repository|repo|tags?|branch(?:es)?|远程|远端|分支|引用规范|仓库)$/i
 function looksLikeRepositoryName(value: string): boolean {
   if (GIT_TARGET_STOP_WORDS.test(value)) return false
-  if (/[\\/]/.test(value) || /^[.~]/.test(value)) return true
-  if (/^[A-Za-z]:/.test(value)) return true
+  if (/[\\/]/.test(value) || /^[.~]/.test(value) || /^[A-Za-z]:/.test(value)) return validRepositoryPath(value)
   if (!/^[\p{L}\p{N}@._-]+$/u.test(value)) return false
   return !/[\p{Script=Han}]/u.test(value)
+}
+function validRepositoryPath(value: string): boolean {
+  // Validate the complete token. Unsupported syntax must not be reinterpreted
+  // as a valid-looking prefix or an ambient repository selection.
+  if (!/^[\p{L}\p{N}@._/\\:+%&=#\x5b\x5d~\- ]+$/u.test(value)) return false
+  if (value === '/' || value === '\\') return false
+  if (value.startsWith('\\\\') || value.startsWith('//')) return false
+  if (/^[A-Za-z]:/.test(value)) {
+    if (!/^[A-Za-z]:\\/.test(value) || value.includes('/') || value.slice(3).includes(':') || value.slice(3).includes('\\\\')) return false
+  } else if (value.includes('\\') && value.includes('/')) return false
+  const parts = value.split(/[\\/]/)
+  return !parts.some((part) => part === '..')
+}
+function malformedExplicitRepository(text: string, action: 'pull' | 'fetch' | 'commit' | 'push'): boolean {
+  const verb = new RegExp(`(?:${GIT_OBJECT_VERB[action]})`, 'iu').exec(text)
+  const read = labeledTokenRead(text, IDENTITY_LABELS.repository)
+    ?? (verb ? objectTokenReadAfter(text, verb.index + verb[0].length, 'repository|repo|仓库', GIT_SECONDARY_LABEL) : undefined)
+  if (!read) return false
+  if (!read.value || ((/[\\/]/.test(read.value) || /^[A-Za-z]:/.test(read.value))
+    && !validRepositoryPath(read.value))) return true
+  const rest = text.slice(read.end)
+  // A quote or token may end only at a real lexical boundary. The scanner
+  // must never accept a quoted/valid prefix of a longer unsupported target.
+  if (rest && !/^[\s.,，,、；;。！？!?]/u.test(rest)) return true
+  // An unquoted Windows path followed immediately by another path-bearing
+  // whitespace token is one unsupported spaced argument, not a selection of
+  // its first component. Quoted paths are already one complete token.
+  if (/^[`"']/.test(read.raw) || !/^[A-Za-z]:\\/.test(read.value)) return false
+  if (!/^\s+[^\s，,、；;。！？!?]+/u.test(rest)) return false
+  // Only a complete, separately labeled Git field proves that the path ended
+  // here. A bare "and More" or "on Hold" could still be an unquoted filename.
+  return !/^\s+(?:(?:to|from)\s+)?(?:remote|branch|refspec|远端|分支|引用规范)\s+[^\s，,、；;。！？!?]+/iu.test(rest)
 }
 /** The target capture for one action, with the source of its identity. */
 /**
@@ -701,6 +743,13 @@ function captureRequestedTarget(
       // pushes a branch, and the branch belongs to the repository the clause
       // names (or inherits), not to a separate repository identity.
       : action !== 'commit' && branch !== undefined ? branch : undefined
+    if (malformedExplicitRepository(text, action)) {
+      return { source: { kind: 'environment_default' }, reasonCode: 'requested_target_repository_invalid', target: {
+        ...(action === 'commit' && branch ? { branch } : {}),
+        ...(action !== 'commit' && remote ? { remote } : {}),
+        ...(action !== 'commit' && refspec ? { refspec } : {}),
+      } }
+    }
     const named = repositoryNamedExplicitly(text, action, subject)
     // 0.6.3 K2: a clause that offers SEVERAL repositories is not a selection.
     // Picking the first would bind the obligation to a repository the root never

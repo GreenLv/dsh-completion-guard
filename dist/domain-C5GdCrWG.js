@@ -3297,13 +3297,15 @@ function extractOperation(text) {
 * separator plus at least one more character — a lone "/" is punctuation, not
 * a path.
 */
-const TARGET_TAIL = "[\\p{L}\\p{N}@._/\\\\:+%?&=#\\[\\]-]";
-const TARGET_TOKEN = `(?:\`[^\`]+\`|"[^"]+"|'[^']+'|${`[.~]*[\\\\/]${TARGET_TAIL}+`}|${`[\\p{L}\\p{N}@]${TARGET_TAIL}*`})`;
+const TARGET_TAIL = "[\\p{L}\\p{N}@._/\\\\:+%?&=#\\[\\]~\\-]";
+const TARGET_TOKEN = "(?:`[^`]+`|\"[^\"]+\"|'[^']+'|[\\p{L}\\p{N}@./~\\\\][^\\s，,、；;。！？!]+|[\\p{L}\\p{N}@./~\\\\])";
+const VALID_UNQUOTED_TARGET = new RegExp(`^${TARGET_TAIL}+$`, "u");
 function unquoteTargetToken(value) {
 	if (!value) return void 0;
 	const trimmed = value.trim().replace(/[.,;，。；]+$/, "");
 	const unquoted = /^(?:`([^`]+)`|"([^"]+)"|'([^']+)')$/.exec(trimmed);
-	return (unquoted?.[1] ?? unquoted?.[2] ?? unquoted?.[3] ?? trimmed) || void 0;
+	if (unquoted) return unquoted[1] ?? unquoted[2] ?? unquoted[3];
+	return VALID_UNQUOTED_TARGET.test(trimmed) ? trimmed : void 0;
 }
 /**
 * The value of a labelled field ("repository X", "版本：1.2.3").
@@ -3312,7 +3314,7 @@ function unquoteTargetToken(value) {
 * word is skipped, so the literal word "repository" is never read as the label
 * "repo" followed by the value "sitory".
 */
-function labeledToken(text, labels) {
+function labeledTokenRead(text, labels) {
 	const label = new RegExp(`(?:${labels})`, "iu");
 	const after = new RegExp(`^(?:\\s*(?:[:=：]|为|是)\\s*|\\s+)(${TARGET_TOKEN})`, "iu");
 	const OTHER_LABEL = /^(?:to|from|on|into|with|at|using|version|profile|registry|remote|refspec|branch|service|repository|repo|包|插件|制品|服务|仓库|版本|配置档|远端|分支|注册表)$/i;
@@ -3321,10 +3323,18 @@ function labeledToken(text, labels) {
 		const match = label.exec(text.slice(cursor));
 		if (!match) return void 0;
 		cursor = cursor + match.index + match[0].length;
-		const value = unquoteTargetToken(after.exec(text.slice(cursor))?.[1]);
-		if (value && !OTHER_LABEL.test(value)) return value;
+		const token = after.exec(text.slice(cursor));
+		const value = unquoteTargetToken(token?.[1]);
+		if (token?.[1] && (!value || !OTHER_LABEL.test(value))) return {
+			raw: token[1],
+			...value ? { value } : {},
+			end: cursor + token[0].length
+		};
 		if (cursor >= text.length) return void 0;
 	}
+}
+function labeledToken(text, labels) {
+	return labeledTokenRead(text, labels)?.value;
 }
 /**
 * Where a labelled field's VALUE sits in the text, so a value that another
@@ -3534,7 +3544,7 @@ function actionObjectTokens(text, verbs, nouns, skipLabels) {
 	return [...new Set(found)];
 }
 /** The object token that follows a verb, read exactly as the singular form does. */
-function objectTokenAfter(text, from, nouns, skipLabels) {
+function objectTokenReadAfter(text, from, nouns, skipLabels) {
 	let cursor = from;
 	if (skipLabels) {
 		const secondary = new RegExp(`^\\s*(?:${skipLabels})(?![\\p{L}\\p{N}_])`, "iu").exec(text.slice(cursor));
@@ -3543,10 +3553,19 @@ function objectTokenAfter(text, from, nouns, skipLabels) {
 	const noun = new RegExp(`^\\s*(?:${nouns})(?![\\p{L}\\p{N}_])`, "iu").exec(text.slice(cursor));
 	if (noun) cursor += noun[0].length;
 	else cursor += text.slice(cursor).match(/^\s*[\p{Script=Han}]{0,2}\s*/u)?.[0].length ?? 0;
-	const rest = text.slice(cursor).replace(/^\s*(?:[:=：]|为)?\s*/u, "");
-	const token = unquoteTargetToken(new RegExp(`^(${TARGET_TOKEN})`, "u").exec(rest)?.[1]);
-	if (!token || IDENTITY_STOP.test(token)) return void 0;
-	return token;
+	cursor += text.slice(cursor).match(/^\s*(?:[:=：]|为)?\s*/u)?.[0].length ?? 0;
+	const raw = new RegExp(`^(${TARGET_TOKEN})`, "u").exec(text.slice(cursor))?.[1];
+	if (!raw) return void 0;
+	const value = unquoteTargetToken(raw);
+	if (value && IDENTITY_STOP.test(value)) return void 0;
+	return {
+		raw,
+		...value ? { value } : {},
+		end: cursor + raw.length
+	};
+}
+function objectTokenAfter(text, from, nouns, skipLabels) {
+	return objectTokenReadAfter(text, from, nouns, skipLabels)?.value;
 }
 /** The verbs that name each repository-facing action, for unlabelled objects. */
 const GIT_OBJECT_VERB = {
@@ -3715,10 +3734,29 @@ function latinIdentityValue(value) {
 const GIT_TARGET_STOP_WORDS = /^(?:the|a|an|this|that|these|those|to|from|in|on|into|with|and|or|then|also|but|my|our|your|all|any|some|change|changes|changed|commit|commits|push|pushes|pull|fetch|update|updates|branch|remote|refspec|origin|upstream|main|master|develop|trunk|head|repository|repo|tags?|branch(?:es)?|远程|远端|分支|引用规范|仓库)$/i;
 function looksLikeRepositoryName(value) {
 	if (GIT_TARGET_STOP_WORDS.test(value)) return false;
-	if (/[\\/]/.test(value) || /^[.~]/.test(value)) return true;
-	if (/^[A-Za-z]:/.test(value)) return true;
+	if (/[\\/]/.test(value) || /^[.~]/.test(value) || /^[A-Za-z]:/.test(value)) return validRepositoryPath(value);
 	if (!/^[\p{L}\p{N}@._-]+$/u.test(value)) return false;
 	return !/[\p{Script=Han}]/u.test(value);
+}
+function validRepositoryPath(value) {
+	if (!/^[\p{L}\p{N}@._/\\:+%&=#\x5b\x5d~\- ]+$/u.test(value)) return false;
+	if (value === "/" || value === "\\") return false;
+	if (value.startsWith("\\\\") || value.startsWith("//")) return false;
+	if (/^[A-Za-z]:/.test(value)) {
+		if (!/^[A-Za-z]:\\/.test(value) || value.includes("/") || value.slice(3).includes(":") || value.slice(3).includes("\\\\")) return false;
+	} else if (value.includes("\\") && value.includes("/")) return false;
+	return !value.split(/[\\/]/).some((part) => part === "..");
+}
+function malformedExplicitRepository(text, action) {
+	const verb = new RegExp(`(?:${GIT_OBJECT_VERB[action]})`, "iu").exec(text);
+	const read = labeledTokenRead(text, IDENTITY_LABELS.repository) ?? (verb ? objectTokenReadAfter(text, verb.index + verb[0].length, "repository|repo|仓库", GIT_SECONDARY_LABEL) : void 0);
+	if (!read) return false;
+	if (!read.value || (/[\\/]/.test(read.value) || /^[A-Za-z]:/.test(read.value)) && !validRepositoryPath(read.value)) return true;
+	const rest = text.slice(read.end);
+	if (rest && !/^[\s.,，,、；;。！？!?]/u.test(rest)) return true;
+	if (/^[`"']/.test(read.raw) || !/^[A-Za-z]:\\/.test(read.value)) return false;
+	if (!/^\s+[^\s，,、；;。！？!?]+/u.test(rest)) return false;
+	return !/^\s+(?:(?:to|from)\s+)?(?:remote|branch|refspec|远端|分支|引用规范)\s+[^\s，,、；;。！？!?]+/iu.test(rest);
 }
 /** The target capture for one action, with the source of its identity. */
 /**
@@ -3900,6 +3938,15 @@ function captureRequestedTarget(action, text, subject, surface) {
 		const remote = latinIdentityValue(labeledToken(text, IDENTITY_LABELS.remote));
 		const explicitRefspec = latinIdentityValue(labeledToken(text, IDENTITY_LABELS.refspec));
 		const refspec = explicitRefspec !== void 0 && (/:/.test(explicitRefspec) || /^refs?\//i.test(explicitRefspec)) ? explicitRefspec : action !== "commit" && branch !== void 0 ? branch : void 0;
+		if (malformedExplicitRepository(text, action)) return {
+			source: { kind: "environment_default" },
+			reasonCode: "requested_target_repository_invalid",
+			target: {
+				...action === "commit" && branch ? { branch } : {},
+				...action !== "commit" && remote ? { remote } : {},
+				...action !== "commit" && refspec ? { refspec } : {}
+			}
+		};
 		const named = repositoryNamedExplicitly(text, action, subject);
 		if (namesSeveralRepositories(text)) return {
 			source: { kind: "environment_default" },

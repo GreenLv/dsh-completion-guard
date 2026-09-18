@@ -10,6 +10,7 @@ import { createTestReadinessObserver } from '../src/tools/observe.js'
 import { requestedTargetMatchesResolved } from '../src/domain/protocol-manifest.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 import { currentActionBases, decideTurnBoundary } from '../src/domain/stop-policy.js'
+import { createRuntime } from '../src/runtime.js'
 import { createHash } from 'node:crypto'
 import { evidenceFromPersistedToolResult } from '../src/domain/evidence.js'
 const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
@@ -22,6 +23,26 @@ function replay(root: string) {
   return { events, projection }
 }
 describe('Session to core/v2 host adapter', () => {
+  it('takes a root locator only from the real Session header through runtime', () => {
+    const cwd = '/work'
+    const id = SessionId('real-posix-root-flavor')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Modify /work/A.txt.' }],
+      source: { kind: 'user' } }), { surfaceOp: 'append' })
+    const events = session.snapshotEvents() as never
+    const withoutHeader = deriveProjection(events, { activation: 'always' }, { cwd }, true, HOST).projection
+    withoutHeader.durabilityWatermark = 'confirmed'
+    expect((sessionCoreSnapshot(events, withoutHeader)?.sources as Array<Record<string, unknown>>)
+      ?.find((source) => source.kind === 'root' && String(source.text).startsWith('Modify')))
+      .not.toHaveProperty('locator_base')
+    const runtime = createRuntime({ session } as never, { activation: 'always' } as never, HOST)
+    runtime.setDurability(true); runtime.sync()
+    expect((sessionCoreSnapshot(events, runtime.projection)?.sources as Array<Record<string, unknown>>)
+      ?.find((source) => source.kind === 'root' && String(source.text).startsWith('Modify')))
+      .toMatchObject({ locator_base: cwd, locator_flavor: 'posix' })
+  })
   it('classifies immutable root bases without ambient drive, case or separator normalization', () => {
     expect(rootLocatorFlavor('/work')).toBe('posix')
     expect(rootLocatorFlavor('C:\\Work')).toBe('windows')
@@ -38,14 +59,22 @@ describe('Session to core/v2 host adapter', () => {
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Modify ${cwd}\\A.txt.` }],
       source: { kind: 'user' } }), { surfaceOp: 'append' })
     const events = session.snapshotEvents() as never
-    const projection = deriveProjection(events, { activation: 'always' }, { cwd }, true, HOST).projection
-    projection.durabilityWatermark = 'confirmed'
-    const root = (sessionCoreSnapshot(events, projection)?.sources as Array<Record<string, unknown>>)
+    const withoutHeader = deriveProjection(events, { activation: 'always' }, { cwd }, true, HOST).projection
+    withoutHeader.durabilityWatermark = 'confirmed'
+    expect((sessionCoreSnapshot(events, withoutHeader)?.sources as Array<Record<string, unknown>>)
+      ?.find((source) => source.kind === 'root' && String(source.text).startsWith('Modify')))
+      .not.toHaveProperty('locator_base')
+    // Runtime obtains the immutable header through the real Session API. The
+    // root text and ambient cwd alone cannot supply a locator identity.
+    const runtime = createRuntime({ session } as never, { activation: 'always' } as never, HOST)
+    runtime.setDurability(true)
+    runtime.sync()
+    const root = (sessionCoreSnapshot(events, runtime.projection)?.sources as Array<Record<string, unknown>>)
       ?.find((source) => source.kind === 'root' && String(source.text).startsWith('Modify'))
     expect(root).toMatchObject({ locator_base: cwd, locator_flavor: 'windows' })
   })
   it('keeps a root-named Windows drive repository as one absolute identity', () => {
-    const cwd = 'D:\\a\\_temp\\dsh-native-git-AbCd12\\work'
+    const cwd = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\dsh-native-git-AbCd12\\work'
     const id = SessionId('windows-absolute-repository')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })

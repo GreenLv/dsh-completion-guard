@@ -869,7 +869,7 @@ interface NeedsReviewFact {
   /** When the check was applied: this is an upgrade fact, not a birth fact. */
   recordedAtRevision: number;
 }
-type TargetCaptureReasonCode = "requested_target_package_id_missing" | "requested_target_artifact_id_missing" | "requested_target_repository_missing" | "requested_target_repository_ambiguous" | "requested_target_field_ambiguous" | "requested_target_service_id_missing" | "requested_target_registry_missing_or_invalid";
+type TargetCaptureReasonCode = "requested_target_package_id_missing" | "requested_target_artifact_id_missing" | "requested_target_repository_missing" | "requested_target_repository_invalid" | "requested_target_repository_ambiguous" | "requested_target_field_ambiguous" | "requested_target_service_id_missing" | "requested_target_registry_missing_or_invalid";
 interface GoalRef {
   id: string;
   revision: number;
