@@ -352,6 +352,23 @@
       ],
       "contracts": [],
       "peer_gates": {}
+    },
+    {
+      "id": "legacy_upgrade_recording",
+      "paths": [
+        "scripts/record_legacy_upgrade_fixture.mjs",
+        "tests/fixtures/upgrade/**",
+        "tests/domain/v063-legacy-upgrade.test.ts"
+      ],
+      "gates": [
+        "contract_tests",
+        "focused_tests"
+      ],
+      "invalidates": [
+        "candidate_matrix"
+      ],
+      "contracts": [],
+      "peer_gates": {}
     }
   ]
 }
