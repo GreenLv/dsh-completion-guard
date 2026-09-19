@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Changes
 
-- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `20b938d5728d9d6a27386268a79ceeb2be5c39ce`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
+- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `22fbf90c857fa6c31df0622e22fd8fcd18e60ff6`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
 - Retire ordinary Guard action/evidence execution and use read-only file, Git and package-script readiness observers. An assessment may select stable existing inputs without requiring another edit; a root time or approval condition remains pending until separately satisfied. Native observations use a separate versioned digest domain; historical v3 encoders and certificates are preserved.
 - Preserve exact relative file and directory constraints through the root-time Session locator and canonical filesystem readback. Current v6 certificates bind that locator in version 4; opaque test or measurement targets keep their distinct identity.
 - Keep a sourced successful mutation of a forbidden file as a completion violation, even when the allowed edit also succeeds. A final-answer claim alone is not treated as a host mutation.
