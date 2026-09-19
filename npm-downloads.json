@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
   "renderer_version": 3,
-  "generated_at": "2026-09-18T09:09:40.378Z",
-  "data_through": "2026-09-11",
+  "generated_at": "2026-09-19T08:57:08.971Z",
+  "data_through": "2026-09-16",
   "period": {
     "start": "2026-08-26",
-    "end": "2026-09-11"
+    "end": "2026-09-16"
   },
   "title": "dsh-completion-guard npm download history",
   "project": "dsh-completion-guard",
@@ -19,7 +19,7 @@
       "label": "dsh-context-guard (previous name)",
       "color": "#f59e0b",
       "start": "2026-08-26",
-      "total": 939,
+      "total": 954,
       "downloads": [
         {
           "day": "2026-08-26",
@@ -105,6 +105,31 @@
           "day": "2026-09-11",
           "downloads": 6,
           "cumulative": 939
+        },
+        {
+          "day": "2026-09-12",
+          "downloads": 3,
+          "cumulative": 942
+        },
+        {
+          "day": "2026-09-13",
+          "downloads": 9,
+          "cumulative": 951
+        },
+        {
+          "day": "2026-09-14",
+          "downloads": 0,
+          "cumulative": 951
+        },
+        {
+          "day": "2026-09-15",
+          "downloads": 0,
+          "cumulative": 951
+        },
+        {
+          "day": "2026-09-16",
+          "downloads": 3,
+          "cumulative": 954
         }
       ]
     },
@@ -113,7 +138,7 @@
       "label": "dsh-completion-guard",
       "color": "#2563eb",
       "start": "2026-08-29",
-      "total": 1117,
+      "total": 1721,
       "downloads": [
         {
           "day": "2026-08-29",
@@ -184,6 +209,31 @@
           "day": "2026-09-11",
           "downloads": 345,
           "cumulative": 1117
+        },
+        {
+          "day": "2026-09-12",
+          "downloads": 49,
+          "cumulative": 1166
+        },
+        {
+          "day": "2026-09-13",
+          "downloads": 42,
+          "cumulative": 1208
+        },
+        {
+          "day": "2026-09-14",
+          "downloads": 333,
+          "cumulative": 1541
+        },
+        {
+          "day": "2026-09-15",
+          "downloads": 0,
+          "cumulative": 1541
+        },
+        {
+          "day": "2026-09-16",
+          "downloads": 180,
+          "cumulative": 1721
         }
       ]
     }
@@ -273,6 +323,31 @@
       "day": "2026-09-11",
       "downloads": 351,
       "cumulative": 2056
+    },
+    {
+      "day": "2026-09-12",
+      "downloads": 52,
+      "cumulative": 2108
+    },
+    {
+      "day": "2026-09-13",
+      "downloads": 51,
+      "cumulative": 2159
+    },
+    {
+      "day": "2026-09-14",
+      "downloads": 333,
+      "cumulative": 2492
+    },
+    {
+      "day": "2026-09-15",
+      "downloads": 0,
+      "cumulative": 2492
+    },
+    {
+      "day": "2026-09-16",
+      "downloads": 183,
+      "cumulative": 2675
     }
   ],
   "sources": [
@@ -315,7 +390,7 @@
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-completion-guard"
       }
     ],
-    "stable_through": "2026-09-11",
+    "stable_through": "2026-09-16",
     "minimum_age_days": 2,
     "minimum_observation_span_hours": 12
   },
