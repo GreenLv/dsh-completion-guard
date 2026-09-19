@@ -1,9 +1,32 @@
 import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { it, expect } from 'vitest'
 import { deriveProjection } from '../../src/domain/derive.js'
 import { createCheckpointTool } from '../../src/tools/checkpoint.js'
 const probeModule = new URL('../../scripts/native_host_probe.mjs', import.meta.url).href
+
+it('executes the native npm fixture with the intended exit status on the platform shell', async () => {
+ const { nativeTestFixturePackage } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const cwd = mkdtempSync(join(tmpdir(), 'dsh-native-script-'))
+ try {
+  for (const [name, exitCode] of [['native-test-fixture', 0], ['native-goal-fixture', 0], ['native-goal-fixture', 1]] as const) {
+   const fixture = nativeTestFixturePackage(exitCode, name)
+   expect(JSON.parse(fixture).name).toBe(name)
+   expect(JSON.parse(fixture).scripts.test).toBe(`node -e "process.exit(${exitCode})"`)
+   writeFileSync(join(cwd, 'package.json'), fixture)
+   const result = spawnSync('npm test', { cwd, shell: true, encoding: 'utf8', timeout: 30_000 })
+   expect(result.error).toBeUndefined()
+   expect(result.signal).toBeNull()
+   expect(result.status).toBe(exitCode)
+  }
+ } finally {
+  rmSync(cwd, { recursive: true, force: true })
+ }
+})
 
 it('requires a completed successful foreground command before requesting a test certificate', async () => {
  const { assertTestCommandSucceeded, shellTerminalFacts } = await import(probeModule)

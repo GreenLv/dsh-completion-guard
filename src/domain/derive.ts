@@ -12,7 +12,7 @@ import { hasCurrentCertificate } from './goal-gate.js'
 import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from './evidence.js'
 import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, type SemanticAction } from './protocol-manifest.js'
 import {
-  interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans, splitTextFragments,
+  interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans, qualificationOfClause, splitTextFragments,
 } from './semantics.js'
 import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
 import { supersedeItem } from './supersession.js'
@@ -568,6 +568,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
   const ordinary = segmentClauses(text, { coordinationSplit })
   if (!v6) return ordinary
   const refined: ClauseSegment[] = []
+  const frontedPlace = /^\s*(?:in|within)\s+(?:(?:(?:this|the|current|isolated)\s+){0,3}(?:workspace|working\s+directory|directory|folder|project|repository|repo)|(?:\/[^,，。.!?？\s]+))\s*[,，]\s*/iu
   const asProhibition = (clause: ClauseSegment | undefined): ClauseSegment | undefined => {
     if (!clause || !/^(?:\s*)(?:(?:本轮|本次任务|在本轮|在本次任务|in\s+this\s+task)\s*)?(?:禁止|严禁|不得|不要|不准|do\s+not\b|must\s+not\b)/iu.test(maskQuotedSpans(clause.text))) return undefined
     return { ...clause, kind: 'prohibition', interpretation: { ...clause.interpretation,
@@ -579,7 +580,8 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
     const visible = maskQuotedSpans(clause.text)
     const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu
     const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu
-    if (!testHead.test(visible) && !(inheritedCommand && inheritedTest.test(visible))) return undefined
+    const packageTest = /^\s*(?:(?:and|then|please)\s+)?(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?=\s|[.,，。!?]|$)/iu.test(visible)
+    if (!testHead.test(visible) && !packageTest && !(inheritedCommand && inheritedTest.test(visible))) return undefined
     if (!inheritedCommand && clause.interpretation.authorityDisposition !== 'executable_now') return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive',
       executee: 'agent', authorityDisposition: 'executable_now', immediatelyExecutable: true,
@@ -588,33 +590,128 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
   }
   const asArtifactEdit = (clause: ClauseSegment): ClauseSegment | undefined => {
     if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
-    if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(maskQuotedSpans(clause.body))) return undefined
+    const visible = maskQuotedSpans(clause.body)
+    // This v6-only reading keeps the older qualification decoder unchanged.
+    // The preface must be an actual place phrase followed by the matrix verb;
+    // a future date or a reported third-party actor cannot become a directive.
+    const place = frontedPlace.exec(visible)
+    const matrix = place ? visible.slice(place[0].length) : visible
+    if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(matrix)) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive',
       executee: 'agent', authorityDisposition: 'executable_now', immediatelyExecutable: true,
       qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `${clause.paths.length ? 'v6-artifact-edit' : 'v6-work-unit-edit'}:${sha256(clause.text)}` } }
   }
+  const asFrontedLocative = (clause: ClauseSegment): ClauseSegment | undefined => {
+    if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
+    const visible = maskQuotedSpans(clause.body)
+    const place = frontedPlace.exec(visible)
+    if (!place || qualificationOfClause(visible.slice(place[0].length)).status !== 'granted') return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive', executee: 'agent',
+      authorityDisposition: 'executable_now', immediatelyExecutable: true,
+      qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `v6-locative:${sha256(clause.text)}` } }
+  }
   const asFileReadback = (clause: ClauseSegment): ClauseSegment | undefined => {
     if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
-    if (!/^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(maskQuotedSpans(clause.body))) return undefined
+    const visible = maskQuotedSpans(clause.body)
+    const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(visible)
+    const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible)
+      && (clause.paths.length === 1 || /\bread\s+it\s+back\b/iu.test(visible))
+    if (!fileCheck && !fileRead) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive', executee: 'agent',
       authorityDisposition: 'executable_now', immediatelyExecutable: true,
       qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `v6-file-readback:${sha256(clause.text)}` } }
   }
   const asReport = (clause: ClauseSegment): ClauseSegment | undefined => {
     if (['prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
-    if (!/^(?:\s*)(?:报告|汇报|report\b)\s*(?:数值|结果|数据|the\s+result\b|a\s+number\b)/iu.test(maskQuotedSpans(clause.body))) return undefined
+    const visible = maskQuotedSpans(clause.body)
+    // A report with a direct object and no external recipient is a requested
+    // final answer. It is not another process effect, and its delivery cannot
+    // be inferred from a tool result or the model's intent to answer.
+    if (!/^\s*(?:(?:and|then)\s+)?(?:报告|汇报|report\b)\s+\S/iu.test(visible)
+      || /\b(?:to|via|by)\s+\S+/iu.test(visible)) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'informational', executee: 'unresolved',
       authorityDisposition: 'informational', immediatelyExecutable: false, fingerprint: `v6-report:${sha256(clause.text)}` } }
   }
-  const asContext = (clause: ClauseSegment): ClauseSegment | undefined => {
+  const asContext = (clause: ClauseSegment, priorActions: readonly ClauseSegment[]): ClauseSegment | undefined => {
     const visible = maskQuotedSpans(clause.body).trim()
     const reported = /^(?:[^，,。.!?？]{1,32}?)(?:日志|报告|记录|注释|消息|log\b|report\b|record\b|comment\b|message\b)\s*(?:还|也)?(?:提到|显示|指出|记载|mentions?|shows?|reports?)/iu.test(visible)
     const connector = /^(?:(?:但|但是|不过|however\b)\s*)?(?:本轮|本次任务|in\s+this\s+task)\s*$/iu.test(visible)
-    if (!reported && !connector) return undefined
+    const priorAction = priorActions.length > 0
+    const completionAdjunct = priorAction
+      && /^(?:complete|finish)\s+(?:this|the)\s+task(?:\s+using\s+(?:(?:ordinary|available|existing|the)\s+)*host\s+tools?)?[.!?]?$/iu.test(visible)
+    // An instrumental adjunct refers back to an already captured action. A
+    // stand-alone "use X for Y" is itself work, never an automatic pass. Its
+    // operation list must be traceable to the preceding actions; an unfamiliar
+    // nominal or an additional business effect stays an unresolved obligation.
+    const method = /^use\s+(?:(?:ordinary|available|existing|the)\s+)*host\s+tools?\s+for\s+(.+?)[.!?]?$/iu.exec(visible)
+    const priorWords = priorActions.flatMap(part => maskQuotedSpans(part.body).toLowerCase().match(/[a-z]+/gu) ?? [])
+    const stem = (word: string) => word.toLowerCase().replace(/(?:ing|ed|es|s)$/u, '').replace(/([^aeiou])\1$/u, '$1')
+    const methodParts = method?.[1]?.replace(/[.!?]+$/u, '').split(/\s*,\s*|\s+and\s+/iu)
+      .map(part => part.trim().replace(/^and\s+/iu, '')).filter(Boolean) ?? []
+    const methodAdjunct = priorAction && methodParts.length > 0 && methodParts.every(part => {
+      if (!/^[a-z]+(?:\s+[a-z]+)?$/iu.test(part)) return false
+      if (part.toLowerCase() === 'readback') return priorActions.some(action => action.interpretation.fingerprint.startsWith('v6-file-readback:'))
+      const words = part.toLowerCase().split(/\s+/u)
+      return words.every(word => priorWords.some(prior => stem(prior) === stem(word)))
+    })
+    if (!reported && !connector && !completionAdjunct && !methodAdjunct) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'unresolved',
       authorityDisposition: 'unresolved', immediatelyExecutable: false, fingerprint: `v6-context:${sha256(clause.text)}` } }
   }
-  for (const segment of ordinary) {
+  const packageScriptName = (visible: string): string | undefined => {
+    const head = visible.trim().replace(/^(?:(?:and|then|please)\s+)*/iu, '')
+    const command = /^(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+run\s+([A-Za-z][\w:.-]*)(?=\s|[.,，。!?]|$)/iu.exec(head)
+    const named = /^(?:run|execute)\s+(?:(?:this\s+project'?s|the\s+project'?s)\s+)?package\s+script\s+named\s+([A-Za-z][\w:.-]*)(?=\s|[.,，。!?]|$)/iu.exec(head)
+    const described = /^(?:run|execute)\s+(?:the\s+)?([A-Za-z][\w:.-]*)\s+script\s+from\s+[^.!?]*\bpackage\.json\b/iu.exec(head)
+    return command?.[1] ?? named?.[1] ?? described?.[1]
+  }
+  const asPackageScript = (clause: ClauseSegment): ClauseSegment | undefined => {
+    if (clause.kind !== 'requirement' || ['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
+    const script = packageScriptName(maskQuotedSpans(clause.body))
+    if (!script) return undefined
+    return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive', executee: 'agent',
+      authorityDisposition: 'executable_now', immediatelyExecutable: true,
+      qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `v6-package-script:${encodeURIComponent(script)}:${sha256(clause.text)}` } }
+  }
+  // A comma or conjunction divides business outcomes only when the right
+  // side opens its own finite test, readback, package-script, or answer speech
+  // act. Splitting a noun list or quoted example would invent authority.
+  const splitIndependent = (segment: ClauseSegment): ClauseSegment[] => {
+    if (segment.kind !== 'requirement' || ['informational', 'prohibition', 'conditional_wait'].includes(segment.interpretation.authorityDisposition)) return [segment]
+    const visible = maskQuotedSpans(segment.text)
+    for (const delimiter of visible.matchAll(/[,，]\s*|\s+\band\b\s+/giu)) {
+      const at = delimiter.index ?? -1
+      if (at === 0 || (at >= 0 && frontedPlace.exec(visible)?.[0].length === at + delimiter[0].length)) continue
+      const leftText = segment.text.slice(0, at + delimiter[0].length)
+      const rightText = segment.text.slice(at + delimiter[0].length)
+      if (!leftText || !rightText) continue
+      const left = segmentClauses(leftText)[0], right = segmentClauses(rightText)[0]
+      if (!left || !right || ![left].every((part) => part.kind === 'requirement')) continue
+      if (!asTest(right, true) && !asFileReadback(right) && !asReport(right) && !asPackageScript(right)) continue
+      return [...splitIndependent({ ...left, text: leftText }), ...splitIndependent({ ...right, text: rightText })]
+    }
+    return [segment]
+  }
+  const joined: ClauseSegment[] = []
+  for (let index = 0; index < ordinary.length; index += 1) {
+    const segment = ordinary[index]!
+    const next = ordinary[index + 1]
+    // The generic clause splitter treats the last noun of an instrumental
+    // list as a new clause. It has no finite predicate of its own and remains
+    // attached to the preceding method phrase.
+    if (next && /,\s*$/u.test(segment.text)
+      && /^\s*and\s+[^,，。.!?？]+[.!?]?\s*$/iu.test(next.text)
+      && next.interpretation.authorityDisposition !== 'executable_now'
+      && /^\s*use\s+.*\bhost\s+tools?\s+for\s+/iu.test(segment.text)) {
+      const combined = `${segment.text} ${next.text}`
+      joined.push({ ...segment, text: combined, body: combined,
+        interpretation: { ...segment.interpretation, text: combined, body: combined } })
+      index += 1
+      continue
+    }
+    joined.push(segment)
+  }
+  for (const segment of joined.flatMap(splitIndependent)) {
     // Coordination creates separate required outcomes when the second member
     // has its own test, readback, or report object. Preserve the original
     // fragments for exact coverage; the left verb does not subsume the right.
@@ -633,15 +730,19 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
     }
     const standaloneBan = asProhibition(segment)
     if (standaloneBan) { refined.push(standaloneBan); continue }
+    const standaloneLocative = asFrontedLocative(segment)
+    if (standaloneLocative) { refined.push(standaloneLocative); continue }
     const standaloneTest = asTest(segment)
     if (standaloneTest) { refined.push(standaloneTest); continue }
     const standaloneEdit = asArtifactEdit(segment)
     if (standaloneEdit) { refined.push(standaloneEdit); continue }
     const standaloneReadback = asFileReadback(segment)
     if (standaloneReadback) { refined.push(standaloneReadback); continue }
+    const standalonePackageScript = asPackageScript(segment)
+    if (standalonePackageScript) { refined.push(standalonePackageScript); continue }
     const standaloneReport = asReport(segment)
     if (standaloneReport) { refined.push(standaloneReport); continue }
-    const standaloneContext = asContext(segment)
+    const standaloneContext = asContext(segment, refined.filter(part => part.interpretation.authorityDisposition === 'executable_now'))
     if (standaloneContext) { refined.push(standaloneContext); continue }
     // A finite test request coordinated with a repair remains its own action.
     // The conjunction is retained by the first span, so the root is covered
@@ -750,6 +851,33 @@ function insertItems(
       }
     }
     if (span) coveredSpans += 1
+    if (segment.interpretation.fingerprint.startsWith('v6-package-script:')) {
+      const quotedScope = /\b(?:in|within)\s+["'`]/iu.test(segment.body)
+      if (quotedScope) {
+        const located = /\b(?:in|within)\s+(["'`])([^"'`]+)\1(?:\s*[.!?])?\s*$/iu.exec(segment.body)
+        const target = located?.[2]
+        if (target && rootLocatorFlavor(target)) {
+          const item = insert(projection, segment, sourceMessageId, target, 'scope', unitId,
+            provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
+          item.targetSource = { kind: 'explicit_path' }
+        } else {
+          const item = insert(projection, segment, sourceMessageId, 'scope', 'scope', unitId,
+            provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
+          delete item.requestedTarget?.scope
+          item.targetCaptureStatus = 'clarification_required'
+          delete item.targetSource
+        }
+        continue
+      }
+      const manifests = segment.paths.filter(path => /(?:^|[\\/])package\.json$/iu.test(path))
+      if (manifests.length === 1) {
+        const resolved = resolveArtifact(manifests[0]!, scope)
+        const project = resolved.replace(/[\\/]package\.json$/iu, '')
+        insert(projection, segment, sourceMessageId, project || resolved, 'scope', unitId,
+          provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
+        continue
+      }
+    }
     if (segment.paths.length === 0) {
       insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
       continue
@@ -1167,6 +1295,15 @@ function insert(
     item.requestedTarget = { scope: subject }
     item.targetCaptureStatus = 'resolved'
     item.taskKind = 'action'
+  }
+  if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-package-script:')) {
+    const encoded = /^v6-package-script:([^:]+):/.exec(segment.interpretation.fingerprint)?.[1]
+    if (encoded) {
+      item.semanticAction = 'verify'
+      item.requestedTarget = { scope: subject, script_name: decodeURIComponent(encoded) }
+      item.targetCaptureStatus = 'resolved'
+      item.taskKind = 'action'
+    }
   }
   if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith('v6-context:')) {
     item.taskKind = 'context'

@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Keep a sourced successful mutation of a forbidden file as a completion violation, even when the allowed edit also succeeds. A final-answer claim alone is not treated as a host mutation.
 - Add a synthetic Session replay CLI for source-to-core and Stop/Goal diagnosis. It is not a real-model or native-platform acceptance run.
 - Treat a structured host error as failure even when renderer text appears successful; malformed or ambiguous host returns stay unknown. The v0.7 native profile checks real host registration and ordinary evidence, with a local mock registry for the preserved adopted-release gate.
+- Keep a fronted workspace location and coordinated edit, test, readback, and final-answer requests as separate current obligations. A method phrase cannot silently close independent work. Creation still requires a trustworthy absent prestate, and the audited test/benchmark observer does not certify arbitrary package-script metrics.
 
 ### Validation
 

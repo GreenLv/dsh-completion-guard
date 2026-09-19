@@ -245,6 +245,11 @@ export function createTestReadinessObserver(host: {
         || typeof item.requestedTarget?.scope !== 'string') return missing('readiness_item_unsupported')
       const scope = item.requestedTarget.scope
       const assessment = item.semanticAction === 'verify'
+      // A root-selected arbitrary package script has a concrete current
+      // action, but this observer only knows how to prepare the audited test
+      // and benchmark contracts. Selecting either in its place would turn an
+      // unrelated successful script into purported assessment evidence.
+      if (typeof item.requestedTarget.script_name === 'string') return missing('readiness_script_capability_unavailable')
       const scriptName = assessment && /(?:吞吐|性能|时延|延迟|throughput|performance|latency)/iu.test(item.normalizedText) ? 'benchmark' : 'test'
       let selectedPath = '', effectCallId = '', inputSha256 = ''
       if (assessment) {

@@ -13863,6 +13863,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 	const ordinary = segmentClauses(text, { coordinationSplit });
 	if (!v6) return ordinary;
 	const refined = [];
+	const frontedPlace = /^\s*(?:in|within)\s+(?:(?:(?:this|the|current|isolated)\s+){0,3}(?:workspace|working\s+directory|directory|folder|project|repository|repo)|(?:\/[^,，。.!?？\s]+))\s*[,，]\s*/iu;
 	const asProhibition = (clause) => {
 		if (!clause || !/^(?:\s*)(?:(?:本轮|本次任务|在本轮|在本次任务|in\s+this\s+task)\s*)?(?:禁止|严禁|不得|不要|不准|do\s+not\b|must\s+not\b)/iu.test(maskQuotedSpans(clause.text))) return void 0;
 		return {
@@ -13884,7 +13885,10 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			"conditional_wait"
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
 		const visible = maskQuotedSpans(clause.text);
-		if (!/^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu.test(visible) && !(inheritedCommand && /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu.test(visible))) return void 0;
+		const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu;
+		const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu;
+		const packageTest = /^\s*(?:(?:and|then|please)\s+)?(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?=\s|[.,，。!?]|$)/iu.test(visible);
+		if (!testHead.test(visible) && !packageTest && !(inheritedCommand && inheritedTest.test(visible))) return void 0;
 		if (!inheritedCommand && clause.interpretation.authorityDisposition !== "executable_now") return void 0;
 		return {
 			...clause,
@@ -13908,7 +13912,10 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			"prohibition",
 			"conditional_wait"
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
-		if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(maskQuotedSpans(clause.body))) return void 0;
+		const visible = maskQuotedSpans(clause.body);
+		const place = frontedPlace.exec(visible);
+		const matrix = place ? visible.slice(place[0].length) : visible;
+		if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(matrix)) return void 0;
 		return {
 			...clause,
 			interpretation: {
@@ -13925,13 +13932,41 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			}
 		};
 	};
+	const asFrontedLocative = (clause) => {
+		if ([
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(clause.interpretation.authorityDisposition)) return void 0;
+		const visible = maskQuotedSpans(clause.body);
+		const place = frontedPlace.exec(visible);
+		if (!place || qualificationOfClause(visible.slice(place[0].length)).status !== "granted") return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "directive",
+				executee: "agent",
+				authorityDisposition: "executable_now",
+				immediatelyExecutable: true,
+				qualification: {
+					status: "granted",
+					reason: "plain_instruction"
+				},
+				fingerprint: `v6-locative:${sha256(clause.text)}`
+			}
+		};
+	};
 	const asFileReadback = (clause) => {
 		if ([
 			"informational",
 			"prohibition",
 			"conditional_wait"
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
-		if (!/^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(maskQuotedSpans(clause.body))) return void 0;
+		const visible = maskQuotedSpans(clause.body);
+		const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(visible);
+		const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible) && (clause.paths.length === 1 || /\bread\s+it\s+back\b/iu.test(visible));
+		if (!fileCheck && !fileRead) return void 0;
 		return {
 			...clause,
 			interpretation: {
@@ -13950,7 +13985,8 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 	};
 	const asReport = (clause) => {
 		if (["prohibition", "conditional_wait"].includes(clause.interpretation.authorityDisposition)) return void 0;
-		if (!/^(?:\s*)(?:报告|汇报|report\b)\s*(?:数值|结果|数据|the\s+result\b|a\s+number\b)/iu.test(maskQuotedSpans(clause.body))) return void 0;
+		const visible = maskQuotedSpans(clause.body);
+		if (!/^\s*(?:(?:and|then)\s+)?(?:报告|汇报|report\b)\s+\S/iu.test(visible) || /\b(?:to|via|by)\s+\S+/iu.test(visible)) return void 0;
 		return {
 			...clause,
 			interpretation: {
@@ -13963,11 +13999,22 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			}
 		};
 	};
-	const asContext = (clause) => {
+	const asContext = (clause, priorActions) => {
 		const visible = maskQuotedSpans(clause.body).trim();
 		const reported = /^(?:[^，,。.!?？]{1,32}?)(?:日志|报告|记录|注释|消息|log\b|report\b|record\b|comment\b|message\b)\s*(?:还|也)?(?:提到|显示|指出|记载|mentions?|shows?|reports?)/iu.test(visible);
 		const connector = /^(?:(?:但|但是|不过|however\b)\s*)?(?:本轮|本次任务|in\s+this\s+task)\s*$/iu.test(visible);
-		if (!reported && !connector) return void 0;
+		const priorAction = priorActions.length > 0;
+		const completionAdjunct = priorAction && /^(?:complete|finish)\s+(?:this|the)\s+task(?:\s+using\s+(?:(?:ordinary|available|existing|the)\s+)*host\s+tools?)?[.!?]?$/iu.test(visible);
+		const method = /^use\s+(?:(?:ordinary|available|existing|the)\s+)*host\s+tools?\s+for\s+(.+?)[.!?]?$/iu.exec(visible);
+		const priorWords = priorActions.flatMap((part) => maskQuotedSpans(part.body).toLowerCase().match(/[a-z]+/gu) ?? []);
+		const stem = (word) => word.toLowerCase().replace(/(?:ing|ed|es|s)$/u, "").replace(/([^aeiou])\1$/u, "$1");
+		const methodParts = method?.[1]?.replace(/[.!?]+$/u, "").split(/\s*,\s*|\s+and\s+/iu).map((part) => part.trim().replace(/^and\s+/iu, "")).filter(Boolean) ?? [];
+		const methodAdjunct = priorAction && methodParts.length > 0 && methodParts.every((part) => {
+			if (!/^[a-z]+(?:\s+[a-z]+)?$/iu.test(part)) return false;
+			if (part.toLowerCase() === "readback") return priorActions.some((action) => action.interpretation.fingerprint.startsWith("v6-file-readback:"));
+			return part.toLowerCase().split(/\s+/u).every((word) => priorWords.some((prior) => stem(prior) === stem(word)));
+		});
+		if (!reported && !connector && !completionAdjunct && !methodAdjunct) return void 0;
 		return {
 			...clause,
 			interpretation: {
@@ -13979,7 +14026,85 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			}
 		};
 	};
-	for (const segment of ordinary) {
+	const packageScriptName = (visible) => {
+		const head = visible.trim().replace(/^(?:(?:and|then|please)\s+)*/iu, "");
+		const command = /^(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+run\s+([A-Za-z][\w:.-]*)(?=\s|[.,，。!?]|$)/iu.exec(head);
+		const named = /^(?:run|execute)\s+(?:(?:this\s+project'?s|the\s+project'?s)\s+)?package\s+script\s+named\s+([A-Za-z][\w:.-]*)(?=\s|[.,，。!?]|$)/iu.exec(head);
+		const described = /^(?:run|execute)\s+(?:the\s+)?([A-Za-z][\w:.-]*)\s+script\s+from\s+[^.!?]*\bpackage\.json\b/iu.exec(head);
+		return command?.[1] ?? named?.[1] ?? described?.[1];
+	};
+	const asPackageScript = (clause) => {
+		if (clause.kind !== "requirement" || [
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(clause.interpretation.authorityDisposition)) return void 0;
+		const script = packageScriptName(maskQuotedSpans(clause.body));
+		if (!script) return void 0;
+		return {
+			...clause,
+			interpretation: {
+				...clause.interpretation,
+				directive: "directive",
+				executee: "agent",
+				authorityDisposition: "executable_now",
+				immediatelyExecutable: true,
+				qualification: {
+					status: "granted",
+					reason: "plain_instruction"
+				},
+				fingerprint: `v6-package-script:${encodeURIComponent(script)}:${sha256(clause.text)}`
+			}
+		};
+	};
+	const splitIndependent = (segment) => {
+		if (segment.kind !== "requirement" || [
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(segment.interpretation.authorityDisposition)) return [segment];
+		const visible = maskQuotedSpans(segment.text);
+		for (const delimiter$1 of visible.matchAll(/[,，]\s*|\s+\band\b\s+/giu)) {
+			const at = delimiter$1.index ?? -1;
+			if (at === 0 || at >= 0 && frontedPlace.exec(visible)?.[0].length === at + delimiter$1[0].length) continue;
+			const leftText = segment.text.slice(0, at + delimiter$1[0].length);
+			const rightText = segment.text.slice(at + delimiter$1[0].length);
+			if (!leftText || !rightText) continue;
+			const left = segmentClauses(leftText)[0], right = segmentClauses(rightText)[0];
+			if (!left || !right || ![left].every((part) => part.kind === "requirement")) continue;
+			if (!asTest(right, true) && !asFileReadback(right) && !asReport(right) && !asPackageScript(right)) continue;
+			return [...splitIndependent({
+				...left,
+				text: leftText
+			}), ...splitIndependent({
+				...right,
+				text: rightText
+			})];
+		}
+		return [segment];
+	};
+	const joined = [];
+	for (let index$1 = 0; index$1 < ordinary.length; index$1 += 1) {
+		const segment = ordinary[index$1];
+		const next = ordinary[index$1 + 1];
+		if (next && /,\s*$/u.test(segment.text) && /^\s*and\s+[^,，。.!?？]+[.!?]?\s*$/iu.test(next.text) && next.interpretation.authorityDisposition !== "executable_now" && /^\s*use\s+.*\bhost\s+tools?\s+for\s+/iu.test(segment.text)) {
+			const combined = `${segment.text} ${next.text}`;
+			joined.push({
+				...segment,
+				text: combined,
+				body: combined,
+				interpretation: {
+					...segment.interpretation,
+					text: combined,
+					body: combined
+				}
+			});
+			index$1 += 1;
+			continue;
+		}
+		joined.push(segment);
+	}
+	for (const segment of joined.flatMap(splitIndependent)) {
 		const coordinated = /(?:并|和|\band\b)\s*(?=(?:运行|执行|跑完|跑|完成|检查|核对|报告|汇报|run|perform|check|verify|report|(?:现有|对应的?)?回归测试|(?:its\s+)?focused\s+test))/iu.exec(maskQuotedSpans(segment.text));
 		if (coordinated && segment.kind === "requirement") {
 			const leftText = segment.text.slice(0, coordinated.index);
@@ -14001,6 +14126,11 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			refined.push(standaloneBan);
 			continue;
 		}
+		const standaloneLocative = asFrontedLocative(segment);
+		if (standaloneLocative) {
+			refined.push(standaloneLocative);
+			continue;
+		}
 		const standaloneTest = asTest(segment);
 		if (standaloneTest) {
 			refined.push(standaloneTest);
@@ -14016,12 +14146,17 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			refined.push(standaloneReadback);
 			continue;
 		}
+		const standalonePackageScript = asPackageScript(segment);
+		if (standalonePackageScript) {
+			refined.push(standalonePackageScript);
+			continue;
+		}
 		const standaloneReport = asReport(segment);
 		if (standaloneReport) {
 			refined.push(standaloneReport);
 			continue;
 		}
-		const standaloneContext = asContext(segment);
+		const standaloneContext = asContext(segment, refined.filter((part) => part.interpretation.authorityDisposition === "executable_now"));
 		if (standaloneContext) {
 			refined.push(standaloneContext);
 			continue;
@@ -14150,6 +14285,36 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			}
 		}
 		if (span) coveredSpans += 1;
+		if (segment.interpretation.fingerprint.startsWith("v6-package-script:")) {
+			if (/\b(?:in|within)\s+["'`]/iu.test(segment.body)) {
+				const target = /\b(?:in|within)\s+(["'`])([^"'`]+)\1(?:\s*[.!?])?\s*$/iu.exec(segment.body)?.[2];
+				if (target && rootLocatorFlavor(target)) {
+					const item = insert(projection, segment, sourceMessageId, target, "scope", unitId, provenance ? {
+						rawTextSha256: provenance.rawTextSha256,
+						span
+					} : void 0);
+					item.targetSource = { kind: "explicit_path" };
+				} else {
+					const item = insert(projection, segment, sourceMessageId, "scope", "scope", unitId, provenance ? {
+						rawTextSha256: provenance.rawTextSha256,
+						span
+					} : void 0);
+					delete item.requestedTarget?.scope;
+					item.targetCaptureStatus = "clarification_required";
+					delete item.targetSource;
+				}
+				continue;
+			}
+			const manifests = segment.paths.filter((path$1) => /(?:^|[\\/])package\.json$/iu.test(path$1));
+			if (manifests.length === 1) {
+				const resolved = resolveArtifact(manifests[0], scope);
+				insert(projection, segment, sourceMessageId, resolved.replace(/[\\/]package\.json$/iu, "") || resolved, "scope", unitId, provenance ? {
+					rawTextSha256: provenance.rawTextSha256,
+					span
+				} : void 0);
+				continue;
+			}
+		}
 		if (segment.paths.length === 0) {
 			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance ? {
 				rawTextSha256: provenance.rawTextSha256,
@@ -14466,6 +14631,18 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 		item.requestedTarget = { scope: subject };
 		item.targetCaptureStatus = "resolved";
 		item.taskKind = "action";
+	}
+	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-package-script:")) {
+		const encoded = /^v6-package-script:([^:]+):/.exec(segment.interpretation.fingerprint)?.[1];
+		if (encoded) {
+			item.semanticAction = "verify";
+			item.requestedTarget = {
+				scope: subject,
+				script_name: decodeURIComponent(encoded)
+			};
+			item.targetCaptureStatus = "resolved";
+			item.taskKind = "action";
+		}
 	}
 	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-context:")) {
 		item.taskKind = "context";

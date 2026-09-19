@@ -28,6 +28,16 @@ const INITIAL_CASES = [
 const textOf = event => Array.isArray(event?.data?.content)
   ? event.data.content.filter(part => part?.type === 'text').map(part => part.text).join('') : ''
 
+// npm runs package scripts through the platform shell. Double quotes preserve
+// the JavaScript expression in both POSIX shells and Windows cmd.exe; single
+// quotes are literal characters in cmd.exe and can turn a failing test green.
+export function nativeTestFixturePackage(exitCode, name = 'native-test-fixture') {
+  assert.ok(exitCode === 0 || exitCode === 1)
+  assert.ok(name === 'native-test-fixture' || name === 'native-goal-fixture')
+  return `${JSON.stringify({ name, private: true,
+    scripts: { test: `node -e "process.exit(${exitCode})"` } })}\n`
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const digest = driverDigest()
@@ -160,7 +170,7 @@ export function apply(ctx, config) {
         })
         await check('v070_ordinary_test_and_checkpoint', async () => {
           await open('test')
-          writeFileSync(join(config.workRoot, 'package.json'), '{"name":"native-test-fixture","private":true,"scripts":{"test":"node -e \'process.exit(0)\'"}}\n')
+          writeFileSync(join(config.workRoot, 'package.json'), nativeTestFixturePackage(0))
           await root(`Run npm test in ${config.workRoot}.`)
           const pending = (await tool('context_guard_checkpoint', { bindings: [] })).value
           assert.equal(pending.status, 'incomplete')
@@ -244,7 +254,7 @@ export function apply(ctx, config) {
           handle.agent.session.append('command/run', { name: 'context-guard', args: 'on', source: { kind: 'user' } })
           await flush()
           const goalWork = config.workRoot
-          writeFileSync(join(goalWork, 'package.json'), '{"name":"native-goal-fixture","private":true,"scripts":{"test":"node -e \'process.exit(0)\'"}}\n')
+          writeFileSync(join(goalWork, 'package.json'), nativeTestFixturePackage(0, 'native-goal-fixture'))
           await root(`Run npm test in ${goalWork}.`)
           const item = (await tool('context_guard_checkpoint', { bindings: [] })).value.open_items.find(row => row.semantic_action === 'test')
           assert.ok(item)
@@ -264,7 +274,7 @@ export function apply(ctx, config) {
           assert.equal(domain.goalCompletionDenial(projection(), 'update_goal', { action: 'complete', goal_id: goal.id, revision: goal.revision }), undefined)
           const packagePath = join(goalWork, 'package.json')
           await tool('read', { file_path: packagePath })
-          await tool('write', { file_path: packagePath, content: '{"name":"native-goal-fixture","private":true,"scripts":{"test":"node -e \'process.exit(1)\'"}}\n' })
+          await tool('write', { file_path: packagePath, content: nativeTestFixturePackage(1, 'native-goal-fixture') })
           const failed = await tool(shell, args, false)
           assert.equal(failed.result.isError || shellTerminalFacts(failed.value).exit_code !== 0, true)
           const latest = projection()
