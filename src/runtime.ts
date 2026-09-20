@@ -624,10 +624,13 @@ export function createRuntime(
     projection.durabilityWatermark = durabilityWatermark
     if (projection.boundaryProtocol === 6 && durabilityWatermark === 'confirmed') {
       try {
-        projection.coreV2 = projectSessionCoreV2(session.snapshotEvents() as never, projection)
+        const displayOrigins: NonNullable<GuardProjection['coreV2RequirementOrigins']> = new Map()
+        projection.coreV2 = projectSessionCoreV2(session.snapshotEvents() as never, projection, displayOrigins)
+        projection.coreV2RequirementOrigins = projection.coreV2 ? displayOrigins : undefined
         projection.coreV2Reason = projection.coreV2 ? undefined : 'source_not_projectable'
       } catch {
         projection.coreV2 = undefined
+        projection.coreV2RequirementOrigins = undefined
         projection.coreV2Reason = 'projection_failed'
       }
     }

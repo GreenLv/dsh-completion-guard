@@ -1,4 +1,4 @@
-import { $ as RELEASE_OPERATION_SURFACES, $i as COMMAND_SURFACE_MANIFEST, $n as latestAssistantText, $r as LEGACY_QUALIFICATION, $t as authorityCaptureCounts, A as lifecyclePhase, Ai as splitTextFragments, An as MIN_RECOVERY_CHAR_BUDGET, Ar as relevantEvidence, At as HOST_CAPABILITY_PACKAGE_GROUPS, B as snapshotSessionEvents, Bi as STOP_PROTOCOL_VERSION, Bn as isVerifyingCapability, Br as captureItem, Bt as selectHostCohort, C as parseGitCommandManifest, Ci as namedActions, Cn as sessionQueryV2, Cr as CONFIRM_LINE_PATTERN, Ct as ACTIVE_HOST_LAUNCHER_VERSION, D as claimedBatchHasRealRootInput, Di as reportingHeadGoverns, Dn as CLEANUP_CONDITION_RULE_COMPACT, Dr as deriveItemDiagnosis, Dt as DEFAULT_HOST_LOCK, E as FIRST_STEP_GUIDANCE, Ei as questionHeadsClause, En as CLEANUP_CONDITION_RULE, Er as capabilityRemedyPhrase, Et as BASE_HOST_PACKAGES, F as captureHostWorkdir, Fi as BOUNDED_ARTIFACT_TYPES, Fn as recoveryDigest, Fr as capabilityFactOf, Ft as evaluateExternalWaitCapability, G as PROTOCOL_V4_NOTICE, Gi as isStatefulAction, Gn as assessmentOutcomePredicate, Gr as extractOperation, Gt as compareHostVersions, H as CAPTURE_V042_NOTICE, Hi as SUPPORTED_EVIDENCE_ADAPTERS, Hn as NO_PROGRESS_RECORD_PREFIX, Hr as environmentDefaultRepositoryTarget, Ht as MIN_SUPPORTED_HOST_VERSION, I as sourcedNamedTestRoot, Ii as CERTIFICATE_VERSION, In as renderRecoveryPacket, Ir as partialFailureOf, It as evaluateHostCapability, J as applyUpgradeEligibility, Ji as requestedTargetMatchesResolved, Jn as decideTurnBoundary, Jr as canonicalRegistryBase, Jt as satisfiesSupportedHostRange, K as PROTOCOL_V5_NOTICE, Ki as requestedIdentityKey, Kn as classifyCompletionClaim, Kr as isInformationalMessage, Kt as evaluateMinimumHostVersion, L as SESSION_API_UNSUPPORTED, Li as CERTIFICATE_VERSION_V2, Ln as bindingSatisfies, Lr as removalIsComplete, Lt as evaluateHostLock, M as projectSessionCoreV2, Mi as verbIsNegated, Mn as cleanupConditionFor, Mr as actionHasCertificationPath, Mt as LEGACY_HOST_COHORTS, N as sessionCoreSnapshot, Ni as ACTION_MANIFEST, Nn as closingHint, Nr as admissibleForRemoval, Nt as bindExecutableIdentity, O as firstStepGuidance, Oi as restatedContentOf, On as CLEANUP_CONDITION_RULE_SHORT, Or as evidenceAvailabilityReason, Ot as EXPECTED_HOST_PACKAGES, P as HOST_WORKDIR_PREFIX, Pi as ACTION_MANIFEST_VERSION, Pn as openItems, Pr as capabilityConsequence, Pt as bindLiveGoalCapability, Q as RELEASE_OPERATIONS, Qi as validateActionTarget, Qn as isWholeTaskCompletionClaim, Qr as GRANTED_QUALIFICATION, Qt as ALPHA3_HOST_PACKAGES, R as SESSION_EVENT_ENVELOPE_INVALID, Ri as SEMANTIC_ACTIONS, Rn as evidenceCoverage, Rr as removalIsPartiallyKnown, Rt as evaluateToolSurfaceCapability, S as gitCommandMatchesTarget, Si as maskQuotedSpans, Sn as sessionQuery, Sr as replayRebindResult, St as ACTIVE_HOST_COHORT_IDS, T as verifiedLinearCommitReadback, Ti as qualificationOfClause, Tn as validateProofManifestV2, Tr as parseConfirmationMessage, Tt as ALPHA2_HOST_PACKAGES, U as DEFAULT_DELEGATION_TOOL_NAMES, Ui as actionCompatible, Un as NO_PROGRESS_TURNS_BEFORE_STOP, Ur as extractArtifactPaths, Ut as SUPPORTED_HOST_RANGE, V as projectCoreV2, Vi as STOP_PROTOCOL_VERSION_V2, Vn as CONTROL_RECORD_PREFIX, Vr as classifyClause, Vt as LATEST_SUPPORTED_HOST_VERSION, W as PROTOCOL_V3_NOTICE, Wi as boundedArtifactChoiceMatches, Wn as assessmentAction, Wr as extractMethod, Wt as SUPPORTED_HOST_VERSIONS, X as legacyRecordsNeedingReview, Xi as semanticActionFromText, Xn as decisionBoundaryKey, Xr as classifyTaskIntent, Xt as RC015_HOST_PACKAGES, Y as deriveProjection, Yi as semanticActionFromCommand, Yn as decideTurnStopping, Yr as npmEscapedPackageName, Yt as RC015_RC2_HOST_PACKAGES, Z as rootLocatorFlavor, Zi as validateActionManifest, Zn as isRootPauseRequest, Zr as classifyUserInteraction, Zt as RC1_HOST_PACKAGES, _ as GIT_COMMAND_TEMPLATES, _i as isRestatement, _n as proofHostSurfacesOf, _r as proposeRebind, _t as canonicalArgvFromCommand, a as combineHostPolicy, aa as sanitizeUrl, ai as explanationHasActionResidue, an as PROOF_MANIFEST_DOMAIN_V2, ar as goalCompletionDenial, at as readbackSettlesContract, b as createGitPrestateEnvelope, bi as legacyQuestionReadingIsInformational, bn as requiredSubjectsOf, br as rebindAttemptKey, bt as parseShellCommand, c as injectActiveProfileHostLock, ci as hasQuestionScope, cn as bindProofToProjection, cr as certificateClosure, ct as releasePreEffectDecision, d as packageRowsFromPnpmLock, di as introducesActionClause, dn as createProofManifest, dr as effectuateBoundary, dt as evidenceFromPersistedToolResult, ea as validateManifest, ei as actionVerbMatches, en as segmentAuthorityBlocks, er as latestRootInstruction, et as RELEASE_RESERVATION_PREFIX, f as readActiveHostGraph, fi as isExecutableItem, fn as createProofManifestV2, fr as isCurrentAcceptedBoundary, ft as extractTextContent, g as GIT_COMMAND_MANIFEST_IDS, gi as isQuestionScopeNeedingReview, gn as proofEvidenceConstraints, gr as confirmRebind, gt as withDurability, h as verifyComposedHostLockDump, hi as isOpenObligation, hn as proofDigestV2, hr as createProjection, ht as persistedToolResultStatus, i as auditedForegroundRenderers, ia as sanitizeClauseText, ii as clauseIsProtected, in as PROOF_KINDS_V2, ir as v6TestPredicate, it as normalizeReleaseContract, j as previewFirstStepInjection, ji as statefulActionsOfScope, jn as carriesCleanupCondition, jr as DEPENDENCY_FREE_ONLY_CONDITION, jt as HOST_COHORTS, k as firstStepGuidanceV6, ki as semanticActionOfScope, kn as DEFAULT_RECOVERY_CHAR_BUDGET, kr as itemDiagnosis, kt as GOAL_HOST_PACKAGES, l as inspectTargetHostGraph, li as interpretClause, ln as bindProofV2ToProjection, lr as unitDescendantIds, lt as reservationFor, m as resolveInstalledHostLock, mi as isInformationalFragment, mn as proofDigest, mr as currentContractDigest, mt as isDeterministicCheck, n as auditedDefaultWorkdirHost, na as digestStrings, ni as clauseAsksOwnQuestion, nn as PROOF_CAPABILITY_MATRIX, nr as progressFingerprint, nt as contractById, o as hostLockContextFromComposedDump, oa as sha256, oi as governedClauseRestrictsExecution, on as PROOF_PROTOCOL_VERSION, or as hasCurrentCertificate, ot as releaseContractFor, p as resolveActiveProfileHostLock, pi as isExplanationScope, pn as proofCapabilityReport, pr as qualifyBoundary, pt as extractToolSubject, q as PROTOCOL_V6_NOTICE, qi as requestedTargetAuthorizesMutation, qn as currentActionBases, qr as segmentClauses, qt as parseHostVersion, r as auditedDefaultWorkdirProvider, ra as normalizeClause, ri as clauseIsGoverned, rn as PROOF_KINDS, rr as testOutcomePredicate, rt as inFlightReservation, s as hostLockRowsFromComposedDump, si as hasOrderedCoordination, sn as PROOF_PROTOCOL_VERSION_V2, sr as certifiableOpenItems, st as releaseCoverage, t as HostProfileError, ta as canonicalizePath, ti as clarifiedSpanOf, tn as certifyCheckpoint, tr as observeAssistantOutcome, tt as RELEASE_SETTLEMENT_PREFIX, u as packageRowsFromActiveGraph, ui as interpretMessage, un as canonicalProjection, ur as availableBoundaryQualifications, ut as supersedeItem, v as commitIndexSnapshotDigest, vi as itemHoldsExecutionAuthority, vn as proofOperationMatches, vr as proposeRebindOutcome, vt as isRunExecutable, w as revalidateGitPrestate, wi as opensWithDirective, wn as validateProofManifest, wr as isFrozenV042RebindResponse, wt as ALPHA2_DSHMARKET_139_HOST_PACKAGES, x as executeRevalidatedGitEffect, xi as maskCodeSpans, xn as scopeCoverageDigest, xr as rebindResponse, xt as ACTIVE_HOST_COHORT_ID, y as commitTreeSnapshotDigest, yi as kindOfScope, yn as proofV2Rejection, yr as proposeRebindV042, yt as parsePwshCommand, z as SessionApiError, zi as STATEFUL_ACTIONS, zn as evidenceMatchesItem, zr as captureClause, zt as hostVersionFromPackages } from "./domain-BDVjRjgV.js";
+import { $ as sourceItemForCoreRequirement, $i as validateActionManifest, $n as isRootPauseRequest, $r as classifyUserInteraction, $t as RC1_HOST_PACKAGES, A as lifecyclePhase, Ai as restatedContentOf, An as CLEANUP_CONDITION_RULE_SHORT, Ar as evidenceAvailabilityReason, At as EXPECTED_HOST_PACKAGES, B as snapshotSessionEvents, Bi as SEMANTIC_ACTIONS, Bn as evidenceCoverage, Br as removalIsPartiallyKnown, Bt as evaluateToolSurfaceCapability, C as parseGitCommandManifest, Ci as maskCodeSpans, Cn as scopeCoverageDigest, Cr as rebindResponse, Ct as ACTIVE_HOST_COHORT_ID, D as claimedBatchHasRealRootInput, Di as qualificationOfClause, Dn as validateProofManifestV2, Dr as parseConfirmationMessage, Dt as ALPHA2_HOST_PACKAGES, E as FIRST_STEP_GUIDANCE, Ei as opensWithDirective, En as validateProofManifest, Er as isFrozenV042RebindResponse, Et as ALPHA2_DSHMARKET_139_HOST_PACKAGES, F as captureHostWorkdir, Fi as ACTION_MANIFEST, Fn as closingHint, Fr as admissibleForRemoval, Ft as bindExecutableIdentity, G as PROTOCOL_V4_NOTICE, Gi as actionCompatible, Gn as NO_PROGRESS_TURNS_BEFORE_STOP, Gr as extractArtifactPaths, Gt as SUPPORTED_HOST_RANGE, H as CAPTURE_V042_NOTICE, Hi as STOP_PROTOCOL_VERSION, Hn as isVerifyingCapability, Hr as captureItem, Ht as selectHostCohort, I as sourcedNamedTestRoot, Ii as ACTION_MANIFEST_VERSION, In as openItems, Ir as capabilityConsequence, It as bindLiveGoalCapability, J as applyUpgradeEligibility, Ji as requestedIdentityKey, Jn as classifyCompletionClaim, Jr as isInformationalMessage, Jt as evaluateMinimumHostVersion, K as PROTOCOL_V5_NOTICE, Ki as boundedArtifactChoiceMatches, Kn as assessmentAction, Kr as extractMethod, Kt as SUPPORTED_HOST_VERSIONS, L as SESSION_API_UNSUPPORTED, Li as BOUNDED_ARTIFACT_TYPES, Ln as recoveryDigest, Lr as capabilityFactOf, Lt as evaluateExternalWaitCapability, M as projectSessionCoreV2, Mi as splitTextFragments, Mn as MIN_RECOVERY_CHAR_BUDGET, Mr as relevantEvidence, Mt as HOST_CAPABILITY_PACKAGE_GROUPS, N as sessionCoreSnapshot, Ni as statefulActionsOfScope, Nn as carriesCleanupCondition, Nr as DEPENDENCY_FREE_ONLY_CONDITION, Nt as HOST_COHORTS, O as firstStepGuidance, Oi as questionHeadsClause, On as CLEANUP_CONDITION_RULE, Or as capabilityRemedyPhrase, Ot as BASE_HOST_PACKAGES, P as HOST_WORKDIR_PREFIX, Pi as verbIsNegated, Pn as cleanupConditionFor, Pr as actionHasCertificationPath, Pt as LEGACY_HOST_COHORTS, Q as currentV6Feedback, Qi as semanticActionFromText, Qn as decisionBoundaryKey, Qr as classifyTaskIntent, Qt as RC015_HOST_PACKAGES, R as SESSION_EVENT_ENVELOPE_INVALID, Ri as CERTIFICATE_VERSION, Rn as renderRecoveryPacket, Rr as partialFailureOf, Rt as evaluateHostCapability, S as gitCommandMatchesTarget, Si as legacyQuestionReadingIsInformational, Sn as requiredSubjectsOf, Sr as rebindAttemptKey, St as parseShellCommand, T as verifiedLinearCommitReadback, Ti as namedActions, Tn as sessionQueryV2, Tr as CONFIRM_LINE_PATTERN, Tt as ACTIVE_HOST_LAUNCHER_VERSION, U as DEFAULT_DELEGATION_TOOL_NAMES, Ui as STOP_PROTOCOL_VERSION_V2, Un as CONTROL_RECORD_PREFIX, Ur as classifyClause, Ut as LATEST_SUPPORTED_HOST_VERSION, V as projectCoreV2, Vi as STATEFUL_ACTIONS, Vn as evidenceMatchesItem, Vr as captureClause, Vt as hostVersionFromPackages, W as PROTOCOL_V3_NOTICE, Wi as SUPPORTED_EVIDENCE_ADAPTERS, Wn as NO_PROGRESS_RECORD_PREFIX, Wr as environmentDefaultRepositoryTarget, Wt as MIN_SUPPORTED_HOST_VERSION, X as legacyRecordsNeedingReview, Xi as requestedTargetMatchesResolved, Xn as decideTurnBoundary, Xr as canonicalRegistryBase, Xt as satisfiesSupportedHostRange, Y as deriveProjection, Yi as requestedTargetAuthorizesMutation, Yn as currentActionBases, Yr as segmentClauses, Yt as parseHostVersion, Z as rootLocatorFlavor, Zi as semanticActionFromCommand, Zn as decideTurnStopping, Zr as npmEscapedPackageName, Zt as RC015_RC2_HOST_PACKAGES, _ as GIT_COMMAND_TEMPLATES, _i as isOpenObligation, _n as proofDigestV2, _r as createProjection, _t as persistedToolResultStatus, a as combineHostPolicy, aa as normalizeClause, ai as clauseIsGoverned, an as PROOF_KINDS, ar as testOutcomePredicate, at as inFlightReservation, b as createGitPrestateEnvelope, bi as itemHoldsExecutionAuthority, bn as proofOperationMatches, br as proposeRebindOutcome, bt as isRunExecutable, c as injectActiveProfileHostLock, ca as sha256, ci as governedClauseRestrictsExecution, cn as PROOF_PROTOCOL_VERSION, cr as hasCurrentCertificate, ct as releaseContractFor, d as packageRowsFromPnpmLock, di as interpretClause, dn as bindProofV2ToProjection, dr as unitDescendantIds, dt as reservationFor, ea as validateActionTarget, ei as GRANTED_QUALIFICATION, en as ALPHA3_HOST_PACKAGES, er as isWholeTaskCompletionClaim, et as RELEASE_OPERATIONS, f as readActiveHostGraph, fi as interpretMessage, fn as canonicalProjection, fr as availableBoundaryQualifications, ft as supersedeItem, g as GIT_COMMAND_MANIFEST_IDS, gi as isInformationalFragment, gn as proofDigest, gr as currentContractDigest, gt as isDeterministicCheck, h as verifyComposedHostLockDump, hi as isExplanationScope, hn as proofCapabilityReport, hr as qualifyBoundary, ht as extractToolSubject, i as auditedForegroundRenderers, ia as digestStrings, ii as clauseAsksOwnQuestion, in as PROOF_CAPABILITY_MATRIX, ir as progressFingerprint, it as contractById, j as previewFirstStepInjection, ji as semanticActionOfScope, jn as DEFAULT_RECOVERY_CHAR_BUDGET, jr as itemDiagnosis, jt as GOAL_HOST_PACKAGES, k as firstStepGuidanceV6, ki as reportingHeadGoverns, kn as CLEANUP_CONDITION_RULE_COMPACT, kr as deriveItemDiagnosis, kt as DEFAULT_HOST_LOCK, l as inspectTargetHostGraph, li as hasOrderedCoordination, ln as PROOF_PROTOCOL_VERSION_V2, lr as certifiableOpenItems, lt as releaseCoverage, m as resolveInstalledHostLock, mi as isExecutableItem, mn as createProofManifestV2, mr as isCurrentAcceptedBoundary, mt as extractTextContent, n as auditedDefaultWorkdirHost, na as validateManifest, ni as actionVerbMatches, nn as segmentAuthorityBlocks, nr as latestRootInstruction, nt as RELEASE_RESERVATION_PREFIX, o as hostLockContextFromComposedDump, oa as sanitizeClauseText, oi as clauseIsProtected, on as PROOF_KINDS_V2, or as v6TestPredicate, ot as normalizeReleaseContract, p as resolveActiveProfileHostLock, pi as introducesActionClause, pn as createProofManifest, pr as effectuateBoundary, pt as evidenceFromPersistedToolResult, q as PROTOCOL_V6_NOTICE, qi as isStatefulAction, qn as assessmentOutcomePredicate, qr as extractOperation, qt as compareHostVersions, r as auditedDefaultWorkdirProvider, ra as canonicalizePath, ri as clarifiedSpanOf, rn as certifyCheckpoint, rr as observeAssistantOutcome, rt as RELEASE_SETTLEMENT_PREFIX, s as hostLockRowsFromComposedDump, sa as sanitizeUrl, si as explanationHasActionResidue, sn as PROOF_MANIFEST_DOMAIN_V2, sr as goalCompletionDenial, st as readbackSettlesContract, t as HostProfileError, ta as COMMAND_SURFACE_MANIFEST, ti as LEGACY_QUALIFICATION, tn as authorityCaptureCounts, tr as latestAssistantText, tt as RELEASE_OPERATION_SURFACES, u as packageRowsFromActiveGraph, ui as hasQuestionScope, un as bindProofToProjection, ur as certificateClosure, ut as releasePreEffectDecision, v as commitIndexSnapshotDigest, vi as isQuestionScopeNeedingReview, vn as proofEvidenceConstraints, vr as confirmRebind, vt as withDurability, w as revalidateGitPrestate, wi as maskQuotedSpans, wn as sessionQuery, wr as replayRebindResult, wt as ACTIVE_HOST_COHORT_IDS, x as executeRevalidatedGitEffect, xi as kindOfScope, xn as proofV2Rejection, xr as proposeRebindV042, xt as parsePwshCommand, y as commitTreeSnapshotDigest, yi as isRestatement, yn as proofHostSurfacesOf, yr as proposeRebind, yt as canonicalArgvFromCommand, z as SessionApiError, zi as CERTIFICATE_VERSION_V2, zn as bindingSatisfies, zr as removalIsComplete, zt as evaluateHostLock } from "./domain-DtYW-etB.js";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
@@ -86,6 +86,7 @@ function checkpointPage(p, query, full) {
 		revision: p.contractRevision,
 		evidence: [...p.evidence.values()],
 		items: [...p.items.values()],
+		...full.current_feedback === true ? { current_core: p.coreV2 } : {},
 		item_ids,
 		evidence_ids,
 		evidence_scope,
@@ -167,12 +168,23 @@ function checkpointPage(p, query, full) {
 		available_evidence: [],
 		available_qualifications: []
 	};
+	if (full.current_feedback === true) {
+		output.reason_code = full.reason_code;
+		output.feedback_source = "confirmed_core_v2";
+		output.current_actions = (full.current_actions ?? []).slice(0, 8);
+		output.current_action_total = (full.current_actions ?? []).length;
+		output.certificate_status = "not_requested";
+	}
 	if (full.certificate) output.certificate = full.certificate;
 	if (full.proof_state) output.proof_state = full.proof_state;
 	const pagination = {
 		snapshot: identity,
 		scope: evidence_scope,
-		counts: {
+		counts: full.current_feedback === true ? {
+			pending: full.open_items.length,
+			passed: Object.values(p.coreV2?.predicates ?? {}).filter((value) => value === "satisfied").length,
+			superseded: 0
+		} : {
 			pending: [...p.items.values()].filter((i) => i.status === "pending").length,
 			passed: [...p.items.values()].filter((i) => i.status === "passed").length,
 			superseded: [...p.items.values()].filter((i) => i.status === "superseded").length
@@ -352,7 +364,7 @@ function openItemForTool(projection, item) {
 function createCheckpointTool(getProjection, onRejected, prepare = async () => true) {
 	return defineTool({
 		name: "context_guard_checkpoint",
-		description: "Request a completion certificate from existing durable evidence.",
+		description: "Read current ordinary closure from confirmed observations; request a certificate only for an explicitly adopted proof, Goal, or release contract.",
 		parameters: {
 			item_ids: {
 				type: "array",
@@ -685,6 +697,46 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 					available_qualifications: [],
 					rejected_bindings: []
 				};
+			}
+			const currentFeedback = args.proof === void 0 ? currentV6Feedback(projection) : void 0;
+			if (currentFeedback) {
+				const openRows = currentFeedback.openIds.map((id) => {
+					const sourced = sourceItemForCoreRequirement(projection, id);
+					return {
+						id,
+						reason_code: currentFeedback.predicates[id],
+						...sourced ? {
+							source_item_id: sourced.item.id,
+							revision: sourced.item.revision,
+							kind: sourced.item.kind,
+							text: sourced.item.normalizedText
+						} : {},
+						...sourced?.origin ? {
+							source_start: sourced.origin.sourceStart,
+							source_end: sourced.origin.sourceEnd,
+							semantic_action: sourced.origin.action,
+							target: sourced.origin.target
+						} : {},
+						next_step: "Answer this sourced requirement using the current Host observation or final delivery; ordinary Guard bindings are not required."
+					};
+				});
+				const constraints = Object.entries(currentFeedback.predicates).filter(([, state]) => state === "constraint_active" || state === "constraint_unresolved" || state === "constraint_violated").map(([id, state]) => ({
+					id,
+					reason_code: state
+				}));
+				return checkpointPage(projection, args, {
+					status: currentFeedback.status,
+					reason_code: currentFeedback.reasonCode,
+					current_feedback: true,
+					contract_revision: projection.contractRevision,
+					blocking_total: openRows.length,
+					open_items: openRows,
+					active_constraints: constraints,
+					available_evidence: [],
+					available_qualifications: [],
+					rejected_bindings: [],
+					current_actions: currentFeedback.currentActions
+				});
 			}
 			const bindings = args.bindings.map((binding) => ({
 				itemId: binding.item_id,
@@ -1252,6 +1304,8 @@ const encodeCursor = (cursor) => Buffer.from(JSON.stringify(cursor), "utf8").toS
 * are reached by item ID, not re-listed here (0.6.1, W060-03).
 */
 function discoveryItemIds(p) {
+	const current = currentV6Feedback(p);
+	if (current && current.status !== "unknown") return current.openIds;
 	const pending = [...p.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id));
 	if (p.boundaryProtocol === void 0 || p.boundaryProtocol < 5) return pending.map((item) => item.id);
 	const closureUnits = new Set([...p.currentUnitId !== void 0 ? [p.currentUnitId, ...unitDescendantIds(p, p.currentUnitId)] : []]);
@@ -1310,8 +1364,14 @@ function createPrepareTool(options) {
 				status: "unknown",
 				reason_code: "guard_unavailable"
 			};
+			const currentFeedback = currentV6Feedback(p);
+			if (currentFeedback?.status === "unknown") return {
+				status: "unknown",
+				reason_code: currentFeedback.reasonCode
+			};
 			if (p.boundaryProtocol === 6 && args.item_id !== void 0) {
-				const current = p.items.get(args.item_id);
+				const sourced = currentFeedback ? sourceItemForCoreRequirement(p, args.item_id) : void 0;
+				const current = sourced?.item ?? p.items.get(args.item_id);
 				if (!current) return {
 					status: "rejected",
 					reason_code: "item_not_found"
@@ -1320,6 +1380,36 @@ function createPrepareTool(options) {
 					status: "rejected",
 					reason_code: "item_revision_mismatch"
 				};
+				if (current.kind === "prohibition" && currentFeedback) {
+					const state = currentFeedback.predicates[args.item_id];
+					if (state === "constraint_active" || state === "constraint_unresolved" || state === "constraint_violated") return {
+						status: state === "constraint_active" ? "active" : state === "constraint_unresolved" ? "unknown" : "incomplete",
+						reason_code: state,
+						item: {
+							id: current.id,
+							revision: current.revision,
+							status: state
+						},
+						next_step: state === "constraint_active" ? "This sourced prohibition remains active." : state === "constraint_unresolved" ? "The current Host facts cannot establish whether this prohibition was respected." : "A sourced Host mutation violated this prohibition."
+					};
+				}
+				if (current.semanticAction !== "publish" && currentFeedback) {
+					const exactDerived = sourced?.origin !== void 0;
+					const related = Object.entries(currentFeedback.predicates).filter(([id]) => exactDerived ? id === args.item_id : id === args.item_id || sourceItemForCoreRequirement(p, id)?.item.id === current.id);
+					const state = related.length === 0 ? void 0 : related.every(([, value]) => value === "satisfied") ? "satisfied" : "insufficient";
+					return {
+						status: state === void 0 || state === "satisfied" ? "observed" : "incomplete",
+						reason_code: state === void 0 ? "historical_item_not_current" : state === "satisfied" ? "ordinary_current_predicate_observed" : "current_predicate_insufficient",
+						item: {
+							id: args.item_id,
+							source_item_id: current.id,
+							revision: current.revision,
+							status: state ?? "historical",
+							related_requirement_ids: related.map(([id]) => id)
+						},
+						next_step: state === void 0 ? "This item is historical and is not current ordinary work." : state === "satisfied" ? "This ordinary predicate is already observed. Continue with the remaining sourced requirements; no Guard execution qualification is needed." : "Use the current sourced action and host facts; no Guard execution qualification is needed."
+					};
+				}
 				if (current.semanticAction !== "publish") return {
 					status: "observed",
 					reason_code: "ordinary_execution_host_owned",
@@ -1333,6 +1423,7 @@ function createPrepareTool(options) {
 			}
 			if (args.item_id === void 0) {
 				const filter = args.semantic_action ?? null;
+				const coreIdentity = currentFeedback ? sha256(JSON.stringify(p.coreV2 ?? null)) : void 0;
 				const invalidCursor = (reason_code, note) => ({
 					status: "rejected",
 					reason_code,
@@ -1346,18 +1437,23 @@ function createPrepareTool(options) {
 					try {
 						if (args.page_cursor.length <= 1024) {
 							const value = JSON.parse(Buffer.from(args.page_cursor, "base64url").toString("utf8"));
-							if (value?.v === 1 && Number.isSafeInteger(value.r) && (value.f === null || typeof value.f === "string") && Array.isArray(value.k) && Number.isSafeInteger(value.k[0]) && typeof value.k[1] === "string") parsed = value;
+							if (value?.v === 1 && Number.isSafeInteger(value.r) && (value.f === null || typeof value.f === "string") && Array.isArray(value.k) && Number.isSafeInteger(value.k[0]) && typeof value.k[1] === "string" && (value.c === void 0 || typeof value.c === "string")) parsed = value;
 						}
 					} catch {
 						parsed = void 0;
 					}
 					if (!parsed) return invalidCursor("discovery_cursor_malformed");
 					if (parsed.r !== p.contractRevision) return invalidCursor("discovery_cursor_stale", `The contract changed (cursor revision ${parsed.r}, current ${p.contractRevision}). Re-run discovery without page_cursor; items are never skipped by a stale page.`);
+					if (parsed.c !== coreIdentity) return invalidCursor("discovery_cursor_stale", "The current observation changed. Re-run discovery without page_cursor.");
 					if ((parsed.f ?? null) !== (filter ?? null)) return invalidCursor("discovery_cursor_filter_mismatch");
 					startAfter = parsed.k;
 				}
-				const eligible = discoveryItemIds(p).map((id) => p.items.get(id)).filter((item$1) => filter === null || (item$1.semanticAction ?? "generic_run") === filter);
-				const startIndex = startAfter === void 0 ? 0 : eligible.findIndex((item$1) => item$1.revision === startAfter[0] && item$1.id === startAfter[1]) + 1;
+				const eligible = discoveryItemIds(p).map((id) => ({
+					id,
+					sourced: currentFeedback ? sourceItemForCoreRequirement(p, id) : void 0,
+					item: currentFeedback ? sourceItemForCoreRequirement(p, id)?.item : p.items.get(id)
+				})).filter((entry) => entry.item !== void 0).filter(({ item: item$1, sourced }) => filter === null || (sourced?.origin?.action ?? item$1.semanticAction ?? "generic_run") === filter);
+				const startIndex = startAfter === void 0 ? 0 : eligible.findIndex(({ id, item: item$1 }) => item$1.revision === startAfter[0] && id === startAfter[1]) + 1;
 				if (startAfter !== void 0 && startIndex <= 0) return invalidCursor("discovery_cursor_stale", "The cursor names an item no longer in the current listing. Re-run discovery without page_cursor.");
 				const page = eligible.slice(startIndex, startIndex + DISCOVERY_ITEM_LIMIT);
 				const hasMore = startIndex + page.length < eligible.length;
@@ -1369,15 +1465,21 @@ function createPrepareTool(options) {
 					total_open: eligible.length,
 					listed: page.length,
 					has_more: hasMore,
-					items: page.map((item$1) => {
+					items: page.map(({ id, item: item$1, sourced }) => {
 						const diagnosis$1 = deriveItemDiagnosis(p, item$1);
 						return {
-							id: item$1.id,
+							id,
+							...sourced?.origin ? {
+								source_item_id: item$1.id,
+								source_start: sourced.origin.sourceStart,
+								source_end: sourced.origin.sourceEnd,
+								target: sourced.origin.target
+							} : {},
 							revision: item$1.revision,
 							kind: item$1.kind,
 							...item$1.taskKind !== void 0 ? { task_kind: item$1.taskKind } : {},
-							semantic_action: item$1.semanticAction ?? "generic_run",
-							reason_code: diagnosis$1.reason_code,
+							semantic_action: sourced?.origin?.action ?? item$1.semanticAction ?? "generic_run",
+							reason_code: currentFeedback ? currentFeedback.predicates[id] ?? "current_predicate_insufficient" : diagnosis$1.reason_code,
 							text: item$1.normalizedText
 						};
 					}),
@@ -1385,7 +1487,8 @@ function createPrepareTool(options) {
 						v: 1,
 						r: p.contractRevision,
 						f: filter,
-						k: [page[page.length - 1].revision, page[page.length - 1].id]
+						k: [page[page.length - 1].item.revision, page[page.length - 1].id],
+						...coreIdentity ? { c: coreIdentity } : {}
 					}) } : {},
 					...filter !== null ? { filtered_by: { semantic_action: filter } } : {},
 					note: "Re-run with one item_id for a read-only diagnosis, or pass page_cursor for the next page."
@@ -5647,10 +5750,13 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		projection.lastRecoveryDigest = priorRecoveryDigest;
 		projection.durabilityWatermark = durabilityWatermark;
 		if (projection.boundaryProtocol === 6 && durabilityWatermark === "confirmed") try {
-			projection.coreV2 = projectSessionCoreV2(session.snapshotEvents(), projection);
+			const displayOrigins = /* @__PURE__ */ new Map();
+			projection.coreV2 = projectSessionCoreV2(session.snapshotEvents(), projection, displayOrigins);
+			projection.coreV2RequirementOrigins = projection.coreV2 ? displayOrigins : void 0;
 			projection.coreV2Reason = projection.coreV2 ? void 0 : "source_not_projectable";
 		} catch {
 			projection.coreV2 = void 0;
+			projection.coreV2RequirementOrigins = void 0;
 			projection.coreV2Reason = "projection_failed";
 		}
 		protocolV4Present = derived.protocolV4Present;

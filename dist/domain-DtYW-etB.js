@@ -13430,6 +13430,94 @@ function releaseCoverage(contract) {
 }
 
 //#endregion
+//#region src/domain/v6-feedback.ts
+/** Display provenance is produced while the core requirement is constructed,
+* never inferred from the shape of its ID. */
+function sourceItemForCoreRequirement(projection, id) {
+	const item = projection.items.get(id);
+	if (item) return { item };
+	const origin = projection.coreV2RequirementOrigins?.get(id);
+	if (!origin) return void 0;
+	const source = projection.items.get(origin.itemId);
+	if (!source?.observerMethod || !source.observerMethod.tools.includes(origin.action) || !Number.isSafeInteger(origin.sourceStart) || !Number.isSafeInteger(origin.sourceEnd) || origin.sourceStart < 0 || origin.sourceEnd <= origin.sourceStart || !source.spans?.some((span) => span.partIndex === 0 && span.start === origin.sourceStart && span.end <= origin.sourceEnd)) return void 0;
+	return {
+		item: source,
+		origin
+	};
+}
+/** The default ordinary feedback scope, before inspecting current core facts. */
+function defaultV6OrdinaryFeedbackScope(projection) {
+	const currentReleaseWork = [...projection.items.values()].some((item) => {
+		if (item.semanticAction !== "publish" || item.unitId !== projection.currentUnitId || item.status !== "pending") return false;
+		const target = item.requestedTarget;
+		return projection.releaseContracts.some((record) => {
+			const contract = releaseContractFor(projection, "npm_publish", record.contractId);
+			return contract !== void 0 && (target?.artifact_id === void 0 || target.artifact_id === contract.candidate.packageId) && (target?.version === void 0 || target.version === contract.candidate.version) && (target?.registry === void 0 || target.registry === contract.candidate.registry);
+		});
+	});
+	return projection.boundaryProtocol === 6 && !projection.goalCompletionAdopted && projection.policy !== "release" && !currentReleaseWork;
+}
+/** A display-only view of the confirmed shared-core closure. Historical item
+* status is deliberately not rewritten: it can still be audited or certified
+* under an explicitly adopted contract, but cannot become default v6 debt. */
+function currentV6Feedback(projection) {
+	if (!defaultV6OrdinaryFeedbackScope(projection)) return void 0;
+	if (projection.hostStatus !== "supported") return {
+		status: "unknown",
+		reasonCode: "host_lock_unsupported",
+		openIds: [],
+		predicates: {},
+		currentActions: []
+	};
+	const needsReview = needsReviewObligations(projection);
+	if (needsReview.length > 0) return {
+		status: "incomplete",
+		reasonCode: "legacy_record_needs_review",
+		openIds: needsReview.map((item) => item.id),
+		predicates: Object.fromEntries(needsReview.map((item) => [item.id, "legacy_review"])),
+		currentActions: []
+	};
+	const core = projection.coreV2;
+	if (projection.integrity !== "valid" || projection.durabilityWatermark !== "confirmed" || core?.schema !== "core-state/v2" || typeof core.certifiable !== "boolean" || !core.predicates || typeof core.predicates !== "object" || Array.isArray(core.predicates) || !Array.isArray(core.unmet_requirements) || !Array.isArray(core.current_actions)) return {
+		status: "unknown",
+		reasonCode: "core_projection_unavailable",
+		openIds: [],
+		predicates: {},
+		currentActions: []
+	};
+	const predicates = core.predicates;
+	const openIds = core.unmet_requirements;
+	if (openIds.some((id) => typeof id !== "string" || !Object.hasOwn(predicates, id)) || Object.values(predicates).some((value) => typeof value !== "string")) return {
+		status: "unknown",
+		reasonCode: "core_projection_unavailable",
+		openIds: [],
+		predicates: {},
+		currentActions: []
+	};
+	if (Object.keys(predicates).some((id) => !sourceItemForCoreRequirement(projection, id))) return {
+		status: "unknown",
+		reasonCode: "core_requirement_source_unavailable",
+		openIds: [],
+		predicates: {},
+		currentActions: []
+	};
+	if (!core.certifiable && openIds.length === 0) return {
+		status: "unknown",
+		reasonCode: "core_coverage_unresolved",
+		openIds: [],
+		predicates,
+		currentActions: []
+	};
+	return {
+		status: core.certifiable ? "observed" : "incomplete",
+		reasonCode: core.certifiable ? "ordinary_current_closure_observed" : "current_closure_unmet",
+		openIds,
+		predicates,
+		currentActions: core.current_actions
+	};
+}
+
+//#endregion
 //#region src/domain/derive.ts
 /**
 * Audited delegation tool names (C04/DS06-B). A tool result from one of these
@@ -15277,6 +15365,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					if (hostResultStatus !== "clean") break;
 					const recorded = parseArguments(textContent);
 					if (recorded.status !== "certified") {
+						if (call.proof === void 0 && defaultV6OrdinaryFeedbackScope(projection)) break;
 						if ((call.bindings?.length ?? 0) > 0) {
 							projection.lastCheckpointRejections = certifyCheckpoint(projection, call.bindings ?? [], "diagnostic", false).rejectedBindings;
 							projection.lastCheckpointRejectionRevision = projection.contractRevision;
@@ -17484,7 +17573,7 @@ function rootControls(roots, requirements, sources, facts, unit, selectedUnitAtR
 }
 /** Convert only real session sources and derived facts. Missing spans, calls, or
 * readback remain unknown/insufficient; this adapter never fabricates them. */
-function sessionCoreSnapshot(events, projection) {
+function sessionCoreSnapshot(events, projection, displayOrigins) {
 	const unit = projection.currentUnitId;
 	if (projection.boundaryProtocol !== 6 || !unit || projection.durabilityWatermark !== "confirmed") return void 0;
 	const roots = events.filter((event) => event.type === "user/message" && row(row(event.data).source).kind === "user");
@@ -17705,6 +17794,13 @@ function sessionCoreSnapshot(events, projection) {
 						subject_kind: subjectKind$1,
 						selection_source_id: fact ? `call:${fact.callId}` : null
 					}
+				});
+				displayOrigins?.set(requirementId, {
+					itemId: item.id,
+					action: tool,
+					target: target$1,
+					sourceStart: itemSpan.start,
+					sourceEnd: itemSpan.end
 				});
 				if (!fact || !pair) continue;
 				const callId = `call:${fact.callId}`, resultId = `result:${fact.callId}`;
@@ -18159,8 +18255,8 @@ function sessionCoreSnapshot(events, projection) {
 		release_state: projection.releaseContracts.some((entry) => entry.revokedAtSeq === void 0) ? "adopted" : "not_adopted"
 	};
 }
-function projectSessionCoreV2(events, projection) {
-	const snapshot = sessionCoreSnapshot(events, projection);
+function projectSessionCoreV2(events, projection, displayOrigins) {
+	const snapshot = sessionCoreSnapshot(events, projection, displayOrigins);
 	return snapshot ? projectCoreV2(snapshot) : void 0;
 }
 
@@ -19197,4 +19293,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { RELEASE_OPERATION_SURFACES as $, COMMAND_SURFACE_MANIFEST as $i, latestAssistantText as $n, LEGACY_QUALIFICATION as $r, authorityCaptureCounts as $t, lifecyclePhase as A, splitTextFragments as Ai, MIN_RECOVERY_CHAR_BUDGET as An, relevantEvidence as Ar, HOST_CAPABILITY_PACKAGE_GROUPS as At, snapshotSessionEvents as B, STOP_PROTOCOL_VERSION as Bi, isVerifyingCapability as Bn, captureItem as Br, selectHostCohort as Bt, parseGitCommandManifest as C, namedActions as Ci, sessionQueryV2 as Cn, CONFIRM_LINE_PATTERN as Cr, ACTIVE_HOST_LAUNCHER_VERSION as Ct, claimedBatchHasRealRootInput as D, reportingHeadGoverns as Di, CLEANUP_CONDITION_RULE_COMPACT as Dn, deriveItemDiagnosis as Dr, DEFAULT_HOST_LOCK as Dt, FIRST_STEP_GUIDANCE as E, questionHeadsClause as Ei, CLEANUP_CONDITION_RULE as En, capabilityRemedyPhrase as Er, BASE_HOST_PACKAGES as Et, captureHostWorkdir as F, BOUNDED_ARTIFACT_TYPES as Fi, recoveryDigest as Fn, capabilityFactOf as Fr, evaluateExternalWaitCapability as Ft, PROTOCOL_V4_NOTICE as G, isStatefulAction as Gi, assessmentOutcomePredicate as Gn, extractOperation as Gr, compareHostVersions as Gt, CAPTURE_V042_NOTICE as H, SUPPORTED_EVIDENCE_ADAPTERS as Hi, NO_PROGRESS_RECORD_PREFIX as Hn, environmentDefaultRepositoryTarget as Hr, MIN_SUPPORTED_HOST_VERSION as Ht, sourcedNamedTestRoot as I, CERTIFICATE_VERSION as Ii, renderRecoveryPacket as In, partialFailureOf as Ir, evaluateHostCapability as It, applyUpgradeEligibility as J, requestedTargetMatchesResolved as Ji, decideTurnBoundary as Jn, canonicalRegistryBase as Jr, satisfiesSupportedHostRange as Jt, PROTOCOL_V5_NOTICE as K, requestedIdentityKey as Ki, classifyCompletionClaim as Kn, isInformationalMessage as Kr, evaluateMinimumHostVersion as Kt, SESSION_API_UNSUPPORTED as L, CERTIFICATE_VERSION_V2 as Li, bindingSatisfies as Ln, removalIsComplete as Lr, evaluateHostLock as Lt, projectSessionCoreV2 as M, verbIsNegated as Mi, cleanupConditionFor as Mn, actionHasCertificationPath as Mr, LEGACY_HOST_COHORTS as Mt, sessionCoreSnapshot as N, ACTION_MANIFEST as Ni, closingHint as Nn, admissibleForRemoval as Nr, bindExecutableIdentity as Nt, firstStepGuidance as O, restatedContentOf as Oi, CLEANUP_CONDITION_RULE_SHORT as On, evidenceAvailabilityReason as Or, EXPECTED_HOST_PACKAGES as Ot, HOST_WORKDIR_PREFIX as P, ACTION_MANIFEST_VERSION as Pi, openItems as Pn, capabilityConsequence as Pr, bindLiveGoalCapability as Pt, RELEASE_OPERATIONS as Q, validateActionTarget as Qi, isWholeTaskCompletionClaim as Qn, GRANTED_QUALIFICATION as Qr, ALPHA3_HOST_PACKAGES as Qt, SESSION_EVENT_ENVELOPE_INVALID as R, SEMANTIC_ACTIONS as Ri, evidenceCoverage as Rn, removalIsPartiallyKnown as Rr, evaluateToolSurfaceCapability as Rt, gitCommandMatchesTarget as S, maskQuotedSpans as Si, sessionQuery as Sn, replayRebindResult as Sr, ACTIVE_HOST_COHORT_IDS as St, verifiedLinearCommitReadback as T, qualificationOfClause as Ti, validateProofManifestV2 as Tn, parseConfirmationMessage as Tr, ALPHA2_HOST_PACKAGES as Tt, DEFAULT_DELEGATION_TOOL_NAMES as U, actionCompatible as Ui, NO_PROGRESS_TURNS_BEFORE_STOP as Un, extractArtifactPaths as Ur, SUPPORTED_HOST_RANGE as Ut, projectCoreV2 as V, STOP_PROTOCOL_VERSION_V2 as Vi, CONTROL_RECORD_PREFIX as Vn, classifyClause as Vr, LATEST_SUPPORTED_HOST_VERSION as Vt, PROTOCOL_V3_NOTICE as W, boundedArtifactChoiceMatches as Wi, assessmentAction as Wn, extractMethod as Wr, SUPPORTED_HOST_VERSIONS as Wt, legacyRecordsNeedingReview as X, semanticActionFromText as Xi, decisionBoundaryKey as Xn, classifyTaskIntent as Xr, RC015_HOST_PACKAGES as Xt, deriveProjection as Y, semanticActionFromCommand as Yi, decideTurnStopping as Yn, npmEscapedPackageName as Yr, RC015_RC2_HOST_PACKAGES as Yt, rootLocatorFlavor as Z, validateActionManifest as Zi, isRootPauseRequest as Zn, classifyUserInteraction as Zr, RC1_HOST_PACKAGES as Zt, GIT_COMMAND_TEMPLATES as _, isRestatement as _i, proofHostSurfacesOf as _n, proposeRebind as _r, canonicalArgvFromCommand as _t, combineHostPolicy as a, sanitizeUrl as aa, explanationHasActionResidue as ai, PROOF_MANIFEST_DOMAIN_V2 as an, goalCompletionDenial as ar, readbackSettlesContract as at, createGitPrestateEnvelope as b, legacyQuestionReadingIsInformational as bi, requiredSubjectsOf as bn, rebindAttemptKey as br, parseShellCommand as bt, injectActiveProfileHostLock as c, hasQuestionScope as ci, bindProofToProjection as cn, certificateClosure as cr, releasePreEffectDecision as ct, packageRowsFromPnpmLock as d, introducesActionClause as di, createProofManifest as dn, effectuateBoundary as dr, evidenceFromPersistedToolResult as dt, validateManifest as ea, actionVerbMatches as ei, segmentAuthorityBlocks as en, latestRootInstruction as er, RELEASE_RESERVATION_PREFIX as et, readActiveHostGraph as f, isExecutableItem as fi, createProofManifestV2 as fn, isCurrentAcceptedBoundary as fr, extractTextContent as ft, GIT_COMMAND_MANIFEST_IDS as g, isQuestionScopeNeedingReview as gi, proofEvidenceConstraints as gn, confirmRebind as gr, withDurability as gt, verifyComposedHostLockDump as h, isOpenObligation as hi, proofDigestV2 as hn, createProjection as hr, persistedToolResultStatus as ht, auditedForegroundRenderers as i, sanitizeClauseText as ia, clauseIsProtected as ii, PROOF_KINDS_V2 as in, v6TestPredicate as ir, normalizeReleaseContract as it, previewFirstStepInjection as j, statefulActionsOfScope as ji, carriesCleanupCondition as jn, DEPENDENCY_FREE_ONLY_CONDITION as jr, HOST_COHORTS as jt, firstStepGuidanceV6 as k, semanticActionOfScope as ki, DEFAULT_RECOVERY_CHAR_BUDGET as kn, itemDiagnosis as kr, GOAL_HOST_PACKAGES as kt, inspectTargetHostGraph as l, interpretClause as li, bindProofV2ToProjection as ln, unitDescendantIds as lr, reservationFor as lt, resolveInstalledHostLock as m, isInformationalFragment as mi, proofDigest as mn, currentContractDigest as mr, isDeterministicCheck as mt, auditedDefaultWorkdirHost as n, digestStrings as na, clauseAsksOwnQuestion as ni, PROOF_CAPABILITY_MATRIX as nn, progressFingerprint as nr, contractById as nt, hostLockContextFromComposedDump as o, sha256 as oa, governedClauseRestrictsExecution as oi, PROOF_PROTOCOL_VERSION as on, hasCurrentCertificate as or, releaseContractFor as ot, resolveActiveProfileHostLock as p, isExplanationScope as pi, proofCapabilityReport as pn, qualifyBoundary as pr, extractToolSubject as pt, PROTOCOL_V6_NOTICE as q, requestedTargetAuthorizesMutation as qi, currentActionBases as qn, segmentClauses as qr, parseHostVersion as qt, auditedDefaultWorkdirProvider as r, normalizeClause as ra, clauseIsGoverned as ri, PROOF_KINDS as rn, testOutcomePredicate as rr, inFlightReservation as rt, hostLockRowsFromComposedDump as s, hasOrderedCoordination as si, PROOF_PROTOCOL_VERSION_V2 as sn, certifiableOpenItems as sr, releaseCoverage as st, HostProfileError as t, canonicalizePath as ta, clarifiedSpanOf as ti, certifyCheckpoint as tn, observeAssistantOutcome as tr, RELEASE_SETTLEMENT_PREFIX as tt, packageRowsFromActiveGraph as u, interpretMessage as ui, canonicalProjection as un, availableBoundaryQualifications as ur, supersedeItem as ut, commitIndexSnapshotDigest as v, itemHoldsExecutionAuthority as vi, proofOperationMatches as vn, proposeRebindOutcome as vr, isRunExecutable as vt, revalidateGitPrestate as w, opensWithDirective as wi, validateProofManifest as wn, isFrozenV042RebindResponse as wr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as wt, executeRevalidatedGitEffect as x, maskCodeSpans as xi, scopeCoverageDigest as xn, rebindResponse as xr, ACTIVE_HOST_COHORT_ID as xt, commitTreeSnapshotDigest as y, kindOfScope as yi, proofV2Rejection as yn, proposeRebindV042 as yr, parsePwshCommand as yt, SessionApiError as z, STATEFUL_ACTIONS as zi, evidenceMatchesItem as zn, captureClause as zr, hostVersionFromPackages as zt };
+export { sourceItemForCoreRequirement as $, validateActionManifest as $i, isRootPauseRequest as $n, classifyUserInteraction as $r, RC1_HOST_PACKAGES as $t, lifecyclePhase as A, restatedContentOf as Ai, CLEANUP_CONDITION_RULE_SHORT as An, evidenceAvailabilityReason as Ar, EXPECTED_HOST_PACKAGES as At, snapshotSessionEvents as B, SEMANTIC_ACTIONS as Bi, evidenceCoverage as Bn, removalIsPartiallyKnown as Br, evaluateToolSurfaceCapability as Bt, parseGitCommandManifest as C, maskCodeSpans as Ci, scopeCoverageDigest as Cn, rebindResponse as Cr, ACTIVE_HOST_COHORT_ID as Ct, claimedBatchHasRealRootInput as D, qualificationOfClause as Di, validateProofManifestV2 as Dn, parseConfirmationMessage as Dr, ALPHA2_HOST_PACKAGES as Dt, FIRST_STEP_GUIDANCE as E, opensWithDirective as Ei, validateProofManifest as En, isFrozenV042RebindResponse as Er, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Et, captureHostWorkdir as F, ACTION_MANIFEST as Fi, closingHint as Fn, admissibleForRemoval as Fr, bindExecutableIdentity as Ft, PROTOCOL_V4_NOTICE as G, actionCompatible as Gi, NO_PROGRESS_TURNS_BEFORE_STOP as Gn, extractArtifactPaths as Gr, SUPPORTED_HOST_RANGE as Gt, CAPTURE_V042_NOTICE as H, STOP_PROTOCOL_VERSION as Hi, isVerifyingCapability as Hn, captureItem as Hr, selectHostCohort as Ht, sourcedNamedTestRoot as I, ACTION_MANIFEST_VERSION as Ii, openItems as In, capabilityConsequence as Ir, bindLiveGoalCapability as It, applyUpgradeEligibility as J, requestedIdentityKey as Ji, classifyCompletionClaim as Jn, isInformationalMessage as Jr, evaluateMinimumHostVersion as Jt, PROTOCOL_V5_NOTICE as K, boundedArtifactChoiceMatches as Ki, assessmentAction as Kn, extractMethod as Kr, SUPPORTED_HOST_VERSIONS as Kt, SESSION_API_UNSUPPORTED as L, BOUNDED_ARTIFACT_TYPES as Li, recoveryDigest as Ln, capabilityFactOf as Lr, evaluateExternalWaitCapability as Lt, projectSessionCoreV2 as M, splitTextFragments as Mi, MIN_RECOVERY_CHAR_BUDGET as Mn, relevantEvidence as Mr, HOST_CAPABILITY_PACKAGE_GROUPS as Mt, sessionCoreSnapshot as N, statefulActionsOfScope as Ni, carriesCleanupCondition as Nn, DEPENDENCY_FREE_ONLY_CONDITION as Nr, HOST_COHORTS as Nt, firstStepGuidance as O, questionHeadsClause as Oi, CLEANUP_CONDITION_RULE as On, capabilityRemedyPhrase as Or, BASE_HOST_PACKAGES as Ot, HOST_WORKDIR_PREFIX as P, verbIsNegated as Pi, cleanupConditionFor as Pn, actionHasCertificationPath as Pr, LEGACY_HOST_COHORTS as Pt, currentV6Feedback as Q, semanticActionFromText as Qi, decisionBoundaryKey as Qn, classifyTaskIntent as Qr, RC015_HOST_PACKAGES as Qt, SESSION_EVENT_ENVELOPE_INVALID as R, CERTIFICATE_VERSION as Ri, renderRecoveryPacket as Rn, partialFailureOf as Rr, evaluateHostCapability as Rt, gitCommandMatchesTarget as S, legacyQuestionReadingIsInformational as Si, requiredSubjectsOf as Sn, rebindAttemptKey as Sr, parseShellCommand as St, verifiedLinearCommitReadback as T, namedActions as Ti, sessionQueryV2 as Tn, CONFIRM_LINE_PATTERN as Tr, ACTIVE_HOST_LAUNCHER_VERSION as Tt, DEFAULT_DELEGATION_TOOL_NAMES as U, STOP_PROTOCOL_VERSION_V2 as Ui, CONTROL_RECORD_PREFIX as Un, classifyClause as Ur, LATEST_SUPPORTED_HOST_VERSION as Ut, projectCoreV2 as V, STATEFUL_ACTIONS as Vi, evidenceMatchesItem as Vn, captureClause as Vr, hostVersionFromPackages as Vt, PROTOCOL_V3_NOTICE as W, SUPPORTED_EVIDENCE_ADAPTERS as Wi, NO_PROGRESS_RECORD_PREFIX as Wn, environmentDefaultRepositoryTarget as Wr, MIN_SUPPORTED_HOST_VERSION as Wt, legacyRecordsNeedingReview as X, requestedTargetMatchesResolved as Xi, decideTurnBoundary as Xn, canonicalRegistryBase as Xr, satisfiesSupportedHostRange as Xt, deriveProjection as Y, requestedTargetAuthorizesMutation as Yi, currentActionBases as Yn, segmentClauses as Yr, parseHostVersion as Yt, rootLocatorFlavor as Z, semanticActionFromCommand as Zi, decideTurnStopping as Zn, npmEscapedPackageName as Zr, RC015_RC2_HOST_PACKAGES as Zt, GIT_COMMAND_TEMPLATES as _, isOpenObligation as _i, proofDigestV2 as _n, createProjection as _r, persistedToolResultStatus as _t, combineHostPolicy as a, normalizeClause as aa, clauseIsGoverned as ai, PROOF_KINDS as an, testOutcomePredicate as ar, inFlightReservation as at, createGitPrestateEnvelope as b, itemHoldsExecutionAuthority as bi, proofOperationMatches as bn, proposeRebindOutcome as br, isRunExecutable as bt, injectActiveProfileHostLock as c, sha256 as ca, governedClauseRestrictsExecution as ci, PROOF_PROTOCOL_VERSION as cn, hasCurrentCertificate as cr, releaseContractFor as ct, packageRowsFromPnpmLock as d, interpretClause as di, bindProofV2ToProjection as dn, unitDescendantIds as dr, reservationFor as dt, validateActionTarget as ea, GRANTED_QUALIFICATION as ei, ALPHA3_HOST_PACKAGES as en, isWholeTaskCompletionClaim as er, RELEASE_OPERATIONS as et, readActiveHostGraph as f, interpretMessage as fi, canonicalProjection as fn, availableBoundaryQualifications as fr, supersedeItem as ft, GIT_COMMAND_MANIFEST_IDS as g, isInformationalFragment as gi, proofDigest as gn, currentContractDigest as gr, isDeterministicCheck as gt, verifyComposedHostLockDump as h, isExplanationScope as hi, proofCapabilityReport as hn, qualifyBoundary as hr, extractToolSubject as ht, auditedForegroundRenderers as i, digestStrings as ia, clauseAsksOwnQuestion as ii, PROOF_CAPABILITY_MATRIX as in, progressFingerprint as ir, contractById as it, previewFirstStepInjection as j, semanticActionOfScope as ji, DEFAULT_RECOVERY_CHAR_BUDGET as jn, itemDiagnosis as jr, GOAL_HOST_PACKAGES as jt, firstStepGuidanceV6 as k, reportingHeadGoverns as ki, CLEANUP_CONDITION_RULE_COMPACT as kn, deriveItemDiagnosis as kr, DEFAULT_HOST_LOCK as kt, inspectTargetHostGraph as l, hasOrderedCoordination as li, PROOF_PROTOCOL_VERSION_V2 as ln, certifiableOpenItems as lr, releaseCoverage as lt, resolveInstalledHostLock as m, isExecutableItem as mi, createProofManifestV2 as mn, isCurrentAcceptedBoundary as mr, extractTextContent as mt, auditedDefaultWorkdirHost as n, validateManifest as na, actionVerbMatches as ni, segmentAuthorityBlocks as nn, latestRootInstruction as nr, RELEASE_RESERVATION_PREFIX as nt, hostLockContextFromComposedDump as o, sanitizeClauseText as oa, clauseIsProtected as oi, PROOF_KINDS_V2 as on, v6TestPredicate as or, normalizeReleaseContract as ot, resolveActiveProfileHostLock as p, introducesActionClause as pi, createProofManifest as pn, effectuateBoundary as pr, evidenceFromPersistedToolResult as pt, PROTOCOL_V6_NOTICE as q, isStatefulAction as qi, assessmentOutcomePredicate as qn, extractOperation as qr, compareHostVersions as qt, auditedDefaultWorkdirProvider as r, canonicalizePath as ra, clarifiedSpanOf as ri, certifyCheckpoint as rn, observeAssistantOutcome as rr, RELEASE_SETTLEMENT_PREFIX as rt, hostLockRowsFromComposedDump as s, sanitizeUrl as sa, explanationHasActionResidue as si, PROOF_MANIFEST_DOMAIN_V2 as sn, goalCompletionDenial as sr, readbackSettlesContract as st, HostProfileError as t, COMMAND_SURFACE_MANIFEST as ta, LEGACY_QUALIFICATION as ti, authorityCaptureCounts as tn, latestAssistantText as tr, RELEASE_OPERATION_SURFACES as tt, packageRowsFromActiveGraph as u, hasQuestionScope as ui, bindProofToProjection as un, certificateClosure as ur, releasePreEffectDecision as ut, commitIndexSnapshotDigest as v, isQuestionScopeNeedingReview as vi, proofEvidenceConstraints as vn, confirmRebind as vr, withDurability as vt, revalidateGitPrestate as w, maskQuotedSpans as wi, sessionQuery as wn, replayRebindResult as wr, ACTIVE_HOST_COHORT_IDS as wt, executeRevalidatedGitEffect as x, kindOfScope as xi, proofV2Rejection as xn, proposeRebindV042 as xr, parsePwshCommand as xt, commitTreeSnapshotDigest as y, isRestatement as yi, proofHostSurfacesOf as yn, proposeRebind as yr, canonicalArgvFromCommand as yt, SessionApiError as z, CERTIFICATE_VERSION_V2 as zi, bindingSatisfies as zn, removalIsComplete as zr, evaluateHostLock as zt };

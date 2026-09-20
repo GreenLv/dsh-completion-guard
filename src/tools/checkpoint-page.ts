@@ -23,7 +23,9 @@ const lookup = (id: string) => id.length <= 128 ? id : `sha256:${sha256(id)}`
 export function checkpointPage(p: GuardProjection, query: PageQuery, full: Record<string, unknown>): Record<string, unknown> {
   const { item_ids, evidence_ids, evidence_scope = 'relevant', limit = 10, detail_id, detail_offset = 0 } = query
   const identity = digest({ session: p.sessionRefDigest, epoch: p.epoch, revision: p.contractRevision,
-    evidence: [...p.evidence.values()], items: [...p.items.values()], item_ids, evidence_ids, evidence_scope, limit, bindings: (query as PageQuery & { bindings?: unknown }).bindings, rejections: full.rejected_bindings })
+    evidence: [...p.evidence.values()], items: [...p.items.values()],
+    ...(full.current_feedback === true ? { current_core: p.coreV2 } : {}),
+    item_ids, evidence_ids, evidence_scope, limit, bindings: (query as PageQuery & { bindings?: unknown }).bindings, rejections: full.rejected_bindings })
   const invalid = (reason: string) => ({ status: 'unknown', contract_revision: p.contractRevision, reason_code: reason,
     next_step: 'Restart context_guard_checkpoint without cursor.', open_items: [], available_evidence: [], rejected_bindings: [] })
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50 || !['relevant', 'history'].includes(evidence_scope)) return invalid('invalid_query')
@@ -66,14 +68,25 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
   const output: Record<string, unknown> = { status: full.status, contract_revision: p.contractRevision,
     blockers: { total: Number(full.blocking_total ?? (full.open_items as unknown[]).length), rejected: (full.rejected_bindings as unknown[]).length, reasons: [...reasons].slice(0, 8).map(([reason_code, count]) => ({ reason_code, count })), folded_reason_count: Math.max(0, reasons.size - 8) },
     open_items: [], active_constraints: [], rejected_bindings: [], available_evidence: [], available_qualifications: [] }
+  if (full.current_feedback === true) {
+    output.reason_code = full.reason_code
+    output.feedback_source = 'confirmed_core_v2'
+    output.current_actions = ((full.current_actions ?? []) as unknown[]).slice(0, 8)
+    output.current_action_total = ((full.current_actions ?? []) as unknown[]).length
+    output.certificate_status = 'not_requested'
+  }
   if (full.certificate) output.certificate = full.certificate
   // The presented proof's binding state is part of the answer, not a range
   // detail: a caller that supplied a proof must learn whether it bound.
   if (full.proof_state) output.proof_state = full.proof_state
   const pagination: Record<string, unknown> = { snapshot: identity, scope: evidence_scope,
-    counts: { pending: [...p.items.values()].filter(i => i.status === 'pending').length,
-      passed: [...p.items.values()].filter(i => i.status === 'passed').length,
-      superseded: [...p.items.values()].filter(i => i.status === 'superseded').length },
+    counts: full.current_feedback === true
+      ? { pending: (full.open_items as unknown[]).length,
+        passed: Object.values((p.coreV2?.predicates ?? {}) as Record<string, string>).filter(value => value === 'satisfied').length,
+        superseded: 0 }
+      : { pending: [...p.items.values()].filter(i => i.status === 'pending').length,
+        passed: [...p.items.values()].filter(i => i.status === 'passed').length,
+        superseded: [...p.items.values()].filter(i => i.status === 'superseded').length },
     detail_query: 'Use detail_id and detail_offset; evidence_scope=history includes non-citable evidence.' }
   // 0.6.2 D062-01: an item row carries the shared capability fact, so a row
   // that fits inline may be up to 1850 bytes. 0.6.2 also stops the truncation

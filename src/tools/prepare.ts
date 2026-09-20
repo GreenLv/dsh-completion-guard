@@ -11,6 +11,8 @@ import { actionHasAdapter, evaluateCompatibility } from '../domain/compatibility
 import { itemHoldsExecutionAuthority } from '../domain/semantics.js'
 import type { TargetTuple } from '../domain/types.js'
 import { unitDescendantIds } from '../domain/work-unit.js'
+import { currentV6Feedback, sourceItemForCoreRequirement } from '../domain/v6-feedback.js'
+import { sha256 } from '../domain/canonicalize.js'
 
 export interface PrepareToolOptions {
   getProjection: () => GuardProjection | undefined
@@ -70,6 +72,8 @@ interface DiscoveryCursor {
   f: string | null
   /** Sort key of the last item on the previous page: [revision, id]. */
   k: [number, string]
+  /** Confirmed shared-core as-of identity for default v6 discovery. */
+  c?: string
 }
 
 const encodeCursor = (cursor: DiscoveryCursor): string =>
@@ -85,6 +89,8 @@ const encodeCursor = (cursor: DiscoveryCursor): string =>
  * are reached by item ID, not re-listed here (0.6.1, W060-03).
  */
 function discoveryItemIds(p: GuardProjection): string[] {
+  const current = currentV6Feedback(p)
+  if (current && current.status !== 'unknown') return current.openIds
   const pending = [...p.items.values()]
     .filter((item) => item.status === 'pending')
     .sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id))
@@ -136,10 +142,43 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       }
       const p = options.getProjection()
       if (!p || !p.enabled || p.integrity !== 'valid') return { status: 'unknown', reason_code: 'guard_unavailable' }
+      const currentFeedback = currentV6Feedback(p)
+      if (currentFeedback?.status === 'unknown') return { status: 'unknown', reason_code: currentFeedback.reasonCode }
       if (p.boundaryProtocol === 6 && args.item_id !== undefined) {
-        const current = p.items.get(args.item_id)
+        const sourced = currentFeedback ? sourceItemForCoreRequirement(p, args.item_id) : undefined
+        const current = sourced?.item ?? p.items.get(args.item_id)
         if (!current) return { status: 'rejected', reason_code: 'item_not_found' } as Record<string, JsonValue>
         if (args.item_revision !== undefined && args.item_revision !== current.revision) return { status: 'rejected', reason_code: 'item_revision_mismatch' } as Record<string, JsonValue>
+        if (current.kind === 'prohibition' && currentFeedback) {
+          const state = currentFeedback.predicates[args.item_id]
+          if (state === 'constraint_active' || state === 'constraint_unresolved' || state === 'constraint_violated') return {
+            status: state === 'constraint_active' ? 'active' : state === 'constraint_unresolved' ? 'unknown' : 'incomplete',
+            reason_code: state,
+            item: { id: current.id, revision: current.revision, status: state },
+            next_step: state === 'constraint_active' ? 'This sourced prohibition remains active.'
+              : state === 'constraint_unresolved' ? 'The current Host facts cannot establish whether this prohibition was respected.'
+                : 'A sourced Host mutation violated this prohibition.',
+          } as Record<string, JsonValue>
+        }
+        if (current.semanticAction !== 'publish' && currentFeedback) {
+          const exactDerived = sourced?.origin !== undefined
+          const related = Object.entries(currentFeedback.predicates)
+            .filter(([id]) => exactDerived ? id === args.item_id
+              : id === args.item_id || sourceItemForCoreRequirement(p, id)?.item.id === current.id)
+          const state = related.length === 0 ? undefined
+            : related.every(([, value]) => value === 'satisfied') ? 'satisfied' : 'insufficient'
+          return {
+            status: state === undefined || state === 'satisfied' ? 'observed' : 'incomplete',
+            reason_code: state === undefined ? 'historical_item_not_current'
+              : state === 'satisfied' ? 'ordinary_current_predicate_observed' : 'current_predicate_insufficient',
+            item: { id: args.item_id, source_item_id: current.id, revision: current.revision,
+              status: state ?? 'historical', related_requirement_ids: related.map(([id]) => id) },
+            next_step: state === undefined ? 'This item is historical and is not current ordinary work.'
+              : state === 'satisfied'
+                ? 'This ordinary predicate is already observed. Continue with the remaining sourced requirements; no Guard execution qualification is needed.'
+                : 'Use the current sourced action and host facts; no Guard execution qualification is needed.',
+          } as Record<string, JsonValue>
+        }
         if (current.semanticAction !== 'publish') return {
           status: 'observed', reason_code: 'ordinary_execution_host_owned',
           item: { id: current.id, revision: current.revision, status: current.status },
@@ -158,6 +197,7 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       // actually prepared or checkpointed.
       if (args.item_id === undefined) {
         const filter = args.semantic_action ?? null
+        const coreIdentity = currentFeedback ? sha256(JSON.stringify(p.coreV2 ?? null)) : undefined
         // Cursor refusals stay minimal: `undefined` is not a lossless JSON
         // value, so optional fields are spread in only when defined.
         const invalidCursor = (reason_code: string, note?: string) => ({
@@ -174,22 +214,26 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
             if (args.page_cursor.length <= 1024) {
               const value = JSON.parse(Buffer.from(args.page_cursor, 'base64url').toString('utf8')) as DiscoveryCursor
               if (value?.v === 1 && Number.isSafeInteger(value.r) && (value.f === null || typeof value.f === 'string')
-                && Array.isArray(value.k) && Number.isSafeInteger(value.k[0]) && typeof value.k[1] === 'string') parsed = value
+                && Array.isArray(value.k) && Number.isSafeInteger(value.k[0]) && typeof value.k[1] === 'string'
+                && (value.c === undefined || typeof value.c === 'string')) parsed = value
             }
           } catch { parsed = undefined }
           if (!parsed) return invalidCursor('discovery_cursor_malformed')
           if (parsed.r !== p.contractRevision) {
             return invalidCursor('discovery_cursor_stale', `The contract changed (cursor revision ${parsed.r}, current ${p.contractRevision}). Re-run discovery without page_cursor; items are never skipped by a stale page.`)
           }
+          if (parsed.c !== coreIdentity) return invalidCursor('discovery_cursor_stale', 'The current observation changed. Re-run discovery without page_cursor.')
           if ((parsed.f ?? null) !== (filter ?? null)) return invalidCursor('discovery_cursor_filter_mismatch')
           startAfter = parsed.k
         }
         const eligible = discoveryItemIds(p)
-          .map((id) => p.items.get(id)!)
-          .filter((item) => filter === null || (item.semanticAction ?? 'generic_run') === filter)
+          .map((id) => ({ id, sourced: currentFeedback ? sourceItemForCoreRequirement(p, id) : undefined,
+            item: currentFeedback ? sourceItemForCoreRequirement(p, id)?.item : p.items.get(id) }))
+          .filter((entry): entry is typeof entry & { item: GuardItem } => entry.item !== undefined)
+          .filter(({ item, sourced }) => filter === null || (sourced?.origin?.action ?? item.semanticAction ?? 'generic_run') === filter)
         const startIndex = startAfter === undefined
           ? 0
-          : eligible.findIndex((item) => item.revision === startAfter![0] && item.id === startAfter![1]) + 1
+          : eligible.findIndex(({ id, item }) => item.revision === startAfter![0] && id === startAfter![1]) + 1
         if (startAfter !== undefined && startIndex <= 0) {
           return invalidCursor('discovery_cursor_stale', 'The cursor names an item no longer in the current listing. Re-run discovery without page_cursor.')
         }
@@ -203,22 +247,25 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
           total_open: eligible.length,
           listed: page.length,
           has_more: hasMore,
-          items: page.map((item) => {
+          items: page.map(({ id, item, sourced }) => {
             const diagnosis = deriveItemDiagnosis(p, item)
             return {
-              id: item.id,
+              id,
+              ...(sourced?.origin ? { source_item_id: item.id, source_start: sourced.origin.sourceStart,
+                source_end: sourced.origin.sourceEnd, target: sourced.origin.target } : {}),
               revision: item.revision,
               kind: item.kind,
               ...(item.taskKind !== undefined ? { task_kind: item.taskKind } : {}),
-              semantic_action: item.semanticAction ?? 'generic_run',
-              reason_code: diagnosis.reason_code,
+              semantic_action: sourced?.origin?.action ?? item.semanticAction ?? 'generic_run',
+              reason_code: currentFeedback ? currentFeedback.predicates[id] ?? 'current_predicate_insufficient' : diagnosis.reason_code,
               text: item.normalizedText,
             }
           }),
           ...(hasMore ? {
             next_cursor: encodeCursor({
               v: 1, r: p.contractRevision, f: filter,
-              k: [page[page.length - 1]!.revision, page[page.length - 1]!.id],
+              k: [page[page.length - 1]!.item.revision, page[page.length - 1]!.id],
+              ...(coreIdentity ? { c: coreIdentity } : {}),
             }),
           } : {}),
           ...(filter !== null ? { filtered_by: { semantic_action: filter } } : {}),

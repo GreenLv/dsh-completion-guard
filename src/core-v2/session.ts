@@ -193,7 +193,8 @@ function rootControls(roots: DerivedEnvelope[], requirements: Array<Record<strin
 
 /** Convert only real session sources and derived facts. Missing spans, calls, or
  * readback remain unknown/insufficient; this adapter never fabricates them. */
-export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: GuardProjection): Record<string, unknown> | undefined {
+export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: GuardProjection,
+  displayOrigins?: NonNullable<GuardProjection['coreV2RequirementOrigins']>): Record<string, unknown> | undefined {
   const unit = projection.currentUnitId
   if (projection.boundaryProtocol !== 6 || !unit || projection.durabilityWatermark !== 'confirmed') return undefined
   const roots = events.filter((event) => event.type === 'user/message' && row(row(event.data).source).kind === 'user')
@@ -347,6 +348,8 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
             implementation_choice: literalTarget || fact ? target : null, host_selection: literalTarget || fact ? target : null,
             resolved: target, observed: literalTarget || fact ? target : null, constraint_kind: literalTarget ? 'exact' : 'work_unit', subject_kind: subjectKind,
             selection_source_id: fact ? `call:${fact.callId}` : null } })
+        displayOrigins?.set(requirementId, { itemId: item.id, action: tool, target,
+          sourceStart: itemSpan.start, sourceEnd: itemSpan.end })
         if (!fact || !pair) continue
         const callId = `call:${fact.callId}`, resultId = `result:${fact.callId}`
         if (!sources.some((source) => source.id === callId)) {
@@ -728,7 +731,8 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     goal_contract_adopted: projection.goalCompletionAdopted, release_state: projection.releaseContracts.some((entry) => entry.revokedAtSeq === undefined) ? 'adopted' : 'not_adopted' }
   return snapshot
 }
-export function projectSessionCoreV2(events: DerivedEnvelope[], projection: GuardProjection): Record<string, unknown> | undefined {
-  const snapshot = sessionCoreSnapshot(events, projection)
+export function projectSessionCoreV2(events: DerivedEnvelope[], projection: GuardProjection,
+  displayOrigins?: NonNullable<GuardProjection['coreV2RequirementOrigins']>): Record<string, unknown> | undefined {
+  const snapshot = sessionCoreSnapshot(events, projection, displayOrigins)
   return snapshot ? projectCoreV2(snapshot) : undefined
 }

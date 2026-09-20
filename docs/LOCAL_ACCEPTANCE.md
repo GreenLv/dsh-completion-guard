@@ -2,6 +2,8 @@
 
 ## 0.7.0 source candidate (Unreleased, 2026-09-18)
 
+The default-v6 feedback repair has focused Session and persisted-reload tests: after a named Host test is satisfied in the confirmed shared core, prepare and checkpoint no longer list its historical pending binding as current work. Before final delivery, a separately sourced report stays open; after trusted delivery, the read-only ordinary feedback is observed without minting a certificate. Missing core input remains unknown. Explicit proof, adopted Goal and applicable release protection retain their certificate paths. These changed source bytes still require the final source, package, CI and native gates; earlier model archives identify the contradiction but are not acceptance of this repair.
+
 The later default-workdir repair has focused source and real installed
 `0.1.5-rc.2` Host-byte tests only. A read-only Cordis pre-execute observation
 can bind an omitted `workdir` to the physical Session cwd when the same-call

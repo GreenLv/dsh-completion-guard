@@ -8,6 +8,7 @@ import { ACTION_MANIFEST, isStatefulAction } from '../domain/protocol-manifest.j
 import { availableBoundaryQualifications } from '../domain/boundary.js'
 import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from '../domain/proof.js'
 import type { BindingActionClosure, EvidenceBinding, ExpectedTransition, GuardEvidence, GuardItem, GuardProjection, TargetTuple } from '../domain/types.js'
+import { currentV6Feedback, sourceItemForCoreRequirement } from '../domain/v6-feedback.js'
 
 export interface CheckpointArgs extends PageQuery {
   bindings: Array<{
@@ -183,7 +184,7 @@ export function createCheckpointTool(
 ): ToolDefinition {
   return defineTool({
     name: 'context_guard_checkpoint',
-    description: 'Request a completion certificate from existing durable evidence.',
+    description: 'Read current ordinary closure from confirmed observations; request a certificate only for an explicitly adopted proof, Goal, or release contract.',
     parameters: {
       item_ids: { type: 'array', items: { type: 'string' } },
       evidence_ids: { type: 'array', items: { type: 'string' } },
@@ -342,6 +343,34 @@ export function createCheckpointTool(
       if (!durable || !projection) {
         onRejected()
         return { status: 'unknown' as const, contract_revision: 0, open_items: [], available_evidence: [], available_qualifications: [], rejected_bindings: [] }
+      }
+      const currentFeedback = args.proof === undefined ? currentV6Feedback(projection) : undefined
+      if (currentFeedback) {
+        const openRows = currentFeedback.openIds.map((id) => {
+          const sourced = sourceItemForCoreRequirement(projection, id)
+          return {
+            id, reason_code: currentFeedback.predicates[id],
+            ...(sourced ? { source_item_id: sourced.item.id, revision: sourced.item.revision,
+              kind: sourced.item.kind, text: sourced.item.normalizedText } : {}),
+            ...(sourced?.origin ? { source_start: sourced.origin.sourceStart, source_end: sourced.origin.sourceEnd,
+              semantic_action: sourced.origin.action, target: sourced.origin.target } : {}),
+            next_step: 'Answer this sourced requirement using the current Host observation or final delivery; ordinary Guard bindings are not required.',
+          }
+        })
+        const constraints = Object.entries(currentFeedback.predicates)
+          .filter(([, state]) => state === 'constraint_active' || state === 'constraint_unresolved' || state === 'constraint_violated')
+          .map(([id, state]) => ({ id, reason_code: state }))
+        return checkpointPage(projection, args, {
+          status: currentFeedback.status,
+          reason_code: currentFeedback.reasonCode,
+          current_feedback: true,
+          contract_revision: projection.contractRevision,
+          blocking_total: openRows.length,
+          open_items: openRows,
+          active_constraints: constraints,
+          available_evidence: [], available_qualifications: [], rejected_bindings: [],
+          current_actions: currentFeedback.currentActions,
+        })
       }
       const bindings: EvidenceBinding[] = args.bindings.map((binding) => ({
         itemId: binding.item_id,

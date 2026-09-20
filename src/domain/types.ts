@@ -541,6 +541,10 @@ export interface GuardProjection {
   rootLocatorIdentity?: string
   /** Shared core/v2 projection from confirmed Session sources; absent when the adapter lacks exact source coverage. */
   coreV2?: Record<string, unknown>
+  /** Display-only producer relation for derived core requirements (for example
+   * one observer method split into separately sourced tool predicates). It is
+   * rebuilt with coreV2 from the same Session snapshot and is never authority. */
+  coreV2RequirementOrigins?: Map<string, { itemId: string; action: string; target: string; sourceStart: number; sourceEnd: number }>
   coreV2Reason?: 'source_not_projectable' | 'projection_failed'
   /** 0.6.0 responsibility tier (C06), from the effective configuration. */
   policy: 'standard' | 'strict' | 'release'

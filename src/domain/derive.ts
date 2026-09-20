@@ -28,6 +28,7 @@ import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
 import { observerMethodEvidence } from './observer-method.js'
+import { defaultV6OrdinaryFeedbackScope } from './v6-feedback.js'
 import {
   normalizeReleaseContract, normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH,
   RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX, RELEASE_REVOCATION_PREFIX,
@@ -2077,6 +2078,11 @@ export function deriveProjection(
           // promoted to a certificate.
           const recorded = parseArguments(textContent)
           if (recorded.status !== 'certified') {
+            // Default v6 ordinary feedback is a read-only shared-core view, not
+            // a failed attempt at the retired binding certificate. Replaying
+            // it must not manufacture legacy rejection diagnostics that send
+            // the next turn back through execution qualification.
+            if (call.proof === undefined && defaultV6OrdinaryFeedbackScope(projection)) break
             if ((call.bindings?.length ?? 0) > 0) {
               const rejected = certifyCheckpoint(projection, call.bindings ?? [], 'diagnostic', false)
               projection.lastCheckpointRejections = rejected.rejectedBindings
