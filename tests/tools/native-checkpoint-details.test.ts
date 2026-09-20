@@ -47,7 +47,8 @@ it('executes the native npm fixture with the intended exit status on the platfor
  } finally {
   rmSync(cwd, { recursive: true, force: true })
  }
-})
+// Three bounded npm child processes can each use 30 seconds on a loaded CI host.
+}, 100_000)
 
 it('requires a completed successful foreground command before requesting a test certificate', async () => {
  const { assertTestCommandSucceeded, shellTerminalFacts } = await import(probeModule)
