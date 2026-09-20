@@ -19,7 +19,8 @@ import { createPrepareTool } from '../src/tools/prepare.js'
 import { projectSessionCoreV2 } from '../src/core-v2/session.js'
 import { requestedTargetMatchesResolved } from '../src/domain/protocol-manifest.js'
 
-const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
+  auditedForegroundRenderers: ['bash' as const] }
 const gitExec = promisify(execFile)
 function appendCall(session: Session, id: string, name: string, args: object): void {
   session.append('tool/call', { turn: 1, step: 1, callId: id as never, name, arguments: JSON.stringify(args) })

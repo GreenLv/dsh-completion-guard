@@ -14,7 +14,8 @@ import { currentActionBases, decideTurnBoundary } from '../src/domain/stop-polic
 import { createRuntime } from '../src/runtime.js'
 import { createHash } from 'node:crypto'
 import { evidenceFromPersistedToolResult } from '../src/domain/evidence.js'
-const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
+  auditedForegroundRenderers: ['bash' as const] }
 const note = { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } } as DerivedEnvelope
 function replay(root: string) {
   const events: DerivedEnvelope[] = [note, { seq: 2, type: 'turn/start', data: { turn: 1 } },

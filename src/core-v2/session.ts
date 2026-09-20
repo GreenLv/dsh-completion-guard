@@ -4,6 +4,7 @@ import type { GuardProjection, DerivedEnvelope, GuardItem } from '../domain/type
 import { assessmentAction, assessmentOutcomePredicate, currentActionBases, v6TestPredicate } from '../domain/stop-policy.js'
 import { actionClassScopeSpeech, controlSpeech, currentUnitScopeSpeech, projectCoreV2, rootControlCandidateSpans } from './project.js'
 import { persistedToolResultStatus } from '../domain/evidence.js'
+import { hostWorkdirForCall } from '../domain/host-workdir.js'
 import { observerMethodEvidence } from '../domain/observer-method.js'
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
@@ -481,9 +482,14 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       let args: Record<string, unknown> = {}
       try { args = row(JSON.parse(String(row(pair.call.data).arguments ?? ''))) } catch { return false }
       const expected = `${namedTest[1]!.toLowerCase()} test`
+      const workdir = typeof args.workdir === 'string' ? args.workdir
+        : !Object.hasOwn(args, 'workdir') && typeof item.requestedTarget?.scope === 'string'
+          ? hostWorkdirForCall(events, pair.call, pair.result, root.seq,
+            projection.sessionRefDigest, projection.hostLockDigest,
+            projection.rootLocatorContexts.get(root.seq)?.base ?? '') : undefined
       return String(args.command ?? '').trim() === expected && args.run_in_background !== true
-        && typeof args.workdir === 'string' && fact.subjects.length === 1
-        && fact.subjects[0] === args.workdir && fact.subjects[0] === item.requestedTarget?.scope
+        && typeof workdir === 'string' && fact.subjects.length === 1
+        && fact.subjects[0] === workdir && fact.subjects[0] === item.requestedTarget?.scope
     }
     const selectedDirectTest = namedTest && !guarded ? [...projection.evidence.values()]
       .filter(isDirectTestFact).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : undefined
@@ -646,8 +652,12 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         && pair.call.seq <= root.seq && pair.result.seq >= root.seq
       if (!pair || pair.result.seq !== evidence.toolResultSeq || (pair.call.seq <= root.seq && !crossesNewConstraint)) continue
       const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId)
-      const untrustedDirectTest = item.semanticAction === 'test' && selectedDirectTest && !selectedReadiness
-        && evidence.evidenceRole === 'effect' && !isDirectTestFact(evidence)
+      // A readiness observer selects package inputs, not the cwd of a later
+      // Host process. Every ordinary test effect still needs its own exact
+      // call-time target proof; an evidence subject defaulted from the header
+      // is not a substitute for what the Host actually executed.
+      const untrustedDirectTest = item.semanticAction === 'test' && evidence.evidenceRole === 'effect'
+        && (namedTest ? !isDirectTestFact(evidence) : !selectedReadiness)
       const outcome = untrustedDirectTest ? 'unknown'
         : hostResultStatus === 'failure' || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
         : evidence.outcome !== 'success' || evidence.processFacts?.outcome === 'unknown'

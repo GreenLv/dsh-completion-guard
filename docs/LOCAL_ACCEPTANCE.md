@@ -2,6 +2,17 @@
 
 ## 0.7.0 source candidate (Unreleased, 2026-09-18)
 
+The later default-workdir repair has focused source and real installed
+`0.1.5-rc.2` Host-byte tests only. A read-only Cordis pre-execute observation
+can bind an omitted `workdir` to the physical Session cwd when the same-call
+policy and active shell provider are exactly audited; ordinary Host test
+effects remain independent of any Guard readiness-tool qualification.
+Missing/ambiguous Host route or old logs without the call-time receipt stay
+insufficient and are never backfilled from current settings. This candidate
+requires its own complete source matrix, clean artifact, CI, macOS/Windows
+native acceptance, and real-model readback; prior artifact results do not
+establish those gates for changed bytes.
+
 This is a local source-candidate record, not a release or native-platform acceptance. The shared core/v2 source and mirror bytes are bound to Codex Context Guard commit `7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a` by `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json`; the historical v1/digest `UPSTREAM_PIN.json` keeps its prior identity. Every mirrored fixture and runtime JSON copy is checked against the committed upstream bytes. This is source-mirror identity, not a claim of complete runtime equivalence, installation, native acceptance, or publication. DSH product commit, clean-source artifact and CI results are separate follow-up evidence kept in the coordinated handoff.
 
 The source adapter reads confirmed Session events, exact root UTF-8 spans, persisted host call/result pairs, and readback evidence. Missing provenance remains unknown. A relative file or directory constraint keeps its literal root span; its resolution uses the root-time Session working directory and the filesystem provider's canonical path/containment readback. An opaque test or measurement target cannot be relabeled as a file, and a later tool working directory cannot strengthen the root. A prohibition may point to a unique file mention elsewhere in the same root while preserving its own prohibition span; a sourced successful host mutation of that file remains a completion violation even after an allowed edit succeeds. Text-only claims create no mutation fact. The new v6 root-locator identity and native observation/v2 are bound into certificate version 4; historical digest_v3 and certificate version 3 remain unchanged. The read-only native file, Git, and package-script readiness observers do not perform ordinary business effects. The package observer binds an actual test or benchmark script and can use an existing stable manifest without forcing another edit. Future time and approval conditions remain pending even when the inputs are ready. A v6 boundary activates the new path for current work; older v5 records retain historical bytes but old generic actions, text-derived waits, and ordinary terminal qualifications require current review before a new certificate. Explicit proof and adopted release contracts remain separate.

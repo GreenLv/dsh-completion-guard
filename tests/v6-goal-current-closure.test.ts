@@ -10,7 +10,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 
-const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
+  auditedForegroundRenderers: ['bash' as const] }
 
 function fixture() {
   const id = SessionId('v6-goal-current-closure')

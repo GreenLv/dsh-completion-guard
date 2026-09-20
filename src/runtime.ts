@@ -65,8 +65,9 @@ import {
 } from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
-import { auditedForegroundRenderers, readActiveHostGraph } from './domain/host-resolver.js'
+import { auditedDefaultWorkdirProvider, auditedForegroundRenderers, readActiveHostGraph } from './domain/host-resolver.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
+import { captureHostWorkdir, HOST_WORKDIR_PREFIX, sourcedNamedTestRoot } from './domain/host-workdir.js'
 import { resolveAuditedRef } from './tools/evidence.js'
 import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 
@@ -739,6 +740,30 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
   }
 }
 
+/** Observe one actual Host dispatch through Cordis without joining its gate. */
+export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall: () => HostLockEvaluation,
+  attestedRouteAtCall: (tool: 'bash' | 'pwsh', provider: unknown, policyProvider: unknown) => Promise<boolean> | boolean,
+  sourcedRootAtCall?: (exec: { arguments: unknown }) => number | undefined): void {
+  if (typeof agent.ctx.on !== 'function') return
+  agent.ctx.on('tools/pre-execute', async (exec, next) => {
+    if (exec.agent === agent && (exec.name === 'bash' || exec.name === 'pwsh')) {
+      try {
+        // Context.get is the read-only service lookup without an inject
+        // requirement. The same scoped sandboxPolicy service is used by the
+        // audited Bash producer. A missing service produces no receipt.
+        const policy = agent.ctx.get('sandboxPolicy') as { resolve(request: { session: Session }): unknown } | undefined
+        const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(), policy,
+          await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy), sourcedRootAtCall?.(exec) ?? null)
+        if (receipt) agent.session.append('user/message', createUserMessage({
+          content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
+          source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'read-only Host workdir observation' },
+        }), { surfaceOp: 'append' })
+      } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
+    }
+    return next()
+  })
+}
+
 /**
  * Executor and network seams for acceptance runs. They replace ONLY the two
  * things a deterministic test cannot do for real — spawning the mutation
@@ -826,6 +851,18 @@ export function apply(ctx: Context, rawConfig: {
     }
     if (registeredAgents.has(agent)) return
     registeredAgents.add(agent)
+    // Passive call-time Host context. This listener never changes the tool
+    // decision: a missing policy, physical identity or durable note only makes
+    // later completion evidence insufficient. The Host has already appended
+    // tool/call before invoking this waterfall, so the note can bind its seq.
+    registerPassiveHostWorkdirObserver(agent, () => seams.hostLock ?? revalidateCoreLock(config, installedHostLock),
+      (tool, provider, policy) => config.hostLockRuntimeRoot && config.hostLockProfileRoot
+        ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy)
+        : false,
+      (exec) => {
+        runtime.sync()
+        return sourcedNamedTestRoot(runtime.projection, agent.session, exec.arguments)
+      })
     agent.ctx.tools.register(createRebindTool(() => runtime.projection, async () => {
       const durable = await ctx.sessions.flush(agent.session)
       runtime.setDurability(durable)

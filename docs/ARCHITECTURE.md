@@ -13,6 +13,29 @@ Context Guard separates DSH-owned execution from Guard-owned certification.
 
 Context Guard does not own Goal, Todo, Compaction, or continuation. It intervenes when completion is claimed without a valid certificate.
 
+## Call-time Host working-directory evidence
+
+For an ordinary named `npm test` or `pnpm test` Host call that omits `workdir`,
+the Guard may append a read-only plugin notice before execution. This is a
+call-time derivation from the original Session header, the scoped sandbox
+policy, the active shell service, and exact audited DSH `0.1.5-rc.2` producer
+bytes. It is **not** a working directory returned by the Host process. The
+notice binds the original call ID, sequence, turn, arguments digest, root
+source, Session digest, Host-lock digest, physical directory, and policy root.
+On replay it is accepted only between the matching call and result, with the
+same source and Host identity. The observer always lets the Host tool proceed;
+it grants no ordinary mutation or execution qualification.
+
+The Bash producer chooses the scoped policy workspace root, or the Session
+header cwd when no policy is mounted; this candidate only certifies the
+audited policy route when its physical root equals the immutable header cwd.
+PowerShell uses the immutable header cwd under its separately audited local
+executor. An explicit `workdir` is checked on its own merits. Missing or
+ambiguous provider identity, a lexical filesystem alias, absent physical
+directory, changed policy or graph bytes, background execution, or missing
+call-time notice leaves target attribution insufficient. Historical logs
+without such a notice cannot be upgraded by reading today's Host config.
+
 ## Durable state model
 
 The effective plugin configuration and the DSH Session append-only log are the inputs to the rebuildable Guard projection. Context Guard **appends no custom session event types**: the persisted event vocabulary is harness-owned and the current persistence layer refuses unknown event types. The `activation` configuration supplies the initial enablement state, while all later session state is derived from the natively persisted events DSH already writes:

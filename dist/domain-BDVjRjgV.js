@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 //#region src/domain/canonicalize.ts
 function normalizeClause(text) {
@@ -2765,12 +2766,12 @@ function semanticMethod(text) {
 * and two different readings never collide.
 */
 function fingerprintOf(source) {
-	let hash$2 = 2166136261;
+	let hash$3 = 2166136261;
 	for (let index$1 = 0; index$1 < source.length; index$1 += 1) {
-		hash$2 ^= source.charCodeAt(index$1);
-		hash$2 = Math.imul(hash$2, 16777619) >>> 0;
+		hash$3 ^= source.charCodeAt(index$1);
+		hash$3 = Math.imul(hash$3, 16777619) >>> 0;
 	}
-	return `i${hash$2.toString(16).padStart(8, "0")}`;
+	return `i${hash$3.toString(16).padStart(8, "0")}`;
 }
 /** Interpret one already-segmented clause. */
 function interpretClause(text, options = {}) {
@@ -6158,8 +6159,8 @@ function decisionBoundaryKey(projection) {
 }
 function progressFingerprint(projection) {
 	const open = [...projection.items.values()].filter((item) => item.status === "pending").map((item) => `${item.id}:${item.revision}:${item.normalizedText}`).sort();
-	const evidence = [...projection.evidence.values()].filter((row$2) => row$2.epoch === projection.epoch && row$2.outcome === "success").map((row$2) => row$2.id).sort();
-	const qualifications = availableBoundaryQualifications(projection).map((row$2) => `${row$2.id}:${row$2.status}`).sort();
+	const evidence = [...projection.evidence.values()].filter((row$3) => row$3.epoch === projection.epoch && row$3.outcome === "success").map((row$3) => row$3.id).sort();
+	const qualifications = availableBoundaryQualifications(projection).map((row$3) => `${row$3.id}:${row$3.status}`).sort();
 	return JSON.stringify({
 		epoch: projection.epoch,
 		contractRevision: projection.contractRevision,
@@ -6839,14 +6840,14 @@ function hostLockDigest(manifest) {
 		const byName = byUtf8(a.name, b.name);
 		return byName !== 0 ? byName : Buffer.compare(typedToken(a.value), typedToken(b.value));
 	});
-	for (const row$2 of sortedRows) {
-		requireExactKeys(row$2, CAPABILITY_KEYS, "capability row");
-		if (typeof row$2.name !== "string" || !DYNAMIC_KEY_RE.test(row$2.name)) throw new DigestError(`capability name must match snake_case grammar: ${String(row$2.name)}`);
-		const token = typedToken(row$2.value);
-		const marker = `${row$2.name}\u0000${token.toString("hex")}`;
-		if (seen.has(marker)) throw new DigestError(`duplicate capability row: ${row$2.name}`);
+	for (const row$3 of sortedRows) {
+		requireExactKeys(row$3, CAPABILITY_KEYS, "capability row");
+		if (typeof row$3.name !== "string" || !DYNAMIC_KEY_RE.test(row$3.name)) throw new DigestError(`capability name must match snake_case grammar: ${String(row$3.name)}`);
+		const token = typedToken(row$3.value);
+		const marker = `${row$3.name}\u0000${token.toString("hex")}`;
+		if (seen.has(marker)) throw new DigestError(`duplicate capability row: ${row$3.name}`);
 		seen.add(marker);
-		parts.push(optField(`cap:${row$2.name}`, token, (v) => v));
+		parts.push(optField(`cap:${row$3.name}`, token, (v) => v));
 		count += 1;
 	}
 	const rawPackages = manifest.packages;
@@ -7042,9 +7043,9 @@ function bindingDigest(records, allowlist) {
 		const byItem = byUtf8(a.item, b.item);
 		return byItem !== 0 ? byItem : byUtf8(a.semanticAction, b.semanticAction);
 	});
-	for (const row$2 of rows) parts.push(field("binding", typedToken({
+	for (const row$3 of rows) parts.push(field("binding", typedToken({
 		k: "x",
-		v: row$2.digest
+		v: row$3.digest
 	})));
 	checkFieldCount(records.length);
 	return sha256Hex(Buffer.concat(parts));
@@ -7548,7 +7549,7 @@ function openItems(projection) {
 */
 function recoveryDigest(packet, projection) {
 	const items = openItems(projection);
-	const evidence = [...projection.evidence.values()].filter((row$2) => items.some((item) => relevantEvidence(projection, item, row$2)));
+	const evidence = [...projection.evidence.values()].filter((row$3) => items.some((item) => relevantEvidence(projection, item, row$3)));
 	return sha256(JSON.stringify({
 		packet,
 		revision: projection.contractRevision,
@@ -7616,7 +7617,7 @@ function renderRecoveryPacket(projection, options = {}) {
 		for (const item of constraints.slice(1, 4)) constraint(item);
 		for (const binding of rejected$1.slice(0, 4)) if (add(`rejected ${clip(binding.itemId, 30)}: ${clip(binding.reasonCode ?? binding.reason, 120)}`, 170)) refusals++;
 		for (const item of work.slice(0, 4)) if (itemDiagnosis(projection, item).certifiable) add(`closing hint [${clip(item.id, 20)}]: ${closingHint(projection, item)}`, 240);
-		for (const row$2 of evidence.slice(0, 4)) if (add(`evidence ${clip(row$2.id, 40)} action=${row$2.semanticAction} role=${row$2.evidenceRole ?? "effect"}`, 140)) shown++;
+		for (const row$3 of evidence.slice(0, 4)) if (add(`evidence ${clip(row$3.id, 40)} action=${row$3.semanticAction} role=${row$3.evidenceRole ?? "effect"}`, 140)) shown++;
 	}
 	lines.push(footer(count, refusals, shown), pointer);
 	return lines.join("\n");
@@ -8759,7 +8760,7 @@ function simpleRecord(projection, item, binding) {
 	} };
 	if (action === "test" && (effect.toolName === "bash" || effect.toolName === "pwsh")) {
 		const process$1 = effect.processFacts;
-		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row$2) => row$2.outcome === "success"))) return { rejected: {
+		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row$3) => row$3.outcome === "success"))) return { rejected: {
 			itemId: item.id,
 			reason: "test process outcome is not attributable to the required operation",
 			reasonCode: "operation_unattributable"
@@ -10450,11 +10451,11 @@ const ALPHA2_HOST_PACKAGES = [
 * identities and the dshmarket 1.39.0 identity is the authoritative row from
 * the 2026-09-01 alpha.3 annex audit. Guard 0.4.0 supports this combination.
 */
-const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row$2) => row$2.name === "dshmarket" ? {
+const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row$3) => row$3.name === "dshmarket" ? {
 	name: "dshmarket",
 	version: "1.39.0",
 	integrity: ALPHA3_HOST_PACKAGES.find((entry) => entry.name === "dshmarket").integrity
-} : row$2);
+} : row$3);
 /**
 * Historical audited host cohort registry. Every entry keeps the exact package
 * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
@@ -10658,7 +10659,7 @@ const HOST_COHORTS = [...LEGACY_HOST_COHORTS, defineCohort("dsh-0.1.5-rc.2", ["0
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
-	packages: cohort.packages.filter((row$2) => row$2.name !== "dshmarket"),
+	packages: cohort.packages.filter((row$3) => row$3.name !== "dshmarket"),
 	capabilities: [
 		{
 			name: "host_cohort",
@@ -10697,7 +10698,7 @@ const EXPECTED_HOST_PACKAGES = HOST_COHORTS[0].packages;
 * cohort rows rather than hardcoded, so a cohort bump cannot leave a stale
 * literal behind in the target-inspection path.
 */
-const ACTIVE_HOST_LAUNCHER_VERSION = EXPECTED_HOST_PACKAGES.find((row$2) => row$2.name === "@deepseek-ai/dsh")?.version;
+const ACTIVE_HOST_LAUNCHER_VERSION = EXPECTED_HOST_PACKAGES.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version;
 const packageNames = (...names) => new Set(names);
 const BASE_HOST_PACKAGES = packageNames("@deepseek-ai/cordis", "@deepseek-ai/dsh-agent", "@deepseek-ai/dsh-commands", "@deepseek-ai/dsh-llm", "@deepseek-ai/dsh-session", "@deepseek-ai/dsh-tools");
 const GOAL_HOST_PACKAGES = packageNames("@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal");
@@ -10719,7 +10720,7 @@ const HOST_CAPABILITY_PACKAGE_GROUPS = {
 * unknown, and an unknown version is not treated as supported.
 */
 function hostVersionFromPackages(rows) {
-	return rows.find((row$2) => row$2.name === "@deepseek-ai/dsh")?.version;
+	return rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version;
 }
 /**
 * Atomically select the audited cohort for one supplied package graph. A
@@ -10731,9 +10732,9 @@ function hostVersionFromPackages(rows) {
 * consistently.
 */
 function selectHostCohort(rows, platform) {
-	rows = rows.filter((row$2) => row$2.name !== "dshmarket");
-	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$2) => row$2.name)));
-	if (rows.some((row$2) => !registryNames.has(row$2.name))) return {
+	rows = rows.filter((row$3) => row$3.name !== "dshmarket");
+	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$3) => row$3.name)));
+	if (rows.some((row$3) => !registryNames.has(row$3.name))) return {
 		cohort: HOST_COHORTS[0],
 		consistent: false,
 		reasonCode: "host_cohort_unknown_package"
@@ -10743,12 +10744,12 @@ function selectHostCohort(rows, platform) {
 		consistent: false,
 		reasonCode: "host_cohort_unbound_identity"
 	};
-	const bound = rows.filter((row$2) => row$2.version !== void 0 && row$2.integrity !== void 0);
+	const bound = rows.filter((row$3) => row$3.version !== void 0 && row$3.integrity !== void 0);
 	const unboundCount = rows.length - bound.length;
-	const versionMatches = bound.map((row$2) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row$2.name && p.version === row$2.version)));
-	const identityMatches = bound.map((row$2, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row$2.name && p.version === row$2.version && p.integrity === row$2.integrity)));
+	const versionMatches = bound.map((row$3) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row$3.name && p.version === row$3.version)));
+	const identityMatches = bound.map((row$3, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row$3.name && p.version === row$3.version && p.integrity === row$3.integrity)));
 	const candidates = HOST_COHORTS.filter((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
-	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row$2) => row$2.name === expected.name).length === 1))[0] ?? candidates[0];
+	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row$3) => row$3.name === expected.name).length === 1))[0] ?? candidates[0];
 	if (consistentCohort !== void 0 && unboundCount === 0) {
 		if (platform && !consistentCohort.acceptedPlatforms.includes(platform)) return {
 			cohort: consistentCohort,
@@ -10756,8 +10757,8 @@ function selectHostCohort(rows, platform) {
 			reasonCode: "host_cohort_platform_not_audited"
 		};
 		const suppliedCounts = /* @__PURE__ */ new Map();
-		for (const row$2 of rows) suppliedCounts.set(row$2.name, (suppliedCounts.get(row$2.name) ?? 0) + 1);
-		if (!(consistentCohort.packages.every((row$2) => (suppliedCounts.get(row$2.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
+		for (const row$3 of rows) suppliedCounts.set(row$3.name, (suppliedCounts.get(row$3.name) ?? 0) + 1);
+		if (!(consistentCohort.packages.every((row$3) => (suppliedCounts.get(row$3.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
 			cohort: consistentCohort,
 			consistent: false,
 			reasonCode: "host_cohort_incomplete_graph"
@@ -10784,13 +10785,13 @@ function selectHostCohort(rows, platform) {
 	};
 }
 function stableRows(rows) {
-	return [...rows].map((row$2) => ({ ...row$2 })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
+	return [...rows].map((row$3) => ({ ...row$3 })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
 }
 function statusForPackages(id, rows, requiredNames, cohort) {
 	const requiredPackages = [...requiredNames].sort();
-	const relevant = rows.filter((row$2) => requiredNames.has(row$2.name));
+	const relevant = rows.filter((row$3) => requiredNames.has(row$3.name));
 	const counts = /* @__PURE__ */ new Map();
-	for (const row$2 of relevant) counts.set(row$2.name, (counts.get(row$2.name) ?? 0) + 1);
+	for (const row$3 of relevant) counts.set(row$3.name, (counts.get(row$3.name) ?? 0) + 1);
 	const missingPackages = requiredPackages.filter((name) => !counts.has(name));
 	const digest$1 = safeHostLockDigest(relevant, { capabilityId: id }, cohort);
 	if ([...counts.values()].some((count) => count > 1)) return {
@@ -10809,10 +10810,10 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		missingPackages,
 		reasonCode: "host_capability_missing"
 	};
-	const expected = new Map(cohort.packages.map((row$2) => [row$2.name, row$2]));
-	for (const row$2 of relevant) {
-		const pinned = expected.get(row$2.name);
-		if (!row$2.version || !row$2.integrity) return {
+	const expected = new Map(cohort.packages.map((row$3) => [row$3.name, row$3]));
+	for (const row$3 of relevant) {
+		const pinned = expected.get(row$3.name);
+		if (!row$3.version || !row$3.integrity) return {
 			id,
 			status: "unavailable",
 			digest: digest$1,
@@ -10820,7 +10821,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 			missingPackages,
 			reasonCode: "host_capability_missing"
 		};
-		if (row$2.version !== pinned.version) return {
+		if (row$3.version !== pinned.version) return {
 			id,
 			status: "unsupported",
 			digest: digest$1,
@@ -10828,7 +10829,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 			missingPackages,
 			reasonCode: "host_capability_version_mismatch"
 		};
-		if (row$2.integrity !== pinned.integrity) return {
+		if (row$3.integrity !== pinned.integrity) return {
 			id,
 			status: "unsupported",
 			digest: digest$1,
@@ -10852,19 +10853,19 @@ function cohortForEvaluation(evaluation) {
 	return HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
 }
 function evaluateHostLock(rows, context = {}) {
-	const supplied = stableRows(rows.filter((row$2) => row$2.name !== "dshmarket"));
+	const supplied = stableRows(rows.filter((row$3) => row$3.name !== "dshmarket"));
 	const selection = selectHostCohort(supplied, context.platform);
 	const cohort = selection.cohort;
 	const capabilities = capabilityEvaluations(supplied, cohort);
 	const counts = /* @__PURE__ */ new Map();
-	for (const row$2 of supplied) counts.set(row$2.name, (counts.get(row$2.name) ?? 0) + 1);
+	for (const row$3 of supplied) counts.set(row$3.name, (counts.get(row$3.name) ?? 0) + 1);
 	const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name));
 	const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size;
 	const digest$1 = safeHostLockDigest(supplied, context, cohort);
 	const base = statusForPackages("base", supplied, BASE_HOST_PACKAGES, cohort);
-	const missingPackages = cohort.packages.map((row$2) => row$2.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
-	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$2) => row$2.name)));
-	const unknown = supplied.find((row$2) => !registryNames.has(row$2.name));
+	const missingPackages = cohort.packages.map((row$3) => row$3.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
+	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$3) => row$3.name)));
+	const unknown = supplied.find((row$3) => !registryNames.has(row$3.name));
 	const hostVersionValue = context.hostVersion ?? hostVersionFromPackages(supplied);
 	const hostVersion = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
 	const baseResult = {
@@ -10884,7 +10885,7 @@ function evaluateHostLock(rows, context = {}) {
 		status: "unsupported",
 		reasonCode: "host_lock_unknown_package"
 	};
-	if (supplied.some((row$2) => (counts.get(row$2.name) ?? 0) > 1)) return {
+	if (supplied.some((row$3) => (counts.get(row$3.name) ?? 0) > 1)) return {
 		...baseResult,
 		status: "unavailable",
 		goalAvailable: false,
@@ -11102,10 +11103,10 @@ function safeHostLockDigest(packages, context = {}, cohort) {
 		});
 	} catch {
 		const bounded = {
-			packages: packages.map((row$2) => [
-				String(row$2.name),
-				row$2.version ?? null,
-				row$2.integrity ?? null
+			packages: packages.map((row$3) => [
+				String(row$3.name),
+				row$3.version ?? null,
+				row$3.integrity ?? null
 			]),
 			platform: context.platform ?? null,
 			profileKind: context.profileKind ?? null,
@@ -11987,9 +11988,9 @@ function declaredOperationResults(meta) {
 	if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return void 0;
 	const rows = [];
 	for (const raw of declared) {
-		const row$2 = asRecord$2(raw);
-		const action = typeof row$2?.action === "string" ? row$2.action : void 0;
-		const outcome = row$2?.outcome;
+		const row$3 = asRecord$2(raw);
+		const action = typeof row$3?.action === "string" ? row$3.action : void 0;
+		const outcome = row$3?.outcome;
 		if (!action || outcome !== "success" && outcome !== "failure" && outcome !== "unknown") return void 0;
 		rows.push({
 			action,
@@ -12705,10 +12706,10 @@ function deriveTrustedDeliveries(events) {
 		if (end.kind !== "completed") continue;
 		if (facts.steps.size === 0) continue;
 		const finalStep = Math.max(...facts.steps);
-		const inFinalStep = facts.assistants.filter((row$2) => row$2.step === finalStep && row$2.seq < end.seq && !row$2.interrupted && row$2.text.trim().length > 0);
+		const inFinalStep = facts.assistants.filter((row$3) => row$3.step === finalStep && row$3.seq < end.seq && !row$3.interrupted && row$3.text.trim().length > 0);
 		if (inFinalStep.length === 0) continue;
 		const final = inFinalStep.reduce((left, right) => right.seq > left.seq ? right : left);
-		if (facts.assistants.some((row$2) => row$2.seq > final.seq && row$2.seq < end.seq)) continue;
+		if (facts.assistants.some((row$3) => row$3.seq > final.seq && row$3.seq < end.seq)) continue;
 		deliveries.push({
 			turn,
 			turnEndSeq: end.seq,
@@ -12859,7 +12860,7 @@ function deriveTrustedSelections(events, options) {
 
 //#endregion
 //#region src/domain/observer-method.ts
-const row$1 = (value) => value && typeof value === "object" ? value : {};
+const row$2 = (value) => value && typeof value === "object" ? value : {};
 const birthSeq = (item) => {
 	const match = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
 	return match ? Number(match[1]) : void 0;
@@ -12871,9 +12872,9 @@ function observerMethodEvidence(projection, events, method, index$1) {
 	const instruction = method.observerMethod;
 	const rootSeq = birthSeq(method);
 	if (!instruction || rootSeq === void 0 || projection.v6BoundarySeq === void 0 || rootSeq <= projection.v6BoundarySeq || method.authority !== "root_instruction") return void 0;
-	const data = row$1(events.find((event) => event.seq === rootSeq && event.type === "user/message")?.data);
-	if (row$1(data.source).kind !== "user" || !Array.isArray(data.content)) return void 0;
-	if (sha256(data.content.filter((part) => row$1(part).type === "text").map((part) => String(row$1(part).text ?? "")).join("")) !== method.rawTextSha256) return void 0;
+	const data = row$2(events.find((event) => event.seq === rootSeq && event.type === "user/message")?.data);
+	if (row$2(data.source).kind !== "user" || !Array.isArray(data.content)) return void 0;
+	if (sha256(data.content.filter((part) => row$2(part).type === "text").map((part) => String(row$2(part).text ?? "")).join("")) !== method.rawTextSha256) return void 0;
 	const tool = instruction.tools[index$1];
 	const related = projection.items.get(instruction.targetItemIds[index$1] ?? "");
 	if (!tool || !related || related.rawTextSha256 !== method.rawTextSha256 || related.unitId !== method.unitId || birthSeq(related) !== rootSeq) return void 0;
@@ -12881,15 +12882,15 @@ function observerMethodEvidence(projection, events, method, index$1) {
 	if (typeof target !== "string" || !target) return void 0;
 	return [...projection.evidence.values()].find((fact) => {
 		if (fact.toolName !== tool || fact.outcome !== "success" || fact.parseStatus !== "supported" || fact.epoch !== projection.epoch || !fact.subjects.includes(target)) return false;
-		const calls = events.filter((event) => event.type === "tool/call" && row$1(event.data).callId === fact.callId);
+		const calls = events.filter((event) => event.type === "tool/call" && row$2(event.data).callId === fact.callId);
 		const results = events.filter((event) => {
 			if (event.type !== "tool/result") return false;
-			const content = row$1(row$1(event.data).message).content;
-			return Array.isArray(content) && content.some((part) => row$1(part).type === "tool-result" && row$1(part).toolCallId === fact.callId);
+			const content = row$2(row$2(event.data).message).content;
+			return Array.isArray(content) && content.some((part) => row$2(part).type === "tool-result" && row$2(part).toolCallId === fact.callId);
 		});
 		if (calls.length !== 1 || results.length !== 1) return false;
 		const call = calls[0], result = results[0];
-		if (call.seq <= rootSeq || call.seq >= result.seq || result.seq !== fact.toolResultSeq || row$1(call.data).name !== tool || row$1(call.data).turn !== row$1(result.data).turn || row$1(call.data).step !== row$1(result.data).step || persistedToolResultStatus(result.data, fact.callId) !== "clean") return false;
+		if (call.seq <= rootSeq || call.seq >= result.seq || result.seq !== fact.toolResultSeq || row$2(call.data).name !== tool || row$2(call.data).turn !== row$2(result.data).turn || row$2(call.data).step !== row$2(result.data).step || persistedToolResultStatus(result.data, fact.callId) !== "clean") return false;
 		if (tool === "context_guard_observe_test_readiness") return related.semanticAction === "test" && fact.readinessForItemId === related.id && fact.readinessPredicate === "test_passed";
 		return (related.semanticAction === "verify" || related.semanticAction === "modify") && fact.evidenceRole === "state" && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.outcome === "success" && effect.evidenceRole === "effect" && effect.toolResultSeq < fact.toolResultSeq && effect.subjects.includes(target));
 	});
@@ -15035,7 +15036,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 									...settlement,
 									settledAtSeq: event.seq
 								};
-								const key = (row$2) => `${row$2.contractId}\u0000${row$2.operation}\u0000${row$2.callId}`;
+								const key = (row$3) => `${row$3.contractId}\u0000${row$3.operation}\u0000${row$3.callId}`;
 								const index$1 = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned));
 								if (index$1 < 0) projection.releaseSettlements.push(pinned);
 								else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index$1].outcome]) projection.releaseSettlements[index$1] = pinned;
@@ -16416,10 +16417,10 @@ function validate(value, schema, path$1) {
 	if (kinds.length && !kinds.some(matches)) throw new Error(`${path$1}: wrong_type`);
 	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
 		const fields = schema.properties ?? {};
-		const row$2 = value;
-		if (schema.additionalProperties === false && Object.keys(row$2).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
-		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row$2))) throw new Error(`${path$1}: missing_fields`);
-		for (const [key, child] of Object.entries(row$2)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
+		const row$3 = value;
+		if (schema.additionalProperties === false && Object.keys(row$3).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
+		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row$3))) throw new Error(`${path$1}: missing_fields`);
+		for (const [key, child] of Object.entries(row$3)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
 	} else if (Array.isArray(value) && schema.items) for (const child of value) validate(child, schema.items, `${path$1}[]`);
 	else if (typeof value === "string") {
 		if (value.length < (schema.minLength ?? 0) || typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) throw new Error(`${path$1}: invalid_string`);
@@ -16441,7 +16442,7 @@ function validateCoreSnapshot(value, schema) {
 //#endregion
 //#region src/core-v2/project.ts
 const rules = patterns;
-const hash$1 = (bytes$1) => createHash("sha256").update(bytes$1).digest("hex");
+const hash$2 = (bytes$1) => createHash("sha256").update(bytes$1).digest("hex");
 const bytes = (value) => Buffer.from(value, "utf8");
 const canonical = (value) => {
 	if (value === null || typeof value === "boolean") return JSON.stringify(value);
@@ -16465,10 +16466,10 @@ const listed = (value) => value;
 const index = (rows, watermark) => {
 	const result = /* @__PURE__ */ new Map();
 	const seen = /* @__PURE__ */ new Set();
-	for (const row$2 of rows) {
-		if (seen.has(row$2.id)) throw new Error("duplicate_identity");
-		seen.add(row$2.id);
-		if (row$2.seq <= watermark) result.set(row$2.id, row$2);
+	for (const row$3 of rows) {
+		if (seen.has(row$3.id)) throw new Error("duplicate_identity");
+		seen.add(row$3.id);
+		if (row$3.seq <= watermark) result.set(row$3.id, row$3);
 	}
 	return result;
 };
@@ -16508,10 +16509,10 @@ function singleRootTaskScope(prefix, rows) {
 	const direct = prefix.trim().replace(/[。.!！]+$/u, "");
 	if (/[。！？;；\n]/u.test(direct)) return false;
 	if (rows.length === 1) return directWorkClause(direct);
-	const parents = rows.filter((row$2) => row$2.parent_id === null);
+	const parents = rows.filter((row$3) => row$3.parent_id === null);
 	if (parents.length !== 1 || parents[0].action !== "local_edit") return false;
 	const parent = parents[0];
-	if (!rows.every((row$2) => row$2 === parent || row$2.parent_id === parent.id && ["test_verify", "state_readback"].includes(row$2.action) && row$2.target === parent.target)) return false;
+	if (!rows.every((row$3) => row$3 === parent || row$3.parent_id === parent.id && ["test_verify", "state_readback"].includes(row$3.action) && row$3.target === parent.target)) return false;
 	const clauses = direct.split("并");
 	return clauses.length === rows.length && clauses.length >= 2 && clauses.every(directWorkClause);
 }
@@ -16692,7 +16693,7 @@ function foldRootControls(snapshot, sources, requirements, facts, units, waterma
 		if (source && !units.has(source.unit)) continue;
 		const controlUnit = source?.unit;
 		const position = `${control.seq}\u0000${span.source_id}\u0000${span.start}`;
-		let valid = Boolean(source && source.kind === "root" && units.has(source.unit) && source.seq === control.seq && sourceMatches(span, sources, true) && !positions.has(position) && [...sources.values()].filter((row$2) => row$2.seq === control.seq).length === 1);
+		let valid = Boolean(source && source.kind === "root" && units.has(source.unit) && source.seq === control.seq && sourceMatches(span, sources, true) && !positions.has(position) && [...sources.values()].filter((row$3) => row$3.seq === control.seq).length === 1);
 		positions.add(position);
 		if (!valid || !source) {
 			errors.push(control.id);
@@ -16826,15 +16827,15 @@ function projectCoreV2(snapshot) {
 		if ((source.target === null || source.target === void 0) !== (source.target_kind === null || source.target_kind === void 0)) throw new Error("selection_target_kind_pair_required");
 		if ((source.locator_base !== void 0 || source.locator_flavor !== void 0) && source.kind !== "root") throw new Error("locator_base_requires_root");
 		if (source.locator_base === void 0 !== (source.locator_flavor === void 0)) throw new Error("locator_base_flavor_pair_required");
-		if (source.kind === "root" && (source.text === null || bytes(source.text).length !== source.byte_length || hash$1(bytes(source.text)) !== source.sha256)) throw new Error("root_source_identity_mismatch");
+		if (source.kind === "root" && (source.text === null || bytes(source.text).length !== source.byte_length || hash$2(bytes(source.text)) !== source.sha256)) throw new Error("root_source_identity_mismatch");
 	}
-	const unitRows = new Map(listed(snapshot.units).map((row$2) => [row$2.id, row$2]));
+	const unitRows = new Map(listed(snapshot.units).map((row$3) => [row$3.id, row$3]));
 	if (unitRows.size !== listed(snapshot.units).length || !unitRows.has(unit)) throw new Error("unit_identity_invalid");
-	for (const row$2 of unitRows.values()) {
-		const source = sources.get(row$2.source_id);
-		if (!source || source.kind !== "root" || source.unit !== row$2.id) throw new Error("unit_source_invalid");
-		const visited = new Set([row$2.id]);
-		let parent = row$2.parent_id;
+	for (const row$3 of unitRows.values()) {
+		const source = sources.get(row$3.source_id);
+		if (!source || source.kind !== "root" || source.unit !== row$3.id) throw new Error("unit_source_invalid");
+		const visited = new Set([row$3.id]);
+		let parent = row$3.parent_id;
 		while (parent !== null) {
 			if (visited.has(parent) || !unitRows.has(parent)) throw new Error("unit_parent_invalid");
 			visited.add(parent);
@@ -16845,8 +16846,8 @@ function projectCoreV2(snapshot) {
 	let growing = true;
 	while (growing) {
 		growing = false;
-		for (const row$2 of unitRows.values()) if (row$2.required && units.has(row$2.parent_id) && !units.has(row$2.id)) {
-			units.add(row$2.id);
+		for (const row$3 of unitRows.values()) if (row$3.required && units.has(row$3.parent_id) && !units.has(row$3.id)) {
+			units.add(row$3.id);
 			growing = true;
 		}
 	}
@@ -16884,7 +16885,7 @@ function projectCoreV2(snapshot) {
 		const source = sources.get(req.supersession_source_id), successor = requirements.get(req.superseded_by_requirement_id);
 		if (!source || source.kind !== "root" || source.unit !== req.unit || source.seq !== end || !successor || successor.unit !== req.unit || successor.seq !== end || successor.source.source_id !== source.id || successor.revision <= req.revision) throw new Error("supersession_source_mismatch");
 	}
-	const current = new Map([...requirements].filter(([, row$2]) => units.has(row$2.unit) && scopeOpen(row$2, watermark)));
+	const current = new Map([...requirements].filter(([, row$3]) => units.has(row$3.unit) && scopeOpen(row$3, watermark)));
 	if ([...current.values()].some((r) => r.parent_id !== null && !requirements.has(r.parent_id))) throw new Error("requirement_parent_missing");
 	const validFacts = /* @__PURE__ */ new Map();
 	for (const [key, fact] of facts) {
@@ -16910,7 +16911,7 @@ function projectCoreV2(snapshot) {
 	const invalidated = /* @__PURE__ */ new Set();
 	for (const fact of validFacts.values()) for (const id of fact.invalidates) if (validFacts.has(id) && validFacts.get(id).seq < fact.seq) invalidated.add(id);
 	for (const id of invalidated) validFacts.delete(id);
-	const conditions = new Map(listed(snapshot.conditions).map((row$2) => [row$2.id, row$2]));
+	const conditions = new Map(listed(snapshot.conditions).map((row$3) => [row$3.id, row$3]));
 	if (conditions.size !== listed(snapshot.conditions).length) throw new Error("duplicate_condition");
 	const released = /* @__PURE__ */ new Set();
 	for (const [key, condition] of conditions) {
@@ -17086,6 +17087,205 @@ function projectCoreV2(snapshot) {
 }
 
 //#endregion
+//#region src/domain/session-events.ts
+/**
+* Read a validated, stable event snapshot from the DSH Session V3 API.
+*
+* Session V3 replaced the V2 `events` getter with `snapshotEvents()`. Context
+* Guard supports only the V3 API: a session object that does not expose that
+* method is an unsupported host, never a reason to fall back to a legacy
+* accessor. Failing loud here keeps a V2-shaped object from being projected as
+* if its events had V3 semantics — the two vocabularies differ (surfaces,
+* `assistant/chunk` vs embedded streams, `session/end-seed` payload), so a
+* silent fallback would derive contract state from a log it cannot read.
+*
+* Guard is a READER of the durable log, so the envelope check below is the one
+* part of log validation it owns itself. The host validates a session it
+* constructs or restores; Guard additionally refuses a snapshot that is not a
+* sequence of event envelopes, because a projection that silently dropped or
+* mis-numbered an event would fabricate contract state rather than report a
+* damaged log.
+*
+* The V3 contract also asks a reader to refuse an unrecognized event type that
+* is not marked `ignorable`. Guard does NOT implement that half, deliberately:
+* the host's persistence reader already refuses such a log before publishing a
+* Session, and a whitelist of event types Guard happens to know would
+* false-refuse a healthy host whose composition registers a required event type
+* through a third-party plugin. The full rationale is in
+* `UPSTREAM_API_AUDIT.md`; revisit it there rather than adding a whitelist here.
+*/
+const SESSION_API_UNSUPPORTED = "session_api_unsupported";
+const SESSION_EVENT_ENVELOPE_INVALID = "session_event_envelope_invalid";
+var SessionApiError = class extends Error {
+	code;
+	constructor(message, code = SESSION_API_UNSUPPORTED) {
+		super(message);
+		this.name = "SessionApiError";
+		this.code = code;
+	}
+};
+/**
+* Refuse a snapshot that is not a contiguous, correctly enveloped V3 log.
+*
+* `seq` must be a non-negative safe integer and `type` a non-empty string.
+* Contiguity is checked against the snapshot's own first sequence rather than
+* against zero, because a ranged read legitimately starts later.
+*/
+function assertEventEnvelopes(events) {
+	let expected;
+	for (let index$1 = 0; index$1 < events.length; index$1 += 1) {
+		const event = events[index$1];
+		if (!event || typeof event !== "object" || Array.isArray(event)) throw new SessionApiError(`snapshot event ${index$1} is not an object`, SESSION_EVENT_ENVELOPE_INVALID);
+		const record = event;
+		if (typeof record.type !== "string" || record.type.length === 0) throw new SessionApiError(`snapshot event ${index$1} has no event type`, SESSION_EVENT_ENVELOPE_INVALID);
+		if (typeof record.seq !== "number" || !Number.isSafeInteger(record.seq) || record.seq < 0) throw new SessionApiError(`snapshot event ${index$1} has no sequence number`, SESSION_EVENT_ENVELOPE_INVALID);
+		if (expected !== void 0 && record.seq !== expected) throw new SessionApiError(`snapshot event ${index$1} breaks sequence contiguity`, SESSION_EVENT_ENVELOPE_INVALID);
+		expected = record.seq + 1;
+	}
+}
+function snapshotSessionEvents(session) {
+	if (!session || typeof session !== "object") throw new SessionApiError("a DSH Session object is required");
+	const source = session;
+	if (typeof source.snapshotEvents !== "function") throw new SessionApiError("session does not expose the DSH Session V3 snapshotEvents() API");
+	const events = source.snapshotEvents.call(session);
+	if (!Array.isArray(events)) throw new SessionApiError("snapshotEvents() did not return an event list");
+	assertEventEnvelopes(events);
+	return events;
+}
+
+//#endregion
+//#region src/domain/host-workdir.ts
+/** A read-only observation of the Host's default cwd at one tool call. */
+const HOST_WORKDIR_PREFIX = "context_guard_host_workdir_v1:";
+const hash$1 = (value) => createHash("sha256").update(value, "utf8").digest("hex");
+const row$1 = (value) => value && typeof value === "object" ? value : {};
+/** Bind a call to exactly one still-current root-sourced named test. */
+function sourcedNamedTestRoot(projection, session, argumentsValue) {
+	const args = row$1(argumentsValue);
+	const command = String(args.command ?? "").trim();
+	if (!/^(?:npm|pnpm) test$/u.test(command) || !projection.currentUnitId) return void 0;
+	const unit = projection.units.get(projection.currentUnitId);
+	if (!unit) return void 0;
+	const refs = new Set(unit.rootInputRefs.map((ref) => ref.seq));
+	const candidates = [...projection.items.values()].flatMap((item) => {
+		const source = /^m(\d+)(?::|$)/u.exec(item.sourceMessageId);
+		const named = /\b(?:npm|pnpm)\s+test\b/iu.exec(item.normalizedText);
+		if (item.unitId !== projection.currentUnitId || item.status !== "pending" || item.semanticAction !== "test" || item.authorityDisposition !== "executable_now" || item.needsReview || item.condition || item.waitAuthorization || item.requestedTarget?.scope !== session.header.cwd || !source || !refs.has(Number(source[1])) || named?.[0].toLowerCase().replace(/\s+/gu, " ") !== command) return [];
+		return [Number(source[1])];
+	});
+	return candidates.length === 1 ? candidates[0] : void 0;
+}
+function physicalDirectory(value) {
+	if (typeof value !== "string" || !value) return void 0;
+	try {
+		const physical = realpathSync(value);
+		return physical === value && statSync(physical).isDirectory() ? physical : void 0;
+	} catch {
+		return;
+	}
+}
+/**
+* Observe the actual audited Host call, without deciding whether it may run.
+* The sandbox-policy service is the same scoped service used by tool-bash;
+* absence or an unproved physical path simply emits no receipt.
+*/
+function captureHostWorkdir(session, exec, hostLock, sandboxPolicy, attestedDefaultRoute, sourcedRootSeq) {
+	if (!attestedDefaultRoute || exec.agent?.session !== session || exec.parent !== void 0 || exec.rootCallId !== exec.callId || sourcedRootSeq === null || exec.name !== "bash" && exec.name !== "pwsh" || hostLock.status !== "supported" || !hostLock.auditedForegroundRenderers?.includes(exec.name)) return void 0;
+	const args = row$1(exec.arguments);
+	if (Object.hasOwn(args, "workdir") || args.run_in_background === true) return void 0;
+	const header = row$1(session.header);
+	const cwd = physicalDirectory(header.cwd);
+	if (!cwd || typeof header.id !== "string") return void 0;
+	let policyRoot = null;
+	let policySource = exec.name === "pwsh" ? "pwsh-header" : "bash-policy";
+	if (exec.name === "bash") {
+		if (!sandboxPolicy) return void 0;
+		let resolved;
+		try {
+			resolved = row$1(sandboxPolicy.resolve({ session }));
+		} catch {
+			return;
+		}
+		if (resolved.sessionId !== header.id) return void 0;
+		const physical = physicalDirectory(resolved.workspaceRoot);
+		if (!physical || physical !== cwd) return void 0;
+		policyRoot = physical;
+		policySource = "bash-policy";
+	}
+	const events = snapshotSessionEvents(session);
+	const callId = String(exec.callId);
+	const calls = events.filter((event) => event.type === "tool/call" && row$1(event.data).callId === callId);
+	if (calls.length !== 1) return void 0;
+	const call = calls[0];
+	if (row$1(call.data).name !== exec.name || typeof row$1(call.data).arguments !== "string") return void 0;
+	let loggedArgs;
+	try {
+		loggedArgs = JSON.parse(String(row$1(call.data).arguments));
+	} catch {
+		return;
+	}
+	if (!isDeepStrictEqual(loggedArgs, exec.arguments)) return void 0;
+	const roots = events.filter((event) => event.type === "user/message" && row$1(row$1(event.data).source).kind === "user" && event.seq < call.seq);
+	const root = sourcedRootSeq === void 0 ? roots.at(-1) : roots.find((event) => event.seq === sourcedRootSeq);
+	const turnStart = events.filter((event) => event.type === "turn/start" && event.seq < call.seq).at(-1);
+	if (!root || !turnStart || sourcedRootSeq === void 0 && root.seq <= turnStart.seq || row$1(turnStart.data).turn !== row$1(call.data).turn) return void 0;
+	const inherited = session.inheritedEventCount;
+	if (header.version !== 3 || typeof header.createdAt !== "number" || typeof header.isSeeded !== "boolean" || typeof inherited !== "number" || !Number.isSafeInteger(inherited)) return void 0;
+	const sessionDigest = sessionRefDigest({
+		version: 3,
+		id: header.id,
+		createdAt: header.createdAt,
+		seedLength: inherited,
+		...typeof header.parentSession === "string" ? { parentSession: header.parentSession } : {},
+		...typeof header.agentPreset === "string" ? { agentPreset: header.agentPreset } : {},
+		...typeof header.origin === "string" ? { origin: header.origin } : {},
+		delegationDepth: typeof header.delegationDepth === "number" ? header.delegationDepth : 0
+	});
+	return {
+		version: 1,
+		callId,
+		callSeq: call.seq,
+		rootSeq: root.seq,
+		turn: Number(row$1(call.data).turn),
+		toolName: exec.name,
+		sessionRefDigest: sessionDigest,
+		headerCwd: cwd,
+		effectiveCwd: cwd,
+		policySource,
+		policyRoot,
+		hostLockDigest: hostLock.digest,
+		argumentsSha256: hash$1(String(row$1(call.data).arguments))
+	};
+}
+/** Validate the persisted observer record against the original call/result. */
+function hostWorkdirForCall(events, call, result, rootSeq, sessionDigest, hostDigest, headerCwd) {
+	const callData = row$1(call.data);
+	const callId = callData.callId;
+	if (typeof callId !== "string" || typeof callData.arguments !== "string") return void 0;
+	const candidates = events.filter((event) => event.seq > call.seq && event.seq < result.seq && event.type === "user/message" && row$1(row$1(event.data).source).kind === "plugin" && row$1(row$1(event.data).source).plugin === "context-guard" && row$1(row$1(event.data).source).form === "notice" && Array.isArray(row$1(event.data).content) && String(row$1(row$1(event.data).content[0]).text ?? "").startsWith(HOST_WORKDIR_PREFIX)).filter((event) => {
+		try {
+			const content$1 = row$1(row$1(event.data).content[0]).text;
+			return row$1(JSON.parse(String(content$1).slice(30))).callId === callId;
+		} catch {
+			return false;
+		}
+	});
+	if (candidates.length !== 1) return void 0;
+	const content = row$1(row$1(candidates[0].data).content[0]).text;
+	let receipt;
+	try {
+		receipt = row$1(JSON.parse(String(content).slice(30)));
+	} catch {
+		return;
+	}
+	if (receipt.version !== 1 || receipt.callId !== callId || receipt.callSeq !== call.seq || receipt.rootSeq !== rootSeq || receipt.turn !== callData.turn || receipt.toolName !== callData.name || receipt.sessionRefDigest !== sessionDigest || receipt.hostLockDigest !== hostDigest || receipt.headerCwd !== headerCwd || receipt.effectiveCwd !== headerCwd || receipt.argumentsSha256 !== hash$1(callData.arguments)) return void 0;
+	if (receipt.toolName === "bash") {
+		if (receipt.policySource !== "bash-policy" || receipt.policyRoot !== headerCwd) return void 0;
+	} else if (receipt.toolName !== "pwsh" || receipt.policySource !== "pwsh-header" || receipt.policyRoot !== null) return void 0;
+	return headerCwd;
+}
+
+//#endregion
 //#region src/core-v2/session.ts
 const hash = (value) => createHash("sha256").update(value, "utf8").digest("hex");
 const windowsAbsolute = (value) => /^[A-Za-z]:\\/.test(value) && !value.includes("/") && !value.slice(3).includes("\\\\") && !value.slice(3).includes(":") && !value.split("\\").some((part) => part === "." || part === "..");
@@ -17189,7 +17389,7 @@ function rootControls(roots, requirements, sources, facts, unit, selectedUnitAtR
 					let expanded = true;
 					while (expanded) {
 						const previous = selected.length;
-						for (const child of eligible) if (child.required && selected.some((row$2) => row$2.id === child.parent_id) && !selected.some((row$2) => row$2.id === child.id)) selected.push(child);
+						for (const child of eligible) if (child.required && selected.some((row$3) => row$3.id === child.parent_id) && !selected.some((row$3) => row$3.id === child.id)) selected.push(child);
 						expanded = selected.length !== previous;
 					}
 					const at = controlStart + Buffer.byteLength(text.slice(0, text.indexOf(parentNoun)), "utf8");
@@ -17647,7 +17847,8 @@ function sessionCoreSnapshot(events, projection) {
 				return false;
 			}
 			const expected = `${namedTest[1].toLowerCase()} test`;
-			return String(args.command ?? "").trim() === expected && args.run_in_background !== true && typeof args.workdir === "string" && fact.subjects.length === 1 && fact.subjects[0] === args.workdir && fact.subjects[0] === item.requestedTarget?.scope;
+			const workdir = typeof args.workdir === "string" ? args.workdir : !Object.hasOwn(args, "workdir") && typeof item.requestedTarget?.scope === "string" ? hostWorkdirForCall(events, pair.call, pair.result, root.seq, projection.sessionRefDigest, projection.hostLockDigest, projection.rootLocatorContexts.get(root.seq)?.base ?? "") : void 0;
+			return String(args.command ?? "").trim() === expected && args.run_in_background !== true && typeof workdir === "string" && fact.subjects.length === 1 && fact.subjects[0] === workdir && fact.subjects[0] === item.requestedTarget?.scope;
 		};
 		const selectedDirectTest = namedTest && !guarded ? [...projection.evidence.values()].filter(isDirectTestFact).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : void 0;
 		const selectedScope = (selectedReadiness || selectedDirectTest) && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0;
@@ -17817,7 +18018,7 @@ function sessionCoreSnapshot(events, projection) {
 			const crossesNewConstraint = kind === "constraint" && forbiddenFile && pair && pair.call.seq <= root.seq && pair.result.seq >= root.seq;
 			if (!pair || pair.result.seq !== evidence.toolResultSeq || pair.call.seq <= root.seq && !crossesNewConstraint) continue;
 			const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId);
-			const outcome = item.semanticAction === "test" && selectedDirectTest && !selectedReadiness && evidence.evidenceRole === "effect" && !isDirectTestFact(evidence) ? "unknown" : hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
+			const outcome = item.semanticAction === "test" && evidence.evidenceRole === "effect" && (namedTest ? !isDirectTestFact(evidence) : !selectedReadiness) ? "unknown" : hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
 			const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`;
 			const existingCall = sources.find((source) => source.id === callId);
 			if (existingCall && existingCall.revision !== itemRevision) continue;
@@ -18233,7 +18434,7 @@ function gitCommandMatchesTarget(manifest, target) {
 	return true;
 }
 function hashTuple(fields) {
-	const hash$2 = createHash("sha256");
+	const hash$3 = createHash("sha256");
 	for (const key of Object.keys(fields).sort()) {
 		const keyBytes = Buffer.from(key, "utf8");
 		const raw = fields[key];
@@ -18241,9 +18442,9 @@ function hashTuple(fields) {
 		const lengths = Buffer.allocUnsafe(8);
 		lengths.writeUInt32BE(keyBytes.length, 0);
 		lengths.writeUInt32BE(value.length, 4);
-		hash$2.update(lengths).update(keyBytes).update(value);
+		hash$3.update(lengths).update(keyBytes).update(value);
 	}
-	return hash$2.digest("hex");
+	return hash$3.digest("hex");
 }
 function parseNulRecords(bytes$1) {
 	if (bytes$1.byteLength === 0 || bytes$1[bytes$1.byteLength - 1] !== 0) return void 0;
@@ -18357,73 +18558,6 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 }
 
 //#endregion
-//#region src/domain/session-events.ts
-/**
-* Read a validated, stable event snapshot from the DSH Session V3 API.
-*
-* Session V3 replaced the V2 `events` getter with `snapshotEvents()`. Context
-* Guard supports only the V3 API: a session object that does not expose that
-* method is an unsupported host, never a reason to fall back to a legacy
-* accessor. Failing loud here keeps a V2-shaped object from being projected as
-* if its events had V3 semantics — the two vocabularies differ (surfaces,
-* `assistant/chunk` vs embedded streams, `session/end-seed` payload), so a
-* silent fallback would derive contract state from a log it cannot read.
-*
-* Guard is a READER of the durable log, so the envelope check below is the one
-* part of log validation it owns itself. The host validates a session it
-* constructs or restores; Guard additionally refuses a snapshot that is not a
-* sequence of event envelopes, because a projection that silently dropped or
-* mis-numbered an event would fabricate contract state rather than report a
-* damaged log.
-*
-* The V3 contract also asks a reader to refuse an unrecognized event type that
-* is not marked `ignorable`. Guard does NOT implement that half, deliberately:
-* the host's persistence reader already refuses such a log before publishing a
-* Session, and a whitelist of event types Guard happens to know would
-* false-refuse a healthy host whose composition registers a required event type
-* through a third-party plugin. The full rationale is in
-* `UPSTREAM_API_AUDIT.md`; revisit it there rather than adding a whitelist here.
-*/
-const SESSION_API_UNSUPPORTED = "session_api_unsupported";
-const SESSION_EVENT_ENVELOPE_INVALID = "session_event_envelope_invalid";
-var SessionApiError = class extends Error {
-	code;
-	constructor(message, code = SESSION_API_UNSUPPORTED) {
-		super(message);
-		this.name = "SessionApiError";
-		this.code = code;
-	}
-};
-/**
-* Refuse a snapshot that is not a contiguous, correctly enveloped V3 log.
-*
-* `seq` must be a non-negative safe integer and `type` a non-empty string.
-* Contiguity is checked against the snapshot's own first sequence rather than
-* against zero, because a ranged read legitimately starts later.
-*/
-function assertEventEnvelopes(events) {
-	let expected;
-	for (let index$1 = 0; index$1 < events.length; index$1 += 1) {
-		const event = events[index$1];
-		if (!event || typeof event !== "object" || Array.isArray(event)) throw new SessionApiError(`snapshot event ${index$1} is not an object`, SESSION_EVENT_ENVELOPE_INVALID);
-		const record = event;
-		if (typeof record.type !== "string" || record.type.length === 0) throw new SessionApiError(`snapshot event ${index$1} has no event type`, SESSION_EVENT_ENVELOPE_INVALID);
-		if (typeof record.seq !== "number" || !Number.isSafeInteger(record.seq) || record.seq < 0) throw new SessionApiError(`snapshot event ${index$1} has no sequence number`, SESSION_EVENT_ENVELOPE_INVALID);
-		if (expected !== void 0 && record.seq !== expected) throw new SessionApiError(`snapshot event ${index$1} breaks sequence contiguity`, SESSION_EVENT_ENVELOPE_INVALID);
-		expected = record.seq + 1;
-	}
-}
-function snapshotSessionEvents(session) {
-	if (!session || typeof session !== "object") throw new SessionApiError("a DSH Session object is required");
-	const source = session;
-	if (typeof source.snapshotEvents !== "function") throw new SessionApiError("session does not expose the DSH Session V3 snapshotEvents() API");
-	const events = source.snapshotEvents.call(session);
-	if (!Array.isArray(events)) throw new SessionApiError("snapshotEvents() did not return an event list");
-	assertEventEnvelopes(events);
-	return events;
-}
-
-//#endregion
 //#region src/domain/host-resolver.ts
 /**
 * Names registered in any cohort; rows outside the union are unknown.
@@ -18433,7 +18567,7 @@ function snapshotSessionEvents(session) {
 * `packageRowsFromPnpmLock` would make an unrelated cohort re-ordering look like
 * a lock-reading change.
 */
-const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$2) => row$2.name)))].sort((a, b) => a.localeCompare(b));
+const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$3) => row$3.name)))].sort((a, b) => a.localeCompare(b));
 const HOST_LOCK_MARKER_BEGIN = "# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>";
 const HOST_LOCK_MARKER_END = "# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<";
 var HostProfileError = class extends Error {
@@ -18596,7 +18730,7 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 				rows.push({ name });
 				continue;
 			}
-			const candidates = locked.filter((row$2) => row$2.name === name && row$2.version === version && row$2.integrity);
+			const candidates = locked.filter((row$3) => row$3.name === name && row$3.version === version && row$3.integrity);
 			if (candidates.length !== 1) {
 				rows.push({
 					name,
@@ -18621,30 +18755,44 @@ function readActiveHostGraph(runtimeRoot, profileRoot) {
 	const profileLockPath = join(profile, "pnpm-lock.yaml");
 	const runtimeRows = packageRowsFromActiveGraph(readFileSync(mapPath, "utf8"), readFileSync(lockPath, "utf8"), join(runtime, "node_modules"));
 	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
-	const runtimeKeys = new Set(runtimeRows.map((row$2) => `${row$2.name}\u0000${row$2.version ?? ""}\u0000${row$2.integrity ?? ""}`));
-	return [...runtimeRows, ...profileRows.filter((row$2) => !runtimeKeys.has(`${row$2.name}\u0000${row$2.version ?? ""}\u0000${row$2.integrity ?? ""}`))];
+	const runtimeKeys = new Set(runtimeRows.map((row$3) => `${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`));
+	return [...runtimeRows, ...profileRows.filter((row$3) => !runtimeKeys.has(`${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`))];
 }
 const AUDITED_FOREGROUND_BYTES = {
 	"@deepseek-ai/dsh-tool-bash": "ea5579df9478198ab6dea378d1de59b5807db50bc4dc7baeb1a5b0cc3abbd4af",
 	"@deepseek-ai/dsh-tool-pwsh": "c1dd78a35722e47eaeef57b33d15d4170f4bb27db2bee15da76a6d4ea9557e63",
 	"@deepseek-ai/dsh-shell": "f2c148176a56fde49ec92885f0149f36450c0f0612008070e71ae795c139773d"
 };
-function activeRendererBytes(nodeModulesRoot, name) {
+const AUDITED_DEFAULT_WORKDIR_BYTES = {
+	"@deepseek-ai/dsh-sandbox-policy": "4a16a580f290dc9903e8b93d64d27be4a56c779f80ce351fa7ee300ded0a3568",
+	"@deepseek-ai/dsh-sandbox": "8994b3e497b0673eddd3640392de4671621aa8972846f4a66d0b1219decf3c03",
+	"@deepseek-ai/dsh-bash-sandbox": "c6100b4edbc71869e0207941b2dfe8d06ff90e332d502c4c9fe54e08339e555a",
+	"@deepseek-ai/dsh-bash-local": "7805ac421930e2943e084004a48c3e9a01a4b7655689cb1c27f2019aff8574fb",
+	"@deepseek-ai/dsh-pwsh-local": "a206f7801ad7ee657b380c37d5b578c195e86e63d23d0712d8f2f7195371ad18"
+};
+function activeRendererModule(nodeModulesRoot, name) {
 	const modules = realpathSync(nodeModulesRoot);
 	const { records, reachable } = activeGraphRecords(readFileSync(join(modules, ".package-map.json"), "utf8"));
 	const ids = [...reachable].filter((id$1) => id$1.startsWith(`${name}@`));
 	if (ids.length !== 1) return void 0;
 	const id = ids[0];
-	if (!/^@deepseek-ai\/dsh-(?:tool-bash|tool-pwsh|shell)@0\.1\.5-rc\.[12](?:\(|$)/.test(id)) return void 0;
+	const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] ? "0\\.1\\.5-rc\\.2" : AUDITED_FOREGROUND_BYTES[name] ? "0\\.1\\.5-rc\\.[12]" : void 0;
+	if (!version || !(/* @__PURE__ */ new RegExp(`^${name.replace("/", "\\/")}@${version}(?:\\(|$)`)).test(id)) return void 0;
 	const url = records[id]?.url;
 	if (typeof url !== "string" || !url.startsWith("./.pnpm/")) return void 0;
 	const root = realpathSync(resolve(modules, url));
 	if (!root.startsWith(`${modules}${sep}`)) return void 0;
 	const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-	if (manifest.name !== name || !["0.1.5-rc.1", "0.1.5-rc.2"].includes(String(manifest.version))) return void 0;
+	if (manifest.name !== name || (AUDITED_DEFAULT_WORKDIR_BYTES[name] ? manifest.version !== "0.1.5-rc.2" : !["0.1.5-rc.1", "0.1.5-rc.2"].includes(String(manifest.version)))) return void 0;
 	const target = realpathSync(join(root, "lib", "index.js"));
 	if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return void 0;
-	return createHash("sha256").update(readFileSync(target)).digest("hex");
+	return {
+		bytes: createHash("sha256").update(readFileSync(target)).digest("hex"),
+		path: target
+	};
+}
+function activeRendererBytes(nodeModulesRoot, name) {
+	return activeRendererModule(nodeModulesRoot, name)?.bytes;
 }
 /** Verify active, reachable producer bytes without reading credentials or
 * accepting historical package-map entries. Missing/ambiguous paths fail
@@ -18661,6 +18809,51 @@ function auditedForegroundRenderers(runtimeRoot, profileRoot) {
 	};
 	if (!checked("@deepseek-ai/dsh-shell")) return [];
 	return [...checked("@deepseek-ai/dsh-tool-bash") ? ["bash"] : [], ...checked("@deepseek-ai/dsh-tool-pwsh") ? ["pwsh"] : []];
+}
+/** Exact active implementation route for call-time omitted-workdir evidence. */
+function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool) {
+	if (!auditedForegroundRenderers(runtimeRoot, profileRoot).includes(tool)) return false;
+	const names = tool === "bash" ? [
+		"@deepseek-ai/dsh-sandbox-policy",
+		"@deepseek-ai/dsh-sandbox",
+		"@deepseek-ai/dsh-bash-sandbox",
+		"@deepseek-ai/dsh-bash-local"
+	] : ["@deepseek-ai/dsh-pwsh-local"];
+	for (const name of names) {
+		const found = [];
+		for (const root of [runtimeRoot, profileRoot]) try {
+			const digest$1 = activeRendererBytes(join(root, "node_modules"), name);
+			if (digest$1) found.push(digest$1);
+		} catch {}
+		if (!found.length || !found.every((digest$1) => digest$1 === AUDITED_DEFAULT_WORKDIR_BYTES[name])) return false;
+	}
+	return true;
+}
+/**
+* The active graph alone does not prove which shell service this Agent uses.
+* Match the scoped service's exact constructor to the audited active module,
+* rejecting another provider with the same public service interface/name.
+*/
+async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, provider, policyProvider) {
+	if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool) || !provider || typeof provider !== "object") return false;
+	const matchesActiveClass = async (name, exportName, value) => {
+		if (!value || typeof value !== "object") return false;
+		const paths = /* @__PURE__ */ new Set();
+		for (const root of [runtimeRoot, profileRoot]) try {
+			const module = activeRendererModule(join(root, "node_modules"), name);
+			if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path);
+		} catch {}
+		if (paths.size !== 1) return false;
+		try {
+			const module = await import(pathToFileURL([...paths][0]).href);
+			const original = value[Symbol.for("cordis.original")];
+			const active = original && typeof original === "object" ? original : value;
+			return typeof module[exportName] === "function" && active.constructor === module[exportName];
+		} catch {
+			return false;
+		}
+	};
+	return (tool === "bash" ? await matchesActiveClass("@deepseek-ai/dsh-bash-sandbox", "SandboxBashExecutor", provider) : await matchesActiveClass("@deepseek-ai/dsh-pwsh-local", "PwshLocalExecutor", provider)) && (tool === "pwsh" || await matchesActiveClass("@deepseek-ai/dsh-sandbox-policy", "SandboxPolicyService", policyProvider));
 }
 function pathPresent(path$1) {
 	try {
@@ -18731,7 +18924,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
 	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
-	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row$2) => row$2.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
@@ -18740,7 +18933,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 		if (typeof record.url !== "string" || realpathSync(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
 		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
 		const patch = installed.dsh?.bundle?.patch;
-		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$2) => row$2.version === host.version && row$2.integrity);
+		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$3) => row$3.version === host.version && row$3.integrity);
 		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
 		return locked[0];
 	});
@@ -18825,10 +19018,10 @@ function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot
 	lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`);
 	lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`);
 	lines.push("    hostLockPackages:");
-	for (const row$2 of rows) {
-		lines.push(`      - name: ${yamlQuote(row$2.name)}`);
-		lines.push(`        version: ${yamlQuote(row$2.version ?? "")}`);
-		lines.push(`        integrity: ${yamlQuote(row$2.integrity ?? "")}`);
+	for (const row$3 of rows) {
+		lines.push(`      - name: ${yamlQuote(row$3.name)}`);
+		lines.push(`        version: ${yamlQuote(row$3.version ?? "")}`);
+		lines.push(`        integrity: ${yamlQuote(row$3.integrity ?? "")}`);
 	}
 	lines.push(HOST_LOCK_MARKER_END);
 	return `${lines.join("\n")}\n`;
@@ -18886,7 +19079,7 @@ function injectActiveProfileHostLock(input) {
 	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
-	const managed = renderManagedPatch(input.evaluation.packages.filter((row$2) => row$2.version && row$2.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
+	const managed = renderManagedPatch(input.evaluation.packages.filter((row$3) => row$3.version && row$3.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
 	writeFileSync(temporary, next, {
@@ -18949,13 +19142,13 @@ function hostLockRowsFromComposedDump(text) {
 			if (/^\s{4}\S/.test(entry[index$1])) break;
 			continue;
 		}
-		const row$2 = { name: parseYamlScalar(nameMatch[1]) };
+		const row$3 = { name: parseYamlScalar(nameMatch[1]) };
 		for (let cursor = index$1 + 1; cursor < entry.length; cursor += 1) {
 			if (/^\s{6}- name:/.test(entry[cursor]) || /^\s{4}\S/.test(entry[cursor])) break;
 			const field$1 = entry[cursor].match(/^\s{8}(version|integrity):\s*(.+?)\s*$/);
-			if (field$1) row$2[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
+			if (field$1) row$3[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
 		}
-		rows.push(row$2);
+		rows.push(row$3);
 	}
 	return rows;
 }
@@ -19004,4 +19197,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { normalizeReleaseContract as $, sanitizeClauseText as $i, v6TestPredicate as $n, clauseIsProtected as $r, PROOF_KINDS_V2 as $t, firstStepGuidance as A, BOUNDED_ARTIFACT_TYPES as Ai, recoveryDigest as An, capabilityFactOf as Ar, evaluateExternalWaitCapability as At, PROTOCOL_V4_NOTICE as B, isStatefulAction as Bi, assessmentOutcomePredicate as Bn, extractOperation as Br, compareHostVersions as Bt, executeRevalidatedGitEffect as C, restatedContentOf as Ci, CLEANUP_CONDITION_RULE_SHORT as Cn, evidenceAvailabilityReason as Cr, EXPECTED_HOST_PACKAGES as Ct, verifiedLinearCommitReadback as D, verbIsNegated as Di, cleanupConditionFor as Dn, actionHasCertificationPath as Dr, LEGACY_HOST_COHORTS as Dt, revalidateGitPrestate as E, statefulActionsOfScope as Ei, carriesCleanupCondition as En, DEPENDENCY_FREE_ONLY_CONDITION as Er, HOST_COHORTS as Et, sessionCoreSnapshot as F, STOP_PROTOCOL_VERSION as Fi, isVerifyingCapability as Fn, captureItem as Fr, selectHostCohort as Ft, legacyRecordsNeedingReview as G, semanticActionFromText as Gi, decisionBoundaryKey as Gn, classifyTaskIntent as Gr, RC015_HOST_PACKAGES as Gt, PROTOCOL_V6_NOTICE as H, requestedTargetAuthorizesMutation as Hi, currentActionBases as Hn, segmentClauses as Hr, parseHostVersion as Ht, projectCoreV2 as I, STOP_PROTOCOL_VERSION_V2 as Ii, CONTROL_RECORD_PREFIX as In, classifyClause as Ir, LATEST_SUPPORTED_HOST_VERSION as It, RELEASE_OPERATION_SURFACES as J, COMMAND_SURFACE_MANIFEST as Ji, latestAssistantText as Jn, LEGACY_QUALIFICATION as Jr, authorityCaptureCounts as Jt, rootLocatorFlavor as K, validateActionManifest as Ki, isRootPauseRequest as Kn, classifyUserInteraction as Kr, RC1_HOST_PACKAGES as Kt, CAPTURE_V042_NOTICE as L, SUPPORTED_EVIDENCE_ADAPTERS as Li, NO_PROGRESS_RECORD_PREFIX as Ln, environmentDefaultRepositoryTarget as Lr, MIN_SUPPORTED_HOST_VERSION as Lt, lifecyclePhase as M, CERTIFICATE_VERSION_V2 as Mi, bindingSatisfies as Mn, removalIsComplete as Mr, evaluateHostLock as Mt, previewFirstStepInjection as N, SEMANTIC_ACTIONS as Ni, evidenceCoverage as Nn, removalIsPartiallyKnown as Nr, evaluateToolSurfaceCapability as Nt, FIRST_STEP_GUIDANCE as O, ACTION_MANIFEST as Oi, closingHint as On, admissibleForRemoval as Or, bindExecutableIdentity as Ot, projectSessionCoreV2 as P, STATEFUL_ACTIONS as Pi, evidenceMatchesItem as Pn, captureClause as Pr, hostVersionFromPackages as Pt, inFlightReservation as Q, normalizeClause as Qi, testOutcomePredicate as Qn, clauseIsGoverned as Qr, PROOF_KINDS as Qt, DEFAULT_DELEGATION_TOOL_NAMES as R, actionCompatible as Ri, NO_PROGRESS_TURNS_BEFORE_STOP as Rn, extractArtifactPaths as Rr, SUPPORTED_HOST_RANGE as Rt, createGitPrestateEnvelope as S, reportingHeadGoverns as Si, CLEANUP_CONDITION_RULE_COMPACT as Sn, deriveItemDiagnosis as Sr, DEFAULT_HOST_LOCK as St, parseGitCommandManifest as T, splitTextFragments as Ti, MIN_RECOVERY_CHAR_BUDGET as Tn, relevantEvidence as Tr, HOST_CAPABILITY_PACKAGE_GROUPS as Tt, applyUpgradeEligibility as U, requestedTargetMatchesResolved as Ui, decideTurnBoundary as Un, canonicalRegistryBase as Ur, satisfiesSupportedHostRange as Ut, PROTOCOL_V5_NOTICE as V, requestedIdentityKey as Vi, classifyCompletionClaim as Vn, isInformationalMessage as Vr, evaluateMinimumHostVersion as Vt, deriveProjection as W, semanticActionFromCommand as Wi, decideTurnStopping as Wn, npmEscapedPackageName as Wr, RC015_RC2_HOST_PACKAGES as Wt, RELEASE_SETTLEMENT_PREFIX as X, canonicalizePath as Xi, observeAssistantOutcome as Xn, clarifiedSpanOf as Xr, certifyCheckpoint as Xt, RELEASE_RESERVATION_PREFIX as Y, validateManifest as Yi, latestRootInstruction as Yn, actionVerbMatches as Yr, segmentAuthorityBlocks as Yt, contractById as Z, digestStrings as Zi, progressFingerprint as Zn, clauseAsksOwnQuestion as Zr, PROOF_CAPABILITY_MATRIX as Zt, snapshotSessionEvents as _, maskQuotedSpans as _i, sessionQuery as _n, replayRebindResult as _r, ACTIVE_HOST_COHORT_IDS as _t, hostLockRowsFromComposedDump as a, interpretMessage as ai, canonicalProjection as an, availableBoundaryQualifications as ar, supersedeItem as at, commitIndexSnapshotDigest as b, qualificationOfClause as bi, validateProofManifestV2 as bn, parseConfirmationMessage as br, ALPHA2_HOST_PACKAGES as bt, packageRowsFromActiveGraph as c, isExplanationScope as ci, proofCapabilityReport as cn, qualifyBoundary as cr, extractToolSubject as ct, resolveActiveProfileHostLock as d, isQuestionScopeNeedingReview as di, proofEvidenceConstraints as dn, confirmRebind as dr, withDurability as dt, sanitizeUrl as ea, explanationHasActionResidue as ei, PROOF_MANIFEST_DOMAIN_V2 as en, goalCompletionDenial as er, readbackSettlesContract as et, resolveInstalledHostLock as f, isRestatement as fi, proofHostSurfacesOf as fn, proposeRebind as fr, canonicalArgvFromCommand as ft, SessionApiError as g, maskCodeSpans as gi, scopeCoverageDigest as gn, rebindResponse as gr, ACTIVE_HOST_COHORT_ID as gt, SESSION_EVENT_ENVELOPE_INVALID as h, legacyQuestionReadingIsInformational as hi, requiredSubjectsOf as hn, rebindAttemptKey as hr, parseShellCommand as ht, hostLockContextFromComposedDump as i, interpretClause as ii, bindProofV2ToProjection as in, unitDescendantIds as ir, reservationFor as it, firstStepGuidanceV6 as j, CERTIFICATE_VERSION as ji, renderRecoveryPacket as jn, partialFailureOf as jr, evaluateHostCapability as jt, claimedBatchHasRealRootInput as k, ACTION_MANIFEST_VERSION as ki, openItems as kn, capabilityConsequence as kr, bindLiveGoalCapability as kt, packageRowsFromPnpmLock as l, isInformationalFragment as li, proofDigest as ln, currentContractDigest as lr, isDeterministicCheck as lt, SESSION_API_UNSUPPORTED as m, kindOfScope as mi, proofV2Rejection as mn, proposeRebindV042 as mr, parsePwshCommand as mt, auditedForegroundRenderers as n, hasOrderedCoordination as ni, PROOF_PROTOCOL_VERSION_V2 as nn, certifiableOpenItems as nr, releaseCoverage as nt, injectActiveProfileHostLock as o, introducesActionClause as oi, createProofManifest as on, effectuateBoundary as or, evidenceFromPersistedToolResult as ot, verifyComposedHostLockDump as p, itemHoldsExecutionAuthority as pi, proofOperationMatches as pn, proposeRebindOutcome as pr, isRunExecutable as pt, RELEASE_OPERATIONS as q, validateActionTarget as qi, isWholeTaskCompletionClaim as qn, GRANTED_QUALIFICATION as qr, ALPHA3_HOST_PACKAGES as qt, combineHostPolicy as r, hasQuestionScope as ri, bindProofToProjection as rn, certificateClosure as rr, releasePreEffectDecision as rt, inspectTargetHostGraph as s, isExecutableItem as si, createProofManifestV2 as sn, isCurrentAcceptedBoundary as sr, extractTextContent as st, HostProfileError as t, sha256 as ta, governedClauseRestrictsExecution as ti, PROOF_PROTOCOL_VERSION as tn, hasCurrentCertificate as tr, releaseContractFor as tt, readActiveHostGraph as u, isOpenObligation as ui, proofDigestV2 as un, createProjection as ur, persistedToolResultStatus as ut, GIT_COMMAND_MANIFEST_IDS as v, namedActions as vi, sessionQueryV2 as vn, CONFIRM_LINE_PATTERN as vr, ACTIVE_HOST_LAUNCHER_VERSION as vt, gitCommandMatchesTarget as w, semanticActionOfScope as wi, DEFAULT_RECOVERY_CHAR_BUDGET as wn, itemDiagnosis as wr, GOAL_HOST_PACKAGES as wt, commitTreeSnapshotDigest as x, questionHeadsClause as xi, CLEANUP_CONDITION_RULE as xn, capabilityRemedyPhrase as xr, BASE_HOST_PACKAGES as xt, GIT_COMMAND_TEMPLATES as y, opensWithDirective as yi, validateProofManifest as yn, isFrozenV042RebindResponse as yr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as yt, PROTOCOL_V3_NOTICE as z, boundedArtifactChoiceMatches as zi, assessmentAction as zn, extractMethod as zr, SUPPORTED_HOST_VERSIONS as zt };
+export { RELEASE_OPERATION_SURFACES as $, COMMAND_SURFACE_MANIFEST as $i, latestAssistantText as $n, LEGACY_QUALIFICATION as $r, authorityCaptureCounts as $t, lifecyclePhase as A, splitTextFragments as Ai, MIN_RECOVERY_CHAR_BUDGET as An, relevantEvidence as Ar, HOST_CAPABILITY_PACKAGE_GROUPS as At, snapshotSessionEvents as B, STOP_PROTOCOL_VERSION as Bi, isVerifyingCapability as Bn, captureItem as Br, selectHostCohort as Bt, parseGitCommandManifest as C, namedActions as Ci, sessionQueryV2 as Cn, CONFIRM_LINE_PATTERN as Cr, ACTIVE_HOST_LAUNCHER_VERSION as Ct, claimedBatchHasRealRootInput as D, reportingHeadGoverns as Di, CLEANUP_CONDITION_RULE_COMPACT as Dn, deriveItemDiagnosis as Dr, DEFAULT_HOST_LOCK as Dt, FIRST_STEP_GUIDANCE as E, questionHeadsClause as Ei, CLEANUP_CONDITION_RULE as En, capabilityRemedyPhrase as Er, BASE_HOST_PACKAGES as Et, captureHostWorkdir as F, BOUNDED_ARTIFACT_TYPES as Fi, recoveryDigest as Fn, capabilityFactOf as Fr, evaluateExternalWaitCapability as Ft, PROTOCOL_V4_NOTICE as G, isStatefulAction as Gi, assessmentOutcomePredicate as Gn, extractOperation as Gr, compareHostVersions as Gt, CAPTURE_V042_NOTICE as H, SUPPORTED_EVIDENCE_ADAPTERS as Hi, NO_PROGRESS_RECORD_PREFIX as Hn, environmentDefaultRepositoryTarget as Hr, MIN_SUPPORTED_HOST_VERSION as Ht, sourcedNamedTestRoot as I, CERTIFICATE_VERSION as Ii, renderRecoveryPacket as In, partialFailureOf as Ir, evaluateHostCapability as It, applyUpgradeEligibility as J, requestedTargetMatchesResolved as Ji, decideTurnBoundary as Jn, canonicalRegistryBase as Jr, satisfiesSupportedHostRange as Jt, PROTOCOL_V5_NOTICE as K, requestedIdentityKey as Ki, classifyCompletionClaim as Kn, isInformationalMessage as Kr, evaluateMinimumHostVersion as Kt, SESSION_API_UNSUPPORTED as L, CERTIFICATE_VERSION_V2 as Li, bindingSatisfies as Ln, removalIsComplete as Lr, evaluateHostLock as Lt, projectSessionCoreV2 as M, verbIsNegated as Mi, cleanupConditionFor as Mn, actionHasCertificationPath as Mr, LEGACY_HOST_COHORTS as Mt, sessionCoreSnapshot as N, ACTION_MANIFEST as Ni, closingHint as Nn, admissibleForRemoval as Nr, bindExecutableIdentity as Nt, firstStepGuidance as O, restatedContentOf as Oi, CLEANUP_CONDITION_RULE_SHORT as On, evidenceAvailabilityReason as Or, EXPECTED_HOST_PACKAGES as Ot, HOST_WORKDIR_PREFIX as P, ACTION_MANIFEST_VERSION as Pi, openItems as Pn, capabilityConsequence as Pr, bindLiveGoalCapability as Pt, RELEASE_OPERATIONS as Q, validateActionTarget as Qi, isWholeTaskCompletionClaim as Qn, GRANTED_QUALIFICATION as Qr, ALPHA3_HOST_PACKAGES as Qt, SESSION_EVENT_ENVELOPE_INVALID as R, SEMANTIC_ACTIONS as Ri, evidenceCoverage as Rn, removalIsPartiallyKnown as Rr, evaluateToolSurfaceCapability as Rt, gitCommandMatchesTarget as S, maskQuotedSpans as Si, sessionQuery as Sn, replayRebindResult as Sr, ACTIVE_HOST_COHORT_IDS as St, verifiedLinearCommitReadback as T, qualificationOfClause as Ti, validateProofManifestV2 as Tn, parseConfirmationMessage as Tr, ALPHA2_HOST_PACKAGES as Tt, DEFAULT_DELEGATION_TOOL_NAMES as U, actionCompatible as Ui, NO_PROGRESS_TURNS_BEFORE_STOP as Un, extractArtifactPaths as Ur, SUPPORTED_HOST_RANGE as Ut, projectCoreV2 as V, STOP_PROTOCOL_VERSION_V2 as Vi, CONTROL_RECORD_PREFIX as Vn, classifyClause as Vr, LATEST_SUPPORTED_HOST_VERSION as Vt, PROTOCOL_V3_NOTICE as W, boundedArtifactChoiceMatches as Wi, assessmentAction as Wn, extractMethod as Wr, SUPPORTED_HOST_VERSIONS as Wt, legacyRecordsNeedingReview as X, semanticActionFromText as Xi, decisionBoundaryKey as Xn, classifyTaskIntent as Xr, RC015_HOST_PACKAGES as Xt, deriveProjection as Y, semanticActionFromCommand as Yi, decideTurnStopping as Yn, npmEscapedPackageName as Yr, RC015_RC2_HOST_PACKAGES as Yt, rootLocatorFlavor as Z, validateActionManifest as Zi, isRootPauseRequest as Zn, classifyUserInteraction as Zr, RC1_HOST_PACKAGES as Zt, GIT_COMMAND_TEMPLATES as _, isRestatement as _i, proofHostSurfacesOf as _n, proposeRebind as _r, canonicalArgvFromCommand as _t, combineHostPolicy as a, sanitizeUrl as aa, explanationHasActionResidue as ai, PROOF_MANIFEST_DOMAIN_V2 as an, goalCompletionDenial as ar, readbackSettlesContract as at, createGitPrestateEnvelope as b, legacyQuestionReadingIsInformational as bi, requiredSubjectsOf as bn, rebindAttemptKey as br, parseShellCommand as bt, injectActiveProfileHostLock as c, hasQuestionScope as ci, bindProofToProjection as cn, certificateClosure as cr, releasePreEffectDecision as ct, packageRowsFromPnpmLock as d, introducesActionClause as di, createProofManifest as dn, effectuateBoundary as dr, evidenceFromPersistedToolResult as dt, validateManifest as ea, actionVerbMatches as ei, segmentAuthorityBlocks as en, latestRootInstruction as er, RELEASE_RESERVATION_PREFIX as et, readActiveHostGraph as f, isExecutableItem as fi, createProofManifestV2 as fn, isCurrentAcceptedBoundary as fr, extractTextContent as ft, GIT_COMMAND_MANIFEST_IDS as g, isQuestionScopeNeedingReview as gi, proofEvidenceConstraints as gn, confirmRebind as gr, withDurability as gt, verifyComposedHostLockDump as h, isOpenObligation as hi, proofDigestV2 as hn, createProjection as hr, persistedToolResultStatus as ht, auditedForegroundRenderers as i, sanitizeClauseText as ia, clauseIsProtected as ii, PROOF_KINDS_V2 as in, v6TestPredicate as ir, normalizeReleaseContract as it, previewFirstStepInjection as j, statefulActionsOfScope as ji, carriesCleanupCondition as jn, DEPENDENCY_FREE_ONLY_CONDITION as jr, HOST_COHORTS as jt, firstStepGuidanceV6 as k, semanticActionOfScope as ki, DEFAULT_RECOVERY_CHAR_BUDGET as kn, itemDiagnosis as kr, GOAL_HOST_PACKAGES as kt, inspectTargetHostGraph as l, interpretClause as li, bindProofV2ToProjection as ln, unitDescendantIds as lr, reservationFor as lt, resolveInstalledHostLock as m, isInformationalFragment as mi, proofDigest as mn, currentContractDigest as mr, isDeterministicCheck as mt, auditedDefaultWorkdirHost as n, digestStrings as na, clauseAsksOwnQuestion as ni, PROOF_CAPABILITY_MATRIX as nn, progressFingerprint as nr, contractById as nt, hostLockContextFromComposedDump as o, sha256 as oa, governedClauseRestrictsExecution as oi, PROOF_PROTOCOL_VERSION as on, hasCurrentCertificate as or, releaseContractFor as ot, resolveActiveProfileHostLock as p, isExplanationScope as pi, proofCapabilityReport as pn, qualifyBoundary as pr, extractToolSubject as pt, PROTOCOL_V6_NOTICE as q, requestedTargetAuthorizesMutation as qi, currentActionBases as qn, segmentClauses as qr, parseHostVersion as qt, auditedDefaultWorkdirProvider as r, normalizeClause as ra, clauseIsGoverned as ri, PROOF_KINDS as rn, testOutcomePredicate as rr, inFlightReservation as rt, hostLockRowsFromComposedDump as s, hasOrderedCoordination as si, PROOF_PROTOCOL_VERSION_V2 as sn, certifiableOpenItems as sr, releaseCoverage as st, HostProfileError as t, canonicalizePath as ta, clarifiedSpanOf as ti, certifyCheckpoint as tn, observeAssistantOutcome as tr, RELEASE_SETTLEMENT_PREFIX as tt, packageRowsFromActiveGraph as u, interpretMessage as ui, canonicalProjection as un, availableBoundaryQualifications as ur, supersedeItem as ut, commitIndexSnapshotDigest as v, itemHoldsExecutionAuthority as vi, proofOperationMatches as vn, proposeRebindOutcome as vr, isRunExecutable as vt, revalidateGitPrestate as w, opensWithDirective as wi, validateProofManifest as wn, isFrozenV042RebindResponse as wr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as wt, executeRevalidatedGitEffect as x, maskCodeSpans as xi, scopeCoverageDigest as xn, rebindResponse as xr, ACTIVE_HOST_COHORT_ID as xt, commitTreeSnapshotDigest as y, kindOfScope as yi, proofV2Rejection as yn, proposeRebindV042 as yr, parsePwshCommand as yt, SessionApiError as z, STATEFUL_ACTIONS as zi, evidenceMatchesItem as zn, captureClause as zr, hostVersionFromPackages as zt };

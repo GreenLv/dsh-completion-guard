@@ -9,7 +9,8 @@ import { currentActionBases, decideTurnBoundary } from '../src/domain/stop-polic
 import { sessionCoreSnapshot } from '../src/core-v2/session.js'
 import { projectCoreV2 } from '../src/core-v2/project.js'
 
-const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
+  auditedForegroundRenderers: ['bash' as const] }
 let nextSession = 0
 
 async function readySession(persistent: boolean, initialRoot?: string) {

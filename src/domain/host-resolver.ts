@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   HOST_COHORTS,
   evaluateHostLock,
@@ -252,23 +252,42 @@ const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-shell': 'f2c148176a56fde49ec92885f0149f36450c0f0612008070e71ae795c139773d',
 }
 
-function activeRendererBytes(nodeModulesRoot: string, name: string): string | undefined {
+// The rc.2 default-workdir route is a separate, narrower attestation than
+// foreground-result rendering. It covers the policy's physical root choice
+// and the local executor that receives the tool's explicit workdir DTO.
+const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
+  '@deepseek-ai/dsh-sandbox-policy': '4a16a580f290dc9903e8b93d64d27be4a56c779f80ce351fa7ee300ded0a3568',
+  '@deepseek-ai/dsh-sandbox': '8994b3e497b0673eddd3640392de4671621aa8972846f4a66d0b1219decf3c03',
+  '@deepseek-ai/dsh-bash-sandbox': 'c6100b4edbc71869e0207941b2dfe8d06ff90e332d502c4c9fe54e08339e555a',
+  '@deepseek-ai/dsh-bash-local': '7805ac421930e2943e084004a48c3e9a01a4b7655689cb1c27f2019aff8574fb',
+  '@deepseek-ai/dsh-pwsh-local': 'a206f7801ad7ee657b380c37d5b578c195e86e63d23d0712d8f2f7195371ad18',
+}
+
+function activeRendererModule(nodeModulesRoot: string, name: string): { bytes: string; path: string } | undefined {
   const modules = realpathSync(nodeModulesRoot)
   const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
   const ids = [...reachable].filter((id) => id.startsWith(`${name}@`))
   if (ids.length !== 1) return undefined
   const id = ids[0]!
-  if (!/^@deepseek-ai\/dsh-(?:tool-bash|tool-pwsh|shell)@0\.1\.5-rc\.[12](?:\(|$)/.test(id)) return undefined
+  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] ? '0\\.1\\.5-rc\\.2'
+    : AUDITED_FOREGROUND_BYTES[name] ? '0\\.1\\.5-rc\\.[12]' : undefined
+  if (!version || !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id)) return undefined
   const url = records[id]?.url
   if (typeof url !== 'string' || !url.startsWith('./.pnpm/')) return undefined
   const root = realpathSync(resolve(modules, url))
   if (!root.startsWith(`${modules}${sep}`)) return undefined
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
-  if (manifest.name !== name || !['0.1.5-rc.1', '0.1.5-rc.2'].includes(String(manifest.version))) return undefined
+  if (manifest.name !== name || (AUDITED_DEFAULT_WORKDIR_BYTES[name]
+    ? manifest.version !== '0.1.5-rc.2'
+    : !['0.1.5-rc.1', '0.1.5-rc.2'].includes(String(manifest.version)))) return undefined
   const bytesPath = join(root, 'lib', 'index.js')
   const target = realpathSync(bytesPath)
   if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return undefined
-  return createHash('sha256').update(readFileSync(target)).digest('hex')
+  return { bytes: createHash('sha256').update(readFileSync(target)).digest('hex'), path: target }
+}
+
+function activeRendererBytes(nodeModulesRoot: string, name: string): string | undefined {
+  return activeRendererModule(nodeModulesRoot, name)?.bytes
 }
 
 /** Verify active, reachable producer bytes without reading credentials or
@@ -291,6 +310,64 @@ export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: str
     ...(checked('@deepseek-ai/dsh-tool-bash') ? ['bash' as const] : []),
     ...(checked('@deepseek-ai/dsh-tool-pwsh') ? ['pwsh' as const] : []),
   ]
+}
+
+/** Exact active implementation route for call-time omitted-workdir evidence. */
+export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: string,
+  tool: 'bash' | 'pwsh'): boolean {
+  if (!auditedForegroundRenderers(runtimeRoot, profileRoot).includes(tool)) return false
+  const names = tool === 'bash'
+    ? ['@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-sandbox',
+      '@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-bash-local']
+    : ['@deepseek-ai/dsh-pwsh-local']
+  for (const name of names) {
+    const found: string[] = []
+    for (const root of [runtimeRoot, profileRoot]) {
+      try {
+        const digest = activeRendererBytes(join(root, 'node_modules'), name)
+        if (digest) found.push(digest)
+      } catch { /* package absent in this half of the graph */ }
+    }
+    if (!found.length || !found.every((digest) => digest === AUDITED_DEFAULT_WORKDIR_BYTES[name])) return false
+  }
+  return true
+}
+
+/**
+ * The active graph alone does not prove which shell service this Agent uses.
+ * Match the scoped service's exact constructor to the audited active module,
+ * rejecting another provider with the same public service interface/name.
+ */
+export async function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string,
+  tool: 'bash' | 'pwsh', provider: unknown, policyProvider?: unknown): Promise<boolean> {
+  if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool)
+    || !provider || typeof provider !== 'object') return false
+  const matchesActiveClass = async (name: string, exportName: string, value: unknown): Promise<boolean> => {
+    if (!value || typeof value !== 'object') return false
+    const paths = new Set<string>()
+    for (const root of [runtimeRoot, profileRoot]) {
+      try {
+        const module = activeRendererModule(join(root, 'node_modules'), name)
+        if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path)
+      } catch { /* absent active package in this graph half */ }
+    }
+    // Two distinct active modules are ambiguous even when their files match.
+    if (paths.size !== 1) return false
+    try {
+      const module = await import(pathToFileURL([...paths][0]!).href) as Record<string, unknown>
+      // Cordis returns a scoped traceable proxy for Service instances. Its
+      // original symbol yields the active provider fiber's underlying value.
+      const original = (value as Record<symbol, unknown>)[Symbol.for('cordis.original')]
+      const active = original && typeof original === 'object' ? original : value
+      return typeof module[exportName] === 'function'
+        && (active as { constructor?: unknown }).constructor === module[exportName]
+    } catch { return false }
+  }
+  const shell = tool === 'bash'
+    ? await matchesActiveClass('@deepseek-ai/dsh-bash-sandbox', 'SandboxBashExecutor', provider)
+    : await matchesActiveClass('@deepseek-ai/dsh-pwsh-local', 'PwshLocalExecutor', provider)
+  return shell && (tool === 'pwsh'
+    || await matchesActiveClass('@deepseek-ai/dsh-sandbox-policy', 'SandboxPolicyService', policyProvider))
 }
 
 export interface TargetHostGraph {
