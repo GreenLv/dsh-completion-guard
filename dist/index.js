@@ -520,9 +520,26 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 						type: "string",
 						enum: [
 							"certified",
+							"observed",
 							"incomplete",
 							"unknown"
 						]
+					},
+					feedback_source: {
+						type: "string",
+						enum: ["confirmed_core_v2"]
+					},
+					current_actions: {
+						type: "array",
+						items: {
+							type: "object",
+							additionalProperties: true
+						}
+					},
+					current_action_total: { type: "integer" },
+					certificate_status: {
+						type: "string",
+						enum: ["not_requested"]
 					},
 					contract_revision: { type: "integer" },
 					active_constraints: {

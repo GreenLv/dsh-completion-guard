@@ -1,5 +1,6 @@
 /** Versioned 0.7 no-model probe. Loaded only in the disposable native host.
- * Ordinary mutations use the host's own tools; Guard only observes and certifies. */
+ * Ordinary mutations use the host's own tools; Guard observes current closure.
+ * Certificates belong to explicitly adopted proof, Goal, or release paths. */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -53,6 +54,18 @@ export function probeHostLock(domain, config, platform) {
   return audited.length ? { ...actual, auditedForegroundRenderers: audited,
     digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${actual.digest}\0${audited.join(',')}`).digest('hex'),
   } : actual
+}
+
+/** The ordinary v6 read surface cannot issue a certificate or an old binding.
+ * Keep this check independent of the caller's desired completion state. */
+export function assertOrdinaryCheckpoint(value, status) {
+  assert.equal(value?.status, status)
+  assert.equal(value?.feedback_source, 'confirmed_core_v2')
+  assert.equal(value?.certificate_status, 'not_requested')
+  assert.equal(value?.certificate, undefined)
+  assert.equal(value?.proof_state, undefined)
+  assert.ok(Array.isArray(value?.open_items))
+  assert.ok(value.open_items.every(row => row.binding_template === undefined))
 }
 
 export function apply(ctx, config) {
@@ -168,17 +181,20 @@ export function apply(ctx, config) {
         await check('v070_ordinary_file_edit_readback', async () => {
           await open('file')
           const path = join(config.workRoot, `native-v070-${config.nonce}-${config.profile}.txt`)
-          await root(`Create ${path} with the native fixture content and read it back.`)
+          writeFileSync(path, 'before\n')
+          await root(`Modify ${path} to native-v070.`)
           const before = await tool('context_guard_checkpoint', { bindings: [] })
-          assert.equal(before.value.status, 'incomplete')
-          const write = await tool('write', { file_path: path, content: 'native-v070\n' })
-          const observed = await tool('context_guard_observe_file', { effect_call_id: write.callId })
+          assertOrdinaryCheckpoint(before.value, 'incomplete')
+          await tool('read', { file_path: path })
+          const edit = await tool('edit', { file_path: path, old_string: 'before', new_string: 'native-v070' })
+          const observed = await tool('context_guard_observe_file', { effect_call_id: edit.callId })
           assert.equal(observed.value.status, 'observed')
           assert.equal(observed.value.path, path)
           assert.equal(observed.value.sha256, createHash('sha256').update('native-v070\n').digest('hex'))
           const read = await tool('read', { file_path: path })
           assert.equal(read.value.path, path)
           assert.equal(readFileSync(path, 'utf8'), 'native-v070\n')
+          assertOrdinaryCheckpoint((await tool('context_guard_checkpoint', { bindings: [] })).value, 'observed')
           const wrong = await tool('context_guard_observe_file', { effect_call_id: 'never-existed' })
           assert.equal(wrong.value.status, 'unavailable')
           return { positive: true, negative: true }
@@ -188,7 +204,7 @@ export function apply(ctx, config) {
           writeFileSync(join(config.workRoot, 'package.json'), nativeTestFixturePackage(0))
           await root(`Run npm test in ${config.workRoot}.`)
           const pending = (await tool('context_guard_checkpoint', { bindings: [] })).value
-          assert.equal(pending.status, 'incomplete')
+          assertOrdinaryCheckpoint(pending, 'incomplete')
           const item = pending.open_items.find(row => row.semantic_action === 'test')
           assert.ok(item)
           const readiness = (await tool('context_guard_observe_test_readiness', { item_id: item.id })).value
@@ -198,18 +214,27 @@ export function apply(ctx, config) {
           const executed = await tool(shell, { command: 'npm test', workdir: config.workRoot,
             ...(fields.description ? { description: 'Run isolated native acceptance fixture' } : {}) })
           assert.deepEqual(shellTerminalFacts(executed.value), { kind: 'foreground', exit_code: 0, timed_out: false, aborted: false })
-          const page = (await tool('context_guard_checkpoint', { bindings: [] })).value
-          const binding = (await readProbeItem((name, args) => tool(name, args).then(result => result.value), page, item.id)).binding_template
-          assert.ok(binding)
-          const certified = (await tool('context_guard_checkpoint', { bindings: [binding] })).value
-          assert.equal(certified.status, 'certified')
-          assert.equal(certified.certificate?.certificate_version, '4')
+          const observed = (await tool('context_guard_checkpoint', { bindings: [] })).value
+          assertOrdinaryCheckpoint(observed, 'observed')
+          assert.equal(observed.open_items.length, 0)
           assert.ok(events().some(event => event.type === 'tool/result' && event.data?.message?.source?.callId === executed.callId))
           const noOrdinaryExecutor = await tool('context_guard_action', { semantic_action: 'install',
             resolution_call_id: 'absent-ordinary', target_digest: '0'.repeat(64),
             contract_item_id: item.id, contract_item_revision: 1 })
           assert.equal(noOrdinaryExecutor.value?.status, 'unavailable')
           assert.equal(noOrdinaryExecutor.value?.reason_code, 'ordinary_action_migrated_to_host_tools')
+          await open('test-failed')
+          writeFileSync(join(config.workRoot, 'package.json'), nativeTestFixturePackage(1))
+          await root(`Run npm test in ${config.workRoot}.`)
+          const failedPending = (await tool('context_guard_checkpoint', { bindings: [] })).value
+          assertOrdinaryCheckpoint(failedPending, 'incomplete')
+          const failedItem = failedPending.open_items.find(row => row.semantic_action === 'test')
+          assert.ok(failedItem)
+          assert.equal((await tool('context_guard_observe_test_readiness', { item_id: failedItem.id })).value.status, 'ready')
+          const failed = await tool(shell, { command: 'npm test', workdir: config.workRoot,
+            ...(fields.description ? { description: 'Run failing isolated native fixture' } : {}) }, false)
+          assert.equal(failed.result.isError || shellTerminalFacts(failed.value).exit_code !== 0, true)
+          assertOrdinaryCheckpoint((await tool('context_guard_checkpoint', { bindings: [] })).value, 'incomplete')
           return { positive: true, negative: true }
         })
         await check('v070_future_vs_current_stop', async () => {

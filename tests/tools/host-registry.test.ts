@@ -106,6 +106,52 @@ it('detects an output-contract violation, so the assertions above can bite', asy
   expect((response as { error?: { info?: { code?: string } } }).error?.info?.code).toBe('INVALID_TOOL_OUTPUT')
 })
 
+it.each([['incomplete', false], ['observed', true]] as const)(
+  'materializes default v6 %s checkpoint feedback through the real ToolRuntime', async (status, certifiable) => {
+    const ctx = new Context()
+    new SystemPrompt(ctx, {})
+    const runtime = new ToolRuntime(ctx)
+    const projection = guardProjection()
+    projection.boundaryProtocol = 6
+    projection.hostStatus = 'supported'
+    projection.integrity = 'valid'
+    projection.durabilityWatermark = 'confirmed'
+    projection.coreV2 = { schema: 'core-state/v2', certifiable,
+      predicates: { R001: certifiable ? 'satisfied' : 'insufficient' },
+      unmet_requirements: certifiable ? [] : ['R001'], current_actions: [] } as never
+    runtime.register(createCheckpointTool(() => projection, () => {}))
+    const response = await runtime.execute({ callId: `v6-${status}` as never,
+      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    expect(response.isError).toBe(false)
+    expect(response.value).toMatchObject({ status, feedback_source: 'confirmed_core_v2',
+      certificate_status: 'not_requested' })
+    expect(response.value).not.toHaveProperty('certificate')
+    const detail = await runtime.execute({ callId: `v6-detail-${status}` as never,
+      name: 'context_guard_checkpoint', arguments: { bindings: [], detail_id: 'R001' }, signal: new AbortController().signal })
+    expect(detail.isError).toBe(false)
+    expect(detail.value).toMatchObject({ status, detail_id: 'R001', detail_chunk: expect.any(String) })
+    const invalid = await runtime.execute({ callId: `v6-invalid-${status}` as never,
+      name: 'context_guard_checkpoint', arguments: { bindings: [], cursor: 'not-a-cursor' }, signal: new AbortController().signal })
+    expect(invalid.isError).toBe(false)
+    expect(invalid.value).toMatchObject({ status: 'unknown', reason_code: 'malformed_cursor' })
+  },
+)
+
+it('reproduces the old checkpoint schema rejection for a default v6 answer', async () => {
+  const ctx = new Context()
+  new SystemPrompt(ctx, {})
+  const runtime = new ToolRuntime(ctx)
+  runtime.register(defineTool({ name: 'old_checkpoint_output_contract', description: 'historical schema repro',
+    parameters: {}, output: { schema: { type: 'object', additionalProperties: false,
+      properties: { status: { type: 'string', enum: ['certified', 'incomplete', 'unknown'] } } },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    execute: async () => ({ status: 'observed', feedback_source: 'confirmed_core_v2' }) as never }))
+  const response = await runtime.execute({ callId: 'old-v6-schema' as never,
+    name: 'old_checkpoint_output_contract', arguments: {}, signal: new AbortController().signal })
+  expect(response.isError).toBe(true)
+  expect(response.error?.info?.code).toBe('INVALID_TOOL_OUTPUT')
+})
+
 const CASES: Array<{ tool: string; arguments: Record<string, unknown>; withAction?: boolean }> = [
   { tool: 'context_guard_checkpoint', arguments: { bindings: [] } },
   { tool: 'context_guard_rebind', arguments: { operation: 'query', item_id: 'R001' }, withAction: false },

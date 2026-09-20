@@ -30,6 +30,21 @@ it('projects the same renderer-attested host lock as the live runtime', async ()
  expect(drift.digest).not.toBe(attestedDigest)
 })
 
+it('requires default ordinary feedback without a certificate or binding template', async () => {
+ const { assertOrdinaryCheckpoint } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const incomplete = { status: 'incomplete', feedback_source: 'confirmed_core_v2',
+  certificate_status: 'not_requested', open_items: [{ id: 'R001', reason_code: 'insufficient' }] }
+ const observed = { ...incomplete, status: 'observed', open_items: [] }
+ expect(() => assertOrdinaryCheckpoint(incomplete, 'incomplete')).not.toThrow()
+ expect(() => assertOrdinaryCheckpoint(observed, 'observed')).not.toThrow()
+ for (const invalid of [
+  { ...observed, certificate: { certificate_version: '4' } },
+  { ...observed, certificate_status: 'bound' },
+  { ...incomplete, open_items: [{ id: 'R001', binding_template: { semantic_action: 'test' } }] },
+  { ...observed, feedback_source: 'historical_item_status' },
+ ]) expect(() => assertOrdinaryCheckpoint(invalid, invalid.status)).toThrow()
+})
+
 it('executes the native npm fixture with the intended exit status on the platform shell', async () => {
  const { nativeTestFixturePackage } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
  const cwd = mkdtempSync(join(tmpdir(), 'dsh-native-script-'))

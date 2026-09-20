@@ -39,6 +39,58 @@ function appendTest(session: Session, id: string, failed = false, command = 'pnp
 }
 
 describe('default v6 current feedback', () => {
+  it('retains the original native create/readback root as an incomplete pre-effect state case', async () => {
+    const { derive } = fixture('Create /work/alpha.txt with the native fixture content and read it back.')
+    const projection = derive()
+    const result = await createCheckpointTool(() => projection, () => {}).execute({ bindings: [] } as never, undefined as never) as Record<string, unknown>
+    expect(result).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2', certificate_status: 'not_requested' })
+    expect(result).not.toHaveProperty('certificate')
+    expect(projection.coreV2?.certifiable).toBe(false)
+  })
+  it('observes a matched native npm test and reopens on its later failed result', async () => {
+    const { session, derive } = fixture('Run npm test in /work.')
+    const read = async () => createCheckpointTool(() => derive(), () => {}).execute({ bindings: [] } as never, undefined as never) as Promise<Record<string, unknown>>
+    expect(await read()).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2' })
+    appendTest(session, 'npm-success', false, 'npm test')
+    expect(await read()).toMatchObject({ status: 'observed', open_items: [], certificate_status: 'not_requested' })
+    appendTest(session, 'npm-failed', true, 'npm test')
+    const failed = await read()
+    expect(failed).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2' })
+    expect(failed).not.toHaveProperty('certificate')
+  })
+  it('keeps the native modify/readback fixture on the ordinary observed path', async () => {
+    const path = '/work/alpha.txt'
+    const { session, derive } = fixture(`Modify ${path} to native-v070.`)
+    const before = derive()
+    const checkpoint = (projection: ReturnType<typeof derive>) => createCheckpointTool(() => projection, () => {})
+    const pending = await checkpoint(before).execute({ bindings: [] } as never, undefined as never) as Record<string, unknown>
+    expect(pending).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2' })
+    expect(pending).not.toHaveProperty('certificate')
+    session.append('tool/call', { turn: 1, step: 1, callId: 'file-edit' as never, name: 'edit',
+      arguments: JSON.stringify({ file_path: path, old_string: 'before', new_string: 'native-v070' }) })
+    session.append('tool/result', { turn: 1, step: 1,
+      message: createToolResultMessage({ callId: 'file-edit' as never, content: [{ type: 'text', text: 'edited' }], isError: false }) },
+    { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 2, callId: 'file-observe' as never, name: 'context_guard_observe_file',
+      arguments: JSON.stringify({ effect_call_id: 'file-edit' }) })
+    const digest = 'a'.repeat(64)
+    session.append('tool/result', { turn: 1, step: 2,
+      message: createToolResultMessage({ callId: 'file-observe' as never,
+        content: [{ type: 'text', text: JSON.stringify({ status: 'observed', path, sha256: digest, action: 'modify', effect_call_id: 'file-edit' }) }], isError: false }),
+      meta: { contextGuardNativeFile: { effectCallId: 'file-edit', path, sha256: digest, action: 'modify' } } } as never,
+    { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 3, callId: 'file-read' as never, name: 'read',
+      arguments: JSON.stringify({ file_path: path }) })
+    session.append('tool/result', { turn: 1, step: 3,
+      message: createToolResultMessage({ callId: 'file-read' as never,
+        content: [{ type: 'text', text: 'native-v070\n' }], isError: false }), meta: { path } } as never,
+    { surfaceOp: 'append' })
+    const after = derive()
+    const result = await checkpoint(after).execute({ bindings: [] } as never, undefined as never) as Record<string, unknown>
+    expect(result.status, JSON.stringify(after.coreV2)).toBe('observed')
+    expect(result).toMatchObject({ feedback_source: 'confirmed_core_v2', certificate_status: 'not_requested' })
+    expect(result).not.toHaveProperty('certificate')
+  })
   it('shows a derived observer requirement with its original source before and after persisted readback', async () => {
     const { session, derive } = fixture('Run pnpm test in /work. Use the read-only context_guard_observe_test_readiness tool for this current test.')
     const before = derive()
