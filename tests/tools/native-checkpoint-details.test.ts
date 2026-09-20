@@ -4,10 +4,31 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { it, expect } from 'vitest'
 import { deriveProjection } from '../../src/domain/derive.js'
 import { createCheckpointTool } from '../../src/tools/checkpoint.js'
 const probeModule = new URL('../../scripts/native_host_probe.mjs', import.meta.url).href
+
+it('projects the same renderer-attested host lock as the live runtime', async () => {
+ const { probeHostLock } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const graph = evaluateHostLock(RC015_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+ expect(graph.status).toBe('supported')
+ const config = { runtimeRoot: '/isolated/runtime', profileRoot: '/isolated/profile',
+  hostPackages: RC015_HOST_PACKAGES, profile: 'web' }
+ const domain = { evaluateHostLock, readActiveHostGraph: () => RC015_HOST_PACKAGES,
+  auditedForegroundRenderers: () => ['bash'] }
+ const live = probeHostLock(domain, config, 'posix')
+ const attestedDigest = createHash('sha256')
+  .update(`dsh.core-host-renderer/v1\0${graph.digest}\0bash`).digest('hex')
+ expect(live).toMatchObject({ status: 'supported', digest: attestedDigest,
+  auditedForegroundRenderers: ['bash'] })
+ expect(live.digest).not.toBe(graph.digest)
+ expect(probeHostLock({ ...domain, auditedForegroundRenderers: () => [] }, config, 'posix').digest).toBe(graph.digest)
+ const drift = probeHostLock({ ...domain, readActiveHostGraph: () => [] }, config, 'posix')
+ expect(drift.status).not.toBe('supported')
+ expect(drift.digest).not.toBe(attestedDigest)
+})
 
 it('executes the native npm fixture with the intended exit status on the platform shell', async () => {
  const { nativeTestFixturePackage } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)

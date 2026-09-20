@@ -38,6 +38,23 @@ export function nativeTestFixturePackage(exitCode, name = 'native-test-fixture')
     scripts: { test: `node -e "process.exit(${exitCode})"` } })}\n`
 }
 
+/** Derive readback with the same active graph and renderer bytes as the
+ * registered Guard runtime. A package-list-only digest is stale whenever the
+ * runtime binds an audited foreground renderer into its Host Lock. */
+export function probeHostLock(domain, config, platform) {
+  const context = { platform, profileKind: config.profile }
+  const expected = domain.evaluateHostLock(config.hostPackages, context)
+  const actual = domain.evaluateHostLock(domain.readActiveHostGraph(config.runtimeRoot, config.profileRoot), context)
+  if (actual.status !== 'supported') return actual
+  if (actual.digest !== expected.digest) return {
+    ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift',
+  }
+  const audited = domain.auditedForegroundRenderers(config.runtimeRoot, config.profileRoot)
+  return audited.length ? { ...actual, auditedForegroundRenderers: audited,
+    digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${actual.digest}\0${audited.join(',')}`).digest('hex'),
+  } : actual
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const digest = driverDigest()
@@ -45,9 +62,6 @@ export function apply(ctx, config) {
     const { createUserMessage, createToolResultMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href)
     const { SessionId } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href)
     const domain = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href)
-    const hostLock = domain.evaluateHostLock(config.hostPackages, {
-      platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: config.profile,
-    })
     const rows = []
     let handle
     let current = 'initialize_runtime'
@@ -66,6 +80,7 @@ export function apply(ctx, config) {
     }
     const events = () => handle.agent.session.snapshotEvents()
     const projection = () => {
+      const hostLock = probeHostLock(domain, config, process.platform === 'win32' ? 'windows' : 'posix')
       const agent = handle.agent
       const raw = agent.session.header
       // The host's V3 header also contains cwd/isSeeded, which are not digest

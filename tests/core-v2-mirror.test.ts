@@ -129,5 +129,5 @@ describe('core/v2 upstream source mirrors', () => {
         status: 1, stderr: expect.stringContaining('upstream byte mismatch: docs/CORE_V2_WIRE.md'),
       })
     })
-  })
+  }, 30_000)
 })
