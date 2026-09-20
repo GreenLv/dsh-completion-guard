@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { deriveProjection, PROTOCOL_V6_NOTICE, rootLocatorFlavor } from '../src/domain/derive.js'
 import { projectSessionCoreV2, sessionCoreSnapshot } from '../src/core-v2/session.js'
+import { projectCoreV2 } from '../src/core-v2/project.js'
 import type { DerivedEnvelope } from '../src/domain/types.js'
 import { replayRawV2 } from '../src/raw-replay.js'
 import { createToolResultMessage } from '@deepseek-ai/dsh-llm'
@@ -92,7 +93,7 @@ describe('Session to core/v2 host adapter', () => {
     const snapshot = sessionCoreSnapshot(events, projection)!
     expect(snapshot).toBeDefined()
     expect(snapshot.facts).toEqual([])
-    expect((snapshot.requirements as Array<Record<string, unknown>>)[0]).toMatchObject({ kind: 'execution', action: 'modify', target: '/work/alpha.txt' })
+    expect((snapshot.requirements as Array<Record<string, unknown>>)[0]).toMatchObject({ kind: 'execution', action: 'local_edit', target: '/work/alpha.txt' })
     expect(projectSessionCoreV2(events, projection)).toMatchObject({ certifiable: false })
   })
   it('retains unknown coverage for a quoted future observation', () => {
@@ -146,6 +147,54 @@ describe('Session to core/v2 host adapter', () => {
     expect(result.post_turn_core_projection).toMatchObject({ certifiable: true, predicates: { R001: 'satisfied' }, stop: 'ordinary_end' })
     expect(result.stop).toBe('safe_yield_pending_preserved')
     expect(result.items).toMatchObject([{ status: 'answered', disposition: 'informational' }])
+  })
+  it('gives two information requirements distinct facts from one persisted final delivery', async () => {
+    const root = 'Explain the test result. Explain the checked file content.'
+    const initial = replay(root).projection
+    expect([...initial.items.values()].filter((item) => item.authorityDisposition === 'informational')).toHaveLength(2)
+    const result = await replayRawV2({ root, final: 'The test passed. The checked file contains mode=on.' })
+    expect((result.stop_core_snapshot as Record<string, unknown>).facts).toEqual([])
+    expect(result.stop_core_projection).toMatchObject({ certifiable: false })
+    const snapshot = result.post_turn_core_snapshot as Record<string, unknown>
+    const deliverySources = (snapshot.sources as Array<Record<string, unknown>>).filter((source) => source.kind === 'final_delivery')
+    const deliveryFacts = (snapshot.facts as Array<Record<string, unknown>>).filter((fact) => fact.kind === 'delivery')
+    expect(deliverySources).toHaveLength(1)
+    expect(deliveryFacts).toHaveLength(2)
+    expect(new Set(deliveryFacts.map((fact) => fact.id)).size).toBe(2)
+    expect(new Set(deliveryFacts.map((fact) => fact.requirement_id)).size).toBe(2)
+    for (const fact of deliveryFacts) expect(fact.id).toBe(`fact:${deliverySources[0]!.id}:${fact.requirement_id}`)
+    expect(result.post_turn_core_projection).toMatchObject({ certifiable: true })
+    // A replay of the immutable persisted observation keeps the same closure.
+    expect(projectCoreV2(structuredClone(snapshot))).toEqual(result.post_turn_core_projection)
+    const invalid = structuredClone(snapshot)
+    ;(invalid.facts as Array<Record<string, unknown>>).push({ ...deliveryFacts[0] })
+    expect(() => projectCoreV2(invalid)).toThrow('duplicate_identity')
+  })
+  it('does not use an earlier turn final delivery to answer a later root', () => {
+    const id = SessionId('two-information-turns')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Explain the first result.' }],
+      source: { kind: 'user' } }), { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'The first result is ready.' }] } } as never, { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } } as never)
+    session.append('turn/start', { turn: 2 })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Explain the second result.' }],
+      source: { kind: 'user' } }), { surfaceOp: 'append' })
+    const events = session.snapshotEvents() as unknown as DerivedEnvelope[]
+    const projection = deriveProjection(events, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
+    projection.durabilityWatermark = 'confirmed'
+    const snapshot = sessionCoreSnapshot(events, projection)!
+    const secondRoot = [...events].reverse().find((event: DerivedEnvelope) => event.type === 'user/message'
+      && (event.data as { source?: { kind?: string } }).source?.kind === 'user')!
+    const second = (snapshot.requirements as Array<Record<string, unknown>>).find((req) =>
+      (req.source as { source_id: string }).source_id === `root:${secondRoot.seq}`)!
+    expect(second).toBeDefined()
+    expect((snapshot.facts as Array<Record<string, unknown>>).some((fact) => fact.requirement_id === second.id)).toBe(false)
+    expect(projectSessionCoreV2(events, projection)?.predicates).toMatchObject({ [String(second.id)]: 'insufficient' })
   })
   it('keeps a ready test actionable across a short resume in the same work unit', () => {
     const first: DerivedEnvelope[] = [note, { seq: 2, type: 'turn/start', data: { turn: 1 } },

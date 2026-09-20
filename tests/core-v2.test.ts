@@ -6,7 +6,7 @@ import { projectCoreV2 } from '../src/core-v2/project.js'
 type Case = { id: string; input: Record<string, unknown>; expected?: Record<string, unknown>; expected_error?: string }
 const fixtures = JSON.parse(readFileSync(new URL('./fixtures/conformance/core_v2/events.json', import.meta.url), 'utf8')) as { cases: Case[] }
 
-describe('provisional upstream core v2 independent expectations', () => {
+describe('commit-bound upstream core v2 independent expectations', () => {
   for (const row of fixtures.cases) {
     it(row.id, () => {
       if (row.expected_error) { expect(() => projectCoreV2(row.input)).toThrow(row.expected_error); return }

@@ -578,7 +578,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
   const asTest = (clause: ClauseSegment, inheritedCommand = false): ClauseSegment | undefined => {
     if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
     const visible = maskQuotedSpans(clause.text)
-    const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu
+    const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。!?？]{1,80}?的\s*|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[，,。.!！?？\s]|$)/iu
     const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu
     const packageTest = /^\s*(?:(?:and|then|please)\s+)?(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?=\s|[.,，。!?]|$)/iu.test(visible)
     if (!testHead.test(visible) && !packageTest && !(inheritedCommand && inheritedTest.test(visible))) return undefined
@@ -884,6 +884,39 @@ function insertItems(
     }
     for (const path of segment.paths) {
       insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
+    }
+  }
+  // Direct coordination in this immutable root is the only source of a v6
+  // repair-child edge. A later pause/persistence clause cannot manufacture
+  // parentage from sibling items that happen to share a work unit.
+  if (projection.boundaryProtocol === 6 && !legacy && provenance) {
+    const fresh = [...projection.items.values()].filter((item) => !before.has(item.id)
+      && item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256
+      && item.spans?.[0]?.partIndex === 0)
+      .sort((a, b) => a.spans![0]!.start - b.spans![0]!.start)
+    let parent: GuardItem | undefined
+    for (const item of fresh) {
+      const own = item.spans![0]!
+      const raw = Buffer.from(provenance.rawText, 'utf8')
+      const clause = raw.subarray(own.start, own.end).toString('utf8')
+      if (item.semanticAction === 'modify' && item.authorityDisposition === 'executable_now'
+        && item.requestedTarget?.artifact_id) { parent = item; continue }
+      if (item.semanticAction !== 'test' || item.authorityDisposition !== 'executable_now' || !parent) {
+        parent = undefined; continue
+      }
+      const origin = parent.spans?.[0]
+      const interval = origin ? raw.subarray(origin.end, own.start).toString('utf8') : ''
+      const connector = /^\s*(?:并且|并|和|and\b)\s*/iu.exec(clause)
+      const childPaths = segmentClauses(clause)[0]?.paths ?? []
+      const parentPaths = origin ? segmentClauses(raw.subarray(origin.start, origin.end).toString('utf8'))[0]?.paths ?? [] : []
+      const parentTarget = parent.requestedTarget?.artifact_id
+      const sameObject = childPaths.length === 0 || (childPaths.length === 1
+        && parentPaths.length === 1 && childPaths[0] === parentPaths[0]
+        && resolveArtifact(childPaths[0]!, scope) === parentTarget)
+      if (!origin || !connector || /[。!！?？;；]|\.(?=\s|$)/u.test(interval) || !sameObject
+        || item.unitId !== parent.unitId || own.start < origin.end) { parent = undefined; continue }
+      item.rootDependency = { parentItemId: parent.id, rawTextSha256: provenance.rawTextSha256,
+        sourceSpan: { ...own, end: own.start + utf8ByteLength(connector[0]) } }
     }
   }
   // A new unconditional root instruction on the same action and target

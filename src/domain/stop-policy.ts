@@ -333,9 +333,16 @@ export function decideTurnBoundary(projection: GuardProjection, latestRootText =
     }
   }
   const actions = currentActionBases(projection)
-  const explicitPersistence = [...projection.items.values()].some((item) => item.authority === 'root_instruction'
-    && !item.legacyFlags?.length && item.persistenceAuthorization?.kind === 'root_explicit_persistence')
-  const shortResume = /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(latestRootText.trim())
+  // V6 control authority comes from core's source-scoped, as-of root-control
+  // fold. An old item that still contains a persistence phrase is historical:
+  // it cannot override a later pause/cancel or grant a newly introduced item.
+  const reasons = projection.boundaryProtocol === 6 && Array.isArray(projection.coreV2?.reason_codes)
+    ? projection.coreV2.reason_codes as string[] : undefined
+  const explicitPersistence = reasons ? reasons.includes('explicit_user_persistence')
+    : [...projection.items.values()].some((item) => item.authority === 'root_instruction'
+      && !item.legacyFlags?.length && item.persistenceAuthorization?.kind === 'root_explicit_persistence')
+  const shortResume = reasons ? reasons.includes('resume_with_actionable_work')
+    : /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(latestRootText.trim())
   if (actions.length && (explicitPersistence || shortResume)) {
     const hostTurn = decisionBoundaryKey(projection)
     if (hostTurn === undefined) return { action: 'stop', reason: 'correction_identity_unavailable' }
@@ -343,7 +350,7 @@ export function decideTurnBoundary(projection: GuardProjection, latestRootText =
     const claims = projection.noProgressClaims.get(fingerprint) ?? new Map<string, number>()
     const boundaryKey = String(hostTurn)
     if (claims.has(boundaryKey) || claims.size > 0) return { action: 'stop', reason: 'protocol_correction_already_issued' }
-    return { action: 'continue', reason: explicitPersistence ? 'explicit_user_persistence' : 'resume_with_actionable_work',
+    return { action: 'continue', reason: shortResume ? 'resume_with_actionable_work' : 'explicit_user_persistence',
       noProgressClaim: { fingerprint, boundaryKey, attempt: 1 } }
   }
   return { action: 'stop', reason: 'safe_yield_pending_preserved' }

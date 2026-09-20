@@ -1033,6 +1033,13 @@ interface GuardItem {
   */
   rawTextSha256?: string;
   spans?: SourceSpan[];
+  /** V6 only: a required child relation captured from direct coordination in
+  * the original root, never inferred from a later control or old state. */
+  rootDependency?: {
+    parentItemId: string;
+    rawTextSha256: string;
+    sourceSpan: SourceSpan;
+  };
   /**
   * 0.6.0 work-unit assignment (C04), present only for obligations captured
   * after a v5 protocol boundary in a non-delegated session. Legacy items keep

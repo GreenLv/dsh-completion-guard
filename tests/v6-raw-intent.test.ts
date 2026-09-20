@@ -29,7 +29,7 @@ describe('v6 current speech acts through the production Session and Stop path', 
     const result = await replayRawV2({ root: '先说明原因，再修正 src/queue.ts 并核对文件内容。', final: '原因已经说明。' })
     const reqs = rows(row(result.post_turn_core_snapshot).requirements)
     const post = row(result.post_turn_core_projection)
-    expect(reqs).toMatchObject([{ kind: 'information', status: 'satisfied' }, { kind: 'execution', action: 'modify', status: 'pending' }])
+    expect(reqs).toMatchObject([{ kind: 'information', status: 'satisfied' }, { kind: 'execution', action: 'local_edit', status: 'pending' }])
     expect(post.certifiable).toBe(false)
     expect(post.coverage_errors).toEqual([])
     expect(post.unknown_coverage).toEqual([])
@@ -40,7 +40,7 @@ describe('v6 current speech acts through the production Session and Stop path', 
       final: '尚未修改指定文件。' })
     const reqs = rows(row(result.post_turn_core_snapshot).requirements)
     const post = row(result.post_turn_core_projection)
-    expect(reqs.some((req) => req.kind === 'execution' && req.action === 'modify'
+    expect(reqs.some((req) => req.kind === 'execution' && req.action === 'local_edit'
       && String(req.target).endsWith('/packages/api/src/request.ts'))).toBe(true)
     expect(reqs.filter((req) => req.action === 'reported_context').every((req) => req.required === false)).toBe(true)
     expect(reqs.some((req) => req.kind === 'constraint')).toBe(true)
@@ -54,7 +54,7 @@ describe('v6 current speech acts through the production Session and Stop path', 
   ])('keeps a correction and its specifically requested test distinct: %s', async (root, predicate) => {
     const result = await replayRawV2({ root, final: '修复已完成，测试尚未运行。' })
     const reqs = rows(row(result.post_turn_core_snapshot).requirements)
-    expect(reqs).toMatchObject([{ kind: 'execution', action: 'modify' }, { kind: 'execution', action: 'test_verify', predicate }])
+    expect(reqs).toMatchObject([{ kind: 'execution', action: 'local_edit' }, { kind: 'execution', action: 'test_verify', predicate }])
     expect(row(result.post_turn_core_projection).certifiable).toBe(false)
   })
 

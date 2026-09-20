@@ -5,60 +5,60 @@
   "upstream": {
     "product": "codex-context-guard",
     "repository": "https://github.com/GreenLv/codex-context-guard",
-    "canonical_commit": "22fbf90c857fa6c31df0622e22fd8fcd18e60ff6"
+    "canonical_commit": "f0196b690c091efd8bca8e17e793c4b3e74dabc3"
   },
-  "canonical_commit": "22fbf90c857fa6c31df0622e22fd8fcd18e60ff6",
+  "canonical_commit": "f0196b690c091efd8bca8e17e793c4b3e74dabc3",
   "mirrored_at": "2026-09-20",
   "legacy_v1_pin_path": "tests/fixtures/conformance/UPSTREAM_PIN.json",
   "files": [
     {
-      "sha256": "84fbf66bd2ce23f579d880998fff806667750e9f0c3f5a3e0fe3d550c93ba341",
+      "sha256": "62cfe81d4e54c5a0b43c37ead9925e2baf5596bc22c0970aacecfb2f7f6e4961",
       "source_path": "assets/core-intent-v2.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/core-intent-v2.json",
-          "sha256": "84fbf66bd2ce23f579d880998fff806667750e9f0c3f5a3e0fe3d550c93ba341"
+          "sha256": "62cfe81d4e54c5a0b43c37ead9925e2baf5596bc22c0970aacecfb2f7f6e4961"
         },
         {
           "path": "src/core-v2/intent.json",
-          "sha256": "84fbf66bd2ce23f579d880998fff806667750e9f0c3f5a3e0fe3d550c93ba341"
+          "sha256": "62cfe81d4e54c5a0b43c37ead9925e2baf5596bc22c0970aacecfb2f7f6e4961"
         }
       ]
     },
     {
-      "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f",
+      "sha256": "c0025c37df0902c25471ada442f58fa86830b090debaced6b3edb87b69030b07",
       "source_path": "assets/core-observation-v2.schema.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/core-observation-v2.schema.json",
-          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+          "sha256": "c0025c37df0902c25471ada442f58fa86830b090debaced6b3edb87b69030b07"
         },
         {
           "path": "tests/fixtures/conformance/core_v2/observation.schema.json",
-          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+          "sha256": "c0025c37df0902c25471ada442f58fa86830b090debaced6b3edb87b69030b07"
         },
         {
           "path": "src/core-v2/observation.schema.json",
-          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+          "sha256": "c0025c37df0902c25471ada442f58fa86830b090debaced6b3edb87b69030b07"
         }
       ]
     },
     {
-      "sha256": "15d38d7f64e1f26aef0ef48a9c1b1eb36bda00497b2d8f20a30fcf6a04f3d39b",
+      "sha256": "1f59becb8494b0c798673561923f6ab0a13881d8f4a4f5cfd5720cf9ed801f80",
       "source_path": "docs/CORE_V2_WIRE.md",
       "role": "reference_identity",
       "mirrors": []
     },
     {
-      "sha256": "5c695a950da439de6bd6303dc1acfbeddb970f2f81ea6e83628b2fbbe6ed19de",
+      "sha256": "628976890274e64a25aca7fdbd7b36596bf796534666b08d3a3ceedf3710446d",
       "source_path": "docs/CORE_V2_HOST_CAPABILITIES.md",
       "role": "reference_identity",
       "mirrors": []
     },
     {
-      "sha256": "817a0545548ab9157f41c5423babfb3f71e34cd70861c6d7719e9de0f075e809",
+      "sha256": "c9d904e45b509eb95e7ca8ed2b4f9281dd6a01b42733b4abae6a55222a3370d6",
       "source_path": "scripts/cg_core_v2.py",
       "role": "reference_identity",
       "mirrors": []
@@ -81,30 +81,30 @@
       ]
     },
     {
-      "sha256": "8696ffc43be4ea74c0de511b6ed363c332a7ac1fbbc4d88119b0399834816978",
+      "sha256": "f75503d982088e00513a684b35f9c6ff88d8a3fae2a3307578be81ecb2ba0368",
       "source_path": "tests/fixtures/conformance/core_v2/events.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/events.json",
-          "sha256": "8696ffc43be4ea74c0de511b6ed363c332a7ac1fbbc4d88119b0399834816978"
+          "sha256": "f75503d982088e00513a684b35f9c6ff88d8a3fae2a3307578be81ecb2ba0368"
         }
       ]
     },
     {
-      "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f",
+      "sha256": "c0025c37df0902c25471ada442f58fa86830b090debaced6b3edb87b69030b07",
       "source_path": "tests/fixtures/conformance/core_v2/observation.schema.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/observation.schema.json",
-          "sha256": "5a42f985abb46a579be51dc0689aad49133a6c5912f383615dfc671ad336be3f"
+          "sha256": "c0025c37df0902c25471ada442f58fa86830b090debaced6b3edb87b69030b07"
         }
       ]
     },
     {
       "source_path": "docs/CORE_ALIGNMENT_CONTRACT_V2.md",
-      "sha256": "523f9239168fb11d8daf72d6c3348b3121caa1b05aaa7f32afd3692952c477d5",
+      "sha256": "42d044ef5970d2a1d7a20e179e8fd458395f4dc7cb7b601692126ffde0d197d2",
       "role": "reference_identity",
       "mirrors": []
     }

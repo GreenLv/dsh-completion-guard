@@ -6375,8 +6375,9 @@ function decideTurnBoundary(projection, latestRootText = "") {
 		reason: projection.currentGoalPhase === "paused" ? "goal_paused_by_user_safe_yield" : "goal_not_continuable_safe_yield"
 	};
 	const actions = currentActionBases(projection);
-	const explicitPersistence = [...projection.items.values()].some((item) => item.authority === "root_instruction" && !item.legacyFlags?.length && item.persistenceAuthorization?.kind === "root_explicit_persistence");
-	const shortResume = /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(latestRootText.trim());
+	const reasons = projection.boundaryProtocol === 6 && Array.isArray(projection.coreV2?.reason_codes) ? projection.coreV2.reason_codes : void 0;
+	const explicitPersistence = reasons ? reasons.includes("explicit_user_persistence") : [...projection.items.values()].some((item) => item.authority === "root_instruction" && !item.legacyFlags?.length && item.persistenceAuthorization?.kind === "root_explicit_persistence");
+	const shortResume = reasons ? reasons.includes("resume_with_actionable_work") : /^(?:请)?(?:继续|接着做|继续执行|go on|continue|proceed)[。.!！\s]*$/i.test(latestRootText.trim());
 	if (actions.length && (explicitPersistence || shortResume)) {
 		const hostTurn = decisionBoundaryKey(projection);
 		if (hostTurn === void 0) return {
@@ -6392,7 +6393,7 @@ function decideTurnBoundary(projection, latestRootText = "") {
 		};
 		return {
 			action: "continue",
-			reason: explicitPersistence ? "explicit_user_persistence" : "resume_with_actionable_work",
+			reason: shortResume ? "resume_with_actionable_work" : "explicit_user_persistence",
 			noProgressClaim: {
 				fingerprint: fingerprint$1,
 				boundaryKey,
@@ -13885,7 +13886,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			"conditional_wait"
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
 		const visible = maskQuotedSpans(clause.text);
-		const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。.!?？]{0,32}?的?|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[。.!！?？\s]|$)/iu;
+		const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。!?？]{1,80}?的\s*|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[，,。.!！?？\s]|$)/iu;
 		const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu;
 		const packageTest = /^\s*(?:(?:and|then|please)\s+)?(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?=\s|[.,，。!?]|$)/iu.test(visible);
 		if (!testHead.test(visible) && !packageTest && !(inheritedCommand && inheritedTest.test(visible))) return void 0;
@@ -14326,6 +14327,42 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			rawTextSha256: provenance.rawTextSha256,
 			span
 		} : void 0);
+	}
+	if (projection.boundaryProtocol === 6 && !legacy && provenance) {
+		const fresh = [...projection.items.values()].filter((item) => !before.has(item.id) && item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256 && item.spans?.[0]?.partIndex === 0).sort((a, b) => a.spans[0].start - b.spans[0].start);
+		let parent;
+		for (const item of fresh) {
+			const own = item.spans[0];
+			const raw = Buffer.from(provenance.rawText, "utf8");
+			const clause = raw.subarray(own.start, own.end).toString("utf8");
+			if (item.semanticAction === "modify" && item.authorityDisposition === "executable_now" && item.requestedTarget?.artifact_id) {
+				parent = item;
+				continue;
+			}
+			if (item.semanticAction !== "test" || item.authorityDisposition !== "executable_now" || !parent) {
+				parent = void 0;
+				continue;
+			}
+			const origin = parent.spans?.[0];
+			const interval = origin ? raw.subarray(origin.end, own.start).toString("utf8") : "";
+			const connector = /^\s*(?:并且|并|和|and\b)\s*/iu.exec(clause);
+			const childPaths = segmentClauses(clause)[0]?.paths ?? [];
+			const parentPaths = origin ? segmentClauses(raw.subarray(origin.start, origin.end).toString("utf8"))[0]?.paths ?? [] : [];
+			const parentTarget = parent.requestedTarget?.artifact_id;
+			const sameObject = childPaths.length === 0 || childPaths.length === 1 && parentPaths.length === 1 && childPaths[0] === parentPaths[0] && resolveArtifact(childPaths[0], scope) === parentTarget;
+			if (!origin || !connector || /[。!！?？;；]|\.(?=\s|$)/u.test(interval) || !sameObject || item.unitId !== parent.unitId || own.start < origin.end) {
+				parent = void 0;
+				continue;
+			}
+			item.rootDependency = {
+				parentItemId: parent.id,
+				rawTextSha256: provenance.rawTextSha256,
+				sourceSpan: {
+					...own,
+					end: own.start + utf8ByteLength(connector[0])
+				}
+			};
+		}
 	}
 	for (const [id, item] of projection.items) {
 		if (before.has(id)) continue;
@@ -15372,7 +15409,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 //#endregion
 //#region src/core-v2/intent.json
 var patterns = {
-	"USER_PERSISTENCE_RE": "\\b(?:(?:do\\s+not|don't|never)\\s+(?:stop|pause|yield|end)\\s+(?:working|on\\s+(?:this|the)\\s+(?:task|work)|while\\s+.{0,24}remains?|until\\s+.{0,64}(?:done|complete[dn]?|finish(?:ed|es)?))|(?:keep\\s+(?:going|working)|continue\\s+(?:working\\s+)?).{0,40}(?:until|through\\s+to).{0,40}(?:done|complete[dn]?|finished))\\b|(?:不要|不得|别|切勿|不能).{0,12}(?:停止|停下|停|暂停|中止|结束).{0,32}(?:直到|直至).{0,32}(?:完成|结束)|(?:持续|继续|一直).{0,24}(?:执行|推进|工作).{0,32}(?:直到|直至).{0,32}(?:完成|结束)|(?:不要|不得|别|切勿).{0,24}(?:工作|任务|事项).{0,24}(?:仍|还|尚).{0,8}(?:可执行|未完成).{0,16}(?:停止|结束)",
+	"USER_PERSISTENCE_RE": "\\b(?:(?:do\\s+not|don't|never)\\s+(?:stop|pause|yield|end)\\s+(?:working|on\\s+(?:this|the)\\s+(?:task|work)|while\\s+.{0,24}remains?|until\\s+.{0,64}(?:done|complete[dn]?|finish(?:ed|es)?))|(?:keep\\s+(?:going|working)|continue\\s+(?:working\\s+)?).{0,40}(?:until|through\\s+to).{0,40}(?:done|complete[dn]?|finished))\\b|(?:不要|不得|别|切勿|不能).{0,12}(?:停止|停下|停|暂停|中止|结束).{0,32}(?:直到|直至).{0,32}(?:完成|结束)|(?:持续|继续|一直).{0,24}(?:执行|推进|工作).{0,32}(?:直到|直至).{0,32}(?:完成|结束)|(?:不要|不得|别|切勿).{0,24}(?:工作|任务|事项).{0,24}(?:仍|还|尚).{0,8}(?:可执行|未完成).{0,16}(?:停止|结束)|(?:持续|继续|一直).{0,8}(?:完成|处理|修复).{0,40}(?:直到|直至).{0,24}(?:当前|这轮|本轮|全部|整个).{0,12}(?:任务|工作|事项|修改|测试).{0,8}(?:完成|结束)",
 	"EXECUTION_RESUME_RE": "^(?:请|你|您|帮我|麻烦)?\\s*(?:继续(?:执行|推进|工作)|继续(?=\\s*[。.!！]?\\s*$)|按(?:照)?(?:你(?:的)?|刚刚|现在|上述|之前|这个|该|既定|和|与|\\s)*(?:计划|建议)(?:继续)?执行)|^(?:please\\s+)?(?:continue(?=\\s*[。.!！]?\\s*$)|continue\\s+(?:working|executing)|continue\\s+(?:(?:the|this|whole|entire|release|remaining)\\s+)*plan|(?:proceed|execute)\\s+(?:with\\s+)?(?:the\\s+)?(?:plan|recommendations))\\b"
 };
 
@@ -15560,8 +15597,22 @@ var observation_schema_default = {
 					"status": { "enum": [
 						"pending",
 						"satisfied",
-						"legacy_review"
+						"legacy_review",
+						"superseded"
 					] },
+					"superseded_at_seq": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 9007199254740991
+					},
+					"supersession_source_id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"superseded_by_requirement_id": {
+						"type": "string",
+						"minLength": 1
+					},
 					"parent_id": { "type": ["string", "null"] },
 					"evidence_kind": { "enum": [
 						"action_event",
@@ -15875,6 +15926,162 @@ var observation_schema_default = {
 					"relation",
 					"readiness_fact_ids",
 					"state"
+				]
+			}
+		},
+		"root_controls": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"kind": { "enum": [
+						"persistence",
+						"pause",
+						"resume",
+						"cancel"
+					] },
+					"source": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"source_id": {
+								"type": "string",
+								"minLength": 1
+							},
+							"start": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"end": {
+								"type": "integer",
+								"minimum": 0,
+								"maximum": 9007199254740991
+							},
+							"sha256": {
+								"type": "string",
+								"pattern": "^[0-9a-f]{64}$"
+							}
+						},
+						"required": [
+							"source_id",
+							"start",
+							"end",
+							"sha256"
+						]
+					},
+					"seq": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 9007199254740991
+					},
+					"scope_basis": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"kind": { "enum": [
+								"current_unit",
+								"exact",
+								"directory",
+								"action_class",
+								"parent_task"
+							] },
+							"target": { "type": ["string", "null"] },
+							"target_source": { "anyOf": [{
+								"type": "object",
+								"additionalProperties": false,
+								"properties": {
+									"source_id": {
+										"type": "string",
+										"minLength": 1
+									},
+									"start": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 9007199254740991
+									},
+									"end": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 9007199254740991
+									},
+									"sha256": {
+										"type": "string",
+										"pattern": "^[0-9a-f]{64}$"
+									}
+								},
+								"required": [
+									"source_id",
+									"start",
+									"end",
+									"sha256"
+								]
+							}, { "type": "null" }] }
+						},
+						"required": [
+							"kind",
+							"target",
+							"target_source"
+						]
+					},
+					"controlled_requirements": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"requirement_id": {
+									"type": "string",
+									"minLength": 1
+								},
+								"unit": {
+									"type": "string",
+									"minLength": 1
+								},
+								"revision": {
+									"type": "integer",
+									"minimum": 0,
+									"maximum": 9007199254740991
+								},
+								"source_id": {
+									"type": "string",
+									"minLength": 1
+								},
+								"seq": {
+									"type": "integer",
+									"minimum": 0,
+									"maximum": 9007199254740991
+								},
+								"target": { "type": ["string", "null"] },
+								"scope_sha256": {
+									"type": "string",
+									"pattern": "^[0-9a-f]{64}$"
+								}
+							},
+							"required": [
+								"requirement_id",
+								"unit",
+								"revision",
+								"source_id",
+								"seq",
+								"target",
+								"scope_sha256"
+							]
+						}
+					}
+				},
+				"required": [
+					"id",
+					"kind",
+					"source",
+					"seq",
+					"scope_basis",
+					"controlled_requirements"
 				]
 			}
 		},
@@ -16196,6 +16403,326 @@ const sourceMatches = (span, sources, root = false) => {
 };
 const utf8Compare = (a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
 const sortedUnique = (value) => [...new Set(value)].sort(utf8Compare);
+function controlSpeech(text, kind) {
+	if (/^\s*(?:```|`|[“‘"]|>)/u.test(text)) return false;
+	let speech = text.trim().replace(/```[\s\S]*?```|`[^`]*`|“[^”]*”|‘[^’]*’|"[^"]*"/gu, "对象");
+	speech = speech.replace(/^(?:(?:请(?:先)?|现在|先)\s*|(?:please|now|kindly)\s+)+/iu, "");
+	if (kind === "persistence" && subjectlessCompoundPersistence(speech)) return true;
+	if (/^(?:不要|不得|别|切勿|无需|不必|do\s+not\b|don't\b|never\b)/iu.test(speech)) return false;
+	if (kind === "persistence") return new RegExp(rules.USER_PERSISTENCE_RE, "is").exec(speech)?.index === 0;
+	if (kind === "resume") return new RegExp(rules.EXECUTION_RESUME_RE, "i").exec(speech)?.index === 0;
+	if (kind === "pause") return /^(?:暂停|搁置|pause\b|hold\b)/iu.test(speech);
+	if (kind === "cancel") return /^(?:取消|撤销|不再进行|cancel\b|drop\b)/iu.test(speech);
+	return false;
+}
+function subjectlessCompoundPersistence(text) {
+	return /^\s*(?:(?:请|现在)\s*)?(?:不要|不得|别|切勿)\s*(?:停止|停下|暂停|结束)\s*[,，]\s*(?:持续|继续|一直)\s*(?:执行|推进|工作)\s*(?:直到|直至)\s*(?:完成|结束)\s*[。.!！]?\s*$/u.test(text);
+}
+function singleRootTaskScope(prefix, rows) {
+	if (!rows.length) return false;
+	const direct = prefix.trim().replace(/[。.!！]+$/u, "");
+	if (/[。！？;；\n]/u.test(direct)) return false;
+	if (rows.length === 1) return directWorkClause(direct);
+	const parents = rows.filter((row$1) => row$1.parent_id === null);
+	if (parents.length !== 1 || parents[0].action !== "local_edit") return false;
+	const parent = parents[0];
+	if (!rows.every((row$1) => row$1 === parent || row$1.parent_id === parent.id && ["test_verify", "state_readback"].includes(row$1.action) && row$1.target === parent.target)) return false;
+	const clauses = direct.split("并");
+	return clauses.length === rows.length && clauses.length >= 2 && clauses.every(directWorkClause);
+}
+function directWorkClause(text) {
+	const clause = text.trim().replace(/[，,。.!！]+$/u, "");
+	const unquoted = clause.replace(/`[^`]*`|“[^”]*”|‘[^’]*’|"[^"]*"/gu, "对象");
+	if (/[,，:：;；]|并|然后|随后|\b(?:and|then)\b/iu.test(unquoted)) return false;
+	if (/^(?:如果|假如|假设|未来|以后|将来|当|若|if\b|when\b|later\b|future\b)/iu.test(clause)) return false;
+	if (/^(?:不要|不得|别|切勿|无需|不必|do\s+not\b|don't\b|never\b)/iu.test(clause)) return false;
+	return /^(?:(?:请|请先|先|现在)\s*)?(?:运行|测试|修复|修改|编辑|更新|实现|检查|评估|测量|提交|推送|执行)|^(?:please\s+)?(?:run|test|repair|fix|edit|update|implement|check|evaluate|measure|commit|push)\b/iu.test(clause);
+}
+function rootSentenceParts(raw) {
+	const characters = Array.from(Buffer.from(raw).toString("utf8"));
+	const starts = [0], delimiters = [];
+	const compoundCommas = /* @__PURE__ */ new Set();
+	let offset = 0, segmentStart = 0, quotedBy;
+	for (let index$1 = 0; index$1 < characters.length; index$1++) {
+		const character = characters[index$1], before = offset;
+		offset += bytes(character).length;
+		if (quotedBy) {
+			if (character === quotedBy) quotedBy = void 0;
+			continue;
+		}
+		if ([
+			"“",
+			"‘",
+			"\"",
+			"`"
+		].includes(character)) {
+			quotedBy = {
+				"“": "”",
+				"‘": "’"
+			}[character] ?? character;
+			continue;
+		}
+		if (character === "并") {
+			const preceding = characters.slice(segmentStart, index$1).join("");
+			const following = characters.slice(index$1 + 1).join("");
+			if (directWorkClause(preceding) && controlSpeech(following.split("。", 1)[0], "persistence")) {
+				starts.push(offset);
+				delimiters.push([
+					before,
+					offset,
+					character
+				]);
+				segmentStart = index$1 + 1;
+				continue;
+			}
+		}
+		if ("。！？;；\n".includes(character) || ".!?".includes(character) && (index$1 + 1 === characters.length || /\s/u.test(characters[index$1 + 1]))) {
+			starts.push(offset);
+			delimiters.push([
+				before,
+				offset,
+				character
+			]);
+			segmentStart = index$1 + 1;
+		} else if ("，,".includes(character)) {
+			const remainder = characters.slice(index$1 + 1).join("").split(/[。！？;；\n]/u, 1)[0];
+			if (subjectlessCompoundPersistence(characters.slice(segmentStart, index$1).join("") + character + remainder)) compoundCommas.add(before);
+			else if (subjectlessCompoundPersistence(remainder)) {
+				starts.push(offset);
+				segmentStart = index$1 + 1;
+			}
+			delimiters.push([
+				before,
+				offset,
+				character
+			]);
+		}
+	}
+	return {
+		starts,
+		delimiters,
+		compoundCommas
+	};
+}
+function rootSentenceBounds(raw, span) {
+	const { starts, delimiters, compoundCommas } = rootSentenceParts(raw);
+	const start = starts.filter((candidate) => candidate <= span.start).at(-1) ?? 0;
+	if (Buffer.from(raw.subarray(start, span.start)).toString("utf8").trim()) return void 0;
+	let clauseEnd = raw.length, delimiterEnd = raw.length;
+	for (const [begin, after, character] of delimiters) {
+		if (begin < span.start) continue;
+		if (compoundCommas.has(begin)) continue;
+		if ("，,".includes(character) && /^(?:直到|直至|until\b)/iu.test(Buffer.from(raw.subarray(after)).toString("utf8").trimStart())) continue;
+		clauseEnd = begin;
+		delimiterEnd = after;
+		break;
+	}
+	let contentEnd = clauseEnd;
+	while (contentEnd > start && /\s/u.test(String.fromCharCode(raw[contentEnd - 1]))) contentEnd--;
+	return span.end === contentEnd || span.end === delimiterEnd ? [start, delimiterEnd] : void 0;
+}
+/** Candidate control spans from immutable root bytes, including a governed
+* coordinated predicate. A comma alone never grants a new speech act. */
+function rootControlCandidateSpans(text) {
+	const raw = bytes(text), { starts, delimiters, compoundCommas } = rootSentenceParts(raw);
+	const spans = [];
+	for (const candidate of starts) {
+		let start = candidate;
+		while (start < raw.length && /\s/u.test(String.fromCharCode(raw[start]))) start++;
+		if (start >= raw.length) continue;
+		let end = raw.length;
+		for (const [begin, after, character] of delimiters) {
+			if (begin < start) continue;
+			if (compoundCommas.has(begin)) continue;
+			if ("，,".includes(character) && /^(?:直到|直至|until\b)/iu.test(Buffer.from(raw.subarray(after)).toString("utf8").trimStart())) continue;
+			end = "，,".includes(character) ? begin : after;
+			break;
+		}
+		if (start < end && rootSentenceBounds(raw, {
+			start,
+			end
+		})) spans.push({
+			start,
+			end
+		});
+	}
+	return spans;
+}
+function currentUnitScopeSpeech(text, kind) {
+	const lead = "(?:(?:(?:请|请先|先)\\s*|(?:please|now)\\s+))*";
+	const end = "\\s*[。.!！]?\\s*";
+	const scoped = "(?:(?:当前|本轮|这轮|全部|整个)(?:任务|工作|事项))";
+	if ([
+		"pause",
+		"resume",
+		"cancel"
+	].includes(kind)) {
+		const verb = kind === "pause" ? "(?:暂停|搁置|pause|hold)" : kind === "resume" ? "(?:继续|continue)" : "(?:取消|撤销|cancel|drop)";
+		const noun = kind === "cancel" ? scoped : `(?:${scoped})?`;
+		return new RegExp(`^\\s*${lead}${verb}\\s*${noun}${end}$`, "iu").test(text);
+	}
+	if (kind !== "persistence") return false;
+	if (subjectlessCompoundPersistence(text)) return true;
+	const zh = new RegExp(`^\\s*${lead}(?:持续|继续|一直)(?:执行|推进|工作|完成|处理)\\s*[,，]?\\s*(?:直到|直至)(?:(?:当前|本轮|这轮|全部|整个))?(?:任务|工作|事项)(?:完成|结束)${end}$`, "iu");
+	const terminal = "(?:(?:is\\s+)?(?:done|complete|finished))";
+	const enHead = "(?:please\\s+)?(?:keep|continue)\\s+(?:going|working)";
+	const en = new RegExp(`^\\s*${enHead}(?:\\s+on\\s+(?:this|the\\s+current)\\s+(?:task|work))?\\s+until\\s+(?:this|the\\s+current|current|whole|entire)\\s+(?:task|work)\\s+${terminal}${end}$`, "iu");
+	const anaphora = new RegExp(`^\\s*${enHead}\\s+on\\s+(?:this|the\\s+current)\\s+(?:task|work)\\s+until\\s+it\\s+${terminal}${end}$`, "iu");
+	return zh.test(text) || en.test(text) || anaphora.test(text);
+}
+/** Source range of one directly governed test-class object. It is a proposal
+* for the core, which still checks immutable root and receipt-time refs. */
+function actionClassScopeSpeech(text, kind) {
+	const noun = "(?:本轮|这轮|当前|全部|这项|该项)测试";
+	const pattern = kind === "persistence" ? `^(?<prefix>\\s*(?:(?:请|请先|先)\\s*)?(?:持续|继续|一直)(?:执行|推进|完成|处理|运行)\\s*(?:(?:本轮|这轮|当前|全部)测试\\s*)?[,，]?\\s*(?:直到|直至)\\s*)(?<noun>${noun})\\s*(?:完成|结束)(?:为止)?\\s*[。.!！]?\\s*$` : `^(?<prefix>\\s*(?:(?:请|请先|先)\\s*)?(?:暂停|搁置|取消|撤销|继续)\\s*)(?<noun>${noun})\\s*[。.!！]?\\s*$`;
+	const match = new RegExp(pattern, "u").exec(text);
+	if (!match?.groups?.prefix || !match.groups.noun) return void 0;
+	const start = match.groups.prefix.length;
+	return {
+		noun: match.groups.noun,
+		start,
+		end: start + match.groups.noun.length
+	};
+}
+const fullMatch = (pattern, text) => new RegExp(`^(?:${pattern})$`, "iu").test(text);
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+const scopeOpen = (req, seq) => req.status !== "superseded" || req.superseded_at_seq !== void 0 ? req.seq <= seq && (req.superseded_at_seq === void 0 || seq < req.superseded_at_seq) : false;
+function explicitTargetSpeech(prefix, suffix, kind) {
+	if ([
+		"pause",
+		"resume",
+		"cancel"
+	].includes(kind)) return fullMatch(`\\s*(?:(?:(?:请|请先|先)\\s*|please\\s+))*${kind === "pause" ? "(?:暂停|搁置|pause|hold)" : kind === "resume" ? "(?:继续|continue)" : "(?:取消|撤销|cancel|drop)"}\\s*(?:文件|目录|测试|仓库)?\\s*[\`“"]?\\s*`, prefix) && fullMatch("\\s*[`”\"]?\\s*[。.!！]?\\s*", suffix);
+	return kind === "persistence" && fullMatch("\\s*(?:(?:(?:请|请先)\\s*|please\\s+))*(?:持续|继续|一直)(?:执行|推进|完成|处理)\\s*[`“\"]?\\s*", prefix) && fullMatch("\\s*[`”\"]?\\s*(?:的测试)?\\s*(?:直到|直至)(?:当前|本轮|这轮)?(?:任务|工作|测试)?(?:完成|结束)\\s*[。.!！]?\\s*", suffix);
+}
+function foldRootControls(snapshot, sources, requirements, facts, units, watermark) {
+	const states = /* @__PURE__ */ new Map(), errors = [], represented = /* @__PURE__ */ new Set(), resumed = /* @__PURE__ */ new Set();
+	const controls = listed(snapshot.root_controls ?? []);
+	if (new Set(controls.map((control) => control.id)).size !== controls.length) throw new Error("duplicate_root_control");
+	const ordered = [...controls].sort((a, b) => a.seq - b.seq || a.source.start - b.source.start || utf8Compare(a.id, b.id));
+	const positions = /* @__PURE__ */ new Set();
+	for (const control of ordered) {
+		if (control.seq > watermark) continue;
+		const span = control.source, source = sources.get(span.source_id);
+		if (source && !units.has(source.unit)) continue;
+		const controlUnit = source?.unit;
+		const position = `${control.seq}\u0000${span.source_id}\u0000${span.start}`;
+		let valid = Boolean(source && source.kind === "root" && units.has(source.unit) && source.seq === control.seq && sourceMatches(span, sources, true) && !positions.has(position) && [...sources.values()].filter((row$1) => row$1.seq === control.seq).length === 1);
+		positions.add(position);
+		if (!valid || !source) {
+			errors.push(control.id);
+			continue;
+		}
+		const text = spanText(span, source);
+		const sentence = rootSentenceBounds(bytes(source.text), span);
+		if (!sentence || !controlSpeech(text, control.kind)) {
+			errors.push(control.id);
+			continue;
+		}
+		const basis = control.scope_basis, target = basis.target, targetSpan = basis.target_source;
+		if (basis.kind === "current_unit") valid = target === null && targetSpan === null && currentUnitScopeSpeech(text, control.kind);
+		else {
+			valid = Boolean(typeof target === "string" && target && targetSpan && targetSpan.source_id === span.source_id && sourceMatches(targetSpan, sources, true) && span.start <= targetSpan.start && targetSpan.end <= span.end && sentence[0] <= targetSpan.start && targetSpan.start < targetSpan.end && targetSpan.end <= sentence[1] && (basis.kind !== "exact" && basis.kind !== "directory" || spanText(targetSpan, source) === target));
+			if (valid && ["exact", "directory"].includes(basis.kind)) {
+				const raw = bytes(source.text);
+				valid = explicitTargetSpeech(Buffer.from(raw.subarray(span.start, targetSpan.start)).toString("utf8"), Buffer.from(raw.subarray(targetSpan.end, span.end)).toString("utf8"), control.kind);
+			}
+		}
+		if (!valid) {
+			errors.push(control.id);
+			continue;
+		}
+		const eligible = new Map([...requirements].filter(([key, req]) => req.unit === controlUnit && scopeOpen(req, control.seq) && req.kind === "execution" && states.get(key) !== "cancelled" && sourceMatches(req.source, sources, true)));
+		if ([...requirements.values()].some((req) => req.unit === controlUnit && req.kind === "execution" && req.superseded_at_seq === control.seq)) {
+			errors.push(control.id);
+			continue;
+		}
+		if (basis.kind === "current_unit" && subjectlessCompoundPersistence(text)) {
+			const prefix = Buffer.from(source.text, "utf8").subarray(0, span.start).toString("utf8");
+			if (![...eligible.values()].every((req) => req.source.source_id === source.id && req.seq === control.seq) || !singleRootTaskScope(prefix, [...eligible.values()])) {
+				errors.push(control.id);
+				continue;
+			}
+		}
+		let selected;
+		if (basis.kind === "current_unit") selected = eligible;
+		else if (basis.kind === "exact") selected = new Map([...eligible].filter(([, req]) => req.target === target));
+		else if (basis.kind === "directory") selected = new Map([...eligible].filter(([, req]) => req.target.startsWith(`${String(target).replace(/\/$/u, "")}/`)));
+		else if (basis.kind === "action_class") {
+			const noun = spanText(targetSpan, source);
+			const parsed = actionClassScopeSpeech(text, control.kind);
+			valid = target === "test_verify" && parsed?.noun === noun && span.start + bytes(text.slice(0, parsed.start)).length === targetSpan.start;
+			selected = valid ? new Map([...eligible].filter(([, req]) => req.action === target)) : /* @__PURE__ */ new Map();
+			if ((noun.startsWith("这项") || noun.startsWith("该项")) && selected.size !== 1) valid = false;
+		} else if (basis.kind === "parent_task") {
+			const noun = spanText(targetSpan, source);
+			let parents = new Map([...eligible].filter(([key, req]) => req.action === "local_edit" && [...eligible.values()].some((child) => child.parent_id === key)));
+			let grammar;
+			if (noun === "这项修复" || noun === "该项修复") grammar = fullMatch(`\\s*(?:(?:请|请先|先)\\s*)?(?:暂停|搁置|取消|撤销|继续)\\s*${escapeRegex(noun)}\\s*[。.!！]?\\s*`, text);
+			else {
+				grammar = control.kind === "persistence" && fullMatch("(?:本轮|这轮|当前).{1,48}(?:修复|修改).{0,24}(?:测试|验证)", noun) && fullMatch(`\\s*(?:(?:请|请先)\\s*)?(?:持续|继续|一直)(?:完成|推进|执行|处理)\\s*${escapeRegex(noun)}\\s*[,，]?\\s*(?:直到|直至)(?:当前|本轮|这轮)(?:任务|工作|事项)(?:完成|结束)\\s*[。.!！]?\\s*`, text);
+				parents = new Map([...parents].filter(([, req]) => req.source.source_id === span.source_id));
+			}
+			valid = grammar && parents.size === 1 && parents.has(target);
+			selected = valid ? new Map([[target, parents.get(target)]]) : /* @__PURE__ */ new Map();
+			if (valid) {
+				let changed = true;
+				while (changed) {
+					changed = false;
+					for (const [key, req] of eligible) if (req.required && selected.has(req.parent_id) && !selected.has(key)) {
+						selected.set(key, req);
+						changed = true;
+					}
+				}
+			}
+		} else {
+			valid = false;
+			selected = /* @__PURE__ */ new Map();
+		}
+		if (!valid) {
+			errors.push(control.id);
+			continue;
+		}
+		const refs = listed(control.controlled_requirements);
+		if (!refs.length || new Set(refs.map((ref) => ref.requirement_id)).size !== refs.length || !same(sortedUnique(refs.map((ref) => ref.requirement_id)), sortedUnique([...selected.keys()]))) {
+			errors.push(control.id);
+			continue;
+		}
+		for (const ref of refs) {
+			const req = selected.get(ref.requirement_id);
+			const selectedAtReceipt = /* @__PURE__ */ new Set();
+			if (req.target_origin.constraint_kind === "work_unit") for (const fact of facts.values()) {
+				if (fact.kind !== "readiness" || fact.outcome !== "success" || fact.requirement_id !== req.id || fact.seq > control.seq) continue;
+				const call = sources.get(fact.call_source_id), result = sources.get(fact.source_id);
+				if (call?.kind === "host_call" && result?.kind === "host_result" && call.seq < result.seq && result.seq <= control.seq && call.target === fact.target && call.target_kind === req.target_origin.subject_kind) selectedAtReceipt.add(fact.target);
+			}
+			if (ref.unit !== req.unit || ref.revision !== req.revision || ref.source_id !== req.source.source_id || ref.seq !== req.seq || ref.target === null && (["exact", "directory"].includes(basis.kind) || req.target_origin.constraint_kind !== "work_unit" || selectedAtReceipt.size > 0) || ref.target !== null && ref.target !== req.target || req.target_origin.constraint_kind === "work_unit" && (selectedAtReceipt.size > 1 || selectedAtReceipt.size > 0 !== (ref.target !== null) || selectedAtReceipt.size > 0 && !selectedAtReceipt.has(ref.target)) || ref.scope_sha256 !== req.scope_sha256 || req.seq === control.seq && req.source.source_id !== span.source_id) {
+				valid = false;
+				break;
+			}
+		}
+		if (!valid) {
+			errors.push(control.id);
+			continue;
+		}
+		represented.add(span.source_id);
+		for (const key of selected.keys()) {
+			const prior = states.get(key) ?? "ordinary";
+			if (control.kind === "cancel") states.set(key, "cancelled");
+			else if (control.kind === "pause") states.set(key, ["persistent", "persistent_paused"].includes(prior) ? "persistent_paused" : "paused");
+			else if (control.kind === "resume" && ["paused", "persistent_paused"].includes(prior)) {
+				states.set(key, prior === "persistent_paused" ? "persistent" : "ordinary");
+				resumed.add(key);
+			} else if (control.kind === "persistence" && prior !== "cancelled") states.set(key, "persistent");
+		}
+	}
+	return {
+		states,
+		errors,
+		represented,
+		resumed
+	};
+}
 /** Pure, host-neutral core/v2 projection. The adapter owns event trust and durability. */
 function projectCoreV2(snapshot) {
 	validateCoreSnapshot(snapshot, observation_schema_default);
@@ -16238,9 +16765,15 @@ function projectCoreV2(snapshot) {
 			growing = true;
 		}
 	}
+	const requirements = index(listed(snapshot.requirements), watermark);
+	const activeRootIds = new Set([
+		...[...sources].filter(([, source]) => source.kind === "root" && units.has(source.unit) && source.revision === revision).map(([key]) => key),
+		...[...requirements.values()].filter((req) => units.has(req.unit)).map((req) => req.source.source_id),
+		...listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark && units.has(sources.get(control.source.source_id)?.unit)).map((control) => control.source.source_id)
+	]);
 	const coverageErrors = [], unknownCoverage = [];
 	for (const [key, source] of sources) {
-		if (source.kind !== "root" || !units.has(source.unit) || source.unit === unit && source.revision !== revision) continue;
+		if (source.kind !== "root" || !activeRootIds.has(key)) continue;
 		const spans = listed(snapshot.coverage).filter((c) => c.source.source_id === key).sort((a, b) => a.source.start - b.source.start);
 		let cursor = 0;
 		for (const coverage of spans) {
@@ -16251,9 +16784,22 @@ function projectCoreV2(snapshot) {
 		}
 		if (cursor !== source.byte_length) coverageErrors.push(key);
 	}
-	const requirements = index(listed(snapshot.requirements), watermark);
 	const facts = index(listed(snapshot.facts), watermark);
-	const current = new Map([...requirements].filter(([, row$1]) => units.has(row$1.unit) && (row$1.unit !== unit || row$1.revision === revision)));
+	for (const req of requirements.values()) {
+		const present = [
+			"superseded_at_seq",
+			"supersession_source_id",
+			"superseded_by_requirement_id"
+		].map((key) => key in req);
+		if (present.some(Boolean) && !present.every(Boolean)) throw new Error("supersession_identity_incomplete");
+		if (!present.every(Boolean)) continue;
+		const end = req.superseded_at_seq;
+		if (end <= req.seq || req.status !== "superseded") throw new Error("supersession_interval_invalid");
+		if (end > watermark) continue;
+		const source = sources.get(req.supersession_source_id), successor = requirements.get(req.superseded_by_requirement_id);
+		if (!source || source.kind !== "root" || source.unit !== req.unit || source.seq !== end || !successor || successor.unit !== req.unit || successor.seq !== end || successor.source.source_id !== source.id || successor.revision <= req.revision) throw new Error("supersession_source_mismatch");
+	}
+	const current = new Map([...requirements].filter(([, row$1]) => units.has(row$1.unit) && scopeOpen(row$1, watermark)));
 	if ([...current.values()].some((r) => r.parent_id !== null && !requirements.has(r.parent_id))) throw new Error("requirement_parent_missing");
 	const validFacts = /* @__PURE__ */ new Map();
 	for (const [key, fact] of facts) {
@@ -16290,16 +16836,19 @@ function projectCoreV2(snapshot) {
 			return f && f.condition_id === key && f.requirement_id === req.id && f.outcome === "success";
 		})) released.add(key);
 	}
+	const historicalExplained = new Map([...requirements].filter(([, req]) => units.has(req.unit) && req.status === "superseded" && req.superseded_at_seq !== void 0 && req.superseded_at_seq <= watermark && sourceMatches(req.source, sources, true)));
+	const structuralGap = (raw, start, end) => Buffer.from(raw.subarray(start, end)).toString("utf8").replace(/^[ \t\r\n,，。.!?？；;：:、]+|[ \t\r\n,，。.!?？；;：:、]+$/gu, "").length > 0;
 	for (const coverage of listed(snapshot.coverage)) {
 		const span = coverage.source, source = sources.get(span.source_id);
 		if (!source || !units.has(source.unit) || coverage.kind !== "interpreted") continue;
-		const covered = [...current.values()].filter((r) => r.source.source_id === span.source_id && r.source.start < span.end && r.source.end > span.start).map((r) => [r.source.start, r.source.end]).sort((a, b) => a[0] - b[0]);
+		const covered = [...[...current.values(), ...historicalExplained.values()].filter((r) => r.source.source_id === span.source_id && r.source.start < span.end && r.source.end > span.start).map((r) => [r.source.start, r.source.end]), ...listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark && control.source.source_id === span.source_id && sourceMatches(control.source, sources, true)).map((control) => [control.source.start, control.source.end])].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 		let cursor = span.start;
+		const raw = bytes(source.text);
 		for (const [start, end] of covered) {
-			if (start > cursor) break;
+			if (start > cursor && structuralGap(raw, cursor, start)) break;
 			cursor = Math.max(cursor, end);
 		}
-		if (cursor < span.end) coverageErrors.push(span.source_id);
+		if (cursor < span.end && structuralGap(raw, cursor, span.end)) coverageErrors.push(span.source_id);
 	}
 	const predicates = {}, delivery = [];
 	for (const [key, req] of current) {
@@ -16388,22 +16937,36 @@ function projectCoreV2(snapshot) {
 			reason: "action_basis_insufficient"
 		});
 	}
+	const controls = foldRootControls(snapshot, sources, requirements, facts, units, watermark);
+	const keptActions = actions.filter((candidate) => {
+		const state = controls.states.get(candidate.requirement_id);
+		if (![
+			"paused",
+			"persistent_paused",
+			"cancelled"
+		].includes(state ?? "")) return true;
+		rejected$1.push({
+			requirement_id: candidate.requirement_id,
+			reason: `root_control_${state}`
+		});
+		return false;
+	});
 	const intent = snapshot.intent, intentSpan = intent.source, intentSource = intentSpan ? sources.get(intentSpan.source_id) : void 0;
 	const intentValid = Boolean(intentSpan && sourceMatches(intentSpan, sources, true) && intentSource?.unit === unit && intentSource.revision === revision);
 	const speech = (intentValid ? spanText(intentSpan, intentSource).trim() : "").replace(/```[\s\S]*?```|`[^`]*`|“[^”]*”|‘[^’]*’|"[^"]*"/g, "").replace(/^\s*>.*$/gm, "");
 	const resumeMatch = new RegExp(rules.EXECUTION_RESUME_RE, "i").test(speech);
-	const persistenceMatch = new RegExp(rules.USER_PERSISTENCE_RE, "is").test(speech);
-	const persistence = Boolean(intentValid && persistenceMatch && ["persistence", "persistence_and_resume"].includes(intent.kind));
-	const resumed = Boolean(intentValid && resumeMatch && ["resume", "persistence_and_resume"].includes(intent.kind) && actions.length);
+	const persistence = [...controls.states].some(([key, state]) => (state === "persistent" || state === "persistent_paused") && requirements.has(key) && scopeOpen(requirements.get(key), watermark));
+	const persistenceReady = keptActions.some((candidate) => controls.states.get(candidate.requirement_id) === "persistent");
+	const resumed = Boolean(intentValid && resumeMatch && ["resume", "persistence_and_resume"].includes(intent.kind) && keptActions.some((candidate) => current.get(candidate.requirement_id).seq <= intentSource.seq)) || keptActions.some((candidate) => controls.resumed.has(candidate.requirement_id));
 	const external = sortedUnique([...validFacts.values()].filter((f) => f.unit && units.has(f.unit) && f.kind === "external_operation" && f.outcome === "unknown" && f.operation_id && current.has(f.requirement_id) && f.revision === current.get(f.requirement_id).revision && conditions.has(f.condition_id) && !released.has(f.condition_id) && conditions.get(f.condition_id).kind === "external_dependency" && conditions.get(f.condition_id).operation_id === f.operation_id && current.get(f.requirement_id).condition_ids.includes(f.condition_id)).map((f) => f.operation_id));
-	const missing = [...current].filter(([key, r]) => r.required && !["satisfied", "constraint_active"].includes(predicates[key])).map(([key]) => key).sort(utf8Compare);
-	const represented = new Set([...current.values()].map((r) => r.source.source_id));
-	const missingSources = [...sources].filter(([key, s]) => s.kind === "root" && units.has(s.unit) && (s.unit !== unit || s.revision === revision) && !represented.has(key));
-	const certifiable = !missing.length && !coverageErrors.length && !unknownCoverage.length && !missingSources.length;
+	const missing = [...current].filter(([key, r]) => r.required && controls.states.get(key) !== "cancelled" && !["satisfied", "constraint_active"].includes(predicates[key])).map(([key]) => key).sort(utf8Compare);
+	const represented = new Set([...current.values(), ...historicalExplained.values()].map((r) => r.source.source_id).concat([...controls.represented]));
+	const missingSources = [...activeRootIds].filter((key) => !represented.has(key));
+	const certifiable = !missing.length && !coverageErrors.length && !unknownCoverage.length && !missingSources.length && !controls.errors.length;
 	const reasons = [];
 	if (snapshot.completion_claim && !certifiable) reasons.push("wrong_whole_completion");
 	if (snapshot.proof_violation) reasons.push("explicit_proof_unsatisfied");
-	if (actions.length && persistence) reasons.push("explicit_user_persistence");
+	if (persistenceReady) reasons.push("explicit_user_persistence");
 	if (resumed) reasons.push("resume_with_actionable_work");
 	const correction = Boolean(reasons.length && snapshot.corrections_used === 0 && snapshot.progress_changed);
 	return {
@@ -16415,19 +16978,21 @@ function projectCoreV2(snapshot) {
 		predicates,
 		delivery: delivery.sort(utf8Compare),
 		facts: [...validFacts.keys()].sort(utf8Compare),
-		current_actions: actions,
+		current_actions: keptActions,
 		rejected_actions: rejected$1,
 		unmet_requirements: missing,
 		certifiable,
 		coverage_errors: sortedUnique(coverageErrors),
 		unknown_coverage: sortedUnique(unknownCoverage),
 		target_origins: Object.fromEntries([...current].map(([key, r]) => [key, r.target_origin])),
+		root_control_states: Object.fromEntries([...controls.states].sort(([a], [b]) => utf8Compare(a, b))),
+		root_control_errors: sortedUnique(controls.errors),
 		conditions: Object.fromEntries([...conditions].map(([key]) => [key, released.has(key) ? "released" : "pending"])),
 		explicit_user_persistence: persistence,
 		resume_with_actionable_work: resumed,
 		registered_external_operations: external,
 		ordinary_path_interference: false,
-		stop: correction ? "bounded_correction" : external.length && !actions.length ? "typed_wait" : "ordinary_end",
+		stop: correction ? "bounded_correction" : external.length && !keptActions.length ? "typed_wait" : "ordinary_end",
 		reason_codes: reasons,
 		correction_count: Number(correction),
 		goal_complete_allowed: !snapshot.goal_contract_adopted || certifiable,
@@ -16491,19 +17056,184 @@ const sourceSpan = (item, text, peers) => {
 		end
 	};
 };
+/** Root controls are immutable, scoped facts. A later root can change the
+* continuation of requirements already present, never authorize a later item. */
+function rootControls(roots, requirements, sources, facts, unit, selectedUnitAtRoot) {
+	const controls = [];
+	const cancelled = /* @__PURE__ */ new Set();
+	const sourceById = new Map(sources.map((source) => [String(source.id), source]));
+	const targetAtReceipt = (req, seq) => {
+		const origin = req.target_origin;
+		if (origin.constraint_kind !== "work_unit") return String(req.target);
+		const selections = new Set(facts.filter((fact) => fact.kind === "readiness" && fact.requirement_id === req.id && fact.outcome === "success" && Number(fact.seq) <= seq).flatMap((fact) => {
+			const call = sourceById.get(String(fact.call_source_id));
+			const result = sourceById.get(String(fact.source_id));
+			return call?.kind === "host_call" && result?.kind === "host_result" && Number(call.seq) < Number(result.seq) && Number(result.seq) <= seq && call.target === fact.target && call.target_kind === origin.subject_kind ? [String(fact.target)] : [];
+		}));
+		return selections.size > 1 ? void 0 : selections.values().next().value ?? null;
+	};
+	for (const root of roots) {
+		const raw = Buffer.from(rootText(root), "utf8");
+		const digest$1 = hash(rootText(root));
+		for (const { start: controlStart, end: sentenceEnd } of rootControlCandidateSpans(rootText(root))) {
+			const text = raw.subarray(controlStart, sentenceEnd).toString("utf8");
+			if (!text.trim()) continue;
+			const kind = [
+				"persistence",
+				"pause",
+				"resume",
+				"cancel"
+			].find((candidate) => controlSpeech(text, candidate));
+			if (!kind) continue;
+			const eligible = requirements.filter((req) => req.unit === unit && Number(req.seq) <= root.seq && req.kind === "execution" && !cancelled.has(String(req.id)) && (req.status !== "superseded" || typeof req.superseded_at_seq === "number") && (typeof req.superseded_at_seq !== "number" || root.seq < req.superseded_at_seq));
+			if (requirements.some((req) => req.unit === unit && req.kind === "execution" && req.superseded_at_seq === root.seq)) continue;
+			const currentUnit = selectedUnitAtRoot(root.seq) === unit && currentUnitScopeSpeech(text, kind);
+			let selected = currentUnit ? eligible : [];
+			let scopeBasis = {
+				kind: "current_unit",
+				target: null,
+				target_source: null
+			};
+			if (!currentUnit) {
+				const parentNoun = /^(?:\s*)(?:(?:请|请先|先)\s*)?(?:暂停|搁置|取消|撤销|继续)\s*(这项修复|该项修复)\s*[。.!！]?\s*$/u.exec(text)?.[1];
+				if (parentNoun) {
+					const parents = eligible.filter((req) => req.action === "local_edit" && eligible.some((child) => child.required && child.parent_id === req.id));
+					if (parents.length !== 1) continue;
+					const parent = parents[0];
+					selected = [parent];
+					let expanded = true;
+					while (expanded) {
+						const previous = selected.length;
+						for (const child of eligible) if (child.required && selected.some((row$1) => row$1.id === child.parent_id) && !selected.some((row$1) => row$1.id === child.id)) selected.push(child);
+						expanded = selected.length !== previous;
+					}
+					const at = controlStart + Buffer.byteLength(text.slice(0, text.indexOf(parentNoun)), "utf8");
+					scopeBasis = {
+						kind: "parent_task",
+						target: parent.id,
+						target_source: {
+							source_id: `root:${root.seq}`,
+							start: at,
+							end: at + Buffer.byteLength(parentNoun, "utf8"),
+							sha256: digest$1
+						}
+					};
+				} else {
+					const testRole = actionClassScopeSpeech(text, kind);
+					if (testRole) {
+						const actionItems = eligible.filter((req) => req.action === "test_verify");
+						if (!actionItems.length || /^(?:这项|该项)/u.test(testRole.noun) && actionItems.length !== 1) continue;
+						selected = actionItems;
+						const at = controlStart + Buffer.byteLength(text.slice(0, testRole.start), "utf8");
+						scopeBasis = {
+							kind: "action_class",
+							target: "test_verify",
+							target_source: {
+								source_id: `root:${root.seq}`,
+								start: at,
+								end: at + Buffer.byteLength(testRole.noun, "utf8"),
+								sha256: digest$1
+							}
+						};
+					} else {
+						const matches = eligible.flatMap((req) => {
+							const target = String(req.target);
+							if (!target.startsWith("/") && !windowsAbsolute(target)) return [];
+							const literal = Buffer.from(target, "utf8");
+							const at = raw.subarray(controlStart, sentenceEnd).indexOf(literal);
+							if (at < 0 || raw.subarray(controlStart, sentenceEnd).indexOf(literal, at + 1) >= 0) return [];
+							return [{
+								req,
+								target,
+								at: controlStart + at
+							}];
+						});
+						if (new Set(matches.map((match$1) => match$1.target)).size !== 1) continue;
+						const match = matches[0];
+						selected = eligible.filter((req) => req.target === match.target);
+						scopeBasis = {
+							kind: "exact",
+							target: match.target,
+							target_source: {
+								source_id: `root:${root.seq}`,
+								start: match.at,
+								end: match.at + Buffer.byteLength(match.target, "utf8"),
+								sha256: digest$1
+							}
+						};
+					}
+				}
+			}
+			if (!selected.length) continue;
+			const source = {
+				source_id: `root:${root.seq}`,
+				start: controlStart,
+				end: sentenceEnd,
+				sha256: digest$1
+			};
+			const refs = selected.map((req) => ({
+				req,
+				target: targetAtReceipt(req, root.seq)
+			}));
+			if (refs.some((ref) => ref.target === void 0)) continue;
+			controls.push({
+				id: `control:${root.seq}:${controlStart}`,
+				kind,
+				source,
+				seq: root.seq,
+				scope_basis: scopeBasis,
+				controlled_requirements: refs.map(({ req, target }) => ({
+					requirement_id: req.id,
+					unit: req.unit,
+					revision: req.revision,
+					source_id: req.source.source_id,
+					seq: req.seq,
+					target,
+					scope_sha256: req.scope_sha256
+				}))
+			});
+			if (kind === "cancel") for (const req of selected) cancelled.add(String(req.id));
+		}
+	}
+	return controls;
+}
 /** Convert only real session sources and derived facts. Missing spans, calls, or
 * readback remain unknown/insufficient; this adapter never fabricates them. */
 function sessionCoreSnapshot(events, projection) {
 	const unit = projection.currentUnitId;
 	if (projection.boundaryProtocol !== 6 || !unit || projection.durabilityWatermark !== "confirmed") return void 0;
 	const roots = events.filter((event) => event.type === "user/message" && row(row(event.data).source).kind === "user");
-	const currentItems = [...projection.items.values()].filter((item) => item.unitId === unit && item.status !== "superseded");
-	const refs = new Set(projection.units.get(unit)?.rootInputRefs.map((ref) => ref.seq) ?? []);
+	const currentItems = [...projection.items.values()].filter((item) => item.unitId === unit);
+	const currentUnit = projection.units.get(unit);
+	if (!currentUnit) return void 0;
+	const refs = new Set(currentUnit.rootInputRefs.map((ref) => ref.seq));
+	const allRefs = new Set([...projection.units.values()].flatMap((entry) => entry.rootInputRefs.map((ref) => ref.seq)));
+	if (roots.some((root) => root.seq >= currentUnit.openedAtSeq && !allRefs.has(root.seq))) return void 0;
 	const usedRoots = roots.filter((event) => refs.has(event.seq));
 	if (!usedRoots.length) return void 0;
 	const latestRoot = usedRoots.at(-1);
 	const turn = String(row(latestRoot.data).turn ?? projection.hostTurn ?? 1);
 	const rootBySeq = new Map(usedRoots.map((root) => [root.seq, root]));
+	const revisionByRootSeq = new Map(usedRoots.map((root, index$1) => [root.seq, index$1 + 1]));
+	const revisionFor = (seq) => revisionByRootSeq.get(seq);
+	const supersessionOf = (item) => {
+		if (item.status !== "superseded" || !item.supersededBy) return void 0;
+		const successor = projection.items.get(item.supersededBy);
+		const seq = successor ? sourceSeq(successor) : void 0;
+		const successorRoot = seq === void 0 ? void 0 : rootBySeq.get(seq);
+		const successorSpan = successor?.spans?.[0];
+		const successorClause = successorRoot && successorSpan?.partIndex === 0 ? Buffer.from(rootText(successorRoot), "utf8").subarray(successorSpan.start, successorSpan.end).toString("utf8") : void 0;
+		const predecessorSeq = sourceSeq(item);
+		const predecessorRoot = predecessorSeq === void 0 ? void 0 : rootBySeq.get(predecessorSeq);
+		const predecessorSpan = item.spans?.[0];
+		const predecessorClause = predecessorRoot && predecessorSpan?.partIndex === 0 ? Buffer.from(rootText(predecessorRoot), "utf8").subarray(predecessorSpan.start, predecessorSpan.end).toString("utf8") : void 0;
+		const sourcedReplacement = Boolean(successorClause && predecessorClause && successorClause === predecessorClause && successor?.textSha256 === item.textSha256);
+		return successor?.unitId === unit && successor.kind === item.kind && successor.semanticAction === item.semanticAction && targetOf(successor) === targetOf(item) && successor.authorityDisposition === "executable_now" && sourcedReplacement && seq !== void 0 && seq > (sourceSeq(item) ?? -1) && rootBySeq.has(seq) && revisionFor(seq) > revisionFor(sourceSeq(item)) ? {
+			seq,
+			sourceId: `root:${seq}`,
+			requirementId: successor.id
+		} : void 0;
+	};
 	if (!currentItems.every((item) => {
 		const root = rootBySeq.get(sourceSeq(item) ?? -1);
 		return root && item.rawTextSha256 === hash(rootText(root));
@@ -16515,7 +17245,7 @@ function sessionCoreSnapshot(events, projection) {
 			seq: root.seq,
 			kind: "root",
 			unit,
-			revision: 1,
+			revision: revisionFor(root.seq),
 			sha256: hash(text),
 			byte_length: Buffer.byteLength(text, "utf8"),
 			text,
@@ -16568,7 +17298,7 @@ function sessionCoreSnapshot(events, projection) {
 			requirements.push({
 				id: `intent:${root.seq}`,
 				unit,
-				revision: 1,
+				revision: revisionFor(root.seq),
 				seq: root.seq,
 				source: span(0, byteLength),
 				kind: "unknown",
@@ -16626,6 +17356,7 @@ function sessionCoreSnapshot(events, projection) {
 	for (const item of currentItems) {
 		const root = rootBySeq.get(sourceSeq(item) ?? -1);
 		if (!root) continue;
+		const itemRevision = revisionFor(root.seq);
 		const text = rootText(root), digest$1 = hash(text);
 		const span = (start, end) => ({
 			source_id: `root:${root.seq}`,
@@ -16635,6 +17366,15 @@ function sessionCoreSnapshot(events, projection) {
 		});
 		const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
 		if (!itemSpan) continue;
+		if (item.semanticAction === "generic_run" && rootControlCandidateSpans(text).some((candidate) => itemSpan.start >= candidate.start && itemSpan.end <= candidate.end && [
+			"persistence",
+			"pause",
+			"resume",
+			"cancel"
+		].some((kind$1) => {
+			const speech = Buffer.from(text, "utf8").subarray(candidate.start, candidate.end).toString("utf8");
+			return controlSpeech(speech, kind$1) && (currentUnitScopeSpeech(speech, kind$1) || actionClassScopeSpeech(speech, kind$1));
+		}))) continue;
 		const kind = kindOf(item);
 		const named = targetOf(item);
 		const raw = Buffer.from(text, "utf8");
@@ -16746,20 +17486,32 @@ function sessionCoreSnapshot(events, projection) {
 			operation_id: null,
 			fact_ids: []
 		});
+		const supersession = supersessionOf(item);
+		const relation = item.rootDependency;
+		const parent = relation ? projection.items.get(relation.parentItemId) : void 0;
+		const parentSpan = parent?.spans?.[0];
+		const childSpan = item.spans?.[0];
+		const relationText = relation ? raw.subarray(relation.sourceSpan.start, relation.sourceSpan.end).toString("utf8") : "";
+		const parentId = relation && parent && parentSpan && childSpan && item.semanticAction === "test" && parent.semanticAction === "modify" && parent.authorityDisposition === "executable_now" && parent.requestedTarget?.artifact_id && parent.unitId === item.unitId && sourceSeq(parent) === root.seq && parent.rawTextSha256 === digest$1 && relation.rawTextSha256 === digest$1 && relation.sourceSpan.start === childSpan.start && relation.sourceSpan.end <= childSpan.end && parentSpan.end <= childSpan.start && /^(?:并且|并|和|and\b)\s*$/iu.test(relationText) ? parent.id : null;
 		requirements.push({
 			id: item.id,
 			unit,
-			revision: 1,
+			revision: itemRevision,
 			seq: root.seq,
 			source: requirementSource,
 			kind,
-			action: item.taskKind === "context" ? "reported_context" : kind === "information" ? "answer" : item.semanticAction === "test" ? "test_verify" : fileReadback ? "readback" : item.semanticAction === "verify" ? assessmentAction(item.normalizedText) : item.semanticAction ?? "unknown",
+			action: item.taskKind === "context" ? "reported_context" : kind === "information" ? "answer" : item.semanticAction === "test" ? "test_verify" : item.semanticAction === "modify" && kind === "execution" ? "local_edit" : fileReadback ? "readback" : item.semanticAction === "verify" ? assessmentAction(item.normalizedText) : item.semanticAction ?? "unknown",
 			target,
 			predicate,
 			scope_sha256: digest$1,
 			required: item.taskKind !== "context",
-			status: item.needsReview || ambiguousForbiddenFile || uncertainForbiddenEffect || unattributedHostCall || unresolvedPhysicalAlias ? "legacy_review" : item.status === "pending" ? "pending" : "satisfied",
-			parent_id: null,
+			status: item.status === "superseded" ? "superseded" : item.needsReview || ambiguousForbiddenFile || uncertainForbiddenEffect || unattributedHostCall || unresolvedPhysicalAlias ? "legacy_review" : item.status === "pending" ? "pending" : "satisfied",
+			parent_id: parentId,
+			...supersession ? {
+				superseded_at_seq: supersession.seq,
+				supersession_source_id: supersession.sourceId,
+				superseded_by_requirement_id: supersession.requirementId
+			} : {},
 			evidence_kind: evidenceKind,
 			condition_ids: conditionId ? [conditionId] : [],
 			target_origin: {
@@ -16781,14 +17533,14 @@ function sessionCoreSnapshot(events, projection) {
 		if (kind === "information" && item.answeredBy) {
 			const delivery = events.find((event) => event.seq === item.answeredBy?.responseSeq && event.type === "assistant/message");
 			if (delivery && item.answeredBy.turn === Number(turn)) {
-				const deliveryId = `delivery:${delivery.seq}`;
+				const deliveryId = `delivery:${delivery.seq}:revision:${itemRevision}`;
 				const deliveredText = Array.isArray(row(row(delivery.data).message).content) ? row(row(delivery.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
 				if (!sources.some((source) => source.id === deliveryId)) sources.push({
 					id: deliveryId,
 					seq: delivery.seq,
 					kind: "final_delivery",
 					unit,
-					revision: 1,
+					revision: itemRevision,
 					sha256: hash(deliveredText),
 					byte_length: Buffer.byteLength(deliveredText, "utf8"),
 					text: null,
@@ -16796,10 +17548,10 @@ function sessionCoreSnapshot(events, projection) {
 					turn
 				});
 				facts.push({
-					id: `fact:${deliveryId}`,
+					id: `fact:${deliveryId}:${item.id}`,
 					seq: delivery.seq,
 					unit,
-					revision: 1,
+					revision: itemRevision,
 					source_id: deliveryId,
 					call_source_id: null,
 					kind: "delivery",
@@ -16835,6 +17587,8 @@ function sessionCoreSnapshot(events, projection) {
 			const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId);
 			const outcome = hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
 			const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`;
+			const existingCall = sources.find((source) => source.id === callId);
+			if (existingCall && existingCall.revision !== itemRevision) continue;
 			const callName = String(row(pair.call.data).name ?? "");
 			let callArgs = {};
 			try {
@@ -16863,7 +17617,7 @@ function sessionCoreSnapshot(events, projection) {
 					seq: pair.call.seq,
 					kind: "host_call",
 					unit,
-					revision: 1,
+					revision: itemRevision,
 					sha256: hash(callBytes),
 					byte_length: Buffer.byteLength(callBytes, "utf8"),
 					text: null,
@@ -16878,7 +17632,7 @@ function sessionCoreSnapshot(events, projection) {
 					seq: pair.result.seq,
 					kind: "host_result",
 					unit,
-					revision: 1,
+					revision: itemRevision,
 					sha256: hash(resultBytes),
 					byte_length: Buffer.byteLength(resultBytes, "utf8"),
 					text: null,
@@ -16891,7 +17645,7 @@ function sessionCoreSnapshot(events, projection) {
 				id: fileReadback ? `${evidence.id}:${item.id}` : evidence.id,
 				seq: pair.result.seq,
 				unit,
-				revision: 1,
+				revision: itemRevision,
 				source_id: resultId,
 				call_source_id: callId,
 				kind: factKind,
@@ -16912,7 +17666,7 @@ function sessionCoreSnapshot(events, projection) {
 				schema: "current-action-basis/v1",
 				requirement_id: item.id,
 				unit,
-				revision: 1,
+				revision: itemRevision,
 				seq: Number(base.asOf),
 				source: requirementSource,
 				scope_sha256: digest$1,
@@ -16928,10 +17682,15 @@ function sessionCoreSnapshot(events, projection) {
 	}
 	const latestText = rootText(latestRoot), latestDigest = hash(latestText);
 	const resume = isResume(latestText);
+	const selectedUnitAtRoot = (seq) => {
+		const selected = [...projection.units.values()].filter((entry) => entry.rootInputRefs.some((ref) => ref.seq === seq));
+		return selected.length === 1 ? selected[0]?.unitId : void 0;
+	};
+	const controls = rootControls(usedRoots, requirements, sources, facts, unit, selectedUnitAtRoot);
 	return {
 		schema: "core-observation/v2",
 		unit,
-		revision: 1,
+		revision: revisionFor(latestRoot.seq),
 		as_of: events.at(-1)?.seq ?? latestRoot.seq,
 		turn,
 		units: [{
@@ -16944,6 +17703,7 @@ function sessionCoreSnapshot(events, projection) {
 		requirements,
 		facts,
 		actions,
+		root_controls: controls,
 		conditions,
 		coverage,
 		intent: resume ? {

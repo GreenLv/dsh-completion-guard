@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { posix } from 'node:path'
 import type { GuardProjection, DerivedEnvelope, GuardItem } from '../domain/types.js'
 import { assessmentAction, assessmentOutcomePredicate, currentActionBases, testOutcomePredicate } from '../domain/stop-policy.js'
-import { projectCoreV2 } from './project.js'
+import { actionClassScopeSpeech, controlSpeech, currentUnitScopeSpeech, projectCoreV2, rootControlCandidateSpans } from './project.js'
 import { persistedToolResultStatus } from '../domain/evidence.js'
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
@@ -79,26 +79,177 @@ const sourceSpan = (item: GuardItem, text: string, peers: GuardItem[]): { start:
   return { start: own.start, end }
 }
 
+/** Root controls are immutable, scoped facts. A later root can change the
+ * continuation of requirements already present, never authorize a later item. */
+function rootControls(roots: DerivedEnvelope[], requirements: Array<Record<string, unknown>>,
+  sources: Array<Record<string, unknown>>, facts: Array<Record<string, unknown>>, unit: string,
+  selectedUnitAtRoot: (seq: number) => string | undefined): Array<Record<string, unknown>> {
+  const controls: Array<Record<string, unknown>> = []
+  const cancelled = new Set<string>()
+  const sourceById = new Map(sources.map((source) => [String(source.id), source]))
+  const targetAtReceipt = (req: Record<string, unknown>, seq: number): string | null | undefined => {
+    const origin = req.target_origin as Record<string, unknown>
+    if (origin.constraint_kind !== 'work_unit') return String(req.target)
+    const selections = new Set(facts.filter((fact) => fact.kind === 'readiness'
+      && fact.requirement_id === req.id && fact.outcome === 'success' && Number(fact.seq) <= seq)
+      .flatMap((fact) => {
+        const call = sourceById.get(String(fact.call_source_id))
+        const result = sourceById.get(String(fact.source_id))
+        return call?.kind === 'host_call' && result?.kind === 'host_result'
+          && Number(call.seq) < Number(result.seq) && Number(result.seq) <= seq
+          && call.target === fact.target && call.target_kind === origin.subject_kind
+          ? [String(fact.target)] : []
+      }))
+    return selections.size > 1 ? undefined : selections.values().next().value ?? null
+  }
+  for (const root of roots) {
+    const raw = Buffer.from(rootText(root), 'utf8')
+    const digest = hash(rootText(root))
+    for (const { start: controlStart, end: sentenceEnd } of rootControlCandidateSpans(rootText(root))) {
+      const text = raw.subarray(controlStart, sentenceEnd).toString('utf8')
+      if (!text.trim()) continue
+      const kind = (['persistence', 'pause', 'resume', 'cancel'] as const).find((candidate) => controlSpeech(text, candidate))
+      if (!kind) continue
+      const eligible = requirements.filter((req) => req.unit === unit && Number(req.seq) <= root.seq
+        && req.kind === 'execution' && !cancelled.has(String(req.id))
+        && (req.status !== 'superseded' || typeof req.superseded_at_seq === 'number')
+        && (typeof req.superseded_at_seq !== 'number' || root.seq < req.superseded_at_seq))
+      // A control and supersession recorded in the same root event have no
+      // trusted internal sequence. Do not choose the predecessor or successor.
+      if (requirements.some((req) => req.unit === unit && req.kind === 'execution'
+        && req.superseded_at_seq === root.seq)) continue
+      // A bare or whole-task control needs the unit selected by the persisted
+      // root ledger. The eventual projection unit alone is not receipt proof.
+      const currentUnit = selectedUnitAtRoot(root.seq) === unit && currentUnitScopeSpeech(text, kind)
+      let selected = currentUnit ? eligible : []
+      let scopeBasis: Record<string, unknown> = { kind: 'current_unit', target: null, target_source: null }
+      if (!currentUnit) {
+        const parentNoun = /^(?:\s*)(?:(?:请|请先|先)\s*)?(?:暂停|搁置|取消|撤销|继续)\s*(这项修复|该项修复)\s*[。.!！]?\s*$/u.exec(text)?.[1]
+        if (parentNoun) {
+          const parents = eligible.filter((req) => req.action === 'local_edit'
+            && eligible.some((child) => child.required && child.parent_id === req.id))
+          if (parents.length !== 1) continue
+          const parent = parents[0]!
+          selected = [parent]
+          let expanded = true
+          while (expanded) {
+            const previous = selected.length
+            for (const child of eligible) if (child.required && selected.some((row) => row.id === child.parent_id)
+              && !selected.some((row) => row.id === child.id)) selected.push(child)
+            expanded = selected.length !== previous
+          }
+          const at = controlStart + Buffer.byteLength(text.slice(0, text.indexOf(parentNoun)), 'utf8')
+          scopeBasis = { kind: 'parent_task', target: parent.id, target_source: {
+            source_id: `root:${root.seq}`, start: at, end: at + Buffer.byteLength(parentNoun, 'utf8'), sha256: digest,
+          } }
+        } else {
+        // A sourced test-role phrase selects the action class, not every item
+        // in the unit. Its source span must sit inside this control predicate.
+        const testRole = actionClassScopeSpeech(text, kind)
+        if (testRole) {
+          const actionItems = eligible.filter((req) => req.action === 'test_verify')
+          if (!actionItems.length || /^(?:这项|该项)/u.test(testRole.noun) && actionItems.length !== 1) continue
+          selected = actionItems
+          const at = controlStart + Buffer.byteLength(text.slice(0, testRole.start), 'utf8')
+          scopeBasis = { kind: 'action_class', target: 'test_verify', target_source: {
+            source_id: `root:${root.seq}`, start: at, end: at + Buffer.byteLength(testRole.noun, 'utf8'), sha256: digest,
+          } }
+        } else {
+        const matches = eligible.flatMap((req) => {
+          const target = String(req.target)
+          if (!target.startsWith('/') && !windowsAbsolute(target)) return []
+          const literal = Buffer.from(target, 'utf8')
+          const at = raw.subarray(controlStart, sentenceEnd).indexOf(literal)
+          if (at < 0 || raw.subarray(controlStart, sentenceEnd).indexOf(literal, at + 1) >= 0) return []
+          return [{ req, target, at: controlStart + at }]
+        })
+        const targets = new Set(matches.map((match) => match.target))
+        if (targets.size !== 1) continue
+        const match = matches[0]!
+        selected = eligible.filter((req) => req.target === match.target)
+        scopeBasis = { kind: 'exact', target: match.target,
+          target_source: { source_id: `root:${root.seq}`, start: match.at,
+            end: match.at + Buffer.byteLength(match.target, 'utf8'), sha256: digest } }
+        }
+        }
+      }
+      if (!selected.length) continue
+      const source = { source_id: `root:${root.seq}`, start: controlStart, end: sentenceEnd, sha256: digest }
+      const refs = selected.map((req) => ({ req, target: targetAtReceipt(req, root.seq) }))
+      if (refs.some((ref) => ref.target === undefined)) continue
+      controls.push({ id: `control:${root.seq}:${controlStart}`, kind, source, seq: root.seq,
+        scope_basis: scopeBasis, controlled_requirements: refs.map(({ req, target }) => ({
+          requirement_id: req.id, unit: req.unit, revision: req.revision,
+          source_id: (req.source as { source_id: string }).source_id, seq: req.seq,
+          target, scope_sha256: req.scope_sha256,
+        })) })
+      if (kind === 'cancel') for (const req of selected) cancelled.add(String(req.id))
+    }
+  }
+  return controls
+}
+
 /** Convert only real session sources and derived facts. Missing spans, calls, or
  * readback remain unknown/insufficient; this adapter never fabricates them. */
 export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: GuardProjection): Record<string, unknown> | undefined {
   const unit = projection.currentUnitId
   if (projection.boundaryProtocol !== 6 || !unit || projection.durabilityWatermark !== 'confirmed') return undefined
   const roots = events.filter((event) => event.type === 'user/message' && row(row(event.data).source).kind === 'user')
-  const currentItems = [...projection.items.values()].filter((item) => item.unitId === unit && item.status !== 'superseded')
-  const refs = new Set(projection.units.get(unit)?.rootInputRefs.map((ref) => ref.seq) ?? [])
+  // Keep superseded rows as historical receipt facts. Filtering by final
+  // status would erase an earlier control's complete at-sequence inventory.
+  const currentItems = [...projection.items.values()].filter((item) => item.unitId === unit)
+  const currentUnit = projection.units.get(unit)
+  if (!currentUnit) return undefined
+  const refs = new Set(currentUnit.rootInputRefs.map((ref) => ref.seq))
+  // The unit ledger is a derived index, not authority to hide an immutable
+  // Host root. Every later user root must remain assigned to some unit; if an
+  // item and its root reference are both removed, coverage must not shrink.
+  const allRefs = new Set([...projection.units.values()].flatMap((entry) => entry.rootInputRefs.map((ref) => ref.seq)))
+  if (roots.some((root) => root.seq >= currentUnit.openedAtSeq && !allRefs.has(root.seq))) return undefined
   const usedRoots = roots.filter((event) => refs.has(event.seq))
   if (!usedRoots.length) return undefined
   const latestRoot = usedRoots.at(-1)!
   const turn = String(row(latestRoot.data).turn ?? projection.hostTurn ?? 1)
   const rootBySeq = new Map(usedRoots.map((root) => [root.seq, root]))
+  // Revision is the immutable root arrival order within this work unit. It
+  // does not borrow the mutable final item status or the projection's latest
+  // revision for a fact that belongs to an earlier root.
+  const revisionByRootSeq = new Map(usedRoots.map((root, index) => [root.seq, index + 1]))
+  const revisionFor = (seq: number): number => revisionByRootSeq.get(seq)!
+  const supersessionOf = (item: GuardItem): { seq: number; sourceId: string; requirementId: string } | undefined => {
+    if (item.status !== 'superseded' || !item.supersededBy) return undefined
+    const successor = projection.items.get(item.supersededBy)
+    const seq = successor ? sourceSeq(successor) : undefined
+    const successorRoot = seq === undefined ? undefined : rootBySeq.get(seq)
+    const successorSpan = successor?.spans?.[0]
+    const successorClause = successorRoot && successorSpan?.partIndex === 0
+      ? Buffer.from(rootText(successorRoot), 'utf8').subarray(successorSpan.start, successorSpan.end).toString('utf8') : undefined
+    const predecessorSeq = sourceSeq(item)
+    const predecessorRoot = predecessorSeq === undefined ? undefined : rootBySeq.get(predecessorSeq)
+    const predecessorSpan = item.spans?.[0]
+    const predecessorClause = predecessorRoot && predecessorSpan?.partIndex === 0
+      ? Buffer.from(rootText(predecessorRoot), 'utf8').subarray(predecessorSpan.start, predecessorSpan.end).toString('utf8') : undefined
+    // The current v6 duplicate capture only replaces the same root duty.
+    // A stored status/link and a later root with the same object are not a
+    // substitute for source bytes that restate that duty.
+    const sourcedReplacement = Boolean(successorClause && predecessorClause
+      && successorClause === predecessorClause && successor?.textSha256 === item.textSha256)
+    return successor?.unitId === unit && successor.kind === item.kind
+      && successor.semanticAction === item.semanticAction
+      && targetOf(successor) === targetOf(item)
+      && successor.authorityDisposition === 'executable_now'
+      && sourcedReplacement
+      && seq !== undefined && seq > (sourceSeq(item) ?? -1)
+      && rootBySeq.has(seq) && revisionFor(seq) > revisionFor(sourceSeq(item)!)
+      ? { seq, sourceId: `root:${seq}`, requirementId: successor.id } : undefined
+  }
   if (!currentItems.every((item) => {
     const root = rootBySeq.get(sourceSeq(item) ?? -1)
     return root && item.rawTextSha256 === hash(rootText(root))
   })) return undefined
   const sources: Array<Record<string, unknown>> = usedRoots.map((root) => {
     const text = rootText(root)
-    return { id: `root:${root.seq}`, seq: root.seq, kind: 'root', unit, revision: 1, sha256: hash(text),
+    return { id: `root:${root.seq}`, seq: root.seq, kind: 'root', unit, revision: revisionFor(root.seq), sha256: hash(text),
       byte_length: Buffer.byteLength(text, 'utf8'), text, call_id: null, turn: String(row(root.data).turn ?? turn),
       ...(projection.rootLocatorContexts.get(root.seq) ? { locator_base: projection.rootLocatorContexts.get(root.seq)!.base,
         locator_flavor: projection.rootLocatorContexts.get(root.seq)!.flavor } : {}) }
@@ -123,7 +274,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     if (!sortedSpans.length && byteLength) {
       if (isResume(text)) {
         coverage.push({ source: span(0, byteLength), kind: 'interpreted' })
-        requirements.push({ id: `intent:${root.seq}`, unit, revision: 1, seq: root.seq, source: span(0, byteLength),
+        requirements.push({ id: `intent:${root.seq}`, unit, revision: revisionFor(root.seq), seq: root.seq, source: span(0, byteLength),
           kind: 'unknown', action: 'resume_control', target: text, predicate: 'intent_observed', scope_sha256: digest,
           required: false, status: 'pending', parent_id: null, evidence_kind: 'none', condition_ids: [],
           target_origin: { root_constraint: text, root_constraint_source: span(0, byteLength), implementation_choice: text,
@@ -157,10 +308,22 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
   for (const item of currentItems) {
     const root = rootBySeq.get(sourceSeq(item) ?? -1)
     if (!root) continue
+    const itemRevision = revisionFor(root.seq)
     const text = rootText(root), digest = hash(text)
     const span = (start: number, end: number) => ({ source_id: `root:${root.seq}`, start, end, sha256: digest })
     const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq))
     if (!itemSpan) continue
+    // The legacy clause capture can split a single v6 root control into
+    // generic fragments (for example, either side of its internal comma).
+    // Preserve their original coverage, but never project those fragments as
+    // separate business requirements once the complete immutable root span
+    // is independently recognized as one control speech act.
+    if (item.semanticAction === 'generic_run' && rootControlCandidateSpans(text).some((candidate) =>
+      itemSpan.start >= candidate.start && itemSpan.end <= candidate.end
+      && (['persistence', 'pause', 'resume', 'cancel'] as const).some((kind) => {
+        const speech = Buffer.from(text, 'utf8').subarray(candidate.start, candidate.end).toString('utf8')
+        return controlSpeech(speech, kind) && (currentUnitScopeSpeech(speech, kind) || actionClassScopeSpeech(speech, kind))
+      }))) continue
     const kind = kindOf(item)
     const named = targetOf(item)
     const raw = Buffer.from(text, 'utf8')
@@ -284,9 +447,27 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     if (conditionId) conditions.push({ id: conditionId, requirement_id: item.id, source: requirementSource,
       kind: item.waitAuthorization || /(?:确认|审批|批准|许可|approval|confirmation|permission)/iu.test(item.condition ?? '') ? 'user_input' : 'predicate',
       status: 'pending', operation_id: null, fact_ids: [] })
-    requirements.push({ id: item.id, unit, revision: 1, seq: root.seq, source: requirementSource,
-      kind, action: item.taskKind === 'context' ? 'reported_context' : kind === 'information' ? 'answer' : item.semanticAction === 'test' ? 'test_verify' : fileReadback ? 'readback' : item.semanticAction === 'verify' ? assessmentAction(item.normalizedText) : item.semanticAction ?? 'unknown', target, predicate, scope_sha256: digest, required: item.taskKind !== 'context',
-      status: item.needsReview || ambiguousForbiddenFile || uncertainForbiddenEffect || unattributedHostCall || unresolvedPhysicalAlias ? 'legacy_review' : item.status === 'pending' ? 'pending' : 'satisfied', parent_id: null,
+    const supersession = supersessionOf(item)
+    const relation = item.rootDependency
+    const parent = relation ? projection.items.get(relation.parentItemId) : undefined
+    const parentSpan = parent?.spans?.[0]
+    const childSpan = item.spans?.[0]
+    const relationText = relation ? raw.subarray(relation.sourceSpan.start, relation.sourceSpan.end).toString('utf8') : ''
+    const parentId = relation && parent && parentSpan && childSpan
+      && item.semanticAction === 'test' && parent.semanticAction === 'modify'
+      && parent.authorityDisposition === 'executable_now' && parent.requestedTarget?.artifact_id
+      && parent.unitId === item.unitId && sourceSeq(parent) === root.seq
+      && parent.rawTextSha256 === digest && relation.rawTextSha256 === digest
+      && relation.sourceSpan.start === childSpan.start && relation.sourceSpan.end <= childSpan.end
+      && parentSpan.end <= childSpan.start && /^(?:并且|并|和|and\b)\s*$/iu.test(relationText)
+      ? parent.id : null
+    requirements.push({ id: item.id, unit, revision: itemRevision, seq: root.seq, source: requirementSource,
+      kind, action: item.taskKind === 'context' ? 'reported_context' : kind === 'information' ? 'answer' : item.semanticAction === 'test' ? 'test_verify' : item.semanticAction === 'modify' && kind === 'execution' ? 'local_edit' : fileReadback ? 'readback' : item.semanticAction === 'verify' ? assessmentAction(item.normalizedText) : item.semanticAction ?? 'unknown', target, predicate, scope_sha256: digest, required: item.taskKind !== 'context',
+      status: item.status === 'superseded' ? 'superseded'
+        : item.needsReview || ambiguousForbiddenFile || uncertainForbiddenEffect || unattributedHostCall || unresolvedPhysicalAlias ? 'legacy_review'
+          : item.status === 'pending' ? 'pending' : 'satisfied', parent_id: parentId,
+      ...(supersession ? { superseded_at_seq: supersession.seq, supersession_source_id: supersession.sourceId,
+        superseded_by_requirement_id: supersession.requirementId } : {}),
       evidence_kind: evidenceKind, condition_ids: conditionId ? [conditionId] : [], target_origin: { root_constraint: forbiddenFile?.literal ?? directoryLiteral ?? (relativeLiteral ?? (selectedScope || selectedEdit || selectedReadback ? trimmed : target)),
         root_constraint_source: span(forbiddenFile ? forbiddenFile.start : directoryLiteral ? directoryAt : relativeLiteral ? relativeAt : selectedScope || selectedEdit || selectedReadback ? ownConstraintSpan.start : constraintSpan.start,
           forbiddenFile ? forbiddenFile.end : directoryLiteral ? directoryAt + Buffer.byteLength(directoryLiteral, 'utf8') : relativeLiteral ? relativeAt + Buffer.byteLength(relativeLiteral, 'utf8') : selectedScope || selectedEdit || selectedReadback ? ownConstraintSpan.end : constraintSpan.end),
@@ -303,13 +484,15 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     if (kind === 'information' && item.answeredBy) {
       const delivery = events.find((event) => event.seq === item.answeredBy?.responseSeq && event.type === 'assistant/message')
       if (delivery && item.answeredBy.turn === Number(turn)) {
-        const deliveryId = `delivery:${delivery.seq}`
+        const deliveryId = `delivery:${delivery.seq}:revision:${itemRevision}`
         const deliveredText = Array.isArray(row(row(delivery.data).message).content)
           ? (row(row(delivery.data).message).content as unknown[]).filter((part) => row(part).type === 'text')
             .map((part) => String(row(part).text ?? '')).join('\n') : ''
-        if (!sources.some((source) => source.id === deliveryId)) sources.push({ id: deliveryId, seq: delivery.seq, kind: 'final_delivery', unit, revision: 1,
+        if (!sources.some((source) => source.id === deliveryId)) sources.push({ id: deliveryId, seq: delivery.seq, kind: 'final_delivery', unit, revision: itemRevision,
           sha256: hash(deliveredText), byte_length: Buffer.byteLength(deliveredText, 'utf8'), text: null, call_id: null, turn })
-        facts.push({ id: `fact:${deliveryId}`, seq: delivery.seq, unit, revision: 1, source_id: deliveryId,
+        // One final message may satisfy several separate information items.
+        // Reuse its source, but bind each fact identity to its requirement.
+        facts.push({ id: `fact:${deliveryId}:${item.id}`, seq: delivery.seq, unit, revision: itemRevision, source_id: deliveryId,
           call_source_id: null, kind: 'delivery', target, predicate, outcome: 'success', operation_id: null,
           requirement_id: item.id, condition_id: null, invalidates: [] })
       }
@@ -349,6 +532,10 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
           || (evidence.evidenceRole === 'effect' && evidence.processFacts && evidence.processFacts.operationAttribution !== 'single_operation')
           || evidence.parseStatus !== 'supported' ? 'unknown' : 'success'
       const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`
+      // One persisted Host exchange has one source identity. Do not copy it
+      // into another root revision just to satisfy a later requirement.
+      const existingCall = sources.find((source) => source.id === callId)
+      if (existingCall && existingCall.revision !== itemRevision) continue
       const callName = String(row(pair.call.data).name ?? '')
       let callArgs: Record<string, unknown> = {}
       try { callArgs = row(JSON.parse(String(row(pair.call.data).arguments ?? ''))) } catch { /* unsupported call */ }
@@ -371,16 +558,16 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         const resultBytes = Array.isArray(row(row(pair.result.data).message).content)
           ? (row(row(pair.result.data).message).content as unknown[]).filter((part) => row(part).type === 'text')
             .map((part) => String(row(part).text ?? '')).join('\n') : ''
-        sources.push({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: 1, sha256: hash(callBytes),
+        sources.push({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: itemRevision, sha256: hash(callBytes),
           byte_length: Buffer.byteLength(callBytes, 'utf8'), text: null, call_id: evidence.callId, turn: callTurn,
           target: hostTarget, target_kind: subjectKind,
           ...(originRoot ? { origin_root_source_id: `root:${originRoot.seq}` } : {}) })
-        sources.push({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: 1, sha256: hash(resultBytes),
+        sources.push({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: itemRevision, sha256: hash(resultBytes),
           byte_length: Buffer.byteLength(resultBytes, 'utf8'), text: null, call_id: evidence.callId, turn: resultTurn })
       }
       const factKind = evidence.toolName === 'context_guard_observe_test_readiness' ? 'readiness'
         : evidence.evidenceRole === 'state' ? 'state_outcome' : 'action_event'
-      facts.push({ id: fileReadback ? `${evidence.id}:${item.id}` : evidence.id, seq: pair.result.seq, unit, revision: 1, source_id: resultId,
+      facts.push({ id: fileReadback ? `${evidence.id}:${item.id}` : evidence.id, seq: pair.result.seq, unit, revision: itemRevision, source_id: resultId,
         call_source_id: callId, kind: factKind, target: hostTarget, predicate: forbiddenFile ? 'mutation_applied' : factKind === 'readiness' ? 'inputs_ready' : predicate,
         outcome, operation_id: null, requirement_id: item.id, condition_id: null, invalidates: [] })
       if (!fileReadback) attached.add(evidence.id)
@@ -388,7 +575,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     for (const base of currentActionBases(projection, false).filter((base) => base.itemId === item.id)) {
       const ready = facts.filter((fact) => fact.requirement_id === item.id && fact.kind === 'readiness' && fact.outcome === 'success').map((fact) => fact.id)
       if (!ready.length) continue
-      actions.push({ schema: 'current-action-basis/v1', requirement_id: item.id, unit, revision: 1,
+      actions.push({ schema: 'current-action-basis/v1', requirement_id: item.id, unit, revision: itemRevision,
         seq: Number(base.asOf), source: requirementSource, scope_sha256: digest,
         action: item.semanticAction === 'test' ? 'test_verify' : item.semanticAction === 'verify' ? assessmentAction(item.normalizedText) : item.semanticAction, target, predicate,
         owner: 'assistant', relation: 'direct', readiness_fact_ids: ready, state: 'current' })
@@ -396,8 +583,13 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
   }
   const latestText = rootText(latestRoot), latestDigest = hash(latestText)
   const resume = isResume(latestText)
-  const snapshot = { schema: 'core-observation/v2', unit, revision: 1, as_of: events.at(-1)?.seq ?? latestRoot.seq, turn,
-    units: [{ id: unit, parent_id: null, required: true, source_id: `root:${usedRoots[0]!.seq}` }], sources, requirements, facts, actions,
+  const selectedUnitAtRoot = (seq: number): string | undefined => {
+    const selected = [...projection.units.values()].filter((entry) => entry.rootInputRefs.some((ref) => ref.seq === seq))
+    return selected.length === 1 ? selected[0]?.unitId : undefined
+  }
+  const controls = rootControls(usedRoots, requirements, sources, facts, unit, selectedUnitAtRoot)
+  const snapshot = { schema: 'core-observation/v2', unit, revision: revisionFor(latestRoot.seq), as_of: events.at(-1)?.seq ?? latestRoot.seq, turn,
+    units: [{ id: unit, parent_id: null, required: true, source_id: `root:${usedRoots[0]!.seq}` }], sources, requirements, facts, actions, root_controls: controls,
     conditions, coverage, intent: resume ? { source: { source_id: `root:${latestRoot.seq}`, start: 0, end: Buffer.byteLength(latestText, 'utf8'), sha256: latestDigest }, kind: 'resume' } : { source: null, kind: 'none' },
     completion_claim: false, proof_violation: false, corrections_used: 0, progress_changed: true,
     goal_contract_adopted: projection.goalCompletionAdopted, release_state: projection.releaseContracts.some((entry) => entry.revokedAtSeq === undefined) ? 'adopted' : 'not_adopted' }

@@ -12,13 +12,15 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Changes
 
-- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `22fbf90c857fa6c31df0622e22fd8fcd18e60ff6`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
+- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `f0196b690c091efd8bca8e17e793c4b3e74dabc3`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
 - Retire ordinary Guard action/evidence execution and use read-only file, Git and package-script readiness observers. An assessment may select stable existing inputs without requiring another edit; a root time or approval condition remains pending until separately satisfied. Native observations use a separate versioned digest domain; historical v3 encoders and certificates are preserved.
 - Preserve exact relative file and directory constraints through the root-time Session locator and canonical filesystem readback. Current v6 certificates bind that locator in version 4; opaque test or measurement targets keep their distinct identity.
 - Keep a sourced successful mutation of a forbidden file as a completion violation, even when the allowed edit also succeeds. A final-answer claim alone is not treated as a host mutation.
 - Add a synthetic Session replay CLI for source-to-core and Stop/Goal diagnosis. It is not a real-model or native-platform acceptance run.
 - Treat a structured host error as failure even when renderer text appears successful; malformed or ambiguous host returns stay unknown. The v0.7 native profile checks real host registration and ordinary evidence, with a local mock registry for the preserved adopted-release gate.
 - Keep a fronted workspace location and coordinated edit, test, readback, and final-answer requests as separate current obligations. A method phrase cannot silently close independent work. Creation still requires a trustworthy absent prestate, and the audited test/benchmark observer does not certify arbitrary package-script metrics.
+- One trusted final answer can now deliver multiple distinct information requirements in the same turn. Each requirement receives its own delivery fact while retaining the shared answer source; an earlier answer still cannot deliver a later request.
+- Root-scoped persistence, pause, cancellation and later resume now bind only requirements that already existed at the instruction’s durable sequence. A directly coordinated edit and its same-object tests can form a sourced repair closure; an unrelated test or explicit proof stays separate. A compound continuation instruction does not create a second generic business duty. Historical supersession remains replayable at its earlier watermark.
 
 ### Validation
 
