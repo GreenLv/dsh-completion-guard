@@ -243,6 +243,56 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): P
   return rows
 }
 
+// The reviewed rc.1/rc.2 foreground tools share these exact renderer bytes.
+// This is a separate check from npm SRI: a modified installed lib/index.js
+// must not inherit the graph's markerless-terminal interpretation.
+const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
+  '@deepseek-ai/dsh-tool-bash': 'ea5579df9478198ab6dea378d1de59b5807db50bc4dc7baeb1a5b0cc3abbd4af',
+  '@deepseek-ai/dsh-tool-pwsh': 'c1dd78a35722e47eaeef57b33d15d4170f4bb27db2bee15da76a6d4ea9557e63',
+  '@deepseek-ai/dsh-shell': 'f2c148176a56fde49ec92885f0149f36450c0f0612008070e71ae795c139773d',
+}
+
+function activeRendererBytes(nodeModulesRoot: string, name: string): string | undefined {
+  const modules = realpathSync(nodeModulesRoot)
+  const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
+  const ids = [...reachable].filter((id) => id.startsWith(`${name}@`))
+  if (ids.length !== 1) return undefined
+  const id = ids[0]!
+  if (!/^@deepseek-ai\/dsh-(?:tool-bash|tool-pwsh|shell)@0\.1\.5-rc\.[12](?:\(|$)/.test(id)) return undefined
+  const url = records[id]?.url
+  if (typeof url !== 'string' || !url.startsWith('./.pnpm/')) return undefined
+  const root = realpathSync(resolve(modules, url))
+  if (!root.startsWith(`${modules}${sep}`)) return undefined
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
+  if (manifest.name !== name || !['0.1.5-rc.1', '0.1.5-rc.2'].includes(String(manifest.version))) return undefined
+  const bytesPath = join(root, 'lib', 'index.js')
+  const target = realpathSync(bytesPath)
+  if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return undefined
+  return createHash('sha256').update(readFileSync(target)).digest('hex')
+}
+
+/** Verify active, reachable producer bytes without reading credentials or
+ * accepting historical package-map entries. Missing/ambiguous paths fail
+ * closed for the ordinary markerless-test shortcut. */
+export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: string): Array<'bash' | 'pwsh'> {
+  const roots = [join(runtimeRoot, 'node_modules'), join(profileRoot, 'node_modules')]
+  const checked = (name: string): boolean => {
+    const found: string[] = []
+    for (const root of roots) {
+      try {
+        const value = activeRendererBytes(root, name)
+        if (value) found.push(value)
+      } catch { /* package absent in this half of the active graph */ }
+    }
+    return found.length > 0 && found.every((value) => value === AUDITED_FOREGROUND_BYTES[name])
+  }
+  if (!checked('@deepseek-ai/dsh-shell')) return []
+  return [
+    ...(checked('@deepseek-ai/dsh-tool-bash') ? ['bash' as const] : []),
+    ...(checked('@deepseek-ai/dsh-tool-pwsh') ? ['pwsh' as const] : []),
+  ]
+}
+
 export interface TargetHostGraph {
   packages: PackageRow[]
   profileGraph: {

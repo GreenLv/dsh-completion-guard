@@ -6158,8 +6158,8 @@ function decisionBoundaryKey(projection) {
 }
 function progressFingerprint(projection) {
 	const open = [...projection.items.values()].filter((item) => item.status === "pending").map((item) => `${item.id}:${item.revision}:${item.normalizedText}`).sort();
-	const evidence = [...projection.evidence.values()].filter((row$1) => row$1.epoch === projection.epoch && row$1.outcome === "success").map((row$1) => row$1.id).sort();
-	const qualifications = availableBoundaryQualifications(projection).map((row$1) => `${row$1.id}:${row$1.status}`).sort();
+	const evidence = [...projection.evidence.values()].filter((row$2) => row$2.epoch === projection.epoch && row$2.outcome === "success").map((row$2) => row$2.id).sort();
+	const qualifications = availableBoundaryQualifications(projection).map((row$2) => `${row$2.id}:${row$2.status}`).sort();
 	return JSON.stringify({
 		epoch: projection.epoch,
 		contractRevision: projection.contractRevision,
@@ -6257,6 +6257,12 @@ function classifyCompletionClaim(text) {
 function testOutcomePredicate(text) {
 	return /(?:回归测试|regression\s+tests?)/iu.test(text) ? "regression_test_result" : /(?:focused\s+tests?|针对[^，,。.!?？]{0,32}?的?\s*测试)/iu.test(text) ? "focused_test_result" : "test_passed";
 }
+/** v6 root outcome intent: running and reporting a named test is distinct
+* from an explicit request to make it pass. A failed run can finish the first
+* duty, while the second remains unmet; neither reading grants repair scope. */
+function v6TestPredicate(text) {
+	return /(?:\b(?:make|ensure|get)\s+(?:the\s+)?(?:tests?|suite)\s+(?:to\s+)?pass\b|\b(?:tests?|suite)\s+(?:must|should|need(?:s)?\s+to)\s+pass\b|\bpass\s+(?:the\s+)?(?:tests?|suite)\b|测试(?:必须|需要|应当)?通过|测试全绿|修(?:复|好)[^。.!?？]{0,24}测试)/iu.test(text) ? "test_passed" : "test_run_completed";
+}
 function assessmentOutcomePredicate(text) {
 	return /(?:内存|memory)/iu.test(text) ? "current_memory_measurement_result" : /(?:延迟|时延|latency)/iu.test(text) ? "latency_measurement_result" : "verification_passed";
 }
@@ -6277,12 +6283,12 @@ function currentActionBases(projection, enforceCore = true) {
 		if (typeof scope !== "string") continue;
 		if (![...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq$1 && fact.outcome === "success" && fact.parseStatus === "supported" && fact.toolName === "context_guard_observe_test_readiness" && fact.readinessForItemId === item.id && fact.readinessPredicate === (action === "test" ? "test_passed" : "verification_passed") && fact.subjects.includes(scope) && typeof fact.readinessManifestSha256 === "string" && (action !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.epoch === fact.epoch && effect.toolResultSeq < fact.toolResultSeq && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath))))) continue;
 		const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch && fact.toolResultSeq >= sourceSeq$1 && fact.semanticAction === action && fact.evidenceRole === "effect" && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0];
-		if (latestRun?.outcome === "success" && latestRun.parseStatus === "supported" && latestRun.processFacts?.outcome === "success" && latestRun.processFacts.operationAttribution === "single_operation") continue;
+		if (projection.boundaryProtocol === 6 && action === "test" && v6TestPredicate(item.normalizedText) === "test_run_completed" && latestRun?.outcome === "failure" && latestRun.parseStatus === "supported" && latestRun.processFacts?.outcome === "failure" && latestRun.processFacts.outcomeReason === "declared_exit_code" && latestRun.processFacts.declaredExitCode !== "unknown" && latestRun.processFacts.operationAttribution === "single_operation" || latestRun?.outcome === "success" && latestRun.parseStatus === "supported" && latestRun.processFacts?.outcome === "success" && latestRun.processFacts.operationAttribution === "single_operation") continue;
 		basis.push({
 			itemId: item.id,
 			action,
 			sourceMessageId: item.sourceMessageId,
-			unmetPredicate: action === "test" ? testOutcomePredicate(item.normalizedText) : assessmentOutcomePredicate(item.normalizedText),
+			unmetPredicate: action === "test" ? projection.boundaryProtocol === 6 ? v6TestPredicate(item.normalizedText) : testOutcomePredicate(item.normalizedText) : assessmentOutcomePredicate(item.normalizedText),
 			owner: "assistant",
 			readiness: "ready",
 			asOf: projection.lastObservedSourceSeq
@@ -6833,14 +6839,14 @@ function hostLockDigest(manifest) {
 		const byName = byUtf8(a.name, b.name);
 		return byName !== 0 ? byName : Buffer.compare(typedToken(a.value), typedToken(b.value));
 	});
-	for (const row$1 of sortedRows) {
-		requireExactKeys(row$1, CAPABILITY_KEYS, "capability row");
-		if (typeof row$1.name !== "string" || !DYNAMIC_KEY_RE.test(row$1.name)) throw new DigestError(`capability name must match snake_case grammar: ${String(row$1.name)}`);
-		const token = typedToken(row$1.value);
-		const marker = `${row$1.name}\u0000${token.toString("hex")}`;
-		if (seen.has(marker)) throw new DigestError(`duplicate capability row: ${row$1.name}`);
+	for (const row$2 of sortedRows) {
+		requireExactKeys(row$2, CAPABILITY_KEYS, "capability row");
+		if (typeof row$2.name !== "string" || !DYNAMIC_KEY_RE.test(row$2.name)) throw new DigestError(`capability name must match snake_case grammar: ${String(row$2.name)}`);
+		const token = typedToken(row$2.value);
+		const marker = `${row$2.name}\u0000${token.toString("hex")}`;
+		if (seen.has(marker)) throw new DigestError(`duplicate capability row: ${row$2.name}`);
 		seen.add(marker);
-		parts.push(optField(`cap:${row$1.name}`, token, (v) => v));
+		parts.push(optField(`cap:${row$2.name}`, token, (v) => v));
 		count += 1;
 	}
 	const rawPackages = manifest.packages;
@@ -7036,9 +7042,9 @@ function bindingDigest(records, allowlist) {
 		const byItem = byUtf8(a.item, b.item);
 		return byItem !== 0 ? byItem : byUtf8(a.semanticAction, b.semanticAction);
 	});
-	for (const row$1 of rows) parts.push(field("binding", typedToken({
+	for (const row$2 of rows) parts.push(field("binding", typedToken({
 		k: "x",
-		v: row$1.digest
+		v: row$2.digest
 	})));
 	checkFieldCount(records.length);
 	return sha256Hex(Buffer.concat(parts));
@@ -7542,7 +7548,7 @@ function openItems(projection) {
 */
 function recoveryDigest(packet, projection) {
 	const items = openItems(projection);
-	const evidence = [...projection.evidence.values()].filter((row$1) => items.some((item) => relevantEvidence(projection, item, row$1)));
+	const evidence = [...projection.evidence.values()].filter((row$2) => items.some((item) => relevantEvidence(projection, item, row$2)));
 	return sha256(JSON.stringify({
 		packet,
 		revision: projection.contractRevision,
@@ -7610,7 +7616,7 @@ function renderRecoveryPacket(projection, options = {}) {
 		for (const item of constraints.slice(1, 4)) constraint(item);
 		for (const binding of rejected$1.slice(0, 4)) if (add(`rejected ${clip(binding.itemId, 30)}: ${clip(binding.reasonCode ?? binding.reason, 120)}`, 170)) refusals++;
 		for (const item of work.slice(0, 4)) if (itemDiagnosis(projection, item).certifiable) add(`closing hint [${clip(item.id, 20)}]: ${closingHint(projection, item)}`, 240);
-		for (const row$1 of evidence.slice(0, 4)) if (add(`evidence ${clip(row$1.id, 40)} action=${row$1.semanticAction} role=${row$1.evidenceRole ?? "effect"}`, 140)) shown++;
+		for (const row$2 of evidence.slice(0, 4)) if (add(`evidence ${clip(row$2.id, 40)} action=${row$2.semanticAction} role=${row$2.evidenceRole ?? "effect"}`, 140)) shown++;
 	}
 	lines.push(footer(count, refusals, shown), pointer);
 	return lines.join("\n");
@@ -8753,7 +8759,7 @@ function simpleRecord(projection, item, binding) {
 	} };
 	if (action === "test" && (effect.toolName === "bash" || effect.toolName === "pwsh")) {
 		const process$1 = effect.processFacts;
-		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row$1) => row$1.outcome === "success"))) return { rejected: {
+		if (!process$1 || process$1.outcome !== "success" || process$1.operationAttribution !== "single_operation" && !(process$1.operationAttribution === "declared_per_operation" && process$1.declaredOperationResults?.length && process$1.declaredOperationResults.every((row$2) => row$2.outcome === "success"))) return { rejected: {
 			itemId: item.id,
 			reason: "test process outcome is not attributable to the required operation",
 			reasonCode: "operation_unattributable"
@@ -10444,11 +10450,11 @@ const ALPHA2_HOST_PACKAGES = [
 * identities and the dshmarket 1.39.0 identity is the authoritative row from
 * the 2026-09-01 alpha.3 annex audit. Guard 0.4.0 supports this combination.
 */
-const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row$1) => row$1.name === "dshmarket" ? {
+const ALPHA2_DSHMARKET_139_HOST_PACKAGES = ALPHA2_HOST_PACKAGES.map((row$2) => row$2.name === "dshmarket" ? {
 	name: "dshmarket",
 	version: "1.39.0",
 	integrity: ALPHA3_HOST_PACKAGES.find((entry) => entry.name === "dshmarket").integrity
-} : row$1);
+} : row$2);
 /**
 * Historical audited host cohort registry. Every entry keeps the exact package
 * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
@@ -10652,7 +10658,7 @@ const HOST_COHORTS = [...LEGACY_HOST_COHORTS, defineCohort("dsh-0.1.5-rc.2", ["0
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
-	packages: cohort.packages.filter((row$1) => row$1.name !== "dshmarket"),
+	packages: cohort.packages.filter((row$2) => row$2.name !== "dshmarket"),
 	capabilities: [
 		{
 			name: "host_cohort",
@@ -10691,7 +10697,7 @@ const EXPECTED_HOST_PACKAGES = HOST_COHORTS[0].packages;
 * cohort rows rather than hardcoded, so a cohort bump cannot leave a stale
 * literal behind in the target-inspection path.
 */
-const ACTIVE_HOST_LAUNCHER_VERSION = EXPECTED_HOST_PACKAGES.find((row$1) => row$1.name === "@deepseek-ai/dsh")?.version;
+const ACTIVE_HOST_LAUNCHER_VERSION = EXPECTED_HOST_PACKAGES.find((row$2) => row$2.name === "@deepseek-ai/dsh")?.version;
 const packageNames = (...names) => new Set(names);
 const BASE_HOST_PACKAGES = packageNames("@deepseek-ai/cordis", "@deepseek-ai/dsh-agent", "@deepseek-ai/dsh-commands", "@deepseek-ai/dsh-llm", "@deepseek-ai/dsh-session", "@deepseek-ai/dsh-tools");
 const GOAL_HOST_PACKAGES = packageNames("@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal");
@@ -10713,7 +10719,7 @@ const HOST_CAPABILITY_PACKAGE_GROUPS = {
 * unknown, and an unknown version is not treated as supported.
 */
 function hostVersionFromPackages(rows) {
-	return rows.find((row$1) => row$1.name === "@deepseek-ai/dsh")?.version;
+	return rows.find((row$2) => row$2.name === "@deepseek-ai/dsh")?.version;
 }
 /**
 * Atomically select the audited cohort for one supplied package graph. A
@@ -10725,9 +10731,9 @@ function hostVersionFromPackages(rows) {
 * consistently.
 */
 function selectHostCohort(rows, platform) {
-	rows = rows.filter((row$1) => row$1.name !== "dshmarket");
-	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$1) => row$1.name)));
-	if (rows.some((row$1) => !registryNames.has(row$1.name))) return {
+	rows = rows.filter((row$2) => row$2.name !== "dshmarket");
+	const registryNames = new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$2) => row$2.name)));
+	if (rows.some((row$2) => !registryNames.has(row$2.name))) return {
 		cohort: HOST_COHORTS[0],
 		consistent: false,
 		reasonCode: "host_cohort_unknown_package"
@@ -10737,12 +10743,12 @@ function selectHostCohort(rows, platform) {
 		consistent: false,
 		reasonCode: "host_cohort_unbound_identity"
 	};
-	const bound = rows.filter((row$1) => row$1.version !== void 0 && row$1.integrity !== void 0);
+	const bound = rows.filter((row$2) => row$2.version !== void 0 && row$2.integrity !== void 0);
 	const unboundCount = rows.length - bound.length;
-	const versionMatches = bound.map((row$1) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row$1.name && p.version === row$1.version)));
-	const identityMatches = bound.map((row$1, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row$1.name && p.version === row$1.version && p.integrity === row$1.integrity)));
+	const versionMatches = bound.map((row$2) => HOST_COHORTS.filter((cohort) => cohort.packages.some((p) => p.name === row$2.name && p.version === row$2.version)));
+	const identityMatches = bound.map((row$2, index$1) => versionMatches[index$1].filter((cohort) => cohort.packages.some((p) => p.name === row$2.name && p.version === row$2.version && p.integrity === row$2.integrity)));
 	const candidates = HOST_COHORTS.filter((cohort) => identityMatches.every((matches) => matches.includes(cohort)));
-	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row$1) => row$1.name === expected.name).length === 1))[0] ?? candidates[0];
+	const consistentCohort = candidates.filter((cohort) => cohort.packages.length === rows.length && cohort.packages.every((expected) => rows.filter((row$2) => row$2.name === expected.name).length === 1))[0] ?? candidates[0];
 	if (consistentCohort !== void 0 && unboundCount === 0) {
 		if (platform && !consistentCohort.acceptedPlatforms.includes(platform)) return {
 			cohort: consistentCohort,
@@ -10750,8 +10756,8 @@ function selectHostCohort(rows, platform) {
 			reasonCode: "host_cohort_platform_not_audited"
 		};
 		const suppliedCounts = /* @__PURE__ */ new Map();
-		for (const row$1 of rows) suppliedCounts.set(row$1.name, (suppliedCounts.get(row$1.name) ?? 0) + 1);
-		if (!(consistentCohort.packages.every((row$1) => (suppliedCounts.get(row$1.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
+		for (const row$2 of rows) suppliedCounts.set(row$2.name, (suppliedCounts.get(row$2.name) ?? 0) + 1);
+		if (!(consistentCohort.packages.every((row$2) => (suppliedCounts.get(row$2.name) ?? 0) === 1) && rows.length === consistentCohort.packages.length)) return {
 			cohort: consistentCohort,
 			consistent: false,
 			reasonCode: "host_cohort_incomplete_graph"
@@ -10778,13 +10784,13 @@ function selectHostCohort(rows, platform) {
 	};
 }
 function stableRows(rows) {
-	return [...rows].map((row$1) => ({ ...row$1 })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
+	return [...rows].map((row$2) => ({ ...row$2 })).sort((a, b) => a.name.localeCompare(b.name) || (a.version ?? "").localeCompare(b.version ?? "") || (a.integrity ?? "").localeCompare(b.integrity ?? ""));
 }
 function statusForPackages(id, rows, requiredNames, cohort) {
 	const requiredPackages = [...requiredNames].sort();
-	const relevant = rows.filter((row$1) => requiredNames.has(row$1.name));
+	const relevant = rows.filter((row$2) => requiredNames.has(row$2.name));
 	const counts = /* @__PURE__ */ new Map();
-	for (const row$1 of relevant) counts.set(row$1.name, (counts.get(row$1.name) ?? 0) + 1);
+	for (const row$2 of relevant) counts.set(row$2.name, (counts.get(row$2.name) ?? 0) + 1);
 	const missingPackages = requiredPackages.filter((name) => !counts.has(name));
 	const digest$1 = safeHostLockDigest(relevant, { capabilityId: id }, cohort);
 	if ([...counts.values()].some((count) => count > 1)) return {
@@ -10803,10 +10809,10 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		missingPackages,
 		reasonCode: "host_capability_missing"
 	};
-	const expected = new Map(cohort.packages.map((row$1) => [row$1.name, row$1]));
-	for (const row$1 of relevant) {
-		const pinned = expected.get(row$1.name);
-		if (!row$1.version || !row$1.integrity) return {
+	const expected = new Map(cohort.packages.map((row$2) => [row$2.name, row$2]));
+	for (const row$2 of relevant) {
+		const pinned = expected.get(row$2.name);
+		if (!row$2.version || !row$2.integrity) return {
 			id,
 			status: "unavailable",
 			digest: digest$1,
@@ -10814,7 +10820,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 			missingPackages,
 			reasonCode: "host_capability_missing"
 		};
-		if (row$1.version !== pinned.version) return {
+		if (row$2.version !== pinned.version) return {
 			id,
 			status: "unsupported",
 			digest: digest$1,
@@ -10822,7 +10828,7 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 			missingPackages,
 			reasonCode: "host_capability_version_mismatch"
 		};
-		if (row$1.integrity !== pinned.integrity) return {
+		if (row$2.integrity !== pinned.integrity) return {
 			id,
 			status: "unsupported",
 			digest: digest$1,
@@ -10846,19 +10852,19 @@ function cohortForEvaluation(evaluation) {
 	return HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
 }
 function evaluateHostLock(rows, context = {}) {
-	const supplied = stableRows(rows.filter((row$1) => row$1.name !== "dshmarket"));
+	const supplied = stableRows(rows.filter((row$2) => row$2.name !== "dshmarket"));
 	const selection = selectHostCohort(supplied, context.platform);
 	const cohort = selection.cohort;
 	const capabilities = capabilityEvaluations(supplied, cohort);
 	const counts = /* @__PURE__ */ new Map();
-	for (const row$1 of supplied) counts.set(row$1.name, (counts.get(row$1.name) ?? 0) + 1);
+	for (const row$2 of supplied) counts.set(row$2.name, (counts.get(row$2.name) ?? 0) + 1);
 	const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name));
 	const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size;
 	const digest$1 = safeHostLockDigest(supplied, context, cohort);
 	const base = statusForPackages("base", supplied, BASE_HOST_PACKAGES, cohort);
-	const missingPackages = cohort.packages.map((row$1) => row$1.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
-	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$1) => row$1.name)));
-	const unknown = supplied.find((row$1) => !registryNames.has(row$1.name));
+	const missingPackages = cohort.packages.map((row$2) => row$2.name).filter((name) => (counts.get(name) ?? 0) === 0).sort((a, b) => a.localeCompare(b));
+	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$2) => row$2.name)));
+	const unknown = supplied.find((row$2) => !registryNames.has(row$2.name));
 	const hostVersionValue = context.hostVersion ?? hostVersionFromPackages(supplied);
 	const hostVersion = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
 	const baseResult = {
@@ -10878,7 +10884,7 @@ function evaluateHostLock(rows, context = {}) {
 		status: "unsupported",
 		reasonCode: "host_lock_unknown_package"
 	};
-	if (supplied.some((row$1) => (counts.get(row$1.name) ?? 0) > 1)) return {
+	if (supplied.some((row$2) => (counts.get(row$2.name) ?? 0) > 1)) return {
 		...baseResult,
 		status: "unavailable",
 		goalAvailable: false,
@@ -11096,10 +11102,10 @@ function safeHostLockDigest(packages, context = {}, cohort) {
 		});
 	} catch {
 		const bounded = {
-			packages: packages.map((row$1) => [
-				String(row$1.name),
-				row$1.version ?? null,
-				row$1.integrity ?? null
+			packages: packages.map((row$2) => [
+				String(row$2.name),
+				row$2.version ?? null,
+				row$2.integrity ?? null
 			]),
 			platform: context.platform ?? null,
 			profileKind: context.profileKind ?? null,
@@ -11981,9 +11987,9 @@ function declaredOperationResults(meta) {
 	if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return void 0;
 	const rows = [];
 	for (const raw of declared) {
-		const row$1 = asRecord$2(raw);
-		const action = typeof row$1?.action === "string" ? row$1.action : void 0;
-		const outcome = row$1?.outcome;
+		const row$2 = asRecord$2(raw);
+		const action = typeof row$2?.action === "string" ? row$2.action : void 0;
+		const outcome = row$2?.outcome;
 		if (!action || outcome !== "success" && outcome !== "failure" && outcome !== "unknown") return void 0;
 		rows.push({
 			action,
@@ -12699,10 +12705,10 @@ function deriveTrustedDeliveries(events) {
 		if (end.kind !== "completed") continue;
 		if (facts.steps.size === 0) continue;
 		const finalStep = Math.max(...facts.steps);
-		const inFinalStep = facts.assistants.filter((row$1) => row$1.step === finalStep && row$1.seq < end.seq && !row$1.interrupted && row$1.text.trim().length > 0);
+		const inFinalStep = facts.assistants.filter((row$2) => row$2.step === finalStep && row$2.seq < end.seq && !row$2.interrupted && row$2.text.trim().length > 0);
 		if (inFinalStep.length === 0) continue;
 		const final = inFinalStep.reduce((left, right) => right.seq > left.seq ? right : left);
-		if (facts.assistants.some((row$1) => row$1.seq > final.seq && row$1.seq < end.seq)) continue;
+		if (facts.assistants.some((row$2) => row$2.seq > final.seq && row$2.seq < end.seq)) continue;
 		deliveries.push({
 			turn,
 			turnEndSeq: end.seq,
@@ -12849,6 +12855,44 @@ function deriveTrustedSelections(events, options) {
 		});
 	}
 	return selections;
+}
+
+//#endregion
+//#region src/domain/observer-method.ts
+const row$1 = (value) => value && typeof value === "object" ? value : {};
+const birthSeq = (item) => {
+	const match = /^m(\d+)(?::|$)/.exec(item.sourceMessageId);
+	return match ? Number(match[1]) : void 0;
+};
+/** The method is a root-sourced way to observe existing work. It is fulfilled
+* only by a real, later, same-turn Host exchange for that exact work item.
+* Old generic records and results before the v6 root can never enter here. */
+function observerMethodEvidence(projection, events, method, index$1) {
+	const instruction = method.observerMethod;
+	const rootSeq = birthSeq(method);
+	if (!instruction || rootSeq === void 0 || projection.v6BoundarySeq === void 0 || rootSeq <= projection.v6BoundarySeq || method.authority !== "root_instruction") return void 0;
+	const data = row$1(events.find((event) => event.seq === rootSeq && event.type === "user/message")?.data);
+	if (row$1(data.source).kind !== "user" || !Array.isArray(data.content)) return void 0;
+	if (sha256(data.content.filter((part) => row$1(part).type === "text").map((part) => String(row$1(part).text ?? "")).join("")) !== method.rawTextSha256) return void 0;
+	const tool = instruction.tools[index$1];
+	const related = projection.items.get(instruction.targetItemIds[index$1] ?? "");
+	if (!tool || !related || related.rawTextSha256 !== method.rawTextSha256 || related.unitId !== method.unitId || birthSeq(related) !== rootSeq) return void 0;
+	const target = tool === "context_guard_observe_test_readiness" ? related.requestedTarget?.scope : related.requestedTarget?.artifact_id ?? (related.semanticAction === "verify" ? related.requestedTarget?.scope : void 0);
+	if (typeof target !== "string" || !target) return void 0;
+	return [...projection.evidence.values()].find((fact) => {
+		if (fact.toolName !== tool || fact.outcome !== "success" || fact.parseStatus !== "supported" || fact.epoch !== projection.epoch || !fact.subjects.includes(target)) return false;
+		const calls = events.filter((event) => event.type === "tool/call" && row$1(event.data).callId === fact.callId);
+		const results = events.filter((event) => {
+			if (event.type !== "tool/result") return false;
+			const content = row$1(row$1(event.data).message).content;
+			return Array.isArray(content) && content.some((part) => row$1(part).type === "tool-result" && row$1(part).toolCallId === fact.callId);
+		});
+		if (calls.length !== 1 || results.length !== 1) return false;
+		const call = calls[0], result = results[0];
+		if (call.seq <= rootSeq || call.seq >= result.seq || result.seq !== fact.toolResultSeq || row$1(call.data).name !== tool || row$1(call.data).turn !== row$1(result.data).turn || row$1(call.data).step !== row$1(result.data).step || persistedToolResultStatus(result.data, fact.callId) !== "clean") return false;
+		if (tool === "context_guard_observe_test_readiness") return related.semanticAction === "test" && fact.readinessForItemId === related.id && fact.readinessPredicate === "test_passed";
+		return (related.semanticAction === "verify" || related.semanticAction === "modify") && fact.evidenceRole === "state" && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.outcome === "success" && effect.evidenceRole === "effect" && effect.toolResultSeq < fact.toolResultSeq && effect.subjects.includes(target));
+	});
 }
 
 //#endregion
@@ -13966,7 +14010,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
 		const visible = maskQuotedSpans(clause.body);
 		const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(visible);
-		const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible) && (clause.paths.length === 1 || /\bread\s+it\s+back\b/iu.test(visible));
+		const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible) && (clause.paths.length === 1 || /\bread\s+(?:it|the\s+file)\s+back\b/iu.test(visible));
 		if (!fileCheck && !fileRead) return void 0;
 		return {
 			...clause,
@@ -13987,7 +14031,9 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 	const asReport = (clause) => {
 		if (["prohibition", "conditional_wait"].includes(clause.interpretation.authorityDisposition)) return void 0;
 		const visible = maskQuotedSpans(clause.body);
-		if (!/^\s*(?:(?:and|then)\s+)?(?:报告|汇报|report\b)\s+\S/iu.test(visible) || /\b(?:to|via|by)\s+\S+/iu.test(visible)) return void 0;
+		const chinese = /^\s*(?:再|然后)?\s*([\p{Script=Han}]{0,2}(?:地)?)?(?:报告|汇报)\s*\S/iu.exec(visible);
+		const english = /^\s*(?:(?:and|then)\s+)?report\b\s+\S/iu.test(visible);
+		if (!chinese && !english || chinese?.[1] && clause.interpretation.authorityDisposition === "executable_now" || /\b(?:to|via|by)\s+\S+/iu.test(visible)) return void 0;
 		return {
 			...clause,
 			interpretation: {
@@ -14058,6 +14104,15 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			}
 		};
 	};
+	const opensObserverMethod = (clause) => {
+		if (clause.kind !== "requirement" || [
+			"informational",
+			"prohibition",
+			"conditional_wait"
+		].includes(clause.interpretation.authorityDisposition)) return false;
+		const visible = maskQuotedSpans(clause.body).trim();
+		return /^(?:use|consult|invoke|call)\b\s+(?:(?:the|read-only)\s+)*`?(?:context_guard_observe_[a-z_]+|[a-z][a-z0-9_]*_observer)\b/iu.test(visible);
+	};
 	const splitIndependent = (segment) => {
 		if (segment.kind !== "requirement" || [
 			"informational",
@@ -14073,7 +14128,8 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			if (!leftText || !rightText) continue;
 			const left = segmentClauses(leftText)[0], right = segmentClauses(rightText)[0];
 			if (!left || !right || ![left].every((part) => part.kind === "requirement")) continue;
-			if (!asTest(right, true) && !asFileReadback(right) && !asReport(right) && !asPackageScript(right)) continue;
+			const observerMethod = opensObserverMethod(right);
+			if (!asTest(right, true) && !asFileReadback(right) && !asReport(right) && !asPackageScript(right) && !(observerMethod && (left.interpretation.authorityDisposition === "executable_now" || asArtifactEdit(left) || asTest(left, true)))) continue;
 			return [...splitIndependent({
 				...left,
 				text: leftText
@@ -14330,6 +14386,30 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 	}
 	if (projection.boundaryProtocol === 6 && !legacy && provenance) {
 		const fresh = [...projection.items.values()].filter((item) => !before.has(item.id) && item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256 && item.spans?.[0]?.partIndex === 0).sort((a, b) => a.spans[0].start - b.spans[0].start);
+		for (const method of fresh) {
+			const text$1 = maskQuotedSpans(method.normalizedText).trim();
+			if (!/^(?:(?:for\s+[^,，]{1,100}[,，]\s*)?(?:use|consult|invoke|call)\b|(?:为|针对|对)[^,，。]{1,80}(?:调用|使用))/iu.test(text$1) || method.kind !== "requirement" || [
+				"informational",
+				"prohibition",
+				"conditional_wait"
+			].includes(method.authorityDisposition ?? "")) continue;
+			const explicit = [...text$1.matchAll(/\bcontext_guard_observe_(?:file|test_readiness)\b/giu)].map((match) => match[0].toLowerCase());
+			if ([...text$1.matchAll(/\b(?:context_guard_observe_[a-z_]+|[a-z][a-z0-9_]*_observer)\b/giu)].map((match) => match[0].toLowerCase()).some((name) => !["context_guard_observe_file", "context_guard_observe_test_readiness"].includes(name))) continue;
+			if ([...text$1.matchAll(/(?:\band\b|\bthen\b|并且|并|然后|再)\s+([^,，;；。.!?？]+)/giu)].some((match) => !/^\s*`?context_guard_observe_(?:file|test_readiness)\b/iu.test(match[1]) || extractOperation(match[1]) !== void 0 || semanticActionFromText(match[1]) !== "generic_run")) continue;
+			const tools = [...new Set(explicit.length ? explicit : /\btest\s+readiness\s+observer\b/iu.test(text$1) ? ["context_guard_observe_test_readiness"] : [])];
+			if (!tools.length || !explicit.length && !/\b(?:observer|tools?)\b/iu.test(text$1)) continue;
+			const earlier = fresh.filter((item) => item.spans[0].start < method.spans[0].start && item.authorityDisposition === "executable_now" && item.status !== "superseded");
+			const targetIds = tools.map((tool) => {
+				const candidates = tool === "context_guard_observe_test_readiness" ? earlier.filter((item) => item.semanticAction === "test") : earlier.filter((item) => item.semanticAction === "verify" && /\bread\b|文件|核对/iu.test(item.normalizedText));
+				const fallback = tool === "context_guard_observe_file" && candidates.length === 0 ? earlier.filter((item) => item.semanticAction === "modify") : candidates;
+				return fallback.length === 1 ? fallback[0].id : void 0;
+			});
+			if (targetIds.some((id) => id === void 0)) continue;
+			method.observerMethod = {
+				tools,
+				targetItemIds: targetIds
+			};
+		}
 		let parent;
 		for (const item of fresh) {
 			const own = item.spans[0];
@@ -14768,6 +14848,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	projection.policy = config.policy ?? "standard";
 	if (scope.sessionHeader) projection.sessionRefDigest = sessionRefDigest(scope.sessionHeader);
 	projection.hostLockDigest = hostLock.digest;
+	projection.auditedForegroundRenderers = hostLock.auditedForegroundRenderers;
 	projection.hostStatus = hostLock.status;
 	projection.hostReasonCode = hostLock.reasonCode;
 	projection.hostCohortId = hostLock.cohortId;
@@ -14954,7 +15035,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 									...settlement,
 									settledAtSeq: event.seq
 								};
-								const key = (row$1) => `${row$1.contractId}\u0000${row$1.operation}\u0000${row$1.callId}`;
+								const key = (row$2) => `${row$2.contractId}\u0000${row$2.operation}\u0000${row$2.callId}`;
 								const index$1 = projection.releaseSettlements.findIndex((entry) => key(entry) === key(pinned));
 								if (index$1 < 0) projection.releaseSettlements.push(pinned);
 								else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index$1].outcome]) projection.releaseSettlements[index$1] = pinned;
@@ -15346,6 +15427,10 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	}
 	projection.enabled = enabled;
 	projection.epoch = epoch;
+	for (const item of projection.items.values()) {
+		if (item.status !== "pending" || !item.observerMethod?.tools.length) continue;
+		if (item.observerMethod.tools.every((_, index$1) => observerMethodEvidence(projection, sourceEvents, item, index$1))) item.status = "passed";
+	}
 	refreshRootLocatorContext(projection, sourceEvents, scope, sourceEvents.at(-1)?.seq ?? 0);
 	applyUpgradeEligibility(projection);
 	if (interpretationFacts.length > 64) interpretationFacts.splice(0, interpretationFacts.length - 64);
@@ -16331,10 +16416,10 @@ function validate(value, schema, path$1) {
 	if (kinds.length && !kinds.some(matches)) throw new Error(`${path$1}: wrong_type`);
 	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
 		const fields = schema.properties ?? {};
-		const row$1 = value;
-		if (schema.additionalProperties === false && Object.keys(row$1).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
-		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row$1))) throw new Error(`${path$1}: missing_fields`);
-		for (const [key, child] of Object.entries(row$1)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
+		const row$2 = value;
+		if (schema.additionalProperties === false && Object.keys(row$2).some((key) => !(key in fields))) throw new Error(`${path$1}: unknown_fields`);
+		if (Array.isArray(schema.required) && schema.required.some((key) => !(key in row$2))) throw new Error(`${path$1}: missing_fields`);
+		for (const [key, child] of Object.entries(row$2)) if (key in fields) validate(child, fields[key], `${path$1}.${key}`);
 	} else if (Array.isArray(value) && schema.items) for (const child of value) validate(child, schema.items, `${path$1}[]`);
 	else if (typeof value === "string") {
 		if (value.length < (schema.minLength ?? 0) || typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) throw new Error(`${path$1}: invalid_string`);
@@ -16380,10 +16465,10 @@ const listed = (value) => value;
 const index = (rows, watermark) => {
 	const result = /* @__PURE__ */ new Map();
 	const seen = /* @__PURE__ */ new Set();
-	for (const row$1 of rows) {
-		if (seen.has(row$1.id)) throw new Error("duplicate_identity");
-		seen.add(row$1.id);
-		if (row$1.seq <= watermark) result.set(row$1.id, row$1);
+	for (const row$2 of rows) {
+		if (seen.has(row$2.id)) throw new Error("duplicate_identity");
+		seen.add(row$2.id);
+		if (row$2.seq <= watermark) result.set(row$2.id, row$2);
 	}
 	return result;
 };
@@ -16423,10 +16508,10 @@ function singleRootTaskScope(prefix, rows) {
 	const direct = prefix.trim().replace(/[。.!！]+$/u, "");
 	if (/[。！？;；\n]/u.test(direct)) return false;
 	if (rows.length === 1) return directWorkClause(direct);
-	const parents = rows.filter((row$1) => row$1.parent_id === null);
+	const parents = rows.filter((row$2) => row$2.parent_id === null);
 	if (parents.length !== 1 || parents[0].action !== "local_edit") return false;
 	const parent = parents[0];
-	if (!rows.every((row$1) => row$1 === parent || row$1.parent_id === parent.id && ["test_verify", "state_readback"].includes(row$1.action) && row$1.target === parent.target)) return false;
+	if (!rows.every((row$2) => row$2 === parent || row$2.parent_id === parent.id && ["test_verify", "state_readback"].includes(row$2.action) && row$2.target === parent.target)) return false;
 	const clauses = direct.split("并");
 	return clauses.length === rows.length && clauses.length >= 2 && clauses.every(directWorkClause);
 }
@@ -16607,7 +16692,7 @@ function foldRootControls(snapshot, sources, requirements, facts, units, waterma
 		if (source && !units.has(source.unit)) continue;
 		const controlUnit = source?.unit;
 		const position = `${control.seq}\u0000${span.source_id}\u0000${span.start}`;
-		let valid = Boolean(source && source.kind === "root" && units.has(source.unit) && source.seq === control.seq && sourceMatches(span, sources, true) && !positions.has(position) && [...sources.values()].filter((row$1) => row$1.seq === control.seq).length === 1);
+		let valid = Boolean(source && source.kind === "root" && units.has(source.unit) && source.seq === control.seq && sourceMatches(span, sources, true) && !positions.has(position) && [...sources.values()].filter((row$2) => row$2.seq === control.seq).length === 1);
 		positions.add(position);
 		if (!valid || !source) {
 			errors.push(control.id);
@@ -16743,13 +16828,13 @@ function projectCoreV2(snapshot) {
 		if (source.locator_base === void 0 !== (source.locator_flavor === void 0)) throw new Error("locator_base_flavor_pair_required");
 		if (source.kind === "root" && (source.text === null || bytes(source.text).length !== source.byte_length || hash$1(bytes(source.text)) !== source.sha256)) throw new Error("root_source_identity_mismatch");
 	}
-	const unitRows = new Map(listed(snapshot.units).map((row$1) => [row$1.id, row$1]));
+	const unitRows = new Map(listed(snapshot.units).map((row$2) => [row$2.id, row$2]));
 	if (unitRows.size !== listed(snapshot.units).length || !unitRows.has(unit)) throw new Error("unit_identity_invalid");
-	for (const row$1 of unitRows.values()) {
-		const source = sources.get(row$1.source_id);
-		if (!source || source.kind !== "root" || source.unit !== row$1.id) throw new Error("unit_source_invalid");
-		const visited = new Set([row$1.id]);
-		let parent = row$1.parent_id;
+	for (const row$2 of unitRows.values()) {
+		const source = sources.get(row$2.source_id);
+		if (!source || source.kind !== "root" || source.unit !== row$2.id) throw new Error("unit_source_invalid");
+		const visited = new Set([row$2.id]);
+		let parent = row$2.parent_id;
 		while (parent !== null) {
 			if (visited.has(parent) || !unitRows.has(parent)) throw new Error("unit_parent_invalid");
 			visited.add(parent);
@@ -16760,8 +16845,8 @@ function projectCoreV2(snapshot) {
 	let growing = true;
 	while (growing) {
 		growing = false;
-		for (const row$1 of unitRows.values()) if (row$1.required && units.has(row$1.parent_id) && !units.has(row$1.id)) {
-			units.add(row$1.id);
+		for (const row$2 of unitRows.values()) if (row$2.required && units.has(row$2.parent_id) && !units.has(row$2.id)) {
+			units.add(row$2.id);
 			growing = true;
 		}
 	}
@@ -16799,7 +16884,7 @@ function projectCoreV2(snapshot) {
 		const source = sources.get(req.supersession_source_id), successor = requirements.get(req.superseded_by_requirement_id);
 		if (!source || source.kind !== "root" || source.unit !== req.unit || source.seq !== end || !successor || successor.unit !== req.unit || successor.seq !== end || successor.source.source_id !== source.id || successor.revision <= req.revision) throw new Error("supersession_source_mismatch");
 	}
-	const current = new Map([...requirements].filter(([, row$1]) => units.has(row$1.unit) && scopeOpen(row$1, watermark)));
+	const current = new Map([...requirements].filter(([, row$2]) => units.has(row$2.unit) && scopeOpen(row$2, watermark)));
 	if ([...current.values()].some((r) => r.parent_id !== null && !requirements.has(r.parent_id))) throw new Error("requirement_parent_missing");
 	const validFacts = /* @__PURE__ */ new Map();
 	for (const [key, fact] of facts) {
@@ -16825,7 +16910,7 @@ function projectCoreV2(snapshot) {
 	const invalidated = /* @__PURE__ */ new Set();
 	for (const fact of validFacts.values()) for (const id of fact.invalidates) if (validFacts.has(id) && validFacts.get(id).seq < fact.seq) invalidated.add(id);
 	for (const id of invalidated) validFacts.delete(id);
-	const conditions = new Map(listed(snapshot.conditions).map((row$1) => [row$1.id, row$1]));
+	const conditions = new Map(listed(snapshot.conditions).map((row$2) => [row$2.id, row$2]));
 	if (conditions.size !== listed(snapshot.conditions).length) throw new Error("duplicate_condition");
 	const released = /* @__PURE__ */ new Set();
 	for (const [key, condition] of conditions) {
@@ -17104,7 +17189,7 @@ function rootControls(roots, requirements, sources, facts, unit, selectedUnitAtR
 					let expanded = true;
 					while (expanded) {
 						const previous = selected.length;
-						for (const child of eligible) if (child.required && selected.some((row$1) => row$1.id === child.parent_id) && !selected.some((row$1) => row$1.id === child.id)) selected.push(child);
+						for (const child of eligible) if (child.required && selected.some((row$2) => row$2.id === child.parent_id) && !selected.some((row$2) => row$2.id === child.id)) selected.push(child);
 						expanded = selected.length !== previous;
 					}
 					const at = controlStart + Buffer.byteLength(text.slice(0, text.indexOf(parentNoun)), "utf8");
@@ -17366,6 +17451,114 @@ function sessionCoreSnapshot(events, projection) {
 		});
 		const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
 		if (!itemSpan) continue;
+		if (item.observerMethod && item.rawTextSha256 === hash(text) && item.authority === "root_instruction") {
+			const methodSource = {
+				source_id: `root:${root.seq}`,
+				start: itemSpan.start,
+				end: itemSpan.end,
+				sha256: hash(text)
+			};
+			const methodConstraint = Buffer.from(text, "utf8").subarray(itemSpan.start, itemSpan.end).toString("utf8");
+			for (const [index$1, tool] of item.observerMethod.tools.entries()) {
+				const related = projection.items.get(item.observerMethod.targetItemIds[index$1]);
+				if (!related || related.rawTextSha256 !== item.rawTextSha256 || related.unitId !== item.unitId || sourceSeq(related) !== root.seq) continue;
+				const target$1 = targetOf(related);
+				if (!target$1) continue;
+				const requirementId = `${item.id}:observer:${index$1 + 1}`;
+				const fact = observerMethodEvidence(projection, events, item, index$1);
+				const pair = fact ? sourceByCall.get(fact.callId) : void 0;
+				const subjectKind$1 = tool === "context_guard_observe_file" ? "filesystem" : "opaque";
+				const relatedSpan = related.spans?.[0];
+				const targetBytes = Buffer.from(target$1, "utf8");
+				const targetAt = relatedSpan ? Buffer.from(text, "utf8").subarray(relatedSpan.start, relatedSpan.end).indexOf(targetBytes) : -1;
+				const literalTarget = targetAt >= 0 && relatedSpan !== void 0;
+				const targetSource = literalTarget ? {
+					source_id: `root:${root.seq}`,
+					start: relatedSpan.start + targetAt,
+					end: relatedSpan.start + targetAt + targetBytes.length,
+					sha256: hash(text)
+				} : methodSource;
+				requirements.push({
+					id: requirementId,
+					unit,
+					revision: itemRevision,
+					seq: root.seq,
+					source: methodSource,
+					kind: "execution",
+					action: tool,
+					target: target$1,
+					predicate: "observer_method_completed",
+					scope_sha256: hash(text),
+					required: true,
+					status: "pending",
+					parent_id: null,
+					evidence_kind: "action_event",
+					condition_ids: [],
+					target_origin: {
+						root_constraint: literalTarget ? target$1 : methodConstraint,
+						root_constraint_source: targetSource,
+						implementation_choice: literalTarget || fact ? target$1 : null,
+						host_selection: literalTarget || fact ? target$1 : null,
+						resolved: target$1,
+						observed: literalTarget || fact ? target$1 : null,
+						constraint_kind: literalTarget ? "exact" : "work_unit",
+						subject_kind: subjectKind$1,
+						selection_source_id: fact ? `call:${fact.callId}` : null
+					}
+				});
+				if (!fact || !pair) continue;
+				const callId = `call:${fact.callId}`, resultId = `result:${fact.callId}`;
+				if (!sources.some((source) => source.id === callId)) {
+					const callBytes = String(row(pair.call.data).arguments ?? "");
+					const resultBytes = Array.isArray(row(row(pair.result.data).message).content) ? row(row(pair.result.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
+					const callTurn = String(row(pair.call.data).turn ?? turn);
+					sources.push({
+						id: callId,
+						seq: pair.call.seq,
+						kind: "host_call",
+						unit,
+						revision: itemRevision,
+						sha256: hash(callBytes),
+						byte_length: Buffer.byteLength(callBytes, "utf8"),
+						text: null,
+						call_id: fact.callId,
+						turn: callTurn,
+						target: target$1,
+						target_kind: subjectKind$1,
+						origin_root_source_id: `root:${root.seq}`
+					});
+					sources.push({
+						id: resultId,
+						seq: pair.result.seq,
+						kind: "host_result",
+						unit,
+						revision: itemRevision,
+						sha256: hash(resultBytes),
+						byte_length: Buffer.byteLength(resultBytes, "utf8"),
+						text: null,
+						call_id: fact.callId,
+						turn: String(row(pair.result.data).turn ?? callTurn)
+					});
+				}
+				facts.push({
+					id: `${fact.id}:observer:${item.id}:${index$1 + 1}`,
+					seq: pair.result.seq,
+					unit,
+					revision: itemRevision,
+					source_id: resultId,
+					call_source_id: callId,
+					kind: "action_event",
+					target: target$1,
+					predicate: "observer_method_completed",
+					outcome: "success",
+					operation_id: null,
+					requirement_id: requirementId,
+					condition_id: null,
+					invalidates: []
+				});
+			}
+			continue;
+		}
 		if (item.semanticAction === "generic_run" && rootControlCandidateSpans(text).some((candidate) => itemSpan.start >= candidate.start && itemSpan.end <= candidate.end && [
 			"persistence",
 			"pause",
@@ -17383,6 +17576,9 @@ function sessionCoreSnapshot(events, projection) {
 		const at = atWithin >= 0 ? itemSpan.start + atWithin : -1;
 		const ownText = raw.subarray(itemSpan.start, itemSpan.end).toString("utf8");
 		const fileReadback = item.interpretationFingerprint?.startsWith("v6-file-readback:") === true;
+		const anaphoricReadback = fileReadback && /\bread\s+(?:it|the\s+file)\s+back\b/iu.test(ownText);
+		const readbackAntecedents = anaphoricReadback ? currentItems.filter((candidate) => candidate.semanticAction === "modify" && candidate.authorityDisposition === "executable_now" && sourceSeq(candidate) === root.seq && typeof candidate.requestedTarget?.artifact_id === "string" && (candidate.spans?.[0]?.end ?? Infinity) <= itemSpan.start) : [];
+		const readbackReferent = readbackAntecedents.length === 1 ? readbackAntecedents[0].requestedTarget.artifact_id : void 0;
 		const referents = kind === "constraint" ? currentItems.flatMap((candidate) => {
 			if (candidate.taskKind !== "context" || sourceSeq(candidate) !== root.seq) return [];
 			const own = sourceSpan(candidate, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
@@ -17412,7 +17608,7 @@ function sessionCoreSnapshot(events, projection) {
 		const editScope = directoryLiteral && scopeValue ? portableResolve(scopeValue, directoryLiteral) : scopeValue;
 		const editChoices = item.semanticAction === "modify" && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === "string" ? [...projection.evidence.values()].filter((fact) => fact.semanticAction === "modify" && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.subjects.length === 1 && typeof fact.subjects[0] === "string" && portableContains(editScope, fact.subjects[0])) : [];
 		const selectedEdit = editChoices.length === 1 ? editChoices[0] : void 0;
-		const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success" && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.outcome === "success" && effect.subjects.includes(fact.subjects[0]) && effect.toolResultSeq < fact.toolResultSeq)) : [];
+		const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success" && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && (!anaphoricReadback || typeof readbackReferent === "string" && fact.subjects[0] === readbackReferent) && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.outcome === "success" && effect.subjects.includes(fact.subjects[0]) && effect.toolResultSeq < fact.toolResultSeq)) : [];
 		const selectedReadback = readbackChoices.length === 1 ? readbackChoices[0] : void 0;
 		const subjectKind = forbiddenFile || fileReadback || [
 			"modify",
@@ -17438,7 +17634,23 @@ function sessionCoreSnapshot(events, projection) {
 			const assessmentEffect = item.semanticAction !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.toolResultSeq < fact.toolResultSeq && effect.epoch === fact.epoch && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath));
 			return fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect && fact.toolName === "context_guard_observe_test_readiness" && fact.outcome === "success" && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === "string" && fact.subjects.includes(item.requestedTarget.scope);
 		}) : void 0;
-		const selectedScope = selectedReadiness && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0;
+		const namedTest = item.semanticAction === "test" ? /\b((?:npm|pnpm))\s+test\b/iu.exec(item.normalizedText) : null;
+		const isDirectTestFact = (fact) => {
+			if (!namedTest || guarded) return false;
+			if (fact.semanticAction !== "test" || fact.evidenceRole !== "effect" || fact.parseStatus !== "supported" || fact.epoch !== projection.epoch || !["bash", "pwsh"].includes(fact.toolName) || !projection.auditedForegroundRenderers?.includes(fact.toolName) || fact.processFacts?.operationAttribution !== "single_operation") return false;
+			const pair = sourceByCall.get(fact.callId);
+			if (!pair || pair.call.seq <= root.seq || pair.result.seq !== fact.toolResultSeq || persistedToolResultStatus(pair.result.data, fact.callId) !== "clean") return false;
+			let args = {};
+			try {
+				args = row(JSON.parse(String(row(pair.call.data).arguments ?? "")));
+			} catch {
+				return false;
+			}
+			const expected = `${namedTest[1].toLowerCase()} test`;
+			return String(args.command ?? "").trim() === expected && args.run_in_background !== true && typeof args.workdir === "string" && fact.subjects.length === 1 && fact.subjects[0] === args.workdir && fact.subjects[0] === item.requestedTarget?.scope;
+		};
+		const selectedDirectTest = namedTest && !guarded ? [...projection.evidence.values()].filter(isDirectTestFact).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : void 0;
+		const selectedScope = (selectedReadiness || selectedDirectTest) && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0;
 		const target = forbiddenFile?.path ?? selectedScope ?? selectedEdit?.subjects[0] ?? selectedReadback?.subjects[0] ?? (relativeLiteral && named ? named : at >= 0 && named ? named : trimmed);
 		if (!target) continue;
 		const knownForbiddenEffect = forbiddenFile && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.subjects.includes(target) && [
@@ -17474,7 +17686,7 @@ function sessionCoreSnapshot(events, projection) {
 			"edit_file"
 		].includes(fact.toolName) && fact.subjects.some((path$1) => path$1 !== target && !permittedFileTargets.has(path$1)));
 		const requirementSource = span(itemSpan.start, itemSpan.end);
-		const predicate = forbiddenFile ? "no_mutation" : item.taskKind === "context" ? "context_recorded" : kind === "information" ? "answer_delivered" : item.semanticAction === "test" ? testOutcomePredicate(item.normalizedText) : fileReadback ? "file_content_checked" : item.semanticAction === "verify" ? assessmentOutcomePredicate(item.normalizedText) : item.semanticAction === "modify" ? "file_modified" : item.semanticAction === "create" ? "file_created" : item.semanticAction === "commit" ? "commit_observed" : item.semanticAction === "push" ? "push_observed" : `${item.semanticAction ?? "unknown"}_observed`;
+		const predicate = forbiddenFile ? "no_mutation" : item.taskKind === "context" ? "context_recorded" : kind === "information" ? "answer_delivered" : item.semanticAction === "test" ? v6TestPredicate(item.normalizedText) : fileReadback ? "file_content_checked" : item.semanticAction === "verify" ? assessmentOutcomePredicate(item.normalizedText) : item.semanticAction === "modify" ? "file_modified" : item.semanticAction === "create" ? "file_created" : item.semanticAction === "commit" ? "commit_observed" : item.semanticAction === "push" ? "push_observed" : `${item.semanticAction ?? "unknown"}_observed`;
 		const evidenceKind = kind === "information" ? "delivery" : kind === "constraint" || kind === "unknown" ? "none" : fileReadback ? "state_outcome" : item.semanticAction === "test" || item.semanticAction === "verify" ? "action_event" : "state_outcome";
 		const conditionId = guarded ? `condition:${item.id}` : void 0;
 		if (conditionId) conditions.push({
@@ -17524,7 +17736,7 @@ function sessionCoreSnapshot(events, projection) {
 				subject_kind: subjectKind,
 				constraint_kind: forbiddenFile ? "exact" : directoryLiteral ? "directory" : relativeLiteral ? "exact" : selectedScope || selectedEdit || selectedReadback ? "work_unit" : "exact",
 				...(forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? { resolved_constraint: portableResolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral) } : {},
-				selection_source_id: kind === "constraint" ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}` : relativeLiteral ? (() => {
+				selection_source_id: kind === "constraint" ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedDirectTest ? `call:${selectedDirectTest.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}` : relativeLiteral ? (() => {
 					const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === "modify" && entry.evidenceRole === "effect" && entry.outcome === "success" && entry.subjects.includes(target) && sourceByCall.has(entry.callId));
 					return fact ? `call:${fact.callId}` : null;
 				})() : null
@@ -17535,6 +17747,26 @@ function sessionCoreSnapshot(events, projection) {
 			if (delivery && item.answeredBy.turn === Number(turn)) {
 				const deliveryId = `delivery:${delivery.seq}:revision:${itemRevision}`;
 				const deliveredText = Array.isArray(row(row(delivery.data).message).content) ? row(row(delivery.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
+				const isTestReport = /\b(?:report|summari[sz]e)\b[^。.!?？]{0,80}\b(?:result|outcome)\b|(?:报告|汇报|说明)[^。.!?？]{0,80}(?:结果|运行情况)/iu.test(item.normalizedText);
+				const rootTests = currentItems.filter((candidate) => sourceSeq(candidate) === root.seq && candidate.semanticAction === "test");
+				const reportTest = isTestReport && rootTests.length === 1 ? rootTests[0] : void 0;
+				const expectedCommand = reportTest ? /\b(npm|pnpm)\s+test\b/iu.exec(reportTest.normalizedText)?.[0]?.toLowerCase() : void 0;
+				const run = expectedCommand ? [...projection.evidence.values()].filter((entry) => {
+					const pair = sourceByCall.get(entry.callId);
+					if (!pair || pair.call.seq <= root.seq || pair.result.seq >= delivery.seq || entry.semanticAction !== "test" || entry.evidenceRole !== "effect" || entry.parseStatus !== "supported" || entry.processFacts?.operationAttribution !== "single_operation" || !projection.auditedForegroundRenderers?.includes(entry.toolName) || persistedToolResultStatus(pair.result.data, entry.callId) !== "clean" || !entry.subjects.includes(String(reportTest?.requestedTarget?.scope ?? ""))) return false;
+					let args = {};
+					try {
+						args = row(JSON.parse(String(row(pair.call.data).arguments ?? "")));
+					} catch {
+						return false;
+					}
+					return String(args.command ?? "").trim() === expectedCommand && args.run_in_background !== true;
+				}).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : void 0;
+				const terminalZero = run?.processFacts?.outcome === "success" && run.processFacts.outcomeReason === "unmarked_renderer_success";
+				const conflictingStatus = /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败)|(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*[1-9]\d*)/iu.test(deliveredText);
+				const numericReport = terminalZero && /(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*0(?!\d)/iu.test(deliveredText);
+				const statusReport = terminalZero ? /(?:test(?:s)?\s+(?:passed|succeeded)|测试(?:已)?通过|测试成功)/iu.test(deliveredText) : false;
+				if (reportTest && (conflictingStatus || !numericReport && !statusReport)) continue;
 				if (!sources.some((source) => source.id === deliveryId)) sources.push({
 					id: deliveryId,
 					seq: delivery.seq,
@@ -17585,7 +17817,7 @@ function sessionCoreSnapshot(events, projection) {
 			const crossesNewConstraint = kind === "constraint" && forbiddenFile && pair && pair.call.seq <= root.seq && pair.result.seq >= root.seq;
 			if (!pair || pair.result.seq !== evidence.toolResultSeq || pair.call.seq <= root.seq && !crossesNewConstraint) continue;
 			const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId);
-			const outcome = hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
+			const outcome = item.semanticAction === "test" && selectedDirectTest && !selectedReadiness && evidence.evidenceRole === "effect" && !isDirectTestFact(evidence) ? "unknown" : hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
 			const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`;
 			const existingCall = sources.find((source) => source.id === callId);
 			if (existingCall && existingCall.revision !== itemRevision) continue;
@@ -18201,7 +18433,7 @@ function snapshotSessionEvents(session) {
 * `packageRowsFromPnpmLock` would make an unrelated cohort re-ordering look like
 * a lock-reading change.
 */
-const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$1) => row$1.name)))].sort((a, b) => a.localeCompare(b));
+const CRITICAL_NAMES = [...new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$2) => row$2.name)))].sort((a, b) => a.localeCompare(b));
 const HOST_LOCK_MARKER_BEGIN = "# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>";
 const HOST_LOCK_MARKER_END = "# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<";
 var HostProfileError = class extends Error {
@@ -18364,7 +18596,7 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 				rows.push({ name });
 				continue;
 			}
-			const candidates = locked.filter((row$1) => row$1.name === name && row$1.version === version && row$1.integrity);
+			const candidates = locked.filter((row$2) => row$2.name === name && row$2.version === version && row$2.integrity);
 			if (candidates.length !== 1) {
 				rows.push({
 					name,
@@ -18389,8 +18621,46 @@ function readActiveHostGraph(runtimeRoot, profileRoot) {
 	const profileLockPath = join(profile, "pnpm-lock.yaml");
 	const runtimeRows = packageRowsFromActiveGraph(readFileSync(mapPath, "utf8"), readFileSync(lockPath, "utf8"), join(runtime, "node_modules"));
 	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
-	const runtimeKeys = new Set(runtimeRows.map((row$1) => `${row$1.name}\u0000${row$1.version ?? ""}\u0000${row$1.integrity ?? ""}`));
-	return [...runtimeRows, ...profileRows.filter((row$1) => !runtimeKeys.has(`${row$1.name}\u0000${row$1.version ?? ""}\u0000${row$1.integrity ?? ""}`))];
+	const runtimeKeys = new Set(runtimeRows.map((row$2) => `${row$2.name}\u0000${row$2.version ?? ""}\u0000${row$2.integrity ?? ""}`));
+	return [...runtimeRows, ...profileRows.filter((row$2) => !runtimeKeys.has(`${row$2.name}\u0000${row$2.version ?? ""}\u0000${row$2.integrity ?? ""}`))];
+}
+const AUDITED_FOREGROUND_BYTES = {
+	"@deepseek-ai/dsh-tool-bash": "ea5579df9478198ab6dea378d1de59b5807db50bc4dc7baeb1a5b0cc3abbd4af",
+	"@deepseek-ai/dsh-tool-pwsh": "c1dd78a35722e47eaeef57b33d15d4170f4bb27db2bee15da76a6d4ea9557e63",
+	"@deepseek-ai/dsh-shell": "f2c148176a56fde49ec92885f0149f36450c0f0612008070e71ae795c139773d"
+};
+function activeRendererBytes(nodeModulesRoot, name) {
+	const modules = realpathSync(nodeModulesRoot);
+	const { records, reachable } = activeGraphRecords(readFileSync(join(modules, ".package-map.json"), "utf8"));
+	const ids = [...reachable].filter((id$1) => id$1.startsWith(`${name}@`));
+	if (ids.length !== 1) return void 0;
+	const id = ids[0];
+	if (!/^@deepseek-ai\/dsh-(?:tool-bash|tool-pwsh|shell)@0\.1\.5-rc\.[12](?:\(|$)/.test(id)) return void 0;
+	const url = records[id]?.url;
+	if (typeof url !== "string" || !url.startsWith("./.pnpm/")) return void 0;
+	const root = realpathSync(resolve(modules, url));
+	if (!root.startsWith(`${modules}${sep}`)) return void 0;
+	const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+	if (manifest.name !== name || !["0.1.5-rc.1", "0.1.5-rc.2"].includes(String(manifest.version))) return void 0;
+	const target = realpathSync(join(root, "lib", "index.js"));
+	if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return void 0;
+	return createHash("sha256").update(readFileSync(target)).digest("hex");
+}
+/** Verify active, reachable producer bytes without reading credentials or
+* accepting historical package-map entries. Missing/ambiguous paths fail
+* closed for the ordinary markerless-test shortcut. */
+function auditedForegroundRenderers(runtimeRoot, profileRoot) {
+	const roots = [join(runtimeRoot, "node_modules"), join(profileRoot, "node_modules")];
+	const checked = (name) => {
+		const found = [];
+		for (const root of roots) try {
+			const value = activeRendererBytes(root, name);
+			if (value) found.push(value);
+		} catch {}
+		return found.length > 0 && found.every((value) => value === AUDITED_FOREGROUND_BYTES[name]);
+	};
+	if (!checked("@deepseek-ai/dsh-shell")) return [];
+	return [...checked("@deepseek-ai/dsh-tool-bash") ? ["bash"] : [], ...checked("@deepseek-ai/dsh-tool-pwsh") ? ["pwsh"] : []];
 }
 function pathPresent(path$1) {
 	try {
@@ -18461,7 +18731,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
 	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
-	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row$1) => row$1.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== selectedCohort.packages.find((row$2) => row$2.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
@@ -18470,7 +18740,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 		if (typeof record.url !== "string" || realpathSync(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
 		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
 		const patch = installed.dsh?.bundle?.patch;
-		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$1) => row$1.version === host.version && row$1.integrity);
+		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$2) => row$2.version === host.version && row$2.integrity);
 		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
 		return locked[0];
 	});
@@ -18555,10 +18825,10 @@ function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot
 	lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`);
 	lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`);
 	lines.push("    hostLockPackages:");
-	for (const row$1 of rows) {
-		lines.push(`      - name: ${yamlQuote(row$1.name)}`);
-		lines.push(`        version: ${yamlQuote(row$1.version ?? "")}`);
-		lines.push(`        integrity: ${yamlQuote(row$1.integrity ?? "")}`);
+	for (const row$2 of rows) {
+		lines.push(`      - name: ${yamlQuote(row$2.name)}`);
+		lines.push(`        version: ${yamlQuote(row$2.version ?? "")}`);
+		lines.push(`        integrity: ${yamlQuote(row$2.integrity ?? "")}`);
 	}
 	lines.push(HOST_LOCK_MARKER_END);
 	return `${lines.join("\n")}\n`;
@@ -18616,7 +18886,7 @@ function injectActiveProfileHostLock(input) {
 	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
-	const managed = renderManagedPatch(input.evaluation.packages.filter((row$1) => row$1.version && row$1.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
+	const managed = renderManagedPatch(input.evaluation.packages.filter((row$2) => row$2.version && row$2.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
 	writeFileSync(temporary, next, {
@@ -18679,13 +18949,13 @@ function hostLockRowsFromComposedDump(text) {
 			if (/^\s{4}\S/.test(entry[index$1])) break;
 			continue;
 		}
-		const row$1 = { name: parseYamlScalar(nameMatch[1]) };
+		const row$2 = { name: parseYamlScalar(nameMatch[1]) };
 		for (let cursor = index$1 + 1; cursor < entry.length; cursor += 1) {
 			if (/^\s{6}- name:/.test(entry[cursor]) || /^\s{4}\S/.test(entry[cursor])) break;
 			const field$1 = entry[cursor].match(/^\s{8}(version|integrity):\s*(.+?)\s*$/);
-			if (field$1) row$1[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
+			if (field$1) row$2[field$1[1]] = parseYamlField(entry, cursor, field$1[2]);
 		}
-		rows.push(row$1);
+		rows.push(row$2);
 	}
 	return rows;
 }
@@ -18734,4 +19004,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { readbackSettlesContract as $, sha256 as $i, hasCurrentCertificate as $n, governedClauseRestrictsExecution as $r, PROOF_MANIFEST_DOMAIN_V2 as $t, firstStepGuidanceV6 as A, CERTIFICATE_VERSION_V2 as Ai, renderRecoveryPacket as An, removalIsComplete as Ar, evaluateHostCapability as At, PROTOCOL_V5_NOTICE as B, requestedTargetAuthorizesMutation as Bi, classifyCompletionClaim as Bn, segmentClauses as Br, evaluateMinimumHostVersion as Bt, gitCommandMatchesTarget as C, splitTextFragments as Ci, DEFAULT_RECOVERY_CHAR_BUDGET as Cn, relevantEvidence as Cr, GOAL_HOST_PACKAGES as Ct, FIRST_STEP_GUIDANCE as D, ACTION_MANIFEST_VERSION as Di, closingHint as Dn, capabilityConsequence as Dr, bindExecutableIdentity as Dt, verifiedLinearCommitReadback as E, ACTION_MANIFEST as Ei, cleanupConditionFor as En, admissibleForRemoval as Er, LEGACY_HOST_COHORTS as Et, projectCoreV2 as F, SUPPORTED_EVIDENCE_ADAPTERS as Fi, CONTROL_RECORD_PREFIX as Fn, environmentDefaultRepositoryTarget as Fr, LATEST_SUPPORTED_HOST_VERSION as Ft, rootLocatorFlavor as G, validateActionTarget as Gi, isRootPauseRequest as Gn, GRANTED_QUALIFICATION as Gr, RC1_HOST_PACKAGES as Gt, applyUpgradeEligibility as H, semanticActionFromCommand as Hi, decideTurnBoundary as Hn, npmEscapedPackageName as Hr, satisfiesSupportedHostRange as Ht, CAPTURE_V042_NOTICE as I, actionCompatible as Ii, NO_PROGRESS_RECORD_PREFIX as In, extractArtifactPaths as Ir, MIN_SUPPORTED_HOST_VERSION as It, RELEASE_RESERVATION_PREFIX as J, canonicalizePath as Ji, latestRootInstruction as Jn, clarifiedSpanOf as Jr, segmentAuthorityBlocks as Jt, RELEASE_OPERATIONS as K, COMMAND_SURFACE_MANIFEST as Ki, isWholeTaskCompletionClaim as Kn, LEGACY_QUALIFICATION as Kr, ALPHA3_HOST_PACKAGES as Kt, DEFAULT_DELEGATION_TOOL_NAMES as L, boundedArtifactChoiceMatches as Li, NO_PROGRESS_TURNS_BEFORE_STOP as Ln, extractMethod as Lr, SUPPORTED_HOST_RANGE as Lt, previewFirstStepInjection as M, STATEFUL_ACTIONS as Mi, evidenceCoverage as Mn, captureClause as Mr, evaluateToolSurfaceCapability as Mt, projectSessionCoreV2 as N, STOP_PROTOCOL_VERSION as Ni, evidenceMatchesItem as Nn, captureItem as Nr, hostVersionFromPackages as Nt, claimedBatchHasRealRootInput as O, BOUNDED_ARTIFACT_TYPES as Oi, openItems as On, capabilityFactOf as Or, bindLiveGoalCapability as Ot, sessionCoreSnapshot as P, STOP_PROTOCOL_VERSION_V2 as Pi, isVerifyingCapability as Pn, classifyClause as Pr, selectHostCohort as Pt, normalizeReleaseContract as Q, sanitizeUrl as Qi, goalCompletionDenial as Qn, explanationHasActionResidue as Qr, PROOF_KINDS_V2 as Qt, PROTOCOL_V3_NOTICE as R, isStatefulAction as Ri, assessmentAction as Rn, extractOperation as Rr, SUPPORTED_HOST_VERSIONS as Rt, executeRevalidatedGitEffect as S, semanticActionOfScope as Si, CLEANUP_CONDITION_RULE_SHORT as Sn, itemDiagnosis as Sr, EXPECTED_HOST_PACKAGES as St, revalidateGitPrestate as T, verbIsNegated as Ti, carriesCleanupCondition as Tn, actionHasCertificationPath as Tr, HOST_COHORTS as Tt, deriveProjection as U, semanticActionFromText as Ui, decideTurnStopping as Un, classifyTaskIntent as Ur, RC015_RC2_HOST_PACKAGES as Ut, PROTOCOL_V6_NOTICE as V, requestedTargetMatchesResolved as Vi, currentActionBases as Vn, canonicalRegistryBase as Vr, parseHostVersion as Vt, legacyRecordsNeedingReview as W, validateActionManifest as Wi, decisionBoundaryKey as Wn, classifyUserInteraction as Wr, RC015_HOST_PACKAGES as Wt, contractById as X, normalizeClause as Xi, progressFingerprint as Xn, clauseIsGoverned as Xr, PROOF_CAPABILITY_MATRIX as Xt, RELEASE_SETTLEMENT_PREFIX as Y, digestStrings as Yi, observeAssistantOutcome as Yn, clauseAsksOwnQuestion as Yr, certifyCheckpoint as Yt, inFlightReservation as Z, sanitizeClauseText as Zi, testOutcomePredicate as Zn, clauseIsProtected as Zr, PROOF_KINDS as Zt, GIT_COMMAND_MANIFEST_IDS as _, opensWithDirective as _i, sessionQueryV2 as _n, isFrozenV042RebindResponse as _r, ACTIVE_HOST_LAUNCHER_VERSION as _t, injectActiveProfileHostLock as a, isExecutableItem as ai, createProofManifest as an, isCurrentAcceptedBoundary as ar, evidenceFromPersistedToolResult as at, commitTreeSnapshotDigest as b, reportingHeadGoverns as bi, CLEANUP_CONDITION_RULE as bn, deriveItemDiagnosis as br, BASE_HOST_PACKAGES as bt, packageRowsFromPnpmLock as c, isOpenObligation as ci, proofDigest as cn, createProjection as cr, isDeterministicCheck as ct, resolveInstalledHostLock as d, itemHoldsExecutionAuthority as di, proofHostSurfacesOf as dn, proposeRebindOutcome as dr, canonicalArgvFromCommand as dt, hasOrderedCoordination as ei, PROOF_PROTOCOL_VERSION as en, certifiableOpenItems as er, releaseContractFor as et, verifyComposedHostLockDump as f, kindOfScope as fi, proofOperationMatches as fn, proposeRebindV042 as fr, isRunExecutable as ft, snapshotSessionEvents as g, namedActions as gi, sessionQuery as gn, CONFIRM_LINE_PATTERN as gr, ACTIVE_HOST_COHORT_IDS as gt, SessionApiError as h, maskQuotedSpans as hi, scopeCoverageDigest as hn, replayRebindResult as hr, ACTIVE_HOST_COHORT_ID as ht, hostLockRowsFromComposedDump as i, introducesActionClause as ii, canonicalProjection as in, effectuateBoundary as ir, supersedeItem as it, lifecyclePhase as j, SEMANTIC_ACTIONS as ji, bindingSatisfies as jn, removalIsPartiallyKnown as jr, evaluateHostLock as jt, firstStepGuidance as k, CERTIFICATE_VERSION as ki, recoveryDigest as kn, partialFailureOf as kr, evaluateExternalWaitCapability as kt, readActiveHostGraph as l, isQuestionScopeNeedingReview as li, proofDigestV2 as ln, confirmRebind as lr, persistedToolResultStatus as lt, SESSION_EVENT_ENVELOPE_INVALID as m, maskCodeSpans as mi, requiredSubjectsOf as mn, rebindResponse as mr, parseShellCommand as mt, combineHostPolicy as n, interpretClause as ni, bindProofToProjection as nn, unitDescendantIds as nr, releasePreEffectDecision as nt, inspectTargetHostGraph as o, isExplanationScope as oi, createProofManifestV2 as on, qualifyBoundary as or, extractTextContent as ot, SESSION_API_UNSUPPORTED as p, legacyQuestionReadingIsInformational as pi, proofV2Rejection as pn, rebindAttemptKey as pr, parsePwshCommand as pt, RELEASE_OPERATION_SURFACES as q, validateManifest as qi, latestAssistantText as qn, actionVerbMatches as qr, authorityCaptureCounts as qt, hostLockContextFromComposedDump as r, interpretMessage as ri, bindProofV2ToProjection as rn, availableBoundaryQualifications as rr, reservationFor as rt, packageRowsFromActiveGraph as s, isInformationalFragment as si, proofCapabilityReport as sn, currentContractDigest as sr, extractToolSubject as st, HostProfileError as t, hasQuestionScope as ti, PROOF_PROTOCOL_VERSION_V2 as tn, certificateClosure as tr, releaseCoverage as tt, resolveActiveProfileHostLock as u, isRestatement as ui, proofEvidenceConstraints as un, proposeRebind as ur, withDurability as ut, GIT_COMMAND_TEMPLATES as v, qualificationOfClause as vi, validateProofManifest as vn, parseConfirmationMessage as vr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as vt, parseGitCommandManifest as w, statefulActionsOfScope as wi, MIN_RECOVERY_CHAR_BUDGET as wn, DEPENDENCY_FREE_ONLY_CONDITION as wr, HOST_CAPABILITY_PACKAGE_GROUPS as wt, createGitPrestateEnvelope as x, restatedContentOf as xi, CLEANUP_CONDITION_RULE_COMPACT as xn, evidenceAvailabilityReason as xr, DEFAULT_HOST_LOCK as xt, commitIndexSnapshotDigest as y, questionHeadsClause as yi, validateProofManifestV2 as yn, capabilityRemedyPhrase as yr, ALPHA2_HOST_PACKAGES as yt, PROTOCOL_V4_NOTICE as z, requestedIdentityKey as zi, assessmentOutcomePredicate as zn, isInformationalMessage as zr, compareHostVersions as zt };
+export { normalizeReleaseContract as $, sanitizeClauseText as $i, v6TestPredicate as $n, clauseIsProtected as $r, PROOF_KINDS_V2 as $t, firstStepGuidance as A, BOUNDED_ARTIFACT_TYPES as Ai, recoveryDigest as An, capabilityFactOf as Ar, evaluateExternalWaitCapability as At, PROTOCOL_V4_NOTICE as B, isStatefulAction as Bi, assessmentOutcomePredicate as Bn, extractOperation as Br, compareHostVersions as Bt, executeRevalidatedGitEffect as C, restatedContentOf as Ci, CLEANUP_CONDITION_RULE_SHORT as Cn, evidenceAvailabilityReason as Cr, EXPECTED_HOST_PACKAGES as Ct, verifiedLinearCommitReadback as D, verbIsNegated as Di, cleanupConditionFor as Dn, actionHasCertificationPath as Dr, LEGACY_HOST_COHORTS as Dt, revalidateGitPrestate as E, statefulActionsOfScope as Ei, carriesCleanupCondition as En, DEPENDENCY_FREE_ONLY_CONDITION as Er, HOST_COHORTS as Et, sessionCoreSnapshot as F, STOP_PROTOCOL_VERSION as Fi, isVerifyingCapability as Fn, captureItem as Fr, selectHostCohort as Ft, legacyRecordsNeedingReview as G, semanticActionFromText as Gi, decisionBoundaryKey as Gn, classifyTaskIntent as Gr, RC015_HOST_PACKAGES as Gt, PROTOCOL_V6_NOTICE as H, requestedTargetAuthorizesMutation as Hi, currentActionBases as Hn, segmentClauses as Hr, parseHostVersion as Ht, projectCoreV2 as I, STOP_PROTOCOL_VERSION_V2 as Ii, CONTROL_RECORD_PREFIX as In, classifyClause as Ir, LATEST_SUPPORTED_HOST_VERSION as It, RELEASE_OPERATION_SURFACES as J, COMMAND_SURFACE_MANIFEST as Ji, latestAssistantText as Jn, LEGACY_QUALIFICATION as Jr, authorityCaptureCounts as Jt, rootLocatorFlavor as K, validateActionManifest as Ki, isRootPauseRequest as Kn, classifyUserInteraction as Kr, RC1_HOST_PACKAGES as Kt, CAPTURE_V042_NOTICE as L, SUPPORTED_EVIDENCE_ADAPTERS as Li, NO_PROGRESS_RECORD_PREFIX as Ln, environmentDefaultRepositoryTarget as Lr, MIN_SUPPORTED_HOST_VERSION as Lt, lifecyclePhase as M, CERTIFICATE_VERSION_V2 as Mi, bindingSatisfies as Mn, removalIsComplete as Mr, evaluateHostLock as Mt, previewFirstStepInjection as N, SEMANTIC_ACTIONS as Ni, evidenceCoverage as Nn, removalIsPartiallyKnown as Nr, evaluateToolSurfaceCapability as Nt, FIRST_STEP_GUIDANCE as O, ACTION_MANIFEST as Oi, closingHint as On, admissibleForRemoval as Or, bindExecutableIdentity as Ot, projectSessionCoreV2 as P, STATEFUL_ACTIONS as Pi, evidenceMatchesItem as Pn, captureClause as Pr, hostVersionFromPackages as Pt, inFlightReservation as Q, normalizeClause as Qi, testOutcomePredicate as Qn, clauseIsGoverned as Qr, PROOF_KINDS as Qt, DEFAULT_DELEGATION_TOOL_NAMES as R, actionCompatible as Ri, NO_PROGRESS_TURNS_BEFORE_STOP as Rn, extractArtifactPaths as Rr, SUPPORTED_HOST_RANGE as Rt, createGitPrestateEnvelope as S, reportingHeadGoverns as Si, CLEANUP_CONDITION_RULE_COMPACT as Sn, deriveItemDiagnosis as Sr, DEFAULT_HOST_LOCK as St, parseGitCommandManifest as T, splitTextFragments as Ti, MIN_RECOVERY_CHAR_BUDGET as Tn, relevantEvidence as Tr, HOST_CAPABILITY_PACKAGE_GROUPS as Tt, applyUpgradeEligibility as U, requestedTargetMatchesResolved as Ui, decideTurnBoundary as Un, canonicalRegistryBase as Ur, satisfiesSupportedHostRange as Ut, PROTOCOL_V5_NOTICE as V, requestedIdentityKey as Vi, classifyCompletionClaim as Vn, isInformationalMessage as Vr, evaluateMinimumHostVersion as Vt, deriveProjection as W, semanticActionFromCommand as Wi, decideTurnStopping as Wn, npmEscapedPackageName as Wr, RC015_RC2_HOST_PACKAGES as Wt, RELEASE_SETTLEMENT_PREFIX as X, canonicalizePath as Xi, observeAssistantOutcome as Xn, clarifiedSpanOf as Xr, certifyCheckpoint as Xt, RELEASE_RESERVATION_PREFIX as Y, validateManifest as Yi, latestRootInstruction as Yn, actionVerbMatches as Yr, segmentAuthorityBlocks as Yt, contractById as Z, digestStrings as Zi, progressFingerprint as Zn, clauseAsksOwnQuestion as Zr, PROOF_CAPABILITY_MATRIX as Zt, snapshotSessionEvents as _, maskQuotedSpans as _i, sessionQuery as _n, replayRebindResult as _r, ACTIVE_HOST_COHORT_IDS as _t, hostLockRowsFromComposedDump as a, interpretMessage as ai, canonicalProjection as an, availableBoundaryQualifications as ar, supersedeItem as at, commitIndexSnapshotDigest as b, qualificationOfClause as bi, validateProofManifestV2 as bn, parseConfirmationMessage as br, ALPHA2_HOST_PACKAGES as bt, packageRowsFromActiveGraph as c, isExplanationScope as ci, proofCapabilityReport as cn, qualifyBoundary as cr, extractToolSubject as ct, resolveActiveProfileHostLock as d, isQuestionScopeNeedingReview as di, proofEvidenceConstraints as dn, confirmRebind as dr, withDurability as dt, sanitizeUrl as ea, explanationHasActionResidue as ei, PROOF_MANIFEST_DOMAIN_V2 as en, goalCompletionDenial as er, readbackSettlesContract as et, resolveInstalledHostLock as f, isRestatement as fi, proofHostSurfacesOf as fn, proposeRebind as fr, canonicalArgvFromCommand as ft, SessionApiError as g, maskCodeSpans as gi, scopeCoverageDigest as gn, rebindResponse as gr, ACTIVE_HOST_COHORT_ID as gt, SESSION_EVENT_ENVELOPE_INVALID as h, legacyQuestionReadingIsInformational as hi, requiredSubjectsOf as hn, rebindAttemptKey as hr, parseShellCommand as ht, hostLockContextFromComposedDump as i, interpretClause as ii, bindProofV2ToProjection as in, unitDescendantIds as ir, reservationFor as it, firstStepGuidanceV6 as j, CERTIFICATE_VERSION as ji, renderRecoveryPacket as jn, partialFailureOf as jr, evaluateHostCapability as jt, claimedBatchHasRealRootInput as k, ACTION_MANIFEST_VERSION as ki, openItems as kn, capabilityConsequence as kr, bindLiveGoalCapability as kt, packageRowsFromPnpmLock as l, isInformationalFragment as li, proofDigest as ln, currentContractDigest as lr, isDeterministicCheck as lt, SESSION_API_UNSUPPORTED as m, kindOfScope as mi, proofV2Rejection as mn, proposeRebindV042 as mr, parsePwshCommand as mt, auditedForegroundRenderers as n, hasOrderedCoordination as ni, PROOF_PROTOCOL_VERSION_V2 as nn, certifiableOpenItems as nr, releaseCoverage as nt, injectActiveProfileHostLock as o, introducesActionClause as oi, createProofManifest as on, effectuateBoundary as or, evidenceFromPersistedToolResult as ot, verifyComposedHostLockDump as p, itemHoldsExecutionAuthority as pi, proofOperationMatches as pn, proposeRebindOutcome as pr, isRunExecutable as pt, RELEASE_OPERATIONS as q, validateActionTarget as qi, isWholeTaskCompletionClaim as qn, GRANTED_QUALIFICATION as qr, ALPHA3_HOST_PACKAGES as qt, combineHostPolicy as r, hasQuestionScope as ri, bindProofToProjection as rn, certificateClosure as rr, releasePreEffectDecision as rt, inspectTargetHostGraph as s, isExecutableItem as si, createProofManifestV2 as sn, isCurrentAcceptedBoundary as sr, extractTextContent as st, HostProfileError as t, sha256 as ta, governedClauseRestrictsExecution as ti, PROOF_PROTOCOL_VERSION as tn, hasCurrentCertificate as tr, releaseContractFor as tt, readActiveHostGraph as u, isOpenObligation as ui, proofDigestV2 as un, createProjection as ur, persistedToolResultStatus as ut, GIT_COMMAND_MANIFEST_IDS as v, namedActions as vi, sessionQueryV2 as vn, CONFIRM_LINE_PATTERN as vr, ACTIVE_HOST_LAUNCHER_VERSION as vt, gitCommandMatchesTarget as w, semanticActionOfScope as wi, DEFAULT_RECOVERY_CHAR_BUDGET as wn, itemDiagnosis as wr, GOAL_HOST_PACKAGES as wt, commitTreeSnapshotDigest as x, questionHeadsClause as xi, CLEANUP_CONDITION_RULE as xn, capabilityRemedyPhrase as xr, BASE_HOST_PACKAGES as xt, GIT_COMMAND_TEMPLATES as y, opensWithDirective as yi, validateProofManifest as yn, isFrozenV042RebindResponse as yr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as yt, PROTOCOL_V3_NOTICE as z, boundedArtifactChoiceMatches as zi, assessmentAction as zn, extractMethod as zr, SUPPORTED_HOST_VERSIONS as zt };

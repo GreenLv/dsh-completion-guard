@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Changes
 
-- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `f0196b690c091efd8bca8e17e793c4b3e74dabc3`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
+- Add the core/v2 consumer and a source-mirror pin to Codex Context Guard commit `7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a`, including exact fixture and runtime JSON hashes. The historical v1 pin remains unchanged. The v6 session boundary separates new runtime behavior from historical v5 records.
 - Retire ordinary Guard action/evidence execution and use read-only file, Git and package-script readiness observers. An assessment may select stable existing inputs without requiring another edit; a root time or approval condition remains pending until separately satisfied. Native observations use a separate versioned digest domain; historical v3 encoders and certificates are preserved.
 - Preserve exact relative file and directory constraints through the root-time Session locator and canonical filesystem readback. Current v6 certificates bind that locator in version 4; opaque test or measurement targets keep their distinct identity.
 - Keep a sourced successful mutation of a forbidden file as a completion violation, even when the allowed edit also succeeds. A final-answer claim alone is not treated as a host mutation.
@@ -21,6 +21,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Keep a fronted workspace location and coordinated edit, test, readback, and final-answer requests as separate current obligations. A method phrase cannot silently close independent work. Creation still requires a trustworthy absent prestate, and the audited test/benchmark observer does not certify arbitrary package-script metrics.
 - One trusted final answer can now deliver multiple distinct information requirements in the same turn. Each requirement receives its own delivery fact while retaining the shared answer source; an earlier answer still cannot deliver a later request.
 - Root-scoped persistence, pause, cancellation and later resume now bind only requirements that already existed at the instruction’s durable sequence. A directly coordinated edit and its same-object tests can form a sourced repair closure; an unrelated test or explicit proof stays separate. A compound continuation instruction does not create a second generic business duty. Historical supersession remains replayable at its earlier watermark.
+- An explicit read-only observer method is a separate sourced obligation. It closes only on a matched persisted observer result for the same current file or test requirement; an old generic clause is not promoted by replay. A named foreground `npm test` or `pnpm test` can complete an ordinary run requirement without an unrequested Guard readiness call when the exact installed Host renderer bytes and terminal result are verified. A markerless completed result supports exit zero; text that resembles a nonzero exit marker cannot certify the numerical exit or an accurate failure report. A request to make tests pass remains distinct from a request to run and report them.
 
 ### Validation
 

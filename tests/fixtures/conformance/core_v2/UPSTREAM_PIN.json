@@ -5,9 +5,9 @@
   "upstream": {
     "product": "codex-context-guard",
     "repository": "https://github.com/GreenLv/codex-context-guard",
-    "canonical_commit": "f0196b690c091efd8bca8e17e793c4b3e74dabc3"
+    "canonical_commit": "7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a"
   },
-  "canonical_commit": "f0196b690c091efd8bca8e17e793c4b3e74dabc3",
+  "canonical_commit": "7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a",
   "mirrored_at": "2026-09-20",
   "legacy_v1_pin_path": "tests/fixtures/conformance/UPSTREAM_PIN.json",
   "files": [
@@ -46,13 +46,13 @@
       ]
     },
     {
-      "sha256": "1f59becb8494b0c798673561923f6ab0a13881d8f4a4f5cfd5720cf9ed801f80",
+      "sha256": "0b03a14760fc9e50de171efec70dc2277ea4e2542802f65caa8897926430abf5",
       "source_path": "docs/CORE_V2_WIRE.md",
       "role": "reference_identity",
       "mirrors": []
     },
     {
-      "sha256": "628976890274e64a25aca7fdbd7b36596bf796534666b08d3a3ceedf3710446d",
+      "sha256": "74af6a17bcb758818d7095453cc4c6b6a0e4ef977c338ea37928affd6db4d6a6",
       "source_path": "docs/CORE_V2_HOST_CAPABILITIES.md",
       "role": "reference_identity",
       "mirrors": []
@@ -81,13 +81,13 @@
       ]
     },
     {
-      "sha256": "f75503d982088e00513a684b35f9c6ff88d8a3fae2a3307578be81ecb2ba0368",
+      "sha256": "1c8f30b86e1bd691895c355fa2feab79d12c9f2cd57f316c790036baf4e30b90",
       "source_path": "tests/fixtures/conformance/core_v2/events.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/events.json",
-          "sha256": "f75503d982088e00513a684b35f9c6ff88d8a3fae2a3307578be81ecb2ba0368"
+          "sha256": "1c8f30b86e1bd691895c355fa2feab79d12c9f2cd57f316c790036baf4e30b90"
         }
       ]
     },

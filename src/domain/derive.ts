@@ -10,7 +10,7 @@ import { sessionRefDigest } from './digest.js'
 import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from './host-lock.js'
 import { hasCurrentCertificate } from './goal-gate.js'
 import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from './evidence.js'
-import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, type SemanticAction } from './protocol-manifest.js'
+import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
 import {
   interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans, qualificationOfClause, splitTextFragments,
 } from './semantics.js'
@@ -27,6 +27,7 @@ import {
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
 import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
+import { observerMethodEvidence } from './observer-method.js'
 import {
   normalizeReleaseContract, normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH,
   RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX, RELEASE_REVOCATION_PREFIX,
@@ -615,7 +616,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
     const visible = maskQuotedSpans(clause.body)
     const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(visible)
     const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible)
-      && (clause.paths.length === 1 || /\bread\s+it\s+back\b/iu.test(visible))
+      && (clause.paths.length === 1 || /\bread\s+(?:it|the\s+file)\s+back\b/iu.test(visible))
     if (!fileCheck && !fileRead) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive', executee: 'agent',
       authorityDisposition: 'executable_now', immediatelyExecutable: true,
@@ -627,7 +628,10 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
     // A report with a direct object and no external recipient is a requested
     // final answer. It is not another process effect, and its delivery cannot
     // be inferred from a tool result or the model's intent to answer.
-    if (!/^\s*(?:(?:and|then)\s+)?(?:报告|汇报|report\b)\s+\S/iu.test(visible)
+    const chinese = /^\s*(?:再|然后)?\s*([\p{Script=Han}]{0,2}(?:地)?)?(?:报告|汇报)\s*\S/iu.exec(visible)
+    const english = /^\s*(?:(?:and|then)\s+)?report\b\s+\S/iu.test(visible)
+    if ((!chinese && !english)
+      || (chinese?.[1] && clause.interpretation.authorityDisposition === 'executable_now')
       || /\b(?:to|via|by)\s+\S+/iu.test(visible)) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'informational', executee: 'unresolved',
       authorityDisposition: 'informational', immediatelyExecutable: false, fingerprint: `v6-report:${sha256(clause.text)}` } }
@@ -673,8 +677,16 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
       authorityDisposition: 'executable_now', immediatelyExecutable: true,
       qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `v6-package-script:${encodeURIComponent(script)}:${sha256(clause.text)}` } }
   }
+  const opensObserverMethod = (clause: ClauseSegment): boolean => {
+    if (clause.kind !== 'requirement' || ['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return false
+    const visible = maskQuotedSpans(clause.body).trim()
+    // A coordinated method has its own imperative and a named observer as
+    // its direct object. The preceding operation retains its own source span;
+    // quoted examples and negated method names cannot start this clause.
+    return /^(?:use|consult|invoke|call)\b\s+(?:(?:the|read-only)\s+)*`?(?:context_guard_observe_[a-z_]+|[a-z][a-z0-9_]*_observer)\b/iu.test(visible)
+  }
   // A comma or conjunction divides business outcomes only when the right
-  // side opens its own finite test, readback, package-script, or answer speech
+  // side opens its own finite test, readback, package-script, method, or answer speech
   // act. Splitting a noun list or quoted example would invent authority.
   const splitIndependent = (segment: ClauseSegment): ClauseSegment[] => {
     if (segment.kind !== 'requirement' || ['informational', 'prohibition', 'conditional_wait'].includes(segment.interpretation.authorityDisposition)) return [segment]
@@ -687,7 +699,10 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
       if (!leftText || !rightText) continue
       const left = segmentClauses(leftText)[0], right = segmentClauses(rightText)[0]
       if (!left || !right || ![left].every((part) => part.kind === 'requirement')) continue
-      if (!asTest(right, true) && !asFileReadback(right) && !asReport(right) && !asPackageScript(right)) continue
+      const observerMethod = opensObserverMethod(right)
+      if (!asTest(right, true) && !asFileReadback(right) && !asReport(right) && !asPackageScript(right)
+        && !(observerMethod && (left.interpretation.authorityDisposition === 'executable_now'
+          || asArtifactEdit(left) || asTest(left, true)))) continue
       return [...splitIndependent({ ...left, text: leftText }), ...splitIndependent({ ...right, text: rightText })]
     }
     return [segment]
@@ -894,6 +909,48 @@ function insertItems(
       && item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256
       && item.spans?.[0]?.partIndex === 0)
       .sort((a, b) => a.spans![0]!.start - b.spans![0]!.start)
+    // A named read-only observer is a method of the preceding root work, not
+    // a new generic business effect. Bind each named method only when its
+    // corresponding current obligation is unique within this immutable root.
+    // Quoted identifiers and arbitrary "use X" clauses retain their original
+    // interpretation; no legacy record is upgraded by this V6 capture rule.
+    for (const method of fresh) {
+      const text = maskQuotedSpans(method.normalizedText).trim()
+      // The observer must be the object of a direct method instruction. A
+      // bounded locative/purpose preface may precede the imperative; a whole
+      // quotation, negation, report, or unrelated business "use" is not one.
+      const directMethod = /^(?:(?:for\s+[^,，]{1,100}[,，]\s*)?(?:use|consult|invoke|call)\b|(?:为|针对|对)[^,，。]{1,80}(?:调用|使用))/iu.test(text)
+      if (!directMethod || method.kind !== 'requirement'
+        || ['informational', 'prohibition', 'conditional_wait'].includes(method.authorityDisposition ?? '')) continue
+      const explicit = [...text.matchAll(/\bcontext_guard_observe_(?:file|test_readiness)\b/giu)]
+        .map((match) => match[0]!.toLowerCase())
+      const namedObserverIds = [...text.matchAll(/\b(?:context_guard_observe_[a-z_]+|[a-z][a-z0-9_]*_observer)\b/giu)]
+        .map((match) => match[0]!.toLowerCase())
+      if (namedObserverIds.some((name) => !['context_guard_observe_file', 'context_guard_observe_test_readiness'].includes(name))) continue
+      // If capture kept a coordinated business effect in this same item, the
+      // observer is only one part of it. Preserve the whole unresolved item;
+      // never replace a delete/publish/edit tail with a passed method fact.
+      const coordinatedEffects = [...text.matchAll(/(?:\band\b|\bthen\b|并且|并|然后|再)\s+([^,，;；。.!?？]+)/giu)]
+        .some((match) => !/^\s*`?context_guard_observe_(?:file|test_readiness)\b/iu.test(match[1]!)
+          || extractOperation(match[1]!) !== undefined
+          || semanticActionFromText(match[1]!) !== 'generic_run')
+      if (coordinatedEffects) continue
+      const tools = [...new Set(explicit.length ? explicit : /\btest\s+readiness\s+observer\b/iu.test(text)
+        ? ['context_guard_observe_test_readiness'] : [])] as NonNullable<GuardItem['observerMethod']>['tools']
+      if (!tools.length || (!explicit.length && !/\b(?:observer|tools?)\b/iu.test(text))) continue
+      const earlier = fresh.filter((item) => item.spans![0]!.start < method.spans![0]!.start
+        && item.authorityDisposition === 'executable_now' && item.status !== 'superseded')
+      const targetIds = tools.map((tool) => {
+        const candidates = tool === 'context_guard_observe_test_readiness'
+          ? earlier.filter((item) => item.semanticAction === 'test')
+          : earlier.filter((item) => item.semanticAction === 'verify' && /\bread\b|文件|核对/iu.test(item.normalizedText))
+        const fallback = tool === 'context_guard_observe_file' && candidates.length === 0
+          ? earlier.filter((item) => item.semanticAction === 'modify') : candidates
+        return fallback.length === 1 ? fallback[0]!.id : undefined
+      })
+      if (targetIds.some((id) => id === undefined)) continue
+      method.observerMethod = { tools, targetItemIds: targetIds as string[] }
+    }
     let parent: GuardItem | undefined
     for (const item of fresh) {
       const own = item.spans![0]!
@@ -1438,6 +1495,7 @@ export function deriveProjection(
   projection.policy = config.policy ?? 'standard'
   if (scope.sessionHeader) projection.sessionRefDigest = sessionRefDigest(scope.sessionHeader)
   projection.hostLockDigest = hostLock.digest
+  projection.auditedForegroundRenderers = hostLock.auditedForegroundRenderers
   projection.hostStatus = hostLock.status
   projection.hostReasonCode = hostLock.reasonCode
   projection.hostCohortId = hostLock.cohortId
@@ -2244,6 +2302,15 @@ export function deriveProjection(
   }
   projection.enabled = enabled
   projection.epoch = epoch
+  // The original clause remains visible until every requested, independently
+  // sourced observer has returned. This is recomputed from persisted Host
+  // events on reload; no text-only interpretation or old generic item passes.
+  for (const item of projection.items.values()) {
+    if (item.status !== 'pending' || !item.observerMethod?.tools.length) continue
+    if (item.observerMethod.tools.every((_, index) => observerMethodEvidence(projection, sourceEvents, item, index))) {
+      item.status = 'passed'
+    }
+  }
   refreshRootLocatorContext(projection, sourceEvents, scope, sourceEvents.at(-1)?.seq ?? 0)
   // 0.6.3 K4: the upgrade eligibility check runs BEFORE any terminal filtering,
   // so a record 0.6.2 closed as `answered` is still re-read and, when its own

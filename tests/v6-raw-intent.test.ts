@@ -49,8 +49,8 @@ describe('v6 current speech acts through the production Session and Stop path', 
   })
 
   it.each([
-    ['修正解析器并执行针对这次改动的回归测试。', 'regression_test_result'],
-    ['完成修复，并在本轮跑完对应的测试。', 'test_passed'],
+    ['修正解析器并执行针对这次改动的回归测试。', 'test_run_completed'],
+    ['完成修复，并在本轮跑完对应的测试。', 'test_run_completed'],
   ])('keeps a correction and its specifically requested test distinct: %s', async (root, predicate) => {
     const result = await replayRawV2({ root, final: '修复已完成，测试尚未运行。' })
     const reqs = rows(row(result.post_turn_core_snapshot).requirements)

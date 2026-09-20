@@ -1,4 +1,5 @@
 import { createRebindTool } from './tools/rebind.js'
+import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -64,7 +65,7 @@ import {
 } from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
-import { readActiveHostGraph } from './domain/host-resolver.js'
+import { auditedForegroundRenderers, readActiveHostGraph } from './domain/host-resolver.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
 import { resolveAuditedRef } from './tools/evidence.js'
 import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -730,7 +731,9 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
     })
     if (actual.status !== 'supported') return actual
     if (actual.digest !== expected.digest) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
-    return actual
+    const audited = auditedForegroundRenderers(config.hostLockRuntimeRoot, config.hostLockProfileRoot)
+    return audited.length ? { ...actual, auditedForegroundRenderers: audited,
+      digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${actual.digest}\0${audited.join(',')}`).digest('hex') } : actual
   } catch {
     return { ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_missing' }
   }

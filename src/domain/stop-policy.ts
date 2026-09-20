@@ -212,6 +212,14 @@ export function testOutcomePredicate(text: string): string {
     : /(?:focused\s+tests?|针对[^，,。.!?？]{0,32}?的?\s*测试)/iu.test(text) ? 'focused_test_result' : 'test_passed'
 }
 
+/** v6 root outcome intent: running and reporting a named test is distinct
+ * from an explicit request to make it pass. A failed run can finish the first
+ * duty, while the second remains unmet; neither reading grants repair scope. */
+export function v6TestPredicate(text: string): 'test_run_completed' | 'test_passed' {
+  const explicitPass = /(?:\b(?:make|ensure|get)\s+(?:the\s+)?(?:tests?|suite)\s+(?:to\s+)?pass\b|\b(?:tests?|suite)\s+(?:must|should|need(?:s)?\s+to)\s+pass\b|\bpass\s+(?:the\s+)?(?:tests?|suite)\b|测试(?:必须|需要|应当)?通过|测试全绿|修(?:复|好)[^。.!?？]{0,24}测试)/iu
+  return explicitPass.test(text) ? 'test_passed' : 'test_run_completed'
+}
+
 export function assessmentOutcomePredicate(text: string): string {
   return /(?:内存|memory)/iu.test(text) ? 'current_memory_measurement_result'
     : /(?:延迟|时延|latency)/iu.test(text) ? 'latency_measurement_result' : 'verification_passed'
@@ -249,11 +257,19 @@ export function currentActionBases(projection: GuardProjection, enforceCore = tr
     const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch
       && fact.toolResultSeq >= sourceSeq && fact.semanticAction === action && fact.evidenceRole === 'effect'
       && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0]
-    const alreadyRan = latestRun?.outcome === 'success' && latestRun.parseStatus === 'supported'
-      && latestRun.processFacts?.outcome === 'success' && latestRun.processFacts.operationAttribution === 'single_operation'
+    const completedFailedRun = projection.boundaryProtocol === 6 && action === 'test'
+      && v6TestPredicate(item.normalizedText) === 'test_run_completed'
+      && latestRun?.outcome === 'failure' && latestRun.parseStatus === 'supported'
+      && latestRun.processFacts?.outcome === 'failure'
+      && latestRun.processFacts.outcomeReason === 'declared_exit_code'
+      && latestRun.processFacts.declaredExitCode !== 'unknown'
+      && latestRun.processFacts.operationAttribution === 'single_operation'
+    const alreadyRan = completedFailedRun || (latestRun?.outcome === 'success' && latestRun.parseStatus === 'supported'
+      && latestRun.processFacts?.outcome === 'success' && latestRun.processFacts.operationAttribution === 'single_operation')
     if (alreadyRan) continue
     basis.push({ itemId: item.id, action, sourceMessageId: item.sourceMessageId,
-      unmetPredicate: action === 'test' ? testOutcomePredicate(item.normalizedText) : assessmentOutcomePredicate(item.normalizedText),
+      unmetPredicate: action === 'test' ? projection.boundaryProtocol === 6 ? v6TestPredicate(item.normalizedText)
+        : testOutcomePredicate(item.normalizedText) : assessmentOutcomePredicate(item.normalizedText),
       owner: 'assistant', readiness: 'ready', asOf: projection.lastObservedSourceSeq })
   }
   if (projection.boundaryProtocol === 6 && enforceCore) {

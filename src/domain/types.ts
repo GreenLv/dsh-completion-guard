@@ -213,6 +213,12 @@ export interface GuardItem {
   legacyFlags?: Array<'legacy_generic_run' | 'legacy_authority_unclassified'>
   /** v0.5 intent layer: inquiries keep the obligation but are not machine certifiable. */
   taskKind?: 'inquiry' | 'action' | 'context'
+  /** V6 root-sourced read-only method, bound to the unique earlier obligation
+   * in this same root. A tool name alone is never an execution authority. */
+  observerMethod?: {
+    tools: Array<'context_guard_observe_file' | 'context_guard_observe_test_readiness'>
+    targetItemIds: string[]
+  }
   /**
    * v0.5.1 interpretation layer, derived from the same source bytes as
    * {@link normalizedText} by `domain/semantics.ts`. These fields record what
@@ -579,6 +585,9 @@ export interface GuardProjection {
   approvals: Array<{ id: string; seq: number; toolName?: string; outcome: 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable' }>
   sessionRefDigest: string
   hostLockDigest: string
+  /** Runtime-only active renderer byte attestation. Never inferred from text
+   * or a package version, and rebound on every projection/reload. */
+  auditedForegroundRenderers?: Array<'bash' | 'pwsh'>
   hostStatus: HostStatus
   hostReasonCode?: string
   /** Readback of the audited cohort bound into `hostLockDigest`. */

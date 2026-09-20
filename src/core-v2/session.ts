@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { posix } from 'node:path'
 import type { GuardProjection, DerivedEnvelope, GuardItem } from '../domain/types.js'
-import { assessmentAction, assessmentOutcomePredicate, currentActionBases, testOutcomePredicate } from '../domain/stop-policy.js'
+import { assessmentAction, assessmentOutcomePredicate, currentActionBases, v6TestPredicate } from '../domain/stop-policy.js'
 import { actionClassScopeSpeech, controlSpeech, currentUnitScopeSpeech, projectCoreV2, rootControlCandidateSpans } from './project.js'
 import { persistedToolResultStatus } from '../domain/evidence.js'
+import { observerMethodEvidence } from '../domain/observer-method.js'
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
 // A persisted root and host call keep their own path syntax. Using the running
@@ -313,6 +314,61 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const span = (start: number, end: number) => ({ source_id: `root:${root.seq}`, start, end, sha256: digest })
     const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq))
     if (!itemSpan) continue
+    if (item.observerMethod && item.rawTextSha256 === hash(text) && item.authority === 'root_instruction') {
+      // Each requested observer has its own sourced predicate. One readiness
+      // result cannot silently stand in for the file readback method (or vice
+      // versa), and a later tool call never fills an earlier Stop watermark.
+      const methodSource = { source_id: `root:${root.seq}`, start: itemSpan.start, end: itemSpan.end, sha256: hash(text) }
+      const methodConstraint = Buffer.from(text, 'utf8').subarray(itemSpan.start, itemSpan.end).toString('utf8')
+      for (const [index, tool] of item.observerMethod.tools.entries()) {
+        const related = projection.items.get(item.observerMethod.targetItemIds[index]!)
+        if (!related || related.rawTextSha256 !== item.rawTextSha256 || related.unitId !== item.unitId
+          || sourceSeq(related) !== root.seq) continue
+        const target = targetOf(related)
+        if (!target) continue
+        const requirementId = `${item.id}:observer:${index + 1}`
+        const fact = observerMethodEvidence(projection, events, item, index)
+        const pair = fact ? sourceByCall.get(fact.callId) : undefined
+        const subjectKind = tool === 'context_guard_observe_file' ? 'filesystem' : 'opaque'
+        const relatedSpan = related.spans?.[0]
+        const targetBytes = Buffer.from(target, 'utf8')
+        const targetAt = relatedSpan ? Buffer.from(text, 'utf8').subarray(relatedSpan.start, relatedSpan.end).indexOf(targetBytes) : -1
+        // A literal target in the earlier root duty is already an exact root
+        // constraint. A method has no power to choose another target; without
+        // a literal, the actual Host selection must supply the work-unit choice.
+        const literalTarget = targetAt >= 0 && relatedSpan !== undefined
+        const targetSource = literalTarget ? { source_id: `root:${root.seq}`,
+          start: relatedSpan.start + targetAt, end: relatedSpan.start + targetAt + targetBytes.length, sha256: hash(text) } : methodSource
+        requirements.push({ id: requirementId, unit, revision: itemRevision, seq: root.seq, source: methodSource,
+          kind: 'execution', action: tool, target, predicate: 'observer_method_completed', scope_sha256: hash(text),
+          required: true, status: 'pending', parent_id: null, evidence_kind: 'action_event', condition_ids: [],
+          target_origin: { root_constraint: literalTarget ? target : methodConstraint, root_constraint_source: targetSource,
+            implementation_choice: literalTarget || fact ? target : null, host_selection: literalTarget || fact ? target : null,
+            resolved: target, observed: literalTarget || fact ? target : null, constraint_kind: literalTarget ? 'exact' : 'work_unit', subject_kind: subjectKind,
+            selection_source_id: fact ? `call:${fact.callId}` : null } })
+        if (!fact || !pair) continue
+        const callId = `call:${fact.callId}`, resultId = `result:${fact.callId}`
+        if (!sources.some((source) => source.id === callId)) {
+          const callBytes = String(row(pair.call.data).arguments ?? '')
+          const resultBytes = Array.isArray(row(row(pair.result.data).message).content)
+            ? (row(row(pair.result.data).message).content as unknown[]).filter((part) => row(part).type === 'text')
+              .map((part) => String(row(part).text ?? '')).join('\n') : ''
+          const callTurn = String(row(pair.call.data).turn ?? turn)
+          sources.push({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: itemRevision,
+            sha256: hash(callBytes), byte_length: Buffer.byteLength(callBytes, 'utf8'), text: null,
+            call_id: fact.callId, turn: callTurn, target, target_kind: subjectKind,
+            origin_root_source_id: `root:${root.seq}` })
+          sources.push({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: itemRevision,
+            sha256: hash(resultBytes), byte_length: Buffer.byteLength(resultBytes, 'utf8'), text: null,
+            call_id: fact.callId, turn: String(row(pair.result.data).turn ?? callTurn) })
+        }
+        facts.push({ id: `${fact.id}:observer:${item.id}:${index + 1}`, seq: pair.result.seq, unit,
+          revision: itemRevision, source_id: resultId, call_source_id: callId, kind: 'action_event', target,
+          predicate: 'observer_method_completed', outcome: 'success', operation_id: null,
+          requirement_id: requirementId, condition_id: null, invalidates: [] })
+      }
+      continue
+    }
     // The legacy clause capture can split a single v6 root control into
     // generic fragments (for example, either side of its internal comma).
     // Preserve their original coverage, but never project those fragments as
@@ -332,6 +388,13 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const at = atWithin >= 0 ? itemSpan.start + atWithin : -1
     const ownText = raw.subarray(itemSpan.start, itemSpan.end).toString('utf8')
     const fileReadback = item.interpretationFingerprint?.startsWith('v6-file-readback:') === true
+    const anaphoricReadback = fileReadback && /\bread\s+(?:it|the\s+file)\s+back\b/iu.test(ownText)
+    const readbackAntecedents = anaphoricReadback ? currentItems.filter((candidate) =>
+      candidate.semanticAction === 'modify' && candidate.authorityDisposition === 'executable_now'
+      && sourceSeq(candidate) === root.seq && typeof candidate.requestedTarget?.artifact_id === 'string'
+      && (candidate.spans?.[0]?.end ?? Infinity) <= itemSpan.start) : []
+    const readbackReferent = readbackAntecedents.length === 1
+      ? readbackAntecedents[0]!.requestedTarget!.artifact_id : undefined
     // A prohibition's own source stays on the forbidden speech act. A single
     // earlier context mention can supply its file referent through a separate
     // root path span; competing mentions never become an invented identity.
@@ -372,6 +435,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) =>
       fact.evidenceRole === 'state' && fact.toolName === 'context_guard_observe_file' && fact.outcome === 'success'
       && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq
+      && (!anaphoricReadback || (typeof readbackReferent === 'string' && fact.subjects[0] === readbackReferent))
       && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId
         && effect.semanticAction === 'modify' && effect.evidenceRole === 'effect' && effect.outcome === 'success'
         && effect.subjects.includes(fact.subjects[0]!) && effect.toolResultSeq < fact.toolResultSeq)) : []
@@ -400,7 +464,30 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === 'string'
         && fact.subjects.includes(item.requestedTarget.scope)
     }) : undefined
-    const selectedScope = selectedReadiness && typeof item.requestedTarget?.scope === 'string' ? item.requestedTarget.scope : undefined
+    // A plain named npm/pnpm test does not require the assistant to call a
+    // Guard readiness tool. The exact foreground Host invocation may select
+    // this root's work-unit target, but only under the independently checked
+    // renderer byte identity and a matched terminal result.
+    const namedTest = item.semanticAction === 'test' ? /\b((?:npm|pnpm))\s+test\b/iu.exec(item.normalizedText) : null
+    const isDirectTestFact = (fact: typeof projection.evidence extends Map<string, infer T> ? T : never): boolean => {
+      if (!namedTest || guarded) return false
+      if (fact.semanticAction !== 'test' || fact.evidenceRole !== 'effect' || fact.parseStatus !== 'supported'
+        || fact.epoch !== projection.epoch || !['bash','pwsh'].includes(fact.toolName)
+        || !projection.auditedForegroundRenderers?.includes(fact.toolName as 'bash' | 'pwsh')
+        || fact.processFacts?.operationAttribution !== 'single_operation') return false
+      const pair = sourceByCall.get(fact.callId)
+      if (!pair || pair.call.seq <= root.seq || pair.result.seq !== fact.toolResultSeq
+        || persistedToolResultStatus(pair.result.data, fact.callId) !== 'clean') return false
+      let args: Record<string, unknown> = {}
+      try { args = row(JSON.parse(String(row(pair.call.data).arguments ?? ''))) } catch { return false }
+      const expected = `${namedTest[1]!.toLowerCase()} test`
+      return String(args.command ?? '').trim() === expected && args.run_in_background !== true
+        && typeof args.workdir === 'string' && fact.subjects.length === 1
+        && fact.subjects[0] === args.workdir && fact.subjects[0] === item.requestedTarget?.scope
+    }
+    const selectedDirectTest = namedTest && !guarded ? [...projection.evidence.values()]
+      .filter(isDirectTestFact).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : undefined
+    const selectedScope = (selectedReadiness || selectedDirectTest) && typeof item.requestedTarget?.scope === 'string' ? item.requestedTarget.scope : undefined
     const target = forbiddenFile?.path ?? selectedScope ?? selectedEdit?.subjects[0] ?? selectedReadback?.subjects[0] ?? (relativeLiteral && named ? named : at >= 0 && named ? named : trimmed)
     if (!target) continue
     const knownForbiddenEffect = forbiddenFile && [...projection.evidence.values()].some((fact) =>
@@ -433,7 +520,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const requirementSource = span(itemSpan.start, itemSpan.end)
     const predicate = forbiddenFile ? 'no_mutation' : item.taskKind === 'context' ? 'context_recorded'
       : kind === 'information' ? 'answer_delivered'
-      : item.semanticAction === 'test' ? testOutcomePredicate(item.normalizedText)
+      : item.semanticAction === 'test' ? v6TestPredicate(item.normalizedText)
       : fileReadback ? 'file_content_checked'
       : item.semanticAction === 'verify' ? assessmentOutcomePredicate(item.normalizedText)
       : item.semanticAction === 'modify' ? 'file_modified'
@@ -477,7 +564,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         ...((forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? {
           resolved_constraint: portableResolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral!),
         } : {}),
-        selection_source_id: kind === 'constraint' ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}`
+        selection_source_id: kind === 'constraint' ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedDirectTest ? `call:${selectedDirectTest.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}`
           : relativeLiteral ? (() => { const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === 'modify'
             && entry.evidenceRole === 'effect' && entry.outcome === 'success' && entry.subjects.includes(target) && sourceByCall.has(entry.callId))
             return fact ? `call:${fact.callId}` : null })() : null } })
@@ -488,6 +575,39 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         const deliveredText = Array.isArray(row(row(delivery.data).message).content)
           ? (row(row(delivery.data).message).content as unknown[]).filter((part) => row(part).type === 'text')
             .map((part) => String(row(part).text ?? '')).join('\n') : ''
+        // A request to report the test's *actual result* is not discharged by
+        // any final prose. Bind the report to this root's one named test and
+        // to that test's latest attributed Host terminal result. An optional
+        // suggestion to repair after failure cannot extend the root scope.
+        const isTestReport = /\b(?:report|summari[sz]e)\b[^。.!?？]{0,80}\b(?:result|outcome)\b|(?:报告|汇报|说明)[^。.!?？]{0,80}(?:结果|运行情况)/iu.test(item.normalizedText)
+        const rootTests = currentItems.filter((candidate) => sourceSeq(candidate) === root.seq && candidate.semanticAction === 'test')
+        const reportTest = isTestReport && rootTests.length === 1 ? rootTests[0] : undefined
+        const expectedCommand = reportTest ? /\b(npm|pnpm)\s+test\b/iu.exec(reportTest.normalizedText)?.[0]?.toLowerCase() : undefined
+        const run = expectedCommand ? [...projection.evidence.values()].filter((entry) => {
+          const pair = sourceByCall.get(entry.callId)
+          if (!pair || pair.call.seq <= root.seq || pair.result.seq >= delivery.seq
+            || entry.semanticAction !== 'test' || entry.evidenceRole !== 'effect' || entry.parseStatus !== 'supported'
+            || entry.processFacts?.operationAttribution !== 'single_operation'
+            || !projection.auditedForegroundRenderers?.includes(entry.toolName as 'bash' | 'pwsh')
+            || persistedToolResultStatus(pair.result.data, entry.callId) !== 'clean'
+            || !entry.subjects.includes(String(reportTest?.requestedTarget?.scope ?? ''))) return false
+          let args: Record<string, unknown> = {}
+          try { args = row(JSON.parse(String(row(pair.call.data).arguments ?? ''))) } catch { return false }
+          return String(args.command ?? '').trim() === expectedCommand && args.run_in_background !== true
+        }).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : undefined
+        // The audited renderer proves a complete markerless foreground result
+        // is exit zero. A nonzero tail marker is text in the persisted Host
+        // message and can be imitated by command stdout, so it cannot certify
+        // the exact failing exit or an accurate failure report by itself.
+        const terminalZero = run?.processFacts?.outcome === 'success'
+          && run.processFacts.outcomeReason === 'unmarked_renderer_success'
+        const conflictingStatus = /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败)|(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*[1-9]\d*)/iu.test(deliveredText)
+        const numericReport = terminalZero
+          && /(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*0(?!\d)/iu.test(deliveredText)
+        const statusReport = terminalZero
+          ? /(?:test(?:s)?\s+(?:passed|succeeded)|测试(?:已)?通过|测试成功)/iu.test(deliveredText)
+          : false
+        if (reportTest && (conflictingStatus || !numericReport && !statusReport)) continue
         if (!sources.some((source) => source.id === deliveryId)) sources.push({ id: deliveryId, seq: delivery.seq, kind: 'final_delivery', unit, revision: itemRevision,
           sha256: hash(deliveredText), byte_length: Buffer.byteLength(deliveredText, 'utf8'), text: null, call_id: null, turn })
         // One final message may satisfy several separate information items.
@@ -526,7 +646,10 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         && pair.call.seq <= root.seq && pair.result.seq >= root.seq
       if (!pair || pair.result.seq !== evidence.toolResultSeq || (pair.call.seq <= root.seq && !crossesNewConstraint)) continue
       const hostResultStatus = persistedToolResultStatus(pair.result.data, evidence.callId)
-      const outcome = hostResultStatus === 'failure' || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
+      const untrustedDirectTest = item.semanticAction === 'test' && selectedDirectTest && !selectedReadiness
+        && evidence.evidenceRole === 'effect' && !isDirectTestFact(evidence)
+      const outcome = untrustedDirectTest ? 'unknown'
+        : hostResultStatus === 'failure' || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
         : evidence.outcome !== 'success' || evidence.processFacts?.outcome === 'unknown'
           || hostResultStatus === 'unknown'
           || (evidence.evidenceRole === 'effect' && evidence.processFacts && evidence.processFacts.operationAttribution !== 'single_operation')

@@ -330,6 +330,10 @@ export interface HostCapabilityEvaluation {
 export interface HostLockEvaluation {
   status: HostLockStatus
   digest: string
+  /** Read-only byte attestation of the active foreground shell renderer and
+   * its shared terminal decoder. Set only by production active-graph readback;
+   * the package version/SRI graph alone does not establish renderer behavior. */
+  auditedForegroundRenderers?: Array<'bash' | 'pwsh'>
   goalAvailable: boolean
   reasonCode?:
     | 'host_lock_migration_required'
