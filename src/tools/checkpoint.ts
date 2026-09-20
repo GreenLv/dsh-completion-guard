@@ -357,7 +357,8 @@ export function createCheckpointTool(
             ...(sourced ? { source_item_id: sourced.item.id, revision: sourced.item.revision,
               kind: sourced.item.kind, text: sourced.item.normalizedText } : {}),
             ...(sourced?.origin ? { source_start: sourced.origin.sourceStart, source_end: sourced.origin.sourceEnd,
-              semantic_action: sourced.origin.action, target: sourced.origin.target } : {}),
+              semantic_action: sourced.origin.action, target: sourced.origin.target }
+              : sourced?.item.semanticAction ? { semantic_action: sourced.item.semanticAction } : {}),
             next_step: 'Answer this sourced requirement using the current Host observation or final delivery; ordinary Guard bindings are not required.',
           }
         })

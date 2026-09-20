@@ -197,6 +197,10 @@ function checkpointPage(p, query, full) {
 			id: String(row.id ?? row.item_id).slice(0, 128),
 			reason_code: row.reason_code,
 			certifiable: row.certifiable,
+			source_item_id: row.source_item_id,
+			revision: row.revision,
+			kind: row.kind,
+			semantic_action: row.semantic_action,
 			next_step: typeof row.next_step === "string" ? row.next_step.slice(0, 240) : void 0,
 			adapter_disposition: row.adapter_disposition,
 			...row.binding_template !== void 0 ? { binding_template: row.binding_template } : {},
@@ -733,7 +737,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 							source_end: sourced.origin.sourceEnd,
 							semantic_action: sourced.origin.action,
 							target: sourced.origin.target
-						} : {},
+						} : sourced?.item.semanticAction ? { semantic_action: sourced.item.semanticAction } : {},
 						next_step: "Answer this sourced requirement using the current Host observation or final delivery; ordinary Guard bindings are not required."
 					};
 				});

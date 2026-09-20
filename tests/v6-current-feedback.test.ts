@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
+import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { Session, SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
@@ -39,6 +42,35 @@ function appendTest(session: Session, id: string, failed = false, command = 'pnp
 }
 
 describe('default v6 current feedback', () => {
+  it('keeps a sourced root test action in a materialized ordinary checkpoint row', async () => {
+    const { derive } = fixture('Run npm test in /work.')
+    const projection = derive()
+    const ctx = new Context()
+    new SystemPrompt(ctx, {})
+    const runtime = new ToolRuntime(ctx)
+    runtime.register(createCheckpointTool(() => projection, () => {}))
+    const response = await runtime.execute({ callId: 'native-root-test-checkpoint' as never,
+      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    expect(response.isError).toBe(false)
+    expect(response.value).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2',
+      open_items: [expect.objectContaining({ id: 'R001', source_item_id: 'R001',
+        semantic_action: 'test', reason_code: 'insufficient' })] })
+    delete projection.items.get('R001')!.semanticAction
+    const unknown = await runtime.execute({ callId: 'unknown-root-test-checkpoint' as never,
+      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    expect(unknown.isError).toBe(false)
+    expect((unknown.value as { open_items: Array<Record<string, unknown>> }).open_items[0]).not.toHaveProperty('semantic_action')
+  })
+  it('retains root action provenance when a long ordinary row is summarized', async () => {
+    const { derive } = fixture('Run npm test in /work.')
+    const projection = derive()
+    projection.items.get('R001')!.normalizedText += ' details'.repeat(400)
+    const page = await createCheckpointTool(() => projection, () => {}).execute({ bindings: [] } as never, undefined as never) as {
+      open_items: Array<Record<string, unknown>>
+    }
+    expect(page.open_items[0]).toMatchObject({ id: 'R001', omitted: true, source_item_id: 'R001',
+      semantic_action: 'test', reason_code: 'insufficient' })
+  })
   it('retains the original native create/readback root as an incomplete pre-effect state case', async () => {
     const { derive } = fixture('Create /work/alpha.txt with the native fixture content and read it back.')
     const projection = derive()
@@ -110,6 +142,9 @@ describe('default v6 current feedback', () => {
       related_requirement_ids: expect.arrayContaining([id]) } })
     const checkpoint = await createCheckpointTool(() => before, () => {}).execute({ bindings: [], detail_id: id } as never, undefined as never) as Record<string, unknown>
     expect(JSON.stringify(checkpoint)).toContain(method.id)
+    const derivedRow = await createCheckpointTool(() => before, () => {}).execute({ bindings: [], item_ids: [id] } as never, undefined as never) as { open_items: Array<Record<string, unknown>> }
+    expect(derivedRow.open_items[0]).toMatchObject({ id, source_item_id: method.id,
+      semantic_action: 'context_guard_observe_test_readiness', reason_code: 'insufficient' })
     session.append('tool/call', { turn: 1, step: 1, callId: 'ready' as never, name: 'context_guard_observe_test_readiness',
       arguments: JSON.stringify({ item_id: test.id }) })
     session.append('tool/result', { turn: 1, step: 1,

@@ -98,6 +98,8 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
   const summarize = (row: Record<string, unknown>) => {
     if (size(row) <= ITEM_ROW_BUDGET) return row
     return { id: String(row.id ?? row.item_id).slice(0, 128), reason_code: row.reason_code, certifiable: row.certifiable,
+      source_item_id: row.source_item_id, revision: row.revision, kind: row.kind,
+      semantic_action: row.semantic_action,
       next_step: typeof row.next_step === 'string' ? row.next_step.slice(0, 240) : undefined,
       adapter_disposition: row.adapter_disposition,
       ...(row.binding_template !== undefined ? { binding_template: row.binding_template } : {}),
