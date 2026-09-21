@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createRuntime, handleGuardTurnStopping } from '../src/runtime.js'
 import { PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
@@ -44,8 +44,9 @@ async function readySession(persistent: boolean, initialRoot?: string) {
     meta: { contextGuardTestReadiness: { itemId: item.id, scope: observed.scope,
       manifestSha256: observed.manifest_sha256, predicate: 'test_passed' } },
   } as never, { surfaceOp: 'append' })
-  session.append('assistant/message', { turn: 1, step: 2,
-    message: { role: 'assistant', content: [{ type: 'text', text: 'The selected test has not run.' }] } } as never,
+  session.append('assistant/message', { turn: 1, step: 2, stream: [],
+    message: createAssistantMessage({ content: [{ type: 'text', text: 'The selected test has not run.' }],
+      source: { provider: 'fixture', model: 'fixture' } }) } as never,
   { surfaceOp: 'append' })
   session.append('turn/end', { turn: 1, reason: { kind: 'completed' } } as never)
   runtime.sync()
@@ -58,8 +59,9 @@ async function readySession(persistent: boolean, initialRoot?: string) {
     runtime.sync()
   }
   function end() {
-    session.append('assistant/message', { turn, step: 1,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'The question has been answered.' }] } } as never,
+    session.append('assistant/message', { turn, step: 1, stream: [],
+      message: createAssistantMessage({ content: [{ type: 'text', text: 'The question has been answered.' }],
+        source: { provider: 'fixture', model: 'fixture' } }) } as never,
     { surfaceOp: 'append' })
     session.append('turn/end', { turn, reason: { kind: 'completed' } } as never)
     runtime.sync()
@@ -85,6 +87,86 @@ async function readySession(persistent: boolean, initialRoot?: string) {
 }
 
 describe('v6 persistence is scoped to the current root task at each Stop watermark', () => {
+  const englishCurrentNouns = ['this task', 'the current task', 'current task', 'this current task']
+  const controlState = (run: Awaited<ReturnType<typeof readySession>>) => {
+    const snapshot = sessionCoreSnapshot(run.session.snapshotEvents() as never, run.runtime.projection) as Record<string, unknown>
+    return { snapshot, core: projectCoreV2(snapshot) }
+  }
+
+  it.each(englishCurrentNouns)('binds English current-unit controls through production projection and restore: %s', async (noun) => {
+    const run = await readySession(true, `运行 pnpm test。Keep working on ${noun} until it is complete.`)
+    const original = controlState(run)
+    const first = (original.snapshot.root_controls as Array<Record<string, unknown>>).find((row) => row.kind === 'persistence')!
+    expect(first).toMatchObject({ scope_basis: { kind: 'current_unit' } })
+    expect((first.controlled_requirements as Array<Record<string, unknown>>).map((row) => row.requirement_id)).toEqual([run.item.id])
+    expect(original.core.root_control_states).toMatchObject({ [run.item.id]: 'persistent' })
+    expect(original.core.root_control_errors).toEqual([])
+
+    run.root('Separately, explain why test.cjs reads config.txt.')
+    run.end()
+    expect(controlState(run).core.root_control_states).toMatchObject({ [run.item.id]: 'persistent' })
+    expect(await run.stop()).toBe('explicit_user_persistence')
+    run.root(`Pause ${noun}.`)
+    const paused = controlState(run)
+    expect(paused.core.root_control_states).toMatchObject({ [run.item.id]: 'persistent_paused' })
+    expect(paused.core.root_control_errors).toEqual([])
+    const pause = (paused.snapshot.root_controls as Array<Record<string, unknown>>).find((row) => row.kind === 'pause')!
+    expect(pause).toMatchObject({ scope_basis: { kind: 'current_unit' } })
+    expect((pause.controlled_requirements as Array<Record<string, unknown>>).map((row) => row.requirement_id)).toEqual([run.item.id])
+    run.end()
+    expect(await run.stop()).toBe('safe_yield_pending_preserved')
+    // A later root cannot revise the already recorded Stop at the earlier watermark.
+    expect(original.core.root_control_states).toMatchObject({ [run.item.id]: 'persistent' })
+
+    run.root(`Continue ${noun}.`)
+    expect(controlState(run).core.root_control_states).toMatchObject({ [run.item.id]: 'persistent' })
+    run.end()
+    run.root(`Cancel ${noun}.`)
+    const cancelled = controlState(run)
+    expect(cancelled.core.root_control_states).toMatchObject({ [run.item.id]: 'cancelled' })
+    expect(cancelled.core.root_control_errors).toEqual([])
+    expect((cancelled.snapshot.root_controls as Array<Record<string, unknown>>).map((row) => row.kind))
+      .toEqual(['persistence', 'pause', 'resume', 'cancel'])
+    const restored = Session.fromRestore(run.session.id, structuredClone(run.session.snapshotEvents()) as never,
+      structuredClone(run.session.header) as never, SessionLogOffset(0), 'detached')
+    const replay = createRuntime({ session: restored, steer: () => {} } as never,
+      { activation: 'always' } as never, HOST, () => {})
+    replay.setDurability(true)
+    replay.sync()
+    const restoredSnapshot = sessionCoreSnapshot(restored.snapshotEvents() as never, replay.projection) as Record<string, unknown>
+    expect(projectCoreV2(restoredSnapshot).root_control_states).toMatchObject({ [run.item.id]: 'cancelled' })
+    expect(projectCoreV2(restoredSnapshot).root_control_errors).toEqual([])
+  })
+
+  it('does not create a ready retry from a completed English-scoped root or bare Continue', async () => {
+    const run = await readySession(true, '运行 pnpm test。Keep working on this current task until it is complete.')
+    run.completeTest()
+    const completed = controlState(run)
+    expect(completed.core.predicates).toMatchObject({ [run.item.id]: 'satisfied' })
+    expect(currentActionBases(run.runtime.projection)).toEqual([])
+    run.root('Separately, explain why test.cjs reads config.txt.')
+    run.end()
+    expect(await run.stop()).toBe('safe_yield_pending_preserved')
+    run.root('Continue.')
+    expect(currentActionBases(run.runtime.projection)).toEqual([])
+    expect(controlState(run).core.current_actions).toEqual([])
+  })
+
+  it.each([
+    'The README says "Pause the current task."',
+    'The user once wrote "Keep working on this current task until it is complete."',
+    'If the test fails later, pause the current task.',
+    'At a future time, cancel this current task.',
+    'Pause the deployment task.',
+    'Do not pause the current task.',
+  ])('does not promote reported, conditional, future or other-target English speech: %s', async (text) => {
+    const run = await readySession(false)
+    run.root(text)
+    const { snapshot, core } = controlState(run)
+    expect(snapshot.root_controls).toEqual([])
+    expect(core.root_control_states).toEqual({})
+  })
+
   it('continues one ready same-root task under a direct compound until-complete control', async () => {
     const run = await readySession(true, '运行 pnpm test。不要停止,一直推进直到完成。')
     const snapshot = sessionCoreSnapshot(run.session.snapshotEvents() as never, run.runtime.projection) as Record<string, unknown>

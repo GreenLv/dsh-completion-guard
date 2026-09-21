@@ -5,9 +5,9 @@
   "upstream": {
     "product": "codex-context-guard",
     "repository": "https://github.com/GreenLv/codex-context-guard",
-    "canonical_commit": "94ebdb00a74ad0707f3c62dec0cb109cf6d2f4dd"
+    "canonical_commit": "cb415cbe374d452e4a0c71e9e292d20e31f23b0e"
   },
-  "canonical_commit": "94ebdb00a74ad0707f3c62dec0cb109cf6d2f4dd",
+  "canonical_commit": "cb415cbe374d452e4a0c71e9e292d20e31f23b0e",
   "mirrored_at": "2026-09-21",
   "legacy_v1_pin_path": "tests/fixtures/conformance/UPSTREAM_PIN.json",
   "files": [
@@ -58,7 +58,7 @@
       "mirrors": []
     },
     {
-      "sha256": "c9d904e45b509eb95e7ca8ed2b4f9281dd6a01b42733b4abae6a55222a3370d6",
+      "sha256": "3ca51142a1c773e6532da1cbc488ea8d2e3e912e01eea174e5a10cba92dbe2a4",
       "source_path": "scripts/cg_core_v2.py",
       "role": "reference_identity",
       "mirrors": []
@@ -70,24 +70,24 @@
       "mirrors": []
     },
     {
-      "sha256": "7971cdb78916e847c6c257c21a3c31b2e113e77403a89cf1715ff71fbff2fb2a",
+      "sha256": "d0978d855ef95183f2c27620cf71166dd8e3b0b5139c6f855ce5dec32f4d991f",
       "source_path": "tests/fixtures/conformance/core_v2/independent-oracle.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/independent-oracle.json",
-          "sha256": "7971cdb78916e847c6c257c21a3c31b2e113e77403a89cf1715ff71fbff2fb2a"
+          "sha256": "d0978d855ef95183f2c27620cf71166dd8e3b0b5139c6f855ce5dec32f4d991f"
         }
       ]
     },
     {
-      "sha256": "1c8f30b86e1bd691895c355fa2feab79d12c9f2cd57f316c790036baf4e30b90",
+      "sha256": "6c69704ba6b2930c14c3f68dfe39280a9e6915c3e8882296efc54e631caa53e7",
       "source_path": "tests/fixtures/conformance/core_v2/events.json",
       "role": "mirrored",
       "mirrors": [
         {
           "path": "tests/fixtures/conformance/core_v2/events.json",
-          "sha256": "1c8f30b86e1bd691895c355fa2feab79d12c9f2cd57f316c790036baf4e30b90"
+          "sha256": "6c69704ba6b2930c14c3f68dfe39280a9e6915c3e8882296efc54e631caa53e7"
         }
       ]
     },

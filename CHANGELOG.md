@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Changes
 
-- The core/v2 consumer mirrors the exact shared source and conformance files pinned to Codex Context Guard commit `7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a`. The old v1 pin and v5 history stay intact; the mirror is a shared-source identity, not full product equivalence.
+- The core/v2 consumer mirrors the exact shared source and conformance files pinned to Codex Context Guard commit `cb415cbe374d452e4a0c71e9e292d20e31f23b0e`. The old v1 pin and v5 history stay intact; the mirror is a shared-source identity, not full product equivalence.
 - Ordinary `context_guard_action` and `context_guard_evidence` calls now return migration guidance. DSH Host tools perform file, test and Git effects; read-only file, Git and package-script observations supply only facts needed for the named completion predicate. A ready input is not proof that the test ran or that a user-set time or approval condition has passed.
 - A relative file request retains its root-time Session location; exact filesystem readback identifies the file. A real Host edit of a forbidden file remains a violation even when an allowed edit also succeeded. A trustworthy pre-effect absence is still required before claiming creation.
 - Separate edits, tests, readbacks and delivered answers remain separate obligations. A short resume or cancellation changes only work in its sourced scope, while future observation and old generic entries cannot become current authority on reload. Default feedback reports an already satisfied ordinary result without asking for a legacy binding again.

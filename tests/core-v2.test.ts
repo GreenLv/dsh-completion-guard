@@ -12,9 +12,10 @@ describe('commit-bound upstream core v2 independent expectations', () => {
       if (row.expected_error) { expect(() => projectCoreV2(row.input)).toThrow(row.expected_error); return }
       const result = projectCoreV2(row.input)
       const expected = row.expected!
-      if ('actions' in expected) expect((result.current_actions as Array<{ action: string }>).map((a) => a.action)).toEqual(expected.actions)
-      for (const key of ['certifiable','stop','explicit_user_persistence','resume_with_actionable_work','goal_complete_allowed','registered_external_operations','reason_codes','correction_count']) {
-        if (key in expected) expect(result[key]).toEqual(expected[key])
+      for (const [key, value] of Object.entries(expected)) {
+        const actual = key === 'actions'
+          ? (result.current_actions as Array<{ action: string }>).map((a) => a.action) : result[key]
+        expect(actual).toEqual(value)
       }
     })
   }

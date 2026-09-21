@@ -16656,7 +16656,7 @@ function controlSpeech(text, kind) {
 	if (kind === "persistence" && subjectlessCompoundPersistence(speech)) return true;
 	if (/^(?:不要|不得|别|切勿|无需|不必|do\s+not\b|don't\b|never\b)/iu.test(speech)) return false;
 	if (kind === "persistence") return new RegExp(rules.USER_PERSISTENCE_RE, "is").exec(speech)?.index === 0;
-	if (kind === "resume") return new RegExp(rules.EXECUTION_RESUME_RE, "i").exec(speech)?.index === 0;
+	if (kind === "resume") return currentUnitScopeSpeech(speech, kind) || new RegExp(rules.EXECUTION_RESUME_RE, "i").exec(speech)?.index === 0;
 	if (kind === "pause") return /^(?:暂停|搁置|pause\b|hold\b)/iu.test(speech);
 	if (kind === "cancel") return /^(?:取消|撤销|不再进行|cancel\b|drop\b)/iu.test(speech);
 	return false;
@@ -16797,7 +16797,8 @@ function rootControlCandidateSpans(text) {
 function currentUnitScopeSpeech(text, kind) {
 	const lead = "(?:(?:(?:请|请先|先)\\s*|(?:please|now)\\s+))*";
 	const end = "\\s*[。.!！]?\\s*";
-	const scoped = "(?:(?:当前|本轮|这轮|全部|整个)(?:任务|工作|事项))";
+	const enScoped = "(?:(?:(?:this|the)\\s+)?current|this)\\s+(?:task|work)";
+	const scoped = `(?:(?:当前|本轮|这轮|全部|整个)(?:任务|工作|事项)|${enScoped})`;
 	if ([
 		"pause",
 		"resume",
@@ -16811,9 +16812,9 @@ function currentUnitScopeSpeech(text, kind) {
 	if (subjectlessCompoundPersistence(text)) return true;
 	const zh = new RegExp(`^\\s*${lead}(?:持续|继续|一直)(?:执行|推进|工作|完成|处理)\\s*[,，]?\\s*(?:直到|直至)(?:(?:当前|本轮|这轮|全部|整个))?(?:任务|工作|事项)(?:完成|结束)${end}$`, "iu");
 	const terminal = "(?:(?:is\\s+)?(?:done|complete|finished))";
-	const enHead = "(?:please\\s+)?(?:keep|continue)\\s+(?:going|working)";
-	const en = new RegExp(`^\\s*${enHead}(?:\\s+on\\s+(?:this|the\\s+current)\\s+(?:task|work))?\\s+until\\s+(?:this|the\\s+current|current|whole|entire)\\s+(?:task|work)\\s+${terminal}${end}$`, "iu");
-	const anaphora = new RegExp(`^\\s*${enHead}\\s+on\\s+(?:this|the\\s+current)\\s+(?:task|work)\\s+until\\s+it\\s+${terminal}${end}$`, "iu");
+	const enHead = `${lead}(?:keep|continue)\\s+(?:going|working)`;
+	const en = new RegExp(`^\\s*${enHead}(?:\\s+on\\s+${enScoped})?\\s+until\\s+(?:${enScoped}|(?:whole|entire)\\s+(?:task|work))\\s+${terminal}${end}$`, "iu");
+	const anaphora = new RegExp(`^\\s*${enHead}\\s+on\\s+${enScoped}\\s+until\\s+it\\s+${terminal}${end}$`, "iu");
 	return zh.test(text) || en.test(text) || anaphora.test(text);
 }
 /** Source range of one directly governed test-class object. It is a proposal

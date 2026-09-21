@@ -43,7 +43,7 @@ Authority rules:
 
 `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json` separately binds ten
 shared core/v2 upstream source files to Codex Context Guard commit
-`7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a` and records eight mirror
+`cb415cbe374d452e4a0c71e9e292d20e31f23b0e` and records eight mirror
 entries, including the packaged runtime JSON copies. The mirror validator checks
 the committed upstream file bytes and local copies. The earlier v1/digest pin
 above remains byte-for-byte unchanged. This is a shared source and conformance
