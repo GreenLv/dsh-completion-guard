@@ -263,23 +263,27 @@ const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-pwsh-local': 'a206f7801ad7ee657b380c37d5b578c195e86e63d23d0712d8f2f7195371ad18',
 }
 
-function activeRendererModule(nodeModulesRoot: string, name: string): { bytes: string; path: string } | undefined {
+export function activeRendererModule(nodeModulesRoot: string, name: string): { bytes: string; path: string } | undefined {
   const modules = realpathSync(nodeModulesRoot)
   const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
-  const ids = [...reachable].filter((id) => id.startsWith(`${name}@`))
+  // Official Windows rc.2 imports use a hoisted bare key and a direct
+  // ./@deepseek-ai/... URL. pnpm's versioned .pnpm key remains supported. Both
+  // forms must identify ONE reachable implementation, never a shadow copy.
+  const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`))
   if (ids.length !== 1) return undefined
   const id = ids[0]!
   const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] ? '0\\.1\\.5-rc\\.2'
     : AUDITED_FOREGROUND_BYTES[name] ? '0\\.1\\.5-rc\\.[12]' : undefined
-  if (!version || !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id)) return undefined
+  if (!version || (id !== name && !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id))) return undefined
   const url = records[id]?.url
-  if (typeof url !== 'string' || !url.startsWith('./.pnpm/')) return undefined
+  if (typeof url !== 'string' || (url !== `./${name}` && !url.startsWith('./.pnpm/'))) return undefined
   const root = realpathSync(resolve(modules, url))
   if (!root.startsWith(`${modules}${sep}`)) return undefined
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
   if (manifest.name !== name || (AUDITED_DEFAULT_WORKDIR_BYTES[name]
     ? manifest.version !== '0.1.5-rc.2'
     : !['0.1.5-rc.1', '0.1.5-rc.2'].includes(String(manifest.version)))) return undefined
+  if (id !== name && manifest.version !== id.slice(name.length + 1).split('(', 1)[0]) return undefined
   const bytesPath = join(root, 'lib', 'index.js')
   const target = realpathSync(bytesPath)
   if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return undefined

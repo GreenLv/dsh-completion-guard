@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -8,7 +9,7 @@ import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
 import { RC015_RC2_HOST_PACKAGES } from '../../src/domain/rc015-rc2-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
-import { inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
+import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
 import { revalidateCoreLock } from '../../src/runtime.js'
 
 const roots: string[] = []
@@ -69,6 +70,60 @@ function installGuard(f: ReturnType<typeof fixture>) {
 }
 
 describe('dependency-free Headless target inspection', () => {
+  it('reads the reachable official hoisted renderer layout without accepting aliases, duplicates or drift', () => {
+    const f = fixture('bare', RC015_RC2_HOST_PACKAGES)
+    const name = '@deepseek-ai/dsh-tool-pwsh'
+    const module = join(f.modules, name)
+    mkdirSync(join(module, 'lib'), { recursive: true })
+    writeFileSync(join(module, 'lib', 'index.js'), 'audited fixture bytes\n')
+    const expected = createHash('sha256').update('audited fixture bytes\n').digest('hex')
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC015_RC2_HOST_PACKAGES)
+    expect(activeRendererModule(f.modules, name)?.bytes).toBe(expected)
+
+    // A changed file is read afresh; the caller's pinned-byte comparison
+    // cannot inherit the earlier hash from a package-map identity alone.
+    writeFileSync(join(module, 'lib', 'index.js'), 'different bytes\n')
+    expect(activeRendererModule(f.modules, name)?.bytes).not.toBe(expected)
+    writeFileSync(join(module, 'lib', 'index.js'), 'audited fixture bytes\n')
+
+    const versioned = `${name}@0.1.5-rc.2(other)`
+    f.records['.'].dependencies.shadow = versioned
+    f.records[versioned] = { url: `./${name}`, dependencies: {} }
+    json(f.mapPath, { packages: f.records })
+    expect(activeRendererModule(f.modules, name)).toBeUndefined()
+    delete f.records['.'].dependencies.shadow
+    f.records[name].url = `./alternate/${name}`
+    json(f.mapPath, { packages: f.records })
+    expect(activeRendererModule(f.modules, name)).toBeUndefined()
+    f.records[name].url = `./${name}`
+    json(f.mapPath, { packages: f.records })
+    json(join(module, 'package.json'), { name, version: '0.1.5-rc.0' })
+    expect(activeRendererModule(f.modules, name)).toBeUndefined()
+    json(join(module, 'package.json'), { name, version: '0.1.5-rc.2' })
+    const outside = join(f.runtime, 'outside')
+    json(join(outside, 'package.json'), { name, version: '0.1.5-rc.2' })
+    mkdirSync(join(outside, 'lib'), { recursive: true })
+    writeFileSync(join(outside, 'lib', 'index.js'), 'audited fixture bytes\n')
+    f.records[name].url = './.pnpm/../../outside'
+    json(f.mapPath, { packages: f.records })
+    expect(activeRendererModule(f.modules, name)).toBeUndefined()
+  })
+
+  it('retains a single versioned pnpm mapping and rejects its manifest version drift', () => {
+    const f = fixture('versioned', RC015_RC2_HOST_PACKAGES)
+    const name = '@deepseek-ai/dsh-shell'
+    const id = `${name}@0.1.5-rc.2`
+    const url = './.pnpm/dsh-shell/node_modules/@deepseek-ai/dsh-shell'
+    f.records[id].url = url
+    json(f.mapPath, { packages: f.records })
+    const module = join(f.modules, url)
+    json(join(module, 'package.json'), { name, version: '0.1.5-rc.2' })
+    mkdirSync(join(module, 'lib'), { recursive: true })
+    writeFileSync(join(module, 'lib', 'index.js'), 'versioned bytes\n')
+    expect(activeRendererModule(f.modules, name)?.bytes).toBe(createHash('sha256').update('versioned bytes\n').digest('hex'))
+    json(join(module, 'package.json'), { name, version: '0.1.5-rc.1' })
+    expect(activeRendererModule(f.modules, name)).toBeUndefined()
+  })
   it.each(['versioned', 'bare'] as const)('accepts the exact rc.2 graph with %s mapping and binds its launcher', (mapKey) => {
     const f = fixture(mapKey, RC015_RC2_HOST_PACKAGES)
     expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC015_RC2_HOST_PACKAGES)
