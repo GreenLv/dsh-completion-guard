@@ -16,14 +16,16 @@ Context Guard does not own Goal, Todo, Compaction, or continuation. It intervene
 ## Call-time Host working-directory evidence
 
 For an ordinary named `npm test` or `pnpm test` Host call that omits `workdir`,
-the Guard may append a read-only plugin notice before execution. This is a
-call-time derivation from the original Session header, the scoped sandbox
+the Guard captures a read-only working-directory receipt before execution and
+defers its provider-visible plugin context until the host has persisted the
+complete tool-result batch. This is a call-time derivation from the original Session header, the scoped sandbox
 policy, the active shell service, and exact audited DSH `0.1.5-rc.2` producer
 bytes. It is **not** a working directory returned by the Host process. The
 notice binds the original call ID, sequence, turn, arguments digest, root
 source, Session digest, Host-lock digest, physical directory, and policy root.
-On replay it is accepted only between the matching call and result, with the
-same source and Host identity. The observer always lets the Host tool proceed;
+On replay it is accepted only after the matching result and before the next
+assistant step, with the same source and Host identity. A legacy notice between
+a call and result is not upgraded. The observer always lets the Host tool proceed;
 it grants no ordinary mutation or execution qualification.
 
 The Bash producer chooses the scoped policy workspace root, or the Session
@@ -38,7 +40,7 @@ without such a notice cannot be upgraded by reading today's Host config.
 
 ## Durable state model
 
-The effective plugin configuration and the DSH Session append-only log are the inputs to the rebuildable Guard projection. Context Guard **appends no custom session event types**: the persisted event vocabulary is harness-owned and the current persistence layer refuses unknown event types. The `activation` configuration supplies the initial enablement state, while all later session state is derived from the natively persisted events DSH already writes:
+The effective plugin configuration and the DSH Session append-only log are the ordinary inputs to the rebuildable Guard projection. Context Guard **appends no custom session event types**: the persisted event vocabulary is harness-owned and the current persistence layer refuses unknown event types. The explicit release and restart paths additionally use the provider-invisible private ledger described below. The `activation` configuration supplies the initial enablement state, while ordinary session state is derived from the natively persisted events DSH already writes:
 
 - effective plugin configuration — initial enablement (`opt-in` starts disabled; `always` starts enabled before log replay);
 - `command/run` — later enablement (`/context-guard on|off|clear`) and epoch transitions;
@@ -174,13 +176,20 @@ demand the proof the user explicitly asked for.
 
 ### Explicit release
 
-Contracts, reservations and settlements are persisted through the plugin-notice
-channel the host already writes, and each is idempotent by its own identity
-(contract id, call id). Reservations are written before the effect and record
+Release adoption remains a root `command/run`. Reservations, settlements, and
+restart intents use an owner-only append-only private ledger beneath the DSH
+home selected by the host's non-empty `DSH_HOME` or default `~/.dsh`. The
+ledger anchors a hashed Session header, cwd, host lock, and canonical ledger
+root; release rows additionally bind the immutable adopted contract, resolved
+target, and preceding reservation. Each row is hash-chained and carries a
+private-ledger position rather than pretending to be a Session sequence.
+Reservations are flushed before the effect and record
 the SRI the trusted producer read; a settlement records a trusted readback when
-one exists and otherwise stays `unconfirmed`, which preserves the in-flight
-protection and refuses a re-send. Adoption comes only from the root
-`command/run`, and `release status`/`release revoke` are read-only and
+one exists and otherwise remains non-settling (`unknown` or `unconfirmed`), which preserves the in-flight
+protection and refuses a re-send. Missing, truncated, cross-session, mismatched,
+or locked ledger state fails closed. Historical plugin-notice records remain
+readable under their frozen rules but are not migrated into stronger sidecar
+facts. `release status`/`release revoke` are read-only and
 authority-withdrawing respectively — neither is a state corruption.
 
 The contract freezes the candidate scope's `adoptedAtRevision`, and the closure

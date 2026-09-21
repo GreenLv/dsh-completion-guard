@@ -344,7 +344,7 @@ describe('Session to core/v2 host adapter', () => {
     expect(core.current_actions).toMatchObject([{ requirement_id: item.id, action: 'evaluate_current_effect', target: '/work' }])
   })
 
-  it('uses the latest same-target test outcome across persisted Session replay', () => {
+  it('uses the latest supported same-target test outcome and omits background repeats', () => {
     const id = SessionId('latest-test-outcome')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
@@ -383,8 +383,8 @@ describe('Session to core/v2 host adapter', () => {
     expect(state.core.predicates).toMatchObject({ [item.id]: 'satisfied' })
     run('run-unknown', 4, '/work', 'unknown')
     state = project()
-    expect(state.core.predicates).toMatchObject({ [item.id]: 'insufficient' })
-    expect(currentActionBases(state.projection, false)).toMatchObject([{ itemId: item.id, action: 'test' }])
+    expect(state.core.predicates).toMatchObject({ [item.id]: 'satisfied' })
+    expect(currentActionBases(state.projection, false)).toEqual([])
     run('run-failure', 5, '/work', 'failure')
     state = project()
     expect(state.core.predicates).toMatchObject({ [item.id]: 'insufficient' })

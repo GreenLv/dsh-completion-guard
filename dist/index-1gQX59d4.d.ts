@@ -704,6 +704,8 @@ interface ReleaseReservation {
   operation: ReleaseOperation;
   callId: string;
   startedAtSeq: number;
+  /** Present instead of a Session sequence for provider-invisible sidecar records. */
+  ledgerPosition?: number;
   status: "in_flight";
   /**
   * The npm SRI the trusted producer read when the reservation was written.
@@ -719,6 +721,8 @@ interface ReleaseSettlement {
   operation: ReleaseOperation;
   callId: string;
   settledAtSeq: number;
+  /** Present instead of a Session sequence for provider-invisible sidecar records. */
+  ledgerPosition?: number;
   /** A trusted readback identity, or the reason no producer exists. */
   readback: {
     kind: "npm_integrity" | "git_ref" | "github_release";

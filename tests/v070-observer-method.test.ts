@@ -317,6 +317,22 @@ describe('v0.7.0 explicit read-only observer methods', () => {
     expect((projectSessionCoreV2(events, unattested)?.predicates as Record<string, unknown>)?.R001).not.toBe('satisfied')
   })
 
+  it('keeps an exact named test effect available inside the full observer-control root', () => {
+    const root = 'In this isolated workspace, modify the existing config.txt so it contains exactly mode=on followed by one newline. Run npm test and read config.txt back with host tools. Use the read-only context_guard_observe_file and context_guard_observe_test_readiness tools for the corresponding current requirements. Report what each observation establishes and the actual result.'
+    const { events } = projectionFor(root)
+    events.push({ seq: 4, type: 'tool/call', data: { turn: 1, step: 1, callId: 'native-test', name: 'bash',
+      arguments: JSON.stringify({ command: 'npm test', workdir: '/work' }) } })
+    events.push({ seq: 5, type: 'tool/result', data: { turn: 1, step: 1,
+      message: createToolResultMessage({ callId: 'native-test' as never,
+        content: [{ type: 'text', text: '> test\n> node test.cjs\n' }], isError: false }) } })
+    const graph = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const projection = deriveProjection(events, { activation: 'always' }, { cwd: '/work' }, true,
+      { ...graph, auditedForegroundRenderers: ['bash'], digest: 'ab'.repeat(32) }).projection
+    projection.durabilityWatermark = 'confirmed'
+    const test = [...projection.items.values()].find((item) => item.semanticAction === 'test')!
+    expect(projectSessionCoreV2(events, projection)?.predicates).toMatchObject({ [test.id]: 'satisfied' })
+  })
+
   it('replays the Host test and method facts from a persisted Session at each watermark', () => {
     const id = SessionId('v070-observer-reload')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
@@ -379,6 +395,7 @@ describe('v0.7.0 explicit read-only observer methods', () => {
     ['> fixture@1.0.0 test\n> node test.cjs\n1 test failed\n[exit code: 1]', 'npm test completed with exit code 1; tests failed.', false, 'insufficient', 'insufficient'],
     ['npm error Missing script: "test"\n[exit code: 1]', 'npm test completed with exit code 1.', false, 'insufficient', 'insufficient'],
     ['[sandbox: file access denied under workspace-write mode]\n[exit code: 1]', 'npm test completed with exit code 1.', false, 'insufficient', 'insufficient'],
+    ['1 test failed\n[exit code: 1]', 'npm test completed with exit code **1**; tests failed.', true, 'insufficient', 'satisfied'],
     ['2 tests passed', 'npm test completed: tests failed.', false, 'satisfied', 'insufficient'],
     ['2 tests passed', 'npm test completed: tests passed, but exit code 1.', false, 'satisfied', 'insufficient'],
   ])('keeps run outcome, truthful report, and error boundary separate: %s', (output, final, isError, expectedRun, expectedReport) => {

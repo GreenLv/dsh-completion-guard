@@ -70,13 +70,17 @@ export function createReleaseTool(options: ReleaseToolOptions): ToolDefinition {
             operations: releaseCoverage(contract),
             candidate: contract.candidate,
           })),
-          reservations: projection.releaseReservations.map(({ contractId, operation, callId, startedAtSeq, observedArtifactSri }) => ({
-            contract_id: contractId, operation, resolution_call_id: callId, started_at_seq: startedAtSeq,
+          reservations: projection.releaseReservations.map(({ contractId, operation, callId, startedAtSeq, ledgerPosition, observedArtifactSri }) => ({
+            contract_id: contractId, operation, resolution_call_id: callId,
+            ...(ledgerPosition === undefined ? { started_at_seq: startedAtSeq }
+              : { record_position: { channel: 'private_ledger', position: ledgerPosition } }),
             observed_artifact_sri: observedArtifactSri ?? null,
             in_flight: inFlightReservation(projection, contractId, operation)?.callId === callId,
           })),
-          settlements: projection.releaseSettlements.map(({ contractId, operation, callId, outcome, readback, settledAtSeq }) => ({
-            contract_id: contractId, operation, resolution_call_id: callId, outcome, readback, settled_at_seq: settledAtSeq,
+          settlements: projection.releaseSettlements.map(({ contractId, operation, callId, outcome, readback, settledAtSeq, ledgerPosition }) => ({
+            contract_id: contractId, operation, resolution_call_id: callId, outcome, readback,
+            ...(ledgerPosition === undefined ? { settled_at_seq: settledAtSeq }
+              : { record_position: { channel: 'private_ledger', position: ledgerPosition } }),
           })),
           diagnostics: projection.releaseDiagnostics,
         } as unknown as Record<string, JsonValue>

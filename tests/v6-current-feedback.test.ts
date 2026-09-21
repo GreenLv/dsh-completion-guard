@@ -90,6 +90,12 @@ describe('default v6 current feedback', () => {
     expect(failed).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2' })
     expect(failed).not.toHaveProperty('certificate')
   })
+  it('keeps a completed exact test when a later unsupported repeat is unknown', async () => {
+    const { session, derive } = fixture('Run npm test in /work.')
+    appendTest(session, 'npm-success', false, 'npm test')
+    appendTest(session, 'unsupported-repeat', false, 'npm test && echo repeated')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied' })
+  })
   it('keeps the native modify/readback fixture on the ordinary observed path', async () => {
     const path = '/work/alpha.txt'
     const { session, derive } = fixture(`Modify ${path} to native-v070.`)
@@ -309,6 +315,29 @@ describe('default v6 current feedback', () => {
     expect(delivered.coreV2?.predicates).toMatchObject({ R001: 'satisfied', R002: 'satisfied' })
     const response = await createCheckpointTool(() => delivered, () => {}).execute({ bindings: [] } as never, undefined as never) as Record<string, unknown>
     expect(response).toMatchObject({ status: 'observed', open_items: [] })
+  })
+
+  it('treats Markdown emphasis as presentation but not quoted or code status as delivery', () => {
+    const delivered = (text: string) => {
+      const { session, derive } = fixture('Run npm test and report its actual result.')
+      appendTest(session, `test-report-${text.length}`, false, 'npm test')
+      session.append('assistant/message', { turn: 1, step: 2, message: { role: 'assistant',
+        content: [{ type: 'text', text }] } } as never, { surfaceOp: 'append' })
+      session.append('turn/end', { turn: 1, reason: { kind: 'completed' } } as never)
+      return derive().coreV2?.predicates as Record<string, string>
+    }
+    const cases: Array<[string, string]> = [
+      ['The test completed. Exit code: **0**.', 'satisfied'],
+      ['The test completed. Exit code: `0`.', 'satisfied'],
+      ['The tool printed "Exit code: **0**".', 'insufficient'],
+      ['The captured snippet was `Exit code: 0`.', 'insufficient'],
+      ['```text\nExit code: 0\n```', 'insufficient'],
+      ['Exit code: **0**, but the tests failed.', 'insufficient'],
+      ['Exit code: **0**. Exit status: **1**.', 'insufficient'],
+      ['Exit status: **1**. Exit code: **0**.', 'insufficient'],
+      ['Exit code: 0.5.', 'insufficient'],
+    ]
+    for (const [text, expected] of cases) expect(delivered(text), text).toMatchObject({ R002: expected })
   })
 
   it('does not let a revoked or unrelated release record revive historical ordinary debt', async () => {

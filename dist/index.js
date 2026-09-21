@@ -1,13 +1,13 @@
-import { $ as sourceItemForCoreRequirement, $i as requestedTargetMatchesResolved, $n as isRootPauseRequest, $r as classifyUserInteraction, $t as RC1_HOST_PACKAGES, A as lifecyclePhase, Ai as qualificationOfClause, An as CLEANUP_CONDITION_RULE_SHORT, Ar as evidenceAvailabilityReason, At as EXPECTED_HOST_PACKAGES, B as snapshotSessionEvents, Bi as BOUNDED_ARTIFACT_TYPES, Bn as evidenceCoverage, Br as removalIsPartiallyKnown, Bt as evaluateToolSurfaceCapability, C as parseGitCommandManifest, Ci as legacyQuestionReadingIsInformational, Cn as scopeCoverageDigest, Cr as rebindResponse, Ct as ACTIVE_HOST_COHORT_ID, D as claimedBatchHasRealRootInput, Di as opensConditionLead, Dn as validateProofManifestV2, Dr as parseConfirmationMessage, Dt as ALPHA2_HOST_PACKAGES, E as FIRST_STEP_GUIDANCE, Ei as namedActions, En as validateProofManifest, Er as isFrozenV042RebindResponse, Et as ALPHA2_DSHMARKET_139_HOST_PACKAGES, F as captureHostWorkdir, Fi as splitTextFragments, Fn as closingHint, Fr as admissibleForRemoval, Ft as bindExecutableIdentity, G as PROTOCOL_V4_NOTICE, Gi as STOP_PROTOCOL_VERSION, Gn as NO_PROGRESS_TURNS_BEFORE_STOP, Gr as extractArtifactPaths, Gt as SUPPORTED_HOST_RANGE, H as CAPTURE_V042_NOTICE, Hi as CERTIFICATE_VERSION_V2, Hn as isVerifyingCapability, Hr as captureItem, Ht as selectHostCohort, I as sourcedNamedTestRoot, Ii as statefulActionsOfScope, In as openItems, Ir as capabilityConsequence, It as bindLiveGoalCapability, J as applyUpgradeEligibility, Ji as actionCompatible, Jn as classifyCompletionClaim, Jr as isInformationalMessage, Jt as evaluateMinimumHostVersion, K as PROTOCOL_V5_NOTICE, Ki as STOP_PROTOCOL_VERSION_V2, Kn as assessmentAction, Kr as extractMethod, Kt as SUPPORTED_HOST_VERSIONS, L as SESSION_API_UNSUPPORTED, Li as verbIsNegated, Ln as recoveryDigest, Lr as capabilityFactOf, Lt as evaluateExternalWaitCapability, M as projectSessionCoreV2, Mi as reportingHeadGoverns, Mn as MIN_RECOVERY_CHAR_BUDGET, Mr as relevantEvidence, Mt as HOST_CAPABILITY_PACKAGE_GROUPS, N as sessionCoreSnapshot, Ni as restatedContentOf, Nn as carriesCleanupCondition, Nr as DEPENDENCY_FREE_ONLY_CONDITION, Nt as HOST_COHORTS, O as firstStepGuidance, Oi as opensWithDirective, On as CLEANUP_CONDITION_RULE, Or as capabilityRemedyPhrase, Ot as BASE_HOST_PACKAGES, P as HOST_WORKDIR_PREFIX, Pi as semanticActionOfScope, Pn as cleanupConditionFor, Pr as actionHasCertificationPath, Pt as LEGACY_HOST_COHORTS, Q as currentV6Feedback, Qi as requestedTargetAuthorizesMutation, Qn as decisionBoundaryKey, Qr as classifyTaskIntent, Qt as RC015_HOST_PACKAGES, R as SESSION_EVENT_ENVELOPE_INVALID, Ri as ACTION_MANIFEST, Rn as renderRecoveryPacket, Rr as partialFailureOf, Rt as evaluateHostCapability, S as gitCommandMatchesTarget, Si as kindOfScope, Sn as requiredSubjectsOf, Sr as rebindAttemptKey, St as parseShellCommand, T as verifiedLinearCommitReadback, Ti as maskQuotedSpans, Tn as sessionQueryV2, Tr as CONFIRM_LINE_PATTERN, Tt as ACTIVE_HOST_LAUNCHER_VERSION, U as DEFAULT_DELEGATION_TOOL_NAMES, Ui as SEMANTIC_ACTIONS, Un as CONTROL_RECORD_PREFIX, Ur as classifyClause, Ut as LATEST_SUPPORTED_HOST_VERSION, V as projectCoreV2, Vi as CERTIFICATE_VERSION, Vn as evidenceMatchesItem, Vr as captureClause, Vt as hostVersionFromPackages, W as PROTOCOL_V3_NOTICE, Wi as STATEFUL_ACTIONS, Wn as NO_PROGRESS_RECORD_PREFIX, Wr as environmentDefaultRepositoryTarget, Wt as MIN_SUPPORTED_HOST_VERSION, X as legacyRecordsNeedingReview, Xi as isStatefulAction, Xn as decideTurnBoundary, Xr as canonicalRegistryBase, Xt as satisfiesSupportedHostRange, Y as deriveProjection, Yi as boundedArtifactChoiceMatches, Yn as currentActionBases, Yr as segmentClauses, Yt as parseHostVersion, Z as rootLocatorFlavor, Zi as requestedIdentityKey, Zn as decideTurnStopping, Zr as npmEscapedPackageName, Zt as RC015_RC2_HOST_PACKAGES, _ as GIT_COMMAND_TEMPLATES, _i as isInformationalFragment, _n as proofDigestV2, _r as createProjection, _t as persistedToolResultStatus, a as combineHostPolicy, aa as validateManifest, ai as clauseIsGoverned, an as PROOF_KINDS, ar as testOutcomePredicate, at as inFlightReservation, b as createGitPrestateEnvelope, bi as isRestatement, bn as proofOperationMatches, br as proposeRebindOutcome, bt as isRunExecutable, c as injectActiveProfileHostLock, ca as normalizeClause, ci as governedClauseRestrictsExecution, cn as PROOF_PROTOCOL_VERSION, cr as hasCurrentCertificate, ct as releaseContractFor, d as packageRowsFromPnpmLock, da as sha256, di as hasWorkPredicate, dn as bindProofV2ToProjection, dr as unitDescendantIds, dt as reservationFor, ea as semanticActionFromCommand, ei as GRANTED_QUALIFICATION, en as ALPHA3_HOST_PACKAGES, er as isWholeTaskCompletionClaim, et as RELEASE_OPERATIONS, f as readActiveHostGraph, fi as interpretClause, fn as canonicalProjection, fr as availableBoundaryQualifications, ft as supersedeItem, g as GIT_COMMAND_MANIFEST_IDS, gi as isExplanationScope, gn as proofDigest, gr as currentContractDigest, gt as isDeterministicCheck, h as verifyComposedHostLockDump, hi as isExecutableItem, hn as proofCapabilityReport, hr as qualifyBoundary, ht as extractToolSubject, i as auditedForegroundRenderers, ia as COMMAND_SURFACE_MANIFEST, ii as clauseAsksOwnQuestion, in as PROOF_CAPABILITY_MATRIX, ir as progressFingerprint, it as contractById, j as previewFirstStepInjection, ji as questionHeadsClause, jn as DEFAULT_RECOVERY_CHAR_BUDGET, jr as itemDiagnosis, jt as GOAL_HOST_PACKAGES, k as firstStepGuidanceV6, ki as presentExplanationHead, kn as CLEANUP_CONDITION_RULE_COMPACT, kr as deriveItemDiagnosis, kt as DEFAULT_HOST_LOCK, l as inspectTargetHostGraph, la as sanitizeClauseText, li as hasOrderedCoordination, ln as PROOF_PROTOCOL_VERSION_V2, lr as certifiableOpenItems, lt as releaseCoverage, m as resolveInstalledHostLock, mi as introducesActionClause, mn as createProofManifestV2, mr as isCurrentAcceptedBoundary, mt as extractTextContent, n as auditedDefaultWorkdirHost, na as validateActionManifest, ni as actionVerbMatches, nn as segmentAuthorityBlocks, nr as latestRootInstruction, nt as RELEASE_RESERVATION_PREFIX, o as hostLockContextFromComposedDump, oa as canonicalizePath, oi as clauseIsProtected, on as PROOF_KINDS_V2, or as v6TestPredicate, ot as normalizeReleaseContract, p as resolveActiveProfileHostLock, pi as interpretMessage, pn as createProofManifest, pr as effectuateBoundary, pt as evidenceFromPersistedToolResult, q as PROTOCOL_V6_NOTICE, qi as SUPPORTED_EVIDENCE_ADAPTERS, qn as assessmentOutcomePredicate, qr as extractOperation, qt as compareHostVersions, r as auditedDefaultWorkdirProvider, ra as validateActionTarget, ri as clarifiedSpanOf, rn as certifyCheckpoint, rr as observeAssistantOutcome, rt as RELEASE_SETTLEMENT_PREFIX, s as hostLockRowsFromComposedDump, sa as digestStrings, si as explanationHasActionResidue, sn as PROOF_MANIFEST_DOMAIN_V2, sr as goalCompletionDenial, st as readbackSettlesContract, t as HostProfileError, ta as semanticActionFromText, ti as LEGACY_QUALIFICATION, tn as authorityCaptureCounts, tr as latestAssistantText, tt as RELEASE_OPERATION_SURFACES, u as packageRowsFromActiveGraph, ua as sanitizeUrl, ui as hasQuestionScope, un as bindProofToProjection, ur as certificateClosure, ut as releasePreEffectDecision, v as commitIndexSnapshotDigest, vi as isOpenObligation, vn as proofEvidenceConstraints, vr as confirmRebind, vt as withDurability, w as revalidateGitPrestate, wi as maskCodeSpans, wn as sessionQuery, wr as replayRebindResult, wt as ACTIVE_HOST_COHORT_IDS, x as executeRevalidatedGitEffect, xi as itemHoldsExecutionAuthority, xn as proofV2Rejection, xr as proposeRebindV042, xt as parsePwshCommand, y as commitTreeSnapshotDigest, yi as isQuestionScopeNeedingReview, yn as proofHostSurfacesOf, yr as proposeRebind, yt as canonicalArgvFromCommand, z as SessionApiError, zi as ACTION_MANIFEST_VERSION, zn as bindingSatisfies, zr as removalIsComplete, zt as evaluateHostLock } from "./domain-3X_gVb6V.js";
+import { $ as sourceItemForCoreRequirement, $i as requestedTargetAuthorizesMutation, $n as decisionBoundaryKey, $r as classifyTaskIntent, $t as RC015_HOST_PACKAGES, A as lifecyclePhase, Ai as presentExplanationHead, An as CLEANUP_CONDITION_RULE_COMPACT, Ar as deriveItemDiagnosis, At as DEFAULT_HOST_LOCK, B as snapshotSessionEvents, Bi as ACTION_MANIFEST_VERSION, Bn as bindingSatisfies, Br as removalIsComplete, Bt as evaluateHostLock, C as parseGitCommandManifest, Ci as kindOfScope, Cn as requiredSubjectsOf, Cr as rebindAttemptKey, Ct as parseShellCommand, D as claimedBatchHasRealRootInput, Di as namedActions, Dn as validateProofManifest, Dr as isFrozenV042RebindResponse, Dt as ALPHA2_DSHMARKET_139_HOST_PACKAGES, E as FIRST_STEP_GUIDANCE, Ei as maskQuotedSpans, En as sessionQueryV2, Er as CONFIRM_LINE_PATTERN, Et as ACTIVE_HOST_LAUNCHER_VERSION, F as captureHostWorkdir, Fi as semanticActionOfScope, Fn as cleanupConditionFor, Fr as actionHasCertificationPath, Ft as LEGACY_HOST_COHORTS, G as PROTOCOL_V4_NOTICE, Gi as STATEFUL_ACTIONS, Gn as NO_PROGRESS_RECORD_PREFIX, Gr as environmentDefaultRepositoryTarget, Gt as MIN_SUPPORTED_HOST_VERSION, H as CAPTURE_V042_NOTICE, Hi as CERTIFICATE_VERSION, Hn as evidenceMatchesItem, Hr as captureClause, Ht as hostVersionFromPackages, I as sourcedNamedTestRoot, Ii as splitTextFragments, In as closingHint, Ir as admissibleForRemoval, It as bindExecutableIdentity, J as applyUpgradeEligibility, Ji as SUPPORTED_EVIDENCE_ADAPTERS, Jn as assessmentOutcomePredicate, Jr as extractOperation, Jt as compareHostVersions, K as PROTOCOL_V5_NOTICE, Ki as STOP_PROTOCOL_VERSION, Kn as NO_PROGRESS_TURNS_BEFORE_STOP, Kr as extractArtifactPaths, Kt as SUPPORTED_HOST_RANGE, L as SESSION_API_UNSUPPORTED, Li as statefulActionsOfScope, Ln as openItems, Lr as capabilityConsequence, Lt as bindLiveGoalCapability, M as projectSessionCoreV2, Mi as questionHeadsClause, Mn as DEFAULT_RECOVERY_CHAR_BUDGET, Mr as itemDiagnosis, Mt as GOAL_HOST_PACKAGES, N as sessionCoreSnapshot, Ni as reportingHeadGoverns, Nn as MIN_RECOVERY_CHAR_BUDGET, Nr as relevantEvidence, Nt as HOST_CAPABILITY_PACKAGE_GROUPS, O as firstStepGuidance, Oi as opensConditionLead, On as validateProofManifestV2, Or as parseConfirmationMessage, Ot as ALPHA2_HOST_PACKAGES, P as HOST_WORKDIR_PREFIX, Pi as restatedContentOf, Pn as carriesCleanupCondition, Pr as DEPENDENCY_FREE_ONLY_CONDITION, Pt as HOST_COHORTS, Q as currentV6Feedback, Qi as requestedIdentityKey, Qn as decideTurnStopping, Qr as npmEscapedPackageName, Qt as RC015_RC2_HOST_PACKAGES, R as SESSION_EVENT_ENVELOPE_INVALID, Ri as verbIsNegated, Rn as recoveryDigest, Rr as capabilityFactOf, Rt as evaluateExternalWaitCapability, S as gitCommandMatchesTarget, Si as itemHoldsExecutionAuthority, Sn as proofV2Rejection, Sr as proposeRebindV042, St as parsePwshCommand, T as verifiedLinearCommitReadback, Ti as maskCodeSpans, Tn as sessionQuery, Tr as replayRebindResult, Tt as ACTIVE_HOST_COHORT_IDS, U as DEFAULT_DELEGATION_TOOL_NAMES, Ui as CERTIFICATE_VERSION_V2, Un as isVerifyingCapability, Ur as captureItem, Ut as selectHostCohort, V as projectCoreV2, Vi as BOUNDED_ARTIFACT_TYPES, Vn as evidenceCoverage, Vr as removalIsPartiallyKnown, Vt as evaluateToolSurfaceCapability, W as PROTOCOL_V3_NOTICE, Wi as SEMANTIC_ACTIONS, Wn as CONTROL_RECORD_PREFIX, Wr as classifyClause, Wt as LATEST_SUPPORTED_HOST_VERSION, X as legacyRecordsNeedingReview, Xi as boundedArtifactChoiceMatches, Xn as currentActionBases, Xr as segmentClauses, Xt as parseHostVersion, Y as deriveProjection, Yi as actionCompatible, Yn as classifyCompletionClaim, Yr as isInformationalMessage, Yt as evaluateMinimumHostVersion, Z as rootLocatorFlavor, Zi as isStatefulAction, Zn as decideTurnBoundary, Zr as canonicalRegistryBase, Zt as satisfiesSupportedHostRange, _ as GIT_COMMAND_TEMPLATES, _i as isExplanationScope, _n as proofDigest, _r as currentContractDigest, _t as isDeterministicCheck, a as combineHostPolicy, aa as COMMAND_SURFACE_MANIFEST, ai as clauseAsksOwnQuestion, an as PROOF_CAPABILITY_MATRIX, ar as progressFingerprint, at as normalizeReleaseContract, b as createGitPrestateEnvelope, bi as isQuestionScopeNeedingReview, bn as proofHostSurfacesOf, br as proposeRebind, bt as canonicalArgvFromCommand, c as injectActiveProfileHostLock, ca as digestStrings, ci as explanationHasActionResidue, cn as PROOF_MANIFEST_DOMAIN_V2, cr as goalCompletionDenial, ct as readbackSettlesContract, d as packageRowsFromPnpmLock, da as sanitizeUrl, di as hasQuestionScope, dn as bindProofToProjection, dr as certificateClosure, dt as releasePreEffectDecision, ea as requestedTargetMatchesResolved, ei as classifyUserInteraction, en as RC1_HOST_PACKAGES, er as isRootPauseRequest, et as OUTCOME_STRENGTH, f as readActiveHostGraph, fa as sha256, fi as hasWorkPredicate, fn as bindProofV2ToProjection, fr as unitDescendantIds, ft as reservationFor, g as GIT_COMMAND_MANIFEST_IDS, gi as isExecutableItem, gn as proofCapabilityReport, gr as qualifyBoundary, gt as extractToolSubject, h as verifyComposedHostLockDump, hi as introducesActionClause, hn as createProofManifestV2, hr as isCurrentAcceptedBoundary, ht as extractTextContent, i as auditedForegroundRenderers, ia as validateActionTarget, ii as clarifiedSpanOf, in as certifyCheckpoint, ir as observeAssistantOutcome, it as inFlightReservation, j as previewFirstStepInjection, ji as qualificationOfClause, jn as CLEANUP_CONDITION_RULE_SHORT, jr as evidenceAvailabilityReason, jt as EXPECTED_HOST_PACKAGES, k as firstStepGuidanceV6, ki as opensWithDirective, kn as CLEANUP_CONDITION_RULE, kr as capabilityRemedyPhrase, kt as BASE_HOST_PACKAGES, l as inspectTargetHostGraph, la as normalizeClause, li as governedClauseRestrictsExecution, ln as PROOF_PROTOCOL_VERSION, lr as hasCurrentCertificate, lt as releaseContractFor, m as resolveInstalledHostLock, mi as interpretMessage, mn as createProofManifest, mr as effectuateBoundary, mt as evidenceFromPersistedToolResult, n as auditedDefaultWorkdirHost, na as semanticActionFromText, ni as LEGACY_QUALIFICATION, nn as authorityCaptureCounts, nr as latestAssistantText, nt as RELEASE_OPERATION_SURFACES, o as hostLockContextFromComposedDump, oa as validateManifest, oi as clauseIsGoverned, on as PROOF_KINDS, or as testOutcomePredicate, ot as normalizeReservation, p as resolveActiveProfileHostLock, pi as interpretClause, pn as canonicalProjection, pr as availableBoundaryQualifications, pt as supersedeItem, q as PROTOCOL_V6_NOTICE, qi as STOP_PROTOCOL_VERSION_V2, qn as assessmentAction, qr as extractMethod, qt as SUPPORTED_HOST_VERSIONS, r as auditedDefaultWorkdirProvider, ra as validateActionManifest, ri as actionVerbMatches, rn as segmentAuthorityBlocks, rr as latestRootInstruction, rt as contractById, s as hostLockRowsFromComposedDump, sa as canonicalizePath, si as clauseIsProtected, sn as PROOF_KINDS_V2, sr as v6TestPredicate, st as normalizeSettlement, t as HostProfileError, ta as semanticActionFromCommand, ti as GRANTED_QUALIFICATION, tn as ALPHA3_HOST_PACKAGES, tr as isWholeTaskCompletionClaim, tt as RELEASE_OPERATIONS, u as packageRowsFromActiveGraph, ua as sanitizeClauseText, ui as hasOrderedCoordination, un as PROOF_PROTOCOL_VERSION_V2, ur as certifiableOpenItems, ut as releaseCoverage, v as commitIndexSnapshotDigest, vi as isInformationalFragment, vn as proofDigestV2, vr as createProjection, vt as persistedToolResultStatus, w as revalidateGitPrestate, wi as legacyQuestionReadingIsInformational, wn as scopeCoverageDigest, wr as rebindResponse, wt as ACTIVE_HOST_COHORT_ID, x as executeRevalidatedGitEffect, xi as isRestatement, xn as proofOperationMatches, xr as proposeRebindOutcome, xt as isRunExecutable, y as commitTreeSnapshotDigest, yi as isOpenObligation, yn as proofEvidenceConstraints, yr as confirmRebind, yt as withDurability, z as SessionApiError, zi as ACTION_MANIFEST, zn as renderRecoveryPacket, zr as partialFailureOf, zt as evaluateHostCapability } from "./domain-BuEk4EDT.js";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { createHash } from "node:crypto";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
+import { homedir, tmpdir } from "node:os";
 import { boundContextSummary, createToolResultMessage, createUserMessage } from "@deepseek-ai/dsh-llm";
-import { constants, existsSync, readFileSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from "node:fs";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { access, readFile, realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { gunzip } from "node:zlib";
 import { SESSION_FORMAT_VERSION, Session, SessionId } from "@deepseek-ai/dsh-session";
@@ -2270,9 +2270,9 @@ async function profilePackage(profilePath, packageId) {
 	}
 }
 async function registryIntegrity(registry, packageId, version, roots, signal) {
-	const canonical = canonicalRegistryBase(registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry });
-	if (!canonical || canonical !== registry) return void 0;
-	const response = await (roots.fetcher ?? fetch)(new URL(npmEscapedPackageName(packageId), canonical), {
+	const canonical$1 = canonicalRegistryBase(registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry });
+	if (!canonical$1 || canonical$1 !== registry) return void 0;
+	const response = await (roots.fetcher ?? fetch)(new URL(npmEscapedPackageName(packageId), canonical$1), {
 		signal,
 		headers: { accept: "application/json" },
 		redirect: "error"
@@ -2368,14 +2368,14 @@ async function executableIdentity(executable, signal) {
 		const candidate = resolve(directory, `${executable}${suffix}`);
 		try {
 			await access(candidate, constants.X_OK);
-			const canonical = await realpath(candidate);
-			const interpreter = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(canonical) ? await windowsCommandInterpreter(signal) : void 0;
-			if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(canonical) && !interpreter) continue;
-			const { stdout, stderr } = await execAuditedFile(canonical, ["--version"], { signal }, interpreter);
+			const canonical$1 = await realpath(candidate);
+			const interpreter = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(canonical$1) ? await windowsCommandInterpreter(signal) : void 0;
+			if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(canonical$1) && !interpreter) continue;
+			const { stdout, stderr } = await execAuditedFile(canonical$1, ["--version"], { signal }, interpreter);
 			const version = `${stdout}${stderr}`.trim();
 			if (version && !version.includes("\n") && !version.includes("\r")) return {
 				executable,
-				realpath: canonical,
+				realpath: canonical$1,
 				version,
 				...interpreter
 			};
@@ -2415,8 +2415,8 @@ async function executeGuardAction(action, resolution, roots, signal, executableI
 		const capabilities = await marketCapabilities(roots, signal);
 		if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return { status: "unavailable" };
 		if (!sameMarketProvider(target.pre_generation, capabilities.generation)) return { status: "unavailable" };
-		if (capabilities.generation !== target.pre_generation) return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? { status: "completed" } : { status: "unavailable" };
-		if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return { status: "handoff_pending" };
+		if (capabilities.generation !== target.pre_generation) return roots.hasRestartIntent?.(resolutionCallId, String(target.service_id), String(target.pre_generation)) || restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? { status: "completed" } : { status: "unavailable" };
+		if (roots.hasRestartIntent?.(resolutionCallId, String(target.service_id), String(target.pre_generation)) || restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return { status: "handoff_pending" };
 		if (!roots.persistRestartIntent || !await roots.persistRestartIntent(agent, {
 			resolutionCallId,
 			serviceId: String(target.service_id),
@@ -2919,6 +2919,7 @@ function normalizedRoots(options) {
 		...options.fetcher ? { fetcher: options.fetcher } : {},
 		...options.commandRunner ? { commandRunner: options.commandRunner } : {},
 		...options.persistRestartIntent ? { persistRestartIntent: options.persistRestartIntent } : {},
+		...options.hasRestartIntent ? { hasRestartIntent: options.hasRestartIntent } : {},
 		...options.hostCapability ? { hostCapability: options.hostCapability } : {},
 		...options.authorizeMutation ? { authorizeMutation: options.authorizeMutation } : {},
 		...options.prepareMutation ? { prepareMutation: options.prepareMutation } : {},
@@ -3535,21 +3536,27 @@ function createReleaseTool(options) {
 					operations: releaseCoverage(contract$1),
 					candidate: contract$1.candidate
 				})),
-				reservations: projection.releaseReservations.map(({ contractId: contractId$1, operation: operation$1, callId: callId$1, startedAtSeq, observedArtifactSri }) => ({
+				reservations: projection.releaseReservations.map(({ contractId: contractId$1, operation: operation$1, callId: callId$1, startedAtSeq, ledgerPosition, observedArtifactSri }) => ({
 					contract_id: contractId$1,
 					operation: operation$1,
 					resolution_call_id: callId$1,
-					started_at_seq: startedAtSeq,
+					...ledgerPosition === void 0 ? { started_at_seq: startedAtSeq } : { record_position: {
+						channel: "private_ledger",
+						position: ledgerPosition
+					} },
 					observed_artifact_sri: observedArtifactSri ?? null,
 					in_flight: inFlightReservation(projection, contractId$1, operation$1)?.callId === callId$1
 				})),
-				settlements: projection.releaseSettlements.map(({ contractId: contractId$1, operation: operation$1, callId: callId$1, outcome: outcome$1, readback: readback$2, settledAtSeq }) => ({
+				settlements: projection.releaseSettlements.map(({ contractId: contractId$1, operation: operation$1, callId: callId$1, outcome: outcome$1, readback: readback$2, settledAtSeq, ledgerPosition }) => ({
 					contract_id: contractId$1,
 					operation: operation$1,
 					resolution_call_id: callId$1,
 					outcome: outcome$1,
 					readback: readback$2,
-					settled_at_seq: settledAtSeq
+					...ledgerPosition === void 0 ? { settled_at_seq: settledAtSeq } : { record_position: {
+						channel: "private_ledger",
+						position: ledgerPosition
+					} }
 				})),
 				diagnostics: projection.releaseDiagnostics
 			};
@@ -4333,17 +4340,23 @@ function releaseResponse(projection, rawInput) {
 		operations: releaseCoverage(contract),
 		expires_at_epoch_ms: contract.expiresAtEpochMs ?? null,
 		consumed_operations: projection.releaseSettlements.filter((settlement) => settlement.contractId === contract.contractId && settlement.outcome === "settled").map((settlement) => settlement.operation),
-		in_flight: projection.releaseReservations.filter((reservation) => reservation.contractId === contract.contractId && !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId && (settlement.outcome === "settled" || settlement.outcome === "not_effected"))).map(({ operation, callId, startedAtSeq }) => ({
+		in_flight: projection.releaseReservations.filter((reservation) => reservation.contractId === contract.contractId && !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId && (settlement.outcome === "settled" || settlement.outcome === "not_effected"))).map(({ operation, callId, startedAtSeq, ledgerPosition }) => ({
 			operation,
 			call_id: callId,
-			started_at_seq: startedAtSeq
+			...ledgerPosition === void 0 ? { started_at_seq: startedAtSeq } : { record_position: {
+				channel: "private_ledger",
+				position: ledgerPosition
+			} }
 		})),
-		settlements: projection.releaseSettlements.filter((settlement) => settlement.contractId === contract.contractId).map(({ operation, callId, outcome, readback: readback$1, settledAtSeq }) => ({
+		settlements: projection.releaseSettlements.filter((settlement) => settlement.contractId === contract.contractId).map(({ operation, callId, outcome, readback: readback$1, settledAtSeq, ledgerPosition }) => ({
 			operation,
 			call_id: callId,
 			outcome,
 			readback: readback$1,
-			settled_at_seq: settledAtSeq
+			...ledgerPosition === void 0 ? { settled_at_seq: settledAtSeq } : { record_position: {
+				channel: "private_ledger",
+				position: ledgerPosition
+			} }
 		}))
 	}));
 	return {
@@ -5326,6 +5339,377 @@ function resolveConfig(config) {
 }
 
 //#endregion
+//#region src/domain/private-ledger.ts
+const normalizeContext = (value) => typeof value === "string" ? {
+	sessionId: value,
+	sessionHeader: { id: value },
+	cwd: "/",
+	hostLockDigest: "test-seam"
+} : value;
+const canonical = (value) => {
+	if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
+	if (typeof value === "number") {
+		if (!Number.isFinite(value) || Object.is(value, -0)) throw new TypeError("private_ledger_non_json_number");
+		return JSON.stringify(value);
+	}
+	if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+	if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+	throw new TypeError("private_ledger_non_json_value");
+};
+const digestRecord = (record$2) => sha256(canonical(record$2));
+const sessionDigest = (sessionId) => sha256(`dsh-completion-guard/private-ledger/v1\0${sessionId}`);
+const contextDigest = (context, root) => sha256(canonical({
+	session_sha256: sessionDigest(context.sessionId),
+	session_header: context.sessionHeader,
+	cwd_sha256: sha256(context.cwd),
+	host_lock_sha256: context.hostLockDigest,
+	ledger_root_sha256: sha256(realpathSync(root))
+}));
+const ledgerPath = (root, context) => join(root, `${sessionDigest(context.sessionId)}.jsonl`);
+const anchorPath = (root) => join(root, "session-anchors.v1.jsonl");
+const rootLockPath = (root) => join(root, ".writer.lock");
+const privateLedgerContractDigest = (contract) => {
+	if (!contract || typeof contract !== "object" || Array.isArray(contract)) return sha256(canonical(contract));
+	const { revokedAtSeq: _mutableRevocation,...immutable } = contract;
+	return sha256(canonical(immutable));
+};
+const privateLedgerTargetDigest = (target) => sha256(canonical(target));
+/** Mirrors the audited dsh-home-paths precedence without importing another host package. */
+function resolvePrivateLedgerRoot(configured, envHome, osHome) {
+	const selected = configured || envHome || join(osHome, ".dsh");
+	if (!selected || !osHome) return void 0;
+	return join(resolve(selected === "~" ? osHome : selected.startsWith("~/") || selected.startsWith("~\\") ? join(osHome, selected.slice(2)) : selected), "completion-guard", "private-ledger-v1");
+}
+function ensureRoot(root) {
+	if (resolve(root) !== root) throw new Error("private_ledger_root_not_normalized");
+	mkdirSync(root, {
+		recursive: true,
+		mode: 448
+	});
+	const stat = lstatSync(root);
+	if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("private_ledger_root_unsafe");
+}
+function openRegular(path, flags, mode = 384) {
+	const fd = openSync(path, flags | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW), mode);
+	const stat = fstatSync(fd);
+	if (!stat.isFile()) {
+		closeSync(fd);
+		throw new Error("private_ledger_file_unsafe");
+	}
+	if (process.platform !== "win32" && (stat.mode & 63) !== 0) fchmodSync(fd, 384);
+	return fd;
+}
+function writeAll(fd, text) {
+	const bytes = Buffer.from(text);
+	let offset = 0;
+	while (offset < bytes.length) {
+		const written = writeSync(fd, bytes, offset, bytes.length - offset);
+		if (written <= 0) throw new Error("private_ledger_partial_write");
+		offset += written;
+	}
+}
+function syncDirectory(root) {
+	if (process.platform === "win32") return;
+	const fd = openSync(root, constants.O_RDONLY);
+	try {
+		fsyncSync(fd);
+	} finally {
+		closeSync(fd);
+	}
+}
+function readAnchors(root) {
+	const path = anchorPath(root);
+	if (!existsSync(path)) return /* @__PURE__ */ new Map();
+	const fd = openRegular(path, constants.O_RDONLY);
+	let raw;
+	try {
+		raw = readFileSync(fd, "utf8");
+	} finally {
+		closeSync(fd);
+	}
+	if (raw && !raw.endsWith("\n")) throw new Error("private_ledger_anchor_truncated");
+	const anchors = /* @__PURE__ */ new Map();
+	for (const line of raw.split("\n").filter(Boolean)) {
+		const value = JSON.parse(line);
+		const unsigned = {
+			version: 1,
+			session_sha256: value.session_sha256,
+			context_sha256: value.context_sha256
+		};
+		if (value.version !== 1 || typeof value.session_sha256 !== "string" || typeof value.context_sha256 !== "string" || value.anchor_sha256 !== sha256(canonical(unsigned))) throw new Error("private_ledger_anchor_invalid");
+		const existing = anchors.get(value.session_sha256);
+		if (existing && existing !== value.context_sha256) throw new Error("private_ledger_anchor_conflict");
+		anchors.set(value.session_sha256, value.context_sha256);
+	}
+	return anchors;
+}
+function readPrivateLedger(root, input) {
+	if (!root) return {
+		records: [],
+		damaged: true,
+		anchored: false
+	};
+	try {
+		const context = normalizeContext(input);
+		if (!existsSync(root)) return {
+			records: [],
+			damaged: false,
+			anchored: false
+		};
+		const rootStat = lstatSync(root);
+		if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return {
+			records: [],
+			damaged: true,
+			anchored: false
+		};
+		const session = sessionDigest(context.sessionId);
+		const expectedContext = contextDigest(context, root);
+		const anchored = readAnchors(root).get(session);
+		if (anchored !== void 0 && anchored !== expectedContext) return {
+			records: [],
+			damaged: true,
+			anchored: true
+		};
+		const path = ledgerPath(root, context);
+		if (!existsSync(path)) return {
+			records: [],
+			damaged: anchored !== void 0,
+			anchored: anchored !== void 0
+		};
+		if (anchored === void 0) return {
+			records: [],
+			damaged: true,
+			anchored: false
+		};
+		const fd = openRegular(path, constants.O_RDONLY);
+		let raw;
+		try {
+			raw = readFileSync(fd, "utf8");
+		} finally {
+			closeSync(fd);
+		}
+		if (raw && !raw.endsWith("\n")) return {
+			records: [],
+			damaged: true,
+			anchored: true
+		};
+		const records = [];
+		let prior = null;
+		for (const [index, line] of raw.split("\n").filter(Boolean).entries()) {
+			const value = JSON.parse(line);
+			const { record_sha256,...unsigned } = value;
+			if (value.version !== 1 || value.session_sha256 !== session || value.context_sha256 !== expectedContext || value.position !== index + 1 || value.prior_sha256 !== prior || ![
+				"release_reservation",
+				"release_settlement",
+				"restart_intent"
+			].includes(value.kind) || !value.payload || typeof value.payload !== "object" || Array.isArray(value.payload) || record_sha256 !== digestRecord(unsigned)) return {
+				records: [],
+				damaged: true,
+				anchored: true
+			};
+			records.push(value);
+			prior = record_sha256;
+		}
+		return {
+			records,
+			damaged: false,
+			anchored: true
+		};
+	} catch {
+		return {
+			records: [],
+			damaged: true,
+			anchored: false
+		};
+	}
+}
+/** Establish the provider-invisible anchor when a live runtime observes a new adoption. */
+function initializePrivateLedger(root, input) {
+	if (!root) return false;
+	let lockFd;
+	try {
+		const context = normalizeContext(input);
+		ensureRoot(root);
+		lockFd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+		const session = sessionDigest(context.sessionId);
+		const expectedContext = contextDigest(context, root);
+		const anchored = readAnchors(root).get(session);
+		if (anchored !== void 0) return anchored === expectedContext;
+		const unsignedAnchor = {
+			version: 1,
+			session_sha256: session,
+			context_sha256: expectedContext
+		};
+		const fd = openRegular(anchorPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
+		try {
+			writeAll(fd, `${canonical({
+				...unsignedAnchor,
+				anchor_sha256: sha256(canonical(unsignedAnchor))
+			})}\n`);
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		const ledgerFd = openRegular(ledgerPath(root, context), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+		try {
+			fsyncSync(ledgerFd);
+		} finally {
+			closeSync(ledgerFd);
+		}
+		syncDirectory(root);
+		return true;
+	} catch {
+		return false;
+	} finally {
+		if (lockFd !== void 0) {
+			try {
+				closeSync(lockFd);
+			} catch {}
+			try {
+				unlinkSync(rootLockPath(root));
+			} catch {}
+		}
+	}
+}
+function appendPrivateLedger(root, input, kind, payload) {
+	if (!root) return false;
+	let lockFd;
+	try {
+		const context = normalizeContext(input);
+		ensureRoot(root);
+		lockFd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+		const session = sessionDigest(context.sessionId);
+		const expectedContext = contextDigest(context, root);
+		const anchored = readAnchors(root).get(session);
+		if (anchored !== void 0 && anchored !== expectedContext) return false;
+		const snapshot = anchored === void 0 ? {
+			records: [],
+			damaged: false
+		} : readPrivateLedger(root, context);
+		if (snapshot.damaged) return false;
+		if (anchored === void 0) {
+			const unsignedAnchor = {
+				version: 1,
+				session_sha256: session,
+				context_sha256: expectedContext
+			};
+			const fd$1 = openRegular(anchorPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
+			try {
+				writeAll(fd$1, `${canonical({
+					...unsignedAnchor,
+					anchor_sha256: sha256(canonical(unsignedAnchor))
+				})}\n`);
+				fsyncSync(fd$1);
+			} finally {
+				closeSync(fd$1);
+			}
+			syncDirectory(root);
+		}
+		if (kind === "release_settlement") {
+			const settlement = normalizeSettlement(payload);
+			const reservation = settlement && [...snapshot.records].reverse().find((record$3) => record$3.kind === "release_reservation" && record$3.payload.contractId === settlement.contractId && record$3.payload.operation === settlement.operation && record$3.payload.callId === settlement.callId);
+			if (!reservation) return false;
+			payload = {
+				...payload,
+				reservation_sha256: reservation.record_sha256,
+				contract_sha256: reservation.payload.contract_sha256,
+				target_sha256: reservation.payload.target_sha256
+			};
+		}
+		const unsigned = {
+			version: 1,
+			session_sha256: session,
+			context_sha256: expectedContext,
+			position: snapshot.records.length + 1,
+			prior_sha256: snapshot.records.at(-1)?.record_sha256 ?? null,
+			kind,
+			payload
+		};
+		const record$2 = {
+			...unsigned,
+			record_sha256: digestRecord(unsigned)
+		};
+		const fd = openRegular(ledgerPath(root, context), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
+		try {
+			writeAll(fd, `${canonical(record$2)}\n`);
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		syncDirectory(root);
+		return true;
+	} catch {
+		return false;
+	} finally {
+		if (lockFd !== void 0) {
+			try {
+				closeSync(lockFd);
+			} catch {}
+			try {
+				unlinkSync(rootLockPath(root));
+			} catch {}
+		}
+	}
+}
+function applyPrivateLedger(projection, snapshot) {
+	if (snapshot.damaged || projection.releaseContracts.length > 0 && snapshot.anchored === false) {
+		projection.releaseStateDamaged = true;
+		if (!projection.releaseDiagnostics.some((row) => row.reasonCode === "private_ledger_damaged")) projection.releaseDiagnostics.push({
+			seq: 0,
+			reasonCode: "private_ledger_damaged"
+		});
+		return;
+	}
+	const reservations = /* @__PURE__ */ new Map();
+	for (const record$2 of snapshot.records) if (record$2.kind === "release_reservation") {
+		const normalized = normalizeReservation(record$2.payload);
+		const contract = normalized && projection.releaseContracts.find((entry) => entry.contractId === normalized.contractId);
+		if (!normalized || !contract || record$2.payload.contract_sha256 !== privateLedgerContractDigest(contract) || typeof record$2.payload.target_sha256 !== "string") {
+			projection.releaseStateDamaged = true;
+			continue;
+		}
+		const key = `${normalized.contractId}\0${normalized.operation}\0${normalized.callId}`;
+		if (reservations.has(key)) {
+			projection.releaseStateDamaged = true;
+			continue;
+		}
+		reservations.set(key, record$2);
+		const existing = projection.releaseReservations.find((entry) => entry.callId === normalized.callId);
+		if (existing && (existing.contractId !== normalized.contractId || existing.operation !== normalized.operation)) {
+			projection.releaseStateDamaged = true;
+			continue;
+		}
+		if (!existing) projection.releaseReservations.push({
+			...normalized,
+			startedAtSeq: 0,
+			ledgerPosition: record$2.position
+		});
+	} else if (record$2.kind === "release_settlement") {
+		const normalized = normalizeSettlement(record$2.payload);
+		const key = normalized && `${normalized.contractId}\0${normalized.operation}\0${normalized.callId}`;
+		const reservationRecord = key ? reservations.get(key) : void 0;
+		const contract = normalized && projection.releaseContracts.find((entry) => entry.contractId === normalized.contractId);
+		const source = record$2.payload.settlement_source;
+		const readbackVerdict = normalized && contract ? readbackSettlesContract(contract, normalized.readback, reservationRecord ? normalizeReservation(reservationRecord.payload)?.observedArtifactSri : void 0) : void 0;
+		if (!normalized || !reservationRecord || !contract || source !== "effect" && source !== "reconcile" || normalized.outcome === "not_effected" && source !== "effect" || source === "reconcile" && normalized.readback === "unavailable" || record$2.payload.reservation_sha256 !== reservationRecord.record_sha256 || record$2.payload.contract_sha256 !== reservationRecord.payload.contract_sha256 || record$2.payload.target_sha256 !== reservationRecord.payload.target_sha256 || normalized.outcome === "settled" && readbackVerdict !== "settled" || source === "reconcile" && readbackVerdict === "mismatch") {
+			projection.releaseStateDamaged = true;
+			continue;
+		}
+		const pinned = {
+			...normalized,
+			settledAtSeq: 0,
+			ledgerPosition: record$2.position
+		};
+		const index = projection.releaseSettlements.findIndex((entry) => entry.contractId === pinned.contractId && entry.operation === pinned.operation && entry.callId === pinned.callId);
+		if (index < 0) projection.releaseSettlements.push(pinned);
+		else if (OUTCOME_STRENGTH[pinned.outcome] >= OUTCOME_STRENGTH[projection.releaseSettlements[index].outcome]) projection.releaseSettlements[index] = pinned;
+	}
+}
+function hasPrivateRestartIntent(snapshot, resolutionCallId, serviceId, preGeneration) {
+	return !snapshot.damaged && snapshot.records.some((record$2) => record$2.kind === "restart_intent" && record$2.payload.resolution_call_id === resolutionCallId && record$2.payload.service_id === serviceId && record$2.payload.pre_generation === preGeneration);
+}
+
+//#endregion
 //#region src/runtime.ts
 const name = "context-guard";
 const inject = [
@@ -5714,7 +6098,7 @@ function sessionHeaderForDigest(session) {
 		delegationDepth: typeof raw.delegationDepth === "number" ? raw.delegationDepth : 0
 	};
 }
-function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalState, refreshHostLock) {
+function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalState, refreshHostLock, readPrivateRecords, initializePrivateRecords) {
 	const projection = createProjection();
 	const session = agent.session;
 	let pendingRecovery = false;
@@ -5728,9 +6112,11 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	let protocolV6Present = false;
 	let realRootInputSeen = false;
 	let lifecycle = "armed";
+	let synchronizedOnce = false;
 	const continuationAttempts = projection.continuationAttempts;
 	const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts;
 	const rebuild = () => {
+		const previousReleaseContracts = projection.releaseContracts.length;
 		if (refreshHostLock) hostLock = refreshHostLock();
 		const header = session.header;
 		const priorRecoveryDigest = projection.lastRecoveryDigest;
@@ -5752,6 +6138,18 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			sessionHeader
 		}, durabilityConfirmed, hostLock);
 		Object.assign(projection, derived.projection);
+		if (readPrivateRecords) {
+			let privateSnapshot = readPrivateRecords();
+			if (!synchronizedOnce && events.length === 0 && !privateSnapshot.damaged && !privateSnapshot.anchored && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords();
+			if (projection.releaseContracts.length > 0 && !privateSnapshot.damaged && !privateSnapshot.anchored) if (synchronizedOnce && previousReleaseContracts === 0 && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords();
+			else privateSnapshot = {
+				records: [],
+				damaged: true,
+				anchored: false
+			};
+			applyPrivateLedger(projection, privateSnapshot);
+		}
+		synchronizedOnce = true;
 		if (!sessionHeader) {
 			projection.integrity = "unknown";
 			if (!projection.integrityViolations.includes("session_ref_unavailable")) projection.integrityViolations.push("session_ref_unavailable");
@@ -5895,24 +6293,36 @@ function revalidateCoreLock(config, expected) {
 /** Observe one actual Host dispatch through Cordis without joining its gate. */
 function registerPassiveHostWorkdirObserver(agent, hostLockAtCall, attestedRouteAtCall, sourcedRootAtCall) {
 	if (typeof agent.ctx.on !== "function") return;
+	const pending = /* @__PURE__ */ new WeakMap();
 	agent.ctx.on("tools/pre-execute", async (exec, next) => {
 		if (exec.agent === agent && (exec.name === "bash" || exec.name === "pwsh")) try {
 			const policy = agent.ctx.get("sandboxPolicy");
 			const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(), policy, await attestedRouteAtCall(exec.name, agent.ctx.get("shell"), policy), sourcedRootAtCall?.(exec) ?? null);
-			if (receipt) agent.session.append("user/message", createUserMessage({
-				content: [{
-					type: "text",
-					text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}`
-				}],
-				source: {
-					kind: "plugin",
-					plugin: "context-guard",
-					form: "notice",
-					summary: "read-only Host workdir observation"
-				}
-			}), { surfaceOp: "append" });
+			if (receipt) pending.set(exec, receipt);
 		} catch {}
 		return next();
+	});
+	agent.ctx.on("tools/post-execute", async (exec, _result, next) => {
+		const decision = await next();
+		const receipt = pending.get(exec);
+		pending.delete(exec);
+		if (!receipt || exec.agent !== agent) return decision;
+		const context = createUserMessage({
+			content: [{
+				type: "text",
+				text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}`
+			}],
+			source: {
+				kind: "plugin",
+				plugin: "context-guard",
+				form: "notice",
+				summary: "read-only Host workdir observation"
+			}
+		});
+		return {
+			...decision,
+			additionalContexts: [...decision.additionalContexts ?? [], context]
+		};
 	});
 }
 function apply(ctx, rawConfig = {}, seams = {}) {
@@ -5922,7 +6332,14 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 		profileKind: config.hostLockProfile
 	});
 	const runtimes = /* @__PURE__ */ new Map();
+	const privateLedgerRoot = seams.privateLedgerRoot ?? resolvePrivateLedgerRoot(void 0, process.env.DSH_HOME, homedir());
 	const hostLocks = /* @__PURE__ */ new Map();
+	const ledgerContext = (agent, fallback = installedHostLock) => ({
+		sessionId: String(agent.session.id),
+		sessionHeader: structuredClone(agent.session.header),
+		cwd: sessionCwd(agent.session) ?? "",
+		hostLockDigest: (hostLocks.get(agent) ?? fallback).digest
+	});
 	const registeredAgents = /* @__PURE__ */ new WeakSet();
 	const ensure = (agent) => {
 		let runtime = runtimes.get(agent);
@@ -5934,7 +6351,7 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				return current;
 			};
 			const agentHostLock = refreshHostLock();
-			runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : void 0, refreshHostLock);
+			runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : void 0, refreshHostLock, privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : void 0, privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : void 0);
 			runtimes.set(agent, runtime);
 			hostLocks.set(agent, agentHostLock);
 		}
@@ -5972,33 +6389,11 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 			runtime.sync();
 			return durable;
 		}, () => runtime.markRecoveryNeeded()));
-		/**
-		* Persist one C10 release record through the plugin-notice channel and make
-		* it durable before returning. A record that cannot be flushed is reported
-		* as a failure: an unflushed reservation is not an in-flight operation, and
-		* an unflushed settlement would let a consumed ticket look unused.
-		*/
-		const persistReleaseRecord = async (toolAgent, prefix, payload) => {
-			const target = toolAgent.session;
-			target.append.bind(target)("user/message", createUserMessage({
-				content: [{
-					type: "text",
-					text: `${prefix}${JSON.stringify(payload)}`
-				}],
-				source: {
-					kind: "plugin",
-					plugin: "context-guard",
-					form: "notice",
-					summary: boundContextSummary("recording an explicit release record")
-				}
-			}), { surfaceOp: "append" });
-			let durable = false;
-			try {
-				durable = await ctx.sessions.flush(target);
-			} catch {
-				durable = false;
-			}
-			runtime.setDurability(durable);
+		/** Persist release state outside provider-visible Session history. */
+		const persistReleaseRecord = async (toolAgent, kind, payload) => {
+			if (toolAgent.session !== agent.session) return false;
+			if (!sessionCwd(agent.session)) return false;
+			const durable = appendPrivateLedger(privateLedgerRoot, ledgerContext(agent), kind, payload);
 			runtime.sync();
 			return durable;
 		};
@@ -6019,6 +6414,7 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				return authorizeMutationFromProjection(runtime.projection, request);
 			},
 			marketOrigin: optionalMarketOrigin(ctx, agent),
+			hasRestartIntent: (resolutionCallId, serviceId, preGeneration) => hasPrivateRestartIntent(readPrivateLedger(privateLedgerRoot, ledgerContext(agent)), resolutionCallId, serviceId, preGeneration),
 			releaseGate: async (request) => {
 				runtime.sync();
 				const projection = runtime.projection;
@@ -6045,12 +6441,19 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 					status: "denied",
 					reasonCode: decision.reasonCode
 				};
-				return await persistReleaseRecord(agent, RELEASE_RESERVATION_PREFIX, {
+				const grantedContract = projection.releaseContracts.find((entry) => entry.contractId === decision.contractId);
+				if (!grantedContract) return {
+					status: "denied",
+					reasonCode: "release_state_damaged"
+				};
+				return await persistReleaseRecord(agent, "release_reservation", {
 					contractId: decision.contractId,
 					operation: request.operation,
 					callId: request.callId,
 					startedAtSeq: 0,
 					status: "in_flight",
+					contract_sha256: privateLedgerContractDigest(grantedContract),
+					target_sha256: privateLedgerTargetDigest(request.resolvedTarget),
 					...observed.artifactSri !== void 0 ? { observedArtifactSri: observed.artifactSri } : {}
 				}) ? {
 					status: "granted",
@@ -6067,35 +6470,26 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				const reservation = reservationFor(runtime.projection, contractId, request.callId);
 				let outcome = request.effect === "not_effected" ? "not_effected" : "unknown";
 				if (request.effect === "completed" && contract) outcome = readbackSettlesContract(contract, request.readback, reservation?.observedArtifactSri) === "settled" ? "settled" : "unknown";
-				await persistReleaseRecord(agent, RELEASE_SETTLEMENT_PREFIX, {
+				await persistReleaseRecord(agent, "release_settlement", {
 					contractId,
 					operation: request.operation,
 					callId: request.callId,
 					settledAtSeq: 0,
 					readback: request.readback,
-					outcome
+					outcome,
+					settlement_source: "effect"
 				});
 			},
 			persistRestartIntent: async (toolAgent, intent) => {
-				const session = toolAgent.session;
-				session.append.bind(session)("user/message", createUserMessage({
-					content: [{
-						type: "text",
-						text: `${RESTART_INTENT_PREFIX}${JSON.stringify({
-							resolution_call_id: intent.resolutionCallId,
-							service_id: intent.serviceId,
-							pre_generation: intent.preGeneration
-						})}`
-					}],
-					source: {
-						kind: "plugin",
-						plugin: "context-guard",
-						form: "notice",
-						summary: boundContextSummary("persisting a restart handoff intent")
-					}
-				}), { surfaceOp: "append" });
-				const durable = await ctx.sessions.flush(session);
-				runtime.setDurability(durable);
+				if (toolAgent.session !== agent.session) return false;
+				if (!sessionCwd(agent.session)) return false;
+				const snapshot = readPrivateLedger(privateLedgerRoot, ledgerContext(agent));
+				if (snapshot.damaged || !snapshot.anchored) return false;
+				const durable = appendPrivateLedger(privateLedgerRoot, ledgerContext(agent), "restart_intent", {
+					resolution_call_id: intent.resolutionCallId,
+					service_id: intent.serviceId,
+					pre_generation: intent.preGeneration
+				});
 				runtime.sync();
 				return durable;
 			}
@@ -6142,13 +6536,14 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 			getProjection: () => runtime.projection,
 			fetcher: evidenceOptions.fetcher,
 			...evidenceOptions.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {},
-			persistSettlement: async (request) => persistReleaseRecord(request.agent, RELEASE_SETTLEMENT_PREFIX, {
+			persistSettlement: async (request) => persistReleaseRecord(request.agent, "release_settlement", {
 				contractId: request.contractId,
 				operation: request.operation,
 				callId: request.callId,
 				settledAtSeq: 0,
 				readback: request.readback,
-				outcome: request.outcome
+				outcome: request.outcome,
+				settlement_source: "reconcile"
 			})
 		}));
 		agent.ctx.tools.register(createExternalOperationTool((id, toolAgent) => readExternalOperation(ctx, toolAgent, id), () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock)));

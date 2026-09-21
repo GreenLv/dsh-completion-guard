@@ -74,6 +74,7 @@ export interface EvidenceToolRoots {
     agent: { session: unknown },
     intent: { resolutionCallId: string; serviceId: string; preGeneration: string },
   ) => Promise<boolean>
+  hasRestartIntent?: (resolutionCallId: string, serviceId: string, preGeneration: string) => boolean
   /** Runtime-supplied, action-scoped host capability decision. */
   hostCapability?: (action: StatefulAction) => { status: 'supported' | 'unsupported' | 'unavailable'; digest: string }
   /** Runtime-owned root-contract authorization. Absence is fail-closed. */
@@ -832,9 +833,11 @@ async function executeGuardAction(
     if (!capabilities || !roots.marketOrigin || !resolutionCallId || !agent) return { status: 'unavailable' }
     if (!sameMarketProvider(target.pre_generation, capabilities.generation)) return { status: 'unavailable' }
     if (capabilities.generation !== target.pre_generation) {
-      return restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target) ? { status: 'completed' } : { status: 'unavailable' }
+      return (roots.hasRestartIntent?.(resolutionCallId, String(target.service_id), String(target.pre_generation))
+        || restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) ? { status: 'completed' } : { status: 'unavailable' }
     }
-    if (restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return { status: 'handoff_pending' }
+    if (roots.hasRestartIntent?.(resolutionCallId, String(target.service_id), String(target.pre_generation))
+      || restartIntent(snapshotSessionEvents(agent.session), resolutionCallId, target)) return { status: 'handoff_pending' }
     if (!roots.persistRestartIntent || !await roots.persistRestartIntent(agent, {
       resolutionCallId,
       serviceId: String(target.service_id),
@@ -1236,6 +1239,7 @@ function normalizedRoots(options: EvidenceToolRoots): EvidenceToolRoots {
     ...(options.fetcher ? { fetcher: options.fetcher } : {}),
     ...(options.commandRunner ? { commandRunner: options.commandRunner } : {}),
     ...(options.persistRestartIntent ? { persistRestartIntent: options.persistRestartIntent } : {}),
+    ...(options.hasRestartIntent ? { hasRestartIntent: options.hasRestartIntent } : {}),
     ...(options.hostCapability ? { hostCapability: options.hostCapability } : {}),
     ...(options.authorizeMutation ? { authorizeMutation: options.authorizeMutation } : {}),
     ...(options.prepareMutation ? { prepareMutation: options.prepareMutation } : {}),

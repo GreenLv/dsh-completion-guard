@@ -45,6 +45,15 @@ const rootText = (event: DerivedEnvelope): string => {
   const data = row(event.data)
   return Array.isArray(data.content) ? data.content.filter((part) => row(part).type === 'text').map((part) => String(row(part).text ?? '')).join('') : ''
 }
+// Delivery assertions are read from visible prose. Markdown emphasis is only
+// presentation. A scalar wrapped in inline code remains the value of the
+// surrounding visible assertion; quoted examples, code phrases, fenced code,
+// and blockquotes remain reported content rather than the assistant's own fact.
+const deliveryAssertionText = (value: string): string => value
+  .replace(/```[\s\S]*?```|“[^”\n]*”|‘[^’\n]*’|"[^"\n]*"|'[^'\n]*'/gu, ' ')
+  .replace(/^\s*>.*$/gmu, ' ')
+  .replace(/`([^`\n]*)`/gu, (_whole, content: string) => /^\s*\d+\s*$/u.test(content) ? content : ' ')
+  .replace(/\*\*|__/gu, '')
 const sourceSeq = (item: GuardItem): number | undefined => {
   const match = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
   return match ? Number(match[1]) : undefined
@@ -481,7 +490,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         || fact.processFacts?.operationAttribution !== 'single_operation') return false
       const pair = sourceByCall.get(fact.callId)
       if (!pair || pair.call.seq <= root.seq || pair.result.seq !== fact.toolResultSeq
-        || persistedToolResultStatus(pair.result.data, fact.callId) !== 'clean') return false
+        || persistedToolResultStatus(pair.result.data, fact.callId) === 'unknown') return false
       let args: Record<string, unknown> = {}
       try { args = row(JSON.parse(String(row(pair.call.data).arguments ?? ''))) } catch { return false }
       const expected = `${namedTest[1]!.toLowerCase()} test`
@@ -598,7 +607,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
             || entry.semanticAction !== 'test' || entry.evidenceRole !== 'effect' || entry.parseStatus !== 'supported'
             || entry.processFacts?.operationAttribution !== 'single_operation'
             || !projection.auditedForegroundRenderers?.includes(entry.toolName as 'bash' | 'pwsh')
-            || persistedToolResultStatus(pair.result.data, entry.callId) !== 'clean'
+            || persistedToolResultStatus(pair.result.data, entry.callId) === 'unknown'
             || !entry.subjects.includes(String(reportTest?.requestedTarget?.scope ?? ''))) return false
           let args: Record<string, unknown> = {}
           try { args = row(JSON.parse(String(row(pair.call.data).arguments ?? ''))) } catch { return false }
@@ -610,12 +619,27 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         // the exact failing exit or an accurate failure report by itself.
         const terminalZero = run?.processFacts?.outcome === 'success'
           && run.processFacts.outcomeReason === 'unmarked_renderer_success'
-        const conflictingStatus = /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败)|(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*[1-9]\d*)/iu.test(deliveredText)
-        const numericReport = terminalZero
-          && /(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*0(?!\d)/iu.test(deliveredText)
-        const statusReport = terminalZero
-          ? /(?:test(?:s)?\s+(?:passed|succeeded)|测试(?:已)?通过|测试成功)/iu.test(deliveredText)
-          : false
+        const runPair = run ? sourceByCall.get(run.callId) : undefined
+        const persistedRunStatus = runPair ? persistedToolResultStatus(runPair.result.data, run!.callId) : 'unknown'
+        const declaredExit = terminalZero ? 0
+          : persistedRunStatus === 'failure' && typeof run?.processFacts?.declaredExitCode === 'number'
+            ? run.processFacts.declaredExitCode : undefined
+        const assertedText = deliveryAssertionText(deliveredText)
+        const reportedExits = [...assertedText.matchAll(/(?:exit\s*(?:code|status)?|退出码)\s*[:=]?\s*(\d+)(?!\d)(?!\.\d)/giu)]
+          .map((match) => Number(match[1]))
+        const trustedFailure = persistedRunStatus === 'failure' && run?.processFacts?.outcome === 'failure'
+        const contradictoryOutcome = trustedFailure
+          ? /(?:test(?:s)?\s+(?:passed|succeeded)|测试(?:已)?通过|测试成功)/iu.test(assertedText)
+          : /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败))/iu.test(assertedText)
+        const conflictingStatus = contradictoryOutcome || reportedExits.length > 0
+          && (declaredExit === undefined || reportedExits.some((value) => value !== declaredExit))
+        const numericReport = declaredExit !== undefined && reportedExits.length > 0
+          && reportedExits.every((value) => value === declaredExit)
+        const statusReport = run?.processFacts?.outcome === 'success'
+          ? /(?:test(?:s)?\s+(?:passed|succeeded)|测试(?:已)?通过|测试成功)/iu.test(assertedText)
+          : trustedFailure
+            ? /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败))/iu.test(assertedText)
+            : false
         if (reportTest && (conflictingStatus || !numericReport && !statusReport)) continue
         if (!sources.some((source) => source.id === deliveryId)) sources.push({ id: deliveryId, seq: delivery.seq, kind: 'final_delivery', unit, revision: itemRevision,
           sha256: hash(deliveredText), byte_length: Buffer.byteLength(deliveredText, 'utf8'), text: null, call_id: null, turn })
@@ -661,8 +685,11 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       // is not a substitute for what the Host actually executed.
       const untrustedDirectTest = item.semanticAction === 'test' && evidence.evidenceRole === 'effect'
         && (namedTest ? !isDirectTestFact(evidence) : !selectedReadiness)
-      const outcome = untrustedDirectTest ? 'unknown'
-        : hostResultStatus === 'failure' || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
+      // Unsupported compound/background calls do not observe this exact
+      // predicate. Omit them while preserving shared latest-fact semantics;
+      // a supported but genuinely unknown run below still reopens the item.
+      if (untrustedDirectTest) continue
+      const outcome = hostResultStatus === 'failure' || evidence.outcome === 'failure' || evidence.processFacts?.outcome === 'failure' ? 'failure'
         : evidence.outcome !== 'success' || evidence.processFacts?.outcome === 'unknown'
           || hostResultStatus === 'unknown'
           || (evidence.evidenceRole === 'effect' && evidence.processFacts && evidence.processFacts.operationAttribution !== 'single_operation')

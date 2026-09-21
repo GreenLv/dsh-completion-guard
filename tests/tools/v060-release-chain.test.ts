@@ -11,6 +11,7 @@ import { certifyCheckpoint } from '../../src/domain/checkpoint.js'
 import { deriveProjection, PROTOCOL_V5_NOTICE } from '../../src/domain/derive.js'
 import { inFlightReservation, settledOperations } from '../../src/domain/release.js'
 import { createUserMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import { applyPrivateLedger, readPrivateLedger, type PrivateLedgerContext } from '../../src/domain/private-ledger.js'
 
 /**
  * 0.6.0 C10 production release chain (F04/F05).
@@ -85,7 +86,8 @@ function execution(session: Session, callId: string, name: string) {
 }
 
 /** Boot the real plugin against a real Session and capture its tool surface. */
-function startRuntime(session: Session, seams: { commandRunner?: () => Promise<void>; fetcher?: typeof fetch }) {
+const ledgerRoots = new WeakMap<Session, { root: string; context: PrivateLedgerContext }>()
+function startRuntime(session: Session, seams: { commandRunner?: () => Promise<void>; fetcher?: typeof fetch; privateLedgerRoot: string }) {
   const tools: RegisteredTool[] = []
   const handlers = new Map<string, unknown[]>()
   const ctx = {
@@ -94,24 +96,27 @@ function startRuntime(session: Session, seams: { commandRunner?: () => Promise<v
     get: () => undefined,
     sessions: { flush: async () => true },
   }
+  const hostLock = {
+    ...evaluateHostLock(EXPECTED_HOST_PACKAGES, {
+      platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: 'web',
+    }), goalAvailable: false,
+  }
   apply(ctx as never, { activation: 'always', policy: 'release' } as never, {
     ...(seams.commandRunner ? { commandRunner: seams.commandRunner } : {}),
     ...(seams.fetcher ? { fetcher: seams.fetcher } : {}),
     allowLoopbackHttpRegistry: true,
+    privateLedgerRoot: seams.privateLedgerRoot,
     // The audited cohort is pinned so the action-scoped capability row is
     // supported without reading a live profile graph. This replaces the
     // host-lock EVALUATION only; the release gate under acceptance is the real
     // runtime gate below.
     // `goalAvailable: false` because this acceptance run boots no Goal service;
     // the lock's own suites cover the Goal binding.
-    hostLock: {
-      ...evaluateHostLock(EXPECTED_HOST_PACKAGES, {
-        platform: process.platform === 'win32' ? 'windows' : 'posix',
-        profileKind: 'web',
-      }),
-      goalAvailable: false,
-    },
+    hostLock,
   })
+  ledgerRoots.set(session, { root: seams.privateLedgerRoot, context: { sessionId: String(session.id),
+    sessionHeader: structuredClone(session.header) as unknown as Record<string, unknown>,
+    cwd: String(session.header.cwd), hostLockDigest: hostLock.digest } })
   const agent = {
     session,
     steer: () => {},
@@ -167,7 +172,10 @@ function command(session: Session, args: string): void {
 }
 
 function projectionOf(session: Session) {
-  return deriveProjection(session.snapshotEvents() as never, { activation: 'always', policy: 'release' }, { cwd: process.cwd() }, true).projection
+  const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'always', policy: 'release' }, { cwd: process.cwd() }, true).projection
+  const ledger = ledgerRoots.get(session)
+  if (ledger) applyPrivateLedger(projection, readPrivateLedger(ledger.root, ledger.context))
+  return projection
 }
 
 describe('0.6.0 C10: the release chain runs on the production wiring', () => {
@@ -191,7 +199,7 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       })
       const { tools } = startRuntime(session, {
         commandRunner: async () => { published.push([...published].length ? [] : []) },
-        fetcher,
+        fetcher, privateLedgerRoot: join(root, 'private-ledger'),
       })
       const byName = (name: string) => tools.find((tool) => tool.name === name)!
       expect(byName('context_guard_release'), 'the recovery entry is registered').toBeDefined()
@@ -303,6 +311,8 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       expect(replay.status).toBe('unavailable')
       expect(replay.reason_code).toBe('release_operation_consumed')
       expect(published).toHaveLength(1)
+      await rm(join(root, 'private-ledger'), { recursive: true, force: true })
+      expect(projectionOf(session).releaseStateDamaged).toBe(true)
     } finally { await rm(root, { recursive: true, force: true }) }
   })
 
@@ -319,7 +329,8 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       const session = Session.create(SessionId('release-chain-revoked'), undefined, {
         version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('release-chain-revoked'), createdAt: 1, cwd: root,
       })
-      const { tools } = startRuntime(session, { commandRunner: async () => {}, fetcher })
+      const { tools } = startRuntime(session, { commandRunner: async () => {}, fetcher,
+        privateLedgerRoot: join(root, 'private-ledger') })
       notice(session, PROTOCOL_V5_NOTICE)
       session.append('user/message', createUserMessage({
         content: [{ type: 'text', text: '创建 report.txt' }], source: { kind: 'user' },
@@ -404,7 +415,8 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       const session = Session.create(SessionId('release-chain-recovery'), undefined, {
         version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('release-chain-recovery'), createdAt: 1, cwd: root,
       })
-      const { tools } = startRuntime(session, { commandRunner: async () => {}, fetcher })
+      const { tools } = startRuntime(session, { commandRunner: async () => {}, fetcher,
+        privateLedgerRoot: join(root, 'private-ledger') })
       notice(session, PROTOCOL_V5_NOTICE)
       session.append('user/message', createUserMessage({
         content: [{ type: 'text', text: '创建 report.txt' }], source: { kind: 'user' },

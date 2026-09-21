@@ -9,8 +9,9 @@ import type { GuardProjection, TargetTuple } from './types.js'
  * contract that names the exact candidate, and every effect must then match
  * that contract and spend a one-shot reservation.
  *
- * Three durable records carry the state machine (P0 §5), all written through
- * the plugin-notice channel the host already persists:
+ * Three durable records carry the state machine (P0 §5). Adoption remains in
+ * the Session log; new reservations and settlements use the provider-invisible
+ * private ledger. Frozen historical plugin notices remain readable:
  *
  * - `contract`    — the adopted scope: operations, the exact candidate, the
  *                   readiness/closure references and an optional expiry.
@@ -148,6 +149,8 @@ export interface ReleaseReservation {
   operation: ReleaseOperation
   callId: string
   startedAtSeq: number
+  /** Present instead of a Session sequence for provider-invisible sidecar records. */
+  ledgerPosition?: number
   status: 'in_flight'
   /**
    * The npm SRI the trusted producer read when the reservation was written.
@@ -165,6 +168,8 @@ export interface ReleaseSettlement {
   operation: ReleaseOperation
   callId: string
   settledAtSeq: number
+  /** Present instead of a Session sequence for provider-invisible sidecar records. */
+  ledgerPosition?: number
   /** A trusted readback identity, or the reason no producer exists. */
   readback: { kind: 'npm_integrity' | 'git_ref' | 'github_release'; identity: string } | 'unavailable'
   outcome: ReleaseOutcome

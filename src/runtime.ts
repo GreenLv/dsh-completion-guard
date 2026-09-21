@@ -1,5 +1,6 @@
 import { createRebindTool } from './tools/rebind.js'
 import { createHash } from 'node:crypto'
+import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -30,7 +31,6 @@ import { GIT_COMMAND_TEMPLATES, type GitAdapterAction } from './domain/git-adapt
 import {
   createActionTool,
   createEvidenceTool,
-  RESTART_INTENT_PREFIX,
   type EvidenceToolRoots,
   type MutationAuthorizationDecision,
   type MutationAuthorizationRequest,
@@ -61,7 +61,6 @@ import { actionHasAdapter, evaluateCompatibility } from './domain/compatibility.
 import {
   readbackSettlesContract, releaseContractFor, releasePreEffectDecision, reservationFor,
   type ReleaseSettlement,
-  RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX,
 } from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
@@ -70,6 +69,9 @@ import { SessionApiError, snapshotSessionEvents } from './domain/session-events.
 import { captureHostWorkdir, HOST_WORKDIR_PREFIX, sourcedNamedTestRoot } from './domain/host-workdir.js'
 import { resolveAuditedRef } from './tools/evidence.js'
 import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import { appendPrivateLedger, applyPrivateLedger, hasPrivateRestartIntent, initializePrivateLedger, privateLedgerContractDigest,
+  privateLedgerTargetDigest, readPrivateLedger, resolvePrivateLedgerRoot,
+  type PrivateLedgerSnapshot } from './domain/private-ledger.js'
 
 export const name = 'context-guard'
 // Native readback and test-readiness tools require the host filesystem. Cordis
@@ -552,6 +554,8 @@ export function createRuntime(
   hostLock: HostLockEvaluation = DEFAULT_HOST_LOCK,
   readGoalState?: () => unknown,
   refreshHostLock?: () => HostLockEvaluation,
+  readPrivateRecords?: () => PrivateLedgerSnapshot,
+  initializePrivateRecords?: () => boolean,
 ): GuardRuntime {
   const projection = createProjection()
   const session = agent.session
@@ -566,10 +570,12 @@ export function createRuntime(
   let protocolV6Present = false
   let realRootInputSeen = false
   let lifecycle: LifecyclePhase = 'armed'
+  let synchronizedOnce = false
   const continuationAttempts = projection.continuationAttempts
   const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts
 
   const rebuild = () => {
+    const previousReleaseContracts = projection.releaseContracts.length
     if (refreshHostLock) hostLock = refreshHostLock()
     const header = session.header as { cwd?: unknown } | undefined
     // The recovery digest is runtime-owned liveness state like the per-turn
@@ -597,6 +603,17 @@ export function createRuntime(
       hostLock,
     )
     Object.assign(projection, derived.projection)
+    if (readPrivateRecords) {
+      let privateSnapshot = readPrivateRecords()
+      if (!synchronizedOnce && events.length === 0 && !privateSnapshot.damaged && !privateSnapshot.anchored
+        && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords()
+      if (projection.releaseContracts.length > 0 && !privateSnapshot.damaged && !privateSnapshot.anchored) {
+        if (synchronizedOnce && previousReleaseContracts === 0 && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords()
+        else privateSnapshot = { records: [], damaged: true, anchored: false }
+      }
+      applyPrivateLedger(projection, privateSnapshot)
+    }
+    synchronizedOnce = true
     if (!sessionHeader) {
       projection.integrity = 'unknown'
       if (!projection.integrityViolations.includes('session_ref_unavailable')) {
@@ -748,6 +765,7 @@ export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall:
   attestedRouteAtCall: (tool: 'bash' | 'pwsh', provider: unknown, policyProvider: unknown) => Promise<boolean> | boolean,
   sourcedRootAtCall?: (exec: { arguments: unknown }) => number | undefined): void {
   if (typeof agent.ctx.on !== 'function') return
+  const pending = new WeakMap<object, ReturnType<typeof captureHostWorkdir>>()
   agent.ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.agent === agent && (exec.name === 'bash' || exec.name === 'pwsh')) {
       try {
@@ -757,13 +775,21 @@ export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall:
         const policy = agent.ctx.get('sandboxPolicy') as { resolve(request: { session: Session }): unknown } | undefined
         const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(), policy,
           await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy), sourcedRootAtCall?.(exec) ?? null)
-        if (receipt) agent.session.append('user/message', createUserMessage({
-          content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
-          source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'read-only Host workdir observation' },
-        }), { surfaceOp: 'append' })
+        if (receipt) pending.set(exec, receipt)
       } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
     }
     return next()
+  })
+  agent.ctx.on('tools/post-execute', async (exec, _result, next) => {
+    const decision = await next()
+    const receipt = pending.get(exec)
+    pending.delete(exec)
+    if (!receipt || exec.agent !== agent) return decision
+    const context = createUserMessage({
+      content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'read-only Host workdir observation' },
+    })
+    return { ...decision, additionalContexts: [...decision.additionalContexts ?? [], context] }
   })
 }
 
@@ -788,6 +814,8 @@ export interface RuntimeExecutorSeams {
    * acceptance.
    */
   hostLock?: HostLockEvaluation
+  /** Isolated acceptance override for the provider-invisible durable ledger. */
+  privateLedgerRoot?: string
 }
 
 export function apply(ctx: Context, rawConfig: {
@@ -808,7 +836,14 @@ export function apply(ctx: Context, rawConfig: {
     profileKind: config.hostLockProfile,
   })
   const runtimes = new Map<Agent, GuardRuntime>()
+  const privateLedgerRoot = seams.privateLedgerRoot
+    ?? resolvePrivateLedgerRoot(undefined, process.env.DSH_HOME, homedir())
   const hostLocks = new Map<Agent, HostLockEvaluation>()
+  const ledgerContext = (agent: Agent, fallback: HostLockEvaluation = installedHostLock) => ({
+    sessionId: String(agent.session.id),
+    sessionHeader: structuredClone(agent.session.header) as unknown as Record<string, unknown>,
+    cwd: sessionCwd(agent.session) ?? '', hostLockDigest: (hostLocks.get(agent) ?? fallback).digest,
+  })
   const registeredAgents = new WeakSet<Agent>()
   const ensure = (agent: Agent) => {
     let runtime = runtimes.get(agent)
@@ -821,7 +856,9 @@ export function apply(ctx: Context, rawConfig: {
         return current
       }
       const agentHostLock = refreshHostLock()
-      runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined, refreshHostLock)
+      runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined, refreshHostLock,
+        privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined,
+        privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined)
       runtimes.set(agent, runtime)
       hostLocks.set(agent, agentHostLock)
     }
@@ -892,26 +929,12 @@ export function apply(ctx: Context, rawConfig: {
       },
       () => runtime.markRecoveryNeeded(),
     ))
-    /**
-     * Persist one C10 release record through the plugin-notice channel and make
-     * it durable before returning. A record that cannot be flushed is reported
-     * as a failure: an unflushed reservation is not an in-flight operation, and
-     * an unflushed settlement would let a consumed ticket look unused.
-     */
-    const persistReleaseRecord = async (toolAgent: Agent, prefix: string, payload: Record<string, unknown>): Promise<boolean> => {
-      const target = toolAgent.session as Session
-      const append = (target as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append.bind(target)
-      append('user/message', createUserMessage({
-        content: [{ type: 'text', text: `${prefix}${JSON.stringify(payload)}` }],
-        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recording an explicit release record') },
-      }), { surfaceOp: 'append' })
-      let durable = false
-      try {
-        durable = await ctx.sessions.flush(target)
-      } catch {
-        durable = false
-      }
-      runtime.setDurability(durable)
+    /** Persist release state outside provider-visible Session history. */
+    const persistReleaseRecord = async (toolAgent: Agent, kind: 'release_reservation' | 'release_settlement',
+      payload: Record<string, unknown>): Promise<boolean> => {
+      if (toolAgent.session !== agent.session) return false
+      if (!sessionCwd(agent.session)) return false
+      const durable = appendPrivateLedger(privateLedgerRoot, ledgerContext(agent), kind, payload)
       runtime.sync()
       return durable
     }
@@ -935,6 +958,8 @@ export function apply(ctx: Context, rawConfig: {
         return authorizeMutationFromProjection(runtime.projection, request)
       },
       marketOrigin: optionalMarketOrigin(ctx, agent),
+      hasRestartIntent: (resolutionCallId, serviceId, preGeneration) => hasPrivateRestartIntent(
+        readPrivateLedger(privateLedgerRoot, ledgerContext(agent)), resolutionCallId, serviceId, preGeneration),
       // C10 explicit release: the gate is consulted before any publish effect.
       // It applies once a contract has been adopted OR the session policy is
       // `release`; before that, publishing keeps its existing Guard-owned
@@ -970,12 +995,16 @@ export function apply(ctx: Context, rawConfig: {
         if (decision.status !== 'granted' || decision.contractId === undefined) {
           return { status: 'denied', reasonCode: decision.reasonCode }
         }
-        const persisted = await persistReleaseRecord(agent, RELEASE_RESERVATION_PREFIX, {
+        const grantedContract = projection.releaseContracts.find((entry) => entry.contractId === decision.contractId)
+        if (!grantedContract) return { status: 'denied', reasonCode: 'release_state_damaged' }
+        const persisted = await persistReleaseRecord(agent, 'release_reservation', {
           contractId: decision.contractId,
           operation: request.operation,
           callId: request.callId,
           startedAtSeq: 0,
           status: 'in_flight',
+          contract_sha256: privateLedgerContractDigest(grantedContract),
+          target_sha256: privateLedgerTargetDigest(request.resolvedTarget),
           // Record the SRI the producer read, so a contract that froze only the
           // byte SHA-256 can still be reconciled later instead of becoming
           // permanently unsettleable.
@@ -1000,7 +1029,7 @@ export function apply(ctx: Context, rawConfig: {
           const settled = readbackSettlesContract(contract, request.readback, reservation?.observedArtifactSri)
           outcome = settled === 'settled' ? 'settled' : 'unknown'
         }
-        await persistReleaseRecord(agent, RELEASE_SETTLEMENT_PREFIX, {
+        await persistReleaseRecord(agent, 'release_settlement', {
           // The settlement belongs to the contract the granted reservation
           // belonged to. Derive pins settledAtSeq to the durable event, so the
           // payload's placeholder cannot be forged by a replay.
@@ -1010,21 +1039,19 @@ export function apply(ctx: Context, rawConfig: {
           settledAtSeq: 0,
           readback: request.readback,
           outcome,
+          settlement_source: 'effect',
         })
       },
       persistRestartIntent: async (toolAgent, intent) => {
-        const session = toolAgent.session as Session
-        const append = (session as unknown as { append: (type: string, data: unknown, options?: unknown) => unknown }).append.bind(session)
-        append('user/message', createUserMessage({
-          content: [{ type: 'text', text: `${RESTART_INTENT_PREFIX}${JSON.stringify({
-            resolution_call_id: intent.resolutionCallId,
-            service_id: intent.serviceId,
-            pre_generation: intent.preGeneration,
-          })}` }],
-          source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('persisting a restart handoff intent') },
-        }), { surfaceOp: 'append' })
-        const durable = await ctx.sessions.flush(session)
-        runtime.setDurability(durable)
+        if (toolAgent.session !== agent.session) return false
+        if (!sessionCwd(agent.session)) return false
+        const snapshot = readPrivateLedger(privateLedgerRoot, ledgerContext(agent))
+        if (snapshot.damaged || !snapshot.anchored) return false
+        const durable = appendPrivateLedger(privateLedgerRoot, ledgerContext(agent), 'restart_intent', {
+          resolution_call_id: intent.resolutionCallId,
+          service_id: intent.serviceId,
+          pre_generation: intent.preGeneration,
+        })
         runtime.sync()
         return durable
       },
@@ -1071,13 +1098,14 @@ export function apply(ctx: Context, rawConfig: {
       getProjection: () => runtime.projection,
       fetcher: evidenceOptions.fetcher,
       ...(evidenceOptions.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
-      persistSettlement: async (request) => persistReleaseRecord(request.agent as Agent, RELEASE_SETTLEMENT_PREFIX, {
+      persistSettlement: async (request) => persistReleaseRecord(request.agent as Agent, 'release_settlement', {
         contractId: request.contractId,
         operation: request.operation,
         callId: request.callId,
         settledAtSeq: 0,
         readback: request.readback,
         outcome: request.outcome,
+        settlement_source: 'reconcile',
       }),
     }))
     agent.ctx.tools.register(createExternalOperationTool(

@@ -256,7 +256,9 @@ export function currentActionBases(projection: GuardProjection, enforceCore = tr
     if (!readiness) continue
     const latestRun = [...projection.evidence.values()].filter((fact) => fact.epoch === projection.epoch
       && fact.toolResultSeq >= sourceSeq && fact.semanticAction === action && fact.evidenceRole === 'effect'
-      && fact.subjects.includes(scope)).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0]
+      && fact.subjects.includes(scope) && fact.parseStatus === 'supported'
+      && fact.processFacts?.operationAttribution === 'single_operation')
+      .sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0]
     const completedFailedRun = projection.boundaryProtocol === 6 && action === 'test'
       && v6TestPredicate(item.normalizedText) === 'test_run_completed'
       && latestRun?.outcome === 'failure' && latestRun.parseStatus === 'supported'

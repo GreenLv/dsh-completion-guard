@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolRuntime, defineTool } from '@deepseek-ai/dsh-tools'
 import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
-import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { captureHostWorkdir, HOST_WORKDIR_PREFIX, hostWorkdirForCall, sourcedNamedTestRoot } from '../src/domain/host-workdir.js'
@@ -122,8 +122,8 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     const s = scenario()
     try {
       expect(s.receipt).toMatchObject({ toolName: 'bash', effectiveCwd: s.physical, policySource: 'bash-policy' })
-      s.appendReceipt()
       s.appendResult()
+      s.appendReceipt()
       const first = s.core()!
       expect(first.certifiable).toBe(true)
       expect(Object.values(first.predicates as Record<string, unknown>)).toContain('satisfied')
@@ -171,14 +171,14 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       const receipt = captureHostWorkdir(session, exec as never, host, policy, true,
         sourcedNamedTestRoot(before, session, args))
       expect(receipt?.rootSeq).toBe(task.seq)
-      session.append('user/message', createUserMessage({
-        content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
-        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'call-time workdir' },
-      }), { surfaceOp: 'append' })
       const result = session.append('tool/result', { turn: 2, step: 1,
         message: createToolResultMessage({ callId: 'cross-turn-test' as never,
           content: [{ type: 'text', text: '1 test passed' }], isError: false }),
       } as never, { surfaceOp: 'append' })
+      session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
+        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'call-time workdir' },
+      }), { surfaceOp: 'append' })
       const events = session.snapshotEvents() as never
       const projection = deriveProjection(events, { activation: 'always' },
         { cwd: physical, sessionHeader: { version: 3, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } },
@@ -202,11 +202,11 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     }
   })
 
-  it('rejects changed call identity and a receipt outside the call/result interval', () => {
+  it('rejects changed call identity and a legacy receipt inside the call/result interval', () => {
     const s = scenario()
     try {
-      s.appendReceipt()
       const result = s.appendResult()
+      s.appendReceipt()
       const events = s.session.snapshotEvents() as never
       const projection = deriveProjection(events, { activation: 'always' },
         { cwd: s.physical, sessionHeader: { version: 3, id: SessionId('default-workdir-receipt'), createdAt: 1,
@@ -217,26 +217,36 @@ describe('v0.7 call-time Host default-workdir observation', () => {
         projection.hostLockDigest, s.physical)).toBeUndefined()
       expect(hostWorkdirForCall(events, s.call as never, result as never, 2, projection.sessionRefDigest,
         'ff'.repeat(32), s.physical)).toBeUndefined()
-      const fakeUser = { ...(events[4] as Record<string, unknown>), data: { ...(events[4] as { data: Record<string, unknown> }).data,
+      const fakeUser = { ...(events[5] as Record<string, unknown>), data: { ...(events[5] as { data: Record<string, unknown> }).data,
         source: { kind: 'user' } } }
-      expect(hostWorkdirForCall([events[0], events[1], events[2], events[3], fakeUser, events[5]] as never,
+      expect(hostWorkdirForCall([events[0], events[1], events[2], events[3], events[4], fakeUser] as never,
         s.call as never, result as never, 2, projection.sessionRefDigest,
         projection.hostLockDigest, s.physical)).toBeUndefined()
+      const legacy = scenario()
+      try {
+        legacy.appendReceipt()
+        const legacyResult = legacy.appendResult()
+        const legacyEvents = legacy.session.snapshotEvents() as never
+        const legacyProjection = deriveProjection(legacyEvents, { activation: 'always' },
+          { cwd: legacy.physical }, true, host).projection
+        expect(hostWorkdirForCall(legacyEvents, legacy.call as never, legacyResult as never, 2,
+          legacyProjection.sessionRefDigest, legacyProjection.hostLockDigest, legacy.physical)).toBeUndefined()
+      } finally { legacy.cleanup() }
     } finally { s.cleanup() }
   })
 
   it('does not use duplicate plugin notices or a later Host lock to certify an earlier call', () => {
     const s = scenario()
     try {
-      s.appendReceipt()
-      s.appendReceipt()
       s.appendResult()
+      s.appendReceipt()
+      s.appendReceipt()
       expect(s.core()?.certifiable).toBe(false)
     } finally { s.cleanup() }
     const stable = scenario()
     try {
-      stable.appendReceipt()
       stable.appendResult()
+      stable.appendReceipt()
       const restored = Session.fromRestore(stable.session.id, structuredClone(stable.session.snapshotEvents()),
         structuredClone(stable.session.header), SessionLogOffset(0), 'detached')
       const events = restored.snapshotEvents() as never
@@ -257,12 +267,12 @@ describe('v0.7 call-time Host default-workdir observation', () => {
   it('does not confuse a concurrent call notice with this call or accept a duplicate for this call', () => {
     const s = scenario()
     try {
+      s.appendResult()
       s.appendReceipt()
       s.session.append('user/message', createUserMessage({
         content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify({ ...s.receipt, callId: 'other-call' })}` }],
         source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'other call' },
       }), { surfaceOp: 'append' })
-      s.appendResult()
       expect(s.core()?.certifiable).toBe(true)
     } finally { s.cleanup() }
   })
@@ -305,12 +315,70 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       const response = await runtime.execute({ agent, callId: 'test-1' as never,
         name: 'bash', arguments: { command: 'npm test' }, signal: new AbortController().signal })
       expect(response.isError).toBe(false)
-      const notes = s.session.snapshotEvents().filter((event) => event.type === 'user/message'
-        && String((event.data as { content?: Array<{ text?: string }> }).content?.[0]?.text ?? '').startsWith(HOST_WORKDIR_PREFIX))
-      expect(notes).toHaveLength(1)
+      expect(response.additionalContexts).toHaveLength(1)
+      expect(s.session.snapshotEvents().filter((event) => event.type === 'user/message'
+        && String((event.data as { content?: Array<{ text?: string }> }).content?.[0]?.text ?? '').startsWith(HOST_WORKDIR_PREFIX))).toHaveLength(0)
       s.appendResult()
+      s.session.append('user/message', response.additionalContexts![0]!, { surfaceOp: 'append' })
       expect(s.core()?.certifiable).toBe(true)
     } finally { s.cleanup() }
+  })
+
+  it('defers real parallel receipts until every result, including an earlier failure', async () => {
+    const physical = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-host-batch-')))
+    const id = SessionId('host-workdir-batch-order')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false,
+      id, createdAt: 1, cwd: physical })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
+      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('turn/start', { turn: 1 })
+    const root = session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Run npm test in ${physical}.` }],
+      source: { kind: 'user' } }), { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({
+      source: { provider: 'fixture', model: 'fixture' }, content: [
+        { type: 'tool-call', id: 'call-a' as never, name: 'bash', arguments: '{"command":"npm test"}' },
+        { type: 'tool-call', id: 'call-b' as never, name: 'bash', arguments: '{"command":"pnpm test"}' },
+      ],
+    }) } as never, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 1, callId: 'call-a' as never, name: 'bash', arguments: '{"command":"npm test"}' })
+    session.append('tool/call', { turn: 1, step: 1, callId: 'call-b' as never, name: 'bash', arguments: '{"command":"pnpm test"}' })
+    try {
+      const ctx = new Context(); new SystemPrompt(ctx, {}); const runtime = new ToolRuntime(ctx)
+      ctx.provide('sandboxPolicy', { resolve: () => ({ sessionId: id, workspaceRoot: physical }) } as never)
+      const agent = { session, ctx } as never
+      registerPassiveHostWorkdirObserver(agent, () => host, () => true, () => root.seq)
+      let failA!: () => void
+      const waitA = new Promise<void>((resolve) => { failA = resolve })
+      runtime.register(defineTool({ name: 'bash', description: 'parallel host fixture',
+        parameters: { command: { type: 'string', required: true } },
+        output: { schema: { type: 'object', additionalProperties: false, properties: { status: { type: 'string', required: true } } },
+          render: () => [{ type: 'text', text: 'done' }] },
+        execute: async ({ command }) => { if (command === 'npm test') { await waitA; throw new Error('fixture failure') }; return { status: 'ok' } },
+      }))
+      const exec = (callId: string, command: string) => runtime.execute({ agent, callId: callId as never,
+        name: 'bash', arguments: { command }, signal: new AbortController().signal })
+      const pendingA = exec('call-a', 'npm test')
+      const responseB = await exec('call-b', 'pnpm test')
+      expect(session.snapshotEvents().some((event) => event.type === 'user/message'
+        && JSON.stringify(event.data).includes(HOST_WORKDIR_PREFIX))).toBe(false)
+      failA()
+      const responseA = await pendingA
+      expect(responseA.isError).toBe(true); expect(responseB.isError).toBe(false)
+      for (const [callId, response] of [['call-a', responseA], ['call-b', responseB]] as const) session.append('tool/result', {
+        turn: 1, step: 1, message: createToolResultMessage({ callId: callId as never,
+          content: [{ type: 'text', text: response.isError ? 'failed' : 'ok' }], isError: response.isError }),
+      } as never, { surfaceOp: 'append' })
+      for (const response of [responseA, responseB]) for (const context of response.additionalContexts ?? []) {
+        session.append('user/message', context, { surfaceOp: 'append' })
+      }
+      const messages = session.deriveMessages()
+      expect(messages.slice(-4).map((message) => message.content[0]?.type)).toEqual(['tool-result', 'tool-result', 'text', 'text'])
+      for (const [callId, response] of [['call-a', responseA], ['call-b', responseB]] as const) {
+        const text = (response.additionalContexts?.[0]?.content[0] as { text?: string } | undefined)?.text ?? ''
+        const receipt = JSON.parse(text.slice(HOST_WORKDIR_PREFIX.length))
+        expect(receipt).toMatchObject({ callId, effectiveCwd: physical, rootSeq: root.seq })
+      }
+    } finally { rmSync(physical, { recursive: true, force: true }) }
   })
 
   it('leaves an ordinary tool host without the observation hook usable and uncredited', () => {

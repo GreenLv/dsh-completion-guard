@@ -90,10 +90,14 @@ function releaseResponse(projection: GuardProjection, rawInput: string): { kind:
       .filter((reservation) => reservation.contractId === contract.contractId
         && !projection.releaseSettlements.some((settlement) => settlement.callId === reservation.callId
           && (settlement.outcome === 'settled' || settlement.outcome === 'not_effected')))
-      .map(({ operation, callId, startedAtSeq }) => ({ operation, call_id: callId, started_at_seq: startedAtSeq })),
+      .map(({ operation, callId, startedAtSeq, ledgerPosition }) => ({ operation, call_id: callId,
+        ...(ledgerPosition === undefined ? { started_at_seq: startedAtSeq }
+          : { record_position: { channel: 'private_ledger', position: ledgerPosition } }) })),
     settlements: projection.releaseSettlements
       .filter((settlement) => settlement.contractId === contract.contractId)
-      .map(({ operation, callId, outcome, readback, settledAtSeq }) => ({ operation, call_id: callId, outcome, readback, settled_at_seq: settledAtSeq })),
+      .map(({ operation, callId, outcome, readback, settledAtSeq, ledgerPosition }) => ({ operation, call_id: callId, outcome, readback,
+        ...(ledgerPosition === undefined ? { settled_at_seq: settledAtSeq }
+          : { record_position: { channel: 'private_ledger', position: ledgerPosition } }) })),
   }))
   return {
     kind: 'success',

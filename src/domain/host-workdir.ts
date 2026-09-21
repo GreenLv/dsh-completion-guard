@@ -130,7 +130,10 @@ export function hostWorkdirForCall(events: DerivedEnvelope[], call: DerivedEnvel
   const callData = row(call.data)
   const callId = callData.callId
   if (typeof callId !== 'string' || typeof callData.arguments !== 'string') return undefined
-  const notices = events.filter((event) => event.seq > call.seq && event.seq < result.seq
+  const nextAssistant = events.find((event) => event.seq > result.seq
+    && (event.type === 'assistant/message' || event.type === 'turn/end'))
+  const upperBound = nextAssistant?.seq ?? Number.POSITIVE_INFINITY
+  const notices = events.filter((event) => event.seq > result.seq && event.seq < upperBound
     && event.type === 'user/message' && row(row(event.data).source).kind === 'plugin'
     && row(row(event.data).source).plugin === 'context-guard'
     && row(row(event.data).source).form === 'notice'
