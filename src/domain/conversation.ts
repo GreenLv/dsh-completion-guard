@@ -1,6 +1,6 @@
 import { normalizeClause } from './canonicalize.js'
 import { extractArtifactPaths, extractMethod } from './capture.js'
-import { governedClauseRestrictsExecution, introducesActionClause, splitTextFragments } from './semantics.js'
+import { governedClauseRestrictsExecution, introducesActionClause, presentExplanationHead, splitTextFragments } from './semantics.js'
 
 export type UserInteractionKind = 'instruction' | 'conversational'
 
@@ -239,6 +239,10 @@ export function classifyUserInteraction(text: string): UserInteractionKind {
   // the message stays an instruction.
   const questionScope = withoutSubordinateSpans(normalized)
   if (QUESTION_TERMS.test(questionScope)) {
+    // An interrogative in the OBJECT of a sourced, present explanation is not
+    // session chatter. The semantic reader still decides the full clause and
+    // any independent action residue; this layer must not delete the input.
+    if (presentExplanationHead(normalized)) return 'instruction'
     // A question term only makes the message session talk when the REST of it
     // orders nothing. A question earlier in the message must never delete a
     // later instruction, and an unrecognised main verb is still work the capture

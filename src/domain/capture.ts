@@ -882,6 +882,11 @@ export function captureItem(
   // stay the full clause.
   const actionText = isRestatement(sanitized) ? (restatedContentOf(sanitized) ?? sanitized) : sanitized
   let semanticAction = unsupportedVisual ? 'generic_run' : semanticActionOfScope(actionText, interpretation?.text ?? sanitized, kind === 'prohibition')
+  // The v6 clause reader has already established a finite, sourced test
+  // request. Preserve that decision through capture even when the command
+  // manifest has no spelling for a natural-language test object.
+  if (!unsupportedVisual && semanticAction === 'generic_run'
+    && interpretation?.fingerprint.startsWith('v6-test:')) semanticAction = 'test'
   // 0.6.0 D06-02/S03: the OBJECT decides the lane, never a blanket verb
   // whitelist. A directive whose head change verb is 更新/调整 and whose
   // object is a recognized artifact-type noun is a modify with a bounded file

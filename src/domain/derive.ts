@@ -12,7 +12,9 @@ import { hasCurrentCertificate } from './goal-gate.js'
 import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from './evidence.js'
 import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
 import {
-  interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans, qualificationOfClause, splitTextFragments,
+  hasWorkPredicate, interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans,
+  opensConditionLead, presentExplanationHead,
+  qualificationOfClause, splitTextFragments,
 } from './semantics.js'
 import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
 import { supersedeItem } from './supersession.js'
@@ -580,7 +582,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
   const asTest = (clause: ClauseSegment, inheritedCommand = false): ClauseSegment | undefined => {
     if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
     const visible = maskQuotedSpans(clause.text)
-    const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。!?？]{1,80}?的\s*|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[，,。.!！?？\s]|$)/iu
+    const testHead = /^(?:\s*)(?:(?:并|且|和|及|然后|现在|本轮|本次任务|在本轮|请|and\b|then\b|now\b|please\b)\s*)*(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+|(?:(?:本|该)?项目的?)\s*)?(?:focused\s+|针对[^，,。!?？]{1,80}?的\s*|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[，,。.!！?？\s]|$)/iu
     const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu
     const packageTest = /^\s*(?:(?:and|then|please)\s+)?(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?=\s|[.,，。!?]|$)/iu.test(visible)
     if (!testHead.test(visible) && !packageTest && !(inheritedCommand && inheritedTest.test(visible))) return undefined
@@ -709,9 +711,31 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
     return [segment]
   }
   const joined: ClauseSegment[] = []
+  let sourceCursor = 0
   for (let index = 0; index < ordinary.length; index += 1) {
     const segment = ordinary[index]!
     const next = ordinary[index + 1]
+    const start = text.indexOf(segment.text, sourceCursor)
+    if (start >= 0) sourceCursor = start + segment.text.length
+    // A comma-bound condition owns the following explanation matrix even if
+    // the generic splitter emitted two scopes. Do not make the second scope a
+    // presently answerable request by losing that source relation. Until a
+    // condition and its satisfaction can be verified, the whole scoped
+    // instruction remains unresolved rather than closing on a final answer.
+    if (next && opensConditionLead(segment.text) && presentExplanationHead(next.text)) {
+      const following = text.indexOf(next.text, sourceCursor)
+      const gap = following < 0 ? '' : text.slice(start + segment.text.length, following)
+      if (start >= 0 && /^\s*[,，]\s*$/u.test(gap)) {
+        const combined = text.slice(start, following + next.text.length)
+        sourceCursor = following + next.text.length
+        joined.push({ ...segment, kind: 'requirement', text: combined, body: combined,
+          paths: [...new Set([...segment.paths, ...next.paths])], interpretation: { ...segment.interpretation,
+            text: combined, body: combined, directive: 'unresolved', authorityDisposition: 'unresolved',
+            immediatelyExecutable: false, fingerprint: `v6-conditional-explanation:${sha256(combined)}` } })
+        index += 1
+        continue
+      }
+    }
     // The generic clause splitter treats the last noun of an instrumental
     // list as a new clause. It has no finite predicate of its own and remains
     // attached to the preceding method phrase.
@@ -722,6 +746,8 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
       const combined = `${segment.text} ${next.text}`
       joined.push({ ...segment, text: combined, body: combined,
         interpretation: { ...segment.interpretation, text: combined, body: combined } })
+      const nextStart = text.indexOf(next.text, sourceCursor)
+      if (nextStart >= 0) sourceCursor = nextStart + next.text.length
       index += 1
       continue
     }
@@ -737,7 +763,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
       const rightText = segment.text.slice(coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)![0].length)
       const left = segmentClauses(leftText)[0]
       const right = segmentClauses(rightText)[0]
-      const promotedLeft = left ? asArtifactEdit(left) ?? left : undefined
+      const promotedLeft = left ? asArtifactEdit(left) ?? asTest(left, true) ?? left : undefined
       const promotedRight = right ? asTest(right, true) ?? asFileReadback(right) ?? asReport(right) : undefined
       if (promotedLeft && promotedRight && promotedLeft.interpretation.authorityDisposition === 'executable_now') {
         refined.push({ ...promotedLeft, text: segment.text.slice(0, coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)![0].length) }, promotedRight)
@@ -783,25 +809,35 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
       refined.push(segment)
       continue
     }
-    const head = /^\s*(?:(?:先|首先|first\b)\s*)?(?:请|please\s+)?(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)\s*/iu.exec(visible)
+    const head = presentExplanationHead(segment.text)
     if (!head) { refined.push(segment); continue }
-    const complement = visible.slice(head[0].length)
-    // A subordinate question or infinitive may govern every following verb.
-    if (/^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim())) {
+    const complement = visible.slice(head.end)
+    // An interrogative complement can name work as DATA. Its unfronted
+    // material clause must independently read as information before a fronted
+    // present-time adjunct can inherit that reading.
+    const governedComplement = /^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim())
+    const parts = splitTextFragments(segment.text)
+    // A current-time adjunct can end at a comma before the explanation
+    // matrix verb. The first material fragment is the one containing that
+    // head, not necessarily fragments[0] ("For this turn, only explain …").
+    const firstIndex = parts.findIndex((part) => part.offset + part.text.length > head.end)
+    const first = parts[firstIndex]
+    if (!first) { refined.push(segment); continue }
+    const materialReading = segmentClauses(first.text)[0]?.interpretation.directive
+    if (governedComplement && hasWorkPredicate(complement)
+      && (materialReading !== 'informational' || parts.length > firstIndex + 1)) {
       refined.push(segment); continue
     }
-    const parts = splitTextFragments(segment.text)
-    const first = parts[0]
-    if (!first) { refined.push(segment); continue }
-    const firstVisible = maskQuotedSpans(first.text)
-    const firstComplement = firstVisible.slice(head[0].length).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, '').trim()
+    const firstEnd = parts[firstIndex + 1]?.offset ?? segment.text.length
+    const firstComplement = visible.slice(head.end, firstEnd).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, '').trim()
     if (!firstComplement || /[`“”"']/.test(first.text)) { refined.push(segment); continue }
     const nominal = /(?:流程|方案|步骤|过程|方法|方式|作用|原因|架构|设计|结果|概念|原理|process|plan|steps?|procedure|method|approach|effect|reason|design|architecture|result|concept|principle)[，,。.!！?？\s]*$/iu.test(firstComplement)
     const pureNoRecognizedAction = segment.interpretation.directive === 'unresolved'
-      && segmentClauses(first.text)[0]?.interpretation.directive === 'unresolved'
-      && !/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement)
+      && ['unresolved', 'informational'].includes(materialReading ?? '')
+      && (!/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement)
+        || (governedComplement && materialReading === 'informational'))
     if (!nominal && !pureNoRecognizedAction) { refined.push(segment); continue }
-    const independent = parts.slice(1).map((part) => {
+    const independent = parts.slice(firstIndex + 1).map((part) => {
       const clause = segmentClauses(part.text)[0]
       return { part, clause: asProhibition(clause) ?? (clause ? asArtifactEdit(clause) : undefined) ?? clause }
     })
@@ -809,15 +845,14 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
       // An unclassified continuation might still be inside the explanation.
       if (parts.length > 1) { refined.push(segment); continue }
     }
-    const firstEnd = parts[1]?.offset ?? segment.text.length
     const informationText = segment.text.slice(0, firstEnd)
-    const informationBody = first.text.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, '').trim()
+    const informationBody = informationText.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, '').trim()
     refined.push({ ...segment, text: informationText, body: informationBody, paths: [], interpretation: {
       ...segment.interpretation, text: informationText, body: informationBody, directive: 'informational',
       executee: 'unresolved', immediatelyExecutable: false, authorityDisposition: 'informational',
       fingerprint: `v6-info:${sha256(informationText)}`,
     } })
-    for (const { part, clause } of independent) if (clause) refined.push(clause)
+    for (const { clause } of independent) if (clause) refined.push(clause)
   }
   return refined
 }

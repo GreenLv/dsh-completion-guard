@@ -785,6 +785,40 @@ const ACTION_VERB = new RegExp(ACTION_VERB_PATTERN, "i");
 const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编写|撰写|起草|拟定|部署|安装|升级|提交|下载|上传|拉取|同步|重启|测试|检查|验证|确认|修复|更新|清理|整理|记录|构建|编译|重构|迁移|轮换|刷新|清空|扩容|缩容|删除|回滚|发布|推送|合并|继续|恢复|还原|回滚|实现|\b(?:build|create|write|modify|change|edit|run|fix|update|install|push|publish|test|verify|check|commit|deploy|migrate|remove|delete|restart|revert|refactor|inspect|fetch|pull|implement|draft|emit|produce|log)\b/i;
 /** Explanatory framings: an action named afterwards is an object, not an order. */
 const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|科普|什么意思|是什么意思|有什么(?:作用|影响|区别)|\bexplain\b|\bdescribe\b|\bclarify\b|\btell\b|\bhow\s+to\b|\bwhat\s+does\b|\bwhat\s+is\b|\bhow\s+does\b|\bmeaning\s+of\b/i;
+/**
+* A present explanation speech act can have a time/scope frame before its
+* matrix verb. This only identifies the head; the v6 capture path still checks
+* the complete complement and keeps an independent action or unknown residue.
+* In particular, a quoted or reported head and a future-time frame do not
+* match, so this predicate never grants execution authority.
+*/
+function presentExplanationHead(text) {
+	const visible = maskQuotedSpans(text);
+	const head = /解释|说明|讲解|讲清楚|介绍|阐述|描述|\b(?:explain|describe|clarify)\b/iu.exec(visible);
+	if (!head) return void 0;
+	let prefix = visible.slice(0, head.index).trim();
+	if (/[“”"'`]/u.test(prefix) || WORK_VERB.test(prefix) || /\b(?:if|when|unless|after|before|because|says?|said|reports?|reported|asks?|asked|will|would|should|tomorrow|later|future|yesterday)\b|\bnext\s+(?:week|month|year|time)\b|如果|若|假如|当|待|之后|以后|将来|未来|明天|后天|下周|随后会|说|称|表示|提到|要求/u.test(prefix)) return void 0;
+	const sequence = /^(?:先|首先|然后|接着|再|first\b|then\b|next\b)\s*[,，]?\s*/iu;
+	const modifier = /^(?:请|只|仅|就|please\b|only\b|just\b)\s*[,，]?\s*/iu;
+	const presentFrame = /^(?:(?:(?:for|in|during|at)\s+)?(?:(?:this|the\s+current)\s+(?:turn|session|time|moment)|(?:the\s+)?(?:present|moment)|now|today|currently)\b|(?:在)?(?:本轮|本次|这轮|这次|当前|现在|如今|此时|目前|今天))\s*[,，]?\s*/iu;
+	for (let step = 0; step < 8 && prefix; step += 1) {
+		const next = prefix.replace(/^[,，]\s*/u, "").replace(sequence, "").replace(modifier, "").replace(presentFrame, "");
+		if (next === prefix) return void 0;
+		prefix = next.trim();
+	}
+	if (prefix) return void 0;
+	return { end: head.index + head[0].length + (/^\s*/u.exec(visible.slice(head.index + head[0].length))?.[0].length ?? 0) };
+}
+/** A sourced clause-level condition can govern the next comma-linked matrix. */
+function opensConditionLead(text) {
+	const visible = maskCodeSpans(maskQuotedSpans(text)).trim();
+	const marker = prefixConditionIndex(visible.toLowerCase());
+	return marker === 0 && conditionMarkerIsClauseLevel(visible, marker);
+}
+/** Work named inside a governed explanation complement needs its own reading. */
+function hasWorkPredicate(text) {
+	return WORK_VERB.test(maskCodeSpans(maskQuotedSpans(text)));
+}
 /** Interrogative framings that make a scope a question rather than an order. */
 /**
 * Interrogative framings that make a scope a question rather than an order.
@@ -3107,6 +3141,7 @@ function classifyUserInteraction(text) {
 	if (hasStrongTaskFeature(normalized)) return "instruction";
 	const questionScope = withoutSubordinateSpans(normalized);
 	if (QUESTION_TERMS.test(questionScope)) {
+		if (presentExplanationHead(normalized)) return "instruction";
 		if (ordersWorkBesideQuestion(questionScope)) return "instruction";
 		return "conversational";
 	}
@@ -4037,6 +4072,7 @@ function captureItem(kind, body, sourceMessageId, id, revision, subject, surface
 	const unsupportedVisual = /\bGUI\b|界面|视觉|截图|颜色|布局|视觉效果/i.test(sanitized);
 	const actionText = isRestatement(sanitized) ? restatedContentOf(sanitized) ?? sanitized : sanitized;
 	let semanticAction = unsupportedVisual ? "generic_run" : semanticActionOfScope(actionText, interpretation?.text ?? sanitized, kind === "prohibition");
+	if (!unsupportedVisual && semanticAction === "generic_run" && interpretation?.fingerprint.startsWith("v6-test:")) semanticAction = "test";
 	if (semanticAction === "generic_run" && !unsupportedVisual && interpretation?.directive === "directive" && headVerbIsChangeWord(sanitized) && boundedArtifactTypeOf(sanitized) !== void 0) semanticAction = "modify";
 	const restated = isRestatement(sanitized) ? restatedContentOf(sanitized) ?? sanitized : void 0;
 	const clarified = restated === void 0 ? sanitized : clarifiedSpanOf(sanitized) ?? sanitized;
@@ -14019,7 +14055,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			"conditional_wait"
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
 		const visible = maskQuotedSpans(clause.text);
-		const testHead = /^(?:\s*)(?:(?:并|且|和|及|and\b|then\b)\s*)?(?:(?:请|please)\s*)?(?:(?:在本轮|本轮|本次任务)\s*)?(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+)?(?:focused\s+|针对[^，,。!?？]{1,80}?的\s*|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[，,。.!！?？\s]|$)/iu;
+		const testHead = /^(?:\s*)(?:(?:并|且|和|及|然后|现在|本轮|本次任务|在本轮|请|and\b|then\b|now\b|please\b)\s*)*(?:(?:运行|执行|开展|跑完|跑|完成|run|perform)\s*(?:(?:the|its|this)\s+|(?:(?:本|该)?项目的?)\s*)?(?:focused\s+|针对[^，,。!?？]{1,80}?的\s*|对应的?)?(?:回归)?(?:tests?|测试)|测试)(?:\b|[，,。.!！?？\s]|$)/iu;
 		const inheritedTest = /^(?:\s*)(?:(?:现有|对应的?|针对[^，,。.!?？]{0,32}?的?)\s*)?(?:回归测试|focused\s+tests?|tests?|测试)(?:\b|[。.!！?？\s]|$)/iu;
 		const packageTest = /^\s*(?:(?:and|then|please)\s+)?(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?=\s|[.,，。!?]|$)/iu.test(visible);
 		if (!testHead.test(visible) && !packageTest && !(inheritedCommand && inheritedTest.test(visible))) return void 0;
@@ -14230,9 +14266,38 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 		return [segment];
 	};
 	const joined = [];
+	let sourceCursor = 0;
 	for (let index$1 = 0; index$1 < ordinary.length; index$1 += 1) {
 		const segment = ordinary[index$1];
 		const next = ordinary[index$1 + 1];
+		const start = text.indexOf(segment.text, sourceCursor);
+		if (start >= 0) sourceCursor = start + segment.text.length;
+		if (next && opensConditionLead(segment.text) && presentExplanationHead(next.text)) {
+			const following = text.indexOf(next.text, sourceCursor);
+			const gap = following < 0 ? "" : text.slice(start + segment.text.length, following);
+			if (start >= 0 && /^\s*[,，]\s*$/u.test(gap)) {
+				const combined = text.slice(start, following + next.text.length);
+				sourceCursor = following + next.text.length;
+				joined.push({
+					...segment,
+					kind: "requirement",
+					text: combined,
+					body: combined,
+					paths: [...new Set([...segment.paths, ...next.paths])],
+					interpretation: {
+						...segment.interpretation,
+						text: combined,
+						body: combined,
+						directive: "unresolved",
+						authorityDisposition: "unresolved",
+						immediatelyExecutable: false,
+						fingerprint: `v6-conditional-explanation:${sha256(combined)}`
+					}
+				});
+				index$1 += 1;
+				continue;
+			}
+		}
 		if (next && /,\s*$/u.test(segment.text) && /^\s*and\s+[^,，。.!?？]+[.!?]?\s*$/iu.test(next.text) && next.interpretation.authorityDisposition !== "executable_now" && /^\s*use\s+.*\bhost\s+tools?\s+for\s+/iu.test(segment.text)) {
 			const combined = `${segment.text} ${next.text}`;
 			joined.push({
@@ -14245,6 +14310,8 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 					body: combined
 				}
 			});
+			const nextStart = text.indexOf(next.text, sourceCursor);
+			if (nextStart >= 0) sourceCursor = nextStart + next.text.length;
 			index$1 += 1;
 			continue;
 		}
@@ -14257,7 +14324,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			const rightText = segment.text.slice(coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length);
 			const left = segmentClauses(leftText)[0];
 			const right = segmentClauses(rightText)[0];
-			const promotedLeft = left ? asArtifactEdit(left) ?? left : void 0;
+			const promotedLeft = left ? asArtifactEdit(left) ?? asTest(left, true) ?? left : void 0;
 			const promotedRight = right ? asTest(right, true) ?? asFileReadback(right) ?? asReport(right) : void 0;
 			if (promotedLeft && promotedRight && promotedLeft.interpretation.authorityDisposition === "executable_now") {
 				refined.push({
@@ -14339,34 +14406,38 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			refined.push(segment);
 			continue;
 		}
-		const head = /^\s*(?:(?:先|首先|first\b)\s*)?(?:请|please\s+)?(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)\s*/iu.exec(visible);
+		const head = presentExplanationHead(segment.text);
 		if (!head) {
 			refined.push(segment);
 			continue;
 		}
-		const complement = visible.slice(head[0].length);
-		if (/^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim())) {
-			refined.push(segment);
-			continue;
-		}
+		const complement = visible.slice(head.end);
+		const governedComplement = /^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim());
 		const parts = splitTextFragments(segment.text);
-		const first = parts[0];
+		const firstIndex = parts.findIndex((part) => part.offset + part.text.length > head.end);
+		const first = parts[firstIndex];
 		if (!first) {
 			refined.push(segment);
 			continue;
 		}
-		const firstComplement = maskQuotedSpans(first.text).slice(head[0].length).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
+		const materialReading = segmentClauses(first.text)[0]?.interpretation.directive;
+		if (governedComplement && hasWorkPredicate(complement) && (materialReading !== "informational" || parts.length > firstIndex + 1)) {
+			refined.push(segment);
+			continue;
+		}
+		const firstEnd = parts[firstIndex + 1]?.offset ?? segment.text.length;
+		const firstComplement = visible.slice(head.end, firstEnd).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
 		if (!firstComplement || /[`“”"']/.test(first.text)) {
 			refined.push(segment);
 			continue;
 		}
 		const nominal = /(?:流程|方案|步骤|过程|方法|方式|作用|原因|架构|设计|结果|概念|原理|process|plan|steps?|procedure|method|approach|effect|reason|design|architecture|result|concept|principle)[，,。.!！?？\s]*$/iu.test(firstComplement);
-		const pureNoRecognizedAction = segment.interpretation.directive === "unresolved" && segmentClauses(first.text)[0]?.interpretation.directive === "unresolved" && !/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement);
+		const pureNoRecognizedAction = segment.interpretation.directive === "unresolved" && ["unresolved", "informational"].includes(materialReading ?? "") && (!/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement) || governedComplement && materialReading === "informational");
 		if (!nominal && !pureNoRecognizedAction) {
 			refined.push(segment);
 			continue;
 		}
-		const independent = parts.slice(1).map((part) => {
+		const independent = parts.slice(firstIndex + 1).map((part) => {
 			const clause = segmentClauses(part.text)[0];
 			return {
 				part,
@@ -14379,9 +14450,8 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 				continue;
 			}
 		}
-		const firstEnd = parts[1]?.offset ?? segment.text.length;
 		const informationText = segment.text.slice(0, firstEnd);
-		const informationBody = first.text.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
+		const informationBody = informationText.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
 		refined.push({
 			...segment,
 			text: informationText,
@@ -14398,7 +14468,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 				fingerprint: `v6-info:${sha256(informationText)}`
 			}
 		});
-		for (const { part, clause } of independent) if (clause) refined.push(clause);
+		for (const { clause } of independent) if (clause) refined.push(clause);
 	}
 	return refined;
 }
@@ -19293,4 +19363,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { sourceItemForCoreRequirement as $, validateActionManifest as $i, isRootPauseRequest as $n, classifyUserInteraction as $r, RC1_HOST_PACKAGES as $t, lifecyclePhase as A, restatedContentOf as Ai, CLEANUP_CONDITION_RULE_SHORT as An, evidenceAvailabilityReason as Ar, EXPECTED_HOST_PACKAGES as At, snapshotSessionEvents as B, SEMANTIC_ACTIONS as Bi, evidenceCoverage as Bn, removalIsPartiallyKnown as Br, evaluateToolSurfaceCapability as Bt, parseGitCommandManifest as C, maskCodeSpans as Ci, scopeCoverageDigest as Cn, rebindResponse as Cr, ACTIVE_HOST_COHORT_ID as Ct, claimedBatchHasRealRootInput as D, qualificationOfClause as Di, validateProofManifestV2 as Dn, parseConfirmationMessage as Dr, ALPHA2_HOST_PACKAGES as Dt, FIRST_STEP_GUIDANCE as E, opensWithDirective as Ei, validateProofManifest as En, isFrozenV042RebindResponse as Er, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Et, captureHostWorkdir as F, ACTION_MANIFEST as Fi, closingHint as Fn, admissibleForRemoval as Fr, bindExecutableIdentity as Ft, PROTOCOL_V4_NOTICE as G, actionCompatible as Gi, NO_PROGRESS_TURNS_BEFORE_STOP as Gn, extractArtifactPaths as Gr, SUPPORTED_HOST_RANGE as Gt, CAPTURE_V042_NOTICE as H, STOP_PROTOCOL_VERSION as Hi, isVerifyingCapability as Hn, captureItem as Hr, selectHostCohort as Ht, sourcedNamedTestRoot as I, ACTION_MANIFEST_VERSION as Ii, openItems as In, capabilityConsequence as Ir, bindLiveGoalCapability as It, applyUpgradeEligibility as J, requestedIdentityKey as Ji, classifyCompletionClaim as Jn, isInformationalMessage as Jr, evaluateMinimumHostVersion as Jt, PROTOCOL_V5_NOTICE as K, boundedArtifactChoiceMatches as Ki, assessmentAction as Kn, extractMethod as Kr, SUPPORTED_HOST_VERSIONS as Kt, SESSION_API_UNSUPPORTED as L, BOUNDED_ARTIFACT_TYPES as Li, recoveryDigest as Ln, capabilityFactOf as Lr, evaluateExternalWaitCapability as Lt, projectSessionCoreV2 as M, splitTextFragments as Mi, MIN_RECOVERY_CHAR_BUDGET as Mn, relevantEvidence as Mr, HOST_CAPABILITY_PACKAGE_GROUPS as Mt, sessionCoreSnapshot as N, statefulActionsOfScope as Ni, carriesCleanupCondition as Nn, DEPENDENCY_FREE_ONLY_CONDITION as Nr, HOST_COHORTS as Nt, firstStepGuidance as O, questionHeadsClause as Oi, CLEANUP_CONDITION_RULE as On, capabilityRemedyPhrase as Or, BASE_HOST_PACKAGES as Ot, HOST_WORKDIR_PREFIX as P, verbIsNegated as Pi, cleanupConditionFor as Pn, actionHasCertificationPath as Pr, LEGACY_HOST_COHORTS as Pt, currentV6Feedback as Q, semanticActionFromText as Qi, decisionBoundaryKey as Qn, classifyTaskIntent as Qr, RC015_HOST_PACKAGES as Qt, SESSION_EVENT_ENVELOPE_INVALID as R, CERTIFICATE_VERSION as Ri, renderRecoveryPacket as Rn, partialFailureOf as Rr, evaluateHostCapability as Rt, gitCommandMatchesTarget as S, legacyQuestionReadingIsInformational as Si, requiredSubjectsOf as Sn, rebindAttemptKey as Sr, parseShellCommand as St, verifiedLinearCommitReadback as T, namedActions as Ti, sessionQueryV2 as Tn, CONFIRM_LINE_PATTERN as Tr, ACTIVE_HOST_LAUNCHER_VERSION as Tt, DEFAULT_DELEGATION_TOOL_NAMES as U, STOP_PROTOCOL_VERSION_V2 as Ui, CONTROL_RECORD_PREFIX as Un, classifyClause as Ur, LATEST_SUPPORTED_HOST_VERSION as Ut, projectCoreV2 as V, STATEFUL_ACTIONS as Vi, evidenceMatchesItem as Vn, captureClause as Vr, hostVersionFromPackages as Vt, PROTOCOL_V3_NOTICE as W, SUPPORTED_EVIDENCE_ADAPTERS as Wi, NO_PROGRESS_RECORD_PREFIX as Wn, environmentDefaultRepositoryTarget as Wr, MIN_SUPPORTED_HOST_VERSION as Wt, legacyRecordsNeedingReview as X, requestedTargetMatchesResolved as Xi, decideTurnBoundary as Xn, canonicalRegistryBase as Xr, satisfiesSupportedHostRange as Xt, deriveProjection as Y, requestedTargetAuthorizesMutation as Yi, currentActionBases as Yn, segmentClauses as Yr, parseHostVersion as Yt, rootLocatorFlavor as Z, semanticActionFromCommand as Zi, decideTurnStopping as Zn, npmEscapedPackageName as Zr, RC015_RC2_HOST_PACKAGES as Zt, GIT_COMMAND_TEMPLATES as _, isOpenObligation as _i, proofDigestV2 as _n, createProjection as _r, persistedToolResultStatus as _t, combineHostPolicy as a, normalizeClause as aa, clauseIsGoverned as ai, PROOF_KINDS as an, testOutcomePredicate as ar, inFlightReservation as at, createGitPrestateEnvelope as b, itemHoldsExecutionAuthority as bi, proofOperationMatches as bn, proposeRebindOutcome as br, isRunExecutable as bt, injectActiveProfileHostLock as c, sha256 as ca, governedClauseRestrictsExecution as ci, PROOF_PROTOCOL_VERSION as cn, hasCurrentCertificate as cr, releaseContractFor as ct, packageRowsFromPnpmLock as d, interpretClause as di, bindProofV2ToProjection as dn, unitDescendantIds as dr, reservationFor as dt, validateActionTarget as ea, GRANTED_QUALIFICATION as ei, ALPHA3_HOST_PACKAGES as en, isWholeTaskCompletionClaim as er, RELEASE_OPERATIONS as et, readActiveHostGraph as f, interpretMessage as fi, canonicalProjection as fn, availableBoundaryQualifications as fr, supersedeItem as ft, GIT_COMMAND_MANIFEST_IDS as g, isInformationalFragment as gi, proofDigest as gn, currentContractDigest as gr, isDeterministicCheck as gt, verifyComposedHostLockDump as h, isExplanationScope as hi, proofCapabilityReport as hn, qualifyBoundary as hr, extractToolSubject as ht, auditedForegroundRenderers as i, digestStrings as ia, clauseAsksOwnQuestion as ii, PROOF_CAPABILITY_MATRIX as in, progressFingerprint as ir, contractById as it, previewFirstStepInjection as j, semanticActionOfScope as ji, DEFAULT_RECOVERY_CHAR_BUDGET as jn, itemDiagnosis as jr, GOAL_HOST_PACKAGES as jt, firstStepGuidanceV6 as k, reportingHeadGoverns as ki, CLEANUP_CONDITION_RULE_COMPACT as kn, deriveItemDiagnosis as kr, DEFAULT_HOST_LOCK as kt, inspectTargetHostGraph as l, hasOrderedCoordination as li, PROOF_PROTOCOL_VERSION_V2 as ln, certifiableOpenItems as lr, releaseCoverage as lt, resolveInstalledHostLock as m, isExecutableItem as mi, createProofManifestV2 as mn, isCurrentAcceptedBoundary as mr, extractTextContent as mt, auditedDefaultWorkdirHost as n, validateManifest as na, actionVerbMatches as ni, segmentAuthorityBlocks as nn, latestRootInstruction as nr, RELEASE_RESERVATION_PREFIX as nt, hostLockContextFromComposedDump as o, sanitizeClauseText as oa, clauseIsProtected as oi, PROOF_KINDS_V2 as on, v6TestPredicate as or, normalizeReleaseContract as ot, resolveActiveProfileHostLock as p, introducesActionClause as pi, createProofManifest as pn, effectuateBoundary as pr, evidenceFromPersistedToolResult as pt, PROTOCOL_V6_NOTICE as q, isStatefulAction as qi, assessmentOutcomePredicate as qn, extractOperation as qr, compareHostVersions as qt, auditedDefaultWorkdirProvider as r, canonicalizePath as ra, clarifiedSpanOf as ri, certifyCheckpoint as rn, observeAssistantOutcome as rr, RELEASE_SETTLEMENT_PREFIX as rt, hostLockRowsFromComposedDump as s, sanitizeUrl as sa, explanationHasActionResidue as si, PROOF_MANIFEST_DOMAIN_V2 as sn, goalCompletionDenial as sr, readbackSettlesContract as st, HostProfileError as t, COMMAND_SURFACE_MANIFEST as ta, LEGACY_QUALIFICATION as ti, authorityCaptureCounts as tn, latestAssistantText as tr, RELEASE_OPERATION_SURFACES as tt, packageRowsFromActiveGraph as u, hasQuestionScope as ui, bindProofToProjection as un, certificateClosure as ur, releasePreEffectDecision as ut, commitIndexSnapshotDigest as v, isQuestionScopeNeedingReview as vi, proofEvidenceConstraints as vn, confirmRebind as vr, withDurability as vt, revalidateGitPrestate as w, maskQuotedSpans as wi, sessionQuery as wn, replayRebindResult as wr, ACTIVE_HOST_COHORT_IDS as wt, executeRevalidatedGitEffect as x, kindOfScope as xi, proofV2Rejection as xn, proposeRebindV042 as xr, parsePwshCommand as xt, commitTreeSnapshotDigest as y, isRestatement as yi, proofHostSurfacesOf as yn, proposeRebind as yr, canonicalArgvFromCommand as yt, SessionApiError as z, CERTIFICATE_VERSION_V2 as zi, bindingSatisfies as zn, removalIsComplete as zr, evaluateHostLock as zt };
+export { sourceItemForCoreRequirement as $, requestedTargetMatchesResolved as $i, isRootPauseRequest as $n, classifyUserInteraction as $r, RC1_HOST_PACKAGES as $t, lifecyclePhase as A, qualificationOfClause as Ai, CLEANUP_CONDITION_RULE_SHORT as An, evidenceAvailabilityReason as Ar, EXPECTED_HOST_PACKAGES as At, snapshotSessionEvents as B, BOUNDED_ARTIFACT_TYPES as Bi, evidenceCoverage as Bn, removalIsPartiallyKnown as Br, evaluateToolSurfaceCapability as Bt, parseGitCommandManifest as C, legacyQuestionReadingIsInformational as Ci, scopeCoverageDigest as Cn, rebindResponse as Cr, ACTIVE_HOST_COHORT_ID as Ct, claimedBatchHasRealRootInput as D, opensConditionLead as Di, validateProofManifestV2 as Dn, parseConfirmationMessage as Dr, ALPHA2_HOST_PACKAGES as Dt, FIRST_STEP_GUIDANCE as E, namedActions as Ei, validateProofManifest as En, isFrozenV042RebindResponse as Er, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Et, captureHostWorkdir as F, splitTextFragments as Fi, closingHint as Fn, admissibleForRemoval as Fr, bindExecutableIdentity as Ft, PROTOCOL_V4_NOTICE as G, STOP_PROTOCOL_VERSION as Gi, NO_PROGRESS_TURNS_BEFORE_STOP as Gn, extractArtifactPaths as Gr, SUPPORTED_HOST_RANGE as Gt, CAPTURE_V042_NOTICE as H, CERTIFICATE_VERSION_V2 as Hi, isVerifyingCapability as Hn, captureItem as Hr, selectHostCohort as Ht, sourcedNamedTestRoot as I, statefulActionsOfScope as Ii, openItems as In, capabilityConsequence as Ir, bindLiveGoalCapability as It, applyUpgradeEligibility as J, actionCompatible as Ji, classifyCompletionClaim as Jn, isInformationalMessage as Jr, evaluateMinimumHostVersion as Jt, PROTOCOL_V5_NOTICE as K, STOP_PROTOCOL_VERSION_V2 as Ki, assessmentAction as Kn, extractMethod as Kr, SUPPORTED_HOST_VERSIONS as Kt, SESSION_API_UNSUPPORTED as L, verbIsNegated as Li, recoveryDigest as Ln, capabilityFactOf as Lr, evaluateExternalWaitCapability as Lt, projectSessionCoreV2 as M, reportingHeadGoverns as Mi, MIN_RECOVERY_CHAR_BUDGET as Mn, relevantEvidence as Mr, HOST_CAPABILITY_PACKAGE_GROUPS as Mt, sessionCoreSnapshot as N, restatedContentOf as Ni, carriesCleanupCondition as Nn, DEPENDENCY_FREE_ONLY_CONDITION as Nr, HOST_COHORTS as Nt, firstStepGuidance as O, opensWithDirective as Oi, CLEANUP_CONDITION_RULE as On, capabilityRemedyPhrase as Or, BASE_HOST_PACKAGES as Ot, HOST_WORKDIR_PREFIX as P, semanticActionOfScope as Pi, cleanupConditionFor as Pn, actionHasCertificationPath as Pr, LEGACY_HOST_COHORTS as Pt, currentV6Feedback as Q, requestedTargetAuthorizesMutation as Qi, decisionBoundaryKey as Qn, classifyTaskIntent as Qr, RC015_HOST_PACKAGES as Qt, SESSION_EVENT_ENVELOPE_INVALID as R, ACTION_MANIFEST as Ri, renderRecoveryPacket as Rn, partialFailureOf as Rr, evaluateHostCapability as Rt, gitCommandMatchesTarget as S, kindOfScope as Si, requiredSubjectsOf as Sn, rebindAttemptKey as Sr, parseShellCommand as St, verifiedLinearCommitReadback as T, maskQuotedSpans as Ti, sessionQueryV2 as Tn, CONFIRM_LINE_PATTERN as Tr, ACTIVE_HOST_LAUNCHER_VERSION as Tt, DEFAULT_DELEGATION_TOOL_NAMES as U, SEMANTIC_ACTIONS as Ui, CONTROL_RECORD_PREFIX as Un, classifyClause as Ur, LATEST_SUPPORTED_HOST_VERSION as Ut, projectCoreV2 as V, CERTIFICATE_VERSION as Vi, evidenceMatchesItem as Vn, captureClause as Vr, hostVersionFromPackages as Vt, PROTOCOL_V3_NOTICE as W, STATEFUL_ACTIONS as Wi, NO_PROGRESS_RECORD_PREFIX as Wn, environmentDefaultRepositoryTarget as Wr, MIN_SUPPORTED_HOST_VERSION as Wt, legacyRecordsNeedingReview as X, isStatefulAction as Xi, decideTurnBoundary as Xn, canonicalRegistryBase as Xr, satisfiesSupportedHostRange as Xt, deriveProjection as Y, boundedArtifactChoiceMatches as Yi, currentActionBases as Yn, segmentClauses as Yr, parseHostVersion as Yt, rootLocatorFlavor as Z, requestedIdentityKey as Zi, decideTurnStopping as Zn, npmEscapedPackageName as Zr, RC015_RC2_HOST_PACKAGES as Zt, GIT_COMMAND_TEMPLATES as _, isInformationalFragment as _i, proofDigestV2 as _n, createProjection as _r, persistedToolResultStatus as _t, combineHostPolicy as a, validateManifest as aa, clauseIsGoverned as ai, PROOF_KINDS as an, testOutcomePredicate as ar, inFlightReservation as at, createGitPrestateEnvelope as b, isRestatement as bi, proofOperationMatches as bn, proposeRebindOutcome as br, isRunExecutable as bt, injectActiveProfileHostLock as c, normalizeClause as ca, governedClauseRestrictsExecution as ci, PROOF_PROTOCOL_VERSION as cn, hasCurrentCertificate as cr, releaseContractFor as ct, packageRowsFromPnpmLock as d, sha256 as da, hasWorkPredicate as di, bindProofV2ToProjection as dn, unitDescendantIds as dr, reservationFor as dt, semanticActionFromCommand as ea, GRANTED_QUALIFICATION as ei, ALPHA3_HOST_PACKAGES as en, isWholeTaskCompletionClaim as er, RELEASE_OPERATIONS as et, readActiveHostGraph as f, interpretClause as fi, canonicalProjection as fn, availableBoundaryQualifications as fr, supersedeItem as ft, GIT_COMMAND_MANIFEST_IDS as g, isExplanationScope as gi, proofDigest as gn, currentContractDigest as gr, isDeterministicCheck as gt, verifyComposedHostLockDump as h, isExecutableItem as hi, proofCapabilityReport as hn, qualifyBoundary as hr, extractToolSubject as ht, auditedForegroundRenderers as i, COMMAND_SURFACE_MANIFEST as ia, clauseAsksOwnQuestion as ii, PROOF_CAPABILITY_MATRIX as in, progressFingerprint as ir, contractById as it, previewFirstStepInjection as j, questionHeadsClause as ji, DEFAULT_RECOVERY_CHAR_BUDGET as jn, itemDiagnosis as jr, GOAL_HOST_PACKAGES as jt, firstStepGuidanceV6 as k, presentExplanationHead as ki, CLEANUP_CONDITION_RULE_COMPACT as kn, deriveItemDiagnosis as kr, DEFAULT_HOST_LOCK as kt, inspectTargetHostGraph as l, sanitizeClauseText as la, hasOrderedCoordination as li, PROOF_PROTOCOL_VERSION_V2 as ln, certifiableOpenItems as lr, releaseCoverage as lt, resolveInstalledHostLock as m, introducesActionClause as mi, createProofManifestV2 as mn, isCurrentAcceptedBoundary as mr, extractTextContent as mt, auditedDefaultWorkdirHost as n, validateActionManifest as na, actionVerbMatches as ni, segmentAuthorityBlocks as nn, latestRootInstruction as nr, RELEASE_RESERVATION_PREFIX as nt, hostLockContextFromComposedDump as o, canonicalizePath as oa, clauseIsProtected as oi, PROOF_KINDS_V2 as on, v6TestPredicate as or, normalizeReleaseContract as ot, resolveActiveProfileHostLock as p, interpretMessage as pi, createProofManifest as pn, effectuateBoundary as pr, evidenceFromPersistedToolResult as pt, PROTOCOL_V6_NOTICE as q, SUPPORTED_EVIDENCE_ADAPTERS as qi, assessmentOutcomePredicate as qn, extractOperation as qr, compareHostVersions as qt, auditedDefaultWorkdirProvider as r, validateActionTarget as ra, clarifiedSpanOf as ri, certifyCheckpoint as rn, observeAssistantOutcome as rr, RELEASE_SETTLEMENT_PREFIX as rt, hostLockRowsFromComposedDump as s, digestStrings as sa, explanationHasActionResidue as si, PROOF_MANIFEST_DOMAIN_V2 as sn, goalCompletionDenial as sr, readbackSettlesContract as st, HostProfileError as t, semanticActionFromText as ta, LEGACY_QUALIFICATION as ti, authorityCaptureCounts as tn, latestAssistantText as tr, RELEASE_OPERATION_SURFACES as tt, packageRowsFromActiveGraph as u, sanitizeUrl as ua, hasQuestionScope as ui, bindProofToProjection as un, certificateClosure as ur, releasePreEffectDecision as ut, commitIndexSnapshotDigest as v, isOpenObligation as vi, proofEvidenceConstraints as vn, confirmRebind as vr, withDurability as vt, revalidateGitPrestate as w, maskCodeSpans as wi, sessionQuery as wn, replayRebindResult as wr, ACTIVE_HOST_COHORT_IDS as wt, executeRevalidatedGitEffect as x, itemHoldsExecutionAuthority as xi, proofV2Rejection as xn, proposeRebindV042 as xr, parsePwshCommand as xt, commitTreeSnapshotDigest as y, isQuestionScopeNeedingReview as yi, proofHostSurfacesOf as yn, proposeRebind as yr, canonicalArgvFromCommand as yt, SessionApiError as z, ACTION_MANIFEST_VERSION as zi, bindingSatisfies as zn, removalIsComplete as zr, evaluateHostLock as zt };

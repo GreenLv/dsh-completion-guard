@@ -201,6 +201,55 @@ const WORK_VERB = /创建|生成|新建|写入|修改|编辑|运行|执行|编�
 /** Explanatory framings: an action named afterwards is an object, not an order. */
 const EXPLAIN_VERB = /解释|说明|讲解|介绍|阐述|分析|讨论|描述|科普|什么意思|是什么意思|有什么(?:作用|影响|区别)|\bexplain\b|\bdescribe\b|\bclarify\b|\btell\b|\bhow\s+to\b|\bwhat\s+does\b|\bwhat\s+is\b|\bhow\s+does\b|\bmeaning\s+of\b/i
 
+/**
+ * A present explanation speech act can have a time/scope frame before its
+ * matrix verb. This only identifies the head; the v6 capture path still checks
+ * the complete complement and keeps an independent action or unknown residue.
+ * In particular, a quoted or reported head and a future-time frame do not
+ * match, so this predicate never grants execution authority.
+ */
+export function presentExplanationHead(text: string): { end: number } | undefined {
+  const visible = maskQuotedSpans(text)
+  // Find the first live matrix predicate, then classify its source prefix. A
+  // time frame alone never determines speech act: a reported/conditional or
+  // future explanation has a different owner or readiness. The complete
+  // complement is checked by the caller before an information item is made.
+  const head = /解释|说明|讲解|讲清楚|介绍|阐述|描述|\b(?:explain|describe|clarify)\b/iu.exec(visible)
+  if (!head) return undefined
+  let prefix = visible.slice(0, head.index).trim()
+  if (/[“”"'`]/u.test(prefix) || WORK_VERB.test(prefix)
+    || /\b(?:if|when|unless|after|before|because|says?|said|reports?|reported|asks?|asked|will|would|should|tomorrow|later|future|yesterday)\b|\bnext\s+(?:week|month|year|time)\b|如果|若|假如|当|待|之后|以后|将来|未来|明天|后天|下周|随后会|说|称|表示|提到|要求/u.test(prefix)) return undefined
+  // A comma-bounded preface may be a present scope adjunct, but never a
+  // subject or another finite clause. Consume its grammatical constituents:
+  // sequencing adjunct, polite/focus modifier, or a preposition with a
+  // present-time deictic frame. Their order is flexible; the first unconsumed
+  // token makes the matrix source unknown rather than answerable. This also
+  // handles "for now" and "for this turn" by the same frame construction.
+  const sequence = /^(?:先|首先|然后|接着|再|first\b|then\b|next\b)\s*[,，]?\s*/iu
+  const modifier = /^(?:请|只|仅|就|please\b|only\b|just\b)\s*[,，]?\s*/iu
+  const presentFrame = /^(?:(?:(?:for|in|during|at)\s+)?(?:(?:this|the\s+current)\s+(?:turn|session|time|moment)|(?:the\s+)?(?:present|moment)|now|today|currently)\b|(?:在)?(?:本轮|本次|这轮|这次|当前|现在|如今|此时|目前|今天))\s*[,，]?\s*/iu
+  for (let step = 0; step < 8 && prefix; step += 1) {
+    const next = prefix.replace(/^[,，]\s*/u, '')
+      .replace(sequence, '').replace(modifier, '').replace(presentFrame, '')
+    if (next === prefix) return undefined
+    prefix = next.trim()
+  }
+  if (prefix) return undefined
+  return { end: head.index + head[0].length + (/^\s*/u.exec(visible.slice(head.index + head[0].length))?.[0].length ?? 0) }
+}
+
+/** A sourced clause-level condition can govern the next comma-linked matrix. */
+export function opensConditionLead(text: string): boolean {
+  const visible = maskCodeSpans(maskQuotedSpans(text)).trim()
+  const marker = prefixConditionIndex(visible.toLowerCase())
+  return marker === 0 && conditionMarkerIsClauseLevel(visible, marker)
+}
+
+/** Work named inside a governed explanation complement needs its own reading. */
+export function hasWorkPredicate(text: string): boolean {
+  return WORK_VERB.test(maskCodeSpans(maskQuotedSpans(text)))
+}
+
 /** Interrogative framings that make a scope a question rather than an order. */
 /**
  * Interrogative framings that make a scope a question rather than an order.
