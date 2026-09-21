@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
   "renderer_version": 3,
-  "generated_at": "2026-09-20T09:25:36.363Z",
-  "data_through": "2026-09-16",
+  "generated_at": "2026-09-21T10:10:29.032Z",
+  "data_through": "2026-09-19",
   "period": {
     "start": "2026-08-26",
-    "end": "2026-09-16"
+    "end": "2026-09-19"
   },
   "title": "dsh-completion-guard npm download history",
   "project": "dsh-completion-guard",
@@ -19,7 +19,7 @@
       "label": "dsh-context-guard (previous name)",
       "color": "#f59e0b",
       "start": "2026-08-26",
-      "total": 954,
+      "total": 955,
       "downloads": [
         {
           "day": "2026-08-26",
@@ -130,6 +130,21 @@
           "day": "2026-09-16",
           "downloads": 3,
           "cumulative": 954
+        },
+        {
+          "day": "2026-09-17",
+          "downloads": 0,
+          "cumulative": 954
+        },
+        {
+          "day": "2026-09-18",
+          "downloads": 1,
+          "cumulative": 955
+        },
+        {
+          "day": "2026-09-19",
+          "downloads": 0,
+          "cumulative": 955
         }
       ]
     },
@@ -138,7 +153,7 @@
       "label": "dsh-completion-guard",
       "color": "#2563eb",
       "start": "2026-08-29",
-      "total": 1721,
+      "total": 2004,
       "downloads": [
         {
           "day": "2026-08-29",
@@ -234,6 +249,21 @@
           "day": "2026-09-16",
           "downloads": 180,
           "cumulative": 1721
+        },
+        {
+          "day": "2026-09-17",
+          "downloads": 0,
+          "cumulative": 1721
+        },
+        {
+          "day": "2026-09-18",
+          "downloads": 238,
+          "cumulative": 1959
+        },
+        {
+          "day": "2026-09-19",
+          "downloads": 45,
+          "cumulative": 2004
         }
       ]
     }
@@ -348,25 +378,40 @@
       "day": "2026-09-16",
       "downloads": 183,
       "cumulative": 2675
+    },
+    {
+      "day": "2026-09-17",
+      "downloads": 0,
+      "cumulative": 2675
+    },
+    {
+      "day": "2026-09-18",
+      "downloads": 239,
+      "cumulative": 2914
+    },
+    {
+      "day": "2026-09-19",
+      "downloads": 45,
+      "cumulative": 2959
     }
   ],
   "sources": [
     {
       "package": "dsh-context-guard",
       "start": "2026-08-26",
-      "end": "2026-09-19",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-09-19/dsh-context-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-09-19/dsh-context-guard"
+      "end": "2026-09-20",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-09-20/dsh-context-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-09-20/dsh-context-guard"
     },
     {
       "package": "dsh-completion-guard",
       "start": "2026-08-29",
-      "end": "2026-09-19",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-09-19/dsh-completion-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-09-19/dsh-completion-guard"
+      "end": "2026-09-20",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-09-20/dsh-completion-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-09-20/dsh-completion-guard"
     }
   ],
-  "observation_through": "2026-09-19",
+  "observation_through": "2026-09-20",
   "settlement": {
     "mode": "observed-stable-days",
     "latest_day_status": "stable",
@@ -376,7 +421,7 @@
         "first_version": "0.1.0",
         "first_published_at": "2026-08-26T19:24:20.556Z",
         "first_public_day": "2026-08-26",
-        "available_through": "2026-09-19",
+        "available_through": "2026-09-20",
         "registry": "https://registry.npmjs.org/dsh-context-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-context-guard"
       },
@@ -385,12 +430,12 @@
         "first_version": "0.2.1",
         "first_published_at": "2026-08-29T05:03:21.705Z",
         "first_public_day": "2026-08-29",
-        "available_through": "2026-09-19",
+        "available_through": "2026-09-20",
         "registry": "https://registry.npmjs.org/dsh-completion-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-completion-guard"
       }
     ],
-    "stable_through": "2026-09-16",
+    "stable_through": "2026-09-19",
     "minimum_age_days": 2,
     "minimum_observation_span_hours": 12
   },
