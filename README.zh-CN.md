@@ -4,16 +4,16 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.7.0 是未发布源码候选。** 当前已发布版本为 [0.6.3](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.6.3)。候选的共享 core/v2 源码镜像绑定 Codex Context Guard 的精确提交；两个产品的运行时和发布身份分别管理。已验证范围和未完成门禁见[兼容性](docs/COMPATIBILITY.md)及[候选验收记录](docs/LOCAL_ACCEPTANCE.md)。
+> **0.7.0 发布线（2026-09-21）。** 安装前请读回[已发布 Release](https://github.com/GreenLv/dsh-completion-guard/releases)和 [npm 版本](https://www.npmjs.com/package/dsh-completion-guard)。本发布线的共享 core/v2 源码镜像绑定 Codex Context Guard 的精确提交；两个产品的运行时和发布身份分别管理。已验证范围和未完成门禁见[兼容性](docs/COMPATIBILITY.md)及[验收记录](docs/LOCAL_ACCEPTANCE.md)。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
 ## 快速开始
 
-下面的命令安装当前已发布的 **0.6.3**。0.7.0 正式发布、且 GitHub Release 的精确制品与平台证据读回后，再把命令中的 `0.6.3` 改为 `0.7.0`。未发布候选不能按 npm 正式包安装。
+确认 npm 已提供 `0.7.0`、且 GitHub Release 绑定同一已验收制品及平台附件后，再安装：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.6.3
+dsh plugin --profile web add dsh-completion-guard@0.7.0
 ```
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -57,9 +57,9 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.6.3 仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
+0.7.0 继续仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
 
-插件市场与 npm 安装现在统一发布按新到旧排列的精确并集 `0.1.5-rc.2 || 0.1.5-rc.1`。更早版本、未注册的稳定版 `0.1.5` 以及未来版本都不会被宣称为受支持。进入版本集合后仍必须匹配完整的 33 包 DSH 核心图；缺失、混装或未知图会 fail closed。
+插件市场与 npm 元数据使用同一个按新到旧排列的精确并集 `0.1.5-rc.2 || 0.1.5-rc.1`。更早版本、未注册的稳定版 `0.1.5` 以及未来版本都不会被宣称为受支持。进入版本集合后仍必须匹配完整的 33 包 DSH 核心图；缺失、混装或未知图会 fail closed。
 
 已注册的宿主组合是 **DSH `0.1.5-rc.1` 和 `0.1.5-rc.2`**，各自绑定完整的 33 个核心包。包身份取自已发布的 npm tarball；两个版本混装会被拒绝。注册表身份和原生验收是不同证据：原生通过需要匹配 Guard 制品、宿主版本和平台的验收附件。版本规则和宿主锁来源详见[兼容性说明](docs/COMPATIBILITY.md)。
 

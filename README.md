@@ -4,16 +4,16 @@
 
 An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
-> **0.7.0 is an unreleased source candidate.** The latest published version is [0.6.3](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.6.3). The candidate's shared core/v2 source mirror is pinned to an exact Codex Context Guard commit; the two products have separate runtimes and release identities. See [compatibility](docs/COMPATIBILITY.md) and [candidate acceptance](docs/LOCAL_ACCEPTANCE.md) for its verified scope and open gates.
+> **0.7.0 release line (2026-09-21).** Verify the [published Releases](https://github.com/GreenLv/dsh-completion-guard/releases) and [npm version](https://www.npmjs.com/package/dsh-completion-guard) before installation. This release line’s shared core/v2 source mirror is pinned to an exact Codex Context Guard commit; the two products have separate runtimes and release identities. See [compatibility](docs/COMPATIBILITY.md) and [acceptance record](docs/LOCAL_ACCEPTANCE.md) for its verified scope and open gates.
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
 ## Quick start
 
-For the currently published **0.6.3**, use the command below. After 0.7.0 is published and its exact artifact and platform evidence have been read back from the GitHub Release, replace `0.6.3` with `0.7.0`. Do not install the unreleased candidate as a registry package.
+After confirming that npm serves `0.7.0` and the GitHub Release identifies the same accepted artifact and platform annexes, install this version:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.6.3
+dsh plugin --profile web add dsh-completion-guard@0.7.0
 ```
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -57,9 +57,9 @@ The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.
 
 ## Status and compatibility
 
-Version 0.6.3 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+Version 0.7.0 retains support for exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
 
-Package discovery and npm installation now publish the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
+Package discovery and npm metadata use the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
 
 The registered host sets are **DSH `0.1.5-rc.1` and `0.1.5-rc.2`**, each with its own exact 33-package graph. Their identities come from published npm tarballs; mixed versions fail the host check. Registry identity and native acceptance are separate: use the annex for the exact Guard artifact, host version and platform to establish a native pass. See the [compatibility guide](docs/COMPATIBILITY.md) for version rules and host-lock provenance.
 

@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.7.0 - Unreleased source candidate
+## 0.7.0 - 2026-09-21
 
 ### Highlights
 
@@ -21,7 +21,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ### Validation
 
-Candidate `583035bd90b8ee589d01b12487a057b655d43e41` passed the complete local deterministic matrix, candidate CI and 34 macOS native gates with cleanup on its exact clean-source tgz. That native run skipped real-model requests; Windows exact-artifact and complete model acceptance remain pending. These are historical results for those bytes once packaged documentation or source changes. The final release candidate, daily installation, npm publication, tag and GitHub Release have not been accepted or read back; see the [acceptance record](docs/LOCAL_ACCEPTANCE.md).
+Candidate `583035bd90b8ee589d01b12487a057b655d43e41` passed the complete local deterministic matrix, candidate CI and 34 macOS native gates with cleanup on its exact clean-source tgz. That native run skipped real-model requests; Windows exact-artifact and complete model acceptance were not performed for those tgz bytes. These are historical results for those bytes once packaged documentation or source changes. Publication requires deterministic, CI, native-platform and model acceptance for the final exact tgz. Tag, npm package and GitHub Release publication follow that acceptance; public readback and daily installation are separate later steps; see the [acceptance record](docs/LOCAL_ACCEPTANCE.md).
 
 ## 0.6.3 - 2026-09-18
 
