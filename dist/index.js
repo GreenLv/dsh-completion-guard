@@ -5376,7 +5376,7 @@ const privateLedgerContractDigest = (contract) => {
 const privateLedgerTargetDigest = (target) => sha256(canonical(target));
 /** Mirrors the audited dsh-home-paths precedence without importing another host package. */
 function resolvePrivateLedgerRoot(configured, envHome, osHome) {
-	const selected = configured || envHome || join(osHome, ".dsh");
+	const selected = configured ?? (envHome?.trim() ? envHome : join(osHome, ".dsh"));
 	if (!selected || !osHome) return void 0;
 	return join(resolve(selected === "~" ? osHome : selected.startsWith("~/") || selected.startsWith("~\\") ? join(osHome, selected.slice(2)) : selected), "completion-guard", "private-ledger-v1");
 }

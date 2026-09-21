@@ -90,11 +90,17 @@ describe('v0.7 provider-invisible private ledger', () => {
   })
 
   it('uses official DSH home precedence and normalizes relative and tilde homes', () => {
-    expect(resolvePrivateLedgerRoot('/configured', '/env', '/home/u')).toBe('/configured/completion-guard/private-ledger-v1')
-    expect(resolvePrivateLedgerRoot(undefined, '/env', '/home/u')).toBe('/env/completion-guard/private-ledger-v1')
-    expect(resolvePrivateLedgerRoot(undefined, '', '/home/u')).toBe('/home/u/.dsh/completion-guard/private-ledger-v1')
-    expect(resolvePrivateLedgerRoot('~/state', undefined, '/home/u')).toBe('/home/u/state/completion-guard/private-ledger-v1')
-    expect(resolvePrivateLedgerRoot('relative', undefined, '/home/u')).toBe(join(process.cwd(), 'relative/completion-guard/private-ledger-v1'))
+    const configured = join(tmpdir(), 'configured-home')
+    const environment = join(tmpdir(), 'environment-home')
+    const home = join(tmpdir(), 'user-home')
+    const ledger = (base: string) => join(base, 'completion-guard', 'private-ledger-v1')
+    expect(resolvePrivateLedgerRoot(configured, environment, home)).toBe(ledger(configured))
+    expect(resolvePrivateLedgerRoot(undefined, environment, home)).toBe(ledger(environment))
+    expect(resolvePrivateLedgerRoot(undefined, '', home)).toBe(ledger(join(home, '.dsh')))
+    expect(resolvePrivateLedgerRoot(undefined, '  ', home)).toBe(ledger(join(home, '.dsh')))
+    expect(resolvePrivateLedgerRoot('~/state', undefined, home)).toBe(ledger(join(home, 'state')))
+    expect(resolvePrivateLedgerRoot('~\\state', undefined, home)).toBe(ledger(join(home, 'state')))
+    expect(resolvePrivateLedgerRoot('relative', undefined, home)).toBe(ledger(join(process.cwd(), 'relative')))
   })
 
   it('rejects settlement sources and transitions that cannot release a reservation', () => {

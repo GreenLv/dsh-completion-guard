@@ -38,7 +38,7 @@ export const privateLedgerTargetDigest = (target: unknown): string => sha256(can
 
 /** Mirrors the audited dsh-home-paths precedence without importing another host package. */
 export function resolvePrivateLedgerRoot(configured: string | undefined, envHome: string | undefined, osHome: string): string | undefined {
-  const selected = configured || envHome || join(osHome, '.dsh')
+  const selected = configured ?? (envHome?.trim() ? envHome : join(osHome, '.dsh'))
   if (!selected || !osHome) return undefined
   const expanded = selected === '~' ? osHome
     : selected.startsWith('~/') || selected.startsWith('~\\') ? join(osHome, selected.slice(2)) : selected
