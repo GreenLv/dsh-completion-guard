@@ -5,10 +5,10 @@
   "upstream": {
     "product": "codex-context-guard",
     "repository": "https://github.com/GreenLv/codex-context-guard",
-    "canonical_commit": "7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a"
+    "canonical_commit": "94ebdb00a74ad0707f3c62dec0cb109cf6d2f4dd"
   },
-  "canonical_commit": "7c97ea0d2790d2a3c14ef80d0ddb09a16ab8bf9a",
-  "mirrored_at": "2026-09-20",
+  "canonical_commit": "94ebdb00a74ad0707f3c62dec0cb109cf6d2f4dd",
+  "mirrored_at": "2026-09-21",
   "legacy_v1_pin_path": "tests/fixtures/conformance/UPSTREAM_PIN.json",
   "files": [
     {
@@ -52,7 +52,7 @@
       "mirrors": []
     },
     {
-      "sha256": "74af6a17bcb758818d7095453cc4c6b6a0e4ef977c338ea37928affd6db4d6a6",
+      "sha256": "338aba7e68bb8dfce022a12e51fdfd2366536108391c3b5db625cb07b7704dae",
       "source_path": "docs/CORE_V2_HOST_CAPABILITIES.md",
       "role": "reference_identity",
       "mirrors": []
