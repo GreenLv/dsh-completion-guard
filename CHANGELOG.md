@@ -118,7 +118,7 @@ exact-artifact native annexes attached to the versioned Release.
 This is a source release candidate. Local checks and remaining CI,
 native T06, exact-artifact and publication gates are recorded in
 [local acceptance](docs/LOCAL_ACCEPTANCE.md) and the
-[release plan](docs/RELEASE_PLAN_0_6_2.md).
+[release plan](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/RELEASE_PLAN_0_6_2.md).
 
 ## 0.6.1 (2026-09-15)
 

@@ -23,8 +23,8 @@ import { createProjection, type DerivedEnvelope, type GuardItem } from '../../sr
  * output — and they are kept separate so a failure here is a real finding
  * rather than a retuned core case.
  *
- * Hold-out failures are recorded in `docs/DEVELOPMENT_PLAN_0_6_3.md`'s batch
- * report and, once fixed, the case becomes a regression case.
+ * The historical 0.6.3 batch report is linked from docs/README.md.
+ * Once fixed, each hold-out failure becomes a regression case.
  */
 
 const config = { activation: 'always' as const }

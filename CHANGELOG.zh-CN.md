@@ -57,7 +57,7 @@
 
 ### 验证范围
 
-当前为源码发布候选。本地结果与尚缺的 CI、T06 原生、精确制品和发布门槛见[验收记录](docs/LOCAL_ACCEPTANCE.md)及[发版计划](docs/RELEASE_PLAN_0_6_2.md)。
+当前为源码发布候选。本地结果与尚缺的 CI、T06 原生、精确制品和发布门槛见[验收记录](docs/LOCAL_ACCEPTANCE.md)及[发版计划](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/RELEASE_PLAN_0_6_2.md)。
 
 ## 0.6.1（2026-09-15）
 

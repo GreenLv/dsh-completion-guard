@@ -2,8 +2,8 @@
 
 状态：**用户明确批准的验收合同调整**，不是对旧合同的“全部实现”声明。本文列出被替代的验收条目、
 代价、替代它们的结构性不变量，以及仍然有效的条目。历史材料
-（[开发计划](DEVELOPMENT_PLAN_0_6_3.md)、[0.6.2 复核](REVIEW_0_6_2_CORE_ALIGNMENT.md)、
-[执行提示](EXECUTE_0_6_3_PROMPT.md)、历轮[验收记录](LOCAL_ACCEPTANCE.md)）保持原样，不静默改写；
+（[开发计划](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/DEVELOPMENT_PLAN_0_6_3.md)、[0.6.2 复核](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/REVIEW_0_6_2_CORE_ALIGNMENT.md)、
+[执行提示](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/EXECUTE_0_6_3_PROMPT.md)、历轮[验收记录](LOCAL_ACCEPTANCE.md)）保持原样，不静默改写；
 本文只记录它们之上的一次显式变更。
 
 ## 1. 为什么修订

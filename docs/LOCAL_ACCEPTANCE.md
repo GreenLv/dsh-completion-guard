@@ -938,7 +938,7 @@ errors/warnings, 81 Python tests passed, and both Codex recording checks were
 current. The recorder tests are now included in candidate CI's static job.
 
 The uncommitted candidate is not frozen, installed, or published. D062-04 was partial at that checkpoint; subsequent disposable-ledger probes above close its bounded lifecycle gap. T06/exact-artifact native acceptance and candidate CI remain pending. See the
-[0.6.2 release plan](RELEASE_PLAN_0_6_2.md) for the remaining ordered gates.
+[0.6.2 release plan](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/RELEASE_PLAN_0_6_2.md) for the remaining ordered gates.
 
 
 Each section names its evidence boundary. Deterministic checks, isolated DSH_HOME composition, native-platform lifecycle runs, model sessions, CI, and public release readback are separate claims; none substitutes for another.
