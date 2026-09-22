@@ -310,7 +310,11 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     expect(resumed.messages).toHaveLength(2)
     const texts = resumed.messages.map((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text)
     expect(texts.filter((text) => text === PROTOCOL_V6_NOTICE)).toHaveLength(0)
-    expect(texts.some((text) => String(text).includes('recovered after compaction or resume'))).toBe(true)
+    // DSH-RF-02: the title names the auditable trigger — this recovery was
+    // armed by a resume, so it must not claim a compaction that never happened.
+    const recoveryTitle = texts.find((text) => String(text).includes('Open task requirements'))!
+    expect(recoveryTitle).toContain('recovered after resume')
+    expect(recoveryTitle).not.toContain('compaction')
   })
 
   it('a pre-0.6 session gains the v5 cut at the first 0.6 write and keeps historical interpretation', async () => {

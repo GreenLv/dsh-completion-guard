@@ -11,7 +11,7 @@ import { actionHasAdapter, evaluateCompatibility } from '../domain/compatibility
 import { itemHoldsExecutionAuthority } from '../domain/semantics.js'
 import type { TargetTuple } from '../domain/types.js'
 import { unitDescendantIds } from '../domain/work-unit.js'
-import { currentV6Feedback, sourceItemForCoreRequirement } from '../domain/v6-feedback.js'
+import { currentV6Feedback, isV6PendingRootWait, sourceItemForCoreRequirement } from '../domain/v6-feedback.js'
 import { sha256 } from '../domain/canonicalize.js'
 
 export interface PrepareToolOptions {
@@ -90,7 +90,17 @@ const encodeCursor = (cursor: DiscoveryCursor): string =>
  */
 function discoveryItemIds(p: GuardProjection): string[] {
   const current = currentV6Feedback(p)
-  if (current && current.status !== 'unknown') return current.openIds
+  if (current && current.status !== 'unknown') {
+    // Standing constraints are open contract items too: a recovery packet's
+    // footer points here for boundary details, so discovery must actually
+    // list them (review R3F1).
+    const standing = Object.entries(current.predicates)
+      .filter(([, state]) => state === 'constraint_active')
+      .map(([id]) => id)
+      .sort()
+      .filter((id) => !current.openIds.includes(id))
+    return [...current.openIds, ...standing]
+  }
   const pending = [...p.items.values()]
     .filter((item) => item.status === 'pending')
     .sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id))
@@ -143,7 +153,44 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       const p = options.getProjection()
       if (!p || !p.enabled || p.integrity !== 'valid') return { status: 'unknown', reason_code: 'guard_unavailable' }
       const currentFeedback = currentV6Feedback(p)
-      if (currentFeedback?.status === 'unknown') return { status: 'unknown', reason_code: currentFeedback.reasonCode }
+      if (currentFeedback?.status === 'unknown') {
+        // Review R3F1 (contract 2): an unavailable closure view does not make
+        // the durable record unreadable. A by-ID query still returns the
+        // item's recorded text — read-only provenance so a compact recovery
+        // packet's reference row stays resolvable — while the response keeps
+        // stating that closure, release, and authorization remain unknown.
+        // Providing text never certifies, releases, or authorizes anything.
+        // Review R4F2: the caller's revision binding is an identity
+        // condition, not part of the unknown closure state, so it is checked
+        // with the same protocol the normal by-ID lane uses.
+        if (args.item_id !== undefined) {
+          const item = sourceItemForCoreRequirement(p, args.item_id)?.item ?? p.items.get(args.item_id)
+          if (item) {
+            if (args.item_revision !== undefined && args.item_revision !== item.revision) {
+              return { status: 'rejected', reason_code: 'item_revision_mismatch', item_revision: item.revision } as Record<string, JsonValue>
+            }
+            return {
+              status: 'unknown' as const,
+              reason_code: currentFeedback.reasonCode,
+              item: {
+                id: item.id, revision: item.revision, kind: item.kind, text: item.normalizedText,
+                // The wait RECORD is historical metadata; only the shared
+                // pending predicate may assert a current confirmation debt
+                // (review R4F1) — a superseded or verifiably released record
+                // is history even while the closure state is unknown.
+                ...(item.waitAuthorization !== undefined || item.authorityDisposition === 'conditional_wait'
+                  ? {
+                    recorded_wait: { resume_event: item.resumeEvent ?? null, condition: item.condition ?? null },
+                    ...(isV6PendingRootWait(p, item) ? { wait: 'root_condition_pending' } : {}),
+                  }
+                  : {}),
+              },
+              next_step: 'The recorded text above is a durable read-only fact only; the closure, release, and authorization state stays unknown until the named condition is restored.',
+            } as Record<string, JsonValue>
+          }
+        }
+        return { status: 'unknown', reason_code: currentFeedback.reasonCode }
+      }
       if (p.boundaryProtocol === 6 && args.item_id !== undefined) {
         const sourced = currentFeedback ? sourceItemForCoreRequirement(p, args.item_id) : undefined
         const current = sourced?.item ?? p.items.get(args.item_id)
@@ -151,13 +198,18 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
         if (args.item_revision !== undefined && args.item_revision !== current.revision) return { status: 'rejected', reason_code: 'item_revision_mismatch' } as Record<string, JsonValue>
         if (current.kind === 'prohibition' && currentFeedback) {
           const state = currentFeedback.predicates[args.item_id]
-          if (state === 'constraint_active' || state === 'constraint_unresolved' || state === 'constraint_violated') return {
-            status: state === 'constraint_active' ? 'active' : state === 'constraint_unresolved' ? 'unknown' : 'incomplete',
+          // The prohibition identity comes from the DURABLE record's kind; the
+          // core predicate (including legacy_review for a constraint the core
+          // cannot verify) only shapes the compliance framing — a prohibition
+          // never falls through to the ordinary-work lane (coverage audit H1).
+          if (state === 'constraint_active' || state === 'constraint_unresolved' || state === 'constraint_violated' || state === 'legacy_review') return {
+            status: state === 'constraint_active' ? 'active' : state === 'constraint_violated' ? 'incomplete' : 'unknown',
             reason_code: state,
-            item: { id: current.id, revision: current.revision, status: state },
+            item: { id: current.id, revision: current.revision, kind: current.kind, status: state, text: current.normalizedText },
             next_step: state === 'constraint_active' ? 'This sourced prohibition remains active.'
               : state === 'constraint_unresolved' ? 'The current Host facts cannot establish whether this prohibition was respected.'
-                : 'A sourced Host mutation violated this prohibition.',
+                : state === 'constraint_violated' ? 'A sourced host mutation violated this prohibition.'
+                  : 'This recorded prohibition stays in force as recorded history; current confirmed facts cannot establish its compliance state. Do not perform the action.',
           } as Record<string, JsonValue>
         }
         if (current.semanticAction !== 'publish' && currentFeedback) {
@@ -172,7 +224,18 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
             reason_code: state === undefined ? 'historical_item_not_current'
               : state === 'satisfied' ? 'ordinary_current_predicate_observed' : 'current_predicate_insufficient',
             item: { id: args.item_id, source_item_id: current.id, revision: current.revision,
-              status: state ?? 'historical', related_requirement_ids: related.map(([id]) => id) },
+              status: state ?? 'historical', related_requirement_ids: related.map(([id]) => id),
+              text: current.normalizedText,
+              // The wait RECORD is returned as metadata; a CURRENT pending
+              // assertion comes only from the shared predicate, so a
+              // released or superseded history never reads as an active
+              // confirmation debt (review R4F1).
+              ...(current.waitAuthorization !== undefined || current.authorityDisposition === 'conditional_wait'
+                ? {
+                  recorded_wait: { resume_event: current.resumeEvent ?? null, condition: current.condition ?? null },
+                  ...(isV6PendingRootWait(p, current) ? { wait: 'root_condition_pending' } : {}),
+                }
+                : {}) },
             next_step: state === undefined ? 'This item is historical and is not current ordinary work.'
               : state === 'satisfied'
                 ? 'This ordinary predicate is already observed. Continue with the remaining sourced requirements; no Guard execution qualification is needed.'

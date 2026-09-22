@@ -7487,6 +7487,667 @@ function bindingSatisfies(projection, item, evidenceIds) {
 }
 
 //#endregion
+//#region src/domain/release.ts
+/**
+* Explicit release adoption and single-use tickets (0.6.0 C10 / DS06-F).
+*
+* A release is never implicit. "release", a loaded Skill, or an installation
+* never activates this profile: a root user must explicitly ADOPT a release
+* contract that names the exact candidate, and every effect must then match
+* that contract and spend a one-shot reservation.
+*
+* Three durable records carry the state machine (P0 §5). Adoption remains in
+* the Session log; new reservations and settlements use the provider-invisible
+* private ledger. Frozen historical plugin notices remain readable:
+*
+* - `contract`    — the adopted scope: operations, the exact candidate, the
+*                   readiness/closure references and an optional expiry.
+* - `reservation` — written BEFORE any effect; the operation is `in_flight`
+*                   from that moment, so a crash cannot be mistaken for "never
+*                   started" and the operation is never blindly re-sent.
+* - `settlement`  — written after the effect. Its outcome distinguishes a
+*                   PROVEN no-effect (`not_effected`, which releases the lock)
+*                   from an UNKNOWN effect (`unknown`/`failed`/`unconfirmed`,
+*                   which keeps the lock until a trusted readback reconciles
+*                   it) and from a `settled` release.
+*
+* CANDIDATE IDENTITY IS TYPED, NOT CONFLATED. A release artifact has several
+* genuinely different identities — the commit it was built from, the SHA-256 of
+* the exact bytes, npm's SHA-512 SRI, the package name, the version, the
+* repository, the ref and the target registry. Each is a separate field and is
+* compared with its own observed value read from a trusted producer. Comparing,
+* say, a 64-hex SHA-256 against an SRI can never succeed, so a legitimate
+* release would have been permanently refused; and accepting a model-supplied
+* SHA instead of the artifact's embedded one would bind nothing. Every field
+* the contract declares must be OBSERVED, so omitting evidence is a refusal,
+* never a bypass.
+*
+* COVERAGE SURFACE (frozen wording): only the surfaces Guard itself routes can
+* be protected. Operations with no Guard execution surface are refused before
+* any effect, and the plugin never suggests falling back to a plain shell
+* command. A trusted in-process caller that bypasses Guard entirely is a host
+* trust boundary and is disclosed as such in the documentation, not pretended
+* away.
+*/
+const RELEASE_CONTRACT_PREFIX = "Context Guard release contract v1: ";
+const RELEASE_RESERVATION_PREFIX = "Context Guard release reservation v1: ";
+const RELEASE_SETTLEMENT_PREFIX = "Context Guard release settlement v1: ";
+const RELEASE_REVOCATION_PREFIX = "Context Guard release revocation v1: ";
+const RELEASE_OPERATIONS = [
+	"npm_publish",
+	"git_tag",
+	"github_release_create",
+	"github_release_update",
+	"github_release_delete",
+	"composite_runner"
+];
+/**
+* The routing table for this release. `git_tag` and the GitHub Release
+* operations have no Guard-owned execution route yet; the coordinator
+* explicitly approved that staged scope reduction on 2026-09-14, and the new
+* route is the way each of them becomes protectable. A composite runner stays
+* opaque by construction.
+*/
+const RELEASE_OPERATION_SURFACES = {
+	npm_publish: {
+		surface: "context_guard_action",
+		protectable: true,
+		reasonCode: "release_operation_protectable",
+		attribution: "implemented"
+	},
+	git_tag: {
+		surface: "none",
+		protectable: false,
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
+	},
+	github_release_create: {
+		surface: "none",
+		protectable: false,
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
+	},
+	github_release_update: {
+		surface: "none",
+		protectable: false,
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
+	},
+	github_release_delete: {
+		surface: "none",
+		protectable: false,
+		reasonCode: "release_operation_unrouted",
+		attribution: "scope_reduction"
+	},
+	composite_runner: {
+		surface: "none",
+		protectable: false,
+		reasonCode: "release_runner_opaque",
+		attribution: "host_boundary"
+	}
+};
+const FULL_SHA40 = /^[0-9a-f]{40}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const SRI = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/;
+/**
+* How strongly an outcome resolves the reservation. A `settled` release is
+* never downgraded by a later record, while a stronger record reconciles a
+* weaker one — that is how a trusted readback recovers an earlier unconfirmed
+* attempt instead of being discarded.
+*/
+const OUTCOME_STRENGTH = {
+	not_effected: 0,
+	unknown: 1,
+	failed: 1,
+	unconfirmed: 2,
+	settled: 3
+};
+function asRecord$2(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function optionalString(value) {
+	return typeof value === "string" && value.trim().length > 0 ? value.trim() : void 0;
+}
+/**
+* Normalize a candidate release contract from a root adoption payload. Every
+* field is validated: an unparsable or partial adoption is refused rather than
+* approximated, because a half-specified contract would authorize an
+* unspecified candidate.
+*/
+function normalizeReleaseContract(raw, adoptedBy, adoptedAtRevision = 0) {
+	const errors = [];
+	const value = asRecord$2(raw);
+	if (!value) return { errors: ["release_contract_malformed"] };
+	const operations = [];
+	if (!Array.isArray(value.operations) || value.operations.length === 0) errors.push("release_operations_missing");
+	else for (const entry of value.operations) {
+		if (typeof entry !== "string" || !RELEASE_OPERATIONS.includes(entry)) {
+			errors.push("release_operation_unknown");
+			continue;
+		}
+		const operation = entry;
+		if (!RELEASE_OPERATION_SURFACES[operation].protectable) {
+			errors.push(RELEASE_OPERATION_SURFACES[operation].reasonCode);
+			continue;
+		}
+		if (!operations.includes(operation)) operations.push(operation);
+	}
+	const candidate = asRecord$2(value.candidate);
+	if (!candidate) errors.push("release_candidate_missing");
+	const CANDIDATE_FIELDS = [
+		"fullSha40",
+		"ref",
+		"repository",
+		"packageId",
+		"version",
+		"artifactSha256",
+		"artifactSri",
+		"registry",
+		"artifactDigest"
+	];
+	for (const key of Object.keys(candidate ?? {})) if (!CANDIDATE_FIELDS.includes(key)) errors.push("release_candidate_field_unknown");
+	const fullSha40 = optionalString(candidate?.fullSha40) ?? "";
+	if (!FULL_SHA40.test(fullSha40)) errors.push("release_candidate_sha_invalid");
+	const ref = optionalString(candidate?.ref);
+	const repository = optionalString(candidate?.repository);
+	const packageId = optionalString(candidate?.packageId);
+	const version = optionalString(candidate?.version);
+	let artifactSha256 = optionalString(candidate?.artifactSha256);
+	let artifactSri = optionalString(candidate?.artifactSri);
+	const legacyDigest = optionalString(candidate?.artifactDigest);
+	if (legacyDigest !== void 0) if (SHA256.test(legacyDigest)) artifactSha256 ??= legacyDigest;
+	else if (SRI.test(legacyDigest)) artifactSri ??= legacyDigest;
+	else errors.push("release_candidate_artifact_digest_invalid");
+	const registry = optionalString(candidate?.registry);
+	if (artifactSha256 !== void 0 && !SHA256.test(artifactSha256)) errors.push("release_candidate_sha256_invalid");
+	if (artifactSri !== void 0 && !SRI.test(artifactSri)) errors.push("release_candidate_sri_invalid");
+	const readinessRefs = Array.isArray(value.readinessRefs) ? value.readinessRefs.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
+	const closureCertRef = optionalString(value.closureCertRef);
+	let expiresAtEpochMs;
+	if (value.expiresAtEpochMs !== void 0) if (typeof value.expiresAtEpochMs !== "number" || !Number.isSafeInteger(value.expiresAtEpochMs) || value.expiresAtEpochMs <= 0) errors.push("release_expiry_invalid");
+	else expiresAtEpochMs = value.expiresAtEpochMs;
+	if (errors.length) return { errors: [...new Set(errors)] };
+	const suppliedId = optionalString(value.contractId);
+	const body = {
+		operations: [...operations].sort(),
+		candidate: {
+			fullSha40,
+			...ref ? { ref } : {},
+			...repository ? { repository } : {},
+			...packageId ? { packageId } : {},
+			...version ? { version } : {},
+			...artifactSha256 ? { artifactSha256 } : {},
+			...artifactSri ? { artifactSri } : {},
+			...registry ? { registry } : {}
+		},
+		readinessRefs: [...readinessRefs].sort(),
+		...closureCertRef ? { closureCertRef } : {},
+		...expiresAtEpochMs !== void 0 ? { expiresAtEpochMs } : {}
+	};
+	return {
+		contract: {
+			contractId: suppliedId ?? `rel-${sha256(JSON.stringify(body)).slice(0, 16)}`,
+			adoptedBy,
+			adoptedAtRevision,
+			operations: operations.sort(),
+			candidate: body.candidate,
+			readinessRefs: body.readinessRefs,
+			...closureCertRef ? { closureCertRef } : {},
+			...expiresAtEpochMs !== void 0 ? { expiresAtEpochMs } : {}
+		},
+		errors: []
+	};
+}
+function normalizeReservation(raw) {
+	const value = asRecord$2(raw);
+	if (!value) return void 0;
+	const contractId = optionalString(value.contractId);
+	const operation = optionalString(value.operation);
+	const callId = optionalString(value.callId);
+	const startedAtSeq = value.startedAtSeq;
+	if (!contractId || !callId) return void 0;
+	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
+	if (typeof startedAtSeq !== "number" || !Number.isSafeInteger(startedAtSeq)) return void 0;
+	const observedArtifactSri = optionalString(value.observedArtifactSri);
+	return {
+		contractId,
+		operation,
+		callId,
+		startedAtSeq,
+		status: "in_flight",
+		...observedArtifactSri ? { observedArtifactSri } : {}
+	};
+}
+const RELEASE_OUTCOMES = [
+	"settled",
+	"unconfirmed",
+	"unknown",
+	"failed",
+	"not_effected"
+];
+function normalizeSettlement(raw) {
+	const value = asRecord$2(raw);
+	if (!value) return void 0;
+	const contractId = optionalString(value.contractId);
+	const operation = optionalString(value.operation);
+	const callId = optionalString(value.callId);
+	const settledAtSeq = value.settledAtSeq;
+	const outcome = optionalString(value.outcome);
+	if (!contractId || !callId) return void 0;
+	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
+	if (typeof settledAtSeq !== "number" || !Number.isSafeInteger(settledAtSeq)) return void 0;
+	if (!outcome || !RELEASE_OUTCOMES.includes(outcome)) return void 0;
+	const readbackRaw = asRecord$2(value.readback);
+	const kind = readbackRaw?.kind;
+	return {
+		contractId,
+		operation,
+		callId,
+		settledAtSeq,
+		readback: readbackRaw && (kind === "npm_integrity" || kind === "git_ref" || kind === "github_release") && optionalString(readbackRaw.identity) ? {
+			kind,
+			identity: optionalString(readbackRaw.identity)
+		} : "unavailable",
+		outcome
+	};
+}
+/** The adopted, not-revoked contract that covers an operation, newest first. */
+function releaseContractFor(projection, operation, contractId) {
+	const contracts = projection.releaseContracts.filter((contract) => contract.revokedAtSeq === void 0 && (contractId === void 0 || contract.contractId === contractId) && contract.operations.includes(operation));
+	return contracts.length ? contracts[contracts.length - 1] : void 0;
+}
+/** Whether a contract was explicitly revoked by a durable root command. */
+function isContractRevoked(projection, contractId) {
+	return projection.releaseContracts.some((contract) => contract.contractId === contractId && contract.revokedAtSeq !== void 0);
+}
+/**
+* The reconciled settlement per (contract, operation, callId): the strongest
+* outcome wins, ties resolve to the later record. A `settled` release is never
+* revoked by a later weaker record.
+*/
+function reconciledSettlements(projection, contractId, operation) {
+	const byCall = /* @__PURE__ */ new Map();
+	for (const settlement of projection.releaseSettlements) {
+		if (settlement.contractId !== contractId || settlement.operation !== operation) continue;
+		const existing = byCall.get(settlement.callId);
+		if (!existing) {
+			byCall.set(settlement.callId, settlement);
+			continue;
+		}
+		const stronger = OUTCOME_STRENGTH[settlement.outcome] > OUTCOME_STRENGTH[existing.outcome];
+		const newer = OUTCOME_STRENGTH[settlement.outcome] === OUTCOME_STRENGTH[existing.outcome] && settlement.settledAtSeq >= existing.settledAtSeq;
+		if (stronger || newer) byCall.set(settlement.callId, settlement);
+	}
+	return [...byCall.values()];
+}
+/** Whether a settlement releases the one-shot lock: settled, or proven no-effect. */
+function releasesLock(settlement) {
+	return settlement.outcome === "settled" || settlement.outcome === "not_effected";
+}
+/** The in-flight (unresolved) reservation for one contract operation, if any. */
+function inFlightReservation(projection, contractId, operation) {
+	const settled = reconciledSettlements(projection, contractId, operation);
+	for (const reservation of projection.releaseReservations) {
+		if (reservation.contractId !== contractId || reservation.operation !== operation) continue;
+		const resolution = settled.find((settlement) => settlement.callId === reservation.callId);
+		if (!resolution || !releasesLock(resolution)) return reservation;
+	}
+}
+/** Whether a contract operation has already been consumed by a settled effect. */
+function settledOperations(projection, contractId) {
+	const consumed = [];
+	for (const settlement of projection.releaseSettlements) {
+		if (settlement.contractId !== contractId) continue;
+		if (settlement.outcome !== "settled") continue;
+		if (!consumed.includes(settlement.operation)) consumed.push(settlement.operation);
+	}
+	return consumed.sort();
+}
+const CANDIDATE_FIELD_CODES = [
+	{
+		field: "fullSha40",
+		label: "commit",
+		unresolvedCode: "release_candidate_sha_unresolved",
+		mismatchCode: "release_candidate_sha_mismatch"
+	},
+	{
+		field: "ref",
+		label: "ref",
+		unresolvedCode: "release_candidate_ref_unresolved",
+		mismatchCode: "release_candidate_ref_mismatch"
+	},
+	{
+		field: "repository",
+		label: "repository",
+		unresolvedCode: "release_candidate_repository_unresolved",
+		mismatchCode: "release_candidate_repository_mismatch"
+	},
+	{
+		field: "packageId",
+		label: "package",
+		unresolvedCode: "release_candidate_package_unresolved",
+		mismatchCode: "release_candidate_package_mismatch"
+	},
+	{
+		field: "version",
+		label: "version",
+		unresolvedCode: "release_candidate_version_unresolved",
+		mismatchCode: "release_candidate_version_mismatch"
+	},
+	{
+		field: "artifactSha256",
+		label: "artifact SHA-256",
+		unresolvedCode: "release_artifact_sha256_unresolved",
+		mismatchCode: "release_candidate_artifact_mismatch"
+	},
+	{
+		field: "artifactSri",
+		label: "artifact SRI",
+		unresolvedCode: "release_artifact_sri_unresolved",
+		mismatchCode: "release_candidate_artifact_sri_mismatch"
+	},
+	{
+		field: "registry",
+		label: "registry",
+		unresolvedCode: "release_candidate_registry_unresolved",
+		mismatchCode: "release_candidate_registry_mismatch"
+	}
+];
+/** A readiness reference resolves to a real, already-established fact. */
+function readinessResolves(projection, ref) {
+	if (projection.checkpoints.some((checkpoint) => checkpoint.id === ref && checkpoint.result === "certified")) return true;
+	if (projection.boundaries.some((boundary) => boundary.id === ref)) return true;
+	return projection.items.get(ref)?.status === "passed";
+}
+/**
+* The pre-effect release decision. Order matters: an unprotectable surface and
+* a damaged release state are refused before expiry or candidate checks,
+* because running an unprotected operation is never made acceptable by a valid
+* ticket, and because unreadable release state must not authorize anything.
+*/
+function releasePreEffectDecision(projection, request) {
+	const surface = RELEASE_OPERATION_SURFACES[request.operation];
+	if (!surface.protectable) return {
+		status: "denied",
+		reasonCode: surface.reasonCode
+	};
+	if (projection.releaseStateDamaged) return {
+		status: "denied",
+		reasonCode: "release_state_damaged"
+	};
+	const contract = releaseContractFor(projection, request.operation, request.contractId);
+	if (!contract) {
+		if (projection.releaseContracts.some((entry) => entry.revokedAtSeq !== void 0 && entry.operations.includes(request.operation) && (request.contractId === void 0 || entry.contractId === request.contractId))) return {
+			status: "denied",
+			reasonCode: "release_contract_revoked"
+		};
+		if (request.contractId !== void 0 && isContractRevoked(projection, request.contractId)) return {
+			status: "denied",
+			reasonCode: "release_contract_revoked"
+		};
+		return {
+			status: "denied",
+			reasonCode: projection.releaseContracts.length === 0 ? "release_contract_required" : "release_operation_not_adopted"
+		};
+	}
+	if (contract.expiresAtEpochMs !== void 0) {
+		if (request.nowEpochMs === void 0) return {
+			status: "denied",
+			reasonCode: "release_expiry_unevaluable",
+			contractId: contract.contractId
+		};
+		if (request.nowEpochMs >= contract.expiresAtEpochMs) return {
+			status: "denied",
+			reasonCode: "release_contract_expired",
+			contractId: contract.contractId
+		};
+	}
+	if (settledOperations(projection, contract.contractId).includes(request.operation)) return {
+		status: "denied",
+		reasonCode: "release_operation_consumed",
+		contractId: contract.contractId
+	};
+	if (inFlightReservation(projection, contract.contractId, request.operation)) return {
+		status: "denied",
+		reasonCode: "release_operation_in_flight",
+		contractId: contract.contractId
+	};
+	for (const ref of contract.readinessRefs) if (!readinessResolves(projection, ref)) return {
+		status: "denied",
+		reasonCode: "release_readiness_unresolved",
+		contractId: contract.contractId
+	};
+	const frozen = contract.frozenClosure;
+	const closure = frozen !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === frozen.id) : void 0;
+	if (!frozen || frozen.contractRevision !== contract.adoptedAtRevision || frozen.id !== contract.closureCertRef || !closure || closure.result !== "certified" || closure.certificationDigest !== frozen.certificationDigest || closure.epoch !== projection.epoch) return {
+		status: "denied",
+		reasonCode: "release_closure_unresolved",
+		contractId: contract.contractId
+	};
+	if (contract.candidate.artifactSha256 === void 0 && contract.candidate.artifactSri === void 0) return {
+		status: "denied",
+		reasonCode: "release_artifact_identity_required",
+		contractId: contract.contractId
+	};
+	const candidate = contract.candidate;
+	const observedIdentity = request.observed ?? {};
+	const compared = [];
+	for (const entry of CANDIDATE_FIELD_CODES) {
+		const declared = candidate[entry.field];
+		if (typeof declared !== "string") continue;
+		compared.push([entry, declared]);
+	}
+	for (const [entry, declared] of compared) {
+		const observed = observedIdentity[entry.field];
+		if (observed === void 0) return {
+			status: "denied",
+			reasonCode: entry.unresolvedCode,
+			contractId: contract.contractId
+		};
+		if (observed !== declared) return {
+			status: "denied",
+			reasonCode: entry.mismatchCode,
+			contractId: contract.contractId
+		};
+	}
+	if (candidate.ref !== void 0 && observedIdentity.refSha !== void 0 && observedIdentity.fullSha40 !== void 0 && observedIdentity.refSha !== observedIdentity.fullSha40) return {
+		status: "denied",
+		reasonCode: "release_ref_commit_mismatch",
+		contractId: contract.contractId
+	};
+	const resolved = request.resolvedTarget;
+	if (resolved === void 0) return {
+		status: "denied",
+		reasonCode: "release_target_unresolved",
+		contractId: contract.contractId
+	};
+	if (resolved.version === void 0) return {
+		status: "denied",
+		reasonCode: "release_target_unresolved",
+		contractId: contract.contractId
+	};
+	if (candidate.packageId !== void 0 && resolved.artifact_id !== candidate.packageId) return {
+		status: "denied",
+		reasonCode: "release_target_package_mismatch",
+		contractId: contract.contractId
+	};
+	if (candidate.version !== void 0 && resolved.version !== candidate.version) return {
+		status: "denied",
+		reasonCode: "release_target_version_mismatch",
+		contractId: contract.contractId
+	};
+	if (candidate.registry !== void 0 && resolved.registry !== candidate.registry) return {
+		status: "denied",
+		reasonCode: "release_target_registry_mismatch",
+		contractId: contract.contractId
+	};
+	return {
+		status: "granted",
+		reasonCode: "release_contract_granted",
+		contractId: contract.contractId
+	};
+}
+/**
+* Whether a trusted readback settles the attempt: the readback must name the
+* SAME artifact identity the contract froze. A registry that answers with a
+* different integrity proves the wrong bytes are published, which is an
+* unknown outcome for this contract, never a settlement.
+*/
+function readbackSettlesContract(contract, readback, reservationSri) {
+	if (readback === "unavailable") return "unconfirmed";
+	if (readback.kind !== "npm_integrity") return "unconfirmed";
+	const expected = contract.candidate.artifactSri ?? reservationSri;
+	if (expected === void 0) return "unconfirmed";
+	return readback.identity === expected ? "settled" : "mismatch";
+}
+/**
+* The reservation for one call, including revoked contracts: reconciling an
+* operation that was already in flight when its contract was revoked is the
+* recovery case, not an authority question.
+*/
+function reservationFor(projection, contractId, callId) {
+	return projection.releaseReservations.find((entry) => entry.contractId === contractId && entry.callId === callId);
+}
+/** A contract by id, INCLUDING revoked ones, for recovery lookups. */
+function contractById(projection, contractId) {
+	return projection.releaseContracts.find((entry) => entry.contractId === contractId);
+}
+/** The coverage report for one contract: which adopted operations Guard can protect. */
+function releaseCoverage(contract) {
+	return [...contract.operations].sort().map((operation) => ({
+		operation,
+		...RELEASE_OPERATION_SURFACES[operation]
+	}));
+}
+
+//#endregion
+//#region src/domain/v6-feedback.ts
+/** Display provenance is produced while the core requirement is constructed,
+* never inferred from the shape of its ID. */
+function sourceItemForCoreRequirement(projection, id) {
+	const item = projection.items.get(id);
+	if (item) return { item };
+	const origin = projection.coreV2RequirementOrigins?.get(id);
+	if (!origin) return void 0;
+	const source = projection.items.get(origin.itemId);
+	if (!source?.observerMethod || !source.observerMethod.tools.includes(origin.action) || !Number.isSafeInteger(origin.sourceStart) || !Number.isSafeInteger(origin.sourceEnd) || origin.sourceStart < 0 || origin.sourceEnd <= origin.sourceStart || !source.spans?.some((span) => span.partIndex === 0 && span.start === origin.sourceStart && span.end <= origin.sourceEnd)) return void 0;
+	return {
+		item: source,
+		origin
+	};
+}
+/** The default ordinary feedback scope, before inspecting current core facts. */
+function defaultV6OrdinaryFeedbackScope(projection) {
+	const currentReleaseWork = [...projection.items.values()].some((item) => {
+		if (item.semanticAction !== "publish" || item.unitId !== projection.currentUnitId || item.status !== "pending") return false;
+		const target = item.requestedTarget;
+		return projection.releaseContracts.some((record) => {
+			const contract = releaseContractFor(projection, "npm_publish", record.contractId);
+			return contract !== void 0 && (target?.artifact_id === void 0 || target.artifact_id === contract.candidate.packageId) && (target?.version === void 0 || target.version === contract.candidate.version) && (target?.registry === void 0 || target.registry === contract.candidate.registry);
+		});
+	});
+	return projection.boundaryProtocol === 6 && !projection.goalCompletionAdopted && projection.policy !== "release" && !currentReleaseWork;
+}
+/**
+* The core object's verified shape, or the reason it cannot be read as
+* evidence. Durability, integrity, schema, field types, id consistency and
+* surfaced-source provenance are ONE chain shared by every consumer — the
+* current view and the condition-release trust check below — so no lane can
+* decide a differently-shaped core object is trustworthy (review R2F3).
+*/
+function verifiedCore(projection) {
+	const core = projection.coreV2;
+	if (projection.integrity !== "valid" || projection.durabilityWatermark !== "confirmed" || core?.schema !== "core-state/v2" || typeof core.certifiable !== "boolean" || !core.predicates || typeof core.predicates !== "object" || Array.isArray(core.predicates) || !Array.isArray(core.unmet_requirements) || !Array.isArray(core.current_actions)) return { reason: "core_projection_unavailable" };
+	const predicates = core.predicates;
+	const openIds = core.unmet_requirements;
+	if (openIds.some((id) => typeof id !== "string" || !Object.hasOwn(predicates, id)) || Object.values(predicates).some((value) => typeof value !== "string")) return { reason: "core_projection_unavailable" };
+	if ([...openIds, ...Object.entries(predicates).filter(([, state]) => state.startsWith("constraint_")).map(([id]) => id)].some((id) => !sourceItemForCoreRequirement(projection, id))) return { reason: "core_requirement_source_unavailable" };
+	return { core: {
+		certifiable: core.certifiable,
+		predicates,
+		openIds,
+		currentActions: core.current_actions
+	} };
+}
+/**
+* The core's condition-release map, but ONLY from a core object that passed
+* the full verification chain above. A corrupt, unconfirmed or unsourceable
+* core's `released` fields are not evidence and must never discharge a
+* durable root boundary: without a verified map the caller keeps the
+* boundary (review R2F3). Host-lock availability is deliberately NOT part of
+* this check — an unavailable host does not by itself unmake a verified
+* release.
+*/
+function v6VerifiedCoreConditions(projection) {
+	if ("reason" in verifiedCore(projection)) return void 0;
+	const conditions = projection.coreV2?.conditions;
+	if (!conditions || typeof conditions !== "object" || Array.isArray(conditions)) return void 0;
+	return Object.fromEntries(Object.entries(conditions).filter((entry) => typeof entry[1] === "string"));
+}
+/**
+* Whether a durable item is a root wait that is CURRENTLY pending: the record
+* carries a wait, the item is still open, it belongs to the current unit's
+* lineage (the current unit or an applicable ancestor — a switched-away
+* sibling's pending audit record is history, not current debt), and no
+* verified core release has discharged it. A record that merely CONTAINS a
+* wait field is history, not a current confirmation debt — recovery, prepare
+* detail and the boundary selector all derive the current state from this
+* ONE predicate (scope included) so the surfaces cannot disagree (reviews
+* R4F1/R5).
+*/
+function isV6PendingRootWait(projection, item) {
+	if (!item || item.status !== "pending") return false;
+	if (item.waitAuthorization === void 0 && item.authorityDisposition !== "conditional_wait") return false;
+	const current = projection.currentUnitId;
+	if (item.unitId === void 0 || current === void 0) return false;
+	if (item.unitId !== current && !unitAncestorIds(projection, current).includes(item.unitId)) return false;
+	return (v6VerifiedCoreConditions(projection) ?? {})[`condition:${item.id}`] !== "released";
+}
+/** A display-only view of the confirmed shared-core closure. Historical item
+* status is deliberately not rewritten: it can still be audited or certified
+* under an explicitly adopted contract, but cannot become default v6 debt. */
+function currentV6Feedback(projection) {
+	if (!defaultV6OrdinaryFeedbackScope(projection)) return void 0;
+	if (projection.hostStatus !== "supported") return {
+		status: "unknown",
+		reasonCode: "host_lock_unsupported",
+		openIds: [],
+		predicates: {},
+		currentActions: []
+	};
+	const needsReview = needsReviewObligations(projection);
+	if (needsReview.length > 0) return {
+		status: "incomplete",
+		reasonCode: "legacy_record_needs_review",
+		openIds: needsReview.map((item) => item.id),
+		predicates: Object.fromEntries(needsReview.map((item) => [item.id, "legacy_review"])),
+		currentActions: []
+	};
+	const verified = verifiedCore(projection);
+	if ("reason" in verified) return {
+		status: "unknown",
+		reasonCode: verified.reason,
+		openIds: [],
+		predicates: {},
+		currentActions: []
+	};
+	if (!verified.core.certifiable && verified.core.openIds.length === 0) return {
+		status: "unknown",
+		reasonCode: "core_coverage_unresolved",
+		openIds: [],
+		predicates: verified.core.predicates,
+		currentActions: []
+	};
+	return {
+		status: verified.core.certifiable ? "observed" : "incomplete",
+		reasonCode: verified.core.certifiable ? "ordinary_current_closure_observed" : "current_closure_unmet",
+		openIds: verified.core.openIds,
+		predicates: verified.core.predicates,
+		currentActions: verified.core.currentActions
+	};
+}
+
+//#endregion
 //#region src/domain/recovery.ts
 const DEFAULT_RECOVERY_CHAR_BUDGET = 4e3;
 const MIN_RECOVERY_CHAR_BUDGET = 512;
@@ -7577,13 +8238,106 @@ function closingHint(projection, item, evidenceIds) {
 function openItems(projection) {
 	return [...projection.items.values()].filter((item) => item.status === "pending").sort((a, b) => a.revision - b.revision || (a.id < b.id ? -1 : 1));
 }
+/** The accurate injection title for one armed recovery (DSH-RF-02). */
+function recoveryTitle(causes) {
+	const compact = new Set(causes);
+	const compacted = compact.has("compaction");
+	const resumed = compact.has("resume");
+	if (compacted && resumed) return "Open task requirements (recovered after compaction or resume):";
+	if (compacted) return "Open task requirements (recovered after compaction):";
+	if (resumed) return "Open task requirements (recovered after resume):";
+	if (compact.has("guard_reenabled")) return "Open task requirements (Guard re-enabled):";
+	if (compact.has("checkpoint_followup")) return "Open task requirements (checkpoint follow-up):";
+	if (compact.has("boundary_update")) return "Open task requirements (boundary update):";
+	if (compact.has("contract_updated")) return "Open task requirements (contract updated):";
+	return "Open task requirements:";
+}
+/**
+* The v6 ordinary completion rule. The legacy rule states the pre-v6 protocol's
+* checkpoint gate; repeating it in the ordinary lane taught models that a
+* Guard checkpoint is a prerequisite for ordinary completion (DSH-RF-01), so
+* this lane states its own rule: completion is READ from persisted host facts,
+* uncertified work is still delivered honestly, and no Guard step authorizes
+* ordinary execution.
+*/
+const V6_ORDINARY_COMPLETION_RULE = "Ordinary completion is read from persisted host tool results and independent readback; uncertified work is delivered honestly and stays uncertified. No Guard checkpoint, binding, or target re-authorization is a prerequisite for ordinary work.";
+/** The same rule at a medium budget. */
+const V6_ORDINARY_COMPLETION_RULE_SHORT = "Ordinary completion is read from persisted host results; uncertified work is delivered honestly and needs no Guard checkpoint or re-authorization.";
+/** The same rule at emergency budget — still never a checkpoint prerequisite. */
+const V6_ORDINARY_COMPLETION_RULE_COMPACT = "Ordinary completion is read from persisted host results; no Guard checkpoint or re-authorization is required.";
+function v6CompletionRuleFor(budget) {
+	if (budget >= DEFAULT_RECOVERY_CHAR_BUDGET) return V6_ORDINARY_COMPLETION_RULE;
+	if (budget >= 1e3) return V6_ORDINARY_COMPLETION_RULE_SHORT;
+	return V6_ORDINARY_COMPLETION_RULE_COMPACT;
+}
+/** The current-unit core conditions, trusted only through the shared
+* verification chain: an unverified core's release fields never discharge a
+* root boundary (review R2F3). */
+/** Pending durable items inside the current unit's lineage (the current unit
+* plus applicable ancestors). This is the v6 scope every current-guidance
+* surface draws from — boundaries, the cleanup condition, and the digest. */
+function currentLineagePendingItems(projection) {
+	const current = projection.currentUnitId;
+	if (current === void 0) return [];
+	const lineage = new Set([current, ...unitAncestorIds(projection, current)]);
+	return [...projection.items.values()].filter((item) => item.status === "pending" && item.unitId !== void 0 && lineage.has(item.unitId));
+}
+/**
+* The durable root authorization boundaries applicable to the CURRENT work:
+* pending prohibitions and root waits whose release is not verified, scoped to
+* the current unit's lineage. Historical sibling units and superseded records
+* stay auditable but never re-enter current guidance (RF08, review R2F2). One
+* selector, shared by both renderer lanes and the recovery digest, so no
+* surface can disagree about which boundaries are in force. Prohibitions are
+* selected from the DURABLE RECORD's kind, never from the core predicate: a
+* prohibition the core cannot verify (legacy_review) is still a prohibition
+* and still renders as DO NOT (coverage audit H1).
+*/
+function v6CurrentRootBoundaries(projection) {
+	const sort = (a, b) => b.revision - a.revision || a.id.localeCompare(b.id);
+	const applicable = currentLineagePendingItems(projection);
+	return {
+		prohibitions: applicable.filter((item) => item.kind === "prohibition").sort(sort),
+		waits: applicable.filter((item) => isV6PendingRootWait(projection, item)).sort(sort)
+	};
+}
 /**
 * Content identity of a rendered recovery packet, bound to the contract
 * revision and epoch it was rendered from. The runtime compares digests before
 * re-injecting, so a repeatedly re-armed recovery with unchanged content is
 * injected once instead of looping (v0.2.1).
+*
+* In the default v6 ordinary lane the identity binds to the DISPLAYED current
+* feedback (status, predicates, open requirements, wait conditions) instead of
+* the legacy pending/evidence inventory: unrelated historical evidence changes
+* no predicate, so it must not re-arm the reminder, while a new requirement, a
+* failed result, a released wait, or an integrity change must (DSH-RF-01).
+* The core waterline (`as_of`) is deliberately excluded — it moves on every
+* event, which is exactly the noise the old digest turned into reminders.
 */
 function recoveryDigest(packet, projection) {
+	const current = currentV6Feedback(projection);
+	if (current) {
+		const boundaries = current.status === "unknown" && projection.integrity === "valid" ? (() => {
+			const selected = v6CurrentRootBoundaries(projection);
+			return [...selected.prohibitions, ...selected.waits].map((item) => item.id).sort();
+		})() : void 0;
+		return sha256(JSON.stringify({
+			lane: "v6-ordinary-recovery",
+			packet,
+			revision: projection.contractRevision,
+			epoch: projection.epoch,
+			host: projection.hostLockDigest,
+			integrity: projection.integrity,
+			unit: projection.currentUnitId ?? null,
+			status: current.status,
+			reason: current.reasonCode,
+			open: current.openIds,
+			predicates: current.predicates,
+			conditions: v6VerifiedCoreConditions(projection) ?? null,
+			boundaries
+		}));
+	}
 	const items = openItems(projection);
 	const evidence = [...projection.evidence.values()].filter((row$3) => items.some((item) => relevantEvidence(projection, item, row$3)));
 	return sha256(JSON.stringify({
@@ -7597,6 +8351,182 @@ function recoveryDigest(packet, projection) {
 function renderRecoveryPacket(projection, options = {}) {
 	const budget = options.charBudget ?? DEFAULT_RECOVERY_CHAR_BUDGET;
 	if (!Number.isSafeInteger(budget) || budget < MIN_RECOVERY_CHAR_BUDGET) throw new RangeError("recovery charBudget must be an integer >= 512");
+	const current = currentV6Feedback(projection);
+	if (current) return renderV6RecoveryPacket(projection, current, budget);
+	return renderLegacyRecoveryPacket(projection, options, budget);
+}
+/**
+* The v6 ordinary recovery packet. Every row comes from the current core
+* predicates and their sourced items: satisfied work is not re-reported,
+* genuinely unmet work stays visible with its reachable host-tool remedy,
+* standing prohibitions stay standing, an unresolved root wait keeps its exact
+* resume event, and an unavailable view reports itself as unknown instead of
+* regressing to the legacy qualification diagnosis.
+*
+* Root authorization boundaries — standing prohibitions and unreleased root
+* waits — outrank ordinary work rows at EVERY budget and survive an
+* unavailable core view (when the root sources themselves are verifiable):
+* a compact packet may fold work, never the boundary (review F1/F2).
+*/
+function renderV6RecoveryPacket(projection, current, budget) {
+	const clip = (text, size) => text.length <= size ? text : text.slice(0, size - 1) + "…";
+	const compact = budget < 1e3;
+	const pointer = "Details/omissions: context_guard_prepare (discovery) and context_guard_checkpoint.";
+	const lines = [];
+	const ruleLineIndex = 1;
+	const isPendingWait = (item) => isV6PendingRootWait(projection, item);
+	const { prohibitions: durableProhibitions } = v6CurrentRootBoundaries(projection);
+	const cleanupApplies = currentLineagePendingItems(projection).some((item) => carriesCleanupCondition(deriveItemDiagnosis(projection, item).capability.gap));
+	const waitBoundaryRow = (item) => `[${clip(item.id, 20)}] root_condition_pending; wait for trusted root: ${item.resumeEvent ?? item.condition ?? item.normalizedText}; do not execute before release`;
+	const waitBoundaryReference = (item) => `[${clip(item.id, 20)}] root_condition_pending; exact condition: context_guard_prepare; do not execute before release`;
+	const constraintBoundaryRow = (item, state) => {
+		const base = `DO NOT [${clip(item.id, 20)}] ${item.normalizedText}`;
+		if (state === "constraint_violated") return `${base} — VIOLATED by a sourced host mutation; report it; do not repeat`;
+		if (state === "constraint_unresolved") return `${base} — current host facts cannot establish whether this was respected`;
+		return base;
+	};
+	const constraintBoundaryReference = (item) => `DO NOT [${clip(item.id, 20)}] exact text: context_guard_prepare`;
+	if (current.status === "unknown") {
+		const unknownRuleFull = "Current-fact recovery is unavailable: nothing here claims completion, authorization, or certification. The durable root boundaries listed below stay in force; retry the current view after the named condition is restored.";
+		const unknownRuleCompact = "Current facts unavailable; nothing here claims completion or authorization; the durable root boundaries below stay in force.";
+		lines.push(`Context Guard: current closure unknown (${current.reasonCode}); revision ${projection.contractRevision}.`);
+		lines.push(compact ? unknownRuleCompact : unknownRuleFull);
+		if (cleanupApplies) lines.push(cleanupConditionFor(budget));
+		const unknownRuleTiers = [unknownRuleFull, unknownRuleCompact];
+		if (projection.integrity !== "valid") lines.push(compact ? "Root source integrity is unverifiable: known constraints cannot be safely recovered here; do not treat any boundary as preserved." : "Root source integrity is unverifiable, so the known prohibitions and waits cannot be safely recovered in this packet; do not treat any boundary as preserved, and re-establish them with the root before acting.");
+		else {
+			const { waits } = v6CurrentRootBoundaries(projection);
+			const footer$1 = (constraintsShown$2, waitsShown$2) => compact ? `${durableProhibitions.length - constraintsShown$2} constraint folded; ${waits.length - waitsShown$2} wait folded.` : `${durableProhibitions.length - constraintsShown$2} constraint rows folded; ${waits.length - waitsShown$2} wait rows folded.`;
+			let remaining$1 = budget - (lines.join("\n").length + 82 + footer$1(0, 0).length + 3);
+			const budget2 = makeV6RowBudget(lines, unknownRuleTiers, ruleLineIndex, () => remaining$1, (value) => {
+				remaining$1 = value;
+			});
+			let constraintsShown$1 = 0, waitsShown$1 = 0;
+			for (const item of durableProhibitions.slice(0, compact ? 1 : 4)) if (budget2.addBoundary(constraintBoundaryRow(item), constraintBoundaryReference(item))) constraintsShown$1++;
+			for (const item of waits.slice(0, compact ? 1 : 4)) if (budget2.addBoundary(waitBoundaryRow(item), waitBoundaryReference(item))) waitsShown$1++;
+			lines.push(footer$1(constraintsShown$1, waitsShown$1));
+		}
+		lines.push(pointer);
+		return lines.join("\n");
+	}
+	if (current.status === "observed") {
+		lines.push(`Context Guard: current ordinary closure observed; revision ${projection.contractRevision}; 0 unmet current requirements${durableProhibitions.length > 0 ? `; ${durableProhibitions.length} standing constraint${durableProhibitions.length === 1 ? "" : "s"}` : ""}.`);
+		lines.push(v6CompletionRuleFor(budget));
+	} else {
+		lines.push(`Context Guard: ${current.openIds.length} unmet current requirement${current.openIds.length === 1 ? "" : "s"}; revision ${projection.contractRevision}.`);
+		lines.push(v6CompletionRuleFor(budget));
+	}
+	if (cleanupApplies) lines.push(cleanupConditionFor(budget));
+	if (current.reasonCode === "legacy_record_needs_review") {
+		const shown$1 = current.openIds.slice(0, 2).map((id) => clip(id, 20)).join("; ");
+		const more = current.openIds.length > 2 ? ` (+${current.openIds.length - 2} more)` : "";
+		lines.push(`NEEDS REVIEW: ${shown$1}${more} — a record from an earlier rule set cannot be inherited; resolve it with the root before certifying.`);
+	}
+	const requirementRow = (id) => {
+		const state = current.predicates[id];
+		const sourced = sourceItemForCoreRequirement(projection, id);
+		const item = sourced?.item;
+		if (state === "insufficient" && sourced?.origin !== void 0) return {
+			reason: state,
+			body: compact ? `run the read-only ${sourced.origin.action}; its persisted result records it` : `run the read-only ${sourced.origin.action} named by the root requirement; its persisted result records this method`
+		};
+		if (state === "insufficient" && item !== void 0 && (item.taskKind === "inquiry" || item.authorityDisposition === "informational")) return {
+			reason: state,
+			body: compact ? "deliver the answer; the completed turn closes it" : "deliver the actual answer; the final response of the completed turn closes it"
+		};
+		if (state === "insufficient") return {
+			reason: state,
+			body: compact ? "unmet from persisted facts; do it with host tools; never re-run a completed action" : "still unmet from persisted host facts; do the work with host tools and let the persisted result or an independent readback show it; never re-run a completed action to mint evidence"
+		};
+		if (state === "legacy_review") return {
+			reason: state,
+			body: compact ? "not certifiable from current facts; ordinary host work continues; stays uncertified" : "recorded but not certifiable from current confirmed facts; continue ordinary host work; stays uncertified unless a fresh root instruction adopts a certified path"
+		};
+		if (state === "constraint_violated") return {
+			reason: state,
+			body: compact ? "a sourced host mutation violated this prohibition; report; do not repeat" : "a sourced host mutation violated this prohibition; report it; do not repeat it"
+		};
+		if (state === "constraint_unresolved") return {
+			reason: state,
+			body: compact ? "host facts cannot establish this prohibition was respected" : "current host facts cannot establish whether this prohibition was respected"
+		};
+		return {
+			reason: state ?? "unmet",
+			body: "answer this sourced requirement with the current Host observation or final delivery"
+		};
+	};
+	const openRows = current.status === "incomplete" ? current.openIds : [];
+	const waitItems = openRows.map((id) => sourceItemForCoreRequirement(projection, id)?.item).filter((item) => isPendingWait(item));
+	const waitRowIds = new Set(waitItems.map((item) => item.id));
+	const prohibitionRowIds = new Set(durableProhibitions.map((item) => item.id));
+	const workRows = openRows.filter((id) => !waitRowIds.has(id) && !prohibitionRowIds.has(id));
+	const footer = (constraintsShown$1, waitsShown$1, shown$1) => compact ? `${durableProhibitions.length - constraintsShown$1} constraint folded; ${waitItems.length - waitsShown$1} wait folded; ${workRows.length - shown$1} work folded.` : `${durableProhibitions.length - constraintsShown$1} constraint rows folded; ${waitItems.length - waitsShown$1} wait rows folded; ${workRows.length - shown$1} requirement rows folded. Current scope is the confirmed core; older records stay historical.`;
+	let remaining = budget - (lines.join("\n").length + 82 + footer(0, 0, 0).length + 3);
+	const rowBudget = makeV6RowBudget(lines, [
+		v6CompletionRuleFor(budget),
+		budget >= DEFAULT_RECOVERY_CHAR_BUDGET ? V6_ORDINARY_COMPLETION_RULE_SHORT : V6_ORDINARY_COMPLETION_RULE_COMPACT,
+		V6_ORDINARY_COMPLETION_RULE_COMPACT
+	].filter((tier, index$1, tiers) => tiers.indexOf(tier) === index$1), ruleLineIndex, () => remaining, (value) => {
+		remaining = value;
+	});
+	let constraintsShown = 0, waitsShown = 0, shown = 0;
+	const constraintLimit = compact ? 1 : 4;
+	for (const item of durableProhibitions.slice(0, constraintLimit)) if (rowBudget.addBoundary(constraintBoundaryRow(item, current.predicates[item.id]), constraintBoundaryReference(item))) constraintsShown++;
+	const waitLimit = compact ? 1 : 4;
+	for (const item of waitItems.slice(0, waitLimit)) if (rowBudget.addBoundary(waitBoundaryRow(item), waitBoundaryReference(item))) waitsShown++;
+	const rowLimit = compact ? 1 : 4;
+	for (const id of workRows.slice(0, rowLimit)) {
+		const row$3 = requirementRow(id);
+		const item = sourceItemForCoreRequirement(projection, id)?.item;
+		const text = item ? clip(item.normalizedText, 70) : "";
+		if (rowBudget.add(`[${clip(id, 20)}] ${row$3.reason}; ${row$3.body}; ${text}`, compact ? 110 : 310)) shown++;
+	}
+	lines.push(footer(constraintsShown, waitsShown, shown), pointer);
+	return lines.join("\n");
+}
+/**
+* The v6 lane's bounded row budget. Ordinary rows clip when tight. Boundary
+* rows — a standing prohibition or a root wait — are NEVER clipped: the
+* complete row is planned first, the generic rule is compressed next, and a
+* row that still cannot fit whole falls back to a truthful pointer row or
+* folds with its count. A displayed boundary is therefore always semantically
+* complete, and "0 folded" always means exactly that (reviews F1/R2F1).
+*/
+function makeV6RowBudget(lines, ruleTiers, ruleLineIndex, getRemaining, setRemaining) {
+	const tryWhole = (line) => {
+		const remaining = getRemaining();
+		if (remaining < line.length + 1) return false;
+		lines.push(line);
+		setRemaining(remaining - (line.length + 1));
+		return true;
+	};
+	const add = (line, cap) => {
+		const remaining = getRemaining();
+		if (remaining < 30) return false;
+		const text = line.length <= Math.min(cap, remaining) ? line : line.slice(0, Math.min(cap, remaining) - 1) + "…";
+		lines.push(text);
+		setRemaining(remaining - (text.length + 1));
+		return true;
+	};
+	const shortenRule = () => {
+		const currentRule = lines[ruleLineIndex];
+		const next = ruleTiers[ruleTiers.indexOf(currentRule) + 1];
+		if (next === void 0) return false;
+		setRemaining(getRemaining() + currentRule.length - next.length);
+		lines[ruleLineIndex] = next;
+		return true;
+	};
+	const addBoundary = (full, reference) => {
+		if (tryWhole(full)) return true;
+		while (shortenRule()) if (tryWhole(full)) return true;
+		return tryWhole(reference);
+	};
+	return {
+		add,
+		addBoundary
+	};
+}
+function renderLegacyRecoveryPacket(projection, options, budget) {
 	const clip = (text, size) => text.length <= size ? text : text.slice(0, size - 1) + "…";
 	const items = openItems(projection).sort((a, b) => Number(b.kind === "prohibition") - Number(a.kind === "prohibition") || b.revision - a.revision || a.id.localeCompare(b.id));
 	const rejected$1 = options.rejectedBindings ?? (projection.lastCheckpointRejectionRevision === projection.contractRevision ? projection.lastCheckpointRejections : []) ?? [];
@@ -11794,13 +12724,13 @@ function parseArguments$1(raw) {
 		return {};
 	}
 }
-function asRecord$2(value) {
+function asRecord$1(value) {
 	return typeof value === "object" && value !== null ? value : void 0;
 }
 function extractTextContent(content) {
 	const parts = [];
 	for (const block$1 of content) {
-		const record = asRecord$2(block$1);
+		const record = asRecord$1(block$1);
 		if (!record) continue;
 		if (record.type === "text" && typeof record.text === "string") parts.push(record.text);
 		if (record.type === "tool-result" && Array.isArray(record.content)) parts.push(extractTextContent(record.content));
@@ -11815,12 +12745,12 @@ function extractTextContent(content) {
 * a clean result for another call.
 */
 function persistedToolResultStatus(data, callId, kind = "tool/result", matchedStart = false) {
-	const result = asRecord$2(data);
+	const result = asRecord$1(data);
 	if (!result) return "unknown";
 	if (result.error !== void 0 || result.isError === true) return "failure";
-	const message = asRecord$2(result.message);
+	const message = asRecord$1(result.message);
 	if (message?.isError === true) return "failure";
-	const returns = (Array.isArray(message?.content) ? message.content : Array.isArray(result.content) ? result.content : []).map(asRecord$2).filter((block$1) => block$1?.type === "tool-result");
+	const returns = (Array.isArray(message?.content) ? message.content : Array.isArray(result.content) ? result.content : []).map(asRecord$1).filter((block$1) => block$1?.type === "tool-result");
 	if (returns.length > 1) return "unknown";
 	if (returns.length === 0) return kind === "tool/ptc-dispatch" && matchedStart && result.subCallId === callId && result.isError === false ? "clean" : "unknown";
 	for (const block$1 of returns) {
@@ -11832,10 +12762,10 @@ function persistedToolResultStatus(data, callId, kind = "tool/result", matchedSt
 	return "clean";
 }
 function metaPaths(meta) {
-	const record = asRecord$2(meta);
+	const record = asRecord$1(meta);
 	if (!record) return [];
 	if (typeof record.path === "string") return [record.path];
-	if (Array.isArray(record.diffs)) return record.diffs.map((diff) => asRecord$2(diff)?.path).filter((path$1) => typeof path$1 === "string");
+	if (Array.isArray(record.diffs)) return record.diffs.map((diff) => asRecord$1(diff)?.path).filter((path$1) => typeof path$1 === "string");
 	return [];
 }
 function argsPaths(args) {
@@ -11856,15 +12786,15 @@ function stable(value) {
 }
 function structuredGuardMeta(meta, toolName) {
 	if (toolName !== "context_guard_evidence") return void 0;
-	const outer = asRecord$2(meta);
-	const value = asRecord$2(outer?.contextGuard ?? outer?.context_guard);
+	const outer = asRecord$1(meta);
+	const value = asRecord$1(outer?.contextGuard ?? outer?.context_guard);
 	if (!value) return void 0;
 	const action = value.semanticAction ?? value.semantic_action;
 	const role = value.evidenceRole ?? value.evidence_role;
-	const resolved = asRecord$2(value.resolvedTarget ?? value.resolved_target);
-	const observed = asRecord$2(value.observedState ?? value.observed_state);
-	const rawExpected = asRecord$2(value.expectedTransition);
-	const expectedParameters = asRecord$2(rawExpected?.parameters);
+	const resolved = asRecord$1(value.resolvedTarget ?? value.resolved_target);
+	const observed = asRecord$1(value.observedState ?? value.observed_state);
+	const rawExpected = asRecord$1(value.expectedTransition);
+	const expectedParameters = asRecord$1(rawExpected?.parameters);
 	const expectedDigest = value.expectedTransitionDigest;
 	const expectedTransition = rawExpected && typeof rawExpected.predicateId === "string" && rawExpected.version === 1 && rawExpected.predParamsKind === "inline" && expectedParameters && typeof expectedDigest === "string" && expectedDigest === sha256(stable(rawExpected)) ? rawExpected : void 0;
 	if (typeof value.adapterId !== "string" || typeof value.adapterVersion !== "string") return void 0;
@@ -11963,7 +12893,7 @@ const PERSISTENT_TIMEOUT_INTRO = /^Your command timed out after \d+ seconds or e
 * the fallback.
 */
 function structuredTerminalFacts(meta) {
-	const record = asRecord$2(meta);
+	const record = asRecord$1(meta);
 	if (!record) return void 0;
 	const rawExit = record.exitCode ?? record.exit_code;
 	const rawSignal = record.signal;
@@ -12020,11 +12950,11 @@ function extractTerminalFacts(textContent) {
 * per-operation producer exists and the attribution stays `unknown`.
 */
 function declaredOperationResults(meta) {
-	const declared = asRecord$2(asRecord$2(meta)?.contextGuardProcess)?.operationResults;
+	const declared = asRecord$1(asRecord$1(meta)?.contextGuardProcess)?.operationResults;
 	if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return void 0;
 	const rows = [];
 	for (const raw of declared) {
-		const row$3 = asRecord$2(raw);
+		const row$3 = asRecord$1(raw);
 		const action = typeof row$3?.action === "string" ? row$3.action : void 0;
 		const outcome = row$3?.outcome;
 		if (!action || outcome !== "success" && outcome !== "failure" && outcome !== "unknown") return void 0;
@@ -12041,7 +12971,7 @@ function declaredOperationResults(meta) {
 * an explicit `exitCode` here outranks the generic `meta.exitCode`.
 */
 function declaredStructuredTerminal(meta) {
-	const record = asRecord$2(asRecord$2(meta)?.contextGuardProcess);
+	const record = asRecord$1(asRecord$1(meta)?.contextGuardProcess);
 	if (!record) return void 0;
 	const rawExit = record.exitCode ?? record.exit_code;
 	const signal = record.signal;
@@ -12161,10 +13091,10 @@ function shellProcessFacts(meta, textContent, frozenOutcome, resultError, surfac
 	};
 }
 function metaUrls(meta) {
-	const record = asRecord$2(meta);
+	const record = asRecord$1(meta);
 	if (!record) return [];
 	if (typeof record.url === "string") return [sanitizeUrl(record.url)];
-	if (Array.isArray(record.sources)) return record.sources.map((source) => asRecord$2(source)?.url).filter((url) => typeof url === "string").map((url) => sanitizeUrl(url));
+	if (Array.isArray(record.sources)) return record.sources.map((source) => asRecord$1(source)?.url).filter((url) => typeof url === "string").map((url) => sanitizeUrl(url));
 	return [];
 }
 const DETERMINISTIC_CHECK_PATTERNS = [
@@ -12235,7 +13165,7 @@ function nativeFileSubjects(args, meta, cwd) {
 function extractToolSubject(call, result, defaultCwd, hostLock) {
 	const args = parseArguments$1(call.arguments);
 	if (call.name === "context_guard_observe_file") {
-		const native = asRecord$2(asRecord$2(result.meta)?.contextGuardNativeFile);
+		const native = asRecord$1(asRecord$1(result.meta)?.contextGuardNativeFile);
 		const effectCallId = native?.effectCallId;
 		const path$1 = native?.path;
 		const digest$1 = native?.sha256;
@@ -12270,7 +13200,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		};
 	}
 	if (call.name === "context_guard_observe_git") {
-		const native = asRecord$2(asRecord$2(result.meta)?.contextGuardNativeGit);
+		const native = asRecord$1(asRecord$1(result.meta)?.contextGuardNativeGit);
 		const action = native?.action;
 		const repository = native?.repository;
 		const postOid = native?.postOid;
@@ -12337,7 +13267,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		};
 	}
 	if (call.name === "context_guard_observe_test_readiness") {
-		const ready = asRecord$2(asRecord$2(result.meta)?.contextGuardTestReadiness);
+		const ready = asRecord$1(asRecord$1(result.meta)?.contextGuardTestReadiness);
 		const assessment = ready?.predicate === "verification_passed";
 		if (typeof ready?.itemId === "string" && typeof ready.scope === "string" && (ready.predicate === "test_passed" || assessment) && typeof ready.manifestSha256 === "string" && /^[0-9a-f]{64}$/.test(ready.manifestSha256)) {
 			if (assessment && (typeof ready.effectCallId !== "string" || typeof ready.selectedPath !== "string" || !ready.selectedPath || !["test", "benchmark"].includes(String(ready.scriptName)) || typeof ready.inputSha256 !== "string" || !/^[0-9a-f]{64}$/.test(ready.inputSha256) || ready.effectCallId === "" && ready.inputSha256 !== ready.manifestSha256)) return {
@@ -12379,7 +13309,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		};
 	}
 	if (call.name === "context_guard_external_operation") {
-		const external = asRecord$2(asRecord$2(result.meta)?.contextGuardExternalOperation);
+		const external = asRecord$1(asRecord$1(result.meta)?.contextGuardExternalOperation);
 		const status = external?.status;
 		if (typeof external?.id === "string" && typeof external.adapterId === "string" && (status === "running" || status === "pending" || status === "completed" || status === "failed" || status === "unknown")) return {
 			capabilities: ["external-operation-readback"],
@@ -12410,7 +13340,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 	}
 	const structured = structuredGuardMeta(result.meta, call.name);
 	if (call.name === "context_guard_evidence" && !structured) {
-		const disposition = asRecord$2(asRecord$2(result.meta)?.contextGuardDisposition);
+		const disposition = asRecord$1(asRecord$1(result.meta)?.contextGuardDisposition);
 		return {
 			capabilities: ["guard-state-readback"],
 			subjects: [],
@@ -12930,628 +13860,6 @@ function observerMethodEvidence(projection, events, method, index$1) {
 		if (tool === "context_guard_observe_test_readiness") return related.semanticAction === "test" && fact.readinessForItemId === related.id && fact.readinessPredicate === "test_passed";
 		return (related.semanticAction === "verify" || related.semanticAction === "modify") && fact.evidenceRole === "state" && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.outcome === "success" && effect.evidenceRole === "effect" && effect.toolResultSeq < fact.toolResultSeq && effect.subjects.includes(target));
 	});
-}
-
-//#endregion
-//#region src/domain/release.ts
-/**
-* Explicit release adoption and single-use tickets (0.6.0 C10 / DS06-F).
-*
-* A release is never implicit. "release", a loaded Skill, or an installation
-* never activates this profile: a root user must explicitly ADOPT a release
-* contract that names the exact candidate, and every effect must then match
-* that contract and spend a one-shot reservation.
-*
-* Three durable records carry the state machine (P0 §5). Adoption remains in
-* the Session log; new reservations and settlements use the provider-invisible
-* private ledger. Frozen historical plugin notices remain readable:
-*
-* - `contract`    — the adopted scope: operations, the exact candidate, the
-*                   readiness/closure references and an optional expiry.
-* - `reservation` — written BEFORE any effect; the operation is `in_flight`
-*                   from that moment, so a crash cannot be mistaken for "never
-*                   started" and the operation is never blindly re-sent.
-* - `settlement`  — written after the effect. Its outcome distinguishes a
-*                   PROVEN no-effect (`not_effected`, which releases the lock)
-*                   from an UNKNOWN effect (`unknown`/`failed`/`unconfirmed`,
-*                   which keeps the lock until a trusted readback reconciles
-*                   it) and from a `settled` release.
-*
-* CANDIDATE IDENTITY IS TYPED, NOT CONFLATED. A release artifact has several
-* genuinely different identities — the commit it was built from, the SHA-256 of
-* the exact bytes, npm's SHA-512 SRI, the package name, the version, the
-* repository, the ref and the target registry. Each is a separate field and is
-* compared with its own observed value read from a trusted producer. Comparing,
-* say, a 64-hex SHA-256 against an SRI can never succeed, so a legitimate
-* release would have been permanently refused; and accepting a model-supplied
-* SHA instead of the artifact's embedded one would bind nothing. Every field
-* the contract declares must be OBSERVED, so omitting evidence is a refusal,
-* never a bypass.
-*
-* COVERAGE SURFACE (frozen wording): only the surfaces Guard itself routes can
-* be protected. Operations with no Guard execution surface are refused before
-* any effect, and the plugin never suggests falling back to a plain shell
-* command. A trusted in-process caller that bypasses Guard entirely is a host
-* trust boundary and is disclosed as such in the documentation, not pretended
-* away.
-*/
-const RELEASE_CONTRACT_PREFIX = "Context Guard release contract v1: ";
-const RELEASE_RESERVATION_PREFIX = "Context Guard release reservation v1: ";
-const RELEASE_SETTLEMENT_PREFIX = "Context Guard release settlement v1: ";
-const RELEASE_REVOCATION_PREFIX = "Context Guard release revocation v1: ";
-const RELEASE_OPERATIONS = [
-	"npm_publish",
-	"git_tag",
-	"github_release_create",
-	"github_release_update",
-	"github_release_delete",
-	"composite_runner"
-];
-/**
-* The routing table for this release. `git_tag` and the GitHub Release
-* operations have no Guard-owned execution route yet; the coordinator
-* explicitly approved that staged scope reduction on 2026-09-14, and the new
-* route is the way each of them becomes protectable. A composite runner stays
-* opaque by construction.
-*/
-const RELEASE_OPERATION_SURFACES = {
-	npm_publish: {
-		surface: "context_guard_action",
-		protectable: true,
-		reasonCode: "release_operation_protectable",
-		attribution: "implemented"
-	},
-	git_tag: {
-		surface: "none",
-		protectable: false,
-		reasonCode: "release_operation_unrouted",
-		attribution: "scope_reduction"
-	},
-	github_release_create: {
-		surface: "none",
-		protectable: false,
-		reasonCode: "release_operation_unrouted",
-		attribution: "scope_reduction"
-	},
-	github_release_update: {
-		surface: "none",
-		protectable: false,
-		reasonCode: "release_operation_unrouted",
-		attribution: "scope_reduction"
-	},
-	github_release_delete: {
-		surface: "none",
-		protectable: false,
-		reasonCode: "release_operation_unrouted",
-		attribution: "scope_reduction"
-	},
-	composite_runner: {
-		surface: "none",
-		protectable: false,
-		reasonCode: "release_runner_opaque",
-		attribution: "host_boundary"
-	}
-};
-const FULL_SHA40 = /^[0-9a-f]{40}$/;
-const SHA256 = /^[0-9a-f]{64}$/;
-const SRI = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/;
-/**
-* How strongly an outcome resolves the reservation. A `settled` release is
-* never downgraded by a later record, while a stronger record reconciles a
-* weaker one — that is how a trusted readback recovers an earlier unconfirmed
-* attempt instead of being discarded.
-*/
-const OUTCOME_STRENGTH = {
-	not_effected: 0,
-	unknown: 1,
-	failed: 1,
-	unconfirmed: 2,
-	settled: 3
-};
-function asRecord$1(value) {
-	return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
-}
-function optionalString(value) {
-	return typeof value === "string" && value.trim().length > 0 ? value.trim() : void 0;
-}
-/**
-* Normalize a candidate release contract from a root adoption payload. Every
-* field is validated: an unparsable or partial adoption is refused rather than
-* approximated, because a half-specified contract would authorize an
-* unspecified candidate.
-*/
-function normalizeReleaseContract(raw, adoptedBy, adoptedAtRevision = 0) {
-	const errors = [];
-	const value = asRecord$1(raw);
-	if (!value) return { errors: ["release_contract_malformed"] };
-	const operations = [];
-	if (!Array.isArray(value.operations) || value.operations.length === 0) errors.push("release_operations_missing");
-	else for (const entry of value.operations) {
-		if (typeof entry !== "string" || !RELEASE_OPERATIONS.includes(entry)) {
-			errors.push("release_operation_unknown");
-			continue;
-		}
-		const operation = entry;
-		if (!RELEASE_OPERATION_SURFACES[operation].protectable) {
-			errors.push(RELEASE_OPERATION_SURFACES[operation].reasonCode);
-			continue;
-		}
-		if (!operations.includes(operation)) operations.push(operation);
-	}
-	const candidate = asRecord$1(value.candidate);
-	if (!candidate) errors.push("release_candidate_missing");
-	const CANDIDATE_FIELDS = [
-		"fullSha40",
-		"ref",
-		"repository",
-		"packageId",
-		"version",
-		"artifactSha256",
-		"artifactSri",
-		"registry",
-		"artifactDigest"
-	];
-	for (const key of Object.keys(candidate ?? {})) if (!CANDIDATE_FIELDS.includes(key)) errors.push("release_candidate_field_unknown");
-	const fullSha40 = optionalString(candidate?.fullSha40) ?? "";
-	if (!FULL_SHA40.test(fullSha40)) errors.push("release_candidate_sha_invalid");
-	const ref = optionalString(candidate?.ref);
-	const repository = optionalString(candidate?.repository);
-	const packageId = optionalString(candidate?.packageId);
-	const version = optionalString(candidate?.version);
-	let artifactSha256 = optionalString(candidate?.artifactSha256);
-	let artifactSri = optionalString(candidate?.artifactSri);
-	const legacyDigest = optionalString(candidate?.artifactDigest);
-	if (legacyDigest !== void 0) if (SHA256.test(legacyDigest)) artifactSha256 ??= legacyDigest;
-	else if (SRI.test(legacyDigest)) artifactSri ??= legacyDigest;
-	else errors.push("release_candidate_artifact_digest_invalid");
-	const registry = optionalString(candidate?.registry);
-	if (artifactSha256 !== void 0 && !SHA256.test(artifactSha256)) errors.push("release_candidate_sha256_invalid");
-	if (artifactSri !== void 0 && !SRI.test(artifactSri)) errors.push("release_candidate_sri_invalid");
-	const readinessRefs = Array.isArray(value.readinessRefs) ? value.readinessRefs.filter((entry) => typeof entry === "string" && entry.length > 0) : [];
-	const closureCertRef = optionalString(value.closureCertRef);
-	let expiresAtEpochMs;
-	if (value.expiresAtEpochMs !== void 0) if (typeof value.expiresAtEpochMs !== "number" || !Number.isSafeInteger(value.expiresAtEpochMs) || value.expiresAtEpochMs <= 0) errors.push("release_expiry_invalid");
-	else expiresAtEpochMs = value.expiresAtEpochMs;
-	if (errors.length) return { errors: [...new Set(errors)] };
-	const suppliedId = optionalString(value.contractId);
-	const body = {
-		operations: [...operations].sort(),
-		candidate: {
-			fullSha40,
-			...ref ? { ref } : {},
-			...repository ? { repository } : {},
-			...packageId ? { packageId } : {},
-			...version ? { version } : {},
-			...artifactSha256 ? { artifactSha256 } : {},
-			...artifactSri ? { artifactSri } : {},
-			...registry ? { registry } : {}
-		},
-		readinessRefs: [...readinessRefs].sort(),
-		...closureCertRef ? { closureCertRef } : {},
-		...expiresAtEpochMs !== void 0 ? { expiresAtEpochMs } : {}
-	};
-	return {
-		contract: {
-			contractId: suppliedId ?? `rel-${sha256(JSON.stringify(body)).slice(0, 16)}`,
-			adoptedBy,
-			adoptedAtRevision,
-			operations: operations.sort(),
-			candidate: body.candidate,
-			readinessRefs: body.readinessRefs,
-			...closureCertRef ? { closureCertRef } : {},
-			...expiresAtEpochMs !== void 0 ? { expiresAtEpochMs } : {}
-		},
-		errors: []
-	};
-}
-function normalizeReservation(raw) {
-	const value = asRecord$1(raw);
-	if (!value) return void 0;
-	const contractId = optionalString(value.contractId);
-	const operation = optionalString(value.operation);
-	const callId = optionalString(value.callId);
-	const startedAtSeq = value.startedAtSeq;
-	if (!contractId || !callId) return void 0;
-	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
-	if (typeof startedAtSeq !== "number" || !Number.isSafeInteger(startedAtSeq)) return void 0;
-	const observedArtifactSri = optionalString(value.observedArtifactSri);
-	return {
-		contractId,
-		operation,
-		callId,
-		startedAtSeq,
-		status: "in_flight",
-		...observedArtifactSri ? { observedArtifactSri } : {}
-	};
-}
-const RELEASE_OUTCOMES = [
-	"settled",
-	"unconfirmed",
-	"unknown",
-	"failed",
-	"not_effected"
-];
-function normalizeSettlement(raw) {
-	const value = asRecord$1(raw);
-	if (!value) return void 0;
-	const contractId = optionalString(value.contractId);
-	const operation = optionalString(value.operation);
-	const callId = optionalString(value.callId);
-	const settledAtSeq = value.settledAtSeq;
-	const outcome = optionalString(value.outcome);
-	if (!contractId || !callId) return void 0;
-	if (!operation || !RELEASE_OPERATIONS.includes(operation)) return void 0;
-	if (typeof settledAtSeq !== "number" || !Number.isSafeInteger(settledAtSeq)) return void 0;
-	if (!outcome || !RELEASE_OUTCOMES.includes(outcome)) return void 0;
-	const readbackRaw = asRecord$1(value.readback);
-	const kind = readbackRaw?.kind;
-	return {
-		contractId,
-		operation,
-		callId,
-		settledAtSeq,
-		readback: readbackRaw && (kind === "npm_integrity" || kind === "git_ref" || kind === "github_release") && optionalString(readbackRaw.identity) ? {
-			kind,
-			identity: optionalString(readbackRaw.identity)
-		} : "unavailable",
-		outcome
-	};
-}
-/** The adopted, not-revoked contract that covers an operation, newest first. */
-function releaseContractFor(projection, operation, contractId) {
-	const contracts = projection.releaseContracts.filter((contract) => contract.revokedAtSeq === void 0 && (contractId === void 0 || contract.contractId === contractId) && contract.operations.includes(operation));
-	return contracts.length ? contracts[contracts.length - 1] : void 0;
-}
-/** Whether a contract was explicitly revoked by a durable root command. */
-function isContractRevoked(projection, contractId) {
-	return projection.releaseContracts.some((contract) => contract.contractId === contractId && contract.revokedAtSeq !== void 0);
-}
-/**
-* The reconciled settlement per (contract, operation, callId): the strongest
-* outcome wins, ties resolve to the later record. A `settled` release is never
-* revoked by a later weaker record.
-*/
-function reconciledSettlements(projection, contractId, operation) {
-	const byCall = /* @__PURE__ */ new Map();
-	for (const settlement of projection.releaseSettlements) {
-		if (settlement.contractId !== contractId || settlement.operation !== operation) continue;
-		const existing = byCall.get(settlement.callId);
-		if (!existing) {
-			byCall.set(settlement.callId, settlement);
-			continue;
-		}
-		const stronger = OUTCOME_STRENGTH[settlement.outcome] > OUTCOME_STRENGTH[existing.outcome];
-		const newer = OUTCOME_STRENGTH[settlement.outcome] === OUTCOME_STRENGTH[existing.outcome] && settlement.settledAtSeq >= existing.settledAtSeq;
-		if (stronger || newer) byCall.set(settlement.callId, settlement);
-	}
-	return [...byCall.values()];
-}
-/** Whether a settlement releases the one-shot lock: settled, or proven no-effect. */
-function releasesLock(settlement) {
-	return settlement.outcome === "settled" || settlement.outcome === "not_effected";
-}
-/** The in-flight (unresolved) reservation for one contract operation, if any. */
-function inFlightReservation(projection, contractId, operation) {
-	const settled = reconciledSettlements(projection, contractId, operation);
-	for (const reservation of projection.releaseReservations) {
-		if (reservation.contractId !== contractId || reservation.operation !== operation) continue;
-		const resolution = settled.find((settlement) => settlement.callId === reservation.callId);
-		if (!resolution || !releasesLock(resolution)) return reservation;
-	}
-}
-/** Whether a contract operation has already been consumed by a settled effect. */
-function settledOperations(projection, contractId) {
-	const consumed = [];
-	for (const settlement of projection.releaseSettlements) {
-		if (settlement.contractId !== contractId) continue;
-		if (settlement.outcome !== "settled") continue;
-		if (!consumed.includes(settlement.operation)) consumed.push(settlement.operation);
-	}
-	return consumed.sort();
-}
-const CANDIDATE_FIELD_CODES = [
-	{
-		field: "fullSha40",
-		label: "commit",
-		unresolvedCode: "release_candidate_sha_unresolved",
-		mismatchCode: "release_candidate_sha_mismatch"
-	},
-	{
-		field: "ref",
-		label: "ref",
-		unresolvedCode: "release_candidate_ref_unresolved",
-		mismatchCode: "release_candidate_ref_mismatch"
-	},
-	{
-		field: "repository",
-		label: "repository",
-		unresolvedCode: "release_candidate_repository_unresolved",
-		mismatchCode: "release_candidate_repository_mismatch"
-	},
-	{
-		field: "packageId",
-		label: "package",
-		unresolvedCode: "release_candidate_package_unresolved",
-		mismatchCode: "release_candidate_package_mismatch"
-	},
-	{
-		field: "version",
-		label: "version",
-		unresolvedCode: "release_candidate_version_unresolved",
-		mismatchCode: "release_candidate_version_mismatch"
-	},
-	{
-		field: "artifactSha256",
-		label: "artifact SHA-256",
-		unresolvedCode: "release_artifact_sha256_unresolved",
-		mismatchCode: "release_candidate_artifact_mismatch"
-	},
-	{
-		field: "artifactSri",
-		label: "artifact SRI",
-		unresolvedCode: "release_artifact_sri_unresolved",
-		mismatchCode: "release_candidate_artifact_sri_mismatch"
-	},
-	{
-		field: "registry",
-		label: "registry",
-		unresolvedCode: "release_candidate_registry_unresolved",
-		mismatchCode: "release_candidate_registry_mismatch"
-	}
-];
-/** A readiness reference resolves to a real, already-established fact. */
-function readinessResolves(projection, ref) {
-	if (projection.checkpoints.some((checkpoint) => checkpoint.id === ref && checkpoint.result === "certified")) return true;
-	if (projection.boundaries.some((boundary) => boundary.id === ref)) return true;
-	return projection.items.get(ref)?.status === "passed";
-}
-/**
-* The pre-effect release decision. Order matters: an unprotectable surface and
-* a damaged release state are refused before expiry or candidate checks,
-* because running an unprotected operation is never made acceptable by a valid
-* ticket, and because unreadable release state must not authorize anything.
-*/
-function releasePreEffectDecision(projection, request) {
-	const surface = RELEASE_OPERATION_SURFACES[request.operation];
-	if (!surface.protectable) return {
-		status: "denied",
-		reasonCode: surface.reasonCode
-	};
-	if (projection.releaseStateDamaged) return {
-		status: "denied",
-		reasonCode: "release_state_damaged"
-	};
-	const contract = releaseContractFor(projection, request.operation, request.contractId);
-	if (!contract) {
-		if (projection.releaseContracts.some((entry) => entry.revokedAtSeq !== void 0 && entry.operations.includes(request.operation) && (request.contractId === void 0 || entry.contractId === request.contractId))) return {
-			status: "denied",
-			reasonCode: "release_contract_revoked"
-		};
-		if (request.contractId !== void 0 && isContractRevoked(projection, request.contractId)) return {
-			status: "denied",
-			reasonCode: "release_contract_revoked"
-		};
-		return {
-			status: "denied",
-			reasonCode: projection.releaseContracts.length === 0 ? "release_contract_required" : "release_operation_not_adopted"
-		};
-	}
-	if (contract.expiresAtEpochMs !== void 0) {
-		if (request.nowEpochMs === void 0) return {
-			status: "denied",
-			reasonCode: "release_expiry_unevaluable",
-			contractId: contract.contractId
-		};
-		if (request.nowEpochMs >= contract.expiresAtEpochMs) return {
-			status: "denied",
-			reasonCode: "release_contract_expired",
-			contractId: contract.contractId
-		};
-	}
-	if (settledOperations(projection, contract.contractId).includes(request.operation)) return {
-		status: "denied",
-		reasonCode: "release_operation_consumed",
-		contractId: contract.contractId
-	};
-	if (inFlightReservation(projection, contract.contractId, request.operation)) return {
-		status: "denied",
-		reasonCode: "release_operation_in_flight",
-		contractId: contract.contractId
-	};
-	for (const ref of contract.readinessRefs) if (!readinessResolves(projection, ref)) return {
-		status: "denied",
-		reasonCode: "release_readiness_unresolved",
-		contractId: contract.contractId
-	};
-	const frozen = contract.frozenClosure;
-	const closure = frozen !== void 0 ? projection.checkpoints.find((checkpoint) => checkpoint.id === frozen.id) : void 0;
-	if (!frozen || frozen.contractRevision !== contract.adoptedAtRevision || frozen.id !== contract.closureCertRef || !closure || closure.result !== "certified" || closure.certificationDigest !== frozen.certificationDigest || closure.epoch !== projection.epoch) return {
-		status: "denied",
-		reasonCode: "release_closure_unresolved",
-		contractId: contract.contractId
-	};
-	if (contract.candidate.artifactSha256 === void 0 && contract.candidate.artifactSri === void 0) return {
-		status: "denied",
-		reasonCode: "release_artifact_identity_required",
-		contractId: contract.contractId
-	};
-	const candidate = contract.candidate;
-	const observedIdentity = request.observed ?? {};
-	const compared = [];
-	for (const entry of CANDIDATE_FIELD_CODES) {
-		const declared = candidate[entry.field];
-		if (typeof declared !== "string") continue;
-		compared.push([entry, declared]);
-	}
-	for (const [entry, declared] of compared) {
-		const observed = observedIdentity[entry.field];
-		if (observed === void 0) return {
-			status: "denied",
-			reasonCode: entry.unresolvedCode,
-			contractId: contract.contractId
-		};
-		if (observed !== declared) return {
-			status: "denied",
-			reasonCode: entry.mismatchCode,
-			contractId: contract.contractId
-		};
-	}
-	if (candidate.ref !== void 0 && observedIdentity.refSha !== void 0 && observedIdentity.fullSha40 !== void 0 && observedIdentity.refSha !== observedIdentity.fullSha40) return {
-		status: "denied",
-		reasonCode: "release_ref_commit_mismatch",
-		contractId: contract.contractId
-	};
-	const resolved = request.resolvedTarget;
-	if (resolved === void 0) return {
-		status: "denied",
-		reasonCode: "release_target_unresolved",
-		contractId: contract.contractId
-	};
-	if (resolved.version === void 0) return {
-		status: "denied",
-		reasonCode: "release_target_unresolved",
-		contractId: contract.contractId
-	};
-	if (candidate.packageId !== void 0 && resolved.artifact_id !== candidate.packageId) return {
-		status: "denied",
-		reasonCode: "release_target_package_mismatch",
-		contractId: contract.contractId
-	};
-	if (candidate.version !== void 0 && resolved.version !== candidate.version) return {
-		status: "denied",
-		reasonCode: "release_target_version_mismatch",
-		contractId: contract.contractId
-	};
-	if (candidate.registry !== void 0 && resolved.registry !== candidate.registry) return {
-		status: "denied",
-		reasonCode: "release_target_registry_mismatch",
-		contractId: contract.contractId
-	};
-	return {
-		status: "granted",
-		reasonCode: "release_contract_granted",
-		contractId: contract.contractId
-	};
-}
-/**
-* Whether a trusted readback settles the attempt: the readback must name the
-* SAME artifact identity the contract froze. A registry that answers with a
-* different integrity proves the wrong bytes are published, which is an
-* unknown outcome for this contract, never a settlement.
-*/
-function readbackSettlesContract(contract, readback, reservationSri) {
-	if (readback === "unavailable") return "unconfirmed";
-	if (readback.kind !== "npm_integrity") return "unconfirmed";
-	const expected = contract.candidate.artifactSri ?? reservationSri;
-	if (expected === void 0) return "unconfirmed";
-	return readback.identity === expected ? "settled" : "mismatch";
-}
-/**
-* The reservation for one call, including revoked contracts: reconciling an
-* operation that was already in flight when its contract was revoked is the
-* recovery case, not an authority question.
-*/
-function reservationFor(projection, contractId, callId) {
-	return projection.releaseReservations.find((entry) => entry.contractId === contractId && entry.callId === callId);
-}
-/** A contract by id, INCLUDING revoked ones, for recovery lookups. */
-function contractById(projection, contractId) {
-	return projection.releaseContracts.find((entry) => entry.contractId === contractId);
-}
-/** The coverage report for one contract: which adopted operations Guard can protect. */
-function releaseCoverage(contract) {
-	return [...contract.operations].sort().map((operation) => ({
-		operation,
-		...RELEASE_OPERATION_SURFACES[operation]
-	}));
-}
-
-//#endregion
-//#region src/domain/v6-feedback.ts
-/** Display provenance is produced while the core requirement is constructed,
-* never inferred from the shape of its ID. */
-function sourceItemForCoreRequirement(projection, id) {
-	const item = projection.items.get(id);
-	if (item) return { item };
-	const origin = projection.coreV2RequirementOrigins?.get(id);
-	if (!origin) return void 0;
-	const source = projection.items.get(origin.itemId);
-	if (!source?.observerMethod || !source.observerMethod.tools.includes(origin.action) || !Number.isSafeInteger(origin.sourceStart) || !Number.isSafeInteger(origin.sourceEnd) || origin.sourceStart < 0 || origin.sourceEnd <= origin.sourceStart || !source.spans?.some((span) => span.partIndex === 0 && span.start === origin.sourceStart && span.end <= origin.sourceEnd)) return void 0;
-	return {
-		item: source,
-		origin
-	};
-}
-/** The default ordinary feedback scope, before inspecting current core facts. */
-function defaultV6OrdinaryFeedbackScope(projection) {
-	const currentReleaseWork = [...projection.items.values()].some((item) => {
-		if (item.semanticAction !== "publish" || item.unitId !== projection.currentUnitId || item.status !== "pending") return false;
-		const target = item.requestedTarget;
-		return projection.releaseContracts.some((record) => {
-			const contract = releaseContractFor(projection, "npm_publish", record.contractId);
-			return contract !== void 0 && (target?.artifact_id === void 0 || target.artifact_id === contract.candidate.packageId) && (target?.version === void 0 || target.version === contract.candidate.version) && (target?.registry === void 0 || target.registry === contract.candidate.registry);
-		});
-	});
-	return projection.boundaryProtocol === 6 && !projection.goalCompletionAdopted && projection.policy !== "release" && !currentReleaseWork;
-}
-/** A display-only view of the confirmed shared-core closure. Historical item
-* status is deliberately not rewritten: it can still be audited or certified
-* under an explicitly adopted contract, but cannot become default v6 debt. */
-function currentV6Feedback(projection) {
-	if (!defaultV6OrdinaryFeedbackScope(projection)) return void 0;
-	if (projection.hostStatus !== "supported") return {
-		status: "unknown",
-		reasonCode: "host_lock_unsupported",
-		openIds: [],
-		predicates: {},
-		currentActions: []
-	};
-	const needsReview = needsReviewObligations(projection);
-	if (needsReview.length > 0) return {
-		status: "incomplete",
-		reasonCode: "legacy_record_needs_review",
-		openIds: needsReview.map((item) => item.id),
-		predicates: Object.fromEntries(needsReview.map((item) => [item.id, "legacy_review"])),
-		currentActions: []
-	};
-	const core = projection.coreV2;
-	if (projection.integrity !== "valid" || projection.durabilityWatermark !== "confirmed" || core?.schema !== "core-state/v2" || typeof core.certifiable !== "boolean" || !core.predicates || typeof core.predicates !== "object" || Array.isArray(core.predicates) || !Array.isArray(core.unmet_requirements) || !Array.isArray(core.current_actions)) return {
-		status: "unknown",
-		reasonCode: "core_projection_unavailable",
-		openIds: [],
-		predicates: {},
-		currentActions: []
-	};
-	const predicates = core.predicates;
-	const openIds = core.unmet_requirements;
-	if (openIds.some((id) => typeof id !== "string" || !Object.hasOwn(predicates, id)) || Object.values(predicates).some((value) => typeof value !== "string")) return {
-		status: "unknown",
-		reasonCode: "core_projection_unavailable",
-		openIds: [],
-		predicates: {},
-		currentActions: []
-	};
-	if (Object.keys(predicates).some((id) => !sourceItemForCoreRequirement(projection, id))) return {
-		status: "unknown",
-		reasonCode: "core_requirement_source_unavailable",
-		openIds: [],
-		predicates: {},
-		currentActions: []
-	};
-	if (!core.certifiable && openIds.length === 0) return {
-		status: "unknown",
-		reasonCode: "core_coverage_unresolved",
-		openIds: [],
-		predicates,
-		currentActions: []
-	};
-	return {
-		status: core.certifiable ? "observed" : "incomplete",
-		reasonCode: core.certifiable ? "ordinary_current_closure_observed" : "current_closure_unmet",
-		openIds,
-		predicates,
-		currentActions: core.current_actions
-	};
 }
 
 //#endregion
@@ -19375,4 +19683,4 @@ function verifyComposedHostLockDump(text, expected, roots) {
 }
 
 //#endregion
-export { currentV6Feedback as $, requestedIdentityKey as $i, decideTurnStopping as $n, npmEscapedPackageName as $r, RC015_RC2_HOST_PACKAGES as $t, firstStepGuidanceV6 as A, opensWithDirective as Ai, CLEANUP_CONDITION_RULE as An, capabilityRemedyPhrase as Ar, BASE_HOST_PACKAGES as At, SessionApiError as B, ACTION_MANIFEST as Bi, renderRecoveryPacket as Bn, partialFailureOf as Br, evaluateHostCapability as Bt, gitCommandMatchesTarget as C, itemHoldsExecutionAuthority as Ci, proofV2Rejection as Cn, proposeRebindV042 as Cr, parsePwshCommand as Ct, FIRST_STEP_GUIDANCE as D, maskQuotedSpans as Di, sessionQueryV2 as Dn, CONFIRM_LINE_PATTERN as Dr, ACTIVE_HOST_LAUNCHER_VERSION as Dt, verifiedLinearCommitReadback as E, maskCodeSpans as Ei, sessionQuery as En, replayRebindResult as Er, ACTIVE_HOST_COHORT_IDS as Et, HOST_WORKDIR_PREFIX as F, restatedContentOf as Fi, carriesCleanupCondition as Fn, DEPENDENCY_FREE_ONLY_CONDITION as Fr, HOST_COHORTS as Ft, PROTOCOL_V3_NOTICE as G, SEMANTIC_ACTIONS as Gi, CONTROL_RECORD_PREFIX as Gn, classifyClause as Gr, LATEST_SUPPORTED_HOST_VERSION as Gt, projectCoreV2 as H, BOUNDED_ARTIFACT_TYPES as Hi, evidenceCoverage as Hn, removalIsPartiallyKnown as Hr, evaluateToolSurfaceCapability as Ht, captureHostWorkdir as I, semanticActionOfScope as Ii, cleanupConditionFor as In, actionHasCertificationPath as Ir, LEGACY_HOST_COHORTS as It, PROTOCOL_V6_NOTICE as J, STOP_PROTOCOL_VERSION_V2 as Ji, assessmentAction as Jn, extractMethod as Jr, SUPPORTED_HOST_VERSIONS as Jt, PROTOCOL_V4_NOTICE as K, STATEFUL_ACTIONS as Ki, NO_PROGRESS_RECORD_PREFIX as Kn, environmentDefaultRepositoryTarget as Kr, MIN_SUPPORTED_HOST_VERSION as Kt, sourcedNamedTestRoot as L, splitTextFragments as Li, closingHint as Ln, admissibleForRemoval as Lr, bindExecutableIdentity as Lt, previewFirstStepInjection as M, qualificationOfClause as Mi, CLEANUP_CONDITION_RULE_SHORT as Mn, evidenceAvailabilityReason as Mr, EXPECTED_HOST_PACKAGES as Mt, projectSessionCoreV2 as N, questionHeadsClause as Ni, DEFAULT_RECOVERY_CHAR_BUDGET as Nn, itemDiagnosis as Nr, GOAL_HOST_PACKAGES as Nt, claimedBatchHasRealRootInput as O, namedActions as Oi, validateProofManifest as On, isFrozenV042RebindResponse as Or, ALPHA2_DSHMARKET_139_HOST_PACKAGES as Ot, sessionCoreSnapshot as P, reportingHeadGoverns as Pi, MIN_RECOVERY_CHAR_BUDGET as Pn, relevantEvidence as Pr, HOST_CAPABILITY_PACKAGE_GROUPS as Pt, rootLocatorFlavor as Q, isStatefulAction as Qi, decideTurnBoundary as Qn, canonicalRegistryBase as Qr, satisfiesSupportedHostRange as Qt, SESSION_API_UNSUPPORTED as R, statefulActionsOfScope as Ri, openItems as Rn, capabilityConsequence as Rr, bindLiveGoalCapability as Rt, executeRevalidatedGitEffect as S, isRestatement as Si, proofOperationMatches as Sn, proposeRebindOutcome as Sr, isRunExecutable as St, revalidateGitPrestate as T, legacyQuestionReadingIsInformational as Ti, scopeCoverageDigest as Tn, rebindResponse as Tr, ACTIVE_HOST_COHORT_ID as Tt, CAPTURE_V042_NOTICE as U, CERTIFICATE_VERSION as Ui, evidenceMatchesItem as Un, captureClause as Ur, hostVersionFromPackages as Ut, snapshotSessionEvents as V, ACTION_MANIFEST_VERSION as Vi, bindingSatisfies as Vn, removalIsComplete as Vr, evaluateHostLock as Vt, DEFAULT_DELEGATION_TOOL_NAMES as W, CERTIFICATE_VERSION_V2 as Wi, isVerifyingCapability as Wn, captureItem as Wr, selectHostCohort as Wt, deriveProjection as X, actionCompatible as Xi, classifyCompletionClaim as Xn, isInformationalMessage as Xr, evaluateMinimumHostVersion as Xt, applyUpgradeEligibility as Y, SUPPORTED_EVIDENCE_ADAPTERS as Yi, assessmentOutcomePredicate as Yn, extractOperation as Yr, compareHostVersions as Yt, legacyRecordsNeedingReview as Z, boundedArtifactChoiceMatches as Zi, currentActionBases as Zn, segmentClauses as Zr, parseHostVersion as Zt, GIT_COMMAND_MANIFEST_IDS as _, isExecutableItem as _i, proofCapabilityReport as _n, qualifyBoundary as _r, extractToolSubject as _t, auditedForegroundRenderers as a, validateActionTarget as aa, clarifiedSpanOf as ai, certifyCheckpoint as an, observeAssistantOutcome as ar, inFlightReservation as at, commitTreeSnapshotDigest as b, isOpenObligation as bi, proofEvidenceConstraints as bn, confirmRebind as br, withDurability as bt, hostLockRowsFromComposedDump as c, canonicalizePath as ca, clauseIsProtected as ci, PROOF_KINDS_V2 as cn, v6TestPredicate as cr, normalizeSettlement as ct, packageRowsFromActiveGraph as d, sanitizeClauseText as da, hasOrderedCoordination as di, PROOF_PROTOCOL_VERSION_V2 as dn, certifiableOpenItems as dr, releaseCoverage as dt, requestedTargetAuthorizesMutation as ea, classifyTaskIntent as ei, RC015_HOST_PACKAGES as en, decisionBoundaryKey as er, sourceItemForCoreRequirement as et, packageRowsFromPnpmLock as f, sanitizeUrl as fa, hasQuestionScope as fi, bindProofToProjection as fn, certificateClosure as fr, releasePreEffectDecision as ft, verifyComposedHostLockDump as g, introducesActionClause as gi, createProofManifestV2 as gn, isCurrentAcceptedBoundary as gr, extractTextContent as gt, resolveInstalledHostLock as h, interpretMessage as hi, createProofManifest as hn, effectuateBoundary as hr, evidenceFromPersistedToolResult as ht, auditedDefaultWorkdirProvider as i, validateActionManifest as ia, actionVerbMatches as ii, segmentAuthorityBlocks as in, latestRootInstruction as ir, contractById as it, lifecyclePhase as j, presentExplanationHead as ji, CLEANUP_CONDITION_RULE_COMPACT as jn, deriveItemDiagnosis as jr, DEFAULT_HOST_LOCK as jt, firstStepGuidance as k, opensConditionLead as ki, validateProofManifestV2 as kn, parseConfirmationMessage as kr, ALPHA2_HOST_PACKAGES as kt, injectActiveProfileHostLock as l, digestStrings as la, explanationHasActionResidue as li, PROOF_MANIFEST_DOMAIN_V2 as ln, goalCompletionDenial as lr, readbackSettlesContract as lt, resolveActiveProfileHostLock as m, interpretClause as mi, canonicalProjection as mn, availableBoundaryQualifications as mr, supersedeItem as mt, activeRendererModule as n, semanticActionFromCommand as na, GRANTED_QUALIFICATION as ni, ALPHA3_HOST_PACKAGES as nn, isWholeTaskCompletionClaim as nr, RELEASE_OPERATIONS as nt, combineHostPolicy as o, COMMAND_SURFACE_MANIFEST as oa, clauseAsksOwnQuestion as oi, PROOF_CAPABILITY_MATRIX as on, progressFingerprint as or, normalizeReleaseContract as ot, readActiveHostGraph as p, sha256 as pa, hasWorkPredicate as pi, bindProofV2ToProjection as pn, unitDescendantIds as pr, reservationFor as pt, PROTOCOL_V5_NOTICE as q, STOP_PROTOCOL_VERSION as qi, NO_PROGRESS_TURNS_BEFORE_STOP as qn, extractArtifactPaths as qr, SUPPORTED_HOST_RANGE as qt, auditedDefaultWorkdirHost as r, semanticActionFromText as ra, LEGACY_QUALIFICATION as ri, authorityCaptureCounts as rn, latestAssistantText as rr, RELEASE_OPERATION_SURFACES as rt, hostLockContextFromComposedDump as s, validateManifest as sa, clauseIsGoverned as si, PROOF_KINDS as sn, testOutcomePredicate as sr, normalizeReservation as st, HostProfileError as t, requestedTargetMatchesResolved as ta, classifyUserInteraction as ti, RC1_HOST_PACKAGES as tn, isRootPauseRequest as tr, OUTCOME_STRENGTH as tt, inspectTargetHostGraph as u, normalizeClause as ua, governedClauseRestrictsExecution as ui, PROOF_PROTOCOL_VERSION as un, hasCurrentCertificate as ur, releaseContractFor as ut, GIT_COMMAND_TEMPLATES as v, isExplanationScope as vi, proofDigest as vn, currentContractDigest as vr, isDeterministicCheck as vt, parseGitCommandManifest as w, kindOfScope as wi, requiredSubjectsOf as wn, rebindAttemptKey as wr, parseShellCommand as wt, createGitPrestateEnvelope as x, isQuestionScopeNeedingReview as xi, proofHostSurfacesOf as xn, proposeRebind as xr, canonicalArgvFromCommand as xt, commitIndexSnapshotDigest as y, isInformationalFragment as yi, proofDigestV2 as yn, createProjection as yr, persistedToolResultStatus as yt, SESSION_EVENT_ENVELOPE_INVALID as z, verbIsNegated as zi, recoveryDigest as zn, capabilityFactOf as zr, evaluateExternalWaitCapability as zt };
+export { supersedeItem as $, STOP_PROTOCOL_VERSION as $i, NO_PROGRESS_TURNS_BEFORE_STOP as $n, extractArtifactPaths as $r, canonicalProjection as $t, firstStepGuidanceV6 as A, kindOfScope as Ai, v6CurrentRootBoundaries as An, rebindAttemptKey as Ar, LATEST_SUPPORTED_HOST_VERSION as At, SessionApiError as B, reportingHeadGoverns as Bi, normalizeReservation as Bn, relevantEvidence as Br, RC1_HOST_PACKAGES as Bt, gitCommandMatchesTarget as C, isExecutableItem as Ci, carriesCleanupCondition as Cn, qualifyBoundary as Cr, bindLiveGoalCapability as Ct, FIRST_STEP_GUIDANCE as D, isQuestionScopeNeedingReview as Di, recoveryDigest as Dn, proposeRebind as Dr, evaluateToolSurfaceCapability as Dt, verifiedLinearCommitReadback as E, isOpenObligation as Ei, openItems as En, confirmRebind as Er, evaluateHostLock as Et, HOST_WORKDIR_PREFIX as F, opensConditionLead as Fi, RELEASE_OPERATIONS as Fn, parseConfirmationMessage as Fr, evaluateMinimumHostVersion as Ft, PROTOCOL_V3_NOTICE as G, verbIsNegated as Gi, releasePreEffectDecision as Gn, capabilityFactOf as Gr, PROOF_CAPABILITY_MATRIX as Gt, projectCoreV2 as H, semanticActionOfScope as Hi, readbackSettlesContract as Hn, actionHasCertificationPath as Hr, authorityCaptureCounts as Ht, captureHostWorkdir as I, opensWithDirective as Ii, RELEASE_OPERATION_SURFACES as In, capabilityRemedyPhrase as Ir, parseHostVersion as It, PROTOCOL_V6_NOTICE as J, BOUNDED_ARTIFACT_TYPES as Ji, evidenceCoverage as Jn, removalIsPartiallyKnown as Jr, PROOF_MANIFEST_DOMAIN_V2 as Jt, PROTOCOL_V4_NOTICE as K, ACTION_MANIFEST as Ki, reservationFor as Kn, partialFailureOf as Kr, PROOF_KINDS as Kt, sourcedNamedTestRoot as L, presentExplanationHead as Li, contractById as Ln, deriveItemDiagnosis as Lr, satisfiesSupportedHostRange as Lt, previewFirstStepInjection as M, maskCodeSpans as Mi, isV6PendingRootWait as Mn, replayRebindResult as Mr, SUPPORTED_HOST_RANGE as Mt, projectSessionCoreV2 as N, maskQuotedSpans as Ni, sourceItemForCoreRequirement as Nn, CONFIRM_LINE_PATTERN as Nr, SUPPORTED_HOST_VERSIONS as Nt, claimedBatchHasRealRootInput as O, isRestatement as Oi, recoveryTitle as On, proposeRebindOutcome as Or, hostVersionFromPackages as Ot, sessionCoreSnapshot as P, namedActions as Pi, OUTCOME_STRENGTH as Pn, isFrozenV042RebindResponse as Pr, compareHostVersions as Pt, rootLocatorFlavor as Q, STATEFUL_ACTIONS as Qi, NO_PROGRESS_RECORD_PREFIX as Qn, environmentDefaultRepositoryTarget as Qr, bindProofV2ToProjection as Qt, SESSION_API_UNSUPPORTED as R, qualificationOfClause as Ri, inFlightReservation as Rn, evidenceAvailabilityReason as Rr, RC015_RC2_HOST_PACKAGES as Rt, executeRevalidatedGitEffect as S, introducesActionClause as Si, V6_ORDINARY_COMPLETION_RULE_SHORT as Sn, isCurrentAcceptedBoundary as Sr, bindExecutableIdentity as St, revalidateGitPrestate as T, isInformationalFragment as Ti, closingHint as Tn, createProjection as Tr, evaluateHostCapability as Tt, CAPTURE_V042_NOTICE as U, splitTextFragments as Ui, releaseContractFor as Un, admissibleForRemoval as Ur, segmentAuthorityBlocks as Ut, snapshotSessionEvents as V, restatedContentOf as Vi, normalizeSettlement as Vn, DEPENDENCY_FREE_ONLY_CONDITION as Vr, ALPHA3_HOST_PACKAGES as Vt, DEFAULT_DELEGATION_TOOL_NAMES as W, statefulActionsOfScope as Wi, releaseCoverage as Wn, capabilityConsequence as Wr, certifyCheckpoint as Wt, deriveProjection as X, CERTIFICATE_VERSION_V2 as Xi, isVerifyingCapability as Xn, captureItem as Xr, PROOF_PROTOCOL_VERSION_V2 as Xt, applyUpgradeEligibility as Y, CERTIFICATE_VERSION as Yi, evidenceMatchesItem as Yn, captureClause as Yr, PROOF_PROTOCOL_VERSION as Yt, legacyRecordsNeedingReview as Z, SEMANTIC_ACTIONS as Zi, CONTROL_RECORD_PREFIX as Zn, classifyClause as Zr, bindProofToProjection as Zt, GIT_COMMAND_MANIFEST_IDS as _, sanitizeClauseText as _a, hasOrderedCoordination as _i, CLEANUP_CONDITION_RULE_SHORT as _n, certifiableOpenItems as _r, EXPECTED_HOST_PACKAGES as _t, auditedForegroundRenderers as a, requestedIdentityKey as aa, npmEscapedPackageName as ai, proofEvidenceConstraints as an, decideTurnStopping as ar, withDurability as at, commitTreeSnapshotDigest as b, interpretClause as bi, V6_ORDINARY_COMPLETION_RULE as bn, availableBoundaryQualifications as br, HOST_COHORTS as bt, hostLockRowsFromComposedDump as c, semanticActionFromCommand as ca, GRANTED_QUALIFICATION as ci, proofV2Rejection as cn, isWholeTaskCompletionClaim as cr, parsePwshCommand as ct, packageRowsFromActiveGraph as d, validateActionTarget as da, clarifiedSpanOf as di, sessionQuery as dn, observeAssistantOutcome as dr, ACTIVE_HOST_COHORT_IDS as dt, STOP_PROTOCOL_VERSION_V2 as ea, extractMethod as ei, createProofManifest as en, assessmentAction as er, evidenceFromPersistedToolResult as et, packageRowsFromPnpmLock as f, COMMAND_SURFACE_MANIFEST as fa, clauseAsksOwnQuestion as fi, sessionQueryV2 as fn, progressFingerprint as fr, ACTIVE_HOST_LAUNCHER_VERSION as ft, verifyComposedHostLockDump as g, normalizeClause as ga, governedClauseRestrictsExecution as gi, CLEANUP_CONDITION_RULE_COMPACT as gn, hasCurrentCertificate as gr, DEFAULT_HOST_LOCK as gt, resolveInstalledHostLock as h, digestStrings as ha, explanationHasActionResidue as hi, CLEANUP_CONDITION_RULE as hn, goalCompletionDenial as hr, BASE_HOST_PACKAGES as ht, auditedDefaultWorkdirProvider as i, isStatefulAction as ia, canonicalRegistryBase as ii, proofDigestV2 as in, decideTurnBoundary as ir, persistedToolResultStatus as it, lifecyclePhase as j, legacyQuestionReadingIsInformational as ji, currentV6Feedback as jn, rebindResponse as jr, MIN_SUPPORTED_HOST_VERSION as jt, firstStepGuidance as k, itemHoldsExecutionAuthority as ki, renderRecoveryPacket as kn, proposeRebindV042 as kr, selectHostCohort as kt, injectActiveProfileHostLock as l, semanticActionFromText as la, LEGACY_QUALIFICATION as li, requiredSubjectsOf as ln, latestAssistantText as lr, parseShellCommand as lt, resolveActiveProfileHostLock as m, canonicalizePath as ma, clauseIsProtected as mi, validateProofManifestV2 as mn, v6TestPredicate as mr, ALPHA2_HOST_PACKAGES as mt, activeRendererModule as n, actionCompatible as na, isInformationalMessage as ni, proofCapabilityReport as nn, classifyCompletionClaim as nr, extractToolSubject as nt, combineHostPolicy as o, requestedTargetAuthorizesMutation as oa, classifyTaskIntent as oi, proofHostSurfacesOf as on, decisionBoundaryKey as or, canonicalArgvFromCommand as ot, readActiveHostGraph as p, validateManifest as pa, clauseIsGoverned as pi, validateProofManifest as pn, testOutcomePredicate as pr, ALPHA2_DSHMARKET_139_HOST_PACKAGES as pt, PROTOCOL_V5_NOTICE as q, ACTION_MANIFEST_VERSION as qi, bindingSatisfies as qn, removalIsComplete as qr, PROOF_KINDS_V2 as qt, auditedDefaultWorkdirHost as r, boundedArtifactChoiceMatches as ra, segmentClauses as ri, proofDigest as rn, currentActionBases as rr, isDeterministicCheck as rt, hostLockContextFromComposedDump as s, requestedTargetMatchesResolved as sa, classifyUserInteraction as si, proofOperationMatches as sn, isRootPauseRequest as sr, isRunExecutable as st, HostProfileError as t, SUPPORTED_EVIDENCE_ADAPTERS as ta, extractOperation as ti, createProofManifestV2 as tn, assessmentOutcomePredicate as tr, extractTextContent as tt, inspectTargetHostGraph as u, validateActionManifest as ua, actionVerbMatches as ui, scopeCoverageDigest as un, latestRootInstruction as ur, ACTIVE_HOST_COHORT_ID as ut, GIT_COMMAND_TEMPLATES as v, sanitizeUrl as va, hasQuestionScope as vi, DEFAULT_RECOVERY_CHAR_BUDGET as vn, certificateClosure as vr, GOAL_HOST_PACKAGES as vt, parseGitCommandManifest as w, isExplanationScope as wi, cleanupConditionFor as wn, currentContractDigest as wr, evaluateExternalWaitCapability as wt, createGitPrestateEnvelope as x, interpretMessage as xi, V6_ORDINARY_COMPLETION_RULE_COMPACT as xn, effectuateBoundary as xr, LEGACY_HOST_COHORTS as xt, commitIndexSnapshotDigest as y, sha256 as ya, hasWorkPredicate as yi, MIN_RECOVERY_CHAR_BUDGET as yn, unitDescendantIds as yr, HOST_CAPABILITY_PACKAGE_GROUPS as yt, SESSION_EVENT_ENVELOPE_INVALID as z, questionHeadsClause as zi, normalizeReleaseContract as zn, itemDiagnosis as zr, RC015_HOST_PACKAGES as zt };

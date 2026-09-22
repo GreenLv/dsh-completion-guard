@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.7.1 - 2026-09-22
+
+### Changes
+
+- Recovery now reports the same current results as prepare and checkpoint. A completed test is not presented as missing evidence, and ordinary work is not sent through target clarification or rebinding merely because it cannot be certified.
+- Recovery retains verifiable current prohibitions and unreleased user waits when current results are unavailable, prioritizes them in short messages, and reports omitted rows. Long boundaries link to read-only details that retain their full text; historical sibling tasks do not become current restrictions.
+- Recovery preserves the dependency-free cleanup condition. A partial deletion or unknown dependency cannot be presented as complete cleanup. Contract updates are identified as updates instead of being mislabeled as compaction or resume.
+- Prepare distinguishes a recorded wait from a currently applicable wait and checks the requested item revision even when the completion state is unknown. Prepare and checkpoint preserve a prohibition's meaning when its compliance state cannot be verified.
+
+### Upgrade and limits
+
+The supported DSH versions remain `0.1.5-rc.2 || 0.1.5-rc.1`. Restart DSH after updating the plugin. Existing history is retained; explicit proof, adopted Goal and release checks remain separate. Some combined natural-language wait clauses remain unrecognized, and this patch does not establish that a model will continue correctly after answering a side question during compaction. See the [acceptance record](docs/LOCAL_ACCEPTANCE.md) for source checks and exact-artifact evidence boundaries.
+
 ## 0.7.0 - 2026-09-21
 
 ### Highlights

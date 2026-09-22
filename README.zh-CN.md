@@ -4,16 +4,16 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.7.0 发布线（2026-09-21）。** 安装前请读回[已发布 Release](https://github.com/GreenLv/dsh-completion-guard/releases)和 [npm 版本](https://www.npmjs.com/package/dsh-completion-guard)。本发布线的共享 core/v2 源码镜像绑定 Codex Context Guard 的精确提交；两个产品的运行时和发布身份分别管理。已验证范围和未完成门禁见[兼容性](docs/COMPATIBILITY.md)及[验收记录](docs/LOCAL_ACCEPTANCE.md)。
+> **0.7.1 发布线（2026-09-22）。** 安装前请读回[已发布 Release](https://github.com/GreenLv/dsh-completion-guard/releases)和 [npm 版本](https://www.npmjs.com/package/dsh-completion-guard)。本发布线的共享 core/v2 源码镜像绑定 Codex Context Guard 的精确提交；两个产品的运行时和发布身份分别管理。已验证范围和未完成门禁见[兼容性](docs/COMPATIBILITY.md)及[验收记录](docs/LOCAL_ACCEPTANCE.md)。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
 ## 快速开始
 
-确认 npm 已提供 `0.7.0`、且 GitHub Release 绑定同一已验收制品及平台附件后，再安装：
+确认 npm 已提供 `0.7.1`、且 GitHub Release 绑定同一已验收制品及平台附件后，再安装：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.7.0
+dsh plugin --profile web add dsh-completion-guard@0.7.1
 ```
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -41,7 +41,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 默认采用 opt-in。`status` 显示 Guard 是否开启、启动阶段（`armed` 表示已就绪、等待你的第一条消息）以及还有多少检查项。`off` 停止保护当前会话，但不删除历史。`clear` 关闭当前待办，同时保留禁止项。`diagnose` 说明完成检查为什么通过或失败；`migration` 报告当前会话适用哪套规则、升级与回滚分别意味着什么；`release` 报告显式发布契约、其覆盖范围以及仍在执行中的操作。
 
-### 0.7.0 中的普通工作
+### 0.7.1 中的普通工作
 
 照常让 DSH 修改文件或运行测试，助手通过 DSH 宿主工具执行。Guard 保存要求，观察宿主已持久化的调用与结果；要求的结果需要独立核验时，再使用只读回读。例如，宿主修改配置文件后，另一次精确文件回读可证明新内容；具名测试需要自己的真实运行结果。工具返回成功或助手自述，不能证明无关条件，也不能抹去对禁改文件的真实修改。`context_guard_prepare` 说明缺少什么证据，`context_guard_checkpoint` 只核对证据实际证明的谓词。
 
@@ -57,7 +57,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.7.0 继续仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
+0.7.1 继续仅支持 **DSH `0.1.5-rc.2` 或 `0.1.5-rc.1`**（配合 Cordis `4.0.2`），两者分别是当前已注册的最新版本和验证过的最低版本。旧 Session API、V2 事件词表和所有更早的宿主包组合仍已删除。如果你从 DSH `0.1.2-rc.1` 升级，请**新建会话**：Guard 不迁移旧日志、提案或证书，也不会删除或重新解释你的旧数据。
 
 插件市场与 npm 元数据使用同一个按新到旧排列的精确并集 `0.1.5-rc.2 || 0.1.5-rc.1`。更早版本、未注册的稳定版 `0.1.5` 以及未来版本都不会被宣称为受支持。进入版本集合后仍必须匹配完整的 33 包 DSH 核心图；缺失、混装或未知图会 fail closed。
 
@@ -110,17 +110,17 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 
 启用后，Guard 会保存用户直接给出的要求和验收条件。只有已保存的工具结果与指定命令、文件或其他目标一致时，才能作为证据。取得机器完成认证需要通过 Guard 检查；证据缺失、过期或对象不一致时，任务保持未认证。当前证据规则未覆盖的调查或解释仍可如实回答并结束，但不会取得完成证书。
 
-只读观察与修改包、文件、服务或 Git 状态的操作保持分离。0.7.0 的普通动作由宿主工具执行；查询成功不会自动产生变更权限。精确命令限制和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
+只读观察与修改包、文件、服务或 Git 状态的操作保持分离。0.7.1 的普通动作由宿主工具执行；查询成功不会自动产生变更权限。精确命令限制和平台证据见 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
 ### 要求一直未完成时
 
-“更新插件并检查 GUI”可能包含 Guard 尚不能认证的部分；而“是否有更新”这类提问属于调查：Guard 会保留原文和来源，但如实说明无法机器认证——完成调查并如实回答即可。checkpoint 会逐项给出原因和一个具体的下一步。0.7.0 的 `context_guard_prepare` 用于诊断要求和缺失证据，不是普通宿主工作的执行配方。
+“更新插件并检查 GUI”可能包含 Guard 尚不能认证的部分；而“是否有更新”这类提问属于调查：Guard 会保留原文和来源，但如实说明无法机器认证——完成调查并如实回答即可。checkpoint 会逐项给出原因和一个具体的下一步。0.7.1 的 `context_guard_prepare` 用于诊断要求和缺失证据，不是普通宿主工作的执行配方。
 
-用 `context_guard_rebind` 提出完整的原文拆分方案。动作或对象不明确时，先请根用户给出包含原条款的明确澄清要求，再在提案中引用新要求的 ID。工具会返回提案 ID 和原项/替代项对照；用户把确认行 `确认重绑定 <proposal ID>` 作为回复的第一行即可应用，空行之后的解释请求或新任务保留各自含义，新任务照常采集。嵌在句子、引号或代码块里的确认，以及后面跟反转表述的确认，都无效。把要求拆成同样不可认证的片段会得到“无认证收益”，而不是要求一次无意义的确认。未支持的部分继续保留 pending；按结构化边界安全结束也不表示全部完成。
+只有根要求本身需要拆分时，才用 `context_guard_rebind` 提出完整的原文拆分方案。普通工作缺少认证支持，不构成重新绑定的理由。动作或对象不明确时，先请根用户给出包含原条款的明确澄清要求，再在提案中引用新要求的 ID。工具会返回提案 ID 和原项/替代项对照；用户把确认行 `确认重绑定 <proposal ID>` 作为回复的第一行即可应用，空行之后的解释请求或新任务保留各自含义，新任务照常采集。嵌在句子、引号或代码块里的确认，以及后面跟反转表述的确认，都无效。把要求拆成同样不可认证的片段会得到“无认证收益”，而不是要求一次无意义的确认。未支持的部分继续保留 pending；按结构化边界安全结束也不表示全部完成。
 
 用 `bindings: []` 调用 `context_guard_checkpoint` 可查询诊断。默认最多展示八个当前要求/限制和十条证据，插件 JSON 不超过 12 KiB。`pagination` 给出总数及各列表独立的 `next_cursor`，首页不代表完整合同。`item_ids`、`evidence_ids` 可按 ID 查询；`evidence_scope: "history"` 可查看完整证据历史，其中不可引用项会明确标记。翻页时保持查询条件不变，合同或证据快照变化后需重新查询。超长行提供 `detail_id`，用 `detail_offset` 取分片；后续分片需把首次返回的 `snapshot` 作为 `detail_snapshot` 传回。分页只改变展示，不会减少认证时检查的要求。
 
-## 0.7.0 中的完成与恢复
+## 0.7.1 中的完成与恢复
 
 Guard 按原始范围保留每项要求、禁止项和答复义务。宿主记录答复已交付后，问题才可关闭；文件修改、测试或回读仍需各自的真实结果。修改图片的要求要核验修改后的图片，不能只看工具是否成功。显式 proof 要求继续走 proof 契约；已采用的 Goal 完成路径仍核验必需结果。
 
@@ -128,7 +128,7 @@ Guard 按原始范围保留每项要求、禁止项和答复义务。宿主记�
 
 义务含糊时，`context_guard_rebind` 可以提出精确拆分，但只有根用户明确确认才会应用。无法支持的核验会如实报告证据不足，不授予动作，也不强迫再次编辑。用 `/context-guard diagnose` 和只读 checkpoint 查看缺失谓词，再通过宿主工具完成可支持的工作，并如实说明边界。
 
-旧安装的 0.6.3 执行流程保留在[对应更新日志](CHANGELOG.zh-CN.md#0632026-09-18)中。0.7.0 的普通 `context_guard_action` 与 `context_guard_evidence` 调用只返回迁移说明。
+旧安装的 0.6.3 执行流程保留在[对应更新日志](CHANGELOG.zh-CN.md#0632026-09-18)中。0.7.1 的普通 `context_guard_action` 与 `context_guard_evidence` 调用只返回迁移说明。
 
 ## 策略档位
 
@@ -170,7 +170,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 0.4.0 明确对齐了 Codex Context Guard 0.10.0 的共享证据规则：证据必须对应仍未完成的工作，并证明用户实际要求的操作、目标和结果。这只是有边界的行为对齐，不表示两个产品拥有相同功能。
 
-0.7.0 的共享 core/v2 源码和一致性夹具，按 `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json` 记录的 Codex Context Guard 精确提交进行字节镜像。这只证明所列文件的源码身份，不证明两个产品功能或运行时完全等价；宿主证据与发布仍分别核验。0.6.x 的 C01–C12 契约和 DSH 自行编写的 v2 候选属于历史阶段。当前对照和限制见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
+0.7.1 的共享 core/v2 源码和一致性夹具，按 `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json` 记录的 Codex Context Guard 精确提交进行字节镜像。这只证明所列文件的源码身份，不证明两个产品功能或运行时完全等价；宿主证据与发布仍分别核验。0.6.x 的 C01–C12 契约和 DSH 自行编写的 v2 候选属于历史阶段。当前对照和限制见 [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md)。
 
 两个项目服务于不同运行时：
 

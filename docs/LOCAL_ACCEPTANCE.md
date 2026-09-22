@@ -1,6 +1,12 @@
 # Local Acceptance
 
-## 0.7.0 release-line source (2026-09-21; public identity pending)
+## 0.7.1 recovery feedback patch (2026-09-22; source evidence)
+
+The candidate repairs inconsistent ordinary recovery feedback, preserves current prohibitions and waits, and retains the dependency-free cleanup condition. The independent source review exercised normal and unavailable views at 512, 1000 and 4000 characters, complete read-only boundary details, source and revision failures, and historical sibling isolation. The complete local deterministic matrix passed with 2587 tests and four skips; lint retained 30 existing warnings. An independent build matched all six generated runtime files. These results bind to the reviewed source; they do not prove that a running host has loaded the package.
+
+Exact candidate CI and macOS/Windows native annexes must identify the release commit and the same canonical tgz. Use the [versioned Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.7.1) for final publication identities and attached results. Until those results are available, this packaged source record supplies no native, model or publication pass. The known combined-wait wording limitation and commentary-answer/compaction continuation boundary remain outside this patch's claims.
+
+## 0.7.0 historical source candidates (2026-09-21)
 
 This entry separates exact candidate source, CI, package, native-host and model evidence. It does not itself establish a tag, npm publication or daily installation. The shared core/v2 source and mirror bytes are pinned to Codex Context Guard commit `cb415cbe374d452e4a0c71e9e292d20e31f23b0e` by `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json`; the historical v1/digest pin is unchanged. Matching shared files does not establish complete runtime or feature equivalence.
 

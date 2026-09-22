@@ -20,7 +20,8 @@ import { itemHoldsExecutionAuthority } from './domain/semantics.js'
 import { claimedBatchHasRealRootInput, lifecyclePhase, previewFirstStepInjection, type LifecyclePhase } from './domain/lifecycle.js'
 import { goalCompletionDenial } from './domain/goal-gate.js'
 import { decideTurnBoundary } from './domain/stop-policy.js'
-import { recoveryDigest, renderRecoveryPacket } from './domain/recovery.js'
+import { recoveryDigest, renderRecoveryPacket, recoveryTitle, type RecoveryCause } from './domain/recovery.js'
+import { currentV6Feedback } from './domain/v6-feedback.js'
 import { createCheckpointTool } from './tools/checkpoint.js'
 import { createBoundaryTool } from './tools/boundary.js'
 import { createPrepareTool } from './tools/prepare.js'
@@ -100,8 +101,15 @@ export interface GuardRuntime {
   sync(): void
   setEnabled(_enabled: boolean): void
   setDurability(confirmed: boolean): void
-  markRecoveryNeeded(): void
+  markRecoveryNeeded(cause?: RecoveryCause): void
   consumeRecovery(): boolean
+  /**
+   * Why recovery is currently armed, recorded where the arm happened so the
+   * injected title can name the real trigger. Empty when armed without an
+   * auditable cause; the neutral title never fabricates compaction or resume
+   * (DSH-RF-02). Cleared by {@link consumeRecovery}.
+   */
+  readonly recoveryCauses?: readonly string[]
 }
 
 export type RuntimeHostCapabilityEvaluator = (action: StatefulAction) => HostCapabilityEvaluation
@@ -560,6 +568,7 @@ export function createRuntime(
   const projection = createProjection()
   const session = agent.session
   let pendingRecovery = false
+  let pendingRecoveryCauses = new Set<RecoveryCause>()
   let durabilityConfirmed = false
   let durabilityWatermark: GuardProjection['durabilityWatermark'] = 'unknown'
   let observedEpoch = -1
@@ -665,15 +674,20 @@ export function createRuntime(
     // after a transition is always injected.
     if (observedEpoch >= 0 && derived.projection.epoch > observedEpoch) {
       pendingRecovery = true
+      pendingRecoveryCauses.add('guard_reenabled')
       projection.lastRecoveryDigest = undefined
     }
     observedEpoch = derived.projection.epoch
-    if (observedContractRevision >= 0 && projection.contractRevision !== observedContractRevision) pendingRecovery = true
+    if (observedContractRevision >= 0 && projection.contractRevision !== observedContractRevision) {
+      pendingRecovery = true
+      pendingRecoveryCauses.add('contract_updated')
+    }
     observedContractRevision = projection.contractRevision
     // Compaction summaries stay in the historical log forever, so only re-arm
     // recovery when a NEW summary is observed, keyed by its sequence.
     if (derived.lastCompactionSeq > observedCompactionSeq) {
       pendingRecovery = true
+      pendingRecoveryCauses.add('compaction')
       projection.lastRecoveryDigest = undefined
       observedCompactionSeq = derived.lastCompactionSeq
     }
@@ -697,12 +711,14 @@ export function createRuntime(
     durabilityWatermark = confirmed ? 'confirmed' : 'failed'
     projection.durabilityWatermark = durabilityWatermark
   }
-  const markRecoveryNeeded = () => {
+  const markRecoveryNeeded = (cause?: RecoveryCause) => {
     pendingRecovery = true
+    pendingRecoveryCauses.add(cause ?? 'explicit')
   }
   const consumeRecovery = () => {
     const was = pendingRecovery
     pendingRecovery = false
+    pendingRecoveryCauses = new Set()
     return was
   }
 
@@ -714,6 +730,7 @@ export function createRuntime(
     get protocolV4Present() { return protocolV4Present },
     get protocolV5Present() { return protocolV5Present },
     get protocolV6Present() { return protocolV6Present },
+    get recoveryCauses() { return [...pendingRecoveryCauses] },
     sync,
     setEnabled,
     setDurability,
@@ -887,7 +904,7 @@ export function apply(ctx: Context, rawConfig: {
       // post-compaction reminder is injected at least once, even when the
       // packet content is unchanged.
       runtime.projection.lastRecoveryDigest = undefined
-      runtime.markRecoveryNeeded()
+      runtime.markRecoveryNeeded(source === 'resume' ? 'resume' : 'compaction')
     }
     if (registeredAgents.has(agent)) return
     registeredAgents.add(agent)
@@ -911,7 +928,7 @@ export function apply(ctx: Context, rawConfig: {
     }))
     agent.ctx.tools.register(createCheckpointTool(
       () => runtime.projection,
-      () => runtime.markRecoveryNeeded(),
+      () => runtime.markRecoveryNeeded('checkpoint_followup'),
       async () => {
         const durable = await ctx.sessions.flush(agent.session)
         runtime.setDurability(durable)
@@ -927,7 +944,7 @@ export function apply(ctx: Context, rawConfig: {
         runtime.sync()
         return durable
       },
-      () => runtime.markRecoveryNeeded(),
+      () => runtime.markRecoveryNeeded('boundary_update'),
     ))
     /** Persist release state outside provider-visible Session history. */
     const persistReleaseRecord = async (toolAgent: Agent, kind: 'release_reservation' | 'release_settlement',
@@ -1141,11 +1158,24 @@ export function apply(ctx: Context, rawConfig: {
       if (runtime.lifecycle === 'armed') injected.push(pluginNoticeMessage(firstStep.guidance, 'Context Guard first-step protection guidance'))
       boundaryPending = false
     }
+    // Read the auditable trigger set BEFORE consuming the arm: the consume
+    // clears it, and the title must still name why this reminder exists.
+    const armedRecoveryCauses = runtime.recoveryCauses ?? []
     if (runtime.projection.enabled && runtime.consumeRecovery()) {
-      // A session with nothing open has nothing to recover: a "0 pending"
-      // packet is noise, not a reminder.
-      const hasOpenWork = [...runtime.projection.items.values()].some((item) => item.status === 'pending')
-      const hasRejections = (runtime.projection.lastCheckpointRejections?.length ?? 0) > 0
+      // Open work is judged by the SAME view the packet renders (DSH-RF-01):
+      // in the default v6 ordinary lane a confirmed-observed closure has
+      // nothing current to recover, while standing prohibitions and an
+      // unavailable view still deserve their bounded reminder. Outside that
+      // lane the historical pending/rejection semantics decide.
+      const current = currentV6Feedback(runtime.projection)
+      const standingConstraints = current
+        ? Object.values(current.predicates).filter((state) => state === 'constraint_active').length
+        : 0
+      const hasOpenWork = current
+        ? current.status !== 'observed' || standingConstraints > 0
+        : [...runtime.projection.items.values()].some((item) => item.status === 'pending')
+      const hasRejections = current === undefined
+        && (runtime.projection.lastCheckpointRejections?.length ?? 0) > 0
       const recovery = hasOpenWork || hasRejections
         ? renderRecoveryPacket(runtime.projection, { charBudget: 4000 })
         : undefined
@@ -1162,8 +1192,12 @@ export function apply(ctx: Context, rawConfig: {
           injected.push(pluginNoticeMessage(PROTOCOL_V6_NOTICE, 'Context Guard recorded a replay version boundary'))
           boundaryPending = false
         }
+        // The title names the auditable trigger(s); an unknown cause renders
+        // the neutral form instead of claiming compaction or resume that never
+        // happened (DSH-RF-02).
+        const title = recoveryTitle(armedRecoveryCauses)
         injected.push(createUserMessage({
-          content: [{ type: 'text', text: `Open task requirements (recovered after compaction or resume):\n${recovery}` }],
+          content: [{ type: 'text', text: `${title}\n${recovery}` }],
           source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recovering open task requirements') },
         }))
       }

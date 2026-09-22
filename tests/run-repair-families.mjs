@@ -24,6 +24,7 @@ export const families = Object.freeze({
     'tests/domain/v063-legacy-upgrade.test.ts',
     'tests/domain/v063-cross-end-projection.test.ts',
     'tests/tools/v063-host-lifecycle.test.ts',
+    'tests/v6-recovery-feedback.test.ts',
   ],
 })
 

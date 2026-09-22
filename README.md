@@ -4,16 +4,16 @@
 
 An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
-> **0.7.0 release line (2026-09-21).** Verify the [published Releases](https://github.com/GreenLv/dsh-completion-guard/releases) and [npm version](https://www.npmjs.com/package/dsh-completion-guard) before installation. This release line’s shared core/v2 source mirror is pinned to an exact Codex Context Guard commit; the two products have separate runtimes and release identities. See [compatibility](docs/COMPATIBILITY.md) and [acceptance record](docs/LOCAL_ACCEPTANCE.md) for its verified scope and open gates.
+> **0.7.1 release line (2026-09-22).** Verify the [published Releases](https://github.com/GreenLv/dsh-completion-guard/releases) and [npm version](https://www.npmjs.com/package/dsh-completion-guard) before installation. This release line’s shared core/v2 source mirror is pinned to an exact Codex Context Guard commit; the two products have separate runtimes and release identities. See [compatibility](docs/COMPATIBILITY.md) and [acceptance record](docs/LOCAL_ACCEPTANCE.md) for its verified scope and open gates.
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
 ## Quick start
 
-After confirming that npm serves `0.7.0` and the GitHub Release identifies the same accepted artifact and platform annexes, install this version:
+After confirming that npm serves `0.7.1` and the GitHub Release identifies the same accepted artifact and platform annexes, install this version:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.7.0
+dsh plugin --profile web add dsh-completion-guard@0.7.1
 ```
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -41,7 +41,7 @@ Restart DSH Web, open a session, and enable the Guard:
 
 Activation is opt-in by default. `status` shows whether the Guard is on, its startup phase (`armed` means waiting for your first message), the active policy tier, how many checks remain, and a summary of why the rest are open. `off` stops protection for the current session without deleting its history. `clear` closes the current checklist while keeping prohibitions. `diagnose` explains why a completion check passed or failed. `migration` reports which rule set the session is under and what an upgrade or rollback would mean. `release` reports an explicitly adopted release contract, its coverage, and anything in flight.
 
-### Ordinary work in 0.7.0
+### Ordinary work in 0.7.1
 
 Ask DSH to edit a file or run a test as usual. The assistant performs that work with the DSH host tools. Guard records the request, observes the host's persisted call and result, and checks independent readback when the requested outcome needs it. For example, after a host edit changes a configuration file, a separate exact file read can establish the new bytes; a named test needs its own observed result. A successful tool return or the assistant's claim alone does not prove an unrelated condition or a forbidden-file constraint. `context_guard_prepare` explains what evidence is missing, and `context_guard_checkpoint` checks only the predicate that evidence establishes.
 
@@ -57,7 +57,7 @@ The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.
 
 ## Status and compatibility
 
-Version 0.7.0 retains support for exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
+Version 0.7.1 retains support for exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`** with Cordis `4.0.2`. These are the latest registered release and the verified minimum. The previous Session API, V2 event vocabulary, and every older host package set remain removed. If you are upgrading from DSH `0.1.2-rc.1`, **start a new session**: Guard does not migrate old logs, proposals or certificates, and it never deletes or reinterprets your old data.
 
 Package discovery and npm metadata use the same newest-first exact union, `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable `0.1.5`, and future versions are not advertised as supported. Every admitted version must still match its complete 33-package DSH core graph; missing, mixed, or unknown graphs fail closed.
 
@@ -110,17 +110,17 @@ After the change, restart DSH.
 
 Once enabled, the Guard saves direct user requirements and acceptance checks. A saved tool result counts only when it matches the requested command, file, or other target. A machine-certified completion requires the Guard's checkpoint; missing, stale, or mismatched evidence leaves the task uncertified. Investigations and explanations outside the supported evidence rules can still end with an honest answer, without a completion certificate.
 
-Read-only observation and actions that change packages, files, services, or Git state remain separate. In 0.7.0, ordinary actions use Host tools; a successful lookup never grants permission to make a change. Exact command limits and platform evidence are documented in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+Read-only observation and actions that change packages, files, services, or Git state remain separate. In 0.7.1, ordinary actions use Host tools; a successful lookup never grants permission to make a change. Exact command limits and platform evidence are documented in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 ### When a requirement stays incomplete
 
-“Update the plugin and check the GUI” can contain work the Guard cannot certify, and questions such as “是否有更新” are inquiries: they stay recorded with their source, but no checkpoint or rebind can machine-certify an answer — complete the investigation and report the result. The checkpoint reports a reason and one concrete next action per item. In 0.7.0, `context_guard_prepare` diagnoses the requirement and missing evidence; it is not an execution recipe for ordinary Host work.
+“Update the plugin and check the GUI” can contain work the Guard cannot certify, and questions such as “是否有更新” are inquiries: they stay recorded with their source, but no checkpoint or rebind can machine-certify an answer — complete the investigation and report the result. The checkpoint reports a reason and one concrete next action per item. In 0.7.1, `context_guard_prepare` diagnoses the requirement and missing evidence; it is not an execution recipe for ordinary Host work.
 
-Use `context_guard_rebind` to propose an exact, complete split of the old text. If the action or target needs clarification, first ask the root user for an explicit instruction that includes the original clause; the proposal can reference that new item's ID. The tool returns a proposal ID and a comparison. The user applies it with the confirmation line `确认重绑定 <proposal ID>` as the first line of a reply; an explanation request or a new task after a blank line keeps its own meaning, and a new task is captured normally. A confirmation buried in a sentence, quotes, or a code block, or followed by a reversal, does nothing. Splitting a requirement into equally uncertifiable pieces returns “no certification gain” instead of asking for a pointless confirmation. Unsupported parts remain pending, and a qualified safe end does not mean all work is complete.
+Only use `context_guard_rebind` when the root requirement itself needs an exact, complete split. Ordinary work that lacks certification support does not need rebinding. If the action or target needs clarification, first ask the root user for an explicit instruction that includes the original clause; the proposal can reference that new item's ID. The tool returns a proposal ID and a comparison. The user applies it with the confirmation line `确认重绑定 <proposal ID>` as the first line of a reply; an explanation request or a new task after a blank line keeps its own meaning, and a new task is captured normally. A confirmation buried in a sentence, quotes, or a code block, or followed by a reversal, does nothing. Splitting a requirement into equally uncertifiable pieces returns “no certification gain” instead of asking for a pointless confirmation. Unsupported parts remain pending, and a qualified safe end does not mean all work is complete.
 
 The default `context_guard_checkpoint` call uses `bindings: []` for diagnosis. It shows at most eight current items/constraints and ten evidence rows, within 12 KiB of plugin JSON. `pagination` reports totals and a separate `next_cursor` for each list; the first page is not the whole contract. Use `item_ids` or `evidence_ids` to focus a query, or `evidence_scope: "history"` for the complete evidence history, including rows marked unavailable. Keep the query unchanged when following a cursor; a changed contract or evidence snapshot requires a fresh query. Large rows expose `detail_id`; retrieve chunks with `detail_offset` and return the first response's `snapshot` as `detail_snapshot` on later chunks. All queries remain read-only and never shrink the certification set.
 
-## Completion and recovery in 0.7.0
+## Completion and recovery in 0.7.1
 
 The Guard keeps each requirement, prohibition and answer obligation in its original scope. A question closes when the host records delivery of its answer; a file edit, test or readback needs its own observed result. A request to change an image needs evidence about the changed image, not just a successful tool return. An explicit proof request still uses the proof contract, and an adopted Goal-completion path still checks its required results.
 
@@ -128,7 +128,7 @@ The source of an action matters. A future observation, an unmet time or approval
 
 If an obligation is ambiguous, `context_guard_rebind` can propose an exact split, but only an explicit root-user confirmation applies it. Unsupported verification is reported as insufficient; it does not grant an action or force an edit. Use `/context-guard diagnose` and the read-only checkpoint to see the missing predicate, then complete supported work with host tools and report limitations honestly.
 
-The 0.6.3 execution-era behavior is retained in the [0.6.3 changelog](CHANGELOG.md#063---2026-09-18) for existing installations. On 0.7.0, ordinary `context_guard_action` and `context_guard_evidence` calls only return migration guidance.
+The 0.6.3 execution-era behavior is retained in the [0.6.3 changelog](CHANGELOG.md#063---2026-09-18) for existing installations. On 0.7.1, ordinary `context_guard_action` and `context_guard_evidence` calls only return migration guidance.
 
 ## Policy tiers
 
@@ -175,7 +175,7 @@ This project began as a DSH port of deterministic behavior from [`GreenLv/codex-
 
 Version 0.4.0 was deliberately aligned with the shared evidence rules in Codex Context Guard 0.10.0: proof must belong to work that is still open and must show the operation, target, and result the user actually requested. This is a limited behavior-level alignment, not a claim that the two products have the same features.
 
-For 0.7.0, the shared core/v2 source files and conformance fixtures are byte-mirrored from the exact Codex Context Guard commit in `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json`. This proves source identity for those files, not complete feature or runtime parity; each product's host evidence and release remain independent. The earlier 0.6.x C01–C12 contract and DSH-authored v2 candidate are historical. The current comparison and its limits are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
+For 0.7.1, the shared core/v2 source files and conformance fixtures are byte-mirrored from the exact Codex Context Guard commit in `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json`. This proves source identity for those files, not complete feature or runtime parity; each product's host evidence and release remain independent. The earlier 0.6.x C01–C12 contract and DSH-authored v2 candidate are historical. The current comparison and its limits are in [`docs/SEMANTIC_COMPATIBILITY.md`](docs/SEMANTIC_COMPATIBILITY.md).
 
 The two repositories serve different runtimes:
 

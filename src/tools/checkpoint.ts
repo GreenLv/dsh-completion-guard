@@ -352,6 +352,10 @@ export function createCheckpointTool(
       if (currentFeedback) {
         const openRows = currentFeedback.openIds.map((id) => {
           const sourced = sourceItemForCoreRequirement(projection, id)
+          // A prohibition in the open list (for example a legacy_review
+          // constraint the core cannot verify) keeps its polarity here too:
+          // it is never phrased as ordinary work to answer (audit H1).
+          const isProhibition = sourced?.item.kind === 'prohibition'
           return {
             id, reason_code: currentFeedback.predicates[id],
             ...(sourced ? { source_item_id: sourced.item.id, revision: sourced.item.revision,
@@ -359,12 +363,21 @@ export function createCheckpointTool(
             ...(sourced?.origin ? { source_start: sourced.origin.sourceStart, source_end: sourced.origin.sourceEnd,
               semantic_action: sourced.origin.action, target: sourced.origin.target }
               : sourced?.item.semanticAction ? { semantic_action: sourced.item.semanticAction } : {}),
-            next_step: 'Answer this sourced requirement using the current Host observation or final delivery; ordinary Guard bindings are not required.',
+            next_step: isProhibition
+              ? 'This recorded prohibition stays in force; do not perform the action.'
+              : 'Answer this sourced requirement using the current Host observation or final delivery; ordinary Guard bindings are not required.',
           }
         })
         const constraints = Object.entries(currentFeedback.predicates)
           .filter(([, state]) => state === 'constraint_active' || state === 'constraint_unresolved' || state === 'constraint_violated')
-          .map(([id, state]) => ({ id, reason_code: state }))
+          .map(([id, state]) => {
+            const sourced = sourceItemForCoreRequirement(projection, id)
+            // The recorded text rides with the constraint row so a compact
+            // recovery packet's reference resolves here too (review R3F1);
+            // display provenance only — the state itself is the core's word.
+            return { id, reason_code: state,
+              ...(sourced ? { revision: sourced.item.revision, text: sourced.item.normalizedText } : {}) }
+          })
         return checkpointPage(projection, args, {
           status: currentFeedback.status,
           reason_code: currentFeedback.reasonCode,
