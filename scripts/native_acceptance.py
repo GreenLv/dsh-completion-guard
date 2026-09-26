@@ -350,6 +350,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.output.resolve() == args.transfer_receipt.resolve():
                 raise NativeRunError("acceptance and transfer receipt need different output paths")
             check_output_path(args.transfer_receipt, args.repo_root)
+        diagnostics_output = args.output.with_name(args.output.name + ".diagnostics.json")
+        if args.transfer_receipt and diagnostics_output.resolve() == args.transfer_receipt.resolve():
+            raise NativeRunError("diagnostics and transfer receipt need different output paths")
+        check_output_path(diagnostics_output, args.repo_root)
         check_output_path(args.output, args.repo_root)
         module = preflight_inputs(args)
     except (OSError, ValueError, KeyError, AttributeError, tarfile.TarError, RuntimeError) as exc:
@@ -373,7 +377,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                          "headless": args.target_headless_profile.resolve()}
                                         if args.target_web_profile else None,
                                         None if args.web_market_version == "none" else args.web_market_version,
-                                        "v070" if args.gate_profile == "host_bound_v070" else "legacy")
+                                        "v070" if args.gate_profile == "host_bound_v070" else "legacy",
+                                        diagnostics_output=diagnostics_output)
     if args.t06:
         probe_path = Path(__file__).with_name("native_cleanup_probe.py")
         spec = importlib.util.spec_from_file_location("dsh_native_cleanup_probe", probe_path)

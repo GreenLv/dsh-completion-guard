@@ -777,7 +777,7 @@ export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall:
         // audited Bash producer. A missing service produces no receipt.
         const policy = agent.ctx.get('sandboxPolicy') as { resolve(request: { session: Session }): unknown } | undefined
         const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(), policy,
-          await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy), sourcedRootAtCall?.(exec) ?? null)
+          await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy), sourcedRootAtCall?.(exec) ?? null, SUPPORTED_SESSION_FORMAT_VERSION)
         if (receipt) pending.set(exec, receipt)
       } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
     }

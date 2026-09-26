@@ -1,4 +1,3 @@
-import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createHash } from 'node:crypto'
 import { realpathSync, statSync } from 'node:fs'
 import { isDeepStrictEqual } from 'node:util'
@@ -69,8 +68,10 @@ function physicalDirectory(value: unknown): string | undefined {
  */
 export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecution>, hostLock: HostLockEvaluation,
   sandboxPolicy: { resolve(request: { session: Session }): unknown } | undefined,
-  attestedDefaultRoute: boolean, sourcedRootSeq?: number | null): HostWorkdirReceipt | undefined {
-  if (!attestedDefaultRoute || exec.agent?.session !== session || exec.parent !== undefined || exec.rootCallId !== exec.callId
+  attestedDefaultRoute: boolean, sourcedRootSeq?: number | null, hostSessionFormatVersion: number = 4): HostWorkdirReceipt | undefined {
+  // The standalone domain has no host imports. rc.2 is V4 only; the runtime
+  // additionally passes the actual host export, so a changed host is refused.
+  if (hostSessionFormatVersion !== 4 || !attestedDefaultRoute || exec.agent?.session !== session || exec.parent !== undefined || exec.rootCallId !== exec.callId
     || sourcedRootSeq === null
     || (exec.name !== 'bash' && exec.name !== 'pwsh') || hostLock.status !== 'supported'
     || !hostLock.auditedForegroundRenderers?.includes(exec.name)) return undefined
@@ -107,10 +108,10 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
   if (!root || !turnStart || (sourcedRootSeq === undefined && root.seq <= turnStart.seq)
     || row(turnStart.data).turn !== row(call.data).turn) return undefined
   const inherited = (session as unknown as { inheritedEventCount?: unknown }).inheritedEventCount
-  if (header.version !== SESSION_FORMAT_VERSION || typeof header.createdAt !== 'number' || typeof header.isSeeded !== 'boolean'
+  if (header.version !== hostSessionFormatVersion || typeof header.createdAt !== 'number' || typeof header.isSeeded !== 'boolean'
     || typeof inherited !== 'number' || !Number.isSafeInteger(inherited)) return undefined
   const sessionDigest = sessionRefDigest({
-    version: SESSION_FORMAT_VERSION, id: header.id, createdAt: header.createdAt,
+    version: hostSessionFormatVersion, id: header.id, createdAt: header.createdAt,
     seedLength: inherited,
     ...(typeof header.parentSession === 'string' ? { parentSession: header.parentSession } : {}),
     ...(typeof header.agentPreset === 'string' ? { agentPreset: header.agentPreset } : {}),

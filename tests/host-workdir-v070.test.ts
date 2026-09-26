@@ -291,6 +291,8 @@ describe('v0.7 call-time Host default-workdir observation', () => {
         { ...host, auditedForegroundRenderers: [] }, policy, true)).toBeUndefined()
       expect(captureHostWorkdir(s.session, exec as never, host, undefined, true)).toBeUndefined()
       expect(captureHostWorkdir(s.session, exec as never, host, policy, false)).toBeUndefined()
+      expect(captureHostWorkdir(s.session, exec as never, host, policy, true, undefined, 3)).toBeUndefined()
+      expect(captureHostWorkdir(s.session, exec as never, host, policy, true, undefined, 5)).toBeUndefined()
     } finally { unlinkSync(alias); s.cleanup() }
   })
 

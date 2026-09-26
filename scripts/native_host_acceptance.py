@@ -55,7 +55,8 @@ def probe_driver_digest(root: Path, protocol: str) -> str:
 
 
 class HostCommandError(RuntimeError):
-    def __init__(self, executable: str, exit_code: int, diagnostic_code: str | None = None):
+    def __init__(self, executable: str, exit_code: int, diagnostic_code: str | None = None, stderr: bytes = b""):
+        self.stderr_redacted = redacted_host_stderr(stderr)
         self.exit_code = exit_code
         self.executable = Path(executable).name
         self.diagnostic_code = diagnostic_code
@@ -67,6 +68,43 @@ def known_error_code(data: bytes) -> str | None:
     import re
     codes = ("ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND", "ERR_ACCESS_DENIED", "EACCES", "EPERM", "ENOENT")
     return next((code for code in codes if re.search(rb"\b" + code.encode() + rb"\b", data)), None)
+
+
+def redacted_host_stderr(data: bytes) -> str:
+    """Retain only allowlisted diagnostic facts, never arbitrary stderr text.
+
+    Paths, credentials, stdout and unknown messages are deliberately omitted.
+    A missing audited package and generated entry basename locate loader errors.
+    """
+    import re
+    text = data[-8192:].decode("utf-8", errors="replace")
+    parts = [known_error_code(data[-8192:]) or "unrecognized_host_error"]
+    audit = Path(__file__).resolve().parents[1] / "manifests" / "rc017-rc2-byte-audit.json"
+    try:
+        names = {row["name"] for row in json.loads(audit.read_text())["packages"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        names = set()
+    match = re.search(r"Cannot find package ['\"]([^'\"]+)['\"]", text)
+    if match and match.group(1) in names:
+        parts.append("missing_package=" + match.group(1))
+    match = re.search(r"[/\\]dist[/\\]((?:domain-[A-Za-z0-9_-]{1,32}|index)\.js)(?:[\s'\"]|$)", text)
+    shipped_entries = {entry.name for entry in audit.parent.parent.joinpath("dist").glob("*.js") if entry.is_file()}
+    if match and match.group(1) in shipped_entries:
+        parts.append("importer=dist/" + match.group(1))
+    return "; ".join(parts)[:512]
+
+
+def write_host_diagnostic(path: Path, stage: str, error: BaseException, digest: str,
+                          source_commit: str) -> None:
+    """External sidecar survives fixture cleanup without extending the annex."""
+    record = {"schema": "dsh-native-diagnostic/v1", "artifact_sha256": digest,
+              "source_commit": source_commit, "failure": json.loads(failure_note(stage, error)),
+              "stderr_redacted": getattr(error, "stderr_redacted", "unrecognized_host_error")}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump(record, stream, indent=2, sort_keys=True)
+        stream.write("\n")
 
 
 def failure_note(stage: str, error: BaseException) -> str:
@@ -132,7 +170,7 @@ def run_host_command(work: Path, environment: dict[str, str], *args: str) -> str
                               text=False, timeout=120, check=False)
     if executed.returncode:
         raise HostCommandError(args[0], executed.returncode,
-                               known_error_code(executed.stdout[-8192:] + b"\n" + executed.stderr[-8192:]))
+                               known_error_code(executed.stdout[-8192:] + b"\n" + executed.stderr[-8192:]), executed.stderr)
     # Decode in the calling thread. text=True's Windows reader thread can lose
     # stdout on a GBK decode error and leave a misleading later None TypeError.
     output = executed.stdout.decode("utf-8", errors="strict")
@@ -272,7 +310,7 @@ def windows_process_query(script: str) -> str:
     result = subprocess.run(["powershell", "-NoProfile", "-Command", prefix + script],
                             capture_output=True, text=False, timeout=10, check=False)
     if result.returncode:
-        raise HostCommandError("powershell", result.returncode, known_error_code(result.stderr[-8192:]))
+        raise HostCommandError("powershell", result.returncode, known_error_code(result.stderr[-8192:]), result.stderr)
     return result.stdout.decode("utf-8", errors="strict")
 
 
@@ -379,7 +417,8 @@ def preflight_link_access() -> None:
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any], targets: dict[str, str] | None = None,
                     target_profiles: dict[str, Path] | None = None,
-                    web_market_version: str | None = None, protocol: str = "legacy") -> dict[str, Any]:
+                    web_market_version: str | None = None, protocol: str = "legacy",
+                    diagnostics_output: Path | None = None) -> dict[str, Any]:
     result["gate_profile"] = "dsh-host-bound/v4" if protocol == "v070" else "host_bound_core"
     result["host_lock_policy"] = "dsh-core/v1"
     result["market_interface"] = {"status": "not_requested" if web_market_version is None else "unavailable",
@@ -529,8 +568,9 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 if not exclude and process.poll() is not None:
                     with (temporary / f"{profile}-host.log").open("rb") as failed_log:
                         failed_log.seek(max(0, failed_log.seek(0, 2) - 8192))
-                        diagnostic_code = known_error_code(failed_log.read(8192))
-                    raise HostCommandError("node", process.returncode, diagnostic_code)
+                        diagnostic_tail = failed_log.read(8192)
+                        diagnostic_code = known_error_code(diagnostic_tail)
+                    raise HostCommandError("node", process.returncode, diagnostic_code, diagnostic_tail)
                 return None
             first = wait_until(probe_result)
             for row in first["cases"]:
@@ -578,6 +618,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 raise RuntimeError("shell shim identity mismatch")
             passed(f"{profile}_shell_shim")
     except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError, RuntimeError) as error:
+        if diagnostics_output is not None:
+            write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"])
         gates.append(api.gate("host_bound_acceptance", digest, passed=False,
                               note=failure_note(stage, error)))
     finally:

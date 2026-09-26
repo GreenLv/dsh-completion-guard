@@ -325,6 +325,29 @@ class HostBoundEntrypointTests(unittest.TestCase):
         error.winerror = 448
         self.assertEqual(json.loads(self.host.failure_note("junction_read", error))["os_error"], 448)
 
+    def test_redacted_diagnostic_survives_fixture_cleanup_without_private_stderr(self):
+        entry = next((SCRIPT.parents[1] / "dist").glob("domain-*.js")).name
+        payload = b"Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepseek-ai/dsh-session' imported from /private/user/secret/dist/domain-Abc_123.js\nAuthorization: Bearer private-token\nhttps://private.invalid?key=secret"
+        payload = payload.replace(b"domain-Abc_123.js", entry.encode())
+        failure = self.host.HostCommandError("/private/node", 1, "ERR_MODULE_NOT_FOUND", payload)
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "external" / "diagnostic.json"
+            fixture = Path(folder) / "fixture"
+            fixture.mkdir()
+            self.host.write_host_diagnostic(target, "web_host_lock", failure, "a" * 64, "b" * 40)
+            fixture.rmdir()
+            record = json.loads(target.read_text())
+            text = json.dumps(record)
+            self.assertIn("missing_package=@deepseek-ai/dsh-session", text)
+            self.assertIn("importer=dist/" + entry, text)
+            for private in ["/private", "private-token", "private.invalid", "Authorization", "secret"]:
+                self.assertNotIn(private, text)
+            self.assertEqual(record["artifact_sha256"], "a" * 64)
+            with self.assertRaises(FileExistsError):
+                self.host.write_host_diagnostic(target, "later", failure, "a" * 64, "b" * 40)
+        unknown = self.host.redacted_host_stderr(b"secret arbitrary text" * 10000)
+        self.assertEqual(unknown, "unrecognized_host_error")
+
     def test_windows_process_query_uses_utf8_bytes_and_preserves_failed_exit(self):
         success = subprocess.CompletedProcess([], 0, '中文路径'.encode(), b'')
         with mock.patch.object(self.host.subprocess, "run", return_value=success) as run:

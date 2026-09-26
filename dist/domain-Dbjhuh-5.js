@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { SESSION_FORMAT_VERSION } from "@deepseek-ai/dsh-session";
 import { isDeepStrictEqual } from "node:util";
 
 //#region src/domain/host-dependency-audit.ts
@@ -17977,8 +17976,8 @@ function physicalDirectory(value) {
 * The sandbox-policy service is the same scoped service used by tool-bash;
 * absence or an unproved physical path simply emits no receipt.
 */
-function captureHostWorkdir(session, exec, hostLock, sandboxPolicy, attestedDefaultRoute, sourcedRootSeq) {
-	if (!attestedDefaultRoute || exec.agent?.session !== session || exec.parent !== void 0 || exec.rootCallId !== exec.callId || sourcedRootSeq === null || exec.name !== "bash" && exec.name !== "pwsh" || hostLock.status !== "supported" || !hostLock.auditedForegroundRenderers?.includes(exec.name)) return void 0;
+function captureHostWorkdir(session, exec, hostLock, sandboxPolicy, attestedDefaultRoute, sourcedRootSeq, hostSessionFormatVersion = 4) {
+	if (hostSessionFormatVersion !== 4 || !attestedDefaultRoute || exec.agent?.session !== session || exec.parent !== void 0 || exec.rootCallId !== exec.callId || sourcedRootSeq === null || exec.name !== "bash" && exec.name !== "pwsh" || hostLock.status !== "supported" || !hostLock.auditedForegroundRenderers?.includes(exec.name)) return void 0;
 	const args = row$1(exec.arguments);
 	if (Object.hasOwn(args, "workdir") || args.run_in_background === true) return void 0;
 	const header = row$1(session.header);
@@ -18018,9 +18017,9 @@ function captureHostWorkdir(session, exec, hostLock, sandboxPolicy, attestedDefa
 	const turnStart = events.filter((event) => event.type === "turn/start" && event.seq < call.seq).at(-1);
 	if (!root || !turnStart || sourcedRootSeq === void 0 && root.seq <= turnStart.seq || row$1(turnStart.data).turn !== row$1(call.data).turn) return void 0;
 	const inherited = session.inheritedEventCount;
-	if (header.version !== SESSION_FORMAT_VERSION || typeof header.createdAt !== "number" || typeof header.isSeeded !== "boolean" || typeof inherited !== "number" || !Number.isSafeInteger(inherited)) return void 0;
+	if (header.version !== hostSessionFormatVersion || typeof header.createdAt !== "number" || typeof header.isSeeded !== "boolean" || typeof inherited !== "number" || !Number.isSafeInteger(inherited)) return void 0;
 	const sessionDigest = sessionRefDigest({
-		version: SESSION_FORMAT_VERSION,
+		version: hostSessionFormatVersion,
 		id: header.id,
 		createdAt: header.createdAt,
 		seedLength: inherited,
