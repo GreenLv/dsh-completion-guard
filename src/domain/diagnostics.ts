@@ -77,7 +77,15 @@ const TARGET_FIELD_REASONS: Record<string, string> = {
  * accepts. Asking every obligation for all three roles made prepare and
  * diagnosis demand a change chain a read-only verification can never produce.
  */
-function requiredEvidenceRoles(item: GuardItem): Array<'resolution' | 'effect' | 'state'> {
+/** Current v6 native edit has a persisted effect plus its own readback.
+ * Prestate-constrained and legacy stateful work keeps the historical chain. */
+export function nativeFileTwoRole(p: GuardProjection, item: GuardItem): boolean {
+  return p.boundaryProtocol === 6 && item.semanticAction === 'modify' && !item.legacyFlags?.length
+    && item.requestedTarget?.pre_digest === undefined && item.requestedTarget?.change_set_digest === undefined
+}
+
+function requiredEvidenceRoles(p: GuardProjection, item: GuardItem): Array<'resolution' | 'effect' | 'state'> {
+  if (nativeFileTwoRole(p, item)) return ['effect', 'state']
   return isStatefulAction(item.semanticAction ?? 'generic_run')
     ? ['resolution', 'effect', 'state']
     : ['effect']
@@ -89,7 +97,7 @@ function evidenceFacets(p: GuardProjection, item: GuardItem): Array<'resolution'
     if (!relevantEvidence(p, item, evidence)) continue
     if (evidence.evidenceRole) present.add(evidence.evidenceRole)
   }
-  return requiredEvidenceRoles(item).filter((facet) => !present.has(facet))
+  return requiredEvidenceRoles(p, item).filter((facet) => !present.has(facet))
 }
 
 /**
@@ -381,8 +389,8 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
   // mint evidence, never assert the action never ran. It fires only while NO
   // attributable role evidence exists — once a producer-chain fact is present
   // the item follows its normal evidence path.
-  const statefulChain = isStatefulAction(action)
-  const hasAttributableEvidence = requiredEvidenceRoles(item).some((role) => !missing_facets.includes(role))
+  const statefulChain = requiredEvidenceRoles(p, item).includes('resolution')
+  const hasAttributableEvidence = requiredEvidenceRoles(p, item).some((role) => !missing_facets.includes(role))
   const unattributed = hasAttributableEvidence ? undefined : unattributedExecutionOf(p, item)
   if (unattributed) {
     return verdict({
@@ -427,7 +435,9 @@ function judgeItemDiagnosis(p: GuardProjection, item: GuardItem): Omit<UnifiedIt
       tool: 'context_guard_prepare',
       resume_condition: statefulChain
         ? 'Collect the matching durable evidence in resolution/effect/state order, then checkpoint.'
-        : 'Collect the single matching durable verification fact, then checkpoint.',
+        : isStatefulAction(action)
+          ? 'Use the persisted native edit result and its independent context_guard_observe_file readback, then checkpoint. Do not repeat an edit only to mint evidence.'
+          : 'Collect the single matching durable verification fact, then checkpoint.',
     },
     attempt_fingerprint: fingerprint(p, item, 'missing_evidence'),
   })
@@ -450,7 +460,13 @@ export function itemDiagnosis(p: GuardProjection, item: GuardItem): { certifiabl
   }
 }
 
-const NATIVE_ADAPTERS = new Set(['dsh.bash.v1', 'dsh.pwsh.v1', 'dsh.shell.v1', 'dsh.read.v1', 'dsh.write.v1', 'dsh.edit.v1', 'dsh.web.v1'])
+const NATIVE_ADAPTERS = new Set([
+  'dsh.bash.v1', 'dsh.pwsh.v1', 'dsh.shell.v1', 'dsh.read.v1', 'dsh.write.v1', 'dsh.edit.v1', 'dsh.web.v1',
+  // These IDs are emitted by this build's read-only observer adapters. Unknown
+  // adapter IDs and versions still fail closed.
+  'context-guard.native-file.v1', 'context-guard.native-git.v1',
+  'context-guard.test-readiness.v1', 'context-guard.external-operation.v1',
+])
 
 export function evidenceAvailabilityReason(evidence: GuardEvidence): string | undefined {
   // C04: a delegated subagent's answer is bounded evidence. It is recorded,

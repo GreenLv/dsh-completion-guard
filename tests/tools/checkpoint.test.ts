@@ -80,7 +80,7 @@ describe('checkpoint tool registration', () => {
     expect(second.certificate).toBeDefined()
   })
 
-  it('copies a stateful predicate only from resolution evidence and never backfills it from observed state', async () => {
+  it('offers a stateful predicate only from matching resolution evidence and refuses a mismatched readback', async () => {
     const projection = createProjection()
     projection.enabled = true
     const item = captureClause('create /repo/output.txt', 'm1', 'R001', 1, { cwd: '/repo' })
@@ -127,7 +127,7 @@ describe('checkpoint tool registration', () => {
 
     projection.evidence.get('E-state')!.observedState = { post_digest: '44'.repeat(32) }
     const changed = await tool.execute({ bindings: [] }, undefined as never) as { open_items: Array<{ binding_template?: Record<string, unknown> }> }
-    expect(changed.open_items[0].binding_template?.expected_transition).toEqual(template.expected_transition)
+    expect(changed.open_items[0].binding_template).toBeUndefined()
     projection.evidence.get('E-state')!.observedState = { post_digest: '22'.repeat(32) }
 
     const certified = await tool.execute({ bindings: [template] } as never, undefined as never) as { status: string }

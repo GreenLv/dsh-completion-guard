@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import { Context } from '@deepseek-ai/cordis'
+import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
+import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { execFile } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -242,4 +245,95 @@ describe('native host file result and independent readback', () => {
     const resumed = derive(resumeEvents)
     expect(decideTurnBoundary(resumed, '继续。')).toMatchObject({ action: 'continue', reason: 'resume_with_actionable_work' })
   })
+})
+
+it('offers the certifiable native edit and foreground test bindings to an adopted Goal', async () => {
+  const id = SessionId('native-goal-feedback-v4')
+  const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
+  session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
+  session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }],
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+  session.append('user/message', createUserMessage({ content: [{ type: 'text', text:
+    'Edit /work/calculator.js so add(a,b) returns a+b. Run npm test in /work.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+  appendCall(session, 'read-before', 'read', { file_path: '/work/calculator.js' })
+  appendResult(session, 'read-before', 'exports.add = (a,b) => a-b;')
+  appendCall(session, 'edit-good', 'edit', { file_path: '/work/calculator.js', old_string: 'a-b', new_string: 'a+b' })
+  appendResult(session, 'edit-good', 'edited')
+  const content = 'exports.add = (a,b) => a+b;\n'
+  const digest = createHash('sha256').update(content).digest('hex')
+  appendCall(session, 'observe-good', 'context_guard_observe_file', { effect_call_id: 'edit-good' })
+  appendResult(session, 'observe-good', JSON.stringify({ status: 'observed', effect_call_id: 'edit-good', path: '/work/calculator.js', sha256: digest, action: 'modify' }),
+    { contextGuardNativeFile: { effectCallId: 'edit-good', path: '/work/calculator.js', sha256: digest, action: 'modify', canonicalPath: '/work/calculator.js', canonicalBase: '/work' } })
+  appendCall(session, 'test-good', 'bash', { command: 'npm test', workdir: '/work' })
+  appendResult(session, 'test-good', 'PASS')
+  appendCall(session, 'test-failed', 'bash', { command: 'false', workdir: '/work' })
+  appendResult(session, 'test-failed', '[exit code: 1]')
+  const events = session.snapshotEvents() as never
+  const projection = deriveProjection(events, { activation: 'opt-in' }, { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: String(id), createdAt: 1, seedLength: 0, delegationDepth: 0 } }, true, HOST).projection
+  projection.durabilityWatermark = 'confirmed'
+  projection.coreV2 = projectSessionCoreV2(events, projection)
+  const editItem = [...projection.items.values()].find(row => row.semanticAction === 'modify')!
+  const testItem = [...projection.items.values()].find(row => row.semanticAction === 'test')!
+  expect(editItem).toBeDefined(); expect(testItem).toBeDefined()
+  const ctx = new Context()
+  new SystemPrompt(ctx, {})
+  const runtime = new ToolRuntime(ctx)
+  runtime.register(createCheckpointTool(() => projection, () => {}))
+  const response = await runtime.execute({ callId: 'feedback' as never, name: 'context_guard_checkpoint',
+    arguments: { bindings: [] }, signal: new AbortController().signal })
+  expect(response.isError).toBe(false)
+  const page = response.value as { open_items: Array<{ id: string; reason_code: string; binding_template?: Record<string, unknown> }> }
+  const edit = page.open_items.find(row => row.id === editItem.id)!
+  const test = page.open_items.find(row => row.id === testItem.id)!
+  expect(edit.reason_code).not.toBe('historical_evidence_gap')
+  expect(edit.binding_template).toMatchObject({ evidence_ids: [expect.any(String), expect.any(String)],
+    effect_evidence_id: expect.any(String), state_evidence_ids: [expect.any(String)] })
+  expect(edit.binding_template).not.toHaveProperty('resolution_evidence_id')
+  expect(test.binding_template).toMatchObject({ evidence_ids: [expect.any(String)], effect_evidence_id: expect.any(String) })
+  const byCall = (callId: string) => [...projection.evidence.values()].find(row => row.callId === callId)!.id
+  expect(edit.binding_template?.evidence_ids).toEqual([byCall('edit-good'), byCall('observe-good')])
+  expect(test.binding_template?.evidence_ids).toEqual([byCall('test-good')])
+  const stateFact = [...projection.evidence.values()].find(row => row.callId === 'observe-good')!
+  const testFact = [...projection.evidence.values()].find(row => row.callId === 'test-good')!
+  for (const altered of [
+    { ...stateFact, causedByCallId: 'foreign-edit' },
+    { ...stateFact, resolvedTarget: { artifact_id: '/work/foreign.js' } },
+    { ...stateFact, outcome: 'failure' as const },
+  ]) {
+    projection.evidence.set(stateFact.id, altered)
+    const refused = await runtime.execute({ callId: `bad-state-${String(altered.causedByCallId ?? 'other')}` as never,
+      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    const row = (refused.value as typeof page).open_items.find(value => value.id === editItem.id)!
+    expect(row.binding_template).toBeUndefined()
+  }
+  projection.evidence.set(stateFact.id, stateFact)
+  projection.evidence.set(testFact.id, { ...testFact, outcome: 'failure' })
+  const failedTest = await runtime.execute({ callId: 'failed-test-feedback' as never,
+    name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+  expect((failedTest.value as typeof page).open_items.find(row => row.id === testItem.id)!.binding_template).toBeUndefined()
+  projection.evidence.set(testFact.id, testFact)
+  const bindings = [edit.binding_template!, test.binding_template!]
+  projection.currentGoalRef = { id: 'goal-native', revision: 1 }
+  const certified = await runtime.execute({ callId: 'certify' as never, name: 'context_guard_checkpoint',
+    arguments: { bindings }, signal: new AbortController().signal })
+  expect(certified.isError).toBe(false)
+  expect(certified.value).toMatchObject({ status: 'certified' })
+  const domainBindings = bindings.map(row => ({ itemId: row.item_id, evidenceIds: row.evidence_ids,
+    semanticAction: row.semantic_action, requestedTarget: row.requested_target, resolvedTarget: row.resolved_target,
+    observedState: row.observed_state, effectEvidenceId: row.effect_evidence_id,
+    ...(row.state_evidence_ids ? { stateEvidenceIds: row.state_evidence_ids } : {}),
+    ...(row.expected_transition ? { expectedTransition: {
+      predicateId: (row.expected_transition as Record<string, unknown>).predicate_id,
+      version: (row.expected_transition as Record<string, unknown>).version,
+      predParamsKind: (row.expected_transition as Record<string, unknown>).pred_params_kind,
+      parameters: (row.expected_transition as Record<string, unknown>).parameters,
+    } } : {}),
+  }))
+  const certificate = certifyCheckpoint(projection, domainBindings as never, 'C-goal', false)
+  expect(certificate.status, JSON.stringify(certificate.rejectedBindings)).toBe('certified')
+  expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete', goal_id: 'goal-native', revision: 1 })).toContain('certificate_missing')
+  expect(certificate.checkpoint).toMatchObject({ certificateVersion: '4', nativeObservations: { schema: 'dsh.native-observation/v2' } })
+  certificate.checkpoint!.recordedAtSeq = session.seq + 1
+  projection.checkpoints.push(certificate.checkpoint!)
+  expect(goalCompletionDenial(projection, 'update_goal', { action: 'complete', goal_id: 'goal-native', revision: 1 })).toBeUndefined()
 })

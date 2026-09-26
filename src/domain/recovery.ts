@@ -1,7 +1,7 @@
 import type { GuardItem, GuardProjection } from './types.js'
 import { sha256 } from './canonicalize.js'
 import { evidenceCoverage } from './matching.js'
-import { deriveItemDiagnosis, itemDiagnosis, relevantEvidence } from './diagnostics.js'
+import { deriveItemDiagnosis, itemDiagnosis, nativeFileTwoRole, relevantEvidence } from './diagnostics.js'
 import { isStatefulAction } from './protocol-manifest.js'
 import { DEPENDENCY_FREE_ONLY_CONDITION, type CapabilityGap, type CapabilityRemedy } from './capability-semantics.js'
 import { needsReviewObligations } from './closure.js'
@@ -109,7 +109,9 @@ export function closingHint(projection: GuardProjection, item: GuardItem, eviden
   if (verification.subject && verification.surface === 'artifact') parts.push(`subject '${verification.subject}'`)
   if (verification.subject && verification.surface === 'scope') parts.push('in the scope directory')
   const operation = verification.operation
-  if (item.semanticAction && isStatefulAction(item.semanticAction)) {
+  if (nativeFileTwoRole(projection, item)) {
+    parts.push('needs the persisted native edit effect + independent context_guard_observe_file readback for the same file; do not repeat the edit only to mint evidence')
+  } else if (item.semanticAction && isStatefulAction(item.semanticAction)) {
     parts.push(`needs ${item.semanticAction} resolution + effect + independent state readback with the same resolved target`)
   } else if (operation === 'run') {
     parts.push('needs a scope run effect: a whitelisted executable (git/pnpm/python/dsh/...) without pipes, `;` or `&&`, e.g. `python -m unittest`')

@@ -2,8 +2,8 @@ import { checkpointPage, type PageQuery } from './checkpoint-page.js'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { capabilityRemedyPhrase, deriveItemDiagnosis, itemDiagnosis, relevantEvidence, evidenceAvailabilityReason } from '../domain/diagnostics.js'
-import { certifyCheckpoint } from '../domain/checkpoint.js'
+import { capabilityRemedyPhrase, deriveItemDiagnosis, itemDiagnosis, nativeFileTwoRole, relevantEvidence, evidenceAvailabilityReason } from '../domain/diagnostics.js'
+import { bindingIndividuallyAccepted, certifyCheckpoint } from '../domain/checkpoint.js'
 import { ACTION_MANIFEST, isStatefulAction } from '../domain/protocol-manifest.js'
 import { availableBoundaryQualifications } from '../domain/boundary.js'
 import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from '../domain/proof.js'
@@ -87,42 +87,57 @@ function bindingTemplate(projection: GuardProjection, item: GuardItem): Record<s
   const action = item.semanticAction
   if (!action || action === 'generic_run') return undefined
   const evidence = evidenceForAction(projection, item)
-  const effect = evidence.find((entry) => (entry.evidenceRole ?? 'effect') === 'effect')
-  if (!effect?.resolvedTarget) return undefined
-  const resolved = effect.resolvedTarget
-  const resolution = isStatefulAction(action)
-    ? evidence.find((entry) => entry.evidenceRole === 'resolution' && sameTuple(entry.resolvedTarget, resolved))
-    : undefined
-  const states = isStatefulAction(action)
-    ? evidence.filter((entry) => entry.evidenceRole === 'state' && sameTuple(entry.resolvedTarget, resolved))
-    : []
-  if (isStatefulAction(action) && (!resolution || states.length === 0)) return undefined
-  if (isStatefulAction(action) && (!resolution?.expectedTransition?.parameters || !resolution.expectedTransitionDigest)) return undefined
-  const observed: TargetTuple = isStatefulAction(action)
-    ? Object.assign({}, ...states.map((entry) => entry.observedState ?? {}))
-    : effect.observedState ?? {}
-  const expectedTransition: ExpectedTransition = isStatefulAction(action)
-    ? resolution!.expectedTransition!
-    : {
-        predicateId: ACTION_MANIFEST.actions[action].predicateId,
-        version: 1,
-        predParamsKind: 'inline',
-        parameters: expectedParameters(action, resolved, observed),
+  const effects = evidence.filter((entry) => (entry.evidenceRole ?? 'effect') === 'effect')
+  // Newest first: a later failed or unrelated call cannot be substituted for
+  // the successful action, and old failed tests never outrank a fresh pass.
+  for (const effect of effects.reverse()) {
+    if (!effect.resolvedTarget) continue
+    const resolved = effect.resolvedTarget
+    const nativeFile = projection.boundaryProtocol === 6 && action === 'modify'
+      && !item.legacyFlags?.length && ['edit', 'edit_file'].includes(effect.toolName)
+    const states = nativeFile
+      ? evidence.filter((entry) => entry.evidenceRole === 'state' && entry.causedByCallId === effect.callId)
+      : isStatefulAction(action)
+        ? evidence.filter((entry) => entry.evidenceRole === 'state' && sameTuple(entry.resolvedTarget, resolved))
+        : []
+    const resolution = !nativeFile && isStatefulAction(action)
+      ? evidence.find((entry) => entry.evidenceRole === 'resolution' && sameTuple(entry.resolvedTarget, resolved))
+      : undefined
+    if (isStatefulAction(action) && !nativeFile && (!resolution || states.length === 0
+      || !resolution.expectedTransition?.parameters || !resolution.expectedTransitionDigest)) continue
+    const candidates = nativeFile ? states.map((state) => [state]) : [states]
+    for (const chosen of candidates) {
+      if (nativeFile && chosen.length !== 1) continue
+      const observed: TargetTuple = nativeFile
+        ? { post_digest: chosen[0]?.observedState?.post_digest ?? '' }
+        : isStatefulAction(action) ? Object.assign({}, ...chosen.map((entry) => entry.observedState ?? {}))
+          : effect.observedState ?? {}
+      const expectedTransition: ExpectedTransition = nativeFile
+        ? { predicateId: ACTION_MANIFEST.actions[action].predicateId, version: 1, predParamsKind: 'inline', parameters: observed }
+        : isStatefulAction(action) ? resolution!.expectedTransition!
+          : { predicateId: ACTION_MANIFEST.actions[action].predicateId, version: 1, predParamsKind: 'inline',
+              parameters: expectedParameters(action, resolved, observed) }
+      const binding = {
+        itemId: item.id, evidenceIds: (nativeFile ? [effect.id, chosen[0]!.id]
+          : isStatefulAction(action) ? [resolution!.id, effect.id, ...chosen.map((entry) => entry.id)] : [effect.id]),
+        semanticAction: action, requestedTarget: item.requestedTarget, resolvedTarget: resolved,
+        observedState: observed, expectedTransition,
+        ...(nativeFile ? { effectEvidenceId: effect.id, stateEvidenceIds: [chosen[0]!.id] }
+          : isStatefulAction(action) ? { resolutionEvidenceId: resolution!.id, effectEvidenceId: effect.id,
+              stateEvidenceIds: chosen.map((entry) => entry.id) } : { effectEvidenceId: effect.id }),
       }
-  return {
-    item_id: item.id,
-    evidence_ids: (isStatefulAction(action) ? [resolution!.id, effect.id, ...states.map((entry) => entry.id)] : [effect.id]) as JsonValue,
-    semantic_action: action,
-    requested_target: targetForTool(item.requestedTarget),
-    resolved_target: targetForTool(resolved),
-    observed_state: targetForTool(observed),
-    expected_transition: expectedTransitionForTool(expectedTransition),
-    ...(isStatefulAction(action) ? {
-      resolution_evidence_id: resolution!.id,
-      effect_evidence_id: effect.id,
-      state_evidence_ids: states.map((entry) => entry.id),
-    } : { effect_evidence_id: effect.id }),
-  } as Record<string, JsonValue>
+      if (!bindingIndividuallyAccepted(projection, item, binding)) continue
+      return {
+        item_id: item.id, evidence_ids: binding.evidenceIds as JsonValue, semantic_action: action,
+        requested_target: targetForTool(item.requestedTarget), resolved_target: targetForTool(resolved),
+        observed_state: targetForTool(observed), expected_transition: expectedTransitionForTool(expectedTransition),
+        ...(nativeFile ? { effect_evidence_id: effect.id, state_evidence_ids: [chosen[0]!.id] }
+          : isStatefulAction(action) ? { resolution_evidence_id: resolution!.id, effect_evidence_id: effect.id,
+              state_evidence_ids: chosen.map((entry) => entry.id) } : { effect_evidence_id: effect.id }),
+      } as Record<string, JsonValue>
+    }
+  }
+  return undefined
 }
 
 function openItemForTool(projection: GuardProjection, item: GuardItem): Record<string, JsonValue> {
@@ -167,7 +182,8 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
     predicate: {
       predicate_id: spec.predicateId,
       version: 1,
-      parameters_source: isStatefulAction(action) ? 'resolution_evidence_expected_transition' : 'versioned_action_manifest',
+      parameters_source: nativeFileTwoRole(projection, item) ? 'native_state_readback'
+        : isStatefulAction(action) ? 'resolution_evidence_expected_transition' : 'versioned_action_manifest',
       resolved_target_keys: spec.resolvedTargetKeys,
       observed_state_keys: spec.observedStateKeys,
       pred_params_kind: 'inline',

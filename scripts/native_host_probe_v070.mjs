@@ -80,15 +80,16 @@ export function createProbeProgress(config, digest) {
     if (config.progressOutput) appendFileSync(config.progressOutput, JSON.stringify(value) + '\n')
   }
   const timed = async (stage, fn, operation = true) => {
+    const budget = /^(?:open_|import_|dispose_)/.test(stage) ? 90000 : 30000
     const began = Date.now()
     record(stage, 'started')
     let timer
     try {
       const value = operation ? await Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(Object.assign(new Error('probe operation deadline'), { code: 'PROBE_OPERATION_TIMEOUT' })), 30000)
+        timer = setTimeout(() => reject(Object.assign(new Error('probe operation deadline'), { code: 'PROBE_OPERATION_TIMEOUT' })), budget)
       })]) : await fn()
       // Synchronous host work can block the timer; still fail its elapsed budget.
-      if (operation && Date.now() - began > 30000) throw Object.assign(new Error('probe operation deadline'), { code: 'PROBE_OPERATION_TIMEOUT' })
+      if (operation && Date.now() - began > budget) throw Object.assign(new Error('probe operation deadline'), { code: 'PROBE_OPERATION_TIMEOUT' })
       record(stage, 'passed', Date.now() - began)
       return value
     } catch (error) {

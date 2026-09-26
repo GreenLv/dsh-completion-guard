@@ -120,6 +120,13 @@ it('persists bound progress and detects async and synchronous operation deadline
   expect(await progress.timed('import_domain', async () => 7)).toBe(7)
   await expect(progress.timed('import_domain', async () => { throw new Error('/private/token') })).rejects.toThrow()
   vi.useFakeTimers()
+  const slowOpen = progress.timed('open_root', () => new Promise(resolve => setTimeout(() => resolve('ready'), 45000)))
+  await vi.advanceTimersByTimeAsync(45000)
+  expect(await slowOpen).toBe('ready')
+  const slowImport = progress.timed('import_domain', () => new Promise(() => {}))
+  const importRejection = expect(slowImport).rejects.toMatchObject({ code: 'PROBE_OPERATION_TIMEOUT' })
+  await vi.advanceTimersByTimeAsync(90000)
+  await importRejection
   const hanging = progress.timed('tool_read', () => new Promise(() => {}))
   const rejection = expect(hanging).rejects.toMatchObject({ code: 'PROBE_OPERATION_TIMEOUT' })
   await vi.advanceTimersByTimeAsync(30000)
@@ -129,7 +136,7 @@ it('persists bound progress and detects async and synchronous operation deadline
   const text = readFileSync(progressOutput, 'utf8')
   const rows = text.trim().split('\n').map(line => JSON.parse(line))
   expect(rows.every(row => row.source_commit === config.sourceCommit && row.artifact_sha256 === config.artifactSha256 && row.nonce === 'unit')).toBe(true)
-  expect(rows.filter(row => row.status === 'timed_out')).toHaveLength(2)
+  expect(rows.filter(row => row.status === 'timed_out')).toHaveLength(3)
   expect(text).not.toContain('/private/token')
  } finally { vi.useRealTimers(); rmSync(folder, { recursive: true, force: true }) }
 })

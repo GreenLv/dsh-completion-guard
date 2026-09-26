@@ -1,7 +1,7 @@
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { GuardItem, GuardProjection } from '../domain/types.js'
-import { deriveItemDiagnosis, evidenceAvailabilityReason, relevantEvidence } from '../domain/diagnostics.js'
+import { deriveItemDiagnosis, evidenceAvailabilityReason, nativeFileTwoRole, relevantEvidence } from '../domain/diagnostics.js'
 import { actionPreparation } from './action-preparation.js'
 import {
   ACTION_MANIFEST, isStatefulAction, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved,
@@ -488,8 +488,10 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       // exactly one matching fact in the `effect` role, which is the manifest
       // the certifier accepts. Wording below must not promise roles the
       // certifier would refuse.
-      const requiredOrder = plannedAction && isStatefulAction(plannedAction)
-        ? ['resolution (prestate facts from a trusted read)', 'effect (the exact planned change)', 'state (independent post-state readback)']
+      const requiredOrder = nativeFileTwoRole(p, item)
+        ? ['effect (the persisted native edit result)', 'state (independent context_guard_observe_file readback)']
+        : plannedAction && isStatefulAction(plannedAction)
+          ? ['resolution (prestate facts from a trusted read)', 'effect (the exact planned change)', 'state (independent post-state readback)']
         : ['effect (one matching durable verification fact)']
 
       const capability = plannedAction && options.hostCapability

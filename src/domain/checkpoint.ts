@@ -470,6 +470,20 @@ function simpleRecord(projection: GuardProjection, item: GuardItem, binding: Evi
   } }
 }
 
+/** Preview one evidence binding through the same per-item acceptance checks as
+ * certificate construction. This does not decide whole-contract closure. */
+export function bindingIndividuallyAccepted(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): boolean {
+  if (item.status === 'superseded' || item.targetCaptureStatus === 'clarification_required'
+    || binding.semanticAction !== item.semanticAction || !tuplesEqual(binding.requestedTarget, item.requestedTarget)
+    || evidenceProblem(projection, item, binding)
+    || (projection.policy === 'strict' && strictProofProblem(projection, item, binding))) return false
+  const built = isStatefulAction(item.semanticAction ?? 'generic_run')
+    ? binding.resolutionEvidenceId ? richStatefulRecord(projection, item, binding)
+      : item.semanticAction === 'commit' || item.semanticAction === 'push' ? nativeGitRecord(projection, item, binding) : nativeFileRecord(projection, item, binding)
+    : simpleRecord(projection, item, binding)
+  return built.record !== undefined && built.rejected === undefined
+}
+
 export function certifyCheckpoint(projection: GuardProjection, bindings: EvidenceBinding[], id: string, commit = true): CheckpointResult {
   if (projection.integrity !== 'valid' || projection.hostStatus !== 'supported') {
     return { status: 'unknown', contractRevision: projection.contractRevision, openItems: certifiableOpenItems(projection).map((item) => item.id), rejectedBindings: [] }
