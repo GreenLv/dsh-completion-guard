@@ -353,6 +353,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         diagnostics_output = args.output.with_name(args.output.name + ".diagnostics.json")
         if args.transfer_receipt and diagnostics_output.resolve() == args.transfer_receipt.resolve():
             raise NativeRunError("diagnostics and transfer receipt need different output paths")
+        progress_output = Path(str(diagnostics_output) + ".stages.jsonl")
+        if args.transfer_receipt and progress_output.resolve() == args.transfer_receipt.resolve():
+            raise NativeRunError("progress and transfer receipt need different output paths")
+        check_output_path(progress_output, args.repo_root)
         check_output_path(diagnostics_output, args.repo_root)
         check_output_path(args.output, args.repo_root)
         module = preflight_inputs(args)

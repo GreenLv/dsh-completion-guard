@@ -58,6 +58,18 @@ class NativeAcceptanceEntrypointTests(unittest.TestCase):
             execute.assert_not_called()
             self.assertEqual(output.read_bytes(), b"original evidence")
 
+    def test_existing_progress_sidecar_is_preserved_before_install(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            progress = Path(str(output) + ".diagnostics.json.stages.jsonl")
+            progress.parent.mkdir(parents=True, exist_ok=True)
+            progress.write_text("original evidence")
+            with mock.patch.object(NATIVE, "portable_acceptance") as execute, \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                NATIVE.main(args)
+            execute.assert_not_called()
+            self.assertEqual(progress.read_text(), "original evidence")
+
     def test_bad_transfer_metadata_fails_before_any_acceptance(self):
         for extra in (("--transport-url", "http://example.invalid/result"),
                       ("--transport-url", "https://token@example.invalid/result"), ()):
@@ -312,6 +324,26 @@ class HostBoundEntrypointTests(unittest.TestCase):
         with mock.patch.object(self.host.subprocess, "run", return_value=completed):
             with self.assertRaisesRegex(RuntimeError, "code 7"):
                 self.host.run_host_command(Path("."), {}, "node")
+
+    def test_probe_progress_requires_identity_and_redacts_extra_fields(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "stages.jsonl"
+            row = {"schema": "dsh-native-progress/v1", "artifact_sha256": "a" * 64,
+                   "source_commit": "b" * 40, "nonce": "unit", "driver_sha256": "c" * 64,
+                   "stage": "tool_read", "status": "started", "pid": 1,
+                   "elapsed_ms": 0, "total_elapsed_ms": 25, "secret": "/private/token"}
+            path.write_text(json.dumps(row) + "\n{partial")
+            args = (path, "a" * 64, "b" * 40, "unit", "c" * 64)
+            value = self.host.safe_probe_progress(*args)
+            self.assertEqual(value["stage"], "tool_read")
+            self.assertNotIn("secret", value)
+            self.assertIsNone(self.host.safe_probe_progress(path, "wrong", *args[2:]))
+            row["stage"] = "/private/token"
+            path.write_text(json.dumps(row))
+            self.assertIsNone(self.host.safe_probe_progress(*args))
+        self.assertEqual(self.host.INITIAL_V070_TIMEOUT, 600)
+        self.assertEqual(self.host.RESTART_TIMEOUT, 90)
+        self.assertEqual(self.host.HostProbeDeadline.diagnostic_code, "PROBE_TOTAL_BUDGET_EXCEEDED")
 
     def test_failure_note_retains_stage_and_codes_without_raw_output(self):
         value = subprocess.CompletedProcess([], 2, b"private config", b"ERR_MODULE_NOT_FOUND private-path")

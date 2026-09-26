@@ -107,3 +107,45 @@ it.each(['short', 'long'])('retrieves a %s Windows test template through the nat
  const passedPage = await tool.execute({ bindings: [], item_ids: [item.id] }, undefined as never)
  expect((await readProbeItem(call, passedPage, item.id)).status).toBe('passed')
 })
+
+it('persists bound progress and detects async and synchronous operation deadlines', async () => {
+ const { createProbeProgress } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const { readFileSync } = await import('node:fs')
+ const { vi } = await import('vitest')
+ const folder = mkdtempSync(join(tmpdir(), 'probe-progress-'))
+ const progressOutput = join(folder, 'stages.jsonl')
+ const config = { progressOutput, sourceCommit: 'a'.repeat(40), artifactSha256: 'b'.repeat(64), nonce: 'unit', profile: 'headless' }
+ try {
+  const progress = createProbeProgress(config, 'c'.repeat(64))
+  expect(await progress.timed('import_domain', async () => 7)).toBe(7)
+  await expect(progress.timed('import_domain', async () => { throw new Error('/private/token') })).rejects.toThrow()
+  vi.useFakeTimers()
+  const hanging = progress.timed('tool_read', () => new Promise(() => {}))
+  const rejection = expect(hanging).rejects.toMatchObject({ code: 'PROBE_OPERATION_TIMEOUT' })
+  await vi.advanceTimersByTimeAsync(30000)
+  await rejection
+  await expect(progress.timed('root_prestep', () => { vi.setSystemTime(Date.now() + 30001); return 1 })).rejects.toMatchObject({ code: 'PROBE_OPERATION_TIMEOUT' })
+  vi.useRealTimers()
+  const text = readFileSync(progressOutput, 'utf8')
+  const rows = text.trim().split('\n').map(line => JSON.parse(line))
+  expect(rows.every(row => row.source_commit === config.sourceCommit && row.artifact_sha256 === config.artifactSha256 && row.nonce === 'unit')).toBe(true)
+  expect(rows.filter(row => row.status === 'timed_out')).toHaveLength(2)
+  expect(text).not.toContain('/private/token')
+ } finally { vi.useRealTimers(); rmSync(folder, { recursive: true, force: true }) }
+})
+
+it('writes a failed probe receipt when initialization imports fail', async () => {
+ const { apply } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const { readFileSync } = await import('node:fs')
+ const folder = mkdtempSync(join(tmpdir(), 'probe-init-'))
+ let ready: (() => Promise<void>) | undefined
+ try {
+  apply({ effect: (fn: () => unknown) => fn(), appReady: { onReady: (fn: () => Promise<void>) => { ready = fn } } },
+   { runtimeRoot: folder, profileRoot: folder, output: join(folder, 'probe'), nonce: 'init' })
+  await ready!()
+  const result = JSON.parse(readFileSync(join(folder, `probe.${process.pid}.json`), 'utf8'))
+  expect(result.status).toBe('failed')
+  expect(result.cases[0].id).toBe('initialize_runtime')
+  expect(result.real_model_request).toBe(false)
+ } finally { rmSync(folder, { recursive: true, force: true }) }
+})

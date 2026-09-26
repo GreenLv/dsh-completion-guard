@@ -12,6 +12,7 @@ import tarfile
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import signal
@@ -95,11 +96,13 @@ def redacted_host_stderr(data: bytes) -> str:
 
 
 def write_host_diagnostic(path: Path, stage: str, error: BaseException, digest: str,
-                          source_commit: str) -> None:
+                          source_commit: str, progress: dict[str, Any] | None = None) -> None:
     """External sidecar survives fixture cleanup without extending the annex."""
     record = {"schema": "dsh-native-diagnostic/v1", "artifact_sha256": digest,
               "source_commit": source_commit, "failure": json.loads(failure_note(stage, error)),
               "stderr_redacted": getattr(error, "stderr_redacted", "unrecognized_host_error")}
+    if progress is not None:
+        record["probe_progress"] = progress
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
@@ -277,6 +280,45 @@ def http_json(origin: str, path: str, method: str = "GET", request_origin: str |
         return exc.code, {}
 
 
+# Full nine-case budget includes twelve create/resume operations and byte audits.
+# Restart remains a separate short gate; neither budget relaxes tool/root signals.
+INITIAL_V070_TIMEOUT = 600
+RESTART_TIMEOUT = 90
+
+
+class HostProbeDeadline(RuntimeError):
+    diagnostic_code = "PROBE_TOTAL_BUDGET_EXCEEDED"
+
+
+def safe_probe_progress(path: Path, digest: str, commit: str, nonce: str,
+                        driver: str) -> dict[str, Any] | None:
+    """Read only bound, fixed-label facts; never relay arbitrary probe payloads."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    latest = None
+    timed_out = None
+    for line in lines:
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(value, dict) or any(value.get(k) != v for k, v in {
+            "schema": "dsh-native-progress/v1", "artifact_sha256": digest,
+            "source_commit": commit, "nonce": nonce, "driver_sha256": driver}.items()):
+            continue
+        if (not isinstance(value.get("stage"), str)
+                or not re.fullmatch(r"[a-z0-9_]{1,100}", value["stage"])
+                or value.get("status") not in {"started", "passed", "failed", "timed_out"}
+                or any(type(value.get(k)) is not int or value[k] < 0 for k in ("elapsed_ms", "total_elapsed_ms", "pid"))):
+            continue
+        latest = {k: value[k] for k in ("stage", "status", "elapsed_ms", "total_elapsed_ms", "pid")}
+        if value["status"] == "timed_out":
+            timed_out = latest
+    return timed_out or latest
+
+
 def wait_until(callback, timeout: int = 90):
     deadline = time.monotonic() + timeout
     delay = 0.1
@@ -289,7 +331,7 @@ def wait_until(callback, timeout: int = 90):
             pass
         time.sleep(delay)
         delay = min(delay * 1.5, 2)
-    raise RuntimeError("host acceptance deadline exceeded")
+    raise HostProbeDeadline("host acceptance deadline exceeded")
 
 
 def owns_host_command(command: str, cli: Path, overlay: Path, windows: bool = False) -> bool:
@@ -437,6 +479,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
     probe = root / "scripts" / ("native_host_probe_v070.mjs" if protocol == "v070" else "native_host_probe.mjs")
     driver_digest = probe_driver_digest(root, protocol)
+    progress_path = None
+    nonce = ""
     processes: list[subprocess.Popen] = []
     log_handles = []
     gates = result["gates"]
@@ -452,6 +496,11 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         gates.append(api.gate(id, digest, passed=True))
 
     try:
+        if protocol == "v070" and diagnostics_output is not None:
+            progress_path = Path(str(diagnostics_output) + ".stages.jsonl")
+            progress_path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(progress_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            os.close(descriptor)
         runtime_manifest, selected = preflight_host_inputs(root, runtime_root, targets or {}, protocol)
         # Optional daily targets are read-only inputs, never destinations.
         # A caller supplying one must supply both; no silent fixture fallback.
@@ -524,7 +573,9 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             overlay = temporary / f"{profile}-probe.patch.yml"
             overlays.append(overlay)
             config = {"runtimeRoot": str(runtime_root), "workRoot": str(work), "nonce": nonce, "output": str(receipt), "profile": profile,
-                      "profileRoot": str(profile_root), "hostPackages": packages, "fixtureTgz": str(fixture_new)}
+                      "profileRoot": str(profile_root), "hostPackages": packages, "fixtureTgz": str(fixture_new),
+                      "sourceCommit": result["repository"]["commit"], "artifactSha256": digest,
+                      **({"progressOutput": str(progress_path)} if progress_path else {})}
             # JSON is valid YAML. Isolated Headless loads its real base services
             # with the interactive task driver disabled; no model is requested.
             patches = [{"id": "context-guard", "config": {"activation": "always",
@@ -572,7 +623,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                         diagnostic_code = known_error_code(diagnostic_tail)
                     raise HostCommandError("node", process.returncode, diagnostic_code, diagnostic_tail)
                 return None
-            first = wait_until(probe_result)
+            first = wait_until(probe_result, timeout=INITIAL_V070_TIMEOUT if protocol == "v070" else 90)
             for row in first["cases"]:
                 passed(f"{profile}_{row['id']}")
             if port is not None:
@@ -607,7 +658,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 process = subprocess.Popen(argv, cwd=work, env=environment, stdout=log, stderr=log,
                                            start_new_session=platform.system() != "Windows")
                 processes.append(process)
-                second = wait_until(lambda: probe_result({first["pid"]}))
+                second = wait_until(lambda: probe_result({first["pid"]}), timeout=RESTART_TIMEOUT)
                 if second["pid"] == first["pid"]:
                     raise RuntimeError("restart did not change host process")
                 passed("web_owned_restart_and_persisted_resume")
@@ -619,7 +670,9 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             passed(f"{profile}_shell_shim")
     except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError, RuntimeError) as error:
         if diagnostics_output is not None:
-            write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"])
+            write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"],
+                                  safe_probe_progress(progress_path, digest, result["repository"]["commit"], nonce, driver_digest)
+                                  if progress_path else None)
         gates.append(api.gate("host_bound_acceptance", digest, passed=False,
                               note=failure_note(stage, error)))
     finally:

@@ -3,7 +3,7 @@
  * Certificates belong to explicitly adopted proof, Goal, or release paths. */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolCall, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
@@ -68,24 +68,61 @@ export function assertOrdinaryCheckpoint(value, status) {
   assert.ok(value.open_items.every(row => row.binding_template === undefined))
 }
 
+/** Only fixed probe labels and identity fields enter the external sidecar. */
+export function createProbeProgress(config, digest) {
+  const started = Date.now()
+  const record = (stage, status, elapsed = 0) => {
+    if (!/^[a-z0-9_]{1,100}$/.test(stage)) throw new Error('invalid probe stage')
+    const value = { schema: 'dsh-native-progress/v1', source_commit: config.sourceCommit,
+      artifact_sha256: config.artifactSha256, nonce: config.nonce, driver_sha256: digest,
+      pid: process.pid, profile: config.profile, stage, status, elapsed_ms: elapsed,
+      total_elapsed_ms: Date.now() - started }
+    if (config.progressOutput) appendFileSync(config.progressOutput, JSON.stringify(value) + '\n')
+  }
+  const timed = async (stage, fn, operation = true) => {
+    const began = Date.now()
+    record(stage, 'started')
+    let timer
+    try {
+      const value = operation ? await Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(Object.assign(new Error('probe operation deadline'), { code: 'PROBE_OPERATION_TIMEOUT' })), 30000)
+      })]) : await fn()
+      // Synchronous host work can block the timer; still fail its elapsed budget.
+      if (operation && Date.now() - began > 30000) throw Object.assign(new Error('probe operation deadline'), { code: 'PROBE_OPERATION_TIMEOUT' })
+      record(stage, 'passed', Date.now() - began)
+      return value
+    } catch (error) {
+      record(stage, error?.code === 'PROBE_OPERATION_TIMEOUT' ? 'timed_out' : 'failed', Date.now() - began)
+      throw error
+    } finally { clearTimeout(timer) }
+  }
+  return { record, timed }
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
-    const digest = driverDigest()
-    const runtime = runtimeRequire(config.runtimeRoot)
-    const { createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href)
-    const { SessionId } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href)
-    const domain = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href)
     const rows = []
+    let digest = ''
+    let progress
     let handle
     let current = 'initialize_runtime'
     let operation = 'initialize'
     let lastTool = null
-    let ordinal = 0
     let mode = 'initial'
+    try {
+      digest = driverDigest()
+      progress = createProbeProgress(config, digest)
+      progress.record('initialize', 'started')
+    const runtime = runtimeRequire(config.runtimeRoot)
+    const { createUserMessage, createToolResultMessage, createAssistantMessage } = await progress.timed('import_llm', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
+    const { SessionId } = await progress.timed('import_session', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href))
+    const domain = await progress.timed('import_domain', () => import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href))
+    progress.record('initialize', 'passed')
+    let ordinal = 0
     const sessionFor = label => SessionId(`guard-native-${config.nonce}-${label}`)
     const open = async (label, resume = false) => {
-      if (handle) await handle.dispose()
-      handle = await createProbeAgent(ctx, sessionFor(label), config.workRoot, resume)
+      if (handle) await progress.timed('dispose_previous', () => handle.dispose())
+      handle = await progress.timed('open_' + label.replaceAll('-', '_'), () => createProbeAgent(ctx, sessionFor(label), config.workRoot, resume))
       ordinal = 0
       return handle.agent
     }
@@ -109,14 +146,14 @@ export function apply(ctx, config) {
       view.coreV2 = domain.projectSessionCoreV2(events(), view)
       return view
     }
-    const flush = async () => assert.equal(await ctx.sessions.flush(handle.agent.session), true)
+    const flush = async () => assert.equal(await progress.timed('flush', () => ctx.sessions.flush(handle.agent.session)), true)
     const root = async phrase => {
       operation = 'root_pre_step'
       const turn = startProbeTurn(handle.agent.session)
       const message = createUserMessage({ content: [{ type: 'text', text: phrase }], source: { kind: 'user' } })
-      const decision = await handle.agent.ctx.waterfall('agent/pre-step', {
+      const decision = await progress.timed('root_prestep', () => handle.agent.ctx.waterfall('agent/pre-step', {
         agent: handle.agent, messages: [message], turn, step: ++ordinal, signal: AbortSignal.timeout(30000),
-      }, async () => ({ kind: 'enter', messages: [message] }))
+      }, async () => ({ kind: 'enter', messages: [message] })))
       assert.equal(decision.kind, 'enter')
       for (const entry of decision.messages) handle.agent.session.append('user/message', entry, { surfaceOp: 'append' })
       await flush()
@@ -126,7 +163,7 @@ export function apply(ctx, config) {
       const callId = `native-v070-${process.pid}-${agent.session.seq}-${++ordinal}`
       const coordinates = appendProbeToolCall(agent.session, createAssistantMessage, callId, name, args)
       operation = `tool_${name}`
-      const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
+      const result = await progress.timed('tool_' + name, () => agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) }))
       lastTool = { name, registered: Boolean(agent.ctx.tools.get(name, agent)),
         is_error: result.isError, status: typeof result.value?.status === 'string' ? result.value.status : null,
         error_code: typeof result.error?.info?.code === 'string' ? result.error.info.code : null,
@@ -145,12 +182,12 @@ export function apply(ctx, config) {
     const check = async (id, fn) => {
       current = id
       operation = id
-      const pair = await fn()
+      const pair = await progress.timed('case_' + id, fn, false)
       assert.equal(pair.positive, true, `${id} positive`)
       assert.equal(pair.negative, true, `${id} negative`)
       rows.push({ id, status: 'passed', positive: true, negative: true })
+      progress.record('result_' + id, 'passed')
     }
-    try {
       if (existsSync(`${config.output}.complete`)) {
         mode = 'restart'
         const receipt = JSON.parse(readFileSync(`${config.output}.complete`, 'utf8'))
@@ -342,10 +379,11 @@ export function apply(ctx, config) {
         })
       }
     } catch (error) {
+      progress?.record('probe_failure', 'failed')
       rows.push({ id: current, status: 'failed', positive: false, negative: false, operation, last_tool: lastTool,
         error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })
     } finally {
-      if (handle) { try { await handle.dispose() } catch { rows.push({ id: 'v070_agent_cleanup', status: 'failed', positive: false, negative: false }) } }
+      if (handle) { try { await progress.timed('dispose_final', () => handle.dispose()) } catch { rows.push({ id: 'v070_agent_cleanup', status: 'failed', positive: false, negative: false }) } }
       const result = { schema: 'dsh-native-host-probe/v2', nonce: config.nonce, pid: process.pid, mode,
         driver_sha256: digest, status: rows.length === (mode === 'initial' ? INITIAL_CASES.length : 1)
           && rows.every(row => row.status === 'passed') ? 'passed' : 'failed',
