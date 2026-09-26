@@ -64,6 +64,18 @@ function createRebindTool(getProjection, prepare) {
 }
 
 //#endregion
+//#region src/tools/cursor-identity.ts
+/** The Session observation watermark advances when a read-only Guard tool
+* records its own result. It is not a change to the current business state.
+* Keep every other core field in cursor identity so changed predicates,
+* actions, coverage, and release state still invalidate a page. */
+function semanticCoreCursorState(core) {
+	if (!core) return null;
+	const { as_of: _observationWatermark,...semantic } = core;
+	return semantic;
+}
+
+//#endregion
 //#region src/tools/checkpoint-page.ts
 const LANES = [
 	"open_items",
@@ -87,7 +99,7 @@ function checkpointPage(p, query, full) {
 		revision: p.contractRevision,
 		evidence: [...p.evidence.values()],
 		items: [...p.items.values()],
-		...full.current_feedback === true ? { current_core: p.coreV2 } : {},
+		...full.current_feedback === true ? { current_core: semanticCoreCursorState(p.coreV2) } : {},
 		item_ids,
 		evidence_ids,
 		evidence_scope,
@@ -1496,7 +1508,6 @@ function createPrepareTool(options) {
 			}
 			if (args.item_id === void 0) {
 				const filter = args.semantic_action ?? null;
-				const coreIdentity = currentFeedback ? sha256(JSON.stringify(p.coreV2 ?? null)) : void 0;
 				const invalidCursor = (reason_code, note) => ({
 					status: "rejected",
 					reason_code,
@@ -1504,6 +1515,15 @@ function createPrepareTool(options) {
 					contract_revision: p.contractRevision,
 					...note !== void 0 ? { note } : { note: "Re-run discovery without page_cursor to list from the first page." }
 				});
+				const eligible = discoveryItemIds(p).map((id) => ({
+					id,
+					sourced: currentFeedback ? sourceItemForCoreRequirement(p, id) : void 0,
+					item: currentFeedback ? sourceItemForCoreRequirement(p, id)?.item : p.items.get(id)
+				})).filter((entry) => entry.item !== void 0).filter(({ item: item$1, sourced }) => filter === null || (sourced?.origin?.action ?? item$1.semanticAction ?? "generic_run") === filter);
+				const coreIdentity = currentFeedback ? sha256(JSON.stringify({
+					core: semanticCoreCursorState(p.coreV2),
+					listing: eligible.map(({ id, item: item$1 }) => [id, item$1.revision])
+				})) : void 0;
 				let startAfter;
 				if (args.page_cursor !== void 0) {
 					let parsed;
@@ -1521,11 +1541,6 @@ function createPrepareTool(options) {
 					if ((parsed.f ?? null) !== (filter ?? null)) return invalidCursor("discovery_cursor_filter_mismatch");
 					startAfter = parsed.k;
 				}
-				const eligible = discoveryItemIds(p).map((id) => ({
-					id,
-					sourced: currentFeedback ? sourceItemForCoreRequirement(p, id) : void 0,
-					item: currentFeedback ? sourceItemForCoreRequirement(p, id)?.item : p.items.get(id)
-				})).filter((entry) => entry.item !== void 0).filter(({ item: item$1, sourced }) => filter === null || (sourced?.origin?.action ?? item$1.semanticAction ?? "generic_run") === filter);
 				const startIndex = startAfter === void 0 ? 0 : eligible.findIndex(({ id, item: item$1 }) => item$1.revision === startAfter[0] && id === startAfter[1]) + 1;
 				if (startAfter !== void 0 && startIndex <= 0) return invalidCursor("discovery_cursor_stale", "The cursor names an item no longer in the current listing. Re-run discovery without page_cursor.");
 				const page = eligible.slice(startIndex, startIndex + DISCOVERY_ITEM_LIMIT);

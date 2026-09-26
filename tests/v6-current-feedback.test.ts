@@ -401,7 +401,7 @@ describe('default v6 current feedback', () => {
       open_items: [{ id: 'R001', reason_code: 'legacy_review' }] })
   })
 
-  it('invalidates a discovery cursor when only the confirmed core waterline changes', async () => {
+  it('keeps a discovery cursor across a read-only waterline and rejects changed predicates', async () => {
     const { derive } = fixture()
     const projection = derive()
     const original = projection.items.get('R001')!
@@ -413,6 +413,9 @@ describe('default v6 current feedback', () => {
     const first = await tool.execute({} as never, undefined as never) as { has_more: boolean; next_cursor: string }
     expect(first.has_more).toBe(true)
     projection.coreV2 = { ...projection.coreV2, as_of: 11 }
+    const continued = await tool.execute({ page_cursor: first.next_cursor } as never, undefined as never) as Record<string, unknown>
+    expect(continued).toMatchObject({ status: 'prepared', mode: 'discovery' })
+    projection.coreV2 = { ...projection.coreV2, predicates: { ...projection.coreV2.predicates as Record<string, string>, R009: 'satisfied' } }
     const stale = await tool.execute({ page_cursor: first.next_cursor } as never, undefined as never) as Record<string, unknown>
     expect(stale).toMatchObject({ status: 'rejected', reason_code: 'discovery_cursor_stale' })
   })
@@ -434,4 +437,58 @@ describe('default v6 current feedback', () => {
     expect(replay.lastCheckpointRejections).toBeUndefined()
     expect(replay.coreV2?.predicates).toMatchObject({ R001: 'satisfied' })
   })
+})
+
+it('traverses real Session discovery and checkpoint pages after persisted read-only results', async () => {
+  const root = Array.from({ length: 12 }, (_, index) => `请创建 /work/item-${index + 1}.txt 并读取确认。`).join('\n')
+  const { session } = fixture(root)
+  let active = session
+  const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: String(session.id), createdAt: 1, seedLength: 0, delegationDepth: 0 } }
+  const derive = () => {
+    const events = active.snapshotEvents() as never
+    const p = deriveProjection(events, { activation: 'always' }, scope, true, HOST).projection
+    p.durabilityWatermark = 'confirmed'
+    p.coreV2 = projectSessionCoreV2(events, p)
+    return p
+  }
+  const ctx = new Context()
+  new SystemPrompt(ctx, {})
+  const runtime = new ToolRuntime(ctx)
+  runtime.register(createPrepareTool({ getProjection: derive }))
+  runtime.register(createCheckpointTool(derive, () => {}))
+  let step = 1
+  const run = async (name: 'context_guard_prepare' | 'context_guard_checkpoint', args: Record<string, unknown>) => {
+    const callId = `page-${step}` as never
+    const result = await runtime.execute({ callId, name, arguments: args, signal: new AbortController().signal })
+    expect(result.isError).toBe(false)
+    active.append('tool/call', { turn: 1, step, callId, name, arguments: JSON.stringify(args) })
+    active.append('tool/result', { turn: 1, step, message: createToolResultMessage({ callId, content: result.content, isError: result.isError }) }, { surfaceOp: 'append' })
+    active = Session.fromRestore(active.id, structuredClone(active.snapshotEvents()) as never,
+      structuredClone(active.header), SessionLogOffset(0), 'detached')
+    step++
+    return result.value as Record<string, unknown>
+  }
+  const first = await run('context_guard_prepare', {})
+  expect(first).toMatchObject({ mode: 'discovery', has_more: true, listed: 8 })
+  const second = await run('context_guard_prepare', { page_cursor: first.next_cursor })
+  expect(second).toMatchObject({ mode: 'discovery', has_more: false })
+  const items = [...first.items as Array<{ id: string }>, ...second.items as Array<{ id: string }>]
+  expect(new Set(items.map(row => row.id)).size).toBe(items.length)
+  expect(items.length).toBe(first.total_open)
+  const checkpoint = await run('context_guard_checkpoint', { bindings: [], limit: 4 })
+  const cursor = (checkpoint.pagination as Record<string, { next_cursor: string | null }>).open_items.next_cursor
+  expect(cursor).not.toBeNull()
+  const continued = await run('context_guard_checkpoint', { bindings: [], limit: 4, cursor })
+  expect(continued.reason_code).not.toBe('stale_cursor')
+  const detail = await run('context_guard_checkpoint', { bindings: [], detail_id: items[0]!.id })
+  expect(detail.snapshot).toBeDefined()
+  const detailNext = await run('context_guard_checkpoint', { bindings: [], detail_id: items[0]!.id,
+    detail_offset: 1, detail_snapshot: detail.snapshot })
+  expect(detailNext.reason_code).not.toBe('stale_detail_snapshot')
+  // A changed root demand must invalidate both read surfaces.
+  active.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Also run npm test in /work.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+  expect(await run('context_guard_prepare', { page_cursor: first.next_cursor })).toMatchObject({ reason_code: 'discovery_cursor_stale' })
+  expect(await run('context_guard_checkpoint', { bindings: [], limit: 4, cursor })).toMatchObject({ reason_code: 'stale_cursor' })
+  expect(await run('context_guard_checkpoint', { bindings: [], detail_id: items[0]!.id,
+    detail_offset: 1, detail_snapshot: detail.snapshot })).toMatchObject({ reason_code: 'stale_detail_snapshot' })
 })

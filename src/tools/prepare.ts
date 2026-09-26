@@ -13,6 +13,7 @@ import type { TargetTuple } from '../domain/types.js'
 import { unitDescendantIds } from '../domain/work-unit.js'
 import { currentV6Feedback, isV6PendingRootWait, sourceItemForCoreRequirement } from '../domain/v6-feedback.js'
 import { sha256 } from '../domain/canonicalize.js'
+import { semanticCoreCursorState } from './cursor-identity.js'
 
 export interface PrepareToolOptions {
   getProjection: () => GuardProjection | undefined
@@ -260,7 +261,6 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
       // actually prepared or checkpointed.
       if (args.item_id === undefined) {
         const filter = args.semantic_action ?? null
-        const coreIdentity = currentFeedback ? sha256(JSON.stringify(p.coreV2 ?? null)) : undefined
         // Cursor refusals stay minimal: `undefined` is not a lossless JSON
         // value, so optional fields are spread in only when defined.
         const invalidCursor = (reason_code: string, note?: string) => ({
@@ -270,6 +270,15 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
           contract_revision: p.contractRevision,
           ...(note !== undefined ? { note } : { note: 'Re-run discovery without page_cursor to list from the first page.' }),
         })
+        const eligible = discoveryItemIds(p)
+          .map((id) => ({ id, sourced: currentFeedback ? sourceItemForCoreRequirement(p, id) : undefined,
+            item: currentFeedback ? sourceItemForCoreRequirement(p, id)?.item : p.items.get(id) }))
+          .filter((entry): entry is typeof entry & { item: GuardItem } => entry.item !== undefined)
+          .filter(({ item, sourced }) => filter === null || (sourced?.origin?.action ?? item.semanticAction ?? 'generic_run') === filter)
+        const coreIdentity = currentFeedback ? sha256(JSON.stringify({
+          core: semanticCoreCursorState(p.coreV2),
+          listing: eligible.map(({ id, item }) => [id, item.revision]),
+        })) : undefined
         let startAfter: DiscoveryCursor['k'] | undefined
         if (args.page_cursor !== undefined) {
           let parsed: DiscoveryCursor | undefined
@@ -289,11 +298,6 @@ export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
           if ((parsed.f ?? null) !== (filter ?? null)) return invalidCursor('discovery_cursor_filter_mismatch')
           startAfter = parsed.k
         }
-        const eligible = discoveryItemIds(p)
-          .map((id) => ({ id, sourced: currentFeedback ? sourceItemForCoreRequirement(p, id) : undefined,
-            item: currentFeedback ? sourceItemForCoreRequirement(p, id)?.item : p.items.get(id) }))
-          .filter((entry): entry is typeof entry & { item: GuardItem } => entry.item !== undefined)
-          .filter(({ item, sourced }) => filter === null || (sourced?.origin?.action ?? item.semanticAction ?? 'generic_run') === filter)
         const startIndex = startAfter === undefined
           ? 0
           : eligible.findIndex(({ id, item }) => item.revision === startAfter![0] && id === startAfter![1]) + 1

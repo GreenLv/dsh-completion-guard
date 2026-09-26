@@ -1,4 +1,5 @@
 import { sha256 } from '../domain/canonicalize.js'
+import { semanticCoreCursorState } from './cursor-identity.js'
 import type { GuardProjection } from '../domain/types.js'
 
 export interface PageQuery {
@@ -24,7 +25,7 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
   const { item_ids, evidence_ids, evidence_scope = 'relevant', limit = 10, detail_id, detail_offset = 0 } = query
   const identity = digest({ session: p.sessionRefDigest, epoch: p.epoch, revision: p.contractRevision,
     evidence: [...p.evidence.values()], items: [...p.items.values()],
-    ...(full.current_feedback === true ? { current_core: p.coreV2 } : {}),
+    ...(full.current_feedback === true ? { current_core: semanticCoreCursorState(p.coreV2) } : {}),
     item_ids, evidence_ids, evidence_scope, limit, bindings: (query as PageQuery & { bindings?: unknown }).bindings, rejections: full.rejected_bindings })
   const invalid = (reason: string) => ({ status: 'unknown', contract_revision: p.contractRevision, reason_code: reason,
     next_step: 'Restart context_guard_checkpoint without cursor.', open_items: [], available_evidence: [], rejected_bindings: [] })
