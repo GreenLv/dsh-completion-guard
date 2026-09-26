@@ -1,4 +1,4 @@
-import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
+import { RC017_RC2_HOST_PACKAGES } from '../../src/domain/rc017-rc2-host.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -12,11 +12,11 @@ const probeModule = new URL('../../scripts/native_host_probe.mjs', import.meta.u
 
 it('projects the same renderer-attested host lock as the live runtime', async () => {
  const { probeHostLock } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
- const graph = evaluateHostLock(RC015_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+ const graph = evaluateHostLock(RC017_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
  expect(graph.status).toBe('supported')
  const config = { runtimeRoot: '/isolated/runtime', profileRoot: '/isolated/profile',
-  hostPackages: RC015_HOST_PACKAGES, profile: 'web' }
- const domain = { evaluateHostLock, readActiveHostGraph: () => RC015_HOST_PACKAGES,
+  hostPackages: RC017_RC2_HOST_PACKAGES, profile: 'web' }
+ const domain = { evaluateHostLock, readActiveHostGraph: () => RC017_RC2_HOST_PACKAGES,
   auditedForegroundRenderers: () => ['bash'] }
  const live = probeHostLock(domain, config, 'posix')
  const attestedDigest = createHash('sha256')
@@ -83,8 +83,8 @@ it.each(['short', 'long'])('retrieves a %s Windows test template through the nat
  const p = deriveProjection([
   { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run pnpm test.' }] } },
   { seq: 2, type: 'tool/call', data: { callId: 'native-12345-1', name: 'pwsh', arguments: JSON.stringify({ command: 'pnpm test' }) } },
-  { seq: 3, type: 'tool/result', data: { message: { source: { callId: 'native-12345-1' }, content: [{ type: 'tool-result', toolCallId: 'native-12345-1', isError: false, content: [{ type: 'text', text: '> node fixture.cjs' }] }] } } },
- ], { activation: 'always' }, { cwd }, true, evaluateHostLock(RC015_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).projection
+  { seq: 3, type: 'tool/result', data: { message: { source: { kind: 'tool', callId: 'native-12345-1' }, role: 'tool', toolCallId: 'native-12345-1', isError: false, content: [{ type: 'text', text: '> node fixture.cjs' }] } } },
+ ], { activation: 'always' }, { cwd }, true, evaluateHostLock(RC017_RC2_HOST_PACKAGES, { platform: 'windows', profileKind: 'web' })).projection
  const tool = createCheckpointTool(() => p, () => {})
  const call = async (name: string, args: never) => {
   expect(name).toBe('context_guard_checkpoint')

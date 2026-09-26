@@ -143,7 +143,7 @@ function restartIntent(events: readonly unknown[], resolutionCallId: string, tar
     if (!event || event.type !== 'user/message') continue
     const data = record(event.data)
     const source = record(data?.source)
-    if (source?.kind !== 'plugin' || source.plugin !== 'context-guard' || source.form !== 'notice') continue
+    if ((source?.kind !== 'plugin' && source?.kind !== 'context-guard') || source.plugin !== 'context-guard' || source.form !== 'notice') continue
     const content = Array.isArray(data?.content) ? data.content : []
     const block = content.length === 1 ? record(content[0]) : undefined
     const text = typeof block?.text === 'string' ? block.text : ''

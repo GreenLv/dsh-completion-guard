@@ -79,11 +79,11 @@ import { join } from 'node:path'
  * Registration facts, each from the implementation's own `super(ctx, "…")`:
  *   agents → new AgentRegistry(ctx) · sessionProjections → new SessionProjectionRegistry(ctx)
  *   systemPrompt → new SystemPrompt(ctx, config) [config REQUIRED] · tools → new ToolRuntime(ctx, {}) [reads ctx.systemPrompt, so it comes after]
- *   sessions → new SessionStore(ctx) (dsh-session) · settings → new SettingsProvider(ctx)
+ *   sessions → new SessionStore(ctx) (dsh-session)
  *   sessionPersistence → new SessionPersistence(ctx)
  *
  * PERSISTENCE (done): the concrete backend is
- * `@deepseek-ai/dsh-session-persistence-jsonl@0.1.5-rc.1`, installed in the
+ * `@deepseek-ai/dsh-session-persistence-jsonl@0.1.7-rc.2`, installed in the
  * fixture; it is `constructor(ctx, config)` with `config.root` REQUIRED, and the
  * scenario points it at a `mkdtemp` directory so no daily data is touched.
  *
@@ -189,7 +189,6 @@ async function startLoopHost(
   const toolsSdk = await load('dsh-tools')
   const sessionSdk = await load('dsh-session')
   const persistenceJsonl = await load('dsh-session-persistence-jsonl')
-  const settingsSdk = await load('dsh-settings')
 
   const ctx = new (Context as new () => Record<string, unknown>)()
   // Real services, each registered the way its own implementation does it.
@@ -208,16 +207,15 @@ async function startLoopHost(
   // The concrete backend, not the abstract base. `root` is required, and a
   // throwaway directory keeps daily session data untouched.
   void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(ctx, { root: sessionRoot, compression: undefined })
-  void new (settingsSdk.SettingsProvider as new (ctx: unknown) => unknown)(ctx)
   const llmCalls = { prepare: 0, stream: 0 }
   ;(ctx as unknown as { provide: (name: string, value: unknown) => void }).provide('llm', deterministicLlm('recorded by the loop', llmCalls))
 
   const service = (name: string) => (ctx as unknown as { get: (n: string) => unknown }).get(name)
   console.log('SERVICES', JSON.stringify(Object.fromEntries(
-    ['agents', 'sessionProjections', 'systemPrompt', 'tools', 'sessions', 'settings', 'sessionPersistence', 'llm']
+    ['agents', 'sessionProjections', 'systemPrompt', 'tools', 'sessions', 'sessionPersistence', 'llm']
       .map((name) => [name, service(name) !== undefined]),
   )))
-  const missing = ['tools', 'sessions', 'settings', 'sessionPersistence'].filter((name) => service(name) === undefined)
+  const missing = ['tools', 'sessions', 'sessionPersistence'].filter((name) => service(name) === undefined)
   expect(missing, `the real loop still needs: ${missing.join(', ') || 'nothing'}`).toEqual([])
 
   const fiber = (ctx as unknown as { plugin: (p: unknown) => unknown }).plugin(loop.AgentLoop as never)
@@ -242,8 +240,8 @@ async function startLoopHost(
   // backend refuses a second create with `session "…" already exists`.
   const created = options.createAgent === false
     ? undefined
-    : await (service('agentLoop') as { create: (id: string, options?: unknown) => Promise<unknown> })
-      .create('loop-host-agent', { cwd: '/work/repo', provider: 'deterministic-fixture', model: 'fixture-model' })
+    : await (service('agentLoop') as { create: (id: string, options?: unknown, meta?: unknown) => Promise<unknown> })
+      .create('loop-host-agent', { provider: 'deterministic-fixture', model: 'fixture-model' }, { cwd: '/work/repo' })
   const host: LoopHost = { ctx, agent: created as LoopHost['agent'], sessionRoot, observed, llmCalls, hooks, fiber: fiber as LoopHost['fiber'] }
   liveHosts.push(host)
   return host
@@ -269,7 +267,7 @@ async function runTurn(host: LoopHost, text: string) {
  */
 const roundMessages = (host: LoopHost) =>
   host.agent.session.snapshotEvents().filter((event) => event.type === 'user/message'
-    && (event.data as { source?: { kind?: string } })?.source?.kind !== 'plugin')
+    && !['plugin', 'context-guard'].includes((event.data as { source?: { kind?: string } })?.source?.kind ?? ''))
 
 afterEach(async () => {
   while (liveHosts.length > 0) {

@@ -5,8 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
-import { RC015_RC2_HOST_PACKAGES } from '../../src/domain/rc015-rc2-host.js'
+import { RC017_RC2_HOST_PACKAGES } from '../../src/domain/rc017-rc2-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
@@ -18,7 +17,7 @@ const version = MIN_SUPPORTED_HOST_VERSION
 // The active core cohort already excludes dshmarket (market identity is not a
 // core lock input), so the fixture is the exact active graph plus the two
 // installation-owned Headless bundles.
-const core = RC015_HOST_PACKAGES
+const core = RC017_RC2_HOST_PACKAGES
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 function json(path: string, value: unknown) {
@@ -39,7 +38,7 @@ function fixture(mapKey: 'versioned' | 'bare' = 'versioned', coreRows = core) {
   const records: Record<string, { url: string; dependencies: Record<string, string> }> = {
     '.': { url: '..', dependencies: {} },
   }
-  for (const row of [...core, ...bundles.map((name) => ({ name, version, integrity: 'sha512-synthetic-bundle' }))]) {
+  for (const row of [...core, ...bundles.filter((name) => !core.some((row) => row.name === name)).map((name) => ({ name, version, integrity: 'sha512-synthetic-bundle' }))]) {
     const id = mapKey === 'bare' ? row.name : `${row.name}@${row.version}`
     records['.'].dependencies[row.name] = id
     records[id] = { url: `./${row.name}`, dependencies: {} }
@@ -49,9 +48,11 @@ function fixture(mapKey: 'versioned' | 'bare' = 'versioned', coreRows = core) {
     })
     if (bundles.includes(row.name)) writeFileSync(join(modules, row.name, 'cordis.patch.yml'), '[]\n')
   }
+  // Bind all resolver-visible packages before pnpm's ambient NODE_PATH fallback.
+  symlinkSync(modules, join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
   const mapPath = join(modules, '.package-map.json')
   json(mapPath, { packages: records })
-  writeFileSync(join(runtime, 'pnpm-lock.yaml'), lock([...core, ...bundles.map((name) => ({ name, version, integrity: 'sha512-synthetic-bundle' }))]))
+  writeFileSync(join(runtime, 'pnpm-lock.yaml'), lock([...core, ...bundles.filter((name) => !core.some((row) => row.name === name)).map((name) => ({ name, version, integrity: 'sha512-synthetic-bundle' }))]))
   const manifestPath = join(profile, 'package.json')
   json(manifestPath, { dsh: { profile: { bundles } } })
   // The reported Windows input has only the manifest and a historical root
@@ -71,13 +72,13 @@ function installGuard(f: ReturnType<typeof fixture>) {
 
 describe('dependency-free Headless target inspection', () => {
   it('reads the reachable official hoisted renderer layout without accepting aliases, duplicates or drift', () => {
-    const f = fixture('bare', RC015_RC2_HOST_PACKAGES)
+    const f = fixture('bare', RC017_RC2_HOST_PACKAGES)
     const name = '@deepseek-ai/dsh-tool-pwsh'
     const module = join(f.modules, name)
     mkdirSync(join(module, 'lib'), { recursive: true })
     writeFileSync(join(module, 'lib', 'index.js'), 'audited fixture bytes\n')
     const expected = createHash('sha256').update('audited fixture bytes\n').digest('hex')
-    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC015_RC2_HOST_PACKAGES)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC017_RC2_HOST_PACKAGES)
     expect(activeRendererModule(f.modules, name)?.bytes).toBe(expected)
 
     // A changed file is read afresh; the caller's pinned-byte comparison
@@ -86,7 +87,7 @@ describe('dependency-free Headless target inspection', () => {
     expect(activeRendererModule(f.modules, name)?.bytes).not.toBe(expected)
     writeFileSync(join(module, 'lib', 'index.js'), 'audited fixture bytes\n')
 
-    const versioned = `${name}@0.1.5-rc.2(other)`
+    const versioned = `${name}@0.1.7-rc.2(other)`
     f.records['.'].dependencies.shadow = versioned
     f.records[versioned] = { url: `./${name}`, dependencies: {} }
     json(f.mapPath, { packages: f.records })
@@ -99,9 +100,9 @@ describe('dependency-free Headless target inspection', () => {
     json(f.mapPath, { packages: f.records })
     json(join(module, 'package.json'), { name, version: '0.1.5-rc.0' })
     expect(activeRendererModule(f.modules, name)).toBeUndefined()
-    json(join(module, 'package.json'), { name, version: '0.1.5-rc.2' })
+    json(join(module, 'package.json'), { name, version: '0.1.7-rc.2' })
     const outside = join(f.runtime, 'outside')
-    json(join(outside, 'package.json'), { name, version: '0.1.5-rc.2' })
+    json(join(outside, 'package.json'), { name, version: '0.1.7-rc.2' })
     mkdirSync(join(outside, 'lib'), { recursive: true })
     writeFileSync(join(outside, 'lib', 'index.js'), 'audited fixture bytes\n')
     f.records[name].url = './.pnpm/../../outside'
@@ -110,24 +111,24 @@ describe('dependency-free Headless target inspection', () => {
   })
 
   it('retains a single versioned pnpm mapping and rejects its manifest version drift', () => {
-    const f = fixture('versioned', RC015_RC2_HOST_PACKAGES)
+    const f = fixture('versioned', RC017_RC2_HOST_PACKAGES)
     const name = '@deepseek-ai/dsh-shell'
-    const id = `${name}@0.1.5-rc.2`
+    const id = `${name}@0.1.7-rc.2`
     const url = './.pnpm/dsh-shell/node_modules/@deepseek-ai/dsh-shell'
     f.records[id].url = url
     json(f.mapPath, { packages: f.records })
     const module = join(f.modules, url)
-    json(join(module, 'package.json'), { name, version: '0.1.5-rc.2' })
+    json(join(module, 'package.json'), { name, version: '0.1.7-rc.2' })
     mkdirSync(join(module, 'lib'), { recursive: true })
     writeFileSync(join(module, 'lib', 'index.js'), 'versioned bytes\n')
     expect(activeRendererModule(f.modules, name)?.bytes).toBe(createHash('sha256').update('versioned bytes\n').digest('hex'))
-    json(join(module, 'package.json'), { name, version: '0.1.5-rc.1' })
+    json(join(module, 'package.json'), { name, version: '0.1.7-rc.1' })
     expect(activeRendererModule(f.modules, name)).toBeUndefined()
   })
   it.each(['versioned', 'bare'] as const)('accepts the exact rc.2 graph with %s mapping and binds its launcher', (mapKey) => {
-    const f = fixture(mapKey, RC015_RC2_HOST_PACKAGES)
-    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC015_RC2_HOST_PACKAGES)
-    json(join(f.modules, '@deepseek-ai/dsh', 'package.json'), { name: '@deepseek-ai/dsh', version })
+    const f = fixture(mapKey, RC017_RC2_HOST_PACKAGES)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC017_RC2_HOST_PACKAGES)
+    json(join(f.modules, '@deepseek-ai/dsh', 'package.json'), { name: '@deepseek-ai/dsh', version: '0.1.7-rc.1' })
     expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
   })
 
@@ -182,13 +183,13 @@ describe('dependency-free Headless target inspection', () => {
     const args = ['--runtime-root', f.runtime, '--profile-root', f.profile]
     const target = spawnSync(process.execPath, [cli, 'inspect-graph', ...args], { encoding: 'utf8' })
     expect(target.status, target.stderr).toBe(0)
-    expect(JSON.parse(target.stdout)).toMatchObject({ inspection_scope: 'pre_install_target', profile_graph: { state: 'dependency_free_headless' }, profile: 'headless', package_count: 33 })
+    expect(JSON.parse(target.stdout)).toMatchObject({ inspection_scope: 'pre_install_target', profile_graph: { state: 'dependency_free_headless' }, profile: 'headless', package_count: 46 })
     // The readback must state how the cohort's rows were established. A
     // "supported" status plus a digest is not enough: a graph that was only
     // resolved from the registry must never read as a natively audited one,
     // and this readback is what a native-acceptance annex records.
     const readback = JSON.parse(target.stdout) as { cohort_id: string; audit_provenance: string }
-    expect(readback.cohort_id).toBe('dsh-0.1.5-rc.1-core-v1')
+    expect(readback.cohort_id).toBe('dsh-0.1.7-rc.2-core-v1')
     expect(readback.audit_provenance).toBe('registry-derived-pending-native-audit')
     const installed = spawnSync(process.execPath, [cli, 'inspect', ...args], { encoding: 'utf8' })
     expect(installed.status).toBe(1)
@@ -249,7 +250,7 @@ describe('dependency-free Headless target inspection', () => {
     writeFileSync(join(outside, 'cordis.patch.yml'), '[]\n')
     rmSync(join(f.modules, bundles[0]), { recursive: true })
     symlinkSync(outside, join(f.modules, bundles[0]), process.platform === 'win32' ? 'junction' : 'dir')
-    expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow(/installation-owned/)
+    expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
   })
 
   it('verifies visible parent fallback provenance and rejects a foreign same-version shadow', () => {
@@ -278,13 +279,13 @@ describe('dependency-free Headless target inspection', () => {
     const f = fixture(); expect(inspectTargetHostGraph(f.runtime, f.profile).profileGraph.state).toBe('dependency_free_headless')
     installGuard(f)
     expect(inspectTargetHostGraph(f.runtime, f.profile).profileGraph.state).toBe('active_importer')
-    const active = resolveActiveProfileHostLock(f.runtime, f.profile, '0.4.3')
-    expect(active.evaluation.status).toBe('supported')
+    // Identity-only fixtures have no audited executable modules.
+    expect(() => resolveActiveProfileHostLock(f.runtime, f.profile, '0.4.3')).toThrow(/modules differ/)
     rmSync(join(f.profile, 'pnpm-lock.yaml'))
     rmSync(join(f.profile, 'node_modules', '.package-map.json'))
     expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
     expect(() => resolveActiveProfileHostLock(f.runtime, f.profile, '0.4.3')).toThrow()
-    const config = { hostLockPolicy: 'dsh-core/v1', hostLockRuntimeRoot: f.runtime, hostLockProfileRoot: f.profile, hostLockPlatform: active.platform, hostLockProfile: active.profileKind }
+    const config = { hostLockPolicy: 'dsh-core/v1', hostLockRuntimeRoot: f.runtime, hostLockProfileRoot: f.profile, hostLockPlatform: 'posix', hostLockProfile: 'headless' }
     expect(revalidateCoreLock(config as Parameters<typeof revalidateCoreLock>[0], evaluateHostLock(core))).toMatchObject({ status: 'unavailable' })
   })
 

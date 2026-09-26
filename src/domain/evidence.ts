@@ -53,12 +53,9 @@ export function extractTextContent(content: readonly unknown[]): string {
   return parts.join('\n')
 }
 
-/**
- * DSH persists the host return flag on a nested `tool-result` block. The
- * surrounding message or event need not carry an `error` field (approval and
- * sandbox denials are examples). Never let a renderer's missing exit marker
- * override that structured return, or accept an ambiguous nested return as
- * a clean result for another call.
+/** rc.2 persists a role=tool message with independent source and return IDs.
+ * Both must bind the original call. PTC uses its own matched dispatch envelope.
+ * Historical nested return records are not current rc.2 execution evidence.
  */
 export function persistedToolResultStatus(
   data: unknown, callId: string,
@@ -68,26 +65,15 @@ export function persistedToolResultStatus(
   const result = asRecord(data)
   if (!result) return 'unknown'
   if (result.error !== undefined || result.isError === true) return 'failure'
+  if (kind === 'tool/ptc-dispatch') {
+    return matchedStart && result.subCallId === callId && result.isError === false ? 'clean' : 'unknown'
+  }
   const message = asRecord(result.message)
+  const source = asRecord(message?.source)
   if (message?.isError === true) return 'failure'
-  const content = Array.isArray(message?.content) ? message.content : Array.isArray(result.content) ? result.content : []
-  const returns = content.map(asRecord).filter((block): block is Record<string, unknown> => block?.type === 'tool-result')
-  if (returns.length > 1) return 'unknown'
-  if (returns.length === 0) {
-    // The SDK's ordinary tool/result always has one nested return. A plain
-    // renderer block cannot authenticate a JSON receipt or a successful test.
-    // PTC dispatch is a separate native event shape, with an explicit flag and
-    // an already matched dispatch-start rather than a nested tool-result.
-    return kind === 'tool/ptc-dispatch' && matchedStart && result.subCallId === callId
-      && result.isError === false ? 'clean' : 'unknown'
-  }
-  for (const block of returns) {
-    const nestedCallId = block.toolCallId ?? block.callId
-    if (nestedCallId !== callId) return 'unknown'
-    if (block.isError === true) return 'failure'
-    if (block.isError !== false) return 'unknown'
-  }
-  if (kind === 'tool/ptc-dispatch' && (!matchedStart || result.subCallId !== callId)) return 'unknown'
+  if (message?.role !== 'tool' || source?.kind !== 'tool' || source.callId !== callId
+    || message.toolCallId !== callId || message.isError !== false || !Array.isArray(message.content)
+    || message.content.some((block) => asRecord(block)?.type === 'tool-result')) return 'unknown'
   return 'clean'
 }
 
@@ -262,30 +248,12 @@ function analyzeCommand(command: string, workdir: unknown, toolName: string): Co
  * in ordinary stdout — `documentation says [timed out after 1000ms] but command
  * succeeded` — is not a terminal fact.
  *
- * Renderer audit for the DSH 0.1.5-rc.1 support baseline:
- *
- * - The bundled session shell tools (`dsh-tool-bash` / `dsh-tool-pwsh`, the two
- *   registered by the `@deepseek-ai/dsh-base` profile) append `[exit code: N]`
- *   (NON-ZERO only), `[killed by signal: S]`, `[sandbox: ...]`, and
- *   `[timed out after Nms]` as trailing lines. Their marker logic is unchanged
- *   between 0.1.2-rc.1 and 0.1.5-rc.1, so a completed foreground result with no
- *   marker at all is still a clean success — but ONLY for those two names, and
- *   only when the host lock proves that pinned graph.
- * - The persistent shell tools (`dsh-tool-bash-persistent`, out of the default
- *   bundle) render `[shell exited: code N]` / `[shell killed by signal: S]` /
- *   `[shell exited]`, and 0.1.5-rc.1 added two markers this scanner must know:
- *   `[Command finished with exit code N]` on the normal completion path and
- *   `[Command timed out or OOM]` on the timeout path. Recognizing them keeps a
- *   persistent-renderer result classified by its own marker instead of falling
- *   through to the unmarked rule, which belongs to the session renderer alone.
- *   The audited cohort admits `dsh-tool-bash` / `dsh-tool-pwsh` and not the
- *   persistent package, so such a host fails the whole graph lock closed too.
- * - Either family may append the prose reset line `The persistent bash shell
- *   was reset; ...`, which is not a marker itself, so the scan strips a
- *   trailing reset line first and treats the timeout intro as a negative fact
- *   only when a reset line confirms the report came from the persistent
- *   renderer — a clean result that merely echoes such prose stays a clean
- *   success.
+ * The rc.2 published bash/pwsh renderers omit a marker on clean foreground
+ * exit, append negative exit/signal/stopped/sandbox markers, and can append
+ * explanatory prose after a promotion marker. Promotion and incomplete output
+ * therefore have independent fail-closed handling before terminal evidence.
+ * Legacy persistent markers remain conservative text classification only;
+ * no historical host or persistent renderer is admitted by the rc.2 cohort.
  */
 interface TerminalFacts {
   exitCode?: number
@@ -319,7 +287,7 @@ function structuredTerminalFacts(meta: unknown): TerminalFacts | undefined {
 /** `[exit code: N]`, `[shell exited: code N]`, `[Command finished with exit code N]`. */
 const TERMINAL_EXIT_MARKER = /^\[(?:exit code|shell exited: code|command finished with exit code)\s*:?\s*(\d+)\]$/
 /** Negative markers with no exit code of their own. */
-const TERMINAL_NEGATIVE_MARKER = /^\[(?:timed out[^\]]*|sandbox[^\]]*|killed by signal[^\]]*|shell killed by signal[^\]]*|shell exited|command timed out or oom|interrupted[^\]]*)\]$/
+const TERMINAL_NEGATIVE_MARKER = /^\[(?:stopped:[^\]]*|timed out[^\]]*|sandbox[^\]]*|killed by signal[^\]]*|shell killed by signal[^\]]*|shell exited|command timed out or oom|interrupted[^\]]*)\]$/
 
 function extractTerminalFacts(textContent: string): TerminalFacts {
   const lines = textContent.split(/\r?\n/)
@@ -833,17 +801,20 @@ export function extractToolSubject(
     case 'pwsh': {
       const command = typeof args.command === 'string' ? args.command : ''
       const backgrounded = args.run_in_background === true
+        || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent)
+        || /^started background job \S+\s*$/.test(result.textContent)
+      const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent)
       const commandDetails = analyzeCommand(command, typeof args.workdir === 'string' ? args.workdir : defaultCwd, call.name)
       const commandCwd = typeof args.workdir === 'string' ? args.workdir : defaultCwd
       const action = structured?.semanticAction ?? semanticActionFromCommand(command)
-      const deterministic = commandDetails.status === 'supported' && !backgrounded && isDeterministicCheck(command)
+      const deterministic = commandDetails.status === 'supported' && !backgrounded && !outputIncomplete && isDeterministicCheck(command)
       // The bundled DSH session shell renderers (`dsh-tool-bash` / `dsh-tool-pwsh`)
       // append markers only for negative terminal facts or non-zero exits; a
       // completed foreground result with no marker is therefore a clean success
       // for those two registered tools. That rule is NOT generalized: the
       // generic `shell` alias has no verified renderer contract, and a result
       // that carries a marker this scanner cannot classify stays `unknown`
-      // rather than being promoted to success (0.1.5-rc.1 added the
+      // rather than being promoted to success (historical renderers used the
       // persistent-renderer `[Command finished with exit code N]` and
       // `[Command timed out or OOM]` markers).
       // 0.6.2 D062-02: the frozen `outcome` keeps the HISTORICAL rule, so
@@ -852,11 +823,17 @@ export function extractToolSubject(
       // source, and whether it disagrees with the frozen reading.
       const terminal = legacyTerminalFacts(result.meta, result.textContent)
       const surface = call.name as 'bash' | 'pwsh' | 'shell'
-      const outcome = shellOutcome(surface, terminal, result.error, backgrounded)
+      const terminalOutcome = shellOutcome(surface, terminal, result.error, backgrounded)
+      const outcome = outputIncomplete && terminalOutcome !== 'failure' ? 'unknown' : terminalOutcome
       const processFacts = shellProcessFacts(
         result.meta, result.textContent, outcome, result.error, surface,
         backgrounded, parseStatus(commandDetails).parseStatus,
       )
+      if (outputIncomplete && terminalOutcome !== 'failure') {
+        processFacts.outcome = 'unknown'
+        processFacts.outcomeReason = 'output_incomplete'
+        processFacts.frozenOutcomeConflict = false
+      }
       const subject: ToolSubject = {
         capabilities: ['shell', ...(deterministic ? ['deterministic-check'] : [])],
         subjects: unique(commandDetails.subjects),

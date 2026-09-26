@@ -8,7 +8,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
-import { runtimeRequire } from './native_host_probe.mjs'
+import { runtimeRequire, appendProbeToolCall, finishProbeToolCall } from './native_host_probe.mjs'
 
 const SHA = 'f'.repeat(40)
 const PACKAGE = 'native-release-fixture'
@@ -51,7 +51,7 @@ function fixturePackage(root) {
 export async function runNativeReleaseFixture(config) {
   const require = runtimeRequire(config.runtimeRoot)
   const { Session, SessionId, SESSION_FORMAT_VERSION } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session')).href)
-  const { createUserMessage, createToolResultMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
+  const { createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
   const product = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'index.js')).href)
   const domain = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href)
   const root = join(config.workRoot, `native-release-${config.nonce}`)
@@ -91,12 +91,12 @@ export async function runNativeReleaseFixture(config) {
     register: tool => { registered.push(tool); return () => {} },
     guard: () => () => {}, get: () => undefined,
   }, get: () => undefined } }
-  for (const handler of handlers.get('agent/session-start') ?? []) handler({ agent, source: 'startup' })
+  for (const handler of handlers.get('agent/created') ?? []) await handler({ agent, source: 'startup' })
   let ordinal = 0
   const append = (type, data, options) => session.append(type, data, options)
-  const notice = text => append('user/message', {
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text }],
-  }, { surfaceOp: 'append' })
+  const notice = text => append('user/message', createUserMessage({
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary:'release fixture' }, content: [{ type: 'text', text }],
+  }), { surfaceOp: 'append' })
   const command = args => append('command/run', {
     commandId: `native-release-${++ordinal}`, name: 'context-guard', args, source: { kind: 'user' },
   })
@@ -109,14 +109,15 @@ export async function runNativeReleaseFixture(config) {
     const tool = registered.find(entry => entry.name === name)
     assert.ok(tool, `${name} registered`)
     const callId = `native-release-call-${++ordinal}`
-    append('tool/call', { turn: 1, step: ordinal, callId, name, arguments: JSON.stringify(args) })
+    const coordinates = appendProbeToolCall(session, createAssistantMessage, callId, name, args)
     const value = await tool.execute(args, { callId, rootCallId: callId, name, arguments: args,
       agent, signal: new AbortController().signal, deferContext: () => {}, concludeTurn: () => {}, token: Symbol('native-release') })
     const meta = tool.output?.presentationMeta?.(args, value)
-    append('tool/result', { turn: 1, step: ordinal,
+    append('tool/result', { ...coordinates,
       message: createToolResultMessage({ callId, content: [{ type: 'text', text: JSON.stringify(value) }], isError: false }),
       ...(meta ? { meta } : {}),
     }, { surfaceOp: 'append' })
+    finishProbeToolCall(session, coordinates)
     return { callId, value }
   }
 
@@ -129,8 +130,8 @@ export async function runNativeReleaseFixture(config) {
   const prepared = domain.certifyCheckpoint(projection(), [], 'C1', false)
   assert.equal(prepared.status, 'certified')
   const checkpoint = prepared.checkpoint
-  append('tool/call', { turn: 1, step: ++ordinal, callId: 'native-closure', name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' })
-  append('tool/result', { turn: 1, step: ordinal,
+  const closureCoordinates = appendProbeToolCall(session, createAssistantMessage, 'native-closure', 'context_guard_checkpoint', {bindings:[]})
+  append('tool/result', { ...closureCoordinates,
     message: createToolResultMessage({ callId: 'native-closure', content: [{ type: 'text', text: JSON.stringify({
       status: 'certified', certificate: {
         stop_protocol_version: checkpoint.stopProtocolVersion, certificate_version: checkpoint.certificateVersion,
@@ -143,6 +144,7 @@ export async function runNativeReleaseFixture(config) {
       },
     }) }], isError: false }),
   }, { surfaceOp: 'append' })
+  finishProbeToolCall(session, closureCoordinates)
   const resolution = await runTool('context_guard_evidence', {
     semantic_action: 'publish', evidence_role: 'resolution',
     selector: { artifact_id: PACKAGE, version: VERSION, registry: REGISTRY },

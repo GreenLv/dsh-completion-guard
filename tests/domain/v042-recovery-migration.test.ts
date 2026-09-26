@@ -7,7 +7,7 @@ import { deriveProjection, CAPTURE_V042_NOTICE, PROTOCOL_V3_NOTICE } from '../..
 import { currentContractDigest } from '../../src/domain/contract-digest.js'
 
 const user = (seq: number, text: string) => ({ seq, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
-const notice = (seq: number, text: string) => ({ seq, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text }] } })
+const notice = (seq: number, text: string) => ({ seq, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text }] } })
 
 describe('0.4.2 recovery and old-log compatibility', () => {
   it.each([3999, 4000, 4001])('T08 preserves rules and constraints around %i characters', count => {

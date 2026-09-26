@@ -17,7 +17,7 @@ const scope = { cwd: '/repo', sessionHeader: { version: 3, id: 'v060-release', c
 let seq = 0
 const reset = () => { seq = 0 }
 const notice = (text: string): DerivedEnvelope => ({ seq: seq++, type: 'user/message', data: {
-  source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+  source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
   content: [{ type: 'text', text }],
 } })
 const v5 = (): DerivedEnvelope => notice(PROTOCOL_V5_NOTICE)
@@ -104,7 +104,7 @@ function withClosure(extra: DerivedEnvelope[] = []) {
   const { prefix, record } = closureFixture()
   const suffix: DerivedEnvelope[] = [
     { seq: 100, type: 'tool/call', data: { callId: 'closure-cp', name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' } },
-    { seq: 101, type: 'tool/result', data: { message: { source: { callId: 'closure-cp' }, content: [{ type: 'tool-result', toolCallId: 'closure-cp', isError: false, content: [{ type: 'text', text: JSON.stringify(record) }] }] } } },
+    { seq: 101, type: 'tool/result', data: { message: { source: { kind: 'tool', callId: 'closure-cp' }, role: 'tool', toolCallId: 'closure-cp', isError: false, content: [{ type: 'text', text: JSON.stringify(record) }] } } },
     ...extra,
   ]
   const projection = deriveProjection([...prefix, ...suffix], config, scope, true).projection
@@ -464,7 +464,7 @@ describe('0.6.0 C10: adoption is ratified only by evidence that already existed'
       ...prefix,
       command(`release adopt ${closureOnly}`),
       { seq: 100, type: 'tool/call', data: { callId: 'closure-cp', name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' } },
-      { seq: 101, type: 'tool/result', data: { message: { source: { callId: 'closure-cp' }, content: [{ type: 'tool-result', toolCallId: 'closure-cp', isError: false, content: [{ type: 'text', text: JSON.stringify(record) }] }] } } },
+      { seq: 101, type: 'tool/result', data: { message: { source: { kind: 'tool', callId: 'closure-cp' }, role: 'tool', toolCallId: 'closure-cp', isError: false, content: [{ type: 'text', text: JSON.stringify(record) }] } } },
     ], config, scope, true).projection
     expect(late.integrity).toBe('valid')
     expect(late.checkpoints.some((checkpoint) => checkpoint.result === 'certified')).toBe(true)
@@ -488,7 +488,7 @@ describe('0.6.0 C10: adoption is ratified only by evidence that already existed'
     const shadowed = deriveProjection([
       ...closureFixture().prefix,
       { seq: 100, type: 'tool/call', data: { callId: 'closure-cp', name: 'context_guard_checkpoint', arguments: '{"bindings":[]}' } },
-      { seq: 101, type: 'tool/result', data: { message: { source: { callId: 'closure-cp' }, content: [{ type: 'tool-result', toolCallId: 'closure-cp', isError: false, content: [{ type: 'text', text: JSON.stringify(record) }] }] } } },
+      { seq: 101, type: 'tool/result', data: { message: { source: { kind: 'tool', callId: 'closure-cp' }, role: 'tool', toolCallId: 'closure-cp', isError: false, content: [{ type: 'text', text: JSON.stringify(record) }] } } },
       { seq: 200, type: 'command/run', data: { name: 'context-guard', args: `release adopt ${adoptLine()}`, source: { kind: 'user' } } },
       { seq: 201, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '创建 report.txt' }] } },
     ], config, scope, true).projection

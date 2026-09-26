@@ -19,7 +19,7 @@ function fixture(root = 'Run pnpm test in /work.') {
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
   const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: String(id), createdAt: 1, seedLength: 0, delegationDepth: 0 } }
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
   const derive = () => {

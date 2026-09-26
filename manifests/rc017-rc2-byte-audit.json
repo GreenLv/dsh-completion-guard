@@ -1,0 +1,637 @@
+{
+  "schema": "dsh-host-byte-audit/v1",
+  "hostVersion": "0.1.7-rc.2",
+  "upstreamCommit": "477b4f420553e8a52c2fbccc464d7561b239c443",
+  "auditedPlatforms": [],
+  "packages": [
+    {
+      "name": "@deepseek-ai/cordis",
+      "version": "4.0.4",
+      "integrity": "sha512-obgyxqWAmFn3Re8kvsuUnyW+ihrz6eJCnJO4fh1cQzDtmPYz/zzVeUkH9R94I0OwSVOocK67Kgakm04j/oQXzg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/cordis/-/cordis-4.0.4.tgz",
+      "sha256": "99a5cdb344de37cb033cb4e3a1dcfd29585d46f7d3a9c64bca9991554927185c",
+      "modules": {
+        "lib/index.js": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
+        "package.json": "41c9dee4715a89ef94f227384460c8445857c8faf33493eb545604a948828649"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.7-rc.2.tgz",
+      "sha256": "5f2da7272d9485abc223e681075809a8d929697c5232ee445718e1b7e066bff8",
+      "modules": {
+        "lib/bin.js": "935e95d05f4dc70a8a013eea59da80028946b5c139e45c6351dcaf2810ca00a1",
+        "lib/dump-config-BEDI-dNY.js": "fa34d3397b9ac9423f3b98a9f4798b9205f684e1eaf368352e0a93c09831d28f",
+        "lib/dump-config-crgOY3tW.js": "4183d3918048badf0a5194fb3c86fbb37b7bf8ccbf638c14bd2ff2b1c545721a",
+        "lib/dump-config-schema-DhhNOaro.js": "85c7eef6eee4532570133d3b90487996e912216b96825e33c1bb659036a269f1",
+        "lib/plugin-DkYIj96-.js": "2103210a39731866ca191faf1a1396f33f248ed3fe81690a592fee7a8f3276c1",
+        "lib/profile-boot-BZ2ZjNWi.js": "c394b2aa2ce08a3b1fcc8c544257c7d689dd4d0b1cfaf8602687e65eeaba5aa1",
+        "lib/profile-boot.js": "c53d4e2caf21428e263b525e657dafaf63fd183f7ef016aabda56af7998b6c4f",
+        "package.json": "b6a8e28158f1bc67862e5d0c671430bfa4867a57be864e6007524877644555aa"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-agent",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-9U/zHZvZqRR5S2FD9fjjAuoMh+WfDan+bE/cLBLSLpqftjZ0FhIlEBK99yonUkNkGemyHiH/lL3jCKYw35ahJA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.1.7-rc.2.tgz",
+      "sha256": "e7b8bf1be4205401c0b0f146148719e1755dc98abc878c8b98fcd0ecc290e76d",
+      "modules": {
+        "lib/index.js": "7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93",
+        "lib/invariant.js": "f9d8c2d1d72f407ffd93b9b04212f7c59dd655908daf68f656e05cca9b93befc",
+        "lib/types/archive-admission.js": "d42fbc10fbf357f1343d4c57eab55d3c7a6bd53fe20a29469cf0b1b67e55c4dd",
+        "lib/types/consumed-work.js": "e20ac9e88d81db3f5e25908a50ad4532cd1d93f410ad5ec4933ef9aa24da5c2d",
+        "lib/types/dispatch.js": "f29567a8eb2f04aaf34523e597d52e46f0fb5bed273db4bf7fa25bc38e2877da",
+        "lib/types/index.js": "7e7c47fc0b82f0718b73e1705c07ad9496cfdbc21598db94de858f718cd23490",
+        "lib/types/invariant.js": "ff96b77450ecd0b7b75d94e7aa07f073e7d378924f2484866a6a04ffe4542bc3",
+        "lib/types/model-selection.js": "47f758ea21ebf7544b4633d2ef8cbe5afafddf3b4aaf9892276cda9e98af11e7",
+        "lib/types/projection.js": "43ab89acd14b20b3c2a85c8307f236b38dfa27671dd31b703554777270abc534",
+        "lib/types/runtime-types.js": "72347f43fb79c35cff8565b6428c6d7b96a78267cf8994ea3ffd0830a83a21d2",
+        "lib/types/types.js": "f4ef7228255d5f64ba546ed2a2b6be63601b77c7b58ac3a58a74f4e8f970cb30",
+        "package.json": "80e615e03a874154cf7416c1172b69103fc3b2265c8147a4714ee28907956bc5"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-agent-loop",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-X+fegYY7yITQ5kAIayFrylMY9Vg6zHFLnP83rJVZ89juF9EBRm8soGAJHvyjat+mdk5a1WViWYdIPM0t9g/glA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.1.7-rc.2.tgz",
+      "sha256": "1f5ee5e938655ca0f501daa491c5c09f810ae1c0b71a86fcdd32b5462a8563c8",
+      "modules": {
+        "lib/index.js": "459deb380d431f98a9250d77b05a77268eda51f096b07be65080097a1683ffda",
+        "lib/invariant.js": "c577dcdde278b761b5810d9a941131d423de40c22ff57f98a3982681ed3bf772",
+        "package.json": "092e5fccdfb6b27654ccbbd8889758c08a38413f619d5d18684f731dd4ecf26e"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-app-boot",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-d0QWMMXxT6kICO9QRrXTqJRKP6bWNes7SVGJK6OOEzX6Ua9mzCx1KghPIf7tjW/ZmX0b8n1FoySr4IHElBkrOg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.1.7-rc.2.tgz",
+      "sha256": "e16298302b2a2858137276bfa6ca4c8e1e8bf0bda8c36941695b555483b0e4ec",
+      "modules": {
+        "lib/index.js": "43dccddf285e7a0262d8ab3794f0fd65912e0dc33178dd782bcd8e87745ecfc2",
+        "lib/worker/profile-resolution-bootstrap.js": "4efac00eba95637481deb245ac4e5b497fceebb55db8e199675406b6bf53dbed",
+        "package.json": "8fd5885b5ac05a4ee1f549f09a15edebadd43a3ecb465ed314d4355ab1bd0f4a"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-attachment",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-g2SQ12Ki1l28T/H+fZKtSWDFF5Y1gavcKVBb2X4eOVX5uT5Jwumx+9Svelp1pHaknuAE1N2Yt9tMwj2quMkhDg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.1.7-rc.2.tgz",
+      "sha256": "74495a054b54ced8636026f56fc531a3549b07729dec76bad5abe09fdfdb5540",
+      "modules": {
+        "lib/index.js": "9cd6c01a6cca9431f789be334afdfe4f5cf647224bb394cc0215056796520f58",
+        "lib/types/admission.js": "e4afabe831d34e00d96416bf902a77bb3cbe3754769b09b0d14142466a340684",
+        "lib/types/brand.js": "5481fe7d3a244f161d54dc7646612fd7654401782d3f0d5fd657247480f6747d",
+        "lib/types/error.js": "eb1952755b936373075d1cc7567815b46b44bf4938e79d54c12c23ffee0161bc",
+        "lib/types/index.js": "c96d48d63936a055a525e9e5eec624ce6796e50af5e3f3bd53adddfcbcba967b",
+        "lib/types/request-projection.js": "8d184a401ec5ea5b7fc3708870205042cc1afc666655e4e8e4d1d11eefdadf9d",
+        "lib/types/types.js": "9a08e59bd2b21a42126b01c3598b057bb5d3be987c200562800e29806e10e50d",
+        "package.json": "d10870a16271c4f766935cb05186201161852aef3954e0820669c304083de5c8"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-base",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-LYwclGWi0SEZh0ZjnlJT/kHaOV0JDuI1mCHFCOQthYlabPp90Ohba+7wdIRX1oqcQN6erFzsQrrV1WFf+NhRYg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.1.7-rc.2.tgz",
+      "sha256": "9d4573d4557d0517a5ece85813fb398f58fb910b19704f602c30ccdef5039ae8",
+      "modules": {
+        "lib/index.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "package.json": "c5732675c653540b3d896a73a033def7c72030866698829243698a1a384b1ba8"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-bash-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-8InocMSTIzUGuKXnSp05pTBfeQmUdC+L5T1I+2iESzPtrNh/F9jLQeCPknWZ7ren/XwDki79J9EqYaLE1vNiUg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.1.7-rc.2.tgz",
+      "sha256": "7388f1085fc98aa4ad9f8c4f1ddef49ce8a46aad2dc57cd020853c2e4bf58a75",
+      "modules": {
+        "lib/index.js": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
+        "package.json": "524c99cd4f34bb23c323e85834d66992d4da60ac103fd649ca04a0c263f4b346"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-bash-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-M4laxtYLPkXlvbtMpLm4hTWKmBb1xJuNMma/eA+xYTNdjHtV/ZJPxiKMVe1crjBp/dKuMTJR42p8rizLM1vkNg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.1.7-rc.2.tgz",
+      "sha256": "9a92e21906e7aee60916f7d0afa0fa9514197f755ec4cc0736c6d89e6fa0725c",
+      "modules": {
+        "lib/index.js": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
+        "package.json": "885025403df063fb7701d8afbad0a5bc0dad2bd7b17e7cc47b186fbab1be2cef"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-commands",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-wVAHwHNDLDNBKXJZU2rHnwc+e3mhi6EuazAfJmqtbzU/ldQVEoJ9f5eXqesBcdQbRIrWQlpjfjdlw3nCJfK2HQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.1.7-rc.2.tgz",
+      "sha256": "3ba2638b147cf7fc0462b8117c7f9affa2ab0ebc82c9d40b6b49699d96ed07b3",
+      "modules": {
+        "lib/index.js": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
+        "lib/invariant.js": "e6dcb52cba426f2cebe18d351ecb968233d41f7e3cf292be192618d0f52774fc",
+        "lib/typert.host.js": "1ec7c1356343db913162ea03c09e6e85df2b60e046dc095ca85ce3d181f05ff0",
+        "lib/typert.remote-client.js": "19783415466cb498a5dd560c6568716cad39223e2587fc0a16350b591fe051ab",
+        "lib/types/brand.js": "50808fed83c5cfe09b80df4165108abba0188645b9b9d39d0426b293e8f188dd",
+        "lib/types/index.js": "e3a06e7bf8da759c727a529d1e6b30c831232318602fcd28e66297ba200ef495",
+        "lib/types/invariant.js": "e4bdb34890eb5b917fb26e5d8987929ef61be4e0587f8975c6cb7692e22be996",
+        "lib/types/types.js": "06f43511aa44249a435d74bf2b168bc767460930d874764c69add444510579b3",
+        "package.json": "3fca6ea818532b030eff8eccc187c22586cae6f6cf6a4e99cd49760eedfc62af"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-3ES1FKLM4asLvFS+yBcatzRNGINfUx/Cl+x+JzGhEK5QWX3aCxpH8Oa9Z4T9k0McBStWg1CTfHziRR8trHPYyw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.1.7-rc.2.tgz",
+      "sha256": "016d426d34c3ba1bcc94579db94364bfc3d123f5a09d711c3162af5d6912b62b",
+      "modules": {
+        "lib/index.js": "b165659f1eff0607222a7fe761bc56bae03fec8337c2e25affd064a3047dacb9",
+        "lib/invariant.js": "c3398ff0da3cf65facc78c3ed287ee088afcb0f6179f6b15eb2f618e759af4bb",
+        "package.json": "ccbd668be5553a489a92873e04211f3d0713b62078067b7e6b897a14143586a9"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-7XlSqUY2nk1S0GQNU7f7rimhBnYZYdtOtW5xr3oApHuaiWyP2Qj9D2Y0Xq5+jyFz7kQ9hoNHq3gA+g5IK1Dofw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.1.7-rc.2.tgz",
+      "sha256": "361aad706935073f130b6c1d527e1b2816639ebfbd3d696b8ce91662c0772582",
+      "modules": {
+        "lib/index.js": "63fbb41d2c33e07111884b798be507e68c2752acab8249c821c20ade436e894f",
+        "package.json": "f956e01eeff4e5b64a7df98260decf157e46712f9e7553c1ee65340cc4a5166e"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-observation-policy",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-htzbOb2krclujHcSMu4eLiMxE1zl1fNlQylN7RReU3ais5J08pJPzenNLH+M18zecRWr7IljxI/mrGAXlH0Upw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.1.7-rc.2.tgz",
+      "sha256": "ea7532ea7cc47de870b83456eec2d9ea0d9560888a04d93a41f84b11739039c3",
+      "modules": {
+        "lib/index.js": "e36b54cdb5c6fa01ccfa29f0433753e810ec1ac29a6a22be349d66b77eb64b03",
+        "package.json": "50d416487ab9b2f0c5811abfd07bc25ac792d16eee9fb70966332d2571a8262f"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-E1f+stkuTefmMeOQ1lEQJum42igtOeg+V5J5P92dZp5QObt3VT1EcIkywe9zFHtEJ+jExVzACLIxj8XNmisiiA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.1.7-rc.2.tgz",
+      "sha256": "eef8162cca5f809d43792e1f1579d9a1bcc503e03d97959e89cdb615687a6e8d",
+      "modules": {
+        "lib/index.js": "cac65e21a0f0895b073cb9a447196ac265f2a171cc7f67c7434a6b3b7782caf5",
+        "package.json": "f0d2361aafeadf39bd867a6711651e69a090b1eea07a153ed7b4e904df8e6ead"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-goal",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-9ULU4IMWGBkUTzOoQC+3tuyy7J/oFq5J05rv2PyxpLZyJGf5lRRDfhNjm/PAfbKzuXAPGEB2aOQ8eAdZ1RCnHA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.1.7-rc.2.tgz",
+      "sha256": "1d03f28a45798a250fdd620ca74fcbe08162a61f7df6f8bac345d607be26b4a9",
+      "modules": {
+        "lib/index.js": "8ec52107ead3d31f4d8ca95894c851046a2cbbd1b2033a0ea22fedf17c043ae4",
+        "lib/invariant.js": "468a099beed22d243daba4d97ae3e9e785f5c97309a656c0b8f1815537927246",
+        "lib/typert.host.js": "54860ac27a2828403f3c3a6d9811a273982ae06613305080d64f6dbd57e34d23",
+        "lib/typert.remote-client.js": "35df09d652b62cc8a3edf5ed9a4f0e84fbfdffbf9c67f778024dfe97758bd7a9",
+        "lib/types/client.js": "4aba033a3236db59a8413dc50ac0640890afe381f5abb93b7bf565b7185e5e8d",
+        "lib/types/domain.js": "4e60898de0faed31865df162479770e0d77cffe654528cef7720ca6c5be419af",
+        "lib/types/fold.js": "fefc4395d38e76e4780165e1881f593cceecc6bb9edb1cc89bf9749902bde881",
+        "lib/types/index.js": "0b0fb502e97ce59f6aed62dc49ca81ef6afe3ea349dd1b85dcc5fa064597e0a9",
+        "lib/types/invariant.js": "2eda87df2fffc21e2f761b138d54c9be523627e3b41bd1508906be5cf69a410d",
+        "lib/types/runtime.js": "3c6cf442aba70e119669f6a349768fe98b7f4cd0cdec9d389fb51437bf97745b",
+        "lib/types/types.js": "956a9ec9381a09458c283fba5deb4b8b695be6e078e49bbc94d1aa4e586cd32c",
+        "package.json": "0f3a524a4cedea7c88e55f2361332622f07bca366441b6e7fb59f018dbebb418"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-goal-round-driver",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-pIIDOhEGMr/BMLsRa+L7Q+qZgQupeAcT5wA7z3GEoZB/ABH4KTsepg0BZadZyuGEen4t0x6AG2pK2K+evonJLQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.1.7-rc.2.tgz",
+      "sha256": "26af9367783066febba442729f25916f9e9f733644ebb4968516fa4068192e8b",
+      "modules": {
+        "lib/index.js": "3bca01a2e87de1683fa8b55ad54688eefc4e366c971c20e9afd654db3b5ab450",
+        "lib/invariant.js": "66d6cf4a66dc84c239cd2efaec29606b645ec7f6a8f6c332209464b090df1c83",
+        "package.json": "267b97fc61a10a372c71cf232ce4f206b306c167f6b1fedec317af55c7271e59"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-headless",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-3M2QA46ATJNwdz2AYB5MpQMZot1ehwH36AqRBU2mNu9Iv8kC9cjsSST0eBnk1EyjF4jTqh5h6PZAkgLOBOExyA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.1.7-rc.2.tgz",
+      "sha256": "567aaa5ef9932c583fd6de16d4b3cb65b2faaa3b7a01ad863444301aa7863c72",
+      "modules": {
+        "lib/index.js": "31a4caa307b6a3bc0133e01d765c9449ff808725058639e32ebf0d020524e267",
+        "lib/json-stream-BA-F3lfb.js": "b6ede8da01119f5caf4baa8051ce8bcd8b956b5b163cf58af91d583b80028c0c",
+        "lib/startup.js": "66bb82dc445d5852de776401a00c1ad963276c741e39749d187c4c292b86330b",
+        "package.json": "ab6e0c93ad8d6aeaeb3a47013db2ed6613e19cec6701df8a75a46c432e107573"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-host-plugin-inventory",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-krS/FKI7cacoUtjpIaZnFQZy4cM2DnshsP//jafFdC1LyKyh5gG97MPmQ37jRM5Gm4VDJfDj3ojqWzx3BrP1sQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.1.7-rc.2.tgz",
+      "sha256": "db19ac8cf43fabf4d0aba3d6e1f5227277bdaffa607120298083ca2cbd46c2ed",
+      "modules": {
+        "lib/index.js": "f8e50fb2e24c92302570a41baa007e409cf4651bed0a65605b0871ba14325d30",
+        "lib/typert.host.js": "dc44ff7a2d5775a7b932ba96688c76803ce776c79303f60fd3b22a19c43d051d",
+        "lib/typert.remote-client.js": "66129f7bd3aabf40020ed60059a6e18712ce7acf8925117212576d05ccd2c6da",
+        "lib/types/index.js": "757079258b5ec9280890180c220a6b9caf3d498b2e71dc63a1ca146a245859cc",
+        "lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
+        "package.json": "56c67ea74cb5238cc543b8f25a10c61e6117919b7bc9042796e89127112746e1"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-host-webserver",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-0ex5NsJFvpqchfnar/IPtNOG5Tx7PmtUO3/zVptT4MJs5OOrvtjNYHpZ6DGntmnpupgXnci1cUsQJIfG3D+U+Q==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.1.7-rc.2.tgz",
+      "sha256": "e828e6c1bca886537f96ad455fe98239a57f007ff4882f84752c8eb3ce4b0cea",
+      "modules": {
+        "lib/index.js": "6efea1375eadeff62d5cfb6d1f515ff75a939d40405a62e5d138e8e7a6b18df5",
+        "package.json": "3d615a595b70cd55b0b3b3e5cce138a26e1f2d345e21705709d9dea26ffd7176"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-jobs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-bzbdcQ1dzCAGjYDs2J+YiwG58cDpASecJ4N6euUJNl0CCmnDETwCUhCpyMKDKCWcExdG3XcHmCjaCnL2hZIC0g==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.1.7-rc.2.tgz",
+      "sha256": "e925abc1ca6ee307ab3d44fff837bc04c05d1495252acdc4ddd2cc858b87b8f5",
+      "modules": {
+        "lib/index.js": "909240e722c34877282c6868cd0e06915669e0ceaef690b1738ae72b4c3ef049",
+        "lib/invariant.js": "afe38795a9485abb3a50a0696e2670571113f90a20e6f4c6fc5fdba4b29c0662",
+        "lib/types/archive-admission.js": "bd07b6e184331641ca4f9720c2405097b27040efe23d1eaaa1c68dc351ccc718",
+        "lib/types/brand.js": "a72a6e317ac1adb10352bfda79c1de3b5999ad7625eac487e952576e0d26daea",
+        "lib/types/index.js": "97dc78378b0537b431313fb1b8dfbcf06f09b4a85feacde07d5064764a0318bf",
+        "lib/types/invariant.js": "8d7b9de3a4928849ef504ea379642e4c60826ec0032ff92ff6fe89839f7fb490",
+        "lib/types/types.js": "f0761bbfcdfd477f36a2fc181d328cc4e1c89b157cabd00426c4151a67b00ba9",
+        "lib/types/view.js": "a83eb92b29b5f9f747211fd0cc66d44dff47784f77a2b32f96d0d6f8fdf7b4e0",
+        "package.json": "8a625089d158260b5c61e5d22de202dfdba19f427f4d7b26d1f5515e5ebbbc3c"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-jobs-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-DE0HLEuI15Vw1ncXLDESUIBTdWhrXgKWV3g/jupEGCwmm6GCqC9W9cjJPmbLP7JQGB7UPkui5DrIft+8MYL6Nw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.1.7-rc.2.tgz",
+      "sha256": "59816ddf7a34d0f93b1691960cf287f9c177b7d0428c24914dd85c062770efcb",
+      "modules": {
+        "lib/index.js": "3bed0cd38c649f39b148752e742ff1ef57696a6b9b11b15ff8cc6cd1d4f08f26",
+        "package.json": "9e4a8b6dfab34efec7db370ca8c8dcd1b5a119b89cd8a6a07f13d8230b239e72"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-llm",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-hNT3ovFnbNDQ8g544bh2Q9ORX40aI6Y+jhjer1lETeHS4g0jTjqUUVfARCTA7uAFvHucSBg2rFgbisIktmJCxw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.1.7-rc.2.tgz",
+      "sha256": "34270b89310f6cd027106b0fefb58bde3ef144dd74146c5f975ed4266e0bb3c1",
+      "modules": {
+        "lib/index.js": "9132c8a8053ee82b9fb1ded4f98c85cf557f288a15a85c552c6b1fb319ead120",
+        "lib/invariant.js": "8cb78641252b7a41523fef2c571dd42c698de4c9475dd91683191cefa4dced48",
+        "lib/typert.host.js": "49bac9ae980b700f4c20d71896595d5282642e818569d1556d221fc4c3679a22",
+        "lib/typert.remote-client.js": "8be01248041bd25c89117f1ad76934638f74808166bc1f0ae027a6ed24a5c6e8",
+        "lib/types/adapter-failure.js": "f1213f11f11e0f20aae26c09a5e0cf3d72512c1f1519e1b3f107edf64af43c28",
+        "lib/types/api-key.js": "254b774234c0bd38dd759765c0fd1e60788651a22106f5559ec2760a39935f2d",
+        "lib/types/assembler.js": "35a4754ab854055942b9142934c595c3e6358a717947daa2d8d89847aef988f7",
+        "lib/types/assistant-stream.js": "7e0cc96a4d60aed34381b552f9cb4549d70df36dbd28c0630da4cd93fa44b7a1",
+        "lib/types/attribution.js": "6f61d7b685175f7c74ed2a0498212258240f2a7fd93e939349cf7daccf33414b",
+        "lib/types/brand.js": "6b70219e0478d3307d865309523e7e7be3f169b06c04f4eef0d49b54aaef72a2",
+        "lib/types/call-config.js": "170f3ce7c7136b93087e2f5d50faa8b69815894ec3ebdf26c36d57e4c7a17a03",
+        "lib/types/content.js": "79802e2e6bece64114c8f6857943c2cd23742bd2c20b067cd06298d397f9b85e",
+        "lib/types/error.js": "2a630a88b278ef18da72abbca0e1288b7a6b221434cbe51a69aeaf70d178da4f",
+        "lib/types/index.js": "23d7367c444252733783e682f31badc56d25ec08bf8817a056892b2b805e8f1e",
+        "lib/types/invariant.js": "31e6ab4e29731d461b2bd49fd285666ea1a1fb96fa71ecd5c449c6c27e95d889",
+        "lib/types/message.js": "c87812f77a2afd284f271af071575edcadfde3daa7b6554d77b96810ce4688e0",
+        "lib/types/retry-policy.js": "f0a8fe075ac24c56ed2aa5d5e359a85539f5ffa237af54b68d3f4fc5124b5d83",
+        "lib/types/types.js": "14106d660103de2db746964fbb5be90c5eb2a7ff736779e2501e9faff956cbf5",
+        "package.json": "fd123bcf2dfd8f165315baa345e939039ef6d8153bb19bc73cbff6d03987e717"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-plugin-manager",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-jYMEyz8fJWa099wvs7meXCOC+W9n2N5mxDL4hze/GDU+t9+brMrpnif6Ind8ENTu/RXVx8O40iCCsPcUXGwa2Q==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.1.7-rc.2.tgz",
+      "sha256": "ad941fc51e348cce3fb6c76ff10e7135855a2082e987d3dcb6e51cd6ac96ca46",
+      "modules": {
+        "lib/index.js": "f46a48b3422927eea5605a70b78502e06ef9ceaa29d7a73f4a7f742361ff51c8",
+        "lib/typert.host.js": "fca5b000a2fdd995d56da7ba21a33921e4765898332db283c255df0cacac4b25",
+        "lib/typert.remote-client.js": "41292d52847b26265f4b55807ad3118b75d46a02edc7bbb66ab04cdc2f88822d",
+        "lib/types/build-approval.js": "a94c5e9217cf7c94af97e73910a292e63a9b54bd2a2bff44739f616c792394c4",
+        "lib/types/failure.js": "144c57fa0f5e7c1fb9d850f97d80d46885e92aaf6cbc4b6180b9797f07de2303",
+        "lib/types/github-connection.js": "0f3acd07fdbb50e7c73b147a242b69281c446d12a15004bd75cf078679936c30",
+        "lib/types/index.js": "0332934b288025bbaa89d73e782cb1347d9cafc5c92025b5caf51308ca471b92",
+        "lib/types/install-failure.js": "fc22ec581dbf3a04ebed6fa2bd9785298a8cd80873a999cb909e9a7e45f7627c",
+        "lib/types/install-spec.js": "27ae5899b75ec2dbe113aa0c35874d983ddd345285bfaf5502e8ac5da26241ea",
+        "lib/types/operations.js": "bf511a06b6ff2d7aab1f7725fcc80f304eb32a9541790e22cd28f8a9617b2c68",
+        "lib/types/patch.js": "cc014a3a09880220026a22792d49628e484edfe99ba4e03658b64891816adfb5",
+        "lib/types/registry.js": "9b8e2a742c989c4741dc4e5a2ba25a00b305d71b5eea90213d24a38ebb53ae5d",
+        "lib/types/run-tree.js": "3e65f458bd298dd2d3a8e3b48b30d771bb8e60a097bc2e6e924dad647f953e4b",
+        "lib/types/tools.js": "b7314b13486bd32657b20b931826a5f91bf2c421983438f29f7491ecd69d8eb0",
+        "lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
+        "package.json": "7e1b72be6719ad071e5dd2e259d412079c07d20975274cf618cd273854c9b6f8"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-ptc-runtime",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-zRFwSSUgTpKuFQTVwnuNO4067Gyi//4C4RRLaUntXaHkZv3z1S07f1fTaYwX4+ubIIAuAVeEsczxf6tPgZ8P5g==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.1.7-rc.2.tgz",
+      "sha256": "a155e4d0849274ce877877954e427f6096821051e819ae1704c239de2ecadc33",
+      "modules": {
+        "lib/index.js": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
+        "package.json": "e9d5fa5be1aa6c2519e30b5f3cc213842601768c30b0125cc980e549305a2109"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-pwsh-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-OJlGS7JLJe5CcLMvVdbxryS6bKW5pfYN2emIeTYhSu+tBsKAiah8kdD+2EOwC0XMq24NcwgKO7xlNmS8oIrurQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.1.7-rc.2.tgz",
+      "sha256": "892a7599c94a44e261a9dd4cb37d22aa21cc17dba3a71f23b3ed0c4a77ff088f",
+      "modules": {
+        "lib/index.js": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e",
+        "package.json": "fa6ee00f175920aaf00b472b5cb77bbca5a4b790dd8a1badd94e53b4106c2a0e"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-pwsh-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-c3kXLNhf8fNL7nt8NfJwcHU0jPvRiy6IPF+DHtT/Tp7+NhytHwj8vR3Ln7GIwsXGNU2hJbaD63S2IStjWLaylQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.1.7-rc.2.tgz",
+      "sha256": "5c098c3402ade4658cd2e6c72558ae9522a5281438f22f547ca06ae07db08151",
+      "modules": {
+        "lib/index.js": "bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783",
+        "package.json": "c97d4a06141943db1a584c92b8c74b26de9025ba7c3c9276aa1fe9a12b6d1896"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-7aP893mtTvnuZfCKD6hUN5gYchi6Wogn4W3mg/rGMvogmhbWgrCs00boJx/eHK4KvVJmEW1e8kO5N+GtsesptA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.1.7-rc.2.tgz",
+      "sha256": "39843ea57532829ca8828f791dd6f71d90fb82778cd4b514a07943616ff38b08",
+      "modules": {
+        "lib/index.js": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
+        "package.json": "ac94475eff7c9fe54b20b40106d33087bca13c46226fe23b6241fa097f0a7bbc"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-sandbox-policy",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-pIhCaOEqYjNoKy/c7dYYgYzK+zp8/FxnEeaBA5e6fTmNROb+/qSFsC4hY3Qu+PVU9IdbH/4fa6TbT2jnqoDPQw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.1.7-rc.2.tgz",
+      "sha256": "d411ab08e126dc61e54edfcb933f9f425be063e19816a8fa57ac5ff63ee677ff",
+      "modules": {
+        "lib/index.js": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
+        "lib/invariant.js": "265d56bbd39b0c383a6d8e5f07dda3a56d3bffcc69424b60a40babe99856873a",
+        "package.json": "ce0e5e99ed890a1fc51472f7fb9a01e3591070d0e209bd54912155c56cac09ce"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-session",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-0dXv1t4Zox/yHkZ4PfPNSBWJfIc72PDqOvjz43EMoHpbmoKTVpit2UpUI+yTtX01e4MVBbDMxBZ95oJW/Oydnw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.1.7-rc.2.tgz",
+      "sha256": "f7deaec7289aa3b93cf8f8551a59cb811ada63ddea97d3e4c87f9b6f59c1e783",
+      "modules": {
+        "lib/index.js": "c7edbf46b9af2a50114ac396596870eaf8bf7ad2970618ec6c5221b053bb5523",
+        "lib/invariant.js": "53066dc4945c0159fb5b48944b578a2d2d22f2f3bd5042599f2f6278edc84466",
+        "lib/types/fork.js": "72ca7ae2cce506eb607e565f2e6b15fc6e3c2663de8403f79e37fc3a469e34cf",
+        "lib/types/index.js": "24b2d8b5d47030fbdddd248f0ae0794321914d44742aaeb98ea28c82ea3f446a",
+        "lib/types/invariant.js": "975e1640ad5dba930b6031315ee7d98dd01151155d2db7e993021de1feef4f32",
+        "lib/types/known-event-types.js": "8f38e6fc9439bb4e47f2bd3aa21c86d5141ef9679f41181c9d9a48765c67d3be",
+        "lib/types/preparation.js": "78dea29f5e11a4d220945a572b3eb26cb66460e6a368a423bf597c3ef05a5faa",
+        "lib/types/repair.js": "23fdd40281163d6f171dab957478441a81c2e3724461e38d68d3f8409b73feb9",
+        "lib/types/request-header.js": "3f73ee59af794df50df159a9c45c606f0fbce364c482b371831d1e8f26b87aea",
+        "lib/types/seq-ranges.js": "68a127c76affa98edeeb50e302eb43f154f4d24f7d04cb95ba8b323e88f3d09e",
+        "lib/types/surface.js": "7e9d4bd3b7c5b2eceed0f8b035e9c021237c72baa2b53e4c6fc941e8b417580e",
+        "lib/types/tool-history.js": "2d2c4f4cbb6717aa2f487af52ce6a81e2002ce2c768cb5a4210c867ec49a0e95",
+        "lib/types/types.js": "a03acad09eec657b94441109af0da31b5b29668feae35d1b9e72fd99beca505f",
+        "package.json": "9946cc74d54f358486f39475aca0dbd8e34dbb255ade18ecf3de15de0029e525"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-session-format-v3-to-v4",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-PpGsFntVbc6HEnIlTRMluk55YPAFGmbz7SSyYMXDaz7N+jzWTa54AuMg9gUthHxPwZyj7KF2QtJAJnSQ2+GPGw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.1.7-rc.2.tgz",
+      "sha256": "2ba5525393e5528aa3772948940344691494dd223125832bdc55cdd692eda630",
+      "modules": {
+        "lib/index.js": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
+        "package.json": "efa6c2c8659466b795d6f12e2401f85c43391c769b0ef17efa39a817be7e0dfb"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-session-persistence",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-xZXMo8hYMnh96UyxpkmDqvfxpmVNWbTlXqSuJray7S2kW8AkugKDc+FMy2+/znoBHhZsi+2/uKJRPj6dwDBIsg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.1.7-rc.2.tgz",
+      "sha256": "e5df22cd3d6c1d0158153674711804df93253f733565fdab3aa010290a6957c8",
+      "modules": {
+        "lib/index.js": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
+        "package.json": "b1526be8a69a4de05f8318a533b9c89518ea6485fe652db90d1370abfc4d70d3"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-session-persistence-jsonl",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-Dymapt+M11rJKQgsisfod2LSf0HvyUN/8QTv+g3BAXlRh5YFXvRcSVsY3XWj5NnUs3tlbU2aauBE7OXbMSP4vQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.1.7-rc.2.tgz",
+      "sha256": "b810feb11e4ea635948763c8c079ea02e07728c0d86975e160ca18c6c08e5ff3",
+      "modules": {
+        "lib/index.js": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
+        "lib/worker.cjs": "7aa76131cfc31a133fd42da731f44240eb4e365c2323fe77a46a5ee770d37dcb",
+        "package.json": "fe90aeb77fac098c6a9ca8b8c619cc9dfe0ad97224c7cb354819f0bc3ae8d5ce"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-session-projection",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-s5T8oHBEh+GeOTJ+wehD4CGZkTiWgczZZA+NDbfbqUO0k5L+dk0kk3fN+/srAg77rhR7UeeDSR8ZNcpYx/VUdw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.1.7-rc.2.tgz",
+      "sha256": "e8e457916347304645c14ddf8780ded998dbc90588baeae9df4d42c180b510f2",
+      "modules": {
+        "lib/index.js": "022f1d13e25aeb3c18e10407d84c69e018c1c05a65c9ee36ed14d89b185a4fa8",
+        "lib/types/index.js": "f3daccbaa1cc82749411fadc7923ff9275cc96b7ec594e65f3e01a3dbbe29444",
+        "lib/types/types.js": "d6b9f7a57fe4dacd7b1a6403a34e6cd1ccd088c2e024e02cbf577166faca6ffb",
+        "package.json": "af5789d9acd19a3e54cb3951bbe0f99b84bdbe54a98fa4d985b97439cd8e7ac4"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-shell",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-l/CdrpqFG3SNPKBm7/zJkqn8gODxMLcTOg57zSqyDi5VdJXb8dlRQNHH4KfhxfWM9rZSH5AC94g6Il2n3sOQ+w==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.1.7-rc.2.tgz",
+      "sha256": "a36a85933e3c734cd345405536ed602b8d103cf6894e5599e8648ced546ad89a",
+      "modules": {
+        "lib/index.js": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
+        "package.json": "0430098a729444ad8749a1631e69b1b2deb67f1adc76267164d7de18136139a8"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-shell-env",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-Zu31yhGgnB+WMah0Qb/+adZTeUr1MQLmNMU8lV6YVt20tCnbA+HFI/akPTIoc9Ux8+Lqf6/fyv4e63OniPXaRw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.1.7-rc.2.tgz",
+      "sha256": "3c785494e25403a6ab1f51f052a24fd8fb613ede845d082604df1bccfce1f4b9",
+      "modules": {
+        "lib/index.js": "82b1e6663968307a387fd7f300ff9db5e3c1ff707b32953da82c3dfa12024364",
+        "package.json": "15d5ff96195580c2884e6ee514e8e2b141f5cc110063df14d1a81324cc442c31"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-subprocess-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-1JKUC4YriYbuyNsDcOwb+WQVaxy6I8CWeTVP/UoEc6uXPSMQdS3GJArDYyFdC2NzjOEmAxpTr4awTNNrpA6Gmw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.1.7-rc.2.tgz",
+      "sha256": "b42bead19498363a819796ad0c8c32cc2bec175d9533fb0f48a871d3222ab162",
+      "modules": {
+        "lib/index.js": "e40106ed35a1e1744c016e77f2cf59b07f87969bb7c4b424d26fb08da75e3922",
+        "lib/output.js": "4f77ef6da608d36df168c99177e9b527e7145df1418845eba567635e64a4c2a3",
+        "lib/runner-launch-B2zsQ1Dz.js": "6df08adc4a27f278878a5f4cde8b551b51e647b922ac7d6591fd62d272ced153",
+        "lib/runner.js": "4e21528dfdb3e92bdce2340945dc4dcb202e4a4af0bbeb8b97585f67735d30c1",
+        "package.json": "9c033c225ec379db266d5d434a2521e9a5b0ca5ee4c6961a90c2c5b0b1a45ed6"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-system-prompt",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-vxKcADh7XOuWJOfa0WeEOhvFiUbMOdoK4w6M7KVCI0S99c9ktxrgY4wKdmAxap+nQjwTEPme3QuOlY3Na+cz9w==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.1.7-rc.2.tgz",
+      "sha256": "4ff9fc37fd66f15f49305dbe4c2c1d3bcd7ed12b736a098893c80657fd0a3a3d",
+      "modules": {
+        "lib/index.js": "ff422afac6ba85f89afa985d921aed0b603feb354a05a549c48eae04cf0d2f57",
+        "lib/invariant.js": "64c55f06e5583df9b577d613c64b6bac9f04d189ff5ef2d613caa65ae9f79d75",
+        "package.json": "a48f0bfd25b553d0b71eed24533e9b3090c5345d2665dec77604fb76a1b75db5"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-bash",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-pdFYrdnX2OlMN9nI0XT5MZwMkR58x4Z5j9qyTfMYLvtbuZxHwxcdHq2PJU3vAuVQj14F7TJiFEan2EXq+X1mFg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.1.7-rc.2.tgz",
+      "sha256": "2328a9b2c46fdab88e6e56dcddbb0c6f5de56ec08cc97f6b687efc91987eb97e",
+      "modules": {
+        "lib/index.js": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
+        "package.json": "6554a080c2621a29580709d48d5d303df0aff9238ad6cd1588f1eb284e4b213b"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-fs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-/6wYrqHH1530tncA7DxC3IxLN2iI8kyhCPR/NfaugL09yGPpBwxm455bMvITSjIAvINWpJfMQvaijPui6goY2Q==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.1.7-rc.2.tgz",
+      "sha256": "bb0216c1b055b771440d4a89a589f6088398512bc865198304f91d54fda654ff",
+      "modules": {
+        "lib/index.js": "66742231de99695b98400cdbc7bcf47b8ef2bf24600cf86f66bb35591981427f",
+        "package.json": "1fc02693f0606d6fa425359e2428c89e3a870c13da75a53c0da5354517b8c009"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-goal",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-Otb3HOlyZA+44nDXrMi9PW4vlurudOaRYdA7hu4MZBtqvmFEty5loJAzrtDbAhwImhA/UM9M+7Qa2ijwm68qCw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.1.7-rc.2.tgz",
+      "sha256": "a37601aa6cbe10ad9e41d7cd15f3cb99a0d6c4033ab78aecfbf21a607a87b14c",
+      "modules": {
+        "lib/index.js": "7220fa7b5b7c95c94377ac32c6b01ecac5b4853d9dec3a48ab17d371cda63e6c",
+        "package.json": "064f7de639ea4bc4c3e0a810dc1124abf69c1f9edfffeb640d2e8a261195c326"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-jobs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-FAqhI8Hf1InawbrJF/XUjIlQHV11vRMWbX7ofrekJcX0OBk/Og/h8SUzy1knGBVULEm8m2PDLxggXoMu+HVlvg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.1.7-rc.2.tgz",
+      "sha256": "411c9a77c56a604f1c9b21b473066e7e62d61f491e75221eaef2677c761e54d0",
+      "modules": {
+        "lib/index.js": "660066155801b20c67e6e288820961a365fe65738ffee1a16e50a2394ac9c7c6",
+        "package.json": "f1f1053535e20130d335bba24990f4cc309f6f115556b8021204c03ee4421447"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-pwsh",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-GMFZT35QKoFOXzFV576FbohrdfcXtrMJlOPqdQvNvUdMLYPiiJEIR4WSuqQuGBoez0bLxKVwtodGzwcvPBP+dQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.1.7-rc.2.tgz",
+      "sha256": "50e078d69cd79614577e3e264527c6dcf723f4fc163ee40169d518e3bc0c1b9f",
+      "modules": {
+        "lib/index.js": "59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c",
+        "package.json": "7b2ecde109a1f8f73e2f365ba752b8ea9d267f1d72cd68567178e55df820ee98"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-tools",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-c3dTdKnslKxVTgjjPLwMKLqGUMwnZH5P8RUsucMQlWn2GViyFW/+5AIUuZHBjjE6Y7NAYl+lVVE/R4LgTp5KWA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.1.7-rc.2.tgz",
+      "sha256": "1ed94fb52cc9106ec30f9a999e1262deef9cb514b9d745e968f1f6ec9c995f80",
+      "modules": {
+        "lib/index.js": "40f47709337c3c205d4e09e647f8588f4977e66f6d52f019b3cc7ef81159d84f",
+        "lib/invariant.js": "41a09fa8d0e0857c6232e8d3b13c8658929b6b6300c6b3a2c53980c05309c282",
+        "lib/types/index.js": "05d701b98fa465ad159555dedeee7470ac63f8fcd67d94a6ecc2c6570cbe9f4b",
+        "lib/types/invariant.js": "955311912d27f945c9298bc2add074b04fd04414312ef4f9dec92635639dd121",
+        "lib/types/json-schema.js": "912e04e68c2455cbb77651031449574f992720c90311e6cbecb1d35020bc1072",
+        "lib/types/presentation.js": "253894265253e38fa9db12f3696d9dac9fd2bed1363c04ce3f95c0f19a6c16da",
+        "lib/types/ptc.js": "3bb2d4b127bd21dd2b17c0ae219f851c4e37420a9bab73ab13d9fc51ca9131d5",
+        "lib/types/py-types.js": "50f65c90c88370f456bd7d565fa0c788da750fc4cdcfc72064c4296960191afc",
+        "lib/types/schema.js": "c3dd33029e3f80e6ab9ad9b0d853ba80b88177c1c2423080a94a2db91e6f33f9",
+        "lib/types/testing.js": "c6784f546e950dc38323baaad4009bb197eb25acf3a16adaa2893a44c7b7a650",
+        "lib/types/ts-types.js": "3c2f80465d6a420f15c75dcd023daa73af97307c3e22478c0bae67cf71c50d1e",
+        "lib/types/types.js": "d53c54d32353419ece121f485a5534ee054842b74ebab7b4a4d3325545d0179a",
+        "package.json": "12bda14a4753f2c2202d607e2bcf77236817bc6f17a827421c7f353ac2d917e5"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-user-approval",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-RQ6GB+C4G6VY/eJrFfS89+89DfHFAJ5G1abhmutfKBhZcYSnGNZyPIzpr5mKbl2xNMIhvCJOb9WiFz2fUPW2HA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.1.7-rc.2.tgz",
+      "sha256": "0cb982508692c1bbe88da937d3e7f2d8d4b2089aa81adcfc1fa354e579a1900a",
+      "modules": {
+        "lib/index.js": "6a5ad1ba3c3dc3abbbae52e6c8c4463970ee0c1c8988cebb0d5cf2acd17ee90b",
+        "lib/invariant.js": "4c4d4f497a9cf8b2397ce0f029456c5d9dc52005f0e60e3fb6365695b3cded7a",
+        "lib/types/index.js": "0b2e00fe1b2cedc9b6349a38e07e26a05a09492da838f069c10b76cf13f6d6e8",
+        "lib/types/invariant.js": "0ee679ea1449b99266df9dc3c53606a61573caa432cfca3d44badfdac71a0ef8",
+        "lib/types/types.js": "525e6f38c039c0b20c6d071bfe06799e8fbc41b2af2ce8db7b1feb3faebad75f",
+        "package.json": "b3f69f6540c18dc0c9321f01398f298f168a1b655792397d9c7f8cb2399fc99d"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-util-values",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-UX8nh5SbtZcPVVEvjd+9PCPcbybA6OpVzJGgFxYn59ao/7QQGyYbByS8KXr+THU5JtqmDDVb9xGUSJaF2IYmeQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.1.7-rc.2.tgz",
+      "sha256": "5e61a75f41d682800285c933104eb4a50ca114769d0f15e3f06e23c91c895db7",
+      "modules": {
+        "lib/index.js": "890eda6f657c44da19ffbd151ea27dd835caac65db0478f64f6c3926534485ec",
+        "package.json": "dfede153fe6997dc062645c1fd0d1d4f89d4507396d83938987ba6ac0c353006"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh-web-app",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-3cMgHys6X9N063HcjhFN2a3azGoWWDtH42/io33gcBZMZxbYP5Kevc4l/erwKa5hAzXtJ2FArjJAytJmy8WSKw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.1.7-rc.2.tgz",
+      "sha256": "388709f10068cdec1997c37a69c282961b6b02afd41871dbc2ff8a17db41e7b4",
+      "modules": {
+        "lib/index.js": "50c7ce5b93e8a7ac0117e066699cd31b553a5a135d38b7051d6a8364ac691af4",
+        "lib/startup.js": "95a47053483fbe8ec86711369b8791bccb592c303fcc89300458a4bd07c6c252",
+        "package.json": "091d775bafe17f4e0681e6312214ce1f2d5d0389bf1201c1a2586ecd2789be81"
+      }
+    }
+  ]
+}

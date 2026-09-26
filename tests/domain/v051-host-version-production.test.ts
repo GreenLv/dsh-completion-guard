@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { evaluateHostLock, hostVersionFromPackages } from '../../src/domain/host-lock.js'
 import { combineHostPolicy } from '../../src/domain/host-resolver.js'
-import { RC015_HOST_PACKAGES } from '../../src/domain/rc015-host.js'
+import { RC017_RC2_HOST_PACKAGES } from '../../src/domain/rc017-rc2-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
 /**
@@ -22,7 +22,7 @@ import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
  * a graph the fixture invented.
  */
 
-const withHostVersion = (version: string) => RC015_HOST_PACKAGES
+const withHostVersion = (version: string) => RC017_RC2_HOST_PACKAGES
   .map((row) => (row.name === '@deepseek-ai/dsh' ? { ...row, version } : row))
 
 describe('the minimum host version is decided by the production host entry', () => {
@@ -38,10 +38,10 @@ describe('the minimum host version is decided by the production host entry', () 
     expect(decision.hostVersion).toMatchObject({ status, minimum: MIN_SUPPORTED_HOST_VERSION, version })
   })
 
-  it.each(['0.1.5', '0.1.6-rc.2', '0.2.0-rc.1'])('classifies %s above the minimum but keeps it unsupported', (version) => {
+  it.each(['0.1.7', '0.1.8-rc.2', '0.2.0-rc.1'])('classifies %s above the minimum but keeps it unsupported', (version) => {
     const decision = evaluateHostLock(withHostVersion(version))
     // At or above the diagnostic floor: the version half passes…
-    expect(decision.hostVersion).toMatchObject({ status: 'supported', version })
+    expect(decision.hostVersion).toMatchObject({ status: 'unregistered', version })
     // …and the graph half still refuses, so an unobserved graph never becomes a
     // certification because its version happens to be high enough.
     expect(decision.status).toBe('unsupported')
@@ -49,8 +49,8 @@ describe('the minimum host version is decided by the production host entry', () 
   })
 
   it('accepts the exact audited cohort at the floor', () => {
-    const decision = evaluateHostLock(RC015_HOST_PACKAGES)
-    expect(hostVersionFromPackages(RC015_HOST_PACKAGES)).toBe(MIN_SUPPORTED_HOST_VERSION)
+    const decision = evaluateHostLock(RC017_RC2_HOST_PACKAGES)
+    expect(hostVersionFromPackages(RC017_RC2_HOST_PACKAGES)).toBe(MIN_SUPPORTED_HOST_VERSION)
     expect(decision).toMatchObject({ status: 'supported', hostVersion: { status: 'supported' } })
   })
 
@@ -65,7 +65,7 @@ describe('the minimum host version is decided by the production host entry', () 
     // A graph without the host row is not evidence of a supported version: the
     // decision is absent rather than "supported", so no caller can read a
     // missing version as a pass.
-    const rows = RC015_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh')
+    const rows = RC017_RC2_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh')
     const decision = evaluateHostLock(rows)
     expect(decision.hostVersion).toBeUndefined()
   })

@@ -1,31 +1,8 @@
-/**
- * DSH host version support policy.
- *
- * Context Guard 0.5.2 supports exactly the two registered DSH host releases:
- * `0.1.5-rc.2` (latest) and `0.1.5-rc.1` (verified minimum). Package discovery,
- * npm installation, and the exported support range use the same newest-first
- * exact union, so an unregistered stable or future prerelease is never advertised
- * merely because it sorts above the minimum.
- *
- * The minimum comparison remains a diagnostic layer for distinguishing an old
- * host from an at-or-above-floor but unregistered host. It never substitutes for
- * the exact support set or the complete 33-package host graph.
- */
-
-/** Lowest supported DSH host version. DSH packages version independently of Cordis. */
-export const MIN_SUPPORTED_HOST_VERSION = '0.1.5-rc.1'
-
-/** Latest DSH release with a registered complete host graph. */
-export const LATEST_SUPPORTED_HOST_VERSION = '0.1.5-rc.2'
-
-/** Exact endpoints supported by the current release, newest first. */
-export const SUPPORTED_HOST_VERSIONS: readonly string[] = [
-  LATEST_SUPPORTED_HOST_VERSION,
-  MIN_SUPPORTED_HOST_VERSION,
-] as const
-
-/** Exact npm range shared by package discovery and peer dependency declarations. */
-export const SUPPORTED_HOST_RANGE: string = SUPPORTED_HOST_VERSIONS.join(' || ')
+/** Exact host identity; version ordering is diagnostic only. */
+export const MIN_SUPPORTED_HOST_VERSION = '0.1.7-rc.2'
+export const LATEST_SUPPORTED_HOST_VERSION = '0.1.7-rc.2'
+export const SUPPORTED_HOST_VERSIONS: readonly string[] = [LATEST_SUPPORTED_HOST_VERSION]
+export const SUPPORTED_HOST_RANGE: string = LATEST_SUPPORTED_HOST_VERSION
 
 export interface ParsedHostVersion {
   major: number
@@ -87,13 +64,13 @@ export function compareHostVersions(a: string, b: string): number | undefined {
   return comparePrerelease(left.prerelease, right.prerelease)
 }
 
-export type HostVersionStatus = 'supported' | 'below_minimum' | 'unparseable'
+export type HostVersionStatus = 'supported' | 'below_minimum' | 'unparseable' | 'unregistered'
 
 export interface HostVersionDecision {
   status: HostVersionStatus
   version: string
   minimum: string
-  reasonCode: 'host_version_supported' | 'host_version_below_minimum' | 'host_version_unparseable'
+  reasonCode: 'host_version_supported' | 'host_version_below_minimum' | 'host_version_unparseable' | 'host_version_unregistered'
 }
 
 /** Decide the version-policy half of host support. Never a substitute for the graph lock. */
@@ -107,7 +84,9 @@ export function evaluateMinimumHostVersion(
   }
   return comparison < 0
     ? { status: 'below_minimum', version, minimum, reasonCode: 'host_version_below_minimum' }
-    : { status: 'supported', version, minimum, reasonCode: 'host_version_supported' }
+    : satisfiesSupportedHostRange(version)
+      ? { status: 'supported', version, minimum, reasonCode: 'host_version_supported' }
+      : { status: 'unregistered', version, minimum, reasonCode: 'host_version_unregistered' }
 }
 
 /** Whether npm's exact public support union admits this host version. */
@@ -115,6 +94,6 @@ export function satisfiesSupportedHostRange(version: string): boolean {
   const normalized = version.trim()
   if (!parseHostVersion(normalized)) return false
   return SUPPORTED_HOST_VERSIONS.some(
-    (supported) => compareHostVersions(normalized, supported) === 0,
+    (supported) => normalized === supported,
   )
 }

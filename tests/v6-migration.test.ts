@@ -35,11 +35,11 @@ describe('v6 historical eligibility cut', () => {
   it('derives a v5-to-v6 cut from persisted notices and does not promote old generic work', () => {
     const notices = [PROTOCOL_V5_NOTICE, PROTOCOL_V6_NOTICE]
     const events = [
-      { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: notices[0] }] } },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: notices[0] }] } },
       { seq: 2, type: 'turn/start', data: { turn: 1 } },
       { seq: 3, type: 'user/message', data: { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: '继续处理任务' }] } },
       { seq: 4, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
-      { seq: 5, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: notices[1] }] } },
+      { seq: 5, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: notices[1] }] } },
     ]
     const p = deriveProjection(events as never, { activation: 'always' }, { cwd: '/work' }, true).projection
     expect(p.boundaryProtocol).toBe(6)

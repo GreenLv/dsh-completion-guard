@@ -32,7 +32,7 @@ const MESSAGES = [
 ]
 
 const project = (texts: string[], notice = true) => deriveProjection([
-  ...(notice ? [{ seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } } as DerivedEnvelope] : []),
+  ...(notice ? [{ seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } } as DerivedEnvelope] : []),
   ...texts.map((text, index): DerivedEnvelope => ({ seq: index + 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })),
 ], { activation: 'always' }, { cwd: '/workspace' }, true).projection
 
@@ -96,11 +96,11 @@ describe('the no-progress budget survives a reload', () => {
     `Context Guard no-progress record: ${JSON.stringify({ fingerprint, boundaryKey, attempt })}`
 
   const record = (seq: number, text: string): DerivedEnvelope =>
-    ({ seq, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text }] } })
+    ({ seq, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text }] } })
 
   const armed = (texts: DerivedEnvelope[]) => deriveProjection([
     { seq: 0, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-    { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+    { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
     { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '持续推进，直到迁移脚本全部跑完为止。' }] } },
     ...texts,
   ], { activation: 'always' }, { cwd: '/workspace' }, true).projection
@@ -125,7 +125,7 @@ describe('the no-progress budget survives a reload', () => {
     const projection = deriveProjection([
       { seq: 0, type: 'turn/start', data: { turn: 1 } },
       { seq: 1, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-      { seq: 2, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+      { seq: 2, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
       { seq: 3, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '持续推进，直到迁移脚本全部跑完为止。' }] } },
     ], { activation: 'always' }, { cwd: '/workspace' }, true).projection
     // Two earlier host turns already reached a decision about this state; the

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts } from './native_host_probe.mjs'
+import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolCall, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
 import { runNativeReleaseFixture } from './native_release_fixture_v070.mjs'
 
 export const name = 'completion-guard-native-probe-v070'
@@ -72,7 +72,7 @@ export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const digest = driverDigest()
     const runtime = runtimeRequire(config.runtimeRoot)
-    const { createUserMessage, createToolResultMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href)
+    const { createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href)
     const { SessionId } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href)
     const domain = await import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href)
     const rows = []
@@ -81,14 +81,12 @@ export function apply(ctx, config) {
     let operation = 'initialize'
     let lastTool = null
     let ordinal = 0
-    let turnOrdinal = 0
     let mode = 'initial'
     const sessionFor = label => SessionId(`guard-native-${config.nonce}-${label}`)
     const open = async (label, resume = false) => {
       if (handle) await handle.dispose()
       handle = await createProbeAgent(ctx, sessionFor(label), config.workRoot, resume)
       ordinal = 0
-      turnOrdinal = 0
       return handle.agent
     }
     const events = () => handle.agent.session.snapshotEvents()
@@ -96,7 +94,7 @@ export function apply(ctx, config) {
       const hostLock = probeHostLock(domain, config, process.platform === 'win32' ? 'windows' : 'posix')
       const agent = handle.agent
       const raw = agent.session.header
-      // The host's V3 header also contains cwd/isSeeded, which are not digest
+      // The host's V4 header also contains cwd/isSeeded, which are not digest
       // fields. Use the same immutable session identity inputs as runtime.ts.
       const scope = { cwd: raw.cwd, sessionHeader: {
         version: raw.version, id: raw.id, createdAt: raw.createdAt,
@@ -114,20 +112,19 @@ export function apply(ctx, config) {
     const flush = async () => assert.equal(await ctx.sessions.flush(handle.agent.session), true)
     const root = async phrase => {
       operation = 'root_pre_step'
-      const turn = ++turnOrdinal
+      const turn = startProbeTurn(handle.agent.session)
       const message = createUserMessage({ content: [{ type: 'text', text: phrase }], source: { kind: 'user' } })
       const decision = await handle.agent.ctx.waterfall('agent/pre-step', {
         agent: handle.agent, messages: [message], turn, step: ++ordinal, signal: AbortSignal.timeout(30000),
       }, async () => ({ kind: 'enter', messages: [message] }))
       assert.equal(decision.kind, 'enter')
-      handle.agent.session.append('turn/start', { turn })
       for (const entry of decision.messages) handle.agent.session.append('user/message', entry, { surfaceOp: 'append' })
       await flush()
     }
     const tool = async (name, args, expectSuccess = true) => {
       const agent = handle.agent
-      const callId = `native-v070-${process.pid}-${++ordinal}`
-      agent.session.append('tool/call', { turn: turnOrdinal, step: ordinal, callId, name, arguments: JSON.stringify(args) })
+      const callId = `native-v070-${process.pid}-${agent.session.seq}-${++ordinal}`
+      const coordinates = appendProbeToolCall(agent.session, createAssistantMessage, callId, name, args)
       operation = `tool_${name}`
       const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
       lastTool = { name, registered: Boolean(agent.ctx.tools.get(name, agent)),
@@ -135,10 +132,11 @@ export function apply(ctx, config) {
         error_code: typeof result.error?.info?.code === 'string' ? result.error.info.code : null,
         ...(['bash', 'pwsh'].includes(name) ? { terminal: shellTerminalFacts(result.value) } : {}) }
       agent.session.append('tool/result', {
-        turn: turnOrdinal, step: ordinal,
+        ...coordinates,
         message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
         ...(result.error ? { error: result.error } : {}), ...(result.meta ? { meta: result.meta } : {}),
       }, { surfaceOp: 'append' })
+      finishProbeToolCall(agent.session, coordinates)
       operation = 'tool_result_flush'
       await flush()
       if (expectSuccess) assert.equal(result.isError, false, `${name} host result`)
@@ -333,10 +331,7 @@ export function apply(ctx, config) {
           await root('Explain the isolated acceptance history.')
           const page = (await tool('context_guard_checkpoint', { bindings: [], evidence_scope: 'history', limit: 1 })).value
           assert.ok(page.pagination)
-          handle.agent.session.append('compaction/summary', {
-            compactionId: 'native-v070', summary: [], shadowedRange: { start: 0, end: 0 }, shadowedSeqs: [],
-            shadowedTokenCount: 0, provider: 'native-driver', model: 'none',
-          })
+          appendProbeCompaction(handle.agent.session, 'native-v070')
           await flush()
           await open('history', true)
           assert.ok(events().some(event => event.type === 'compaction/summary'))

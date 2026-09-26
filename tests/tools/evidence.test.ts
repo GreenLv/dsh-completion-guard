@@ -172,7 +172,7 @@ describe('ordinary producer migration', () => {
     enable(session)
     user(session, `Perform ${action} in /fixture.`)
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'migration boundary' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'migration boundary' } }), { surfaceOp: 'append' })
     let effects = 0
     const roots: EvidenceToolRoots = {
       commandRunner: async () => { effects += 1 },

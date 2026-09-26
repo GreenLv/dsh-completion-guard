@@ -4,6 +4,8 @@ Start with [architecture](ARCHITECTURE.md), [compatibility](COMPATIBILITY.md), [
 
 The [core alignment contract](CORE_ALIGNMENT_CONTRACT_V2.md), [semantic compatibility](SEMANTIC_COMPATIBILITY.md), [upstream base](UPSTREAM_BASE.md), and frozen conformance pin describe shared semantics and their limits. Keep the [0.7.0 development plan](DEVELOPMENT_PLAN_0_7_0.md) with its [plan review](CORE_ALIGNMENT_PLAN_REVIEW.json): these are the original planning snapshot, not a current execution queue or proof of release. Their original bytes remain unchanged.
 
+The current [rc.2 adaptation plan](DEVELOPMENT_PLAN_DSH_0_1_7_RC2.md), [planning evidence](dsh-0.1.7-rc.2-planning-evidence.json), and [A01–A16 status](DSH_0_1_7_RC2_ACCEPTANCE.md) distinguish source work from artifact and native gates.
+
 ## Historical development material
 
 Completed pre-0.7 plans and one-time execution handoffs have been removed from the current documentation tree. Their exact original content remains available below; historical instructions do not authorize new operations.

@@ -49,7 +49,7 @@ describe('v0.3 authoritative instruction segmentation', () => {
     const projection = deriveProjection([
       { seq: 1, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run pnpm test in the workspace' }] } },
-      { seq: 3, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }] } },
+      { seq: 3, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }] } },
     ], { activation: 'opt-in' }, { cwd: '/work' }, true).projection
     const rebound = [...projection.items.values()][0]
     expect(rebound).toMatchObject({ authority: 'root_instruction', semanticAction: 'test', targetCaptureStatus: 'resolved' })
@@ -58,7 +58,7 @@ describe('v0.3 authoritative instruction segmentation', () => {
     const uncertain = deriveProjection([
       { seq: 1, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Background material about workspace state' }] } },
-      { seq: 3, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }] } },
+      { seq: 3, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }] } },
     ], { activation: 'opt-in' }, { cwd: '/work' }, true).projection
     expect([...uncertain.items.values()][0]).toMatchObject({
       authority: 'legacy_authority_unclassified', semanticAction: 'generic_run',

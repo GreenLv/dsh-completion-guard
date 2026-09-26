@@ -1,4 +1,4 @@
-import type { PackageRow } from './digest.js'
+import type { PackageRow } from '../../src/domain/digest.js'
 
 /** Exact npm registry identities for DSH 0.1.5-rc.2 (Cordis 4.0.2).
  * Native acceptance is recorded separately; these rows are registry-derived.

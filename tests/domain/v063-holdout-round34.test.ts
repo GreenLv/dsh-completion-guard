@@ -39,7 +39,7 @@ function derive(texts: string | string[]) {
   seq = 0
   const events: DerivedEnvelope[] = [{
     seq: seq++, type: 'user/message', data: {
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
       content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }],
     },
   }]

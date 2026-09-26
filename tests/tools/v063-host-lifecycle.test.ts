@@ -53,7 +53,7 @@ class DurableLog {
 
   notice(): void {
     this.append('user/message', {
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
       content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }],
     })
   }

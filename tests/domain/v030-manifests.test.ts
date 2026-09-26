@@ -25,6 +25,7 @@ describe('v0.3 versioned manifests', () => {
     expect(rows.map((row) => row.name)).toEqual([
       '@deepseek-ai/cordis',
       '@deepseek-ai/dsh-agent',
+      '@deepseek-ai/dsh-app-boot',
       '@deepseek-ai/dsh-attachment',
       '@deepseek-ai/dsh-commands',
       '@deepseek-ai/dsh-fs',
@@ -32,17 +33,25 @@ describe('v0.3 versioned manifests', () => {
       '@deepseek-ai/dsh-fs-observation-policy',
       '@deepseek-ai/dsh-fs-sandbox',
       '@deepseek-ai/dsh-goal',
+      '@deepseek-ai/dsh-goal-round-driver',
       '@deepseek-ai/dsh-jobs',
       '@deepseek-ai/dsh-jobs-local',
       '@deepseek-ai/dsh-llm',
+      '@deepseek-ai/dsh-ptc-runtime',
       '@deepseek-ai/dsh-sandbox',
       '@deepseek-ai/dsh-sandbox-policy',
       '@deepseek-ai/dsh-session',
+      '@deepseek-ai/dsh-session-projection',
+      '@deepseek-ai/dsh-shell',
+      '@deepseek-ai/dsh-shell-env',
       '@deepseek-ai/dsh-system-prompt',
+      '@deepseek-ai/dsh-tool-bash',
       '@deepseek-ai/dsh-tool-fs',
       '@deepseek-ai/dsh-tool-goal',
+      '@deepseek-ai/dsh-tool-pwsh',
       '@deepseek-ai/dsh-tools',
-      '@deepseek-ai/dsh-user-approval'
+      '@deepseek-ai/dsh-user-approval',
+      '@deepseek-ai/dsh-util-values'
     ])
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     // CG-DSH-001: the dev lockfile is not the complete audited host graph, so
@@ -78,9 +87,9 @@ describe('v0.3 versioned manifests', () => {
       expect(entry.auditProvenance).toBe(cohort.auditProvenance)
       expect(entry.packages).toEqual(cohort.packages)
     }
-    expect(HOST_COHORTS).toHaveLength(2)
+    expect(HOST_COHORTS).toHaveLength(1)
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
-      name: 'host_cohort', value: { k: 's', v: 'dsh-0.1.5-rc.1-core-v1' },
+      name: 'host_cohort', value: { k: 's', v: 'dsh-0.1.7-rc.2-core-v1' },
     })
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
       name: 'external_wait_jobs_readback', value: { k: 's', v: 'dsh.jobs.v1' },
@@ -134,7 +143,7 @@ describe('v0.3 versioned manifests', () => {
     const withGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES)
     expect(withGoal.status).toBe('supported')
     expect(withGoal.goalAvailable).toBe(true)
-    expect(withGoal.cohortId).toBe('dsh-0.1.5-rc.1-core-v1')
+    expect(withGoal.cohortId).toBe('dsh-0.1.7-rc.2-core-v1')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows (Goal rows included) fails closed.
     const withoutGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => !['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(row.name)))

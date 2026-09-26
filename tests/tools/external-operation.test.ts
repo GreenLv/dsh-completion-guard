@@ -36,7 +36,7 @@ const EXPECTED_MAPPING: Record<JobStatus, ExternalOperationSnapshot['status']> =
 // A live Agent always carries a scoped `ctx`; Guard probes `agent.ctx` FIRST and
 // only then the root context. The scoped context here deliberately has no jobs
 // service, which is the ordinary case that exercises the fallback.
-const AGENT = { id: 'agent-1', ctx: { get: () => undefined } } as unknown as Agent
+const AGENT = { id: 'agent-1', session: { id: 'agent-1' }, ctx: { get: () => undefined } } as unknown as Agent
 
 function contextWith(service: unknown) {
   return {
@@ -47,8 +47,8 @@ function contextWith(service: unknown) {
 
 /** A scoped context that DOES carry the service, to prove the first probe wins. */
 const SCOPED_AGENT = {
-  id: 'agent-1',
-  ctx: { get: (name: string) => (name === 'jobs' ? { get: () => ({ status: 'completed' }) } : undefined) },
+  id: 'agent-1', session: { id: 'agent-1' },
+  ctx: { get: (name: string) => (name === 'jobs' ? { get: () => ({ id: 'bash-1', status: 'completed' }) } : undefined) },
 } as unknown as Agent
 
 describe('external operation readback against the host job contract', () => {
@@ -86,15 +86,15 @@ describe('external operation readback against the host job contract', () => {
     for (const row of [{}, { status: undefined }, { status: 7 },
       { status: { state: 'running' } }, { status: 'exited' }, { status: 'succeeded' },
       { status: 'success' }, { status: 'cancelled' }, { status: 'done' }]) {
-      expect(readExternalOperation(contextWith({ get: () => row }) as never, AGENT, 'bash-1'), JSON.stringify(row))
+      expect(readExternalOperation(contextWith({ get: () => row && ({ id: 'bash-1', ...row }) }) as never, AGENT, 'bash-1'), JSON.stringify(row))
         .toEqual({ id: 'bash-1', status: 'unknown', adapterId: 'dsh.jobs.v1' })
     }
   })
 
   it('prefers the agent-scoped service over the root context', () => {
-    const root = { get: () => ({ get: () => ({ status: 'running' }) }), jobs: { get: () => ({ status: 'running' }) } }
+    const root = { get: () => ({ get: () => ({ id: 'bash-1', status: 'running' }) }), jobs: { get: () => ({ id: 'bash-1', status: 'running' }) } }
     expect(readExternalOperation(root as never, SCOPED_AGENT, 'bash-1'))
-      .toMatchObject({ status: 'completed' })
+      .toMatchObject({ id: 'bash-1', status: 'completed' })
   })
 
   it('fails closed when no jobs service is present at all', () => {
@@ -106,16 +106,16 @@ describe('external operation readback against the host job contract', () => {
   })
 
   it('fails closed without an agent or without an id', () => {
-    const service = { get: () => ({ status: 'running' }) }
+    const service = { get: () => ({ id: 'bash-1', status: 'running' }) }
     expect(readExternalOperation(contextWith(service) as never, undefined, 'bash-1')).toBeUndefined()
     expect(readExternalOperation(contextWith(service) as never, AGENT, '')).toBeUndefined()
   })
 
-  it('reports the requested id, not a row id the service invented', () => {
+  it('refuses a row id the service invented', () => {
     // Guard binds the snapshot to the id it asked for, so a misbehaving or
     // confused provider cannot re-key the readback.
     const service = { get: () => ({ id: 'other-9', status: 'running' }) }
     expect(readExternalOperation(contextWith(service) as never, AGENT, 'bash-1'))
-      .toMatchObject({ id: 'bash-1' })
+      .toBeUndefined()
   })
 })

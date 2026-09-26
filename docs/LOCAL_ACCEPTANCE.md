@@ -1,5 +1,9 @@
 # Local Acceptance
 
+## 0.8.0 rc.2 adaptation candidate
+
+The current local work is tracked in the [A01–A16 acceptance record](DSH_0_1_7_RC2_ACCEPTANCE.md). Earlier results below apply only to their named source or artifact and cannot certify the changed rc.2 adapter. No current canonical artifact, CI, native or model pass is claimed.
+
 ## 0.7.1 recovery feedback patch (2026-09-22; source evidence)
 
 The candidate repairs inconsistent ordinary recovery feedback, preserves current prohibitions and waits, and retains the dependency-free cleanup condition. The independent source review exercised normal and unavailable views at 512, 1000 and 4000 characters, complete read-only boundary details, source and revision failures, and historical sibling isolation. The complete local deterministic matrix passed with 2587 tests and four skips; lint retained 30 existing warnings. An independent build matched all six generated runtime files. These results bind to the reviewed source; they do not prove that a running host has loaded the package.

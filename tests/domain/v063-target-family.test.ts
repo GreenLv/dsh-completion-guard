@@ -20,7 +20,7 @@ const ambiguous = [
 
 function derive(text: string) {
   const events: DerivedEnvelope[] = [
-    { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] } },
+    { seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] } },
     { seq: 1, type: 'turn/start', data: { turn: 1 } },
     { seq: 2, type: 'user/message', data: { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text }] } },
   ]

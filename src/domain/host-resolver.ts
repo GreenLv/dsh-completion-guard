@@ -1,3 +1,4 @@
+import hostByteAudit from '../../manifests/rc017-rc2-byte-audit.json' with { type: 'json' }
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
@@ -87,12 +88,12 @@ export function packageRowsFromPnpmLock(text: string, names: readonly string[] =
  */
 export function combineHostPolicy(evaluation: HostLockEvaluation): HostLockEvaluation {
   const version = evaluation.hostVersion
-  if (version?.status !== 'below_minimum' && version?.status !== 'unparseable') return evaluation
+  if (version?.status !== 'below_minimum' && version?.status !== 'unparseable' && version?.status !== 'unregistered') return evaluation
   return {
     ...evaluation,
     status: 'unsupported',
     goalAvailable: false,
-    reasonCode: version.status === 'below_minimum' ? 'host_lock_version_below_minimum' : 'host_lock_version_unparseable',
+    reasonCode: version.status === 'below_minimum' ? 'host_lock_version_below_minimum' : version.status === 'unregistered' ? 'host_lock_version_mismatch' : 'host_lock_version_unparseable',
   }
 }
 
@@ -243,24 +244,58 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): P
   return rows
 }
 
-// The reviewed rc.1/rc.2 foreground tools share these exact renderer bytes.
+/** Verify published executable bytes at the reachable runtime/profile roots.
+ * Registry SRI and installed manifests alone cannot authenticate loaded code.
+ * Missing, duplicate, escaped or modified modules never pass this audit.
+ */
+export function auditedHostImplementation(runtimeRoot: string, profileRoot: string): boolean {
+  try {
+    const seen = new Set<string>()
+    for (const rootPath of new Set([runtimeRoot, profileRoot])) {
+      const modulesPath = join(rootPath, 'node_modules')
+      if (!existsSync(join(modulesPath, '.package-map.json'))) continue
+      const modules = realpathSync(modulesPath)
+      const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
+      for (const expected of hostByteAudit.packages) {
+        const ids = [...reachable].filter((id) => id === expected.name || id.startsWith(`${expected.name}@`))
+        if (ids.length > 1) return false
+        if (!ids.length) continue
+        const url = records[ids[0]]?.url
+        if (typeof url !== 'string' || !url.startsWith('./')) return false
+        const root = realpathSync(resolve(modules, url))
+        if (!root.startsWith(`${modules}${sep}`)) return false
+        const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+        if (manifest.name !== expected.name || manifest.version !== expected.version) return false
+        for (const [file, digest] of Object.entries(expected.modules)) {
+          const target = realpathSync(join(root, file))
+          if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()
+            || createHash('sha256').update(readFileSync(target)).digest('hex') !== digest) return false
+        }
+        seen.add(expected.name)
+      }
+    }
+    return hostByteAudit.packages.every((entry) => seen.has(entry.name))
+  } catch { return false }
+}
+
+// The reviewed 0.1.7-rc.2 foreground tools have these exact renderer bytes.
 // This is a separate check from npm SRI: a modified installed lib/index.js
 // must not inherit the graph's markerless-terminal interpretation.
 const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-tool-bash': 'ea5579df9478198ab6dea378d1de59b5807db50bc4dc7baeb1a5b0cc3abbd4af',
-  '@deepseek-ai/dsh-tool-pwsh': 'c1dd78a35722e47eaeef57b33d15d4170f4bb27db2bee15da76a6d4ea9557e63',
-  '@deepseek-ai/dsh-shell': 'f2c148176a56fde49ec92885f0149f36450c0f0612008070e71ae795c139773d',
+  '@deepseek-ai/dsh-tool-bash': '9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707',
+  '@deepseek-ai/dsh-tool-pwsh': '59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c',
+  '@deepseek-ai/dsh-shell': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
 }
 
 // The rc.2 default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
 const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-sandbox-policy': '4a16a580f290dc9903e8b93d64d27be4a56c779f80ce351fa7ee300ded0a3568',
-  '@deepseek-ai/dsh-sandbox': '8994b3e497b0673eddd3640392de4671621aa8972846f4a66d0b1219decf3c03',
-  '@deepseek-ai/dsh-bash-sandbox': 'c6100b4edbc71869e0207941b2dfe8d06ff90e332d502c4c9fe54e08339e555a',
-  '@deepseek-ai/dsh-bash-local': '7805ac421930e2943e084004a48c3e9a01a4b7655689cb1c27f2019aff8574fb',
-  '@deepseek-ai/dsh-pwsh-local': 'a206f7801ad7ee657b380c37d5b578c195e86e63d23d0712d8f2f7195371ad18',
+  '@deepseek-ai/dsh-sandbox-policy': '772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924',
+  '@deepseek-ai/dsh-sandbox': 'b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743',
+  '@deepseek-ai/dsh-bash-sandbox': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
+  '@deepseek-ai/dsh-bash-local': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
+  '@deepseek-ai/dsh-pwsh-local': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
 }
 
 export function activeRendererModule(nodeModulesRoot: string, name: string): { bytes: string; path: string } | undefined {
@@ -272,17 +307,14 @@ export function activeRendererModule(nodeModulesRoot: string, name: string): { b
   const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`))
   if (ids.length !== 1) return undefined
   const id = ids[0]!
-  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] ? '0\\.1\\.5-rc\\.2'
-    : AUDITED_FOREGROUND_BYTES[name] ? '0\\.1\\.5-rc\\.[12]' : undefined
+  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? '0\\.1\\.7-rc\\.2' : undefined
   if (!version || (id !== name && !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id))) return undefined
   const url = records[id]?.url
   if (typeof url !== 'string' || (url !== `./${name}` && !url.startsWith('./.pnpm/'))) return undefined
   const root = realpathSync(resolve(modules, url))
   if (!root.startsWith(`${modules}${sep}`)) return undefined
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
-  if (manifest.name !== name || (AUDITED_DEFAULT_WORKDIR_BYTES[name]
-    ? manifest.version !== '0.1.5-rc.2'
-    : !['0.1.5-rc.1', '0.1.5-rc.2'].includes(String(manifest.version)))) return undefined
+  if (manifest.name !== name || manifest.version !== '0.1.7-rc.2') return undefined
   if (id !== name && manifest.version !== id.slice(name.length + 1).split('(', 1)[0]) return undefined
   const bytesPath = join(root, 'lib', 'index.js')
   const target = realpathSync(bytesPath)
@@ -545,6 +577,9 @@ export function resolveActiveProfileHostLock(
   const evaluation = evaluateHostLock(rows, { platform, profileKind })
   if (evaluation.status !== 'supported') {
     throw new HostProfileError(evaluation.reasonCode ?? 'active_graph_unavailable', 'active runtime graph does not match the supported host manifest')
+  }
+  if (!auditedHostImplementation(runtime, profile)) {
+    throw new HostProfileError('host_implementation_bytes_mismatch', 'reachable host modules differ from the audited rc.2 tarballs')
   }
   return { evaluation, runtimeRoot: runtime, profileRoot: profile, pluginVersion: expectedPluginVersion, platform, profileKind }
 }

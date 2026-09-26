@@ -26,6 +26,57 @@ export async function createProbeAgent(ctx, sessionId, workRoot, resume = false)
   return handle
 }
 
+/** Deterministic probe framing only; these injected tool advertisements are not
+ * model requests. Preserve rc.2's native turn/step/tool relationships so the
+ * same log can be restored by the real persistence reader. */
+function probePosition(session) {
+  let turn = null, step = null, nextTurn = 1, nextStep = 1
+  for (const event of session.snapshotEvents()) {
+    if (event.type === 'turn/start') { turn = event.data.turn; nextTurn = turn + 1; nextStep = 1 }
+    if (event.type === 'turn/end') turn = null
+    if (event.type === 'step/start') step = event.data.step
+    if (event.type === 'step/end') { nextStep = event.data.step + 1; step = null }
+  }
+  assert.equal(step, null, 'probe must not overlap an unfinished step')
+  return { turn, nextTurn, nextStep }
+}
+
+export function startProbeTurn(session) {
+  const position = probePosition(session)
+  if (position.turn !== null) session.append('turn/end', { turn: position.turn, reason: {kind:'blocked'} })
+  session.append('turn/start', { turn: position.nextTurn })
+  return position.nextTurn
+}
+
+export function appendProbeToolCall(session, createAssistantMessage, callId, name, args) {
+  let position = probePosition(session)
+  if (position.turn === null) { startProbeTurn(session); position = probePosition(session) }
+  const coordinates = { turn: position.turn, step: position.nextStep }
+  session.append('step/start', coordinates)
+  session.append('assistant/message', { ...coordinates, stream: [], message: createAssistantMessage({
+    source: {provider:'native-probe',model:'deterministic-injection'},
+    content: [{type:'tool-call',id:callId,name,arguments:JSON.stringify(args)}],
+  }) }, {surfaceOp:'append'})
+  session.append('tool/call', {...coordinates,callId,name,arguments:JSON.stringify(args)})
+  return coordinates
+}
+
+export function finishProbeToolCall(session, coordinates) {
+  session.append('step/end', coordinates)
+}
+
+/** A bounded injected compaction record for persistence tests, not model compaction. */
+export function appendProbeCompaction(session, compactionId) {
+  const {turn} = probePosition(session)
+  const source = session.snapshotEvents().find(event => event.type === 'user/message' && event.surfaceOp === 'append')
+  assert.ok(source, 'compaction probe needs a real surface span')
+  session.append('compaction/start', {compactionId,turn})
+  session.append('compaction/summary', {compactionId,summary:[],
+    shadowedRange:{start:source.seq,end:source.seq},shadowedSeqs:[source.seq],
+    shadowedTokenCount:0,provider:'native-probe',model:'deterministic-injection'})
+  session.append('compaction/end', {compactionId,turn})
+}
+
 /** Resolve rows folded by the public checkpoint response budget. */
 export async function readProbeItem(call, page, itemId) {
   const row = page.open_items.find(item => item.id === itemId)
@@ -84,7 +135,7 @@ export function apply(ctx, config) {
     let operation = 'initialize'
     let lastTool = null
     let mode = 'initial'
-    let createUserMessage, createToolResultMessage, sessionId
+    let createUserMessage, createToolResultMessage, createAssistantMessage, sessionId
     let clarifiedItemId
     const driverDigest = createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex')
     const check = async (id, fn) => {
@@ -96,11 +147,12 @@ export function apply(ctx, config) {
     const root = async text => {
       operation = 'root_flush'
       const agent = handle.agent
+      const turn = startProbeTurn(agent.session)
       const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
       // Exercise the real registered pre-step waterfall before persisting the
       // driver input. This is hook delivery evidence, not a model request.
       const decision = await agent.ctx.waterfall('agent/pre-step', {
-        agent, messages: [message], turn: 1, step: ordinal + 1, signal: AbortSignal.timeout(30000),
+        agent, messages: [message], turn, step: ordinal + 1, signal: AbortSignal.timeout(30000),
       }, async () => ({ kind: 'enter', messages: [message] }))
       assert.equal(decision.kind, 'enter')
       for (const entry of decision.messages) agent.session.append('user/message', entry, { surfaceOp: 'append' })
@@ -108,8 +160,8 @@ export function apply(ctx, config) {
     }
     const call = async (name, args) => {
       const agent = handle.agent
-      const callId = `native-${process.pid}-${++ordinal}`
-      agent.session.append('tool/call', { turn: 1, step: ordinal, callId, name, arguments: JSON.stringify(args) })
+      const callId = `native-${process.pid}-${agent.session.seq}-${++ordinal}`
+      const coordinates = appendProbeToolCall(agent.session, createAssistantMessage, callId, name, args)
       operation = `tool_${name}`
       const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
       const code = value => typeof value === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(value) ? value : null
@@ -120,10 +172,11 @@ export function apply(ctx, config) {
         item_shapes: result.value?.open_items?.slice(0, 8).map(row => ({ omitted: row.omitted === true, has_detail: typeof row.detail_id === 'string', has_template: !!row.binding_template, action: code(row.semantic_action) })) ?? [],
         evidence_shapes: result.value?.available_evidence?.slice(0, 10).map(row => ({ parse: code(row.parse_status), disposition: code(row.adapter_disposition), reason: code(row.reason_code), action: code(row.semantic_action) })) ?? [] }
       agent.session.append('tool/result', {
-        turn: 1, step: ordinal,
+        ...coordinates,
         message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
         ...(result.error ? { error: result.error } : {}), ...(result.meta ? { meta: result.meta } : {}),
       }, { surfaceOp: 'append' })
+      finishProbeToolCall(agent.session, coordinates)
       operation = 'tool_result_flush'
       assert.equal(await ctx.sessions.flush(agent.session), true)
       operation = 'tool_result_success'
@@ -133,7 +186,7 @@ export function apply(ctx, config) {
     }
     try {
       const runtime = runtimeRequire(config.runtimeRoot)
-      ;({ createUserMessage, createToolResultMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
+      ;({ createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
       const { SessionId } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href)
       sessionId = SessionId(`guard-native-${config.nonce}`)
       if (existsSync(`${config.output}.complete`)) {

@@ -2,7 +2,7 @@ import { sha256 } from './canonicalize.js'
 import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from './rebind.js'
 import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses, type ClauseSegment } from './capture.js'
 import { certifyCheckpoint } from './checkpoint.js'
-import { qualifyBoundary, type BoundaryRequest } from './boundary.js'
+import { BOUNDARY_RECORD_PREFIX, qualifyBoundary, type BoundaryRequest } from './boundary.js'
 import { classifyUserInteraction } from './conversation.js'
 import { CONFIRM_LINE_PATTERN, parseConfirmationMessage } from './confirm-parse.js'
 import { segmentAuthorityBlocks } from './contract-segment.js'
@@ -100,7 +100,7 @@ function isProtocolBoundaryNotice(event: DerivedEnvelope, notice = PROTOCOL_V3_N
   if (event.type !== 'user/message') return false
   const data = asRecord(event.data)
   const source = asRecord(data?.source)
-  if (source?.kind !== 'plugin' || source.plugin !== 'context-guard' || source.form !== 'notice') return false
+  if ((source?.kind !== 'plugin' && source?.kind !== 'context-guard') || source.plugin !== 'context-guard' || source.form !== 'notice') return false
   return extractTextContent((data?.content as unknown[] | undefined) ?? []) === notice
 }
 
@@ -1734,7 +1734,24 @@ export function deriveProjection(
           const record = asRecord(event.data)
           const recordSource = asRecord(record?.source)
           const recordText = extractTextContent((record?.content as unknown[] | undefined) ?? [])
-          if (recordSource?.kind === 'plugin' && recordSource.plugin === 'context-guard' && recordText.startsWith(NO_PROGRESS_RECORD_PREFIX)) {
+          if (enabled && recordSource?.kind === 'context-guard' && recordSource.plugin === 'context-guard'
+            && recordSource.form === 'notice' && recordText.startsWith(BOUNDARY_RECORD_PREFIX)) {
+            const payload = parseArguments(recordText.slice(BOUNDARY_RECORD_PREFIX.length))
+            const request = asRecord(payload.request)
+            const candidate = request && qualifyBoundary(projection, {
+              disposition: String(request.disposition) as BoundaryRequest['disposition'],
+              qualificationKind: String(request.qualificationKind) as BoundaryRequest['qualificationKind'],
+              qualificationIds: Array.isArray(request.qualificationIds) ? request.qualificationIds.map(String) : [],
+            })
+            if (!candidate || candidate.persistedResult !== 'accepted' || candidate.candidateSha256 !== payload.candidate_sha256) {
+              projection.integrity = 'corrupt'
+              projection.integrityViolations.push('boundary_replay_mismatch')
+            } else if (!projection.boundaries.some((entry) => entry.candidateSha256 === candidate.candidateSha256)) {
+              projection.boundaries.push(candidate)
+            }
+            break
+          }
+          if ((recordSource?.kind === 'plugin' || recordSource?.kind === 'context-guard') && recordSource.plugin === 'context-guard' && recordText.startsWith(NO_PROGRESS_RECORD_PREFIX)) {
             const parsed = asRecord(parseArguments(recordText.slice(NO_PROGRESS_RECORD_PREFIX.length)))
             const fingerprint = typeof parsed?.fingerprint === 'string' ? parsed.fingerprint : undefined
             const attempt = typeof parsed?.attempt === 'number' && Number.isSafeInteger(parsed.attempt) && parsed.attempt > 0 ? parsed.attempt : undefined
@@ -1747,7 +1764,7 @@ export function deriveProjection(
             }
             break
           }
-          if (recordSource?.kind === 'plugin' && recordSource.plugin === 'context-guard' && recordText.startsWith(CONTROL_RECORD_PREFIX)) {
+          if ((recordSource?.kind === 'plugin' || recordSource?.kind === 'context-guard') && recordSource.plugin === 'context-guard' && recordText.startsWith(CONTROL_RECORD_PREFIX)) {
             const parsed = asRecord(parseArguments(recordText.slice(CONTROL_RECORD_PREFIX.length)))
             const rootSeq = typeof parsed?.rootSeq === 'number' && Number.isSafeInteger(parsed.rootSeq) ? parsed.rootSeq : undefined
             if (rootSeq !== undefined) projection.handledControlSeqs.add(rootSeq)
@@ -1758,7 +1775,7 @@ export function deriveProjection(
           // nothing. A malformed record is recorded as a bounded diagnostic and
           // never marks the projection corrupt: damaged release state must not
           // block unrelated ordinary work.
-          if (recordSource?.kind === 'plugin' && recordSource.plugin === 'context-guard') {
+          if ((recordSource?.kind === 'plugin' || recordSource?.kind === 'context-guard') && recordSource.plugin === 'context-guard') {
             if (recordText.startsWith(RELEASE_CONTRACT_PREFIX)) {
               const payload = parseArguments(recordText.slice(RELEASE_CONTRACT_PREFIX.length))
               const adoptionSeq = typeof payload.adoptedBySeq === 'number' && Number.isSafeInteger(payload.adoptedBySeq) ? payload.adoptedBySeq : event.seq

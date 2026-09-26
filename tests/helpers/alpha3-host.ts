@@ -1,4 +1,4 @@
-import type { PackageRow } from './digest.js'
+import type { PackageRow } from '../../src/domain/digest.js'
 
 /** Exact 34-row alpha.3 runtime/web graph from the 2026-09-01 annex audit. */
 export const ALPHA3_HOST_PACKAGES: PackageRow[] = [

@@ -20,7 +20,7 @@ function toolCall(session: Session, id: string, name: string, args: unknown): vo
 function toolResult(session: Session, id: string, value: unknown, meta?: unknown): void {
   append(session, 'tool/result', {
     turn: 1, step: session.seq,
-    message: { role: 'user', content: [{ type: 'tool-result', toolCallId: id, isError: false, content: [{ type: 'text', text: JSON.stringify(value) }] }], source: { kind: 'tool', callId: id } },
+    message: { source: { kind: 'tool', callId: id }, role: 'tool', toolCallId: id, isError: false, content: [{ type: 'text', text: JSON.stringify(value) }] },
     ...(meta ? { meta } : {}),
   }, { surfaceOp: 'append' })
 }
@@ -37,11 +37,11 @@ describe('typed boundary production sources', () => {
       label: 'bounded integration job',
       run: () => ({ cancel: () => {}, done }),
     })
-    const agent = { ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
+    const agent = { id: 'owner-1', session: { id: 'owner-1' }, ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
 
     const pinnedSnapshot = jobs.get(id)
     expect(pinnedSnapshot).toMatchObject({
-      id: 'bash-1', kind: 'bash', label: 'bounded integration job', status: 'running', reported: false,
+      id: 'bash-1', kind: 'bash', label: 'bounded integration job', status: 'running',
     })
     expect(readExternalOperation({} as never, agent, String(id))).toEqual({
       id: 'bash-1', status: 'running', adapterId: 'dsh.jobs.v1',
@@ -60,7 +60,7 @@ describe('typed boundary production sources', () => {
     ['running', 'running'], ['stopping', 'pending'], ['completed', 'completed'], ['killed', 'failed'], ['failed', 'failed'],
   ] as const)('maps pinned ctx.jobs status %s to %s without parsing output text', (hostStatus, expected) => {
     const jobs = { get: (id: string) => ({ id, kind: 'bash', label: 'bounded', status: hostStatus, startedAt: 1, reported: false }) }
-    const agent = { ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
+    const agent = { id: 'owner-1', session: { id: 'owner-1' }, ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
     expect(readExternalOperation({} as never, agent, 'bash-1')).toEqual({ id: 'bash-1', status: expected, adapterId: 'dsh.jobs.v1' })
   })
 
@@ -68,7 +68,7 @@ describe('typed boundary production sources', () => {
     const session = Session.create(SessionId('boundary-external-session'))
     append(session, 'command/run', { commandId: 'on', name: 'context-guard', args: 'on', source: { kind: 'user' } })
     const jobs = { get: (id: string) => ({ id, kind: 'bash', label: 'bounded', status: 'running', startedAt: 1, reported: false }) }
-    const agent = { session, ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
+    const agent = { id: session.id, session, ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
     const reader = (id: string) => readExternalOperation({} as never, agent, id)
     const external = createExternalOperationTool(reader, () => ({ status: 'supported', digest: 'a'.repeat(64) }))
     const externalArgs = { operation_id: 'bash-1' }

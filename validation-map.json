@@ -335,7 +335,10 @@
         "tests/validate_native_v070_test.py",
         "tests/native_acceptance_test.py",
         "scripts/native_cleanup_probe.py",
-        "tests/native_cleanup_probe_test.py"
+        "tests/native_cleanup_probe_test.py",
+        "tests/rc017-native-shell.node.mjs",
+        "scripts/verify_rc017_host_audit.py",
+        "tests/rc017_host_audit_test.py"
       ],
       "gates": [
         "full_candidate"

@@ -1,0 +1,585 @@
+{
+  "schema": "dsh-rc2-adaptation-planning-evidence/v1",
+  "observed_date": "2026-09-26",
+  "status": "planning-only; no implementation or native acceptance",
+  "plugin_baseline": {
+    "name": "dsh-completion-guard",
+    "version": "0.7.1",
+    "commit": "c6e14cd8aaf755e8cfb41a343c67e6e64659969c",
+    "initial_worktree": "clean"
+  },
+  "upstream": [
+    {
+      "tag": "dsh-v0.1.5-rc.2",
+      "commit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
+      "source_files": [
+        {
+          "path": "packages/core/agent/src/index.ts",
+          "sha256": "50f0bb7642b47a0f43322c26ca9c91613cf7c148084342727e372b36d1b0dcc2",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/agent/src/index.ts"
+        },
+        {
+          "path": "packages/core/agent/src/runtime-types.ts",
+          "sha256": "6680865f221cfda70bcc715910f6a4ca27a97945e5baaace0b249213c8c4bbb5",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/agent/src/runtime-types.ts"
+        },
+        {
+          "path": "packages/core/agent-loop/src/agent.ts",
+          "sha256": "bbc3c4f34076e81596af855eddb1bf66f6362278730f7c4db24ea96a990e3cb3",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/agent-loop/src/agent.ts"
+        },
+        {
+          "path": "packages/core/session/src/index.ts",
+          "sha256": "607bbb8d50c1ed4fd5e470f921be737d5cd8589a2bc52c8560aa2cbb4822ec99",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/session/src/index.ts"
+        },
+        {
+          "path": "packages/core/session/src/types.ts",
+          "sha256": "e9dfc1d7bc4b146f954520a9ca2eff8539f3b9c082b5ecfac7ddb9c747501e45",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/session/src/types.ts"
+        },
+        {
+          "path": "packages/core/tools/src/index.ts",
+          "sha256": "cc8d54b6a0d6005a26871e84ce3390ba0bbd7fa61a8c65d4b9cc2fbd86126ac2",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/tools/src/index.ts"
+        },
+        {
+          "path": "packages/core/tools/src/ptc.ts",
+          "sha256": "c0dda3a17a5c70503b41779605fd323d81e5c571758eb3012086c971f8fabe09",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/core/tools/src/ptc.ts"
+        },
+        {
+          "path": "packages/jobs/jobs/src/index.ts",
+          "sha256": "11e4a5fc2aa1bf2cb131f5dfdead07864614f2de2aa325dcc2e292f5eed94a10",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/jobs/jobs/src/index.ts"
+        },
+        {
+          "path": "packages/jobs/jobs-local/src/index.ts",
+          "sha256": "3f5b7c89a1df16c43a250502f2a14d5f4c2948e2be7751713e21ec8cdaffa09e",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/jobs/jobs-local/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-bash/src/index.ts",
+          "sha256": "dc63cd3bd18ad6b7ebe76851576cef50a95de9c250e69b533324b184c5bf235b",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/shell/tool-bash/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-bash/src/render.ts",
+          "sha256": "655be29a8d31dc2c465812b43bf5dfb32faeab9f774a34cb4a0a00f5c81f73c7",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/shell/tool-bash/src/render.ts"
+        },
+        {
+          "path": "packages/shell/tool-pwsh/src/index.ts",
+          "sha256": "4ddf8e43370962895fec947a502426eb0c654cdb934ac4c97a9a9a68304995c6",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/shell/tool-pwsh/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-pwsh/src/render.ts",
+          "sha256": "ceb85f94909bf259fe4c8b419ce801bb8bc5d29e2e0959bd6496f5b1efb04d3a",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/shell/tool-pwsh/src/render.ts"
+        },
+        {
+          "path": "packages/fs/tool-fs/src/session-cwd.ts",
+          "sha256": "e32517dfe91ac3c89d8a08f28b41bf3d1f1eecdd562a43b4f94253b41a57ab30",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/fs/tool-fs/src/session-cwd.ts"
+        },
+        {
+          "path": "packages/fs/tool-fs/src/write.ts",
+          "sha256": "fa24e0e72c729a296a69b2e7cf67eee63cafaa7f5938e6cc16c23b528da0cbe5",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/fs/tool-fs/src/write.ts"
+        },
+        {
+          "path": "packages/goal/goal/src/index.ts",
+          "sha256": "1dbc449df90d26d11867262dd0996d7ef6d6502af62b0603142224b2d19adf14",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/goal/goal/src/index.ts"
+        },
+        {
+          "path": "packages/goal/tool-goal/src/index.ts",
+          "sha256": "378df43535a4ac40d94e6e8b79df12b5dad2c42d572105652faf1efd0b648959",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/packages/goal/tool-goal/src/index.ts"
+        },
+        {
+          "path": "apps/cli/src/plugin.ts",
+          "sha256": "97375a55d91953ad0f37d630aa052ecfee24a15d9ee1277416dda0c773d51423",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/apps/cli/src/plugin.ts"
+        },
+        {
+          "path": "vendor/cordis/package.json",
+          "sha256": "8b38780c3a8e5de57f9ad98219bfd6b8fb7877829a1b84e1e987926f32f2dae9",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fb2c4b9e698e30edb738bca4cf0618587db7d203/vendor/cordis/package.json"
+        }
+      ]
+    },
+    {
+      "tag": "dsh-v0.1.7-rc.1",
+      "commit": "46a7f68b0922371ce7144b668b90e377d8e799f4",
+      "source_files": [
+        {
+          "path": "packages/core/agent/src/index.ts",
+          "sha256": "9979fdae64fd0a342067981c39de9cde2da7066d28f8506a501fd51e8f9068b9",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/agent/src/index.ts"
+        },
+        {
+          "path": "packages/core/agent/src/runtime-types.ts",
+          "sha256": "d0ac3509febb04308eff84bc6c949ff3c736dec9fd9f8d230c5d7fa3455ff204",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/agent/src/runtime-types.ts"
+        },
+        {
+          "path": "packages/core/agent-loop/src/agent.ts",
+          "sha256": "d77f9602338483bfaed22e3c897fab8933c7eac829d2ba944ae60b78deba7a12",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/agent-loop/src/agent.ts"
+        },
+        {
+          "path": "packages/core/session/src/index.ts",
+          "sha256": "df2744c0db654676a10729556468c9f40d9b006737c6ef95015bdbb7be7be090",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/session/src/index.ts"
+        },
+        {
+          "path": "packages/core/session/src/types.ts",
+          "sha256": "f8638a5aa5d65137df2a95cb204dc28cc6064110033cfae7fc8d6f0cce9866a7",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/session/src/types.ts"
+        },
+        {
+          "path": "packages/core/session/src/fork.ts",
+          "sha256": "de80ecbf0e6a7961c096a2d7f0304bc6f6c83f897268304e28352357da06bfb0",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/session/src/fork.ts"
+        },
+        {
+          "path": "packages/core/tools/src/index.ts",
+          "sha256": "8db2ce69d9be374845063b72efd91917e174c961bc8ac37b3670cc17e8d494f0",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/tools/src/index.ts"
+        },
+        {
+          "path": "packages/core/tools/src/ptc.ts",
+          "sha256": "b9b8fd874cee9c128e2b9e18f099739ea014b918b3962f7d69f61e527ec4d280",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/tools/src/ptc.ts"
+        },
+        {
+          "path": "packages/jobs/jobs/src/index.ts",
+          "sha256": "7cda58a0c085ced5053cfe18addf9ea55d217568ac2e7ae4e7f394ef0b4023f1",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/jobs/jobs/src/index.ts"
+        },
+        {
+          "path": "packages/jobs/jobs/src/view.ts",
+          "sha256": "d337b2cbaf7c2ff6e50e074676bd6d36613bc0a115c5c57d745b3e65ec42ece4",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/jobs/jobs/src/view.ts"
+        },
+        {
+          "path": "packages/jobs/jobs-local/src/index.ts",
+          "sha256": "b342014279db814186818ec2cc3d8a355c28483d3c29f8324e22dee80cc90a02",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/jobs/jobs-local/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-bash/src/index.ts",
+          "sha256": "bf800cdc94fdc8f289eae3a839215edc0b378c4daaf5a3ec9dbc71106b4f0e61",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/shell/tool-bash/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-bash/src/render.ts",
+          "sha256": "bfb17540c1902fc0a996ea3833f2a1df18a13cf0c764d1a3f50d11d3f733aedb",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/shell/tool-bash/src/render.ts"
+        },
+        {
+          "path": "packages/shell/tool-pwsh/src/index.ts",
+          "sha256": "6ac63bdd918c411d83f3cfbd8cf81e8b63cf9c377836ae4484148abada1b4015",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/shell/tool-pwsh/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-pwsh/src/render.ts",
+          "sha256": "1ecbb4aef0861427f24cd853753dee3d1119c09684bc5af616fffeb26746aaac",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/shell/tool-pwsh/src/render.ts"
+        },
+        {
+          "path": "packages/fs/tool-fs/src/session-cwd.ts",
+          "sha256": "9ca398d82e3170bc3bb1324f54ddf02ea04a41b3a19ba973e66d7449fc5744bc",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/fs/tool-fs/src/session-cwd.ts"
+        },
+        {
+          "path": "packages/fs/tool-fs/src/write.ts",
+          "sha256": "6b77ef84711ea09a20b57d9ac2a2c5dc9af1499551c54840d9315c1d3ea6e2e5",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/fs/tool-fs/src/write.ts"
+        },
+        {
+          "path": "packages/goal/goal/src/index.ts",
+          "sha256": "333ebc31489619ee083235c5f5ceeb38ac3c6c844b2a0179458058401a6ebf9a",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/goal/goal/src/index.ts"
+        },
+        {
+          "path": "packages/goal/tool-goal/src/index.ts",
+          "sha256": "d93ff95e7e16c46af1f3439532eb3ed8b18e27c58adf44cd897a5c6dcb4a96b8",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/goal/tool-goal/src/index.ts"
+        },
+        {
+          "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
+          "sha256": "ab688efec2beb165e2a0917b36fa72bfd5c8b96b8be3a1e6121b76ba24748135",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/boot/app-boot/src/plugin-compatibility.ts"
+        },
+        {
+          "path": "apps/cli/src/plugin.ts",
+          "sha256": "067932cab2de8d3684f8d746a843756f36bf1261dba7a29fe2f90ec2df17c229",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/apps/cli/src/plugin.ts"
+        },
+        {
+          "path": "vendor/cordis/package.json",
+          "sha256": "bd5b142ae927e4f954ceaee7cdc0e43fe921dde311edc8ec4f797f85f1981f83",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor/cordis/package.json"
+        },
+        {
+          "path": ".agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md",
+          "sha256": "4ac3f665cbed2c1c8922ed72f5fc157d37d16e97b56489b5a58f61c44550208e",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/.agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md"
+        }
+      ]
+    },
+    {
+      "tag": "dsh-v0.1.7-rc.2",
+      "commit": "477b4f420553e8a52c2fbccc464d7561b239c443",
+      "source_files": [
+        {
+          "path": "packages/core/agent/src/index.ts",
+          "sha256": "9979fdae64fd0a342067981c39de9cde2da7066d28f8506a501fd51e8f9068b9",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/agent/src/index.ts"
+        },
+        {
+          "path": "packages/core/agent/src/runtime-types.ts",
+          "sha256": "d0ac3509febb04308eff84bc6c949ff3c736dec9fd9f8d230c5d7fa3455ff204",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/agent/src/runtime-types.ts"
+        },
+        {
+          "path": "packages/core/agent-loop/src/agent.ts",
+          "sha256": "6163adcf3633e31483ceee9992c7871e7761ffc30268efe8775abbfeb1a8632a",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/agent-loop/src/agent.ts"
+        },
+        {
+          "path": "packages/core/session/src/index.ts",
+          "sha256": "e4092a93a5a6daecf9639f2a261cf074d1877318c9ddb2226249802cc21ddd2d",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/session/src/index.ts"
+        },
+        {
+          "path": "packages/core/session/src/types.ts",
+          "sha256": "71df05767d4436f7df989a7fe0d634befef54587f1ae63849cc6b28de6921c53",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/session/src/types.ts"
+        },
+        {
+          "path": "packages/core/session/src/fork.ts",
+          "sha256": "de80ecbf0e6a7961c096a2d7f0304bc6f6c83f897268304e28352357da06bfb0",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/session/src/fork.ts"
+        },
+        {
+          "path": "packages/core/session/src/tool-history.ts",
+          "sha256": "53ae6aebe5ebe9b1eb782f008315db33ff637611093e40fa3529ec3019b56683",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/session/src/tool-history.ts"
+        },
+        {
+          "path": "packages/core/tools/src/index.ts",
+          "sha256": "9107a2b6447b10c2ecb90429d7c1b80b956759e96d35230af16f5a88f5d3eccd",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/src/index.ts"
+        },
+        {
+          "path": "packages/core/tools/src/ptc.ts",
+          "sha256": "a0569c4600191c4395e669ceb20f6bd279cc898d3ba506bd8e6a188e80ed8dfb",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/src/ptc.ts"
+        },
+        {
+          "path": "packages/jobs/jobs/src/index.ts",
+          "sha256": "7cda58a0c085ced5053cfe18addf9ea55d217568ac2e7ae4e7f394ef0b4023f1",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/jobs/jobs/src/index.ts"
+        },
+        {
+          "path": "packages/jobs/jobs/src/view.ts",
+          "sha256": "d337b2cbaf7c2ff6e50e074676bd6d36613bc0a115c5c57d745b3e65ec42ece4",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/jobs/jobs/src/view.ts"
+        },
+        {
+          "path": "packages/jobs/jobs-local/src/index.ts",
+          "sha256": "b342014279db814186818ec2cc3d8a355c28483d3c29f8324e22dee80cc90a02",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/jobs/jobs-local/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-bash/src/index.ts",
+          "sha256": "63b1b49e9d1b4d4edbabae7b112184647bacff8866394e330f3214ff078a1bdf",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/shell/tool-bash/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-bash/src/render.ts",
+          "sha256": "bfb17540c1902fc0a996ea3833f2a1df18a13cf0c764d1a3f50d11d3f733aedb",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/shell/tool-bash/src/render.ts"
+        },
+        {
+          "path": "packages/shell/tool-pwsh/src/index.ts",
+          "sha256": "e2f146805832f3adc4232ce32538a1544ed9c41ce688c92a640d69f1480ca8c8",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/shell/tool-pwsh/src/index.ts"
+        },
+        {
+          "path": "packages/shell/tool-pwsh/src/render.ts",
+          "sha256": "1ecbb4aef0861427f24cd853753dee3d1119c09684bc5af616fffeb26746aaac",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/shell/tool-pwsh/src/render.ts"
+        },
+        {
+          "path": "packages/fs/tool-fs/src/session-cwd.ts",
+          "sha256": "9ca398d82e3170bc3bb1324f54ddf02ea04a41b3a19ba973e66d7449fc5744bc",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/fs/tool-fs/src/session-cwd.ts"
+        },
+        {
+          "path": "packages/fs/tool-fs/src/write.ts",
+          "sha256": "c79dfb2f270a52df96c87547a8370e4561ac110596a83db909477da38f884d8f",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/fs/tool-fs/src/write.ts"
+        },
+        {
+          "path": "packages/goal/goal/src/index.ts",
+          "sha256": "333ebc31489619ee083235c5f5ceeb38ac3c6c844b2a0179458058401a6ebf9a",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/goal/goal/src/index.ts"
+        },
+        {
+          "path": "packages/goal/tool-goal/src/index.ts",
+          "sha256": "f031e40594f72792a75f9a7c9ffdd1cf21d84493cd131023a879c07ef3b942b7",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/goal/tool-goal/src/index.ts"
+        },
+        {
+          "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
+          "sha256": "ab688efec2beb165e2a0917b36fa72bfd5c8b96b8be3a1e6121b76ba24748135",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/app-boot/src/plugin-compatibility.ts"
+        },
+        {
+          "path": "apps/cli/src/plugin.ts",
+          "sha256": "067932cab2de8d3684f8d746a843756f36bf1261dba7a29fe2f90ec2df17c229",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/plugin.ts"
+        },
+        {
+          "path": "vendor/cordis/package.json",
+          "sha256": "bd5b142ae927e4f954ceaee7cdc0e43fe921dde311edc8ec4f797f85f1981f83",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/vendor/cordis/package.json"
+        },
+        {
+          "path": ".agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md",
+          "sha256": "4ac3f665cbed2c1c8922ed72f5fc157d37d16e97b56489b5a58f61c44550208e",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/.agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md"
+        }
+      ]
+    }
+  ],
+  "registry_scope": "36 existing cohort/development dependency names only; not a complete rc.2 runtime graph",
+  "registry_rows": [
+    {
+      "name": "@deepseek-ai/cordis",
+      "version": "4.0.4",
+      "integrity": "sha512-obgyxqWAmFn3Re8kvsuUnyW+ihrz6eJCnJO4fh1cQzDtmPYz/zzVeUkH9R94I0OwSVOocK67Kgakm04j/oQXzg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/cordis/-/cordis-4.0.4.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-agent",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-9U/zHZvZqRR5S2FD9fjjAuoMh+WfDan+bE/cLBLSLpqftjZ0FhIlEBK99yonUkNkGemyHiH/lL3jCKYw35ahJA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-agent-loop",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-X+fegYY7yITQ5kAIayFrylMY9Vg6zHFLnP83rJVZ89juF9EBRm8soGAJHvyjat+mdk5a1WViWYdIPM0t9g/glA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-attachment",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-g2SQ12Ki1l28T/H+fZKtSWDFF5Y1gavcKVBb2X4eOVX5uT5Jwumx+9Svelp1pHaknuAE1N2Yt9tMwj2quMkhDg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-bash-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-M4laxtYLPkXlvbtMpLm4hTWKmBb1xJuNMma/eA+xYTNdjHtV/ZJPxiKMVe1crjBp/dKuMTJR42p8rizLM1vkNg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-commands",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-wVAHwHNDLDNBKXJZU2rHnwc+e3mhi6EuazAfJmqtbzU/ldQVEoJ9f5eXqesBcdQbRIrWQlpjfjdlw3nCJfK2HQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-3ES1FKLM4asLvFS+yBcatzRNGINfUx/Cl+x+JzGhEK5QWX3aCxpH8Oa9Z4T9k0McBStWg1CTfHziRR8trHPYyw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-7XlSqUY2nk1S0GQNU7f7rimhBnYZYdtOtW5xr3oApHuaiWyP2Qj9D2Y0Xq5+jyFz7kQ9hoNHq3gA+g5IK1Dofw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-observation-policy",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-htzbOb2krclujHcSMu4eLiMxE1zl1fNlQylN7RReU3ais5J08pJPzenNLH+M18zecRWr7IljxI/mrGAXlH0Upw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-E1f+stkuTefmMeOQ1lEQJum42igtOeg+V5J5P92dZp5QObt3VT1EcIkywe9zFHtEJ+jExVzACLIxj8XNmisiiA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-goal",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-9ULU4IMWGBkUTzOoQC+3tuyy7J/oFq5J05rv2PyxpLZyJGf5lRRDfhNjm/PAfbKzuXAPGEB2aOQ8eAdZ1RCnHA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-goal-round-driver",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-pIIDOhEGMr/BMLsRa+L7Q+qZgQupeAcT5wA7z3GEoZB/ABH4KTsepg0BZadZyuGEen4t0x6AG2pK2K+evonJLQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-host-plugin-inventory",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-krS/FKI7cacoUtjpIaZnFQZy4cM2DnshsP//jafFdC1LyKyh5gG97MPmQ37jRM5Gm4VDJfDj3ojqWzx3BrP1sQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-host-webserver",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-0ex5NsJFvpqchfnar/IPtNOG5Tx7PmtUO3/zVptT4MJs5OOrvtjNYHpZ6DGntmnpupgXnci1cUsQJIfG3D+U+Q==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-jobs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-bzbdcQ1dzCAGjYDs2J+YiwG58cDpASecJ4N6euUJNl0CCmnDETwCUhCpyMKDKCWcExdG3XcHmCjaCnL2hZIC0g==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-jobs-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-DE0HLEuI15Vw1ncXLDESUIBTdWhrXgKWV3g/jupEGCwmm6GCqC9W9cjJPmbLP7JQGB7UPkui5DrIft+8MYL6Nw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-llm",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-hNT3ovFnbNDQ8g544bh2Q9ORX40aI6Y+jhjer1lETeHS4g0jTjqUUVfARCTA7uAFvHucSBg2rFgbisIktmJCxw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-pwsh-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-c3kXLNhf8fNL7nt8NfJwcHU0jPvRiy6IPF+DHtT/Tp7+NhytHwj8vR3Ln7GIwsXGNU2hJbaD63S2IStjWLaylQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-sandbox",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-7aP893mtTvnuZfCKD6hUN5gYchi6Wogn4W3mg/rGMvogmhbWgrCs00boJx/eHK4KvVJmEW1e8kO5N+GtsesptA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-sandbox-policy",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-pIhCaOEqYjNoKy/c7dYYgYzK+zp8/FxnEeaBA5e6fTmNROb+/qSFsC4hY3Qu+PVU9IdbH/4fa6TbT2jnqoDPQw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-session",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-0dXv1t4Zox/yHkZ4PfPNSBWJfIc72PDqOvjz43EMoHpbmoKTVpit2UpUI+yTtX01e4MVBbDMxBZ95oJW/Oydnw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-session-projection",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-s5T8oHBEh+GeOTJ+wehD4CGZkTiWgczZZA+NDbfbqUO0k5L+dk0kk3fN+/srAg77rhR7UeeDSR8ZNcpYx/VUdw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-shell",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-l/CdrpqFG3SNPKBm7/zJkqn8gODxMLcTOg57zSqyDi5VdJXb8dlRQNHH4KfhxfWM9rZSH5AC94g6Il2n3sOQ+w==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-shell-env",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-Zu31yhGgnB+WMah0Qb/+adZTeUr1MQLmNMU8lV6YVt20tCnbA+HFI/akPTIoc9Ux8+Lqf6/fyv4e63OniPXaRw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-subprocess-local",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-1JKUC4YriYbuyNsDcOwb+WQVaxy6I8CWeTVP/UoEc6uXPSMQdS3GJArDYyFdC2NzjOEmAxpTr4awTNNrpA6Gmw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-system-prompt",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-vxKcADh7XOuWJOfa0WeEOhvFiUbMOdoK4w6M7KVCI0S99c9ktxrgY4wKdmAxap+nQjwTEPme3QuOlY3Na+cz9w==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-bash",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-pdFYrdnX2OlMN9nI0XT5MZwMkR58x4Z5j9qyTfMYLvtbuZxHwxcdHq2PJU3vAuVQj14F7TJiFEan2EXq+X1mFg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-fs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-/6wYrqHH1530tncA7DxC3IxLN2iI8kyhCPR/NfaugL09yGPpBwxm455bMvITSjIAvINWpJfMQvaijPui6goY2Q==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-goal",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-Otb3HOlyZA+44nDXrMi9PW4vlurudOaRYdA7hu4MZBtqvmFEty5loJAzrtDbAhwImhA/UM9M+7Qa2ijwm68qCw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-jobs",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-FAqhI8Hf1InawbrJF/XUjIlQHV11vRMWbX7ofrekJcX0OBk/Og/h8SUzy1knGBVULEm8m2PDLxggXoMu+HVlvg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-pwsh",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-GMFZT35QKoFOXzFV576FbohrdfcXtrMJlOPqdQvNvUdMLYPiiJEIR4WSuqQuGBoez0bLxKVwtodGzwcvPBP+dQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tools",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-c3dTdKnslKxVTgjjPLwMKLqGUMwnZH5P8RUsucMQlWn2GViyFW/+5AIUuZHBjjE6Y7NAYl+lVVE/R4LgTp5KWA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-user-approval",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-RQ6GB+C4G6VY/eJrFfS89+89DfHFAJ5G1abhmutfKBhZcYSnGNZyPIzpr5mKbl2xNMIhvCJOb9WiFz2fUPW2HA==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-util-values",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-UX8nh5SbtZcPVVEvjd+9PCPcbybA6OpVzJGgFxYn59ao/7QQGyYbByS8KXr+THU5JtqmDDVb9xGUSJaF2IYmeQ==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.1.7-rc.2.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-web-app",
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-3cMgHys6X9N063HcjhFN2a3azGoWWDtH42/io33gcBZMZxbYP5Kevc4l/erwKa5hAzXtJ2FArjJAytJmy8WSKw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.1.7-rc.2.tgz"
+    }
+  ],
+  "limitations": [
+    "Registry SRI metadata was read; tarball bytes and installed runtime graphs were not validated.",
+    "Source archives were compared locally because the GitHub compare response listed only 300 files.",
+    "No candidate typecheck, runtime test, CI, native lifecycle, or model test was performed."
+  ]
+}

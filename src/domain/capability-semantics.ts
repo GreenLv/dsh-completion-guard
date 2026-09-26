@@ -181,6 +181,8 @@ export type ProcessOutcomeReason =
   | 'marker_unclassified'
   /** The call was backgrounded; its result is not a completion fact. */
   | 'backgrounded'
+  /** The host retained only a lossy/truncated part of the process output. */
+  | 'output_incomplete'
   /** Plain-text scanning without a structured terminal fact and without the
    * audited unmarked-renderer rule. */
   | 'text_scan_inconclusive'

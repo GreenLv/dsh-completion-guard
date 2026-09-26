@@ -24,7 +24,7 @@ function fixture(root: string, idLabel = 'v6-recovery-feedback') {
   const id = SessionId(idLabel)
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
   const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: String(id), createdAt: 1, seedLength: 0, delegationDepth: 0 } }
@@ -577,7 +577,7 @@ function guardedAgent(session: Session) {
 }
 
 function startGuard(ctx: ReturnType<typeof fakeCtx>, agent: Agent, source: string) {
-  for (const handler of ctx.handlers.get('agent/session-start') ?? []) {
+  for (const handler of ctx.handlers.get('agent/created') ?? []) {
     ;(handler as (payload: { agent: Agent; source: string }) => void)({ agent, source })
   }
 }
@@ -688,7 +688,7 @@ function siblingFixture(firstRoot: string, idLabel: string) {
   const id = SessionId(idLabel)
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: firstRoot }], source: { kind: 'user' } }), { surfaceOp: 'append' })
   session.append('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Understood; waiting.' }] } } as never, { surfaceOp: 'append' })
@@ -920,7 +920,7 @@ describe('review R4F1/R4F2: wait state derivation and revision identity in detai
     const id = SessionId('review-r4f1-superseded')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     const roots = [
       'Push repository /work/repo to remote origin refspec refs/heads/main:refs/heads/main.',
       '请在收到我的确认后再执行推送。',

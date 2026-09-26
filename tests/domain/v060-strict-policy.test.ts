@@ -8,7 +8,7 @@ const scope = { cwd: '/repo', sessionHeader: { version: 3, id: 'v060-policy', cr
 
 let seq = 0
 const v5Notice = (): DerivedEnvelope => ({ seq: seq++, type: 'user/message', data: {
-  source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+  source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
   content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }],
 } })
 

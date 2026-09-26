@@ -13,7 +13,7 @@ type ResultShape = { outerError?: boolean; outerIsError?: boolean; messageIsErro
 function replay(name: 'bash' | 'pwsh' | 'shell', result?: ResultShape) {
   const callId = 'test-call'
   const events: DerivedEnvelope[] = [
-    { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+    { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
       content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
     { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run npm test.' }] } },
     { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId, name,
@@ -23,11 +23,10 @@ function replay(name: 'bash' | 'pwsh' | 'shell', result?: ResultShape) {
     turn: 1, step: 1,
     ...(result.outerError ? { error: { name: 'SandboxUnavailableError', code: 'SANDBOX_UNAVAILABLE' } } : {}),
     ...(result.outerIsError ? { isError: true } : {}),
-    message: { source: { kind: 'tool', callId }, ...(result.messageIsError ? { isError: true } : {}),
-      content: result.nested?.map((block) => ({ type: 'tool-result', toolCallId: block.callId ?? callId,
-        ...(block.isError === undefined ? {} : { isError: block.isError }),
-        content: [{ type: 'text', text: block.text ?? result.text ?? 'host result' }] }))
-        ?? [{ type: 'text', text: result.text ?? 'host result' }] },
+    message: { role: 'tool', source: { kind: 'tool', callId },
+      toolCallId: result.nested?.length === 1 ? result.nested[0].callId ?? callId : undefined,
+      isError: result.messageIsError || (result.nested?.length === 1 ? result.nested[0].isError : undefined),
+      content: [{ type: 'text', text: result.nested?.[0]?.text ?? result.text ?? 'host result' }] },
   } })
   const projection = deriveProjection(events, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
   projection.durabilityWatermark = 'confirmed'
@@ -81,14 +80,12 @@ describe('v0.7 structured host result error priority', () => {
 
   it('never replays a certified checkpoint carried by a failed host result', () => {
     const events: DerivedEnvelope[] = [
-      { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
         content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
       { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run npm test.' }] } },
       { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'cp-1', name: 'context_guard_checkpoint',
         arguments: JSON.stringify({ bindings: [] }) } },
-      { seq: 4, type: 'tool/result', data: { turn: 1, step: 1, message: { source: { kind: 'tool', callId: 'cp-1' },
-        content: [{ type: 'tool-result', toolCallId: 'cp-1', isError: true,
-          content: [{ type: 'text', text: JSON.stringify({ status: 'certified', certificate: {} }) }] }] } } },
+      { seq: 4, type: 'tool/result', data: { turn: 1, step: 1, message: { source: { kind: 'tool', callId: 'cp-1' }, role: 'tool', toolCallId: 'cp-1', isError: true, content: [{ type: 'text', text: JSON.stringify({ status: 'certified', certificate: {} }) }] } } },
     ]
     const projection = deriveProjection(events, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
     expect(projection.checkpoints).toHaveLength(0)
@@ -98,7 +95,7 @@ describe('v0.7 structured host result error priority', () => {
 
   it('does not replay a text-only certified receipt without an SDK nested return', () => {
     const events: DerivedEnvelope[] = [
-      { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
         content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
       { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run npm test.' }] } },
       { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'cp-text', name: 'context_guard_checkpoint',
@@ -123,12 +120,12 @@ describe('v0.7 structured host result error priority', () => {
     const result = { message: { content: [{ type: 'tool-result', isError: false,
       content: [{ type: 'text', text: '[exit code: 0]' }] }] } }
     expect(persistedToolResultStatus(result, 'call-1')).toBe('unknown')
-    expect(persistedToolResultStatus({ message: { content: [{ ...result.message.content[0], toolCallId: 'call-1' }] } }, 'call-1')).toBe('clean')
+    expect(persistedToolResultStatus({ message: { content: [{ ...result.message.content[0], toolCallId: 'call-1' }] } }, 'call-1')).toBe('unknown')
   })
 
   it('does not let a dispatch result complete an ordinary call with the same id', () => {
     const base: DerivedEnvelope[] = [
-      { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
         content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
       { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run npm test.' }] } },
       { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'same-id', name: 'bash',
@@ -150,14 +147,12 @@ describe('v0.7 structured host result error priority', () => {
 
   it('marks a failed delegated host return as failed even when its text says completed', () => {
     const events: DerivedEnvelope[] = [
-      { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
         content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
       { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Create /work/a.txt.' }] } },
       { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'delegate-1', name: 'delegate_task',
         arguments: JSON.stringify({ prompt: 'Create /work/a.txt.' }) } },
-      { seq: 4, type: 'tool/result', data: { turn: 1, step: 1, message: { source: { kind: 'tool', callId: 'delegate-1' },
-        content: [{ type: 'tool-result', toolCallId: 'delegate-1', isError: true,
-          content: [{ type: 'text', text: JSON.stringify({ status: 'completed' }) }] }] } } },
+      { seq: 4, type: 'tool/result', data: { turn: 1, step: 1, message: { source: { kind: 'tool', callId: 'delegate-1' }, role: 'tool', toolCallId: 'delegate-1', isError: true, content: [{ type: 'text', text: JSON.stringify({ status: 'completed' }) }] } } },
     ]
     const projection = deriveProjection(events, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
     expect([...projection.evidence.values()][0]).toMatchObject({ outcome: 'failure', delegatedSubtask: true })

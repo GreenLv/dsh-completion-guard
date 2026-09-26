@@ -27,7 +27,7 @@ const scope = { cwd: '/workspace' }
 
 function replay(texts: string[], cwd = '/workspace') {
   const events: DerivedEnvelope[] = [
-    { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+    { seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
     ...texts.map((text, index): DerivedEnvelope => ({
       seq: index + 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
     })),

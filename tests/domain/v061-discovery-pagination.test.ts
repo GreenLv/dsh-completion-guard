@@ -203,7 +203,7 @@ describe('0.6.1 W060-03: discovery pagination traverses the full applicable set'
     let seq = 0
     const env = (type: string, data: unknown): DerivedEnvelope => ({ seq: seq++, type, data })
     events.push(
-      env('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
+      env('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
       env('turn/start', { turn: 1 }),
       env('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: '创建 report.txt' }] }),
       env('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '好的。' }] } }),

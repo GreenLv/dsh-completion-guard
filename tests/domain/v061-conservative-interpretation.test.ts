@@ -22,7 +22,7 @@ const scope = { cwd: '/repo', sessionHeader: { version: 3, id: 'v061-conservativ
 let seq = 0
 const reset = () => { seq = 0 }
 const notice = (): DerivedEnvelope => ({ seq: seq++, type: 'user/message', data: {
-  source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+  source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
   content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }],
 } })
 const turnStart = (turn: number): DerivedEnvelope => ({ seq: seq++, type: 'turn/start', data: { turn } })

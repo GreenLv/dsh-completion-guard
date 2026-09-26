@@ -1,13 +1,9 @@
 /**
- * Read a validated, stable event snapshot from the DSH Session V3 API.
+ * Read a validated, stable event snapshot from the DSH Session V4 API.
  *
- * Session V3 replaced the V2 `events` getter with `snapshotEvents()`. Context
- * Guard supports only the V3 API: a session object that does not expose that
- * method is an unsupported host, never a reason to fall back to a legacy
- * accessor. Failing loud here keeps a V2-shaped object from being projected as
- * if its events had V3 semantics — the two vocabularies differ (surfaces,
- * `assistant/chunk` vs embedded streams, `session/end-seed` payload), so a
- * silent fallback would derive contract state from a log it cannot read.
+ * Exact rc.2 still exposes the deprecated synchronous snapshotEvents() API.
+ * This adapter retains that existing dependency; it does not promise support
+ * for remote history or add a fallback to a legacy events getter.
  *
  * Guard is a READER of the durable log, so the envelope check below is the one
  * part of log validation it owns itself. The host validates a session it
@@ -16,7 +12,7 @@
  * mis-numbered an event would fabricate contract state rather than report a
  * damaged log.
  *
- * The V3 contract also asks a reader to refuse an unrecognized event type that
+ * The V4 contract also asks a reader to refuse an unrecognized event type that
  * is not marked `ignorable`. Guard does NOT implement that half, deliberately:
  * the host's persistence reader already refuses such a log before publishing a
  * Session, and a whitelist of event types Guard happens to know would
@@ -37,13 +33,13 @@ export class SessionApiError extends Error {
   }
 }
 
-/** The V3 session surface Guard reads: one bounded, immutable event snapshot. */
-export interface V3SessionLike {
+/** The V4 session surface Guard reads: one bounded, immutable event snapshot. */
+export interface V4SessionLike {
   snapshotEvents(fromSeq?: number, toSeqExclusive?: number): readonly unknown[]
 }
 
 /**
- * Refuse a snapshot that is not a contiguous, correctly enveloped V3 log.
+ * Refuse a snapshot that is not a contiguous, correctly enveloped V4 log.
  *
  * `seq` must be a non-negative safe integer and `type` a non-empty string.
  * Contiguity is checked against the snapshot's own first sequence rather than
@@ -76,7 +72,7 @@ export function snapshotSessionEvents(session: unknown): readonly unknown[] {
   }
   const source = session as { snapshotEvents?: unknown }
   if (typeof source.snapshotEvents !== 'function') {
-    throw new SessionApiError('session does not expose the DSH Session V3 snapshotEvents() API')
+    throw new SessionApiError('session does not expose the DSH Session V4 snapshotEvents() API')
   }
   const events = (source.snapshotEvents as () => unknown).call(session)
   if (!Array.isArray(events)) {

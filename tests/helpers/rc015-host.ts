@@ -1,4 +1,4 @@
-import type { PackageRow } from './digest.js'
+import type { PackageRow } from '../../src/domain/digest.js'
 
 /**
  * Exact 33-row DSH 0.1.5-rc.1 core graph.

@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto'
 import { evidenceFromPersistedToolResult } from '../src/domain/evidence.js'
 const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
   auditedForegroundRenderers: ['bash' as const] }
-const note = { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } } as DerivedEnvelope
+const note = { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } } as DerivedEnvelope
 function replay(root: string) {
   const events: DerivedEnvelope[] = [note, { seq: 2, type: 'turn/start', data: { turn: 1 } },
     { seq: 3, type: 'user/message', data: { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: root }] } }]
@@ -30,7 +30,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId('real-posix-root-flavor')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Modify /work/A.txt.' }],
       source: { kind: 'user' } }), { surfaceOp: 'append' })
     const events = session.snapshotEvents() as never
@@ -57,7 +57,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId('real-windows-root-flavor')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Modify ${cwd}\\A.txt.` }],
       source: { kind: 'user' } }), { surfaceOp: 'append' })
     const events = session.snapshotEvents() as never
@@ -175,7 +175,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId('two-information-turns')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Explain the first result.' }],
       source: { kind: 'user' } }), { surfaceOp: 'append' })
@@ -226,7 +226,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId(`raw-test-ready-${Buffer.from(root).toString('hex').slice(0, 16)}`)
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     const initial = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
@@ -276,7 +276,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId(`assessment-ready-${scriptName}`)
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     session.append('tool/call', { turn: 1, step: 1, callId: 'edit-assessment' as never,
@@ -316,7 +316,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId('assessment-existing-change')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     const initial = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
@@ -348,7 +348,7 @@ describe('Session to core/v2 host adapter', () => {
     const id = SessionId('latest-test-outcome')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Run pnpm test in /work.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     const project = () => {

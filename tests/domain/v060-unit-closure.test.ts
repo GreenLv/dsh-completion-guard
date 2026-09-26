@@ -14,7 +14,7 @@ const scope = { cwd: '/repo', sessionHeader: { version: 3, id: 'v060-unit-closur
 let seq = 0
 const reset = () => { seq = 0 }
 const notice = (): DerivedEnvelope => ({ seq: seq++, type: 'user/message', data: {
-  source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+  source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
   content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }],
 } })
 const turnStart = (turn: number): DerivedEnvelope => ({ seq: seq++, type: 'turn/start', data: { turn } })
@@ -27,7 +27,7 @@ const assistant = (turn: number, step: number, text: string): DerivedEnvelope =>
 } })
 const toolCall = (callId: string, name: string, args: unknown): DerivedEnvelope => ({ seq: seq++, type: 'tool/call', data: { callId, name, arguments: JSON.stringify(args) } })
 const toolResult = (callId: string, payload: unknown, isError = false): DerivedEnvelope => ({ seq: seq++, type: 'tool/result', data: {
-  message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] }] },
+  message: { source: { kind: 'tool', callId }, role: 'tool', toolCallId: callId, isError: false, content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] },
   ...(isError ? { error: { name: 'x', code: 'Y' } } : {}),
 } })
 
@@ -74,7 +74,7 @@ function pushEvidence() {
       callId, name: 'context_guard_evidence', arguments: JSON.stringify({ semantic_action: 'push', evidence_role: role }),
     } })
     events.push({ seq: localSeq++, type: 'tool/result', data: {
-      message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: '{}' }] }] },
+      message: { source: { kind: 'tool', callId }, role: 'tool', toolCallId: callId, isError: false, content: [{ type: 'text', text: '{}' }] },
       meta: { contextGuard: {
         adapterId: 'context-guard.git.v1', adapterVersion: '1.0.0', semanticAction: 'push', evidenceRole: role,
         resolvedTarget: shape.resolved, ...(observed ? { observedState: observed } : {}), ...extra,

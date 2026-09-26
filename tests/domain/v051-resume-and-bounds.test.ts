@@ -19,7 +19,7 @@ import type { DerivedEnvelope } from '../../src/domain/types.js'
  */
 
 const replay = (texts: string[]) => deriveProjection([
-  { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+  { seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
   ...texts.map((text, index): DerivedEnvelope => ({ seq: index + 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })),
 ], { activation: 'always' }, { cwd: '/workspace' }, true).projection
 
@@ -29,7 +29,7 @@ const onlyItem = (text: string) => [...replay([text]).items.values()][0]!
 const TARGETED_PUSH = 'Push repository repo-alpha to remote origin refspec refs/heads/main:refs/heads/main.'
 const RESOLVED_PUSH = { repository: 'repo-alpha', remote: 'origin', refspec: 'refs/heads/main:refs/heads/main', local_oid: 'a'.repeat(64) }
 const replayRepo = (texts: string[]) => deriveProjection([
-  { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+  { seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
   ...texts.map((text, index): DerivedEnvelope => ({ seq: index + 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })),
 ], { activation: 'always' }, { cwd: '/work/repo' }, true).projection
 

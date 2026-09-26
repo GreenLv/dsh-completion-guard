@@ -29,7 +29,7 @@ interface RegisteredTool {
 
 function startGuardSession(options: { activation?: 'opt-in' | 'always'; config?: Record<string, unknown> } = {}) {
   const session = Session.create(SessionId('tool-surface'), undefined, {
-    version: 3, isSeeded: false, id: SessionId('tool-surface'), createdAt: 1, cwd: '/work',
+    version: 4, isSeeded: false, id: SessionId('tool-surface'), createdAt: 1, cwd: '/work',
   })
   const tools: RegisteredTool[] = []
   const guards: Array<(exec: { name: string; arguments: unknown }) => string | undefined> = []
@@ -57,7 +57,7 @@ function startGuardSession(options: { activation?: 'opt-in' | 'always'; config?:
     },
   }
   const start = (source: string) => {
-    for (const handler of handlers.get('agent/session-start') ?? []) {
+    for (const handler of handlers.get('agent/created') ?? []) {
       (handler as (payload: unknown) => void)({ agent, source })
     }
   }
@@ -185,7 +185,7 @@ describe('registered tool surface', () => {
     const { tools } = startGuardSession()
     const action = tools.find((tool) => tool.name === 'context_guard_action')!
     const foreign = Session.create(SessionId('foreign-session'), undefined, {
-      version: 3, isSeeded: false, id: SessionId('foreign-session'), createdAt: 2, cwd: '/elsewhere',
+      version: 4, isSeeded: false, id: SessionId('foreign-session'), createdAt: 2, cwd: '/elsewhere',
     })
     const result = await (action.execute as (args: unknown, exec: unknown) => Promise<Record<string, unknown>>)(
       {

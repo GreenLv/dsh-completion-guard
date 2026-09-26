@@ -17,7 +17,7 @@ async function readySession(persistent: boolean, initialRoot?: string) {
   const id = SessionId(`v6-root-control-${++nextSession}`)
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   const first = initialRoot ?? (persistent ? '运行 pnpm test。持续推进，直到本轮测试完成为止。' : '运行 pnpm test。')
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: first }], source: { kind: 'user' } }), { surfaceOp: 'append' })
@@ -294,7 +294,7 @@ describe('v6 repair child relations come from the original root coordination', (
     const id = SessionId(`v6-root-relation-${++nextSession}`)
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     const runtime = createRuntime({ session, steer: () => {} } as never, { activation: 'always' } as never, HOST, () => {})

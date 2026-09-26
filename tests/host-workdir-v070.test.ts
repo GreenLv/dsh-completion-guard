@@ -26,7 +26,7 @@ function scenario(options: { workdir?: string; policyRoot?: string; headerCwd?: 
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false,
     id, createdAt: 1, cwd })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Run npm test in ${physical}.` }],
     source: { kind: 'user' } }), { surfaceOp: 'append' })
@@ -40,7 +40,7 @@ function scenario(options: { workdir?: string; policyRoot?: string; headerCwd?: 
   const appendReceipt = () => {
     if (receipt) session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'call-time workdir' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'call-time workdir' },
     }), { surfaceOp: 'append' })
   }
   const appendResult = () => session.append('tool/result', { turn: 1, step: 1,
@@ -50,7 +50,7 @@ function scenario(options: { workdir?: string; policyRoot?: string; headerCwd?: 
   const core = () => {
     const events = session.snapshotEvents() as never
     const projection = deriveProjection(events, { activation: 'always' },
-      { cwd, sessionHeader: { version: 3, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } }, true, host).projection
+      { cwd, sessionHeader: { version: SESSION_FORMAT_VERSION, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } }, true, host).projection
     projection.durabilityWatermark = 'confirmed'
     return projectSessionCoreV2(events, projection)
   }
@@ -66,7 +66,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     expect(auditedDefaultWorkdirHost('/no-such-runtime', '/no-such-profile', 'bash')).toBe(false)
     const provider = async (name: string, exported: string) => {
       const store = join(runtimeRoot, 'node_modules', '.pnpm')
-      const entry = readdirSync(store).find((value) => value.startsWith(`@deepseek-ai+${name}@0.1.5-rc.2_`))!
+      const entry = readdirSync(store).find((value) => value.startsWith(`@deepseek-ai+${name}@0.1.7-rc.2_`))!
       const path = join(store, entry, 'node_modules', '@deepseek-ai', name, 'lib', 'index.js')
       const module = await import(pathToFileURL(path).href) as Record<string, { prototype: object }>
       return Object.create(module[exported]!.prototype) as object
@@ -98,13 +98,13 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       }
       const sourceStore = join(runtimeRoot, 'node_modules', '.pnpm')
       for (const name of names) {
-        const slug = readdirSync(sourceStore).find((value) => value.startsWith(`@deepseek-ai+${name}@0.1.5-rc.2_`))!
+        const slug = readdirSync(sourceStore).find((value) => value.startsWith(`@deepseek-ai+${name}@0.1.7-rc.2_`))!
         const source = join(sourceStore, slug, 'node_modules', '@deepseek-ai', name)
         const destination = join(other, 'node_modules', '.pnpm', slug, 'node_modules', '@deepseek-ai', name)
         mkdirSync(join(destination, 'lib'), { recursive: true })
         copyFileSync(join(source, 'package.json'), join(destination, 'package.json'))
         copyFileSync(join(source, 'lib', 'index.js'), join(destination, 'lib', 'index.js'))
-        const id = `@deepseek-ai/${name}@0.1.5-rc.2(test)`
+        const id = `@deepseek-ai/${name}@0.1.7-rc.2(test)`
         dependencies[`@deepseek-ai/${name}`] = id
         packages[id] = { url: `./.pnpm/${slug}/node_modules/@deepseek-ai/${name}`, dependencies: {} }
       }
@@ -112,7 +112,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       expect(auditedDefaultWorkdirHost(runtimeRoot, other, 'bash')).toBe(true)
       expect(await auditedDefaultWorkdirProvider(runtimeRoot, other, 'bash', bash, policyProvider)).toBe(false)
       const policy = join(other, 'node_modules', '.pnpm',
-        readdirSync(sourceStore).find((value) => value.startsWith('@deepseek-ai+dsh-sandbox-policy@0.1.5-rc.2_'))!,
+        readdirSync(sourceStore).find((value) => value.startsWith('@deepseek-ai+dsh-sandbox-policy@0.1.7-rc.2_'))!,
         'node_modules', '@deepseek-ai', 'dsh-sandbox-policy', 'lib', 'index.js')
       writeFileSync(policy, `${readFileSync(policy, 'utf8')}\n// changed installed policy bytes`)
       expect(auditedDefaultWorkdirHost(runtimeRoot, other, 'bash')).toBe(false)
@@ -146,7 +146,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION,
         isSeeded: false, id, createdAt: 1, cwd: physical })
       session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+        source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
       session.append('turn/start', { turn: 1 })
       const task = session.append('user/message', createUserMessage({
         content: [{ type: 'text', text: `Run npm test in ${physical}.` }], source: { kind: 'user' },
@@ -165,7 +165,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       expect(captureHostWorkdir(session, exec as never, host, policy, true)?.rootSeq).toBe(interlude.seq)
       expect(captureHostWorkdir(session, exec as never, host, policy, true, null)).toBeUndefined()
       const before = deriveProjection(session.snapshotEvents() as never, { activation: 'always' },
-        { cwd: physical, sessionHeader: { version: 3, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } },
+        { cwd: physical, sessionHeader: { version: SESSION_FORMAT_VERSION, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } },
         true, host).projection
       expect(sourcedNamedTestRoot(before, session, args)).toBe(task.seq)
       const receipt = captureHostWorkdir(session, exec as never, host, policy, true,
@@ -177,11 +177,11 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       } as never, { surfaceOp: 'append' })
       session.append('user/message', createUserMessage({
         content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
-        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'call-time workdir' },
+        source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'call-time workdir' },
       }), { surfaceOp: 'append' })
       const events = session.snapshotEvents() as never
       const projection = deriveProjection(events, { activation: 'always' },
-        { cwd: physical, sessionHeader: { version: 3, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } },
+        { cwd: physical, sessionHeader: { version: SESSION_FORMAT_VERSION, id, createdAt: 1, seedLength: 0, delegationDepth: 0 } },
         true, host).projection
       expect(hostWorkdirForCall(events, call as never, result as never, task.seq,
         projection.sessionRefDigest, projection.hostLockDigest, physical)).toBe(physical)
@@ -209,7 +209,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       s.appendReceipt()
       const events = s.session.snapshotEvents() as never
       const projection = deriveProjection(events, { activation: 'always' },
-        { cwd: s.physical, sessionHeader: { version: 3, id: SessionId('default-workdir-receipt'), createdAt: 1,
+        { cwd: s.physical, sessionHeader: { version: SESSION_FORMAT_VERSION, id: SessionId('default-workdir-receipt'), createdAt: 1,
           seedLength: 0, delegationDepth: 0 } }, true, host).projection
       expect(hostWorkdirForCall(events, s.call as never, result as never, 2, projection.sessionRefDigest,
         projection.hostLockDigest, s.physical)).toBe(s.physical)
@@ -251,12 +251,12 @@ describe('v0.7 call-time Host default-workdir observation', () => {
         structuredClone(stable.session.header), SessionLogOffset(0), 'detached')
       const events = restored.snapshotEvents() as never
       const original = deriveProjection(events, { activation: 'always' },
-        { cwd: stable.physical, sessionHeader: { version: 3, id: restored.id, createdAt: 1,
+        { cwd: stable.physical, sessionHeader: { version: SESSION_FORMAT_VERSION, id: restored.id, createdAt: 1,
           seedLength: 0, delegationDepth: 0 } }, true, host).projection
       original.durabilityWatermark = 'confirmed'
       expect(projectSessionCoreV2(events, original)?.certifiable).toBe(true)
       const drifted = deriveProjection(events, { activation: 'always' },
-        { cwd: stable.physical, sessionHeader: { version: 3, id: restored.id, createdAt: 1,
+        { cwd: stable.physical, sessionHeader: { version: SESSION_FORMAT_VERSION, id: restored.id, createdAt: 1,
           seedLength: 0, delegationDepth: 0 } }, true,
         { ...host, digest: 'bb'.repeat(32) }).projection
       drifted.durabilityWatermark = 'confirmed'
@@ -271,7 +271,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       s.appendReceipt()
       s.session.append('user/message', createUserMessage({
         content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify({ ...s.receipt, callId: 'other-call' })}` }],
-        source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'other call' },
+        source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'other call' },
       }), { surfaceOp: 'append' })
       expect(s.core()?.certifiable).toBe(true)
     } finally { s.cleanup() }
@@ -317,7 +317,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       expect(response.isError).toBe(false)
       expect(response.additionalContexts).toHaveLength(1)
       expect(s.session.snapshotEvents().filter((event) => event.type === 'user/message'
-        && String((event.data as { content?: Array<{ text?: string }> }).content?.[0]?.text ?? '').startsWith(HOST_WORKDIR_PREFIX))).toHaveLength(0)
+        && String((event.data as { content?: ReadonlyArray<{ text?: string }> }).content?.[0]?.text ?? '').startsWith(HOST_WORKDIR_PREFIX))).toHaveLength(0)
       s.appendResult()
       s.session.append('user/message', response.additionalContexts![0]!, { surfaceOp: 'append' })
       expect(s.core()?.certifiable).toBe(true)
@@ -330,7 +330,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false,
       id, createdAt: 1, cwd: physical })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     const root = session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `Run npm test in ${physical}.` }],
       source: { kind: 'user' } }), { surfaceOp: 'append' })
@@ -372,7 +372,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
         session.append('user/message', context, { surfaceOp: 'append' })
       }
       const messages = session.deriveMessages()
-      expect(messages.slice(-4).map((message) => message.content[0]?.type)).toEqual(['tool-result', 'tool-result', 'text', 'text'])
+      expect(messages.slice(-4).map((message) => message.role)).toEqual(['tool', 'tool', 'user', 'user'])
       for (const [callId, response] of [['call-a', responseA], ['call-b', responseB]] as const) {
         const text = (response.additionalContexts?.[0]?.content[0] as { text?: string } | undefined)?.text ?? ''
         const receipt = JSON.parse(text.slice(HOST_WORKDIR_PREFIX.length))

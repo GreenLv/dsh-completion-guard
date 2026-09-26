@@ -16,7 +16,7 @@ import type { DerivedEnvelope } from '../../src/domain/types.js'
  */
 
 const replay = (texts: string[]) => deriveProjection([
-  { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+  { seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
   ...texts.map((text, index): DerivedEnvelope => ({ seq: index + 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })),
 ], { activation: 'always' }, { cwd: '/work' }, true).projection
 
@@ -119,7 +119,7 @@ describe('only a matching trusted restatement supersedes the wait', () => {
   }
   const project = (texts: string[]) => deriveProjection([
     { seq: 0, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-    { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+    { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
     ...texts.map((text, index): DerivedEnvelope => ({ seq: index + 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })),
   ], { activation: 'opt-in' }, { cwd: '/work/repo' }, true).projection
   const waitItems = (projection: ReturnType<typeof project>) =>

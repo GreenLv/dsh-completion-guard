@@ -7,7 +7,7 @@ import type { DerivedEnvelope, GuardItem } from '../src/domain/types.js'
 
 const rootProjection = (root: string) => {
   const events: DerivedEnvelope[] = [
-    { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
+    { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
     { seq: 2, type: 'turn/start', data: { turn: 1 } },
     { seq: 3, type: 'user/message', data: { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: root }] } },
   ]

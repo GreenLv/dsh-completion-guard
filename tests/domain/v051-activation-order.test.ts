@@ -18,7 +18,7 @@ const enabledFirstOrAfter = (goalFirst: boolean) => {
   })
   const enable = () => {
     session.append('command/run', { name: 'context-guard', args: 'on', source: { kind: 'user' } } as never)
-    session.append('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } as never, { surfaceOp: 'append' } as never)
+    session.append('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } as never, { surfaceOp: 'append' } as never)
   }
   const goal = () => session.append('goal/change', {
     kind: 'goal/change', version: 1, operation: 'create',

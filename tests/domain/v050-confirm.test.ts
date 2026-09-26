@@ -6,14 +6,14 @@ import type { DerivedEnvelope } from '../../src/domain/types.js'
 const config = { activation: 'always' as const }
 const scope = { cwd: '/repo', sessionHeader: { version: 1, id: 'confirm-test', createdAt: 1 } }
 const user = (seq: number, text: string, kind = 'user'): DerivedEnvelope => ({ seq, type: 'user/message', data: { source: { kind }, content: [{ type: 'text', text }] } })
-const v4: DerivedEnvelope = { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } }
+const v4: DerivedEnvelope = { seq: 0, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } }
 const replay = (events: DerivedEnvelope[], durable = true, sessionScope = scope) => deriveProjection([v4, ...events], config, sessionScope, durable).projection
 
 function toolCall(seq: number, callId: string, name: string, args: unknown): DerivedEnvelope {
   return { seq, type: 'tool/call', data: { callId, name, arguments: JSON.stringify(args) } }
 }
 function toolResult(seq: number, callId: string, value: unknown): DerivedEnvelope {
-  return { seq, type: 'tool/result', data: { message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, isError: false, content: [{ type: 'text', text: JSON.stringify(value) }] }] } } }
+  return { seq, type: 'tool/result', data: { message: { source: { kind: 'tool', callId }, role: 'tool', toolCallId: callId, isError: false, content: [{ type: 'text', text: JSON.stringify(value) }] } } }
 }
 
 /** A gainful proposal: the later root clarification gives the clause a real action. */

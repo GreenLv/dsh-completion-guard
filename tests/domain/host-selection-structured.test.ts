@@ -8,7 +8,8 @@ const call: DerivedEnvelope = { seq: 1, type: 'tool/call', data: {
   }),
 } }
 const result = (content: unknown[]): DerivedEnvelope => ({ seq: 2, type: 'tool/result', data: {
-  message: { source: { kind: 'tool', callId: 'question-1' }, content },
+  message: { role: 'tool', source: { kind: 'tool', callId: 'question-1' },
+    ...(content.length === 1 && (content[0] as { type?: string }).type === 'tool-result' ? content[0] as object : { content }) },
 } })
 const nested = (toolCallId: string, isError: boolean) => [{ type: 'tool-result', toolCallId, isError,
   content: [{ type: 'text', text: JSON.stringify({ answer: '/work/a' }) }] }]

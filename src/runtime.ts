@@ -1,9 +1,12 @@
+import './message-source.js'
+import { auditedHostImplementation } from './domain/host-resolver.js'
+import { JobId } from '@deepseek-ai/dsh-jobs'
 import { createRebindTool } from './tools/rebind.js'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from './domain/digest.js'
 import {
@@ -42,6 +45,7 @@ import {
   type ExternalOperationSnapshot,
 } from './tools/external-operation.js'
 import {
+  BOUNDARY_RECORD_PREFIX,
   effectuateBoundary,
   isCurrentAcceptedBoundary,
   qualifyBoundary,
@@ -294,27 +298,12 @@ async function establishBoundary(
     seq: number
     append: (type: string, data: unknown, options?: unknown) => unknown
   }
-  const callId = `guard-boundary-${candidate.id}`
-  session.append('tool/call', {
-    turn: 0, step: session.seq, callId, name: 'context_guard_boundary',
-    arguments: JSON.stringify({
-      disposition: request.disposition,
-      qualification_kind: request.qualificationKind,
-      qualification_ids: request.qualificationIds,
-    }),
-  })
-  session.append('tool/result', {
-    turn: 0, step: session.seq,
-    message: createToolResultMessage({
-      callId: callId as never,
-      content: [{ type: 'text', text: JSON.stringify({
-        status: candidate.persistedResult,
-        reason_code: candidate.reasonCode,
-        boundary: { candidate_sha256: candidate.candidateSha256 },
-      }) }],
-      isError: false,
-    }),
-  }, { surfaceOp: 'append' })
+  // A Stop hook is outside a tool step. V4 forbids invented tool/call
+  // envelopes; persist a producer-owned notice and revalidate it on replay.
+  session.append('user/message', pluginNoticeMessage(
+    `${BOUNDARY_RECORD_PREFIX}${JSON.stringify({ request, candidate_sha256: candidate.candidateSha256 })}`,
+    'recording a qualified stop boundary',
+  ), { surfaceOp: 'append' })
   let durable = false
   try {
     durable = await flush()
@@ -398,7 +387,7 @@ export async function handleGuardTurnStopping(
     const session = agent.session as unknown as { seq: number; append: (type: string, data: unknown, options?: unknown) => unknown }
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: `${CONTROL_RECORD_PREFIX}${JSON.stringify({ kind: 'root_pause', rootSeq: rootInstruction.seq })}` }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('carrying the root pause request to the host') },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('carrying the root pause request to the host') },
     }), { surfaceOp: 'append' })
     // An already-paused goal is the same outcome, not an error: the host refuses
     // to pause a goal that is not active, and a user pause that was already
@@ -425,7 +414,7 @@ export async function handleGuardTurnStopping(
     const session = agent.session as unknown as { seq: number; append: (type: string, data: unknown, options?: unknown) => unknown }
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: record }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recording a turn boundary without relevant progress') },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recording a turn boundary without relevant progress') },
     }), { surfaceOp: 'append' })
     let recorded = false
     try {
@@ -440,7 +429,7 @@ export async function handleGuardTurnStopping(
   if (decision.action === 'continue') {
     agent.steer(createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_CORRECTION_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('requesting the one allowed protocol correction step') },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('requesting the one allowed protocol correction step') },
     }))
     return decision.reason ?? 'protocol_correction_steer'
   }
@@ -769,6 +758,7 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
     })
     if (actual.status !== 'supported') return actual
     if (actual.digest !== expected.digest) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
+    if (!auditedHostImplementation(config.hostLockRuntimeRoot, config.hostLockProfileRoot)) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
     const audited = auditedForegroundRenderers(config.hostLockRuntimeRoot, config.hostLockProfileRoot)
     return audited.length ? { ...actual, auditedForegroundRenderers: audited,
       digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${actual.digest}\0${audited.join(',')}`).digest('hex') } : actual
@@ -780,10 +770,10 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
 /** Observe one actual Host dispatch through Cordis without joining its gate. */
 export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall: () => HostLockEvaluation,
   attestedRouteAtCall: (tool: 'bash' | 'pwsh', provider: unknown, policyProvider: unknown) => Promise<boolean> | boolean,
-  sourcedRootAtCall?: (exec: { arguments: unknown }) => number | undefined): void {
-  if (typeof agent.ctx.on !== 'function') return
+  sourcedRootAtCall?: (exec: { arguments: unknown }) => number | undefined): () => void {
+  if (typeof agent.ctx.on !== 'function') return () => {}
   const pending = new WeakMap<object, ReturnType<typeof captureHostWorkdir>>()
-  agent.ctx.on('tools/pre-execute', async (exec, next) => {
+  const pre = agent.ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.agent === agent && (exec.name === 'bash' || exec.name === 'pwsh')) {
       try {
         // Context.get is the read-only service lookup without an inject
@@ -797,17 +787,18 @@ export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall:
     }
     return next()
   })
-  agent.ctx.on('tools/post-execute', async (exec, _result, next) => {
+  const post = agent.ctx.on('tools/post-execute', async (exec, _result, next) => {
     const decision = await next()
     const receipt = pending.get(exec)
     pending.delete(exec)
     if (!receipt || exec.agent !== agent) return decision
     const context = createUserMessage({
       content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'read-only Host workdir observation' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'read-only Host workdir observation' },
     })
     return { ...decision, additionalContexts: [...decision.additionalContexts ?? [], context] }
   })
+  return () => { pre(); post() }
 }
 
 /**
@@ -861,7 +852,16 @@ export function apply(ctx: Context, rawConfig: {
     sessionHeader: structuredClone(agent.session.header) as unknown as Record<string, unknown>,
     cwd: sessionCwd(agent.session) ?? '', hostLockDigest: (hostLocks.get(agent) ?? fallback).digest,
   })
-  const registeredAgents = new WeakSet<Agent>()
+  const registrations = new Map<Agent, Array<() => unknown>>()
+  const detach = (agent: Agent) => {
+    const disposers = registrations.get(agent)
+    registrations.delete(agent)
+    for (const dispose of disposers?.slice().reverse() ?? []) dispose()
+    runtimes.delete(agent)
+    hostLocks.delete(agent)
+  }
+  ctx.effect?.(() => () => { for (const agent of registrations.keys()) detach(agent) })
+  ctx.on('agent/disposed', ({ agent }) => { detach(agent) })
   const ensure = (agent: Agent) => {
     let runtime = runtimes.get(agent)
     if (!runtime) {
@@ -892,11 +892,28 @@ export function apply(ctx: Context, rawConfig: {
     (agent) => ensure(agent).lifecycle,
   ))
 
-  // T0 stays silent: session-start registers tools and the runtime, reads
+  // T0 stays silent: agent/created registers tools and the runtime, reads
   // history, and arms recovery for resume/compact. It never appends Guard
   // messages, so a fresh session remains blank (seq 0) and the Web mode
   // picker can still stage a preset before the first real input.
-  ctx.on('agent/session-start', ({ agent, source }) => {
+  const attach = (agent: Agent, source?: string): undefined => {
+    if (registrations.has(agent)) {
+      if (source === 'resume' || source === 'compact') {
+        const runtime = ensure(agent)
+        runtime.sync()
+        runtime.projection.lastRecoveryDigest = undefined
+        runtime.markRecoveryNeeded(source === 'resume' ? 'resume' : 'compaction')
+      }
+      return
+    }
+    const disposers: Array<() => unknown> = []
+    registrations.set(agent, disposers)
+    const own = (dispose: (() => unknown) | void) => { if (dispose) disposers.push(dispose) }
+    const ownedTools = {
+      register: (...args: Parameters<typeof agent.ctx.tools.register>) => own(agent.ctx.tools.register(...args)),
+      guard: (...args: Parameters<typeof agent.ctx.tools.guard>) => own(agent.ctx.tools.guard(...args)),
+    }
+    try {
     const runtime = ensure(agent)
     runtime.sync()
     if (source === 'resume' || source === 'compact') {
@@ -906,27 +923,25 @@ export function apply(ctx: Context, rawConfig: {
       runtime.projection.lastRecoveryDigest = undefined
       runtime.markRecoveryNeeded(source === 'resume' ? 'resume' : 'compaction')
     }
-    if (registeredAgents.has(agent)) return
-    registeredAgents.add(agent)
     // Passive call-time Host context. This listener never changes the tool
     // decision: a missing policy, physical identity or durable note only makes
     // later completion evidence insufficient. The Host has already appended
     // tool/call before invoking this waterfall, so the note can bind its seq.
-    registerPassiveHostWorkdirObserver(agent, () => seams.hostLock ?? revalidateCoreLock(config, installedHostLock),
+    own(registerPassiveHostWorkdirObserver(agent, () => seams.hostLock ?? revalidateCoreLock(config, installedHostLock),
       (tool, provider, policy) => config.hostLockRuntimeRoot && config.hostLockProfileRoot
         ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy)
         : false,
       (exec) => {
         runtime.sync()
         return sourcedNamedTestRoot(runtime.projection, agent.session, exec.arguments)
-      })
-    agent.ctx.tools.register(createRebindTool(() => runtime.projection, async () => {
+      }))
+    ownedTools.register(createRebindTool(() => runtime.projection, async () => {
       const durable = await ctx.sessions.flush(agent.session)
       runtime.setDurability(durable)
       runtime.sync()
       return durable
     }))
-    agent.ctx.tools.register(createCheckpointTool(
+    ownedTools.register(createCheckpointTool(
       () => runtime.projection,
       () => runtime.markRecoveryNeeded('checkpoint_followup'),
       async () => {
@@ -936,7 +951,7 @@ export function apply(ctx: Context, rawConfig: {
         return durable
       },
     ))
-    agent.ctx.tools.register(createBoundaryTool(
+    ownedTools.register(createBoundaryTool(
       () => runtime.projection,
       async () => {
         const durable = await ctx.sessions.flush(agent.session)
@@ -1073,19 +1088,19 @@ export function apply(ctx: Context, rawConfig: {
         return durable
       },
     }
-    agent.ctx.tools.register(createEvidenceTool(evidenceOptions))
-    agent.ctx.tools.register(createNativeFileObserver({
+    ownedTools.register(createEvidenceTool(evidenceOptions))
+    ownedTools.register(createNativeFileObserver({
       fs: (ctx as unknown as Parameters<typeof createNativeFileObserver>[0]).fs,
       flush: (session) => ctx.sessions.flush(session as Session),
     }))
-    agent.ctx.tools.register(createNativeGitObserver({ flush: (session) => ctx.sessions.flush(session as never) }))
-    agent.ctx.tools.register(createTestReadinessObserver({
+    ownedTools.register(createNativeGitObserver({ flush: (session) => ctx.sessions.flush(session as never) }))
+    ownedTools.register(createTestReadinessObserver({
       getProjection: () => runtime.projection,
       fs: (ctx as unknown as Parameters<typeof createTestReadinessObserver>[0]).fs,
       flush: (session) => ctx.sessions.flush(session as Session),
     }))
-    agent.ctx.tools.register(createActionTool(evidenceOptions))
-    agent.ctx.tools.register(createPrepareTool({
+    ownedTools.register(createActionTool(evidenceOptions))
+    ownedTools.register(createPrepareTool({
       getProjection: () => runtime.projection,
       hostCapability: (action) => {
         const evaluation = createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action)
@@ -1102,7 +1117,7 @@ export function apply(ctx: Context, rawConfig: {
         return durable
       },
     }))
-    agent.ctx.tools.register(createInterpretTool({
+    ownedTools.register(createInterpretTool({
       getProjection: () => runtime.projection,
       refreshProjection: async () => {
         const durable = await ctx.sessions.flush(agent.session)
@@ -1111,7 +1126,7 @@ export function apply(ctx: Context, rawConfig: {
         return durable
       },
     }))
-    agent.ctx.tools.register(createReleaseTool({
+    ownedTools.register(createReleaseTool({
       getProjection: () => runtime.projection,
       fetcher: evidenceOptions.fetcher,
       ...(evidenceOptions.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
@@ -1125,16 +1140,27 @@ export function apply(ctx: Context, rawConfig: {
         settlement_source: 'reconcile',
       }),
     }))
-    agent.ctx.tools.register(createExternalOperationTool(
+    ownedTools.register(createExternalOperationTool(
       (id, toolAgent) => readExternalOperation(ctx, toolAgent as Agent | undefined, id),
       () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
     ))
-    agent.ctx.tools.guard((exec) => goalCompletionDenial(
+    ownedTools.guard((exec) => goalCompletionDenial(
       runtime.projection,
       exec.name,
       exec.arguments,
     ))
+    } catch (error) {
+      detach(agent)
+      throw error
+    }
+  }
+  ctx.on('agent/created', ({ agent, source, signal }) => {
+    signal?.throwIfAborted()
+    return attach(agent, source)
   })
+  // rc.2 does not replay creation when a plugin is enabled on live agents.
+  // Attach existing agents once, without inventing a startup/resume cause.
+  for (const agent of ctx.get?.('agents')?.list() ?? []) attach(agent)
   // T1 activation: the loop claims this step's input before persisting it, so
   // first-step injections are decided from the validated claim (pure preview)
   // and delivered INSIDE the same step batch, ahead of the root message. The
@@ -1198,7 +1224,7 @@ export function apply(ctx: Context, rawConfig: {
         const title = recoveryTitle(armedRecoveryCauses)
         injected.push(createUserMessage({
           content: [{ type: 'text', text: `${title}\n${recovery}` }],
-          source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recovering open task requirements') },
+          source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('recovering open task requirements') },
         }))
       }
     }
@@ -1223,33 +1249,20 @@ export function apply(ctx: Context, rawConfig: {
 
 export function readExternalOperation(ctx: Context, agent: Agent | undefined, id: string): ExternalOperationSnapshot | undefined {
   if (!agent || !id) return undefined
-  // Probe the agent's scoped context first, then the root one. The single
-  // `catch { return undefined }` covers the whole loop, so a service that THROWS
-  // while probed ends the search instead of falling through to the next owner.
-  // That is deliberate and fail-closed — "cannot tell" must never become "still
-  // running" — but it means the fallback is single-shot rather than per-owner. A
-  // live Agent always carries a scoped `ctx`, so the throwing path is
-  // unreachable from a real composition; the reachable fallback (scoped context
-  // present but carrying no jobs service) is covered by
-  // `tests/tools/external-operation.test.ts`.
-  for (const owner of [agent.ctx, ctx] as unknown as Array<{ get?: (name: string) => unknown; jobs?: unknown }>) {
-    try {
-      const service = owner.get?.('jobs') ?? owner.jobs
-      if (!service || typeof service !== 'object') continue
-      const row = typeof (service as { get?: unknown }).get === 'function'
-        ? (service as { get(id: string, agent: Agent): unknown }).get(id, agent) as Record<string, unknown> | undefined : undefined
-      if (!row) return undefined
-      const raw = String(row.status ?? 'unknown')
-      const status: ExternalOperationSnapshot['status'] = raw === 'running' ? 'running'
-        : raw === 'stopping' ? 'pending'
-          : raw === 'completed' ? 'completed'
-            : raw === 'killed' || raw === 'failed' ? 'failed' : 'unknown'
-      return { id, status, adapterId: 'dsh.jobs.v1' }
-    } catch {
-      return undefined
-    }
+  if (!agent.session || agent.id !== agent.session.id) return undefined
+  try {
+    const service = agent.ctx.get('jobs') ?? ctx.get('jobs')
+    if (!service) return undefined
+    const row = service.get(JobId(id), agent.id)
+    if (!row || row.id !== id) return undefined
+    const status: ExternalOperationSnapshot['status'] = row.status === 'running' ? 'running'
+      : row.status === 'stopping' ? 'pending'
+        : row.status === 'completed' ? 'completed'
+          : row.status === 'killed' || row.status === 'failed' ? 'failed' : 'unknown'
+    return { id, status, adapterId: 'dsh.jobs.v1' }
+  } catch {
+    return undefined
   }
-  return undefined
 }
 
 function optionalMarketOrigin(ctx: Context, agent: Agent): string | undefined {
@@ -1270,7 +1283,7 @@ function optionalMarketOrigin(ctx: Context, agent: Agent): string | undefined {
 function pluginNoticeMessage(text: string, summaryLabel: string) {
   return createUserMessage({
     content: [{ type: 'text', text }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary(summaryLabel) },
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary(summaryLabel) },
   })
 }
 

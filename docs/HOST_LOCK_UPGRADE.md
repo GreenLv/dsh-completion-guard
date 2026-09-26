@@ -1,6 +1,6 @@
 # Upgrading the core host lock
 
-The 0.4.3 line separates Guard's exact DSH core from optional market versions.
+The 0.8.0 candidate requires DSH `0.1.7-rc.2` and Cordis `4.0.4` only. Its 46 critical packages must match the registered identities and implementation bytes. It is not yet approved for daily installation. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 

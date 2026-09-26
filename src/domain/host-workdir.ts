@@ -1,3 +1,4 @@
+import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createHash } from 'node:crypto'
 import { realpathSync, statSync } from 'node:fs'
 import { isDeepStrictEqual } from 'node:util'
@@ -106,10 +107,10 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
   if (!root || !turnStart || (sourcedRootSeq === undefined && root.seq <= turnStart.seq)
     || row(turnStart.data).turn !== row(call.data).turn) return undefined
   const inherited = (session as unknown as { inheritedEventCount?: unknown }).inheritedEventCount
-  if (header.version !== 3 || typeof header.createdAt !== 'number' || typeof header.isSeeded !== 'boolean'
+  if (header.version !== SESSION_FORMAT_VERSION || typeof header.createdAt !== 'number' || typeof header.isSeeded !== 'boolean'
     || typeof inherited !== 'number' || !Number.isSafeInteger(inherited)) return undefined
   const sessionDigest = sessionRefDigest({
-    version: 3, id: header.id, createdAt: header.createdAt,
+    version: SESSION_FORMAT_VERSION, id: header.id, createdAt: header.createdAt,
     seedLength: inherited,
     ...(typeof header.parentSession === 'string' ? { parentSession: header.parentSession } : {}),
     ...(typeof header.agentPreset === 'string' ? { agentPreset: header.agentPreset } : {}),
@@ -134,7 +135,7 @@ export function hostWorkdirForCall(events: DerivedEnvelope[], call: DerivedEnvel
     && (event.type === 'assistant/message' || event.type === 'turn/end'))
   const upperBound = nextAssistant?.seq ?? Number.POSITIVE_INFINITY
   const notices = events.filter((event) => event.seq > result.seq && event.seq < upperBound
-    && event.type === 'user/message' && row(row(event.data).source).kind === 'plugin'
+    && event.type === 'user/message' && ['plugin', 'context-guard'].includes(String(row(row(event.data).source).kind))
     && row(row(event.data).source).plugin === 'context-guard'
     && row(row(event.data).source).form === 'notice'
     && Array.isArray(row(event.data).content)

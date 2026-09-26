@@ -36,7 +36,7 @@ function appendResult(session: Session, id: string, text: string, meta?: JsonVal
 describe('native host file result and independent readback', () => {
   it('does not treat an always-on observation profile as Goal completion adoption', () => {
     const session = Session.create(SessionId('native-goal-observation'), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('native-goal-observation'), createdAt: 1, cwd: '/work' })
-    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     const observed = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, HOST).projection
     observed.currentGoalRef = { id: 'g', revision: 1 }
     expect(observed.enabled).toBe(true)
@@ -51,7 +51,7 @@ describe('native host file result and independent readback', () => {
   it('certifies an observed edit without a Guard execution qualification or resolution call', async () => {
     const session = Session.create(SessionId('native-file-v2'), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('native-file-v2'), createdAt: 1, cwd: '/work' })
     session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
-    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Modify /work/alpha.txt.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     appendCall(session, 'edit-1', 'edit', { file_path: '/work/alpha.txt', old_string: 'before', new_string: 'after' })
     appendResult(session, 'edit-1', 'edited')
@@ -109,7 +109,7 @@ describe('native host file result and independent readback', () => {
     const make = (id: string, command: string, text: string) => {
       const session = Session.create(SessionId(id), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId(id), createdAt: 1, cwd: '/work' })
       session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
-      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
       session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Run pnpm test in /work.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
       appendCall(session, 'test-1', 'bash', { command, workdir: '/work' })
       appendResult(session, 'test-1', text)

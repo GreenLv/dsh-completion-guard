@@ -100,7 +100,7 @@ let seq = 0
 const reset = () => { seq = 0 }
 const env = (type: string, data: unknown): DerivedEnvelope => ({ seq: seq++, type, data })
 const notice = () => env('user/message', {
-  source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+  source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
   content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }],
 })
 
@@ -115,7 +115,7 @@ function session(texts: string[], runs: ShellRun[] = [], platform: 'posix' | 'wi
   }
   for (const [index, run] of runs.entries()) {
     events.push(env('tool/call', { turn: 1, callId: `sh-${index}`, name: tool, arguments: JSON.stringify({ command: run.command, workdir: '/repo' }) }))
-    events.push(env('tool/result', { turn: 1, message: { source: { callId: `sh-${index}` }, content: [{ type: 'tool-result', toolCallId: `sh-${index}`, isError: false, content: [{ type: 'text', text: run.text ?? 'ok' }] }] } }))
+    events.push(env('tool/result', { turn: 1, message: { source: { kind: 'tool', callId: `sh-${index}` }, role: 'tool', toolCallId: `sh-${index}`, isError: false, content: [{ type: 'text', text: run.text ?? 'ok' }] } }))
   }
   events.push(env('turn/end', { turn: 1, reason: { kind: 'completed' } }))
   return events
@@ -265,7 +265,7 @@ describe('0.6.2 D062-04: cross-end comparison uses recorded real Codex entry-poi
       env('tool/result', {
         turn: 1,
         meta: { contextGuardProcess: { operationResults: [{ action: 'test', outcome: 'success' }, { action: 'verify', outcome: 'failure' }] } },
-        message: { source: { callId: 'sh-0' }, content: [{ type: 'tool-result', toolCallId: 'sh-0', isError: false, content: [{ type: 'text', text: 'ok' }] }] },
+        message: { source: { kind: 'tool', callId: 'sh-0' }, role: 'tool', toolCallId: 'sh-0', isError: false, content: [{ type: 'text', text: 'ok' }] },
       }),
       env('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]

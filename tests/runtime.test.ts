@@ -281,7 +281,7 @@ describe('runtime derivation', () => {
     }
     events.push(
       { seq: 3, type: 'tool/call', data: { callId: 'checkpoint-goal', name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) } },
-      { seq: 4, type: 'tool/result', data: { message: { source: { callId: 'checkpoint-goal' }, content: [{ type: 'tool-result', toolCallId: 'checkpoint-goal', isError: false, content: [{ type: 'text', text: JSON.stringify({ status: 'certified', certificate }) }] }] } } },
+      { seq: 4, type: 'tool/result', data: { message: { source: { kind: 'tool', callId: 'checkpoint-goal' }, role: 'tool', toolCallId: 'checkpoint-goal', isError: false, content: [{ type: 'text', text: JSON.stringify({ status: 'certified', certificate }) }] } } },
       { seq: 5, type: 'goal/change', data: { operation: 'complete', goal: { id: 'certified-goal', revision: 1, phase: 'complete' } } },
     )
     const replayed = deriveProjection(events as never, OPT_IN, {}, true).projection
@@ -298,7 +298,7 @@ describe('runtime derivation', () => {
     toolResult(session, 'old-checkpoint', JSON.stringify({ status: 'certified' }))
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'Context Guard v3 boundary' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'Context Guard v3 boundary' },
     }), { surfaceOp: 'append' })
     rawAppend(session)('command/run', { commandId: 'clear-old', name: 'context-guard', args: 'clear', source: { kind: 'user' } })
     userText(session, 'Run pnpm test in the workspace')
@@ -334,7 +334,7 @@ describe('runtime derivation', () => {
     userText(session, 'Run pnpm test in the workspace')
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'Context Guard v3 boundary' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'Context Guard v3 boundary' },
     }), { surfaceOp: 'append' })
     toolCall(session, 'rebind-test', 'bash', JSON.stringify({ command: 'pnpm test', workdir: '/work' }))
     toolResult(session, 'rebind-test', '[exit code: 0]')
@@ -357,7 +357,7 @@ describe('runtime derivation', () => {
     userText(uncertainSession, 'Background material about workspace state')
     uncertainSession.append('user/message', createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'Context Guard v3 boundary' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'Context Guard v3 boundary' },
     }), { surfaceOp: 'append' })
     toolCall(uncertainSession, 'unclassified-test', 'bash', JSON.stringify({ command: 'pnpm test', workdir: '/work' }))
     toolResult(uncertainSession, 'unclassified-test', '[exit code: 0]')
@@ -748,7 +748,7 @@ function guardedAgent(session: Session) {
 }
 
 function startGuard(ctx: ReturnType<typeof fakeCtx>, agent: Agent, source: string) {
-  for (const handler of ctx.handlers.get('agent/session-start') ?? []) {
+  for (const handler of ctx.handlers.get('agent/created') ?? []) {
     ;(handler as (payload: { agent: Agent; source: string }) => void)({ agent, source })
   }
 }
@@ -947,7 +947,7 @@ describe('recovery injection dedup (v0.2.1)', () => {
     // A pre-0.5 session carries the old T0 boundary notices as plain history.
     rawAppend(session)('user/message', createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('Context Guard recorded a replay version boundary') },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('Context Guard recorded a replay version boundary') },
     }), { surfaceOp: 'append' })
     enableCommand(session, 'on')
     userText(session, 'verify package.json')
@@ -962,11 +962,11 @@ describe('recovery injection dedup (v0.2.1)', () => {
     // T0 is silent: no Guard appends beyond the seeded legacy notice, and a
     // repeated session-start does not add any.
     const notices = session.snapshotEvents().filter((event) => event.type === 'user/message'
-      && (event.data as { source?: { kind?: string; plugin?: string } }).source?.kind === 'plugin'
+      && (event.data as { source?: { kind?: string; plugin?: string } }).source?.kind === 'context-guard'
       && (event.data as { source?: { plugin?: string } }).source?.plugin === 'context-guard')
     expect(notices).toHaveLength(1)
     expect(session.snapshotEvents().some((event) => event.type === 'command/run'
-      && (event.data as { source?: { kind?: string } }).source?.kind === 'plugin')).toBe(false)
+      && (event.data as { source?: { kind?: string } }).source?.kind === 'context-guard')).toBe(false)
 
     const seed = structuredClone(session.snapshotEvents()) as never
     const header = structuredClone(session.header) as never

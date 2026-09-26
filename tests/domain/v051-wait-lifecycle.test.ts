@@ -79,7 +79,7 @@ function project(target: Session, envelopes: DerivedEnvelope[]): GuardProjection
 const root = (seq: number, text: string): DerivedEnvelope =>
   ({ seq, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
 const boundaryNotice = (seq: number): DerivedEnvelope =>
-  ({ seq, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } })
+  ({ seq, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } })
 
 /** The whole scenario, returning every artifact the assertions need. */
 async function runScenario(release = true) {

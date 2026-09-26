@@ -42,7 +42,7 @@ const session = () => {
   return {
     events,
     open: () => {
-      push('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] })
+      push('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] })
     },
     turnStart: (turn: number) => push('turn/start', { turn }),
     turnEnd: (turn: number, kind = 'completed') => push('turn/end', { turn, reason: { kind } }),
@@ -62,10 +62,10 @@ const session = () => {
     /** A confirmed `context_guard_interpret` round-trip with the production receipt shape. */
     interpret: (turn: number, itemId: string, revision: number, messageSeq: number, mediaSha256: string, partIndex: number) => {
       push('tool/call', { turn, callId: `interp-${itemId}`, name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: itemId }) })
-      push('tool/result', { turn, message: { source: { callId: `interp-${itemId}` }, content: [{ type: 'tool-result', toolCallId: `interp-${itemId}`, isError: false, content: [{ type: 'text', text: JSON.stringify({
+      push('tool/result', { turn, message: { source: { kind: 'tool', callId: `interp-${itemId}` }, role: 'tool', toolCallId: `interp-${itemId}`, isError: false, content: [{ type: 'text', text: JSON.stringify({
         status: 'recorded', item_id: itemId, item_revision: revision, kind: 'asset',
         asset: { message_seq: messageSeq, part_index: partIndex, media_sha256: mediaSha256 },
-      }) }] }] } })
+      }) }] } })
     },
   }
 }
@@ -80,10 +80,8 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     const asset = b.assetMessage(1, ['failed-interpretation'])
     b.interpret(1, 'R001', asset.revisions[0]!, asset.messageSeq, asset.identities[0]!, 0)
     const event = b.events[b.events.length - 1]!
-    const data = event.data as { message: { source: { callId: string }; content: unknown[] } }
-    const original = data.message.content
-    data.message.content = [{ type: 'tool-result', toolCallId: data.message.source.callId,
-      isError: true, content: original }]
+    const data = event.data as { message: { source: { callId: string }; content: unknown[]; isError?: boolean } }
+    data.message.isError = true
     b.assistant(1, 1, 'I saw the image.')
     b.turnEnd(1)
     const { projection } = deriveProjection(b.events, config, scope, true)
@@ -98,8 +96,8 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
       b.turnStart(1)
       const asset = b.assetMessage(1, ['receipt-kind'])
       b.interpret(1, 'R001', asset.revisions[0]!, asset.messageSeq, asset.identities[0]!, 0)
-      const result = b.events[b.events.length - 1]!.data as { message: { content: Array<{ content: Array<{ text: string }> }> } }
-      const content = result.message.content[0]!.content[0]!
+      const result = b.events[b.events.length - 1]!.data as { message: { content: Array<{ text: string }> } }
+      const content = result.message.content[0]!
       content.text = JSON.stringify({ ...JSON.parse(content.text), [field]: [] })
       b.assistant(1, 1, '已读取图片。')
       b.turnEnd(1)
@@ -208,10 +206,10 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     // rebuilt as a raw event because the builder always echoes the truth.
     const tampered = [...b.events]
     tampered.push({ seq: 1000, type: 'tool/call', data: { turn: 1, callId: 'interp-bad', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001' }) } })
-    tampered.push({ seq: 1001, type: 'tool/result', data: { turn: 1, message: { source: { callId: 'interp-bad' }, content: [{ type: 'tool-result', toolCallId: 'interp-bad', isError: false, content: [{ type: 'text', text: JSON.stringify({
+    tampered.push({ seq: 1001, type: 'tool/result', data: { turn: 1, message: { source: { kind: 'tool', callId: 'interp-bad' }, role: 'tool', toolCallId: 'interp-bad', isError: false, content: [{ type: 'text', text: JSON.stringify({
       status: 'recorded', item_id: 'R002', item_revision: assets.revisions[1], kind: 'asset',
       asset: { message_seq: assets.messageSeq, part_index: 1, media_sha256: digestOf('WRONG') },
-    }) }] }] } } })
+    }) }] } } })
     tampered.push({ seq: 1002, type: 'assistant/message', data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '已查看。' }] } } })
     const { projection } = deriveProjection(tampered, config, scope, true)
     expect(projection.integrity).toBe('corrupt')
@@ -238,7 +236,7 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     b.turnStart(1)
     b.assetMessage(1, ['LLLL'])
     b.events.push({ seq: 900, type: 'tool/call', data: { turn: 1, callId: 'interp-bad', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R999' }) } })
-    b.events.push({ seq: 901, type: 'tool/result', data: { turn: 1, message: { source: { callId: 'interp-bad' }, content: [{ type: 'tool-result', toolCallId: 'interp-bad', isError: false, content: [{ type: 'text', text: JSON.stringify({ status: 'rejected', reason_code: 'item_not_found' }) }] }] } } })
+    b.events.push({ seq: 901, type: 'tool/result', data: { turn: 1, message: { source: { kind: 'tool', callId: 'interp-bad' }, role: 'tool', toolCallId: 'interp-bad', isError: false, content: [{ type: 'text', text: JSON.stringify({ status: 'rejected', reason_code: 'item_not_found' }) }] } } })
     b.assistant(1, 1, '已查看。')
     b.turnEnd(1)
     const { projection } = deriveProjection(b.events, config, scope, true)
@@ -281,7 +279,7 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     b.turnStart(1)
     b.assetMessage(1, ['OOOO'])
     b.events.push({ seq: 800, type: 'tool/call', data: { turn: 1, callId: 'deleg-1', name: 'task', arguments: '{}' } })
-    b.events.push({ seq: 801, type: 'tool/result', data: { turn: 1, message: { source: { callId: 'deleg-1' }, content: [{ type: 'tool-result', toolCallId: 'deleg-1', isError: false, content: [{ type: 'text', text: '子代理已看过图片并总结。' }] }] } } })
+    b.events.push({ seq: 801, type: 'tool/result', data: { turn: 1, message: { source: { kind: 'tool', callId: 'deleg-1' }, role: 'tool', toolCallId: 'deleg-1', isError: false, content: [{ type: 'text', text: '子代理已看过图片并总结。' }] } } })
     b.assistant(1, 1, '子代理说图片是流程图。')
     b.turnEnd(1)
     const { projection } = deriveProjection(b.events, config, scope, true)
@@ -343,10 +341,10 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     // ...and the receipt is transplanted into turn 2, which delivers normally.
     b.turnStart(2)
     b.userText(2, '现在看一下那张图。')
-    b.events.push({ seq: callSeq + 1, type: 'tool/result', data: { turn: 2, message: { source: { callId: 'interp-late' }, content: [{ type: 'tool-result', toolCallId: 'interp-late', isError: false, content: [{ type: 'text', text: JSON.stringify({
+    b.events.push({ seq: callSeq + 1, type: 'tool/result', data: { turn: 2, message: { source: { kind: 'tool', callId: 'interp-late' }, role: 'tool', toolCallId: 'interp-late', isError: false, content: [{ type: 'text', text: JSON.stringify({
       status: 'recorded', item_id: 'R001', item_revision: one.revisions[0], kind: 'asset',
       asset: { message_seq: one.messageSeq, part_index: 0, media_sha256: one.identities[0] },
-    }) }] }] } } })
+    }) }] } } })
     b.assistant(2, 1, '已读取：图中是报错截图。')
     b.turnEnd(2)
     const { projection } = deriveProjection(b.events, config, scope, true)
@@ -363,10 +361,10 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     const one = b.assetMessage(1, ['TTTT'])
     // The result event carries NO turn at all: nothing to bind the fact to.
     b.events.push({ seq: 900, type: 'tool/call', data: { turn: 1, callId: 'interp-nt', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001' }) } })
-    b.events.push({ seq: 901, type: 'tool/result', data: { message: { source: { callId: 'interp-nt' }, content: [{ type: 'tool-result', toolCallId: 'interp-nt', isError: false, content: [{ type: 'text', text: JSON.stringify({
+    b.events.push({ seq: 901, type: 'tool/result', data: { message: { source: { kind: 'tool', callId: 'interp-nt' }, role: 'tool', toolCallId: 'interp-nt', isError: false, content: [{ type: 'text', text: JSON.stringify({
       status: 'recorded', item_id: 'R001', item_revision: one.revisions[0], kind: 'asset',
       asset: { message_seq: one.messageSeq, part_index: 0, media_sha256: one.identities[0] },
-    }) }] }] } } })
+    }) }] } } })
     b.assistant(1, 1, '已读取图片。')
     b.turnEnd(1)
     const { projection } = deriveProjection(b.events, config, scope, true)
@@ -381,10 +379,10 @@ describe('0.6.1 W060-01: attachment closure needs per-asset interpretation AND d
     b.turnStart(1)
     const one = b.assetMessage(1, ['UUUU'])
     b.events.push({ seq: 900, type: 'tool/call', data: { callId: 'interp-nc', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001' }) } })
-    b.events.push({ seq: 901, type: 'tool/result', data: { turn: 1, message: { source: { callId: 'interp-nc' }, content: [{ type: 'tool-result', toolCallId: 'interp-nc', isError: false, content: [{ type: 'text', text: JSON.stringify({
+    b.events.push({ seq: 901, type: 'tool/result', data: { turn: 1, message: { source: { kind: 'tool', callId: 'interp-nc' }, role: 'tool', toolCallId: 'interp-nc', isError: false, content: [{ type: 'text', text: JSON.stringify({
       status: 'recorded', item_id: 'R001', item_revision: one.revisions[0], kind: 'asset',
       asset: { message_seq: one.messageSeq, part_index: 0, media_sha256: one.identities[0] },
-    }) }] }] } } })
+    }) }] } } })
     b.assistant(1, 1, '已读取图片。')
     b.turnEnd(1)
     const { projection } = deriveProjection(b.events, config, scope, true)
@@ -451,15 +449,15 @@ describe('0.6.1 W060-01 review round 10: the interpretation partition', () => {
       const info = { start: 0, end: 17 }
       const unknownSpan = { start: 19, end: 38 }
       const events: DerivedEnvelope[] = [
-        e('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
+        e('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
         e('turn/start', { turn: 1 }),
         e('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: 'Explain the issue, sanitize all inputs' }] }),
         e('tool/call', { turn: 1, callId: 'i1', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001', information_spans: [info], unknown_spans: [unknownSpan] }) }),
-        e('tool/result', { turn: 1, message: { source: { callId: 'i1' }, content: [{ type: 'tool-result', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
+        e('tool/result', { turn: 1, message: { source: { kind: 'tool', callId: 'i1' }, role: 'tool', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
           status: 'recorded', item_id: 'R001', item_revision: 1, kind: 'clause',
           spans: [{ part_index: 0, start: 0, end: 38 }],
           information_spans: [info], unknown_spans: [unknownSpan],
-        }) }] }] } }),
+        }) }] } }),
         e('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '尚未执行该请求。' }] } }),
         e('turn/end', { turn: 1, reason: { kind: 'completed' } }),
       ]
@@ -485,17 +483,17 @@ describe('0.6.1 W060-01 review round 10: the interpretation partition', () => {
     let seq = 0
     const e = (t: string, d: unknown): DerivedEnvelope => ({ seq: seq++, type: t, data: d })
     const events: DerivedEnvelope[] = [
-      e('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
+      e('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
       e('turn/start', { turn: 1 }),
       e('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: 'Explain the issue, sanitize all inputs' }] }),
       // Dishonest full-extent declaration: the complement (0..19 undeclared,
       // 19..38 declared... here declare only part) — use a PARTIAL declaration.
       e('tool/call', { turn: 1, callId: 'i1', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001', information_spans: [{ start: 0, end: 17 }], unknown_spans: [] }) }),
-      e('tool/result', { turn: 1, message: { source: { callId: 'i1' }, content: [{ type: 'tool-result', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
+      e('tool/result', { turn: 1, message: { source: { kind: 'tool', callId: 'i1' }, role: 'tool', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
         status: 'recorded', item_id: 'R001', item_revision: 1, kind: 'clause',
         spans: [{ part_index: 0, start: 0, end: 38 }],
         information_spans: [{ start: 0, end: 17 }], unknown_spans: [],
-      }) }] }] } }),
+      }) }] } }),
       e('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '尚未执行该请求。' }] } }),
       e('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]
@@ -513,15 +511,15 @@ describe('0.6.1 W060-01 review round 10: the interpretation partition', () => {
     let seq = 0
     const e = (t: string, d: unknown): DerivedEnvelope => ({ seq: seq++, type: t, data: d })
     const events: DerivedEnvelope[] = [
-      e('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
+      e('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
       e('turn/start', { turn: 1 }),
       e('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: 'Explain the issue, sanitize all inputs' }] }),
       e('tool/call', { turn: 1, callId: 'i1', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001', information_spans: [{ start: 0, end: 99 }], unknown_spans: [] }) }),
-      e('tool/result', { turn: 1, message: { source: { callId: 'i1' }, content: [{ type: 'tool-result', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
+      e('tool/result', { turn: 1, message: { source: { kind: 'tool', callId: 'i1' }, role: 'tool', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
         status: 'recorded', item_id: 'R001', item_revision: 1, kind: 'clause',
         spans: [{ part_index: 0, start: 0, end: 38 }],
         information_spans: [{ start: 0, end: 99 }], unknown_spans: [],
-      }) }] }] } }),
+      }) }] } }),
       e('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } }),
       e('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]
@@ -536,17 +534,17 @@ describe('0.6.1 W060-01 review round 11: the receipt cannot redraw the call part
     let seq = 0
     const e = (t: string, d: unknown): DerivedEnvelope => ({ seq: seq++, type: t, data: d })
     const events: DerivedEnvelope[] = [
-      e('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
+      e('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
       e('turn/start', { turn: 1 }),
       e('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: 'Explain the issue, sanitize all inputs' }] }),
       // The call submits the honest partition...
       e('tool/call', { turn: 1, callId: 'i1', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001', information_spans: [{ start: 0, end: 17 }], unknown_spans: [{ start: 19, end: 38 }] }) }),
       // ...and the receipt is tampered: full-span information, empty unknown.
-      e('tool/result', { turn: 1, message: { source: { callId: 'i1' }, content: [{ type: 'tool-result', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
+      e('tool/result', { turn: 1, message: { source: { kind: 'tool', callId: 'i1' }, role: 'tool', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
         status: 'recorded', item_id: 'R001', item_revision: 1, kind: 'clause',
         spans: [{ part_index: 0, start: 0, end: 38 }],
         information_spans: [{ start: 0, end: 38 }], unknown_spans: [],
-      }) }] }] } }),
+      }) }] } }),
       e('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '尚未执行该请求。' }] } }),
       e('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]
@@ -565,15 +563,15 @@ describe('0.6.1 W060-01 review round 11: the receipt cannot redraw the call part
     let seq = 0
     const e = (t: string, d: unknown): DerivedEnvelope => ({ seq: seq++, type: t, data: d })
     const events: DerivedEnvelope[] = [
-      e('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
+      e('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V5_NOTICE }] }),
       e('turn/start', { turn: 1 }),
       e('user/message', { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: 'Explain the issue, sanitize all inputs' }] }),
       e('tool/call', { turn: 1, callId: 'i1', name: 'context_guard_interpret', arguments: JSON.stringify({ item_id: 'R001', information_spans: [{ start: 0, end: 17 }], unknown_spans: [{ start: 19, end: 38 }] }) }),
-      e('tool/result', { turn: 1, message: { source: { callId: 'i1' }, content: [{ type: 'tool-result', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
+      e('tool/result', { turn: 1, message: { source: { kind: 'tool', callId: 'i1' }, role: 'tool', toolCallId: 'i1', isError: false, content: [{ type: 'text', text: JSON.stringify({
         status: 'recorded', item_id: 'R001', item_revision: 1, kind: 'clause',
         spans: [{ part_index: 0, start: 0, end: 38 }],
         information_spans: [{ start: 0, end: 17 }], unknown_spans: [{ start: 19, end: 38 }],
-      }) }] }] } }),
+      }) }] } }),
       e('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '尚未执行该请求。' }] } }),
       e('turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]

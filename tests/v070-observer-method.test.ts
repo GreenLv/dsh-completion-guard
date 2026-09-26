@@ -8,7 +8,7 @@ import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-loc
 import { auditedForegroundRenderers } from '../src/domain/host-resolver.js'
 import { createRuntime } from '../src/runtime.js'
 
-const note = { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+const note = { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
   content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } } as DerivedEnvelope
 
 function projectionFor(root: string) {
@@ -56,7 +56,7 @@ describe('v0.7.0 explicit read-only observer methods', () => {
     const events: DerivedEnvelope[] = [
       { seq: 1, type: 'turn/start', data: { turn: 1 } },
       { seq: 2, type: 'user/message', data: { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: root }] } },
-      { seq: 3, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+      { seq: 3, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
         content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
       { seq: 4, type: 'turn/start', data: { turn: 2 } },
       { seq: 5, type: 'user/message', data: { turn: 2, source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] } },
@@ -337,7 +337,7 @@ describe('v0.7.0 explicit read-only observer methods', () => {
     const id = SessionId('v070-observer-reload')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
     session.append('turn/start', { turn: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text',
       text: 'Run npm test in /work. Use context_guard_observe_test_readiness for this current test.' }],

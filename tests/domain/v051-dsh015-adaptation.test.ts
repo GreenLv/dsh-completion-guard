@@ -61,7 +61,7 @@ function shellCase(callName: string, rendered: string) {
     { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'shell-1', name: callName, arguments: JSON.stringify({ command: 'pnpm test', workdir: '/work' }) } },
     { seq: 4, type: 'tool/result', data: {
       turn: 1, step: 1,
-      message: { id: 't1', role: 'user', source: { kind: 'tool', callId: 'shell-1' }, content: [{ type: 'tool-result', callId: 'shell-1', isError: false, content: [{ type: 'text', text: rendered }] }] },
+      message: { id: 't1', source: { kind: 'tool', callId: 'shell-1' }, role: 'tool', toolCallId: 'shell-1', isError: false, content: [{ type: 'text', text: rendered }] },
     } },
   ]
   return deriveProjection(events, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST_LOCK).projection
@@ -82,10 +82,10 @@ describe('DSH host version policy (T09)', () => {
   })
 
   it('decides the six documented prerelease categories', () => {
-    for (const version of ['0.1.5-rc.1', '0.1.5-rc.2', '0.1.5', '0.1.6', '0.2.0']) {
+    for (const version of ['0.1.7-rc.2']) {
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'supported', reasonCode: 'host_version_supported' })
     }
-    for (const version of ['0.1.4', '0.1.4-rc.9', '0.1.5-alpha.9']) {
+    for (const version of ['0.1.4', '0.1.4-rc.9', '0.1.7-alpha.9']) {
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'below_minimum', reasonCode: 'host_version_below_minimum' })
     }
     expect(evaluateMinimumHostVersion('nonsense')).toMatchObject({ status: 'unparseable', reasonCode: 'host_version_unparseable' })
@@ -93,15 +93,15 @@ describe('DSH host version policy (T09)', () => {
   })
 
   it('advertises only the verified minimum and latest host releases', () => {
-    for (const version of ['0.1.5-rc.2', '0.1.5-rc.1']) {
+    for (const version of ['0.1.7-rc.2']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.4', '0.1.5-alpha.9', '0.1.5', '0.1.6', '0.1.6-rc.1', '0.2.0-rc.1', '1.0.0']) {
+    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0-rc.1', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
     // The minimum diagnostic still distinguishes a future unregistered host
     // from an old host; the exact public range and graph lock refuse support.
-    expect(evaluateMinimumHostVersion('0.2.0-rc.1').status).toBe('supported')
+    expect(evaluateMinimumHostVersion('0.2.0-rc.1').status).toBe('unregistered')
   })
 
   it('never lets the version range alone admit an unregistered host graph', () => {
@@ -124,7 +124,7 @@ describe('DSH Session V3 identity and snapshot boundary (T02, T05)', () => {
   it('binds certificates to the V3 header plus the Session-owned inherited prefix length', () => {
     const session = sessionWithEvents('v051-identity')
     const runtime = createRuntime(fakeAgent(session), { activation: 'opt-in' }, HOST_LOCK)
-    expect(session.header.version).toBe(3)
+    expect(session.header.version).toBe(4)
     expect(session.header.isSeeded).toBe(false)
     expect(runtime.projection.sessionRefDigest).toMatch(/^[0-9a-f]{64}$/)
     expect(runtime.projection.integrity).toBe('valid')
@@ -328,7 +328,7 @@ describe('DSH 0.1.5-rc.1 shell renderer classification (T08)', () => {
       { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'bg-1', name: 'bash', arguments: JSON.stringify({ command: 'pnpm test', workdir: '/work', run_in_background: true }) } },
       { seq: 4, type: 'tool/result', data: {
         turn: 1, step: 1,
-        message: { id: 't1', role: 'user', source: { kind: 'tool', callId: 'bg-1' }, content: [{ type: 'tool-result', callId: 'bg-1', isError: false, content: [{ type: 'text', text: '[exit code: 0]' }] }] },
+        message: { id: 't1', source: { kind: 'tool', callId: 'bg-1' }, role: 'tool', toolCallId: 'bg-1', isError: false, content: [{ type: 'text', text: '[exit code: 0]' }] },
       } },
     ], { activation: 'opt-in' }, { cwd: '/work' }, true, HOST_LOCK).projection
     expect([...projection.evidence.values()][0].outcome).toBe('unknown')
@@ -343,7 +343,7 @@ describe('DSH 0.1.5-rc.1 filesystem result structure (T08)', () => {
       { seq: 3, type: 'tool/call', data: { turn: 1, step: 1, callId: 'fs-1', name: toolName, arguments: JSON.stringify(args) } },
       { seq: 4, type: 'tool/result', data: {
         turn: 1, step: 1,
-        message: { id: 't1', role: 'user', source: { kind: 'tool', callId: 'fs-1' }, content: [{ type: 'tool-result', callId: 'fs-1', isError: result.isError, content: [{ type: 'text', text: result.text }] }] },
+        message: { id: 't1', source: { kind: 'tool', callId: 'fs-1' }, role: 'tool', toolCallId: 'fs-1', isError: result.isError, content: [{ type: 'text', text: result.text }] },
         ...(result.error ? { error: result.error } : {}),
       } },
     ]
@@ -418,10 +418,10 @@ describe('DSH 0.1.5-rc.1 rename and API surface (T01)', () => {
     // uses for every injected notice; the summary stays inside the host bound.
     const message = createUserMessage({
       content: [{ type: 'text', text: 'notice' }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('x'.repeat(400)) },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: boundContextSummary('x'.repeat(400)) },
     })
     expect(message.role).toBe('user')
-    expect(message.source).toMatchObject({ kind: 'plugin', plugin: 'context-guard', form: 'notice' })
+    expect(message.source).toMatchObject({ kind: 'context-guard', plugin: 'context-guard', form: 'notice' })
     expect((message.source as { summary: string }).summary.length).toBeLessThanOrEqual(120)
   })
 })

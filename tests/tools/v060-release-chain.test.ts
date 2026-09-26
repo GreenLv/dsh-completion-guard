@@ -129,7 +129,7 @@ function startRuntime(session: Session, seams: { commandRunner?: () => Promise<v
       get: () => undefined,
     },
   }
-  for (const handler of handlers.get('agent/session-start') ?? []) {
+  for (const handler of handlers.get('agent/created') ?? []) {
     (handler as (payload: unknown) => void)({ agent, source: 'startup' })
   }
   return { tools, agent: agent as unknown as Agent }
@@ -162,7 +162,7 @@ function append(session: Session, type: string, data: unknown, options?: unknown
 
 function notice(session: Session, text: string): void {
   append(session, 'user/message', {
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' },
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
     content: [{ type: 'text', text }],
   }, { surfaceOp: 'append' })
 }

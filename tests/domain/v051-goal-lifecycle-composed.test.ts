@@ -322,7 +322,7 @@ describe('composed wait and Goal lifecycle', () => {
     const created = built.goals.create(built.agent, { objective: 'ship the guarded change' })
     const envelopes: DerivedEnvelope[] = [
       { seq: 0, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
-      { seq: 1, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } },
       root(2, RESERVED),
     ]
     const projection = project(built, envelopes)
@@ -444,7 +444,7 @@ describe('guard-owned boundaries through the real host services', () => {
     // event, so a scenario without it is a session the host never turned.
     host.session.append('turn/start', { turn: (host.session.snapshotEvents().filter((event) => event.type === 'turn/start').length) + 1 } as never)
     host.session.append('command/run', { name: 'context-guard', args: 'on', source: { kind: 'user' } } as never)
-    host.session.append('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } as never, { surfaceOp: 'append' } as never)
+    host.session.append('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } as never, { surfaceOp: 'append' } as never)
     host.session.append('user/message', { source: { kind: 'user' }, content: [{ type: 'text', text }] } as never, { surfaceOp: 'append' } as never)
   }
 
@@ -680,7 +680,7 @@ describe('a trusted root pause reaches the host control path', () => {
   /** Record a root instruction in the session, as a host does. */
   const say = (host: DriveHost, text: string) => {
     host.session.append('command/run', { name: 'context-guard', args: 'on', source: { kind: 'user' } } as never)
-    host.session.append('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } as never, { surfaceOp: 'append' } as never)
+    host.session.append('user/message', { source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V4_NOTICE }] } as never, { surfaceOp: 'append' } as never)
     host.session.append('user/message', { source: { kind: 'user' }, content: [{ type: 'text', text }] } as never, { surfaceOp: 'append' } as never)
   }
 
@@ -732,7 +732,7 @@ describe('a trusted root pause reaches the host control path', () => {
   })
 
   it.each([
-    ['a plugin notice', { kind: 'plugin', plugin: 'context-guard', form: 'notice' }],
+    ['a plugin notice', { kind: 'context-guard', plugin: 'context-guard', form: 'notice' }],
     ['a quoted user message', { kind: 'plugin', plugin: 'other', form: 'notice' }],
   ])('does not pause for the same words arriving from %s', async (_label, source) => {
     const host = await startDriveHost()

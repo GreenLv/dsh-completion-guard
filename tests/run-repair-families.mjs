@@ -7,6 +7,16 @@ import { spawnSync } from 'node:child_process'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const families = Object.freeze({
+  'rc017-adaptation': [
+    'tests/v080-rc017-host.test.ts',
+    'tests/v080-rc017-lifecycle.test.ts',
+    'tests/v080-rc017-session.test.ts',
+    'tests/v080-rc017-shell.test.ts',
+    'tests/domain/v051-host-loop.test.ts',
+    'tests/domain/v051-goal-lifecycle-composed.test.ts',
+    'tests/host-workdir-v070.test.ts',
+    'tests/v6-recovery-feedback.test.ts',
+  ],
   qualification: [
     'tests/domain/v063-narrowed-contract.test.ts',
     'tests/domain/v063-holdout-round34.test.ts',

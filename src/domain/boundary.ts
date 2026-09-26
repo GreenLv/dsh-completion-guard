@@ -1,3 +1,4 @@
+export const BOUNDARY_RECORD_PREFIX = '[context-guard boundary/v1] '
 import { sha256 } from './canonicalize.js'
 import { currentContractDigest } from './contract-digest.js'
 import { NO_PROGRESS_TURNS_BEFORE_STOP, progressFingerprint } from './stop-policy.js'

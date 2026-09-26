@@ -1,10 +1,7 @@
+import { RC017_RC2_HOST_PACKAGES } from './rc017-rc2-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
-import { ALPHA3_HOST_PACKAGES } from './alpha3-host.js'
-import { RC1_HOST_PACKAGES } from './rc1-host.js'
-import { RC015_HOST_PACKAGES } from './rc015-host.js'
-import { RC015_RC2_HOST_PACKAGES } from './rc015-rc2-host.js'
 import { evaluateMinimumHostVersion, type HostVersionDecision } from './host-version.js'
 
 export type HostLockStatus = 'supported' | 'unsupported' | 'unavailable'
@@ -15,7 +12,7 @@ export type HostProfileKind = 'headless' | 'web'
  * Capability expectations shared by every registered cohort.
  *
  * Every row is a host contract Guard actually consumes, re-checked against the
- * 0.1.5-rc.1 package surfaces: `ctx.sessions.flush()` still returns whether a
+ * 0.1.7-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
  * durability listener participated; `tools.guard()` is still a monotonic
  * post-policy denial; the Goal service still exposes `get`/`disarm` with a
  * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
@@ -23,11 +20,9 @@ export type HostProfileKind = 'headless' | 'web'
  * `dsh-tool-fs` still registers `read`/`write`/`edit` with the same parameter
  * and result contract (`dsh.fs-tools.v1`).
  *
- * What is NOT a row, because it changed rather than stayed compatible: the
- * Session event API and vocabulary. Guard 0.5.1 supports only V3
- * `snapshotEvents()` and refuses a session that does not expose it, so a V2
- * host is rejected by the cohort's exact package rows before any capability row
- * is consulted.
+ * Session V4 is bound by the exact package set and header version, not by a
+ * permissive capability alias. Existing snapshotEvents() reads remain valid
+ * only for this pinned local Session implementation.
  */
 const AUDITED_CAPABILITY_ROWS: readonly CapabilityRow[] = [
   { name: 'goal_complete_precommit_guard', value: { k: 's', v: 'required' } },
@@ -96,141 +91,17 @@ function defineCohort(
   }
 }
 
-/**
- * alpha.2 audited package identities (second registry cohort), hoisted so the
- * alpha.2 + dshmarket 1.39.0 cohort can reuse the exact natively audited rows
- * with only the dshmarket identity substituted.
- */
-export const ALPHA2_HOST_PACKAGES: PackageRow[] = [
-  { name: "@deepseek-ai/cordis", version: "4.0.2", integrity: "sha512-asOnXP1TzFSFQlHb1iegDZp0z/8WD1c7YNrwJR/Tx2bzNuMXfcekE/I67Iv6SQXeLB4csxqCngzQKANP7gdw0g==" },
-  { name: "@deepseek-ai/dsh", version: "0.1.2-alpha.2", integrity: "sha512-4TvTC5kRKlgtSU2UTBv+cID9a2Z+6+m6mpvjXWJfVzuTkflCff6s4MsQpFJTCmwFh/k7zNWe7qFXcLYMV/5VvA==" },
-  { name: "@deepseek-ai/dsh-agent", version: "0.1.2-alpha.2", integrity: "sha512-K7B5XSQ7byB/IoNGj7n+lBgHCpVPJqEPvpGoHKc1dBS8fPo2yYp/ALFag4YOfrXVP3jQ9A8di20BbvIlp79SoA==" },
-  { name: "@deepseek-ai/dsh-agent-loop", version: "0.1.2-alpha.2", integrity: "sha512-UU1i+rTuQV3Q5PGY4qFlojJ0Gbthib22pida5elZlg28dd8gtY2d1U5V9q2+rKK/469CO29rkz6TWMWk0g93Jg==" },
-  { name: "@deepseek-ai/dsh-attachment", version: "0.1.2-alpha.2", integrity: "sha512-+e+zQCbBi94Jnyfpq/M+/J2R/66GbMh5zqr7yVdCjvAJp8d2hxQsZ0O/oaSV+iZQIMgJz+BcwvrS1VU+XmzQWg==" },
-  { name: "@deepseek-ai/dsh-bash-sandbox", version: "0.1.2-alpha.2", integrity: "sha512-y5NZT7OkKi23N2fF+x9oo1QZH8LPfTU+llL86r+iETSSk5jzh91Hp2cP5Iq5S/L3BAQDaEw2J4Dg8VjF+fnnkg==" },
-  { name: "@deepseek-ai/dsh-commands", version: "0.1.2-alpha.2", integrity: "sha512-KkyNkD5V80h+xXsByGdXH8uvKo/5uflb1CSY8O8IrciuptaJdneSAmTFsjmCKAjqCTGgigk2VDw6mqPwux2JYg==" },
-  { name: "@deepseek-ai/dsh-fs", version: "0.1.2-alpha.2", integrity: "sha512-wx5n0QS5rfZ2LPVocMNfuOUh0RYH/QuLoCEy+qI8U3nKmSZ8GSTASURLg+0pVxckHpLElo38U+S/lkLxRK1rpQ==" },
-  { name: "@deepseek-ai/dsh-fs-local", version: "0.1.2-alpha.2", integrity: "sha512-IIpZAxGw8wr+xpZQhvuHB9JtUeE6V03e45njfFah1eRl0miaHV5CxCRlFwkMLrow5I2zCCsCPPmdEaouGxTGSA==" },
-  { name: "@deepseek-ai/dsh-fs-observation-policy", version: "0.1.2-alpha.2", integrity: "sha512-oMDSB1NTnj4rIGy5JXCtbzTFDwKkU/38KIKrVs3u6b65Y5spq3kjc1ITpjqo3Ze4H8umc8wJqGke2o/ms8eIEQ==" },
-  { name: "@deepseek-ai/dsh-fs-sandbox", version: "0.1.2-alpha.2", integrity: "sha512-jTnGZUov95e9OANKG+uoWAczdGlzy24aXJ+z4N4J+rMvThfj5awV3ucsmX9S4YW2peHoTV9D7BNGgBQ84LxB+w==" },
-  { name: "@deepseek-ai/dsh-goal", version: "0.1.2-alpha.2", integrity: "sha512-6E+QfBezGsQ2RI0KLZc8llRpukV9ujLjCcQ2UAboYJS7FPQMs7f/QfSrfTubwpB4lrnOok0H26JT2jHUhJeQbQ==" },
-  { name: "@deepseek-ai/dsh-host-plugin-inventory", version: "0.1.2-alpha.2", integrity: "sha512-qWD+fTYTq8YoNa1TbYXy/Qk7bjjS4URJMgMa3m1vnyZ+xdwtRBF47dUa7wVAVX7oGg03bl7TD1Eo7GcKP/eajA==" },
-  { name: "@deepseek-ai/dsh-host-webserver", version: "0.1.2-alpha.2", integrity: "sha512-cvsfM/cm5hZk/RqdIsardfqBIVpemdmUrP4M6UgdqhJy2nG5VnokLBg7k0bc8Yi11q0vIETfQK4xiDOSOMnu7Q==" },
-  { name: "@deepseek-ai/dsh-jobs", version: "0.1.2-alpha.2", integrity: "sha512-yPNlYX/ZKphjzRY7oMf5uLgfSlJ8qBp49W6qNqzhmn8moXgJcPUCNqeOkT0C3a6GQ286mmmo09eyfDLGX7+lMQ==" },
-  { name: "@deepseek-ai/dsh-jobs-local", version: "0.1.2-alpha.2", integrity: "sha512-nrK4ujL6QRS6GAysgBR08vaHub4vh7/iuGtmMvcg4Bp3hZeQ4rjWnpQAuItg9E9G3OUrvfjwzwENEM1TyVcbWw==" },
-  { name: "@deepseek-ai/dsh-llm", version: "0.1.2-alpha.2", integrity: "sha512-ip6yMxwHugxQm4VCbwX/FDnlTeeBM9VBkIn0+74ityQy7Z3yKREJ1Ov8Z04l4G3duRzeGRsQ4ztOFZ01oNfKIw==" },
-  { name: "@deepseek-ai/dsh-pwsh-sandbox", version: "0.1.2-alpha.2", integrity: "sha512-j/gUmv+nWYzg8o+oEEIK9FKeb6L24n2u7xjpIm7DcL5YjQlRDR6FgDvR2hpUK/d4Wk+zvnaPqZaEaXfUtOzEKQ==" },
-  { name: "@deepseek-ai/dsh-sandbox", version: "0.1.2-alpha.2", integrity: "sha512-InfHYn5B0MxF5QLz0AjbwPS5W0G9VtIvjEFl5o/049KzH6khGKhjqOAVZtu1Z46f1+K/dbjF50VkTdnX3pgIJA==" },
-  { name: "@deepseek-ai/dsh-sandbox-policy", version: "0.1.2-alpha.2", integrity: "sha512-Af7DWZTEjF/70YWSiN0jfbZli1XRk6Bo9W61QHxfShS79I8//mOPrItEPtJRWL/RCmGNfudFglNFyyGKdaqBIg==" },
-  { name: "@deepseek-ai/dsh-session", version: "0.1.2-alpha.2", integrity: "sha512-RfikXscYTDXDr7CD7C/8oGJZaH8Egclj7pmXRtd90QcB5L8RIQ7069xrHZjds8OjNrFo69qQwNK3gYLUVZy9PA==" },
-  { name: "@deepseek-ai/dsh-shell", version: "0.1.2-alpha.2", integrity: "sha512-i16e+OrCJ7GZ1XDnPds081NgVs/xzIVMLECzmLnXgVDKeePgWpdEgR//PgMqKPwoBoJ8z7DTzwKiOISAtOpNzA==" },
-  { name: "@deepseek-ai/dsh-shell-env", version: "0.1.2-alpha.2", integrity: "sha512-OCf1iaPC5Qg6/DMLzvq5flGVSKP2uxAhgKs+8vrRuUiKc2UXXUE4uKayzZU7S18EysLZOVjMKKyUnHFXCVRQxg==" },
-  { name: "@deepseek-ai/dsh-subprocess-local", version: "0.1.2-alpha.2", integrity: "sha512-IFneyTRqvbF/1Jm9h0WwBBxwlAd3vRh3SE/sZo2DTy9lzkRUMEBmWTiJZhVCMZ7hDLE0ALnjLLnLFLkA7bCP9Q==" },
-  { name: "@deepseek-ai/dsh-system-prompt", version: "0.1.2-alpha.2", integrity: "sha512-qT9PZEVMAbszsg1UVUvuovfWFS5unjy08KV0rnOc89TJCgkb2CnlknSyIQs0lXc/UiqT6ZQ59i4ClAFrXhxfxQ==" },
-  { name: "@deepseek-ai/dsh-tool-bash", version: "0.1.2-alpha.2", integrity: "sha512-Vt70FCPSE3Y7++2i9dKCNrsXTqhDpeJwqo44/GZow1xJ5acY9iNkjmjfq0UrTvacLLOEVnrMMBa9LojXi2WZUA==" },
-  { name: "@deepseek-ai/dsh-tool-fs", version: "0.1.2-alpha.2", integrity: "sha512-zQ+zxunJ9BXFR/kAw0Z/LO5TEy87uf1X2giE1AmM9fqbev28vd4pzLq3y8F9b0E64461ANrfD1q2wx8Gy1w47g==" },
-  { name: "@deepseek-ai/dsh-tool-goal", version: "0.1.2-alpha.2", integrity: "sha512-lvp60s3JKuTzncrlKCyS3qM/jYMLZSTMXJ/xQ8A0EIDvfPp7x1C3NNez66IJXPJ5YMtW9QYsqx2YmnUKhPOrow==" },
-  { name: "@deepseek-ai/dsh-tool-jobs", version: "0.1.2-alpha.2", integrity: "sha512-QYq4almnoKNDu/ncrpGLTfkT5sIdqvRTyLd61VNJTFl4rNT2G/JCoEIhDgf50Rkwcchvvk/bNNdekjlENqZjKg==" },
-  { name: "@deepseek-ai/dsh-tool-pwsh", version: "0.1.2-alpha.2", integrity: "sha512-sRGAmLWxxb+gglsqoftLojnFY1HaKMcwV9itkvv7JeACn5vkZuXTI0I/gNxjvt+g/b6sXT37hmQ7bmyo3dFHuQ==" },
-  { name: "@deepseek-ai/dsh-tools", version: "0.1.2-alpha.2", integrity: "sha512-trk0fkmCDp64pqdcr8u7rCcRrwNi+93FKuznTnCD+YsPGFygcSG/6n+Wsh4+9A6oI1fM4/Ecq6Baa9vq1sNhJg==" },
-  { name: "@deepseek-ai/dsh-user-approval", version: "0.1.2-alpha.2", integrity: "sha512-CcV3hf2Q0NYxRbnlE+IysaUkq/hvmjlvS9OGiHpARZVY4VlidlZRmsy5g5L17vDoxirX+WBJ9Cc5VcJMcjPrUg==" },
-  { name: "@deepseek-ai/dsh-web-app", version: "0.1.2-alpha.2", integrity: "sha512-+SKilM9fCCCoYr3fKT7CxNiozGsNHgvvTGhL63tKXM7/3M96dyj7zhT5ztoTgIDW9b9m8J/CaJUa4KlSeUJGFQ==" },
-  { name: "dshmarket", version: "1.38.1", integrity: "sha512-Z9VleLtCXwk5OlbSJKayWtbMaKACL8JUMyb/JHpErS4N3q//GJS+cgOhhxNkZYmXxB8/lv9IbhX1CBzlMhJeJg==" },
-]
-
-/**
- * The exact graph the Windows daily runtime realized when it upgraded
- * dshmarket to 1.39.0 on an otherwise alpha.2 install — the combination whose
- * rejection was Guard 0.3.2's real web_control failure. It is one audited
- * whole-graph cohort: alpha.2 rows keep their native macOS/Windows audit
- * identities and the dshmarket 1.39.0 identity is the authoritative row from
- * the 2026-09-01 alpha.3 annex audit. Guard 0.4.0 supports this combination.
- */
-export const ALPHA2_DSHMARKET_139_HOST_PACKAGES: PackageRow[] = ALPHA2_HOST_PACKAGES.map((row) =>
-  row.name === 'dshmarket'
-    ? { name: 'dshmarket', version: '1.39.0', integrity: ALPHA3_HOST_PACKAGES.find((entry) => entry.name === 'dshmarket')!.integrity }
-    : row)
-
-/**
- * Historical audited host cohort registry. Every entry keeps the exact package
- * identities audited natively for a past Guard release (CG-DSH-001 whole-graph
- * contracts). These are historical verification facts only: since 0.5.1 the
- * active support targets are `0.1.5-rc.1` and `0.1.5-rc.2`, so an installed graph from any of
- * these cohorts — including previous RCs and alphas — is no longer an active
- * support entry and fails closed in `evaluateHostLock`.
- */
-export const LEGACY_HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort('dsh-0.1.1-rc.2', ['0.1.1-rc.2'], ['posix', 'windows'], [
-    { name: '@deepseek-ai/cordis', version: '4.0.1', integrity: 'sha512-YBdskTU2Po1kru3GgcUWUbkTsPMA9LkSQDAY8rBkFJeajdgcQad3QPJZE26JyK99Xb6HaASvoXg2DSUTeN/0Nw==' },
-    { name: '@deepseek-ai/dsh-agent', version: '0.1.1-rc.2', integrity: 'sha512-cC7lnJe7JgPFcreNXxcxLMxQd78LnpVO9ZXROjZsGRQN1zGH6i/DduI892F1am85IfzzO+XTxMwwUHmfwamb0g==' },
-    { name: '@deepseek-ai/dsh-commands', version: '0.1.1-rc.2', integrity: 'sha512-BOIe4Sht9rmMv1a6b3GWjWBbeWr7PtHlAy41vgpaymvUUuzOapOIA648ZMGCI/crRIt72Umev2FHtSwCNSbYZg==' },
-    { name: '@deepseek-ai/dsh-goal', version: '0.1.1-rc.2', integrity: 'sha512-lSHTh4vfS6eRb9to/y+bjRf2+0QkNpY3tHJ29HMTewR9fJYZsEVVu4Hc+GPhPEjF7RpiD35/sKx+akijtDasyg==' },
-    { name: '@deepseek-ai/dsh-llm', version: '0.1.1-rc.2', integrity: 'sha512-ASJfjIdZbIXvLwi3rGo+eZb/GxMVV/WO5/XVD3B96mT8EIzrlw3+nMR6/CvmJVzcycKQ2XN0wj7jD6TasPRySA==' },
-    { name: '@deepseek-ai/dsh-session', version: '0.1.1-rc.2', integrity: 'sha512-4/cv6X9HPhm47eyRhCu/WZwzrtJKegk5J+0xaxcZ9i8S0smdxP57tqy8a0jkSshLQn7BzMFxneQrlYExrLrDhQ==' },
-    { name: '@deepseek-ai/dsh-tools', version: '0.1.1-rc.2', integrity: 'sha512-0GGL4D55MwYDepzZMOI3L0ycu5b2qr96GL0Y7snwhAnpK2Di61rbX3fJE+PB3ZrovGX0csIRdt9n3iJZDVtDrw==' },
-    { name: '@deepseek-ai/dsh-tool-goal', version: '0.1.1-rc.2', integrity: 'sha512-kTECpE732uwlxRJr/jBZb1BqaxZzrA7Rv4KuM3eolvhoTJ5zjyiR2YHmDmCSfuI6zmA/BEfWss7D0mLbVtJEZA==' },
-    { name: '@deepseek-ai/dsh-agent-loop', version: '0.1.1-rc.2', integrity: 'sha512-2uJZ6kjJ3IYLRGn6/NhiZgD576ABcbERB/nkReR9TEUMO2zWkz6OuKtVwLyFCFSni2T25Jv+clKQWt7D4MhU3A==' },
-    { name: '@deepseek-ai/dsh-tool-bash', version: '0.1.1-rc.2', integrity: 'sha512-YNmrKmBanj5EQn1zejjbo4UUFtg2/h3s9y0lY3vBu+dezNz4HdUlSkSZACbNUAZywyLomdhlt4rJdtdnrqyS7Q==' },
-    { name: '@deepseek-ai/dsh-tool-pwsh', version: '0.1.1-rc.2', integrity: 'sha512-Gr0F4VWCIIR25qWVv4mMEJnewXILHLCkZwrLfbHA2OOI7DNvvdB5wjJxhuo+ZQa8/3KJ/byQGtEBqCY9mb10Zg==' },
-    { name: '@deepseek-ai/dsh-shell', version: '0.1.1-rc.2', integrity: 'sha512-gEqPUxKOpOV66wvM4o8Z5FEuWmsEvYzD9OQy3cyo/kjzlx+2+KUWi22cl/YWtBs/zUtRJbdG5UqMnh8GUeO8Hg==' },
-    { name: '@deepseek-ai/dsh-subprocess-local', version: '0.1.1-rc.2', integrity: 'sha512-I4pyzpohZEVRQQbuEpMP0t8oKsf+XIlRo64aJVKGXI2eMcg9f9gbfhKQNYNqRGbegQL1HYpSLU6Rzyibldgwaw==' },
-    { name: '@deepseek-ai/dsh-bash-sandbox', version: '0.1.1-rc.2', integrity: 'sha512-bagZDMZ73C1dVDBjFCn1flNZ8aOEel4dsmDJTfmagqeYPXfIJDFKPhDc3lWjc+o6jMNfmumeUJ62dwhHkjJHKA==' },
-    { name: '@deepseek-ai/dsh-pwsh-sandbox', version: '0.1.1-rc.2', integrity: 'sha512-hBUTg5p8TTQifZrfstbimVlBFyUOb7JhNkWKc+n6UpTzoFRSkPAvrjGeXKDmFI6jXpL4nXzLJoaIssfYnRg7bw==' },
-    { name: '@deepseek-ai/dsh-shell-env', version: '0.1.1-rc.2', integrity: 'sha512-dDKKqsxsbklUpxX5ornd/SKJ2yfr/SOHOWDgeJkYvx3SMSXq8EvhCK/VEvHswXQ25rRLFWM4/Mr3htk1hn/GPA==' },
-    { name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', integrity: 'sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg==' },
-    { name: '@deepseek-ai/dsh-host-plugin-inventory', version: '0.1.1-rc.2', integrity: 'sha512-Hud9ezW0bexWfhX7C+c5rdUDX1xzbEGDzj1lGQyj/QxdrxHYHjGrJq3tLRyvN6K4FSmEdG2IBKdQGCOLVrIthA==' },
-    { name: 'dshmarket', version: '1.36.0', integrity: 'sha512-xX8CCoXdIALaxtLosj+5qGg8r1cykW2zo1AOPJcSQepg2r4Vd2K0NmERldDqfeyFV0pCuZsUoAPe1Q/BW7De/g==' },
-    { name: '@deepseek-ai/dsh-host-webserver', version: '0.1.1-rc.2', integrity: 'sha512-t9MrjC65QHiiWhG9V8UZxgfE/aWYhJHHrIM0kbTvtXxg4tLGIKo/upHp7iiag65F3HTkVLrH/DUyPMi4v2ZA7g==' },
-    { name: '@deepseek-ai/dsh-web-app', version: '0.1.1-rc.2', integrity: 'sha512-1zGHY7qwBVlVJrzIWu+86SuBZXaVUxe2JRfffsuRvKXq2QcR/K4CoJJfZ43cDoWKu9xPvvxz7w2ezV+EdXgg1A==' },
-    { name: '@deepseek-ai/dsh-jobs', version: '0.1.1-rc.2', integrity: 'sha512-SXvDJMvcUrGrlzIyE7j8/lI4Pj1nDe/UOR8C05Zagp+/0R8p46n6KylySvZdPAFENV5t8WX3Fw3eOaS4No0+wQ==' },
-    { name: '@deepseek-ai/dsh-jobs-local', version: '0.1.1-rc.2', integrity: 'sha512-26lg7mi9RKnu8IP8SWLbY+uZenbqF2AkAZvgZaLDlw1z58NtBsbgKgh6FNC8JXEyknAwYc6auQQKF+nLTlEjCw==' },
-    { name: '@deepseek-ai/dsh-tool-jobs', version: '0.1.1-rc.2', integrity: 'sha512-wCU7mo2uoQcAtz7de4ZXP2es9lALsmz6XzC+KAlS2e7/yTBi9a5LL2vdSr6XhExVAuhu/6f9eM/w4EQBOxtKlw==' },
-    { name: '@deepseek-ai/dsh-tool-fs', version: '0.1.1-rc.2', integrity: 'sha512-llX8AWbaI3CGme/a2eeTSfy5atk8u3iJeOFzmZV/KZ0v0hMhKZIK1xQInWwC9OmSDJ/StStJe0hDPVLWbB7hVg==' },
-    { name: '@deepseek-ai/dsh-fs', version: '0.1.1-rc.2', integrity: 'sha512-8j+6MffvCHATLQrhAVfc9rKyunKu/O7mjjJzmdsUSdID7V4iUYMwqPamhlAyI+tfohZu/vcforKzCRIZGmCYug==' },
-    { name: '@deepseek-ai/dsh-fs-local', version: '0.1.1-rc.2', integrity: 'sha512-jvn1MsAMqCmt5SjRNkPjmpc+RIWrZQrBVtf/OpmKr2PaBEGqSbCkPApWDE9iSMhcuQg6k5evScOXwAsduzKOLA==' },
-    { name: '@deepseek-ai/dsh-fs-sandbox', version: '0.1.1-rc.2', integrity: 'sha512-PI65uLZ3ARkfVV/PXvACS1HEXggoOaXgYQzXQFdLOfm7AiHOdZWZccUAXBetpZhcNYIOKsVoLnfZkXcHByqecQ==' },
-    { name: '@deepseek-ai/dsh-fs-observation-policy', version: '0.1.1-rc.2', integrity: 'sha512-rlq7yu4xavkKK1Oa1/aNCOeUW7t/3OXJJOfOcZXuUgJn5f8G0AbpTDpp2CeuL1cHlKpbunGhEkKQ2N/dv7ZR9w==' },
-    { name: '@deepseek-ai/dsh-sandbox', version: '0.1.1-rc.2', integrity: 'sha512-rnO2RqZ+ycpwrXrXlMcrhWAICdui3ZVTjNQ8eZrOPE18hAbX3tw0nLFq26sBjMSnBfDQHNZ4VaFpt0p8qhkPWQ==' },
-    { name: '@deepseek-ai/dsh-sandbox-policy', version: '0.1.1-rc.2', integrity: 'sha512-cpoIUxCzpZJDTMXVt9gS+qgWEDAWf6rIe715uY1NF0ROoiEXPlmToLsHLF+4pXTW3wWWzpGVswO0bPYEKrQr3g==' },
-    { name: '@deepseek-ai/dsh-user-approval', version: '0.1.1-rc.2', integrity: 'sha512-SdsO4Rs+NeJFoertkVilXBACREOLfkKPJJznYKqDhJxeRo38RJ56dtj0Xd0/6rERmsQiMck4Bwdrzg1ubUqPNA==' },
-    { name: '@deepseek-ai/dsh-attachment', version: '0.1.1-rc.2', integrity: 'sha512-rCYAt8QsawP1yfDCU7XxNwYT/XWvyFsxYrkwhLLkdfW83QVD0CQHizSkTQE7RFX74nKUD1z3sTLfnLr7xneArw==' },
-    { name: '@deepseek-ai/dsh-system-prompt', version: '0.1.1-rc.2', integrity: 'sha512-on4hjAlYI5uX9q7Sf95YkMMBVe6heywtA/H50ksrIMUub8U2B98hO9iQpHhjwIO1F1vu+5pLcPvRr6yUGGmtXQ==' },
-  ]),
-  defineCohort('dsh-0.1.2-alpha.2', ['0.1.2-alpha.2'], ['posix', 'windows'], ALPHA2_HOST_PACKAGES),
-  defineCohort('dsh-0.1.2-alpha.2-dshmarket-1.39.0', ['0.1.2-alpha.2'], ['posix', 'windows'], ALPHA2_DSHMARKET_139_HOST_PACKAGES),
-  defineCohort('dsh-0.1.2-alpha.3', ['0.1.2-alpha.3'], ['posix', 'windows'], ALPHA3_HOST_PACKAGES),
-  defineCohort('dsh-0.1.2-rc.1', ['0.1.2-rc.1'], ['posix', 'windows'], RC1_HOST_PACKAGES),
-  // DSH 0.1.5-rc.1: the graph rows are the exact published registry identities,
-  // but this cohort has never been loaded on a native host in this round, so it
-  // is registered as registry-derived. It accepts evaluation on both platforms
-  // (the whole point of implementing and testing against this baseline), while
-  // `auditProvenance` records that the native macOS/Windows audit is still
-  // outstanding and is bound into the digest so no certificate can imply one.
-  defineCohort(
-    'dsh-0.1.5-rc.1',
-    ['0.1.5-rc.1'],
-    [],
-    RC015_HOST_PACKAGES,
-    'registry-derived-pending-native-audit',
-    ['posix', 'windows'],
-  ),
-]
-
 /** Baseline cohort retained for callers that need a default fixture. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.1.5-rc.1'
-export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID, 'dsh-0.1.5-rc.2']
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.1.7-rc.2'
+export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
-/** Core-lock/v1 separates optional market identity from the audited DSH graph.
- * The active support targets are the exact registered rc.1 and rc.2 graphs:
- * historical cohorts stay in `LEGACY_HOST_COHORTS` as verification data but are
- * never silently re-labelled as accepted active locks, and an installed
- * historical graph fails closed under `evaluateHostLock`. The version policy
- * (the exact rc.2-or-rc.1 public set) and the graph lock are separate
- * judgments: a host that has not been registered here is "unverified / pending
- * audit", never supported by version order alone.
+/** Core-lock/v1 separates optional market identity from the rc.2 critical
+ * graph. Historical cohorts live only in test data. Version ordering cannot
+ * authorize an unregistered graph, and graph identity is separate from native
+ * acceptance of a Guard artifact.
  */
-export const HOST_COHORTS: readonly HostCohort[] = [...LEGACY_HOST_COHORTS,
-  defineCohort('dsh-0.1.5-rc.2', ['0.1.5-rc.2'], [], RC015_RC2_HOST_PACKAGES,
+export const HOST_COHORTS: readonly HostCohort[] = [
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.1.7-rc.2'], [], RC017_RC2_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))
@@ -248,7 +119,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [...LEGACY_HOST_COHORTS,
   }))
 
 /**
- * Baseline fixture package identities (DSH 0.1.5-rc.1). The cohort
+ * Baseline fixture package identities (DSH 0.1.7-rc.2). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially
@@ -658,12 +529,12 @@ export function evaluateHostLock(rows: readonly PackageRow[], context: HostLockC
   // decided last on purpose — a graph that already failed keeps its own graph
   // verdict, because the version policy and the exact-graph audit are
   // independent facts and neither may be reported as the other.
-  if (hostVersion?.status === 'below_minimum' || hostVersion?.status === 'unparseable') {
+  if (hostVersion?.status === 'below_minimum' || hostVersion?.status === 'unparseable' || hostVersion?.status === 'unregistered') {
     return {
       ...baseResult,
       status: 'unsupported',
       goalAvailable: false,
-      reasonCode: hostVersion.status === 'below_minimum' ? 'host_lock_version_below_minimum' : 'host_lock_version_unparseable',
+      reasonCode: hostVersion.status === 'below_minimum' ? 'host_lock_version_below_minimum' : hostVersion.status === 'unregistered' ? 'host_lock_version_mismatch' : 'host_lock_version_unparseable',
     }
   }
   return { ...baseResult, status: 'supported' }

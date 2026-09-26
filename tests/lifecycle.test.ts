@@ -62,7 +62,7 @@ function guardedAgent(session: Session) {
 }
 
 function startGuard(ctx: ReturnType<typeof fakeCtx>, agent: Agent, source: string) {
-  for (const handler of ctx.handlers.get('agent/session-start') ?? []) {
+  for (const handler of ctx.handlers.get('agent/created') ?? []) {
     ;(handler as (payload: { agent: Agent; source: string }) => void)({ agent, source })
   }
 }
@@ -322,7 +322,7 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
     // Old-style T0 notices exist as history from a pre-0.5 session.
     rawAppend(session)('user/message', createUserMessage({
       content: [{ type: 'text', text: PROTOCOL_V3_NOTICE }],
-      source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'legacy' },
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'legacy' },
     }), { surfaceOp: 'append' })
     enableCommand(session, 'on')
     userText(session, '修改 g.txt')

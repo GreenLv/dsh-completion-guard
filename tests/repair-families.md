@@ -20,3 +20,7 @@ A successful process is evidence only for the source, tests and environment
 actually exercised; retain the source identity in the existing review record.
 
 Runner failure handling: `node --test tests/repair-families.node.mjs`.
+
+## rc017-adaptation
+
+Runs rc.2 identity, lifecycle, V4, renderer, Jobs, default-workdir, Goal and recovery composition tests. Set `DSH_RUNTIME_ROOT` to an isolated rc.2 installation for the real graph/module and provider tests; these are explicitly skipped when absent. Renderer tests invoke published tool producers with controlled shell results. They do not establish real native shell, Web restart, exact-artifact or model acceptance.

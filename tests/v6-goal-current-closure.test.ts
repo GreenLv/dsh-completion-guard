@@ -19,7 +19,7 @@ function fixture() {
   const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: String(id), createdAt: 1, seedLength: 0, delegationDepth: 0 } }
   session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
   session.append('goal/change', { kind: 'goal/change', version: 1, operation: 'create',
     goal: { id: 'g', revision: 1, objective: 'Run tests', phase: 'active', maxGoalRounds: 256 },
     roundsStarted: 1, createdAt: 1, updatedAt: 1 } as never)

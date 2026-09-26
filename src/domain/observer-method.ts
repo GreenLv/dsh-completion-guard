@@ -36,9 +36,9 @@ export function observerMethodEvidence(
     const calls = events.filter((event) => event.type === 'tool/call' && row(event.data).callId === fact.callId)
     const results = events.filter((event) => {
       if (event.type !== 'tool/result') return false
-      const content = row(row(event.data).message).content
-      return Array.isArray(content) && content.some((part) => row(part).type === 'tool-result'
-        && row(part).toolCallId === fact.callId)
+      const message = row(row(event.data).message)
+      return message.role === 'tool' && message.toolCallId === fact.callId
+        && row(message.source).callId === fact.callId
     })
     if (calls.length !== 1 || results.length !== 1) return false
     const call = calls[0]!, result = results[0]!

@@ -22,7 +22,7 @@ export async function replayRawV2(input: RawReplayInput): Promise<Record<string,
   const id = SessionId('raw-v2-replay')
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6 replay boundary' } }), { surfaceOp: 'append' })
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6 replay boundary' } }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ content: [{ type: 'text', text: input.root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
   const appendEvent = (session as unknown as { append: (type: string, data: unknown, options: unknown) => unknown }).append.bind(session)

@@ -28,7 +28,7 @@ function toolEvents(name: string, args: Record<string, unknown>, meta: Record<st
     { seq: 0, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
     { seq: 1, type: 'tool/call', data: { callId: 'call-1', name, arguments: JSON.stringify(args) } },
     { seq: 2, type: 'tool/result', data: {
-      message: { role: 'user', source: { kind: 'tool', callId: 'call-1' }, content: [{ type: 'tool-result', toolCallId: 'call-1', isError: false, content: [{ type: 'text', text: 'ok' }] }] },
+      message: { source: { kind: 'tool', callId: 'call-1' }, role: 'tool', toolCallId: 'call-1', isError: false, content: [{ type: 'text', text: 'ok' }] },
       meta,
     } },
   ]
@@ -83,7 +83,7 @@ describe('v0.3 pinned filesystem tool capability', () => {
     })).toMatchObject({ path: '/bounded-workspace/a.txt', lines: [{ number: 1, text: 'a' }] })
     expect(write.output.presentationMeta?.({ file_path: 'a.txt' }, {
       path: '/bounded-workspace/a.txt', operation: 'create', before: null, after: 'a',
-    })).toEqual({ diffs: [] })
+    })).toEqual({ operation: 'create', diffs: [] })
     expect(edit.output.presentationMeta?.({ file_path: 'a.txt' }, {
       path: '/bounded-workspace/a.txt', before: 'old', after: 'new',
     })).toEqual({ diffs: [{ path: 'a.txt', oldText: 'old', newText: 'new' }] })

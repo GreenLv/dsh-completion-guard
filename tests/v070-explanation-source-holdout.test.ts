@@ -13,7 +13,7 @@ function project(text: string) {
   const session = Session.create(id, undefined, header)
   session.append('user/message', createUserMessage({
     content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
-    source: { kind: 'plugin', plugin: 'context-guard', form: 'notice', summary: 'v6' },
+    source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' },
   }), { surfaceOp: 'append' })
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({

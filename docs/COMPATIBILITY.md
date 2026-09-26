@@ -2,48 +2,21 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## 0.7.0 release-line boundary (2026-09-21)
+## 0.8.0 candidate: DSH 0.1.7-rc.2 only
+
+Current metadata and the production selector accept exactly `0.1.7-rc.2`, with Cordis `4.0.4`. The sole cohort is `dsh-0.1.7-rc.2-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest checks in `manifests/rc017-rc2-byte-audit.json`. A higher version is unregistered, not supported. Old cohorts exist only as historical test data.
+
+Missing, duplicated, mixed, escaped or modified critical packages fail closed. A matching version or `allow-version` cannot bypass host identity. `auditedPlatforms: []` remains empty: local graph/module verification is separate from native acceptance of a frozen Guard tgz. See the [A01–A16 record](DSH_0_1_7_RC2_ACCEPTANCE.md).
+
+Upgrade DSH first, install an accepted Guard artifact, rebuild the host lock and restart each profile. This candidate is not yet approved for daily installation. Goal is optional; neither Goal nor Inspector nor scheduling is assumed to be enabled. The 0.7.1 recovery fixes and independent proof, Goal and release gates remain in force.
+
+Foreground shell evidence requires the audited renderer and a trusted terminal result. Promotion, truncation or unknown ownership cannot certify completion from partial stdout. The promoted job-to-target completion chain remains unavailable; do not rerun business merely to obtain evidence. Old ledger and certificate context remains historical after host/session identity changes, with no automatic re-signing or deletion.
+
+## Historical 0.7.0 release-line boundary (2026-09-21)
 
 Public availability of 0.7.0 depends on npm, tag and GitHub Release readback. Historical commit `583035bd90b8ee589d01b12487a057b655d43e41` passed candidate CI and a 34-gate macOS native run with cleanup on its exact canonical tgz; that result skipped real-model requests. That historical tgz has no Windows exact-artifact native or complete fixed-model acceptance. Final release identity, installation and publication require separately bound evidence. Later packaged-document or source changes require a new exact artifact and native acceptance. The existing exact DSH host-lock cohorts remain the test targets. Ordinary file edits, tests and Git operations run through host tools; Guard observes persisted results and uses read-only file/Git/readiness adapters where the named completion predicate needs independent evidence. A package-script readiness observation may select a current test or assessment input; it proves neither that the test ran nor that a root time or approval condition was released. An existing change can be assessed without requiring a new edit. A missing pre-effect state cannot prove create/no-overwrite, and a Git parent object is not an observed pre-effect HEAD. Unsupported predicates remain insufficient rather than being inferred from successful tool return.
 
 The core/v2 JSON and conformance fixture mirrors are bound to the exact Codex Context Guard source commit `cb415cbe374d452e4a0c71e9e292d20e31f23b0e` and per-file hashes in `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json`. The historical v1/digest pin at `tests/fixtures/conformance/UPSTREAM_PIN.json` retains its prior bytes. This source-mirror identity does not establish product runtime equivalence, publication, or installed behavior. Source and cross-end checks, CI, native acceptance, and exact-artifact acceptance remain separate evidence.
-
-## 0.5.2 support policy
-
-Version 0.5.2 supports exactly **DSH `0.1.5-rc.2` or `0.1.5-rc.1`**.
-These are the latest registered release and the verified minimum. There is no
-backward compatibility: the previous Session V2 API, the V2 event vocabulary,
-and every older host cohort remain removed.
-
-Two separate judgments decide whether a host is usable, and neither replaces the
-other:
-
-1. **Exact published set** — top-level `engines.dsh`, nested
-   `dsh.engines.dsh`, and every DSH peer dependency publish the newest-first
-   union `0.1.5-rc.2 || 0.1.5-rc.1`. Older versions, unregistered stable
-   `0.1.5`, and future releases are not advertised as supported. The minimum
-   comparison remains a diagnostic that distinguishes old hosts from newer but
-   unregistered hosts.
-2. **Host identity** — membership in the published set is not enough. The exact
-   33-row DSH core graph must match one registered cohort row for row. Missing,
-   mixed, or unknown graphs are reported as unsupported.
-
-If you are upgrading from a profile that ran DSH 0.1.2-rc.1, start a **new
-session**. Guard does not migrate V2 logs, proposals, or certificates, and old
-user data is never deleted or reinterpreted.
-
-### Exact rc.1 and rc.2 host sets
-
-The registered cohorts are `dsh-0.1.5-rc.1-core-v1` and `dsh-0.1.5-rc.2-core-v1`. Each contains 33 exact package identities from the corresponding npm release. A complete set must match atomically; mixing rc.1 and rc.2 rows fails closed.
-
-Both record `auditProvenance: registry-derived-pending-native-audit`, an empty `auditedPlatforms` list and `acceptedPlatforms` containing `posix` and `windows`. These fields describe the registry source of the shipped graph, not a live acceptance result. The provenance is included in `hostLockDigest`. Native acceptance must be established by a separate annex bound to the exact Guard artifact, host cohort and platform; a host-lock certificate alone is insufficient.
-
-Every older cohort — `0.1.1-rc.2`, `0.1.2-alpha.2`, the alpha.2 + dshmarket
-1.39.0 combination, `0.1.2-alpha.3`, and `0.1.2-rc.1` — stays in the shipped
-manifest and source registry as a historical identity so previously accepted
-annexes stay verifiable. An installed runtime built from one of them fails
-closed (`host_lock_version_mismatch`). No floating range and no alpha support is
-claimed.
 
 ## 0.4.3 core-lock policy
 
