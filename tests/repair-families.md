@@ -24,3 +24,9 @@ Runner failure handling: `node --test tests/repair-families.node.mjs`.
 ## rc017-adaptation
 
 Runs rc.2 identity, lifecycle, V4, renderer, Jobs, default-workdir, Goal and recovery composition tests. Set `DSH_RUNTIME_ROOT` to an isolated rc.2 installation for the real graph/module and provider tests; these are explicitly skipped when absent. Renderer tests invoke published tool producers with controlled shell results. They do not establish real native shell, Web restart, exact-artifact or model acceptance.
+
+### rc017 dependency-route identity family
+
+Invariant: authenticated package-map files are insufficient unless the importer's actual critical dependency path reaches that same package. The family covers installation native resolution, profile-local priority and profile-to-installation interception, normal pnpm symlinks, missing/redirected map edges, unlisted nearer shadows, duplicate reachable critical identities, exported subpaths and escaping symlinks. Critical package exports are authenticated before using Node require resolution: rc.2 uses the same default target for ESM/CJS and any new conditional branch is refused. The real-runtime test also invokes the unmodified official rc.2 worker loader and checks both ESM and CJS profile resolution.
+
+Portable synthetic route cases run without an installed DSH runtime. The full 46-package byte/map/shadow control and official loader probe require `DSH_RUNTIME_ROOT`; their skips are explicit. These are dependency-route checks, not live Web restart, native-artifact or real-model acceptance. Noncritical implementation bytes and concurrent same-user filesystem replacement remain outside this byte audit.

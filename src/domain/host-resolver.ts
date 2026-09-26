@@ -1,3 +1,4 @@
+import { auditHostDependencyRoutes, type DependencyAuditGraph } from './host-dependency-audit.js'
 import hostByteAudit from '../../manifests/rc017-rc2-byte-audit.json' with { type: 'json' }
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -251,11 +252,17 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): P
 export function auditedHostImplementation(runtimeRoot: string, profileRoot: string): boolean {
   try {
     const seen = new Set<string>()
+    const graphs: DependencyAuditGraph[] = []
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
       const modulesPath = join(rootPath, 'node_modules')
-      if (!existsSync(join(modulesPath, '.package-map.json'))) continue
+      if (!existsSync(join(modulesPath, '.package-map.json'))) {
+        if (rootPath === runtimeRoot) return false
+        continue
+      }
       const modules = realpathSync(modulesPath)
       const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
+      const packages: DependencyAuditGraph['packages'] = new Map()
+      graphs.push({ modules, records, reachable, packages })
       for (const expected of hostByteAudit.packages) {
         const ids = [...reachable].filter((id) => id === expected.name || id.startsWith(`${expected.name}@`))
         if (ids.length > 1) return false
@@ -271,10 +278,12 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
           if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()
             || createHash('sha256').update(readFileSync(target)).digest('hex') !== digest) return false
         }
+        packages.set(expected.name, { root, manifest, files: Object.keys(expected.modules) })
         seen.add(expected.name)
       }
     }
     return hostByteAudit.packages.every((entry) => seen.has(entry.name))
+      && auditHostDependencyRoutes(graphs, profileRoot)
   } catch { return false }
 }
 

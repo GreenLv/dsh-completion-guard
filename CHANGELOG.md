@@ -2,14 +2,14 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
-## 0.8.0 - Unreleased candidate
+## 0.8.0
 
-- Target only DSH `0.1.7-rc.2` / Cordis `4.0.4`. Check all 46 critical package identities and published implementation bytes; remove historical hosts from production selection.
+- Target only DSH `0.1.7-rc.2` / Cordis `4.0.4`. Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; remove historical hosts from production selection.
 - Install and dispose tools, guards and listeners through awaited `agent/created`, including existing Agents on enablement. Use Session V4 and Jobs SessionId ownership.
 - Keep shell promotion and incomplete output uncertified. Persist Stop boundaries as Guard notices instead of fabricating tool events outside a turn.
 - Preserve 0.7.1 recovery feedback and independent proof, Goal and release gates. Upgrade requires a new host lock and restart; old certificates are not re-signed.
 
-This is a local source candidate. Exact-commit CI, the canonical tgz, dual-platform native and real-model acceptance remain pending. Do not use this entry as daily-profile upgrade approval. See the [acceptance status](docs/DSH_0_1_7_RC2_ACCEPTANCE.md).
+Upgrade DSH before installing 0.8.0, then regenerate the host lock for each profile. Follow the [upgrade guide](docs/HOST_LOCK_UPGRADE.md). The [source-stage evidence snapshot](docs/DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks and their limits; exact-artifact acceptance is recorded separately in Release attachments.
 
 ## 0.7.1 - 2026-09-22
 

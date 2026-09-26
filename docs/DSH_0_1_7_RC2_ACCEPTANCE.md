@@ -1,6 +1,6 @@
 # DSH 0.1.7-rc.2 adaptation evidence
 
-Status: **local 0.8.0 candidate; native acceptance and publication pending**. This record follows [the development plan](DEVELOPMENT_PLAN_DSH_0_1_7_RC2.md) and its unchanged [planning inputs](dsh-0.1.7-rc.2-planning-evidence.json). It does not authorize daily-profile changes, Git push or publication.
+Status: **source-stage snapshot, before exact-artifact CI/native acceptance and publication**. Later artifact and publication receipts supersede the corresponding pending statuses in this historical snapshot; this document does not assert their outcome. This record follows [the development plan](DEVELOPMENT_PLAN_DSH_0_1_7_RC2.md) and its unchanged [planning inputs](dsh-0.1.7-rc.2-planning-evidence.json). It does not authorize daily-profile changes, Git push or publication.
 
 ## Identity and phase status
 
@@ -41,7 +41,7 @@ Run the affected bundle with `node tests/run-repair-families.mjs rc017-adaptatio
 
 Synthetic graph/config tests isolate injection and strict-noop from installed byte authentication. The separate actual-runtime tests check the unmocked byte gate. The shared core mirror, digest algorithm and golden vectors are unchanged. Current host identity and certificate authority never derive from historical test cohorts.
 
-Local verification on macOS / Node 25.1.0 / pnpm 11.22.0:
+Initial source verification (before the dependency-route review repair), on macOS / Node 25.1.0 / pnpm 11.22.0:
 
 - Vitest: **2605 passed, 2 Windows-only tests skipped** with the isolated runtime supplied. The skipped checks are Windows Session drive identity and exact cmd-shim execution.
 - Typecheck, lint, build, release-pack tests (2), npm-stat tests (10), package inventory dry run, documentation audit and `git diff --check` passed. Lint has warnings; they are not represented as a warning-free result.
@@ -51,3 +51,7 @@ Local verification on macOS / Node 25.1.0 / pnpm 11.22.0:
 - Core mirror and digest fixtures were unchanged. Repeated generated-output checks and canonical-package reproducibility are recorded by the local handoff receipts.
 
 A passing local matrix cannot close the native and artifact conditions in this table. Candidate CI is required before spending native-platform acceptance slots; no remote dispatch was authorized here.
+
+## Dependency-route review repair
+
+The byte-audit review found that an unchanged package map could hide a nearer native dependency. The repair binds critical dependency edges to the authenticated mapped instance at each audited importer directory, distinguishes installation native resolution from rc.2 Profile interception, and checks concrete runtime export targets. The matrix in `tests/repair-families.md` covers normal pnpm links, absent/local Profile peers, missing and redirected edges, shadows, duplicate map identities, conditional-export refusal and escaping subpaths. An unmodified official rc.2 loader probe verifies ESM and CJS Profile interception; the public profile resolver and runtime revalidation reject the same drift. Final check counts and temporary pack comparison digests belong to the repair handoff, not the initial results above. Native/model requirements in A01–A16 remain separate.

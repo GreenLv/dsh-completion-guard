@@ -2,13 +2,13 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## 0.8.0 candidate: DSH 0.1.7-rc.2 only
+## 0.8.0: DSH 0.1.7-rc.2 only
 
-Current metadata and the production selector accept exactly `0.1.7-rc.2`, with Cordis `4.0.4`. The sole cohort is `dsh-0.1.7-rc.2-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest checks in `manifests/rc017-rc2-byte-audit.json`. A higher version is unregistered, not supported. Old cohorts exist only as historical test data.
+Current metadata and the production selector accept exactly `0.1.7-rc.2`, with Cordis `4.0.4`. The sole cohort is `dsh-0.1.7-rc.2-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest and actual dependency-path checks in `manifests/rc017-rc2-byte-audit.json`. A higher version is unregistered, not supported. Old cohorts exist only as historical test data.
 
 Missing, duplicated, mixed, escaped or modified critical packages fail closed. A matching version or `allow-version` cannot bypass host identity. `auditedPlatforms: []` remains empty: local graph/module verification is separate from native acceptance of a frozen Guard tgz. See the [A01–A16 record](DSH_0_1_7_RC2_ACCEPTANCE.md).
 
-Upgrade DSH first, install an accepted Guard artifact, rebuild the host lock and restart each profile. This candidate is not yet approved for daily installation. Goal is optional; neither Goal nor Inspector nor scheduling is assumed to be enabled. The 0.7.1 recovery fixes and independent proof, Goal and release gates remain in force.
+Upgrade DSH first, install an accepted Guard artifact, rebuild the host lock and restart each profile. Goal is optional; neither Goal nor Inspector nor scheduling is assumed to be enabled. The 0.7.1 recovery fixes and independent proof, Goal and release gates remain in force.
 
 Foreground shell evidence requires the audited renderer and a trusted terminal result. Promotion, truncation or unknown ownership cannot certify completion from partial stdout. The promoted job-to-target completion chain remains unavailable; do not rerun business merely to obtain evidence. Old ledger and certificate context remains historical after host/session identity changes, with no automatic re-signing or deletion.
 
@@ -18,7 +18,7 @@ Public availability of 0.7.0 depends on npm, tag and GitHub Release readback. Hi
 
 The core/v2 JSON and conformance fixture mirrors are bound to the exact Codex Context Guard source commit `cb415cbe374d452e4a0c71e9e292d20e31f23b0e` and per-file hashes in `tests/fixtures/conformance/core_v2/UPSTREAM_PIN.json`. The historical v1/digest pin at `tests/fixtures/conformance/UPSTREAM_PIN.json` retains its prior bytes. This source-mirror identity does not establish product runtime equivalence, publication, or installed behavior. Source and cross-end checks, CI, native acceptance, and exact-artifact acceptance remain separate evidence.
 
-## 0.4.3 core-lock policy
+## Historical 0.4.3 core-lock policy
 
 `dsh-core/v1` uses manifest version 2 and four exact 33-package DSH core graphs, retaining the previously audited DSH and Cordis versions. Market is not a core row. Its transitive dependencies remain part of active-graph traversal, so replacing or duplicating a core dependency still blocks certification. No floating DSH version range is introduced.
 
@@ -46,7 +46,7 @@ DSH is still a developer preview and may make breaking changes. Version 0.4.0 th
 
 DSH rc.1 replaces the public `Session.events` getter with `snapshotEvents()` and `eventAt()`. The 0.4.1-rc.1 candidate used `snapshotEvents()` when present and retained `events` for older registered cohorts. **Superseded by 0.5.1**, which supports only the Session V3 API and refuses a session that does not expose `snapshotEvents()`; the historical fallback no longer exists in the shipped plugin. The flush path, Goal disarm, and `update_goal` contract noted here still hold.
 
-## Upstream adaptation policy
+## Historical 0.5.2 adaptation policy
 
 Version 0.5.2 advertises only DSH `0.1.5-rc.2` and `0.1.5-rc.1`, with rc.1 retained as the implemented and tested baseline; alpha releases are observed for trend only and are never adaptation or validation targets. A newer upstream tag does not establish support by itself: support starts when that exact RC or release is added as its own registered cohort with source, CI, and native acceptance. The upstream [tags page](https://github.com/deepseek-ai/deepseek-harness/tags) tracks later releases. The host-side API differences that this adaptation had to absorb are listed in the repository's upstream API audit (`UPSTREAM_API_AUDIT.md` at the repository root), which is a maintainer document and is not part of the published package.
 
@@ -61,7 +61,7 @@ Version 0.5.2 advertises only DSH `0.1.5-rc.2` and `0.1.5-rc.1`, with rc.1 retai
 ## Historical compatibility cohorts
 
 These are verification records, not support entries. An installed runtime built
-from any of them fails closed under the 0.5.2 policy.
+from any of them fails closed under the 0.8.0 policy.
 
 - DSH `0.1.1-rc.2` + dshmarket `1.36.0` + Cordis `4.0.1` is a retained, published-line cohort.
 - DSH `0.1.2-alpha.2` + dshmarket `1.38.1` + Cordis `4.0.2` is the published 0.3.2 cohort checked natively on macOS and Windows.
@@ -73,7 +73,7 @@ from any of them fails closed under the 0.5.2 policy.
 
 ## Rejection rules
 
-Current core graphs and original historical cohorts are recorded separately in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json). All core rows must match one complete graph. Missing, mixed, duplicate, unknown or integrity-drifted core rows reject certification.
+The sole current core graph is recorded in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json); older graphs remain only in historical test fixtures. All core rows and actual critical dependency routes must match the current graph. Missing, mixed, duplicate, unknown or integrity-drifted core rows reject certification.
 
 Market versions do not select a core cohort. Market restart has its own protocol and loaded-instance checks; an unavailable adapter does not disable the core or erase pending restart work. Changing the actual core graph changes its digest and invalidates earlier certificates.
 
@@ -85,7 +85,7 @@ Market versions do not select a core cohort. Market restart has its own protocol
 
 ## Loader contract
 
-The package exposes a named `apply(ctx)` function and a named `inject` array (`['sessions', 'commands']`) with no default export. Its `dsh.bundle.patch` points at `cordis.patch.yml`, which inserts the `context-guard` bundle row.
+The package exposes a named `apply(ctx)` function and a named `inject` array (`['sessions', 'commands', 'fs']`) with no default export. Its `dsh.bundle.patch` points at `cordis.patch.yml`, which inserts the `context-guard` bundle row.
 
 The plugin accepts an `activation` configuration value of `opt-in` or `always`. The default is `opt-in`; `always` means every session is protected automatically from its first real user message. Since 0.5.0, session start writes nothing into the session log: the versioned protocol boundary and first-step guidance are delivered inside the same step batch as — and ahead of — the first real user message, so a new session stays blank (`seq === 0`) and a DSH preset can be selected before anything is sent. An explicit `off` suppresses `always` in that session until the next `on`. Invalid values fail during plugin configuration instead of silently falling back. A DSH profile can select `always` with an ID-targeted `config` override in its `cordis.patch.yml`; see the README quick start for the complete example.
 
@@ -93,7 +93,7 @@ The plugin accepts an `activation` configuration value of `opt-in` or `always`. 
 
 Before the Guard can certify work, generate and verify the host lock from the active DSH runtime and profile. Use the packaged `dsh-completion-guard-host-lock inspect|inject|verify-dump` flow in the README. The default patch has no `hostLockPackages`, so the Guard fails closed until this flow succeeds.
 
-Version 0.4.3 injects `hostLockPolicy: dsh-core/v1`, the runtime/profile source roots, `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile` together. Replay rechecks those actual graph sources; legacy configuration without the policy and roots reports `host_lock_migration_required`. Each critical package row records the exact resolved version and registry tarball integrity. The Guard does not infer a missing identity from a nearby lockfile: missing, duplicate, multi-version, or drifted rows fail closed. The audited identities are defined in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json).
+Since 0.4.3, the generator injects `hostLockPolicy: dsh-core/v1`, the runtime/profile source roots, `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile` together. Replay rechecks those actual graph sources; legacy configuration without the policy and roots reports `host_lock_migration_required`. Each critical package row records the exact resolved version and registry tarball integrity. The Guard does not infer a missing identity from a nearby lockfile: missing, duplicate, multi-version, or drifted rows fail closed. The audited identities are defined in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json).
 
 ### Capability groups
 

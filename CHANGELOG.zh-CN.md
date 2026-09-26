@@ -2,14 +2,14 @@
 
 本项目的重要变化记录在这里。项目仍处于 1.0 之前；版本号跟踪插件生命周期，不代表 API 已稳定。
 
-## 0.8.0 - 未发布候选
+## 0.8.0
 
-- 仅适配 DSH `0.1.7-rc.2` / Cordis `4.0.4`；46 包宿主身份及已发布实现字节一起检查，移除生产历史宿主选择。
+- 仅适配 DSH `0.1.7-rc.2` / Cordis `4.0.4`；核对 46 个关键包的身份、已发布实现字节和实际依赖解析路径，移除生产历史宿主选择。
 - 按 awaited `agent/created` 安装并清理工具、guard 和监听器，动态启用接入已有 Agent；使用 Session V4 和 Jobs SessionId。
 - 拒绝把 shell 后台 promotion 的部分输出或截断输出认证为成功。Stop 边界使用持久化 Guard notice，避免制造无所属 turn 的工具事件。
 - 保留 0.7.1 恢复反馈与现有 proof、Goal、release 边界。升级需重建 host-lock 并重启；旧证书不会重新签发。
 
-这是本地源码候选。精确提交 CI、规范 tgz、双平台原生及真实模型验收仍待执行；不要据此升级日常 Profile。逐项限制见[验收状态](docs/DSH_0_1_7_RC2_ACCEPTANCE.md)。
+安装 0.8.0 前先升级 DSH，再为各 Profile 重新生成宿主锁。步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md)。[源码阶段证据快照](docs/DSH_0_1_7_RC2_ACCEPTANCE.md)保留开发检查及其限制；精确制品验收另记于 Release 附件。
 
 ## 0.7.1（2026-09-22）
 

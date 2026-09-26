@@ -1,6 +1,6 @@
 # Upgrading the core host lock
 
-The 0.8.0 candidate requires DSH `0.1.7-rc.2` and Cordis `4.0.4` only. Its 46 critical packages must match the registered identities and implementation bytes. It is not yet approved for daily installation. Guard's exact DSH core is separate from optional market versions.
+Version 0.8.0 requires DSH `0.1.7-rc.2` and Cordis `4.0.4` only. Its 46 critical packages must match the registered identities, implementation bytes and actual dependency paths. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 
@@ -50,13 +50,13 @@ unsupported graph, and only a thrown error produces `status: "unavailable"` with
 you whether the graph was accepted.
 
 For Headless, use its profile path and `--profile headless`. On Windows, use the
-installed `.cmd` launcher and Windows absolute paths. The published 0.5.1 artifact passed separate native macOS and Windows acceptance on DSH `0.1.5-rc.2`; see the [acceptance record](LOCAL_ACCEPTANCE.md). That result does not cover other artifacts or host versions. A strict repeat leaves
+installed `.cmd` launcher and Windows absolute paths. A strict repeat leaves
 the package and profile contents unchanged. Restarting or enabling a daily
 profile remains a separate user action.
 
 ## Check a Headless profile before installation
 
-A DSH `0.1.5-rc.1` Headless profile can have no external dependencies and no private `node_modules` or lockfile. From an accepted package or matching source checkout, `node bin/dsh-completion-guard-host-lock.mjs inspect-graph --runtime-root <runtime> --profile-root <profile>` checks that state without initializing or launching the profile.
+A DSH `0.1.7-rc.2` Headless profile can have no external dependencies and no private `node_modules` or lockfile. From an accepted package or matching source checkout, `node bin/dsh-completion-guard-host-lock.mjs inspect-graph --runtime-root <runtime> --profile-root <profile>` checks that state without initializing or launching the profile.
 
 This narrow case requires exactly the installation-owned `dsh-base` and `dsh-headless` bundles, a complete audited runtime core, and matching bundle versions, package-map origins and patch files. Declared but uninstalled dependencies, partial map/lock pairs, unexplained local modules and foreign parent-module fallbacks are rejected. Existing profiles with both graph files retain their active-importer checks; damaged files are not treated as an empty graph.
 
@@ -65,13 +65,13 @@ The result labels `inspection_scope: pre_install_target` and `profile_graph.stat
 ## What changes in the lock
 
 The generator writes `hostLockPolicy: dsh-core/v1`, the actual runtime/profile
-source roots, platform/profile kind and the complete 33-row core graph. The
+source roots, platform/profile kind and the complete 46-row core graph. The
 core manifest is version 2. Runtime replay re-reads those graph sources and
 requires the same exact core before using certificate authority.
 
-Version 0.5.1 registers separate DSH `0.1.5-rc.1` and `0.1.5-rc.2` core graphs. Their package identities come from exact published npm tarballs. The immutable package records `auditProvenance: registry-derived-pending-native-audit` and an empty `auditedPlatforms` list; this provenance is part of the lock digest.
+Version 0.8.0 registers only `dsh-0.1.7-rc.2-core-v1`. Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use rc.2's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
-The later macOS and Windows native runs on rc.2 are recorded in the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). They establish native acceptance for that artifact and host version without modifying its registry or digest. A lock readback by itself proves the registered graph match, not a native run. Successful inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest; a failed check reports only its status and reason.
+The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
 **Which failure code you see depends on the lock generation you are holding**, and
 that matters for deciding whether you are migrating or just drifting:
@@ -88,8 +88,7 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical cohorts, requirements and session records
-are retained; old certificates do not become certificates for the new lock.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.0.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 ## Market and restart
@@ -118,3 +117,7 @@ inputs. The driver creates its own isolated profiles, with no market in
 Headless. Real market HTTP lifecycle checks and protocol unit fixtures are
 separate from Guard adapter certification. Each native annex belongs to one
 exact artifact and platform; publication is recorded on its GitHub Release.
+
+## Historical 0.5.1 evidence
+
+Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.0.

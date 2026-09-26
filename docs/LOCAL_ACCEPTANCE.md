@@ -1,8 +1,8 @@
 # Local Acceptance
 
-## 0.8.0 rc.2 adaptation candidate
+## 0.8.0 rc.2 source-stage snapshot
 
-The current local work is tracked in the [A01–A16 acceptance record](DSH_0_1_7_RC2_ACCEPTANCE.md). Earlier results below apply only to their named source or artifact and cannot certify the changed rc.2 adapter. No current canonical artifact, CI, native or model pass is claimed.
+The [A01–A16 source-stage snapshot](DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks before exact-artifact acceptance. Final CI, platform and model results belong to the matching artifact receipts and Release attachments. This source snapshot neither predicts those results nor transfers earlier acceptance to the changed rc.2 adapter.
 
 ## 0.7.1 recovery feedback patch (2026-09-22; source evidence)
 

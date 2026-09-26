@@ -1,5 +1,5 @@
 import { revalidateCoreLock } from '../../src/runtime.js'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { symlinkSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -299,8 +299,13 @@ function makeActiveRoots() {
     packages[id] = { url: relative, dependencies: {} }
     const packageRoot = join(modulesRoot, relative)
     mkdirSync(packageRoot, { recursive: true })
-    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: row.name, version: row.version }))
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: row.name, version: row.version, exports: {} }))
   }
+  mkdirSync(join(modulesRoot, '@deepseek-ai'), { recursive: true })
+  for (const row of runtimeRows) {
+    symlinkSync(join(modulesRoot, packages[`${row.name}@${row.version}`].url), join(modulesRoot, row.name), 'junction')
+  }
+  writeFileSync(join(runtimeRoot, 'package.json'), '{}')
   const lockYaml = (rows: typeof EXPECTED_HOST_PACKAGES) => [
     "lockfileVersion: '9.0'", '', 'packages:',
     ...rows.flatMap((row) => [
@@ -463,6 +468,22 @@ describe('managed core lock migration and live graph revalidation', () => {
     const row = Object.values(fixture.packages).find((entry) => entry.url.startsWith('./active'))!
     writeFileSync(join(fixture.runtimeRoot, 'node_modules', row.url, 'package.json'), JSON.stringify({ name: 'changed-core', version: '99.0.0' }))
     expect(revalidateCoreLock(config, active.evaluation).status).not.toBe('supported')
+  })
+
+  it('rejects a mapped-byte/native-path disagreement at both public host entrypoints', () => {
+    const fixture = makeActiveRoots()
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    const config = { activation: 'always' as const, hostLockPolicy: 'dsh-core/v1',
+      hostLockRuntimeRoot: fixture.runtimeRoot, hostLockProfileRoot: fixture.profileRoot,
+      hostLockPlatform: active.platform, hostLockProfile: active.profileKind }
+    expect(revalidateCoreLock(config, active.evaluation).status).toBe('supported')
+    const shadow = join(fixture.runtimeRoot, 'node_modules', '@deepseek-ai/dsh-session')
+    rmSync(shadow, { recursive: true })
+    mkdirSync(shadow)
+    writeFileSync(join(shadow, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-session', version: MIN_SUPPORTED_HOST_VERSION, exports: {} }))
+    expect(() => resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0'))
+      .toThrow(/reachable host modules differ/)
+    expect(revalidateCoreLock(config, active.evaluation)).toMatchObject({ status: 'unsupported', reasonCode: 'host_lock_installed_graph_drift' })
   })
 
   it('checks composed policy and actual source roots, not just copied package rows', () => {

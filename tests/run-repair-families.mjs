@@ -9,6 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const families = Object.freeze({
   'rc017-adaptation': [
     'tests/v080-rc017-host.test.ts',
+    'tests/domain/host-dependency-audit.test.ts',
+    'tests/domain/v030-host-lock.test.ts',
     'tests/v080-rc017-lifecycle.test.ts',
     'tests/v080-rc017-session.test.ts',
     'tests/v080-rc017-shell.test.ts',

@@ -1,12 +1,111 @@
 import { createRequire } from "node:module";
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
+import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { SESSION_FORMAT_VERSION } from "@deepseek-ai/dsh-session";
 import { isDeepStrictEqual } from "node:util";
 
+//#region src/domain/host-dependency-audit.ts
+const within$1 = (root, path$1) => path$1.startsWith(root + sep);
+/** rc.2's authenticated exports have only types/default conditions. Do not use
+* CJS resolution as an ESM oracle if a future manifest introduces other branches.
+* Wildcard source exports are not runtime entrypoints in the published audit.
+*/
+function runtimeExports(manifest) {
+	const result = /* @__PURE__ */ new Map();
+	const entries = manifest.exports;
+	if (!entries || typeof entries !== "object" || Array.isArray(entries)) throw new Error("missing audited exports");
+	for (const [key, value] of Object.entries(entries)) {
+		if (key.includes("*")) continue;
+		let target = value;
+		if (value && typeof value === "object" && !Array.isArray(value)) {
+			if (Object.keys(value).some((condition) => condition !== "types" && condition !== "default")) throw new Error("unaudited export conditions");
+			target = value.default;
+		}
+		if (typeof target !== "string" || !target.startsWith("./")) throw new Error("invalid export target");
+		if (/\.(?:m?js|cjs|json)$/.test(target)) result.set(key, target);
+	}
+	return result;
+}
+/** Authenticate dependency *edges*, after authenticating mapped package bytes.
+* rc.2 app-boot leaves installation imports native. Within a profile, local
+* candidates win; only their absence permits interception to installation
+* packages. A mapped but missing local edge never becomes a runtime fallback.
+* All audited module locations are checked, including nested subpath importers.
+*/
+function auditHostDependencyRoutes(graphs, profileRoot) {
+	try {
+		const installation = graphs[0];
+		if (!installation) return false;
+		const profile = realpathSync(profileRoot);
+		for (const graph of graphs) {
+			const isProfile = graph !== installation;
+			for (const id of graph.reachable) {
+				const record = graph.records[id];
+				if (id !== "." && typeof record.url !== "string") return false;
+				const configuredRoot = resolve(graph.modules, String(record.url));
+				if (id !== "." && !existsSync(configuredRoot) && !Object.keys(record.dependencies).some((name) => graph.packages.has(name) || installation.packages.has(name))) continue;
+				const root = id === "." ? dirname(graph.modules) : realpathSync(resolve(graph.modules, String(record.url)));
+				if (id !== "." && !within$1(graph.modules, root)) return false;
+				const manifestPath = join(root, "package.json");
+				const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+				const mapped = record.dependencies;
+				const declared = {
+					...manifest.dependencies,
+					...manifest.peerDependencies,
+					...manifest.optionalDependencies
+				};
+				const names = new Set([...Object.keys(declared), ...Object.keys(mapped)].filter((name) => graph.packages.has(name) || installation.packages.has(name)));
+				if (names.size === 0) continue;
+				const own = graph.packages.get(String(manifest.name));
+				const importers = new Set([manifestPath]);
+				if (own?.root === root) {
+					for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file));
+				} else if (typeof manifest.main === "string") {
+					const main = realpathSync(createRequire(manifestPath).resolve(resolve(root, manifest.main)));
+					if (!within$1(root, main)) return false;
+					importers.add(main);
+				}
+				for (const name of names) {
+					const local = graph.packages.get(name);
+					const installed = installation.packages.get(name);
+					if (!local && !installed) continue;
+					const targetId = mapped[name];
+					if (targetId !== void 0) {
+						const target = graph.records[targetId];
+						if (!graph.reachable.has(targetId) || typeof target?.url !== "string" || !local || realpathSync(resolve(graph.modules, target.url)) !== local.root) return false;
+					} else if (!isProfile || local) return false;
+					const expected = local ?? installed;
+					const exports = runtimeExports(expected.manifest);
+					const directories = new Map([...importers].map((path$1) => [dirname(path$1), path$1]));
+					for (const importer of directories.values()) {
+						const require = createRequire(importer);
+						const paths = require.resolve.paths(name) ?? [];
+						const selected = (isProfile ? paths.filter((path$1) => within$1(profile, path$1)) : paths).map((path$1) => join(path$1, name)).find((path$1) => existsSync(path$1));
+						if (selected) {
+							if (!statSync(selected).isDirectory() || realpathSync(selected) !== expected.root) return false;
+						} else if (!isProfile || local || !installed) return false;
+						for (const [subpath, target] of exports) {
+							const wanted = realpathSync(resolve(expected.root, target));
+							if (!within$1(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
+							if (selected) {
+								const request = name + (subpath === "." ? "" : subpath.slice(1));
+								if (realpathSync(require.resolve(request)) !== wanted) return false;
+							}
+						}
+					}
+				}
+			}
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+//#endregion
 //#region manifests/rc017-rc2-byte-audit.json
 var packages = [
 	{
@@ -2743,11 +2842,22 @@ function readActiveHostGraph(runtimeRoot, profileRoot) {
 function auditedHostImplementation(runtimeRoot, profileRoot) {
 	try {
 		const seen = /* @__PURE__ */ new Set();
+		const graphs = [];
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
 			const modulesPath = join(rootPath, "node_modules");
-			if (!existsSync(join(modulesPath, ".package-map.json"))) continue;
+			if (!existsSync(join(modulesPath, ".package-map.json"))) {
+				if (rootPath === runtimeRoot) return false;
+				continue;
+			}
 			const modules = realpathSync(modulesPath);
 			const { records, reachable } = activeGraphRecords(readFileSync(join(modules, ".package-map.json"), "utf8"));
+			const packages$1 = /* @__PURE__ */ new Map();
+			graphs.push({
+				modules,
+				records,
+				reachable,
+				packages: packages$1
+			});
 			for (const expected of packages) {
 				const ids = [...reachable].filter((id) => id === expected.name || id.startsWith(`${expected.name}@`));
 				if (ids.length > 1) return false;
@@ -2762,10 +2872,15 @@ function auditedHostImplementation(runtimeRoot, profileRoot) {
 					const target = realpathSync(join(root, file));
 					if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile() || createHash("sha256").update(readFileSync(target)).digest("hex") !== digest$1) return false;
 				}
+				packages$1.set(expected.name, {
+					root,
+					manifest,
+					files: Object.keys(expected.modules)
+				});
 				seen.add(expected.name);
 			}
 		}
-		return packages.every((entry) => seen.has(entry.name));
+		return packages.every((entry) => seen.has(entry.name)) && auditHostDependencyRoutes(graphs, profileRoot);
 	} catch {
 		return false;
 	}

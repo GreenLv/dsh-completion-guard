@@ -273,13 +273,9 @@ export interface RuntimeTurnStoppingAccess {
 
 
 /**
- * Establish a boundary Guard itself owns, through the same durable record the
- * boundary tool writes.
- *
- * Replay reads boundaries from the `context_guard_boundary` call/result pair, so
- * a Guard-created boundary is written in exactly that wire shape rather than in
- * a private side channel — otherwise it would not survive a reload, and a
- * boundary that only exists in memory is not a persisted wait or stop.
+ * Establish a Guard-owned boundary as a durable producer notice. V4 Stop hooks
+ * run outside tool steps, so replay requalifies the notice request and verifies
+ * its candidate digest instead of inventing a tool call/result envelope.
  *
  * Returns the boundary only after the durable flush succeeded. A failed flush
  * reports the failure instead of a boundary, because an unflushed record must
