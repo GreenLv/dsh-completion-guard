@@ -3,6 +3,7 @@ import { auditedHostImplementation } from './domain/host-resolver.js'
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import { createRebindTool } from './tools/rebind.js'
 import { createHash } from 'node:crypto'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -118,14 +119,17 @@ export interface GuardRuntime {
   /**
    * Runs one bounded authorization entry — typically a single tool execution
    * that consults more than one host-lock gate (capability check, mutation
-   * authorization, release pre-effect). Fresh validations requested inside
-   * share the entry's single result, so one publish decision costs one full
-   * audit instead of one per gate. The entry's end — return or throw —
-   * invalidates the shared result: the next entry validates again, and a
-   * result from an earlier entry can never authorize this one. The final
-   * effect still runs only after a gate decision that rested on THIS entry's
-   * validation, and an unsupported, drifted or failed shared result denies
-   * every gate it feeds, exactly as a per-gate validation would.
+   * authorization, release pre-effect). Each entry has its own async context,
+   * so concurrent entries of the same agent never share a result. Inside one
+   * entry, fresh validations are shared only within a synchronous stretch:
+   * the first request validates and later gates in the same stretch reuse it,
+   * while any gate that runs after an await — after the entry's async
+   * read-only preparation — triggers a fresh validation of its own. No
+   * pre-await audit therefore ever authorizes a post-await effect. The final
+   * effect still runs only after a gate decision that rested on a validation
+   * taken with no await between it and the decision, and an unsupported,
+   * drifted or failed result denies every gate it feeds, exactly as a
+   * per-gate validation would.
    */
   runHostLockEntry<T>(_operation: () => Promise<T> | T): Promise<T>
 }
@@ -722,30 +726,32 @@ export function createRuntime(
     }
   }
 
-  // One bounded entry's shared validation: the flag marks an open entry, the
-  // lock holds its first fresh result, and the entry's end clears both.
-  let entryLock: HostLockEvaluation | undefined
-  let entryOpen = false
+  // One bounded entry's shared validation lives in an async context, so
+  // concurrent entries of the same agent never see each other's result. The
+  // cell's staleness marker bounds the sharing to one SYNCHRONOUS stretch:
+  // it fires on the microtask queue before any await inside the entry
+  // resumes, so a gate that runs after an async readback always revalidates
+  // instead of trusting a pre-await audit to authorize the final effect.
+  const entryStorage = new AsyncLocalStorage<{ lock: HostLockEvaluation; stale: boolean }>()
   const sync = (options?: RuntimeSyncOptions) => {
     if (options?.revalidateHostLock && refreshHostLock) {
-      if (entryLock) hostLock = entryLock
-      else {
+      const cell = entryStorage.getStore()
+      if (cell && !cell.stale) {
+        hostLock = cell.lock
+      } else {
         hostLock = refreshHostLock()
-        if (entryOpen) entryLock = hostLock
+        if (cell) {
+          cell.lock = hostLock
+          cell.stale = false
+          queueMicrotask(() => { cell.stale = true })
+        }
       }
     }
     rebuild()
   }
   const runHostLockEntry = async <T>(operation: () => Promise<T> | T): Promise<T> => {
     if (!refreshHostLock) return await operation()
-    entryOpen = true
-    entryLock = undefined
-    try {
-      return await operation()
-    } finally {
-      entryOpen = false
-      entryLock = undefined
-    }
+    return await entryStorage.run({ lock: undefined as never, stale: true }, async () => await operation())
   }
 
   const setEnabled = (_enabled: boolean) => {

@@ -1288,9 +1288,6 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       if (!agent || !['install', 'apply', 'restart', 'publish', 'commit', 'push', 'pull', 'fetch'].includes(action)) {
         return { status: 'unavailable' as const, reason_code: 'action_adapter_unavailable', ...empty }
       }
-      if (roots.hostCapability?.(action).status !== 'supported' && roots.hostCapability) {
-        return { status: 'unavailable' as const, reason_code: 'host_capability_unavailable', ...empty }
-      }
       let durable = false
       try {
         durable = await roots.prepareMutation?.(agent) === true
@@ -1307,6 +1304,36 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
       const identity = { resolved_target: jsonTuple(resolution.target), target_digest: targetDigest, command_manifest_digest: manifestDigest }
       if (args.target_digest !== targetDigest) {
         return { status: 'unavailable' as const, reason_code: 'target_digest_mismatch', ...identity }
+      }
+      // The remaining awaits are read-only preparation. They run BEFORE the
+      // host-lock gates so the capability check, the mutation authorization
+      // and the release pre-effect decision form one synchronous stretch: the
+      // entry's single fresh validation is taken after the last await, and no
+      // pre-await audit ever authorizes the final effect.
+      const executable = executableFor(action)
+      let currentExecutable: ExecutableIdentity | undefined
+      if (executable) {
+        currentExecutable = await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal)
+        if (bindExecutableIdentity(resolution.executableIdentity, currentExecutable).status !== 'supported') {
+          return { status: 'unavailable' as const, reason_code: 'executable_identity_drift', ...identity }
+        }
+      }
+      // C10: the explicit release ticket is checked before ANY effect. Only
+      // `publish` has a Guard-owned execution surface in this host, so the
+      // other release operations are refused at contract adoption rather than
+      // here (they have no interception point to reach).
+      const releaseOperation: ReleaseOperation | undefined = action === 'publish' ? 'npm_publish' : undefined
+      let observed: ReleaseObservedIdentity | undefined
+      if (releaseOperation && roots.releaseGate) {
+        // The candidate identity comes from the trusted producers (the exact
+        // tgz and the local repository), never from the caller's arguments.
+        observed = await observePublishCandidate(resolution, roots, exec.signal, cwdOf(agent as never))
+        if (!observed) {
+          return { status: 'unavailable' as const, reason_code: 'release_candidate_unobservable', ...identity }
+        }
+      }
+      if (roots.hostCapability?.(action).status !== 'supported' && roots.hostCapability) {
+        return { status: 'unavailable' as const, reason_code: 'host_capability_unavailable', ...empty }
       }
       let authorization: MutationAuthorizationDecision | undefined
       try {
@@ -1326,28 +1353,9 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
           ...identity,
         }
       }
-      const executable = executableFor(action)
-      let currentExecutable: ExecutableIdentity | undefined
-      if (executable) {
-        currentExecutable = await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal)
-        if (bindExecutableIdentity(resolution.executableIdentity, currentExecutable).status !== 'supported') {
-          return { status: 'unavailable' as const, reason_code: 'executable_identity_drift', ...identity }
-        }
-      }
-      // C10: the explicit release ticket is checked before ANY effect. Only
-      // `publish` has a Guard-owned execution surface in this host, so the
-      // other release operations are refused at contract adoption rather than
-      // here (they have no interception point to reach).
-      const releaseOperation: ReleaseOperation | undefined = action === 'publish' ? 'npm_publish' : undefined
       let releaseGranted = false
       let releaseContractId: string | undefined
       if (releaseOperation && roots.releaseGate) {
-        // The candidate identity comes from the trusted producers (the exact
-        // tgz and the local repository), never from the caller's arguments.
-        const observed = await observePublishCandidate(resolution, roots, exec.signal, cwdOf(agent as never))
-        if (!observed) {
-          return { status: 'unavailable' as const, reason_code: 'release_candidate_unobservable', ...identity }
-        }
         let decision: ReleaseGateDecision | undefined
         try {
           decision = await roots.releaseGate({
@@ -1355,7 +1363,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
             operation: releaseOperation,
             callId: args.resolution_call_id,
             resolvedTarget: resolution.target,
-            observed,
+            observed: observed!,
           })
         } catch {
           decision = undefined

@@ -6,6 +6,7 @@ import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lst
 import { fileURLToPath } from "node:url";
 import { JobId } from "@deepseek-ai/dsh-jobs";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { homedir, tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
@@ -3140,11 +3141,6 @@ function createActionTool(options = {}) {
 				reason_code: "action_adapter_unavailable",
 				...empty
 			};
-			if (roots.hostCapability?.(action).status !== "supported" && roots.hostCapability) return {
-				status: "unavailable",
-				reason_code: "host_capability_unavailable",
-				...empty
-			};
 			let durable = false;
 			try {
 				durable = await roots.prepareMutation?.(agent) === true;
@@ -3174,6 +3170,31 @@ function createActionTool(options = {}) {
 				reason_code: "target_digest_mismatch",
 				...identity
 			};
+			const executable = executableFor(action);
+			let currentExecutable;
+			if (executable) {
+				currentExecutable = await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal);
+				if (bindExecutableIdentity(resolution.executableIdentity, currentExecutable).status !== "supported") return {
+					status: "unavailable",
+					reason_code: "executable_identity_drift",
+					...identity
+				};
+			}
+			const releaseOperation = action === "publish" ? "npm_publish" : void 0;
+			let observed;
+			if (releaseOperation && roots.releaseGate) {
+				observed = await observePublishCandidate(resolution, roots, exec.signal, cwdOf(agent));
+				if (!observed) return {
+					status: "unavailable",
+					reason_code: "release_candidate_unobservable",
+					...identity
+				};
+			}
+			if (roots.hostCapability?.(action).status !== "supported" && roots.hostCapability) return {
+				status: "unavailable",
+				reason_code: "host_capability_unavailable",
+				...empty
+			};
 			let authorization;
 			try {
 				authorization = roots.authorizeMutation?.({
@@ -3190,26 +3211,9 @@ function createActionTool(options = {}) {
 				reason_code: authorization?.reasonCode ?? "mutation_authority_unavailable",
 				...identity
 			};
-			const executable = executableFor(action);
-			let currentExecutable;
-			if (executable) {
-				currentExecutable = await (roots.readExecutableIdentity ?? executableIdentity)(executable, exec.signal);
-				if (bindExecutableIdentity(resolution.executableIdentity, currentExecutable).status !== "supported") return {
-					status: "unavailable",
-					reason_code: "executable_identity_drift",
-					...identity
-				};
-			}
-			const releaseOperation = action === "publish" ? "npm_publish" : void 0;
 			let releaseGranted = false;
 			let releaseContractId;
 			if (releaseOperation && roots.releaseGate) {
-				const observed = await observePublishCandidate(resolution, roots, exec.signal, cwdOf(agent));
-				if (!observed) return {
-					status: "unavailable",
-					reason_code: "release_candidate_unobservable",
-					...identity
-				};
 				let decision;
 				try {
 					decision = await roots.releaseGate({
@@ -6375,26 +6379,30 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			observedCompactionSeq = derived.lastCompactionSeq;
 		}
 	};
-	let entryLock;
-	let entryOpen = false;
+	const entryStorage = new AsyncLocalStorage();
 	const sync = (options) => {
-		if (options?.revalidateHostLock && refreshHostLock) if (entryLock) hostLock = entryLock;
-		else {
-			hostLock = refreshHostLock();
-			if (entryOpen) entryLock = hostLock;
+		if (options?.revalidateHostLock && refreshHostLock) {
+			const cell = entryStorage.getStore();
+			if (cell && !cell.stale) hostLock = cell.lock;
+			else {
+				hostLock = refreshHostLock();
+				if (cell) {
+					cell.lock = hostLock;
+					cell.stale = false;
+					queueMicrotask(() => {
+						cell.stale = true;
+					});
+				}
+			}
 		}
 		rebuild();
 	};
 	const runHostLockEntry = async (operation) => {
 		if (!refreshHostLock) return await operation();
-		entryOpen = true;
-		entryLock = void 0;
-		try {
-			return await operation();
-		} finally {
-			entryOpen = false;
-			entryLock = void 0;
-		}
+		return await entryStorage.run({
+			lock: void 0,
+			stale: true
+		}, async () => await operation());
 	};
 	const setEnabled = (_enabled) => {
 		sync({ revalidateHostLock: true });

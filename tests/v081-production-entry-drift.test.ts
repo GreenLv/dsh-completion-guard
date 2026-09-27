@@ -244,6 +244,8 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
   commandRunner?: () => Promise<void>
   fetcher?: typeof fetch
   privateLedgerRoot: string
+  order?: string[]
+  onAsyncPreparation?: () => void
 }) {
   const tools: RegisteredTool[] = []
   const guards: Array<(exec: { name?: string; arguments?: unknown }) => string | undefined> = []
@@ -265,7 +267,7 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
     commands: { register: () => () => {} },
     on: (name: string, handler: unknown) => { handlers.set(name, [...(handlers.get(name) ?? []), handler as never]); return () => {} },
     get: (name: string) => name === 'goals' ? goalsService : undefined,
-    sessions: { flush: async () => true },
+    sessions: { flush: async () => { seams.onAsyncPreparation?.(); return true } },
   }
   const validations: number[] = []
   apply(ctx as never, { ...host.config }, {
@@ -273,7 +275,10 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
     ...(seams.fetcher ? { fetcher: seams.fetcher } : {}),
     allowLoopbackHttpRegistry: true,
     privateLedgerRoot: seams.privateLedgerRoot,
-    onHostLockValidation: () => { validations.push(1) },
+    onHostLockValidation: () => {
+      validations.push(1)
+      seams.order?.push('audit:' + new Error().stack?.split('\n')[3]?.trim().slice(0, 60))
+    },
   })
   const agent = {
     session,
@@ -293,98 +298,106 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
   return { tools, guards, validations, agent: agent as unknown as Agent }
 }
 
+/**
+ * One publish chain over the real apply() wiring, reusable by several
+ * entry-level failure tests. The fetcher can observe the registry readback
+ * moment, which is the async read-only preparation inside the publish entry.
+ */
+async function publishChain(setup: { onAsyncPreparation?: () => void } = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
+  temporaryRoots.push(root)
+  const host = makeHost()
+  const tgz = await packFixture(root, PACKAGE, VERSION)
+  const published: string[][] = []
+  const registryState = { integrity: `sha512-${Buffer.alloc(64, 5).toString('base64')}` }
+  const fetcher = (async (input: string | URL) => {
+    const url = String(input)
+    if (!url.startsWith(REGISTRY)) return new Response('{}', { status: 404 })
+    const name = decodeURIComponent(url.slice(REGISTRY.length).replace(/\/+$/, ''))
+    return new Response(JSON.stringify({
+      name,
+      versions: { [VERSION]: { name, version: VERSION, dist: { integrity: registryState.integrity } } },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as unknown as typeof fetch
+  const session = Session.create(SessionId('entry-drift'), undefined, {
+    version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('entry-drift'), createdAt: 1, cwd: root,
+  })
+  const runtime = startRuntime(session, host, {
+    commandRunner: async () => { published.push([]) },
+    fetcher, privateLedgerRoot: join(root, 'private-ledger'),
+    onAsyncPreparation: setup.onAsyncPreparation,
+  })
+  const { tools, guards, validations } = runtime
+  const byName = (name: string) => tools.find((tool) => tool.name === name)!
+  expect(byName('context_guard_action')).toBeDefined()
+  // Startup attach performed exactly one full validation.
+  expect(validations).toHaveLength(1)
+
+  notice(session, PROTOCOL_V5_NOTICE)
+  session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '创建 report.txt' }], source: { kind: 'user' },
+  }), { surfaceOp: 'append' })
+  command(session, 'clear')
+
+  const closure = await runTool(session, tools, 'context_guard_checkpoint', 'closure', { bindings: [] })
+  expect(closure.status, JSON.stringify(closure)).toBe('certified')
+  expect(validations).toHaveLength(2)
+
+  const resolution = await runTool(session, tools, 'context_guard_evidence', 'chain-resolution', {
+    semantic_action: 'publish', evidence_role: 'resolution',
+    selector: { artifact_id: PACKAGE, version: VERSION, registry: REGISTRY },
+    command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
+  }) as unknown as { status: string; resolved_target: Record<string, string>; target_digest: string }
+  expect(resolution.status, JSON.stringify(resolution)).toBe('supported')
+  const sri = resolution.resolved_target.integrity_digest
+  const artifactSha256 = createHash('sha256').update(readFileSync(tgz)).digest('hex')
+  command(session, `release adopt ${JSON.stringify({
+    contractId: 'rel-entry', operations: ['npm_publish'],
+    candidate: { fullSha40: SHA, repository: 'https://github.com/GreenLv/dsh-completion-guard.git',
+      packageId: PACKAGE, version: VERSION, artifactSha256, artifactSri: sri, registry: REGISTRY },
+    readinessRefs: [], closureCertRef: 'C1',
+  })}`)
+  session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: `Publish package ${PACKAGE} version ${VERSION} registry ${REGISTRY}` }],
+    source: { kind: 'user' },
+  }), { surfaceOp: 'append' })
+  const releaseItem = [...projectionOf(session, join(root, 'private-ledger')).items.values()]
+    .find((entry) => entry.status === 'pending' && entry.semanticAction === 'publish')
+  expect(releaseItem, 'the release instruction captured a publish obligation').toBeDefined()
+  return {
+    root, host, session, tools, guards, validations, published, registryState,
+    resolution: resolution as { status: string; resolved_target: Record<string, string>; target_digest: string },
+    releaseItem: releaseItem!,
+    action: (callId: string) => runTool(session, tools, 'context_guard_action', callId, {
+      semantic_action: 'publish', resolution_call_id: 'chain-resolution',
+      target_digest: resolution.target_digest, contract_item_id: releaseItem!.id, contract_item_revision: releaseItem!.revision,
+    }),
+  }
+}
+
 describe('real production entries validate freshly and share one audit per decision', () => {
   it('charges one validation to the checkpoint entry and one to the whole publish entry, and refuses drift between entries', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
-    temporaryRoots.push(root)
-    const host = makeHost()
-    const tgz = await packFixture(root, PACKAGE, VERSION)
-    const published: string[][] = []
-    const registryState = { integrity: `sha512-${Buffer.alloc(64, 5).toString('base64')}` }
-    const fetcher = (async (input: string | URL) => {
-      const url = String(input)
-      if (!url.startsWith(REGISTRY)) return new Response('{}', { status: 404 })
-      const name = decodeURIComponent(url.slice(REGISTRY.length).replace(/\/+$/, ''))
-      return new Response(JSON.stringify({
-        name,
-        versions: { [VERSION]: { name, version: VERSION, dist: { integrity: registryState.integrity } } },
-      }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }) as unknown as typeof fetch
-    const session = Session.create(SessionId('entry-drift'), undefined, {
-      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('entry-drift'), createdAt: 1, cwd: root,
-    })
-    const { tools, guards, validations } = startRuntime(session, host, {
-      commandRunner: async () => { published.push([]) },
-      fetcher, privateLedgerRoot: join(root, 'private-ledger'),
-    })
-    const byName = (name: string) => tools.find((tool) => tool.name === name)!
-    expect(byName('context_guard_action')).toBeDefined()
-    // Startup attach performed exactly one full validation.
-    expect(validations).toHaveLength(1)
+    const chain = await publishChain()
+    const { host, session, tools, guards, validations, published } = chain
+    void session; void tools
 
-    // A real preparation obligation, then a durable clear (the candidate work
-    // the closure certificate answers for).
-    notice(session, PROTOCOL_V5_NOTICE)
-    session.append('user/message', createUserMessage({
-      content: [{ type: 'text', text: '创建 report.txt' }], source: { kind: 'user' },
-    }), { surfaceOp: 'append' })
-    command(session, 'clear')
-
-    // The registered checkpoint tool certifies through its own entry: exactly
-    // one full validation for the whole certification decision.
-    const closure = await runTool(session, tools, 'context_guard_checkpoint', 'closure', { bindings: [] })
-    expect(closure.status, JSON.stringify(closure)).toBe('certified')
-    expect(validations).toHaveLength(2)
-
-    // Produce the resolution evidence and adopt the release contract.
-    const resolution = await runTool(session, tools, 'context_guard_evidence', 'chain-resolution', {
-      semantic_action: 'publish', evidence_role: 'resolution',
-      selector: { artifact_id: PACKAGE, version: VERSION, registry: REGISTRY },
-      command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
-    }) as unknown as { status: string; resolved_target: Record<string, string>; target_digest: string }
-    expect(resolution.status, JSON.stringify(resolution)).toBe('supported')
-    expect(validations, 'after evidence resolution').toHaveLength(2)
-    const sri = resolution.resolved_target.integrity_digest
-    const artifactSha256 = createHash('sha256').update(readFileSync(tgz)).digest('hex')
-    command(session, `release adopt ${JSON.stringify({
-      contractId: 'rel-entry', operations: ['npm_publish'],
-      candidate: { fullSha40: SHA, repository: 'https://github.com/GreenLv/dsh-completion-guard.git',
-        packageId: PACKAGE, version: VERSION, artifactSha256, artifactSri: sri, registry: REGISTRY },
-      readinessRefs: [], closureCertRef: 'C1',
-    })}`)
-    session.append('user/message', createUserMessage({
-      content: [{ type: 'text', text: `Publish package ${PACKAGE} version ${VERSION} registry ${REGISTRY}` }],
-      source: { kind: 'user' },
-    }), { surfaceOp: 'append' })
-
-    expect(validations, 'after adopt and instruction').toHaveLength(2)
+    expect(validations, 'after evidence resolution and adoption').toHaveLength(2)
     // Drift between the certification entry and the publish entry: the action
     // entry validates freshly and refuses fail-closed before any effect.
     const drift = driftSessionBytes(host)
     applyDrift(host, drift.original, drift.stamp)
-    const refused = await runTool(session, tools, 'context_guard_action', 'drifted-action', {
-      semantic_action: 'publish', resolution_call_id: 'chain-resolution',
-      target_digest: resolution.target_digest, contract_item_id: 'unknown', contract_item_revision: 0,
-    })
+    const refused = await chain.action('drifted-action')
     expect(refused.status, JSON.stringify(refused)).toBe('unavailable')
     expect(refused.reason_code).toBe('host_capability_unavailable')
     expect(published).toHaveLength(0)
-    expect(validations, 'after drifted action').toHaveLength(3)
+    expect(validations).toHaveLength(3)
     restoreSessionBytes(host, drift.original, drift.stamp)
 
     // A publish decision crosses THREE host-lock gates — capability check,
     // mutation authorization, release pre-effect — and costs ONE full
     // validation for the whole entry.
-    const releaseItem = [...projectionOf(session, join(root, 'private-ledger')).items.values()]
-      .find((entry) => entry.status === 'pending' && entry.semanticAction === 'publish')
-    expect(releaseItem, 'the release instruction captured a publish obligation').toBeDefined()
-    const value = await runTool(session, tools, 'context_guard_action', 'chain-action', {
-      semantic_action: 'publish', resolution_call_id: 'chain-resolution',
-      target_digest: resolution.target_digest, contract_item_id: releaseItem!.id, contract_item_revision: releaseItem!.revision,
-    })
+    const value = await chain.action('chain-action')
     if (value.status !== 'completed') {
-      // The contract item id must resolve; surface the real refusal for
-      // diagnosis instead of hiding it behind a count assertion.
       throw new Error(`publish did not complete: ${JSON.stringify(value)}`)
     }
     expect(published).toHaveLength(1)
@@ -401,5 +414,26 @@ describe('real production entries validate freshly and share one audit per decis
     expect(guards[0]!({ name: 'bash', arguments: {} })).toBeUndefined()
     expect(validations).toHaveLength(5)
     restoreSessionBytes(host, drift.original, drift.stamp)
+  })
+
+  it('refuses publish when the host drifts during the entry\'s async preparation', async () => {
+    // The durability flush is the publish entry's first async await, before
+    // the host-lock gates. Same byte count and mtime, different audited
+    // bytes: the drift lands inside the entry, before its final host-lock
+    // judgement — an audit taken before the await must not authorize the
+    // effect.
+    let armed = false
+    const chain = await publishChain({
+      onAsyncPreparation: () => {
+        if (!armed) return
+        const d = driftSessionBytes(chain.host)
+        applyDrift(chain.host, d.original, d.stamp)
+      },
+    })
+    armed = true
+    const value = await chain.action('mid-preparation-action')
+    expect(value.status, JSON.stringify(value)).toBe('unavailable')
+    expect(chain.published).toHaveLength(0)
+    expect(chain.validations, 'the entry still validates for its own decision').toHaveLength(3)
   })
 })

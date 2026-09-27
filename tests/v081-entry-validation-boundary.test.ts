@@ -210,6 +210,53 @@ describe('one attach performs exactly one full host-lock validation', () => {
   })
 })
 
+describe('concurrent entries of one agent never share a validation result', () => {
+  it('gives each entry its own fresh audit even when another entry is open', async () => {
+    let counter = 0
+    const audits: string[] = []
+    let hostState: 'clean' | 'drifted' = 'clean'
+    const runtime = createRuntime(fakeAgent(sessionWithId('v081-concurrent', 1)), { activation: 'always' },
+      DEFAULT_HOST_LOCK, undefined, () => {
+        counter += 1
+        audits.push(hostState)
+        return hostState === 'clean' ? DEFAULT_HOST_LOCK
+          : { ...DEFAULT_HOST_LOCK, status: 'unsupported' as const, goalAvailable: false,
+            reasonCode: 'host_lock_installed_graph_drift' as const }
+      })
+    expect(counter).toBe(0)
+    let releaseEntry1!: () => void
+    const entry1Barrier = new Promise<void>((resolve) => { releaseEntry1 = resolve })
+    let releaseEntry2!: () => void
+    const entry2Barrier = new Promise<void>((resolve) => { releaseEntry2 = resolve })
+
+    // Entry 1 pauses before its first fresh request; entry 2 validates and
+    // stays open. When entry 1 resumes on a drifted host, it must audit for
+    // itself — reusing entry 2's open result would authorize on stale facts.
+    const entry1 = runtime.runHostLockEntry(async () => {
+      await entry1Barrier
+      runtime.sync({ revalidateHostLock: true })
+      const judged = runtime.projection.hostStatus
+      runtime.sync({ revalidateHostLock: true })
+      expect(runtime.projection.hostStatus).toBe(judged)
+      return judged
+    })
+    const entry2 = runtime.runHostLockEntry(async () => {
+      runtime.sync({ revalidateHostLock: true })
+      const judged = runtime.projection.hostStatus
+      await entry2Barrier
+      return judged
+    })
+    hostState = 'drifted'
+    releaseEntry1()
+    const judged1 = await entry1
+    releaseEntry2()
+    const judged2 = await entry2
+    expect(judged2).toBe('supported')
+    expect(judged1).toBe('unsupported')
+    expect(audits).toEqual(['clean', 'drifted'])
+  })
+})
+
 describe('drift between two consecutive authorized entries is refused', () => {
   it('refuses a same-size, same-mtime real-byte replacement between two fresh validations', () => {
     const host = makeHost()
@@ -333,16 +380,23 @@ describe('one audit reads each manifest at most once', () => {
     const inner = createHostAuditSession()
     const manifestReads = new Map<string, number>()
     const graphParses = new Map<string, number>()
+    const fileReads = new Map<string, number>()
     const counting: HostAuditSession = {
       realpath: (path) => inner.realpath(path),
       exists: (path) => inner.exists(path),
       stat: (path) => inner.stat(path),
-      readFile: (path) => inner.readFile(path),
+      readFile: (path) => inner.memo(`read:${path}`, () => {
+        fileReads.set(path, (fileReads.get(path) ?? 0) + 1)
+        return inner.readFile(path)
+      }),
       readJson: (path) => inner.memo(`json:${path}`, () => {
         manifestReads.set(path, (manifestReads.get(path) ?? 0) + 1)
         return inner.readJson(path)
       }),
-      fileDigest: (path) => inner.fileDigest(path),
+      fileDigest: (path) => inner.memo(`digest:${path}`, () => {
+        fileReads.set(path, (fileReads.get(path) ?? 0) + 1)
+        return inner.fileDigest(path)
+      }),
       requireFor: (importer) => inner.requireFor(importer),
       resolvePaths: (importer, name) => inner.resolvePaths(importer, name),
       requireResolve: (importer, request) => inner.requireResolve(importer, request),
@@ -361,6 +415,11 @@ describe('one audit reads each manifest at most once', () => {
     // operation: every JSON object is parsed exactly once per validation.
     const duplicated = [...manifestReads.entries()].filter(([, count]) => count > 1)
     expect(duplicated, `duplicate manifest reads: ${JSON.stringify(duplicated)}`).toEqual([])
+    // Raw byte reads — package maps and hashed audited modules — are counted
+    // at the same physical-read level and are equally duplicate-free.
+    const duplicatedReads = [...fileReads.entries()].filter(([, count]) => count > 1)
+    expect(duplicatedReads, `duplicate file reads: ${JSON.stringify(duplicatedReads)}`).toEqual([])
+    expect(fileReads.size).toBeGreaterThanOrEqual(46)
     const reparsed = [...graphParses.entries()].filter(([, count]) => count > 1)
     expect(reparsed, `re-parsed package maps: ${JSON.stringify(reparsed)}`).toEqual([])
     // The counting session actually saw the audited manifests and both graphs.
