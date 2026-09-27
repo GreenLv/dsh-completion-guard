@@ -123,6 +123,16 @@ node scripts/release-pack.mjs --source . --output-dir <outside-repository-dir>
 
 ## Release identity and authorization
 
+- When a release changes supported DSH versions, verify the published npm
+  manifest and the consuming market's compatibility response separately. The
+  market may display an installed version beside cached `latest` metadata from
+  an older release. Read its cache version/range and the actual discovery API
+  result before claiming the card is current. A package-only audit is not UI
+  acceptance. If npm is correct, repair only the affected cache through the
+  supported route (or a backed-up, scoped cache update), preserve other entries,
+  and honor user-owned restart boundaries; do not republish for stale cache.
+  Record disk-cache repair, running-process readback and rendered-card evidence
+  separately, with pending restart or mirror propagation explicit.
 - Keep implementation, deterministic tests, CI, native source acceptance,
   exact-artifact acceptance, credentialed behavior, main, tag, npm publication,
   GitHub Release, and public readback as separate facts and permissions.
