@@ -100,6 +100,27 @@ export function createProbeProgress(config, digest) {
   return { record, timed }
 }
 
+export function assertProbePrecondition(name, passed) {
+  assert.ok(['guard_tools_registered', 'guard_boundary_active', 'goal_protection_adopted'].includes(name))
+  if (passed !== true) throw Object.assign(new Error('native probe precondition failed'), {
+    code: 'PROBE_PRECONDITION_FAILED', precondition: name,
+  })
+}
+
+export function assertProbeActivation(domain, events) {
+  // Replay current control state without repeating the expensive host-graph audit.
+  const view = domain.deriveProjection(events, { activation: 'always' }, {}, true).projection
+  assertProbePrecondition('guard_boundary_active', view.enabled === true && view.boundaryProtocol === 6)
+}
+
+export function assertShellTerminal(value, expected) {
+  const actual = shellTerminalFacts(value)
+  try { assert.deepEqual(actual, expected) } catch (error) {
+    error.terminalAssertion = { expected, actual }
+    throw error
+  }
+}
+
 export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const rows = []
@@ -125,6 +146,9 @@ export function apply(ctx, config) {
       if (handle) await progress.timed('dispose_previous', () => handle.dispose())
       handle = await progress.timed('open_' + label.replaceAll('-', '_'), () => createProbeAgent(ctx, sessionFor(label), config.workRoot, resume))
       ordinal = 0
+      assertProbePrecondition('guard_tools_registered',
+        ['context_guard_checkpoint', 'context_guard_observe_test_readiness'].every(name =>
+          Boolean(handle.agent.ctx.tools.get(name, handle.agent))))
       return handle.agent
     }
     const events = () => handle.agent.session.snapshotEvents()
@@ -158,6 +182,7 @@ export function apply(ctx, config) {
       assert.equal(decision.kind, 'enter')
       for (const entry of decision.messages) handle.agent.session.append('user/message', entry, { surfaceOp: 'append' })
       await flush()
+      assertProbeActivation(domain, events())
     }
     const tool = async (name, args, expectSuccess = true) => {
       const agent = handle.agent
@@ -249,7 +274,7 @@ export function apply(ctx, config) {
           const fields = handle.agent.ctx.tools.get(shell, handle.agent)?.parameters?.properties ?? {}
           const executed = await tool(shell, { command: 'npm test', workdir: config.workRoot,
             ...(fields.description ? { description: 'Run isolated native acceptance fixture' } : {}) })
-          assert.deepEqual(shellTerminalFacts(executed.value), { kind: 'foreground', exit_code: 0, timed_out: false, aborted: false })
+          assertShellTerminal(executed.value, { kind: 'foreground', exit_code: 0, timed_out: false, aborted: false })
           const observed = (await tool('context_guard_checkpoint', { bindings: [] })).value
           assertOrdinaryCheckpoint(observed, 'observed')
           assert.equal(observed.open_items.length, 0)
@@ -329,6 +354,7 @@ export function apply(ctx, config) {
           const goal = goals.create(handle.agent, { objective: 'Run the isolated fixture test' })
           handle.agent.session.append('command/run', { name: 'context-guard', args: 'on', source: { kind: 'user' } })
           await flush()
+          assertProbePrecondition('goal_protection_adopted', projection().goalCompletionAdopted === true)
           const goalWork = config.workRoot
           writeFileSync(join(goalWork, 'package.json'), nativeTestFixturePackage(0, 'native-goal-fixture'))
           await root(`Run npm test in ${goalWork}.`)
@@ -382,6 +408,8 @@ export function apply(ctx, config) {
     } catch (error) {
       progress?.record('probe_failure', 'failed')
       rows.push({ id: current, status: 'failed', positive: false, negative: false, operation, last_tool: lastTool,
+        ...(error?.precondition ? { precondition: error.precondition } : {}),
+        ...(error?.terminalAssertion ? { terminal_assertion: error.terminalAssertion } : {}),
         error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })
     } finally {
       if (handle) { try { await progress.timed('dispose_final', () => handle.dispose()) } catch { rows.push({ id: 'v070_agent_cleanup', status: 'failed', positive: false, negative: false }) } }

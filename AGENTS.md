@@ -111,8 +111,10 @@ node scripts/release-pack.mjs --source . --output-dir <outside-repository-dir>
   equivalent interface.
 - Add `--preflight` to the intended native command before expensive execution.
   It checks source/artifact identity, tool availability, declared host cohorts,
-  and result paths without installing packages or starting hosts. It does not
-  establish restricted-child access, loaded instances, credentials, target
+  result paths, and same-invocation child/process-query access without installing
+  packages or starting hosts. A denied capability must use the normal platform
+  approval path; a successful check in another shell is not transferable.
+  This does not establish restricted-child access, loaded instances, credentials, target
   dependency graphs or real-model behavior; the actual run still checks those
   applicable surfaces. Store `--output` and any `--transfer-receipt` at distinct,
   unused paths outside the source checkout and disposable fixtures. Missing

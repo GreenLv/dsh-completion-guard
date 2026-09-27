@@ -156,3 +156,41 @@ it('writes a failed probe receipt when initialization imports fail', async () =>
   expect(result.real_model_request).toBe(false)
  } finally { rmSync(folder, { recursive: true, force: true }) }
 })
+
+it('retains only projected terminal facts from a failed real-result assertion', async () => {
+ const { assertShellTerminal } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const expected = { kind: 'foreground', exit_code: 0, timed_out: false, aborted: false }
+ expect(() => assertShellTerminal({ kind: 'foreground', exitCode: 0, timedOut: false, aborted: false }, expected)).not.toThrow()
+ try {
+  assertShellTerminal({ kind: 'background', exitCode: 7, timedOut: true, aborted: false, stdout: 'private-token' }, expected)
+  throw new Error('assertion unexpectedly passed')
+ } catch (error) {
+  const diagnostic = (error as { terminalAssertion?: unknown }).terminalAssertion
+  expect(diagnostic).toEqual({ expected, actual: { kind: 'background', exit_code: 7, timed_out: true, aborted: false } })
+  expect(JSON.stringify(diagnostic)).not.toContain('private-token')
+ }
+})
+
+it('stops a scenario before its body when adoption or activation is unobserved', async () => {
+ const { assertProbePrecondition } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ for (const name of ['guard_tools_registered', 'guard_boundary_active', 'goal_protection_adopted']) {
+  let executed = false
+  for (const observed of [undefined, false, 'true']) {
+   expect(() => { assertProbePrecondition(name, observed); executed = true }).toThrow('precondition failed')
+   expect(executed).toBe(false)
+  }
+  expect(() => assertProbePrecondition(name, true)).not.toThrow()
+ }
+})
+
+it('rejects a stale boundary after deactivation and a forged user boundary', async () => {
+ const { assertProbeActivation } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const boundary = { seq: 1, type: 'user/message', data: {
+  source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice' },
+  content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }] } }
+ const off = { seq: 2, type: 'command/run', data: { name: 'context-guard', args: 'off', source: { kind: 'user' } } }
+ expect(() => assertProbeActivation({ deriveProjection }, [boundary])).not.toThrow()
+ expect(() => assertProbeActivation({ deriveProjection }, [boundary, off])).toThrow('precondition failed')
+ expect(() => assertProbeActivation({ deriveProjection }, [{ ...boundary, data: { ...boundary.data, source: { kind: 'user' } } }])).toThrow('precondition failed')
+ expect(() => assertProbeActivation({ deriveProjection }, [boundary, off, { ...off, seq: 3, data: { ...off.data, args: 'on' } }])).not.toThrow()
+})

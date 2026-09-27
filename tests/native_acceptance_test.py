@@ -46,6 +46,30 @@ class NativeAcceptanceEntrypointTests(unittest.TestCase):
                               "--artifact-sha256", NATIVE.sha256(artifact),
                               "--source-commit", "a" * 40, "--output", str(output)]
 
+    def test_host_permission_preflight_is_wired_before_install(self):
+        from types import SimpleNamespace
+        module = SimpleNamespace(preflight_host_inputs=mock.Mock(),
+                                 preflight_execution_access=mock.Mock(side_effect=RuntimeError("capability denied")),
+                                 preflight_link_access=mock.Mock())
+        spec = SimpleNamespace(loader=SimpleNamespace(exec_module=mock.Mock()))
+        with tempfile.TemporaryDirectory() as directory:
+            root, output, args = self.fixture(directory)
+            args += ["--gate-profile", "host_bound_v070", "--runtime-root", str(root),
+                     "--web-cohort", "web", "--headless-cohort", "headless", "--web-market-version", "none"]
+            with mock.patch.object(NATIVE, "verify_exact_source"), \
+                    mock.patch.object(NATIVE, "run", return_value=subprocess.CompletedProcess([], 0, "https://example.invalid/repo.git", "")), \
+                    mock.patch.object(NATIVE, "resolve_executable", side_effect=lambda name: name), \
+                    mock.patch.object(NATIVE.importlib.util, "spec_from_file_location", return_value=spec), \
+                    mock.patch.object(NATIVE.importlib.util, "module_from_spec", return_value=module), \
+                    mock.patch.object(NATIVE, "portable_acceptance") as install, \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                NATIVE.main(args)
+            self.assertEqual(caught.exception.code, 2)
+            module.preflight_execution_access.assert_called_once()
+            module.preflight_link_access.assert_not_called()
+            install.assert_not_called()
+            self.assertFalse(output.exists())
+
     def test_existing_result_is_preserved_without_starting_acceptance(self):
         with tempfile.TemporaryDirectory() as directory:
             _, output, args = self.fixture(directory)
@@ -306,6 +330,86 @@ class HostBoundEntrypointTests(unittest.TestCase):
                 mock.patch.object(self.host.tempfile, "mkdtemp", return_value="private-root") as allocate:
             self.assertEqual(self.host.host_temporary_root(), Path("private-root"))
             allocate.assert_called_once_with(prefix="dsh-guard-host-")
+
+    def test_execution_preflight_checks_current_process_on_both_platforms(self):
+        for system in ("Darwin", "Windows"):
+            child = subprocess.CompletedProcess([], 0, b"native-preflight", b"")
+            query = subprocess.CompletedProcess([], 0, f" {os.getpid()}\n".encode(), b"")
+            with mock.patch.object(self.host.platform, "system", return_value=system), \
+                    mock.patch.object(self.host.subprocess, "run", side_effect=[child, query]) as run, \
+                    mock.patch.object(self.host, "windows_process_query", return_value=str(os.getpid())) as win:
+                self.host.preflight_execution_access()
+                if system == "Windows":
+                    win.assert_called_once()
+                    self.assertIn(str(os.getpid()), win.call_args.args[0])
+                    self.assertEqual(run.call_count, 1)
+                else:
+                    self.assertEqual(run.call_args.args[0], ["ps", "-p", str(os.getpid()), "-o", "pid="])
+
+    def test_execution_preflight_strips_inherited_overrides_and_cleans_fixture(self):
+        child = subprocess.CompletedProcess([], 0, b"native-preflight", b"")
+        query = subprocess.CompletedProcess([], 0, str(os.getpid()).encode(), b"")
+        with mock.patch.dict(os.environ, {"NODE_OPTIONS": "--require=private", "OPENAI_API_KEY": "private"}), \
+                mock.patch.object(self.host.platform, "system", return_value="Darwin"), \
+                mock.patch.object(self.host.subprocess, "run", side_effect=[child, query]) as run:
+            self.host.preflight_execution_access()
+        call = run.call_args_list[0]
+        self.assertNotIn("NODE_OPTIONS", call.kwargs["env"])
+        self.assertNotIn("OPENAI_API_KEY", call.kwargs["env"])
+        self.assertEqual(call.kwargs["env"]["DSH_TOOLS_MODE"], "native")
+        self.assertFalse(Path(call.kwargs["cwd"]).exists())
+
+    def test_execution_preflight_rejects_denial_or_wrong_pid_without_raw_output(self):
+        child = subprocess.CompletedProcess([], 0, b"native-preflight", b"")
+        for result in (PermissionError(1, "private credential path"),
+                       subprocess.CompletedProcess([], 0, b"999999999", b"private credential")):
+            with mock.patch.object(self.host.platform, "system", return_value="Darwin"), \
+                    mock.patch.object(self.host.subprocess, "run", side_effect=[child, result]), \
+                    self.assertRaisesRegex(RuntimeError, "execution capability failed") as caught:
+                self.host.preflight_execution_access()
+            self.assertNotIn("private", str(caught.exception))
+
+    def test_failed_child_prevents_process_query(self):
+        error = subprocess.CalledProcessError(2, ["node"], stderr=b"private credential")
+        with mock.patch.object(self.host.platform, "system", return_value="Windows"), \
+                mock.patch.object(self.host, "windows_process_query") as query, \
+                mock.patch.object(self.host.subprocess, "run", side_effect=error) as run, \
+                self.assertRaisesRegex(RuntimeError, "execution capability failed") as caught:
+            self.host.preflight_execution_access()
+        self.assertEqual(run.call_count, 1)
+        query.assert_not_called()
+        self.assertNotIn("private", str(caught.exception))
+
+    def test_failed_shell_facts_survive_cleanup_in_external_diagnostic(self):
+        expected = {"kind": "foreground", "exit_code": 0, "timed_out": False, "aborted": False}
+        actual = {**expected, "exit_code": 7, "stdout": "private credential"}
+        value = {"cases": [{"id": "v070_ordinary_test_and_checkpoint", "status": "failed",
+                           "terminal_assertion": {"expected": expected, "actual": actual}}]}
+        failure = self.host.HostProbeFailure(value)
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = Path(folder)/"fixture"
+            fixture.mkdir()
+            (fixture/"probe.json").write_text(json.dumps(value))
+            output = Path(folder)/"retained.json"
+            self.host.write_host_diagnostic(output, "web_host_start_and_probe", failure, "a"*64, "b"*40)
+            import shutil
+            shutil.rmtree(fixture)
+            record = json.loads(output.read_text())
+            self.assertEqual(record["probe_failures"][0]["terminal_assertion"]["actual"], {**expected, "exit_code": 7})
+            self.assertNotIn("private", output.read_text())
+            self.assertFalse(fixture.exists())
+
+    def test_diagnostic_drops_untyped_values_and_unknown_preconditions(self):
+        facts = self.host.safe_terminal_facts({"kind": ["secret"], "exit_code": True,
+                                              "timed_out": "secret", "aborted": {"token": "secret"}})
+        self.assertEqual(facts, dict.fromkeys(("kind", "exit_code", "timed_out", "aborted")))
+        details = self.host.HostProbeFailure({"cases": [{"id": "v070_goal_adoption_current_closure",
+            "status": "failed", "error_code": "PROBE_PRECONDITION_FAILED",
+            "precondition": "goal_protection_adopted"}]}).details
+        self.assertEqual(details[0]["expected"], True)
+        self.assertEqual(details[0]["actual"], False)
+        unknown = self.host.HostProbeFailure({"cases": [{"id": [], "status": "failed"}]}).details
+        self.assertEqual(unknown, [])
 
     def test_host_command_decodes_utf8_in_calling_thread(self):
         output = "路径和证书".encode("utf-8")

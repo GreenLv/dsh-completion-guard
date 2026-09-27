@@ -19,14 +19,34 @@
         "type": "object", "additionalProperties": false,
         "required": ["id", "status", "positive", "negative"],
         "properties": {
-          "id": { "type": "string", "pattern": "^v070_[a-z0-9_]+$" },
+          "id": { "type": "string", "pattern": "^(?:v070_[a-z0-9_]+|initialize_runtime)$" },
           "status": { "enum": ["passed", "failed"] },
           "positive": { "type": "boolean" },
           "negative": { "type": "boolean" },
           "operation": { "type": "string" },
           "error_code": { "type": "string" },
-          "last_tool": { "type": ["object", "null"] }
+          "last_tool": { "type": ["object", "null"] },
+          "precondition": {"enum": ["guard_tools_registered", "guard_boundary_active", "goal_protection_adopted"]},
+          "terminal_assertion": {
+            "type": "object", "additionalProperties": false, "required": ["expected", "actual"],
+            "properties": {
+              "expected": { "$ref": "#/$defs/terminal" },
+              "actual": { "$ref": "#/$defs/terminal" }
+            }
+          }
         }
+      }
+    }
+  },
+  "$defs": {
+    "terminal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "exit_code", "timed_out", "aborted"],
+      "properties": {
+        "kind": { "enum": ["foreground", "background", null] },
+        "exit_code": { "type": ["integer", "null"] },
+        "timed_out": { "type": ["boolean", "null"] },
+        "aborted": { "type": ["boolean", "null"] }
       }
     }
   }

@@ -103,6 +103,8 @@ def write_host_diagnostic(path: Path, stage: str, error: BaseException, digest: 
               "stderr_redacted": getattr(error, "stderr_redacted", "unrecognized_host_error")}
     if progress is not None:
         record["probe_progress"] = progress
+    if isinstance(error, HostProbeFailure):
+        record["probe_failures"] = error.details
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
@@ -217,7 +219,7 @@ def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = F
             return False
         for row in value.get("cases", []):
             if (not isinstance(row, dict) or not {"id", "status", "positive", "negative"}.issubset(row)
-                    or not set(row).issubset({"id", "status", "positive", "negative", "operation", "error_code", "last_tool"})):
+                    or not set(row).issubset({"id", "status", "positive", "negative", "operation", "error_code", "last_tool", "precondition", "terminal_assertion"})):
                 return False
     return (isinstance(value, dict) and value.get("schema") == schema
             and value.get("nonce") == nonce and value.get("driver_sha256") == driver_digest
@@ -250,6 +252,46 @@ def safe_probe_failures(value: dict[str, Any]) -> list[dict[str, str | None]]:
                        "status": "failed", "error_code": code if isinstance(code, str) and code.isupper() and len(code) <= 60 else None,
                        "tool": name if isinstance(name, str) and name in allowed else None})
     return output
+
+
+class HostProbeFailure(RuntimeError):
+    def __init__(self, value: dict[str, Any]):
+        super().__init__("real host probe failed or returned an incomplete case set")
+        self.details = []
+        for row in value.get("cases", []):
+            if not isinstance(row, dict) or row.get("status") != "failed":
+                continue
+            identifier = row.get("id")
+            if not isinstance(identifier, str) or identifier not in PROBE_V070_CASES | {"initialize_runtime", "v070_persisted_restart_resume"}:
+                continue
+            detail = {"id": identifier}
+            if row.get("error_code") == "PROBE_PRECONDITION_FAILED" and isinstance(row.get("precondition"), str) and row.get("precondition") in {
+                "guard_tools_registered", "guard_boundary_active", "goal_protection_adopted"
+            }:
+                detail["precondition"] = row["precondition"]
+                detail["expected"] = True
+                detail["actual"] = False
+            # Only this fixed assertion has a safe scalar/enum projection.
+            assertion = row.get("terminal_assertion")
+            if isinstance(assertion, dict):
+                expected = safe_terminal_facts(assertion.get("expected"))
+                actual = safe_terminal_facts(assertion.get("actual"))
+                if expected is not None and actual is not None:
+                    detail["terminal_assertion"] = {"expected": expected, "actual": actual}
+            self.details.append(detail)
+
+
+def safe_terminal_facts(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    # Unknown values are explicit nulls, never raw output or error text.
+    return {
+        "kind": value.get("kind") if isinstance(value.get("kind"), str) and value.get("kind") in {"foreground", "background"} else None,
+        "exit_code": value.get("exit_code") if type(value.get("exit_code")) is int
+                     and -(2**31) <= value["exit_code"] <= 2**32 - 1 else None,
+        "timed_out": value.get("timed_out") if type(value.get("timed_out")) is bool else None,
+        "aborted": value.get("aborted") if type(value.get("aborted")) is bool else None,
+    }
 
 
 def free_loopback_port() -> int:
@@ -425,6 +467,37 @@ def preflight_host_inputs(root: Path, runtime_root: Path,
     cohorts = json.loads((root / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))["cohorts"]
     selected = select_target_cohorts(cohorts, manifest["version"], targets)
     return manifest, selected
+
+
+def preflight_execution_access() -> None:
+    """Check this invocation's child and process-query route, without a host.
+
+    A separate approved shell does not establish this process's permissions.
+    This is not evidence of the DSH tool's restricted-child capabilities.
+    """
+    temporary = host_temporary_root()
+    try:
+        environment = isolated_environment(temporary)
+        child = subprocess.run(["node", "-e", "process.stdout.write('native-preflight')"],
+                               cwd=temporary, env=environment,
+                               capture_output=True, timeout=10, check=True)
+        if child.stdout != b"native-preflight":
+            raise RuntimeError("child probe mismatch")
+        pid = os.getpid()
+        if platform.system() == "Windows":
+            observed = windows_process_query(
+                f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').ProcessId")
+        else:
+            result = subprocess.run(["ps", "-p", str(pid), "-o", "pid="],
+                                    capture_output=True, timeout=10, check=True)
+            observed = result.stdout.decode("ascii", errors="strict")
+        if observed.strip() != str(pid):
+            raise RuntimeError("process-query probe mismatch")
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        raise RuntimeError("execution capability failed: " +
+                           failure_note("execution_preflight", error)) from None
+    finally:
+        shutil.rmtree(temporary)
 
 
 def preflight_link_access() -> None:
@@ -615,6 +688,9 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                         result["host_probe_failures"] = safe_probe_failures(value) if protocol == "v070" else [
                             {"id": row.get("id"), "status": row.get("status"), "error_code": row.get("error_code")}
                             for row in value.get("cases", []) if isinstance(row, dict) and row.get("status") != "passed"]
+                        if (protocol == "v070" and value.get("nonce") == nonce
+                                and value.get("driver_sha256") == driver_digest):
+                            raise HostProbeFailure(value)
                         raise RuntimeError("real host probe failed or returned an incomplete case set")
                     extra_pids[value["pid"]] = overlay
                     return value
