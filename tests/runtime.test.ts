@@ -774,6 +774,7 @@ function projectionRuntime(projection: ReturnType<typeof createProjection>): Gua
     get protocolV5Present() { return true },
     sync: () => {}, setEnabled: () => {}, setDurability: () => {},
     markRecoveryNeeded: () => {}, consumeRecovery: () => false,
+    runHostLockEntry: async <T>(operation: () => Promise<T> | T) => await operation(),
   }
 }
 

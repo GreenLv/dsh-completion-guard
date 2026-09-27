@@ -31,10 +31,11 @@ dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root 
 
 **Run this block after the runtime is already on the target DSH version, not
 before.** `inject` records the absolute runtime and profile roots and binds the
-graph it finds there, and runtime replay re-reads those same roots. Injecting
-against the old runtime therefore writes a lock that describes a graph the new
-runtime no longer has, and it will fail on the next replay. Order: upgrade the
-runtime, restart it, then inspect/inject/verify.
+graph it finds there, and each session mount validates those same roots once,
+with every security-sensitive entry validating them again at its own decision.
+Injecting against the old runtime therefore writes a lock that describes a graph
+the new runtime no longer has, and it will fail at the next mount or the next
+protected entry. Order: upgrade the runtime, restart it, then inspect/inject/verify.
 
 `inject` **writes to `<profile>/cordis.patch.yml`** — it replaces or adds Guard's
 managed block in that file. Back the file up first. The same file is the one
@@ -66,8 +67,12 @@ The result labels `inspection_scope: pre_install_target` and `profile_graph.stat
 
 The generator writes `hostLockPolicy: dsh-core/v1`, the actual runtime/profile
 source roots, platform/profile kind and the complete 46-row core graph. The
-core manifest is version 2. Runtime replay re-reads those graph sources and
-requires the same exact core before using certificate authority.
+core manifest is version 2. Each session mount validates those graph sources
+exactly once; ordinary replay (resume, compaction, step and command refresh)
+consumes that result without rescanning, and every entry that grants
+certificate authority — completion certificates, mutation authorization,
+release pre-effect decisions and Goal/Stop boundaries — validates the lock
+freshly at the moment of its own decision.
 
 Version 0.8.1 registers only `dsh-0.1.7-rc.2-core-v1`. Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use rc.2's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 

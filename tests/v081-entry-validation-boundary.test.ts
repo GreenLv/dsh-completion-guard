@@ -12,6 +12,7 @@ import { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
 import { createRuntime, apply, handleGuardTurnStopping, revalidateCoreLock } from '../src/runtime.js'
 import { readActiveHostGraph } from '../src/domain/host-resolver.js'
+import { createHostAuditSession, type HostAuditSession } from '../src/domain/host-audit-session.js'
 import { DEFAULT_HOST_LOCK, evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostLockEvaluation } from '../src/domain/host-lock.js'
 
 // This family isolates the host-lock validation BOUNDARY: how many full
@@ -323,5 +324,47 @@ describe('drift between two consecutive authorized entries is refused', () => {
     host.packages['.'].dependencies[victim.name] = victimId
     writeFileSync(join(host.runtimeRoot, 'node_modules', '.package-map.json'), JSON.stringify({ packages: host.packages }))
     expect(revalidateCoreLock(config, expected).status).toBe('supported')
+  })
+})
+
+describe('one audit reads each manifest at most once', () => {
+  it('deduplicates package.json reads and package-map parses within a single validation', () => {
+    const host = makeHost()
+    const inner = createHostAuditSession()
+    const manifestReads = new Map<string, number>()
+    const graphParses = new Map<string, number>()
+    const counting: HostAuditSession = {
+      realpath: (path) => inner.realpath(path),
+      exists: (path) => inner.exists(path),
+      stat: (path) => inner.stat(path),
+      readFile: (path) => inner.readFile(path),
+      readJson: (path) => inner.memo(`json:${path}`, () => {
+        manifestReads.set(path, (manifestReads.get(path) ?? 0) + 1)
+        return inner.readJson(path)
+      }),
+      fileDigest: (path) => inner.fileDigest(path),
+      requireFor: (importer) => inner.requireFor(importer),
+      resolvePaths: (importer, name) => inner.resolvePaths(importer, name),
+      requireResolve: (importer, request) => inner.requireResolve(importer, request),
+      memo: <T,>(key: string, compute: () => T) =>
+        // Physical reads happen exactly when the memo misses: counting inside
+        // the wrapped compute catches key-spelling divergence between the
+        // three manifest readers (graph readback, byte audit, route audit),
+        // not mere call counts.
+        inner.memo(key, () => {
+          if (key.startsWith('graph:')) graphParses.set(key, (graphParses.get(key) ?? 0) + 1)
+          return compute()
+        }),
+    }
+    expect(revalidateCoreLock(host.config, expectedLockFor(host), counting).status).toBe('supported')
+    // The graph readback, the byte audit and the route audit share one
+    // operation: every JSON object is parsed exactly once per validation.
+    const duplicated = [...manifestReads.entries()].filter(([, count]) => count > 1)
+    expect(duplicated, `duplicate manifest reads: ${JSON.stringify(duplicated)}`).toEqual([])
+    const reparsed = [...graphParses.entries()].filter(([, count]) => count > 1)
+    expect(reparsed, `re-parsed package maps: ${JSON.stringify(reparsed)}`).toEqual([])
+    // The counting session actually saw the audited manifests and both graphs.
+    expect(manifestReads.size).toBeGreaterThanOrEqual(46)
+    expect(graphParses.size).toBe(2)
   })
 })

@@ -6375,9 +6375,26 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			observedCompactionSeq = derived.lastCompactionSeq;
 		}
 	};
+	let entryLock;
+	let entryOpen = false;
 	const sync = (options) => {
-		if (options?.revalidateHostLock && refreshHostLock) hostLock = refreshHostLock();
+		if (options?.revalidateHostLock && refreshHostLock) if (entryLock) hostLock = entryLock;
+		else {
+			hostLock = refreshHostLock();
+			if (entryOpen) entryLock = hostLock;
+		}
 		rebuild();
+	};
+	const runHostLockEntry = async (operation) => {
+		if (!refreshHostLock) return await operation();
+		entryOpen = true;
+		entryLock = void 0;
+		try {
+			return await operation();
+		} finally {
+			entryOpen = false;
+			entryLock = void 0;
+		}
 	};
 	const setEnabled = (_enabled) => {
 		sync({ revalidateHostLock: true });
@@ -6417,6 +6434,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			return [...pendingRecoveryCauses];
 		},
 		sync,
+		runHostLockEntry,
 		setEnabled,
 		setDurability,
 		markRecoveryNeeded,
@@ -6743,10 +6761,17 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				fs: ctx.fs,
 				flush: (session) => ctx.sessions.flush(session)
 			}));
-			ownedTools.register(createActionTool({
+			const actionTool = createActionTool({
 				...evidenceOptions,
-				hostCapability: (action) => createHostCapabilityEvaluator(refreshAgentHostLock(agent))(action)
-			}));
+				hostCapability: (action) => {
+					runtime.sync({ revalidateHostLock: true });
+					return createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action);
+				}
+			});
+			ownedTools.register({
+				...actionTool,
+				execute: (...args) => runtime.runHostLockEntry(() => actionTool.execute(...args))
+			});
 			ownedTools.register(createPrepareTool({
 				getProjection: () => runtime.projection,
 				hostCapability: (action) => {

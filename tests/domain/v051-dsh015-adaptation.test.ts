@@ -42,6 +42,7 @@ function projectionRuntime(projection: GuardProjection): GuardRuntime {
     setDurability() {},
     markRecoveryNeeded() {},
     consumeRecovery() { return false },
+    async runHostLockEntry<T>(operation: () => Promise<T> | T) { return await operation() },
   }
 }
 

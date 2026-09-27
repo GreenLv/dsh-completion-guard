@@ -115,6 +115,19 @@ export interface GuardRuntime {
    * (DSH-RF-02). Cleared by {@link consumeRecovery}.
    */
   readonly recoveryCauses?: readonly string[]
+  /**
+   * Runs one bounded authorization entry — typically a single tool execution
+   * that consults more than one host-lock gate (capability check, mutation
+   * authorization, release pre-effect). Fresh validations requested inside
+   * share the entry's single result, so one publish decision costs one full
+   * audit instead of one per gate. The entry's end — return or throw —
+   * invalidates the shared result: the next entry validates again, and a
+   * result from an earlier entry can never authorize this one. The final
+   * effect still runs only after a gate decision that rested on THIS entry's
+   * validation, and an unsupported, drifted or failed shared result denies
+   * every gate it feeds, exactly as a per-gate validation would.
+   */
+  runHostLockEntry<T>(_operation: () => Promise<T> | T): Promise<T>
 }
 
 export type RuntimeHostCapabilityEvaluator = (action: StatefulAction) => HostCapabilityEvaluation
@@ -709,9 +722,30 @@ export function createRuntime(
     }
   }
 
+  // One bounded entry's shared validation: the flag marks an open entry, the
+  // lock holds its first fresh result, and the entry's end clears both.
+  let entryLock: HostLockEvaluation | undefined
+  let entryOpen = false
   const sync = (options?: RuntimeSyncOptions) => {
-    if (options?.revalidateHostLock && refreshHostLock) hostLock = refreshHostLock()
+    if (options?.revalidateHostLock && refreshHostLock) {
+      if (entryLock) hostLock = entryLock
+      else {
+        hostLock = refreshHostLock()
+        if (entryOpen) entryLock = hostLock
+      }
+    }
     rebuild()
+  }
+  const runHostLockEntry = async <T>(operation: () => Promise<T> | T): Promise<T> => {
+    if (!refreshHostLock) return await operation()
+    entryOpen = true
+    entryLock = undefined
+    try {
+      return await operation()
+    } finally {
+      entryOpen = false
+      entryLock = undefined
+    }
   }
 
   const setEnabled = (_enabled: boolean) => {
@@ -751,6 +785,7 @@ export function createRuntime(
     get protocolV6Present() { return protocolV6Present },
     get recoveryCauses() { return [...pendingRecoveryCauses] },
     sync,
+    runHostLockEntry,
     setEnabled,
     setDurability,
     markRecoveryNeeded,
@@ -1182,13 +1217,27 @@ export function apply(ctx: Context, rawConfig: {
       fs: (ctx as unknown as Parameters<typeof createTestReadinessObserver>[0]).fs,
       flush: (session) => ctx.sessions.flush(session as Session),
     }))
-    ownedTools.register(createActionTool({
+    // An action execution is a tool authorization: the capability check runs
+    // against this call's own full host validation, not a frozen attach-time
+    // evaluation. The validation goes through runtime.sync so it shares the
+    // entry's single result with the later authorization and release gates.
+    const actionTool = createActionTool({
       ...evidenceOptions,
-      // An action execution is a tool authorization: the capability check runs
-      // against this call's own full host validation, not a frozen attach-time
-      // evaluation.
-      hostCapability: (action) => createHostCapabilityEvaluator(refreshAgentHostLock(agent))(action),
-    }))
+      hostCapability: (action) => {
+        runtime.sync({ revalidateHostLock: true })
+        return createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action)
+      },
+    })
+    ownedTools.register({
+      ...actionTool,
+      // One publish decision crosses three host-lock gates (capability check,
+      // mutation authorization, release pre-effect). They share THIS
+      // execution's single full validation; the entry's end invalidates it,
+      // so the next execution validates again and fail-closed semantics are
+      // unchanged.
+      execute: (...args: Parameters<typeof actionTool.execute>) =>
+        runtime.runHostLockEntry(() => actionTool.execute(...args)),
+    })
     ownedTools.register(createPrepareTool({
       getProjection: () => runtime.projection,
       hostCapability: (action) => {
