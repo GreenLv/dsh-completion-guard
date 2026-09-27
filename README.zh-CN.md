@@ -4,7 +4,7 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.8.0 要求 DSH `0.1.7-rc.2` 和 Cordis `4.0.4`。** 本版保留 0.7.1 的恢复反馈，适配新的宿主生命周期与 Session V4。安装前请先升级 DSH。
+> **0.8.1 要求 DSH `0.1.7-rc.2` 和 Cordis `4.0.4`。** 本版保留 0.7.1 的恢复反馈，适配新的宿主生命周期与 Session V4。安装前请先升级 DSH。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
@@ -13,7 +13,7 @@
 先升级到 DSH `0.1.7-rc.2`，再把 Guard 安装到需要保护的 Profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.8.0
+dsh plugin --profile web add dsh-completion-guard@0.8.1
 ```
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -57,7 +57,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.8.0 仅支持 **DSH `0.1.7-rc.2`**，配合 Cordis `4.0.4`；元数据、宿主锁和运行时使用同一精确版本。旧 RC、正式版、未来版本、缺包及混合图均被拒绝。46 个关键包的身份及实现字节绑定到已校验的 npm tarball，历史宿主不再进入生产选择器。
+0.8.1 仅支持 **DSH `0.1.7-rc.2`**，配合 Cordis `4.0.4`；元数据、宿主锁和运行时使用同一精确版本。旧 RC、正式版、未来版本、缺包及混合图均被拒绝。46 个关键包的身份及实现字节绑定到已校验的 npm tarball，历史宿主不再进入生产选择器。
 
 升级后重新检查并注入 host-lock，再重启对应 Profile，步骤见[宿主锁升级](docs/HOST_LOCK_UPGRADE.md)。旧会话由 DSH 迁移为 V4；Guard 保留旧 ledger 和证书，但不会重签或把旧身份升级为当前权限。Goal 为可选能力，宿主安装不代表它已启用。
 

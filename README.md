@@ -4,7 +4,7 @@
 
 An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
-> **0.8.0 requires DSH `0.1.7-rc.2` and Cordis `4.0.4`.** It retains the 0.7.1 recovery feedback and uses the new host lifecycle and Session V4. Upgrade DSH before installing this version.
+> **0.8.1 requires DSH `0.1.7-rc.2` and Cordis `4.0.4`.** It retains the 0.7.1 recovery feedback and uses the new host lifecycle and Session V4. Upgrade DSH before installing this version.
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
@@ -13,7 +13,7 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 Upgrade to DSH `0.1.7-rc.2` first, then install Guard in the profile you want to protect:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.8.0
+dsh plugin --profile web add dsh-completion-guard@0.8.1
 ```
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -57,7 +57,7 @@ The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.
 
 ## Status and compatibility
 
-Version 0.8.0 supports only **DSH `0.1.7-rc.2`** with Cordis `4.0.4`. Metadata, host locks and runtime checks use that exact version. Older RCs, stable or future releases, missing packages and mixed graphs are rejected. The identities and implementation bytes of 46 critical packages are bound to verified npm tarballs; historical hosts are absent from the production selector.
+Version 0.8.1 supports only **DSH `0.1.7-rc.2`** with Cordis `4.0.4`. Metadata, host locks and runtime checks use that exact version. Older RCs, stable or future releases, missing packages and mixed graphs are rejected. The identities and implementation bytes of 46 critical packages are bound to verified npm tarballs; historical hosts are absent from the production selector.
 
 After upgrading, inspect and inject a new host lock, then restart the profile; follow the [host-lock upgrade guide](docs/HOST_LOCK_UPGRADE.md). DSH migrates old sessions to V4. Guard retains old ledgers and certificates without re-signing them or promoting their old identity to current authority. Goal remains optional; installing the host does not imply it is enabled.
 

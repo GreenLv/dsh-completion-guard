@@ -1,4 +1,5 @@
-import { auditHostDependencyRoutes, type DependencyAuditGraph } from './host-dependency-audit.js'
+import { auditHostDependencyRoutes, reachableIdsByName, type DependencyAuditGraph } from './host-dependency-audit.js'
+import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 import hostByteAudit from '../../manifests/rc017-rc2-byte-audit.json' with { type: 'json' }
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -152,8 +153,20 @@ export function packageRowsFromActiveGraph(
   packageMapText: string,
   lockText: string,
   nodeModulesRoot?: string,
+  providedSession?: HostAuditSession,
 ): PackageRow[] {
+  const session = providedSession ?? createHostAuditSession()
   const { records, reachable } = activeGraphRecords(packageMapText)
+  return packageRowsFromGraph(records, reachable, lockText, nodeModulesRoot, session)
+}
+
+function packageRowsFromGraph(
+  records: ReturnType<typeof activeGraphRecords>['records'],
+  reachable: Set<string>,
+  lockText: string,
+  nodeModulesRoot: string | undefined,
+  session: HostAuditSession,
+): PackageRow[] {
   if (!/^lockfileVersion: ['"]?9\.0['"]?\s*$/m.test(lockText) || !/^packages:(?:\s*\{\})?\s*$/m.test(lockText)) {
     throw new HostProfileError('active_graph_invalid', 'invalid pnpm lockfile shape')
   }
@@ -172,13 +185,13 @@ export function packageRowsFromActiveGraph(
           continue
         }
         try {
-          const modules = realpathSync(nodeModulesRoot)
-          const manifestPath = realpathSync(resolve(modules, record.url, 'package.json'))
+          const modules = session.realpath(nodeModulesRoot)
+          const manifestPath = session.realpath(resolve(modules, record.url, 'package.json'))
           if (!manifestPath.startsWith(`${modules}${sep}`)) {
             rows.push({ name })
             continue
           }
-          installedManifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+          installedManifest = session.readJson(manifestPath)
           if (installedManifest.name !== name || typeof installedManifest.version !== 'string'
             || (version && installedManifest.version !== version)) {
             rows.push({ name })
@@ -217,22 +230,31 @@ export interface ActiveProfileHostLock {
 /** Read exact reachable critical rows without requiring Guard installation.
  * Used by target preflight before a legacy profile can be migrated.
  */
-export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): PackageRow[] {
+export function readActiveHostGraph(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): PackageRow[] {
+  const session = providedSession ?? createHostAuditSession()
   const runtime = resolve(runtimeRoot)
   const profile = resolve(profileRoot)
   const mapPath = join(runtime, 'node_modules', '.package-map.json')
   const lockPath = join(runtime, 'pnpm-lock.yaml')
   const profileMapPath = join(profile, 'node_modules', '.package-map.json')
   const profileLockPath = join(profile, 'pnpm-lock.yaml')
-  const runtimeRows = packageRowsFromActiveGraph(
-    readFileSync(mapPath, 'utf8'),
-    readFileSync(lockPath, 'utf8'),
+  // One parsed graph per map file per audit: the same parse is reused by the
+  // byte audit and the dependency-route audit through the shared session.
+  const runtimeGraph = session.memo(`graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString('utf8')))
+  const profileGraph = session.memo(`graph:${profileMapPath}`, () => activeGraphRecords(session.readFile(profileMapPath).toString('utf8')))
+  const runtimeRows = packageRowsFromGraph(
+    runtimeGraph.records,
+    runtimeGraph.reachable,
+    session.readFile(lockPath).toString('utf8'),
     join(runtime, 'node_modules'),
+    session,
   )
-  const profileRows = packageRowsFromActiveGraph(
-    readFileSync(profileMapPath, 'utf8'),
-    readFileSync(profileLockPath, 'utf8'),
+  const profileRows = packageRowsFromGraph(
+    profileGraph.records,
+    profileGraph.reachable,
+    session.readFile(profileLockPath).toString('utf8'),
     join(profile, 'node_modules'),
+    session,
   )
   // Preserve duplicates within either active graph (two reachable variants are
   // ambiguous), while deduplicating only the same identity repeated across the
@@ -248,42 +270,52 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string): P
 /** Verify published executable bytes at the reachable runtime/profile roots.
  * Registry SRI and installed manifests alone cannot authenticate loaded code.
  * Missing, duplicate, escaped or modified modules never pass this audit.
+ *
+ * All filesystem resolution within one call is memoized through a single
+ * {@link HostAuditSession}; callers may thread one in to share the parsed
+ * graphs and digests with the other audits of the same validation operation.
  */
-export function auditedHostImplementation(runtimeRoot: string, profileRoot: string): boolean {
+export function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): boolean {
+  const session = providedSession ?? createHostAuditSession()
   try {
     const seen = new Set<string>()
     const graphs: DependencyAuditGraph[] = []
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
       const modulesPath = join(rootPath, 'node_modules')
-      if (!existsSync(join(modulesPath, '.package-map.json'))) {
+      if (!session.exists(join(modulesPath, '.package-map.json'))) {
         if (rootPath === runtimeRoot) return false
         continue
       }
-      const modules = realpathSync(modulesPath)
-      const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
-      const packages: DependencyAuditGraph['packages'] = new Map()
-      graphs.push({ modules, records, reachable, packages })
+      const modules = session.realpath(modulesPath)
+      const mapPath = join(modules, '.package-map.json')
+      const { records, reachable } = session.memo(`graph:${mapPath}`,
+        () => activeGraphRecords(session.readFile(mapPath).toString('utf8')))
+      const graph: DependencyAuditGraph = { modules, records, reachable, packages: new Map() }
+      graphs.push(graph)
+      // One name→reachable-IDs index replaces filtering the whole reachable
+      // set once per audited package.
+      const index = reachableIdsByName(graph, session)
       for (const expected of hostByteAudit.packages) {
-        const ids = [...reachable].filter((id) => id === expected.name || id.startsWith(`${expected.name}@`))
+        const ids = index.get(expected.name) ?? []
         if (ids.length > 1) return false
         if (!ids.length) continue
         const url = records[ids[0]]?.url
         if (typeof url !== 'string' || !url.startsWith('./')) return false
-        const root = realpathSync(resolve(modules, url))
+        const root = session.realpath(resolve(modules, url))
         if (!root.startsWith(`${modules}${sep}`)) return false
-        const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+        const manifest = session.readJson(join(root, 'package.json'))
         if (manifest.name !== expected.name || manifest.version !== expected.version) return false
         for (const [file, digest] of Object.entries(expected.modules)) {
-          const target = realpathSync(join(root, file))
-          if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()
-            || createHash('sha256').update(readFileSync(target)).digest('hex') !== digest) return false
+          const target = session.realpath(join(root, file))
+          if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile()
+            || session.fileDigest(target) !== digest) return false
         }
-        packages.set(expected.name, { root, manifest, files: Object.keys(expected.modules) })
+        graph.packages.set(expected.name, { root, manifest, files: Object.keys(expected.modules) })
         seen.add(expected.name)
       }
     }
     return hostByteAudit.packages.every((entry) => seen.has(entry.name))
-      && auditHostDependencyRoutes(graphs, profileRoot)
+      && auditHostDependencyRoutes(graphs, profileRoot, session)
   } catch { return false }
 }
 
@@ -307,44 +339,48 @@ const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-pwsh-local': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
 }
 
-export function activeRendererModule(nodeModulesRoot: string, name: string): { bytes: string; path: string } | undefined {
-  const modules = realpathSync(nodeModulesRoot)
-  const { records, reachable } = activeGraphRecords(readFileSync(join(modules, '.package-map.json'), 'utf8'))
-  // Official Windows rc.2 imports use a hoisted bare key and a direct
-  // ./@deepseek-ai/... URL. pnpm's versioned .pnpm key remains supported. Both
-  // forms must identify ONE reachable implementation, never a shadow copy.
-  const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`))
+export function activeRendererModule(nodeModulesRoot: string, name: string,
+  providedSession?: HostAuditSession): { bytes: string; path: string } | undefined {
+  const session = providedSession ?? createHostAuditSession()
+  const modules = session.realpath(nodeModulesRoot)
+  const mapPath = join(modules, '.package-map.json')
+  const { records, reachable } = session.memo(`graph:${mapPath}`,
+    () => activeGraphRecords(session.readFile(mapPath).toString('utf8')))
+  const ids = session.memo(`renderer-ids:${modules}\u0000${name}`, () =>
+    [...reachable].filter((id) => id === name || id.startsWith(`${name}@`)))
   if (ids.length !== 1) return undefined
   const id = ids[0]!
   const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? '0\\.1\\.7-rc\\.2' : undefined
   if (!version || (id !== name && !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id))) return undefined
   const url = records[id]?.url
   if (typeof url !== 'string' || (url !== `./${name}` && !url.startsWith('./.pnpm/'))) return undefined
-  const root = realpathSync(resolve(modules, url))
+  const root = session.realpath(resolve(modules, url))
   if (!root.startsWith(`${modules}${sep}`)) return undefined
-  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
+  const manifest = session.readJson(join(root, 'package.json'))
   if (manifest.name !== name || manifest.version !== '0.1.7-rc.2') return undefined
   if (id !== name && manifest.version !== id.slice(name.length + 1).split('(', 1)[0]) return undefined
   const bytesPath = join(root, 'lib', 'index.js')
-  const target = realpathSync(bytesPath)
-  if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return undefined
-  return { bytes: createHash('sha256').update(readFileSync(target)).digest('hex'), path: target }
+  const target = session.realpath(bytesPath)
+  if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile()) return undefined
+  return { bytes: session.fileDigest(target), path: target }
 }
 
-function activeRendererBytes(nodeModulesRoot: string, name: string): string | undefined {
-  return activeRendererModule(nodeModulesRoot, name)?.bytes
+function activeRendererBytes(nodeModulesRoot: string, name: string, session?: HostAuditSession): string | undefined {
+  return activeRendererModule(nodeModulesRoot, name, session)?.bytes
 }
 
 /** Verify active, reachable producer bytes without reading credentials or
  * accepting historical package-map entries. Missing/ambiguous paths fail
  * closed for the ordinary markerless-test shortcut. */
-export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: string): Array<'bash' | 'pwsh'> {
+export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: string,
+  providedSession?: HostAuditSession): Array<'bash' | 'pwsh'> {
+  const session = providedSession ?? createHostAuditSession()
   const roots = [join(runtimeRoot, 'node_modules'), join(profileRoot, 'node_modules')]
   const checked = (name: string): boolean => {
     const found: string[] = []
     for (const root of roots) {
       try {
-        const value = activeRendererBytes(root, name)
+        const value = activeRendererBytes(root, name, session)
         if (value) found.push(value)
       } catch { /* package absent in this half of the active graph */ }
     }
@@ -359,8 +395,9 @@ export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: str
 
 /** Exact active implementation route for call-time omitted-workdir evidence. */
 export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: string,
-  tool: 'bash' | 'pwsh'): boolean {
-  if (!auditedForegroundRenderers(runtimeRoot, profileRoot).includes(tool)) return false
+  tool: 'bash' | 'pwsh', providedSession?: HostAuditSession): boolean {
+  const session = providedSession ?? createHostAuditSession()
+  if (!auditedForegroundRenderers(runtimeRoot, profileRoot, session).includes(tool)) return false
   const names = tool === 'bash'
     ? ['@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-sandbox',
       '@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-bash-local']
@@ -369,7 +406,7 @@ export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: stri
     const found: string[] = []
     for (const root of [runtimeRoot, profileRoot]) {
       try {
-        const digest = activeRendererBytes(join(root, 'node_modules'), name)
+        const digest = activeRendererBytes(join(root, 'node_modules'), name, session)
         if (digest) found.push(digest)
       } catch { /* package absent in this half of the graph */ }
     }
@@ -384,15 +421,17 @@ export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: stri
  * rejecting another provider with the same public service interface/name.
  */
 export async function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string,
-  tool: 'bash' | 'pwsh', provider: unknown, policyProvider?: unknown): Promise<boolean> {
-  if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool)
+  tool: 'bash' | 'pwsh', provider: unknown, policyProvider?: unknown,
+  providedSession?: HostAuditSession): Promise<boolean> {
+  const session = providedSession ?? createHostAuditSession()
+  if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, session)
     || !provider || typeof provider !== 'object') return false
   const matchesActiveClass = async (name: string, exportName: string, value: unknown): Promise<boolean> => {
     if (!value || typeof value !== 'object') return false
     const paths = new Set<string>()
     for (const root of [runtimeRoot, profileRoot]) {
       try {
-        const module = activeRendererModule(join(root, 'node_modules'), name)
+        const module = activeRendererModule(join(root, 'node_modules'), name, session)
         if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path)
       } catch { /* absent active package in this graph half */ }
     }
@@ -565,7 +604,8 @@ export function resolveActiveProfileHostLock(
   for (const path of [lockPath, mapPath, profileLockPath, profileMapPath, profileManifestPath, pluginManifestPath]) {
     if (!existsSync(path)) throw new HostProfileError('active_graph_missing', `required active graph file is missing: ${path}`)
   }
-  const rows = readActiveHostGraph(runtime, profile)
+  const session = createHostAuditSession()
+  const rows = readActiveHostGraph(runtime, profile, session)
   const profileManifest = readJsonObject(profileManifestPath, 'profile_manifest_invalid')
   const installedPlugin = readJsonObject(pluginManifestPath, 'installed_plugin_invalid')
   const dependencies = profileManifest.dependencies
@@ -587,7 +627,7 @@ export function resolveActiveProfileHostLock(
   if (evaluation.status !== 'supported') {
     throw new HostProfileError(evaluation.reasonCode ?? 'active_graph_unavailable', 'active runtime graph does not match the supported host manifest')
   }
-  if (!auditedHostImplementation(runtime, profile)) {
+  if (!auditedHostImplementation(runtime, profile, session)) {
     throw new HostProfileError('host_implementation_bytes_mismatch', 'reachable host modules differ from the audited rc.2 tarballs')
   }
   return { evaluation, runtimeRoot: runtime, profileRoot: profile, pluginVersion: expectedPluginVersion, platform, profileKind }

@@ -1,8 +1,8 @@
-import { $ as PROOF_KINDS, $i as BOUNDED_ARTIFACT_TYPES, $n as capabilityConsequence, $r as statefulActionsOfScope, $t as reservationFor, A as PROTOCOL_V4_NOTICE, Ai as DEFAULT_HOST_LOCK, An as isCurrentAcceptedBoundary, Ar as interpretMessage, At as carriesCleanupCondition, B as extractToolSubject, Bi as evaluateToolSurfaceCapability, Bn as replayRebindResult, Br as legacyQuestionReadingIsInformational, Bt as sourceItemForCoreRequirement, C as SESSION_EVENT_ENVELOPE_INVALID, Ci as resolveActiveProfileHostLock, Cn as hasCurrentCertificate, Cr as clauseIsProtected, Ct as CLEANUP_CONDITION_RULE_COMPACT, D as CAPTURE_V042_NOTICE, Di as ACTIVE_HOST_COHORT_IDS, Dn as BOUNDARY_RECORD_PREFIX, Dr as hasQuestionScope, Dt as V6_ORDINARY_COMPLETION_RULE, E as projectCoreV2, Ei as ACTIVE_HOST_COHORT_ID, En as unitDescendantIds, Er as hasOrderedCoordination, Et as MIN_RECOVERY_CHAR_BUDGET, F as legacyRecordsNeedingReview, Fi as bindExecutableIdentity, Fn as proposeRebind, Fr as isOpenObligation, Ft as recoveryTitle, G as isRunExecutable, Gi as SUPPORTED_HOST_RANGE, Gn as deriveItemDiagnosis, Gr as opensWithDirective, Gt as inFlightReservation, H as persistedToolResultStatus, Hi as selectHostCohort, Hn as isFrozenV042RebindResponse, Hr as maskQuotedSpans, Ht as RELEASE_OPERATIONS, I as rootLocatorFlavor, Ii as bindLiveGoalCapability, In as proposeRebindOutcome, Ir as isQuestionScopeNeedingReview, It as renderRecoveryPacket, J as authorityCaptureCounts, Ji as evaluateMinimumHostVersion, Jn as nativeFileTwoRole, Jr as questionHeadsClause, Jt as normalizeSettlement, K as parsePwshCommand, Ki as SUPPORTED_HOST_VERSIONS, Kn as evidenceAvailabilityReason, Kr as presentExplanationHead, Kt as normalizeReleaseContract, L as supersedeItem, Li as evaluateExternalWaitCapability, Ln as proposeRebindV042, Lr as isRestatement, Lt as v6CurrentRootBoundaries, M as PROTOCOL_V6_NOTICE, Mi as GOAL_HOST_PACKAGES, Mn as currentContractDigest, Mr as isExecutableItem, Mt as closingHint, N as applyUpgradeEligibility, Ni as HOST_CAPABILITY_PACKAGE_GROUPS, Nn as createProjection, Nr as isExplanationScope, Nt as openItems, O as DEFAULT_DELEGATION_TOOL_NAMES, Oi as ACTIVE_HOST_LAUNCHER_VERSION, On as availableBoundaryQualifications, Or as hasWorkPredicate, Ot as V6_ORDINARY_COMPLETION_RULE_COMPACT, P as deriveProjection, Pi as HOST_COHORTS, Pn as confirmRebind, Pr as isInformationalFragment, Pt as recoveryDigest, Q as PROOF_CAPABILITY_MATRIX, Qi as ACTION_MANIFEST_VERSION, Qn as admissibleForRemoval, Qr as splitTextFragments, Qt as releasePreEffectDecision, R as evidenceFromPersistedToolResult, Ri as evaluateHostCapability, Rn as rebindAttemptKey, Rr as itemHoldsExecutionAuthority, Rt as currentV6Feedback, S as SESSION_API_UNSUPPORTED, Si as readActiveHostGraph, Sn as goalCompletionDenial, Sr as clauseIsGoverned, St as CLEANUP_CONDITION_RULE, T as snapshotSessionEvents, Ti as verifyComposedHostLockDump, Tn as certificateClosure, Tr as governedClauseRestrictsExecution, Tt as DEFAULT_RECOVERY_CHAR_BUDGET, U as withDurability, Ui as LATEST_SUPPORTED_HOST_VERSION, Un as parseConfirmationMessage, Ur as namedActions, Ut as RELEASE_OPERATION_SURFACES, V as isDeterministicCheck, Vi as hostVersionFromPackages, Vn as CONFIRM_LINE_PATTERN, Vr as maskCodeSpans, Vt as OUTCOME_STRENGTH, W as canonicalArgvFromCommand, Wi as MIN_SUPPORTED_HOST_VERSION, Wn as capabilityRemedyPhrase, Wr as opensConditionLead, Wt as contractById, X as bindingIndividuallyAccepted, Xi as satisfiesSupportedHostRange, Xn as DEPENDENCY_FREE_ONLY_CONDITION, Xr as restatedContentOf, Xt as releaseContractFor, Y as segmentAuthorityBlocks, Yi as parseHostVersion, Yn as relevantEvidence, Yr as reportingHeadGoverns, Yt as readbackSettlesContract, Z as certifyCheckpoint, Zi as ACTION_MANIFEST, Zn as actionHasCertificationPath, Zr as semanticActionOfScope, Zt as releaseCoverage, _ as projectSessionCoreV2, _a as RC017_RC2_HOST_PACKAGES, _i as hostLockRowsFromComposedDump, _n as latestRootInstruction, _r as GRANTED_QUALIFICATION, _t as scopeCoverageDigest, a as createGitPrestateEnvelope, aa as STOP_PROTOCOL_VERSION_V2, ai as normalizeClause, an as NO_PROGRESS_RECORD_PREFIX, ar as captureItem, at as bindProofV2ToProjection, b as captureHostWorkdir, bi as packageRowsFromActiveGraph, bn as testOutcomePredicate, br as clarifiedSpanOf, bt as validateProofManifest, c as parseGitCommandManifest, ca as boundedArtifactChoiceMatches, ci as sha256, cn as assessmentOutcomePredicate, cr as extractArtifactPaths, ct as createProofManifestV2, d as FIRST_STEP_GUIDANCE, da as requestedTargetAuthorizesMutation, di as auditedDefaultWorkdirHost, dn as decideTurnBoundary, dr as isInformationalMessage, dt as proofDigestV2, ea as CERTIFICATE_VERSION, ei as verbIsNegated, en as bindingSatisfies, er as capabilityFactOf, et as PROOF_KINDS_V2, f as claimedBatchHasRealRootInput, fa as requestedTargetMatchesResolved, fi as auditedDefaultWorkdirProvider, fn as decideTurnStopping, fr as segmentClauses, ft as proofEvidenceConstraints, g as previewFirstStepInjection, ga as validateActionTarget, gi as hostLockContextFromComposedDump, gn as latestAssistantText, gr as classifyUserInteraction, gt as requiredSubjectsOf, h as lifecyclePhase, ha as validateActionManifest, hi as combineHostPolicy, hn as isWholeTaskCompletionClaim, hr as classifyTaskIntent, ht as proofV2Rejection, i as commitTreeSnapshotDigest, ia as STOP_PROTOCOL_VERSION, ii as digestStrings, in as CONTROL_RECORD_PREFIX, ir as captureClause, it as bindProofToProjection, j as PROTOCOL_V5_NOTICE, ji as EXPECTED_HOST_PACKAGES, jn as qualifyBoundary, jr as introducesActionClause, jt as cleanupConditionFor, k as PROTOCOL_V3_NOTICE, ki as BASE_HOST_PACKAGES, kn as effectuateBoundary, kr as interpretClause, kt as V6_ORDINARY_COMPLETION_RULE_SHORT, l as revalidateGitPrestate, la as isStatefulAction, li as HostProfileError, ln as classifyCompletionClaim, lr as extractMethod, lt as proofCapabilityReport, m as firstStepGuidanceV6, ma as semanticActionFromText, mi as auditedHostImplementation, mn as isRootPauseRequest, mr as npmEscapedPackageName, mt as proofOperationMatches, n as GIT_COMMAND_TEMPLATES, na as SEMANTIC_ACTIONS, ni as validateManifest, nn as evidenceMatchesItem, nr as removalIsComplete, nt as PROOF_PROTOCOL_VERSION, o as executeRevalidatedGitEffect, oa as SUPPORTED_EVIDENCE_ADAPTERS, oi as sanitizeClauseText, on as NO_PROGRESS_TURNS_BEFORE_STOP, or as classifyClause, ot as canonicalProjection, p as firstStepGuidance, pa as semanticActionFromCommand, pi as auditedForegroundRenderers, pn as decisionBoundaryKey, pr as canonicalRegistryBase, pt as proofHostSurfacesOf, q as parseShellCommand, qi as compareHostVersions, qn as itemDiagnosis, qr as qualificationOfClause, qt as normalizeReservation, r as commitIndexSnapshotDigest, ra as STATEFUL_ACTIONS, ri as canonicalizePath, rn as isVerifyingCapability, rr as removalIsPartiallyKnown, rt as PROOF_PROTOCOL_VERSION_V2, s as gitCommandMatchesTarget, sa as actionCompatible, si as sanitizeUrl, sn as assessmentAction, sr as environmentDefaultRepositoryTarget, st as createProofManifest, t as GIT_COMMAND_MANIFEST_IDS, ta as CERTIFICATE_VERSION_V2, ti as COMMAND_SURFACE_MANIFEST, tn as evidenceCoverage, tr as partialFailureOf, tt as PROOF_MANIFEST_DOMAIN_V2, u as verifiedLinearCommitReadback, ua as requestedIdentityKey, ui as activeRendererModule, un as currentActionBases, ur as extractOperation, ut as proofDigest, v as sessionCoreSnapshot, vi as injectActiveProfileHostLock, vn as observeAssistantOutcome, vr as LEGACY_QUALIFICATION, vt as sessionQuery, w as SessionApiError, wi as resolveInstalledHostLock, wn as certifiableOpenItems, wr as explanationHasActionResidue, wt as CLEANUP_CONDITION_RULE_SHORT, x as sourcedNamedTestRoot, xi as packageRowsFromPnpmLock, xn as v6TestPredicate, xr as clauseAsksOwnQuestion, xt as validateProofManifestV2, y as HOST_WORKDIR_PREFIX, yi as inspectTargetHostGraph, yn as progressFingerprint, yr as actionVerbMatches, yt as sessionQueryV2, z as extractTextContent, zi as evaluateHostLock, zn as rebindResponse, zr as kindOfScope, zt as isV6PendingRootWait } from "./domain-D0zTh3O_.js";
+import { $ as PROOF_KINDS, $i as BOUNDED_ARTIFACT_TYPES, $n as capabilityConsequence, $r as statefulActionsOfScope, $t as reservationFor, A as PROTOCOL_V4_NOTICE, Ai as DEFAULT_HOST_LOCK, An as isCurrentAcceptedBoundary, Ar as interpretMessage, At as carriesCleanupCondition, B as extractToolSubject, Bi as evaluateToolSurfaceCapability, Bn as replayRebindResult, Br as legacyQuestionReadingIsInformational, Bt as sourceItemForCoreRequirement, C as SESSION_EVENT_ENVELOPE_INVALID, Ci as resolveActiveProfileHostLock, Cn as hasCurrentCertificate, Cr as clauseIsProtected, Ct as CLEANUP_CONDITION_RULE_COMPACT, D as CAPTURE_V042_NOTICE, Di as ACTIVE_HOST_COHORT_IDS, Dn as BOUNDARY_RECORD_PREFIX, Dr as hasQuestionScope, Dt as V6_ORDINARY_COMPLETION_RULE, E as projectCoreV2, Ei as ACTIVE_HOST_COHORT_ID, En as unitDescendantIds, Er as hasOrderedCoordination, Et as MIN_RECOVERY_CHAR_BUDGET, F as legacyRecordsNeedingReview, Fi as bindExecutableIdentity, Fn as proposeRebind, Fr as isOpenObligation, Ft as recoveryTitle, G as isRunExecutable, Gi as SUPPORTED_HOST_RANGE, Gn as deriveItemDiagnosis, Gr as opensWithDirective, Gt as inFlightReservation, H as persistedToolResultStatus, Hi as selectHostCohort, Hn as isFrozenV042RebindResponse, Hr as maskQuotedSpans, Ht as RELEASE_OPERATIONS, I as rootLocatorFlavor, Ii as bindLiveGoalCapability, In as proposeRebindOutcome, Ir as isQuestionScopeNeedingReview, It as renderRecoveryPacket, J as authorityCaptureCounts, Ji as evaluateMinimumHostVersion, Jn as nativeFileTwoRole, Jr as questionHeadsClause, Jt as normalizeSettlement, K as parsePwshCommand, Ki as SUPPORTED_HOST_VERSIONS, Kn as evidenceAvailabilityReason, Kr as presentExplanationHead, Kt as normalizeReleaseContract, L as supersedeItem, Li as evaluateExternalWaitCapability, Ln as proposeRebindV042, Lr as isRestatement, Lt as v6CurrentRootBoundaries, M as PROTOCOL_V6_NOTICE, Mi as GOAL_HOST_PACKAGES, Mn as currentContractDigest, Mr as isExecutableItem, Mt as closingHint, N as applyUpgradeEligibility, Ni as HOST_CAPABILITY_PACKAGE_GROUPS, Nn as createProjection, Nr as isExplanationScope, Nt as openItems, O as DEFAULT_DELEGATION_TOOL_NAMES, Oi as ACTIVE_HOST_LAUNCHER_VERSION, On as availableBoundaryQualifications, Or as hasWorkPredicate, Ot as V6_ORDINARY_COMPLETION_RULE_COMPACT, P as deriveProjection, Pi as HOST_COHORTS, Pn as confirmRebind, Pr as isInformationalFragment, Pt as recoveryDigest, Q as PROOF_CAPABILITY_MATRIX, Qi as ACTION_MANIFEST_VERSION, Qn as admissibleForRemoval, Qr as splitTextFragments, Qt as releasePreEffectDecision, R as evidenceFromPersistedToolResult, Ri as evaluateHostCapability, Rn as rebindAttemptKey, Rr as itemHoldsExecutionAuthority, Rt as currentV6Feedback, S as SESSION_API_UNSUPPORTED, Si as readActiveHostGraph, Sn as goalCompletionDenial, Sr as clauseIsGoverned, St as CLEANUP_CONDITION_RULE, T as snapshotSessionEvents, Ti as verifyComposedHostLockDump, Tn as certificateClosure, Tr as governedClauseRestrictsExecution, Tt as DEFAULT_RECOVERY_CHAR_BUDGET, U as withDurability, Ui as LATEST_SUPPORTED_HOST_VERSION, Un as parseConfirmationMessage, Ur as namedActions, Ut as RELEASE_OPERATION_SURFACES, V as isDeterministicCheck, Vi as hostVersionFromPackages, Vn as CONFIRM_LINE_PATTERN, Vr as maskCodeSpans, Vt as OUTCOME_STRENGTH, W as canonicalArgvFromCommand, Wi as MIN_SUPPORTED_HOST_VERSION, Wn as capabilityRemedyPhrase, Wr as opensConditionLead, Wt as contractById, X as bindingIndividuallyAccepted, Xi as satisfiesSupportedHostRange, Xn as DEPENDENCY_FREE_ONLY_CONDITION, Xr as restatedContentOf, Xt as releaseContractFor, Y as segmentAuthorityBlocks, Yi as parseHostVersion, Yn as relevantEvidence, Yr as reportingHeadGoverns, Yt as readbackSettlesContract, Z as certifyCheckpoint, Zi as ACTION_MANIFEST, Zn as actionHasCertificationPath, Zr as semanticActionOfScope, Zt as releaseCoverage, _ as projectSessionCoreV2, _a as RC017_RC2_HOST_PACKAGES, _i as hostLockRowsFromComposedDump, _n as latestRootInstruction, _r as GRANTED_QUALIFICATION, _t as scopeCoverageDigest, a as createGitPrestateEnvelope, aa as STOP_PROTOCOL_VERSION_V2, ai as normalizeClause, an as NO_PROGRESS_RECORD_PREFIX, ar as captureItem, at as bindProofV2ToProjection, b as captureHostWorkdir, bi as packageRowsFromActiveGraph, bn as testOutcomePredicate, br as clarifiedSpanOf, bt as validateProofManifest, c as parseGitCommandManifest, ca as boundedArtifactChoiceMatches, ci as sha256, cn as assessmentOutcomePredicate, cr as extractArtifactPaths, ct as createProofManifestV2, d as FIRST_STEP_GUIDANCE, da as requestedTargetAuthorizesMutation, di as auditedDefaultWorkdirHost, dn as decideTurnBoundary, dr as isInformationalMessage, dt as proofDigestV2, ea as CERTIFICATE_VERSION, ei as verbIsNegated, en as bindingSatisfies, er as capabilityFactOf, et as PROOF_KINDS_V2, f as claimedBatchHasRealRootInput, fa as requestedTargetMatchesResolved, fi as auditedDefaultWorkdirProvider, fn as decideTurnStopping, fr as segmentClauses, ft as proofEvidenceConstraints, g as previewFirstStepInjection, ga as validateActionTarget, gi as hostLockContextFromComposedDump, gn as latestAssistantText, gr as classifyUserInteraction, gt as requiredSubjectsOf, h as lifecyclePhase, ha as validateActionManifest, hi as combineHostPolicy, hn as isWholeTaskCompletionClaim, hr as classifyTaskIntent, ht as proofV2Rejection, i as commitTreeSnapshotDigest, ia as STOP_PROTOCOL_VERSION, ii as digestStrings, in as CONTROL_RECORD_PREFIX, ir as captureClause, it as bindProofToProjection, j as PROTOCOL_V5_NOTICE, ji as EXPECTED_HOST_PACKAGES, jn as qualifyBoundary, jr as introducesActionClause, jt as cleanupConditionFor, k as PROTOCOL_V3_NOTICE, ki as BASE_HOST_PACKAGES, kn as effectuateBoundary, kr as interpretClause, kt as V6_ORDINARY_COMPLETION_RULE_SHORT, l as revalidateGitPrestate, la as isStatefulAction, li as HostProfileError, ln as classifyCompletionClaim, lr as extractMethod, lt as proofCapabilityReport, m as firstStepGuidanceV6, ma as semanticActionFromText, mi as auditedHostImplementation, mn as isRootPauseRequest, mr as npmEscapedPackageName, mt as proofOperationMatches, n as GIT_COMMAND_TEMPLATES, na as SEMANTIC_ACTIONS, ni as validateManifest, nn as evidenceMatchesItem, nr as removalIsComplete, nt as PROOF_PROTOCOL_VERSION, o as executeRevalidatedGitEffect, oa as SUPPORTED_EVIDENCE_ADAPTERS, oi as sanitizeClauseText, on as NO_PROGRESS_TURNS_BEFORE_STOP, or as classifyClause, ot as canonicalProjection, p as firstStepGuidance, pa as semanticActionFromCommand, pi as auditedForegroundRenderers, pn as decisionBoundaryKey, pr as canonicalRegistryBase, pt as proofHostSurfacesOf, q as parseShellCommand, qi as compareHostVersions, qn as itemDiagnosis, qr as qualificationOfClause, qt as normalizeReservation, r as commitIndexSnapshotDigest, ra as STATEFUL_ACTIONS, ri as canonicalizePath, rn as isVerifyingCapability, rr as removalIsPartiallyKnown, rt as PROOF_PROTOCOL_VERSION_V2, s as gitCommandMatchesTarget, sa as actionCompatible, si as sanitizeUrl, sn as assessmentAction, sr as environmentDefaultRepositoryTarget, st as createProofManifest, t as GIT_COMMAND_MANIFEST_IDS, ta as CERTIFICATE_VERSION_V2, ti as COMMAND_SURFACE_MANIFEST, tn as evidenceCoverage, tr as partialFailureOf, tt as PROOF_MANIFEST_DOMAIN_V2, u as verifiedLinearCommitReadback, ua as requestedIdentityKey, ui as activeRendererModule, un as currentActionBases, ur as extractOperation, ut as proofDigest, v as sessionCoreSnapshot, va as createHostAuditSession, vi as injectActiveProfileHostLock, vn as observeAssistantOutcome, vr as LEGACY_QUALIFICATION, vt as sessionQuery, w as SessionApiError, wi as resolveInstalledHostLock, wn as certifiableOpenItems, wr as explanationHasActionResidue, wt as CLEANUP_CONDITION_RULE_SHORT, x as sourcedNamedTestRoot, xi as packageRowsFromPnpmLock, xn as v6TestPredicate, xr as clauseAsksOwnQuestion, xt as validateProofManifestV2, y as HOST_WORKDIR_PREFIX, yi as inspectTargetHostGraph, yn as progressFingerprint, yr as actionVerbMatches, yt as sessionQueryV2, z as extractTextContent, zi as evaluateHostLock, zn as rebindResponse, zr as kindOfScope, zt as isV6PendingRootWait } from "./domain-CypDsFpl.js";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from "node:fs";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { createHash } from "node:crypto";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { JobId } from "@deepseek-ai/dsh-jobs";
 import { defineTool } from "@deepseek-ai/dsh-tools";
@@ -410,7 +410,7 @@ function openItemForTool(projection, item) {
 		...template ? { binding_template: template } : {}
 	};
 }
-function createCheckpointTool(getProjection, onRejected, prepare = async () => true) {
+function createCheckpointTool(getProjection, onRejected, prepare = async () => true, revalidate = () => {}) {
 	return defineTool({
 		name: "context_guard_checkpoint",
 		description: "Read current ordinary closure from confirmed observations; request a certificate only for an explicitly adopted proof, Goal, or release contract.",
@@ -836,6 +836,7 @@ function createCheckpointTool(getProjection, onRejected, prepare = async () => t
 					order: closure.order
 				})) } : {}
 			}));
+			revalidate();
 			let proofState = {
 				status: "absent",
 				reason_codes: []
@@ -6107,8 +6108,9 @@ async function handleGuardTurnStopping(agent, runtime, access$1) {
 		durable = false;
 	}
 	runtime.setDurability(durable);
-	runtime.sync();
+	runtime.sync({ revalidateHostLock: true });
 	if (!durable) return "boundary_flush_failed";
+	const hostSupported = access$1.hostSupported && runtime.projection.hostStatus === "supported";
 	const rootInstruction = latestRootInstruction(agent.session?.snapshotEvents?.() ?? []);
 	if (rootInstruction !== void 0 && isRootPauseRequest(rootInstruction.text) && !runtime.projection.handledControlSeqs.has(rootInstruction.seq) && access$1.pauseAccess) {
 		agent.session.append("user/message", createUserMessage({
@@ -6177,7 +6179,7 @@ async function handleGuardTurnStopping(agent, runtime, access$1) {
 		return decision.reason ?? "protocol_correction_steer";
 	}
 	if (decision.reason === "no_progress_bounded_disarm") {
-		if (!access$1.goalAccess || !access$1.hostSupported) {
+		if (!access$1.goalAccess || !hostSupported) {
 			runtime.projection.integrity = "unknown";
 			runtime.projection.integrityViolations.push("boundary_host_lock_unsupported");
 			return "boundary_host_lock_unsupported";
@@ -6195,7 +6197,7 @@ async function handleGuardTurnStopping(agent, runtime, access$1) {
 		const current = runtime.projection.boundaries.at(-1);
 		const alreadyCurrent = current && isCurrentAcceptedBoundary(runtime.projection, current) && current.disposition === "user_wait" && current.qualificationIds.slice().sort().join(",") === waiting.join(",");
 		if (waiting.length > 0 && !alreadyCurrent) {
-			if (!access$1.hostSupported) {
+			if (!hostSupported) {
 				runtime.projection.integrity = "unknown";
 				runtime.projection.integrityViolations.push("boundary_host_lock_unsupported");
 				return "boundary_host_lock_unsupported";
@@ -6212,15 +6214,17 @@ async function handleGuardTurnStopping(agent, runtime, access$1) {
 	if (decision.reason !== "accepted_boundary_pending_effectuation") return decision.reason ?? "safe_yield_pending_preserved";
 	const boundary = runtime.projection.boundaries.at(-1);
 	if (!boundary || !isCurrentAcceptedBoundary(runtime.projection, boundary)) return "boundary_candidate_stale";
-	if (boundary.goalRef && (!access$1.goalAccess || !access$1.hostSupported)) {
+	if (boundary.goalRef && (!access$1.goalAccess || !hostSupported)) {
 		runtime.projection.integrity = "unknown";
 		runtime.projection.integrityViolations.push("boundary_host_lock_unsupported");
 		return "boundary_host_lock_unsupported";
 	}
-	const requalify = boundary.disposition === "external_wait" ? async () => access$1.externalWaitCapability?.status === "supported" && boundary.qualificationIds.every((id) => {
-		const row = access$1.readExternalOperation(id);
-		return row?.status === "running" || row?.status === "pending";
-	}) : void 0;
+	const requalify = boundary.disposition === "external_wait" ? async () => {
+		return (access$1.refreshExternalWaitCapability?.() ?? access$1.externalWaitCapability)?.status === "supported" && boundary.qualificationIds.every((id) => {
+			const row = access$1.readExternalOperation(id);
+			return row?.status === "running" || row?.status === "pending";
+		});
+	} : void 0;
 	const effect = await effectuateBoundary(boundary, {
 		...access$1.goalAccess ?? {
 			get: async () => void 0,
@@ -6285,7 +6289,6 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts;
 	const rebuild = () => {
 		const previousReleaseContracts = projection.releaseContracts.length;
-		if (refreshHostLock) hostLock = refreshHostLock();
 		const header = session.header;
 		const priorRecoveryDigest = projection.lastRecoveryDigest;
 		const sessionHeader = sessionHeaderForDigest(session);
@@ -6372,11 +6375,12 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			observedCompactionSeq = derived.lastCompactionSeq;
 		}
 	};
-	const sync = () => {
+	const sync = (options) => {
+		if (options?.revalidateHostLock && refreshHostLock) hostLock = refreshHostLock();
 		rebuild();
 	};
 	const setEnabled = (_enabled) => {
-		rebuild();
+		sync({ revalidateHostLock: true });
 	};
 	const setDurability = (confirmed) => {
 		durabilityConfirmed = confirmed;
@@ -6434,15 +6438,18 @@ function isDelegatedSession(session) {
 	return header?.origin === "subagent" || typeof header?.delegationDepth === "number" && header.delegationDepth > 0 || typeof header?.parentSession === "string";
 }
 /** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
-function revalidateCoreLock(config, expected) {
+function revalidateCoreLock(config, expected, providedSession) {
 	if (config.hostLockPolicy !== "dsh-core/v1" || !config.hostLockRuntimeRoot || !config.hostLockProfileRoot) return {
 		...expected,
 		status: "unavailable",
 		goalAvailable: false,
 		reasonCode: "host_lock_migration_required"
 	};
+	const session = providedSession ?? createHostAuditSession();
 	try {
-		const actual = evaluateHostLock(readActiveHostGraph(config.hostLockRuntimeRoot, config.hostLockProfileRoot), {
+		const runtimeRoot = session.realpath(config.hostLockRuntimeRoot);
+		const profileRoot = session.realpath(config.hostLockProfileRoot);
+		const actual = evaluateHostLock(readActiveHostGraph(runtimeRoot, profileRoot, session), {
 			platform: config.hostLockPlatform,
 			profileKind: config.hostLockProfile
 		});
@@ -6453,13 +6460,13 @@ function revalidateCoreLock(config, expected) {
 			goalAvailable: false,
 			reasonCode: "host_lock_installed_graph_drift"
 		};
-		if (!auditedHostImplementation(config.hostLockRuntimeRoot, config.hostLockProfileRoot)) return {
+		if (!auditedHostImplementation(runtimeRoot, profileRoot, session)) return {
 			...actual,
 			status: "unsupported",
 			goalAvailable: false,
 			reasonCode: "host_lock_installed_graph_drift"
 		};
-		const audited = auditedForegroundRenderers(config.hostLockRuntimeRoot, config.hostLockProfileRoot);
+		const audited = auditedForegroundRenderers(runtimeRoot, profileRoot, session);
 		return audited.length ? {
 			...actual,
 			auditedForegroundRenderers: audited,
@@ -6481,7 +6488,8 @@ function registerPassiveHostWorkdirObserver(agent, hostLockAtCall, attestedRoute
 	const pre = agent.ctx.on("tools/pre-execute", async (exec, next) => {
 		if (exec.agent === agent && (exec.name === "bash" || exec.name === "pwsh")) try {
 			const policy = agent.ctx.get("sandboxPolicy");
-			const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(), policy, await attestedRouteAtCall(exec.name, agent.ctx.get("shell"), policy), sourcedRootAtCall?.(exec) ?? null, SESSION_FORMAT_VERSION);
+			const audit = createHostAuditSession();
+			const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(audit), policy, await attestedRouteAtCall(exec.name, agent.ctx.get("shell"), policy, audit), sourcedRootAtCall?.(exec) ?? null, SESSION_FORMAT_VERSION);
 			if (receipt) pending.set(exec, receipt);
 		} catch {}
 		return next();
@@ -6542,19 +6550,25 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 	ctx.on("agent/disposed", ({ agent }) => {
 		detach(agent);
 	});
+	/** One full host-lock validation for the named agent, recorded as the
+	* agent's current authority. Every fresh-validation entry funnels here. */
+	const fullHostLockValidation = () => {
+		const evaluated = revalidateCoreLock(config, installedHostLock);
+		seams.onHostLockValidation?.();
+		return evaluated;
+	};
+	const refreshAgentHostLock = (agent) => {
+		const current = bindLiveGoalCapability(seams.hostLock ?? fullHostLockValidation(), Boolean(optionalGoalService(ctx, agent)) && hasPinnedUpdateGoalTool(agent));
+		hostLocks.set(agent, current);
+		return current;
+	};
 	const ensure = (agent) => {
 		let runtime = runtimes.get(agent);
 		if (!runtime) {
 			const goals = optionalGoalService(ctx, agent);
-			const refreshHostLock = () => {
-				const current = bindLiveGoalCapability(seams.hostLock ?? revalidateCoreLock(config, installedHostLock), Boolean(goals) && hasPinnedUpdateGoalTool(agent));
-				hostLocks.set(agent, current);
-				return current;
-			};
-			const agentHostLock = refreshHostLock();
-			runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : void 0, refreshHostLock, privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : void 0, privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : void 0);
+			const agentHostLock = refreshAgentHostLock(agent);
+			runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : void 0, () => refreshAgentHostLock(agent), privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : void 0, privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : void 0);
 			runtimes.set(agent, runtime);
-			hostLocks.set(agent, agentHostLock);
 		}
 		return runtime;
 	};
@@ -6585,7 +6599,12 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				runtime.projection.lastRecoveryDigest = void 0;
 				runtime.markRecoveryNeeded(source === "resume" ? "resume" : "compaction");
 			}
-			own(registerPassiveHostWorkdirObserver(agent, () => seams.hostLock ?? revalidateCoreLock(config, installedHostLock), (tool, provider, policy) => config.hostLockRuntimeRoot && config.hostLockProfileRoot ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy) : false, (exec) => {
+			own(registerPassiveHostWorkdirObserver(agent, (audit) => {
+				if (seams.hostLock) return seams.hostLock;
+				const evaluated = revalidateCoreLock(config, installedHostLock, audit);
+				seams.onHostLockValidation?.();
+				return evaluated;
+			}, (tool, provider, policy, audit) => config.hostLockRuntimeRoot && config.hostLockProfileRoot ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy, audit) : false, (exec) => {
 				runtime.sync();
 				return sourcedNamedTestRoot(runtime.projection, agent.session, exec.arguments);
 			}));
@@ -6600,7 +6619,7 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				runtime.setDurability(durable);
 				runtime.sync();
 				return durable;
-			}));
+			}, () => runtime.sync({ revalidateHostLock: true })));
 			ownedTools.register(createBoundaryTool(() => runtime.projection, async () => {
 				const durable = await ctx.sessions.flush(agent.session);
 				runtime.setDurability(durable);
@@ -6615,8 +6634,9 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				runtime.sync();
 				return durable;
 			};
+			const hostCapabilityFromCache = (action) => createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action);
 			const evidenceOptions = {
-				hostCapability: createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock),
+				hostCapability: hostCapabilityFromCache,
 				...seams.commandRunner ? { commandRunner: seams.commandRunner } : {},
 				...seams.fetcher ? { fetcher: seams.fetcher } : {},
 				...seams.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {},
@@ -6628,13 +6648,13 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 					return durable;
 				},
 				authorizeMutation: (request) => {
-					runtime.sync();
+					runtime.sync({ revalidateHostLock: true });
 					return authorizeMutationFromProjection(runtime.projection, request);
 				},
 				marketOrigin: optionalMarketOrigin(ctx, agent),
 				hasRestartIntent: (resolutionCallId, serviceId, preGeneration) => hasPrivateRestartIntent(readPrivateLedger(privateLedgerRoot, ledgerContext(agent)), resolutionCallId, serviceId, preGeneration),
 				releaseGate: async (request) => {
-					runtime.sync();
+					runtime.sync({ revalidateHostLock: true });
 					const projection = runtime.projection;
 					if (!(projection.policy === "release" || projection.releaseContracts.length > 0)) return {
 						status: "denied",
@@ -6723,7 +6743,10 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				fs: ctx.fs,
 				flush: (session) => ctx.sessions.flush(session)
 			}));
-			ownedTools.register(createActionTool(evidenceOptions));
+			ownedTools.register(createActionTool({
+				...evidenceOptions,
+				hostCapability: (action) => createHostCapabilityEvaluator(refreshAgentHostLock(agent))(action)
+			}));
 			ownedTools.register(createPrepareTool({
 				getProjection: () => runtime.projection,
 				hostCapability: (action) => {
@@ -6765,7 +6788,10 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 				})
 			}));
 			ownedTools.register(createExternalOperationTool((id, toolAgent) => readExternalOperation(ctx, toolAgent, id), () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock)));
-			ownedTools.guard((exec) => goalCompletionDenial(runtime.projection, exec.name, exec.arguments));
+			ownedTools.guard((exec) => {
+				if (exec.name === "update_goal" && exec.arguments?.action === "complete" && runtime.projection.enabled) runtime.sync({ revalidateHostLock: true });
+				return goalCompletionDenial(runtime.projection, exec.name, exec.arguments);
+			});
 		} catch (error) {
 			detach(agent);
 			throw error;
@@ -6840,6 +6866,7 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 			flush: () => ctx.sessions.flush(agent.session),
 			hostSupported: runtime.projection.hostStatus === "supported",
 			externalWaitCapability: evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
+			refreshExternalWaitCapability: () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
 			...goals ? { goalAccess: {
 				get: async () => normalizeGoalState(await goals.get(agent)),
 				disarm: async () => normalizeGoalState(await goals.disarm(agent))

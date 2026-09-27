@@ -1,6 +1,5 @@
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { dirname, join, resolve, sep } from 'node:path'
+import { join, dirname, resolve, sep } from 'node:path'
+import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 
 export interface DependencyAuditGraph {
   modules: string
@@ -32,29 +31,59 @@ function runtimeExports(manifest: Record<string, unknown>): Map<string, string> 
   return result
 }
 
+/** Index reachable IDs by critical package name: exact bare keys and pnpm's
+ * versioned `name@version(...)` keys both belong to the name. Built once per
+ * audit instead of filtering the reachable set once per expected package.
+ */
+export function reachableIdsByName(graph: DependencyAuditGraph, session: HostAuditSession): Map<string, string[]> {
+  return session.memo(`name-index:${graph.modules}`, () => {
+    const index = new Map<string, string[]>()
+    for (const id of graph.reachable) {
+      // Split `name` from `name@version(...)` exactly where the membership test
+      // (`id === name || id.startsWith(name + '@')`) draws the line: a scoped
+      // id's leading '@' is part of the name, and any later '@' — including one
+      // inside a pnpm peer suffix like `name@ver(@scope/peer@ver)` — is the
+      // version separator, so the FIRST '@' after the name is the split point.
+      const separator = id[0] === '@' ? id.indexOf('@', 1) : id.indexOf('@')
+      const name = id === '.' ? undefined : separator === -1 ? id : id.slice(0, separator)
+      if (!name) continue
+      const ids = index.get(name)
+      if (ids) ids.push(id)
+      else index.set(name, [id])
+    }
+    return index
+  })
+}
+
 /** Authenticate dependency *edges*, after authenticating mapped package bytes.
  * rc.2 app-boot leaves installation imports native. Within a profile, local
  * candidates win; only their absence permits interception to installation
  * packages. A mapped but missing local edge never becomes a runtime fallback.
  * All audited module locations are checked, including nested subpath importers.
+ *
+ * Repeated real-path, importer, dependency and export resolutions are memoized
+ * through one {@link HostAuditSession}; the session is created per call when
+ * the caller does not thread one in, so results never outlive the audit.
  */
-export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[], profileRoot: string): boolean {
+export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[], profileRoot: string,
+  providedSession?: HostAuditSession): boolean {
+  const session = providedSession ?? createHostAuditSession()
   try {
     const installation = graphs[0]
     if (!installation) return false
-    const profile = realpathSync(profileRoot)
+    const profile = session.realpath(profileRoot)
     for (const graph of graphs) {
       const isProfile = graph !== installation
       for (const id of graph.reachable) {
         const record = graph.records[id]
         if (id !== '.' && typeof record.url !== 'string') return false
         const configuredRoot = resolve(graph.modules, String(record.url))
-        if (id !== '.' && !existsSync(configuredRoot)
+        if (id !== '.' && !session.exists(configuredRoot)
           && !Object.keys(record.dependencies as object).some(name => graph.packages.has(name) || installation.packages.has(name))) continue
-        const root = id === '.' ? dirname(graph.modules) : realpathSync(resolve(graph.modules, String(record.url)))
+        const root = id === '.' ? dirname(graph.modules) : session.realpath(resolve(graph.modules, String(record.url)))
         if (id !== '.' && !within(graph.modules, root)) return false
         const manifestPath = join(root, 'package.json')
-        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+        const manifest = session.readJson(manifestPath)
         const mapped = record.dependencies as Record<string, string>
         const declared = { ...(manifest.dependencies as object), ...(manifest.peerDependencies as object), ...(manifest.optionalDependencies as object) }
         const names = new Set([...Object.keys(declared), ...Object.keys(mapped)].filter(name => graph.packages.has(name) || installation.packages.has(name)))
@@ -64,7 +93,7 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
         if (own?.root === root) {
           for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file))
         } else if (typeof manifest.main === 'string') {
-          const main = realpathSync(createRequire(manifestPath).resolve(resolve(root, manifest.main)))
+          const main = session.realpath(session.requireResolve(manifestPath, resolve(root, manifest.main)))
           if (!within(root, main)) return false
           importers.add(main)
         }
@@ -76,30 +105,29 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
           if (targetId !== undefined) {
             const target = graph.records[targetId]
             if (!graph.reachable.has(targetId) || typeof target?.url !== 'string'
-              || !local || realpathSync(resolve(graph.modules, target.url)) !== local.root) return false
+              || !local || session.realpath(resolve(graph.modules, target.url)) !== local.root) return false
           } else if (!isProfile || local) return false
           const expected = local ?? installed!
-          const exports = runtimeExports(expected.manifest)
+          const exports = session.memo(`exports:${expected.root}`, () => runtimeExports(expected.manifest))
           // Bare dependency resolution depends on the importer directory.
           const directories = new Map([...importers].map(path => [dirname(path), path]))
           for (const importer of directories.values()) {
-            const require = createRequire(importer)
             // Inspect native search paths before calling resolve: an active
             // official loader must not conceal a package-map/local-path mismatch.
-            const paths = require.resolve.paths(name) ?? []
+            const paths = session.resolvePaths(importer, name)
             const localPaths = isProfile ? paths.filter(path => within(profile, path)) : paths
-            const selected = localPaths.map(path => join(path, name)).find(path => existsSync(path))
+            const selected = localPaths.map(path => join(path, name)).find(path => session.exists(path))
             if (selected) {
-              if (!statSync(selected).isDirectory() || realpathSync(selected) !== expected.root) return false
+              if (!session.stat(selected).isDirectory() || session.realpath(selected) !== expected.root) return false
             } else if (!isProfile || local || !installed) return false
             for (const [subpath, target] of exports) {
-              const wanted = realpathSync(resolve(expected.root, target))
+              const wanted = session.realpath(resolve(expected.root, target))
               if (!within(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false
               // Profile fallback is the official interception route, not Node's
               // unrelated ancestor fallback. Installation/local routes remain native.
               if (selected) {
                 const request = name + (subpath === '.' ? '' : subpath.slice(1))
-                if (realpathSync(require.resolve(request)) !== wanted) return false
+                if (session.realpath(session.requireResolve(importer, request)) !== wanted) return false
               }
             }
           }

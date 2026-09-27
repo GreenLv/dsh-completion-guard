@@ -1,11 +1,53 @@
 import { createRequire } from "node:module";
-import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
+//#region src/domain/host-audit-session.ts
+function createHostAuditSession() {
+	const cache = /* @__PURE__ */ new Map();
+	const once = (key, compute) => {
+		const hit = cache.get(key);
+		if (hit?.settled) {
+			if (hit.error !== void 0) throw hit.error;
+			return hit.value;
+		}
+		try {
+			const value = compute();
+			cache.set(key, {
+				settled: true,
+				value
+			});
+			return value;
+		} catch (error) {
+			cache.set(key, {
+				settled: true,
+				error
+			});
+			throw error;
+		}
+	};
+	return {
+		realpath: (path$1) => once(`realpath:${path$1}`, () => realpathSync(path$1)),
+		exists: (path$1) => once(`exists:${path$1}`, () => existsSync(path$1)),
+		stat: (path$1) => once(`stat:${path$1}`, () => statSync(path$1)),
+		readFile: (path$1) => once(`read:${path$1}`, () => readFileSync(path$1)),
+		readJson: (path$1) => once(`json:${path$1}`, () => JSON.parse(readFileSync(path$1, "utf8"))),
+		fileDigest: (path$1) => once(`digest:${path$1}`, () => createFileDigest(readFileSync(path$1))),
+		requireFor: (importer) => once(`require:${importer}`, () => createRequire(importer)),
+		resolvePaths: (importer, name) => once(`paths:${importer}\u0000${name}`, () => createRequire(importer).resolve.paths(name) ?? []),
+		requireResolve: (importer, request) => once(`resolve:${importer}\u0000${request}`, () => createRequire(importer).resolve(request)),
+		memo: once
+	};
+}
+function createFileDigest(bytes$1) {
+	return createHash("sha256").update(bytes$1).digest("hex");
+}
+
+//#endregion
 //#region src/domain/host-dependency-audit.ts
 const within$1 = (root, path$1) => path$1.startsWith(root + sep);
 /** rc.2's authenticated exports have only types/default conditions. Do not use
@@ -28,28 +70,51 @@ function runtimeExports(manifest) {
 	}
 	return result;
 }
+/** Index reachable IDs by critical package name: exact bare keys and pnpm's
+* versioned `name@version(...)` keys both belong to the name. Built once per
+* audit instead of filtering the reachable set once per expected package.
+*/
+function reachableIdsByName(graph, session) {
+	return session.memo(`name-index:${graph.modules}`, () => {
+		const index$1 = /* @__PURE__ */ new Map();
+		for (const id of graph.reachable) {
+			const separator = id[0] === "@" ? id.indexOf("@", 1) : id.indexOf("@");
+			const name = id === "." ? void 0 : separator === -1 ? id : id.slice(0, separator);
+			if (!name) continue;
+			const ids = index$1.get(name);
+			if (ids) ids.push(id);
+			else index$1.set(name, [id]);
+		}
+		return index$1;
+	});
+}
 /** Authenticate dependency *edges*, after authenticating mapped package bytes.
 * rc.2 app-boot leaves installation imports native. Within a profile, local
 * candidates win; only their absence permits interception to installation
 * packages. A mapped but missing local edge never becomes a runtime fallback.
 * All audited module locations are checked, including nested subpath importers.
+*
+* Repeated real-path, importer, dependency and export resolutions are memoized
+* through one {@link HostAuditSession}; the session is created per call when
+* the caller does not thread one in, so results never outlive the audit.
 */
-function auditHostDependencyRoutes(graphs, profileRoot) {
+function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
 	try {
 		const installation = graphs[0];
 		if (!installation) return false;
-		const profile = realpathSync(profileRoot);
+		const profile = session.realpath(profileRoot);
 		for (const graph of graphs) {
 			const isProfile = graph !== installation;
 			for (const id of graph.reachable) {
 				const record = graph.records[id];
 				if (id !== "." && typeof record.url !== "string") return false;
 				const configuredRoot = resolve(graph.modules, String(record.url));
-				if (id !== "." && !existsSync(configuredRoot) && !Object.keys(record.dependencies).some((name) => graph.packages.has(name) || installation.packages.has(name))) continue;
-				const root = id === "." ? dirname(graph.modules) : realpathSync(resolve(graph.modules, String(record.url)));
+				if (id !== "." && !session.exists(configuredRoot) && !Object.keys(record.dependencies).some((name) => graph.packages.has(name) || installation.packages.has(name))) continue;
+				const root = id === "." ? dirname(graph.modules) : session.realpath(resolve(graph.modules, String(record.url)));
 				if (id !== "." && !within$1(graph.modules, root)) return false;
 				const manifestPath = join(root, "package.json");
-				const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+				const manifest = session.readJson(manifestPath);
 				const mapped = record.dependencies;
 				const declared = {
 					...manifest.dependencies,
@@ -63,7 +128,7 @@ function auditHostDependencyRoutes(graphs, profileRoot) {
 				if (own?.root === root) {
 					for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file));
 				} else if (typeof manifest.main === "string") {
-					const main = realpathSync(createRequire(manifestPath).resolve(resolve(root, manifest.main)));
+					const main = session.realpath(session.requireResolve(manifestPath, resolve(root, manifest.main)));
 					if (!within$1(root, main)) return false;
 					importers.add(main);
 				}
@@ -74,24 +139,23 @@ function auditHostDependencyRoutes(graphs, profileRoot) {
 					const targetId = mapped[name];
 					if (targetId !== void 0) {
 						const target = graph.records[targetId];
-						if (!graph.reachable.has(targetId) || typeof target?.url !== "string" || !local || realpathSync(resolve(graph.modules, target.url)) !== local.root) return false;
+						if (!graph.reachable.has(targetId) || typeof target?.url !== "string" || !local || session.realpath(resolve(graph.modules, target.url)) !== local.root) return false;
 					} else if (!isProfile || local) return false;
 					const expected = local ?? installed;
-					const exports = runtimeExports(expected.manifest);
+					const exports = session.memo(`exports:${expected.root}`, () => runtimeExports(expected.manifest));
 					const directories = new Map([...importers].map((path$1) => [dirname(path$1), path$1]));
 					for (const importer of directories.values()) {
-						const require = createRequire(importer);
-						const paths = require.resolve.paths(name) ?? [];
-						const selected = (isProfile ? paths.filter((path$1) => within$1(profile, path$1)) : paths).map((path$1) => join(path$1, name)).find((path$1) => existsSync(path$1));
+						const paths = session.resolvePaths(importer, name);
+						const selected = (isProfile ? paths.filter((path$1) => within$1(profile, path$1)) : paths).map((path$1) => join(path$1, name)).find((path$1) => session.exists(path$1));
 						if (selected) {
-							if (!statSync(selected).isDirectory() || realpathSync(selected) !== expected.root) return false;
+							if (!session.stat(selected).isDirectory() || session.realpath(selected) !== expected.root) return false;
 						} else if (!isProfile || local || !installed) return false;
 						for (const [subpath, target] of exports) {
-							const wanted = realpathSync(resolve(expected.root, target));
+							const wanted = session.realpath(resolve(expected.root, target));
 							if (!within$1(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
-								if (realpathSync(require.resolve(request)) !== wanted) return false;
+								if (session.realpath(session.requireResolve(importer, request)) !== wanted) return false;
 							}
 						}
 					}
@@ -2768,8 +2832,12 @@ function activeGraphRecords(packageMapText) {
 * two reachable peer variants of a critical package remain a duplicate and
 * are returned twice so evaluateHostLock can fail closed with a bounded code.
 */
-function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
+function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
 	const { records, reachable } = activeGraphRecords(packageMapText);
+	return packageRowsFromGraph(records, reachable, lockText, nodeModulesRoot, session);
+}
+function packageRowsFromGraph(records, reachable, lockText, nodeModulesRoot, session) {
 	if (!/^lockfileVersion: ['"]?9\.0['"]?\s*$/m.test(lockText) || !/^packages:(?:\s*\{\})?\s*$/m.test(lockText)) throw new HostProfileError("active_graph_invalid", "invalid pnpm lockfile shape");
 	const locked = packageRowsFromPnpmLock(lockText);
 	const rows = [];
@@ -2785,13 +2853,13 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 					continue;
 				}
 				try {
-					const modules = realpathSync(nodeModulesRoot);
-					const manifestPath = realpathSync(resolve(modules, record.url, "package.json"));
+					const modules = session.realpath(nodeModulesRoot);
+					const manifestPath = session.realpath(resolve(modules, record.url, "package.json"));
 					if (!manifestPath.startsWith(`${modules}${sep}`)) {
 						rows.push({ name });
 						continue;
 					}
-					installedManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+					installedManifest = session.readJson(manifestPath);
 					if (installedManifest.name !== name || typeof installedManifest.version !== "string" || version && installedManifest.version !== version) {
 						rows.push({ name });
 						continue;
@@ -2822,56 +2890,66 @@ function packageRowsFromActiveGraph(packageMapText, lockText, nodeModulesRoot) {
 /** Read exact reachable critical rows without requiring Guard installation.
 * Used by target preflight before a legacy profile can be migrated.
 */
-function readActiveHostGraph(runtimeRoot, profileRoot) {
+function readActiveHostGraph(runtimeRoot, profileRoot, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
 	const runtime = resolve(runtimeRoot);
 	const profile = resolve(profileRoot);
 	const mapPath = join(runtime, "node_modules", ".package-map.json");
 	const lockPath = join(runtime, "pnpm-lock.yaml");
 	const profileMapPath = join(profile, "node_modules", ".package-map.json");
 	const profileLockPath = join(profile, "pnpm-lock.yaml");
-	const runtimeRows = packageRowsFromActiveGraph(readFileSync(mapPath, "utf8"), readFileSync(lockPath, "utf8"), join(runtime, "node_modules"));
-	const profileRows = packageRowsFromActiveGraph(readFileSync(profileMapPath, "utf8"), readFileSync(profileLockPath, "utf8"), join(profile, "node_modules"));
+	const runtimeGraph = session.memo(`graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString("utf8")));
+	const profileGraph = session.memo(`graph:${profileMapPath}`, () => activeGraphRecords(session.readFile(profileMapPath).toString("utf8")));
+	const runtimeRows = packageRowsFromGraph(runtimeGraph.records, runtimeGraph.reachable, session.readFile(lockPath).toString("utf8"), join(runtime, "node_modules"), session);
+	const profileRows = packageRowsFromGraph(profileGraph.records, profileGraph.reachable, session.readFile(profileLockPath).toString("utf8"), join(profile, "node_modules"), session);
 	const runtimeKeys = new Set(runtimeRows.map((row$3) => `${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`));
 	return [...runtimeRows, ...profileRows.filter((row$3) => !runtimeKeys.has(`${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`))];
 }
 /** Verify published executable bytes at the reachable runtime/profile roots.
 * Registry SRI and installed manifests alone cannot authenticate loaded code.
 * Missing, duplicate, escaped or modified modules never pass this audit.
+*
+* All filesystem resolution within one call is memoized through a single
+* {@link HostAuditSession}; callers may thread one in to share the parsed
+* graphs and digests with the other audits of the same validation operation.
 */
-function auditedHostImplementation(runtimeRoot, profileRoot) {
+function auditedHostImplementation(runtimeRoot, profileRoot, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
 	try {
 		const seen = /* @__PURE__ */ new Set();
 		const graphs = [];
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
 			const modulesPath = join(rootPath, "node_modules");
-			if (!existsSync(join(modulesPath, ".package-map.json"))) {
+			if (!session.exists(join(modulesPath, ".package-map.json"))) {
 				if (rootPath === runtimeRoot) return false;
 				continue;
 			}
-			const modules = realpathSync(modulesPath);
-			const { records, reachable } = activeGraphRecords(readFileSync(join(modules, ".package-map.json"), "utf8"));
-			const packages$1 = /* @__PURE__ */ new Map();
-			graphs.push({
+			const modules = session.realpath(modulesPath);
+			const mapPath = join(modules, ".package-map.json");
+			const { records, reachable } = session.memo(`graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString("utf8")));
+			const graph = {
 				modules,
 				records,
 				reachable,
-				packages: packages$1
-			});
+				packages: /* @__PURE__ */ new Map()
+			};
+			graphs.push(graph);
+			const index$1 = reachableIdsByName(graph, session);
 			for (const expected of packages) {
-				const ids = [...reachable].filter((id) => id === expected.name || id.startsWith(`${expected.name}@`));
+				const ids = index$1.get(expected.name) ?? [];
 				if (ids.length > 1) return false;
 				if (!ids.length) continue;
 				const url = records[ids[0]]?.url;
 				if (typeof url !== "string" || !url.startsWith("./")) return false;
-				const root = realpathSync(resolve(modules, url));
+				const root = session.realpath(resolve(modules, url));
 				if (!root.startsWith(`${modules}${sep}`)) return false;
-				const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+				const manifest = session.readJson(join(root, "package.json"));
 				if (manifest.name !== expected.name || manifest.version !== expected.version) return false;
 				for (const [file, digest$1] of Object.entries(expected.modules)) {
-					const target = realpathSync(join(root, file));
-					if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile() || createHash("sha256").update(readFileSync(target)).digest("hex") !== digest$1) return false;
+					const target = session.realpath(join(root, file));
+					if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile() || session.fileDigest(target) !== digest$1) return false;
 				}
-				packages$1.set(expected.name, {
+				graph.packages.set(expected.name, {
 					root,
 					manifest,
 					files: Object.keys(expected.modules)
@@ -2879,7 +2957,7 @@ function auditedHostImplementation(runtimeRoot, profileRoot) {
 				seen.add(expected.name);
 			}
 		}
-		return packages.every((entry) => seen.has(entry.name)) && auditHostDependencyRoutes(graphs, profileRoot);
+		return packages.every((entry) => seen.has(entry.name)) && auditHostDependencyRoutes(graphs, profileRoot, session);
 	} catch {
 		return false;
 	}
@@ -2896,40 +2974,44 @@ const AUDITED_DEFAULT_WORKDIR_BYTES = {
 	"@deepseek-ai/dsh-bash-local": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
 	"@deepseek-ai/dsh-pwsh-local": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e"
 };
-function activeRendererModule(nodeModulesRoot, name) {
-	const modules = realpathSync(nodeModulesRoot);
-	const { records, reachable } = activeGraphRecords(readFileSync(join(modules, ".package-map.json"), "utf8"));
-	const ids = [...reachable].filter((id$1) => id$1 === name || id$1.startsWith(`${name}@`));
+function activeRendererModule(nodeModulesRoot, name, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
+	const modules = session.realpath(nodeModulesRoot);
+	const mapPath = join(modules, ".package-map.json");
+	const { records, reachable } = session.memo(`graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString("utf8")));
+	const ids = session.memo(`renderer-ids:${modules}\u0000${name}`, () => [...reachable].filter((id$1) => id$1 === name || id$1.startsWith(`${name}@`)));
 	if (ids.length !== 1) return void 0;
 	const id = ids[0];
 	const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? "0\\.1\\.7-rc\\.2" : void 0;
 	if (!version || id !== name && !(/* @__PURE__ */ new RegExp(`^${name.replace("/", "\\/")}@${version}(?:\\(|$)`)).test(id)) return void 0;
 	const url = records[id]?.url;
 	if (typeof url !== "string" || url !== `./${name}` && !url.startsWith("./.pnpm/")) return void 0;
-	const root = realpathSync(resolve(modules, url));
+	const root = session.realpath(resolve(modules, url));
 	if (!root.startsWith(`${modules}${sep}`)) return void 0;
-	const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+	const manifest = session.readJson(join(root, "package.json"));
 	if (manifest.name !== name || manifest.version !== "0.1.7-rc.2") return void 0;
 	if (id !== name && manifest.version !== id.slice(name.length + 1).split("(", 1)[0]) return void 0;
-	const target = realpathSync(join(root, "lib", "index.js"));
-	if (!target.startsWith(`${root}${sep}`) || !statSync(target).isFile()) return void 0;
+	const bytesPath = join(root, "lib", "index.js");
+	const target = session.realpath(bytesPath);
+	if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile()) return void 0;
 	return {
-		bytes: createHash("sha256").update(readFileSync(target)).digest("hex"),
+		bytes: session.fileDigest(target),
 		path: target
 	};
 }
-function activeRendererBytes(nodeModulesRoot, name) {
-	return activeRendererModule(nodeModulesRoot, name)?.bytes;
+function activeRendererBytes(nodeModulesRoot, name, session) {
+	return activeRendererModule(nodeModulesRoot, name, session)?.bytes;
 }
 /** Verify active, reachable producer bytes without reading credentials or
 * accepting historical package-map entries. Missing/ambiguous paths fail
 * closed for the ordinary markerless-test shortcut. */
-function auditedForegroundRenderers(runtimeRoot, profileRoot) {
+function auditedForegroundRenderers(runtimeRoot, profileRoot, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
 	const roots = [join(runtimeRoot, "node_modules"), join(profileRoot, "node_modules")];
 	const checked = (name) => {
 		const found = [];
 		for (const root of roots) try {
-			const value = activeRendererBytes(root, name);
+			const value = activeRendererBytes(root, name, session);
 			if (value) found.push(value);
 		} catch {}
 		return found.length > 0 && found.every((value) => value === AUDITED_FOREGROUND_BYTES[name]);
@@ -2938,8 +3020,9 @@ function auditedForegroundRenderers(runtimeRoot, profileRoot) {
 	return [...checked("@deepseek-ai/dsh-tool-bash") ? ["bash"] : [], ...checked("@deepseek-ai/dsh-tool-pwsh") ? ["pwsh"] : []];
 }
 /** Exact active implementation route for call-time omitted-workdir evidence. */
-function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool) {
-	if (!auditedForegroundRenderers(runtimeRoot, profileRoot).includes(tool)) return false;
+function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
+	if (!auditedForegroundRenderers(runtimeRoot, profileRoot, session).includes(tool)) return false;
 	const names = tool === "bash" ? [
 		"@deepseek-ai/dsh-sandbox-policy",
 		"@deepseek-ai/dsh-sandbox",
@@ -2949,7 +3032,7 @@ function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool) {
 	for (const name of names) {
 		const found = [];
 		for (const root of [runtimeRoot, profileRoot]) try {
-			const digest$1 = activeRendererBytes(join(root, "node_modules"), name);
+			const digest$1 = activeRendererBytes(join(root, "node_modules"), name, session);
 			if (digest$1) found.push(digest$1);
 		} catch {}
 		if (!found.length || !found.every((digest$1) => digest$1 === AUDITED_DEFAULT_WORKDIR_BYTES[name])) return false;
@@ -2961,13 +3044,14 @@ function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool) {
 * Match the scoped service's exact constructor to the audited active module,
 * rejecting another provider with the same public service interface/name.
 */
-async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, provider, policyProvider) {
-	if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool) || !provider || typeof provider !== "object") return false;
+async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, provider, policyProvider, providedSession) {
+	const session = providedSession ?? createHostAuditSession();
+	if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, session) || !provider || typeof provider !== "object") return false;
 	const matchesActiveClass = async (name, exportName, value) => {
 		if (!value || typeof value !== "object") return false;
 		const paths = /* @__PURE__ */ new Set();
 		for (const root of [runtimeRoot, profileRoot]) try {
-			const module = activeRendererModule(join(root, "node_modules"), name);
+			const module = activeRendererModule(join(root, "node_modules"), name, session);
 			if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path);
 		} catch {}
 		if (paths.size !== 1) return false;
@@ -3097,7 +3181,8 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 		profileManifestPath,
 		pluginManifestPath
 	]) if (!existsSync(path$1)) throw new HostProfileError("active_graph_missing", `required active graph file is missing: ${path$1}`);
-	const rows = readActiveHostGraph(runtime, profile);
+	const session = createHostAuditSession();
+	const rows = readActiveHostGraph(runtime, profile, session);
 	const profileManifest = readJsonObject(profileManifestPath, "profile_manifest_invalid");
 	const installedPlugin = readJsonObject(pluginManifestPath, "installed_plugin_invalid");
 	const dependencies = profileManifest.dependencies;
@@ -3112,7 +3197,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 		profileKind
 	});
 	if (evaluation.status !== "supported") throw new HostProfileError(evaluation.reasonCode ?? "active_graph_unavailable", "active runtime graph does not match the supported host manifest");
-	if (!auditedHostImplementation(runtime, profile)) throw new HostProfileError("host_implementation_bytes_mismatch", "reachable host modules differ from the audited rc.2 tarballs");
+	if (!auditedHostImplementation(runtime, profile, session)) throw new HostProfileError("host_implementation_bytes_mismatch", "reachable host modules differ from the audited rc.2 tarballs");
 	return {
 		evaluation,
 		runtimeRoot: runtime,
@@ -19379,4 +19464,4 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 }
 
 //#endregion
-export { PROOF_KINDS as $, BOUNDED_ARTIFACT_TYPES as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, DEFAULT_HOST_LOCK as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, evaluateToolSurfaceCapability as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, resolveActiveProfileHostLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, ACTIVE_HOST_COHORT_IDS as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, ACTIVE_HOST_COHORT_ID as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, bindExecutableIdentity as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, SUPPORTED_HOST_RANGE as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, selectHostCohort as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, bindLiveGoalCapability as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateMinimumHostVersion as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, SUPPORTED_HOST_VERSIONS as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, evaluateExternalWaitCapability as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, GOAL_HOST_PACKAGES as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, HOST_CAPABILITY_PACKAGE_GROUPS as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, ACTIVE_HOST_LAUNCHER_VERSION as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, HOST_COHORTS as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, ACTION_MANIFEST_VERSION as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, evaluateHostCapability as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, readActiveHostGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, verifyComposedHostLockDump as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, LATEST_SUPPORTED_HOST_VERSION as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, hostVersionFromPackages as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, MIN_SUPPORTED_HOST_VERSION as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, satisfiesSupportedHostRange as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, parseHostVersion as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, ACTION_MANIFEST as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, RC017_RC2_HOST_PACKAGES as _a, hostLockRowsFromComposedDump as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, STOP_PROTOCOL_VERSION_V2 as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, packageRowsFromActiveGraph as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, boundedArtifactChoiceMatches as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, requestedTargetAuthorizesMutation as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, CERTIFICATE_VERSION as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, requestedTargetMatchesResolved as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, validateActionTarget as ga, hostLockContextFromComposedDump as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, validateActionManifest as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, STOP_PROTOCOL_VERSION as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, EXPECTED_HOST_PACKAGES as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, BASE_HOST_PACKAGES as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, isStatefulAction as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, semanticActionFromText as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, SEMANTIC_ACTIONS as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, SUPPORTED_EVIDENCE_ADAPTERS as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, semanticActionFromCommand as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, compareHostVersions as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, STATEFUL_ACTIONS as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, actionCompatible as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, CERTIFICATE_VERSION_V2 as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, requestedIdentityKey as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, injectActiveProfileHostLock as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, resolveInstalledHostLock as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, packageRowsFromPnpmLock as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, inspectTargetHostGraph as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, evaluateHostLock as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };
+export { PROOF_KINDS as $, BOUNDED_ARTIFACT_TYPES as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, DEFAULT_HOST_LOCK as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, evaluateToolSurfaceCapability as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, resolveActiveProfileHostLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, ACTIVE_HOST_COHORT_IDS as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, ACTIVE_HOST_COHORT_ID as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, bindExecutableIdentity as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, SUPPORTED_HOST_RANGE as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, selectHostCohort as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, bindLiveGoalCapability as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateMinimumHostVersion as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, SUPPORTED_HOST_VERSIONS as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, evaluateExternalWaitCapability as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, GOAL_HOST_PACKAGES as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, HOST_CAPABILITY_PACKAGE_GROUPS as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, ACTIVE_HOST_LAUNCHER_VERSION as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, HOST_COHORTS as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, ACTION_MANIFEST_VERSION as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, evaluateHostCapability as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, readActiveHostGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, verifyComposedHostLockDump as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, LATEST_SUPPORTED_HOST_VERSION as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, hostVersionFromPackages as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, MIN_SUPPORTED_HOST_VERSION as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, satisfiesSupportedHostRange as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, parseHostVersion as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, ACTION_MANIFEST as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, RC017_RC2_HOST_PACKAGES as _a, hostLockRowsFromComposedDump as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, STOP_PROTOCOL_VERSION_V2 as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, packageRowsFromActiveGraph as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, boundedArtifactChoiceMatches as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, requestedTargetAuthorizesMutation as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, CERTIFICATE_VERSION as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, requestedTargetMatchesResolved as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, validateActionTarget as ga, hostLockContextFromComposedDump as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, validateActionManifest as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, STOP_PROTOCOL_VERSION as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, EXPECTED_HOST_PACKAGES as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, BASE_HOST_PACKAGES as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, isStatefulAction as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, semanticActionFromText as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, SEMANTIC_ACTIONS as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, SUPPORTED_EVIDENCE_ADAPTERS as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, semanticActionFromCommand as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, compareHostVersions as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, STATEFUL_ACTIONS as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, actionCompatible as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, CERTIFICATE_VERSION_V2 as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, requestedIdentityKey as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, createHostAuditSession as va, injectActiveProfileHostLock as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, resolveInstalledHostLock as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, packageRowsFromPnpmLock as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, inspectTargetHostGraph as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, evaluateHostLock as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };

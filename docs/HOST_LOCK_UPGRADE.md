@@ -1,6 +1,6 @@
 # Upgrading the core host lock
 
-Version 0.8.0 requires DSH `0.1.7-rc.2` and Cordis `4.0.4` only. Its 46 critical packages must match the registered identities, implementation bytes and actual dependency paths. Guard's exact DSH core is separate from optional market versions.
+Version 0.8.1 requires DSH `0.1.7-rc.2` and Cordis `4.0.4` only. Its 46 critical packages must match the registered identities, implementation bytes and actual dependency paths. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 
@@ -69,7 +69,7 @@ source roots, platform/profile kind and the complete 46-row core graph. The
 core manifest is version 2. Runtime replay re-reads those graph sources and
 requires the same exact core before using certificate authority.
 
-Version 0.8.0 registers only `dsh-0.1.7-rc.2-core-v1`. Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use rc.2's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
+Version 0.8.1 registers only `dsh-0.1.7-rc.2-core-v1`. Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use rc.2's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
 The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
@@ -88,7 +88,7 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.0.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.1.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 ## Market and restart
@@ -120,4 +120,4 @@ exact artifact and platform; publication is recorded on its GitHub Release.
 
 ## Historical 0.5.1 evidence
 
-Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.0.
+Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.1.

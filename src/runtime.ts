@@ -70,6 +70,7 @@ import {
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
 import { auditedDefaultWorkdirProvider, auditedForegroundRenderers, readActiveHostGraph } from './domain/host-resolver.js'
+import { createHostAuditSession, type HostAuditSession } from './domain/host-audit-session.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
 import { captureHostWorkdir, HOST_WORKDIR_PREFIX, sourcedNamedTestRoot } from './domain/host-workdir.js'
 import { resolveAuditedRef } from './tools/evidence.js'
@@ -102,7 +103,7 @@ export interface GuardRuntime {
   /** The durable log already carries the 0.6 first-step protocol boundary. */
   readonly protocolV5Present: boolean
   readonly protocolV6Present?: boolean
-  sync(): void
+  sync(_options?: RuntimeSyncOptions): void
   setEnabled(_enabled: boolean): void
   setDurability(confirmed: boolean): void
   markRecoveryNeeded(cause?: RecoveryCause): void
@@ -117,6 +118,20 @@ export interface GuardRuntime {
 }
 
 export type RuntimeHostCapabilityEvaluator = (action: StatefulAction) => HostCapabilityEvaluation
+
+/**
+ * Options for one projection refresh. Projection rebuilds never rescan the
+ * host graph on their own: they consume the host-lock result that was passed
+ * in or that a previous refresh produced. `revalidateHostLock` requests this
+ * entry's own full validation first, and only security-sensitive entries —
+ * mutation authorization, release pre-effect, Goal/Stop boundary decisions,
+ * completion certificates, trusted workdir evidence — may do that. A pending,
+ * drifted or failed validation is refused by the same fail-closed codes as
+ * before; nothing here turns an unfinished audit into a `supported` verdict.
+ */
+export interface RuntimeSyncOptions {
+  revalidateHostLock?: boolean
+}
 
 /**
  * Bind an explicit mutation to one live root-owned contract item. Resolution
@@ -268,6 +283,12 @@ export interface RuntimeTurnStoppingAccess {
   }
   hostSupported: boolean
   externalWaitCapability?: ExternalOperationCapability
+  /**
+   * Read AFTER this entry's own fresh host validation: the runtime's recorded
+   * lock is current by then, so the jobs capability reflects the validated
+   * graph rather than the value captured before the flush.
+   */
+  refreshExternalWaitCapability?: () => ExternalOperationCapability | undefined
   readExternalOperation(id: string): ExternalOperationSnapshot | undefined
 }
 
@@ -361,8 +382,12 @@ export async function handleGuardTurnStopping(
     durable = false
   }
   runtime.setDurability(durable)
-  runtime.sync()
+  // Establishing a Guard-owned stop/wait is a Goal/Stop authorization decision:
+  // it validates the host lock freshly for THIS decision instead of reusing the
+  // last projection refresh.
+  runtime.sync({ revalidateHostLock: true })
   if (!durable) return 'boundary_flush_failed'
+  const hostSupported = access.hostSupported && runtime.projection.hostStatus === 'supported'
 
   // A trusted root pause request outranks the old Goal's continuation: the user
   // stopped the work, so Guard routes that request to the host's own pause entry
@@ -434,7 +459,7 @@ export async function handleGuardTurnStopping(
   // and a human wait are the guard's own reading of the session, and requiring
   // a model round trip for them is how a stalled task stays stalled.
   if (decision.reason === 'no_progress_bounded_disarm') {
-    if (!access.goalAccess || !access.hostSupported) {
+    if (!access.goalAccess || !hostSupported) {
       runtime.projection.integrity = 'unknown'
       runtime.projection.integrityViolations.push('boundary_host_lock_unsupported')
       return 'boundary_host_lock_unsupported'
@@ -460,7 +485,7 @@ export async function handleGuardTurnStopping(
       && current.disposition === 'user_wait'
       && current.qualificationIds.slice().sort().join(',') === waiting.join(',')
     if (waiting.length > 0 && !alreadyCurrent) {
-      if (!access.hostSupported) {
+      if (!hostSupported) {
         runtime.projection.integrity = 'unknown'
         runtime.projection.integrityViolations.push('boundary_host_lock_unsupported')
         return 'boundary_host_lock_unsupported'
@@ -480,18 +505,21 @@ export async function handleGuardTurnStopping(
 
   const boundary = runtime.projection.boundaries.at(-1)
   if (!boundary || !isCurrentAcceptedBoundary(runtime.projection, boundary)) return 'boundary_candidate_stale'
-  if (boundary.goalRef && (!access.goalAccess || !access.hostSupported)) {
+  if (boundary.goalRef && (!access.goalAccess || !hostSupported)) {
     runtime.projection.integrity = 'unknown'
     runtime.projection.integrityViolations.push('boundary_host_lock_unsupported')
     return 'boundary_host_lock_unsupported'
   }
 
   const requalify = boundary.disposition === 'external_wait'
-    ? async () => access.externalWaitCapability?.status === 'supported'
-      && boundary.qualificationIds.every((id) => {
-        const row = access.readExternalOperation(id)
-        return row?.status === 'running' || row?.status === 'pending'
-      })
+    ? async () => {
+      const capability = access.refreshExternalWaitCapability?.() ?? access.externalWaitCapability
+      return capability?.status === 'supported'
+        && boundary.qualificationIds.every((id) => {
+          const row = access.readExternalOperation(id)
+          return row?.status === 'running' || row?.status === 'pending'
+        })
+    }
     : undefined
   const goalAccess = access.goalAccess ?? {
     get: async () => undefined,
@@ -570,7 +598,10 @@ export function createRuntime(
 
   const rebuild = () => {
     const previousReleaseContracts = projection.releaseContracts.length
-    if (refreshHostLock) hostLock = refreshHostLock()
+    // Host authority is an explicit input, never an implicit rescan: rebuild
+    // consumes the host-lock result this runtime was given (or that a caller's
+    // fresh sync produced). One attach therefore performs at most one full
+    // host validation, shared by ensure → createRuntime → attach.sync.
     const header = session.header as { cwd?: unknown } | undefined
     // The recovery digest is runtime-owned liveness state like the per-turn
     // attempt cap; Object.assign would otherwise flush it with the fresh
@@ -678,14 +709,17 @@ export function createRuntime(
     }
   }
 
-  const sync = () => {
+  const sync = (options?: RuntimeSyncOptions) => {
+    if (options?.revalidateHostLock && refreshHostLock) hostLock = refreshHostLock()
     rebuild()
   }
 
   const setEnabled = (_enabled: boolean) => {
     // Enablement is derived from the already-logged `command/run`; this entry
-    // point only re-syncs so the projection reflects the new state.
-    rebuild()
+    // point re-syncs so the projection reflects the new state. Toggling
+    // protection is a user-facing decision, so it keeps validating the host
+    // lock freshly as it did when every rebuild rescanned.
+    sync({ revalidateHostLock: true })
   }
 
   const setDurability = (confirmed: boolean) => {
@@ -744,18 +778,26 @@ function isDelegatedSession(session: Session): boolean {
 }
 
 /** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
-export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEvaluation): HostLockEvaluation {
+export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEvaluation,
+  providedSession?: HostAuditSession): HostLockEvaluation {
   if (config.hostLockPolicy !== 'dsh-core/v1' || !config.hostLockRuntimeRoot || !config.hostLockProfileRoot) {
     return { ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_migration_required' }
   }
+  // ONE bounded validation: the graph readback, the byte/route audit and the
+  // renderer audit share a single operation-scoped memo table, so the same
+  // real path, manifest or digest is read once per validation and never
+  // cached across entries.
+  const session = providedSession ?? createHostAuditSession()
   try {
-    const actual = evaluateHostLock(readActiveHostGraph(config.hostLockRuntimeRoot, config.hostLockProfileRoot), {
+    const runtimeRoot = session.realpath(config.hostLockRuntimeRoot)
+    const profileRoot = session.realpath(config.hostLockProfileRoot)
+    const actual = evaluateHostLock(readActiveHostGraph(runtimeRoot, profileRoot, session), {
       platform: config.hostLockPlatform, profileKind: config.hostLockProfile,
     })
     if (actual.status !== 'supported') return actual
     if (actual.digest !== expected.digest) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
-    if (!auditedHostImplementation(config.hostLockRuntimeRoot, config.hostLockProfileRoot)) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
-    const audited = auditedForegroundRenderers(config.hostLockRuntimeRoot, config.hostLockProfileRoot)
+    if (!auditedHostImplementation(runtimeRoot, profileRoot, session)) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
+    const audited = auditedForegroundRenderers(runtimeRoot, profileRoot, session)
     return audited.length ? { ...actual, auditedForegroundRenderers: audited,
       digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${actual.digest}\0${audited.join(',')}`).digest('hex') } : actual
   } catch {
@@ -764,8 +806,10 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
 }
 
 /** Observe one actual Host dispatch through Cordis without joining its gate. */
-export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall: () => HostLockEvaluation,
-  attestedRouteAtCall: (tool: 'bash' | 'pwsh', provider: unknown, policyProvider: unknown) => Promise<boolean> | boolean,
+export function registerPassiveHostWorkdirObserver(agent: Agent,
+  hostLockAtCall: (audit?: HostAuditSession) => HostLockEvaluation,
+  attestedRouteAtCall: (tool: 'bash' | 'pwsh', provider: unknown, policyProvider: unknown,
+    audit?: HostAuditSession) => Promise<boolean> | boolean,
   sourcedRootAtCall?: (exec: { arguments: unknown }) => number | undefined): () => void {
   if (typeof agent.ctx.on !== 'function') return () => {}
   const pending = new WeakMap<object, ReturnType<typeof captureHostWorkdir>>()
@@ -776,8 +820,12 @@ export function registerPassiveHostWorkdirObserver(agent: Agent, hostLockAtCall:
         // requirement. The same scoped sandboxPolicy service is used by the
         // audited Bash producer. A missing service produces no receipt.
         const policy = agent.ctx.get('sandboxPolicy') as { resolve(request: { session: Session }): unknown } | undefined
-        const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(), policy,
-          await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy), sourcedRootAtCall?.(exec) ?? null, SUPPORTED_SESSION_FORMAT_VERSION)
+        // Trusted workdir evidence is validated fresh at each dispatch, and
+        // the lock readback and the route attestation share ONE bounded
+        // validation's memo table for this call.
+        const audit = createHostAuditSession()
+        const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(audit), policy,
+          await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy, audit), sourcedRootAtCall?.(exec) ?? null, SUPPORTED_SESSION_FORMAT_VERSION)
         if (receipt) pending.set(exec, receipt)
       } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
     }
@@ -820,6 +868,14 @@ export interface RuntimeExecutorSeams {
   hostLock?: HostLockEvaluation
   /** Isolated acceptance override for the provider-invisible durable ledger. */
   privateLedgerRoot?: string
+  /**
+   * Invoked once per full host-lock validation the runtime actually performs —
+   * the attach-time validation and every security-sensitive entry's fresh
+   * validation. It observes; it never replaces the audit. Production callers
+   * omit it, so deterministic tests and acceptance harnesses can count full
+   * validations without instrumenting the filesystem.
+   */
+  onHostLockValidation?: () => void
 }
 
 export function apply(ctx: Context, rawConfig: {
@@ -858,22 +914,34 @@ export function apply(ctx: Context, rawConfig: {
   }
   ctx.effect?.(() => () => { for (const agent of registrations.keys()) detach(agent) })
   ctx.on('agent/disposed', ({ agent }) => { detach(agent) })
+  /** One full host-lock validation for the named agent, recorded as the
+   * agent's current authority. Every fresh-validation entry funnels here. */
+  const fullHostLockValidation = (): HostLockEvaluation => {
+    const evaluated = revalidateCoreLock(config, installedHostLock)
+    seams.onHostLockValidation?.()
+    return evaluated
+  }
+  const refreshAgentHostLock = (agent: Agent): HostLockEvaluation => {
+    const evaluated = seams.hostLock ?? fullHostLockValidation()
+    const current = bindLiveGoalCapability(evaluated,
+      Boolean(optionalGoalService(ctx, agent)) && hasPinnedUpdateGoalTool(agent))
+    hostLocks.set(agent, current)
+    return current
+  }
   const ensure = (agent: Agent) => {
     let runtime = runtimes.get(agent)
     if (!runtime) {
       const goals = optionalGoalService(ctx, agent)
-      const refreshHostLock = () => {
-        const evaluated = seams.hostLock ?? revalidateCoreLock(config, installedHostLock)
-        const current = bindLiveGoalCapability(evaluated, Boolean(goals) && hasPinnedUpdateGoalTool(agent))
-        hostLocks.set(agent, current)
-        return current
-      }
-      const agentHostLock = refreshHostLock()
-      runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined, refreshHostLock,
+      // Exactly ONE full validation per attach: its result seeds the runtime
+      // and every rebuild until a security-sensitive entry requests its own
+      // fresh validation. The stale-write-back of the earlier double refresh
+      // is gone with the second refresh itself.
+      const agentHostLock = refreshAgentHostLock(agent)
+      runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined,
+        () => refreshAgentHostLock(agent),
         privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined,
         privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined)
       runtimes.set(agent, runtime)
-      hostLocks.set(agent, agentHostLock)
     }
     return runtime
   }
@@ -923,9 +991,15 @@ export function apply(ctx: Context, rawConfig: {
     // decision: a missing policy, physical identity or durable note only makes
     // later completion evidence insufficient. The Host has already appended
     // tool/call before invoking this waterfall, so the note can bind its seq.
-    own(registerPassiveHostWorkdirObserver(agent, () => seams.hostLock ?? revalidateCoreLock(config, installedHostLock),
-      (tool, provider, policy) => config.hostLockRuntimeRoot && config.hostLockProfileRoot
-        ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy)
+    own(registerPassiveHostWorkdirObserver(agent,
+      (audit) => {
+        if (seams.hostLock) return seams.hostLock
+        const evaluated = revalidateCoreLock(config, installedHostLock, audit)
+        seams.onHostLockValidation?.()
+        return evaluated
+      },
+      (tool, provider, policy, audit) => config.hostLockRuntimeRoot && config.hostLockProfileRoot
+        ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy, audit)
         : false,
       (exec) => {
         runtime.sync()
@@ -946,6 +1020,10 @@ export function apply(ctx: Context, rawConfig: {
         runtime.sync()
         return durable
       },
+      // A completion certificate is authority: it records the host lock only
+      // after this entry's own full validation. Read-only feedback queries on
+      // the same tool skip the revalidation.
+      () => runtime.sync({ revalidateHostLock: true }),
     ))
     ownedTools.register(createBoundaryTool(
       () => runtime.projection,
@@ -966,8 +1044,13 @@ export function apply(ctx: Context, rawConfig: {
       runtime.sync()
       return durable
     }
+    // Read-only evidence producers follow the latest recorded validation
+    // without triggering their own; the authorization entries below are the
+    // ones that must validate freshly.
+    const hostCapabilityFromCache = (action: StatefulAction) =>
+      createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock)(action)
     const evidenceOptions: EvidenceToolRoots & { hostCapability: RuntimeHostCapabilityEvaluator } = {
-      hostCapability: createHostCapabilityEvaluator(hostLocks.get(agent) ?? installedHostLock),
+      hostCapability: hostCapabilityFromCache,
       ...(seams.commandRunner ? { commandRunner: seams.commandRunner } : {}),
       ...(seams.fetcher ? { fetcher: seams.fetcher } : {}),
       ...(seams.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
@@ -981,8 +1064,10 @@ export function apply(ctx: Context, rawConfig: {
       authorizeMutation: (request) => {
         // prepareMutation has already flushed and replayed the exact session.
         // A final sync keeps authorization bound to any synchronous append
-        // performed between the durable gate and this check.
-        runtime.sync()
+        // performed between the durable gate and this check — and because
+        // tool authorization decides authority, that sync validates the host
+        // lock freshly for this very decision.
+        runtime.sync({ revalidateHostLock: true })
         return authorizeMutationFromProjection(runtime.projection, request)
       },
       marketOrigin: optionalMarketOrigin(ctx, agent),
@@ -995,7 +1080,9 @@ export function apply(ctx: Context, rawConfig: {
       // decision persists the one-shot reservation BEFORE the effect, and a
       // reservation that cannot be made durable is a denial, not a warning.
       releaseGate: async (request) => {
-        runtime.sync()
+        // A release pre-effect decision grants a publish reservation: it must
+        // rest on this entry's own full host validation, never on the last one.
+        runtime.sync({ revalidateHostLock: true })
         const projection = runtime.projection
         const applicable = projection.policy === 'release' || projection.releaseContracts.length > 0
         if (!applicable) return { status: 'denied', reasonCode: 'release_contract_not_adopted' }
@@ -1095,7 +1182,13 @@ export function apply(ctx: Context, rawConfig: {
       fs: (ctx as unknown as Parameters<typeof createTestReadinessObserver>[0]).fs,
       flush: (session) => ctx.sessions.flush(session as Session),
     }))
-    ownedTools.register(createActionTool(evidenceOptions))
+    ownedTools.register(createActionTool({
+      ...evidenceOptions,
+      // An action execution is a tool authorization: the capability check runs
+      // against this call's own full host validation, not a frozen attach-time
+      // evaluation.
+      hostCapability: (action) => createHostCapabilityEvaluator(refreshAgentHostLock(agent))(action),
+    }))
     ownedTools.register(createPrepareTool({
       getProjection: () => runtime.projection,
       hostCapability: (action) => {
@@ -1140,11 +1233,21 @@ export function apply(ctx: Context, rawConfig: {
       (id, toolAgent) => readExternalOperation(ctx, toolAgent as Agent | undefined, id),
       () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
     ))
-    ownedTools.guard((exec) => goalCompletionDenial(
-      runtime.projection,
-      exec.name,
-      exec.arguments,
-    ))
+    ownedTools.guard((exec) => {
+      // A completion decision is a Goal/Stop authorization. Only the calls the
+      // gate judges pay for this entry's own full host validation; every other
+      // tool call is judged from the shared projection without rescanning.
+      if (exec.name === 'update_goal'
+        && (exec.arguments as { action?: unknown } | undefined)?.action === 'complete'
+        && runtime.projection.enabled) {
+        runtime.sync({ revalidateHostLock: true })
+      }
+      return goalCompletionDenial(
+        runtime.projection,
+        exec.name,
+        exec.arguments,
+      )
+    })
     } catch (error) {
       detach(agent)
       throw error
@@ -1234,6 +1337,7 @@ export function apply(ctx: Context, rawConfig: {
       flush: () => ctx.sessions.flush(agent.session),
       hostSupported: runtime.projection.hostStatus === 'supported',
       externalWaitCapability: evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
+      refreshExternalWaitCapability: () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
       ...(goals ? { goalAccess: {
         get: async () => normalizeGoalState(await goals.get(agent)),
         disarm: async () => normalizeGoalState(await goals.disarm(agent)),

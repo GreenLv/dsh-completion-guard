@@ -1,3 +1,5 @@
+import { Stats } from "node:fs";
+
 //#region src/domain/canonicalize.d.ts
 declare function normalizeClause(text: string): string;
 /**
@@ -2356,6 +2358,40 @@ declare function revalidateGitPrestate(resolved: GitPrestateEnvelope, manifest: 
 /** Execute the exact resolved argv only after the mandatory live recheck. */
 declare function executeRevalidatedGitEffect(resolved: GitPrestateEnvelope, manifest: GitCommandManifest, target: GitTargetIdentity, currentStateTuple: Readonly<Record<string, string | Uint8Array>>, runner: GitEffectRunner): Promise<GitEffectExecution>;
 //#endregion
+//#region src/domain/host-audit-session.d.ts
+/**
+* Memo table for ONE bounded host-lock validation operation.
+*
+* A full validation re-reads the same real paths, manifests, search paths and
+* export targets from several cooperating audits. Resolution results are
+* reused strictly inside this operation: the table lives and dies with one
+* audit call, is never shared across entries, and is never a substitute for
+* revalidation — a later entry always performs its own fresh reads. There are
+* deliberately no timestamps, mtimes, sizes or cross-call caches here.
+*/
+interface HostAuditSession {
+  /** Memoized `realpathSync`; identical inputs return the identical result. */
+  realpath(path: string): string;
+  /** Memoized `existsSync`, including the negative result. */
+  exists(path: string): boolean;
+  /** Memoized `statSync`. */
+  stat(path: string): Stats;
+  /** Memoized file read (bytes). */
+  readFile(path: string): Buffer;
+  /** Memoized `JSON.parse` of an object file; parse errors propagate. */
+  readJson(path: string): Record<string, unknown>;
+  /** Memoized SHA-256 of file bytes. */
+  fileDigest(path: string): string;
+  /** Memoized `createRequire` for one importer path. */
+  requireFor(importer: string): NodeRequire;
+  /** Memoized `require.resolve.paths(name)` for one importer. */
+  resolvePaths(importer: string, name: string): readonly string[];
+  /** Memoized `require.resolve(request)` for one importer. */
+  requireResolve(importer: string, request: string): string;
+  /** Generic operation-scoped memo for derived structures (parsed graphs, indexes). */
+  memo<T>(key: string, compute: () => T): T;
+}
+//#endregion
 //#region src/domain/host-resolver.d.ts
 declare class HostProfileError extends Error {
   readonly code: string;
@@ -2386,7 +2422,7 @@ declare function resolveInstalledHostLock(moduleUrl?: string): HostLockEvaluatio
 * two reachable peer variants of a critical package remain a duplicate and
 * are returned twice so evaluateHostLock can fail closed with a bounded code.
 */
-declare function packageRowsFromActiveGraph(packageMapText: string, lockText: string, nodeModulesRoot?: string): PackageRow[];
+declare function packageRowsFromActiveGraph(packageMapText: string, lockText: string, nodeModulesRoot?: string, providedSession?: HostAuditSession): PackageRow[];
 interface ActiveProfileHostLock {
   evaluation: HostLockEvaluation;
   runtimeRoot: string;
@@ -2398,28 +2434,32 @@ interface ActiveProfileHostLock {
 /** Read exact reachable critical rows without requiring Guard installation.
 * Used by target preflight before a legacy profile can be migrated.
 */
-declare function readActiveHostGraph(runtimeRoot: string, profileRoot: string): PackageRow[];
+declare function readActiveHostGraph(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): PackageRow[];
 /** Verify published executable bytes at the reachable runtime/profile roots.
 * Registry SRI and installed manifests alone cannot authenticate loaded code.
 * Missing, duplicate, escaped or modified modules never pass this audit.
+*
+* All filesystem resolution within one call is memoized through a single
+* {@link HostAuditSession}; callers may thread one in to share the parsed
+* graphs and digests with the other audits of the same validation operation.
 */
-declare function auditedHostImplementation(runtimeRoot: string, profileRoot: string): boolean;
-declare function activeRendererModule(nodeModulesRoot: string, name: string): {
+declare function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): boolean;
+declare function activeRendererModule(nodeModulesRoot: string, name: string, providedSession?: HostAuditSession): {
   bytes: string;
   path: string;
 } | undefined;
 /** Verify active, reachable producer bytes without reading credentials or
 * accepting historical package-map entries. Missing/ambiguous paths fail
 * closed for the ordinary markerless-test shortcut. */
-declare function auditedForegroundRenderers(runtimeRoot: string, profileRoot: string): Array<"bash" | "pwsh">;
+declare function auditedForegroundRenderers(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): Array<"bash" | "pwsh">;
 /** Exact active implementation route for call-time omitted-workdir evidence. */
-declare function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: string, tool: "bash" | "pwsh"): boolean;
+declare function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: string, tool: "bash" | "pwsh", providedSession?: HostAuditSession): boolean;
 /**
 * The active graph alone does not prove which shell service this Agent uses.
 * Match the scoped service's exact constructor to the audited active module,
 * rejecting another provider with the same public service interface/name.
 */
-declare function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string, tool: "bash" | "pwsh", provider: unknown, policyProvider?: unknown): Promise<boolean>;
+declare function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string, tool: "bash" | "pwsh", provider: unknown, policyProvider?: unknown, providedSession?: HostAuditSession): Promise<boolean>;
 interface TargetHostGraph {
   packages: PackageRow[];
   profileGraph: {

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.8.1
+
+- One session mount performs one full host-lock validation instead of three. Projection rebuilds consume an explicitly passed host-lock result and never rescan the host graph; resume, compaction replay, step refreshes and command readbacks share the attach-time validation.
+- Security-sensitive entries — mutation authorization, release pre-effect decisions, Goal/Stop boundary establishment, completion pre-commit, checkpoint certification and trusted shell workdir evidence — each still validate the host lock freshly at the moment of decision. A pending, drifted or failed validation is refused exactly as before; nothing accepts an unfinished or cached audit as `supported`.
+- A single validation reuses repeated real-path, manifest, dependency and export resolutions through an operation-scoped memo that is discarded with the audit. Cross-entry caches, mtimes, file sizes or timestamps never stand in for revalidation; critical package byte hashes, real dependency routes, local-first routing, installation fallback and the rejection of nearer shadows, missing edges, wrong exports and escaped symlinks are unchanged, and verdicts, reason codes and digests are identical to 0.8.0.
+- macOS recheck on the same real rc.2 runtime and profiles: a Web mount drops from about 2.0 s to about 0.4 s and a plain projection refresh no longer pays for an audit. Windows cold-open targets (p95 ≤ 2 s, ≥ 5× over 0.8.0) remain a separate native acceptance gate.
+
 ## 0.8.0
 
 - Target only DSH `0.1.7-rc.2` / Cordis `4.0.4`. Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; remove historical hosts from production selection.

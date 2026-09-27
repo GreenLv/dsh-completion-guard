@@ -197,6 +197,10 @@ export function createCheckpointTool(
   getProjection: () => GuardProjection | undefined,
   onRejected: () => void,
   prepare: () => Promise<boolean> = async () => true,
+  /** Host-lock revalidation for the certificate path only: a completion
+   * certificate must record a host lock validated by THIS entry, while the
+   * read-only current-feedback query stays cheap. */
+  revalidate: () => void = () => {},
 ): ToolDefinition {
   return defineTool({
     name: 'context_guard_checkpoint',
@@ -433,6 +437,7 @@ export function createCheckpointTool(
       // A presented proof is bound BEFORE any certificate is issued: an
       // unbound proof makes the query fail closed with its exact reasons
       // instead of yielding a certificate that ignores it.
+      revalidate()
       let proofState: { status: 'absent' | 'bound' | 'rejected' | 'invalid'; reason_codes: string[] } = { status: 'absent', reason_codes: [] }
       if (args.proof !== undefined) {
         const structural = validateProofManifestV2(args.proof)
