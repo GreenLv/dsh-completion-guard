@@ -280,10 +280,12 @@ def http_json(origin: str, path: str, method: str = "GET", request_origin: str |
         return exc.code, {}
 
 
-# Full nine-case budget includes twelve create/resume operations and byte audits.
-# Restart remains a separate short gate; neither budget relaxes tool/root signals.
-INITIAL_V070_TIMEOUT = 600
+# Nine serial cases open or resume twelve Agents. On Windows, each creation
+# can take over 30s; the first six cases exhausted the former 600s aggregate
+# deadline. Keep a bounded allowance for all twelve opens plus case work.
+INITIAL_V070_TIMEOUT = 1200
 RESTART_TIMEOUT = 90
+RESTART_V070_TIMEOUT = 180
 
 
 class HostProbeDeadline(RuntimeError):
@@ -658,7 +660,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 process = subprocess.Popen(argv, cwd=work, env=environment, stdout=log, stderr=log,
                                            start_new_session=platform.system() != "Windows")
                 processes.append(process)
-                second = wait_until(lambda: probe_result({first["pid"]}), timeout=RESTART_TIMEOUT)
+                second = wait_until(lambda: probe_result({first["pid"]}),
+                                    timeout=RESTART_V070_TIMEOUT if protocol == "v070" else RESTART_TIMEOUT)
                 if second["pid"] == first["pid"]:
                     raise RuntimeError("restart did not change host process")
                 passed("web_owned_restart_and_persisted_resume")

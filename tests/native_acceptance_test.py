@@ -341,7 +341,13 @@ class HostBoundEntrypointTests(unittest.TestCase):
             row["stage"] = "/private/token"
             path.write_text(json.dumps(row))
             self.assertIsNone(self.host.safe_probe_progress(*args))
-        self.assertEqual(self.host.INITIAL_V070_TIMEOUT, 600)
+        # The initial v0.7 probe has twelve serial create/resume operations.
+        # The restart has host boot, one open and a tool/readback; legacy v3
+        # retains its narrower restart deadline.
+        self.assertGreaterEqual(self.host.INITIAL_V070_TIMEOUT, 12 * 90 + 120)
+        self.assertEqual(self.host.INITIAL_V070_TIMEOUT, 1200)
+        self.assertGreaterEqual(self.host.RESTART_V070_TIMEOUT, 90 + 30 + 60)
+        self.assertEqual(self.host.RESTART_V070_TIMEOUT, 180)
         self.assertEqual(self.host.RESTART_TIMEOUT, 90)
         self.assertEqual(self.host.HostProbeDeadline.diagnostic_code, "PROBE_TOTAL_BUDGET_EXCEEDED")
 
