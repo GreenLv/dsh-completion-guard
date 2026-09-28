@@ -32,15 +32,14 @@ verdict is never inherited from a file-level or family-level green run.
 
 ## Library binding
 
-- Historical error library: `context-guard-effectiveness` (the single
-  maintenance entry; the former local `context-guard-incidents` directory is
-  retired and sealed). This page's per-record table below is a historical
-  producer statement for the former 28-record subset and is superseded for
-  acceptance purposes by the CURRENT full-library adjudication:
-  `benchmarks/incidents/acceptance/dsh-0.8.1-full-library-adjudication.{json,md}`
-  in that library (56 cases / 45 active — 29 Codex, 16 DSH — plus the frozen
-  16-record/8-active legacy lineage), with per-case verdicts, lanes and
-  candidate binding.
+- Historical evidence lives in the maintainer's sanitized historical
+  regression set, kept outside this repository; raw records, private session
+  material and machine-local mappings are never copied into public files.
+  The per-record table below is a historical producer statement for a former
+  28-record subset and is superseded for acceptance purposes by the current
+  full-library adjudication (56 cases / 45 active — 29 Codex, 16 DSH — plus a
+  frozen 16-record legacy lineage), whose per-case verdicts, execution lanes
+  and candidate binding are tracked in that sanitized set.
 
 ## New adaptation tests added for this adjudication
 

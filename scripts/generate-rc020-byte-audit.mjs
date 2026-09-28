@@ -11,8 +11,11 @@ import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 const studyPath = process.argv[2]
-  ?? '/Users/lgr59/Documents/Github/context-guard-effectiveness/benchmarks/incidents/repros/dsh-warm-resolver-scope-drift/f847499-review/rc020-study.json'
 const outputPath = process.argv[3] ?? 'manifests/rc020-rc1-byte-audit.json'
+if (!studyPath) {
+  console.error('usage: generate-rc020-byte-audit.mjs <reviewed-input-study.json> [output-manifest.json]\n\nThe reviewed input is the maintainer-reviewed upstream study binding the exact\ncohort tarballs; it is supplied explicitly per run and never hardcoded.')
+  process.exit(1)
+}
 const study = JSON.parse(readFileSync(studyPath, 'utf8'))
 const upstreamCommit = study.upstream.commit
 const hostVersion = study.upstream.version

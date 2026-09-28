@@ -54,18 +54,78 @@ function nearestPackageScope(session: HostAuditSession, dir: string):
  *   shadows a real exact key. Unrequested patterns/arrays/unmodellable shapes
  *   are OUTSIDE the support domain and fail closed — they never approximate.
  * - condition selection: iterate the manifest's OWN keys in manifest order
- *   (never a fixed node→require→default priority); a key matches when it is
- *   'default' or in the CJS require condition set {node, node-addons,
- *   require}; a nested object without a matching condition CONTINUES to the
- *   next key; null denies.
- * - target validation happens BEFORE any realpath comparison: the target must
- *   start with './', must URL-resolve inside the scope directory, and must
- *   contain no 'node_modules' segment and no encoded %2f/%5c — exactly the
- *   shapes Node rejects with ERR_INVALID_PACKAGE_TARGET. realpath equal to
- *   the authenticated file is never sufficient for an illegal target.
+ *   (never a fixed node→require→default priority). The proved lane is the CJS
+ *   require lane with the conditions Node actually activates for it:
+ *   {node, node-addons, require, module-sync}; 'default' always matches. A
+ *   matched key whose value is neither string/null/object is an INVALID
+ *   branch — it fails the route instead of falling through to a later key
+ *   that would happen to reach the audited file. A nested object without a
+ *   matching condition CONTINUES to the next key (a legal no-match
+ *   fallback); null denies. Numeric condition keys are
+ *   ERR_INVALID_PACKAGE_CONFIG. A require-lane resolution that selected
+ *   through a conditions object which ALSO carries an own 'import' key is
+ *   rejected: the require proof must never silently cover a differing import
+ *   branch, while an 'import' key inside a branch the require lane skipped
+ *   (a no-match fallback) stays legal.
+ * - target validation happens BEFORE any URL normalization or realpath
+ *   comparison, on the RAW target string: it must start with './', contain no
+ *   backslash, no encoded separators (%2f/%5c), and no raw OR percent-encoded
+ *   empty/'.'/'..'/'node_modules' (case-insensitive) segment — exactly the
+ *   shapes Node rejects with ERR_INVALID_PACKAGE_TARGET. Normalization never
+ *   launders illegal syntax, and realpath equal to the authenticated file is
+ *   never sufficient for an illegal target.
  */
-const SCOPE_CONDITIONS = new Set(['node', 'node-addons', 'require'])
+const REQUIRE_LANE_CONDITIONS = new Set(['node', 'node-addons', 'require', 'module-sync'])
+const NUMERIC_CONDITION_KEY = /^(?:0|[1-9][0-9]*)$/
 const ENCODED_SEPARATOR = /%2f|%5c/i
+
+type LaneSelection = 'invalid' | 'deny' | 'no-match' | { target: string }
+
+function selectRequireLane(value: unknown, depth: number): LaneSelection {
+  if (value === null) return 'deny'
+  if (typeof value === 'string') return { target: value }
+  if (depth > 4 || !value || typeof value !== 'object' || Array.isArray(value)) {
+    // A matched branch with an unmodellable value can never be treated as a
+    // no-match: Node rejects the target instead of falling through.
+    return 'invalid'
+  }
+  const conditions = value as Record<string, unknown>
+  for (const key of Object.keys(conditions)) {
+    if (NUMERIC_CONDITION_KEY.test(key)) return 'invalid'
+  }
+  for (const key of Object.keys(conditions)) {
+    const active = key === 'default' || REQUIRE_LANE_CONDITIONS.has(key)
+    if (!active) continue
+    const nested = selectRequireLane(conditions[key], depth + 1)
+    if (nested === 'no-match') continue
+    if (nested === 'invalid') return 'invalid'
+    // The require lane resolved through THIS object. If the same object also
+    // declares an own 'import' branch, the require proof cannot vouch for the
+    // actual load route — reject the divergence instead of covering it.
+    if (Object.hasOwn(conditions, 'import')) return 'invalid'
+    return nested
+  }
+  return 'no-match'
+}
+
+/** Raw-target validation, per Node's ERR_INVALID_PACKAGE_TARGET rules. */
+function rawTargetAllowed(target: string): boolean {
+  if (!target.startsWith('./') || target.includes('\\') || ENCODED_SEPARATOR.test(target)) return false
+  const rest = target.slice(2)
+  if (rest === '') return false
+  for (const segment of rest.split('/')) {
+    if (segment === '' || segment === '.' || segment === '..') return false
+    let decoded = segment
+    try {
+      decoded = decodeURIComponent(segment)
+    } catch {
+      return false
+    }
+    const lowered = decoded.toLowerCase()
+    if (lowered === '.' || lowered === '..' || lowered === 'node_modules') return false
+  }
+  return true
+}
 
 function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; manifest: Record<string, unknown> },
   request: string, wanted: string): boolean {
@@ -106,23 +166,11 @@ function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; ma
     if (subpath !== '.') return false
     entry = rootTarget
   }
-  const select = (value: unknown, depth: number): string | null | undefined => {
-    if (value === null) return null
-    if (typeof value === 'string') return value
-    if (depth > 4 || !value || typeof value !== 'object' || Array.isArray(value)) return undefined
-    const conditions = value as Record<string, unknown>
-    for (const key of Object.keys(conditions)) {
-      const matched = key === 'default' || SCOPE_CONDITIONS.has(key)
-      if (!matched) continue
-      const nested = select(conditions[key], depth + 1)
-      if (nested !== undefined) return nested
-    }
-    return undefined
-  }
-  const resolvedTarget = select(entry, 0)
-  if (resolvedTarget === null || resolvedTarget === undefined) return false
-  // Target syntax and containment checks BEFORE any realpath comparison.
-  if (!resolvedTarget.startsWith('./')) return false
+  const selection = selectRequireLane(entry, 0)
+  if (selection === 'no-match' || selection === 'deny' || selection === 'invalid') return false
+  const resolvedTarget = selection.target
+  // Raw-target syntax checks BEFORE any URL normalization or realpath.
+  if (!rawTargetAllowed(resolvedTarget)) return false
   let targetPath: string
   try {
     targetPath = fileURLToPath(new URL(resolvedTarget, pathToFileURL(join(scope.dir, '/'))))
@@ -130,8 +178,7 @@ function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; ma
     return false
   }
   const scopeRelative = relative(scope.dir, targetPath)
-  if (scopeRelative.startsWith('..') || isAbsolute(scopeRelative) || scopeRelative.split(sep).includes('node_modules')
-    || ENCODED_SEPARATOR.test(resolvedTarget)) return false
+  if (scopeRelative.startsWith('..') || isAbsolute(scopeRelative)) return false
   // The self-route must land on exactly the authenticated file; anything else
   // (a redirect into the scope, a missing file) bypasses the audited bytes.
   return session.realpath(targetPath) === wanted

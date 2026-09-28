@@ -875,7 +875,7 @@ replaces it:
 | documentation audit | `python3 scripts/audit_repository_documentation.py .` | 27 markdown files, 0 errors, 0 warnings |
 | documentation audit test | `python3 -m pytest tests -q` | 84 passed |
 | whitespace | `git diff --check` | clean |
-| reviewer probes (supplementary evidence, not the acceptance) | the fourteen counterexample files under `/tmp/dsh-063-review`, `/private/tmp/dsh-063-independent-review`, `/private/tmp/dsh-063-review3`, `/private/tmp/dsh-063-review4`, `/tmp/dsh-063-review-20260917`, `/tmp/dsh-063-review-20260917-next`, `/tmp/dsh-063-review-20260917-r8`, `/tmp/dsh-063-review-20260917-r9`, `/tmp/dsh-063-review-20260917-r10`, `/tmp/dsh-063-review-20260917-r11`, `/tmp/dsh-063-review-20260917-r12`, `/tmp/dsh-063-review-20260917-r13`, `/tmp/dsh-063-review-20260917-r14` and `/tmp/dsh-063-review-20260917-r15`, run from `tests/domain/` | all fourteen files passed against the final source; every copy was removed afterwards |
+| reviewer probes (supplementary evidence, not the acceptance) | the fourteen counterexample files under maintainer-local review workspaces, run from `tests/domain/` | all fourteen files passed against the final source; every copy was removed afterwards |
 | recorded 0.6.2 fixture | `node scripts/record_legacy_upgrade_fixture.mjs --module-dir <baseline dist> --commit 63326f2… --output tests/fixtures/upgrade/legacy-0.6.2.json` | exit 0; re-running reproduces the committed fixture byte for byte |
 
 `NODE_PATH` was unset for the test runs. The DSH harness injects a `NODE_PATH`
@@ -1877,7 +1877,7 @@ pnpm pack --dry-run --json
 ## Isolated profile composition (macOS, no real ~/.dsh)
 
 ```sh
-export DSH_HOME=/tmp/dsh-context-guard-smoke
+export DSH_HOME=<local smoke directory>
 DSH=/path/to/dsh
 "$DSH" plugin --profile web add "file:/abs/path/to/dsh-context-guard"
 "$DSH" --profile web --dump-config | grep context-guard

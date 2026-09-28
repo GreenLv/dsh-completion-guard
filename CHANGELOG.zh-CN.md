@@ -13,7 +13,7 @@
 
 ## 0.8.0
 
-- 仅适配 DSH `0.2.0-rc.1` / Cordis `4.0.4`；核对 46 个关键包的身份、已发布实现字节和实际依赖解析路径，移除生产历史宿主选择。
+- 仅适配 DSH `0.1.7-rc.2` / Cordis `4.0.4`；核对 46 个关键包的身份、已发布实现字节和实际依赖解析路径，移除生产历史宿主选择。
 - 按 awaited `agent/created` 安装并清理工具、guard 和监听器，动态启用接入已有 Agent；使用 Session V4 和 Jobs SessionId。
 - 拒绝把 shell 后台 promotion 的部分输出或截断输出认证为成功。Stop 边界使用持久化 Guard notice，避免制造无所属 turn 的工具事件。
 - prepare 发现列表与 checkpoint 翻页不再因自身只读结果入账而使游标失效；条目或业务状态变化仍会使旧游标失效。

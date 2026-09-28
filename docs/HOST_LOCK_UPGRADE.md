@@ -1,6 +1,6 @@
 # Upgrading the core host lock
 
-Version 0.8.1 requires DSH `0.1.7-rc.2` and Cordis `4.0.4` only. Its 46 critical packages must match the registered identities, implementation bytes and actual dependency paths. Guard's exact DSH core is separate from optional market versions.
+Version 0.8.1 requires DSH `0.2.0-rc.1` and Cordis `4.0.4` only. Upgrading means: install DSH `0.2.0-rc.1` first, then install this Guard version; the host lock is rebuilt from the new graph on the next Guard start, and each Web/Headless profile that runs Guard must be restarted once. A successful upgrade reads back a `supported` host lock; an `unsupported`/`host_lock_migration_required` readback means DSH itself is not yet on the required version. Its 46 critical packages must match the registered identities, implementation bytes and actual dependency paths. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 

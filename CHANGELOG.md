@@ -4,6 +4,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ## 0.8.1
 
+- **Host requirement moved to DSH `0.2.0-rc.1` / Cordis `4.0.4` (upstream `4878cdabd87d4041bdaff61d04c966883b9fd07a`).** To upgrade: install DSH `0.2.0-rc.1` first, then this Guard version; the host lock is rebuilt from the new graph on the next Guard start, and every Web/Headless profile that runs Guard must be restarted once. The whole retired `0.1.7.x` line is refused as below-minimum. The 46 critical-package identities, published implementation bytes and dependency routes are re-bound to the published `0.2.0-rc.1` tarballs; historical cold/open timings quoted for older inputs are historical measurements, not this combination, and no native acceptance is claimed for the new artifact yet.
 - One session mount performs one full host-lock validation instead of three. Projection rebuilds consume an explicitly passed host-lock result and never rescan the host graph; resume, compaction replay, step refreshes and command readbacks share the attach-time validation.
 - Security-sensitive entries — mutation authorization, release pre-effect decisions, Goal/Stop boundary establishment, completion pre-commit, checkpoint certification and trusted shell workdir evidence — each still validate the host lock freshly at the moment of decision. A pending, drifted or failed validation is refused exactly as before; nothing accepts an unfinished or cached audit as `supported`.
 - One publish decision crosses three host-lock gates (action capability check, mutation authorization, release pre-effect) and is executed under a final pre-effect veto. Every await in the entry — the durability flush, the executable-identity and artifact readbacks, the adopted contract's ref resolution — precedes the gate that depends on it; the veto then takes one more fresh validation after the effect path's last await, with no yield between it and the effect start, refusing fail-closed. No audit taken before an await can authorize the effect, concurrent entries never share validation results, and the reservation decision validates freshly after its own preparation await.
@@ -13,7 +14,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ## 0.8.0
 
-- Target only DSH `0.2.0-rc.1` / Cordis `4.0.4` (upstream `4878cdabd87d4041bdaff61d04c966883b9fd07a`). Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; the whole 0.1.7.x line is removed from production selection and refused as below-minimum.
+- Target only DSH `0.1.7-rc.2` / Cordis `4.0.4`. Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; older hosts are removed from production selection.
 - Install and dispose tools, guards and listeners through awaited `agent/created`, including existing Agents on enablement. Use Session V4 and Jobs SessionId ownership.
 - Keep shell promotion and incomplete output uncertified. Persist Stop boundaries as Guard notices instead of fabricating tool events outside a turn.
 - Read-only prepare discovery and checkpoint pagination now continue after their own persisted observations; changed contract items or business state still invalidate old cursors.

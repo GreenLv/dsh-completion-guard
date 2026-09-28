@@ -2,9 +2,13 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## 0.8.0–0.8.1: DSH 0.1.7-rc.2 only (0.8.1 final target moved to 0.2.0-rc.1)
+## 0.8.1: DSH 0.2.0-rc.1 only
 
-Current metadata and the production selector accept exactly `0.1.7-rc.2`, with Cordis `4.0.4`. The sole cohort is `dsh-0.1.7-rc.2-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest and actual dependency-path checks in `manifests/rc017-rc2-byte-audit.json`. A higher version is unregistered, not supported. Old cohorts exist only as historical test data.
+Current metadata and the production selector accept exactly `0.2.0-rc.1`, with Cordis `4.0.4`. The sole cohort is `dsh-0.2.0-rc.1-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest and actual dependency-path checks in `manifests/rc020-rc1-byte-audit.json`. Any other version — including the entire retired `0.1.7.x` line — is refused as below-minimum or unregistered, never supported. Old cohorts exist only as historical test data.
+
+## 0.8.0: DSH 0.1.7-rc.2 (historical fact, unchanged)
+
+0.8.0 metadata and its production selector accepted exactly `0.1.7-rc.2`, with Cordis `4.0.4`, cohort `dsh-0.1.7-rc.2-core-v1`, manifest `manifests/rc017-rc2-byte-audit.json`. That historical support scope is a property of the released 0.8.0 and is not rewritten by the 0.8.1 adaptation.
 
 Missing, duplicated, mixed, escaped or modified critical packages fail closed. A matching version or `allow-version` cannot bypass host identity. `auditedPlatforms: []` remains empty: local graph/module verification is separate from native acceptance of a frozen Guard tgz. See the [A01–A16 record](DSH_0_1_7_RC2_ACCEPTANCE.md).
 

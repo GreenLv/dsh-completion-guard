@@ -4,7 +4,7 @@
 
 An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
-> **0.8.1 requires DSH `0.2.0-rc.1` and Cordis `4.0.4`.** It retains the 0.7.1 recovery feedback, adds fresh byte-exact host-route validation and consumes the new host tool-call recovery semantics. Upgrade DSH before installing this version; the 0.1.7.x line is no longer supported.
+> **0.8.1 requires DSH `0.2.0-rc.1` and Cordis `4.0.4`.** Upgrade DSH first, then install this version; after the first Guard start the host lock is rebuilt automatically and each profile running Guard needs one restart. A successful upgrade reads back a `supported` host lock; anything else means DSH itself is not yet on the required version. The 0.1.7.x line is no longer supported. This version also keeps the 0.7.1 recovery feedback, re-validates host dependency routes against the exact published bytes on every fresh decision, and understands the new host's crash-recovery tool results (an unknown outcome never counts as success).
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
