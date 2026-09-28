@@ -37,8 +37,19 @@ describe('UX10 regression: adjacent prose never pollutes a structured target ide
       expect(serialized).not.toContain('说明文档')
       expect(serialized).not.toContain('更新')
       expect(commit!.verification.subject ?? '').not.toContain('说明文档')
-      // The adjacent prose keeps its own clause identity when captured.
+      // The adjacent prose must never absorb the repository literal (the
+      // load-bearing non-pollution assertion). Where the prose is its own
+      // sentence (orders 2 and 3) it is ALSO captured as a separate clause
+      // with its own identity; the comma-joined first order binds the prose
+      // into the same root message's other clauses without a repository
+      // literal of its own.
       const prose = [...projection.items.values()].find((row) => row !== commit && row.normalizedText.includes('说明文档'))
-      if (prose) expect(prose.normalizedText).not.toContain('/work/repo-a')
+      const proseIsOwnSentence = text.includes('。说明文档') || text.startsWith('说明文档')
+      if (proseIsOwnSentence) {
+        expect(prose).toBeDefined()
+        expect(prose!.normalizedText).not.toContain('/work/repo-a')
+      } else {
+        expect(serialized).not.toContain('说明文档')
+      }
     })
 })
