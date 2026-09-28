@@ -10593,7 +10593,7 @@ function recoveryDigest(packet, projection) {
 			status: current.status,
 			reason: current.reasonCode,
 			open: current.openIds,
-			predicates: current.predicates,
+			predicates: Object.fromEntries(Object.entries(current.predicates).filter(([id, state]) => current.openIds.includes(id) || state.startsWith("constraint_"))),
 			conditions: v6VerifiedCoreConditions(projection) ?? null,
 			boundaries
 		}));
