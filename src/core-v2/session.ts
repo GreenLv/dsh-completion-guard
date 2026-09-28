@@ -4,6 +4,7 @@ import type { GuardProjection, DerivedEnvelope, GuardItem } from '../domain/type
 import { assessmentAction, assessmentOutcomePredicate, currentActionBases, v6TestPredicate } from '../domain/stop-policy.js'
 import { actionClassScopeSpeech, controlSpeech, currentUnitScopeSpeech, projectCoreV2, rootControlCandidateSpans } from './project.js'
 import { persistedToolResultStatus } from '../domain/evidence.js'
+import { isStatefulAction } from '../domain/protocol-manifest.js'
 import { hostWorkdirForCall } from '../domain/host-workdir.js'
 import { observerMethodEvidence } from '../domain/observer-method.js'
 
@@ -658,6 +659,16 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       if (kind === 'constraint' && (!forbiddenFile || evidence.evidenceRole !== 'effect'
         || !['write', 'write_file', 'edit', 'edit_file'].includes(evidence.toolName)
         || !evidence.operations?.some((operation) => ['create','modify'].includes(operation.op) && operation.path === target))) continue
+      // Evidence applicability for execution requirements: an ordinary
+      // stateful requirement is satisfied only by observations of its OWN
+      // semantic action. A same-repository Git observation of a DIFFERENT
+      // action is a different fact — rebinding it to this requirement's
+      // predicate would both satisfy the wrong clause and, through the shared
+      // attachment set, steal the rows of the clause that actually matches.
+      // Readiness items keep their dedicated tool/action gates below;
+      // information delivery and constraints have their own lanes above.
+      if (kind === 'execution' && !needsReadiness && isStatefulAction(item.semanticAction as never)
+        && evidence.semanticAction !== item.semanticAction) continue
       // A relative root locator is stronger than a later tool's display path.
       // The provider's processPath/contains readback must bind the physical
       // target and root-time base before a state fact can satisfy it.

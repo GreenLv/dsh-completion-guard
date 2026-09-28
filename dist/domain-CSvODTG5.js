@@ -18942,6 +18942,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				"edit",
 				"edit_file"
 			].includes(evidence.toolName) || !evidence.operations?.some((operation) => ["create", "modify"].includes(operation.op) && operation.path === target))) continue;
+			if (kind === "execution" && !needsReadiness && isStatefulAction(item.semanticAction) && evidence.semanticAction !== item.semanticAction) continue;
 			if (subjectKind === "filesystem" && (directoryLiteral || relativeLiteral || selectedReadback) && evidence.toolName === "context_guard_observe_file" && (!rootBase || evidence.nativeCanonicalBase !== rootBase || evidence.nativeCanonicalPath !== target)) continue;
 			if (needsReadiness && evidence.toolName !== "context_guard_observe_test_readiness" && evidence.semanticAction !== item.semanticAction) continue;
 			if (fileReadback && (evidence.evidenceRole !== "state" || evidence.toolName !== "context_guard_observe_file")) continue;

@@ -5,7 +5,7 @@ import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { execFile } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -382,6 +382,8 @@ describe('CGI-2026-042: one root commit-and-push authorization carries ordinary 
             resolve: async (path: string) => ({ displayPath: path }),
             stat: async (target: { displayPath: string }) => ({ type: 'file', version: 'v2', size: (await fsStat(target.displayPath)).size }),
             readText: async (target: { displayPath: string }) => await fsRead(target.displayPath, 'utf8'),
+            processPath: (target: { displayPath: string }) => target.displayPath,
+            contains: (base: { displayPath: string }, target: { displayPath: string }) => target.displayPath.startsWith(base.displayPath + sep),
           } })
           const observed = await observer.execute({ effect_call_id: 'host-edit' }, { agent: { session }, signal: new AbortController().signal } as never) as { status: string; sha256: string }
           expect(observed.status).toBe('observed')
@@ -425,35 +427,171 @@ describe('CGI-2026-042: one root commit-and-push authorization carries ordinary 
       expect(commitAuth, JSON.stringify(commitAuth)).toMatchObject({ status: 'authorized' })
       const pushAuth = authorizeMutationFromProjection(projection, { action: 'push', contractItemId: pushItem.id, contractItemRevision: pushItem.revision, resolvedTarget: { repository: work, remote: 'origin', refspec: 'refs/heads/main:refs/heads/main' } })
       expect(pushAuth, JSON.stringify(pushAuth)).toMatchObject({ status: 'authorized' })
-      // The push binding is individually valid. Certification status follows
-      // the shared-core closure, and observation is the only input it tracks:
-      // without the edit observation the unobserved item is insufficient, so
-      // the gate refuses to mint ANY certificate — naming the closure, never
-      // the push binding, and never demanding a re-authorization.
+      // Certification status follows the shared-core closure; observation is
+      // its only variable input here and authorization never re-arms: the
+      // commit/push authority stays with the original root items either way.
       const pushEffect = [...projection.evidence.values()].find((row) => row.callId === 'host-push')!
       const pushState = [...projection.evidence.values()].find((row) => row.callId === 'push-readback')!
+      const byId = (callId: string) => [...projection.evidence.values()].find((row) => row.callId === callId)!.id
       const pushBinding = { itemId: pushItem.id, evidenceIds: [pushEffect.id, pushState.id], semanticAction: 'push' as const,
         requestedTarget: pushItem.requestedTarget, resolvedTarget: { repository: work, remote: 'origin', refspec: push.refspec, local_oid: push.post_oid },
         observedState: { post_head_oid: push.post_oid, remote_oid: push.post_oid }, effectEvidenceId: pushEffect.id, stateEvidenceIds: [pushState.id] }
-      const blocked = certifyCheckpoint(projection, [pushBinding], 'C-042-blocked', false)
-      expect(blocked.status).toBe('incomplete')
-      expect(blocked.rejectedBindings).toEqual([expect.objectContaining({ itemId: '*', reasonCode: 'current_closure_unmet' })])
       const unmet = (projection.coreV2?.unmet_requirements ?? []) as string[]
+      const checkpointTool = createCheckpointTool(() => projection, () => {})
+      const toolBindings = (bindings: Array<Record<string, unknown>>) => ({ bindings: bindings.map((row) => ({
+        item_id: row.itemId, evidence_ids: row.evidenceIds, semantic_action: row.semanticAction,
+        requested_target: row.requestedTarget, resolved_target: row.resolvedTarget, observed_state: row.observedState,
+        effect_evidence_id: row.effectEvidenceId, state_evidence_ids: row.stateEvidenceIds,
+      })) as never })
       if (editMode === 'observed') {
-        // Fully observed except the reported core-v2 finding: the LAST
-        // same-target git requirement stays unmet because the core evidence
-        // fold attaches its rows to the earlier one (platform-independent;
-        // the total count may vary with platform path binding). Documented
-        // boundary; the core-v2 fix flips this red deliberately.
-        expect(unmet).toContain(pushItem.id)
+        // Fully observed compound chain: every clause is satisfied by its OWN
+        // matching effect+state rows — no cross-action satisfaction and no
+        // cross-clause consumption — and the REGISTERED checkpoint tool
+        // certifies the whole closure.
+        expect(unmet).toEqual([])
+        const commitEffect = [...projection.evidence.values()].find((row) => row.callId === 'host-commit')!
+        const commitState = [...projection.evidence.values()].find((row) => row.callId === 'commit-readback')!
+        const editEffect = [...projection.evidence.values()].find((row) => row.callId === 'host-edit')!
+        const editState = [...projection.evidence.values()].find((row) => row.callId === 'edit-readback')!
+        const bindings = [
+          { itemId: modify.id, evidenceIds: [editEffect.id, editState.id], semanticAction: 'modify' as const,
+            requestedTarget: modify.requestedTarget, resolvedTarget: { artifact_id: join(work, 'app.py'), scope: work },
+            observedState: { post_digest: editObservedSha }, effectEvidenceId: editEffect.id, stateEvidenceIds: [editState.id] },
+          { itemId: commitItem.id, evidenceIds: [commitEffect.id, commitState.id], semanticAction: 'commit' as const,
+            requestedTarget: commitItem.requestedTarget, resolvedTarget: { repository: work, branch: 'main' },
+            observedState: { post_head_oid: commit.post_oid }, effectEvidenceId: commitEffect.id, stateEvidenceIds: [commitState.id] },
+          pushBinding,
+        ]
+        const certified = await checkpointTool.execute(toolBindings(bindings) as never, undefined as never) as { status: string }
+        expect(certified).toMatchObject({ status: 'certified' })
       } else {
-        // The unobserved edit keeps its own requirement insufficient.
+        // Missing edit provenance keeps the edit item insufficient, so the
+        // closure refuses ANY certificate — naming the closure, never the
+        // push binding, and never demanding a re-authorization.
         expect(unmet).toContain(modify.id)
+        const blocked = await checkpointTool.execute(toolBindings([pushBinding]) as never, undefined as never) as { status: string; rejected?: unknown }
+        expect(blocked.status).toBe('incomplete')
       }
-      // The commit/push rows never demand anything about the edit provenance.
-      const fullPage = await createCheckpointTool(() => projection, () => {}).execute({ bindings: [] } as never, undefined as never) as { open_items: Array<{ id: string; binding_template?: Record<string, unknown> }> }
-      for (const entry of fullPage.open_items.filter((row) => row.id === commitItem.id || row.id === pushItem.id)) {
-        expect(JSON.stringify(entry.binding_template ?? {})).not.toContain('host-edit')
+      // Template evidence binds ONLY its own clause: with the shared-core
+      // closure unmet the page renders no templates at all (nothing is
+      // certifiable); any template that does render cites exactly its own
+      // effect+state ids and never another clause's rows.
+      const fullPage = await checkpointTool.execute({ bindings: [] } as never, undefined as never) as { open_items: Array<{ id: string; binding_template?: { evidence_ids: string[] } }> }
+      const ownIds = new Map<string, string[]>([
+        [modify.id, [byId('host-edit'), ...editMode === 'observed' ? [byId('edit-readback')] : []]],
+        [commitItem.id, commitMode === 'shell' ? [byId('host-commit'), byId('commit-readback')] : [byId('host-commit')]],
+        [pushItem.id, [byId('host-push'), byId('push-readback')]],
+      ])
+      for (const row of fullPage.open_items) {
+        const ids = row.binding_template?.evidence_ids
+        if (!ids) continue
+        for (const id of ids) expect(ownIds.get(row.id) ?? []).toContain(id)
+      }
+      if (editMode !== 'observed') {
+        for (const row of fullPage.open_items.filter((entry) => entry.id === modify.id)) {
+          expect(row.binding_template).toBeUndefined()
+        }
       }
     })
+})
+
+
+describe('review: a Git operation cannot satisfy a different same-repository action', () => {
+  async function observed(required: 'commit' | 'push', performed: 'commit' | 'push') {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-git-action-review-'))
+    const remote = join(root, 'origin.git'); const work = join(root, 'work')
+    await gitExec('git', ['init', '--bare', remote]); await gitExec('git', ['init', '-b', 'main', work])
+    await gitExec('git', ['-C', work, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', work, 'config', 'user.email', 'fixture@example.invalid'])
+    await gitExec('git', ['-C', work, 'remote', 'add', 'origin', remote])
+    await writeFile(join(work, 'a.txt'), 'first\n')
+    await gitExec('git', ['-C', work, 'add', 'a.txt']); await gitExec('git', ['-C', work, 'commit', '-m', 'first'])
+    const id = SessionId(`review-${required}-${performed}`)
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: work })
+    session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    const text = required === 'commit' ? `Commit changes in repository ${work}.` : `Push repository ${work} to remote origin refspec refs/heads/main:refs/heads/main.`
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    if (performed === 'commit') {
+      await writeFile(join(work, 'a.txt'), 'second\n'); await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    }
+    const command = performed === 'commit' ? 'git commit -m second' : 'git push origin refs/heads/main:refs/heads/main'
+    appendCall(session, 'actual-operation', 'bash', { command, workdir: work })
+    const result = await gitExec('git', ['-C', work, ...(performed === 'commit' ? ['commit', '-m', 'second'] : ['push', 'origin', 'refs/heads/main:refs/heads/main'])])
+    appendResult(session, 'actual-operation', performed === 'commit' ? result.stdout : result.stderr)
+    const observer = createNativeGitObserver({ flush: async () => true })
+    const state = await observer.execute({ effect_call_id: 'actual-operation' }, { agent: { session }, signal: new AbortController().signal } as never) as { status: string; post_oid: string; parent_oid: string; tree_oid: string; remote: string; refspec: string }
+    expect(state).toMatchObject({ status: 'observed' })
+    appendCall(session, 'actual-readback', 'context_guard_observe_git', { effect_call_id: 'actual-operation' })
+    appendResult(session, 'actual-readback', JSON.stringify(state), { contextGuardNativeGit: { effectCallId: 'actual-operation', action: performed, repository: work, branch: 'main', remote: performed === 'push' ? 'origin' : '', refspec: performed === 'push' ? 'refs/heads/main:refs/heads/main' : '', postOid: state.post_oid, parentOid: state.parent_oid ?? '', treeOid: state.tree_oid ?? '' } })
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: work }, true, HOST).projection
+    projection.durabilityWatermark = 'confirmed'
+    const core = projectSessionCoreV2(session.snapshotEvents() as never, projection)!
+    const item = [...projection.items.values()].find(row => row.semanticAction === required)!
+    expect(item).toBeDefined()
+    const { rm } = await import('node:fs/promises')
+    await rm(root, {recursive: true, force: true})
+    return { core, item }
+  }
+  it.each(['commit', 'push'] as const)('does not mark %s satisfied by only the other Git action', async required => {
+    const { core, item } = await observed(required, required === 'commit' ? 'push' : 'commit')
+    const predicates = core.predicates as Record<string, string>
+    expect(predicates[item.id], JSON.stringify(core)).not.toBe('satisfied')
+    expect(core.certifiable).toBe(false)
+  })
+  it.each(['commit', 'push'] as const)('accepts an observed matching %s action', async required => {
+    const { core, item } = await observed(required, required)
+    const predicates = core.predicates as Record<string, string>
+    expect(predicates[item.id], JSON.stringify(core)).toBe('satisfied')
+    expect(core.certifiable).toBe(true)
+  })
+})
+
+describe('review: a compound commit-and-push root satisfied by only one action', () => {
+  it('satisfies only the observed clause, keeps the other insufficient, and refuses certification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-compound-partial-'))
+    const remote = join(root, 'origin.git'); const work = join(root, 'work')
+    await gitExec('git', ['init', '--bare', remote]); await gitExec('git', ['init', '-b', 'main', work])
+    await gitExec('git', ['-C', work, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', work, 'config', 'user.email', 'fixture@example.invalid'])
+    await gitExec('git', ['-C', work, 'remote', 'add', 'origin', remote])
+    await writeFile(join(work, 'a.txt'), 'first\n'); await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    await gitExec('git', ['-C', work, 'commit', '-m', 'first'])
+    const id = SessionId('review-compound-partial')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: work })
+    session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `提交仓库 ${work} 分支 main;推送仓库 ${work} 远端 origin 引用规范 refs/heads/main:refs/heads/main。` }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    // ONLY the push runs and is natively observed; no commit ever happens.
+    appendCall(session, 'host-push', 'bash', { command: 'git push origin refs/heads/main:refs/heads/main', workdir: work })
+    const pushed = await gitExec('git', ['-C', work, 'push', 'origin', 'refs/heads/main:refs/heads/main'])
+    appendResult(session, 'host-push', pushed.stderr)
+    const observer = createNativeGitObserver({ flush: async () => true })
+    const push = await observer.execute({ effect_call_id: 'host-push' }, { agent: { session }, signal: new AbortController().signal } as never) as { status: string; post_oid: string; remote: string; refspec: string }
+    expect(push.status).toBe('observed')
+    appendCall(session, 'push-readback', 'context_guard_observe_git', { effect_call_id: 'host-push' })
+    appendResult(session, 'push-readback', JSON.stringify(push), { contextGuardNativeGit: { effectCallId: 'host-push', action: 'push', repository: work, branch: 'main', remote: push.remote, refspec: push.refspec, postOid: push.post_oid, parentOid: '', treeOid: '' } })
+    const events = session.snapshotEvents() as never
+    const projection = deriveProjection(events, { activation: 'opt-in' }, { cwd: work }, true, HOST).projection
+    projection.durabilityWatermark = 'confirmed'
+    projection.coreV2 = projectSessionCoreV2(events, projection)
+    const commitItem = [...projection.items.values()].find((row) => row.semanticAction === 'commit')!
+    const pushItem = [...projection.items.values()].find((row) => row.semanticAction === 'push')!
+    const predicates = (projection.coreV2?.predicates ?? {}) as Record<string, string>
+    expect(predicates[pushItem.id]).toBe('satisfied')
+    expect(predicates[commitItem.id]).toBe('insufficient')
+    expect((projection.coreV2?.unmet_requirements ?? []) as string[]).toContain(commitItem.id)
+    expect(projection.coreV2?.certifiable).toBe(false)
+    // The satisfied clause alone cannot certify the closure, and Goal/Stop
+    // completion stays gated: nothing may report the whole task done.
+    const tool = createCheckpointTool(() => projection, () => {})
+    const pushEffect = [...projection.evidence.values()].find((row) => row.callId === 'host-push')!
+    const pushState = [...projection.evidence.values()].find((row) => row.callId === 'push-readback')!
+    const refused = await tool.execute({ bindings: [{ item_id: pushItem.id, evidence_ids: [pushEffect.id, pushState.id], semantic_action: 'push',
+      requested_target: pushItem.requestedTarget, resolved_target: { repository: work, remote: 'origin', refspec: push.refspec, local_oid: push.post_oid },
+      observed_state: { post_head_oid: push.post_oid, remote_oid: push.post_oid }, effect_evidence_id: pushEffect.id, state_evidence_ids: [pushState.id] }] } as never, undefined as never) as { status: string }
+    expect(refused).toMatchObject({ status: 'incomplete' })
+    const { rm } = await import('node:fs/promises')
+    await rm(root, { recursive: true, force: true })
+  })
 })

@@ -1149,6 +1149,7 @@ describe('CGI-2026-040: answered questions stay out of recovery debt across comp
     // The answered question never returns as recovery debt; the open question
     // is still captured by the contract.
     expect(joined, joined).not.toContain('名字来源')
+    expect(joined, joined).toContain('恢复包机制')
     expect(restoredGuard.agent.session === restored).toBe(true)
     const after = derive(restored.snapshotEvents())
     expect([...after.items.values()].find((item) => item.normalizedText.includes('名字来源'))!.status).toBe('answered')
