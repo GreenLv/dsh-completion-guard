@@ -483,6 +483,19 @@ describe('real production entries validate freshly and share one audit per decis
     const value = await chain.action('pre-effect-drift-action')
     expect(value.status, JSON.stringify(value)).toBe('unavailable')
     expect(chain.published).toHaveLength(0)
+    // Refused with-ref entry: capability stretch + the release gate's own
+    // fresh validation after the ref-resolution await = 2 audits.
+    expect(chain.validations).toHaveLength(4)
+    const stamp = { atime: statSync(join(chain.host.sessionPackageDir, 'lib', 'index.js')).atime,
+      mtime: statSync(join(chain.host.sessionPackageDir, 'lib', 'index.js')).mtime }
+    restoreSessionBytes(chain.host, AUDITED_MODULE_TEXT, stamp)
+    // A SUCCESSFUL with-ref publish costs THREE full validations for the
+    // entry: the capability stretch, the release gate after the ref await,
+    // and the final pre-effect veto after the tgz readback.
+    const ok = await chain.action('with-ref-success')
+    expect(ok.status, JSON.stringify(ok)).toBe('completed')
+    expect(chain.published).toHaveLength(1)
+    expect(chain.validations).toHaveLength(7)
   })
 
   it('refuses post-reservation drift through the wired final veto', async () => {

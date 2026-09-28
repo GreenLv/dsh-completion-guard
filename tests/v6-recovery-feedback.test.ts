@@ -1088,3 +1088,34 @@ describe('audit H2: the cleanup dependency condition rides the v6 lane', () => {
     expect(packet).toContain('do not execute before release')
   })
 })
+
+
+describe('CGI-2026-014/023: persisted checkpoint follow-up stays bounded', () => {
+  for (const rejection of ['invalid-proof', 'failed-flush'] as const) {
+    it(`${rejection}: reminders do not repeat after a persisted continue and the same rejection`, async () => {
+      const { session, ctx, agent, registered } = freshRuntimeSession(`review-followup-${rejection}`)
+      const root = await runPreStep(ctx, agent, [claimed('Run npm test in /work.')])
+      persistStep(session, root.messages)
+      const checkpoint = registered.find((tool) => tool.name === 'context_guard_checkpoint')!
+      const reject = async () => {
+        ctx.sessions.flush = async () => rejection !== 'failed-flush'
+        const result = await checkpoint.execute(rejection === 'invalid-proof'
+          ? { bindings: [], proof: {} } : { bindings: [] }) as Record<string, unknown>
+        ctx.sessions.flush = async () => true
+        expect(result).toMatchObject({ status: rejection === 'invalid-proof' ? 'incomplete' : 'unknown' })
+      }
+      await reject()
+      const first = await runPreStep(ctx, agent, [claimed('继续')])
+      const followups = (texts: string[]) => texts.filter((text) => text.includes('Open task requirements (checkpoint follow-up):'))
+      expect(followups(first.texts)).toHaveLength(1)
+      expectNoOldQualificationDemand(first.texts.join('\n'))
+      persistStep(session, first.messages)
+      for (let iteration = 0; iteration < 3; iteration++) {
+        await reject()
+        const repeated = await runPreStep(ctx, agent, [claimed('继续')])
+        expect(followups(repeated.texts), repeated.texts.join('\n')).toHaveLength(0)
+        persistStep(session, repeated.messages)
+      }
+    })
+  }
+})

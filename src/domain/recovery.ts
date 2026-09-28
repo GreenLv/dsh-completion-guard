@@ -249,7 +249,9 @@ export function recoveryDigest(packet: string, projection: GuardProjection): str
       host: projection.hostLockDigest, integrity: projection.integrity,
       unit: projection.currentUnitId ?? null,
       status: current.status, reason: current.reasonCode,
-      open: current.openIds, predicates: current.predicates,
+      open: current.openIds,
+      predicates: Object.fromEntries(Object.entries(current.predicates)
+        .filter(([id, state]) => current.openIds.includes(id) || state.startsWith('constraint_'))),
       conditions: v6VerifiedCoreConditions(projection) ?? null,
       boundaries,
     }))
