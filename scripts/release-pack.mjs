@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
 import process from "node:process";
@@ -32,6 +32,29 @@ function pack(source, destination, cache) {
 
 async function sha256(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+/**
+ * Normalize staged file permissions: the tar must not inherit the packing
+ * host's working-tree modes, or the same clean HEAD packs different bytes on
+ * a machine where files happen to be 0600. Executable bits come from the Git
+ * index (mode 100755); every other file is 0644 and every directory 0755, so
+ * the same HEAD is byte-identical regardless of source permissions.
+ */
+export async function normalizeStagedModes(stagedRoot, execPaths) {
+  const walk = async (directory, relative) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      const rel = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await chmod(path, 0o755);
+        await walk(path, rel);
+      } else if (entry.isFile()) {
+        await chmod(path, execPaths.has(rel) ? 0o755 : 0o644);
+      }
+    }
+  };
+  await walk(stagedRoot, "");
 }
 
 function parseArgs(argv) {
@@ -96,6 +119,12 @@ export async function buildReleasePackage({ source, outputDir }) {
       "staged package contains a conflicting gitHead");
     stagedManifest.gitHead = gitHead;
     await writeFile(stagedManifestPath, `${JSON.stringify(stagedManifest, null, 2)}\n`, "utf8");
+    const execPaths = new Set(run("git", ["ls-files", "-s"], root)
+      .split("\n")
+      .filter((line) => line.startsWith("100755 "))
+      .map((line) => line.split("\t").pop() ?? "")
+      .filter(Boolean));
+    await normalizeStagedModes(stagedRoot, execPaths);
 
     const first = pack(stagedRoot, firstDir, cacheDir);
     const second = pack(stagedRoot, secondDir, cacheDir);

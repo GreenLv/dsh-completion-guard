@@ -2368,6 +2368,10 @@ declare function executeRevalidatedGitEffect(resolved: GitPrestateEnvelope, mani
 * audit call, is never shared across entries, and is never a substitute for
 * revalidation — a later entry always performs its own fresh reads. There are
 * deliberately no timestamps, mtimes, sizes or cross-call caches here.
+*
+* Every byte read funnels through ONE memo (`read:`): the raw file bytes are
+* read from disk exactly once per path per operation, and JSON parsing and
+* digesting both consume those shared bytes.
 */
 interface HostAuditSession {
   /** Memoized `realpathSync`; identical inputs return the identical result. */
@@ -2376,11 +2380,11 @@ interface HostAuditSession {
   exists(path: string): boolean;
   /** Memoized `statSync`. */
   stat(path: string): Stats;
-  /** Memoized file read (bytes). */
+  /** Memoized raw file bytes — the single physical-read channel. */
   readFile(path: string): Buffer;
-  /** Memoized `JSON.parse` of an object file; parse errors propagate. */
+  /** Memoized `JSON.parse` of an object file over the shared bytes; parse errors propagate. */
   readJson(path: string): Record<string, unknown>;
-  /** Memoized SHA-256 of file bytes. */
+  /** Memoized SHA-256 over the shared bytes. */
   fileDigest(path: string): string;
   /** Memoized `createRequire` for one importer path. */
   requireFor(importer: string): NodeRequire;

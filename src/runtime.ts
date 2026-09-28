@@ -896,6 +896,8 @@ export function registerPassiveHostWorkdirObserver(agent: Agent,
 export interface RuntimeExecutorSeams {
   commandRunner?: EvidenceToolRoots['commandRunner']
   fetcher?: EvidenceToolRoots['fetcher']
+  /** Isolated acceptance override for the executable-identity reader. */
+  readExecutableIdentity?: EvidenceToolRoots['readExecutableIdentity']
   allowLoopbackHttpRegistry?: boolean
   /**
    * Pin the audited host cohort instead of reading a live profile graph. An
@@ -1094,7 +1096,16 @@ export function apply(ctx: Context, rawConfig: {
       hostCapability: hostCapabilityFromCache,
       ...(seams.commandRunner ? { commandRunner: seams.commandRunner } : {}),
       ...(seams.fetcher ? { fetcher: seams.fetcher } : {}),
+      ...(seams.readExecutableIdentity ? { readExecutableIdentity: seams.readExecutableIdentity } : {}),
       ...(seams.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {}),
+      // The pre-effect veto is the FINAL fresh host judgment of an action
+      // entry: the effect path calls it after its own last await, with no
+      // yield between it and the effect start, so no pre-await audit can
+      // authorize the effect.
+      preEffectVeto: () => {
+        runtime.sync({ revalidateHostLock: true })
+        return runtime.projection.hostStatus === 'supported'
+      },
       prepareMutation: async (toolAgent) => {
         if (toolAgent.session !== agent.session) return false
         const durable = await ctx.sessions.flush(agent.session)
@@ -1121,18 +1132,13 @@ export function apply(ctx: Context, rawConfig: {
       // decision persists the one-shot reservation BEFORE the effect, and a
       // reservation that cannot be made durable is a denial, not a warning.
       releaseGate: async (request) => {
-        // A release pre-effect decision grants a publish reservation: it must
-        // rest on this entry's own full host validation, never on the last one.
-        runtime.sync({ revalidateHostLock: true })
-        const projection = runtime.projection
-        const applicable = projection.policy === 'release' || projection.releaseContracts.length > 0
-        if (!applicable) return { status: 'denied', reasonCode: 'release_contract_not_adopted' }
-        // The candidate identity comes from trusted readers: the action tool
-        // read the artifact, and the runtime resolves the ref an ADOPTED
-        // CONTRACT names, because that contract is the only closed, reachable
-        // path for a ref (a model-supplied one would not be authority).
+        // A release pre-effect decision grants a publish reservation. The ref
+        // resolution may await a git subprocess, so it is ASYNC PREPARATION
+        // and runs first: the fresh validation below must not precede any
+        // await, and the pre-effect veto in the effect path revalidates again
+        // after the effect's own last await.
         const observed = { ...request.observed }
-        const declaredContract = releaseContractFor(projection, request.operation)
+        const declaredContract = releaseContractFor(runtime.projection, request.operation)
         const declaredRef = declaredContract?.candidate.ref
         if (declaredRef !== undefined && observed.ref === undefined) {
           const cwd = sessionCwd(runtime.session)
@@ -1141,6 +1147,15 @@ export function apply(ctx: Context, rawConfig: {
             observed.ref = declaredRef
             observed.refSha = refSha
           }
+        }
+        // The reservation is a durable decision: it validates the host lock
+        // freshly AFTER the preparation await above.
+        runtime.sync({ revalidateHostLock: true })
+        const projection = runtime.projection
+        const applicable = projection.policy === 'release' || projection.releaseContracts.length > 0
+        if (!applicable) return { status: 'denied', reasonCode: 'release_contract_not_adopted' }
+        if (projection.hostStatus !== 'supported') {
+          return { status: 'denied', reasonCode: projection.hostReasonCode ?? 'host_lock_unavailable' }
         }
         const decision = releasePreEffectDecision(projection, {
           operation: request.operation,

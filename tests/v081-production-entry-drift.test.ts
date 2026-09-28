@@ -8,7 +8,9 @@ import { join } from 'node:path'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import { execFileSync } from 'node:child_process'
 import { apply } from '../src/runtime.js'
+import { executableIdentity } from '../src/tools/evidence.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostLockEvaluation } from '../src/domain/host-lock.js'
 import { readActiveHostGraph } from '../src/domain/host-resolver.js'
 import { deriveProjection, PROTOCOL_V5_NOTICE } from '../src/domain/derive.js'
@@ -22,13 +24,24 @@ import { createHostAuditSession } from '../src/domain/host-audit-session.js'
 // observer seam and refusing a host mutated between two consecutive entries.
 // The synthetic byte-audit manifest gives the audits one real hashed module
 // per package; published-tarball identity stays with v080-rc017-host.test.ts.
-const { AUDITED_MODULE_TEXT } = vi.hoisted(() => ({ AUDITED_MODULE_TEXT: 'export const auditedModule = true\n' }))
+const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
+  AUDITED_MODULE_TEXT: 'export const auditedModule = true\n',
+  canonicalManifest: (name: string, version: string) => JSON.stringify({
+    name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
+  }),
+}))
 vi.mock('../manifests/rc017-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
   return { default: { ...source.default, packages: source.default.packages.map((p) => ({
-    ...p, sha256: '0'.repeat(64), tarball: '', modules: { 'lib/index.js': auditedModuleDigest },
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // The published audit hashes package.json too: the manifest the JSON
+    // parsers read and the bytes the digest check reads are the same file.
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
   })) } }
 })
 
@@ -59,7 +72,7 @@ function makeHost() {
     packages[id] = { url: relative, dependencies: {} }
     const packageRoot = join(modulesRoot, relative)
     mkdirSync(packageRoot, { recursive: true })
-    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: row.name, version: row.version, exports: {} }))
+    writeFileSync(join(packageRoot, 'package.json'), canonicalManifest(row.name, row.version!))
     mkdirSync(join(packageRoot, 'lib'), { recursive: true })
     writeFileSync(join(packageRoot, 'lib', 'index.js'), AUDITED_MODULE_TEXT)
   }
@@ -169,11 +182,11 @@ function tarHeader(name: string, size: number): Buffer {
   return header
 }
 
-async function packFixture(root: string, name: string, version: string): Promise<string> {
+async function packFixture(root: string, name: string, version: string, gitHead: string): Promise<string> {
   const output = join(root, 'packs')
   await mkdir(output, { recursive: true })
   const manifest = Buffer.from(JSON.stringify({
-    name, version, files: ['index.js'], gitHead: SHA,
+    name, version, files: ['index.js'], gitHead,
     repository: { type: 'git', url: 'https://github.com/GreenLv/dsh-completion-guard.git' },
   }), 'utf8')
   const padding = Buffer.alloc((512 - (manifest.length % 512)) % 512)
@@ -244,8 +257,8 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
   commandRunner?: () => Promise<void>
   fetcher?: typeof fetch
   privateLedgerRoot: string
-  order?: string[]
   onAsyncPreparation?: () => void
+  readExecutableIdentity?: typeof executableIdentity
 }) {
   const tools: RegisteredTool[] = []
   const guards: Array<(exec: { name?: string; arguments?: unknown }) => string | undefined> = []
@@ -273,11 +286,11 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
   apply(ctx as never, { ...host.config }, {
     ...(seams.commandRunner ? { commandRunner: seams.commandRunner } : {}),
     ...(seams.fetcher ? { fetcher: seams.fetcher } : {}),
+    ...(seams.readExecutableIdentity ? { readExecutableIdentity: seams.readExecutableIdentity } : {}),
     allowLoopbackHttpRegistry: true,
     privateLedgerRoot: seams.privateLedgerRoot,
     onHostLockValidation: () => {
       validations.push(1)
-      seams.order?.push('audit:' + new Error().stack?.split('\n')[3]?.trim().slice(0, 60))
     },
   })
   const agent = {
@@ -303,11 +316,14 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
  * entry-level failure tests. The fetcher can observe the registry readback
  * moment, which is the async read-only preparation inside the publish entry.
  */
-async function publishChain(setup: { onAsyncPreparation?: () => void } = {}) {
+async function publishChain(setup: {
+  onAsyncPreparation?: () => void
+  withRef?: boolean
+  onIdentityRead?: (executable: string) => void
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
   temporaryRoots.push(root)
   const host = makeHost()
-  const tgz = await packFixture(root, PACKAGE, VERSION)
   const published: string[][] = []
   const registryState = { integrity: `sha512-${Buffer.alloc(64, 5).toString('base64')}` }
   const fetcher = (async (input: string | URL) => {
@@ -319,6 +335,21 @@ async function publishChain(setup: { onAsyncPreparation?: () => void } = {}) {
       versions: { [VERSION]: { name, version: VERSION, dist: { integrity: registryState.integrity } } },
     }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as unknown as typeof fetch
+  if (setup.withRef) {
+    // A real repository so the adopted contract's ref resolves through the
+    // production git path inside the release gate.
+    const git = (args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+    git(['init', '-b', 'main'])
+    git(['config', 'user.email', 'chain@example.invalid'])
+    git(['config', 'user.name', 'chain'])
+    writeFileSync(join(root, 'README.md'), 'chain\n')
+    git(['add', 'README.md'])
+    git(['commit', '-m', 'chain'])
+  }
+  const headSha = setup.withRef
+    ? execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+    : SHA
+  const tgz = await packFixture(root, PACKAGE, VERSION, headSha)
   const session = Session.create(SessionId('entry-drift'), undefined, {
     version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('entry-drift'), createdAt: 1, cwd: root,
   })
@@ -326,6 +357,15 @@ async function publishChain(setup: { onAsyncPreparation?: () => void } = {}) {
     commandRunner: async () => { published.push([]) },
     fetcher, privateLedgerRoot: join(root, 'private-ledger'),
     onAsyncPreparation: setup.onAsyncPreparation,
+    // The hook observes the executable-identity reads; the release gate's ref
+    // resolution reads the GIT identity between its fresh validation and the
+    // effect on the pre-fix runtime.
+    readExecutableIdentity: setup.onIdentityRead
+      ? async (executable, signal) => {
+        setup.onIdentityRead!(executable)
+        return executableIdentity(executable, signal)
+      }
+      : undefined,
   })
   const { tools, guards, validations } = runtime
   const byName = (name: string) => tools.find((tool) => tool.name === name)!
@@ -353,8 +393,9 @@ async function publishChain(setup: { onAsyncPreparation?: () => void } = {}) {
   const artifactSha256 = createHash('sha256').update(readFileSync(tgz)).digest('hex')
   command(session, `release adopt ${JSON.stringify({
     contractId: 'rel-entry', operations: ['npm_publish'],
-    candidate: { fullSha40: SHA, repository: 'https://github.com/GreenLv/dsh-completion-guard.git',
-      packageId: PACKAGE, version: VERSION, artifactSha256, artifactSri: sri, registry: REGISTRY },
+    candidate: { fullSha40: headSha, repository: 'https://github.com/GreenLv/dsh-completion-guard.git',
+      packageId: PACKAGE, version: VERSION, artifactSha256, artifactSri: sri, registry: REGISTRY,
+      ...(setup.withRef ? { ref: 'refs/heads/main' } : {}) },
     readinessRefs: [], closureCertRef: 'C1',
   })}`)
   session.append('user/message', createUserMessage({
@@ -414,6 +455,29 @@ describe('real production entries validate freshly and share one audit per decis
     expect(guards[0]!({ name: 'bash', arguments: {} })).toBeUndefined()
     expect(validations).toHaveLength(5)
     restoreSessionBytes(host, drift.original, drift.stamp)
+  })
+
+  it('refuses publish when the host drifts after the last audit, before the effect starts', async () => {
+    // The release gate resolves the adopted contract's ref through a real git
+    // subprocess — an await INSIDE the gate, after its fresh validation on the
+    // pre-fix runtime and before the effect. Same byte count and mtime,
+    // different audited bytes: drift landing in that window must never let the
+    // effect start.
+    let armed = false
+    let drifted = false
+    const chain = await publishChain({
+      withRef: true,
+      onIdentityRead: (executable) => {
+        if (!armed || executable !== 'git' || drifted) return
+        drifted = true
+        const d = driftSessionBytes(chain.host)
+        applyDrift(chain.host, d.original, d.stamp)
+      },
+    })
+    armed = true
+    const value = await chain.action('pre-effect-drift-action')
+    expect(value.status, JSON.stringify(value)).toBe('unavailable')
+    expect(chain.published).toHaveLength(0)
   })
 
   it('refuses publish when the host drifts during the entry\'s async preparation', async () => {

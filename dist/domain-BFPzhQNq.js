@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 //#region src/domain/host-audit-session.ts
-function createHostAuditSession() {
+function createHostAuditSession(onPhysicalRead) {
 	const cache = /* @__PURE__ */ new Map();
 	const once = (key, compute) => {
 		const hit = cache.get(key);
@@ -30,18 +30,23 @@ function createHostAuditSession() {
 			throw error;
 		}
 	};
-	return {
+	const readBytes = (path$1) => once(`read:${path$1}`, () => {
+		onPhysicalRead?.(path$1);
+		return readFileSync(path$1);
+	});
+	const session = {
 		realpath: (path$1) => once(`realpath:${path$1}`, () => realpathSync(path$1)),
 		exists: (path$1) => once(`exists:${path$1}`, () => existsSync(path$1)),
 		stat: (path$1) => once(`stat:${path$1}`, () => statSync(path$1)),
-		readFile: (path$1) => once(`read:${path$1}`, () => readFileSync(path$1)),
-		readJson: (path$1) => once(`json:${path$1}`, () => JSON.parse(readFileSync(path$1, "utf8"))),
-		fileDigest: (path$1) => once(`digest:${path$1}`, () => createFileDigest(readFileSync(path$1))),
+		readFile: (path$1) => readBytes(path$1),
+		readJson: (path$1) => once(`json:${path$1}`, () => JSON.parse(session.readFile(path$1).toString("utf8"))),
+		fileDigest: (path$1) => once(`digest:${path$1}`, () => createFileDigest(session.readFile(path$1))),
 		requireFor: (importer) => once(`require:${importer}`, () => createRequire(importer)),
 		resolvePaths: (importer, name) => once(`paths:${importer}\u0000${name}`, () => createRequire(importer).resolve.paths(name) ?? []),
 		requireResolve: (importer, request) => once(`resolve:${importer}\u0000${request}`, () => createRequire(importer).resolve(request)),
 		memo: once
 	};
+	return session;
 }
 function createFileDigest(bytes$1) {
 	return createHash("sha256").update(bytes$1).digest("hex");

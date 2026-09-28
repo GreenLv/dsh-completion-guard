@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { buildReleasePackage } from "../scripts/release-pack.mjs";
+import { buildReleasePackage, normalizeStagedModes } from "../scripts/release-pack.mjs";
 
 function git(args, cwd) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -101,4 +101,22 @@ test("packed standalone entries start without host peers or repository resolutio
       }
     }
   } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
+test("normalizes staged file permissions regardless of working-tree modes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dsh-cg-release-pack-modes-"));
+  try {
+    await writeFile(join(dir, "plain.txt"), "x");
+    await chmod(join(dir, "plain.txt"), 0o600);
+    await mkdir(join(dir, "sub"));
+    await chmod(join(dir, "sub"), 0o700);
+    await writeFile(join(dir, "sub", "run.sh"), "x");
+    await chmod(join(dir, "sub", "run.sh"), 0o700);
+    await normalizeStagedModes(dir, new Set(["sub/run.sh"]));
+    assert.equal((await stat(join(dir, "plain.txt"))).mode & 0o777, 0o644);
+    assert.equal((await stat(join(dir, "sub"))).mode & 0o777, 0o755);
+    assert.equal((await stat(join(dir, "sub", "run.sh"))).mode & 0o777, 0o755);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

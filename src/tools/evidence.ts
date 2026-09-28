@@ -91,6 +91,13 @@ export interface EvidenceToolRoots {
    * mutation authorization is the whole authority chain.
    */
   releaseGate?: (request: ReleaseGateToolRequest) => Promise<ReleaseGateDecision>
+  /**
+   * The FINAL fresh host judgment of an action entry. Called after the
+   * effect's own last await and immediately before the effect starts, with no
+   * yield in between; `false` refuses the effect fail-closed. A pre-await
+   * audit can therefore never authorize a post-await effect.
+   */
+  preEffectVeto?: () => boolean
   /** C10 settlement record, written after the effect from a trusted readback. */
   releaseSettle?: (request: ReleaseSettlementToolRequest) => Promise<void>
 }
@@ -814,6 +821,7 @@ async function executeGuardAction(
     const identity = tgzPath ? await tgzIdentity(tgzPath) : undefined
     if (!executableIdentity || !tgzPath || !identity || identity.name !== target.package_id || identity.version !== target.version
       || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return { status: 'unavailable' }
+    if (roots.preEffectVeto?.() === false) return { status: 'unavailable', reasonCode: 'pre_effect_host_veto_refused' }
     await runCommand(roots, executableIdentity, ['plugin', '--profile', roots.profile.name, 'add', `file:${tgzPath}`], undefined, signal)
     return { status: 'completed' }
   }
@@ -825,6 +833,7 @@ async function executeGuardAction(
       : undefined
     if (!executableIdentity || !tgzPath || !identity || identity.name !== target.artifact_id || identity.version !== target.version
       || identity.integrity !== target.integrity_digest || !registry || registry !== target.registry) return { status: 'unavailable' }
+    if (roots.preEffectVeto?.() === false) return { status: 'unavailable', reasonCode: 'pre_effect_host_veto_refused' }
     await runCommand(roots, executableIdentity, ['publish', tgzPath, '--registry', registry, '--ignore-scripts'], undefined, signal)
     return { status: 'completed' }
   }

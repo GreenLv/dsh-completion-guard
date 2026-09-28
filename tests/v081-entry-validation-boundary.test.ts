@@ -22,13 +22,24 @@ import { DEFAULT_HOST_LOCK, evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostL
 // integrity against the real rc.2 tarballs stays with v080-rc017-host.test.ts;
 // here the byte-audit manifest is narrowed to one synthetic audited module per
 // package so the byte-hash, export, route and symlink checks run for real.
-const { AUDITED_MODULE_TEXT } = vi.hoisted(() => ({ AUDITED_MODULE_TEXT: 'export const auditedModule = true\n' }))
+const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
+  AUDITED_MODULE_TEXT: 'export const auditedModule = true\n',
+  canonicalManifest: (name: string, version: string) => JSON.stringify({
+    name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
+  }),
+}))
 vi.mock('../manifests/rc017-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
   return { default: { ...source.default, packages: source.default.packages.map((p) => ({
-    ...p, sha256: '0'.repeat(64), tarball: '', modules: { 'lib/index.js': auditedModuleDigest },
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // The published audit hashes package.json too: the manifest the JSON
+    // parsers read and the bytes the digest check reads are the same file.
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
   })) } }
 })
 
@@ -61,7 +72,7 @@ function makeHost() {
     packages[id] = { url: relative, dependencies: {} }
     const packageRoot = join(modulesRoot, relative)
     mkdirSync(packageRoot, { recursive: true })
-    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: row.name, version: row.version, exports: {} }))
+    writeFileSync(join(packageRoot, 'package.json'), canonicalManifest(row.name, row.version!))
     mkdirSync(join(packageRoot, 'lib'), { recursive: true })
     writeFileSync(join(packageRoot, 'lib', 'index.js'), AUDITED_MODULE_TEXT)
   }
@@ -329,22 +340,22 @@ describe('drift between two consecutive authorized entries is refused', () => {
     expect(victim.name.length).toBeGreaterThan(0)
     expect(revalidateCoreLock(config, expected).status).toBe('supported')
     const manifestPath = join(packageRoot, 'package.json')
-    const manifest = (exports: Record<string, unknown>) => JSON.stringify({
-      name: victim.name, version: victim.version, exports,
-    })
-    // A real audited export passes, including the native require.resolve route.
-    writeFileSync(manifestPath, manifest({ '.': { types: './index.d.ts', default: './lib/index.js' } }))
-    expect(revalidateCoreLock(config, expected).status).toBe('supported')
+    // The canonical manifest is the only byte form the audited digest accepts;
+    // any export rewrite also changes the manifest bytes, so the byte audit
+    // and the route audit both fail closed on a redirect.
     // Redirecting the export to a file the byte inventory never authenticated
-    // is refused.
+    // is refused (manifest bytes and route target both drift).
     writeFileSync(join(packageRoot, 'lib', 'escaped.js'), AUDITED_MODULE_TEXT)
-    writeFileSync(manifestPath, manifest({ '.': { types: './index.d.ts', default: './lib/escaped.js' } }))
+    writeFileSync(manifestPath, JSON.stringify({
+      name: victim.name, version: victim.version,
+      exports: { '.': { types: './index.d.ts', default: './lib/escaped.js' } },
+    }))
     expect(revalidateCoreLock(config, expected).status).not.toBe('supported')
     // An export target that is a symlink escaping the authenticated package
-    // root is refused as well.
+    // root is refused as well (canonical manifest restored, module symlinked).
     rmSync(join(packageRoot, 'lib', 'escaped.js'))
     writeFileSync(join(host.root, 'outside.js'), AUDITED_MODULE_TEXT)
-    writeFileSync(manifestPath, manifest({ '.': { types: './index.d.ts', default: './lib/index.js' } }))
+    writeFileSync(manifestPath, canonicalManifest(victim.name, victim.version!))
     rmSync(join(packageRoot, 'lib', 'index.js'))
     symlinkSync(join(host.root, 'outside.js'), join(packageRoot, 'lib', 'index.js'))
     expect(revalidateCoreLock(config, expected).status).not.toBe('supported')
@@ -374,56 +385,35 @@ describe('drift between two consecutive authorized entries is refused', () => {
   })
 })
 
-describe('one audit reads each manifest at most once', () => {
-  it('deduplicates package.json reads and package-map parses within a single validation', () => {
+describe('one audit physically reads each path at most once', () => {
+  it('counts physical byte reads across manifests, maps and hashed modules', () => {
     const host = makeHost()
-    const inner = createHostAuditSession()
-    const manifestReads = new Map<string, number>()
-    const graphParses = new Map<string, number>()
-    const fileReads = new Map<string, number>()
+    const physicalReads = new Map<string, number>()
+    const inner = createHostAuditSession((path) => {
+      physicalReads.set(path, (physicalReads.get(path) ?? 0) + 1)
+    })
     const counting: HostAuditSession = {
       realpath: (path) => inner.realpath(path),
       exists: (path) => inner.exists(path),
       stat: (path) => inner.stat(path),
-      readFile: (path) => inner.memo(`read:${path}`, () => {
-        fileReads.set(path, (fileReads.get(path) ?? 0) + 1)
-        return inner.readFile(path)
-      }),
-      readJson: (path) => inner.memo(`json:${path}`, () => {
-        manifestReads.set(path, (manifestReads.get(path) ?? 0) + 1)
-        return inner.readJson(path)
-      }),
-      fileDigest: (path) => inner.memo(`digest:${path}`, () => {
-        fileReads.set(path, (fileReads.get(path) ?? 0) + 1)
-        return inner.fileDigest(path)
-      }),
+      readFile: (path) => inner.readFile(path),
+      readJson: (path) => inner.readJson(path),
+      fileDigest: (path) => inner.fileDigest(path),
       requireFor: (importer) => inner.requireFor(importer),
       resolvePaths: (importer, name) => inner.resolvePaths(importer, name),
       requireResolve: (importer, request) => inner.requireResolve(importer, request),
-      memo: <T,>(key: string, compute: () => T) =>
-        // Physical reads happen exactly when the memo misses: counting inside
-        // the wrapped compute catches key-spelling divergence between the
-        // three manifest readers (graph readback, byte audit, route audit),
-        // not mere call counts.
-        inner.memo(key, () => {
-          if (key.startsWith('graph:')) graphParses.set(key, (graphParses.get(key) ?? 0) + 1)
-          return compute()
-        }),
+      memo: <T,>(key: string, compute: () => T) => inner.memo(key, compute),
     }
-    expect(revalidateCoreLock(host.config, expectedLockFor(host), counting).status).toBe('supported')
-    // The graph readback, the byte audit and the route audit share one
-    // operation: every JSON object is parsed exactly once per validation.
-    const duplicated = [...manifestReads.entries()].filter(([, count]) => count > 1)
-    expect(duplicated, `duplicate manifest reads: ${JSON.stringify(duplicated)}`).toEqual([])
-    // Raw byte reads — package maps and hashed audited modules — are counted
-    // at the same physical-read level and are equally duplicate-free.
-    const duplicatedReads = [...fileReads.entries()].filter(([, count]) => count > 1)
-    expect(duplicatedReads, `duplicate file reads: ${JSON.stringify(duplicatedReads)}`).toEqual([])
-    expect(fileReads.size).toBeGreaterThanOrEqual(46)
-    const reparsed = [...graphParses.entries()].filter(([, count]) => count > 1)
-    expect(reparsed, `re-parsed package maps: ${JSON.stringify(reparsed)}`).toEqual([])
-    // The counting session actually saw the audited manifests and both graphs.
-    expect(manifestReads.size).toBeGreaterThanOrEqual(46)
-    expect(graphParses.size).toBe(2)
+    const verdict = revalidateCoreLock(host.config, expectedLockFor(host), counting)
+    if (verdict.status !== 'supported') console.log('PROBE verdict:', verdict.status, verdict.reasonCode)
+    expect(verdict.status).toBe('supported')
+    // One physical read per path per validation: JSON parsers and digest
+    // checks share the same bytes, and the graph readback, byte audit and
+    // route audit converge on one memo key.
+    const duplicated = [...physicalReads.entries()].filter(([, count]) => count > 1)
+    expect(duplicated, `duplicate physical reads: ${JSON.stringify(duplicated)}`).toEqual([])
+    // 46 manifests + 46 audited modules (+ the profile's session copy) + 2
+    // package maps + 2 lockfiles at minimum.
+    expect(physicalReads.size).toBeGreaterThanOrEqual(92)
   })
 })

@@ -11,6 +11,10 @@ import { createRequire } from 'node:module'
  * audit call, is never shared across entries, and is never a substitute for
  * revalidation — a later entry always performs its own fresh reads. There are
  * deliberately no timestamps, mtimes, sizes or cross-call caches here.
+ *
+ * Every byte read funnels through ONE memo (`read:`): the raw file bytes are
+ * read from disk exactly once per path per operation, and JSON parsing and
+ * digesting both consume those shared bytes.
  */
 export interface HostAuditSession {
   /** Memoized `realpathSync`; identical inputs return the identical result. */
@@ -19,11 +23,11 @@ export interface HostAuditSession {
   exists(path: string): boolean
   /** Memoized `statSync`. */
   stat(path: string): Stats
-  /** Memoized file read (bytes). */
+  /** Memoized raw file bytes — the single physical-read channel. */
   readFile(path: string): Buffer
-  /** Memoized `JSON.parse` of an object file; parse errors propagate. */
+  /** Memoized `JSON.parse` of an object file over the shared bytes; parse errors propagate. */
   readJson(path: string): Record<string, unknown>
-  /** Memoized SHA-256 of file bytes. */
+  /** Memoized SHA-256 over the shared bytes. */
   fileDigest(path: string): string
   /** Memoized `createRequire` for one importer path. */
   requireFor(importer: string): NodeRequire
@@ -41,7 +45,7 @@ interface CacheEntry {
   value?: unknown
 }
 
-export function createHostAuditSession(): HostAuditSession {
+export function createHostAuditSession(onPhysicalRead?: (path: string) => void): HostAuditSession {
   const cache = new Map<string, CacheEntry>()
   const once = <T>(key: string, compute: () => T): T => {
     const hit = cache.get(key)
@@ -60,18 +64,23 @@ export function createHostAuditSession(): HostAuditSession {
       throw error
     }
   }
-  return {
+  const readBytes = (path: string): Buffer => once(`read:${path}`, () => {
+    onPhysicalRead?.(path)
+    return readFileSync(path)
+  })
+  const session: HostAuditSession = {
     realpath: (path) => once(`realpath:${path}`, () => realpathSync(path)),
     exists: (path) => once(`exists:${path}`, () => existsSync(path)),
     stat: (path) => once(`stat:${path}`, () => statSync(path)),
-    readFile: (path) => once(`read:${path}`, () => readFileSync(path)),
-    readJson: (path) => once(`json:${path}`, () => JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>),
-    fileDigest: (path) => once(`digest:${path}`, () => createFileDigest(readFileSync(path))),
+    readFile: (path) => readBytes(path),
+    readJson: (path) => once(`json:${path}`, () => JSON.parse(session.readFile(path).toString('utf8')) as Record<string, unknown>),
+    fileDigest: (path) => once(`digest:${path}`, () => createFileDigest(session.readFile(path))),
     requireFor: (importer) => once(`require:${importer}`, () => createRequire(importer)),
     resolvePaths: (importer, name) => once(`paths:${importer}\u0000${name}`, () => createRequire(importer).resolve.paths(name) ?? []),
     requireResolve: (importer, request) => once(`resolve:${importer}\u0000${request}`, () => createRequire(importer).resolve(request)),
     memo: once,
   }
+  return session
 }
 
 function createFileDigest(bytes: Buffer): string {
