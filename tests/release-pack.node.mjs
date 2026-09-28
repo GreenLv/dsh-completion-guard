@@ -40,6 +40,29 @@ test("builds a deterministic tgz whose manifest binds the exact Git HEAD", async
     assert.match(await readFile(join(firstDir, "SHA256SUMS.txt"), "utf8"), new RegExp(`^${first.sha256}  release-pack-fixture-1\\.2\\.3\\.tgz\\n$`));
     const record = JSON.parse(await readFile(join(firstDir, "release-artifact.json"), "utf8"));
     assert.deepEqual(record, first);
+    // Identity fields are recomputed INDEPENDENTLY from the output bytes,
+    // not taken from the packer's record: npm pack's own shasum/integrity
+    // describe the pre-canonicalization archive, not the released one.
+    const { createHash } = await import("node:crypto");
+    for (const dir of [firstDir, secondDir]) {
+      const bytes = await readFile(join(dir, "release-pack-fixture-1.2.3.tgz"));
+      const expected = {
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        sha1: createHash("sha1").update(bytes).digest("hex"),
+        integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
+        size: bytes.length,
+      };
+      assert.equal(expected.sha256, first.sha256);
+      assert.equal(expected.sha1, first.sha1);
+      assert.equal(expected.integrity, first.integrity);
+      assert.equal(expected.size, first.size);
+      const dirRecord = JSON.parse(await readFile(join(dir, "release-artifact.json"), "utf8"));
+      assert.equal(dirRecord.sha256, expected.sha256);
+      assert.equal(dirRecord.sha1, expected.sha1);
+      assert.equal(dirRecord.shasum, expected.sha1);
+      assert.equal(dirRecord.integrity, expected.integrity);
+      assert.equal(dirRecord.size, expected.size);
+    }
   } finally {
     await Promise.all([root, firstDir, secondDir].map((path) => rm(path, { recursive: true, force: true })));
   }

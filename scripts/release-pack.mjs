@@ -243,15 +243,25 @@ export async function buildReleasePackage({ source, outputDir }) {
     const recompressed = await canonicalTarGzip(verifyDir);
     await writeFile(target, recompressed);
     await writeFile(join(destination, "SHA256SUMS.txt"), `${createHash("sha256").update(recompressed).digest("hex")}  ${basename(target)}\n`, "utf8");
+    // Every identity field is computed from the bytes actually written to
+    // disk — never from npm pack's pre-canonicalization record, whose
+    // shasum/integrity/size describe a different archive.
+    const written = await readFile(target);
+    const sha256Of = createHash("sha256").update(written).digest("hex");
+    const sha1Of = createHash("sha1").update(written).digest("hex");
+    const integrityOf = `sha512-${createHash("sha512").update(written).digest("base64")}`;
+    assert(sha256Of === createHash("sha256").update(recompressed).digest("hex"),
+      "written tgz bytes differ from the canonical stream");
     const result = {
       name: sourceManifest.name,
       version: sourceManifest.version,
       gitHead,
       filename: basename(target),
-      sha256: createHash("sha256").update(recompressed).digest("hex"),
-      shasum: first.shasum,
-      integrity: first.integrity,
-      size: recompressed.length,
+      sha256: sha256Of,
+      sha1: sha1Of,
+      shasum: sha1Of,
+      integrity: integrityOf,
+      size: written.length,
       fileCount: first.files.length,
     };
     await writeFile(join(destination, "release-artifact.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");

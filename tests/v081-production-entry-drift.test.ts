@@ -259,6 +259,7 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
   privateLedgerRoot: string
   onAsyncPreparation?: () => void
   readExecutableIdentity?: typeof executableIdentity
+  onAudit?: (count: number) => void
 }) {
   const tools: RegisteredTool[] = []
   const guards: Array<(exec: { name?: string; arguments?: unknown }) => string | undefined> = []
@@ -291,6 +292,7 @@ function startRuntime(session: Session, host: ReturnType<typeof makeHost>, seams
     privateLedgerRoot: seams.privateLedgerRoot,
     onHostLockValidation: () => {
       validations.push(1)
+      seams.onAudit?.(validations.length)
     },
   })
   const agent = {
@@ -320,6 +322,7 @@ async function publishChain(setup: {
   onAsyncPreparation?: () => void
   withRef?: boolean
   onIdentityRead?: (executable: string) => void
+  onAudit?: (count: number) => void
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
   temporaryRoots.push(root)
@@ -357,6 +360,7 @@ async function publishChain(setup: {
     commandRunner: async () => { published.push([]) },
     fetcher, privateLedgerRoot: join(root, 'private-ledger'),
     onAsyncPreparation: setup.onAsyncPreparation,
+    onAudit: setup.onAudit,
     // The hook observes the executable-identity reads; the release gate's ref
     // resolution reads the GIT identity between its fresh validation and the
     // effect on the pre-fix runtime.
@@ -435,14 +439,15 @@ describe('real production entries validate freshly and share one audit per decis
     restoreSessionBytes(host, drift.original, drift.stamp)
 
     // A publish decision crosses THREE host-lock gates — capability check,
-    // mutation authorization, release pre-effect — and costs ONE full
-    // validation for the whole entry.
+    // mutation authorization, release pre-effect — plus the FINAL pre-effect
+    // veto taken after the effect path's last await: two full validations for
+    // the whole entry, the second of which is the one the effect obeys.
     const value = await chain.action('chain-action')
     if (value.status !== 'completed') {
       throw new Error(`publish did not complete: ${JSON.stringify(value)}`)
     }
     expect(published).toHaveLength(1)
-    expect(validations).toHaveLength(4)
+    expect(validations).toHaveLength(5)
 
     // The completion guard is its own entry: it validates freshly for exactly
     // the update_goal(complete) calls and refuses a drifted host.
@@ -450,10 +455,10 @@ describe('real production entries validate freshly and share one audit per decis
     applyDrift(host, drift.original, drift.stamp)
     const denial = guards[0]!({ name: 'update_goal', arguments: { action: 'complete', goal_id: 'g', revision: 1 } })
     expect(denial).toContain('stale_host')
-    expect(validations).toHaveLength(5)
+    expect(validations).toHaveLength(6)
     // A guard on an unrelated tool never pays for an audit.
     expect(guards[0]!({ name: 'bash', arguments: {} })).toBeUndefined()
-    expect(validations).toHaveLength(5)
+    expect(validations).toHaveLength(6)
     restoreSessionBytes(host, drift.original, drift.stamp)
   })
 
@@ -478,6 +483,19 @@ describe('real production entries validate freshly and share one audit per decis
     const value = await chain.action('pre-effect-drift-action')
     expect(value.status, JSON.stringify(value)).toBe('unavailable')
     expect(chain.published).toHaveLength(0)
+  })
+
+  it('refuses post-reservation drift through the wired final veto', async () => {
+    let chain: Awaited<ReturnType<typeof publishChain>>
+    chain = await publishChain({ onAudit: (count) => {
+      if (count !== 3) return
+      queueMicrotask(() => {
+        const d = driftSessionBytes(chain.host)
+        applyDrift(chain.host, d.original, d.stamp)
+      })
+    } })
+    const value = await chain.action('post-reservation-drift')
+    expect({ status: value.status, effects: chain.published.length }).toEqual({ status: 'unavailable', effects: 0 })
   })
 
   it('refuses publish when the host drifts during the entry\'s async preparation', async () => {

@@ -3035,7 +3035,8 @@ function normalizedRoots(options) {
 		...options.readExecutableIdentity ? { readExecutableIdentity: options.readExecutableIdentity } : {},
 		...options.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {},
 		...options.releaseGate ? { releaseGate: options.releaseGate } : {},
-		...options.releaseSettle ? { releaseSettle: options.releaseSettle } : {}
+		...options.releaseSettle ? { releaseSettle: options.releaseSettle } : {},
+		...options.preEffectVeto ? { preEffectVeto: options.preEffectVeto } : {}
 	};
 }
 function createActionTool(options = {}) {

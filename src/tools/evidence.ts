@@ -1257,6 +1257,9 @@ function normalizedRoots(options: EvidenceToolRoots): EvidenceToolRoots {
     // C10 release seams: the runtime's ticket gate and settlement recorder.
     ...(options.releaseGate ? { releaseGate: options.releaseGate } : {}),
     ...(options.releaseSettle ? { releaseSettle: options.releaseSettle } : {}),
+    // The final pre-effect host judgment: dropping it here would let the
+    // effect run on whatever audit preceded the last await.
+    ...(options.preEffectVeto ? { preEffectVeto: options.preEffectVeto } : {}),
   }
 }
 
