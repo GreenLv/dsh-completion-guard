@@ -365,7 +365,7 @@ describe('CGI-2026-042: one root commit-and-push authorization carries ordinary 
       session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
       session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
       // ONE root message authorizes the edit, the commit and the push.
-      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `修改 ${work}/app.py;提交仓库 ${work} 分支 main;推送仓库 ${work} 远端 origin 引用规范 refs/heads/main:refs/heads/main。` }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `修改 ${join(work, 'app.py')};提交仓库 ${work} 分支 main;推送仓库 ${work} 远端 origin 引用规范 refs/heads/main:refs/heads/main。` }], source: { kind: 'user' } }), { surfaceOp: 'append' })
 
       const content = 'version = "2.0"\n'
       await writeFile(join(work, 'app.py'), content)
