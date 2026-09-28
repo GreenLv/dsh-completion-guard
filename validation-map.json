@@ -407,6 +407,25 @@
       ],
       "contracts": [],
       "peer_gates": {}
+    },
+    {
+      "id": "host_audit_tooling",
+      "paths": [
+        "scripts/generate-rc020-byte-audit.mjs",
+        "scripts/measure-host-audit.mjs",
+        "manifests/rc020-rc1-byte-audit.json",
+        "manifests/supported-host.v1.json"
+      ],
+      "gates": [
+        "artifact_identity",
+        "static_contracts"
+      ],
+      "invalidates": [
+        "artifact",
+        "native_artifact"
+      ],
+      "contracts": [],
+      "peer_gates": {}
     }
   ]
 }

@@ -253,11 +253,11 @@ class HostBoundEntrypointTests(unittest.TestCase):
         manifest = json.loads(
             (Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
         cohorts = manifest["cohorts"]
-        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.1.7-rc.2-core-v1"])
+        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.0-rc.1-core-v1"])
         active = cohorts[0]
         launcher = [row for row in active["packages"] if row["name"] == "@deepseek-ai/dsh"]
         self.assertEqual(len(launcher), 1, "the launcher row must be unique for version lookup")
-        self.assertEqual(launcher[0]["version"], "0.1.7-rc.2")
+        self.assertEqual(launcher[0]["version"], "0.2.0-rc.1")
 
         targets = {"web": active["id"], "headless": active["id"]}
         chosen = self.host.select_target_cohorts(cohorts, launcher[0]["version"], targets)
@@ -272,8 +272,8 @@ class HostBoundEntrypointTests(unittest.TestCase):
 
     def test_shipped_rc2_cohort_requires_the_rc2_runtime(self):
         manifest = json.loads((Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
-        targets = {"web": "dsh-0.1.7-rc.2-core-v1", "headless": "dsh-0.1.7-rc.2-core-v1"}
-        chosen = self.host.select_target_cohorts(manifest["cohorts"], "0.1.7-rc.2", targets)
+        targets = {"web": "dsh-0.2.0-rc.1-core-v1", "headless": "dsh-0.2.0-rc.1-core-v1"}
+        chosen = self.host.select_target_cohorts(manifest["cohorts"], "0.2.0-rc.1", targets)
         self.assertEqual(chosen["web"]["id"], targets["web"])
         with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
             self.host.select_target_cohorts(manifest["cohorts"], "0.1.5-rc.1", targets)
