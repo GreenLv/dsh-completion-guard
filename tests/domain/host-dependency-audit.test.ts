@@ -3,6 +3,7 @@ import { realpathSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSyn
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { auditHostDependencyRoutes, type DependencyAuditGraph } from '../../src/domain/host-dependency-audit.js'
+import { createHostAuditSession, type HostAuditSession } from '../../src/domain/host-audit-session.js'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -81,6 +82,38 @@ describe('rc.2 mapped dependency edge family (native and profile interception)',
   })
   it('refuses an unreviewed import/require conditional divergence', () => {
     const f = fixture(); f.runtime.packages.get(dep)!.manifest.exports = { '.': { import: './lib/sub.js', require: './lib/index.js' } }
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+  })
+  it('performs one native resolution per package-root export route and reuses it for every importer of that root', () => {
+    const f = fixture()
+    const base = createHostAuditSession()
+    let nativeResolutions = 0
+    const counted: HostAuditSession = {
+      ...base,
+      requireResolve: (importer, request) => {
+        nativeResolutions += 1
+        return base.requireResolve(importer, request)
+      },
+    }
+    // The parent package exposes two importer directories (its root and lib/)
+    // and the critical dependency exposes three runtime export routes, so the
+    // per-importer lane would spend six native resolutions. Node resolves the
+    // request from the selected root's own manifest, so one proof per physical
+    // (root, request) route is enough — provided every importer still passed
+    // its own shadow and identity checks, which the accepted verdict above
+    // and the shadow rejection below pin.
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot, counted)).toBe(true)
+    expect(nativeResolutions).toBe(3)
+  })
+  it('revalidates with a fresh audit when a nearer shadow appears between two audits', () => {
+    const f = fixture()
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(true)
+    const rogue = graph(join(f.home, 'rogue')); const copy = pkg(rogue, dep)
+    const link = join(f.source, 'lib/node_modules', dep)
+    mkdirSync(dirname(link), { recursive: true }); symlinkSync(copy, link, 'junction')
+    // The second audit creates its own session: no resolution, existence or
+    // realpath memo may leak from the first audit, or the shadow would be
+    // masked by the first audit's negative exists() result.
     expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
   })
 })

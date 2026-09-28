@@ -156,11 +156,11 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 							if (!session.stat(selected).isDirectory() || session.realpath(selected) !== expected.root) return false;
 						} else if (!isProfile || local || !installed) return false;
 						for (const [subpath, target] of exports) {
-							const wanted = session.realpath(resolve(expected.root, target));
+							const wanted = session.memo(`wanted:${expected.root}\u0000${subpath}`, () => session.realpath(resolve(expected.root, target)));
 							if (!within$1(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
-								if (session.realpath(session.requireResolve(importer, request)) !== wanted) return false;
+								if (session.memo(`resolved:${expected.root}\u0000${request}`, () => session.realpath(session.requireResolve(importer, request))) !== wanted) return false;
 							}
 						}
 					}

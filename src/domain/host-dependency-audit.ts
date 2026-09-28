@@ -121,13 +121,26 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
               if (!session.stat(selected).isDirectory() || session.realpath(selected) !== expected.root) return false
             } else if (!isProfile || local || !installed) return false
             for (const [subpath, target] of exports) {
-              const wanted = session.realpath(resolve(expected.root, target))
+              const wanted = session.memo(`wanted:${expected.root}\u0000${subpath}`,
+                () => session.realpath(resolve(expected.root, target)))
               if (!within(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false
               // Profile fallback is the official interception route, not Node's
               // unrelated ancestor fallback. Installation/local routes remain native.
               if (selected) {
                 const request = name + (subpath === '.' ? '' : subpath.slice(1))
-                if (session.realpath(session.requireResolve(importer, request)) !== wanted) return false
+                // Node resolves `request` from the selected package root's own
+                // manifest, so within ONE audit every importer that has
+                // independently selected this same root (verified above:
+                // realpath(selected) === expected.root) shares one native
+                // proof of the export route. The first importer reaching the
+                // route performs the real require.resolve; the rest reuse it
+                // and keep only their own shadow, stat and identity checks.
+                // The key is the physical root plus the exact request — never
+                // a package name or a bare target — and the table dies with
+                // this audit.
+                const resolved = session.memo(`resolved:${expected.root}\u0000${request}`,
+                  () => session.realpath(session.requireResolve(importer, request)))
+                if (resolved !== wanted) return false
               }
             }
           }
