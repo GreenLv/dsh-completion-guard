@@ -2,9 +2,10 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -70,6 +71,64 @@ function parseArgs(argv) {
   }
   assert(result.outputDir, "--output-dir is required");
   return result;
+}
+
+const USTAR_MTIME = 499137300; // 1985-10-26T08:15:00Z, before every real source mtime
+
+function tarChecksum(block) {
+  let sum = 0;
+  for (let index = 0; index < 512; index += 1) {
+    sum += index >= 148 && index < 156 ? 32 : block[index];
+  }
+  return `${sum.toString(8).padStart(7, "0")}\0`;
+}
+
+function ustarHeader(path, size, mode) {
+  assert(Buffer.byteLength(path) <= 100, `ustar member path too long: ${path}`);
+  const block = Buffer.alloc(512);
+  block.write(path, 0);
+  block.write(`${mode.toString(8).padStart(7, "0")}\0`, 100);
+  block.write("0000000\0", 108);
+  block.write("0000000\0", 116);
+  block.write(`${size.toString(8).padStart(11, "0")}\0`, 124);
+  block.write(`${USTAR_MTIME.toString(8).padStart(11, "0")}\0`, 136);
+  block.write("        ", 148);
+  block[156] = 0x30;
+  block.write("ustar\0", 257);
+  block.write("00", 263);
+  block.write(tarChecksum(block), 148);
+  return block;
+}
+
+/**
+ * Deterministic ustar+gzip bytes for one extracted package tree: fixed
+ * metadata, git-index executable bits, sorted file order, node:zlib framing.
+ */
+async function canonicalTarGzip(extractedRoot) {
+  const packageRoot = join(extractedRoot, "package");
+  const files = [];
+  const walk = async (directory) => {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) await walk(path);
+      else if (entry.isFile()) files.push(path);
+      else throw new Error(`unexpected non-regular package member: ${path}`);
+    }
+  };
+  await walk(packageRoot);
+  files.sort();
+  const chunks = [];
+  for (const file of files) {
+    const member = relative(packageRoot, file).split(sep).join("/");
+    const bytes = await readFile(file);
+    const { mode } = await stat(file);
+    chunks.push(ustarHeader(`package/${member}`, bytes.length, mode & 0o755 === 0o755 ? 0o755 : 0o644));
+    chunks.push(bytes);
+    const padding = (512 - (bytes.length % 512)) % 512;
+    if (padding) chunks.push(Buffer.alloc(padding));
+  }
+  chunks.push(Buffer.alloc(1024));
+  return gzipSync(Buffer.concat(chunks), { level: 9 });
 }
 
 export async function buildReleasePackage({ source, outputDir }) {
@@ -144,17 +203,24 @@ export async function buildReleasePackage({ source, outputDir }) {
     assert(publishedManifest.version === sourceManifest.version, "release package version mismatch");
     assert(publishedManifest.gitHead === gitHead, "release package gitHead mismatch");
 
-    await copyFile(firstPath, target);
-    await writeFile(join(destination, "SHA256SUMS.txt"), `${firstDigest}  ${basename(target)}\n`, "utf8");
+    // npm pack compresses with the host's tar/gzip, whose tar flavor and
+    // deflate framing differ between operating systems even for identical
+    // file bytes (verified: same members, different tgz sha256 on macOS vs
+    // Ubuntu). Build the ustar stream in node with fixed metadata and
+    // compress with node:zlib so the published tgz is byte-identical on
+    // every host.
+    const recompressed = await canonicalTarGzip(verifyDir);
+    await writeFile(target, recompressed);
+    await writeFile(join(destination, "SHA256SUMS.txt"), `${createHash("sha256").update(recompressed).digest("hex")}  ${basename(target)}\n`, "utf8");
     const result = {
       name: sourceManifest.name,
       version: sourceManifest.version,
       gitHead,
       filename: basename(target),
-      sha256: firstDigest,
+      sha256: createHash("sha256").update(recompressed).digest("hex"),
       shasum: first.shasum,
       integrity: first.integrity,
-      size: first.size,
+      size: recompressed.length,
       fileCount: first.files.length,
     };
     await writeFile(join(destination, "release-artifact.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
