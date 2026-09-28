@@ -9,6 +9,8 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { rmSync } from 'node:fs'
 import { apply } from '../src/runtime.js'
 import { executableIdentity } from '../src/tools/evidence.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostLockEvaluation } from '../src/domain/host-lock.js'
@@ -496,6 +498,35 @@ describe('real production entries validate freshly and share one audit per decis
     expect(ok.status, JSON.stringify(ok)).toBe('completed')
     expect(chain.published).toHaveLength(1)
     expect(chain.validations).toHaveLength(7)
+  })
+
+  it('refuses publish after a warm-scope drift without any authenticated byte changing', async () => {
+    // The Windows warm-host incident shape: the graph was already resolved by
+    // real host activity, then a NEARER package scope is introduced that
+    // self-references a critical dependency. No audited byte changes, so a
+    // warm-resolver-based route proof would still pass. The scope file lands
+    // at the audited importer's own lib/ directory.
+    const chain = await publishChain()
+    const { host } = chain
+    const first = await chain.action('warm-baseline')
+    expect(first.status, JSON.stringify(first)).toBe('completed')
+    const publishedBefore = chain.published.length
+    const importer = join(host.sessionPackageDir, 'lib', 'index.js')
+    const dep = '@deepseek-ai/dsh-session'
+    // Real host activity resolves the dependency FIRST (the warm state).
+    expect(createRequire(importer).resolve(dep)).toBe(importer)
+    writeFileSync(join(host.sessionPackageDir, 'lib', 'package.json'), JSON.stringify({
+      name: dep, exports: { '.': './index.js', './package.json': './package.json' },
+    }))
+    // On disk the same request now self-redirects into the importer; a fresh
+    // Node process would refuse the authenticated module. No audited byte
+    // changed, and no further real resolution happens before the publish.
+    expect(chain.published.length).toBe(publishedBefore)
+    const refused = await chain.action('warm-drift-action')
+    expect(refused.status, JSON.stringify(refused)).toBe('unavailable')
+    // The effect never started: the final veto judged the drifted scope.
+    expect(chain.published.length).toBe(publishedBefore)
+    rmSync(join(host.sessionPackageDir, 'lib', 'package.json'))
   })
 
   it('refuses post-reservation drift through the wired final veto', async () => {

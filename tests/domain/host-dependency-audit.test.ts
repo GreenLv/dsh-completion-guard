@@ -85,7 +85,7 @@ describe('rc.2 mapped dependency edge family (native and profile interception)',
     const f = fixture(); f.runtime.packages.get(dep)!.manifest.exports = { '.': { import: './lib/sub.js', require: './lib/index.js' } }
     expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
   })
-  it('performs one native resolution per package-root export route and reuses it for every importer of that root', () => {
+  it('proves export routes from audit bytes alone and never consults the resident resolver', () => {
     const f = fixture()
     const base = createHostAuditSession()
     let nativeResolutions = 0
@@ -96,36 +96,27 @@ describe('rc.2 mapped dependency edge family (native and profile interception)',
         return base.requireResolve(importer, request)
       },
     }
-    // The parent package exposes two importer directories (its root and lib/)
-    // with the SAME nearest package scope, and the critical dependency exposes
-    // three runtime export routes, so the per-importer lane would spend six
-    // native resolutions. Same scope + same verified selected root is one
-    // equivalence class: one native proof per (scope, root, request).
+    // The resident resolver keeps Node's internal package-manifest and path
+    // caches from earlier host activity, so it is not a fresh oracle after a
+    // warm-up. The route authority is the audit's own restricted exports
+    // interpretation over this session's bytes; require.resolve must not be
+    // consulted at all on the audited surface.
     expect(auditHostDependencyRoutes(f.graphs, f.profileRoot, counted)).toBe(true)
-    expect(nativeResolutions).toBe(3)
+    expect(nativeResolutions).toBe(0)
   })
-  it('gives importers under different package scopes their own native proofs of the same route', () => {
+  it('binds each importer scope to its own route outcome without cross-scope sharing', () => {
     const f = fixture()
-    // The dependency package now imports itself: its own files are importers
-    // whose nearest scope (its own manifest) self-references, a different
-    // resolution class from the parent's scope even though both select the
-    // same physical root. Self-reference resolves inside the legitimate
-    // package here, so the audit still accepts.
+    // The dependency package imports itself: its own files are importers whose
+    // nearest scope self-references, and that self-route lands exactly on the
+    // authenticated file, so both scope classes accept.
     pkg(f.runtime, dep, [dep])
-    const base = createHostAuditSession()
-    let nativeResolutions = 0
-    const counted: HostAuditSession = {
-      ...base,
-      requireResolve: (importer, request) => {
-        nativeResolutions += 1
-        return base.requireResolve(importer, request)
-      },
-    }
-    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot, counted)).toBe(true)
-    // Two scope classes × three export routes: the dependency's own scope
-    // proves its three routes natively, and the parent's scope proves the same
-    // three routes again — no proof crosses a scope boundary.
-    expect(nativeResolutions).toBe(6)
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(true)
+    // A nested duplicate scope with the same name that redirects anywhere other
+    // than the authenticated file is a different route and must fail.
+    const shadow = join(f.runtime.packages.get(parent)!.root, 'lib/package.json')
+    file(shadow, JSON.stringify({ name: dep, exports: { '.': './index.js' } }))
+    file(join(f.runtime.packages.get(parent)!.root, 'lib/index.js'), 'export const ok = true')
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
   })
   it('revalidates with a fresh audit when a nearer shadow appears between two audits', () => {
     const f = fixture()

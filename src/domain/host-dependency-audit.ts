@@ -19,7 +19,7 @@ const within = (root: string, path: string): boolean => path.startsWith(root + s
  * and a missing or unparseable manifest fails the audit closed.
  */
 function nearestPackageScope(session: HostAuditSession, dir: string):
-  { path: string; manifest: Record<string, unknown> } | undefined {
+  { dir: string; path: string; manifest: Record<string, unknown> } | undefined {
   return session.memo(`scope:${dir}`, () => {
     let current = dir
     for (;;) {
@@ -28,13 +28,52 @@ function nearestPackageScope(session: HostAuditSession, dir: string):
       if (session.exists(manifestPath)) {
         // A corrupt scope manifest is a resolution input, not a transient read
         // error: throw so the audit reports the host unavailable.
-        return { path: manifestPath, manifest: session.readJson(manifestPath) }
+        return { dir: current, path: manifestPath, manifest: session.readJson(manifestPath) }
       }
       const parent = dirname(current)
       if (parent === current) return undefined
       current = parent
     }
   })
+}
+
+/**
+ * Restricted exports interpretation for a nearby package scope. The route
+ * authority inside one audit is a fresh oracle over THIS audit's own bytes:
+ * the resident `createRequire(...).resolve` keeps Node's internal package
+ * manifests and path cache from earlier host activity, so a scope rewritten
+ * after that warm-up would keep answering with the pre-drift route no matter
+ * how fresh the audit's own memo table is. For the audited rc.2 surface the
+ * CJS resolution is deterministic from the bytes, so this interpreter computes
+ * the unique route itself and never consults warm resolver receipts.
+ *
+ * Conditions follow Node's CJS require set; wildcard patterns or shapes this
+ * interpreter cannot decide are fail-closed, never approximated.
+ */
+function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; manifest: Record<string, unknown> },
+  request: string, wanted: string): boolean {
+  const subpath = request === scope.manifest.name ? '.' : '.' + request.slice(String(scope.manifest.name).length)
+  const target = (value: unknown, depth: number): string | null | undefined => {
+    if (value === null) return null
+    if (typeof value === 'string') return value
+    if (depth > 4 || !value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const conditions = value as Record<string, unknown>
+    for (const condition of ['node', 'require', 'default'] as const) {
+      if (Object.hasOwn(conditions, condition)) return target(conditions[condition], depth + 1)
+    }
+    return undefined
+  }
+  let entries: unknown = scope.manifest.exports
+  if (entries && typeof entries === 'object' && !Array.isArray(entries)
+    && !Object.keys(entries as Record<string, unknown>).some((key) => key.includes('*'))) {
+    entries = (entries as Record<string, unknown>)[subpath]
+  }
+  const resolvedTarget = target(entries, 0)
+  // No matching export target: Node refuses the request (the route is broken).
+  if (resolvedTarget === null || resolvedTarget === undefined || !resolvedTarget.startsWith('./')) return false
+  // The self-route must land on exactly the authenticated file; anything else
+  // (a redirect into the scope, a missing file) bypasses the audited bytes.
+  return session.realpath(resolve(scope.dir, resolvedTarget)) === wanted
 }
 
 /** rc.2's authenticated exports have only types/default conditions. Do not use
@@ -120,7 +159,16 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
         if (own?.root === root) {
           for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file))
         } else if (typeof manifest.main === 'string') {
-          const main = session.realpath(session.requireResolve(manifestPath, resolve(root, manifest.main)))
+          // Resolve the importer's own main with fresh session reads, never the
+          // resident resolver: LOAD_AS_FILE (exact, then .js) and
+          // LOAD_AS_DIRECTORY (index.js) cover the supported surface.
+          const mainPath = resolve(root, manifest.main)
+          const mainFile = session.exists(mainPath) && session.stat(mainPath).isFile() ? mainPath
+            : session.exists(mainPath + '.js') ? mainPath + '.js'
+            : session.exists(join(mainPath, 'index.js')) ? join(mainPath, 'index.js')
+            : undefined
+          if (!mainFile) return false
+          const main = session.realpath(mainFile)
           if (!within(root, main)) return false
           importers.add(main)
         }
@@ -155,34 +203,21 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
               // unrelated ancestor fallback. Installation/local routes remain native.
               if (selected) {
                 const request = name + (subpath === '.' ? '' : subpath.slice(1))
-                // Equivalence condition for sharing one native proof inside ONE
-                // audit. For a fixed request string and require conditions,
-                // Node's resolution from an importer file is a pure function of:
-                //   (a) the importer's nearest package scope — Node's trySelf
-                //       consults it BEFORE any node_modules search and applies
-                //       whenever the scope's name equals the request's package
-                //       name and the manifest has exports, so a nested scope can
-                //       redirect or deny the request without touching any
-                //       authenticated byte (`resolve.paths` and the selected-root
-                //       check never observe this step);
-                //   (b) the first existing node_modules candidate — verified
-                //       independently per importer above to realpath to
-                //       expected.root; and
-                //   (c) that selected root's own manifest exports.
-                // Importers with the SAME nearest scope path and the SAME
-                // verified selected root therefore resolve the request
-                // identically, and one native require.resolve proves the class.
-                // A different nearest scope — including a self-referencing
-                // redirect or denial — is a different class and resolves
-                // natively. The key carries the scope identity, the physical
-                // root and the exact request — never a package name alone —
-                // and the table dies with this audit.
+                // Fresh route proof, computed from THIS audit's bytes only. The
+                // importer's nearest package scope decides Node's trySelf step:
+                // when the scope's name equals the request's package name and
+                // the manifest declares exports, the self-route takes over and
+                // must land on exactly the authenticated file. Otherwise the
+                // node_modules walk picks `selected` — already verified above
+                // to realpath to expected.root — and the route is that root's
+                // own exports target (`wanted`). The resident resolver is never
+                // consulted: its internal package manifests and path cache can
+                // hold pre-drift state from earlier host activity, which is
+                // exactly the warm-process masking this gate exists to reject.
                 const scope = nearestPackageScope(session, dirname(importer))
-                const resolved = session.memo(
-                  `resolved:${scope?.path ?? '-'}\u0000${expected.root}\u0000${request}`,
-                  () => session.realpath(session.requireResolve(importer, request)),
-                )
-                if (resolved !== wanted) return false
+                const selfApplies = scope !== undefined
+                  && scope.manifest.name === name && Object.hasOwn(scope.manifest, 'exports')
+                if (selfApplies && !interpretScopeRoute(session, scope, request, wanted)) return false
               }
             }
           }

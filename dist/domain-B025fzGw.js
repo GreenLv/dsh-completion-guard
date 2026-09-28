@@ -70,6 +70,7 @@ function nearestPackageScope(session, dir) {
 			if (basename(current) === "node_modules") return void 0;
 			const manifestPath = join(current, "package.json");
 			if (session.exists(manifestPath)) return {
+				dir: current,
 				path: manifestPath,
 				manifest: session.readJson(manifestPath)
 			};
@@ -78,6 +79,38 @@ function nearestPackageScope(session, dir) {
 			current = parent;
 		}
 	});
+}
+/**
+* Restricted exports interpretation for a nearby package scope. The route
+* authority inside one audit is a fresh oracle over THIS audit's own bytes:
+* the resident `createRequire(...).resolve` keeps Node's internal package
+* manifests and path cache from earlier host activity, so a scope rewritten
+* after that warm-up would keep answering with the pre-drift route no matter
+* how fresh the audit's own memo table is. For the audited rc.2 surface the
+* CJS resolution is deterministic from the bytes, so this interpreter computes
+* the unique route itself and never consults warm resolver receipts.
+*
+* Conditions follow Node's CJS require set; wildcard patterns or shapes this
+* interpreter cannot decide are fail-closed, never approximated.
+*/
+function interpretScopeRoute(session, scope, request, wanted) {
+	const subpath = request === scope.manifest.name ? "." : "." + request.slice(String(scope.manifest.name).length);
+	const target = (value, depth) => {
+		if (value === null) return null;
+		if (typeof value === "string") return value;
+		if (depth > 4 || !value || typeof value !== "object" || Array.isArray(value)) return void 0;
+		const conditions = value;
+		for (const condition of [
+			"node",
+			"require",
+			"default"
+		]) if (Object.hasOwn(conditions, condition)) return target(conditions[condition], depth + 1);
+	};
+	let entries = scope.manifest.exports;
+	if (entries && typeof entries === "object" && !Array.isArray(entries) && !Object.keys(entries).some((key) => key.includes("*"))) entries = entries[subpath];
+	const resolvedTarget = target(entries, 0);
+	if (resolvedTarget === null || resolvedTarget === void 0 || !resolvedTarget.startsWith("./")) return false;
+	return session.realpath(resolve(scope.dir, resolvedTarget)) === wanted;
 }
 /** rc.2's authenticated exports have only types/default conditions. Do not use
 * CJS resolution as an ESM oracle if a future manifest introduces other branches.
@@ -157,7 +190,10 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 				if (own?.root === root) {
 					for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file));
 				} else if (typeof manifest.main === "string") {
-					const main = session.realpath(session.requireResolve(manifestPath, resolve(root, manifest.main)));
+					const mainPath = resolve(root, manifest.main);
+					const mainFile = session.exists(mainPath) && session.stat(mainPath).isFile() ? mainPath : session.exists(mainPath + ".js") ? mainPath + ".js" : session.exists(join(mainPath, "index.js")) ? join(mainPath, "index.js") : void 0;
+					if (!mainFile) return false;
+					const main = session.realpath(mainFile);
 					if (!within$1(root, main)) return false;
 					importers.add(main);
 				}
@@ -185,7 +221,7 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
 								const scope = nearestPackageScope(session, dirname(importer));
-								if (session.memo(`resolved:${scope?.path ?? "-"}\u0000${expected.root}\u0000${request}`, () => session.realpath(session.requireResolve(importer, request))) !== wanted) return false;
+								if (scope !== void 0 && scope.manifest.name === name && Object.hasOwn(scope.manifest, "exports") && !interpretScopeRoute(session, scope, request, wanted)) return false;
 							}
 						}
 					}
