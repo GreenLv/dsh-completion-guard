@@ -47,33 +47,33 @@ describe('shipped artifact entries', () => {
   it('loads the domain entry and exposes the active host policy and cohort', async () => {
     const domain = await import(distDomain.href) as Record<string, unknown>
     expect('default' in domain).toBe(false)
-    const rows = domain.RC017_RC2_HOST_PACKAGES as Array<{ name: string; version?: string; integrity?: string }>
+    const rows = domain.RC020_RC1_HOST_PACKAGES as Array<{ name: string; version?: string; integrity?: string }>
     expect(rows).toHaveLength(46)
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
-    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.1.7-rc.2')
-    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.1.7-rc.2')
-    expect(domain.LATEST_SUPPORTED_HOST_VERSION).toBe('0.1.7-rc.2')
-    expect(domain.SUPPORTED_HOST_VERSIONS).toEqual(['0.1.7-rc.2'])
-    expect(domain.SUPPORTED_HOST_RANGE).toBe('0.1.7-rc.2')
+    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.0-rc.1')
+    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.0-rc.1')
+    expect(domain.LATEST_SUPPORTED_HOST_VERSION).toBe('0.2.0-rc.1')
+    expect(domain.SUPPORTED_HOST_VERSIONS).toEqual(['0.2.0-rc.1'])
+    expect(domain.SUPPORTED_HOST_RANGE).toBe('0.2.0-rc.1')
   })
 
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {
     const domain = await import(distDomain.href) as {
-      RC017_RC2_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
+      RC020_RC1_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
       evaluateHostLock: (rows: unknown[], context: unknown) => { status: string; cohortId?: string; auditProvenance?: string }
       selectHostCohort: (rows: unknown[], platform?: string) => { consistent: boolean }
     }
-    const evaluation = domain.evaluateHostLock(domain.RC017_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const evaluation = domain.evaluateHostLock(domain.RC020_RC1_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluation).toMatchObject({
       status: 'supported',
-      cohortId: 'dsh-0.1.7-rc.2-core-v1',
+      cohortId: 'dsh-0.2.0-rc.1-core-v1',
       auditProvenance: 'registry-derived-pending-native-audit',
     })
     // Drift fails closed in the shipped path too, not only in source.
-    const drifted = domain.RC017_RC2_HOST_PACKAGES.map((row) =>
+    const drifted = domain.RC020_RC1_HOST_PACKAGES.map((row) =>
       row.name === '@deepseek-ai/dsh-session' ? { ...row, integrity: 'sha512-drift' } : row)
     expect(domain.evaluateHostLock(drifted, { platform: 'posix', profileKind: 'web' }).status).toBe('unsupported')
-    expect(domain.selectHostCohort(domain.RC017_RC2_HOST_PACKAGES, 'posix')).toMatchObject({ consistent: true })
+    expect(domain.selectHostCohort(domain.RC020_RC1_HOST_PACKAGES, 'posix')).toMatchObject({ consistent: true })
   })
 
   it('runs the shipped apply() against a minimal host context without throwing', async () => {

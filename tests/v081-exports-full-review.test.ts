@@ -30,7 +30,7 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
     name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' }, ...(name === '@deepseek-ai/dsh' ? { './lib/*': './lib/*' } : {}) },
   }),
 }))
-vi.mock('../manifests/rc017-rc2-byte-audit.json', async (original) => {
+vi.mock('../manifests/rc020-rc1-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()

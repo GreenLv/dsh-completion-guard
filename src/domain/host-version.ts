@@ -1,6 +1,6 @@
 /** Exact host identity; version ordering is diagnostic only. */
-export const MIN_SUPPORTED_HOST_VERSION = '0.1.7-rc.2'
-export const LATEST_SUPPORTED_HOST_VERSION = '0.1.7-rc.2'
+export const MIN_SUPPORTED_HOST_VERSION = '0.2.0-rc.1'
+export const LATEST_SUPPORTED_HOST_VERSION = '0.2.0-rc.1'
 export const SUPPORTED_HOST_VERSIONS: readonly string[] = [LATEST_SUPPORTED_HOST_VERSION]
 export const SUPPORTED_HOST_RANGE: string = LATEST_SUPPORTED_HOST_VERSION
 

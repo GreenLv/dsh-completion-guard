@@ -23,12 +23,12 @@ import {
   resolveActiveProfileHostLock,
   verifyComposedHostLockDump,
 } from '../../src/domain/host-resolver.js'
-import { RC017_RC2_HOST_PACKAGES } from '../../src/domain/rc017-rc2-host.js'
+import { RC020_RC1_HOST_PACKAGES } from '../../src/domain/rc020-rc1-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
 // This family isolates graph/config mutation with synthetic package manifests.
 // Published-byte integrity is exercised without mocks in v080-rc017-host.test.ts.
-vi.mock('../../manifests/rc017-rc2-byte-audit.json', async (original) => {
+vi.mock('../../manifests/rc020-rc1-byte-audit.json', async (original) => {
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
   return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {} })) } }
 })
@@ -53,7 +53,7 @@ describe('v0.3 host graph and live capability binding', () => {
     // The active cohort row is asserted against the published 0.1.5-rc.1
     // identity module, so a cohort swap cannot leave the Goal pair unlocked.
     expect(EXPECTED_HOST_PACKAGES).toContainEqual(
-      RC017_RC2_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
+      RC020_RC1_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
     )
     expect(EXPECTED_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal')?.version)
       .toBe(MIN_SUPPORTED_HOST_VERSION)

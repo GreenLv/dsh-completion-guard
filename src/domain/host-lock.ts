@@ -1,4 +1,4 @@
-import { RC017_RC2_HOST_PACKAGES } from './rc017-rc2-host.js'
+import { RC020_RC1_HOST_PACKAGES } from './rc020-rc1-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -12,7 +12,7 @@ export type HostProfileKind = 'headless' | 'web'
  * Capability expectations shared by every registered cohort.
  *
  * Every row is a host contract Guard actually consumes, re-checked against the
- * 0.1.7-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
+ * 0.2.0-rc.1 package surfaces: `ctx.sessions.flush()` still returns whether a
  * durability listener participated; `tools.guard()` is still a monotonic
  * post-policy denial; the Goal service still exposes `get`/`disarm` with a
  * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
@@ -92,7 +92,7 @@ function defineCohort(
 }
 
 /** Baseline cohort retained for callers that need a default fixture. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.1.7-rc.2'
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.0-rc.1'
 export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
 /** Core-lock/v1 separates optional market identity from the rc.2 critical
@@ -101,7 +101,7 @@ export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
  * acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.1.7-rc.2'], [], RC017_RC2_HOST_PACKAGES,
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.0-rc.1'], [], RC020_RC1_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))
@@ -119,7 +119,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   }))
 
 /**
- * Baseline fixture package identities (DSH 0.1.7-rc.2). The cohort
+ * Baseline fixture package identities (DSH 0.2.0-rc.1). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially

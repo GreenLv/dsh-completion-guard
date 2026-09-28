@@ -1,6 +1,6 @@
 import { auditHostDependencyRoutes, reachableIdsByName, type DependencyAuditGraph } from './host-dependency-audit.js'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
-import hostByteAudit from '../../manifests/rc017-rc2-byte-audit.json' with { type: 'json' }
+import hostByteAudit from '../../manifests/rc020-rc1-byte-audit.json' with { type: 'json' }
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
@@ -319,7 +319,9 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
   } catch { return false }
 }
 
-// The reviewed 0.1.7-rc.2 foreground tools have these exact renderer bytes.
+// The reviewed 0.2.0-rc.1 foreground tools have these exact published bytes
+// (unchanged from rc.2 — these packages are not in the seven-package JS-change
+// set; re-verified against the published 0.2.0-rc.1 tarballs).
 // This is a separate check from npm SRI: a modified installed lib/index.js
 // must not inherit the graph's markerless-terminal interpretation.
 const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
@@ -328,7 +330,7 @@ const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-shell': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
 }
 
-// The rc.2 default-workdir route is a separate, narrower attestation than
+// The default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
 const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
@@ -350,14 +352,14 @@ export function activeRendererModule(nodeModulesRoot: string, name: string,
     [...reachable].filter((id) => id === name || id.startsWith(`${name}@`)))
   if (ids.length !== 1) return undefined
   const id = ids[0]!
-  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? '0\\.1\\.7-rc\\.2' : undefined
+  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? '0\\.2\\.0-rc\\.1' : undefined
   if (!version || (id !== name && !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id))) return undefined
   const url = records[id]?.url
   if (typeof url !== 'string' || (url !== `./${name}` && !url.startsWith('./.pnpm/'))) return undefined
   const root = session.realpath(resolve(modules, url))
   if (!root.startsWith(`${modules}${sep}`)) return undefined
   const manifest = session.readJson(join(root, 'package.json'))
-  if (manifest.name !== name || manifest.version !== '0.1.7-rc.2') return undefined
+  if (manifest.name !== name || manifest.version !== '0.2.0-rc.1') return undefined
   if (id !== name && manifest.version !== id.slice(name.length + 1).split('(', 1)[0]) return undefined
   const bytesPath = join(root, 'lib', 'index.js')
   const target = session.realpath(bytesPath)
