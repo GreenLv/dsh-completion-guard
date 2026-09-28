@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { crc32 } from "node:zlib";
 import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
@@ -101,8 +101,39 @@ function ustarHeader(path, size, mode) {
 }
 
 /**
+ * Deterministic gzip container with STORED deflate blocks, built by hand:
+ * the framing is fully specified (10-byte header with OS=3, RFC1952 stored
+ * blocks, CRC-32 and length), so the bytes are identical on every host and
+ * node build — zlib's compressed output is not, as macOS and CI nodes with
+ * different bundled zlib versions produced different streams for the same
+ * tar.
+ */
+function canonicalGzip(tar) {
+  const header = Buffer.from([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]);
+  const chunks = [header];
+  let offset = 0;
+  const maxStored = 0xffff;
+  while (offset < tar.length) {
+    const size = Math.min(maxStored, tar.length - offset);
+    const block = tar.subarray(offset, offset + size);
+    const blockHeader = Buffer.alloc(5);
+    blockHeader[0] = offset + size >= tar.length ? 1 : 0; // BFINAL, BTYPE=00 stored
+    blockHeader.writeUInt16LE(size, 1);
+    blockHeader.writeUInt16LE(~size & 0xffff, 3);
+    chunks.push(blockHeader, block);
+    offset += size;
+  }
+  const trailer = Buffer.alloc(8);
+  trailer.writeUInt32LE(Number(BigInt.asUintN(32, BigInt(crc32(tar)))), 0);
+  trailer.writeUInt32LE(tar.length >>> 0, 4);
+  chunks.push(trailer);
+  return Buffer.concat(chunks);
+}
+
+/**
  * Deterministic ustar+gzip bytes for one extracted package tree: fixed
- * metadata, git-index executable bits, sorted file order, node:zlib framing.
+ * metadata, git-index executable bits, sorted file order, hand-built gzip
+ * framing.
  */
 async function canonicalTarGzip(extractedRoot) {
   const packageRoot = join(extractedRoot, "package");
@@ -128,7 +159,7 @@ async function canonicalTarGzip(extractedRoot) {
     if (padding) chunks.push(Buffer.alloc(padding));
   }
   chunks.push(Buffer.alloc(1024));
-  return gzipSync(Buffer.concat(chunks), { level: 9 });
+  return canonicalGzip(Buffer.concat(chunks));
 }
 
 export async function buildReleasePackage({ source, outputDir }) {
