@@ -1,4 +1,5 @@
-import { basename, join, dirname, resolve, sep } from 'node:path'
+import { basename, join, dirname, relative, resolve, sep, isAbsolute } from 'node:path'
+import { pathToFileURL, fileURLToPath } from 'node:url'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 
 export interface DependencyAuditGraph {
@@ -43,37 +44,97 @@ function nearestPackageScope(session: HostAuditSession, dir: string):
  * the resident `createRequire(...).resolve` keeps Node's internal package
  * manifests and path cache from earlier host activity, so a scope rewritten
  * after that warm-up would keep answering with the pre-drift route no matter
- * how fresh the audit's own memo table is. For the audited rc.2 surface the
- * CJS resolution is deterministic from the bytes, so this interpreter computes
- * the unique route itself and never consults warm resolver receipts.
+ * how fresh the audit's own memo table is. Within its support domain the
+ * interpreter is NODE-EXACT:
  *
- * Conditions follow Node's CJS require set; wildcard patterns or shapes this
- * interpreter cannot decide are fail-closed, never approximated.
+ * - exports shape: a string/null root target, a conditions object with no
+ *   dot-prefixed keys, or a subpath map whose keys are all exactly '.' or
+ *   start with './'. Mixing dot and non-dot keys is ERR_INVALID_PACKAGE_CONFIG.
+ * - subpath lookup: the exact key wins; a sibling wildcard pattern never
+ *   shadows a real exact key. Unrequested patterns/arrays/unmodellable shapes
+ *   are OUTSIDE the support domain and fail closed — they never approximate.
+ * - condition selection: iterate the manifest's OWN keys in manifest order
+ *   (never a fixed node→require→default priority); a key matches when it is
+ *   'default' or in the CJS require condition set {node, node-addons,
+ *   require}; a nested object without a matching condition CONTINUES to the
+ *   next key; null denies.
+ * - target validation happens BEFORE any realpath comparison: the target must
+ *   start with './', must URL-resolve inside the scope directory, and must
+ *   contain no 'node_modules' segment and no encoded %2f/%5c — exactly the
+ *   shapes Node rejects with ERR_INVALID_PACKAGE_TARGET. realpath equal to
+ *   the authenticated file is never sufficient for an illegal target.
  */
+const SCOPE_CONDITIONS = new Set(['node', 'node-addons', 'require'])
+const ENCODED_SEPARATOR = /%2f|%5c/i
+
 function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; manifest: Record<string, unknown> },
   request: string, wanted: string): boolean {
-  const subpath = request === scope.manifest.name ? '.' : '.' + request.slice(String(scope.manifest.name).length)
-  const target = (value: unknown, depth: number): string | null | undefined => {
+  const packageName = String(scope.manifest.name)
+  const subpath = request === packageName ? '.' : '.' + request.slice(packageName.length)
+  const rawExports = scope.manifest.exports
+  // Shape classification. `undefined` = no exports field: Node's trySelf does
+  // not apply, so the walk lane governs and the route stays in-root.
+  let rootTarget: unknown
+  let subpathMap: Record<string, unknown> | undefined
+  if (rawExports === undefined) return true
+  if (rawExports === null || typeof rawExports === 'string') {
+    rootTarget = rawExports
+  } else if (typeof rawExports === 'object' && !Array.isArray(rawExports)) {
+    const keys = Object.keys(rawExports as Record<string, unknown>)
+    const dotKeys = keys.filter((key) => key === '.' || key.startsWith('./'))
+    if (dotKeys.length === 0 && keys.length > 0) {
+      rootTarget = rawExports // pure conditions object for the root
+    } else if (dotKeys.length === keys.length) {
+      subpathMap = rawExports as Record<string, unknown>
+    } else {
+      // Mixed dot/non-dot keys: ERR_INVALID_PACKAGE_CONFIG territory.
+      return false
+    }
+  } else {
+    return false // arrays/other shapes are outside the support domain
+  }
+  let entry: unknown
+  if (subpathMap !== undefined) {
+    if (!Object.hasOwn(subpathMap, subpath)) {
+      // No exact key. Wildcard/pattern expansion is outside the support
+      // domain: fail closed rather than approximate Node's pattern matching.
+      return false
+    }
+    entry = subpathMap[subpath]
+  } else {
+    // Root-target forms only answer the bare package request.
+    if (subpath !== '.') return false
+    entry = rootTarget
+  }
+  const select = (value: unknown, depth: number): string | null | undefined => {
     if (value === null) return null
     if (typeof value === 'string') return value
     if (depth > 4 || !value || typeof value !== 'object' || Array.isArray(value)) return undefined
     const conditions = value as Record<string, unknown>
-    for (const condition of ['node', 'require', 'default'] as const) {
-      if (Object.hasOwn(conditions, condition)) return target(conditions[condition], depth + 1)
+    for (const key of Object.keys(conditions)) {
+      const matched = key === 'default' || SCOPE_CONDITIONS.has(key)
+      if (!matched) continue
+      const nested = select(conditions[key], depth + 1)
+      if (nested !== undefined) return nested
     }
     return undefined
   }
-  let entries: unknown = scope.manifest.exports
-  if (entries && typeof entries === 'object' && !Array.isArray(entries)
-    && !Object.keys(entries as Record<string, unknown>).some((key) => key.includes('*'))) {
-    entries = (entries as Record<string, unknown>)[subpath]
+  const resolvedTarget = select(entry, 0)
+  if (resolvedTarget === null || resolvedTarget === undefined) return false
+  // Target syntax and containment checks BEFORE any realpath comparison.
+  if (!resolvedTarget.startsWith('./')) return false
+  let targetPath: string
+  try {
+    targetPath = fileURLToPath(new URL(resolvedTarget, pathToFileURL(join(scope.dir, '/'))))
+  } catch {
+    return false
   }
-  const resolvedTarget = target(entries, 0)
-  // No matching export target: Node refuses the request (the route is broken).
-  if (resolvedTarget === null || resolvedTarget === undefined || !resolvedTarget.startsWith('./')) return false
+  const scopeRelative = relative(scope.dir, targetPath)
+  if (scopeRelative.startsWith('..') || isAbsolute(scopeRelative) || scopeRelative.split(sep).includes('node_modules')
+    || ENCODED_SEPARATOR.test(resolvedTarget)) return false
   // The self-route must land on exactly the authenticated file; anything else
   // (a redirect into the scope, a missing file) bypasses the audited bytes.
-  return session.realpath(resolve(scope.dir, resolvedTarget)) === wanted
+  return session.realpath(targetPath) === wanted
 }
 
 /** rc.2's authenticated exports have only types/default conditions. Do not use
@@ -159,14 +220,35 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
         if (own?.root === root) {
           for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file))
         } else if (typeof manifest.main === 'string') {
-          // Resolve the importer's own main with fresh session reads, never the
-          // resident resolver: LOAD_AS_FILE (exact, then .js) and
-          // LOAD_AS_DIRECTORY (index.js) cover the supported surface.
-          const mainPath = resolve(root, manifest.main)
-          const mainFile = session.exists(mainPath) && session.stat(mainPath).isFile() ? mainPath
-            : session.exists(mainPath + '.js') ? mainPath + '.js'
-            : session.exists(join(mainPath, 'index.js')) ? join(mainPath, 'index.js')
-            : undefined
+          // Resolve the importer's own main with fresh session reads, never
+          // the resident resolver. Node's algorithm: LOAD_AS_FILE (exact, then
+          // .js), then LOAD_AS_DIRECTORY — a directory main uses THAT
+          // directory's package.json main recursively, and only falls back to
+          // index.js when the directory carries no manifest. Guessing
+          // index.js over a nested manifest audits the wrong entry file and
+          // misses scopes declared beside the real main. Missing, non-file,
+          // out-of-root and depth-exceeded forms fail closed.
+          const resolveMain = (base: string, spec: string, depth: number): string | undefined => {
+            if (depth > 4) return undefined
+            const mainPath = resolve(base, spec)
+            if (session.exists(mainPath) && session.stat(mainPath).isFile()) return mainPath
+            if (session.exists(mainPath + '.js') && session.stat(mainPath + '.js').isFile()) return mainPath + '.js'
+            if (!session.exists(mainPath) || !session.stat(mainPath).isDirectory()) return undefined
+            const nestedManifestPath = join(mainPath, 'package.json')
+            if (session.exists(nestedManifestPath)) {
+              const nestedManifest = session.readJson(nestedManifestPath)
+              if (typeof nestedManifest.main === 'string') {
+                const nested = resolveMain(mainPath, nestedManifest.main, depth + 1)
+                if (nested) return nested
+                // A declared nested main that resolves to nothing is broken,
+                // not a fallback trigger.
+                return undefined
+              }
+            }
+            const fallback = join(mainPath, 'index.js')
+            return session.exists(fallback) && session.stat(fallback).isFile() ? fallback : undefined
+          }
+          const mainFile = resolveMain(root, manifest.main, 0)
           if (!mainFile) return false
           const main = session.realpath(mainFile)
           if (!within(root, main)) return false
