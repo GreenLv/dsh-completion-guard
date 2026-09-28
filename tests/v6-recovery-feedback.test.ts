@@ -1118,4 +1118,50 @@ describe('CGI-2026-014/023: persisted checkpoint follow-up stays bounded', () =>
       }
     })
   }
+
+  it('a legal correction after the armed follow-up ends the turn safely with the work still pending', async () => {
+    const { session, ctx, agent, registered } = freshRuntimeSession('cgi-014-chain')
+    const root = await runPreStep(ctx, agent, [claimed('Run npm test in /work.')])
+    persistStep(session, root.messages)
+    const checkpoint = registered.find((tool) => tool.name === 'context_guard_checkpoint')!
+    // The checkpoint rejects with a missing proof: the follow-up arms.
+    const rejected = await checkpoint.execute({ bindings: [], proof: {} }) as Record<string, unknown>
+    expect(rejected).toMatchObject({ status: 'incomplete' })
+    const followups = (texts: string[]) => texts.filter((text) => text.includes('Open task requirements (checkpoint follow-up):'))
+    const first = await runPreStep(ctx, agent, [claimed('继续')])
+    expect(followups(first.texts)).toHaveLength(1)
+    persistStep(session, first.messages)
+    // The legal correction: a real successful host test lands in the durable log.
+    session.append('tool/call', { turn: 2, step: 1, callId: 'fix-1' as never, name: 'bash', arguments: JSON.stringify({ command: 'npm test', workdir: '/work' }) })
+    session.append('tool/result', { turn: 2, step: 1, message: createToolResultMessage({ callId: 'fix-1' as never,
+      content: [{ type: 'text', text: '10 tests passed' }], isError: false }) } as never, { surfaceOp: 'append' })
+    const confirmed = await checkpoint.execute({ bindings: [] }) as Record<string, unknown>
+    expect(confirmed).toMatchObject({ status: 'observed', feedback_source: 'confirmed_core_v2' })
+    const corrected = await runPreStep(ctx, agent, [claimed('继续')])
+    expect(followups(corrected.texts), corrected.texts.join('\n')).toHaveLength(0)
+    persistStep(session, corrected.messages)
+    // The production turn-stopping entry stops safely and never spends a steer.
+    const { handleGuardTurnStopping } = await import('../src/runtime.js')
+    const steered: unknown[] = []
+    const steering = { ...agent, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: 'cgi-014-chain', createdAt: 1, seedLength: 0, delegationDepth: 0 } }
+    const runtime = {
+      get projection() {
+        return deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, scope, true, HOST).projection
+      },
+      sync: () => {}, setEnabled: () => {}, setDurability: () => {}, consumeRecovery: () => false,
+      get lifecycle() { return 'active' as const },
+      get protocolV4Present() { return true },
+    }
+    const reason = await handleGuardTurnStopping(steering, runtime as never,
+      { flush: async () => true, hostSupported: true, readExternalOperation: () => undefined })
+    expect(reason).toBe('safe_yield_pending_preserved')
+    expect(steered).toEqual([])
+    // Unfinished work stays recorded as unfinished: no certificate exists, the
+    // item is not passed, and nothing claims completion on the guard's behalf.
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, scope, true, HOST).projection
+    expect(projection.checkpoints.some((row) => row.result === 'certified')).toBe(false)
+    const item = [...projection.items.values()].find((row) => row.normalizedText.includes('Run npm test'))!
+    expect(item?.status).toBe('pending')
+  })
 })

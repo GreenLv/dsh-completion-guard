@@ -874,6 +874,61 @@ describe('production turn-stopping integration', () => {
     expect(disarms).toBe(0)
   })
 
+  it('keeps the protocol correction message fixed-size regardless of session debt', async () => {
+    const access = { flush: async () => true, hostSupported: true, readExternalOperation: () => undefined }
+    const build = (fillerCount: number) => {
+      const projection = createProjection()
+      projection.enabled = true
+      const item = captureClause('运行 pnpm test。', 'm1', 'R001', 1, { cwd: '/work' })
+      const persistence = captureClause('持续推进，直到本轮测试完成为止。', 'm2', 'R002', 1, { cwd: '/work' })
+      projection.items.set(item.id, item)
+      projection.items.set(persistence.id, persistence)
+      for (let index = 0; index < fillerCount; index++) {
+        const filler = captureClause(`第 ${index + 1} 项遗留任务等待后续安排。`, `m${index + 10}`, `R${String(index + 10).padStart(3, '0')}`, 1, { cwd: '/work' })
+        projection.items.set(filler.id, filler)
+      }
+      projection.contractRevision = 1
+      projection.hostTurn = 1
+      projection.evidence.set('E-ready', { id: 'E-ready', epoch: 0, callId: 'ready-1', rootCallId: 'ready-1',
+        toolName: 'context_guard_observe_test_readiness', toolResultSeq: 3, outcome: 'success',
+        capabilities: ['test-input-readiness'], subjects: ['/work'], surfaces: ['scope'], boundedSummarySha256: 'a'.repeat(64),
+        semanticAction: 'verify', evidenceRole: 'state', parseStatus: 'supported', readinessForItemId: item.id,
+        readinessPredicate: 'test_passed', readinessManifestSha256: 'b'.repeat(64) })
+      return projection
+    }
+    const textOf = (steered: unknown[]) => ((steered[0] as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text ?? ''
+    const smallSteered: unknown[] = []
+    expect(await handleGuardTurnStopping(steeringAgent(smallSteered), projectionRuntime(build(0)), access))
+      .toBe('explicit_user_persistence')
+    expect(smallSteered).toHaveLength(1)
+    const small = textOf(smallSteered)
+    expect(small).toBe(PROTOCOL_CORRECTION_NOTICE)
+    expect(small.length).toBeLessThanOrEqual(240)
+    const largeSteered: unknown[] = []
+    expect(await handleGuardTurnStopping(steeringAgent(largeSteered), projectionRuntime(build(60)), access))
+      .toBe('explicit_user_persistence')
+    expect(largeSteered).toHaveLength(1)
+    // Sixty extra open items must not grow the correction message: it stays the
+    // same fixed notice byte for byte, never an appended Expected-IDs list.
+    expect(textOf(largeSteered)).toBe(small)
+    expect(textOf(largeSteered)).not.toContain('R001')
+  })
+
+  it('a cleanup request never carries mutation authority for product repair', () => {
+    const session = Session.create(SessionId('cleanup-scope-authority'), undefined, {
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('cleanup-scope-authority'), createdAt: 1, cwd: '/work',
+    })
+    enableCommand(session, 'on')
+    userText(session, '清理构建缓存目录。')
+    const projection = deriveProjection(session.snapshotEvents() as never, OPT_IN, { cwd: '/work' }, true).projection
+    const cleanup = [...projection.items.values()].find((entry) => entry.normalizedText.includes('清理构建缓存'))!
+    expect(cleanup).toBeDefined()
+    expect(authorizeMutationFromProjection(projection, {
+      action: 'modify', contractItemId: cleanup.id, contractItemRevision: cleanup.revision,
+      resolvedTarget: { artifact_id: '/work/app.ts', scope: '/work' },
+    })).toMatchObject({ status: 'denied' })
+  })
+
   it('live-requalifies every external_wait job immediately before effectuation', async () => {
     const projection = createProjection()
     projection.enabled = true

@@ -5,6 +5,7 @@ import {
   SEMANTIC_ACTIONS,
   STATEFUL_ACTIONS,
   SUPPORTED_EVIDENCE_ADAPTERS,
+  isStatefulAction,
   semanticActionFromCommand,
   semanticActionFromText,
   validateActionManifest,
@@ -129,6 +130,18 @@ describe('v0.3 versioned manifests', () => {
     expect(semanticActionFromCommand('git push origin main')).toBe('push')
     expect(semanticActionFromCommand('dsh plugin --profile web add skin@1.2.3')).toBe('install')
     expect(semanticActionFromCommand('node scripts/report.js')).toBe('generic_run')
+  })
+
+  it('routes simulation variants through the same stateful mutation lane as the real mutation', () => {
+    // No simulation lane exists, by manifest: a no-side-effect spelling can
+    // never classify past the mutation it names, and the real mutation gains
+    // no classification advantage over its dry-run form.
+    expect(semanticActionFromCommand('npm publish --dry-run')).toBe('publish')
+    expect(semanticActionFromCommand('npm publish')).toBe('publish')
+    expect(semanticActionFromCommand('git push --dry-run origin main')).toBe('push')
+    expect(semanticActionFromCommand('git push origin main')).toBe('push')
+    expect(isStatefulAction(semanticActionFromCommand('npm publish --dry-run'))).toBe(true)
+    expect(isStatefulAction(semanticActionFromCommand('git push --dry-run origin main'))).toBe(true)
   })
 
   it('keeps unittest evidence separate from install/pull/commit/push clauses', () => {
