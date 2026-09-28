@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import { realpathSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -96,14 +97,35 @@ describe('rc.2 mapped dependency edge family (native and profile interception)',
       },
     }
     // The parent package exposes two importer directories (its root and lib/)
-    // and the critical dependency exposes three runtime export routes, so the
-    // per-importer lane would spend six native resolutions. Node resolves the
-    // request from the selected root's own manifest, so one proof per physical
-    // (root, request) route is enough — provided every importer still passed
-    // its own shadow and identity checks, which the accepted verdict above
-    // and the shadow rejection below pin.
+    // with the SAME nearest package scope, and the critical dependency exposes
+    // three runtime export routes, so the per-importer lane would spend six
+    // native resolutions. Same scope + same verified selected root is one
+    // equivalence class: one native proof per (scope, root, request).
     expect(auditHostDependencyRoutes(f.graphs, f.profileRoot, counted)).toBe(true)
     expect(nativeResolutions).toBe(3)
+  })
+  it('gives importers under different package scopes their own native proofs of the same route', () => {
+    const f = fixture()
+    // The dependency package now imports itself: its own files are importers
+    // whose nearest scope (its own manifest) self-references, a different
+    // resolution class from the parent's scope even though both select the
+    // same physical root. Self-reference resolves inside the legitimate
+    // package here, so the audit still accepts.
+    pkg(f.runtime, dep, [dep])
+    const base = createHostAuditSession()
+    let nativeResolutions = 0
+    const counted: HostAuditSession = {
+      ...base,
+      requireResolve: (importer, request) => {
+        nativeResolutions += 1
+        return base.requireResolve(importer, request)
+      },
+    }
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot, counted)).toBe(true)
+    // Two scope classes × three export routes: the dependency's own scope
+    // proves its three routes natively, and the parent's scope proves the same
+    // three routes again — no proof crosses a scope boundary.
+    expect(nativeResolutions).toBe(6)
   })
   it('revalidates with a fresh audit when a nearer shadow appears between two audits', () => {
     const f = fixture()
@@ -115,5 +137,43 @@ describe('rc.2 mapped dependency edge family (native and profile interception)',
     // realpath memo may leak from the first audit, or the shadow would be
     // masked by the first audit's negative exists() result.
     expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+  })
+})
+
+
+describe('importer package-scope equivalence (review regression)', () => {
+  function nativeFixture(profile: boolean) {
+    const f = fixture(profile)
+    if (profile) {
+      const local = pkg(f.p, dep)
+      f.p.records[parent].dependencies = { [dep]: dep }
+      const link = join(f.p.modules, '.pnpm/loop/node_modules', dep)
+      mkdirSync(dirname(link), { recursive: true })
+      symlinkSync(local, link, 'junction')
+    }
+    return f
+  }
+  it.each([false, true])('rejects redirected package self-reference for runtime/profile-local (%s)', profile => {
+    const f = nativeFixture(profile)
+    const legitimate = f.p.packages.get(dep)!.root
+    file(join(f.source, 'lib/package.json'), JSON.stringify({
+      name: dep, exports: { '.': './index.js', './sub': './sub.js', './package.json': './package.json' },
+    }))
+    expect(createRequire(join(f.source, 'package.json')).resolve(dep)).toBe(join(legitimate, 'lib/index.js'))
+    expect(createRequire(join(f.source, 'lib/index.js')).resolve(dep)).toBe(join(f.source, 'lib/index.js'))
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+  })
+  it.each([false, true])('rejects package self-reference export denial for runtime/profile-local (%s)', profile => {
+    const f = nativeFixture(profile)
+    file(join(f.source, 'lib/package.json'), JSON.stringify({ name: dep, exports: { '.': null } }))
+    expect(() => createRequire(join(f.source, 'lib/index.js')).resolve(dep)).toThrow()
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(false)
+  })
+  it.each([false, true])('keeps unrelated nested package scopes valid for runtime/profile-local (%s)', profile => {
+    const f = nativeFixture(profile)
+    const legitimate = f.p.packages.get(dep)!.root
+    file(join(f.source, 'lib/package.json'), JSON.stringify({ name: '@unrelated/scope', exports: { '.': './index.js' } }))
+    expect(createRequire(join(f.source, 'lib/index.js')).resolve(dep)).toBe(join(legitimate, 'lib/index.js'))
+    expect(auditHostDependencyRoutes(f.graphs, f.profileRoot)).toBe(true)
   })
 })

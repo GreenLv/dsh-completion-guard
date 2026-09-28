@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { createHash } from 'node:crypto'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
@@ -415,5 +416,32 @@ describe('one audit physically reads each path at most once', () => {
     // 46 manifests + 46 audited modules (+ the profile's session copy) + 2
     // package maps + 2 lockfiles at minimum.
     expect(physicalReads.size).toBeGreaterThanOrEqual(92)
+  })
+})
+
+
+describe('review: full host validation must reject importer self-reference drift', () => {
+  it('rejects a nested self-reference without any authenticated critical package bytes changing', () => {
+    const host = makeHost()
+    const dep = '@deepseek-ai/dsh-session'
+    const row = EXPECTED_HOST_PACKAGES.find(p => p.name === dep)!
+    const id = `${row.name}@${row.version}`
+    const consumer = join(host.runtimeRoot, 'node_modules', 'consumer')
+    mkdirSync(join(consumer, 'lib'), { recursive: true })
+    writeFileSync(join(consumer, 'package.json'), JSON.stringify({
+      name: 'consumer', version: '1.0.0', main: './lib/index.js', dependencies: { [dep]: row.version },
+    }))
+    writeFileSync(join(consumer, 'lib/index.js'), 'export const unauthenticated = true\n')
+    host.packages['.'].dependencies.consumer = 'consumer'
+    host.packages.consumer = { url: './consumer', dependencies: { [dep]: id } }
+    writeFileSync(join(host.runtimeRoot, 'node_modules', '.package-map.json'), JSON.stringify({ packages: host.packages }))
+    host.rows = readActiveHostGraph(host.runtimeRoot, host.profileRoot)
+    const expected = expectedLockFor(host)
+    expect(revalidateCoreLock(host.config, expected).status).toBe('supported')
+    writeFileSync(join(consumer, 'lib/package.json'), JSON.stringify({
+      name: dep, exports: { '.': './index.js' },
+    }))
+    expect(createRequire(join(consumer, 'lib/index.js')).resolve(dep)).toBe(join(consumer, 'lib/index.js'))
+    expect(revalidateCoreLock(host.config, expected).status).not.toBe('supported')
   })
 })

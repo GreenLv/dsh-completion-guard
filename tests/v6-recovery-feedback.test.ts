@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
-import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from '../src/runtime.js'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
@@ -1089,6 +1089,89 @@ describe('audit H2: the cleanup dependency condition rides the v6 lane', () => {
   })
 })
 
+
+describe('CGI-2026-040: answered questions stay out of recovery debt across compaction and restore', () => {
+  // Sanitized fixtures that keep the original record's STRUCTURE (question A
+  // answered before question B, then compaction and a strict Session restore).
+  // The original private question texts are never copied here.
+  function persistQuestionTurn(session: Session, messages: unknown[], answer?: string) {
+    const turn = 1 + [...session.snapshotEvents()].filter((event) => (event as { type?: unknown }).type === 'turn/start').length
+    rawAppend(session)('turn/start', { turn })
+    for (const message of messages) rawAppend(session)('user/message', message, { surfaceOp: 'append' })
+    rawAppend(session)('step/start', { turn, step: 1 })
+    if (answer !== undefined) {
+      rawAppend(session)('assistant/message', { turn, step: 1, stream: [], message: createAssistantMessage({ source: { provider: 'fixture', model: 'fixture' }, content: [{ type: 'text', text: answer }] }) } as never, { surfaceOp: 'append' })
+    }
+    rawAppend(session)('step/end', { turn, step: 1 })
+    rawAppend(session)('turn/end', { turn, reason: { kind: 'completed' } } as never)
+  }
+
+  it('an answered explicit question is not re-injected after compaction and restore while the open one stays current', async () => {
+    const { session, ctx, agent } = freshRuntimeSession('cgi-040-chain')
+    // Turn 1: question A is captured as an informational obligation and
+    // answered inside its own turn.
+    const first = await runPreStep(ctx, agent, [claimed('请解释这个插件的名字来源是什么。')])
+    expect(first.texts.length).toBeGreaterThan(0)
+    persistQuestionTurn(session, first.messages, '这个插件的名字来自它的守护职责。')
+    // Turn 2: question B is captured but never answered.
+    const second = await runPreStep(ctx, agent, [claimed('请解释这个插件的恢复包机制是什么。')])
+    persistQuestionTurn(session, second.messages)
+    const before = [...session.snapshotEvents()]
+    const derive = (events: readonly unknown[]) => {
+      const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: 'cgi-040-chain', createdAt: 1, seedLength: 0, delegationDepth: 0 } }
+      const projection = deriveProjection(events as never, { activation: 'always' }, scope, true, HOST).projection
+      projection.durabilityWatermark = 'confirmed'
+      const origins: NonNullable<typeof projection.coreV2RequirementOrigins> = new Map()
+      projection.coreV2 = projectSessionCoreV2(events as never, projection, origins)
+      projection.coreV2RequirementOrigins = origins
+      return projection
+    }
+    const pre = derive(before)
+    const answered = [...pre.items.values()].find((item) => item.normalizedText.includes('名字来源'))!
+    const open = [...pre.items.values()].find((item) => item.normalizedText.includes('恢复包机制'))!
+    expect(answered.status).toBe('answered')
+    expect(open.status).toBe('pending')
+    // Compaction, then a strict restore into a NEW session: the recovery lane
+    // must run over the restored log, not over this process's memory.
+    rawAppend(session)('compaction/summary', {
+      compactionId: 'cgi-040-c1', summary: [], shadowedRange: { start: 0, end: session.seq },
+      shadowedSeqs: [], shadowedTokenCount: 0, provider: 'fixture', model: 'fixture',
+    })
+    const { SessionLogOffset } = await import('@deepseek-ai/dsh-session')
+    const restored = Session.fromRestore(SessionId('cgi-040-chain'), structuredClone(session.snapshotEvents()) as never,
+      structuredClone(session.header) as never, SessionLogOffset(0), 'detached')
+    const restoredCtx = fakeCtx()
+    guardApply(restoredCtx)
+    const restoredGuard = guardedAgent(restored)
+    startGuard(restoredCtx, restoredGuard.agent, 'resume')
+    const resumed = await runPreStep(restoredCtx, restoredGuard.agent, [claimed('继续')])
+    const joined = resumed.texts.join('\n')
+    // The answered question never returns as recovery debt; the open question
+    // is still captured by the contract.
+    expect(joined, joined).not.toContain('名字来源')
+    expect(restoredGuard.agent.session === restored).toBe(true)
+    const after = derive(restored.snapshotEvents())
+    expect([...after.items.values()].find((item) => item.normalizedText.includes('名字来源'))!.status).toBe('answered')
+    expect([...after.items.values()].find((item) => item.normalizedText.includes('恢复包机制'))!.status).toBe('pending')
+  })
+
+  it('the original conversational question phrasing stays outside the contract entirely', () => {
+    // Input boundary control: the original record's B was a bare conversational
+    // question. In DSH that lane is conversational and never becomes an
+    // obligation — which is why the chain above uses the explicit explanatory
+    // phrasing DSH actually captures. The two readings must not be conflated
+    // into a claimed precise replay.
+    const id = SessionId('cgi-040-conversational')
+    const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: '/work' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }],
+      source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: '这个插件的恢复包是什么？' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: String(id), createdAt: 1, seedLength: 0, delegationDepth: 0 } }
+    const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, scope, true, HOST).projection
+    expect([...projection.items.values()]).toEqual([])
+  })
+})
 
 describe('CGI-2026-014/023: persisted checkpoint follow-up stays bounded', () => {
   for (const rejection of ['invalid-proof', 'failed-flush'] as const) {

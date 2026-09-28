@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import * as path from "node:path";
-import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -55,6 +55,30 @@ function createFileDigest(bytes$1) {
 //#endregion
 //#region src/domain/host-dependency-audit.ts
 const within$1 = (root, path$1) => path$1.startsWith(root + sep);
+/**
+* The importer's nearest package scope, with Node's own walk semantics: from
+* the importing module's directory upward, the first directory containing a
+* package.json defines the scope, and a `node_modules` path component ends the
+* walk with no scope. Both the discovery and the read go through the fresh
+* audit session, so a scope introduced or changed between audits is observed
+* and a missing or unparseable manifest fails the audit closed.
+*/
+function nearestPackageScope(session, dir) {
+	return session.memo(`scope:${dir}`, () => {
+		let current = dir;
+		for (;;) {
+			if (basename(current) === "node_modules") return void 0;
+			const manifestPath = join(current, "package.json");
+			if (session.exists(manifestPath)) return {
+				path: manifestPath,
+				manifest: session.readJson(manifestPath)
+			};
+			const parent = dirname(current);
+			if (parent === current) return void 0;
+			current = parent;
+		}
+	});
+}
 /** rc.2's authenticated exports have only types/default conditions. Do not use
 * CJS resolution as an ESM oracle if a future manifest introduces other branches.
 * Wildcard source exports are not runtime entrypoints in the published audit.
@@ -160,7 +184,8 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 							if (!within$1(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
-								if (session.memo(`resolved:${expected.root}\u0000${request}`, () => session.realpath(session.requireResolve(importer, request))) !== wanted) return false;
+								const scope = nearestPackageScope(session, dirname(importer));
+								if (session.memo(`resolved:${scope?.path ?? "-"}\u0000${expected.root}\u0000${request}`, () => session.realpath(session.requireResolve(importer, request))) !== wanted) return false;
 							}
 						}
 					}

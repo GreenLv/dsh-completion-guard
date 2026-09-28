@@ -1,4 +1,4 @@
-import { join, dirname, resolve, sep } from 'node:path'
+import { basename, join, dirname, resolve, sep } from 'node:path'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 
 export interface DependencyAuditGraph {
@@ -9,6 +9,33 @@ export interface DependencyAuditGraph {
 }
 
 const within = (root: string, path: string): boolean => path.startsWith(root + sep)
+
+/**
+ * The importer's nearest package scope, with Node's own walk semantics: from
+ * the importing module's directory upward, the first directory containing a
+ * package.json defines the scope, and a `node_modules` path component ends the
+ * walk with no scope. Both the discovery and the read go through the fresh
+ * audit session, so a scope introduced or changed between audits is observed
+ * and a missing or unparseable manifest fails the audit closed.
+ */
+function nearestPackageScope(session: HostAuditSession, dir: string):
+  { path: string; manifest: Record<string, unknown> } | undefined {
+  return session.memo(`scope:${dir}`, () => {
+    let current = dir
+    for (;;) {
+      if (basename(current) === 'node_modules') return undefined
+      const manifestPath = join(current, 'package.json')
+      if (session.exists(manifestPath)) {
+        // A corrupt scope manifest is a resolution input, not a transient read
+        // error: throw so the audit reports the host unavailable.
+        return { path: manifestPath, manifest: session.readJson(manifestPath) }
+      }
+      const parent = dirname(current)
+      if (parent === current) return undefined
+      current = parent
+    }
+  })
+}
 
 /** rc.2's authenticated exports have only types/default conditions. Do not use
  * CJS resolution as an ESM oracle if a future manifest introduces other branches.
@@ -128,18 +155,33 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
               // unrelated ancestor fallback. Installation/local routes remain native.
               if (selected) {
                 const request = name + (subpath === '.' ? '' : subpath.slice(1))
-                // Node resolves `request` from the selected package root's own
-                // manifest, so within ONE audit every importer that has
-                // independently selected this same root (verified above:
-                // realpath(selected) === expected.root) shares one native
-                // proof of the export route. The first importer reaching the
-                // route performs the real require.resolve; the rest reuse it
-                // and keep only their own shadow, stat and identity checks.
-                // The key is the physical root plus the exact request — never
-                // a package name or a bare target — and the table dies with
-                // this audit.
-                const resolved = session.memo(`resolved:${expected.root}\u0000${request}`,
-                  () => session.realpath(session.requireResolve(importer, request)))
+                // Equivalence condition for sharing one native proof inside ONE
+                // audit. For a fixed request string and require conditions,
+                // Node's resolution from an importer file is a pure function of:
+                //   (a) the importer's nearest package scope — Node's trySelf
+                //       consults it BEFORE any node_modules search and applies
+                //       whenever the scope's name equals the request's package
+                //       name and the manifest has exports, so a nested scope can
+                //       redirect or deny the request without touching any
+                //       authenticated byte (`resolve.paths` and the selected-root
+                //       check never observe this step);
+                //   (b) the first existing node_modules candidate — verified
+                //       independently per importer above to realpath to
+                //       expected.root; and
+                //   (c) that selected root's own manifest exports.
+                // Importers with the SAME nearest scope path and the SAME
+                // verified selected root therefore resolve the request
+                // identically, and one native require.resolve proves the class.
+                // A different nearest scope — including a self-referencing
+                // redirect or denial — is a different class and resolves
+                // natively. The key carries the scope identity, the physical
+                // root and the exact request — never a package name alone —
+                // and the table dies with this audit.
+                const scope = nearestPackageScope(session, dirname(importer))
+                const resolved = session.memo(
+                  `resolved:${scope?.path ?? '-'}\u0000${expected.root}\u0000${request}`,
+                  () => session.realpath(session.requireResolve(importer, request)),
+                )
                 if (resolved !== wanted) return false
               }
             }
