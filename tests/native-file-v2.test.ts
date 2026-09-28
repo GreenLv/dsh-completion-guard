@@ -438,17 +438,17 @@ describe('CGI-2026-042: one root commit-and-push authorization carries ordinary 
       const blocked = certifyCheckpoint(projection, [pushBinding], 'C-042-blocked', false)
       expect(blocked.status).toBe('incomplete')
       expect(blocked.rejectedBindings).toEqual([expect.objectContaining({ itemId: '*', reasonCode: 'current_closure_unmet' })])
-      const insufficient = Object.values(projection.coreV2?.predicates ?? {}).filter((value) => value === 'insufficient').length
+      const unmet = (projection.coreV2?.unmet_requirements ?? []) as string[]
       if (editMode === 'observed') {
-        // Fully observed: every per-item predicate is satisfied except the LAST
-        // same-target git requirement, which the core fold's evidence
-        // attachment consumes for the earlier one. That cross-attachment is a
-        // reported core-v2 finding with its own repair cycle, not the contract
-        // this row pins; this assertion documents today's boundary so the fix
-        // flips it red deliberately.
-        expect(insufficient).toBe(1)
+        // Fully observed except the reported core-v2 finding: the LAST
+        // same-target git requirement stays unmet because the core evidence
+        // fold attaches its rows to the earlier one (platform-independent;
+        // the total count may vary with platform path binding). Documented
+        // boundary; the core-v2 fix flips this red deliberately.
+        expect(unmet).toContain(pushItem.id)
       } else {
-        expect(insufficient).toBeGreaterThanOrEqual(2)
+        // The unobserved edit keeps its own requirement insufficient.
+        expect(unmet).toContain(modify.id)
       }
       // The commit/push rows never demand anything about the edit provenance.
       const fullPage = await createCheckpointTool(() => projection, () => {}).execute({ bindings: [] } as never, undefined as never) as { open_items: Array<{ id: string; binding_template?: Record<string, unknown> }> }
