@@ -2,7 +2,7 @@
 
 Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
 
-## 0.8.0–0.8.1: DSH 0.1.7-rc.2 only
+## 0.8.0–0.8.1: DSH 0.1.7-rc.2 only (0.8.1 final target moved to 0.2.0-rc.1)
 
 Current metadata and the production selector accept exactly `0.1.7-rc.2`, with Cordis `4.0.4`. The sole cohort is `dsh-0.1.7-rc.2-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest and actual dependency-path checks in `manifests/rc017-rc2-byte-audit.json`. A higher version is unregistered, not supported. Old cohorts exist only as historical test data.
 

@@ -4,13 +4,13 @@
 
 An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
-> **0.8.1 requires DSH `0.1.7-rc.2` and Cordis `4.0.4`.** It retains the 0.7.1 recovery feedback and uses the new host lifecycle and Session V4. Upgrade DSH before installing this version.
+> **0.8.1 requires DSH `0.2.0-rc.1` and Cordis `4.0.4`.** It retains the 0.7.1 recovery feedback, adds fresh byte-exact host-route validation and consumes the new host tool-call recovery semantics. Upgrade DSH before installing this version; the 0.1.7.x line is no longer supported.
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
 ## Quick start
 
-Upgrade to DSH `0.1.7-rc.2` first, then install Guard in the profile you want to protect:
+Upgrade to DSH `0.2.0-rc.1` first, then install Guard in the profile you want to protect:
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.8.1
@@ -57,7 +57,7 @@ The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.
 
 ## Status and compatibility
 
-Version 0.8.1 supports only **DSH `0.1.7-rc.2`** with Cordis `4.0.4`. Metadata, host locks and runtime checks use that exact version. Older RCs, stable or future releases, missing packages and mixed graphs are rejected. The identities and implementation bytes of 46 critical packages are bound to verified npm tarballs; historical hosts are absent from the production selector.
+Version 0.8.1 supports only **DSH `0.2.0-rc.1`** with Cordis `4.0.4`. Metadata, host locks and runtime checks use that exact version. Older lines (including the whole 0.1.7.x), other RCs, stable or future releases, missing packages and mixed graphs are rejected. The identities and implementation bytes of 46 critical packages are bound to the published 0.2.0-rc.1 tarballs; historical hosts are absent from the production selector.
 
 After upgrading, inspect and inject a new host lock, then restart the profile; follow the [host-lock upgrade guide](docs/HOST_LOCK_UPGRADE.md). DSH migrates old sessions to V4. Guard retains old ledgers and certificates without re-signing them or promoting their old identity to current authority. Goal remains optional; installing the host does not imply it is enabled.
 

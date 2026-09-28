@@ -13,7 +13,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ## 0.8.0
 
-- Target only DSH `0.1.7-rc.2` / Cordis `4.0.4`. Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; remove historical hosts from production selection.
+- Target only DSH `0.2.0-rc.1` / Cordis `4.0.4` (upstream `4878cdabd87d4041bdaff61d04c966883b9fd07a`). Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; the whole 0.1.7.x line is removed from production selection and refused as below-minimum.
 - Install and dispose tools, guards and listeners through awaited `agent/created`, including existing Agents on enablement. Use Session V4 and Jobs SessionId ownership.
 - Keep shell promotion and incomplete output uncertified. Persist Stop boundaries as Guard notices instead of fabricating tool events outside a turn.
 - Read-only prepare discovery and checkpoint pagination now continue after their own persisted observations; changed contract items or business state still invalidate old cursors.

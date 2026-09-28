@@ -28,26 +28,24 @@ function openTailSession(label: string, blocks: Array<Record<string, unknown>>, 
 }
 
 describe('rc.020 tool-call recovery keeps unknown outcomes unknown in the Guard projection', () => {
+  const block = (): Record<string, unknown> => ({ type: 'tool-call', id: 'call-1' })
   const variants = [
-    ['TOOL_OUTCOME_UNKNOWN', [{ type: 'tool-call', id: 'call-1' } as unknown], true, 'interrupted'],
-    ['TOOL_NOT_STARTED', [{ type: 'tool-call', id: 'call-1' } as unknown], false, 'interrupted'],
-    ['TOOL_OUTCOME_UNKNOWN_forked', [{ type: 'tool-call', id: 'call-1' } as unknown], true, 'forked'],
+    ['TOOL_OUTCOME_UNKNOWN', [block()], true, 'interrupted'],
+    ['TOOL_NOT_STARTED', [block()], false, 'interrupted'],
+    ['TOOL_OUTCOME_UNKNOWN_forked', [block()], true, 'forked'],
   ] as const
   it.each(variants)('%s: the synthetic error result never satisfies the mutation obligation', (label, blocks, withCall, kind) => {
     const session = openTailSession(`rc020-recovery-${String(kind)}-${withCall}`, [...blocks], withCall)
     const events = session.snapshotEvents() as never
-    let closers: Array<{ type: string; data: unknown }> 
+    let closers: Array<{ type: string; data: unknown }>
     if (kind === 'forked') {
       // The public entry exposes the class: build the forked-cause closers
       // through the same observe/results protocol the host uses.
       const recovery = new ToolCallRecovery({ kind: 'forked' })
-      for (const event of events) recovery.observe(event as never)
+      for (const event of events as unknown as Array<Parameters<ToolCallRecovery['observe']>[0]>) recovery.observe(event)
       closers = [...recovery.results() as unknown as Array<{ type: string; data: unknown }>]
-      const last = (events as unknown as Array<{ seq: number }>).at(-1)!
-      let seq = last.seq + closers.length + 1
       closers.push({ type: 'step/end', data: { turn: 1, step: 1 } })
       closers.push({ type: 'turn/end', data: { turn: 1, reason: { kind: 'forked' } } })
-      void seq
     } else {
       closers = interruptedTurnClosers(events) as unknown as Array<{ type: string; data: unknown }>
     }
@@ -70,13 +68,13 @@ describe('rc.020 tool-call recovery keeps unknown outcomes unknown in the Guard 
     // Commit the closers into the durable log, then derive the Guard view.
     for (const event of closers) {
       if (event.type === 'tool/result') {
-        session.append('tool/result', { turn: (event.data as unknown as { turn: number }).turn, step: (event.data as unknown as { step: number }).step,
-          message: (event.data as unknown as { message: unknown }).message,
-          error: (event.data as unknown as { error?: unknown }).error } as never, { surfaceOp: 'append' })
+        const data = event.data as { turn: number; step: number; message: unknown; error?: unknown }
+        session.append('tool/result', { turn: data.turn, step: data.step, message: data.message, error: data.error } as never, { surfaceOp: 'append' })
       } else if (event.type === 'step/end') {
-        session.append('step/end', event.data)
+        session.append('step/end', event.data as { turn: number; step: number })
       } else if (event.type === 'turn/end') {
-        session.append('turn/end', event.data)
+        const data = event.data as { turn: number; reason: { kind: string } }
+        session.append('turn/end', { turn: data.turn, reason: data.reason } as never)
       }
     }
     const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: 'rc020-recovery', createdAt: 1, seedLength: 0, delegationDepth: 0 } }
@@ -93,16 +91,17 @@ describe('rc.020 tool-call recovery keeps unknown outcomes unknown in the Guard 
       resolvedTarget: { package_id: 'package-fixture', version: '2.0.0', integrity_digest: 'sha512-fixture', profile: 'web' } })
     expect(auth).toMatchObject({ status: 'denied' })
     // No certificate can be minted either: unknown is not success.
-    expect(projectSessionCoreV2(session.snapshotEvents() as never, projection).certifiable).toBe(false)
+    expect(projectSessionCoreV2(session.snapshotEvents() as never, projection)!.certifiable).toBe(false)
   })
 
   it('a completed real result recorded before the crash is untouched by recovery', () => {
-    const session = openTailSession('rc020-recovery-balanced', [{ type: 'tool-call', id: 'call-1' } as unknown], true)
+    const session = openTailSession('rc020-recovery-balanced', [{ type: 'tool-call', id: 'call-1' }], true)
     session.append('tool/result', { turn: 1, step: 1, message: {
       source: { kind: 'tool', callId: 'call-1' }, role: 'tool', toolCallId: 'call-1', isError: false,
       content: [{ type: 'text', text: '[exit code: 0] installed' }] } } as never, { surfaceOp: 'append' })
     session.append('step/end', { turn: 1, step: 1 })
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } } as never)
+    void TOOL_NOT_STARTED; void TOOL_OUTCOME_UNKNOWN
     // A balanced log yields NO synthetic closers: recovery never invents facts
     // over recorded outcomes, and never duplicates results for matched calls.
     expect(interruptedTurnClosers(session.snapshotEvents() as never)).toEqual([])
@@ -110,15 +109,15 @@ describe('rc.020 tool-call recovery keeps unknown outcomes unknown in the Guard 
     // call even when its callId matches.
     const recovery = new ToolCallRecovery()
     for (const event of session.snapshotEvents()) recovery.observe(event as never)
-    void TOOL_NOT_STARTED; void TOOL_OUTCOME_UNKNOWN
     const scope = { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: 'rc020-recovery', createdAt: 1, seedLength: 0, delegationDepth: 0 } }
     const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, scope, true, HOST).projection
-    const install = [...projection.items.values()].find((row) => row.semanticAction === 'install')!
-    expect(install.status).toBe('pending')
+    const install = [...projection.items.values()].find((row) => row.semanticAction === 'install')
+    expect(install).toBeDefined()
+    expect(install!.status).toBe('pending')
   })
 
   it('a mismatched or non-appended result does not clear the pending call', () => {
-    const session = openTailSession('rc020-recovery-mismatch', [{ type: 'tool-call', id: 'call-1' } as unknown], true)
+    const session = openTailSession('rc020-recovery-mismatch', [{ type: 'tool-call', id: 'call-1' }], true)
     // Wrong turn attribution and a replay (non-append) result: neither counts.
     session.append('tool/result', { turn: 9, step: 9, message: {
       source: { kind: 'tool', callId: 'call-1' }, role: 'tool', toolCallId: 'call-1', isError: false,

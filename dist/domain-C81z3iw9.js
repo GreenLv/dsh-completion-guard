@@ -1,9 +1,9 @@
 import { createRequire } from "node:module";
 import * as path from "node:path";
-import { basename, dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 //#region src/domain/host-audit-session.ts
@@ -86,31 +86,78 @@ function nearestPackageScope(session, dir) {
 * the resident `createRequire(...).resolve` keeps Node's internal package
 * manifests and path cache from earlier host activity, so a scope rewritten
 * after that warm-up would keep answering with the pre-drift route no matter
-* how fresh the audit's own memo table is. For the audited rc.2 surface the
-* CJS resolution is deterministic from the bytes, so this interpreter computes
-* the unique route itself and never consults warm resolver receipts.
+* how fresh the audit's own memo table is. Within its support domain the
+* interpreter is NODE-EXACT:
 *
-* Conditions follow Node's CJS require set; wildcard patterns or shapes this
-* interpreter cannot decide are fail-closed, never approximated.
+* - exports shape: a string/null root target, a conditions object with no
+*   dot-prefixed keys, or a subpath map whose keys are all exactly '.' or
+*   start with './'. Mixing dot and non-dot keys is ERR_INVALID_PACKAGE_CONFIG.
+* - subpath lookup: the exact key wins; a sibling wildcard pattern never
+*   shadows a real exact key. Unrequested patterns/arrays/unmodellable shapes
+*   are OUTSIDE the support domain and fail closed — they never approximate.
+* - condition selection: iterate the manifest's OWN keys in manifest order
+*   (never a fixed node→require→default priority); a key matches when it is
+*   'default' or in the CJS require condition set {node, node-addons,
+*   require}; a nested object without a matching condition CONTINUES to the
+*   next key; null denies.
+* - target validation happens BEFORE any realpath comparison: the target must
+*   start with './', must URL-resolve inside the scope directory, and must
+*   contain no 'node_modules' segment and no encoded %2f/%5c — exactly the
+*   shapes Node rejects with ERR_INVALID_PACKAGE_TARGET. realpath equal to
+*   the authenticated file is never sufficient for an illegal target.
 */
+const SCOPE_CONDITIONS = new Set([
+	"node",
+	"node-addons",
+	"require"
+]);
+const ENCODED_SEPARATOR = /%2f|%5c/i;
 function interpretScopeRoute(session, scope, request, wanted) {
-	const subpath = request === scope.manifest.name ? "." : "." + request.slice(String(scope.manifest.name).length);
-	const target = (value, depth) => {
+	const packageName = String(scope.manifest.name);
+	const subpath = request === packageName ? "." : "." + request.slice(packageName.length);
+	const rawExports = scope.manifest.exports;
+	let rootTarget;
+	let subpathMap;
+	if (rawExports === void 0) return true;
+	if (rawExports === null || typeof rawExports === "string") rootTarget = rawExports;
+	else if (typeof rawExports === "object" && !Array.isArray(rawExports)) {
+		const keys = Object.keys(rawExports);
+		const dotKeys = keys.filter((key) => key === "." || key.startsWith("./"));
+		if (dotKeys.length === 0 && keys.length > 0) rootTarget = rawExports;
+		else if (dotKeys.length === keys.length) subpathMap = rawExports;
+		else return false;
+	} else return false;
+	let entry;
+	if (subpathMap !== void 0) {
+		if (!Object.hasOwn(subpathMap, subpath)) return false;
+		entry = subpathMap[subpath];
+	} else {
+		if (subpath !== ".") return false;
+		entry = rootTarget;
+	}
+	const select = (value, depth) => {
 		if (value === null) return null;
 		if (typeof value === "string") return value;
 		if (depth > 4 || !value || typeof value !== "object" || Array.isArray(value)) return void 0;
 		const conditions = value;
-		for (const condition of [
-			"node",
-			"require",
-			"default"
-		]) if (Object.hasOwn(conditions, condition)) return target(conditions[condition], depth + 1);
+		for (const key of Object.keys(conditions)) {
+			if (!(key === "default" || SCOPE_CONDITIONS.has(key))) continue;
+			const nested = select(conditions[key], depth + 1);
+			if (nested !== void 0) return nested;
+		}
 	};
-	let entries = scope.manifest.exports;
-	if (entries && typeof entries === "object" && !Array.isArray(entries) && !Object.keys(entries).some((key) => key.includes("*"))) entries = entries[subpath];
-	const resolvedTarget = target(entries, 0);
-	if (resolvedTarget === null || resolvedTarget === void 0 || !resolvedTarget.startsWith("./")) return false;
-	return session.realpath(resolve(scope.dir, resolvedTarget)) === wanted;
+	const resolvedTarget = select(entry, 0);
+	if (resolvedTarget === null || resolvedTarget === void 0) return false;
+	if (!resolvedTarget.startsWith("./")) return false;
+	let targetPath;
+	try {
+		targetPath = fileURLToPath(new URL(resolvedTarget, pathToFileURL(join(scope.dir, "/"))));
+	} catch {
+		return false;
+	}
+	const scopeRelative = relative(scope.dir, targetPath);
+	if (scopeRelative.startsWith("..") || isAbsolute(scopeRelative) || scopeRelative.split(sep).includes("node_modules") || ENCODED_SEPARATOR.test(resolvedTarget)) return false;
+	return session.realpath(targetPath) === wanted;
 }
 /** rc.2's authenticated exports have only types/default conditions. Do not use
 * CJS resolution as an ESM oracle if a future manifest introduces other branches.
@@ -190,8 +237,25 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 				if (own?.root === root) {
 					for (const file of own.files) if (/\.(?:m?js|cjs)$/.test(file)) importers.add(join(root, file));
 				} else if (typeof manifest.main === "string") {
-					const mainPath = resolve(root, manifest.main);
-					const mainFile = session.exists(mainPath) && session.stat(mainPath).isFile() ? mainPath : session.exists(mainPath + ".js") ? mainPath + ".js" : session.exists(join(mainPath, "index.js")) ? join(mainPath, "index.js") : void 0;
+					const resolveMain = (base, spec, depth) => {
+						if (depth > 4) return void 0;
+						const mainPath = resolve(base, spec);
+						if (session.exists(mainPath) && session.stat(mainPath).isFile()) return mainPath;
+						if (session.exists(mainPath + ".js") && session.stat(mainPath + ".js").isFile()) return mainPath + ".js";
+						if (!session.exists(mainPath) || !session.stat(mainPath).isDirectory()) return void 0;
+						const nestedManifestPath = join(mainPath, "package.json");
+						if (session.exists(nestedManifestPath)) {
+							const nestedManifest = session.readJson(nestedManifestPath);
+							if (typeof nestedManifest.main === "string") {
+								const nested = resolveMain(mainPath, nestedManifest.main, depth + 1);
+								if (nested) return nested;
+								return;
+							}
+						}
+						const fallback = join(mainPath, "index.js");
+						return session.exists(fallback) && session.stat(fallback).isFile() ? fallback : void 0;
+					};
+					const mainFile = resolveMain(root, manifest.main, 0);
 					if (!mainFile) return false;
 					const main = session.realpath(mainFile);
 					if (!within$1(root, main)) return false;
@@ -235,7 +299,7 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 }
 
 //#endregion
-//#region manifests/rc017-rc2-byte-audit.json
+//#region manifests/rc020-rc1-byte-audit.json
 var packages = [
 	{
 		"name": "@deepseek-ai/cordis",
@@ -250,10 +314,10 @@ var packages = [
 	},
 	{
 		"name": "@deepseek-ai/dsh",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.7-rc.2.tgz",
-		"sha256": "5f2da7272d9485abc223e681075809a8d929697c5232ee445718e1b7e066bff8",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.1.tgz",
+		"sha256": "ceb66bebe8117044e05f6932deaca15daea6a1ae1d0cffad079e33895f10d216",
 		"modules": {
 			"lib/bin.js": "935e95d05f4dc70a8a013eea59da80028946b5c139e45c6351dcaf2810ca00a1",
 			"lib/dump-config-BEDI-dNY.js": "fa34d3397b9ac9423f3b98a9f4798b9205f684e1eaf368352e0a93c09831d28f",
@@ -262,15 +326,15 @@ var packages = [
 			"lib/plugin-DkYIj96-.js": "2103210a39731866ca191faf1a1396f33f248ed3fe81690a592fee7a8f3276c1",
 			"lib/profile-boot-BZ2ZjNWi.js": "c394b2aa2ce08a3b1fcc8c544257c7d689dd4d0b1cfaf8602687e65eeaba5aa1",
 			"lib/profile-boot.js": "c53d4e2caf21428e263b525e657dafaf63fd183f7ef016aabda56af7998b6c4f",
-			"package.json": "b6a8e28158f1bc67862e5d0c671430bfa4867a57be864e6007524877644555aa"
+			"package.json": "6c5d2b98ca97920fffe81eaff8455dfd1e97524c8b3a7a3b0cac4c960ebb363c"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-agent",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-9U/zHZvZqRR5S2FD9fjjAuoMh+WfDan+bE/cLBLSLpqftjZ0FhIlEBK99yonUkNkGemyHiH/lL3jCKYw35ahJA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.1.7-rc.2.tgz",
-		"sha256": "e7b8bf1be4205401c0b0f146148719e1755dc98abc878c8b98fcd0ecc290e76d",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-PQ4Qtu7QiI6j2n730p8RJ+u4l7ywwhVJ4NeIe/Tj86hBYYZNvNT8iMhViECn+GSepAk7GmM/1eb7e7hvmYhsKA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.2.0-rc.1.tgz",
+		"sha256": "dd21ff4bc625edc78928cbfc5f8fa7a1ea03fc9ecab6028bb9b50b940def0cfe",
 		"modules": {
 			"lib/index.js": "7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93",
 			"lib/invariant.js": "f9d8c2d1d72f407ffd93b9b04212f7c59dd655908daf68f656e05cca9b93befc",
@@ -283,39 +347,39 @@ var packages = [
 			"lib/types/projection.js": "43ab89acd14b20b3c2a85c8307f236b38dfa27671dd31b703554777270abc534",
 			"lib/types/runtime-types.js": "72347f43fb79c35cff8565b6428c6d7b96a78267cf8994ea3ffd0830a83a21d2",
 			"lib/types/types.js": "f4ef7228255d5f64ba546ed2a2b6be63601b77c7b58ac3a58a74f4e8f970cb30",
-			"package.json": "80e615e03a874154cf7416c1172b69103fc3b2265c8147a4714ee28907956bc5"
+			"package.json": "4c07ec3f1ece7f5029e9b1e8d12d7a045bd5732208bb798fbb36c9480d54d3f2"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-agent-loop",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-X+fegYY7yITQ5kAIayFrylMY9Vg6zHFLnP83rJVZ89juF9EBRm8soGAJHvyjat+mdk5a1WViWYdIPM0t9g/glA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.1.7-rc.2.tgz",
-		"sha256": "1f5ee5e938655ca0f501daa491c5c09f810ae1c0b71a86fcdd32b5462a8563c8",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-01JWFfTcne/44tqfGLAOH0KkMicq6VVFBV1YjQbO9vj6Q0SmcHsPObm11fP0opEZIqEmdUN5wwS6LAzCjViDlg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.2.0-rc.1.tgz",
+		"sha256": "446c70a8fa8b83a35fc19f35c5f8e018946391844bfe9372a4d1d747d8572f8e",
 		"modules": {
-			"lib/index.js": "459deb380d431f98a9250d77b05a77268eda51f096b07be65080097a1683ffda",
+			"lib/index.js": "00c4814d63f3d1e2754eb09144832d19b30499d6ea444730473f740b587948c2",
 			"lib/invariant.js": "c577dcdde278b761b5810d9a941131d423de40c22ff57f98a3982681ed3bf772",
-			"package.json": "092e5fccdfb6b27654ccbbd8889758c08a38413f619d5d18684f731dd4ecf26e"
+			"package.json": "e7ecfbef09d7dfd50be40d70a32ca87b1ee43ac3cefdfeb050468c7f0e31b0ea"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-app-boot",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-d0QWMMXxT6kICO9QRrXTqJRKP6bWNes7SVGJK6OOEzX6Ua9mzCx1KghPIf7tjW/ZmX0b8n1FoySr4IHElBkrOg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.1.7-rc.2.tgz",
-		"sha256": "e16298302b2a2858137276bfa6ca4c8e1e8bf0bda8c36941695b555483b0e4ec",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-iHUYI+Tc3FlaYay0aLg4LsmZELi8wNWd6DSYrd46enUv0SWgm3qXVFLZivlcKqKWxcjuuvL5JxNemxGiMRIWxQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.2.0-rc.1.tgz",
+		"sha256": "a5881b46f9f982da59cede0facc77aeb0ec3cc4995b67fc494110e617986eef6",
 		"modules": {
-			"lib/index.js": "43dccddf285e7a0262d8ab3794f0fd65912e0dc33178dd782bcd8e87745ecfc2",
+			"lib/index.js": "234db45e1b3f8c683b5bc1f551948b2a2ec52a6468c7b6937725a23f1c0e0d96",
 			"lib/worker/profile-resolution-bootstrap.js": "4efac00eba95637481deb245ac4e5b497fceebb55db8e199675406b6bf53dbed",
-			"package.json": "8fd5885b5ac05a4ee1f549f09a15edebadd43a3ecb465ed314d4355ab1bd0f4a"
+			"package.json": "8f4d5cfc5b81e44c77928e115cb8a28070892c2ce4454afd1962cbd0f4d32f49"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-attachment",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-g2SQ12Ki1l28T/H+fZKtSWDFF5Y1gavcKVBb2X4eOVX5uT5Jwumx+9Svelp1pHaknuAE1N2Yt9tMwj2quMkhDg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.1.7-rc.2.tgz",
-		"sha256": "74495a054b54ced8636026f56fc531a3549b07729dec76bad5abe09fdfdb5540",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-aKKFE9fGYYn1BCzDtun7IYkpiMANYt7s51vwPukkCnobNiLfxHrIyANLWNmMTSpq0iENfqREXPR805K/um8Hfw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.2.0-rc.1.tgz",
+		"sha256": "f11e40a5184b10ae0b5a528a575d31254f6b485ab6e416965ff2dcdffb65c3e8",
 		"modules": {
 			"lib/index.js": "9cd6c01a6cca9431f789be334afdfe4f5cf647224bb394cc0215056796520f58",
 			"lib/types/admission.js": "e4afabe831d34e00d96416bf902a77bb3cbe3754769b09b0d14142466a340684",
@@ -324,115 +388,115 @@ var packages = [
 			"lib/types/index.js": "c96d48d63936a055a525e9e5eec624ce6796e50af5e3f3bd53adddfcbcba967b",
 			"lib/types/request-projection.js": "8d184a401ec5ea5b7fc3708870205042cc1afc666655e4e8e4d1d11eefdadf9d",
 			"lib/types/types.js": "9a08e59bd2b21a42126b01c3598b057bb5d3be987c200562800e29806e10e50d",
-			"package.json": "d10870a16271c4f766935cb05186201161852aef3954e0820669c304083de5c8"
+			"package.json": "08debb8c62d78d1ea524b0d82378f651196c6a57ed8bfc6c936f2cf323c7a259"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-base",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-LYwclGWi0SEZh0ZjnlJT/kHaOV0JDuI1mCHFCOQthYlabPp90Ohba+7wdIRX1oqcQN6erFzsQrrV1WFf+NhRYg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.1.7-rc.2.tgz",
-		"sha256": "9d4573d4557d0517a5ece85813fb398f58fb910b19704f602c30ccdef5039ae8",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-5knjWdy+/lFOcwjuliaK4Pc+xPfDXMOoN/+CCza5JkQG5JI+GajicpAh7XFH/At6WzWjf9m8OwLGYABVz1pIxA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.2.0-rc.1.tgz",
+		"sha256": "664cf31c422dc9cc8337fe908153341a9505ee8d3a6f399e945554e51bb050c6",
 		"modules": {
 			"lib/index.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
-			"package.json": "c5732675c653540b3d896a73a033def7c72030866698829243698a1a384b1ba8"
+			"package.json": "683a76071c6483acaa890b6c333037b34add96fc33a20ba995401cc5b909a060"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-bash-local",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-8InocMSTIzUGuKXnSp05pTBfeQmUdC+L5T1I+2iESzPtrNh/F9jLQeCPknWZ7ren/XwDki79J9EqYaLE1vNiUg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.1.7-rc.2.tgz",
-		"sha256": "7388f1085fc98aa4ad9f8c4f1ddef49ce8a46aad2dc57cd020853c2e4bf58a75",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-thF8D96F78QWem0y0C4oqef6h+x3kahGlsTKE9elXrM506sys6EGwHs+PwQqyMyQCGUJlJCVwd2gT6m4ipdplg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.2.0-rc.1.tgz",
+		"sha256": "157173b9701653979b5159c20318ee6609c59e2a385720c18b27c395d974a21a",
 		"modules": {
 			"lib/index.js": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
-			"package.json": "524c99cd4f34bb23c323e85834d66992d4da60ac103fd649ca04a0c263f4b346"
+			"package.json": "e20248d48f2868419d5c22b3f66a519c908fc707b5b8e275f866c1f34b22ac9f"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-bash-sandbox",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-M4laxtYLPkXlvbtMpLm4hTWKmBb1xJuNMma/eA+xYTNdjHtV/ZJPxiKMVe1crjBp/dKuMTJR42p8rizLM1vkNg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.1.7-rc.2.tgz",
-		"sha256": "9a92e21906e7aee60916f7d0afa0fa9514197f755ec4cc0736c6d89e6fa0725c",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-/+vnsleF/U7kKjZdUynHiWTpjAVr9i3ZCPwuWiwecd588VUjOvm9nDeiSUd8Zl60XZFtsYAjdSYU+gunSC98PQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "14ee57a5b8cf6e3620db44e463df3fa74d5f7f1e921c89f42504542556d97da8",
 		"modules": {
 			"lib/index.js": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
-			"package.json": "885025403df063fb7701d8afbad0a5bc0dad2bd7b17e7cc47b186fbab1be2cef"
+			"package.json": "4698a8d47699af3451b3d58f8e02573ece1297d321addda7bc16eb8ba7e7c703"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-commands",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-wVAHwHNDLDNBKXJZU2rHnwc+e3mhi6EuazAfJmqtbzU/ldQVEoJ9f5eXqesBcdQbRIrWQlpjfjdlw3nCJfK2HQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.1.7-rc.2.tgz",
-		"sha256": "3ba2638b147cf7fc0462b8117c7f9affa2ab0ebc82c9d40b6b49699d96ed07b3",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-VZOWNwjBDBkX3kXVJcD24oAoKeGRpLnHZjRiPm0gq41ZClCYy9CzNnFdl6IVtJHfG+bz9/HDnONilpiRwBg2lQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.2.0-rc.1.tgz",
+		"sha256": "7c4685987a66feba87a04f76204bb087c7fb76be7f701aa5d9ac86cfcfbc82b0",
 		"modules": {
 			"lib/index.js": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
 			"lib/invariant.js": "e6dcb52cba426f2cebe18d351ecb968233d41f7e3cf292be192618d0f52774fc",
-			"lib/typert.host.js": "1ec7c1356343db913162ea03c09e6e85df2b60e046dc095ca85ce3d181f05ff0",
+			"lib/typert.host.js": "fb0f8aba6dcc824b6e50be022c5428319b98cacf802ba4face67bd8523110e95",
 			"lib/typert.remote-client.js": "19783415466cb498a5dd560c6568716cad39223e2587fc0a16350b591fe051ab",
 			"lib/types/brand.js": "50808fed83c5cfe09b80df4165108abba0188645b9b9d39d0426b293e8f188dd",
 			"lib/types/index.js": "e3a06e7bf8da759c727a529d1e6b30c831232318602fcd28e66297ba200ef495",
 			"lib/types/invariant.js": "e4bdb34890eb5b917fb26e5d8987929ef61be4e0587f8975c6cb7692e22be996",
 			"lib/types/types.js": "06f43511aa44249a435d74bf2b168bc767460930d874764c69add444510579b3",
-			"package.json": "3fca6ea818532b030eff8eccc187c22586cae6f6cf6a4e99cd49760eedfc62af"
+			"package.json": "2bf9983819f8e38713da5fb9432e5d09170a66c3e0eca4b2204a5fa2eb774e5d"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-3ES1FKLM4asLvFS+yBcatzRNGINfUx/Cl+x+JzGhEK5QWX3aCxpH8Oa9Z4T9k0McBStWg1CTfHziRR8trHPYyw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.1.7-rc.2.tgz",
-		"sha256": "016d426d34c3ba1bcc94579db94364bfc3d123f5a09d711c3162af5d6912b62b",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-IWjXn/BsoWwT5dti/Jfkrx49GDGi1H7B3cuTgwRvxIQl6o86eb7ns+3mQiBpFyrCrVOMV+1t8FC1ipiIxol+gA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.2.0-rc.1.tgz",
+		"sha256": "dc7ede4bfbf35bef54fca2db4a382e20fde49fb9f70816833da76550995d3f8e",
 		"modules": {
 			"lib/index.js": "b165659f1eff0607222a7fe761bc56bae03fec8337c2e25affd064a3047dacb9",
 			"lib/invariant.js": "c3398ff0da3cf65facc78c3ed287ee088afcb0f6179f6b15eb2f618e759af4bb",
-			"package.json": "ccbd668be5553a489a92873e04211f3d0713b62078067b7e6b897a14143586a9"
+			"package.json": "aad483456e100274e985871679ed2fd82a354b7003beb0d2f19efc5ad0f92887"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-local",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-7XlSqUY2nk1S0GQNU7f7rimhBnYZYdtOtW5xr3oApHuaiWyP2Qj9D2Y0Xq5+jyFz7kQ9hoNHq3gA+g5IK1Dofw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.1.7-rc.2.tgz",
-		"sha256": "361aad706935073f130b6c1d527e1b2816639ebfbd3d696b8ce91662c0772582",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-ntgv1fFhXEuL2ncfbORPprI+mVppaBSdVsUNLN1mfigO6snU6ORU5V2kohL3rop0Q5605lGA/+pGiiGIJYdxQg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.2.0-rc.1.tgz",
+		"sha256": "d300481c8c670587fa0689da7c4f1c247fbbb583402e01d30b7b1d452f64b33d",
 		"modules": {
 			"lib/index.js": "63fbb41d2c33e07111884b798be507e68c2752acab8249c821c20ade436e894f",
-			"package.json": "f956e01eeff4e5b64a7df98260decf157e46712f9e7553c1ee65340cc4a5166e"
+			"package.json": "b875f7af3ffb1d57f43b81a7f62c5c10fe7039eb5edc2bbdf780f4785b614abe"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-observation-policy",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-htzbOb2krclujHcSMu4eLiMxE1zl1fNlQylN7RReU3ais5J08pJPzenNLH+M18zecRWr7IljxI/mrGAXlH0Upw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.1.7-rc.2.tgz",
-		"sha256": "ea7532ea7cc47de870b83456eec2d9ea0d9560888a04d93a41f84b11739039c3",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-odxCFuRQAyruog2mYSl0DxJJ//piwUEJuQpC0rY3Hrt4Zv3GjtNhZ42hwvIAug6ueqkJ8nWuR1XevJoRu518SA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.2.0-rc.1.tgz",
+		"sha256": "44feaec8907fa8c8c74730b14769af3326b5fac214d4d098ad1e40668b6504ac",
 		"modules": {
 			"lib/index.js": "e36b54cdb5c6fa01ccfa29f0433753e810ec1ac29a6a22be349d66b77eb64b03",
-			"package.json": "50d416487ab9b2f0c5811abfd07bc25ac792d16eee9fb70966332d2571a8262f"
+			"package.json": "25d8d29bd1157e189048f112aeccb4157c73e0280cdce81c4db97be718724a27"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-sandbox",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-E1f+stkuTefmMeOQ1lEQJum42igtOeg+V5J5P92dZp5QObt3VT1EcIkywe9zFHtEJ+jExVzACLIxj8XNmisiiA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.1.7-rc.2.tgz",
-		"sha256": "eef8162cca5f809d43792e1f1579d9a1bcc503e03d97959e89cdb615687a6e8d",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-5pIVWc3mGUHigSCSq6R1eUuQB7NjwhdhQ9E6BbrTYXC/qzezvxLJSYEF7z0Vr6ajd7qhV00Wih8OyS1zGkJ9ww==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "49cbd96b99a8b58389357d405b569e0d9de7a369b4b25c4acec074e200e98739",
 		"modules": {
 			"lib/index.js": "cac65e21a0f0895b073cb9a447196ac265f2a171cc7f67c7434a6b3b7782caf5",
-			"package.json": "f0d2361aafeadf39bd867a6711651e69a090b1eea07a153ed7b4e904df8e6ead"
+			"package.json": "5018476647b5eb3e9be0fb6a03557cb4c8effe28636d37417752926e2c9452cb"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-goal",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-9ULU4IMWGBkUTzOoQC+3tuyy7J/oFq5J05rv2PyxpLZyJGf5lRRDfhNjm/PAfbKzuXAPGEB2aOQ8eAdZ1RCnHA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.1.7-rc.2.tgz",
-		"sha256": "1d03f28a45798a250fdd620ca74fcbe08162a61f7df6f8bac345d607be26b4a9",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-gqpN0MvHofDjqw/c23JF9EQ93VQnRrOFiyVG6XMl3d+PHPVizmLxEHsm4lIE+dU42+iA1dYVtPS1IUkH6l0jFA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.2.0-rc.1.tgz",
+		"sha256": "15835bb53f7d3f4328ed717a188cd2bc4a583a702c8f1767a892ae4eebe6d021",
 		"modules": {
 			"lib/index.js": "8ec52107ead3d31f4d8ca95894c851046a2cbbd1b2033a0ea22fedf17c043ae4",
 			"lib/invariant.js": "468a099beed22d243daba4d97ae3e9e785f5c97309a656c0b8f1815537927246",
-			"lib/typert.host.js": "54860ac27a2828403f3c3a6d9811a273982ae06613305080d64f6dbd57e34d23",
+			"lib/typert.host.js": "a1849a6a248d103478577e8f6812fb7927f74d1ff38677f5734cefb2278164b8",
 			"lib/typert.remote-client.js": "35df09d652b62cc8a3edf5ed9a4f0e84fbfdffbf9c67f778024dfe97758bd7a9",
 			"lib/types/client.js": "4aba033a3236db59a8413dc50ac0640890afe381f5abb93b7bf565b7185e5e8d",
 			"lib/types/domain.js": "4e60898de0faed31865df162479770e0d77cffe654528cef7720ca6c5be419af",
@@ -441,66 +505,66 @@ var packages = [
 			"lib/types/invariant.js": "2eda87df2fffc21e2f761b138d54c9be523627e3b41bd1508906be5cf69a410d",
 			"lib/types/runtime.js": "3c6cf442aba70e119669f6a349768fe98b7f4cd0cdec9d389fb51437bf97745b",
 			"lib/types/types.js": "956a9ec9381a09458c283fba5deb4b8b695be6e078e49bbc94d1aa4e586cd32c",
-			"package.json": "0f3a524a4cedea7c88e55f2361332622f07bca366441b6e7fb59f018dbebb418"
+			"package.json": "076c418e3611453205952af6087d44ff53115ee836e6c70744dccb2e343c92de"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-goal-round-driver",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-pIIDOhEGMr/BMLsRa+L7Q+qZgQupeAcT5wA7z3GEoZB/ABH4KTsepg0BZadZyuGEen4t0x6AG2pK2K+evonJLQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.1.7-rc.2.tgz",
-		"sha256": "26af9367783066febba442729f25916f9e9f733644ebb4968516fa4068192e8b",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-9MlObGRGkFE/DIp2kHV3GBS5/1zcx6eVysXDfWs9AvMYb0Etk8gJK5nHumyBAIXT97seiaFa30IBITTYemsi7w==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.0-rc.1.tgz",
+		"sha256": "9954d23e8b7686ed66e2273ea1e82cd3f2624222132eccaf5b007bf55bafc899",
 		"modules": {
 			"lib/index.js": "3bca01a2e87de1683fa8b55ad54688eefc4e366c971c20e9afd654db3b5ab450",
 			"lib/invariant.js": "66d6cf4a66dc84c239cd2efaec29606b645ec7f6a8f6c332209464b090df1c83",
-			"package.json": "267b97fc61a10a372c71cf232ce4f206b306c167f6b1fedec317af55c7271e59"
+			"package.json": "eb6712fabe459a6e57dfa3c6be10c3c4ccc603dd573340ba4ac514c308618b94"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-headless",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-3M2QA46ATJNwdz2AYB5MpQMZot1ehwH36AqRBU2mNu9Iv8kC9cjsSST0eBnk1EyjF4jTqh5h6PZAkgLOBOExyA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.1.7-rc.2.tgz",
-		"sha256": "567aaa5ef9932c583fd6de16d4b3cb65b2faaa3b7a01ad863444301aa7863c72",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-xdx3LXmRmeu1bXBvXOppaitF5UxsudhsIy8IrYpMkIRh63LWVbxJGMTCgwk6pM8Jrg1ayW7vhi8Fw7ewukMDtA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.2.0-rc.1.tgz",
+		"sha256": "57e632a633b08b0d05a5454759d438058a24cfc9b80c5c50a7c7129973758476",
 		"modules": {
 			"lib/index.js": "31a4caa307b6a3bc0133e01d765c9449ff808725058639e32ebf0d020524e267",
 			"lib/json-stream-BA-F3lfb.js": "b6ede8da01119f5caf4baa8051ce8bcd8b956b5b163cf58af91d583b80028c0c",
 			"lib/startup.js": "66bb82dc445d5852de776401a00c1ad963276c741e39749d187c4c292b86330b",
-			"package.json": "ab6e0c93ad8d6aeaeb3a47013db2ed6613e19cec6701df8a75a46c432e107573"
+			"package.json": "bbb9bad4a389d263a6349ddc5d9920f7e35be016ecac8068d8b476775a3084a4"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-host-plugin-inventory",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-krS/FKI7cacoUtjpIaZnFQZy4cM2DnshsP//jafFdC1LyKyh5gG97MPmQ37jRM5Gm4VDJfDj3ojqWzx3BrP1sQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.1.7-rc.2.tgz",
-		"sha256": "db19ac8cf43fabf4d0aba3d6e1f5227277bdaffa607120298083ca2cbd46c2ed",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-9jPsILbbodim7gswvWzCuvHgzXbvDMvVnR11pGY+FaSVEt4beWVdSPglxHmGHGbEOotSnhbwUnl6vouyRQo7eg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.2.0-rc.1.tgz",
+		"sha256": "2a4b9d6c33c9eb3cbbfef7cf0c5a59823866548fa64a24c4894ebafcc7cdffc0",
 		"modules": {
 			"lib/index.js": "f8e50fb2e24c92302570a41baa007e409cf4651bed0a65605b0871ba14325d30",
 			"lib/typert.host.js": "dc44ff7a2d5775a7b932ba96688c76803ce776c79303f60fd3b22a19c43d051d",
 			"lib/typert.remote-client.js": "66129f7bd3aabf40020ed60059a6e18712ce7acf8925117212576d05ccd2c6da",
 			"lib/types/index.js": "757079258b5ec9280890180c220a6b9caf3d498b2e71dc63a1ca146a245859cc",
 			"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
-			"package.json": "56c67ea74cb5238cc543b8f25a10c61e6117919b7bc9042796e89127112746e1"
+			"package.json": "6cef7d98aca9f2d2cc0ebebafe06524d13998f2df2e2a1f1dc8342a935fad0b5"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-host-webserver",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-0ex5NsJFvpqchfnar/IPtNOG5Tx7PmtUO3/zVptT4MJs5OOrvtjNYHpZ6DGntmnpupgXnci1cUsQJIfG3D+U+Q==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.1.7-rc.2.tgz",
-		"sha256": "e828e6c1bca886537f96ad455fe98239a57f007ff4882f84752c8eb3ce4b0cea",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-/LkuSWupB7vijPty3Iypt9DZrBli9wsNh/E485m+xgo4uBbgloANQA+nyIpB0n+N20zleyV4EFYbe6Lb6k2oqQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.2.0-rc.1.tgz",
+		"sha256": "0ebef41935e446f4a8f7241640d0312a8366e37ab4dbff5e67fae5d18a34d46b",
 		"modules": {
 			"lib/index.js": "6efea1375eadeff62d5cfb6d1f515ff75a939d40405a62e5d138e8e7a6b18df5",
-			"package.json": "3d615a595b70cd55b0b3b3e5cce138a26e1f2d345e21705709d9dea26ffd7176"
+			"package.json": "98ec06b6a0e2a3208268f56e66da7cfcc8931f8d334bfc6cc909ce2317f507b8"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-jobs",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-bzbdcQ1dzCAGjYDs2J+YiwG58cDpASecJ4N6euUJNl0CCmnDETwCUhCpyMKDKCWcExdG3XcHmCjaCnL2hZIC0g==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.1.7-rc.2.tgz",
-		"sha256": "e925abc1ca6ee307ab3d44fff837bc04c05d1495252acdc4ddd2cc858b87b8f5",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-ewueg51ZSEF+/sLXEhi5ySqFu2egKWI4koBwBciE2sAaOwBY2Ou9BqYUHFN1wGRaUYVZ/DrMpn18c0XBC37j0A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.2.0-rc.1.tgz",
+		"sha256": "a096930a52a464e15a9eb9f49edcb2bbb9bf8fd93f0d782ae19c121f34e33348",
 		"modules": {
 			"lib/index.js": "909240e722c34877282c6868cd0e06915669e0ceaef690b1738ae72b4c3ef049",
 			"lib/invariant.js": "afe38795a9485abb3a50a0696e2670571113f90a20e6f4c6fc5fdba4b29c0662",
@@ -510,26 +574,26 @@ var packages = [
 			"lib/types/invariant.js": "8d7b9de3a4928849ef504ea379642e4c60826ec0032ff92ff6fe89839f7fb490",
 			"lib/types/types.js": "f0761bbfcdfd477f36a2fc181d328cc4e1c89b157cabd00426c4151a67b00ba9",
 			"lib/types/view.js": "a83eb92b29b5f9f747211fd0cc66d44dff47784f77a2b32f96d0d6f8fdf7b4e0",
-			"package.json": "8a625089d158260b5c61e5d22de202dfdba19f427f4d7b26d1f5515e5ebbbc3c"
+			"package.json": "9d810293ccd369ba93e636b8f868b7cfbac1c55d3e5c222fcfae8281a69633fa"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-jobs-local",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-DE0HLEuI15Vw1ncXLDESUIBTdWhrXgKWV3g/jupEGCwmm6GCqC9W9cjJPmbLP7JQGB7UPkui5DrIft+8MYL6Nw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.1.7-rc.2.tgz",
-		"sha256": "59816ddf7a34d0f93b1691960cf287f9c177b7d0428c24914dd85c062770efcb",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-h8N5VxKl+cvc6NoZ73ymnFTyf2HPlzbAImEjvzmmhMPiotooXSFW/YCFAimrL883L9m0d4XZBsJOnlLekfHNFQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.2.0-rc.1.tgz",
+		"sha256": "9a860b0cfdb15ef3babca22e22e23b5e4a6a035373eb2120717d9a851024fcf0",
 		"modules": {
 			"lib/index.js": "3bed0cd38c649f39b148752e742ff1ef57696a6b9b11b15ff8cc6cd1d4f08f26",
-			"package.json": "9e4a8b6dfab34efec7db370ca8c8dcd1b5a119b89cd8a6a07f13d8230b239e72"
+			"package.json": "f5f62efb897c568eb0a0f41bd13ffdebc06490790db9c49fb7d8e0ff1f2541bc"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-llm",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-hNT3ovFnbNDQ8g544bh2Q9ORX40aI6Y+jhjer1lETeHS4g0jTjqUUVfARCTA7uAFvHucSBg2rFgbisIktmJCxw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.1.7-rc.2.tgz",
-		"sha256": "34270b89310f6cd027106b0fefb58bde3ef144dd74146c5f975ed4266e0bb3c1",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-F5ZlBG8z8o5PfEWeEF/PN9t/A1N/oEErvqmpqE4J8f9mJR85DvBdV+rjDs7OjAbMJsJ8INjkbroruG5NNKDg5A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.0-rc.1.tgz",
+		"sha256": "8fc47d00410abc90f802e1648280b2b63350e42395e260d0efc58e8c5f08947c",
 		"modules": {
 			"lib/index.js": "9132c8a8053ee82b9fb1ded4f98c85cf557f288a15a85c552c6b1fb319ead120",
 			"lib/invariant.js": "8cb78641252b7a41523fef2c571dd42c698de4c9475dd91683191cefa4dced48",
@@ -549,15 +613,15 @@ var packages = [
 			"lib/types/message.js": "c87812f77a2afd284f271af071575edcadfde3daa7b6554d77b96810ce4688e0",
 			"lib/types/retry-policy.js": "f0a8fe075ac24c56ed2aa5d5e359a85539f5ffa237af54b68d3f4fc5124b5d83",
 			"lib/types/types.js": "14106d660103de2db746964fbb5be90c5eb2a7ff736779e2501e9faff956cbf5",
-			"package.json": "fd123bcf2dfd8f165315baa345e939039ef6d8153bb19bc73cbff6d03987e717"
+			"package.json": "7255a085c517b8ae60a751533a871ef32a370b61a2eafc80901d3959b5ff9643"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-plugin-manager",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-jYMEyz8fJWa099wvs7meXCOC+W9n2N5mxDL4hze/GDU+t9+brMrpnif6Ind8ENTu/RXVx8O40iCCsPcUXGwa2Q==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.1.7-rc.2.tgz",
-		"sha256": "ad941fc51e348cce3fb6c76ff10e7135855a2082e987d3dcb6e51cd6ac96ca46",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-5GVhQcwQi1O9UG4YTNgvR+PO3BDV9+XAAF2+YrIm2ycFwQ60bk2wevpepm7Pcw+g4dD9pmjigg4OY0pC4YBHjg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.2.0-rc.1.tgz",
+		"sha256": "02879d58e0ee75edfde2d1cc5a39c63cbbaa61bc21ee3cf311ea5218d23b27fe",
 		"modules": {
 			"lib/index.js": "f46a48b3422927eea5605a70b78502e06ef9ceaa29d7a73f4a7f742361ff51c8",
 			"lib/typert.host.js": "fca5b000a2fdd995d56da7ba21a33921e4765898332db283c255df0cacac4b25",
@@ -574,244 +638,243 @@ var packages = [
 			"lib/types/run-tree.js": "3e65f458bd298dd2d3a8e3b48b30d771bb8e60a097bc2e6e924dad647f953e4b",
 			"lib/types/tools.js": "b7314b13486bd32657b20b931826a5f91bf2c421983438f29f7491ecd69d8eb0",
 			"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
-			"package.json": "7e1b72be6719ad071e5dd2e259d412079c07d20975274cf618cd273854c9b6f8"
+			"package.json": "8cb610f905ccf45fc6a2bd0db78e336a3ae05824d1f09e882594ab55af15bdb7"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-ptc-runtime",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-zRFwSSUgTpKuFQTVwnuNO4067Gyi//4C4RRLaUntXaHkZv3z1S07f1fTaYwX4+ubIIAuAVeEsczxf6tPgZ8P5g==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.1.7-rc.2.tgz",
-		"sha256": "a155e4d0849274ce877877954e427f6096821051e819ae1704c239de2ecadc33",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-bz4ObfDeRZyBCejUMrSiDKpIffCImGafgktIWqTEAqNCprVWLRUHT+rHGFPcxHJRBsvxFQLlXHkYc/ccfqIB4A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.2.0-rc.1.tgz",
+		"sha256": "2859d0360281d8312a3c58e89bf527b07bb7659269b0b73dccdbd2723e4c8f85",
 		"modules": {
 			"lib/index.js": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
-			"package.json": "e9d5fa5be1aa6c2519e30b5f3cc213842601768c30b0125cc980e549305a2109"
+			"package.json": "9aef21b169a5b665336caa1c8a5a1dc1e41c28ddff69daf28577cf5e35154217"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-pwsh-local",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-OJlGS7JLJe5CcLMvVdbxryS6bKW5pfYN2emIeTYhSu+tBsKAiah8kdD+2EOwC0XMq24NcwgKO7xlNmS8oIrurQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.1.7-rc.2.tgz",
-		"sha256": "892a7599c94a44e261a9dd4cb37d22aa21cc17dba3a71f23b3ed0c4a77ff088f",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-iKi2MdBcU1B6y0qe6oDvB7JUPL2DyMOfmNGww/+4eFh8jRnlJe+uoTJSRmcq5ofKHzChWfuuXpepiBJr9NFt7A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.2.0-rc.1.tgz",
+		"sha256": "effecad22900271997bfce9d2da31940d9c54b896aa895859df7fefb5bc79c10",
 		"modules": {
 			"lib/index.js": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e",
-			"package.json": "fa6ee00f175920aaf00b472b5cb77bbca5a4b790dd8a1badd94e53b4106c2a0e"
+			"package.json": "65cee3e788b661f07ae97029e7cbb190cd8210e381da1002936f83cee8164314"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-pwsh-sandbox",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-c3kXLNhf8fNL7nt8NfJwcHU0jPvRiy6IPF+DHtT/Tp7+NhytHwj8vR3Ln7GIwsXGNU2hJbaD63S2IStjWLaylQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.1.7-rc.2.tgz",
-		"sha256": "5c098c3402ade4658cd2e6c72558ae9522a5281438f22f547ca06ae07db08151",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-1vxcRjpRCk5ynQn1+QZM407P9v2oeFztZatg60Ti6LBO1JoXUBDdtcGDtpD+MXOu7LT/wxRdNpqnCyqXs5k/Ig==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "814e75a90b29560fc6390c1318bc4c177c5d87afdad0e6d0eda9f5820986fd3a",
 		"modules": {
 			"lib/index.js": "bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783",
-			"package.json": "c97d4a06141943db1a584c92b8c74b26de9025ba7c3c9276aa1fe9a12b6d1896"
+			"package.json": "7b0785ef8cbdb64df136e3f05d998c1b10d7aed038541512420e8237883a9d0e"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-sandbox",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-7aP893mtTvnuZfCKD6hUN5gYchi6Wogn4W3mg/rGMvogmhbWgrCs00boJx/eHK4KvVJmEW1e8kO5N+GtsesptA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.1.7-rc.2.tgz",
-		"sha256": "39843ea57532829ca8828f791dd6f71d90fb82778cd4b514a07943616ff38b08",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-NnEHqSf4SKoM5cIqtHg+utLUZYJX4r9u2PwQbEpYwiOYSvOW5G4DRtLRpIX7J6V2HOC6CXo2Xcm3DJBOsbKYOA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "0b1c6e45b6b2f0e1bf07403e355b2e009ff3735d503c83446d7794ed04760b16",
 		"modules": {
 			"lib/index.js": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
-			"package.json": "ac94475eff7c9fe54b20b40106d33087bca13c46226fe23b6241fa097f0a7bbc"
+			"package.json": "c819086d3245ccc6d006627637fd9bf7f450e9af3f39531129487e39572580ca"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-sandbox-policy",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-pIhCaOEqYjNoKy/c7dYYgYzK+zp8/FxnEeaBA5e6fTmNROb+/qSFsC4hY3Qu+PVU9IdbH/4fa6TbT2jnqoDPQw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.1.7-rc.2.tgz",
-		"sha256": "d411ab08e126dc61e54edfcb933f9f425be063e19816a8fa57ac5ff63ee677ff",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-O850xvmnU+Bxpq7F7d0QjiFm3Y581GwFxfvBvLohzyAC81M6iXGBrbxt4EcX/CUPJEIHB0KSOUrX9/3xQulNZw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.2.0-rc.1.tgz",
+		"sha256": "4058a212d031fafb2c073e49dadbdf52b07cb1b2d937f4f3fdc12dba816c7c30",
 		"modules": {
 			"lib/index.js": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
 			"lib/invariant.js": "265d56bbd39b0c383a6d8e5f07dda3a56d3bffcc69424b60a40babe99856873a",
-			"package.json": "ce0e5e99ed890a1fc51472f7fb9a01e3591070d0e209bd54912155c56cac09ce"
+			"package.json": "30bbef60ae3f30666ed9ae5718a629de22460c65d04902f9dd9d2b7719cc07dd"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-session",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-0dXv1t4Zox/yHkZ4PfPNSBWJfIc72PDqOvjz43EMoHpbmoKTVpit2UpUI+yTtX01e4MVBbDMxBZ95oJW/Oydnw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.1.7-rc.2.tgz",
-		"sha256": "f7deaec7289aa3b93cf8f8551a59cb811ada63ddea97d3e4c87f9b6f59c1e783",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-KUDCUk8kmiJCwvV3gDbkUSpkyoGHdg36nIhKsEh6iBoYDuIQCuvX2htiVRXCm099XZO6rCBVInmm1193UoPYcA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.2.0-rc.1.tgz",
+		"sha256": "56ee80a9b292368ce9959b348f8b933e54d7c4456a032e05e3d55901708d4e49",
 		"modules": {
-			"lib/index.js": "c7edbf46b9af2a50114ac396596870eaf8bf7ad2970618ec6c5221b053bb5523",
+			"lib/index.js": "87ea85e2fb5318bf1f826db9a1c88c1b26d3ea328027a7f32b211880c4d62b9d",
 			"lib/invariant.js": "53066dc4945c0159fb5b48944b578a2d2d22f2f3bd5042599f2f6278edc84466",
 			"lib/types/fork.js": "72ca7ae2cce506eb607e565f2e6b15fc6e3c2663de8403f79e37fc3a469e34cf",
-			"lib/types/index.js": "24b2d8b5d47030fbdddd248f0ae0794321914d44742aaeb98ea28c82ea3f446a",
+			"lib/types/index.js": "71b3a3578b85704f026b590462e7d5e8bceb6dededd4e8782a83696138ec7da7",
 			"lib/types/invariant.js": "975e1640ad5dba930b6031315ee7d98dd01151155d2db7e993021de1feef4f32",
 			"lib/types/known-event-types.js": "8f38e6fc9439bb4e47f2bd3aa21c86d5141ef9679f41181c9d9a48765c67d3be",
 			"lib/types/preparation.js": "78dea29f5e11a4d220945a572b3eb26cb66460e6a368a423bf597c3ef05a5faa",
-			"lib/types/repair.js": "23fdd40281163d6f171dab957478441a81c2e3724461e38d68d3f8409b73feb9",
+			"lib/types/repair.js": "ee2e02d4e924bf01af621c38c27e030b89eaa8e0abfdf801a6220eca95aa2038",
 			"lib/types/request-header.js": "3f73ee59af794df50df159a9c45c606f0fbce364c482b371831d1e8f26b87aea",
 			"lib/types/seq-ranges.js": "68a127c76affa98edeeb50e302eb43f154f4d24f7d04cb95ba8b323e88f3d09e",
 			"lib/types/surface.js": "7e9d4bd3b7c5b2eceed0f8b035e9c021237c72baa2b53e4c6fc941e8b417580e",
 			"lib/types/tool-history.js": "2d2c4f4cbb6717aa2f487af52ce6a81e2002ce2c768cb5a4210c867ec49a0e95",
 			"lib/types/types.js": "a03acad09eec657b94441109af0da31b5b29668feae35d1b9e72fd99beca505f",
-			"package.json": "9946cc74d54f358486f39475aca0dbd8e34dbb255ade18ecf3de15de0029e525"
+			"package.json": "2f443f9ef9f0e4dd5b975641a41694bc24596fab629abb51c42969b7c8c0e01d"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-format-v3-to-v4",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-PpGsFntVbc6HEnIlTRMluk55YPAFGmbz7SSyYMXDaz7N+jzWTa54AuMg9gUthHxPwZyj7KF2QtJAJnSQ2+GPGw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.1.7-rc.2.tgz",
-		"sha256": "2ba5525393e5528aa3772948940344691494dd223125832bdc55cdd692eda630",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-vnplfHQOqTXpe7EMN/0h0VZyBS10+kzzjm5x/X01iu5lynbOQs2jRdi4Lrzp9fgnAUEJYaESZZLlWKY40arLCw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.2.0-rc.1.tgz",
+		"sha256": "fbee2c059776093ae18889bf8ac82ab3397e2e42c5ea2bb2ecbceb7bbfbee499",
 		"modules": {
 			"lib/index.js": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
-			"package.json": "efa6c2c8659466b795d6f12e2401f85c43391c769b0ef17efa39a817be7e0dfb"
+			"package.json": "72632c0f2042c2db7f42012ac198e3504a19dc4919c2ebd58267d0238c80429c"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-persistence",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-xZXMo8hYMnh96UyxpkmDqvfxpmVNWbTlXqSuJray7S2kW8AkugKDc+FMy2+/znoBHhZsi+2/uKJRPj6dwDBIsg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.1.7-rc.2.tgz",
-		"sha256": "e5df22cd3d6c1d0158153674711804df93253f733565fdab3aa010290a6957c8",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-OAHmDpR3LasgEXzpmGyajlgcG5tOEzlUSclovllLtKaY402hcTn6Vm7W/EzRMwc+jvSfEQyXDY1g7wG3t3Ch+g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.2.0-rc.1.tgz",
+		"sha256": "af6ff71617c6e1df006c88a873c7416552cdc1a1317fb33c79bd3279c49a3a26",
 		"modules": {
 			"lib/index.js": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
-			"package.json": "b1526be8a69a4de05f8318a533b9c89518ea6485fe652db90d1370abfc4d70d3"
+			"package.json": "a5a768a7fa9dff906404056185bdf186dbecd12e62b0725a762fc71fc4269df8"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-persistence-jsonl",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-Dymapt+M11rJKQgsisfod2LSf0HvyUN/8QTv+g3BAXlRh5YFXvRcSVsY3XWj5NnUs3tlbU2aauBE7OXbMSP4vQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.1.7-rc.2.tgz",
-		"sha256": "b810feb11e4ea635948763c8c079ea02e07728c0d86975e160ca18c6c08e5ff3",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-16hp5zx1Q1SIVJfQI/hrxASHMkE/r+pHeELn1b/GZCpKwCD1nwiQapqHhgq/+WEb9SRvRpWAxE5dQWEscZghEw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.0-rc.1.tgz",
+		"sha256": "5f26f58226db1c8b9fabb21121176360826cc0b8f9ecc183ae5c78ca89e12ade",
 		"modules": {
 			"lib/index.js": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
-			"lib/worker.cjs": "7aa76131cfc31a133fd42da731f44240eb4e365c2323fe77a46a5ee770d37dcb",
-			"package.json": "fe90aeb77fac098c6a9ca8b8c619cc9dfe0ad97224c7cb354819f0bc3ae8d5ce"
+			"package.json": "01debc5bef48135fba71b78f9f0212e097f7a31ad30a14a64c3f6cb12638ef48"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-projection",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-s5T8oHBEh+GeOTJ+wehD4CGZkTiWgczZZA+NDbfbqUO0k5L+dk0kk3fN+/srAg77rhR7UeeDSR8ZNcpYx/VUdw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.1.7-rc.2.tgz",
-		"sha256": "e8e457916347304645c14ddf8780ded998dbc90588baeae9df4d42c180b510f2",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-6ymxQyycjXlxayjgVfxAsQv8POk3oKny/mrpxPcz30/Sv8FRsWnEnKaWf1pQvlBsGQcN6atOqXWsNyvHSyT/zw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.2.0-rc.1.tgz",
+		"sha256": "f4518edd373985721a7615c9381b5703434f38b6b31cff15d7bfd3b486443b3c",
 		"modules": {
 			"lib/index.js": "022f1d13e25aeb3c18e10407d84c69e018c1c05a65c9ee36ed14d89b185a4fa8",
 			"lib/types/index.js": "f3daccbaa1cc82749411fadc7923ff9275cc96b7ec594e65f3e01a3dbbe29444",
 			"lib/types/types.js": "d6b9f7a57fe4dacd7b1a6403a34e6cd1ccd088c2e024e02cbf577166faca6ffb",
-			"package.json": "af5789d9acd19a3e54cb3951bbe0f99b84bdbe54a98fa4d985b97439cd8e7ac4"
+			"package.json": "ac165c17714f1af15fc9018a06d7cda0fdab44bb4483ab16eafdc282b9f2aafe"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-shell",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-l/CdrpqFG3SNPKBm7/zJkqn8gODxMLcTOg57zSqyDi5VdJXb8dlRQNHH4KfhxfWM9rZSH5AC94g6Il2n3sOQ+w==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.1.7-rc.2.tgz",
-		"sha256": "a36a85933e3c734cd345405536ed602b8d103cf6894e5599e8648ced546ad89a",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-gdugmqfA+BA1y+qLxHjtHuw8Jc1Dnar2dCaKlawagUxnBCK7mcqkYstTaeiANM7o+2tWELLIt/Pjj46PnMY8iA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.2.0-rc.1.tgz",
+		"sha256": "85fba32b588dd3ff0bb990d102a043f9eb2e2ba39ec45c8fc815bdbf1a79fbf8",
 		"modules": {
 			"lib/index.js": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
-			"package.json": "0430098a729444ad8749a1631e69b1b2deb67f1adc76267164d7de18136139a8"
+			"package.json": "a2967633b7fe3ab32cbdf807e1bea04363b7441bc2b802f2257819abd12b28e8"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-shell-env",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-Zu31yhGgnB+WMah0Qb/+adZTeUr1MQLmNMU8lV6YVt20tCnbA+HFI/akPTIoc9Ux8+Lqf6/fyv4e63OniPXaRw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.1.7-rc.2.tgz",
-		"sha256": "3c785494e25403a6ab1f51f052a24fd8fb613ede845d082604df1bccfce1f4b9",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-4qOlCOg7Bs/dieRpYFK5aTycWLuJU3RLsbGHtgwz9hyjCyI339pCR9Sd4TyZstENhPHI9k/mjKy1IsbT4T+wig==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.2.0-rc.1.tgz",
+		"sha256": "4983c6317892ca5cce6e0d16378ddf47293f571fc667d3ab11816fe9685af05e",
 		"modules": {
 			"lib/index.js": "82b1e6663968307a387fd7f300ff9db5e3c1ff707b32953da82c3dfa12024364",
-			"package.json": "15d5ff96195580c2884e6ee514e8e2b141f5cc110063df14d1a81324cc442c31"
+			"package.json": "01eea37e115c18bfbba18c6976e2455895fbac1a9298a42d90b068769be6d319"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-subprocess-local",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-1JKUC4YriYbuyNsDcOwb+WQVaxy6I8CWeTVP/UoEc6uXPSMQdS3GJArDYyFdC2NzjOEmAxpTr4awTNNrpA6Gmw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.1.7-rc.2.tgz",
-		"sha256": "b42bead19498363a819796ad0c8c32cc2bec175d9533fb0f48a871d3222ab162",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-rO0VCIPqEk6A47rlVZxvHXXaoQ2MS8pW5yhXpb3+hqc/2NQA33ZOMViqeDeVyyBlhLTxn7p972kETEB1EhEZfw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.2.0-rc.1.tgz",
+		"sha256": "3bfabfdb8091e0540ccaf3d352566048151e8c89f0551e2019cf3eaf9d96146a",
 		"modules": {
 			"lib/index.js": "e40106ed35a1e1744c016e77f2cf59b07f87969bb7c4b424d26fb08da75e3922",
 			"lib/output.js": "4f77ef6da608d36df168c99177e9b527e7145df1418845eba567635e64a4c2a3",
 			"lib/runner-launch-B2zsQ1Dz.js": "6df08adc4a27f278878a5f4cde8b551b51e647b922ac7d6591fd62d272ced153",
 			"lib/runner.js": "4e21528dfdb3e92bdce2340945dc4dcb202e4a4af0bbeb8b97585f67735d30c1",
-			"package.json": "9c033c225ec379db266d5d434a2521e9a5b0ca5ee4c6961a90c2c5b0b1a45ed6"
+			"package.json": "45e100772a6e1b2273fcf06fbe069a823be0c3f22407869dd3ee6c2a5ebaf16c"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-system-prompt",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-vxKcADh7XOuWJOfa0WeEOhvFiUbMOdoK4w6M7KVCI0S99c9ktxrgY4wKdmAxap+nQjwTEPme3QuOlY3Na+cz9w==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.1.7-rc.2.tgz",
-		"sha256": "4ff9fc37fd66f15f49305dbe4c2c1d3bcd7ed12b736a098893c80657fd0a3a3d",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-AZC0HBWaiopkVcJXh/WEzyyF19+/yBPnbuLrZoD7h+UJYF8iG8tlDabauWfMw+dvgoYe9hIiTV2EcFRv4AgJhw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.2.0-rc.1.tgz",
+		"sha256": "986c461e1fd98644f74a749f3423e3bb73ea192db46fefef0601a1477f9c92aa",
 		"modules": {
 			"lib/index.js": "ff422afac6ba85f89afa985d921aed0b603feb354a05a549c48eae04cf0d2f57",
 			"lib/invariant.js": "64c55f06e5583df9b577d613c64b6bac9f04d189ff5ef2d613caa65ae9f79d75",
-			"package.json": "a48f0bfd25b553d0b71eed24533e9b3090c5345d2665dec77604fb76a1b75db5"
+			"package.json": "15b3df1dd7402705398d2429f49343106393f71d198b0d90cc966815b798547a"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-bash",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-pdFYrdnX2OlMN9nI0XT5MZwMkR58x4Z5j9qyTfMYLvtbuZxHwxcdHq2PJU3vAuVQj14F7TJiFEan2EXq+X1mFg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.1.7-rc.2.tgz",
-		"sha256": "2328a9b2c46fdab88e6e56dcddbb0c6f5de56ec08cc97f6b687efc91987eb97e",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-/uF4JXgGIc141xAOsA89c3jlaxVcEjOeXmJ6WDtcg6IcEVvpXbIW4DFvgd49VFCskcGoyzy0eOVPATkIryyo2A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.2.0-rc.1.tgz",
+		"sha256": "bc20060ddce3e3ec6bc7821a5c4126b6ae7447400fb3921a8070e218f09fab9d",
 		"modules": {
 			"lib/index.js": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
-			"package.json": "6554a080c2621a29580709d48d5d303df0aff9238ad6cd1588f1eb284e4b213b"
+			"package.json": "0e3f1f40650fffaf358eaebd6cdb7dc4fb11be4508fc068bc35358ea0c4cd5fc"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-fs",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-/6wYrqHH1530tncA7DxC3IxLN2iI8kyhCPR/NfaugL09yGPpBwxm455bMvITSjIAvINWpJfMQvaijPui6goY2Q==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.1.7-rc.2.tgz",
-		"sha256": "bb0216c1b055b771440d4a89a589f6088398512bc865198304f91d54fda654ff",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-B6CY0yldjoWXQ2RY/5XNtQd9UHgcWRjw7jgZt9wk2i0vw6FuusQ/1VF9b0FPotmOhQ5W6MHiNaOwx0LS5lSfUQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.2.0-rc.1.tgz",
+		"sha256": "0ca591b9f6a8d9ad4d1db30fb2527225606373b5325a4aef312e3d662342325a",
 		"modules": {
 			"lib/index.js": "66742231de99695b98400cdbc7bcf47b8ef2bf24600cf86f66bb35591981427f",
-			"package.json": "1fc02693f0606d6fa425359e2428c89e3a870c13da75a53c0da5354517b8c009"
+			"package.json": "e5cac7e89436d03212ea527ce8a43fc0603228a1c5abebaa1bbc0f080603e2cf"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-goal",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-Otb3HOlyZA+44nDXrMi9PW4vlurudOaRYdA7hu4MZBtqvmFEty5loJAzrtDbAhwImhA/UM9M+7Qa2ijwm68qCw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.1.7-rc.2.tgz",
-		"sha256": "a37601aa6cbe10ad9e41d7cd15f3cb99a0d6c4033ab78aecfbf21a607a87b14c",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-EIrmvt28dsJ1/ujj/7B6cd6URYeIiBg3pigjViTr9hI5XeGdbUsIie3TiIHixdB4HK8+f1TE27kDvWoIpCIslg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.2.0-rc.1.tgz",
+		"sha256": "227e7b0a18a4c0adb03dc1127a8fb8f9e8d7fb45ffe725d99b8fcec50a88b579",
 		"modules": {
 			"lib/index.js": "7220fa7b5b7c95c94377ac32c6b01ecac5b4853d9dec3a48ab17d371cda63e6c",
-			"package.json": "064f7de639ea4bc4c3e0a810dc1124abf69c1f9edfffeb640d2e8a261195c326"
+			"package.json": "185e65b45116b1d1b8ea1cc2f9eede2b3551a1f2d9b851a7ae8716eb2fc4d1f0"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-jobs",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-FAqhI8Hf1InawbrJF/XUjIlQHV11vRMWbX7ofrekJcX0OBk/Og/h8SUzy1knGBVULEm8m2PDLxggXoMu+HVlvg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.1.7-rc.2.tgz",
-		"sha256": "411c9a77c56a604f1c9b21b473066e7e62d61f491e75221eaef2677c761e54d0",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-drRwecBoDKmjY3iS16w9/Tpt7qc+uJYmFpuYk7PaSFvRGEINQQWVlcrwoV6NFSr2DRTJnBEomEnQ7zCzMRy3hw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.2.0-rc.1.tgz",
+		"sha256": "80a675da52edaeaed1d363e3794156f7281913c3d2afe7a73f630f91b10c03a0",
 		"modules": {
 			"lib/index.js": "660066155801b20c67e6e288820961a365fe65738ffee1a16e50a2394ac9c7c6",
-			"package.json": "f1f1053535e20130d335bba24990f4cc309f6f115556b8021204c03ee4421447"
+			"package.json": "d0b6f47c0ae26f9b3c7a3ef3a71d7b4d80be8c3be22704b8b3eec1c8053a6d55"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-pwsh",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-GMFZT35QKoFOXzFV576FbohrdfcXtrMJlOPqdQvNvUdMLYPiiJEIR4WSuqQuGBoez0bLxKVwtodGzwcvPBP+dQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.1.7-rc.2.tgz",
-		"sha256": "50e078d69cd79614577e3e264527c6dcf723f4fc163ee40169d518e3bc0c1b9f",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-jxKcyzZ1c9/1tRdBweae+fivnx4WhYMWco+9AG5ANmVHTOXaSCJ8RtUfBQyB7/HUXsLEU1jtHWg3kEcLxZK33Q==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.2.0-rc.1.tgz",
+		"sha256": "b670a0cace67e87f241c737f2a3b52fe300dd4008f76233c3a7692ccf010202d",
 		"modules": {
 			"lib/index.js": "59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c",
-			"package.json": "7b2ecde109a1f8f73e2f365ba752b8ea9d267f1d72cd68567178e55df820ee98"
+			"package.json": "0ab2225df3c4b818c74e6398f6c41e5d97013459c8f0fdc9388b40178a9d508e"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-tools",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-c3dTdKnslKxVTgjjPLwMKLqGUMwnZH5P8RUsucMQlWn2GViyFW/+5AIUuZHBjjE6Y7NAYl+lVVE/R4LgTp5KWA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.1.7-rc.2.tgz",
-		"sha256": "1ed94fb52cc9106ec30f9a999e1262deef9cb514b9d745e968f1f6ec9c995f80",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-HmXY+X4HBoeuGBJWkS+q91GEGK61XgNc3qCXT+QqI+nzCcg1VOIwWvjgOnr1c76x5HKPyxR7FF3PMMq3+hO7oQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.2.0-rc.1.tgz",
+		"sha256": "173440b373cf1a6f8bd21ddc7c867137c5069d2388023bba23c832a6249795c7",
 		"modules": {
 			"lib/index.js": "40f47709337c3c205d4e09e647f8588f4977e66f6d52f019b3cc7ef81159d84f",
 			"lib/invariant.js": "41a09fa8d0e0857c6232e8d3b13c8658929b6b6300c6b3a2c53980c05309c282",
@@ -825,54 +888,56 @@ var packages = [
 			"lib/types/testing.js": "c6784f546e950dc38323baaad4009bb197eb25acf3a16adaa2893a44c7b7a650",
 			"lib/types/ts-types.js": "3c2f80465d6a420f15c75dcd023daa73af97307c3e22478c0bae67cf71c50d1e",
 			"lib/types/types.js": "d53c54d32353419ece121f485a5534ee054842b74ebab7b4a4d3325545d0179a",
-			"package.json": "12bda14a4753f2c2202d607e2bcf77236817bc6f17a827421c7f353ac2d917e5"
+			"package.json": "4d94a4285686e430c153c87b5311e4656f3b3833fdbbcf3591110406a84ef227"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-user-approval",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-RQ6GB+C4G6VY/eJrFfS89+89DfHFAJ5G1abhmutfKBhZcYSnGNZyPIzpr5mKbl2xNMIhvCJOb9WiFz2fUPW2HA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.1.7-rc.2.tgz",
-		"sha256": "0cb982508692c1bbe88da937d3e7f2d8d4b2089aa81adcfc1fa354e579a1900a",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-0d2sFESHYhnnwuIPDw7sNImFE+HWU6kbX9cWZSPntMXLMhr8lgJFmtZFmrZwobQO7lhpEZKcvX8Jhzmc3OCdWQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.2.0-rc.1.tgz",
+		"sha256": "2f54cc7a3905930af5a540fb2ad8ebfb1c458e56e9d0a547b81e6fb7a2f81799",
 		"modules": {
 			"lib/index.js": "6a5ad1ba3c3dc3abbbae52e6c8c4463970ee0c1c8988cebb0d5cf2acd17ee90b",
 			"lib/invariant.js": "4c4d4f497a9cf8b2397ce0f029456c5d9dc52005f0e60e3fb6365695b3cded7a",
 			"lib/types/index.js": "0b2e00fe1b2cedc9b6349a38e07e26a05a09492da838f069c10b76cf13f6d6e8",
 			"lib/types/invariant.js": "0ee679ea1449b99266df9dc3c53606a61573caa432cfca3d44badfdac71a0ef8",
 			"lib/types/types.js": "525e6f38c039c0b20c6d071bfe06799e8fbc41b2af2ce8db7b1feb3faebad75f",
-			"package.json": "b3f69f6540c18dc0c9321f01398f298f168a1b655792397d9c7f8cb2399fc99d"
+			"package.json": "eff21ab4e65ee041c7eabc61f03b9fba28b21471463ca9e51af50f57fa965ad6"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-util-values",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-UX8nh5SbtZcPVVEvjd+9PCPcbybA6OpVzJGgFxYn59ao/7QQGyYbByS8KXr+THU5JtqmDDVb9xGUSJaF2IYmeQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.1.7-rc.2.tgz",
-		"sha256": "5e61a75f41d682800285c933104eb4a50ca114769d0f15e3f06e23c91c895db7",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-Eh1HH0LFvztBwU2xotdfW5oCwLlWGjK2ygCC5+PnC3tkSDh9gvVQpEf0ezK+Kk6vpLz117V7VPehhR1+gs90+Q==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.2.0-rc.1.tgz",
+		"sha256": "7840c210683d0c79c4054b63b39b869d8fb06f2c5095c35ce0eb836beedd361d",
 		"modules": {
-			"lib/index.js": "890eda6f657c44da19ffbd151ea27dd835caac65db0478f64f6c3926534485ec",
-			"package.json": "dfede153fe6997dc062645c1fd0d1d4f89d4507396d83938987ba6ac0c353006"
+			"lib/index.js": "d291828dc4ff9c4b43a67e7ed81625c8f90ebdcf4de2f5cbf2c33f38208ce2b8",
+			"package.json": "7f5894851834711e41f529d77e95f8a74c4892e6fd07cafff0f50f359f0b7b4b"
 		}
 	},
 	{
 		"name": "@deepseek-ai/dsh-web-app",
-		"version": "0.1.7-rc.2",
-		"integrity": "sha512-3cMgHys6X9N063HcjhFN2a3azGoWWDtH42/io33gcBZMZxbYP5Kevc4l/erwKa5hAzXtJ2FArjJAytJmy8WSKw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.1.7-rc.2.tgz",
-		"sha256": "388709f10068cdec1997c37a69c282961b6b02afd41871dbc2ff8a17db41e7b4",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-Gho07L3/1hk0UdVc7PjYtl01CPRb9famTmgsw9KrzuBfUcv5co1gKdAJYF+urZdx7mqkux6lZDBqUNbOIrPgBg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.2.0-rc.1.tgz",
+		"sha256": "430cb785d6a800a6112a3b57d916d6450d90bb94134af19b3394ecd5a9b2e3f7",
 		"modules": {
 			"lib/index.js": "50c7ce5b93e8a7ac0117e066699cd31b553a5a135d38b7051d6a8364ac691af4",
 			"lib/startup.js": "95a47053483fbe8ec86711369b8791bccb592c303fcc89300458a4bd07c6c252",
-			"package.json": "091d775bafe17f4e0681e6312214ce1f2d5d0389bf1201c1a2586ecd2789be81"
+			"package.json": "0623b04fee889a1622cc6d4d3aa8d5b347f9260a06d11ff9b7160ce40cee5df6"
 		}
 	}
 ];
 
 //#endregion
-//#region src/domain/rc017-rc2-host.ts
+//#region src/domain/rc020-rc1-host.ts
 /** One source for verified registry identities and published executable bytes.
-* Native platform acceptance remains a separate, currently pending fact. */
-const RC017_RC2_HOST_PACKAGES = packages.map(({ name, version, integrity }) => ({
+* Bound to the published dsh-v0.2.0-rc.1 tarballs (upstream
+* 4878cdabd87d4041bdaff61d04c966883b9fd07a). Native platform acceptance
+* remains a separate, currently pending fact. */
+const RC020_RC1_HOST_PACKAGES = packages.map(({ name, version, integrity }) => ({
 	name,
 	version,
 	integrity
@@ -2042,8 +2107,8 @@ function validateActionManifest() {
 //#endregion
 //#region src/domain/host-version.ts
 /** Exact host identity; version ordering is diagnostic only. */
-const MIN_SUPPORTED_HOST_VERSION = "0.1.7-rc.2";
-const LATEST_SUPPORTED_HOST_VERSION = "0.1.7-rc.2";
+const MIN_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
+const LATEST_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
 const SUPPORTED_HOST_VERSIONS = [LATEST_SUPPORTED_HOST_VERSION];
 const SUPPORTED_HOST_RANGE = LATEST_SUPPORTED_HOST_VERSION;
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -2140,7 +2205,7 @@ function satisfiesSupportedHostRange(version) {
 * Capability expectations shared by every registered cohort.
 *
 * Every row is a host contract Guard actually consumes, re-checked against the
-* 0.1.7-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
+* 0.2.0-rc.1 package surfaces: `ctx.sessions.flush()` still returns whether a
 * durability listener participated; `tools.guard()` is still a monotonic
 * post-policy denial; the Goal service still exposes `get`/`disarm` with a
 * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
@@ -2239,14 +2304,14 @@ function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages$1, a
 	};
 }
 /** Baseline cohort retained for callers that need a default fixture. */
-const ACTIVE_HOST_COHORT_ID = "dsh-0.1.7-rc.2";
+const ACTIVE_HOST_COHORT_ID = "dsh-0.2.0-rc.1";
 const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID];
 /** Core-lock/v1 separates optional market identity from the rc.2 critical
 * graph. Historical cohorts live only in test data. Version ordering cannot
 * authorize an unregistered graph, and graph identity is separate from native
 * acceptance of a Guard artifact.
 */
-const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.1.7-rc.2"], [], RC017_RC2_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
+const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.0-rc.1"], [], RC020_RC1_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
@@ -2277,7 +2342,7 @@ const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.1.7-rc.2"], [], RC
 	]
 }));
 /**
-* Baseline fixture package identities (DSH 0.1.7-rc.2). The cohort
+* Baseline fixture package identities (DSH 0.2.0-rc.1). The cohort
 * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
 * unknown-version, unbound, OR MISSING row fails the whole lock closed
 * (`host_lock_missing`); no capability inherits independence from a partially
@@ -3048,14 +3113,14 @@ function activeRendererModule(nodeModulesRoot, name, providedSession) {
 	const ids = session.memo(`renderer-ids:${modules}\u0000${name}`, () => [...reachable].filter((id$1) => id$1 === name || id$1.startsWith(`${name}@`)));
 	if (ids.length !== 1) return void 0;
 	const id = ids[0];
-	const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? "0\\.1\\.7-rc\\.2" : void 0;
+	const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? "0\\.2\\.0-rc\\.1" : void 0;
 	if (!version || id !== name && !(/* @__PURE__ */ new RegExp(`^${name.replace("/", "\\/")}@${version}(?:\\(|$)`)).test(id)) return void 0;
 	const url = records[id]?.url;
 	if (typeof url !== "string" || url !== `./${name}` && !url.startsWith("./.pnpm/")) return void 0;
 	const root = session.realpath(resolve(modules, url));
 	if (!root.startsWith(`${modules}${sep}`)) return void 0;
 	const manifest = session.readJson(join(root, "package.json"));
-	if (manifest.name !== name || manifest.version !== "0.1.7-rc.2") return void 0;
+	if (manifest.name !== name || manifest.version !== "0.2.0-rc.1") return void 0;
 	if (id !== name && manifest.version !== id.slice(name.length + 1).split("(", 1)[0]) return void 0;
 	const bytesPath = join(root, "lib", "index.js");
 	const target = session.realpath(bytesPath);
@@ -19531,4 +19596,4 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 }
 
 //#endregion
-export { PROOF_KINDS as $, BOUNDED_ARTIFACT_TYPES as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, DEFAULT_HOST_LOCK as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, evaluateToolSurfaceCapability as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, resolveActiveProfileHostLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, ACTIVE_HOST_COHORT_IDS as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, ACTIVE_HOST_COHORT_ID as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, bindExecutableIdentity as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, SUPPORTED_HOST_RANGE as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, selectHostCohort as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, bindLiveGoalCapability as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateMinimumHostVersion as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, SUPPORTED_HOST_VERSIONS as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, evaluateExternalWaitCapability as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, GOAL_HOST_PACKAGES as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, HOST_CAPABILITY_PACKAGE_GROUPS as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, ACTIVE_HOST_LAUNCHER_VERSION as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, HOST_COHORTS as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, ACTION_MANIFEST_VERSION as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, evaluateHostCapability as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, readActiveHostGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, verifyComposedHostLockDump as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, LATEST_SUPPORTED_HOST_VERSION as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, hostVersionFromPackages as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, MIN_SUPPORTED_HOST_VERSION as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, satisfiesSupportedHostRange as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, parseHostVersion as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, ACTION_MANIFEST as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, RC017_RC2_HOST_PACKAGES as _a, hostLockRowsFromComposedDump as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, STOP_PROTOCOL_VERSION_V2 as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, packageRowsFromActiveGraph as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, boundedArtifactChoiceMatches as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, requestedTargetAuthorizesMutation as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, CERTIFICATE_VERSION as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, requestedTargetMatchesResolved as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, validateActionTarget as ga, hostLockContextFromComposedDump as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, validateActionManifest as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, STOP_PROTOCOL_VERSION as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, EXPECTED_HOST_PACKAGES as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, BASE_HOST_PACKAGES as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, isStatefulAction as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, semanticActionFromText as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, SEMANTIC_ACTIONS as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, SUPPORTED_EVIDENCE_ADAPTERS as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, semanticActionFromCommand as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, compareHostVersions as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, STATEFUL_ACTIONS as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, actionCompatible as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, CERTIFICATE_VERSION_V2 as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, requestedIdentityKey as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, createHostAuditSession as va, injectActiveProfileHostLock as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, resolveInstalledHostLock as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, packageRowsFromPnpmLock as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, inspectTargetHostGraph as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, evaluateHostLock as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };
+export { PROOF_KINDS as $, BOUNDED_ARTIFACT_TYPES as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, DEFAULT_HOST_LOCK as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, evaluateToolSurfaceCapability as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, resolveActiveProfileHostLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, ACTIVE_HOST_COHORT_IDS as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, ACTIVE_HOST_COHORT_ID as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, bindExecutableIdentity as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, SUPPORTED_HOST_RANGE as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, selectHostCohort as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, bindLiveGoalCapability as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateMinimumHostVersion as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, SUPPORTED_HOST_VERSIONS as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, evaluateExternalWaitCapability as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, GOAL_HOST_PACKAGES as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, HOST_CAPABILITY_PACKAGE_GROUPS as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, ACTIVE_HOST_LAUNCHER_VERSION as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, HOST_COHORTS as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, ACTION_MANIFEST_VERSION as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, evaluateHostCapability as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, readActiveHostGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, verifyComposedHostLockDump as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, LATEST_SUPPORTED_HOST_VERSION as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, hostVersionFromPackages as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, MIN_SUPPORTED_HOST_VERSION as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, satisfiesSupportedHostRange as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, parseHostVersion as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, ACTION_MANIFEST as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, RC020_RC1_HOST_PACKAGES as _a, hostLockRowsFromComposedDump as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, STOP_PROTOCOL_VERSION_V2 as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, packageRowsFromActiveGraph as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, boundedArtifactChoiceMatches as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, requestedTargetAuthorizesMutation as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, CERTIFICATE_VERSION as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, requestedTargetMatchesResolved as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, validateActionTarget as ga, hostLockContextFromComposedDump as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, validateActionManifest as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, STOP_PROTOCOL_VERSION as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, EXPECTED_HOST_PACKAGES as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, BASE_HOST_PACKAGES as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, isStatefulAction as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, semanticActionFromText as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, SEMANTIC_ACTIONS as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, SUPPORTED_EVIDENCE_ADAPTERS as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, semanticActionFromCommand as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, compareHostVersions as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, STATEFUL_ACTIONS as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, actionCompatible as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, CERTIFICATE_VERSION_V2 as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, requestedIdentityKey as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, createHostAuditSession as va, injectActiveProfileHostLock as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, resolveInstalledHostLock as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, packageRowsFromPnpmLock as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, inspectTargetHostGraph as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, evaluateHostLock as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };
