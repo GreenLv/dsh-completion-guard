@@ -13,6 +13,13 @@
 // The coordinator runs mode 2 against the real macOS host graph; development
 // verifies the device on the synthesized graph. Nothing here touches a user
 // profile or a running host.
+//
+// Mode 2 measures the graph half (readActiveHostGraph + evaluate) AND the
+// byte/route audit body (auditedHostImplementation) per round — together the
+// full validation composition. It also reports the per-protocol entry counts
+// from the v081 production suites' observed invariants (mount 1, checkpoint 1,
+// publish without ref 2, with ref 3, Goal/Stop 1 each) so the numbers come
+// from the same production wiring the suites execute.
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, existsSync, cpSync } from 'node:fs'
@@ -26,6 +33,8 @@ function synthesize(targetDir) {
   mkdirSync(targetDir, { recursive: true })
   const modules = join(targetDir, 'runtime', 'node_modules')
   const records = { '.': { url: '..', dependencies: {} } }
+  // Pass 1: extract every cohort tarball and keep each real manifest.
+  const extracted = []
   for (const [index, row] of manifest.packages.entries()) {
     const url = row.tarball
     const tgz = join(targetDir, `.tgz-${index}`)
@@ -34,19 +43,40 @@ function synthesize(targetDir) {
     if (sha !== row.sha256) throw new Error(`tarball sha mismatch for ${row.name}`)
     const id = `${row.name}@${row.version}`
     const relative = `./active/package-${index}`
-    records['.'].dependencies[row.name] = id
-    records[id] = { url: relative, dependencies: {} }
     const packageRoot = join(modules, relative)
     mkdirSync(packageRoot, { recursive: true })
     execFileSync('tar', ['-xzf', tgz, '-C', packageRoot, '--strip-components', '1'], { stdio: 'pipe' })
     rmSync(tgz, { force: true })
+    const manifestJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+    extracted.push({ row, id, relative, manifestJson })
   }
+  // Pass 2: declare the ACTUAL dependency edges the real manifests declare,
+  // mapped onto cohort record ids. The route audit authenticates exactly these
+  // edges, so a synthesized graph without them is not a host graph.
+  const idByName = new Map(extracted.map(({ row, id }) => [row.name, id]))
+  const names = new Set(idByName.keys())
+  for (const { row, id, relative, manifestJson } of extracted) {
+    const name = row.name
+    const declared = {
+      ...(manifestJson.dependencies ?? {}),
+      ...(manifestJson.peerDependencies ?? {}),
+      ...(manifestJson.optionalDependencies ?? {}),
+    }
+    const mapped = {}
+    for (const depName of Object.keys(declared)) {
+      if (names.has(depName)) mapped[depName] = idByName.get(depName)
+    }
+    records[id] = { url: relative, dependencies: mapped }
+  }
+  // The root package carries every cohort package as a direct dependency,
+  // like a real runtime root.
+  records['.'] = { url: '..', dependencies: Object.fromEntries(extracted.map(({ row, id }) => [row.name, id])) }
   mkdirSync(join(modules, '@deepseek-ai'), { recursive: true })
-  for (const row of manifest.packages) {
+  for (const { row, id, relative } of extracted) {
     const bare = join(modules, row.name)
     if (!existsSync(bare)) {
       mkdirSync(dirname(bare), { recursive: true })
-      symlinkSync(join(modules, records[`${row.name}@${row.version}`].url), bare, 'junction')
+      symlinkSync(join(modules, relative), bare, 'junction')
     }
   }
   writeFileSync(join(modules, '.package-map.json'), JSON.stringify({ packages: records }))
