@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { cpSync, symlinkSync, realpathSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
+import { pathToFileURL, fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import audit from '../manifests/rc020-rc1-byte-audit.json' with {type:'json'}
 import manifest from '../manifests/supported-host.v1.json' with {type:'json'}
 import { RC020_RC1_HOST_PACKAGES } from '../src/domain/rc020-rc1-host.js'
-import { auditedHostImplementation, packageRowsFromActiveGraph, auditedForegroundRenderers } from '../src/domain/host-resolver.js'
+import { auditedHostImplementation, packageRowsFromActiveGraph, auditedForegroundRenderers, readActiveHostGraph, evaluateActiveHostLock } from '../src/domain/host-resolver.js'
 import { evaluateHostLock } from '../src/domain/host-lock.js'
 
 describe('rc.2 published identity and executable-byte audit', () => {
@@ -46,6 +46,23 @@ describe('rc.2 published identity and executable-byte audit', () => {
       writeFileSync(join(clone,'package.json'),JSON.stringify({dependencies:Object.fromEntries(Object.keys(dependencies).map(name=>[name,'*']))}))
       writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:copied}))
       expect(auditedHostImplementation(clone,clone)).toBe(true)
+      // The official standard hoisted generator records self edges, not a
+      // declared dependency closure. Exercise the complete production gate
+      // with unchanged published module bytes and fresh independent lanes.
+      const hoisted: Record<string, { url: string; dependencies: Record<string, string> }> = { '.': { url: '..', dependencies } }
+      for (const p of audit.packages) hoisted[p.name] = { url: './' + p.name, dependencies: { [p.name]: p.name } }
+      writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:hoisted}))
+      copyFileSync(join(runtime,'pnpm-lock.yaml'),join(clone,'pnpm-lock.yaml'))
+      expect(readActiveHostGraph(clone,clone)).toHaveLength(audit.packages.length)
+      expect(evaluateActiveHostLock(clone,clone,{platform:'posix',profileKind:'headless'}).status).toBe('supported')
+      const importer=join(clone,'node_modules/@deepseek-ai/dsh/lib/bin.js')
+      const wanted=join(clone,'node_modules/@deepseek-ai/cordis/lib/index.js')
+      expect(execFileSync(process.execPath,['-e',`console.log(require('node:module').createRequire(${JSON.stringify(importer)}).resolve('@deepseek-ai/cordis'))`],{encoding:'utf8'}).trim()).toBe(wanted)
+      const oracle=join(dirname(importer),'hoisted-oracle.mjs')
+      writeFileSync(oracle,"console.log(import.meta.resolve('@deepseek-ai/cordis'))")
+      expect(fileURLToPath(execFileSync(process.execPath,[oracle],{encoding:'utf8'}).trim())).toBe(wanted)
+      rmSync(oracle)
+      writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:copied}))
       // Review counterexample: map/lock/bytes still point at the genuine
       // session, while an installation importer sees a different package.
       const shadow=join(clone,'node_modules/@deepseek-ai/dsh-agent-loop/node_modules/@deepseek-ai/dsh-session')

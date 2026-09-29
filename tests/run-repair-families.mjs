@@ -20,6 +20,7 @@ export const families = Object.freeze({
     'tests/v6-recovery-feedback.test.ts',
   ],
   'host-contract-qualification': [
+    'tests/v081-hoisted-host.test.ts',
     'tests/domain/host-contract-probe.test.ts',
     'tests/domain/host-node-conditions.test.ts',
     'tests/domain/host-target-preflight.test.ts',

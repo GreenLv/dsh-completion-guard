@@ -12,6 +12,28 @@ export interface DependencyAuditGraph {
 
 const within = (root: string, path: string): boolean => path.startsWith(root + sep)
 
+/** pnpm's standard hoisted generator uses physical path IDs, self edges and
+ * the importer index, rather than the isolated generator's dependency closure.
+ * Recognize that bounded shape before allowing a declared sibling lookup. A
+ * missing isolated edge never inherits this permission. Linked/external and
+ * ambiguous identities remain outside this admission contract.
+ */
+function hoistedPathGraph(graph: DependencyAuditGraph): boolean {
+  if (graph.records['.']?.url !== '..') return false
+  const packageName = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/
+  for (const [id, record] of Object.entries(graph.records)) {
+    if (id === '.') continue
+    const segments = id.split('/node_modules/')
+    if (!segments.every(name => packageName.test(name) && name !== '.' && name !== '..')
+      || record?.url !== './' + id || !record.dependencies || typeof record.dependencies !== 'object'
+      || Array.isArray(record.dependencies)) return false
+    const dependencies = record.dependencies as Record<string, unknown>
+    if (dependencies[segments.at(-1)!] !== id
+      || Object.values(dependencies).some(target => typeof target !== 'string' || !Object.hasOwn(graph.records, target))) return false
+  }
+  return true
+}
+
 /**
  * The importer's nearest package scope, with Node's own walk semantics: from
  * the importing module's directory upward, the first directory containing a
@@ -248,6 +270,24 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
     const profile = session.realpath(profileRoot)
     for (const graph of graphs) {
       const isProfile = graph !== installation
+      const hoisted = hoistedPathGraph(graph)
+      const rootIndex = graph.records['.'].dependencies as Record<string, string>
+      if (hoisted) {
+        // Inspect ALL path records, including unreachable nested duplicates.
+        // Only one indexed top-level candidate may supply an audited identity.
+        const idsByName = new Map<string, string[]>()
+        for (const id of Object.keys(graph.records)) {
+          if (id === '.') continue
+          const name = id.split('/node_modules/').at(-1)!
+          const ids = idsByName.get(name) ?? []
+          ids.push(id)
+          idsByName.set(name, ids)
+        }
+        for (const name of graph.packages.keys()) {
+          const ids = idsByName.get(name)
+          if (ids?.length !== 1 || ids[0] !== name || rootIndex[name] !== name || !graph.reachable.has(name)) return false
+        }
+      }
       for (const id of graph.reachable) {
         const record = graph.records[id]
         if (id !== '.' && typeof record.url !== 'string') return false
@@ -310,7 +350,7 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
             const target = graph.records[targetId]
             if (!graph.reachable.has(targetId) || typeof target?.url !== 'string'
               || !local || session.realpath(resolve(graph.modules, target.url)) !== local.root) return false
-          } else if (!isProfile || local) return false
+          } else if ((!isProfile || local) && !(hoisted && local && rootIndex[name] === name)) return false
           const expected = local ?? installed!
           const exports = session.memo(`exports:${expected.root}`, () => runtimeExports(expected.manifest, expected.independentLanes))
           // Bare dependency resolution depends on the importer directory.

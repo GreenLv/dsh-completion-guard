@@ -34,3 +34,9 @@ Portable synthetic route cases run without an installed DSH runtime. The full 46
 ## Host contract qualification
 
 `host-contract-qualification` covers registry acquisition and issued receipt binding, benign program changes, Session V4 event/restore/fork and flush behavior, optional Goal isolation, qualified pre-install inspection, fresh entry byte inventories, and require/import routing under actual CLI/NODE_OPTIONS conditions in installation/profile paths. It does not establish native host lifecycle, model-provider behavior or arbitrary future ABI compatibility. The independent Node oracles run from temporary SDK fixtures without a user profile or credentials.
+
+### Standard hoisted dependency admission
+
+`v081-hoisted-host.test.ts` runs complete graph acquisition and byte/route admission for pnpm's path-ID, self-edge maps. Missing declared sibling edges are accepted only for this bounded layout with one reachable, authenticated root-index candidate. Isolated maps still require their declared edges; explicit edges remain authoritative. Root-index loss/conflict, unreachable nested critical duplicates, scope redirect/deny, nearer native shadows and escaping symlinks fail a new audit; restoring the same fixture restores admission. Independent fresh Node require/import processes check the selected sibling and shadow paths. The production publish fixture confirms that a shadow introduced between entries produces zero effects and that restoration permits the protected action.
+
+With `DSH_RUNTIME_ROOT`, `v080-rc017-host.test.ts` repeats full admission using the published host module bytes in a disposable flat layout and compares fresh Node lanes. It never changes or starts the supplied host. These checks establish source/layout support, not Windows native lifecycle or exact-artifact acceptance.

@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { readFileSync, statSync, utimesSync, realpathSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, cpSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
@@ -143,6 +143,35 @@ function makeHost() {
       hostLockPackages: rows,
     },
   }
+}
+
+/** The standard hoisted map has path IDs and self-only package records.
+ * A noncritical consumer declares the authenticated Session sibling; its
+ * omitted map edge must still pass the complete production audit. */
+function makeHoistedHost() {
+  const host = makeHost()
+  const modules = join(host.runtimeRoot, 'node_modules')
+  const packages: typeof host.packages = { '.': { url: '..', dependencies: {} } }
+  for (const row of EXPECTED_HOST_PACKAGES) {
+    const old = join(modules, host.packages[`${row.name}@${row.version}`].url)
+    const destination = join(modules, row.name)
+    rmSync(destination, { force: true, recursive: true })
+    cpSync(old, destination, { recursive: true })
+    packages['.'].dependencies[row.name] = row.name
+    packages[row.name] = { url: './' + row.name, dependencies: { [row.name]: row.name } }
+  }
+  const consumer = join(modules, 'fixture-consumer')
+  mkdirSync(join(consumer, 'lib'), { recursive: true })
+  writeFileSync(join(consumer, 'package.json'), JSON.stringify({ name: 'fixture-consumer', main: './lib/index.js', dependencies: { '@deepseek-ai/dsh-session': '*' } }))
+  writeFileSync(join(consumer, 'lib/index.js'), AUDITED_MODULE_TEXT)
+  packages['.'].dependencies['fixture-consumer'] = 'fixture-consumer'
+  packages['fixture-consumer'] = { url: './fixture-consumer', dependencies: { 'fixture-consumer': 'fixture-consumer' } }
+  host.packages = packages
+  writeFileSync(join(modules, '.package-map.json'), JSON.stringify({ packages }))
+  host.sessionPackageDir = join(modules, '@deepseek-ai/dsh-session')
+  host.rows = readActiveHostGraph(host.runtimeRoot, host.profileRoot)
+  host.config.hostLockPackages = host.rows
+  return host
 }
 
 /** Same byte count and mtime, different bytes: no metadata fingerprint may
@@ -400,11 +429,12 @@ async function publishChain(setup: {
   onIdentityRead?: (executable: string) => void
   onAudit?: (count: number) => void
   futureHost?: boolean
+  hoistedHost?: boolean
   benignBytes?: boolean
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
   temporaryRoots.push(root)
-  const host = setup.futureHost ? await makeFutureHost({ benignBytes: setup.benignBytes }) : makeHost()
+  const host = setup.futureHost ? await makeFutureHost({ benignBytes: setup.benignBytes }) : setup.hoistedHost ? makeHoistedHost() : makeHost()
   const published: string[][] = []
   const registryState = { integrity: `sha512-${Buffer.alloc(64, 5).toString('base64')}` }
   const fetcher = (async (input: string | URL) => {
@@ -499,6 +529,20 @@ async function publishChain(setup: {
 }
 
 describe('real production entries validate freshly and share one audit per decision', () => {
+  it('keeps hoisted admission fresh through protected publish, refusing a new shadow with zero effects and admitting restoration', async () => {
+    const chain = await publishChain({ hoistedHost: true })
+    const shadow = join(chain.host.runtimeRoot, 'node_modules/fixture-consumer/lib/node_modules/@deepseek-ai/dsh-session')
+    mkdirSync(dirname(shadow), { recursive: true })
+    cpSync(chain.host.sessionPackageDir, shadow, { recursive: true })
+    const refused = await chain.action('hoisted-shadow-action')
+    expect(refused.status).toBe('unavailable')
+    expect(chain.published).toHaveLength(0)
+    rmSync(shadow, { recursive: true, force: true })
+    const allowed = await chain.action('hoisted-restored-action')
+    expect(allowed.status, JSON.stringify(allowed)).toBe('completed')
+    expect(chain.published).toHaveLength(1)
+  })
+
   it('charges one validation to the checkpoint entry and one to the whole publish entry, and refuses drift between entries', async () => {
     const chain = await publishChain()
     const { host, session, tools, guards, validations, published } = chain
