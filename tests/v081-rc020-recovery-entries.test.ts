@@ -208,7 +208,7 @@ describe('rc.020 real recovery entries keep unknown outcomes from authorizing si
     void new (loop.AgentLoop as unknown as new (ctx: unknown, config: unknown) => unknown)(ctx, { agents: [] })
     const persistenceB = (ctx as unknown as { get: (n: string) => unknown }).get('sessionPersistence')
     void persistenceB
-    const resumedHandle = await (ctx as unknown as { get: (n: string) => { resume: (o: unknown) => Promise<unknown> } })
+    const resumedHandle = await (ctx as unknown as { get: (n: string) => { resume: (owner: unknown, o: { resumeSessionId: string }) => Promise<unknown> } })
       .get('agentLoop').resume(ctx as never, { resumeSessionId: 'rc020-recovery-agent' })
     const resumedAgent = (resumedHandle as unknown as { agent: { session: { snapshotEvents: () => Array<{ type: string; data: Record<string, unknown> }> } } }).agent
     const events = resumedAgent.session.snapshotEvents()

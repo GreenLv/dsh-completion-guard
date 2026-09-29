@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import {
-  evaluateGraphDerivedHostLock,
-  HOST_COHORTS,
-  readActiveHostGraphSafe,
-} from '../src/domain/host-lock.js'
-import { evaluateHostLock } from '../src/domain/host-lock.js'
+import { evaluateGraphDerivedHostLock, evaluateHostLock, HOST_COHORTS } from '../src/domain/host-lock.js'
+import type { PackageRow } from '../src/domain/digest.js'
 import {
   evaluateMinimumHostVersion,
   HOST_VALIDATED_VERSIONS,
@@ -28,7 +24,7 @@ describe('0.8.1 floor-admission host version policy', () => {
     ]).flat(),
     'snapshots:', '',
   ].join('\n')
-  const verifyFromLock = (row: { name: string; version: string; integrity?: string }) =>
+  const verifyFromLock = (row: PackageRow): boolean =>
     row.integrity !== undefined && lockYaml.includes(`'${row.name}@${row.version}':`)
     && lockYaml.includes(row.integrity!)
   it('version admission: floor, later same-tuple RC, stable, patch/minor RC and higher major admit; below-floor refuses', () => {
