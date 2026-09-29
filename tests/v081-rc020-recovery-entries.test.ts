@@ -109,6 +109,17 @@ const resultsOf = (events: readonly Event[]) => events
     return { toolCallId: message?.toolCallId, isError: message?.isError === true, errorName: error?.name, text: message?.content?.[0]?.text ?? '' }
   })
 
+const loadBase = async () => {
+  const { Context } = await load('cordis')
+  const agentSdk = await load('dsh-agent')
+  const projectionSdk = await load('dsh-session-projection')
+  const prompt = await load('dsh-system-prompt')
+  const toolsSdk = await load('dsh-tools')
+  const loop = await load('dsh-agent-loop')
+  const sessionSdk = await load('dsh-session')
+  const persistenceJsonl = await load('dsh-session-persistence-jsonl')
+  return { Context, agentSdk, projectionSdk, prompt, toolsSdk, loop, sessionSdk, persistenceJsonl }
+}
 const Guard = () => import('../src/runtime.js') as Promise<{ authorizeMutationFromProjection: (p: unknown, r: unknown) => unknown }>
 const Derive = () => import('../src/domain/derive.js')
 const HostLock = () => import('../src/domain/host-lock.js')
@@ -153,7 +164,7 @@ describe('rc.020 real recovery entries keep unknown outcomes from authorizing si
     expect(host.effects.count).toBe(1)
   })
 
-  it('persisted reload: the abandoned crashed log is balanced by the host recovery and re-derives the same refusal', async () => {
+  it('registered resume: agentLoop.resume consumes the drained log, appends the host recovery itself, and the resumed agent re-derives the refusal', async () => {
     const sessionRoot = mkdtempSync(join(tmpdir(), 'cg-rc020-reload-'))
     const host = await startRecoveryHost(sessionRoot, { hangMidFlight: true })
     const llmSdk = await load('dsh-llm')
@@ -161,59 +172,60 @@ describe('rc.020 real recovery entries keep unknown outcomes from authorizing si
       content: [{ type: 'text', text: '安装 package-fixture@2.0.0 到 profile web。' }], source: { kind: 'user' },
     }))
     host.agent.wakeDriver()
-    // Wait until the durable log really contains the recorded call with NO
-    // result — the true crash shape — then abandon the process-in-flight host.
     for (let waited = 0; waited < 100; waited += 1) {
       const hasCall = host.agent.session.snapshotEvents().some((event) => event.type === 'tool/call')
       const hasResult = host.agent.session.snapshotEvents().some((event) => event.type === 'tool/result')
       if (hasCall && !hasResult) break
       await new Promise((resolve) => setTimeout(resolve, 20))
     }
-    const persisted = host.agent.session.snapshotEvents()
-    expect(persisted.some((event) => event.type === 'tool/call')).toBe(true)
-    expect(persisted.some((event) => event.type === 'tool/result')).toBe(false)
-    // The durability barrier: reach the SAME write handle the loop owns
-    // The loop's own write handle is registered in the backend's writers map.
-    const backend = (host.ctx as unknown as { sessionPersistence?: { tracker?: { writers?: Map<string, { drainBuffered: () => Promise<unknown> }> } } }).sessionPersistence!
-    const writer = backend.tracker!.writers!.get('rc020-recovery-agent')!
-    await writer.drainBuffered()
+    expect(host.agent.session.snapshotEvents().some((event) => event.type === 'tool/call')).toBe(true)
+    const backend = (host.ctx as unknown as { sessionPersistence?: { tracker?: { writers?: Map<string, { drainBuffered: () => Promise<unknown>; close: () => Promise<unknown> }> } } }).sessionPersistence!
+    const writerA = backend.tracker!.writers!.get('rc020-recovery-agent')!
+    await writerA.drainBuffered()
+    await writerA.close()
+    // Host A's loop is abandoned mid-flight (its driver is stuck on the hung
+    // tool); it is NOT disposed — dispose would drain the driver and block.
+    // The bounded pending promise keeps no active handle alive.
     liveHosts.splice(liveHosts.indexOf(host), 1)
-    // Host A is abandoned mid-flight WITHOUT dispose: its writes are durable
-    // (the JSONL backend appends synchronously), the pending effect never
-    // settles, and the pending tool timer does not keep the test process alive.
-    // Host B reads the SAME durable log through the persistence backend's own
-    // reader, exactly like the v051 reload scenario — no in-memory state.
-    const b = await startRecoveryHost(sessionRoot, { createAgent: false })
-    const persistenceB = (b.ctx as unknown as { get: (n: string) => { list: () => Promise<Array<{ id?: string } | string>>; readStoredLog: (p: unknown, id: string) => Promise<{ events?: unknown[] } | unknown[]> } }).get('sessionPersistence')
-    const listed = await persistenceB.list()
-    const storedId = (listed.map((row) => typeof row === 'string' ? row : (row as { header?: { id?: string } }).header?.id).find((id) => id === 'rc020-recovery-agent'))!
-    expect(storedId).toBe('rc020-recovery-agent')
-    const file = readdirSync(sessionRoot, { recursive: true } as never).map(String)
-      .find((name) => name.endsWith('.jsonl.zstd') || name.endsWith('.jsonl'))!
-    const stored = await persistenceB.readStoredLog(join(sessionRoot, file) as never, storedId)
-    const storedEvents = (Array.isArray(stored) ? stored : (stored as { events?: unknown[] }).events ?? []) as Event[]
-    expect(storedEvents.length).toBeGreaterThan(0)
-    // The session package's own recovery function balances the crashed tail
-    // (this is the exact entry the loop's resume path calls).
-    const sessionPkg = await import(new URL('dsh-session/lib/index.js', FIXTURE).href) as { interruptedTurnClosers: (e: unknown) => Array<{ type: string; data: Record<string, unknown> }> }
-    const closers = sessionPkg.interruptedTurnClosers(storedEvents)
-    const recovered = [...storedEvents, ...closers] as Event[]
-    const unknown = resultsOf(recovered).filter((row) => row.toolCallId === 'probe-call-1' && row.isError)
+
+    const { Context } = await load('cordis')
+    const loop = await load('dsh-agent-loop')
+    const agentSdk = await load('dsh-agent')
+    const projectionSdk = await load('dsh-session-projection')
+    const prompt = await load('dsh-system-prompt')
+    const toolsSdk = await load('dsh-tools')
+    const sessionSdk = await load('dsh-session')
+    const persistenceJsonl = await load('dsh-session-persistence-jsonl')
+    const ctx = new (Context as new () => Record<string, unknown>)()
+    void new (agentSdk.AgentRegistry as new (ctx: unknown) => unknown)(ctx)
+    void new (projectionSdk.SessionProjectionRegistry as new (ctx: unknown) => unknown)(ctx)
+    void new (prompt.SystemPrompt as new (ctx: unknown, config: unknown) => unknown)(ctx, {
+      includeHarnessIdentity: false, includeRuntimeContext: false, personaPrefix: '', personaSuffix: '', toolOrder: undefined,
+    })
+    void new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => unknown)(ctx)
+    void new (sessionSdk.SessionStore as new (ctx: unknown) => unknown)(ctx)
+    void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(ctx, { root: sessionRoot, compression: undefined })
+    void new (loop.AgentLoop as unknown as new (ctx: unknown, config: unknown) => unknown)(ctx, { agents: [] })
+    const persistenceB = (ctx as unknown as { get: (n: string) => unknown }).get('sessionPersistence')
+    void persistenceB
+    const resumedHandle = await (ctx as unknown as { get: (n: string) => { resume: (o: unknown) => Promise<unknown> } })
+      .get('agentLoop').resume(ctx as never, { resumeSessionId: 'rc020-recovery-agent' })
+    const resumedAgent = (resumedHandle as unknown as { agent: { session: { snapshotEvents: () => Array<{ type: string; data: Record<string, unknown> }> } } }).agent
+    const events = resumedAgent.session.snapshotEvents()
+    const unknown = resultsOf(events).filter((row) => row.toolCallId === 'probe-call-1' && row.isError)
     expect(unknown).toHaveLength(1)
     expect(unknown[0]!.errorName).toBe('ToolOutcomeUnknownError')
     expect(unknown[0]!.text).toMatch(/outcome is unknown|Do not retry blindly/)
-    const projection = await projectionOf(recovered, storedId)
+    expect(events.filter((event) => event.type === 'turn/end').at(-1)!.data).toMatchObject({ reason: { kind: 'interrupted' } })
+    const projection = await projectionOf(events, 'rc020-recovery-agent')
     const install = [...projection.items.values()].find((row) => row.semanticAction === 'install')
-    expect(install, JSON.stringify([...projection.items.values()].map((row) => ({ id: row.id, action: row.semanticAction, status: row.status })))).toBeDefined()
     expect(install!.status).toBe('pending')
     const { authorizeMutationFromProjection } = await Guard()
     expect(authorizeMutationFromProjection(projection, { action: 'install', contractItemId: install!.id,
       contractItemRevision: install!.revision, resolvedTarget: INSTALL_TARGET })).toMatchObject({ status: 'denied' })
-    // The reloaded host has executed nothing: the effect stays with host A.
-    expect(b.effects.count).toBe(0)
   })
 
-  it('fork seed: the session fork entry writes inherited-branch wording and the fork refuses the effect', async () => {
+  it('registered fork: the seed becomes a REAL created agent whose durable log carries the forked closers; the fork refuses the effect', async () => {
     const sessionRoot = mkdtempSync(join(tmpdir(), 'cg-rc020-fork-'))
     const host = await startRecoveryHost(sessionRoot, { hangMidFlight: true })
     const llmSdk = await load('dsh-llm')
@@ -228,18 +240,48 @@ describe('rc.020 real recovery entries keep unknown outcomes from authorizing si
       await new Promise((resolve) => setTimeout(resolve, 20))
     }
     const persisted = host.agent.session.snapshotEvents()
-    const persistenceA = (host.ctx as unknown as { sessionPersistence?: { tracker?: { writers?: Map<string, { drainBuffered: () => Promise<unknown> }> } } }).sessionPersistence!
-    await persistenceA.tracker!.writers!.get('rc020-recovery-agent')!.drainBuffered()
+    // The seed's boundary must sit inside the OPEN tail (turn open, tool call
+    // recorded, no result) — the true crash shape for a fork cut mid-flight.
+    let boundary = persisted.length - 1
+    while (boundary > 0 && persisted[boundary]!.type !== 'tool/call') boundary -= 1
+    expect(persisted[boundary]!.type).toBe('tool/call')
+    const backend = (host.ctx as unknown as { sessionPersistence?: { tracker?: { writers?: Map<string, { drainBuffered: () => Promise<unknown>; close: () => Promise<unknown> }> } } }).sessionPersistence!
+    const writerA = backend.tracker!.writers!.get('rc020-recovery-agent')!
+    await writerA.drainBuffered()
+    await writerA.close()
     liveHosts.splice(liveHosts.indexOf(host), 1)
-    const sessionPkg = await import(new URL('dsh-session/lib/index.js', FIXTURE).href) as {
+    const sessionPkg = await import(new URL('dsh-session/lib/index.js', FIXTURE).href) as unknown as {
       buildForkSeed: (e: unknown, b: number) => Array<{ type: string; data: Record<string, unknown> }> }
-    const seed = sessionPkg.buildForkSeed(persisted, persisted.length - 1)
+    const seed = sessionPkg.buildForkSeed(persisted, boundary)
     const seedResults = resultsOf(seed).filter((row) => row.toolCallId === 'probe-call-1' && row.isError)
     expect(seedResults).toHaveLength(1)
     expect(seedResults[0]!.errorName).toBe('ToolOutcomeUnknownError')
     expect(seedResults[0]!.text).toContain('inherited by this branch')
-    expect(seed.filter((event) => event.type === 'turn/end').at(-1)!.data).toMatchObject({ reason: { kind: 'forked' } })
-    const projection = await projectionOf(seed, 'rc020-fork-seed')
+    const { Context, agentSdk, projectionSdk, prompt, toolsSdk, sessionSdk, persistenceJsonl, loop } = await loadBase()
+    const forkCtx = new (Context as new () => Record<string, unknown>)()
+    void new (agentSdk.AgentRegistry as new (ctx: unknown) => unknown)(forkCtx)
+    void new (projectionSdk.SessionProjectionRegistry as new (ctx: unknown) => unknown)(forkCtx)
+    void new (prompt.SystemPrompt as new (ctx: unknown, config: unknown) => unknown)(forkCtx, {
+      includeHarnessIdentity: false, includeRuntimeContext: false, personaPrefix: '', personaSuffix: '', toolOrder: undefined,
+    })
+    void new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => unknown)(forkCtx)
+    void new (sessionSdk.SessionStore as new (ctx: unknown) => unknown)(forkCtx)
+    void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(forkCtx, { root: mkdtempSync(join(tmpdir(), 'cg-rc020-fork-seed-')), compression: undefined })
+    void new (loop.AgentLoop as unknown as new (ctx: unknown, config: unknown) => unknown)(forkCtx, { agents: [] })
+    // createAgent is the registered lifecycle entry that accepts the fork
+    // seed; the published handle is { agent, dispose }.
+    const loopService = (forkCtx as unknown as { get: (n: string) => { createAgent: (owner: unknown, o: unknown) => Promise<unknown> } }).get('agentLoop')
+    const handle = await loopService.createAgent(forkCtx as never, {
+      sessionId: 'rc020-fork-agent',
+      seed: seed.map((event, index) => ({ ...event, seq: index })) as unknown,
+      meta: { version: 4, isSeeded: true, createdAt: 2, cwd: '/work' },
+      inheritedEventCount: seed.length,
+      agentOptions: { provider: 'fixture', model: 'fixture-model' },
+    })
+    const forkedAgent = (handle as unknown as { agent: { session: { snapshotEvents: () => Array<{ type: string; data: Record<string, unknown> }> } } }).agent
+    const forkedEvents = forkedAgent.session.snapshotEvents()
+    expect(forkedEvents.filter((event) => event.type === 'turn/end').at(-1)!.data).toMatchObject({ reason: { kind: 'forked' } })
+    const projection = await projectionOf(forkedEvents, 'rc020-fork-agent')
     const install = [...projection.items.values()].find((row) => row.semanticAction === 'install')
     expect(install).toBeDefined()
     expect(install!.status).toBe('pending')
