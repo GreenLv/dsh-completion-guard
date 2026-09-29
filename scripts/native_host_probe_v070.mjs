@@ -29,6 +29,22 @@ const INITIAL_CASES = [
 const textOf = event => Array.isArray(event?.data?.content)
   ? event.data.content.filter(part => part?.type === 'text').map(part => part.text).join('') : ''
 
+/** Root delivery depends on provenance, not later host-added context. */
+export function assertRootV6Delivery(events) {
+  const messages = events.filter(event => event.type === 'user/message')
+  assert.equal(messages[0]?.data?.source?.kind, 'context-guard')
+  assert.equal(messages[0].data.source.plugin, 'context-guard')
+  assert.equal(textOf(messages[0]), 'Context Guard protocol boundary: v6.0.0')
+  // Host plugins may append non-user context after the human input. Its
+  // position is not authority: require exactly one actual user and its full
+  // original text, while retaining the delivered boundary and old-v5 refusal.
+  const users = messages.filter(event => event.data?.source?.kind === 'user')
+  assert.equal(users.length, 1)
+  assert.equal(textOf(users[0]), 'Explain the isolated acceptance fixture.')
+  assert.ok(!messages.some(event => textOf(event) === 'Context Guard protocol boundary: v5.0.0'))
+  return { positive: true, negative: true }
+}
+
 // npm runs package scripts through the platform shell. Double quotes preserve
 // the JavaScript expression in both POSIX shells and Windows cmd.exe; single
 // quotes are literal characters in cmd.exe and can turn a failing test green.
@@ -232,12 +248,7 @@ export function apply(ctx, config) {
           await open('root')
           assert.equal(events().filter(event => event.type === 'user/message').length, 0)
           await root('Explain the isolated acceptance fixture.')
-          const messages = events().filter(event => event.type === 'user/message')
-          assert.equal(messages[0].data.source.plugin, 'context-guard')
-          assert.equal(textOf(messages[0]), 'Context Guard protocol boundary: v6.0.0')
-          assert.equal(messages.filter(event => event.data.source.kind === 'user').length, 1)
-          assert.equal(textOf(messages.at(-1)), 'Explain the isolated acceptance fixture.')
-          return { positive: true, negative: !messages.some(event => textOf(event) === 'Context Guard protocol boundary: v5.0.0') }
+          return assertRootV6Delivery(events())
         })
         await check('v070_ordinary_file_edit_readback', async () => {
           await open('file')

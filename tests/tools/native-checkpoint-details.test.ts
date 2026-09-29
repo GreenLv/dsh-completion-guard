@@ -194,3 +194,28 @@ it('rejects a stale boundary after deactivation and a forged user boundary', asy
  expect(() => assertProbeActivation({ deriveProjection }, [{ ...boundary, data: { ...boundary.data, source: { kind: 'user' } } }])).toThrow('precondition failed')
  expect(() => assertProbeActivation({ deriveProjection }, [boundary, off, { ...off, seq: 3, data: { ...off.data, args: 'on' } }])).not.toThrow()
 })
+
+const rootDeliveryText = 'Explain the isolated acceptance fixture.'
+const rootMessage = (text: string, source: Record<string, string>) => ({ type: 'user/message', data: { source, content: [{ type: 'text', text }] } })
+const rootBoundary = () => rootMessage('Context Guard protocol boundary: v6.0.0', { kind: 'context-guard', plugin: 'context-guard', form: 'notice' })
+const rootHuman = () => rootMessage(rootDeliveryText, { kind: 'user' })
+const rootCatalog = () => rootMessage('Available isolated fixture skills.', { kind: 'skill-catalog', plugin: 'skill-catalog' })
+it.each([false, true])('accepts original root delivery with trailing skill-catalog=%s', async catalog => {
+ const { assertRootV6Delivery } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const events = [rootBoundary(), rootHuman(), ...(catalog ? [rootCatalog()] : [])]
+ expect(assertRootV6Delivery(events)).toEqual({ positive: true, negative: true })
+})
+it.each(['missing-boundary', 'wrong-protocol', 'wrong-source-kind', 'wrong-plugin', 'missing-user', 'rewritten-user', 'duplicate-user', 'old-v5'] as const)('rejects invalid root delivery: %s', async mode => {
+ const { assertRootV6Delivery } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const boundary = rootBoundary(), human = rootHuman()
+ let events = [boundary, human, rootCatalog()]
+ if (mode === 'missing-boundary') events = [human, rootCatalog()]
+ if (mode === 'wrong-protocol') boundary.data.content[0].text = 'Context Guard protocol boundary: v5.0.0'
+ if (mode === 'wrong-source-kind') boundary.data.source.kind = 'skill-catalog'
+ if (mode === 'wrong-plugin') boundary.data.source.plugin = 'skill-catalog'
+ if (mode === 'missing-user') events = [boundary, rootCatalog()]
+ if (mode === 'rewritten-user') human.data.content[0].text = rootDeliveryText + ' rewritten'
+ if (mode === 'duplicate-user') events.push(rootHuman())
+ if (mode === 'old-v5') events.push(rootMessage('Context Guard protocol boundary: v5.0.0', { kind: 'context-guard', plugin: 'context-guard' }))
+ expect(() => assertRootV6Delivery(events)).toThrow()
+})
