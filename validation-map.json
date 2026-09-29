@@ -426,6 +426,20 @@
       ],
       "contracts": [],
       "peer_gates": {}
+    },
+    {
+      "id": "acceptance_evidence",
+      "paths": [
+        "benchmarks/incidents/**"
+      ],
+      "gates": [
+        "docs_contract"
+      ],
+      "invalidates": [
+        "documentation"
+      ],
+      "contracts": [],
+      "peer_gates": {}
     }
   ]
 }
