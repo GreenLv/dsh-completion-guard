@@ -52,9 +52,11 @@ describe('shipped artifact entries', () => {
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.0-rc.1')
     expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.0-rc.1')
-    expect(domain.LATEST_SUPPORTED_HOST_VERSION).toBe('0.2.0-rc.1')
-    expect(domain.SUPPORTED_HOST_VERSIONS).toEqual(['0.2.0-rc.1'])
-    expect(domain.SUPPORTED_HOST_RANGE).toBe('0.2.0-rc.1')
+    // The floor-based admission model: the public range is >=, and the
+    // validated-versions list is evidence, not an admission whitelist.
+    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.0-rc.1')
+    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1'])
+    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.0-rc.1')
   })
 
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {

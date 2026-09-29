@@ -16,7 +16,7 @@ export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1']
 /** Historical alias retained for evidence-list readers; the admission rule is
  * the floor above, never this list. */
 export const SUPPORTED_HOST_VERSIONS: readonly string[] = HOST_VALIDATED_VERSIONS
-export const LATEST_TESTED_HOST_VERSION = HOST_VALIDATED_VERSIONS.at(-1)!
+export const LATEST_TESTED_HOST_VERSION: string = HOST_VALIDATED_VERSIONS.at(-1)!
 
 export interface ParsedHostVersion {
   major: number

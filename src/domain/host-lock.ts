@@ -41,7 +41,10 @@ const AUDITED_CAPABILITY_ROWS: readonly CapabilityRow[] = [
  * records whether the exact graph it used was loaded on a native host or only
  * resolved from the registry.
  */
-export type HostAuditProvenance = 'native-audited' | 'registry-derived-pending-native-audit'
+export type HostAuditProvenance =
+  | 'native-audited'
+  | 'registry-derived-pending-native-audit'
+  | 'graph-derived-rebind-pending-native-audit'
 
 export interface HostCohort {
   /** Stable cohort identity; bound into every hostLockDigest via `host_cohort`. */
@@ -416,6 +419,68 @@ function statusForPackages(
     }
   }
   return { id, status: 'supported', digest, requiredPackages, missingPackages }
+}
+
+/**
+ * Graph-derived rebind (the 0.8.1 admission model). For a host ABOVE the
+ * version floor that is not the audited rc.1 cohort, this derives a NEW cohort
+ * identity from the actual installed rows — but ONLY when every row's
+ * integrity is real install-time evidence matching the graph's own
+ * pnpm-lock.yaml SRI (the package manager wrote it at install; a self-reported
+ * package.json or a forged row never qualifies). The returned evaluation binds
+ * the actual versions/SRIs/digests; provenance states that per-version native
+ * validation has NOT happened. Drift after rebind fails through the ordinary
+ * digest comparison in the production entry, so rebind never carries old
+ * certificates or authorities across.
+ */
+export function evaluateGraphDerivedHostLock(rows: readonly PackageRow[], context: HostLockContext = {},
+  verifyLockfileSri: (row: PackageRow) => boolean = () => false): HostLockEvaluation {
+  const supplied = stableRows(rows.filter((row) => row.name !== 'dshmarket'))
+  const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row) => row.name)))
+  const unknownFailure = () => ({ digest: '', goalAvailable: false, packages: supplied, capabilities: {} as Record<HostCapabilityId, never>,
+    cohortId: 'graph-derived', auditProvenance: 'graph-derived-rebind-pending-native-audit' as const,
+    missingPackages: [] as string[], status: 'unsupported' as const, reasonCode: 'host_lock_unknown_package' as const })
+  if (supplied.some((row) => !registryNames.has(row.name))) return unknownFailure()
+  const versionValue = context.hostVersion ?? hostVersionFromPackages(supplied)
+  const version = versionValue === undefined ? undefined : evaluateMinimumHostVersion(versionValue)
+  if (version && version.status !== 'supported') {
+    return { ...unknownFailure(), status: 'unsupported' as const, reasonCode: 'host_lock_version_below_minimum' as const,
+      ...(version ? { hostVersion: version } : {}) }
+  }
+  if (!supplied.every((row) => row.integrity?.startsWith('sha512-') && verifyLockfileSri(row))) {
+    return { ...unknownFailure(), status: 'unsupported' as const, reasonCode: 'host_lock_integrity_mismatch' as const }
+  }
+  const counts = new Map<string, number>()
+  for (const row of supplied) counts.set(row.name, (counts.get(row.name) ?? 0) + 1)
+  if ([...counts.values()].some((count) => count > 1)) {
+    return { ...unknownFailure(), status: 'unavailable' as const, reasonCode: 'host_lock_duplicate_package' as const }
+  }
+  const baseCohort = HOST_COHORTS[0]
+  const digest = safeHostLockDigest(supplied, context, baseCohort)
+  const derivedCohort: HostCohort = {
+    ...baseCohort,
+    id: `graph-derived-${digest.slice(0, 16)}`,
+    supportedGoalVersions: [...new Set(supplied.filter((row) => row.name.startsWith('@deepseek-ai/dsh-goal')).map((row) => row.version!))],
+    packages: supplied.map((row) => ({ name: row.name, version: row.version!, integrity: row.integrity! })),
+    auditProvenance: 'graph-derived-rebind-pending-native-audit',
+  }
+  const capabilities = capabilityEvaluations(supplied, derivedCohort)
+  const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name))
+  const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size
+  const baseResult = {
+    digest, goalAvailable, packages: supplied, capabilities, cohortId: derivedCohort.id,
+    auditProvenance: derivedCohort.auditProvenance, missingPackages: [] as string[],
+    ...(version ? { hostVersion: version } : {}),
+    ...(context.platform ? { platform: context.platform } : {}),
+    ...(context.profileKind ? { profileKind: context.profileKind } : {}),
+  }
+  if (goalAvailable) {
+    const goal = statusForPackages('goal', supplied, GOAL_HOST_PACKAGES, derivedCohort)
+    if (goal.status !== 'supported') {
+      return { ...baseResult, status: goal.status, goalAvailable: false, reasonCode: 'host_lock_goal_graph_incomplete' }
+    }
+  }
+  return { ...baseResult, status: 'supported' }
 }
 
 function capabilityEvaluations(rows: readonly PackageRow[], cohort: HostCohort): Record<HostCapabilityId, HostCapabilityEvaluation> {

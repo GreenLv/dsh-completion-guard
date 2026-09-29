@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, realpathSync, statSync, type Stats } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, type Stats } from 'node:fs'
 import { createRequire } from 'node:module'
 
 /**
@@ -29,6 +29,8 @@ export interface HostAuditSession {
   readJson(path: string): Record<string, unknown>
   /** Memoized SHA-256 over the shared bytes. */
   fileDigest(path: string): string
+  /** Memoized directory listing (names + kinds) for audit enumeration. */
+  listDir?(dir: string): Array<{ name: string; isFile: boolean; isDirectory: boolean }>
   /** Memoized `createRequire` for one importer path. */
   requireFor(importer: string): NodeRequire
   /** Memoized `require.resolve.paths(name)` for one importer. */
@@ -75,6 +77,9 @@ export function createHostAuditSession(onPhysicalRead?: (path: string) => void):
     readFile: (path) => readBytes(path),
     readJson: (path) => once(`json:${path}`, () => JSON.parse(session.readFile(path).toString('utf8')) as Record<string, unknown>),
     fileDigest: (path) => once(`digest:${path}`, () => createFileDigest(session.readFile(path))),
+    listDir: (dir) => once(`listdir:${dir}`, () => readdirSync(dir, { withFileTypes: true }).map((entry) => ({
+      name: entry.name, isFile: entry.isFile(), isDirectory: entry.isDirectory(),
+    }))),
     requireFor: (importer) => once(`require:${importer}`, () => createRequire(importer)),
     resolvePaths: (importer, name) => once(`paths:${importer}\u0000${name}`, () => createRequire(importer).resolve.paths(name) ?? []),
     requireResolve: (importer, request) => once(`resolve:${importer}\u0000${request}`, () => createRequire(importer).resolve(request)),

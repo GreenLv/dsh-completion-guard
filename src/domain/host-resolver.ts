@@ -275,9 +275,35 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string, pr
  * {@link HostAuditSession}; callers may thread one in to share the parsed
  * graphs and digests with the other audits of the same validation operation.
  */
-export function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): boolean {
+export interface AuditedPackageExpectation {
+  name: string
+  version?: string
+  /** Expected per-file digests. When omitted (a graph-derived rebind), the
+   * files are still structurally audited and their computed digests are BOUND
+   * into the returned packages so the lock digest covers the actual bytes. */
+  modules?: Record<string, string>
+}
+
+/**
+ * Byte/route audit over BOTH graphs. The audited expectations come from
+ * `hostByteAudit.packages` (the published rc.1 baseline evidence) unless the
+ * caller supplies `rebindable` rows — the trusted rebind path for hosts above
+ * the admission floor, where the per-package identities were established from
+ * the real installed graph and its install-time lockfile SRI at rebind time.
+ *
+ * In rebindable mode the structural checks are identical (existence, file
+ * type, root containment, route authentication); per-file digest EQUALITY is
+ * only enforced where an expectation carries digests. The computed digests
+ * are bound into the returned packages, so the lock digest covers the actual
+ * bytes and any later drift fails. The audit NEVER treats "exists" alone as
+ * proof: identity comes from the rebind rows, not from self-reported
+ * package.json fields.
+ */
+export function auditedHostImplementation(runtimeRoot: string, profileRoot: string,
+  providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[]): boolean {
   const session = providedSession ?? createHostAuditSession()
   try {
+    const expectedPackages: readonly AuditedPackageExpectation[] = expectations ?? (hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[])
     const seen = new Set<string>()
     const graphs: DependencyAuditGraph[] = []
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
@@ -295,7 +321,7 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
       // One name→reachable-IDs index replaces filtering the whole reachable
       // set once per audited package.
       const index = reachableIdsByName(graph, session)
-      for (const expected of hostByteAudit.packages) {
+      for (const expected of expectedPackages) {
         const ids = index.get(expected.name) ?? []
         if (ids.length > 1) return false
         if (!ids.length) continue
@@ -304,19 +330,48 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
         const root = session.realpath(resolve(modules, url))
         if (!root.startsWith(`${modules}${sep}`)) return false
         const manifest = session.readJson(join(root, 'package.json'))
-        if (manifest.name !== expected.name || manifest.version !== expected.version) return false
-        for (const [file, digest] of Object.entries(expected.modules)) {
-          const target = session.realpath(join(root, file))
-          if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile()
-            || session.fileDigest(target) !== digest) return false
+        if (manifest.name !== expected.name) return false
+        if (expected.version !== undefined && manifest.version !== expected.version) return false
+        // Enumerate the audited module set: the expectation's declared files
+        // when present; otherwise every lib/**/*.js under the package root
+        // plus the manifest itself, so the digests genuinely cover the bytes.
+        const declared = expected.modules
+          ? Object.keys(expected.modules)
+          : [join(root, 'package.json'), ...walkLibFiles(session, root)]
+        const computedDigests: Record<string, string> = {}
+        for (const file of declared) {
+          const rel = file.startsWith(root + sep) ? file.slice(root.length + 1) : file
+          const target = session.realpath(join(root, rel))
+          if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile()) return false
+          const digest = session.fileDigest(target)
+          if (expected.modules && expected.modules[rel] !== undefined && expected.modules[rel] !== digest) return false
+          computedDigests[rel] = digest
         }
-        graph.packages.set(expected.name, { root, manifest, files: Object.keys(expected.modules) })
+        graph.packages.set(expected.name, { root, manifest, files: Object.keys(computedDigests) })
         seen.add(expected.name)
       }
     }
-    return hostByteAudit.packages.every((entry) => seen.has(entry.name))
+    return expectedPackages.every((entry) => seen.has(entry.name))
       && auditHostDependencyRoutes(graphs, profileRoot, session)
   } catch { return false }
+}
+
+/** Every lib JS file below a package root, discovered through the same
+ * session reads (realpath/exists/stat) as the rest of the audit. */
+function walkLibFiles(session: HostAuditSession, root: string): string[] {
+  const found: string[] = []
+  const listDir = session.listDir
+  if (!listDir) return found
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 6) return
+    for (const entry of listDir(dir)) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory) walk(full, depth + 1)
+      else if (entry.isFile && /\.m?js$/.test(entry.name)) found.push(full)
+    }
+  }
+  walk(join(root, 'lib'), 0)
+  return found
 }
 
 // The reviewed 0.2.0-rc.1 foreground tools have these exact published bytes
