@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { realpathSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { auditHostDependencyRoutes, type DependencyAuditGraph } from '../../src/domain/host-dependency-audit.js'
 import { createHostAuditSession, type HostAuditSession } from '../../src/domain/host-audit-session.js'
 
@@ -75,7 +76,7 @@ describe('independent complete require plus import route proof',()=>{
     const cjs=JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',code,join(lib,'index.js'),dep],{encoding:'utf8'}))
     const esm=JSON.parse(execFileSync(process.execPath,[join(lib,'oracle.mjs')],{encoding:'utf8'}))
     expect(cjs.resolved).toBe(join(wanted,'lib/index.js'))
-    expect(decodeURIComponent(new URL(esm.resolved).pathname)).toBe(join(wanted,'lib/index.js'));expect(esm.loadedOk).toBe(true)
+    expect(fileURLToPath(esm.resolved)).toBe(join(wanted,'lib/index.js'));expect(esm.loadedOk).toBe(true)
     expect(auditHostDependencyRoutes(f.graphs,f.profileRoot)).toBe(true)
   })
 })
