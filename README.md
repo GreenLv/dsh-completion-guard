@@ -18,7 +18,7 @@ dsh plugin --profile web add dsh-completion-guard@0.8.1
 
 **Upgrade and restart DSH before running the host-lock checks below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
 
-Check that each command's JSON output says `status: "supported"`. A failure reports a specific reason and exits nonzero. For a later compatible host, add `--rebind-registry` to all three commands; it verifies the official registry archives before rebuilding the lock. See the [upgrade guide](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions).
+Check that each command's JSON output says `status: "supported"`. A failure reports a specific reason and exits nonzero. For a later compatible host, add `--rebind-registry` to all three commands; it verifies the official archives and qualifies changed programs in an isolated Node probe before rebuilding the lock. See the [upgrade guide](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions).
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -57,7 +57,7 @@ The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.
 
 ## Status and compatibility
 
-Version 0.8.1 admits **DSH `>=0.2.0-rc.1`** without an upper version limit. Cordis has an independent `>=4.0.4` peer range and must pass its adapter qualification. The published `0.2.0-rc.1` 46-package graph remains the reviewed baseline; a newer mixed-version graph can receive its own registry-backed lock when the consumed implementations qualify. Changed or unknown Session/API implementations report a qualification failure, and an old certificate cannot transfer to the new lock. The real installed-graph source harness has been exercised on `0.2.0-rc.1`; exact-artifact macOS/Windows native acceptance and future-version native evidence remain separate.
+Version 0.8.1 admits **DSH `>=0.2.0-rc.1`** without an upper version limit. Cordis has an independent `>=4.0.4` peer range and must pass its adapter qualification. The published `0.2.0-rc.1` 46-package graph remains the reviewed baseline; a newer mixed-version graph can receive its own registry-backed lock when the consumed implementations qualify. Changed Session/API implementations run a finite contract probe; incompatible behavior reports a qualification failure, and an old certificate cannot transfer to the new lock. The real installed-graph source harness has been exercised on `0.2.0-rc.1`; exact-artifact macOS/Windows native acceptance and future-version native evidence remain separate.
 
 After upgrading, inspect and inject a new host lock, then restart the profile; follow the [host-lock upgrade guide](docs/HOST_LOCK_UPGRADE.md). DSH migrates old sessions to V4. Guard retains old ledgers and certificates without re-signing them or promoting their old identity to current authority. Goal remains optional; installing the host does not imply it is enabled.
 

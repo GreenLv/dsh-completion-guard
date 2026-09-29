@@ -4,6 +4,7 @@
 // SHA-256 against the reviewed study, then hash every `lib/**/*.{js,cjs,mjs}` module
 // plus package.json. The study's per-tarball SHA-256 and registry SRI are the
 // identity inputs; this script only derives per-file digests.
+import { parse } from 'acorn'
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -40,10 +41,16 @@ try {
     const prefix = 'package/'
     const list = execFileSync('tar', ['-tzf', join(work, binding.name.replaceAll('/', '_') + '.tgz')], { encoding: 'utf8' })
       .split('\n').filter((line) => line.startsWith(prefix + 'lib/') && /\.(?:[cm]?js)$/.test(line))
-    const modules = {}
+    const modules = {}, programs = {}
     for (const entry of [...list, prefix + 'package.json'].sort()) {
       const content = execFileSync('tar', ['-xzf', join(work, binding.name.replaceAll('/', '_') + '.tgz'), '-O', entry], { maxBuffer: 64 * 1024 * 1024 })
-      modules[entry.slice(prefix.length)] = createHash('sha256').update(content).digest('hex')
+      const file = entry.slice(prefix.length)
+      modules[file] = createHash('sha256').update(content).digest('hex')
+      if (file !== 'package.json') {
+        const ast = parse(content.toString('utf8'), { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true })
+        const normalized = JSON.stringify(ast, function (key, value) { return (['start', 'end', 'loc'].includes(key) && typeof this.type === 'string') || (key === 'raw' && this.type === 'Literal') ? undefined : typeof value === 'bigint' ? { bigint: String(value) } : value })
+        programs[file] = createHash('sha256').update(normalized).digest('hex')
+      }
     }
     return {
       name: binding.name,
@@ -52,6 +59,7 @@ try {
       tarball: url,
       sha256: tarballSha,
       modules,
+      programs,
     }
   })
   const manifest = {

@@ -19,6 +19,15 @@ export const families = Object.freeze({
     'tests/host-workdir-v070.test.ts',
     'tests/v6-recovery-feedback.test.ts',
   ],
+  'host-contract-qualification': [
+    'tests/domain/host-contract-probe.test.ts',
+    'tests/domain/host-node-conditions.test.ts',
+    'tests/domain/host-target-preflight.test.ts',
+    'tests/domain/host-dependency-audit.review-72d32e7.local.test.ts',
+    'tests/domain/host-dependency-audit.warm-review.test.ts',
+    'tests/v081-production-entry-drift.test.ts',
+    'tests/v081-host-version-floor.test.ts',
+  ],
   qualification: [
     'tests/domain/v063-narrowed-contract.test.ts',
     'tests/domain/v063-holdout-round34.test.ts',

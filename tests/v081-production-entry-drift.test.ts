@@ -35,12 +35,14 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
 }))
 vi.mock('../manifests/rc020-rc1-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
+  const { hostProgramDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
   return { default: { ...source.default, packages: source.default.packages.map((p) => ({
     ...p, sha256: '0'.repeat(64), tarball: '',
     // The published audit hashes package.json too: the manifest the JSON
     // parsers read and the bytes the digest check reads are the same file.
+    programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
     modules: {
       'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
       'lib/index.js': auditedModuleDigest,
@@ -206,16 +208,18 @@ async function packFixture(root: string, name: string, version: string, gitHead:
 
 /** Contract fixture only: compatible newer mixed versions, independently
  * registry-attested tar bytes. No future native-acceptance claim. */
-async function makeFutureHost(options: { unknownGoal?: boolean } = {}) {
+async function makeFutureHost(options: { unknownGoal?: boolean; benignBytes?: boolean } = {}) {
   const host = makeHost()
   const archives = new Map<string, { bytes: Buffer; name: string; version: string; integrity: string }>()
   const rows = EXPECTED_HOST_PACKAGES.map((p, index) => {
     const version = p.name === '@deepseek-ai/cordis' ? p.version! : index % 2 ? '0.3.0-rc.1' : '0.2.1-rc.1'
     const manifest = Buffer.from(canonicalManifest(p.name, version))
-    const module = Buffer.from(options.unknownGoal && ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(p.name) ? 'export const changedGoal = true\n' : AUDITED_MODULE_TEXT)
+    const module = Buffer.from(options.unknownGoal && ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(p.name) ? 'export const changedGoal = true\n' : AUDITED_MODULE_TEXT + (options.benignBytes ? '// release-only comment; no behavior change\n' : ''))
+    const extra = options.benignBytes ? Buffer.from('export const unused = 42\n') : undefined
     const tar = Buffer.concat([
       tarHeader('package/package.json', manifest.length), manifest, Buffer.alloc((512 - manifest.length % 512) % 512),
-      tarHeader('package/lib/index.js', module.length), module, Buffer.alloc((512 - module.length % 512) % 512), Buffer.alloc(1024),
+      tarHeader('package/lib/index.js', module.length), module, Buffer.alloc((512 - module.length % 512) % 512),
+      ...(extra ? [tarHeader('package/lib/unused.js', extra.length), extra, Buffer.alloc((512 - extra.length % 512) % 512)] : []), Buffer.alloc(1024),
     ])
     const bytes = gzipSync(tar)
     const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
@@ -232,6 +236,10 @@ async function makeFutureHost(options: { unknownGoal?: boolean } = {}) {
       if (row) {
         writeFileSync(join(root, 'node_modules', record.url, 'package.json'), canonicalManifest(row.name, row.version))
         if (options.unknownGoal && ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(row.name)) writeFileSync(join(root, 'node_modules', record.url, 'lib/index.js'), 'export const changedGoal = true\n')
+        if (options.benignBytes) {
+          writeFileSync(join(root, 'node_modules', record.url, 'lib/index.js'), AUDITED_MODULE_TEXT + '// release-only comment; no behavior change\n')
+          writeFileSync(join(root, 'node_modules', record.url, 'lib/unused.js'), 'export const unused = 42\n')
+        }
       }
       records[row ? ids.get(row.name)! : id] = { ...record, dependencies: Object.fromEntries(Object.entries(record.dependencies).map(([name, target]) => [name, ids.get(name) ?? target])) }
     }
@@ -257,7 +265,7 @@ async function makeFutureHost(options: { unknownGoal?: boolean } = {}) {
     return Response.json({ name, version: p.version, dist: { integrity: p.integrity,
       tarball: `https://registry.npmjs.org/-/${encodeURIComponent(name)}.tgz` } })
   }) as unknown as typeof fetch
-  const trust = await acquireHostTrust(readActiveHostGraph(host.runtimeRoot, host.profileRoot), fetcher)
+  const trust = await acquireHostTrust(readActiveHostGraph(host.runtimeRoot, host.profileRoot), fetcher, { profileRoot: host.profileRoot })
   host.config.hostLockTrust = JSON.stringify(trust)
   host.config.hostLockPackages = readActiveHostGraph(host.runtimeRoot, host.profileRoot)
   return host
@@ -387,10 +395,11 @@ async function publishChain(setup: {
   onIdentityRead?: (executable: string) => void
   onAudit?: (count: number) => void
   futureHost?: boolean
+  benignBytes?: boolean
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
   temporaryRoots.push(root)
-  const host = setup.futureHost ? await makeFutureHost() : makeHost()
+  const host = setup.futureHost ? await makeFutureHost({ benignBytes: setup.benignBytes }) : makeHost()
   const published: string[][] = []
   const registryState = { integrity: `sha512-${Buffer.alloc(64, 5).toString('base64')}` }
   const fetcher = (async (input: string | URL) => {
@@ -659,8 +668,8 @@ describe('registry-qualified floor through the production composition', () => {
     const context = { platform: 'posix' as const, profileKind: 'headless' as const }
     expect(() => evaluateActiveHostLock(host.runtimeRoot, host.profileRoot, context, undefined,
       JSON.stringify({ ...trust, source: 'local-manifest' }))).toThrow('host_trust_source_untrusted')
-    for (const [name, reason] of [['@deepseek-ai/dsh-session', 'host_contract_session_incompatible'],
-      ['@deepseek-ai/dsh-tools', 'host_contract_api_qualification_required']]) {
+    for (const [name, reason] of [['@deepseek-ai/dsh-session', 'host_trust_contract_binding_mismatch'],
+      ['@deepseek-ai/dsh-tools', 'host_trust_contract_binding_mismatch']]) {
       const bad = structuredClone(trust)
       bad.packages.find((p) => p.name === name)!.modules['lib/index.js'] = '0'.repeat(64)
       expect(() => evaluateActiveHostLock(host.runtimeRoot, host.profileRoot, context, undefined, JSON.stringify(bad))).toThrow(reason)
@@ -669,6 +678,20 @@ describe('registry-qualified floor through the production composition', () => {
 })
 
 describe('qualified rebind keeps fresh identity and routing gates', () => {
+  it('rebinds mixed newer versions with benign executable byte changes and an unrelated new module through real publish entry', async () => {
+    const chain = await publishChain({ futureHost: true, benignBytes: true })
+    const before = chain.validations.length
+    const result = await chain.action('benign-future-publish')
+    expect(result.status, JSON.stringify(result)).toBe('completed')
+    expect(chain.validations.length - before).toBe(2)
+    expect(chain.published).toHaveLength(1)
+  })
+  it('refuses an unqualified new module introduced after issuing the receipt', async () => {
+    const chain = await publishChain({ futureHost: true })
+    writeFileSync(join(chain.host.sessionPackageDir, 'lib', 'unqualified.js'), 'export const newProgram = true')
+    expect((await chain.action('unqualified-extra')).status).toBe('unavailable')
+    expect(chain.published).toHaveLength(0)
+  })
   it('rejects a future host nearer scope without granting publish effects', async () => {
     const chain = await publishChain({ futureHost: true })
     const before = chain.published.length

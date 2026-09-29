@@ -117,7 +117,7 @@ function measure(runtimeRoot, profileRoot, profile) {
     if (!match) throw new Error('production measurement did not emit its observed result')
     results.push(JSON.parse(match[1]))
   }
-  const files = [...new Set([...execFileSync('git', ['ls-files', '--', 'src', 'manifests', 'package.json', 'pnpm-lock.yaml',
+  const files = [...new Set([...execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'src', 'manifests', 'package.json', 'pnpm-lock.yaml',
     'scripts/measure-host-audit.mjs', 'tests/v081-host-protocol-measurement.test.ts'], { cwd: repo, encoding: 'utf8' }).trim().split('\n'),
     'src/domain/host-trust.ts', 'tests/v081-host-protocol-measurement.test.ts'])].sort()
   const sourceSha256 = Object.fromEntries(files.map((file) => [file, createHash('sha256').update(readFileSync(join(repo, file))).digest('hex')]))

@@ -18,7 +18,7 @@ dsh plugin --profile web add dsh-completion-guard@0.8.1
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
 
-查看每条命令 JSON 输出中的 `status`，确认它为 `supported`。失败会报告具体原因并以非零退出码结束。较新兼容宿主需给三条命令都加上 `--rebind-registry`，先验证官方 registry 的包归档，再重建锁；步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。
+查看每条命令 JSON 输出中的 `status`，确认它为 `supported`。失败会报告具体原因并以非零退出码结束。较新兼容宿主需给三条命令都加上 `--rebind-registry`，先验证官方包归档，并在隔离 Node 进程中检查变化程序的兼容契约，再重建锁；步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -57,7 +57,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.8.1 的版本准入范围是 **DSH `>=0.2.0-rc.1`**，没有版本上限。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.1` 46 包依赖图保留为已审查基线；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。未知或变化的 Session/API 实现会报告具体资格缺口，旧证书不能转移到新锁。已在 `0.2.0-rc.1` 的真实安装图上执行源码入口测量；最终制品的 macOS/Windows 原生验收和未来版本原生证据仍须分别建立。
+0.8.1 的版本准入范围是 **DSH `>=0.2.0-rc.1`**，没有版本上限。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.1` 46 包依赖图保留为已审查基线；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。变化的 Session/API 实现须通过有限行为探针，不兼容行为会报告具体资格缺口，旧证书不能转移到新锁。已在 `0.2.0-rc.1` 的真实安装图上执行源码入口测量；最终制品的 macOS/Windows 原生验收和未来版本原生证据仍须分别建立。
 
 升级后重新检查并注入 host-lock，再重启对应 Profile，步骤见[宿主锁升级](docs/HOST_LOCK_UPGRADE.md)。旧会话由 DSH 迁移为 V4；Guard 保留旧 ledger 和证书，但不会重签或把旧身份升级为当前权限。Goal 为可选能力，宿主安装不代表它已启用。
 

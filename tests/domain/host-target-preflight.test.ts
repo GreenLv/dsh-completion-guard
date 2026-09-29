@@ -4,12 +4,25 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RC020_RC1_HOST_PACKAGES } from '../../src/domain/rc020-rc1-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
 import { revalidateCoreLock } from '../../src/runtime.js'
+
+// Structural fixtures carry an explicit synthetic published-byte oracle. The
+// shipped CLI has its real baseline and must refuse these synthetic bytes.
+vi.mock('../../manifests/rc020-rc1-byte-audit.json', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(row => ({ ...row, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, main: 'lib/index.js',
+      ...(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'].includes(row.name) ? { dsh: { bundle: { patch: './cordis.patch.yml' } } } : {}),
+    })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
+  } })) } }
+})
 
 const roots: string[] = []
 const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
@@ -43,13 +56,16 @@ function fixture(mapKey: 'versioned' | 'bare' = 'versioned', coreRows = core) {
     records['.'].dependencies[row.name] = id
     records[id] = { url: `./${row.name}`, dependencies: {} }
     json(join(modules, row.name, 'package.json'), {
-      name: row.name, version: row.version,
+      name: row.name, version: row.version, main: 'lib/index.js',
       ...(bundles.includes(row.name) ? { dsh: { bundle: { patch: './cordis.patch.yml' } } } : {}),
     })
+    mkdirSync(join(modules, row.name, 'lib'), { recursive: true })
+    writeFileSync(join(modules, row.name, 'lib/index.js'), 'audited fixture bytes\n')
     if (bundles.includes(row.name)) writeFileSync(join(modules, row.name, 'cordis.patch.yml'), '[]\n')
   }
   // Bind all resolver-visible packages before pnpm's ambient NODE_PATH fallback.
   symlinkSync(modules, join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
+  json(join(runtime, 'package.json'), {})
   const mapPath = join(modules, '.package-map.json')
   json(mapPath, { packages: records })
   writeFileSync(join(runtime, 'pnpm-lock.yaml'), lock([...core, ...bundles.filter((name) => !core.some((row) => row.name === name)).map((name) => ({ name, version, integrity: 'sha512-synthetic-bundle' }))]))
@@ -177,20 +193,13 @@ describe('dependency-free Headless target inspection', () => {
     expect(() => resolveActiveProfileHostLock(f.runtime, f.profile, '0.4.3')).toThrow()
   })
 
-  it('exposes pre-install scope through the shipped CLI without permitting installed inspection', () => {
+  it('refuses synthetic unauthenticated bytes in the shipped pre-install CLI and preserves strict installed inspection', () => {
     const f = fixture()
     const cli = fileURLToPath(new URL('../../bin/dsh-completion-guard-host-lock.mjs', import.meta.url))
     const args = ['--runtime-root', f.runtime, '--profile-root', f.profile]
     const target = spawnSync(process.execPath, [cli, 'inspect-graph', ...args], { encoding: 'utf8' })
-    expect(target.status, target.stderr).toBe(0)
-    expect(JSON.parse(target.stdout)).toMatchObject({ inspection_scope: 'pre_install_target', profile_graph: { state: 'dependency_free_headless' }, profile: 'headless', package_count: 46 })
-    // The readback must state how the cohort's rows were established. A
-    // "supported" status plus a digest is not enough: a graph that was only
-    // resolved from the registry must never read as a natively audited one,
-    // and this readback is what a native-acceptance annex records.
-    const readback = JSON.parse(target.stdout) as { cohort_id: string; audit_provenance: string }
-    expect(readback.cohort_id).toBe('dsh-0.2.0-rc.1-core-v1')
-    expect(readback.audit_provenance).toBe('registry-derived-pending-native-audit')
+    expect(target.status).toBe(1)
+    expect(JSON.parse(target.stderr)).toMatchObject({ status: 'unavailable', reason_code: 'target_runtime_unsupported' })
     const installed = spawnSync(process.execPath, [cli, 'inspect', ...args], { encoding: 'utf8' })
     expect(installed.status).toBe(1)
     expect(JSON.parse(installed.stderr)).toMatchObject({ reason_code: 'active_graph_missing' })
@@ -279,7 +288,8 @@ describe('dependency-free Headless target inspection', () => {
     const f = fixture(); expect(inspectTargetHostGraph(f.runtime, f.profile).profileGraph.state).toBe('dependency_free_headless')
     installGuard(f)
     expect(inspectTargetHostGraph(f.runtime, f.profile).profileGraph.state).toBe('active_importer')
-    // Identity-only fixtures have no audited executable modules.
+    expect(resolveActiveProfileHostLock(f.runtime, f.profile, '0.4.3').evaluation.status).toBe('supported')
+    writeFileSync(join(f.modules, '@deepseek-ai/dsh-session/lib/index.js'), 'unqualified replacement')
     expect(() => resolveActiveProfileHostLock(f.runtime, f.profile, '0.4.3')).toThrow(/modules differ/)
     rmSync(join(f.profile, 'pnpm-lock.yaml'))
     rmSync(join(f.profile, 'node_modules', '.package-map.json'))

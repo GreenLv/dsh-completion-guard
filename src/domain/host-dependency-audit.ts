@@ -1,6 +1,7 @@
 import { basename, join, dirname, relative, resolve, sep, isAbsolute } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
+import { hostNodeConditions } from './host-node-conditions.js'
 
 export interface DependencyAuditGraph {
   modules: string
@@ -53,20 +54,11 @@ function nearestPackageScope(session: HostAuditSession, dir: string):
  * - subpath lookup: the exact key wins; a sibling wildcard pattern never
  *   shadows a real exact key. Unrequested patterns/arrays/unmodellable shapes
  *   are OUTSIDE the support domain and fail closed — they never approximate.
- * - condition selection: iterate the manifest's OWN keys in manifest order
- *   (never a fixed node→require→default priority). The proved lane is the CJS
- *   require lane with the conditions Node actually activates for it:
- *   {node, node-addons, require, module-sync}; 'default' always matches. A
- *   matched key whose value is neither string/null/object is an INVALID
- *   branch — it fails the route instead of falling through to a later key
- *   that would happen to reach the audited file. A nested object without a
- *   matching condition CONTINUES to the next key (a legal no-match
- *   fallback); null denies. Numeric condition keys are
- *   ERR_INVALID_PACKAGE_CONFIG. A require-lane resolution that selected
- *   through a conditions object which ALSO carries an own 'import' key is
- *   rejected: the require proof must never silently cover a differing import
- *   branch, while an 'import' key inside a branch the require lane skipped
- *   (a no-match fallback) stays legal.
+ * - condition selection follows manifest key order and actual startup
+ *   conditions, including CLI/NODE_OPTIONS custom conditions, node-addons and
+ *   module-sync availability. Both require and import lanes must agree on the
+ *   authenticated target. Invalid active branches and numeric keys fail closed;
+ *   legal no-match branches continue to the next sibling.
  * - target validation happens BEFORE any URL normalization or realpath
  *   comparison, on the RAW target string: it must start with './', contain no
  *   backslash, no encoded separators (%2f/%5c), and no raw OR percent-encoded
@@ -75,8 +67,6 @@ function nearestPackageScope(session: HostAuditSession, dir: string):
  *   launders illegal syntax, and realpath equal to the authenticated file is
  *   never sufficient for an illegal target.
  */
-const REQUIRE_LANE_CONDITIONS = new Set(['node', 'node-addons', 'require', 'module-sync'])
-const IMPORT_LANE_CONDITIONS = new Set(['node', 'node-addons', 'import', 'module-sync'])
 const NUMERIC_CONDITION_KEY = /^(?:0|[1-9][0-9]*)$/
 const ENCODED_SEPARATOR = /%2f|%5c/i
 
@@ -99,7 +89,7 @@ function selectLane(value: unknown, depth: number, lane: 'require' | 'import'): 
   for (const key of Object.keys(conditions)) {
     if (NUMERIC_CONDITION_KEY.test(key)) return 'invalid'
   }
-  const active = lane === 'require' ? REQUIRE_LANE_CONDITIONS : IMPORT_LANE_CONDITIONS
+  const active = new Set(hostNodeConditions()[lane])
   for (const key of Object.keys(conditions)) {
     if (key === 'default' || active.has(key)) {
       const nested = selectLane(conditions[key], depth + 1, lane)
@@ -183,23 +173,29 @@ function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; ma
   return true
 }
 
-/** rc.2's authenticated exports have only types/default conditions. Do not use
- * CJS resolution as an ESM oracle if a future manifest introduces other branches.
- * Wildcard source exports are not runtime entrypoints in the published audit.
- */
+/** Each declared runtime entry must resolve to the authenticated target in
+ * both startup lanes. Wildcard source-only exports are not entrypoints. */
 function runtimeExports(manifest: Record<string, unknown>): Map<string, string> {
   const result = new Map<string, string>()
-  const entries = manifest.exports
-  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) throw new Error('missing audited exports')
-  for (const [key, value] of Object.entries(entries)) {
+  const raw = manifest.exports
+  if (raw === undefined) {
+    const main = manifest.main ?? './index.js'
+    if (typeof main !== 'string') throw new Error('invalid main')
+    const target = main.startsWith('./') ? main : './' + main
+    if (!rawTargetAllowed(target)) throw new Error('invalid main')
+    result.set('.', target)
+    return result
+  }
+  const keys = raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw) : []
+  const dot = keys.filter(key => key === '.' || key.startsWith('./'))
+  if (dot.length && dot.length !== keys.length) throw new Error('mixed exports')
+  const entries: Array<[string, unknown]> = dot.length ? Object.entries(raw as Record<string, unknown>) : [['.', raw]]
+  for (const [key, value] of entries) {
     if (key.includes('*')) continue
-    let target: unknown = value
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      if (Object.keys(value).some(condition => condition !== 'types' && condition !== 'default')) throw new Error('unaudited export conditions')
-      target = (value as Record<string, unknown>).default
-    }
-    if (typeof target !== 'string' || !target.startsWith('./')) throw new Error('invalid export target')
-    if (/\.(?:m?js|cjs|json)$/.test(target)) result.set(key, target)
+    const required = selectLane(value, 0, 'require'), imported = selectLane(value, 0, 'import')
+    if (typeof required !== 'object' || typeof imported !== 'object' || required.target !== imported.target
+      || !rawTargetAllowed(required.target)) throw new Error('unaudited export conditions')
+    if (/\.(?:[cm]?js|json)$/.test(required.target)) result.set(key, required.target)
   }
   return result
 }
@@ -242,6 +238,7 @@ export function auditHostDependencyRoutes(graphs: readonly DependencyAuditGraph[
   providedSession?: HostAuditSession): boolean {
   const session = providedSession ?? createHostAuditSession()
   try {
+    hostNodeConditions()
     const installation = graphs[0]
     if (!installation) return false
     const profile = session.realpath(profileRoot)

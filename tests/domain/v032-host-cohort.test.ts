@@ -9,6 +9,7 @@ import {
   evaluateHostLock,
   selectHostCohort,
 } from '../../src/domain/host-lock.js'
+import { hostNodeConditions } from '../../src/domain/host-node-conditions.js'
 import { hostLockDigest } from '../../src/domain/digest.js'
 import { ALPHA3_HOST_PACKAGES } from '../helpers/alpha3-host.js'
 import { RC1_HOST_PACKAGES } from '../helpers/rc1-host.js'
@@ -120,6 +121,7 @@ describe('audited host cohort registry', () => {
         ...cohort.capabilities.map((row) => row.name === 'host_audit_provenance'
           ? { name: row.name, value: { k: 's' as const, v: provenance } }
           : row),
+        { name: 'node_loading_conditions', value: { k: 's' as const, v: hostNodeConditions().digest } },
         { name: 'active_platform', value: { k: 's' as const, v: context.platform } },
         { name: 'active_profile', value: { k: 's' as const, v: context.profileKind } },
       ],

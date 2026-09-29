@@ -6,8 +6,9 @@ import { dirname, join } from 'node:path'
 import {
   injectActiveProfileHostLock,
   prepareActiveHostTrust,
+  prepareTargetHostTrust,
   inspectTargetHostGraph,
-  evaluateHostLock,
+  evaluateConfiguredHostLock,
   resolveActiveProfileHostLock,
   verifyComposedHostLockDump,
 } from '../dist/domain/index.js'
@@ -57,12 +58,14 @@ try {
   const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   if (command === 'inspect-graph') {
-    const target = inspectTargetHostGraph(option('--runtime-root'), option('--profile-root'))
+    const trust = process.argv.includes('--rebind-registry')
+      ? await prepareTargetHostTrust(option('--runtime-root'), option('--profile-root')) : undefined
+    const target = inspectTargetHostGraph(option('--runtime-root'), option('--profile-root'), trust)
     const rows = target.packages
-    const evaluation = evaluateHostLock(rows, {
+    const evaluation = evaluateConfiguredHostLock(rows, {
       platform: process.platform === 'win32' ? 'windows' : 'posix',
       ...(target.profileGraph.state === 'dependency_free_headless' ? { profileKind: 'headless' } : {}),
-    })
+    }, trust ? JSON.stringify(trust) : undefined, option('--profile-root'))
     process.stdout.write(`${JSON.stringify({ ...summary(evaluation), inspection_scope: 'pre_install_target', profile_graph: target.profileGraph, packages: rows })}\n`)
     process.exit(evaluation.status === 'supported' ? 0 : 1)
   }

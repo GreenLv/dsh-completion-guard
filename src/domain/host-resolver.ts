@@ -274,9 +274,9 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string, pr
 
 /** Version/identity evaluation of operator-owned registry expectations. */
 export function evaluateConfiguredHostLock(rows: readonly PackageRow[], context: HostLockContext,
-  trustText?: string): HostLockEvaluation {
+  trustText?: string, profileRoot?: string): HostLockEvaluation {
   if (!trustText) return combineHostPolicy(evaluateHostLock(rows, context))
-  const trust = parseHostTrust(trustText)
+  const trust = parseHostTrust(trustText, profileRoot)
   const evaluation = combineHostPolicy(evaluateGraphDerivedHostLock(rows, { ...context, trustDigest: hostTrustDigest(trust) },
     (row) => trust.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)))
   return trust.unqualifiedOptionalPackages?.length && evaluation.status === 'supported'
@@ -288,9 +288,10 @@ export function evaluateConfiguredHostLock(rows: readonly PackageRow[], context:
 export function evaluateActiveHostLock(runtime: string, profile: string, context: HostLockContext,
   session: HostAuditSession = createHostAuditSession(), trustText?: string): HostLockEvaluation {
   const rows = readActiveHostGraph(runtime, profile, session)
-  const evaluation = evaluateConfiguredHostLock(rows, context, trustText)
+  const evaluation = evaluateConfiguredHostLock(rows, context, trustText, profile)
   if (evaluation.status !== 'supported') return evaluation
-  const expectations = trustText ? parseHostTrust(trustText).packages : undefined
+  const trust = trustText ? parseHostTrust(trustText, profile) : undefined
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : undefined
   if (!auditedHostImplementation(runtime, profile, session, expectations)) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
@@ -300,7 +301,37 @@ export function evaluateActiveHostLock(runtime: string, profile: string, context
 /** Trusted acquisition only; consumers never use local SRI as provenance. */
 export async function prepareActiveHostTrust(runtime: string, profile: string,
   fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
-  return acquireHostTrust(readActiveHostGraph(runtime, profile), fetcher)
+  return acquireHostTrust(readActiveHostGraph(runtime, profile), fetcher, {
+    profileRoot: profile,
+    dependencyIdentity: (name, importer) => probeDependencyIdentity(runtime, profile, name, importer),
+  })
+}
+
+function probeDependencyIdentity(runtime: string, profile: string, name: string, importer: string): PackageRow {
+  for (const owner of [runtime, profile]) {
+    const modules = join(owner, 'node_modules'), mapPath = join(modules, '.package-map.json')
+    if (!existsSync(mapPath)) continue
+    const { records, reachable } = activeGraphRecords(readFileSync(mapPath, 'utf8'))
+    const id = [...reachable].find((key) => key === importer || key.startsWith(importer + '@'))
+    if (!id || typeof records[id]?.url !== 'string') continue
+    const anchor = join(realpathSync(resolve(modules, records[id].url as string)), 'package.json')
+    const packageRoot = packageFromAnchor(anchor, name)
+    if (!packageRoot) continue
+    for (const graphRoot of [runtime, profile]) {
+      if (!existsSync(join(graphRoot, 'node_modules'))) continue
+      const graphModules = realpathSync(join(graphRoot, 'node_modules'))
+      const graph = activeGraphRecords(readFileSync(join(graphModules, '.package-map.json'), 'utf8'))
+      const ids = [...graph.reachable].filter((key) => key === name || key.startsWith(name + '@'))
+      if (ids.length !== 1 || typeof graph.records[ids[0]]?.url !== 'string'
+        || realpathSync(resolve(graphModules, graph.records[ids[0]].url as string)) !== packageRoot) continue
+      if (!within(graphModules, packageRoot)) continue
+      const manifest = readJsonObject(join(packageRoot, 'package.json'), 'host_contract_probe_dependency_unbound')
+      const matches = packageRowsFromPnpmLock(readFileSync(join(graphRoot, 'pnpm-lock.yaml'), 'utf8'), [name])
+        .filter((row) => row.version === manifest.version && row.integrity)
+      if (manifest.name === name && matches.length === 1) return matches[0]
+    }
+  }
+  throw new HostProfileError('host_contract_probe_dependency_unbound', 'probe dependency lacks an exact installed registry identity')
 }
 
 /** Verify published executable bytes at the reachable runtime/profile roots.
@@ -361,6 +392,12 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
         const declared = expected.modules
           ? Object.keys(expected.modules)
           : [join(root, 'package.json'), ...walkLibFiles(session, root)]
+        if (expectations) {
+          // A qualified archive is a closed executable/JSON inventory. New
+          // installed files cannot silently inherit an earlier receipt.
+          const actual = qualifiedModuleFiles(session, root).sort()
+          if (JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false
+        }
         const computedDigests: Record<string, string> = {}
         for (const file of declared) {
           const rel = file.startsWith(root + sep) ? file.slice(root.length + 1) : file
@@ -377,6 +414,24 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
     return expectedPackages.every((entry) => seen.has(entry.name))
       && auditHostDependencyRoutes(graphs, profileRoot, session)
   } catch { return false }
+}
+
+function qualifiedModuleFiles(session: HostAuditSession, root: string): string[] {
+  if (!session.listDir) throw new Error('qualified inventory reader unavailable')
+  const files: string[] = []
+  const walk = (directory: string, prefix: string, depth: number): void => {
+    if (depth > 32) throw new Error('qualified inventory too deep')
+    for (const entry of session.listDir!(directory)) {
+      if (entry.name === 'node_modules') continue
+      const file = prefix + entry.name, path = join(directory, entry.name)
+      if (!entry.isFile && !entry.isDirectory) throw new Error('qualified inventory special file')
+      if (entry.isDirectory) walk(path, file + '/', depth + 1)
+      else if (/\.(?:[cm]?js|json)$/.test(file)) files.push(file)
+      if (files.length > 10000) throw new Error('qualified inventory too large')
+    }
+  }
+  walk(root, '', 0)
+  return files
 }
 
 /** Every lib JS file below a package root, discovered through the same
@@ -574,7 +629,7 @@ function packageFromAnchor(anchor: string, name: string): string | undefined {
  * installation-owned bundles without a private importer. Never extend this
  * absence rule to inject or runtime replay, which still call the strict reader.
  */
-export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string): TargetHostGraph {
+function readTargetHostGraph(runtimeRoot: string, profileRoot: string): TargetHostGraph {
   const runtime = realpathSync(runtimeRoot)
   const profile = realpathSync(profileRoot)
   const mapPath = join(profile, 'node_modules', '.package-map.json')
@@ -606,11 +661,6 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   const mapText = readFileSync(join(modules, '.package-map.json'), 'utf8')
   const lockText = readFileSync(join(runtime, 'pnpm-lock.yaml'), 'utf8')
   const rows = packageRowsFromActiveGraph(mapText, lockText, modules)
-  const evaluation = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: 'headless' })
-  const selectedCohort = HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId)
-  if (evaluation.status !== 'supported' || !selectedCohort) {
-    throw new HostProfileError('target_runtime_unsupported', 'dependency-free inspection requires the active audited core cohort')
-  }
   const { records, reachable } = activeGraphRecords(mapText)
   const launcher = realpathSync(join(modules, '@deepseek-ai', 'dsh'))
   const anchor = join(launcher, 'package.json')
@@ -618,7 +668,7 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   // pnpm's hoisted map uses bare package names; the installed manifest and
   // exact mapped realpath below remain authoritative for either key shape.
   const launcherId = [...reachable].filter((id) => id === '@deepseek-ai/dsh' || id.startsWith('@deepseek-ai/dsh@'))
-  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== selectedCohort.packages.find((row) => row.name === '@deepseek-ai/dsh')?.version
+  if (launcherId.length !== 1 || host.name !== '@deepseek-ai/dsh' || host.version !== rows.find((row) => row.name === '@deepseek-ai/dsh')?.version
     || typeof records[launcherId[0]].url !== 'string'
     || realpathSync(resolve(modules, records[launcherId[0]].url as string)) !== launcher || !within(modules, launcher)) {
     throw new HostProfileError('target_runtime_unsupported', 'launcher differs from the active runtime importer')
@@ -667,6 +717,26 @@ export function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string)
   }
 }
 
+/** The pre-install path consumes the same qualified identities and byte/route
+ * audit as active-profile entries; structural discovery grants no authority. */
+export function inspectTargetHostGraph(runtime: string, profile: string, trust?: HostRebindTrust): TargetHostGraph {
+  const target = readTargetHostGraph(runtime, profile)
+  const evaluation = evaluateConfiguredHostLock(target.packages, {
+    platform: process.platform === 'win32' ? 'windows' : 'posix',
+    ...(target.profileGraph.state === 'dependency_free_headless' ? { profileKind: 'headless' as const } : {}),
+  }, trust ? JSON.stringify(trust) : undefined, profile)
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : undefined
+  if (evaluation.status !== 'supported' || !auditedHostImplementation(runtime, profile, undefined, expectations)) {
+    throw new HostProfileError('target_runtime_unsupported', 'pre-install target fails host qualification or byte/route audit')
+  }
+  return target
+}
+export async function prepareTargetHostTrust(runtime: string, profile: string, fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
+  return acquireHostTrust(readTargetHostGraph(runtime, profile).packages, fetcher, {
+    profileRoot: profile, dependencyIdentity: (name, importer) => probeDependencyIdentity(runtime, profile, name, importer),
+  })
+}
+
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
 export function resolveActiveProfileHostLock(
   runtimeRoot: string,
@@ -686,7 +756,7 @@ export function resolveActiveProfileHostLock(
     if (!existsSync(path)) throw new HostProfileError('active_graph_missing', `required active graph file is missing: ${path}`)
   }
   const session = createHostAuditSession()
-  const trust = providedTrust ? qualifyHostTrust(providedTrust) : undefined
+  const trust = providedTrust ? qualifyHostTrust(providedTrust, profile) : undefined
   const profileManifest = readJsonObject(profileManifestPath, 'profile_manifest_invalid')
   const installedPlugin = readJsonObject(pluginManifestPath, 'installed_plugin_invalid')
   const dependencies = profileManifest.dependencies
@@ -938,7 +1008,7 @@ export function verifyComposedHostLockDump(
   if (trustLines.length > 1) throw new HostProfileError('host_lock_readback_mismatch', 'duplicate trust description')
   const trustIndex = trustLines[0]
   const trustText = trustIndex === undefined ? undefined : parseYamlField(entry, trustIndex, entry[trustIndex].slice(entry[trustIndex].indexOf(':') + 1))
-  const actual = evaluateConfiguredHostLock(hostLockRowsFromComposedDump(text), context, trustText)
+  const actual = evaluateConfiguredHostLock(hostLockRowsFromComposedDump(text), context, trustText, settings.hostLockProfileRoot)
   if (actual.status !== 'supported' || actual.digest !== expected.digest) {
     throw new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph')
   }

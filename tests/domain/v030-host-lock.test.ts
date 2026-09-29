@@ -29,8 +29,12 @@ import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 // This family isolates graph/config mutation with synthetic package manifests.
 // Published-byte integrity is exercised without mocks in v080-rc017-host.test.ts.
 vi.mock('../../manifests/rc020-rc1-byte-audit.json', async (original) => {
+  const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
-  return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {} })) } }
+  return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: p.name, version: p.version, exports: { '.': './lib/index.js' } })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
+  } })) } }
 })
 
 const temporaryRoots: string[] = []
@@ -299,7 +303,9 @@ function makeActiveRoots() {
     packages[id] = { url: relative, dependencies: {} }
     const packageRoot = join(modulesRoot, relative)
     mkdirSync(packageRoot, { recursive: true })
-    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: row.name, version: row.version, exports: {} }))
+    mkdirSync(join(packageRoot, 'lib'), { recursive: true })
+    writeFileSync(join(packageRoot, 'lib/index.js'), 'export const synthetic = true\n')
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: row.name, version: row.version, exports: { '.': './lib/index.js' } }))
   }
   mkdirSync(join(modulesRoot, '@deepseek-ai'), { recursive: true })
   for (const row of runtimeRows) {

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
 import { parseHostVersion, evaluateMinimumHostVersion, type HostVersionDecision } from './host-version.js'
+import { hostNodeConditions } from './host-node-conditions.js'
 
 export type HostLockStatus = 'supported' | 'unsupported' | 'unavailable'
 export type HostPlatform = 'posix' | 'windows'
@@ -728,6 +729,7 @@ function safeHostLockDigest(packages: readonly PackageRow[], context: HostLockCo
     // bound to the audited cohort and a cohort switch invalidates them.
     const capabilities = [
       ...cohort.capabilities,
+      { name: 'node_loading_conditions', value: { k: 's' as const, v: hostNodeConditions().digest } },
       ...(context.platform ? [{ name: 'active_platform', value: { k: 's' as const, v: context.platform } }] : []),
       ...(context.profileKind ? [{ name: 'active_profile', value: { k: 's' as const, v: context.profileKind } }] : []),
       ...(context.capabilityId ? [{ name: 'active_capability', value: { k: 's' as const, v: context.capabilityId } }] : []),

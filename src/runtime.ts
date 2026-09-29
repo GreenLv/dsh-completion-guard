@@ -936,7 +936,7 @@ export function apply(ctx: Context, rawConfig: {
   const installedHostLock = seams.hostLock ?? evaluateConfiguredHostLock(config.hostLockPackages ?? [], {
     platform: config.hostLockPlatform,
     profileKind: config.hostLockProfile,
-  }, config.hostLockTrust)
+  }, config.hostLockTrust, config.hostLockProfileRoot)
   const runtimes = new Map<Agent, GuardRuntime>()
   const privateLedgerRoot = seams.privateLedgerRoot
     ?? resolvePrivateLedgerRoot(undefined, process.env.DSH_HOME, homedir())

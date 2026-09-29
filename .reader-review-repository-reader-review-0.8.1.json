@@ -10,40 +10,40 @@
       "path": "README.md",
       "role": "readme",
       "language": "default",
-      "sha256": "afbcd9f20ac903a699c7df696de2dd4c92c8de5ff1cbd5aa046d3e0db8e7f5d2"
+      "sha256": "0b2b906d3db990ec2ff720f7b6bc8e73ea52f22531d8891ac16ae2919b8814c2"
     },
     {
       "path": "README.zh-CN.md",
       "role": "readme",
       "language": "zh",
-      "sha256": "c81dc416b5dd2e79e811594ea6e41f73e518052a9ad7f02f2bb7067d29afd2ba"
+      "sha256": "bfe4cba84d19071daee5eaba695ffa67fe1096d5d07c8723b4b346de428be98e"
     },
     {
       "path": "CHANGELOG.md",
       "role": "changelog",
       "language": "default",
-      "sha256": "5c00ac4a6f7fd37cd1796d0430a80e7eb6d34b3373ee6de74eaa139373da3e78"
+      "sha256": "79e48a4f63511f93572a6ea7ce144540541323eb5035dca49519e6ae429734c7"
     },
     {
       "path": "CHANGELOG.zh-CN.md",
       "role": "changelog",
       "language": "zh",
-      "sha256": "5a5a10938d343041fa1527cdba2633cf214fe78d7bed2c7065d183c268d3b1b6"
+      "sha256": "3204e41442780968c106802d936012905eed8723cca9990442fd05107ec7b5b2"
     },
     {
       "path": "docs/COMPATIBILITY.md",
       "role": "readme",
       "language": "default",
-      "sha256": "de32cf413e1713016732c0fc6d39c152668d063bd3a369bc8accd1ed98c8f17e"
+      "sha256": "40558bd85b4b32b721a13dce042d7d35832d9e87c560d2642ad7851aef76331c"
     },
     {
       "path": "docs/HOST_LOCK_UPGRADE.md",
       "role": "readme",
       "language": "default",
-      "sha256": "12179a5b43169e95d9b6ba8a5844a27e331cccb274c23907764c37c366780a71"
+      "sha256": "3680b81f64725633aee3d3b53ae5bbcf773effb94842565b4e1c3c493d9f354f"
     }
   ],
-  "document_set_sha256": "4b0fb2e6c3699f72d6bedbffa085b2d6b1e99a86367098dc0f98c1d1657ffd98",
+  "document_set_sha256": "051f6d2b0f387477920f570c61f878c0358b0e288cfe9abe22d372bebeba1145",
   "method": {
     "kind": "cold_read",
     "implementation_context_used": false,
@@ -73,7 +73,7 @@
         "README.zh-CN.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "Both readmes give upgrade, backup, inspect/inject/dump verification, supported readback and controlled restart; the guide distinguishes DSH profile selection from host-lock root arguments."
+      "note": "Both readmes give upgrade, backup, inspect/inject/dump, supported readback and controlled restart. Rebind guidance explains isolated Node qualification and the per-profile receipt; the guide exposes pre-install qualification and loader limits."
     },
     {
       "id": "term_onboarding",
@@ -94,7 +94,7 @@
         "CHANGELOG.md",
         "CHANGELOG.zh-CN.md"
       ],
-      "note": "Reviewed baseline, installed-graph source harness, synthetic future-version contracts and pending native artifact acceptance remain distinct. Unknown executable semantics require qualification; pnpm installation is not floor enforcement evidence."
+      "note": "Baseline source harness, finite registry/API probes, synthetic future graphs and pending native artifact acceptance are separate. Issued receipts bind program bytes and startup conditions; pnpm installation does not enforce the floor."
     },
     {
       "id": "density_and_order",
