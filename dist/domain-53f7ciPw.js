@@ -131,9 +131,11 @@ function resolveHostNodeConditions(argv, nodeOptions, requireModule) {
 			...requireModule ? [] : ["--no-experimental-require-module"],
 			...[...custom].sort().map((value) => `--conditions=${value}`)
 		],
+		requireModule,
 		digest: createHash("sha256").update(JSON.stringify({
 			require,
-			import: esm
+			import: esm,
+			requireModule
 		})).digest("hex")
 	};
 }
@@ -235,7 +237,7 @@ function rawTargetAllowed(target) {
 	return true;
 }
 /** True when every lane Node may actually load resolves to the wanted file. */
-function interpretScopeRoute(session, scope, request, wanted) {
+function interpretScopeRoute(session, scope, request, wanted, selectedLane) {
 	const packageName = String(scope.manifest.name);
 	const subpath = request === packageName ? "." : "." + request.slice(packageName.length);
 	const rawExports = scope.manifest.exports;
@@ -258,7 +260,7 @@ function interpretScopeRoute(session, scope, request, wanted) {
 		if (subpath !== ".") return false;
 		entry = rootTarget;
 	}
-	for (const lane of ["require", "import"]) {
+	for (const lane of selectedLane ? [selectedLane] : ["require", "import"]) {
 		const selection = selectLane(entry, 0, lane);
 		if (selection === "no-match" || selection === "deny" || selection === "invalid") return false;
 		if (!rawTargetAllowed(selection.target)) return false;
@@ -276,15 +278,18 @@ function interpretScopeRoute(session, scope, request, wanted) {
 }
 /** Each declared runtime entry must resolve to the authenticated target in
 * both startup lanes. Wildcard source-only exports are not entrypoints. */
-function runtimeExports(manifest) {
-	const result = /* @__PURE__ */ new Map();
+function runtimeExports(manifest, independentLanes = false) {
+	const result = [];
 	const raw = manifest.exports;
 	if (raw === void 0) {
 		const main = manifest.main ?? "./index.js";
 		if (typeof main !== "string") throw new Error("invalid main");
 		const target = main.startsWith("./") ? main : "./" + main;
 		if (!rawTargetAllowed(target)) throw new Error("invalid main");
-		result.set(".", target);
+		result.push({
+			subpath: ".",
+			target
+		});
 		return result;
 	}
 	const keys = raw && typeof raw === "object" && !Array.isArray(raw) ? Object.keys(raw) : [];
@@ -294,8 +299,17 @@ function runtimeExports(manifest) {
 	for (const [key, value] of entries) {
 		if (key.includes("*")) continue;
 		const required$1 = selectLane(value, 0, "require"), imported = selectLane(value, 0, "import");
-		if (typeof required$1 !== "object" || typeof imported !== "object" || required$1.target !== imported.target || !rawTargetAllowed(required$1.target)) throw new Error("unaudited export conditions");
-		if (/\.(?:[cm]?js|json)$/.test(required$1.target)) result.set(key, required$1.target);
+		if (typeof required$1 !== "object" || typeof imported !== "object" || !independentLanes && required$1.target !== imported.target || !rawTargetAllowed(required$1.target) || !rawTargetAllowed(imported.target)) throw new Error("unaudited export conditions");
+		if (independentLanes) {
+			for (const [lane, selection] of [["require", required$1], ["import", imported]]) if (/\.(?:[cm]?js|json)$/.test(selection.target)) result.push({
+				subpath: key,
+				target: selection.target,
+				lane
+			});
+		} else if (/\.(?:[cm]?js|json)$/.test(required$1.target)) result.push({
+			subpath: key,
+			target: required$1.target
+		});
 	}
 	return result;
 }
@@ -392,7 +406,7 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 						if (!graph.reachable.has(targetId) || typeof target?.url !== "string" || !local || session.realpath(resolve(graph.modules, target.url)) !== local.root) return false;
 					} else if (!isProfile || local) return false;
 					const expected = local ?? installed;
-					const exports = session.memo(`exports:${expected.root}`, () => runtimeExports(expected.manifest));
+					const exports = session.memo(`exports:${expected.root}`, () => runtimeExports(expected.manifest, expected.independentLanes));
 					const directories = new Map([...importers].map((path$1) => [dirname(path$1), path$1]));
 					for (const importer of directories.values()) {
 						const paths = session.resolvePaths(importer, name);
@@ -400,13 +414,13 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 						if (selected) {
 							if (!session.stat(selected).isDirectory() || session.realpath(selected) !== expected.root) return false;
 						} else if (!isProfile || local || !installed) return false;
-						for (const [subpath, target] of exports) {
-							const wanted = session.memo(`wanted:${expected.root}\u0000${subpath}`, () => session.realpath(resolve(expected.root, target)));
+						for (const { subpath, target, lane } of exports) {
+							const wanted = session.memo(`wanted:${expected.root}\u0000${subpath}\u0000${lane ?? "both"}`, () => session.realpath(resolve(expected.root, target)));
 							if (!within$1(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
 								const scope = nearestPackageScope(session, dirname(importer));
-								if (scope !== void 0 && scope.manifest.name === name && Object.hasOwn(scope.manifest, "exports") && !interpretScopeRoute(session, scope, request, wanted)) return false;
+								if (scope !== void 0 && scope.manifest.name === name && Object.hasOwn(scope.manifest, "exports") && !interpretScopeRoute(session, scope, request, wanted, lane)) return false;
 							}
 						}
 					}
@@ -432,7 +446,8 @@ var packages = [
 			"lib/index.js": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
 			"package.json": "41c9dee4715a89ef94f227384460c8445857c8faf33493eb545604a948828649"
 		},
-		"programs": { "lib/index.js": "80e38b85f7f608fa7cac756beb911a1a05c2274396fe2e7ee16952f0c8d78202" }
+		"programs": { "lib/index.js": "80e38b85f7f608fa7cac756beb911a1a05c2274396fe2e7ee16952f0c8d78202" },
+		"loadingDigest": "a883ad98b889c0cb667e23c5dd2f9179f88e825aed6355feae69f4c30b77cd69"
 	},
 	{
 		"name": "@deepseek-ai/dsh",
@@ -458,7 +473,8 @@ var packages = [
 			"lib/plugin-DkYIj96-.js": "8eb1965ca0e64e9668f9926e0175610fbda401bf65f92db9840615e4a6bc6a97",
 			"lib/profile-boot-BZ2ZjNWi.js": "5826cf68cc33e0c89b1379bd047b92cf209cece56a2e16b01d34f5be5b68c068",
 			"lib/profile-boot.js": "29f32dc66585887e03529fc468f1df7cab368ca546d8395c8ceb528cc1d0c853"
-		}
+		},
+		"loadingDigest": "6ffb4f27956f1c86920fef7f1bc92c1dab4d1f5f9e97686fe85be3b4d09fc692"
 	},
 	{
 		"name": "@deepseek-ai/dsh-agent",
@@ -492,7 +508,8 @@ var packages = [
 			"lib/types/projection.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
 			"lib/types/runtime-types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "80ab1ef5e697a73acc875ef0dff2d9bbcdca82c1b77c3d43aaed08398195d1a9"
 	},
 	{
 		"name": "@deepseek-ai/dsh-agent-loop",
@@ -508,7 +525,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "29355ba39cd6f2d9276b2a353538c54811745f05f5fb65ee0fd722a962b270bf",
 			"lib/invariant.js": "7aaf9659b7faf875f37181ef774c6dc0b64a51456e3bb473622e383a2bec9353"
-		}
+		},
+		"loadingDigest": "d59a5938a28425b5e995ddf1b7ce23f3cab61c9b29083a2733addeaf1f787487"
 	},
 	{
 		"name": "@deepseek-ai/dsh-app-boot",
@@ -524,7 +542,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "b73271cd64ae1b30291fea15032f524eb2fc4558076be4c9e1038b1e0f4da183",
 			"lib/worker/profile-resolution-bootstrap.js": "36c6e937266951b9be2f3e13453e66a784420b721f051bec27d1e74804a9a592"
-		}
+		},
+		"loadingDigest": "11c28f05919a2c73c0890e1182c146ad939cdfb9a8e131e8acfe5d584bc2fda7"
 	},
 	{
 		"name": "@deepseek-ai/dsh-attachment",
@@ -550,7 +569,8 @@ var packages = [
 			"lib/types/index.js": "d6eea1297cbd2013cd813675063f917c2913eb7b674cc1956711e6252a176db1",
 			"lib/types/request-projection.js": "918f29b1549200f0268e104250b47b5feb6841b697f6d56088f16032cd5223a9",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "dcf42d68f9de89b973734dbf1f7b9fa1e414463caf168fdc2ff41da93b95570b"
 	},
 	{
 		"name": "@deepseek-ai/dsh-base",
@@ -562,7 +582,8 @@ var packages = [
 			"lib/index.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
 			"package.json": "683a76071c6483acaa890b6c333037b34add96fc33a20ba995401cc5b909a060"
 		},
-		"programs": { "lib/index.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8" }
+		"programs": { "lib/index.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8" },
+		"loadingDigest": "f44d4963e2b2e9ec3a592ca8f3a0023844259674df9536827a10d37aaec24d7c"
 	},
 	{
 		"name": "@deepseek-ai/dsh-bash-local",
@@ -574,7 +595,8 @@ var packages = [
 			"lib/index.js": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
 			"package.json": "e20248d48f2868419d5c22b3f66a519c908fc707b5b8e275f866c1f34b22ac9f"
 		},
-		"programs": { "lib/index.js": "bad1dad01d2dc853e47f5b3452db5e871039e54d3f1859086931b7dd74675508" }
+		"programs": { "lib/index.js": "bad1dad01d2dc853e47f5b3452db5e871039e54d3f1859086931b7dd74675508" },
+		"loadingDigest": "2be7840d6fc827e5b1c54dc6bb242957645a1d001d596c2a93d280c87e8a50ba"
 	},
 	{
 		"name": "@deepseek-ai/dsh-bash-sandbox",
@@ -586,7 +608,8 @@ var packages = [
 			"lib/index.js": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
 			"package.json": "4698a8d47699af3451b3d58f8e02573ece1297d321addda7bc16eb8ba7e7c703"
 		},
-		"programs": { "lib/index.js": "007bc497922220ffe1723faaa96bd367356c81558c1b50b81c1c0601bff281ab" }
+		"programs": { "lib/index.js": "007bc497922220ffe1723faaa96bd367356c81558c1b50b81c1c0601bff281ab" },
+		"loadingDigest": "932ccfcdf2987ab32f85d36a929ae2d5c6de32157eba27b372aadc425a3efd18"
 	},
 	{
 		"name": "@deepseek-ai/dsh-commands",
@@ -614,7 +637,8 @@ var packages = [
 			"lib/types/index.js": "0ca9432876c5276664b12bcb83c0228f88020b4c9e911bdb59fcf4b36e6ed954",
 			"lib/types/invariant.js": "2af033be5a6a236dbb98e2e6916d586a009043f43c5098f148e311b6940cb68c",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "985c3bcddbd2128244218d5c39171f094c8d43b2062bf584bac2c33c80c8bf5f"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs",
@@ -630,7 +654,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "7c8ece277d8308c7b11b07ebe59453d8800aec42d7845ea7016ac3a1305fb612",
 			"lib/invariant.js": "de826317b9fb50f2195cb2686b06b471a9cae0cb2fcbf0612cc916dd41380e0e"
-		}
+		},
+		"loadingDigest": "56789270f90c7a1077d3a0ef01c179ec65991fbb1c4ed25e80f207406f38a31f"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-local",
@@ -642,7 +667,8 @@ var packages = [
 			"lib/index.js": "63fbb41d2c33e07111884b798be507e68c2752acab8249c821c20ade436e894f",
 			"package.json": "b875f7af3ffb1d57f43b81a7f62c5c10fe7039eb5edc2bbdf780f4785b614abe"
 		},
-		"programs": { "lib/index.js": "e5163b8d9882f25941b64f9dd84ca3f5b879b9077faedbbc2d2298f94e1d3714" }
+		"programs": { "lib/index.js": "e5163b8d9882f25941b64f9dd84ca3f5b879b9077faedbbc2d2298f94e1d3714" },
+		"loadingDigest": "0c24809933eb25f92ace3895fd1de77a8744ba12aa2309c61548623e3155c081"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-observation-policy",
@@ -654,7 +680,8 @@ var packages = [
 			"lib/index.js": "e36b54cdb5c6fa01ccfa29f0433753e810ec1ac29a6a22be349d66b77eb64b03",
 			"package.json": "25d8d29bd1157e189048f112aeccb4157c73e0280cdce81c4db97be718724a27"
 		},
-		"programs": { "lib/index.js": "4021ffd6e41bb82344eea4b471cc2130053802170a508a037b87771383461867" }
+		"programs": { "lib/index.js": "4021ffd6e41bb82344eea4b471cc2130053802170a508a037b87771383461867" },
+		"loadingDigest": "eb3acae13118b9b7cc537ca6f95e54e60722f4ccb60577ce1d08d57b5774776e"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-sandbox",
@@ -666,7 +693,8 @@ var packages = [
 			"lib/index.js": "cac65e21a0f0895b073cb9a447196ac265f2a171cc7f67c7434a6b3b7782caf5",
 			"package.json": "5018476647b5eb3e9be0fb6a03557cb4c8effe28636d37417752926e2c9452cb"
 		},
-		"programs": { "lib/index.js": "514de2a11be8e3997b98a38549dde1a1f35e620fee69feabb4797c0be4bfa083" }
+		"programs": { "lib/index.js": "514de2a11be8e3997b98a38549dde1a1f35e620fee69feabb4797c0be4bfa083" },
+		"loadingDigest": "17256d5beb07a458ae45655c40d1da643361620dd4c106cc574e0cb9fd66f5c9"
 	},
 	{
 		"name": "@deepseek-ai/dsh-goal",
@@ -700,7 +728,8 @@ var packages = [
 			"lib/types/invariant.js": "86d378954b35b50a82384489efd196ba0de8d0887c01fb6e3a67d9f7198ba1bf",
 			"lib/types/runtime.js": "318984bcd709ef43f6b2d4dda7c9a49950078246f7b51b7b621a333a17e0b53f",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "d02ad02c4d13c4c797adfcbc7fa6365723d84a057c97744d8e65d60da973e964"
 	},
 	{
 		"name": "@deepseek-ai/dsh-goal-round-driver",
@@ -716,7 +745,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "7424d5e5202b23369fed831c932addc766123f637e648b05bfc4f0c1435f43b8",
 			"lib/invariant.js": "02b035daf22e24b83ce36d10cc5341891d2228560022b6d5d947cbf12604cb8c"
-		}
+		},
+		"loadingDigest": "9d98137351ceb0635d6ae9b6512a9b3bf5369e7cdae1acdafed7c4723456e339"
 	},
 	{
 		"name": "@deepseek-ai/dsh-headless",
@@ -734,7 +764,8 @@ var packages = [
 			"lib/index.js": "c60f4fe96003b24bcd2c3d173f25f552da1736750a61a3eb18601509c7240d1c",
 			"lib/json-stream-BA-F3lfb.js": "f6c8737078ab95bf80fa2d921cd7d5425d2da1d994c648b9f3fb490adfecc698",
 			"lib/startup.js": "0444aea7aa5190fc45f532ee56bd4cac29e1f317e02728ba6c3379b3dc6612e5"
-		}
+		},
+		"loadingDigest": "78bf1d7b0019be5565bc8bcf828b17c819323344eabfc450861fff292f888c63"
 	},
 	{
 		"name": "@deepseek-ai/dsh-host-plugin-inventory",
@@ -756,7 +787,8 @@ var packages = [
 			"lib/typert.remote-client.js": "450d742bc19023ef7c030e3b18cac2f0e50b9a5c6c8efe4f187950f21a5395e3",
 			"lib/types/index.js": "e128c3b8d32cf32ce3aa473ddf6cc5c4c2f2c41c130ce9efe0c28f596ff1b391",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "bac2380c9c39390c6c6ef6d20bdef5a2bb4c3db928dee3f8b062647f57aafd4e"
 	},
 	{
 		"name": "@deepseek-ai/dsh-host-webserver",
@@ -768,7 +800,8 @@ var packages = [
 			"lib/index.js": "6efea1375eadeff62d5cfb6d1f515ff75a939d40405a62e5d138e8e7a6b18df5",
 			"package.json": "98ec06b6a0e2a3208268f56e66da7cfcc8931f8d334bfc6cc909ce2317f507b8"
 		},
-		"programs": { "lib/index.js": "b0c70fa39f2e01e0115fb64087659be3920443dc31cf287db2d53cc792dbeb44" }
+		"programs": { "lib/index.js": "b0c70fa39f2e01e0115fb64087659be3920443dc31cf287db2d53cc792dbeb44" },
+		"loadingDigest": "a5b3106e5990d4891e43f5a9711f56b03011dee0a8557dcaf0bbe06780e7a2f3"
 	},
 	{
 		"name": "@deepseek-ai/dsh-jobs",
@@ -796,7 +829,8 @@ var packages = [
 			"lib/types/invariant.js": "d4d980d0a93f783cbfbed29b5fbf9cd6244cdc2632b6ccada624fe78159811d3",
 			"lib/types/types.js": "ba8bb16a02cf17594a7084afbb7d48926ba5d135205821dc32e62b3f3fd0d7ce",
 			"lib/types/view.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "a21f146983f3554f86eff34a134ca3ae6af882610fe92e4f56bbcc2e487db07f"
 	},
 	{
 		"name": "@deepseek-ai/dsh-jobs-local",
@@ -808,7 +842,8 @@ var packages = [
 			"lib/index.js": "3bed0cd38c649f39b148752e742ff1ef57696a6b9b11b15ff8cc6cd1d4f08f26",
 			"package.json": "f5f62efb897c568eb0a0f41bd13ffdebc06490790db9c49fb7d8e0ff1f2541bc"
 		},
-		"programs": { "lib/index.js": "f045c307bccf2d8b873f86e427d3235a56568779fcb526228444692745ad43d3" }
+		"programs": { "lib/index.js": "f045c307bccf2d8b873f86e427d3235a56568779fcb526228444692745ad43d3" },
+		"loadingDigest": "38f0a6ca909766b116c5246823043c5c3e38598e82c3187cbbc4f814dd8104d8"
 	},
 	{
 		"name": "@deepseek-ai/dsh-llm",
@@ -856,7 +891,8 @@ var packages = [
 			"lib/types/message.js": "c065bac7cc1052ed136aa8fb9db4d1ff0c57fb4940313614ed18ebb18a57eb78",
 			"lib/types/retry-policy.js": "a1d4a7ee0cbdede6fe666f1529455f6f73703a4d04e96ff957b1251ce12d901a",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "11ed0054e954fa8cadd72c2a9c989c886f3b00b0c59decc4b293c5d3ae44c4a2"
 	},
 	{
 		"name": "@deepseek-ai/dsh-plugin-manager",
@@ -898,7 +934,8 @@ var packages = [
 			"lib/types/run-tree.js": "f8be76dc4b9890935c4db2e636774c0a2f30576beedb1c2fcf636d86f68903f5",
 			"lib/types/tools.js": "9dab7451db4dff6edd0cec0a321c13c8d34d37383ecd3135235d02afbb6c85ca",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "7d0f18d29e6f8ee50c49091ddc179686efe0a569568e3894662c7a43d1bbf569"
 	},
 	{
 		"name": "@deepseek-ai/dsh-ptc-runtime",
@@ -910,7 +947,8 @@ var packages = [
 			"lib/index.js": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
 			"package.json": "9aef21b169a5b665336caa1c8a5a1dc1e41c28ddff69daf28577cf5e35154217"
 		},
-		"programs": { "lib/index.js": "2cce6f19ca57740a864a07852bc885d4114c48711326b83a50cabc302e892e3f" }
+		"programs": { "lib/index.js": "2cce6f19ca57740a864a07852bc885d4114c48711326b83a50cabc302e892e3f" },
+		"loadingDigest": "bae6af62627d8d58de77d8222f9dcac4c4a41af6a89fd7f9fa579a5f43e7e7fe"
 	},
 	{
 		"name": "@deepseek-ai/dsh-pwsh-local",
@@ -922,7 +960,8 @@ var packages = [
 			"lib/index.js": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e",
 			"package.json": "65cee3e788b661f07ae97029e7cbb190cd8210e381da1002936f83cee8164314"
 		},
-		"programs": { "lib/index.js": "4e2cb7f3aeaf7cfe3380c9fd7b0b48c06313060680bd9fefc639aa2cdca67fc7" }
+		"programs": { "lib/index.js": "4e2cb7f3aeaf7cfe3380c9fd7b0b48c06313060680bd9fefc639aa2cdca67fc7" },
+		"loadingDigest": "c3e055b258a2022af26ff6959719692297a898f84cd2ca812345af6091f4d16c"
 	},
 	{
 		"name": "@deepseek-ai/dsh-pwsh-sandbox",
@@ -934,7 +973,8 @@ var packages = [
 			"lib/index.js": "bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783",
 			"package.json": "7b0785ef8cbdb64df136e3f05d998c1b10d7aed038541512420e8237883a9d0e"
 		},
-		"programs": { "lib/index.js": "23755f4bc2a1797364c319e7a7954998925e39eaaa7e3bb223c7b15544a826bb" }
+		"programs": { "lib/index.js": "23755f4bc2a1797364c319e7a7954998925e39eaaa7e3bb223c7b15544a826bb" },
+		"loadingDigest": "ed543842b927a8ea370c850ffb1e4794dc64be9cb795567c83261ab0407b9ca6"
 	},
 	{
 		"name": "@deepseek-ai/dsh-sandbox",
@@ -946,7 +986,8 @@ var packages = [
 			"lib/index.js": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
 			"package.json": "c819086d3245ccc6d006627637fd9bf7f450e9af3f39531129487e39572580ca"
 		},
-		"programs": { "lib/index.js": "65c26fbec4020c6c5be45f62317151c2d4b082409099415dcfd21962535d4dd0" }
+		"programs": { "lib/index.js": "65c26fbec4020c6c5be45f62317151c2d4b082409099415dcfd21962535d4dd0" },
+		"loadingDigest": "b4c44dc5d88a2eebd5145567efce78827bd1bdeeb532f5865eaf907ce2dd1032"
 	},
 	{
 		"name": "@deepseek-ai/dsh-sandbox-policy",
@@ -962,7 +1003,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "e6cdd6cb194a74188917ec769fd289f47641d943af5053cac004ba7a47681b4b",
 			"lib/invariant.js": "8d49b466edf0f0db733e2a4af5233e36e28e9c2d13a955841801b03297af2722"
-		}
+		},
+		"loadingDigest": "0ac97ed1268223acf55fb3db47435f32431a0c39e62175000dedabc2ed5f28dd"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session",
@@ -1000,7 +1042,8 @@ var packages = [
 			"lib/types/surface.js": "a148742e392fb75a1993a5dd89866cee8bb0b90d2fd22d8a5f1df9310b1b383d",
 			"lib/types/tool-history.js": "daa7e0e3e791f1b7001ab5567376faa493d9609ca5899182f258c43dc4d84911",
 			"lib/types/types.js": "10e24b6be50f234352ffcdca6d57c0c185ba64843b6db2e1bf1e3286abf0635c"
-		}
+		},
+		"loadingDigest": "47ad4022ceb88fee1b13b5ac947443f96ce253dfb22f8c39ac397280ad29692b"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-format-v3-to-v4",
@@ -1012,7 +1055,8 @@ var packages = [
 			"lib/index.js": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
 			"package.json": "72632c0f2042c2db7f42012ac198e3504a19dc4919c2ebd58267d0238c80429c"
 		},
-		"programs": { "lib/index.js": "6145523403f90c1984c02da07549762f3e04fcb302b5e314a001f7c3f962805f" }
+		"programs": { "lib/index.js": "6145523403f90c1984c02da07549762f3e04fcb302b5e314a001f7c3f962805f" },
+		"loadingDigest": "5b040372a4432fafc6bf1c0e04be48d1be916c3495816d4e8dd30468952121a4"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-persistence",
@@ -1024,7 +1068,8 @@ var packages = [
 			"lib/index.js": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
 			"package.json": "a5a768a7fa9dff906404056185bdf186dbecd12e62b0725a762fc71fc4269df8"
 		},
-		"programs": { "lib/index.js": "9ba15ebd7b22c52163c672b518e0ea1a2a2c23662695cc932e1f3726cdd51154" }
+		"programs": { "lib/index.js": "9ba15ebd7b22c52163c672b518e0ea1a2a2c23662695cc932e1f3726cdd51154" },
+		"loadingDigest": "ada72328490fccb2f2a6f5f747a473e106fcca5e3d086786b6896b8f110e54ac"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-persistence-jsonl",
@@ -1040,7 +1085,8 @@ var packages = [
 		"programs": {
 			"lib/worker.cjs": "cacc573e51f6c37084d06bb04b8aa74f41f96615ad38055b2594f88083406681",
 			"lib/index.js": "4d4e99e13a1c2cffec557d01071f5cf2c811fb0904f3cd0b4b67655a3334e160"
-		}
+		},
+		"loadingDigest": "8475d09a64f63d103c07ab7346d7098ab2e0df44b1b1e2336be9d3cf4ea5c319"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-projection",
@@ -1058,7 +1104,8 @@ var packages = [
 			"lib/index.js": "0893b519f2b8c9957e229e159ca3da0e84135b7574251eba1cd5e2b6e2158808",
 			"lib/types/index.js": "42eb631f64dff8d190095e0cc0cc7aa746b688d52d4ccf7abceabf1362b2c3ea",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "e0d506e976f0c0820d6769bf9398dc786e066a546fa1d12d62e6431b6239389f"
 	},
 	{
 		"name": "@deepseek-ai/dsh-shell",
@@ -1070,7 +1117,8 @@ var packages = [
 			"lib/index.js": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
 			"package.json": "a2967633b7fe3ab32cbdf807e1bea04363b7441bc2b802f2257819abd12b28e8"
 		},
-		"programs": { "lib/index.js": "acac3b2a24b6341887e38401f79b0c311147d1778c0dce9847801cbc3aa88c93" }
+		"programs": { "lib/index.js": "acac3b2a24b6341887e38401f79b0c311147d1778c0dce9847801cbc3aa88c93" },
+		"loadingDigest": "109d3d27b92d74b80e41e5ef60bd42dd1d378c6b759288d1a929b6f631552918"
 	},
 	{
 		"name": "@deepseek-ai/dsh-shell-env",
@@ -1082,7 +1130,8 @@ var packages = [
 			"lib/index.js": "82b1e6663968307a387fd7f300ff9db5e3c1ff707b32953da82c3dfa12024364",
 			"package.json": "01eea37e115c18bfbba18c6976e2455895fbac1a9298a42d90b068769be6d319"
 		},
-		"programs": { "lib/index.js": "4791ba7c803bbeb87fb45fe6b6c13d319fb8ad39d5bacf0c88ff2436676a0077" }
+		"programs": { "lib/index.js": "4791ba7c803bbeb87fb45fe6b6c13d319fb8ad39d5bacf0c88ff2436676a0077" },
+		"loadingDigest": "2fe7ec6308e351f64ec605f2bacf7d77d44b529d4704e727c9df17267ee90acd"
 	},
 	{
 		"name": "@deepseek-ai/dsh-subprocess-local",
@@ -1102,7 +1151,8 @@ var packages = [
 			"lib/output.js": "847fa903d1373f700f9c3455c93432e35052bbb93eb6ebd57aeedd82a8e291d7",
 			"lib/runner-launch-B2zsQ1Dz.js": "37e251b01260c34613374e70b997cc51dd0015523bfc42037ee5fd8a25431890",
 			"lib/runner.js": "53bc0d336ca33fb2cf4ff08916149f1f3230e09c7be3cd1d9f6c47f2a19ad661"
-		}
+		},
+		"loadingDigest": "727cfa9aa41b1940d3b6d61dd5827b5ba6c86046f8e22cd8f7b171591459a889"
 	},
 	{
 		"name": "@deepseek-ai/dsh-system-prompt",
@@ -1118,7 +1168,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "f143b76b0ac707d4b881859deb979884de738230594f57f3e0da7960ab252f96",
 			"lib/invariant.js": "c4b2b4ca734001b7b84295bb0fbea061eeae3303b1c0412da41d3a56ec57feb1"
-		}
+		},
+		"loadingDigest": "94fbc4352b4fb7c9b04e0d3eb1405f3a68a844b74ad988f39161ba98f521aeab"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-bash",
@@ -1130,7 +1181,8 @@ var packages = [
 			"lib/index.js": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
 			"package.json": "0e3f1f40650fffaf358eaebd6cdb7dc4fb11be4508fc068bc35358ea0c4cd5fc"
 		},
-		"programs": { "lib/index.js": "60a0584841178397132ea6861531b6f75d5f266ef6b0227624f918ba0d3e8de6" }
+		"programs": { "lib/index.js": "60a0584841178397132ea6861531b6f75d5f266ef6b0227624f918ba0d3e8de6" },
+		"loadingDigest": "5fb429f1ed7099b2a8e6a1d24994321985aae12d8de58bcfcefcd97a54f08a3e"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-fs",
@@ -1142,7 +1194,8 @@ var packages = [
 			"lib/index.js": "66742231de99695b98400cdbc7bcf47b8ef2bf24600cf86f66bb35591981427f",
 			"package.json": "e5cac7e89436d03212ea527ce8a43fc0603228a1c5abebaa1bbc0f080603e2cf"
 		},
-		"programs": { "lib/index.js": "6a1a2ef79f388e46436ed703e7ecc083c5d1329d49d16bbe9fb9cc9f15464312" }
+		"programs": { "lib/index.js": "6a1a2ef79f388e46436ed703e7ecc083c5d1329d49d16bbe9fb9cc9f15464312" },
+		"loadingDigest": "61ef2cd955dd990b1820ba04bfd1540b3b7476fc3180a5f080b4fc8d27a168da"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-goal",
@@ -1154,7 +1207,8 @@ var packages = [
 			"lib/index.js": "7220fa7b5b7c95c94377ac32c6b01ecac5b4853d9dec3a48ab17d371cda63e6c",
 			"package.json": "185e65b45116b1d1b8ea1cc2f9eede2b3551a1f2d9b851a7ae8716eb2fc4d1f0"
 		},
-		"programs": { "lib/index.js": "1d2190e8352f2a3cd78f8df8c8b23d9e6ee4223483a72322ea2fb0ba5f8f3963" }
+		"programs": { "lib/index.js": "1d2190e8352f2a3cd78f8df8c8b23d9e6ee4223483a72322ea2fb0ba5f8f3963" },
+		"loadingDigest": "5eaf4abf59e453f00b1ac8077c8e636b2bac5d75e92bfbdd78fbd8a92d98773e"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-jobs",
@@ -1166,7 +1220,8 @@ var packages = [
 			"lib/index.js": "660066155801b20c67e6e288820961a365fe65738ffee1a16e50a2394ac9c7c6",
 			"package.json": "d0b6f47c0ae26f9b3c7a3ef3a71d7b4d80be8c3be22704b8b3eec1c8053a6d55"
 		},
-		"programs": { "lib/index.js": "b45d13d983e98d28aa8164d7997c125d1c28bae8976784c8e235bf8430224e8b" }
+		"programs": { "lib/index.js": "b45d13d983e98d28aa8164d7997c125d1c28bae8976784c8e235bf8430224e8b" },
+		"loadingDigest": "351320b650ef0f38efa22884cdfec1903e72ec55b9393d80eae8e7851baa1010"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-pwsh",
@@ -1178,7 +1233,8 @@ var packages = [
 			"lib/index.js": "59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c",
 			"package.json": "0ab2225df3c4b818c74e6398f6c41e5d97013459c8f0fdc9388b40178a9d508e"
 		},
-		"programs": { "lib/index.js": "685e36eb7326cedc2da4792c7492c2081049ef2c9bb855e9c36d5c7b60b6b645" }
+		"programs": { "lib/index.js": "685e36eb7326cedc2da4792c7492c2081049ef2c9bb855e9c36d5c7b60b6b645" },
+		"loadingDigest": "fdb4841ece36f7e32e53b8774aa1f4c5122bbfa5e6333d7a7eddc1a7b2927925"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tools",
@@ -1214,7 +1270,8 @@ var packages = [
 			"lib/types/testing.js": "8cc6510c709aaa842a557ed738a2fae77076504abe75b87d319bc4496d02ca7a",
 			"lib/types/ts-types.js": "43a7ec56be4712c758ab51258748ce5f019b54b96d2109f1a53c9238bb993d2b",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
-		}
+		},
+		"loadingDigest": "1cd29c06e528ffaaa72a892ee8f108aef2918520f3df43dd70c9ae41a39e21dd"
 	},
 	{
 		"name": "@deepseek-ai/dsh-user-approval",
@@ -1236,7 +1293,8 @@ var packages = [
 			"lib/types/index.js": "c061d0951a79a8795c3fdd304ff647c76ee199b48519586639cf065f87c7c4a1",
 			"lib/types/invariant.js": "9349b8ab02632d47cadb7c7e5397088781f0687dc5abe64ff60a48b67dcf518a",
 			"lib/types/types.js": "59c2241ede0957a0d4e93789fff530e3fc3eb5f358267346777eaf82a7fe0058"
-		}
+		},
+		"loadingDigest": "27ab167b7c7a7c54dee1f03f75dab32491fc8706e7877d683a1236643321616f"
 	},
 	{
 		"name": "@deepseek-ai/dsh-util-values",
@@ -1248,7 +1306,8 @@ var packages = [
 			"lib/index.js": "d291828dc4ff9c4b43a67e7ed81625c8f90ebdcf4de2f5cbf2c33f38208ce2b8",
 			"package.json": "7f5894851834711e41f529d77e95f8a74c4892e6fd07cafff0f50f359f0b7b4b"
 		},
-		"programs": { "lib/index.js": "d50891d897458af7cd7e4bc116748073d5f35421f7ffdf93536237454b521deb" }
+		"programs": { "lib/index.js": "d50891d897458af7cd7e4bc116748073d5f35421f7ffdf93536237454b521deb" },
+		"loadingDigest": "2cdd26d82f4bc97d962b1ff7dc419ca7fc6afdd4c382d5e4a8ff3861300befdd"
 	},
 	{
 		"name": "@deepseek-ai/dsh-web-app",
@@ -1264,7 +1323,8 @@ var packages = [
 		"programs": {
 			"lib/index.js": "875b581fb8a2918f226d082e98119488a8f229239effe9fe0ec8f79536730561",
 			"lib/startup.js": "f1aba5df366d09c63960d8b8a8be6699e3ddd1b9d8a2baf841794190d9c49368"
-		}
+		},
+		"loadingDigest": "1ef78bb1d0084433fefe46ab2589207a1b425d0ddcd83faa0800a5096b483485"
 	}
 ];
 
@@ -8369,17 +8429,48 @@ function hostProgramDigest(source) {
 	});
 	return createHash("sha256").update(normalized).digest("hex");
 }
+/** Ordered Node loading fields: export/import condition key order matters.
+* Version and descriptive metadata do not affect entry selection. */
+function hostManifestLoadingDigest(source) {
+	const manifest = JSON.parse(source);
+	const loading = Object.fromEntries([
+		"name",
+		"type",
+		"main",
+		"exports",
+		"imports",
+		"dependencies",
+		"peerDependencies",
+		"peerDependenciesMeta",
+		"optionalDependencies"
+	].filter((key) => Object.hasOwn(manifest, key)).map((key) => [key, manifest[key]]));
+	return createHash("sha256").update(JSON.stringify(loading)).digest("hex");
+}
 
 //#endregion
 //#region src/domain/host-contract-probe.ts
-const HOST_CONTRACT_SCHEMA = "guard-host-contract/v1";
+const HOST_CONTRACT_SCHEMA = "guard-host-contract/v2";
+const HOST_CONTRACT_CONSUMERS = [
+	"@deepseek-ai/cordis",
+	"@deepseek-ai/dsh-session",
+	"@deepseek-ai/dsh-agent",
+	"@deepseek-ai/dsh-agent-loop",
+	"@deepseek-ai/dsh-tools",
+	"@deepseek-ai/dsh-commands",
+	"@deepseek-ai/dsh-llm",
+	"@deepseek-ai/dsh-session-persistence",
+	"@deepseek-ai/dsh-session-persistence-jsonl",
+	"@deepseek-ai/dsh-session-projection",
+	"@deepseek-ai/dsh-goal",
+	"@deepseek-ai/dsh-tool-goal"
+];
 /** The trusted driver is isolated from downloaded code. No host app, provider,
 * install script, user profile or credential is present in this process. */
 const DRIVER = String.raw`
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { syncBuiltinESMExports, createRequire } from 'node:module';
 import dgram from 'node:dgram'; import http2 from 'node:http2';
 import net from 'node:net'; import tls from 'node:tls'; import http from 'node:http'; import https from 'node:https'; import dns from 'node:dns';
 const dnsPrototypes=[dns.Resolver.prototype,dns.promises.Resolver.prototype];
@@ -8391,8 +8482,11 @@ for(const prototype of dnsPrototypes)for(const key of Object.getOwnPropertyNames
 globalThis.fetch=deny; globalThis.WebSocket=undefined; syncBuiltinESMExports();
 const spec=JSON.parse(readFileSync(join(process.cwd(),'probe.json'),'utf8'));
 const checks=[],failures=[];const check=(id,value)=>{if(!value)throw new Error(id);checks.push(id)};
-const load=(name)=>import(pathToFileURL(join(process.cwd(),'node_modules',name,'lib/index.js')).href);
-for(const name of spec.targets){
+const require=createRequire(import.meta.url);
+const load=(name)=>spec.lane==='require'?Promise.resolve(require(name)):import(name);
+for(const name of spec.targets){try{const required=realpathSync(require.resolve(name)),imported=realpathSync(fileURLToPath(import.meta.resolve(name)));check('loading.dual_route:'+name,required===imported)}catch{failures.push('host_contract_entry_incompatible:'+name)}}
+if(spec.lane==='resolve')checks.push('loading.require.behavior_unavailable');else checks.push('loading.'+spec.lane+'.behavior');
+for(const name of spec.lane==='resolve'?[]:spec.targets){
  let behavior=false;
  try{
   const m=await load(name);
@@ -8491,7 +8585,7 @@ for(const name of spec.targets){
   }
  }catch{failures.push(name==='@deepseek-ai/dsh-session'?'host_contract_session_incompatible':name.startsWith('@deepseek-ai/dsh-goal')||name==='@deepseek-ai/dsh-tool-goal'?'host_contract_goal_qualification_required':(behavior?'host_contract_behavior_incompatible:':'host_contract_api_incompatible:')+name)}
 }
-console.log('DSH_CONTRACT_RESULT='+JSON.stringify({schema:'guard-host-contract/v1',checks:checks.sort(),failures:failures.sort()}));
+console.log('DSH_CONTRACT_RESULT='+JSON.stringify({schema:'guard-host-contract/v2',checks:checks.sort(),failures:failures.sort()}));
 `;
 function runHostContractProbe(archives, targets) {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "guard-host-contract-")));
@@ -8502,28 +8596,43 @@ function runHostContractProbe(archives, targets) {
 			mkdirSync(dirname(path$1), { recursive: true });
 			writeFileSync(path$1, content);
 		}
-		writeFileSync(join(root, "probe.json"), JSON.stringify({ targets }));
 		writeFileSync(join(root, "probe.mjs"), DRIVER);
 		const env = {};
 		if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
-		const child = spawnSync(process.execPath, [
-			...hostNodeConditions().childArgs,
-			process.allowedNodeEnvironmentFlags.has("--permission") ? "--permission" : "--experimental-permission",
-			`--allow-fs-read=${root}`,
-			join(root, "probe.mjs")
-		], {
-			cwd: root,
-			env,
-			encoding: "utf8",
-			timeout: 2e4,
-			maxBuffer: 128 * 1024,
-			windowsHide: true
-		});
-		const line = child.stdout?.trim().split("\n").at(-1);
-		if (child.status !== 0 || child.error || !line?.startsWith("DSH_CONTRACT_RESULT=")) throw new Error("host_contract_probe_isolation_unavailable");
-		const result = JSON.parse(line.slice(20));
-		if (result.schema !== HOST_CONTRACT_SCHEMA || !Array.isArray(result.checks) || !Array.isArray(result.failures)) throw new Error("host_contract_probe_result_invalid");
-		return result;
+		const conditions = hostNodeConditions();
+		const combined = {
+			schema: HOST_CONTRACT_SCHEMA,
+			checks: [],
+			failures: []
+		};
+		for (const lane of ["import", conditions.requireModule ? "require" : "resolve"]) {
+			writeFileSync(join(root, "probe.json"), JSON.stringify({
+				targets,
+				lane
+			}));
+			const child = spawnSync(process.execPath, [
+				...conditions.childArgs,
+				process.allowedNodeEnvironmentFlags.has("--permission") ? "--permission" : "--experimental-permission",
+				`--allow-fs-read=${root}`,
+				join(root, "probe.mjs")
+			], {
+				cwd: root,
+				env,
+				encoding: "utf8",
+				timeout: 2e4,
+				maxBuffer: 128 * 1024,
+				windowsHide: true
+			});
+			const line = child.stdout?.trim().split("\n").at(-1);
+			if (child.status !== 0 || child.error || !line?.startsWith("DSH_CONTRACT_RESULT=")) throw new Error("host_contract_probe_isolation_unavailable");
+			const result = JSON.parse(line.slice(20));
+			if (result.schema !== HOST_CONTRACT_SCHEMA || !Array.isArray(result.checks) || !Array.isArray(result.failures)) throw new Error("host_contract_probe_result_invalid");
+			combined.checks.push(...result.checks, ...result.checks.map((check) => "lane:" + lane + ":" + check));
+			combined.failures.push(...result.failures);
+		}
+		combined.checks = [...new Set(combined.checks)].sort();
+		combined.failures = [...new Set(combined.failures)].sort();
+		return combined;
 	} finally {
 		rmSync(root, {
 			recursive: true,
@@ -8675,12 +8784,11 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 	};
 	for (const row$3 of rows) packages$1.push(await acquire(row$3));
 	if (!options?.profileRoot) return fail("host_trust_receipt_root_missing");
-	const targets = [], checks = [];
-	for (const row$3 of packages$1) {
+	const targets = [], checks = [], equivalent = /* @__PURE__ */ new Set();
+	const reviewedEquivalent = (row$3, files) => {
 		const reference = packages.find((p) => p.name === row$3.name);
-		if (!reference) return fail("host_trust_identity_invalid");
-		const files = archives.find((a) => a.name === row$3.name).files;
-		if (Object.entries(reference.modules).filter(([file]) => file !== "package.json").every(([file, digest$1]) => {
+		if (!reference) return false;
+		return hostManifestLoadingDigest(files["package.json"].toString()) === reference.loadingDigest && Object.entries(reference.modules).filter(([file]) => file !== "package.json").every(([file, digest$1]) => {
 			if (!files[file]) return false;
 			if (row$3.modules[file] === digest$1) return true;
 			const programs = reference.programs;
@@ -8689,10 +8797,15 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			} catch {
 				return false;
 			}
-		})) checks.push("reviewed_program_equivalence:" + row$3.name);
+		});
+	};
+	for (const row$3 of packages$1) {
+		if (!packages.find((p) => p.name === row$3.name)) return fail("host_trust_identity_invalid");
+		const files = archives.find((a) => a.name === row$3.name).files;
+		if (reviewedEquivalent(row$3, files)) equivalent.add(row$3.name);
 		else targets.push(row$3.name);
 	}
-	const visited = /* @__PURE__ */ new Set(), queue = [...targets];
+	const visited = /* @__PURE__ */ new Set(), queue = [...new Set([...targets, ...packages$1.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name)).map((p) => p.name)])];
 	while (queue.length) {
 		const name = queue.shift();
 		if (visited.has(name)) continue;
@@ -8712,7 +8825,24 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			queue.push(dependency);
 		}
 	}
-	const result = targets.length ? runHostContractProbe(archives, targets) : {
+	for (const row$3 of dependencies.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name))) if (reviewedEquivalent(row$3, archives.find((a) => a.name === row$3.name).files)) equivalent.add(row$3.name);
+	else targets.push(row$3.name);
+	const graphEquivalent = (name, seen = /* @__PURE__ */ new Set()) => {
+		if (seen.has(name)) return true;
+		seen.add(name);
+		if (!equivalent.has(name)) return false;
+		const archive = archives.find((a) => a.name === name);
+		const manifest = JSON.parse(archive.files["package.json"].toString());
+		return Object.keys({
+			...manifest.dependencies,
+			...manifest.peerDependencies
+		}).filter((n) => !manifest.peerDependenciesMeta?.[n]?.optional || n in (manifest.dependencies ?? {})).every((n) => graphEquivalent(n, seen));
+	};
+	for (const row$3 of [...packages$1, ...dependencies.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name))]) if (equivalent.has(row$3.name)) if (HOST_CONTRACT_CONSUMERS.includes(row$3.name) && !graphEquivalent(row$3.name)) {
+		targets.push(row$3.name);
+		checks.push("reviewed_program_bytes:" + row$3.name);
+	} else checks.push("reviewed_program_equivalence:" + row$3.name);
+	const result = targets.length ? runHostContractProbe(archives, [...new Set(targets)]) : {
 		schema: HOST_CONTRACT_SCHEMA,
 		checks: [],
 		failures: []
@@ -9071,7 +9201,8 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, ex
 				graph.packages.set(expected.name, {
 					root,
 					manifest,
-					files: Object.keys(computedDigests)
+					files: Object.keys(computedDigests),
+					independentLanes: !!expectations && !CRITICAL_NAMES.includes(expected.name)
 				});
 				seen.add(expected.name);
 			}

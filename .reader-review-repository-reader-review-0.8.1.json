@@ -34,16 +34,16 @@
       "path": "docs/COMPATIBILITY.md",
       "role": "readme",
       "language": "default",
-      "sha256": "40558bd85b4b32b721a13dce042d7d35832d9e87c560d2642ad7851aef76331c"
+      "sha256": "465be5d59e57dab232ed4077d3b4d687f81434e2460cad707278981028820caa"
     },
     {
       "path": "docs/HOST_LOCK_UPGRADE.md",
       "role": "readme",
       "language": "default",
-      "sha256": "2c6a874caac7ff93355927799439d26a1868ce018758214b741a436c43a2d41e"
+      "sha256": "7662d7dbf3b52a1f0243fb3894486615fcc6a14108ec37e121c9c3f1d137b34f"
     }
   ],
-  "document_set_sha256": "522f57e42a46a7eed7146d9c1f4adbbb3a7d5f60fad03b723fe91ca4c1b1afa9",
+  "document_set_sha256": "89bb60436078179193f1797171ba26990a3010f6a5ca3cc7c05e7afeb99c2a11",
   "method": {
     "kind": "cold_read",
     "implementation_context_used": false,
@@ -73,7 +73,7 @@
         "README.zh-CN.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "Both languages consistently instruct: stop the host, upgrade and install, inspect/inject/verify each profile, then start it when needed. The upgrade guide gives matching order, backup and supported readback; rebind probes do not boot DSH."
+      "note": "The stop/upgrade/install/inspect/inject/verify/start order remains consistent in both languages. References explain changed entry qualification, dependency binding, v1-to-v2 rebind and explicit CJS coverage without starting DSH."
     },
     {
       "id": "term_onboarding",
@@ -94,7 +94,7 @@
         "CHANGELOG.md",
         "CHANGELOG.zh-CN.md"
       ],
-      "note": "Baseline source harness, finite registry/API probes, synthetic future graphs and pending native artifact acceptance are separate. Issued receipts bind program bytes and startup conditions; pnpm installation does not enforce the floor."
+      "note": "v2 binds actual entries and acquired dependencies; separate bare-import/require probes and explicit resolution-only CJS coverage are distinguished from native acceptance. Old v1 receipts require rebind; future native versions are not claimed."
     },
     {
       "id": "density_and_order",

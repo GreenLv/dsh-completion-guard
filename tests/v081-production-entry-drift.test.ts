@@ -35,13 +35,14 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
 }))
 vi.mock('../manifests/rc020-rc1-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
-  const { hostProgramDigest } = await import('../src/domain/host-contract-program.js')
+  const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
   return { default: { ...source.default, packages: source.default.packages.map((p) => ({
     ...p, sha256: '0'.repeat(64), tarball: '',
     // The published audit hashes package.json too: the manifest the JSON
     // parsers read and the bytes the digest check reads are the same file.
+    loadingDigest: hostManifestLoadingDigest(canonicalManifest(p.name as string, p.version as string)),
     programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
     modules: {
       'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),

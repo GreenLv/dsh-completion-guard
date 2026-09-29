@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export interface HostNodeConditions { require: string[]; import: string[]; childArgs: string[]; digest: string }
+export interface HostNodeConditions { require: string[]; import: string[]; childArgs: string[]; requireModule: boolean; digest: string }
 /** Node's NODE_OPTIONS lexer is not a shell. Accept its bounded double-quote
  * form; refuse ambiguous escapes/quotes instead of dropping a condition. */
 function optionWords(text: string): string[] {
@@ -41,7 +41,7 @@ export function resolveHostNodeConditions(argv: readonly string[], nodeOptions: 
   const require = [...new Set([...common, 'require', 'default'])].sort()
   const esm = [...new Set([...common, 'import', 'default'])].sort()
   const childArgs = [...(addons ? [] : ['--no-addons']), ...(requireModule ? [] : ['--no-experimental-require-module']), ...[...custom].sort().map((value) => `--conditions=${value}`)]
-  return { require, import: esm, childArgs, digest: createHash('sha256').update(JSON.stringify({ require, import: esm })).digest('hex') }
+  return { require, import: esm, childArgs, requireModule, digest: createHash('sha256').update(JSON.stringify({ require, import: esm, requireModule })).digest('hex') }
 }
 // Capture startup inputs once: later environment edits do not change the
 // conditions this Node process already activated. New processes requalify.

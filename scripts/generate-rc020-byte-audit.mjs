@@ -41,12 +41,15 @@ try {
     const prefix = 'package/'
     const list = execFileSync('tar', ['-tzf', join(work, binding.name.replaceAll('/', '_') + '.tgz')], { encoding: 'utf8' })
       .split('\n').filter((line) => line.startsWith(prefix + 'lib/') && /\.(?:[cm]?js)$/.test(line))
-    const modules = {}, programs = {}
+    const modules = {}, programs = {}; let loadingDigest
     for (const entry of [...list, prefix + 'package.json'].sort()) {
       const content = execFileSync('tar', ['-xzf', join(work, binding.name.replaceAll('/', '_') + '.tgz'), '-O', entry], { maxBuffer: 64 * 1024 * 1024 })
       const file = entry.slice(prefix.length)
       modules[file] = createHash('sha256').update(content).digest('hex')
-      if (file !== 'package.json') {
+      if (file === 'package.json') {
+        const manifest = JSON.parse(content), fields = ['name', 'type', 'main', 'exports', 'imports', 'dependencies', 'peerDependencies', 'peerDependenciesMeta', 'optionalDependencies']
+        loadingDigest = createHash('sha256').update(JSON.stringify(Object.fromEntries(fields.filter(key => Object.hasOwn(manifest, key)).map(key => [key, manifest[key]])))).digest('hex')
+      } else {
         const ast = parse(content.toString('utf8'), { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true })
         const normalized = JSON.stringify(ast, function (key, value) { return (['start', 'end', 'loc'].includes(key) && typeof this.type === 'string') || (key === 'raw' && this.type === 'Literal') ? undefined : typeof value === 'bigint' ? { bigint: String(value) } : value })
         programs[file] = createHash('sha256').update(normalized).digest('hex')
@@ -60,6 +63,7 @@ try {
       sha256: tarballSha,
       modules,
       programs,
+      loadingDigest,
     }
   })
   const manifest = {

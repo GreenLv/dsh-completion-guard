@@ -13,3 +13,12 @@ export function hostProgramDigest(source: string): string {
   })
   return createHash('sha256').update(normalized).digest('hex')
 }
+
+/** Ordered Node loading fields: export/import condition key order matters.
+ * Version and descriptive metadata do not affect entry selection. */
+export function hostManifestLoadingDigest(source: string): string {
+  const manifest = JSON.parse(source) as Record<string, unknown>
+  const fields = ['name', 'type', 'main', 'exports', 'imports', 'dependencies', 'peerDependencies', 'peerDependenciesMeta', 'optionalDependencies']
+  const loading = Object.fromEntries(fields.filter(key => Object.hasOwn(manifest, key)).map(key => [key, manifest[key]]))
+  return createHash('sha256').update(JSON.stringify(loading)).digest('hex')
+}

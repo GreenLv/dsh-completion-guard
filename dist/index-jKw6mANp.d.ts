@@ -2429,7 +2429,7 @@ interface HostAuditSession {
 }
 //#endregion
 //#region src/domain/host-contract-probe.d.ts
-declare const HOST_CONTRACT_SCHEMA: "guard-host-contract/v1";
+declare const HOST_CONTRACT_SCHEMA: "guard-host-contract/v2";
 //#endregion
 //#region src/domain/host-trust.d.ts
 interface HostTrustedPackage extends PackageRow {
@@ -2441,7 +2441,7 @@ interface HostTrustedPackage extends PackageRow {
 interface HostRebindTrust {
   schema: "dsh-host-registry-trust/v1";
   source: "https://registry.npmjs.org/";
-  qualification: "guard-host-contract/v1";
+  qualification: "guard-host-contract/v2";
   packages: HostTrustedPackage[];
   probeDependencies?: HostTrustedPackage[];
   contract: {

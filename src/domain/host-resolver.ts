@@ -407,7 +407,10 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
           if (expected.modules && expected.modules[rel] !== undefined && expected.modules[rel] !== digest) return false
           computedDigests[rel] = digest
         }
-        graph.packages.set(expected.name, { root, manifest, files: Object.keys(computedDigests) })
+        // Auxiliary libraries may publish distinct CJS/ESM implementations.
+        // Both qualified file sets remain authenticated; critical adapter
+        // packages retain their one-target dual-lane contract.
+        graph.packages.set(expected.name, { root, manifest, files: Object.keys(computedDigests), independentLanes: !!expectations && !CRITICAL_NAMES.includes(expected.name) })
         seen.add(expected.name)
       }
     }

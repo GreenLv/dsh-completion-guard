@@ -4,16 +4,17 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-export const HOST_CONTRACT_SCHEMA: 'guard-host-contract/v1' = 'guard-host-contract/v1'
+export const HOST_CONTRACT_SCHEMA: 'guard-host-contract/v2' = 'guard-host-contract/v2'
+export const HOST_CONTRACT_CONSUMERS = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session-persistence', '@deepseek-ai/dsh-session-persistence-jsonl', '@deepseek-ai/dsh-session-projection', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'] as const
 export interface ProbeArchive { name: string; files: Record<string, Buffer> }
 export interface HostContractProbeResult { schema: typeof HOST_CONTRACT_SCHEMA; checks: string[]; failures: string[] }
 /** The trusted driver is isolated from downloaded code. No host app, provider,
  * install script, user profile or credential is present in this process. */
 const DRIVER = String.raw`
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { syncBuiltinESMExports, createRequire } from 'node:module';
 import dgram from 'node:dgram'; import http2 from 'node:http2';
 import net from 'node:net'; import tls from 'node:tls'; import http from 'node:http'; import https from 'node:https'; import dns from 'node:dns';
 const dnsPrototypes=[dns.Resolver.prototype,dns.promises.Resolver.prototype];
@@ -25,8 +26,11 @@ for(const prototype of dnsPrototypes)for(const key of Object.getOwnPropertyNames
 globalThis.fetch=deny; globalThis.WebSocket=undefined; syncBuiltinESMExports();
 const spec=JSON.parse(readFileSync(join(process.cwd(),'probe.json'),'utf8'));
 const checks=[],failures=[];const check=(id,value)=>{if(!value)throw new Error(id);checks.push(id)};
-const load=(name)=>import(pathToFileURL(join(process.cwd(),'node_modules',name,'lib/index.js')).href);
-for(const name of spec.targets){
+const require=createRequire(import.meta.url);
+const load=(name)=>spec.lane==='require'?Promise.resolve(require(name)):import(name);
+for(const name of spec.targets){try{const required=realpathSync(require.resolve(name)),imported=realpathSync(fileURLToPath(import.meta.resolve(name)));check('loading.dual_route:'+name,required===imported)}catch{failures.push('host_contract_entry_incompatible:'+name)}}
+if(spec.lane==='resolve')checks.push('loading.require.behavior_unavailable');else checks.push('loading.'+spec.lane+'.behavior');
+for(const name of spec.lane==='resolve'?[]:spec.targets){
  let behavior=false;
  try{
   const m=await load(name);
@@ -125,7 +129,7 @@ for(const name of spec.targets){
   }
  }catch{failures.push(name==='@deepseek-ai/dsh-session'?'host_contract_session_incompatible':name.startsWith('@deepseek-ai/dsh-goal')||name==='@deepseek-ai/dsh-tool-goal'?'host_contract_goal_qualification_required':(behavior?'host_contract_behavior_incompatible:':'host_contract_api_incompatible:')+name)}
 }
-console.log('DSH_CONTRACT_RESULT='+JSON.stringify({schema:'guard-host-contract/v1',checks:checks.sort(),failures:failures.sort()}));
+console.log('DSH_CONTRACT_RESULT='+JSON.stringify({schema:'guard-host-contract/v2',checks:checks.sort(),failures:failures.sort()}));
 `
 
 export function runHostContractProbe(archives: readonly ProbeArchive[], targets: readonly string[]): HostContractProbeResult {
@@ -137,17 +141,25 @@ export function runHostContractProbe(archives: readonly ProbeArchive[], targets:
       const path = join(root, 'node_modules', archive.name, file)
       mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content)
     }
-    writeFileSync(join(root, 'probe.json'), JSON.stringify({ targets }))
     writeFileSync(join(root, 'probe.mjs'), DRIVER)
     const env: Record<string, string> = {}
     if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot
-    const child = spawnSync(process.execPath, [...hostNodeConditions().childArgs, process.allowedNodeEnvironmentFlags.has('--permission') ? '--permission' : '--experimental-permission', `--allow-fs-read=${root}`, join(root, 'probe.mjs')], {
-      cwd: root, env, encoding: 'utf8', timeout: 20_000, maxBuffer: 128 * 1024, windowsHide: true,
-    })
-    const line = child.stdout?.trim().split('\n').at(-1)
-    if (child.status !== 0 || child.error || !line?.startsWith('DSH_CONTRACT_RESULT=')) throw new Error('host_contract_probe_isolation_unavailable')
-    const result = JSON.parse(line.slice('DSH_CONTRACT_RESULT='.length)) as HostContractProbeResult
-    if (result.schema !== HOST_CONTRACT_SCHEMA || !Array.isArray(result.checks) || !Array.isArray(result.failures)) throw new Error('host_contract_probe_result_invalid')
-    return result
+    const conditions = hostNodeConditions()
+    const combined: HostContractProbeResult = { schema: HOST_CONTRACT_SCHEMA, checks: [], failures: [] }
+    // Separate processes avoid cross-lane module-cache or prototype mutations.
+    for (const lane of ['import', conditions.requireModule ? 'require' : 'resolve']) {
+      writeFileSync(join(root, 'probe.json'), JSON.stringify({ targets, lane }))
+      const child = spawnSync(process.execPath, [...conditions.childArgs, process.allowedNodeEnvironmentFlags.has('--permission') ? '--permission' : '--experimental-permission', `--allow-fs-read=${root}`, join(root, 'probe.mjs')], {
+        cwd: root, env, encoding: 'utf8', timeout: 20_000, maxBuffer: 128 * 1024, windowsHide: true,
+      })
+      const line = child.stdout?.trim().split('\n').at(-1)
+      if (child.status !== 0 || child.error || !line?.startsWith('DSH_CONTRACT_RESULT=')) throw new Error('host_contract_probe_isolation_unavailable')
+      const result = JSON.parse(line.slice('DSH_CONTRACT_RESULT='.length)) as HostContractProbeResult
+      if (result.schema !== HOST_CONTRACT_SCHEMA || !Array.isArray(result.checks) || !Array.isArray(result.failures)) throw new Error('host_contract_probe_result_invalid')
+      combined.checks.push(...result.checks, ...result.checks.map(check => 'lane:' + lane + ':' + check)); combined.failures.push(...result.failures)
+    }
+    combined.checks = [...new Set(combined.checks)].sort()
+    combined.failures = [...new Set(combined.failures)].sort()
+    return combined
   } finally { rmSync(root, { recursive: true, force: true }) }
 }

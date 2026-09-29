@@ -4,8 +4,8 @@ import baseline from '../../manifests/rc020-rc1-byte-audit.json' with { type: 'j
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
-import { hostProgramDigest } from './host-contract-program.js'
-import { HOST_CONTRACT_SCHEMA, runHostContractProbe, type ProbeArchive } from './host-contract-probe.js'
+import { hostProgramDigest, hostManifestLoadingDigest } from './host-contract-program.js'
+import { HOST_CONTRACT_SCHEMA, HOST_CONTRACT_CONSUMERS, runHostContractProbe, type ProbeArchive } from './host-contract-probe.js'
 import { hostNodeConditions } from './host-node-conditions.js'
 import { parseHostVersion } from './host-version.js'
 
@@ -18,7 +18,7 @@ export interface HostTrustedPackage extends PackageRow {
 export interface HostRebindTrust {
   schema: 'dsh-host-registry-trust/v1'
   source: 'https://registry.npmjs.org/'
-  qualification: 'guard-host-contract/v1'
+  qualification: 'guard-host-contract/v2'
   packages: HostTrustedPackage[]
   probeDependencies?: HostTrustedPackage[]
   contract: { schema: typeof HOST_CONTRACT_SCHEMA; receiptDigest: string; bindingDigest: string; conditionsDigest: string }
@@ -160,24 +160,30 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
   }
   for (const row of rows) packages.push(await acquire(row))
   if (!options?.profileRoot) return fail('host_trust_receipt_root_missing')
-  const targets: string[] = [], checks: string[] = []
-  for (const row of packages) {
-    const reference = baseline.packages.find((p) => p.name === row.name)
-    if (!reference) return fail('host_trust_identity_invalid')
-    const files = archives.find((a) => a.name === row.name)!.files
-    const same = Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {
+  const targets: string[] = [], checks: string[] = [], equivalent = new Set<string>()
+  const reviewedEquivalent = (row: HostTrustedPackage, files: Record<string, Buffer>): boolean => {
+    const reference = baseline.packages.find(p => p.name === row.name)
+    if (!reference) return false
+    return hostManifestLoadingDigest(files['package.json'].toString()) === (reference as unknown as { loadingDigest?: string }).loadingDigest
+      && Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {
       if (!files[file]) return false
       if (row.modules[file] === digest) return true
       const programs = (reference as unknown as { programs?: Record<string, string> }).programs
       try { return !!programs?.[file] && hostProgramDigest(files[file].toString('utf8')) === programs[file] } catch { return false }
     })
-    if (same) checks.push('reviewed_program_equivalence:' + row.name)
+  }
+  for (const row of packages) {
+    const reference = baseline.packages.find((p) => p.name === row.name)
+    if (!reference) return fail('host_trust_identity_invalid')
+    const files = archives.find((a) => a.name === row.name)!.files
+    const same = reviewedEquivalent(row, files)
+    if (same) equivalent.add(row.name)
     else targets.push(row.name)
   }
-  // Only changed consumed programs execute. Follow their actual installed
+  // Follow every consumed adapter's actual installed
   // imports to independently acquired dependency identities; no range/latest
   // selection and no local manifest/SRI assertion establishes provenance.
-  const visited = new Set<string>(), queue = [...targets]
+  const visited = new Set<string>(), queue = [...new Set([...targets, ...packages.filter(p => (HOST_CONTRACT_CONSUMERS as readonly string[]).includes(p.name)).map(p => p.name)])]
   while (queue.length) {
     const name = queue.shift()!
     if (visited.has(name)) continue
@@ -194,7 +200,27 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
       queue.push(dependency)
     }
   }
-  const result = targets.length ? runHostContractProbe(archives, targets) : { schema: HOST_CONTRACT_SCHEMA, checks: [], failures: [] }
+  for (const row of dependencies.filter(p => (HOST_CONTRACT_CONSUMERS as readonly string[]).includes(p.name))) {
+    if (reviewedEquivalent(row, archives.find(a => a.name === row.name)!.files)) equivalent.add(row.name)
+    else targets.push(row.name)
+  }
+  // Equivalence of an adapter's own old file is not equivalence of its
+  // dependency graph. Unknown/changed dependencies are exercised through the
+  // consumed adapters in both actual loading lanes and bound in the receipt.
+  const graphEquivalent = (name: string, seen = new Set<string>()): boolean => {
+    if (seen.has(name)) return true
+    seen.add(name)
+    if (!equivalent.has(name)) return false
+    const archive = archives.find(a => a.name === name)!
+    const manifest = JSON.parse(archive.files['package.json'].toString()) as { dependencies?: Record<string, string>; peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> }
+    return Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).filter(n => !manifest.peerDependenciesMeta?.[n]?.optional || n in (manifest.dependencies ?? {})).every(n => graphEquivalent(n, seen))
+  }
+  for (const row of [...packages, ...dependencies.filter(p => (HOST_CONTRACT_CONSUMERS as readonly string[]).includes(p.name))]) if (equivalent.has(row.name)) {
+    if ((HOST_CONTRACT_CONSUMERS as readonly string[]).includes(row.name) && !graphEquivalent(row.name)) {
+      targets.push(row.name); checks.push('reviewed_program_bytes:' + row.name)
+    } else checks.push('reviewed_program_equivalence:' + row.name)
+  }
+  const result = targets.length ? runHostContractProbe(archives, [...new Set(targets)]) : { schema: HOST_CONTRACT_SCHEMA, checks: [], failures: [] }
   const coreFailure = result.failures.find((code) => code !== 'host_contract_goal_qualification_required')
   if (coreFailure) return fail(coreFailure)
   const optional = result.failures.length ? targets.filter((name) => ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(name)) : []
