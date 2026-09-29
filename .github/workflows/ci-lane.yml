@@ -35,10 +35,10 @@ jobs:
       - name: Run tests
         if: inputs.runner != 'windows-latest'
         run: pnpm test
-      # Bound concurrent Git/filesystem fixtures on hosted Windows runners so
+      # Serialize Git/filesystem fixtures on hosted Windows runners so
       # Vitest can deliver worker updates without changing assertion timeouts.
       - name: Run Windows tests with bounded workers
         if: inputs.runner == 'windows-latest'
-        run: pnpm test --maxWorkers=2
+        run: pnpm test --maxWorkers=1 --no-file-parallelism
       - name: Test repair-family runner portability
         run: node --test tests/repair-families.node.mjs

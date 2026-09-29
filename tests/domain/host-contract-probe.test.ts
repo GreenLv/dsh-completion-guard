@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
 import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { createRequire } from 'node:module'
@@ -11,6 +12,10 @@ import { tmpdir } from 'node:os'
 import { acquireHostTrust, qualifyHostTrust } from '../../src/domain/host-trust.js'
 import { hostProgramDigest } from '../../src/domain/host-contract-program.js'
 import { auditedHostImplementation } from '../../src/domain/host-resolver.js'
+
+// Each case runs synchronous, confined Node children. Yield between cases so
+// worker RPC replies are processed even when this file takes over a minute.
+afterEach(async () => { await yieldToEventLoop() })
 
 /** Copies fixture SDK dependencies into the probe stage, never loads SDK code
  * in the oracle process. Registry provenance is tested at acquisition separately. */

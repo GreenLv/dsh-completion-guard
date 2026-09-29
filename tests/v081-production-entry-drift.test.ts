@@ -57,8 +57,8 @@ const VERSION = '1.0.0'
 const REGISTRY = 'https://registry.example.invalid/'
 
 const temporaryRoots: string[] = []
-afterEach(() => {
-  for (const root of temporaryRoots.splice(0)) rm(root, { recursive: true, force: true })
+afterEach(async () => {
+  await Promise.all(temporaryRoots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
 function makeHost() {
