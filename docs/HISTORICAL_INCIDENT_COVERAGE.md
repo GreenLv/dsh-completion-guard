@@ -1,4 +1,4 @@
-# Historical incident coverage (context-guard-incidents library)
+# Historical incident coverage
 
 Verification date: 2026-09-28 (two evidence rounds). The adjudication round
 ran its working tree on the `1e88176` lineage and the four adaptation cases it

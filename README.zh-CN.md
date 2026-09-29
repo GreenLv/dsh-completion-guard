@@ -4,7 +4,7 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.8.1 要求 DSH `0.2.0-rc.1` 和 Cordis `4.0.4`。** 请先升级 DSH，再安装本版本；Guard 首次启动时会自动重建宿主锁，运行 Guard 的每个 Profile 需重启一次。升级成功会读回 `supported` 宿主锁；其它读回表示 DSH 本体尚未升级到位。0.1.7.x 已不再支持。本版同时保留 0.7.1 的恢复反馈，在每次新鲜判定时按已发布字节重新校验宿主依赖路由，并理解新宿主的崩溃恢复工具结果（未知结果绝不计为成功）。
+> **0.8.1 要求 DSH `0.2.0-rc.1` 和 Cordis `4.0.4`。** 请先升级 DSH，再安装本版本，然后用随附的宿主锁工具（`inject` + `verify-dump`）为每个 Guard Profile 重建宿主锁并重启该 Profile。重建成功会读回 `supported`；`host_lock_version_below_minimum` 表示 DSH 版本仍低于下限，`host_lock_version_mismatch`/`host_lock_installed_graph_drift` 表示已安装依赖图与被审计身份不一致，`host_lock_migration_required` 表示工具运行时缺少 runtime/profile 配置。0.1.7.x 已不再支持。本版同时保留 0.7.1 的恢复反馈，在每次新鲜判定时按已发布字节重新校验宿主依赖路由，并理解新宿主的崩溃恢复工具结果（未知结果绝不计为成功）。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 

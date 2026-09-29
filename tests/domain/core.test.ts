@@ -1512,11 +1512,11 @@ describe('domain core', () => {
       { seq: 5, textContent: 'Updating..' },
       1,
       'E0001',
-      '/Users/lgr59/Documents/Github/codex-sync',
+      '/workspace/repo',
     )
     expect(pull.outcome).toBe('success')
-    expect(pull.subjects).toContain('/Users/lgr59/Documents/Github/codex-sync')
-    expect(pull.operations).toContainEqual({ op: 'run', path: '/Users/lgr59/Documents/Github/codex-sync' })
+    expect(pull.subjects).toContain('/workspace/repo')
+    expect(pull.operations).toContainEqual({ op: 'run', path: '/workspace/repo' })
     expect(pull.executables).toEqual(['git'])
     const readFile = evidenceFromPersistedToolResult(
       { callId: 'c2', name: 'read', arguments: JSON.stringify({ file_path: 'src/feature.ts' }) },
@@ -1570,7 +1570,7 @@ describe('domain core', () => {
   })
 
   it('v0.2: an install-and-restart task certifies with a shell run and a clean unittest', () => {
-    const cwd = '/Users/lgr59/Documents/Github/codex-sync'
+    const cwd = '/workspace/repo'
     const make = (command: string, callId: string) => ([
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '请帮我安装 dsh-dream-skin 换肤插件，重启 DSH' }], source: { kind: 'user' } } },
@@ -1592,7 +1592,7 @@ describe('domain core', () => {
   })
 
   it('v0.2: a macOS-style pull/apply task certifies with run evidence alone', () => {
-    const cwd = '/Users/lgr59/Documents/Github/codex-sync'
+    const cwd = '/workspace/repo'
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '拉取远端最近的两个更新，同步更新插件' }], source: { kind: 'user' } } },
@@ -1638,7 +1638,7 @@ describe('domain core', () => {
   })
 
   it('v0.2: an install task closes with a dsh CLI run or a clean state check', () => {
-    const cwd = '/Users/lgr59/Documents/Github/codex-sync'
+    const cwd = '/workspace/repo'
     const make = (command: string, callId: string) => ([
       { seq: 0, type: 'command/run', data: { commandId: 'c0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: 'Install package fixture@1.0.0 in profile web.' }], source: { kind: 'user' } } },
