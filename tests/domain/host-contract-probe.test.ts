@@ -258,23 +258,21 @@ describe('qualification of the actual active package entry', () => {
   })
 })
 
-it('qualifies dependency entries through actual resolution and rejects a broken Cordis dependency', async () => {
-  for (const broken of [false, true]) {
-    const archives = redirectedTools('unused', false), dependency = archives.find(a => a.name === '@deepseek-ai/cordis')!
-    const manifest = JSON.parse(dependency.files['package.json'].toString()); manifest.exports['.'] = './lib/alternate.js'
-    dependency.files['package.json'] = Buffer.from(JSON.stringify(manifest))
-    dependency.files['lib/alternate.js'] = Buffer.from("export * from './index.js';\n" + (broken ? "import {Context} from './index.js';Context.prototype.parallel=async()=>{};\n" : ''))
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'dependency-entry-')))
-    try {
-      if (broken) await expect(acquireToolsFixture(archives, root)).rejects.toThrow('host_contract_behavior_incompatible:@deepseek-ai/cordis')
-      else {
-        const trust = await acquireToolsFixture(archives, root)
-        expect(auditedHostImplementation(root, root, undefined, [...trust.packages, ...(trust.probeDependencies ?? [])])).toBe(false) // not yet installed
-        expect(toolsEntryOracle(archives, root)).toEqual({ isError: true, effects: 0 })
-        expect(auditedHostImplementation(root, root, undefined, [...trust.packages, ...(trust.probeDependencies ?? [])])).toBe(true)
-      }
-    } finally { rmSync(root, { recursive: true, force: true }) }
-  }
+it.each([['compatible', false], ['broken', true]] as const)('qualifies actual dependency entry: %s Cordis control', async (_label, broken) => {
+  const archives = redirectedTools('unused', false), dependency = archives.find(a => a.name === '@deepseek-ai/cordis')!
+  const manifest = JSON.parse(dependency.files['package.json'].toString()); manifest.exports['.'] = './lib/alternate.js'
+  dependency.files['package.json'] = Buffer.from(JSON.stringify(manifest))
+  dependency.files['lib/alternate.js'] = Buffer.from("export * from './index.js';\n" + (broken ? "import {Context} from './index.js';Context.prototype.parallel=async()=>{};\n" : ''))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'dependency-entry-')))
+  try {
+    if (broken) await expect(acquireToolsFixture(archives, root)).rejects.toThrow('host_contract_behavior_incompatible:@deepseek-ai/cordis')
+    else {
+      const trust = await acquireToolsFixture(archives, root)
+      expect(auditedHostImplementation(root, root, undefined, [...trust.packages, ...(trust.probeDependencies ?? [])])).toBe(false) // not yet installed
+      expect(toolsEntryOracle(archives, root)).toEqual({ isError: true, effects: 0 })
+      expect(auditedHostImplementation(root, root, undefined, [...trust.packages, ...(trust.probeDependencies ?? [])])).toBe(true)
+    }
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
 it('records resolution-only CJS coverage when this Node cannot require ESM', () => {
