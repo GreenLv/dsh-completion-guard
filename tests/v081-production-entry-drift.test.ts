@@ -20,6 +20,10 @@ import { applyPrivateLedger, readPrivateLedger } from '../src/domain/private-led
 import { acquireHostTrust, type HostRebindTrust } from '../src/domain/host-trust.js'
 import { createHostAuditSession } from '../src/domain/host-audit-session.js'
 
+// Full graph acquisition and several protected decisions invoke independently
+// bounded child probes. Budget the functional chain, not one Node startup.
+vi.setConfig({ testTimeout: 60_000 })
+
 // Real production ENTRIES over a real rc.2-shaped host: the same session
 // drives the registered checkpoint tool, the registered action tool (whose
 // publish decision crosses three host-lock gates) and the registered

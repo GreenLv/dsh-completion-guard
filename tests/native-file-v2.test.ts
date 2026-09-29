@@ -209,7 +209,7 @@ describe('native host file result and independent readback', () => {
       stateEvidenceIds: [pushState.id] }
     const pushCertificate = certifyCheckpoint(pushProjection, [pushBinding], 'C-native-push', false)
     expect(pushCertificate, JSON.stringify(pushCertificate.rejectedBindings)).toMatchObject({ status: 'certified' })
-  })
+  }, 30_000) // Includes fixture setup, two commits, push and independent Git queries.
   it('keeps future observations separate from a ready current test and later resume', async () => {
     const eventsFor = (roots: string[]) => {
       const events: Array<{ seq: number; type: string; data: unknown }> = [
@@ -492,11 +492,11 @@ describe('CGI-2026-042: one root commit-and-push authorization carries ordinary 
           expect(row.binding_template).toBeUndefined()
         }
       }
-    })
+    }, 30_000) // Each variant performs a complete local Git authorization chain.
 })
 
 
-describe('review: a Git operation cannot satisfy a different same-repository action', () => {
+describe('review: a Git operation cannot satisfy a different same-repository action', { timeout: 30_000 }, () => {
   async function observed(required: 'commit' | 'push', performed: 'commit' | 'push') {
     const root = await mkdtemp(join(tmpdir(), 'dsh-git-action-review-'))
     const remote = join(root, 'origin.git'); const work = join(root, 'work')
@@ -547,7 +547,7 @@ describe('review: a Git operation cannot satisfy a different same-repository act
   })
 })
 
-describe('review: a compound commit-and-push root satisfied by only one action', () => {
+describe('review: a compound commit-and-push root satisfied by only one action', { timeout: 30_000 }, () => {
   it('satisfies only the observed clause, keeps the other insufficient, and refuses certification', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-compound-partial-'))
     const remote = join(root, 'origin.git'); const work = join(root, 'work')

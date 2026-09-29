@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
 import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
@@ -12,6 +12,11 @@ import { tmpdir } from 'node:os'
 import { acquireHostTrust, qualifyHostTrust } from '../../src/domain/host-trust.js'
 import { hostProgramDigest } from '../../src/domain/host-contract-program.js'
 import { auditedHostImplementation } from '../../src/domain/host-resolver.js'
+
+// These functional cases stage an SDK graph and run multiple confined children,
+// each with its own unchanged 20s deadline. The whole-case budget must cover
+// both loading lanes and fixture I/O; it is not a host responsiveness threshold.
+vi.setConfig({ testTimeout: 60_000 })
 
 // Each case runs synchronous, confined Node children. Yield between cases so
 // worker RPC replies are processed even when this file takes over a minute.
