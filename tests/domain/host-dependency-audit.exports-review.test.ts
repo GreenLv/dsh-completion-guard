@@ -82,7 +82,10 @@ describe('fresh restricted exports interpreter Node equivalence', () => {
     const lib=join(f.source,'lib'), root=f.p.packages.get(dep)!.root
     for(const [local,fileName] of [['ok.js','lib/index.js'],['ok-sub.js','lib/sub.js'],['ok-package.json','package.json']])symlinkSync(join(root,fileName),join(lib,local),'file')
     file(join(lib,'wrong.js'),'export const wrong=true')
-    file(join(lib,'package.json'),JSON.stringify({name:dep,exports:{'.':{require:'./ok.js',default:'./wrong.js'},'./sub':'./ok-sub.js','./package.json':'./ok-package.json',...(pattern?{'./lib/*':'./lib/*'}:{})}}))
+    // Prior manifest used {require:ok, default:wrong}: safe for CJS only, a real
+// ESM import loaded wrong.js. Replaced with a condition inactive in BOTH
+// lanes before a safe default — genuinely dual-lane-safe.
+    file(join(lib,'package.json'),JSON.stringify({name:dep,exports:{'.':{'fixture-inactive-condition':'./wrong.js',default:'./ok.js'},'./sub':'./ok-sub.js','./package.json':'./ok-package.json',...(pattern?{'./lib/*':'./lib/*'}:{})}}))
     expect(createRequire(join(lib,'index.js')).resolve(dep)).toBe(join(root,'lib/index.js'))
     expect(auditHostDependencyRoutes(f.graphs,f.profileRoot)).toBe(true)
   })

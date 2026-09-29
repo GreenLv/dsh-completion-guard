@@ -291,11 +291,11 @@ describe('audited host cohort registry', () => {
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
       expect(peers[name]).toBe(SUPPORTED_HOST_RANGE)
     }
-    expect(SUPPORTED_HOST_RANGE).toBe('0.2.0-rc.1')
-    for (const version of [MIN_SUPPORTED_HOST_VERSION]) {
+    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.0-rc.1')
+    for (const version of ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1', '0.3.0-rc.1', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.1.7-rc.2', '0.1.8-rc.2', '0.2.0']) {
+    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.1.7-rc.2', '0.1.8-rc.2', '0.2.0-alpha.9', '0.2.0-rc.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
     expect(Object.values(peers)).not.toContain('*')

@@ -1,8 +1,22 @@
-/** Exact host identity; version ordering is diagnostic only. */
+/** Version admission floor. Since 0.8.1 the public DSH support range is
+ * `>=0.2.0-rc.1` with NO implied upper bound: every host version at or above
+ * this floor (including later RCs on any tuple, stable and future releases)
+ * passes VERSION ADMISSION. The floor only rises when a future Guard release
+ * actively adopts a newer DSH; the runtime never raises it from a remote
+ * `latest`. Ordering is strict SemVer with prerelease comparison and build
+ * metadata ignored. Version admission is one gate of several — it never
+ * claims native validation of a not-yet-tested host, and the graph/byte/
+ * contract audits below still run on every admission. */
 export const MIN_SUPPORTED_HOST_VERSION = '0.2.0-rc.1'
-export const LATEST_SUPPORTED_HOST_VERSION = '0.2.0-rc.1'
-export const SUPPORTED_HOST_VERSIONS: readonly string[] = [LATEST_SUPPORTED_HOST_VERSION]
-export const SUPPORTED_HOST_RANGE: string = LATEST_SUPPORTED_HOST_VERSION
+export const SUPPORTED_HOST_RANGE: string = `>=${MIN_SUPPORTED_HOST_VERSION}`
+/** Versions with recorded first-hand host evidence. This is an EVIDENCE
+ * ledger, NOT an admission whitelist: a missing row never refuses a
+ * version-above-floor host. */
+export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1']
+/** Historical alias retained for evidence-list readers; the admission rule is
+ * the floor above, never this list. */
+export const SUPPORTED_HOST_VERSIONS: readonly string[] = HOST_VALIDATED_VERSIONS
+export const LATEST_TESTED_HOST_VERSION = HOST_VALIDATED_VERSIONS.at(-1)!
 
 export interface ParsedHostVersion {
   major: number
@@ -64,13 +78,13 @@ export function compareHostVersions(a: string, b: string): number | undefined {
   return comparePrerelease(left.prerelease, right.prerelease)
 }
 
-export type HostVersionStatus = 'supported' | 'below_minimum' | 'unparseable' | 'unregistered'
+export type HostVersionStatus = 'supported' | 'below_minimum' | 'unparseable'
 
 export interface HostVersionDecision {
   status: HostVersionStatus
   version: string
   minimum: string
-  reasonCode: 'host_version_supported' | 'host_version_below_minimum' | 'host_version_unparseable' | 'host_version_unregistered'
+  reasonCode: 'host_version_supported' | 'host_version_below_minimum' | 'host_version_unparseable'
 }
 
 /** Decide the version-policy half of host support. Never a substitute for the graph lock. */
@@ -82,18 +96,28 @@ export function evaluateMinimumHostVersion(
   if (comparison === undefined) {
     return { status: 'unparseable', version, minimum, reasonCode: 'host_version_unparseable' }
   }
+  // Range admission is now the floor itself: any version at or above the
+  // minimum is 'supported' at the version gate. There is deliberately no
+  // 'unregistered' refusal — per-version native validation is a separate,
+  // recorded fact (HOST_VALIDATED_VERSIONS), never an admission gate.
   return comparison < 0
     ? { status: 'below_minimum', version, minimum, reasonCode: 'host_version_below_minimum' }
-    : satisfiesSupportedHostRange(version)
-      ? { status: 'supported', version, minimum, reasonCode: 'host_version_supported' }
-      : { status: 'unregistered', version, minimum, reasonCode: 'host_version_unregistered' }
+    : { status: 'supported', version, minimum, reasonCode: 'host_version_supported' }
 }
 
-/** Whether npm's exact public support union admits this host version. */
+/** Version admission: at or above the floor by strict SemVer precedence
+ * (prerelease-aware; build metadata ignored). `0.2.0-rc.0` and the whole
+ * `0.1.7.x` line stay below the floor; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.0`,
+ * later patch/minor RCs and releases all admit. */
 export function satisfiesSupportedHostRange(version: string): boolean {
   const normalized = version.trim()
-  if (!parseHostVersion(normalized)) return false
-  return SUPPORTED_HOST_VERSIONS.some(
-    (supported) => normalized === supported,
-  )
+  const parsed = parseHostVersion(normalized)
+  if (!parsed) return false
+  const floor = parseHostVersion(MIN_SUPPORTED_HOST_VERSION)!
+  const comparable = { major: parsed.major, minor: parsed.minor, patch: parsed.patch, prerelease: parsed.prerelease }
+  const floorComparable = { major: floor.major, minor: floor.minor, patch: floor.patch, prerelease: floor.prerelease }
+  if (comparable.major !== floorComparable.major) return comparable.major > floorComparable.major
+  if (comparable.minor !== floorComparable.minor) return comparable.minor > floorComparable.minor
+  if (comparable.patch !== floorComparable.patch) return comparable.patch > floorComparable.patch
+  return comparePrerelease(comparable.prerelease, floorComparable.prerelease) >= 0
 }

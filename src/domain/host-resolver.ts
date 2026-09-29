@@ -90,12 +90,12 @@ export function packageRowsFromPnpmLock(text: string, names: readonly string[] =
  */
 export function combineHostPolicy(evaluation: HostLockEvaluation): HostLockEvaluation {
   const version = evaluation.hostVersion
-  if (version?.status !== 'below_minimum' && version?.status !== 'unparseable' && version?.status !== 'unregistered') return evaluation
+  if (version?.status !== 'below_minimum' && version?.status !== 'unparseable') return evaluation
   return {
     ...evaluation,
     status: 'unsupported',
     goalAvailable: false,
-    reasonCode: version.status === 'below_minimum' ? 'host_lock_version_below_minimum' : version.status === 'unregistered' ? 'host_lock_version_mismatch' : 'host_lock_version_unparseable',
+    reasonCode: version.status === 'below_minimum' ? 'host_lock_version_below_minimum' : 'host_lock_version_unparseable',
   }
 }
 

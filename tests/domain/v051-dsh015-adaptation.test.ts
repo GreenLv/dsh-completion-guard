@@ -93,16 +93,17 @@ describe('DSH host version policy (T09)', () => {
     expect(evaluateMinimumHostVersion(MIN_SUPPORTED_HOST_VERSION, MIN_SUPPORTED_HOST_VERSION).status).toBe('supported')
   })
 
-  it('advertises only the verified minimum and latest host releases', () => {
-    for (const version of ['0.2.0-rc.1']) {
+  it('admits every version at or above the floor; the floor itself refuses older lines', () => {
+    for (const version of ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0', '1.0.0']) {
+    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
-    // The minimum diagnostic still distinguishes a future unregistered host
-    // from an old host; the exact public range and graph lock refuse support.
-    expect(evaluateMinimumHostVersion('0.2.0').status).toBe('unregistered')
+    // Version admission above the floor is unconditional at this gate; a
+    // not-yet-tested host is a recorded-evidence fact (HOST_VALIDATED_VERSIONS),
+    // never a refusal reason. Future same-tuple RCs admit like later RCs.
+    expect(evaluateMinimumHostVersion('0.2.0').status).toBe('supported')
   })
 
   it('never lets the version range alone admit an unregistered host graph', () => {

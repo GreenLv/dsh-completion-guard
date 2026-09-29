@@ -76,34 +76,36 @@ function nearestPackageScope(session: HostAuditSession, dir: string):
  *   never sufficient for an illegal target.
  */
 const REQUIRE_LANE_CONDITIONS = new Set(['node', 'node-addons', 'require', 'module-sync'])
+const IMPORT_LANE_CONDITIONS = new Set(['node', 'node-addons', 'import', 'module-sync'])
 const NUMERIC_CONDITION_KEY = /^(?:0|[1-9][0-9]*)$/
 const ENCODED_SEPARATOR = /%2f|%5c/i
 
+/**
+ * One loading lane's selection over a conditions entry. Four explicit states:
+ * a resolved target string, an explicit deny (null), a legal no-match (the
+ * lane's conditions skip this object entirely, so Node CONTINUES to the next
+ * sibling key), and an invalid/unsupported input that must fail the route
+ * instead of falling through. Numeric condition keys are
+ * ERR_INVALID_PACKAGE_CONFIG; a matched branch whose value is neither
+ * string/null/object is an invalid branch, never a fallback trigger.
+ */
 type LaneSelection = 'invalid' | 'deny' | 'no-match' | { target: string }
 
-function selectRequireLane(value: unknown, depth: number): LaneSelection {
+function selectLane(value: unknown, depth: number, lane: 'require' | 'import'): LaneSelection {
   if (value === null) return 'deny'
   if (typeof value === 'string') return { target: value }
-  if (depth > 4 || !value || typeof value !== 'object' || Array.isArray(value)) {
-    // A matched branch with an unmodellable value can never be treated as a
-    // no-match: Node rejects the target instead of falling through.
-    return 'invalid'
-  }
+  if (depth > 4 || !value || typeof value !== 'object' || Array.isArray(value)) return 'invalid'
   const conditions = value as Record<string, unknown>
   for (const key of Object.keys(conditions)) {
     if (NUMERIC_CONDITION_KEY.test(key)) return 'invalid'
   }
+  const active = lane === 'require' ? REQUIRE_LANE_CONDITIONS : IMPORT_LANE_CONDITIONS
   for (const key of Object.keys(conditions)) {
-    const active = key === 'default' || REQUIRE_LANE_CONDITIONS.has(key)
-    if (!active) continue
-    const nested = selectRequireLane(conditions[key], depth + 1)
-    if (nested === 'no-match') continue
-    if (nested === 'invalid') return 'invalid'
-    // The require lane resolved through THIS object. If the same object also
-    // declares an own 'import' branch, the require proof cannot vouch for the
-    // actual load route — reject the divergence instead of covering it.
-    if (Object.hasOwn(conditions, 'import')) return 'invalid'
-    return nested
+    if (key === 'default' || active.has(key)) {
+      const nested = selectLane(conditions[key], depth + 1, lane)
+      if (nested === 'no-match') continue
+      return nested
+    }
   }
   return 'no-match'
 }
@@ -127,13 +129,12 @@ function rawTargetAllowed(target: string): boolean {
   return true
 }
 
+/** True when every lane Node may actually load resolves to the wanted file. */
 function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; manifest: Record<string, unknown> },
   request: string, wanted: string): boolean {
   const packageName = String(scope.manifest.name)
   const subpath = request === packageName ? '.' : '.' + request.slice(packageName.length)
   const rawExports = scope.manifest.exports
-  // Shape classification. `undefined` = no exports field: Node's trySelf does
-  // not apply, so the walk lane governs and the route stays in-root.
   let rootTarget: unknown
   let subpathMap: Record<string, unknown> | undefined
   if (rawExports === undefined) return true
@@ -143,45 +144,43 @@ function interpretScopeRoute(session: HostAuditSession, scope: { dir: string; ma
     const keys = Object.keys(rawExports as Record<string, unknown>)
     const dotKeys = keys.filter((key) => key === '.' || key.startsWith('./'))
     if (dotKeys.length === 0 && keys.length > 0) {
-      rootTarget = rawExports // pure conditions object for the root
+      rootTarget = rawExports
     } else if (dotKeys.length === keys.length) {
       subpathMap = rawExports as Record<string, unknown>
     } else {
-      // Mixed dot/non-dot keys: ERR_INVALID_PACKAGE_CONFIG territory.
       return false
     }
   } else {
-    return false // arrays/other shapes are outside the support domain
+    return false
   }
   let entry: unknown
   if (subpathMap !== undefined) {
-    if (!Object.hasOwn(subpathMap, subpath)) {
-      // No exact key. Wildcard/pattern expansion is outside the support
-      // domain: fail closed rather than approximate Node's pattern matching.
-      return false
-    }
+    if (!Object.hasOwn(subpathMap, subpath)) return false
     entry = subpathMap[subpath]
   } else {
-    // Root-target forms only answer the bare package request.
     if (subpath !== '.') return false
     entry = rootTarget
   }
-  const selection = selectRequireLane(entry, 0)
-  if (selection === 'no-match' || selection === 'deny' || selection === 'invalid') return false
-  const resolvedTarget = selection.target
-  // Raw-target syntax checks BEFORE any URL normalization or realpath.
-  if (!rawTargetAllowed(resolvedTarget)) return false
-  let targetPath: string
-  try {
-    targetPath = fileURLToPath(new URL(resolvedTarget, pathToFileURL(join(scope.dir, '/'))))
-  } catch {
-    return false
+  // BOTH loading lanes must independently resolve to the authenticated file.
+  // A require-lane proof says nothing about the import lane: Node selects
+  // conditional exports separately per lane, so `{require: ok, default:
+  // wrong}` and `{node: {import: wrong}, default: ok}` both load wrong.js for
+  // a real ESM consumer. Each lane resolves on its own; the routes must agree.
+  for (const lane of ['require', 'import'] as const) {
+    const selection = selectLane(entry, 0, lane)
+    if (selection === 'no-match' || selection === 'deny' || selection === 'invalid') return false
+    if (!rawTargetAllowed(selection.target)) return false
+    let targetPath: string
+    try {
+      targetPath = fileURLToPath(new URL(selection.target, pathToFileURL(join(scope.dir, '/'))))
+    } catch {
+      return false
+    }
+    const scopeRelative = relative(scope.dir, targetPath)
+    if (scopeRelative.startsWith('..') || isAbsolute(scopeRelative)) return false
+    if (session.realpath(targetPath) !== wanted) return false
   }
-  const scopeRelative = relative(scope.dir, targetPath)
-  if (scopeRelative.startsWith('..') || isAbsolute(scopeRelative)) return false
-  // The self-route must land on exactly the authenticated file; anything else
-  // (a redirect into the scope, a missing file) bypasses the audited bytes.
-  return session.realpath(targetPath) === wanted
+  return true
 }
 
 /** rc.2's authenticated exports have only types/default conditions. Do not use

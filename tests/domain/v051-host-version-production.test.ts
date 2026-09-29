@@ -47,12 +47,12 @@ describe('the minimum host version is decided by the production host entry', () 
     expect(decision.hostVersion).toMatchObject({ status: 'below_minimum', version })
   })
 
-  it.each(['0.2.0', '0.2.1'])('classifies %s above the floor but keeps it unregistered', (version) => {
+  it.each(['0.2.0-rc.2', '0.2.0', '0.2.1', '1.0.0'])('admits %s above the floor at the version gate; the graph half still refuses unobserved graphs', (version) => {
     const decision = evaluateHostLock(withHostVersion(version))
-    // At or above the diagnostic floor: the version half reports unregistered…
-    expect(decision.hostVersion).toMatchObject({ status: 'unregistered', version })
-    // …and the graph half still refuses, so an unobserved graph never becomes
-    // a certification because its version happens to be high enough.
+    // At or above the floor: the version half admits…
+    expect(decision.hostVersion).toMatchObject({ status: 'supported', version })
+    // …and the graph/byte audit still refuses, so a higher version never
+    // becomes a certification because the version number is high enough.
     expect(decision.status).toBe('unsupported')
     expect(decision.reasonCode).not.toBe('host_lock_version_below_minimum')
   })

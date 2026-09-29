@@ -529,12 +529,12 @@ export function evaluateHostLock(rows: readonly PackageRow[], context: HostLockC
   // decided last on purpose — a graph that already failed keeps its own graph
   // verdict, because the version policy and the exact-graph audit are
   // independent facts and neither may be reported as the other.
-  if (hostVersion?.status === 'below_minimum' || hostVersion?.status === 'unparseable' || hostVersion?.status === 'unregistered') {
+  if (hostVersion?.status === 'below_minimum' || hostVersion?.status === 'unparseable') {
     return {
       ...baseResult,
       status: 'unsupported',
       goalAvailable: false,
-      reasonCode: hostVersion.status === 'below_minimum' ? 'host_lock_version_below_minimum' : hostVersion.status === 'unregistered' ? 'host_lock_version_mismatch' : 'host_lock_version_unparseable',
+      reasonCode: hostVersion.status === 'below_minimum' ? 'host_lock_version_below_minimum' : 'host_lock_version_unparseable',
     }
   }
   return { ...baseResult, status: 'supported' }
