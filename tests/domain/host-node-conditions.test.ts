@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
 import { resolveHostNodeConditions } from '../../src/domain/host-node-conditions.js'
 const roots: string[] = []
@@ -28,7 +29,7 @@ function oracle(profile: boolean, conditions: Record<string, string>, args: stri
   const setup = definitions.map(({ root: home, own }) => ({ modules: join(home, 'node_modules'), records: { '.': { url: '..', dependencies: {} }, ...(own ? { [dep]: { url: './' + dep, dependencies: {} }, [parent]: { url: './' + parent, dependencies: { [dep]: dep } } } : {}) }, reachable: own ? ['.', dep, parent] : ['.'], packages: own ? [[dep, { root: depRoot, manifest: { name: dep, exports: { '.': './lib/index.js' } }, files: ['package.json', 'lib/index.js'] }], [parent, { root: parentRoot, manifest: { name: parent }, files: ['package.json', 'lib/index.js'] }]] : [] }))
   mkdirSync(join(runtime, 'node_modules'), { recursive: true })
   file(join(root, 'graphs.json'), JSON.stringify(setup))
-  file(join(parentRoot, 'lib/oracle.mjs'), `import {createRequire} from 'node:module';import{auditHostDependencyRoutes}from ${JSON.stringify(join(root, 'host-dependency-audit.js'))};import{hostNodeConditions}from ${JSON.stringify(join(root, 'host-node-conditions.js'))};import{readFileSync}from'node:fs';const graphs=JSON.parse(readFileSync(${JSON.stringify(join(root, 'graphs.json'))})).map(g=>({...g,reachable:new Set(g.reachable),packages:new Map(g.packages)}));const required=createRequire(import.meta.url)(${JSON.stringify(dep)});const imported=await import(${JSON.stringify(dep)});console.log(JSON.stringify({audit:auditHostDependencyRoutes(graphs,${JSON.stringify(owner)}),require:required.ok,import:imported.default.ok,digest:hostNodeConditions().digest}));`)
+  file(join(parentRoot, 'lib/oracle.mjs'), `import {createRequire} from 'node:module';import{auditHostDependencyRoutes}from ${JSON.stringify(pathToFileURL(join(root, 'host-dependency-audit.js')).href)};import{hostNodeConditions}from ${JSON.stringify(pathToFileURL(join(root, 'host-node-conditions.js')).href)};import{readFileSync}from'node:fs';const graphs=JSON.parse(readFileSync(${JSON.stringify(join(root, 'graphs.json'))})).map(g=>({...g,reachable:new Set(g.reachable),packages:new Map(g.packages)}));const required=createRequire(import.meta.url)(${JSON.stringify(dep)});const imported=await import(${JSON.stringify(dep)});console.log(JSON.stringify({audit:auditHostDependencyRoutes(graphs,${JSON.stringify(owner)}),require:required.ok,import:imported.default.ok,digest:hostNodeConditions().digest}));`)
   const env: Record<string, string> = { NODE_OPTIONS: options }
   if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot
   return JSON.parse(execFileSync(process.execPath, [...args, join(parentRoot, 'lib/oracle.mjs')], { encoding: 'utf8', env }))
