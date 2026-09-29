@@ -2,10 +2,10 @@
 
 Version 0.8.1 requires DSH `>=0.2.0-rc.1` and qualified Cordis `>=4.0.4`. Upgrade order and what each step produces:
 
-1. Upgrade DSH to `0.2.0-rc.1` or a later version, then install this Guard version.
-2. Rebuild the host lock for each Guard profile by running, from an accepted package or matching source checkout:
+1. Stop the host, upgrade DSH to `0.2.0-rc.1` or a later version, then install this Guard version.
+2. Rebuild the host lock for each Guard profile by running `inspect`, `inject` and `verify-dump` from an accepted package or matching source checkout:
    `node bin/dsh-completion-guard-host-lock.mjs inject --runtime-root <DSH runtime> --profile-root <profile>` — then verify with `... verify-dump --dump-config <file>`. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
-3. Restart each Web/Headless profile that runs Guard so it re-reads the rebuilt lock.
+3. Start each Web/Headless profile when needed so it reads the rebuilt lock. The checks above do not require a running host.
 
 Failure readbacks distinguish these cases:
 
@@ -49,7 +49,7 @@ graph it finds there, and each session mount validates those same roots once,
 with every security-sensitive entry validating them again at its own decision.
 Injecting against the old runtime therefore writes a lock that describes a graph
 the new runtime no longer has, and it will fail at the next mount or the next
-protected entry. Order: upgrade the runtime, restart it, then inspect/inject/verify.
+protected entry. Order: stop the host, upgrade DSH and install Guard, inspect/inject/verify each profile, then start it when needed.
 
 `inject` **writes to `<profile>/cordis.patch.yml`** — it replaces or adds Guard's
 managed block in that file. Back the file up first. The same file is the one

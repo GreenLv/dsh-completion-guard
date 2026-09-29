@@ -10,13 +10,13 @@
       "path": "README.md",
       "role": "readme",
       "language": "default",
-      "sha256": "0b2b906d3db990ec2ff720f7b6bc8e73ea52f22531d8891ac16ae2919b8814c2"
+      "sha256": "c691656f264621672f6cbf181886f463b86bbb5fda0d23d25035ea7ec542ee74"
     },
     {
       "path": "README.zh-CN.md",
       "role": "readme",
       "language": "zh",
-      "sha256": "bfe4cba84d19071daee5eaba695ffa67fe1096d5d07c8723b4b346de428be98e"
+      "sha256": "b3560024af361a77e33cf3ae3004fdca8723775d561e13da61674564e27ab212"
     },
     {
       "path": "CHANGELOG.md",
@@ -40,10 +40,10 @@
       "path": "docs/HOST_LOCK_UPGRADE.md",
       "role": "readme",
       "language": "default",
-      "sha256": "3680b81f64725633aee3d3b53ae5bbcf773effb94842565b4e1c3c493d9f354f"
+      "sha256": "2c6a874caac7ff93355927799439d26a1868ce018758214b741a436c43a2d41e"
     }
   ],
-  "document_set_sha256": "051f6d2b0f387477920f570c61f878c0358b0e288cfe9abe22d372bebeba1145",
+  "document_set_sha256": "522f57e42a46a7eed7146d9c1f4adbbb3a7d5f60fad03b723fe91ca4c1b1afa9",
   "method": {
     "kind": "cold_read",
     "implementation_context_used": false,
@@ -62,7 +62,7 @@
         "docs/COMPATIBILITY.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "Read the final six files as user-facing instructions and change records; references carry the technical qualification details."
+      "note": "Read the current README reader paths, complete upgrade guide, current compatibility introduction and 0.8.1 change records as user decisions; historical changelog sections retain separate historical scope."
     },
     {
       "id": "reader_outcome",
@@ -73,7 +73,7 @@
         "README.zh-CN.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "Both readmes give upgrade, backup, inspect/inject/dump, supported readback and controlled restart. Rebind guidance explains isolated Node qualification and the per-profile receipt; the guide exposes pre-install qualification and loader limits."
+      "note": "Both languages consistently instruct: stop the host, upgrade and install, inspect/inject/verify each profile, then start it when needed. The upgrade guide gives matching order, backup and supported readback; rebind probes do not boot DSH."
     },
     {
       "id": "term_onboarding",
@@ -122,7 +122,7 @@
   ],
   "findings": [],
   "limitations": [
-    "Covers the six listed reader-path documents, including their retained historical sections; other deep references are outside this cold-read receipt.",
+    "Six exact-byte documents are bound. This cold reread covers the complete README and upgrade reader paths plus current compatibility and 0.8.1 changelog sections; unchanged historical changelog and deep reference sections are outside this reread.",
     "Final source and archive privacy scans are auxiliary checks recorded separately; they do not establish readability."
   ]
 }
