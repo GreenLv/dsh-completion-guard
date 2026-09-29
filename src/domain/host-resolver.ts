@@ -9,10 +9,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   HOST_COHORTS,
   evaluateHostLock,
+  evaluateGraphDerivedHostLock,
+  type HostLockContext,
   type HostLockEvaluation,
   type HostPlatform,
   type HostProfileKind,
 } from './host-lock.js'
+import { satisfiesSupportedHostRange } from './host-version.js'
+import { acquireHostTrust, hostTrustDigest, parseHostTrust, qualifyHostTrust, type HostRebindTrust } from './host-trust.js'
 import type { PackageRow } from './digest.js'
 
 /**
@@ -225,6 +229,7 @@ export interface ActiveProfileHostLock {
   pluginVersion: string
   platform: HostPlatform
   profileKind: HostProfileKind
+  trust?: HostRebindTrust
 }
 
 /** Read exact reachable critical rows without requiring Guard installation.
@@ -267,6 +272,37 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string, pr
   return rows
 }
 
+/** Version/identity evaluation of operator-owned registry expectations. */
+export function evaluateConfiguredHostLock(rows: readonly PackageRow[], context: HostLockContext,
+  trustText?: string): HostLockEvaluation {
+  if (!trustText) return combineHostPolicy(evaluateHostLock(rows, context))
+  const trust = parseHostTrust(trustText)
+  const evaluation = combineHostPolicy(evaluateGraphDerivedHostLock(rows, { ...context, trustDigest: hostTrustDigest(trust) },
+    (row) => trust.packages.some((p) => p.name === row.name && p.version === row.version && p.integrity === row.integrity)))
+  return trust.unqualifiedOptionalPackages?.length && evaluation.status === 'supported'
+    ? { ...evaluation, goalAvailable: false, goalQualificationFailure: 'host_contract_goal_qualification_required' }
+    : evaluation
+}
+
+/** Complete production composition; no graph-only result grants authority. */
+export function evaluateActiveHostLock(runtime: string, profile: string, context: HostLockContext,
+  session: HostAuditSession = createHostAuditSession(), trustText?: string): HostLockEvaluation {
+  const rows = readActiveHostGraph(runtime, profile, session)
+  const evaluation = evaluateConfiguredHostLock(rows, context, trustText)
+  if (evaluation.status !== 'supported') return evaluation
+  const expectations = trustText ? parseHostTrust(trustText).packages : undefined
+  if (!auditedHostImplementation(runtime, profile, session, expectations)) {
+    return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
+  }
+  return evaluation
+}
+
+/** Trusted acquisition only; consumers never use local SRI as provenance. */
+export async function prepareActiveHostTrust(runtime: string, profile: string,
+  fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
+  return acquireHostTrust(readActiveHostGraph(runtime, profile), fetcher)
+}
+
 /** Verify published executable bytes at the reachable runtime/profile roots.
  * Registry SRI and installed manifests alone cannot authenticate loaded code.
  * Missing, duplicate, escaped or modified modules never pass this audit.
@@ -278,27 +314,13 @@ export function readActiveHostGraph(runtimeRoot: string, profileRoot: string, pr
 export interface AuditedPackageExpectation {
   name: string
   version?: string
-  /** Expected per-file digests. When omitted (a graph-derived rebind), the
-   * files are still structurally audited and their computed digests are BOUND
-   * into the returned packages so the lock digest covers the actual bytes. */
+  /** Required published per-file digests; absence never authenticates bytes. */
   modules?: Record<string, string>
 }
 
-/**
- * Byte/route audit over BOTH graphs. The audited expectations come from
- * `hostByteAudit.packages` (the published rc.1 baseline evidence) unless the
- * caller supplies `rebindable` rows — the trusted rebind path for hosts above
- * the admission floor, where the per-package identities were established from
- * the real installed graph and its install-time lockfile SRI at rebind time.
- *
- * In rebindable mode the structural checks are identical (existence, file
- * type, root containment, route authentication); per-file digest EQUALITY is
- * only enforced where an expectation carries digests. The computed digests
- * are bound into the returned packages, so the lock digest covers the actual
- * bytes and any later drift fails. The audit NEVER treats "exists" alone as
- * proof: identity comes from the rebind rows, not from self-reported
- * package.json fields.
- */
+/** Byte and dual-lane route audit over both graphs. Expectations are either
+ * the published baseline or operator-owned, registry-acquired qualified module
+ * digests. A missing digest set never authenticates unknown implementation. */
 export function auditedHostImplementation(runtimeRoot: string, profileRoot: string,
   providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[]): boolean {
   const session = providedSession ?? createHostAuditSession()
@@ -332,6 +354,7 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
         const manifest = session.readJson(join(root, 'package.json'))
         if (manifest.name !== expected.name) return false
         if (expected.version !== undefined && manifest.version !== expected.version) return false
+        if (!expected.modules) return false
         // Enumerate the audited module set: the expectation's declared files
         // when present; otherwise every lib/**/*.js under the package root
         // plus the manifest itself, so the digests genuinely cover the bytes.
@@ -414,7 +437,7 @@ export function activeRendererModule(nodeModulesRoot: string, name: string,
   const root = session.realpath(resolve(modules, url))
   if (!root.startsWith(`${modules}${sep}`)) return undefined
   const manifest = session.readJson(join(root, 'package.json'))
-  if (manifest.name !== name || manifest.version !== '0.2.0-rc.1') return undefined
+  if (manifest.name !== name || typeof manifest.version !== 'string' || !satisfiesSupportedHostRange(manifest.version)) return undefined
   if (id !== name && manifest.version !== id.slice(name.length + 1).split('(', 1)[0]) return undefined
   const bytesPath = join(root, 'lib', 'index.js')
   const target = session.realpath(bytesPath)
@@ -649,6 +672,7 @@ export function resolveActiveProfileHostLock(
   runtimeRoot: string,
   profileRoot: string,
   expectedPluginVersion: string,
+  providedTrust?: HostRebindTrust,
 ): ActiveProfileHostLock {
   const runtime = resolve(runtimeRoot)
   const profile = resolve(profileRoot)
@@ -662,7 +686,7 @@ export function resolveActiveProfileHostLock(
     if (!existsSync(path)) throw new HostProfileError('active_graph_missing', `required active graph file is missing: ${path}`)
   }
   const session = createHostAuditSession()
-  const rows = readActiveHostGraph(runtime, profile, session)
+  const trust = providedTrust ? qualifyHostTrust(providedTrust) : undefined
   const profileManifest = readJsonObject(profileManifestPath, 'profile_manifest_invalid')
   const installedPlugin = readJsonObject(pluginManifestPath, 'installed_plugin_invalid')
   const dependencies = profileManifest.dependencies
@@ -680,14 +704,12 @@ export function resolveActiveProfileHostLock(
   }
   const profileKind: HostProfileKind = bundles.includes('@deepseek-ai/dsh-web-app') || bundles.includes('dshmarket') ? 'web' : 'headless'
   const platform: HostPlatform = process.platform === 'win32' ? 'windows' : 'posix'
-  const evaluation = evaluateHostLock(rows, { platform, profileKind })
+  const evaluation = evaluateActiveHostLock(runtime, profile, { platform, profileKind }, session, trust ? JSON.stringify(trust) : undefined)
   if (evaluation.status !== 'supported') {
-    throw new HostProfileError(evaluation.reasonCode ?? 'active_graph_unavailable', 'active runtime graph does not match the supported host manifest')
+    throw new HostProfileError(evaluation.reasonCode === 'host_lock_installed_graph_drift' ? 'host_implementation_bytes_mismatch' : evaluation.reasonCode ?? 'active_graph_unavailable',
+      evaluation.reasonCode === 'host_lock_installed_graph_drift' ? 'reachable host modules differ from the qualified published implementation' : 'active runtime graph does not match the supported host manifest')
   }
-  if (!auditedHostImplementation(runtime, profile, session)) {
-    throw new HostProfileError('host_implementation_bytes_mismatch', 'reachable host modules differ from the audited rc.2 tarballs')
-  }
-  return { evaluation, runtimeRoot: runtime, profileRoot: profile, pluginVersion: expectedPluginVersion, platform, profileKind }
+  return { evaluation, runtimeRoot: runtime, profileRoot: profile, pluginVersion: expectedPluginVersion, platform, profileKind, ...(trust ? { trust } : {}) }
 }
 
 function readJsonObject(path: string, code: string): Record<string, unknown> {
@@ -712,6 +734,7 @@ function renderManagedPatch(
   activation?: string,
   runtimeRoot?: string,
   profileRoot?: string,
+  trust?: HostRebindTrust,
 ): string {
   const lines = [HOST_LOCK_MARKER_BEGIN, '- id: context-guard', '  name: dsh-completion-guard', '  config:']
   lines.push('    hostLockPolicy: "dsh-core/v1"')
@@ -720,6 +743,7 @@ function renderManagedPatch(
   if (activation) lines.push(`    activation: ${yamlQuote(activation)}`)
   lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`)
   lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`)
+  if (trust) lines.push(`    hostLockTrust: ${yamlQuote(JSON.stringify(trust))}`)
   lines.push('    hostLockPackages:')
   for (const row of rows) {
     lines.push(`      - name: ${yamlQuote(row.name)}`)
@@ -800,6 +824,7 @@ export function injectActiveProfileHostLock(input: ActiveProfileHostLock): strin
     activation,
     input.runtimeRoot,
     input.profileRoot,
+    input.trust,
   )
   const next = `${base.trimEnd()}${base.trim() ? '\n\n' : ''}${managed}`
   const temporary = `${patchPath}.context-guard-${process.pid}.tmp`
@@ -909,7 +934,11 @@ export function verifyComposedHostLockDump(
     throw new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph')
   }
   const context = hostLockContextFromComposedDump(text)
-  const actual = evaluateHostLock(hostLockRowsFromComposedDump(text), context)
+  const trustLines = entry.flatMap((line, index) => line.startsWith('    hostLockTrust:') ? [index] : [])
+  if (trustLines.length > 1) throw new HostProfileError('host_lock_readback_mismatch', 'duplicate trust description')
+  const trustIndex = trustLines[0]
+  const trustText = trustIndex === undefined ? undefined : parseYamlField(entry, trustIndex, entry[trustIndex].slice(entry[trustIndex].indexOf(':') + 1))
+  const actual = evaluateConfiguredHostLock(hostLockRowsFromComposedDump(text), context, trustText)
   if (actual.status !== 'supported' || actual.digest !== expected.digest) {
     throw new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph')
   }

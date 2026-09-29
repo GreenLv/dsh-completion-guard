@@ -1,13 +1,20 @@
 # Upgrading the core host lock
 
-Version 0.8.1 requires DSH `>=0.2.0-rc.1` and Cordis `4.0.4`. Upgrade order and what each step produces:
+Version 0.8.1 requires DSH `>=0.2.0-rc.1` and qualified Cordis `>=4.0.4`. Upgrade order and what each step produces:
 
 1. Upgrade DSH to `0.2.0-rc.1` or a later version, then install this Guard version.
 2. Rebuild the host lock for each Guard profile by running, from an accepted package or matching source checkout:
    `node bin/dsh-completion-guard-host-lock.mjs inject --runtime-root <DSH runtime> --profile-root <profile>` — then verify with `... verify-dump --dump-config <file>`. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
 3. Restart each Web/Headless profile that runs Guard so it re-reads the rebuilt lock.
 
-Failure readbacks have distinct causes: `host_lock_migration_required` means the Guard tool was run without a policy/roots configuration (supply `--runtime-root`/`--profile-root`); `host_lock_version_below_minimum` means the installed DSH is older than `0.2.0-rc.1`; `host_lock_version_mismatch` means the installed graph differs from the audited cohort in version or integrity — for a version above the floor this is resolved by the graph-derived rebind (or, for the audited cohort, by matching the recorded identities); `host_lock_installed_graph_drift` means the installed bytes/routes changed after the audit. The floor is `>=0.2.0-rc.1` with no implied upper bound; versions above the floor are version-admitted but are not individually native-validated (validated versions are recorded separately). Guard's exact DSH core is separate from optional market versions.
+Failure readbacks distinguish these cases:
+
+- `host_lock_migration_required`: the configuration lacks the policy or source roots. Supply `--runtime-root` and `--profile-root` when rebuilding the lock.
+- `host_lock_version_below_minimum`: DSH is older than `0.2.0-rc.1`. Upgrade DSH first.
+- `host_lock_version_mismatch`: the installed graph differs from the reviewed baseline in version or integrity. For a later compatible version, use `--rebind-registry` to acquire and qualify the published graph. For the baseline, restore the recorded identities.
+- `host_lock_installed_graph_drift`: installed bytes or routes changed after the audit. Inspect the change before rebuilding the lock.
+
+The floor is `>=0.2.0-rc.1` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 
@@ -48,16 +55,9 @@ protected entry. Order: upgrade the runtime, restart it, then inspect/inject/ver
 managed block in that file. Back the file up first. The same file is the one
 `docs/LOCAL_ACCEPTANCE.md` tells you to preserve.
 
-**Read the verdict from the JSON body, not from the exit status.** All three
-commands print a JSON object whose `status` is the verdict — `supported`,
-`unsupported` or `unavailable` — together with `cohort_id`, `host_lock_digest` and
-`audit_provenance`. Note that `inspect`, `inject` and `verify-dump` exit **0** even
-when that status is `unsupported`; only `inspect-graph` exits non-zero on an
-unsupported graph, and only a thrown error produces `status: "unavailable"` with a
-`reason_code` on stderr and exit 1. So a shell check of `$?` alone will not tell
-you whether the graph was accepted.
+**Check both the JSON verdict and the exit status.** Accepted commands print `status: "supported"`. A missing graph, drift, incompatible implementation or untrusted registry description reports a specific `reason_code` on stderr and exits 1. `inspect-graph` is a pre-install graph check; it does not grant runtime authority.
 
-For Headless, use its profile path and `--profile headless`. On Windows, use the
+For Headless, use its profile path for the host-lock commands and `dsh --profile headless --dump-config` for the dump. On Windows, use the
 installed `.cmd` launcher and Windows absolute paths. A strict repeat leaves
 the package and profile contents unchanged. Restarting or enabling a daily
 profile remains a separate user action.
@@ -73,7 +73,7 @@ The result labels `inspection_scope: pre_install_target` and `profile_graph.stat
 ## What changes in the lock
 
 The generator writes `hostLockPolicy: dsh-core/v1`, the actual runtime/profile
-source roots, platform/profile kind and the complete 46-row core graph. The
+source roots, platform/profile kind and the actual core package graph (46 rows in the reviewed baseline). The
 core manifest is version 2. Each session mount validates those graph sources
 exactly once; ordinary replay (resume, compaction, step and command refresh)
 consumes that result without rescanning, and every entry that grants
@@ -133,3 +133,16 @@ exact artifact and platform; publication is recorded on its GitHub Release.
 ## Historical 0.5.1 evidence
 
 Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.1.
+
+## Rebinding compatible package versions
+
+For a newer compatible installation, add `--rebind-registry` to `inspect`, `inject` and `verify-dump` in the upgrade example above. This downloads the official public archives; it does not install or execute them. A successful result binds a new lock. Keep the backup until dump verification succeeds.
+
+The version floor admits later releases and RCs by SemVer precedence. A new version does not by itself prove that Guard can read its events or authorize its effects. Rebinding separates published installation identity from adapter qualification:
+
+- Published identity is acquired from the official npm registry for each exact installed `name@version`. The registry integrity must agree with the installed lock, and the downloaded archive must reproduce that integrity. The archive supplies the manifest and module digests; local manifests and local lockfile SRI alone never establish provenance.
+- The current adapter qualifies the executable module set against the reviewed baseline, separately from package versions and manifest bytes. A newer package with the same reviewed implementation can rebind without adding a version row. Changed Session, AgentLoop, ToolRuntime, durability or other consumed implementation bytes require adapter qualification and report a concrete contract failure; they do not inherit audited semantics from an archive hash. This conservative qualification does not certify arbitrary future ABI changes. Optional Goal qualification is reported separately and cannot disable core work that does not use Goal.
+- The trusted generator writes the registry-derived per-file expectations into the managed configuration. This configuration is operator-owned authority, like the existing roots and package rows; a package's own compatibility declaration is never a substitute. The lock digest binds these expectations and the actual mixed-version graph. Inspection and authorization rerun the byte and dual-lane route checks using one fresh audit session.
+- A changed graph or trust description creates a new lock identity. Existing completion certificates and private authority records retain their old digest and cannot transfer. Reinject the lock, restart the profile under the user's control, and obtain new evidence.
+
+The acquisition step only downloads and examines archives. It does not start DSH, execute downloaded modules, install packages, publish, or mutate session history. Foreground/default-workdir interpretations retain their narrower reviewed-byte qualification. Native acceptance of a later DSH version remains separate from this source-level compatibility rule.

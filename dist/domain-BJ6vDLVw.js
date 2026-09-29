@@ -3,7 +3,8 @@ import * as path from "node:path";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { isDeepStrictEqual } from "node:util";
 
 //#region src/domain/host-audit-session.ts
@@ -41,6 +42,11 @@ function createHostAuditSession(onPhysicalRead) {
 		readFile: (path$1) => readBytes(path$1),
 		readJson: (path$1) => once(`json:${path$1}`, () => JSON.parse(session.readFile(path$1).toString("utf8"))),
 		fileDigest: (path$1) => once(`digest:${path$1}`, () => createFileDigest(session.readFile(path$1))),
+		listDir: (dir) => once(`listdir:${dir}`, () => readdirSync(dir, { withFileTypes: true }).map((entry) => ({
+			name: entry.name,
+			isFile: entry.isFile(),
+			isDirectory: entry.isDirectory()
+		}))),
 		requireFor: (importer) => once(`require:${importer}`, () => createRequire(importer)),
 		resolvePaths: (importer, name) => once(`paths:${importer}\u0000${name}`, () => createRequire(importer).resolve.paths(name) ?? []),
 		requireResolve: (importer, request) => once(`resolve:${importer}\u0000${request}`, () => createRequire(importer).resolve(request)),
@@ -123,20 +129,24 @@ const REQUIRE_LANE_CONDITIONS = new Set([
 	"require",
 	"module-sync"
 ]);
+const IMPORT_LANE_CONDITIONS = new Set([
+	"node",
+	"node-addons",
+	"import",
+	"module-sync"
+]);
 const NUMERIC_CONDITION_KEY = /^(?:0|[1-9][0-9]*)$/;
 const ENCODED_SEPARATOR = /%2f|%5c/i;
-function selectRequireLane(value, depth) {
+function selectLane(value, depth, lane) {
 	if (value === null) return "deny";
 	if (typeof value === "string") return { target: value };
 	if (depth > 4 || !value || typeof value !== "object" || Array.isArray(value)) return "invalid";
 	const conditions = value;
 	for (const key of Object.keys(conditions)) if (NUMERIC_CONDITION_KEY.test(key)) return "invalid";
-	for (const key of Object.keys(conditions)) {
-		if (!(key === "default" || REQUIRE_LANE_CONDITIONS.has(key))) continue;
-		const nested = selectRequireLane(conditions[key], depth + 1);
+	const active = lane === "require" ? REQUIRE_LANE_CONDITIONS : IMPORT_LANE_CONDITIONS;
+	for (const key of Object.keys(conditions)) if (key === "default" || active.has(key)) {
+		const nested = selectLane(conditions[key], depth + 1, lane);
 		if (nested === "no-match") continue;
-		if (nested === "invalid") return "invalid";
-		if (Object.hasOwn(conditions, "import")) return "invalid";
 		return nested;
 	}
 	return "no-match";
@@ -159,6 +169,7 @@ function rawTargetAllowed(target) {
 	}
 	return true;
 }
+/** True when every lane Node may actually load resolves to the wanted file. */
 function interpretScopeRoute(session, scope, request, wanted) {
 	const packageName = String(scope.manifest.name);
 	const subpath = request === packageName ? "." : "." + request.slice(packageName.length);
@@ -182,19 +193,21 @@ function interpretScopeRoute(session, scope, request, wanted) {
 		if (subpath !== ".") return false;
 		entry = rootTarget;
 	}
-	const selection = selectRequireLane(entry, 0);
-	if (selection === "no-match" || selection === "deny" || selection === "invalid") return false;
-	const resolvedTarget = selection.target;
-	if (!rawTargetAllowed(resolvedTarget)) return false;
-	let targetPath;
-	try {
-		targetPath = fileURLToPath(new URL(resolvedTarget, pathToFileURL(join(scope.dir, "/"))));
-	} catch {
-		return false;
+	for (const lane of ["require", "import"]) {
+		const selection = selectLane(entry, 0, lane);
+		if (selection === "no-match" || selection === "deny" || selection === "invalid") return false;
+		if (!rawTargetAllowed(selection.target)) return false;
+		let targetPath;
+		try {
+			targetPath = fileURLToPath(new URL(selection.target, pathToFileURL(join(scope.dir, "/"))));
+		} catch {
+			return false;
+		}
+		const scopeRelative = relative(scope.dir, targetPath);
+		if (scopeRelative.startsWith("..") || isAbsolute(scopeRelative)) return false;
+		if (session.realpath(targetPath) !== wanted) return false;
 	}
-	const scopeRelative = relative(scope.dir, targetPath);
-	if (scopeRelative.startsWith("..") || isAbsolute(scopeRelative)) return false;
-	return session.realpath(targetPath) === wanted;
+	return true;
 }
 /** rc.2's authenticated exports have only types/default conditions. Do not use
 * CJS resolution as an ESM oracle if a future manifest introduces other branches.
@@ -786,6 +799,7 @@ var packages = [
 		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.0-rc.1.tgz",
 		"sha256": "5f26f58226db1c8b9fabb21121176360826cc0b8f9ecc183ae5c78ca89e12ade",
 		"modules": {
+			"lib/worker.cjs": "cadd901598e2bb8a847409a980f59deea639eeadf21e30da324fb674a4ed8038",
 			"lib/index.js": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
 			"package.json": "01debc5bef48135fba71b78f9f0212e097f7a31ad30a14a64c3f6cb12638ef48"
 		}
@@ -2143,12 +2157,26 @@ function validateActionManifest() {
 
 //#endregion
 //#region src/domain/host-version.ts
-/** Exact host identity; version ordering is diagnostic only. */
+/** Version admission floor. Since 0.8.1 the public DSH support range is
+* `>=0.2.0-rc.1` with NO implied upper bound: every host version at or above
+* this floor (including later RCs on any tuple, stable and future releases)
+* passes VERSION ADMISSION. The floor only rises when a future Guard release
+* actively adopts a newer DSH; the runtime never raises it from a remote
+* `latest`. Ordering is strict SemVer with prerelease comparison and build
+* metadata ignored. Version admission is one gate of several — it never
+* claims native validation of a not-yet-tested host, and the graph/byte/
+* contract audits below still run on every admission. */
 const MIN_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
-const LATEST_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
-const SUPPORTED_HOST_VERSIONS = [LATEST_SUPPORTED_HOST_VERSION];
-const SUPPORTED_HOST_RANGE = LATEST_SUPPORTED_HOST_VERSION;
-const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+const SUPPORTED_HOST_RANGE = `>=${MIN_SUPPORTED_HOST_VERSION}`;
+/** Versions with recorded first-hand host evidence. This is an EVIDENCE
+* ledger, NOT an admission whitelist: a missing row never refuses a
+* version-above-floor host. */
+const HOST_VALIDATED_VERSIONS = ["0.2.0-rc.1"];
+/** Historical alias retained for evidence-list readers; the admission rule is
+* the floor above, never this list. */
+const SUPPORTED_HOST_VERSIONS = HOST_VALIDATED_VERSIONS;
+const LATEST_TESTED_HOST_VERSION = HOST_VALIDATED_VERSIONS.at(-1);
+const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 function parseHostVersion(value) {
 	const match = VERSION_PATTERN.exec(value.trim());
 	if (!match) return void 0;
@@ -2159,7 +2187,7 @@ function parseHostVersion(value) {
 	].map(Number);
 	if (parts.some((part) => !Number.isSafeInteger(part) || part < 0)) return void 0;
 	const prerelease = match[4] ? match[4].split(".") : [];
-	if (prerelease.some((identifier) => identifier.length === 0)) return void 0;
+	if (prerelease.some((identifier) => /^0\d+$/.test(identifier))) return void 0;
 	return {
 		major: parts[0],
 		minor: parts[1],
@@ -2180,8 +2208,8 @@ function comparePrerelease(a, b) {
 		const leftNumeric = /^\d+$/.test(left);
 		const rightNumeric = /^\d+$/.test(right);
 		if (leftNumeric && rightNumeric) {
-			const difference = Number(left) - Number(right);
-			if (difference !== 0) return difference < 0 ? -1 : 1;
+			if (left.length !== right.length) return left.length < right.length ? -1 : 1;
+			if (left !== right) return left < right ? -1 : 1;
 			continue;
 		}
 		if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
@@ -2217,23 +2245,37 @@ function evaluateMinimumHostVersion(version, minimum = MIN_SUPPORTED_HOST_VERSIO
 		version,
 		minimum,
 		reasonCode: "host_version_below_minimum"
-	} : satisfiesSupportedHostRange(version) ? {
+	} : {
 		status: "supported",
 		version,
 		minimum,
 		reasonCode: "host_version_supported"
-	} : {
-		status: "unregistered",
-		version,
-		minimum,
-		reasonCode: "host_version_unregistered"
 	};
 }
-/** Whether npm's exact public support union admits this host version. */
+/** Version admission: at or above the floor by strict SemVer precedence
+* (prerelease-aware; build metadata ignored). `0.2.0-rc.0` and the whole
+* `0.1.7.x` line stay below the floor; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.0`,
+* later patch/minor RCs and releases all admit. */
 function satisfiesSupportedHostRange(version) {
-	const normalized = version.trim();
-	if (!parseHostVersion(normalized)) return false;
-	return SUPPORTED_HOST_VERSIONS.some((supported) => normalized === supported);
+	const parsed = parseHostVersion(version.trim());
+	if (!parsed) return false;
+	const floor = parseHostVersion(MIN_SUPPORTED_HOST_VERSION);
+	const comparable = {
+		major: parsed.major,
+		minor: parsed.minor,
+		patch: parsed.patch,
+		prerelease: parsed.prerelease
+	};
+	const floorComparable = {
+		major: floor.major,
+		minor: floor.minor,
+		patch: floor.patch,
+		prerelease: floor.prerelease
+	};
+	if (comparable.major !== floorComparable.major) return comparable.major > floorComparable.major;
+	if (comparable.minor !== floorComparable.minor) return comparable.minor > floorComparable.minor;
+	if (comparable.patch !== floorComparable.patch) return comparable.patch > floorComparable.patch;
+	return comparePrerelease(comparable.prerelease, floorComparable.prerelease) >= 0;
 }
 
 //#endregion
@@ -2539,11 +2581,129 @@ function statusForPackages(id, rows, requiredNames, cohort) {
 		missingPackages
 	};
 }
+/** Evaluate a qualified graph against trusted registry identities. The callback
+* must authenticate rows against acquired published identities, not local YAML
+* alone. Production adds the byte/route audit and the adapter qualification. */
+function evaluateGraphDerivedHostLock(rows, context = {}, verifyLockfileSri = () => false) {
+	const supplied = stableRows(rows.filter((row$3) => row$3.name !== "dshmarket"));
+	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$3) => row$3.name)));
+	const unknownFailure = () => ({
+		digest: "",
+		goalAvailable: false,
+		packages: supplied,
+		capabilities: {},
+		cohortId: "graph-derived",
+		auditProvenance: "graph-derived-rebind-pending-native-audit",
+		missingPackages: [],
+		status: "unsupported",
+		reasonCode: "host_lock_unknown_package"
+	});
+	if (supplied.some((row$3) => !registryNames.has(row$3.name))) return unknownFailure();
+	const versionValue = context.hostVersion ?? hostVersionFromPackages(supplied);
+	const version = versionValue === void 0 ? void 0 : evaluateMinimumHostVersion(versionValue);
+	if (!version || version.status !== "supported") return {
+		...unknownFailure(),
+		status: "unsupported",
+		reasonCode: version?.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable",
+		...version ? { hostVersion: version } : {}
+	};
+	if (!supplied.every((row$3) => row$3.version && parseHostVersion(row$3.version) && /^sha512-[A-Za-z0-9+/]{86}==$/.test(row$3.integrity ?? "") && verifyLockfileSri(row$3))) return {
+		...unknownFailure(),
+		status: "unsupported",
+		reasonCode: "host_lock_integrity_mismatch"
+	};
+	const counts = /* @__PURE__ */ new Map();
+	for (const row$3 of supplied) counts.set(row$3.name, (counts.get(row$3.name) ?? 0) + 1);
+	if ([...counts.values()].some((count) => count > 1)) return {
+		...unknownFailure(),
+		status: "unavailable",
+		reasonCode: "host_lock_duplicate_package"
+	};
+	const baseCohort = HOST_COHORTS[0];
+	const seed = safeHostLockDigest(supplied, context, baseCohort);
+	const derivedCohort = {
+		...baseCohort,
+		id: `graph-derived-${seed.slice(0, 16)}`,
+		supportedGoalVersions: [...new Set(supplied.filter((row$3) => row$3.name.startsWith("@deepseek-ai/dsh-goal")).map((row$3) => row$3.version))],
+		packages: supplied.map((row$3) => ({
+			name: row$3.name,
+			version: row$3.version,
+			integrity: row$3.integrity
+		})),
+		auditProvenance: "graph-derived-rebind-pending-native-audit",
+		capabilities: [
+			...baseCohort.capabilities.filter((row$3) => row$3.name !== "host_cohort" && row$3.name !== "host_audit_provenance"),
+			{
+				name: "host_cohort",
+				value: {
+					k: "s",
+					v: `graph-derived-${seed.slice(0, 16)}`
+				}
+			},
+			{
+				name: "host_audit_provenance",
+				value: {
+					k: "s",
+					v: "graph-derived-rebind-pending-native-audit"
+				}
+			},
+			...context.trustDigest ? [{
+				name: "registry_implementation_trust",
+				value: {
+					k: "s",
+					v: context.trustDigest
+				}
+			}] : []
+		]
+	};
+	const digest$1 = safeHostLockDigest(supplied, context, derivedCohort);
+	const capabilities = capabilityEvaluations(supplied, derivedCohort);
+	const goalRows = [...GOAL_HOST_PACKAGES].filter((name) => counts.has(name));
+	const goalAvailable = goalRows.length === GOAL_HOST_PACKAGES.size;
+	const baseResult = {
+		digest: digest$1,
+		goalAvailable,
+		packages: supplied,
+		capabilities,
+		cohortId: derivedCohort.id,
+		derivedCohort,
+		auditProvenance: derivedCohort.auditProvenance,
+		missingPackages: [],
+		...version ? { hostVersion: version } : {},
+		...context.platform ? { platform: context.platform } : {},
+		...context.profileKind ? { profileKind: context.profileKind } : {}
+	};
+	if (statusForPackages("base", supplied, BASE_HOST_PACKAGES, derivedCohort).status !== "supported") return {
+		...baseResult,
+		status: "unavailable",
+		goalAvailable: false,
+		reasonCode: "host_lock_missing"
+	};
+	if (goalRows.length > 0 && !goalAvailable) return {
+		...baseResult,
+		status: "unavailable",
+		goalAvailable: false,
+		reasonCode: "host_lock_goal_graph_incomplete"
+	};
+	if (goalAvailable) {
+		const goal = statusForPackages("goal", supplied, GOAL_HOST_PACKAGES, derivedCohort);
+		if (goal.status !== "supported") return {
+			...baseResult,
+			status: goal.status,
+			goalAvailable: false,
+			reasonCode: "host_lock_goal_graph_incomplete"
+		};
+	}
+	return {
+		...baseResult,
+		status: "supported"
+	};
+}
 function capabilityEvaluations(rows, cohort) {
 	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages$1]) => [id, statusForPackages(id, rows, packages$1, cohort)]));
 }
 function cohortForEvaluation(evaluation) {
-	return HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
+	return evaluation.derivedCohort ?? HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
 }
 function evaluateHostLock(rows, context = {}) {
 	const supplied = stableRows(rows.filter((row$3) => row$3.name !== "dshmarket"));
@@ -2645,11 +2805,11 @@ function evaluateHostLock(rows, context = {}) {
 			reasonCode: failure.reasonCode
 		};
 	}
-	if (hostVersion?.status === "below_minimum" || hostVersion?.status === "unparseable" || hostVersion?.status === "unregistered") return {
+	if (hostVersion?.status === "below_minimum" || hostVersion?.status === "unparseable") return {
 		...baseResult,
 		status: "unsupported",
 		goalAvailable: false,
-		reasonCode: hostVersion.status === "below_minimum" ? "host_lock_version_below_minimum" : hostVersion.status === "unregistered" ? "host_lock_version_mismatch" : "host_lock_version_unparseable"
+		reasonCode: hostVersion.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable"
 	};
 	return {
 		...baseResult,
@@ -2866,6 +3026,131 @@ function bindExecutableIdentity(resolution, effect) {
 const DEFAULT_HOST_LOCK = evaluateHostLock(EXPECTED_HOST_PACKAGES);
 
 //#endregion
+//#region src/domain/host-trust.ts
+var HostTrustError = class extends Error {
+	constructor(code) {
+		super(code);
+		this.code = code;
+		this.name = "HostTrustError";
+	}
+};
+const fail = (code) => {
+	throw new HostTrustError(code);
+};
+/** Qualify consumed implementation semantics independently of version/metadata.
+* Manifest changes may describe a compatible release; unknown executable bytes
+* cannot inherit this adapter's reviewed Session/API behavior. */
+function qualifyHostTrust(value) {
+	const trust = value;
+	if (trust?.schema !== "dsh-host-registry-trust/v1" || trust.source !== "https://registry.npmjs.org/" || trust.qualification !== "reviewed-implementation-equivalence/v1" || !Array.isArray(trust.packages)) return fail("host_trust_source_untrusted");
+	const known = new Map(packages.map((p) => [p.name, p]));
+	const names = /* @__PURE__ */ new Set();
+	const unqualifiedOptionalPackages = [];
+	for (const row$3 of trust.packages) {
+		const reference = known.get(row$3.name);
+		if (!reference || names.has(row$3.name) || !parseHostVersion(row$3.version) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(row$3.integrity) || !row$3.modules || typeof row$3.modules !== "object" || Array.isArray(row$3.modules)) return fail("host_trust_identity_invalid");
+		names.add(row$3.name);
+		const expected = reference.modules;
+		const executable = Object.keys(expected).filter((file) => file !== "package.json").sort();
+		const supplied = Object.keys(row$3.modules).filter((file) => file !== "package.json").sort();
+		if (JSON.stringify(executable) !== JSON.stringify(supplied) || executable.some((file) => row$3.modules[file] !== expected[file])) if (row$3.name === "@deepseek-ai/dsh-goal" || row$3.name === "@deepseek-ai/dsh-tool-goal") unqualifiedOptionalPackages.push(row$3.name);
+		else return fail(row$3.name === "@deepseek-ai/dsh-session" ? "host_contract_session_incompatible" : "host_contract_api_qualification_required");
+		if (!/^[a-f0-9]{64}$/.test(row$3.modules["package.json"])) return fail("host_trust_identity_invalid");
+	}
+	return JSON.parse(JSON.stringify({
+		...trust,
+		unqualifiedOptionalPackages: unqualifiedOptionalPackages.sort()
+	}));
+}
+function parseHostTrust(text) {
+	if (text.length > 2 * 1024 * 1024) return fail("host_trust_identity_invalid");
+	try {
+		return qualifyHostTrust(JSON.parse(text));
+	} catch (error) {
+		if (error instanceof HostTrustError) throw error;
+		return fail("host_trust_identity_invalid");
+	}
+}
+function hostTrustDigest(trust) {
+	const packages$1 = [...trust.packages].sort((a, b) => a.name.localeCompare(b.name)).map((row$3) => ({
+		name: row$3.name,
+		version: row$3.version,
+		integrity: row$3.integrity,
+		modules: Object.fromEntries(Object.entries(row$3.modules).sort(([a], [b]) => a.localeCompare(b)))
+	}));
+	return createHash("sha256").update(JSON.stringify({
+		...trust,
+		packages: packages$1
+	})).digest("hex");
+}
+/** Closed-world regular-file tar projection. Never extract or execute archives. */
+function registryArchiveModules(bytes$1, row$3) {
+	if (bytes$1.length === 0 || bytes$1.length > 64 * 1024 * 1024 || `sha512-${createHash("sha512").update(bytes$1).digest("base64")}` !== row$3.integrity) return fail("host_trust_archive_integrity_mismatch");
+	const tar = gunzipSync(bytes$1, { maxOutputLength: 128 * 1024 * 1024 });
+	const seen = /* @__PURE__ */ new Set(), modules = {};
+	let manifest;
+	for (let offset = 0; offset + 512 <= tar.length;) {
+		const header = tar.subarray(offset, offset + 512);
+		if (header.every((byte) => byte === 0)) break;
+		const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
+		const prefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/, "");
+		const type$1 = header[156];
+		const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim();
+		if (!/^[0-7]+$/.test(sizeText) || prefix || !name.startsWith("package/") || name.split("/").some((part) => part === ".." || part === ".") || seen.has(name)) return fail("host_trust_archive_invalid");
+		seen.add(name);
+		const size = Number.parseInt(sizeText, 8), start = offset + 512, end = start + size;
+		if (!Number.isSafeInteger(size) || end > tar.length || ![
+			0,
+			48,
+			53
+		].includes(type$1)) return fail("host_trust_archive_invalid");
+		if (type$1 === 0 || type$1 === 48) {
+			const file = name.slice(8), content = tar.subarray(start, end);
+			if (file === "package.json") manifest = JSON.parse(content.toString("utf8"));
+			if (file === "package.json" || file.startsWith("lib/") && /\.(?:[cm]?js)$/.test(file)) modules[file] = createHash("sha256").update(content).digest("hex");
+		}
+		offset = start + Math.ceil(size / 512) * 512;
+	}
+	if (manifest?.name !== row$3.name || manifest.version !== row$3.version) return fail("host_trust_archive_identity_mismatch");
+	return modules;
+}
+/** Fetch exact public registry identity at trusted inspect/rebind time.
+* Lockfile integrity is compared with HTTPS registry metadata AND archive bytes.
+* The production origin is fixed; tests can inject a fetch transport. */
+async function acquireHostTrust(rows, fetcher = fetch) {
+	const packages$1 = [];
+	for (const row$3 of rows) {
+		if (!row$3.version || !parseHostVersion(row$3.version) || !row$3.integrity) return fail("host_trust_identity_invalid");
+		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row$3.name)}/${encodeURIComponent(row$3.version)}`, {
+			signal: AbortSignal.timeout(3e4),
+			redirect: "error"
+		});
+		if (!response.ok) return fail("host_trust_registry_unavailable");
+		const metadata = await response.json();
+		if (metadata.name !== row$3.name || metadata.version !== row$3.version || metadata.dist?.integrity !== row$3.integrity) return fail("host_trust_registry_identity_mismatch");
+		const url = new URL(metadata.dist?.tarball ?? "");
+		if (url.origin !== "https://registry.npmjs.org" || url.username || url.password) return fail("host_trust_source_untrusted");
+		const archive = await fetcher(url, {
+			signal: AbortSignal.timeout(3e4),
+			redirect: "error"
+		});
+		if (!archive.ok) return fail("host_trust_registry_unavailable");
+		packages$1.push({
+			name: row$3.name,
+			version: row$3.version,
+			integrity: row$3.integrity,
+			modules: registryArchiveModules(Buffer.from(await archive.arrayBuffer()), row$3)
+		});
+	}
+	return qualifyHostTrust({
+		schema: "dsh-host-registry-trust/v1",
+		source: "https://registry.npmjs.org/",
+		qualification: "reviewed-implementation-equivalence/v1",
+		packages: packages$1
+	});
+}
+
+//#endregion
 //#region src/domain/host-resolver.ts
 /**
 * Names registered in any cohort; rows outside the union are unknown.
@@ -2945,12 +3230,12 @@ function packageRowsFromPnpmLock(text, names = CRITICAL_NAMES) {
 */
 function combineHostPolicy(evaluation) {
 	const version = evaluation.hostVersion;
-	if (version?.status !== "below_minimum" && version?.status !== "unparseable" && version?.status !== "unregistered") return evaluation;
+	if (version?.status !== "below_minimum" && version?.status !== "unparseable") return evaluation;
 	return {
 		...evaluation,
 		status: "unsupported",
 		goalAvailable: false,
-		reasonCode: version.status === "below_minimum" ? "host_lock_version_below_minimum" : version.status === "unregistered" ? "host_lock_version_mismatch" : "host_lock_version_unparseable"
+		reasonCode: version.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable"
 	};
 }
 function resolveInstalledHostLock(moduleUrl = import.meta.url) {
@@ -3073,17 +3358,43 @@ function readActiveHostGraph(runtimeRoot, profileRoot, providedSession) {
 	const runtimeKeys = new Set(runtimeRows.map((row$3) => `${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`));
 	return [...runtimeRows, ...profileRows.filter((row$3) => !runtimeKeys.has(`${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`))];
 }
-/** Verify published executable bytes at the reachable runtime/profile roots.
-* Registry SRI and installed manifests alone cannot authenticate loaded code.
-* Missing, duplicate, escaped or modified modules never pass this audit.
-*
-* All filesystem resolution within one call is memoized through a single
-* {@link HostAuditSession}; callers may thread one in to share the parsed
-* graphs and digests with the other audits of the same validation operation.
-*/
-function auditedHostImplementation(runtimeRoot, profileRoot, providedSession) {
+/** Version/identity evaluation of operator-owned registry expectations. */
+function evaluateConfiguredHostLock(rows, context, trustText) {
+	if (!trustText) return combineHostPolicy(evaluateHostLock(rows, context));
+	const trust = parseHostTrust(trustText);
+	const evaluation = combineHostPolicy(evaluateGraphDerivedHostLock(rows, {
+		...context,
+		trustDigest: hostTrustDigest(trust)
+	}, (row$3) => trust.packages.some((p) => p.name === row$3.name && p.version === row$3.version && p.integrity === row$3.integrity)));
+	return trust.unqualifiedOptionalPackages?.length && evaluation.status === "supported" ? {
+		...evaluation,
+		goalAvailable: false,
+		goalQualificationFailure: "host_contract_goal_qualification_required"
+	} : evaluation;
+}
+/** Complete production composition; no graph-only result grants authority. */
+function evaluateActiveHostLock(runtime, profile, context, session = createHostAuditSession(), trustText) {
+	const evaluation = evaluateConfiguredHostLock(readActiveHostGraph(runtime, profile, session), context, trustText);
+	if (evaluation.status !== "supported") return evaluation;
+	if (!auditedHostImplementation(runtime, profile, session, trustText ? parseHostTrust(trustText).packages : void 0)) return {
+		...evaluation,
+		status: "unsupported",
+		goalAvailable: false,
+		reasonCode: "host_lock_installed_graph_drift"
+	};
+	return evaluation;
+}
+/** Trusted acquisition only; consumers never use local SRI as provenance. */
+async function prepareActiveHostTrust(runtime, profile, fetcher = fetch) {
+	return acquireHostTrust(readActiveHostGraph(runtime, profile), fetcher);
+}
+/** Byte and dual-lane route audit over both graphs. Expectations are either
+* the published baseline or operator-owned, registry-acquired qualified module
+* digests. A missing digest set never authenticates unknown implementation. */
+function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations) {
 	const session = providedSession ?? createHostAuditSession();
 	try {
+		const expectedPackages = expectations ?? packages;
 		const seen = /* @__PURE__ */ new Set();
 		const graphs = [];
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
@@ -3103,7 +3414,7 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession) {
 			};
 			graphs.push(graph);
 			const index$1 = reachableIdsByName(graph, session);
-			for (const expected of packages) {
+			for (const expected of expectedPackages) {
 				const ids = index$1.get(expected.name) ?? [];
 				if (ids.length > 1) return false;
 				if (!ids.length) continue;
@@ -3112,23 +3423,48 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession) {
 				const root = session.realpath(resolve(modules, url));
 				if (!root.startsWith(`${modules}${sep}`)) return false;
 				const manifest = session.readJson(join(root, "package.json"));
-				if (manifest.name !== expected.name || manifest.version !== expected.version) return false;
-				for (const [file, digest$1] of Object.entries(expected.modules)) {
-					const target = session.realpath(join(root, file));
-					if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile() || session.fileDigest(target) !== digest$1) return false;
+				if (manifest.name !== expected.name) return false;
+				if (expected.version !== void 0 && manifest.version !== expected.version) return false;
+				if (!expected.modules) return false;
+				const declared = expected.modules ? Object.keys(expected.modules) : [join(root, "package.json"), ...walkLibFiles(session, root)];
+				const computedDigests = {};
+				for (const file of declared) {
+					const rel = file.startsWith(root + sep) ? file.slice(root.length + 1) : file;
+					const target = session.realpath(join(root, rel));
+					if (!target.startsWith(`${root}${sep}`) || !session.stat(target).isFile()) return false;
+					const digest$1 = session.fileDigest(target);
+					if (expected.modules && expected.modules[rel] !== void 0 && expected.modules[rel] !== digest$1) return false;
+					computedDigests[rel] = digest$1;
 				}
 				graph.packages.set(expected.name, {
 					root,
 					manifest,
-					files: Object.keys(expected.modules)
+					files: Object.keys(computedDigests)
 				});
 				seen.add(expected.name);
 			}
 		}
-		return packages.every((entry) => seen.has(entry.name)) && auditHostDependencyRoutes(graphs, profileRoot, session);
+		return expectedPackages.every((entry) => seen.has(entry.name)) && auditHostDependencyRoutes(graphs, profileRoot, session);
 	} catch {
 		return false;
 	}
+}
+/** Every lib JS file below a package root, discovered through the same
+* session reads (realpath/exists/stat) as the rest of the audit. */
+function walkLibFiles(session, root) {
+	const found = [];
+	const listDir = session.listDir;
+	if (!listDir) return found;
+	const walk = (dir, depth) => {
+		if (depth > 6) return;
+		for (const entry of listDir(dir)) {
+			const full = join(dir, entry.name);
+			if (entry.isDirectory) walk(full, depth + 1);
+			else if (entry.isFile && /\.m?js$/.test(entry.name)) found.push(full);
+		}
+	};
+	walk(join(root, "lib"), 0);
+	return found;
 }
 const AUDITED_FOREGROUND_BYTES = {
 	"@deepseek-ai/dsh-tool-bash": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
@@ -3157,7 +3493,7 @@ function activeRendererModule(nodeModulesRoot, name, providedSession) {
 	const root = session.realpath(resolve(modules, url));
 	if (!root.startsWith(`${modules}${sep}`)) return void 0;
 	const manifest = session.readJson(join(root, "package.json"));
-	if (manifest.name !== name || manifest.version !== "0.2.0-rc.1") return void 0;
+	if (manifest.name !== name || typeof manifest.version !== "string" || !satisfiesSupportedHostRange(manifest.version)) return void 0;
 	if (id !== name && manifest.version !== id.slice(name.length + 1).split("(", 1)[0]) return void 0;
 	const bytesPath = join(root, "lib", "index.js");
 	const target = session.realpath(bytesPath);
@@ -3332,7 +3668,7 @@ function inspectTargetHostGraph(runtimeRoot, profileRoot) {
 	};
 }
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
-function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion) {
+function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion, providedTrust) {
 	const runtime = resolve(runtimeRoot);
 	const profile = resolve(profileRoot);
 	const lockPath = join(runtime, "pnpm-lock.yaml");
@@ -3350,7 +3686,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 		pluginManifestPath
 	]) if (!existsSync(path$1)) throw new HostProfileError("active_graph_missing", `required active graph file is missing: ${path$1}`);
 	const session = createHostAuditSession();
-	const rows = readActiveHostGraph(runtime, profile, session);
+	const trust = providedTrust ? qualifyHostTrust(providedTrust) : void 0;
 	const profileManifest = readJsonObject(profileManifestPath, "profile_manifest_invalid");
 	const installedPlugin = readJsonObject(pluginManifestPath, "installed_plugin_invalid");
 	const dependencies = profileManifest.dependencies;
@@ -3360,19 +3696,19 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 	if (installedPlugin.name !== "dsh-completion-guard" || installedPlugin.version !== expectedPluginVersion) throw new HostProfileError("profile_plugin_version_mismatch", "installed profile plugin identity does not match the generator version");
 	const profileKind = bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("dshmarket") ? "web" : "headless";
 	const platform = process.platform === "win32" ? "windows" : "posix";
-	const evaluation = evaluateHostLock(rows, {
+	const evaluation = evaluateActiveHostLock(runtime, profile, {
 		platform,
 		profileKind
-	});
-	if (evaluation.status !== "supported") throw new HostProfileError(evaluation.reasonCode ?? "active_graph_unavailable", "active runtime graph does not match the supported host manifest");
-	if (!auditedHostImplementation(runtime, profile, session)) throw new HostProfileError("host_implementation_bytes_mismatch", "reachable host modules differ from the audited rc.2 tarballs");
+	}, session, trust ? JSON.stringify(trust) : void 0);
+	if (evaluation.status !== "supported") throw new HostProfileError(evaluation.reasonCode === "host_lock_installed_graph_drift" ? "host_implementation_bytes_mismatch" : evaluation.reasonCode ?? "active_graph_unavailable", evaluation.reasonCode === "host_lock_installed_graph_drift" ? "reachable host modules differ from the qualified published implementation" : "active runtime graph does not match the supported host manifest");
 	return {
 		evaluation,
 		runtimeRoot: runtime,
 		profileRoot: profile,
 		pluginVersion: expectedPluginVersion,
 		platform,
-		profileKind
+		profileKind,
+		...trust ? { trust } : {}
 	};
 }
 function readJsonObject(path$1, code) {
@@ -3385,7 +3721,7 @@ function readJsonObject(path$1, code) {
 function yamlQuote(value) {
 	return JSON.stringify(value);
 }
-function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot, profileRoot) {
+function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot, profileRoot, trust) {
 	const lines = [
 		HOST_LOCK_MARKER_BEGIN,
 		"- id: context-guard",
@@ -3398,6 +3734,7 @@ function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot
 	if (activation) lines.push(`    activation: ${yamlQuote(activation)}`);
 	lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`);
 	lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`);
+	if (trust) lines.push(`    hostLockTrust: ${yamlQuote(JSON.stringify(trust))}`);
 	lines.push("    hostLockPackages:");
 	for (const row$3 of rows) {
 		lines.push(`      - name: ${yamlQuote(row$3.name)}`);
@@ -3460,7 +3797,7 @@ function injectActiveProfileHostLock(input) {
 	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
-	const managed = renderManagedPatch(input.evaluation.packages.filter((row$3) => row$3.version && row$3.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot);
+	const managed = renderManagedPatch(input.evaluation.packages.filter((row$3) => row$3.version && row$3.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot, input.trust);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
 	writeFileSync(temporary, next, {
@@ -3572,7 +3909,11 @@ function verifyComposedHostLockDump(text, expected, roots) {
 	}
 	if (settings.hostLockPolicy !== "dsh-core/v1" || !isAbsolute(settings.hostLockRuntimeRoot) || !isAbsolute(settings.hostLockProfileRoot) || roots && (resolve(settings.hostLockRuntimeRoot) !== resolve(roots.runtimeRoot) || resolve(settings.hostLockProfileRoot) !== resolve(roots.profileRoot))) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
 	const context = hostLockContextFromComposedDump(text);
-	const actual = evaluateHostLock(hostLockRowsFromComposedDump(text), context);
+	const trustLines = entry.flatMap((line, index$1) => line.startsWith("    hostLockTrust:") ? [index$1] : []);
+	if (trustLines.length > 1) throw new HostProfileError("host_lock_readback_mismatch", "duplicate trust description");
+	const trustIndex = trustLines[0];
+	const trustText = trustIndex === void 0 ? void 0 : parseYamlField(entry, trustIndex, entry[trustIndex].slice(entry[trustIndex].indexOf(":") + 1));
+	const actual = evaluateConfiguredHostLock(hostLockRowsFromComposedDump(text), context, trustText);
 	if (actual.status !== "supported" || actual.digest !== expected.digest) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
 	return actual;
 }
@@ -19633,4 +19974,4 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 }
 
 //#endregion
-export { PROOF_KINDS as $, BOUNDED_ARTIFACT_TYPES as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, DEFAULT_HOST_LOCK as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, evaluateToolSurfaceCapability as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, resolveActiveProfileHostLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, ACTIVE_HOST_COHORT_IDS as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, ACTIVE_HOST_COHORT_ID as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, bindExecutableIdentity as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, SUPPORTED_HOST_RANGE as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, selectHostCohort as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, bindLiveGoalCapability as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateMinimumHostVersion as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, SUPPORTED_HOST_VERSIONS as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, evaluateExternalWaitCapability as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, GOAL_HOST_PACKAGES as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, HOST_CAPABILITY_PACKAGE_GROUPS as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, ACTIVE_HOST_LAUNCHER_VERSION as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, HOST_COHORTS as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, ACTION_MANIFEST_VERSION as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, evaluateHostCapability as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, readActiveHostGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, verifyComposedHostLockDump as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, LATEST_SUPPORTED_HOST_VERSION as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, hostVersionFromPackages as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, MIN_SUPPORTED_HOST_VERSION as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, satisfiesSupportedHostRange as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, parseHostVersion as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, ACTION_MANIFEST as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, RC020_RC1_HOST_PACKAGES as _a, hostLockRowsFromComposedDump as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, STOP_PROTOCOL_VERSION_V2 as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, packageRowsFromActiveGraph as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, boundedArtifactChoiceMatches as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, requestedTargetAuthorizesMutation as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, CERTIFICATE_VERSION as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, requestedTargetMatchesResolved as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, validateActionTarget as ga, hostLockContextFromComposedDump as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, validateActionManifest as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, STOP_PROTOCOL_VERSION as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, EXPECTED_HOST_PACKAGES as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, BASE_HOST_PACKAGES as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, isStatefulAction as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, semanticActionFromText as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, SEMANTIC_ACTIONS as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, SUPPORTED_EVIDENCE_ADAPTERS as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, semanticActionFromCommand as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, compareHostVersions as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, STATEFUL_ACTIONS as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, actionCompatible as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, CERTIFICATE_VERSION_V2 as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, requestedIdentityKey as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, createHostAuditSession as va, injectActiveProfileHostLock as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, resolveInstalledHostLock as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, packageRowsFromPnpmLock as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, inspectTargetHostGraph as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, evaluateHostLock as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };
+export { PROOF_KINDS as $, HOST_VALIDATED_VERSIONS as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, acquireHostTrust as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, EXPECTED_HOST_PACKAGES as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, requestedTargetMatchesResolved as Ca, packageRowsFromPnpmLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, validateActionTarget as Da, resolveInstalledHostLock as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, validateActionManifest as Ea, resolveActiveProfileHostLock as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, ACTIVE_HOST_COHORT_ID as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, bindLiveGoalCapability as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, HOST_CAPABILITY_PACKAGE_GROUPS as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, ACTIVE_HOST_COHORT_IDS as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateHostCapability as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, evaluateExternalWaitCapability as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, ACTIVE_HOST_LAUNCHER_VERSION as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, parseHostTrust as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, qualifyHostTrust as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, RC020_RC1_HOST_PACKAGES as Oa, verifyComposedHostLockDump as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, registryArchiveModules as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, selectHostCohort as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, BASE_HOST_PACKAGES as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, requestedTargetAuthorizesMutation as Sa, packageRowsFromActiveGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, semanticActionFromText as Ta, readActiveHostGraph as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, HOST_COHORTS as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, GOAL_HOST_PACKAGES as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, bindExecutableIdentity as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, evaluateToolSurfaceCapability as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, evaluateHostLock as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, hostVersionFromPackages as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, SUPPORTED_EVIDENCE_ADAPTERS as _a, evaluateConfiguredHostLock as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, evaluateMinimumHostVersion as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, isStatefulAction as ba, injectActiveProfileHostLock as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, ACTION_MANIFEST as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, CERTIFICATE_VERSION as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, LATEST_TESTED_HOST_VERSION as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, CERTIFICATE_VERSION_V2 as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, STOP_PROTOCOL_VERSION_V2 as ga, evaluateActiveHostLock as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, STOP_PROTOCOL_VERSION as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, compareHostVersions as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, hostTrustDigest as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, createHostAuditSession as ka, HostTrustError as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, ACTION_MANIFEST_VERSION as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, STATEFUL_ACTIONS as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, SUPPORTED_HOST_RANGE as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, parseHostVersion as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, SEMANTIC_ACTIONS as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, evaluateGraphDerivedHostLock as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, SUPPORTED_HOST_VERSIONS as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, satisfiesSupportedHostRange as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, MIN_SUPPORTED_HOST_VERSION as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, BOUNDED_ARTIFACT_TYPES as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, actionCompatible as va, hostLockContextFromComposedDump as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, semanticActionFromCommand as wa, prepareActiveHostTrust as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, requestedIdentityKey as xa, inspectTargetHostGraph as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, boundedArtifactChoiceMatches as ya, hostLockRowsFromComposedDump as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, DEFAULT_HOST_LOCK as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };

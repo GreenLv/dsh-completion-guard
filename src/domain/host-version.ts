@@ -26,7 +26,7 @@ export interface ParsedHostVersion {
   prerelease: readonly string[]
 }
 
-const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/
+const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/
 
 export function parseHostVersion(value: string): ParsedHostVersion | undefined {
   const match = VERSION_PATTERN.exec(value.trim())
@@ -34,7 +34,7 @@ export function parseHostVersion(value: string): ParsedHostVersion | undefined {
   const parts: number[] = [match[1], match[2], match[3]].map(Number)
   if (parts.some((part) => !Number.isSafeInteger(part) || part < 0)) return undefined
   const prerelease = match[4] ? match[4].split('.') : []
-  if (prerelease.some((identifier) => identifier.length === 0)) return undefined
+  if (prerelease.some((identifier) => /^0\d+$/.test(identifier))) return undefined
   return { major: parts[0], minor: parts[1], patch: parts[2], prerelease }
 }
 
@@ -52,8 +52,8 @@ function comparePrerelease(a: readonly string[], b: readonly string[]): number {
     const leftNumeric = /^\d+$/.test(left)
     const rightNumeric = /^\d+$/.test(right)
     if (leftNumeric && rightNumeric) {
-      const difference = Number(left) - Number(right)
-      if (difference !== 0) return difference < 0 ? -1 : 1
+      if (left.length !== right.length) return left.length < right.length ? -1 : 1
+      if (left !== right) return left < right ? -1 : 1
       continue
     }
     // Numeric identifiers always have lower precedence than alphanumeric ones.

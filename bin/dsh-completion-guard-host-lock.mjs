@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import {
   injectActiveProfileHostLock,
+  prepareActiveHostTrust,
   inspectTargetHostGraph,
   evaluateHostLock,
   resolveActiveProfileHostLock,
@@ -23,6 +24,7 @@ function summary(evaluation) {
     cohort_id: evaluation.cohortId,
     host_lock_digest: evaluation.digest,
     goal_available: evaluation.goalAvailable,
+    ...(evaluation.goalQualificationFailure ? { goal_qualification_reason: evaluation.goalQualificationFailure } : {}),
     platform: evaluation.platform,
     profile: evaluation.profileKind,
     // How the cohort's rows were established. Without this in the READBACK, an
@@ -64,10 +66,14 @@ try {
     process.stdout.write(`${JSON.stringify({ ...summary(evaluation), inspection_scope: 'pre_install_target', profile_graph: target.profileGraph, packages: rows })}\n`)
     process.exit(evaluation.status === 'supported' ? 0 : 1)
   }
+  // Explicit registry rebind. Existing baseline inspection stays offline.
+  const trust = process.argv.includes('--rebind-registry')
+    ? await prepareActiveHostTrust(option('--runtime-root'), option('--profile-root')) : undefined
   const active = resolveActiveProfileHostLock(
     option('--runtime-root'),
     option('--profile-root'),
     packageManifest.version,
+    trust,
   )
   if (command === 'inject') injectActiveProfileHostLock(active)
   if (command === 'verify-dump') {

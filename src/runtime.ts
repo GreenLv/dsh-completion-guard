@@ -1,5 +1,5 @@
 import './message-source.js'
-import { auditedHostImplementation } from './domain/host-resolver.js'
+import { evaluateActiveHostLock, evaluateConfiguredHostLock } from './domain/host-resolver.js'
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import { createRebindTool } from './tools/rebind.js'
 import { createHash } from 'node:crypto'
@@ -58,7 +58,6 @@ import {
   DEFAULT_HOST_LOCK,
   evaluateExternalWaitCapability,
   evaluateHostCapability,
-  evaluateHostLock,
   type HostCapabilityEvaluation,
   type HostLockEvaluation,
 } from './domain/host-lock.js'
@@ -70,7 +69,7 @@ import {
 } from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
-import { auditedDefaultWorkdirProvider, auditedForegroundRenderers, readActiveHostGraph } from './domain/host-resolver.js'
+import { auditedDefaultWorkdirProvider, auditedForegroundRenderers } from './domain/host-resolver.js'
 import { createHostAuditSession, type HostAuditSession } from './domain/host-audit-session.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
 import { captureHostWorkdir, HOST_WORKDIR_PREFIX, sourcedNamedTestRoot } from './domain/host-workdir.js'
@@ -832,12 +831,11 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
   try {
     const runtimeRoot = session.realpath(config.hostLockRuntimeRoot)
     const profileRoot = session.realpath(config.hostLockProfileRoot)
-    const actual = evaluateHostLock(readActiveHostGraph(runtimeRoot, profileRoot, session), {
+    const actual = evaluateActiveHostLock(runtimeRoot, profileRoot, {
       platform: config.hostLockPlatform, profileKind: config.hostLockProfile,
-    })
+    }, session, config.hostLockTrust)
     if (actual.status !== 'supported') return actual
     if (actual.digest !== expected.digest) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
-    if (!auditedHostImplementation(runtimeRoot, profileRoot, session)) return { ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
     const audited = auditedForegroundRenderers(runtimeRoot, profileRoot, session)
     return audited.length ? { ...actual, auditedForegroundRenderers: audited,
       digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${actual.digest}\0${audited.join(',')}`).digest('hex') } : actual
@@ -929,19 +927,22 @@ export function apply(ctx: Context, rawConfig: {
   hostLockPolicy?: unknown
   hostLockRuntimeRoot?: unknown
   hostLockProfileRoot?: unknown
+  hostLockTrust?: unknown
 } = {}, seams: RuntimeExecutorSeams = {}): void {
   const config: ResolvedConfig = resolveConfig(rawConfig)
   // Runtime authority must come from the active profile/package graph, not a
   // nearest lockfile (profiles and the DSH runtime have separate locks). The
   // acceptance installer injects this bounded identity; absence is unknown.
-  const installedHostLock = seams.hostLock ?? evaluateHostLock(config.hostLockPackages ?? [], {
+  const installedHostLock = seams.hostLock ?? evaluateConfiguredHostLock(config.hostLockPackages ?? [], {
     platform: config.hostLockPlatform,
     profileKind: config.hostLockProfile,
-  })
+  }, config.hostLockTrust)
   const runtimes = new Map<Agent, GuardRuntime>()
   const privateLedgerRoot = seams.privateLedgerRoot
     ?? resolvePrivateLedgerRoot(undefined, process.env.DSH_HOME, homedir())
   const hostLocks = new Map<Agent, HostLockEvaluation>()
+  const qualifiedGoalService = (agent: Agent) => (hostLocks.get(agent) ?? installedHostLock).goalQualificationFailure
+    ? undefined : optionalGoalService(ctx, agent)
   const ledgerContext = (agent: Agent, fallback: HostLockEvaluation = installedHostLock) => ({
     sessionId: String(agent.session.id),
     sessionHeader: structuredClone(agent.session.header) as unknown as Record<string, unknown>,
@@ -967,14 +968,14 @@ export function apply(ctx: Context, rawConfig: {
   const refreshAgentHostLock = (agent: Agent): HostLockEvaluation => {
     const evaluated = seams.hostLock ?? fullHostLockValidation()
     const current = bindLiveGoalCapability(evaluated,
-      Boolean(optionalGoalService(ctx, agent)) && hasPinnedUpdateGoalTool(agent))
+      Boolean(qualifiedGoalService(agent)) && hasPinnedUpdateGoalTool(agent))
     hostLocks.set(agent, current)
     return current
   }
   const ensure = (agent: Agent) => {
     let runtime = runtimes.get(agent)
     if (!runtime) {
-      const goals = optionalGoalService(ctx, agent)
+      const goals = qualifiedGoalService(agent)
       // Exactly ONE full validation per attach: its result seeds the runtime
       // and every rebuild until a security-sensitive entry requests its own
       // fresh validation. The stale-write-back of the earlier double refresh
@@ -1402,7 +1403,7 @@ export function apply(ctx: Context, rawConfig: {
   })
   ctx.on('agent/turn-stopping', async ({ agent }) => {
     const runtime = ensure(agent)
-    const goals = optionalGoalService(ctx, agent)
+    const goals = qualifiedGoalService(agent)
     await handleGuardTurnStopping(agent, runtime, {
       flush: () => ctx.sessions.flush(agent.session),
       hostSupported: runtime.projection.hostStatus === 'supported',

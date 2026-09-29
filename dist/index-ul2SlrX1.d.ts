@@ -1729,11 +1729,25 @@ declare function authorityCaptureCounts(blocks: readonly AuthorityBlock[]): Reco
 declare function currentContractDigest(projection: GuardProjection): string;
 //#endregion
 //#region src/domain/host-version.d.ts
-/** Exact host identity; version ordering is diagnostic only. */
+/** Version admission floor. Since 0.8.1 the public DSH support range is
+* `>=0.2.0-rc.1` with NO implied upper bound: every host version at or above
+* this floor (including later RCs on any tuple, stable and future releases)
+* passes VERSION ADMISSION. The floor only rises when a future Guard release
+* actively adopts a newer DSH; the runtime never raises it from a remote
+* `latest`. Ordering is strict SemVer with prerelease comparison and build
+* metadata ignored. Version admission is one gate of several — it never
+* claims native validation of a not-yet-tested host, and the graph/byte/
+* contract audits below still run on every admission. */
 declare const MIN_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
-declare const LATEST_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
-declare const SUPPORTED_HOST_VERSIONS: readonly string[];
 declare const SUPPORTED_HOST_RANGE: string;
+/** Versions with recorded first-hand host evidence. This is an EVIDENCE
+* ledger, NOT an admission whitelist: a missing row never refuses a
+* version-above-floor host. */
+declare const HOST_VALIDATED_VERSIONS: readonly string[];
+/** Historical alias retained for evidence-list readers; the admission rule is
+* the floor above, never this list. */
+declare const SUPPORTED_HOST_VERSIONS: readonly string[];
+declare const LATEST_TESTED_HOST_VERSION: string;
 interface ParsedHostVersion {
   major: number;
   minor: number;
@@ -1748,16 +1762,19 @@ declare function parseHostVersion(value: string): ParsedHostVersion | undefined;
 * unparseable host version fails closed rather than sorting as "newer".
 */
 declare function compareHostVersions(a: string, b: string): number | undefined;
-type HostVersionStatus = "supported" | "below_minimum" | "unparseable" | "unregistered";
+type HostVersionStatus = "supported" | "below_minimum" | "unparseable";
 interface HostVersionDecision {
   status: HostVersionStatus;
   version: string;
   minimum: string;
-  reasonCode: "host_version_supported" | "host_version_below_minimum" | "host_version_unparseable" | "host_version_unregistered";
+  reasonCode: "host_version_supported" | "host_version_below_minimum" | "host_version_unparseable";
 }
 /** Decide the version-policy half of host support. Never a substitute for the graph lock. */
 declare function evaluateMinimumHostVersion(version: string, minimum?: string): HostVersionDecision;
-/** Whether npm's exact public support union admits this host version. */
+/** Version admission: at or above the floor by strict SemVer precedence
+* (prerelease-aware; build metadata ignored). `0.2.0-rc.0` and the whole
+* `0.1.7.x` line stay below the floor; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.0`,
+* later patch/minor RCs and releases all admit. */
 declare function satisfiesSupportedHostRange(version: string): boolean;
 //#endregion
 //#region src/domain/host-lock.d.ts
@@ -1770,7 +1787,7 @@ type HostProfileKind = "headless" | "web";
 * records whether the exact graph it used was loaded on a native host or only
 * resolved from the registry.
 */
-type HostAuditProvenance = "native-audited" | "registry-derived-pending-native-audit";
+type HostAuditProvenance = "native-audited" | "registry-derived-pending-native-audit" | "graph-derived-rebind-pending-native-audit";
 interface HostCohort {
   /** Stable cohort identity; bound into every hostLockDigest via `host_cohort`. */
   id: string;
@@ -1832,11 +1849,14 @@ interface HostCapabilityEvaluation {
 interface HostLockEvaluation {
   status: HostLockStatus;
   digest: string;
+  /** Qualified graph descriptor retained by capability consumers. */
+  derivedCohort?: HostCohort;
   /** Read-only byte attestation of the active foreground shell renderer and
   * its shared terminal decoder. Set only by production active-graph readback;
   * the package version/SRI graph alone does not establish renderer behavior. */
   auditedForegroundRenderers?: Array<"bash" | "pwsh">;
   goalAvailable: boolean;
+  goalQualificationFailure?: "host_contract_goal_qualification_required";
   reasonCode?: "host_lock_migration_required" | "host_lock_installed_graph_drift" | "host_lock_missing" | "host_lock_version_mismatch" | "host_lock_version_below_minimum" | "host_lock_version_unparseable" | "host_lock_integrity_mismatch" | "host_lock_unknown_package" | "host_lock_duplicate_package" | "host_lock_goal_graph_incomplete" | "host_lock_goal_capability_mismatch" | "host_lock_cohort_mixed_graph" | "host_lock_cohort_unbound_identity" | "host_lock_cohort_platform_not_audited";
   packages: PackageRow[];
   capabilities: Record<HostCapabilityId, HostCapabilityEvaluation>;
@@ -1872,6 +1892,8 @@ interface HostLockContext {
   * it leaves the version question unanswered rather than assumed supported.
   */
   hostVersion?: string;
+  /** Trusted registry expectations, bound separately from version admission. */
+  trustDigest?: string;
 }
 /**
 * The host version a package graph records, for the version-policy decision.
@@ -1909,6 +1931,10 @@ interface HostCohortSelection {
 * consistently.
 */
 declare function selectHostCohort(rows: readonly PackageRow[], platform?: HostPlatform): HostCohortSelection;
+/** Evaluate a qualified graph against trusted registry identities. The callback
+* must authenticate rows against acquired published identities, not local YAML
+* alone. Production adds the byte/route audit and the adapter qualification. */
+declare function evaluateGraphDerivedHostLock(rows: readonly PackageRow[], context?: HostLockContext, verifyLockfileSri?: (row: PackageRow) => boolean): HostLockEvaluation;
 declare function evaluateHostLock(rows: readonly PackageRow[], context?: HostLockContext): HostLockEvaluation;
 interface HostCapabilityRequest {
   action: SemanticAction;
@@ -2386,6 +2412,12 @@ interface HostAuditSession {
   readJson(path: string): Record<string, unknown>;
   /** Memoized SHA-256 over the shared bytes. */
   fileDigest(path: string): string;
+  /** Memoized directory listing (names + kinds) for audit enumeration. */
+  listDir?(dir: string): Array<{
+    name: string;
+    isFile: boolean;
+    isDirectory: boolean;
+  }>;
   /** Memoized `createRequire` for one importer path. */
   requireFor(importer: string): NodeRequire;
   /** Memoized `require.resolve.paths(name)` for one importer. */
@@ -2395,6 +2427,38 @@ interface HostAuditSession {
   /** Generic operation-scoped memo for derived structures (parsed graphs, indexes). */
   memo<T>(key: string, compute: () => T): T;
 }
+//#endregion
+//#region src/domain/host-trust.d.ts
+interface HostTrustedPackage extends PackageRow {
+  version: string;
+  integrity: string;
+  modules: Record<string, string>;
+}
+/** Operator-owned output of registry acquisition, never package self-report. */
+interface HostRebindTrust {
+  schema: "dsh-host-registry-trust/v1";
+  source: "https://registry.npmjs.org/";
+  qualification: "reviewed-implementation-equivalence/v1";
+  packages: HostTrustedPackage[];
+  /** Recomputed qualification, not caller-reported compatibility. */
+  unqualifiedOptionalPackages?: string[];
+}
+declare class HostTrustError extends Error {
+  readonly code: string;
+  constructor(code: string);
+}
+/** Qualify consumed implementation semantics independently of version/metadata.
+* Manifest changes may describe a compatible release; unknown executable bytes
+* cannot inherit this adapter's reviewed Session/API behavior. */
+declare function qualifyHostTrust(value: unknown): HostRebindTrust;
+declare function parseHostTrust(text: string): HostRebindTrust;
+declare function hostTrustDigest(trust: HostRebindTrust): string;
+/** Closed-world regular-file tar projection. Never extract or execute archives. */
+declare function registryArchiveModules(bytes: Buffer, row: PackageRow): Record<string, string>;
+/** Fetch exact public registry identity at trusted inspect/rebind time.
+* Lockfile integrity is compared with HTTPS registry metadata AND archive bytes.
+* The production origin is fixed; tests can inject a fetch transport. */
+declare function acquireHostTrust(rows: readonly PackageRow[], fetcher?: typeof fetch): Promise<HostRebindTrust>;
 //#endregion
 //#region src/domain/host-resolver.d.ts
 declare class HostProfileError extends Error {
@@ -2434,11 +2498,18 @@ interface ActiveProfileHostLock {
   pluginVersion: string;
   platform: HostPlatform;
   profileKind: HostProfileKind;
+  trust?: HostRebindTrust;
 }
 /** Read exact reachable critical rows without requiring Guard installation.
 * Used by target preflight before a legacy profile can be migrated.
 */
 declare function readActiveHostGraph(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): PackageRow[];
+/** Version/identity evaluation of operator-owned registry expectations. */
+declare function evaluateConfiguredHostLock(rows: readonly PackageRow[], context: HostLockContext, trustText?: string): HostLockEvaluation;
+/** Complete production composition; no graph-only result grants authority. */
+declare function evaluateActiveHostLock(runtime: string, profile: string, context: HostLockContext, session?: HostAuditSession, trustText?: string): HostLockEvaluation;
+/** Trusted acquisition only; consumers never use local SRI as provenance. */
+declare function prepareActiveHostTrust(runtime: string, profile: string, fetcher?: typeof fetch): Promise<HostRebindTrust>;
 /** Verify published executable bytes at the reachable runtime/profile roots.
 * Registry SRI and installed manifests alone cannot authenticate loaded code.
 * Missing, duplicate, escaped or modified modules never pass this audit.
@@ -2447,7 +2518,16 @@ declare function readActiveHostGraph(runtimeRoot: string, profileRoot: string, p
 * {@link HostAuditSession}; callers may thread one in to share the parsed
 * graphs and digests with the other audits of the same validation operation.
 */
-declare function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession): boolean;
+interface AuditedPackageExpectation {
+  name: string;
+  version?: string;
+  /** Required published per-file digests; absence never authenticates bytes. */
+  modules?: Record<string, string>;
+}
+/** Byte and dual-lane route audit over both graphs. Expectations are either
+* the published baseline or operator-owned, registry-acquired qualified module
+* digests. A missing digest set never authenticates unknown implementation. */
+declare function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[]): boolean;
 declare function activeRendererModule(nodeModulesRoot: string, name: string, providedSession?: HostAuditSession): {
   bytes: string;
   path: string;
@@ -2479,7 +2559,7 @@ interface TargetHostGraph {
 */
 declare function inspectTargetHostGraph(runtimeRoot: string, profileRoot: string): TargetHostGraph;
 /** Read and validate the actual runtime graph plus the installed profile plugin. */
-declare function resolveActiveProfileHostLock(runtimeRoot: string, profileRoot: string, expectedPluginVersion: string): ActiveProfileHostLock;
+declare function resolveActiveProfileHostLock(runtimeRoot: string, profileRoot: string, expectedPluginVersion: string, providedTrust?: HostRebindTrust): ActiveProfileHostLock;
 /** Atomically inject a repeatable managed patch into the selected profile only. */
 declare function injectActiveProfileHostLock(input: ActiveProfileHostLock): string;
 /** Extract the bounded host tuple from DSH's composed YAML dump. */
@@ -3080,4 +3160,4 @@ declare function projectSessionCoreV2(events: DerivedEnvelope[], projection: Gua
 * remains a separate, currently pending fact. */
 declare const RC020_RC1_HOST_PACKAGES: PackageRow[];
 //#endregion
-export { PROOF_MANIFEST_DOMAIN_V2 as $, proposeRebindV042 as $a, AssetObligation as $i, isDeterministicCheck as $n, legacyQuestionReadingIsInformational as $o, evaluateToolSurfaceCapability as $r, TargetHostGraph as $t, V4SessionLike as A, SourceSpan as Aa, certifyCheckpoint as Ai, commitTreeSnapshotDigest as An, QualificationStatus as Ao, ExecutableIdentity as Ar, isStatefulAction as As, validateProofManifestV2 as At, V6_ORDINARY_COMPLETION_RULE_COMPACT as B, createProjection as Ba, isInformationalMessage as Bi, ShellParseStatus as Bn, hasQuestionScope as Bo, HostCohortSelection as Br, normalizeClause as Bs, validateManifest as Bt, observeAssistantOutcome as C, GuardOperation as Ca, CONFIRM_LINE_PATTERN as Ci, GitEffectExecution as Cn, DirectiveClass as Co, ACTIVE_HOST_COHORT_ID as Cr, STOP_PROTOCOL_VERSION as Cs, proofOperationMatches as Ct, SESSION_API_UNSUPPORTED as D, NeedsReviewFact as Da, CheckpointResult as Di, GitTargetIdentity as Dn, InterpretOptions as Do, BASE_HOST_PACKAGES as Dr, StatefulAction as Ds, sessionQuery as Dt, v6TestPredicate as E, MessageCoverage as Ea, parseConfirmationMessage as Ei, GitPrestateEnvelope as En, GRANTED_QUALIFICATION as Eo, AuditedExecutable as Er, SemanticAction as Es, scopeCoverageDigest as Et, DEFAULT_RECOVERY_CHAR_BUDGET as F, TargetTuple as Fa, classifyClause as Fi, revalidateGitPrestate as Fn, clauseIsGoverned as Fo, HostAuditProvenance as Fr, semanticActionFromText as Fs, isVerifyingCapability as Ft, openItems as G, ReleaseSettlement as Ga, BoundaryRequest as Gi, goalCompletionDenial as Gn, isExecutableItem as Go, HostPlatform as Gr, LifecyclePhase as Gt, carriesCleanupCondition as H, ReleaseGateDecision as Ha, BOUNDARY_RECORD_PREFIX as Hi, isRunExecutable as Hn, interpretClause as Ho, HostLockContext as Hr, sanitizeUrl as Hs, FIRST_STEP_GUIDANCE as Ht, MIN_RECOVERY_CHAR_BUDGET as I, TargetValue as Ia, environmentDefaultRepositoryTarget as Ii, verifiedLinearCommitReadback as In, clauseIsProtected as Io, HostCapabilityEvaluation as Ir, validateActionManifest as Is, COMMAND_SURFACE_MANIFEST as It, renderRecoveryPacket as J, RebindArgs as Ja, availableBoundaryQualifications as Ji, ToolResultInput as Jn, isOpenObligation as Jo, bindExecutableIdentity as Jr, firstStepGuidanceV6 as Jt, recoveryDigest as K, BoundedSource as Ka, GoalActivationState as Ki, hasCurrentCertificate as Kn, isExplanationScope as Ko, HostProfileKind as Kr, claimedBatchHasRealRootInput as Kt, RecoveryCause as L, VerificationContract as La, extractArtifactPaths as Li, CanonicalArgv as Ln, explanationHasActionResidue as Lo, HostCapabilityId as Lr, validateActionTarget as Ls, CommandSurfaceManifest as Lt, CLEANUP_CONDITION_RULE as M, TargetCaptureStatus as Ma, ClauseSegment as Mi, executeRevalidatedGitEffect as Mn, actionVerbMatches as Mo, GOAL_HOST_PACKAGES as Mr, requestedTargetAuthorizesMutation as Ms, bindingSatisfies as Mt, CLEANUP_CONDITION_RULE_COMPACT as N, TargetSource as Na, captureClause as Ni, gitCommandMatchesTarget as Nn, clarifiedSpanOf as No, HOST_CAPABILITY_PACKAGE_GROUPS as Nr, requestedTargetMatchesResolved as Ns, evidenceCoverage as Nt, SESSION_EVENT_ENVELOPE_INVALID as O, NeedsReviewReason as Oa, RejectedBinding as Oi, LinearCommitReadback as On, LEGACY_QUALIFICATION as Oo, DEFAULT_HOST_LOCK as Or, actionCompatible as Os, sessionQueryV2 as Ot, CLEANUP_CONDITION_RULE_SHORT as P, TargetSourceKind as Pa, captureItem as Pi, parseGitCommandManifest as Pn, clauseAsksOwnQuestion as Po, HOST_COHORTS as Pr, semanticActionFromCommand as Ps, evidenceMatchesItem as Pt, PROOF_KINDS_V2 as Q, proposeRebindOutcome as Qa, AssetInterpretationFact as Qi, extractToolSubject as Qn, kindOfScope as Qo, evaluateHostLock as Qr, HostProfileError as Qt, RecoveryOptions as R, WaitAuthorization as Ra, extractMethod as Ri, CanonicalCommandSurface as Rn, governedClauseRestrictsExecution as Ro, HostCapabilityRequest as Rr, canonicalizePath as Rs, ManifestIssue as Rt, latestRootInstruction as S, GuardItemStatus as Sa, classifyUserInteraction as Si, GitCommandRejected as Sn, AuthorityDisposition as So, rootLocatorFlavor as Sr, STATEFUL_ACTIONS as Ss, proofHostSurfacesOf as St, testOutcomePredicate as T, HostStatus as Ta, isFrozenV042RebindResponse as Ti, GitPrestateCheck as Tn, ExecutionQualification as To, ACTIVE_HOST_LAUNCHER_VERSION as Tr, SUPPORTED_EVIDENCE_ADAPTERS as Ts, requiredSubjectsOf as Tt, cleanupConditionFor as U, ReleaseObservedIdentity as Ua, BoundaryEffectuation as Ui, parsePwshCommand as Un, interpretMessage as Uo, HostLockEvaluation as Ur, sha256 as Us, FirstStepInjection as Ut, V6_ORDINARY_COMPLETION_RULE_SHORT as V, PackageRow as Va, segmentClauses as Vi, canonicalArgvFromCommand as Vn, hasWorkPredicate as Vo, HostCohortSelectionReason as Vr, sanitizeClauseText as Vs, ClaimedMessage as Vt, closingHint as W, ReleaseOperation as Wa, BoundaryQualification as Wi, parseShellCommand as Wn, introducesActionClause as Wo, HostLockStatus as Wr, FirstStepPreviewInput as Wt, PROOF_CAPABILITY_MATRIX as X, confirmRebind as Xa, isCurrentAcceptedBoundary as Xi, evidenceFromPersistedToolResult as Xn, isRestatement as Xo, evaluateExternalWaitCapability as Xr, previewFirstStepInjection as Xt, v6CurrentRootBoundaries as Y, RebindProposal as Ya, effectuateBoundary as Yi, ToolSubject as Yn, isQuestionScopeNeedingReview as Yo, bindLiveGoalCapability as Yr, lifecyclePhase as Yt, PROOF_KINDS as Z, proposeRebind as Za, qualifyBoundary as Zi, extractTextContent as Zn, itemHoldsExecutionAuthority as Zo, evaluateHostCapability as Zr, ActiveProfileHostLock as Zt, decideTurnStopping as _, GuardCheckpoint as _a, authorityCaptureCounts as _i, GIT_COMMAND_TEMPLATES as _n, capabilityConsequence as _o, PROTOCOL_V5_NOTICE as _r, ActionSpec as _s, createProofManifestV2 as _t, AssistantOutcomeObservation as a, DeriveConfig as aa, MIN_SUPPORTED_HOST_VERSION as ai, combineHostPolicy as an, CapabilityRemedy as ao, TaskKind as ar, presentExplanationHead as as, ProofKindV2 as at, isWholeTaskCompletionClaim as b, GuardItem as ba, UserInteractionKind as bi, GitCommandManifest as bn, removalIsComplete as bo, deriveProjection as br, CERTIFICATE_VERSION_V2 as bs, proofDigestV2 as bt, CurrentActionBasis as c, DerivedEnvelope as ca, SUPPORTED_HOST_VERSIONS as ci, injectActiveProfileHostLock as cn, DependencyStatus as co, deriveItemDiagnosis as cr, reportingHeadGoverns as cs, ProofObligation as ct, TurnStoppingDecision as d, EvidenceParseStatus as da, parseHostVersion as di, packageRowsFromPnpmLock as dn, ProcessExitStatus as do, nativeFileTwoRole as dr, splitTextFragments as ds, SessionQuery as dt, BindingActionClosure as ea, hostVersionFromPackages as ei, activeRendererModule as en, rebindAttemptKey as eo, persistedToolResultStatus as er, maskCodeSpans as es, PROOF_PROTOCOL_VERSION as et, assessmentAction as f, EvidenceRole as fa, satisfiesSupportedHostRange as fi, readActiveHostGraph as fn, ProcessFactSource as fo, relevantEvidence as fr, statefulActionsOfScope as fs, SessionQueryV2 as ft, decideTurnBoundary as g, GuardBoundary as ga, AuthorityKind as gi, GIT_COMMAND_MANIFEST_IDS as gn, admissibleForRemoval as go, PROTOCOL_V4_NOTICE as gr, ActionManifest as gs, createProofManifest as gt, currentActionBases as h, GoalRef as ha, AuthorityBlockKind as hi, verifyComposedHostLockDump as hn, actionHasCertificationPath as ho, PROTOCOL_V3_NOTICE as hr, ACTION_MANIFEST_VERSION as hs, canonicalProjection as ht, supersedeItem as i, DelegationRef as ia, LATEST_SUPPORTED_HOST_VERSION as ii, auditedHostImplementation as in, CapabilityGap as io, Repairability as ir, opensWithDirective as is, ProofKindCapability as it, snapshotSessionEvents as j, TargetCaptureReasonCode as ja, CaptureScope as ji, createGitPrestateEnvelope as jn, ScopeInterpretation as jo, ExecutableIdentityBinding as jr, requestedIdentityKey as js, EvidenceFacetCoverage as jt, SessionApiError as k, PersistenceAuthorization as ka, bindingIndividuallyAccepted as ki, commitIndexSnapshotDigest as kn, QualificationReason as ko, EXPECTED_HOST_PACKAGES as kr, boundedArtifactChoiceMatches as ks, validateProofManifest as kt, NO_PROGRESS_RECORD_PREFIX as l, EvidenceBinding as la, compareHostVersions as li, inspectTargetHostGraph as ln, DerivedProcessFacts as lo, evidenceAvailabilityReason as lr, restatedContentOf as ls, ProofObligationV2 as lt, classifyCompletionClaim as m, ExternalOperation as ma, AuthorityBlock as mi, resolveInstalledHostLock as mn, RemovalOutcomeReport as mo, DEFAULT_DELEGATION_TOOL_NAMES as mr, ACTION_MANIFEST as ms, bindProofV2ToProjection as mt, projectSessionCoreV2 as n, BoundaryQualificationKind as na, HostVersionDecision as ni, auditedDefaultWorkdirProvider as nn, replayRebindResult as no, CertificationSupport as nr, namedActions as ns, ProofHostSurface as nt, CONTROL_RECORD_PREFIX as o, DeriveResult as oa, ParsedHostVersion as oi, hostLockContextFromComposedDump as on, DEPENDENCY_FREE_ONLY_CONDITION as oo, UnifiedItemDiagnosis as or, qualificationOfClause as os, ProofManifest as ot, assessmentOutcomePredicate as p, ExpectedTransition as pa, currentContractDigest as pi, resolveActiveProfileHostLock as pn, ProcessOutcomeReason as po, CAPTURE_V042_NOTICE as pr, verbIsNegated as ps, bindProofToProjection as pt, recoveryTitle as q, ProposeOutcome as qa, GoalBoundaryAccess as qi, ToolCallInput as qn, isInformationalFragment as qo, HostToolSurface as qr, firstStepGuidance as qt, projectCoreV2 as r, DeferAuthorization as ra, HostVersionStatus as ri, auditedForegroundRenderers as rn, CapabilityFact as ro, DiagnosisNextAction as rr, opensConditionLead as rs, ProofKind as rt, CompletionDisposition as s, DeriveScope as sa, SUPPORTED_HOST_RANGE as si, hostLockRowsFromComposedDump as sn, DeclaredOperationResult as so, capabilityRemedyPhrase as sr, questionHeadsClause as ss, ProofManifestV2 as st, RC020_RC1_HOST_PACKAGES as t, BoundaryDisposition as ta, selectHostCohort as ti, auditedDefaultWorkdirHost as tn, rebindResponse as to, withDurability as tr, maskQuotedSpans as ts, PROOF_PROTOCOL_VERSION_V2 as tt, NO_PROGRESS_TURNS_BEFORE_STOP as u, EvidenceOutcome as ua, evaluateMinimumHostVersion as ui, packageRowsFromActiveGraph as un, OperationAttribution as uo, itemDiagnosis as ur, semanticActionOfScope as us, ProofSurface as ut, decisionBoundaryKey as v, GuardEvidence as va, segmentAuthorityBlocks as vi, GitAdapterAction as vn, capabilityFactOf as vo, PROTOCOL_V6_NOTICE as vr, BOUNDED_ARTIFACT_TYPES as vs, proofCapabilityReport as vt, progressFingerprint as w, GuardProjection as wa, ParsedConfirmation as wi, GitEffectRunner as wn, Executee as wo, ACTIVE_HOST_COHORT_IDS as wr, STOP_PROTOCOL_VERSION_V2 as ws, proofV2Rejection as wt, latestAssistantText as x, GuardItemKind as xa, classifyTaskIntent as xi, GitCommandParseResult as xn, removalIsPartiallyKnown as xo, legacyRecordsNeedingReview as xr, SEMANTIC_ACTIONS as xs, proofEvidenceConstraints as xt, isRootPauseRequest as y, GuardIntegrity as ya, TaskIntent as yi, GitCommandAccepted as yn, partialFailureOf as yo, applyUpgradeEligibility as yr, CERTIFICATE_VERSION as ys, proofDigest as yt, V6_ORDINARY_COMPLETION_RULE as z, WorkUnit as za, extractOperation as zi, ParsedShell as zn, hasOrderedCoordination as zo, HostCohort as zr, digestStrings as zs, OperationVerbEntry as zt };
+export { PROOF_MANIFEST_DOMAIN_V2 as $, WorkUnit as $a, extractOperation as $i, canonicalArgvFromCommand as $n, hasOrderedCoordination as $o, HostCohortSelectionReason as $r, digestStrings as $s, HostProfileError as $t, V4SessionLike as A, GuardBoundary as Aa, AuthorityKind as Ai, GitAdapterAction as An, admissibleForRemoval as Ao, PROTOCOL_V6_NOTICE as Ar, ActionManifest as As, validateProofManifestV2 as At, V6_ORDINARY_COMPLETION_RULE_COMPACT as B, MessageCoverage as Ba, parseConfirmationMessage as Bi, LinearCommitReadback as Bn, GRANTED_QUALIFICATION as Bo, DEFAULT_HOST_LOCK as Br, SemanticAction as Bs, validateManifest as Bt, observeAssistantOutcome as C, EvidenceBinding as Ca, compareHostVersions as Ci, acquireHostTrust as Cn, DerivedProcessFacts as Co, nativeFileTwoRole as Cr, restatedContentOf as Cs, proofOperationMatches as Ct, SESSION_API_UNSUPPORTED as D, ExpectedTransition as Da, currentContractDigest as Di, registryArchiveModules as Dn, ProcessOutcomeReason as Do, PROTOCOL_V3_NOTICE as Dr, verbIsNegated as Ds, sessionQuery as Dt, v6TestPredicate as E, EvidenceRole as Ea, satisfiesSupportedHostRange as Ei, qualifyHostTrust as En, ProcessFactSource as Eo, DEFAULT_DELEGATION_TOOL_NAMES as Er, statefulActionsOfScope as Es, scopeCoverageDigest as Et, DEFAULT_RECOVERY_CHAR_BUDGET as F, GuardItemKind as Fa, classifyTaskIntent as Fi, GitEffectExecution as Fn, removalIsPartiallyKnown as Fo, ACTIVE_HOST_COHORT_ID as Fr, SEMANTIC_ACTIONS as Fs, isVerifyingCapability as Ft, openItems as G, TargetCaptureReasonCode as Ga, CaptureScope as Gi, gitCommandMatchesTarget as Gn, ScopeInterpretation as Go, HOST_CAPABILITY_PACKAGE_GROUPS as Gr, requestedIdentityKey as Gs, LifecyclePhase as Gt, carriesCleanupCondition as H, NeedsReviewReason as Ha, RejectedBinding as Hi, commitTreeSnapshotDigest as Hn, LEGACY_QUALIFICATION as Ho, ExecutableIdentity as Hr, actionCompatible as Hs, FIRST_STEP_GUIDANCE as Ht, MIN_RECOVERY_CHAR_BUDGET as I, GuardItemStatus as Ia, classifyUserInteraction as Ii, GitEffectRunner as In, AuthorityDisposition as Io, ACTIVE_HOST_COHORT_IDS as Ir, STATEFUL_ACTIONS as Is, COMMAND_SURFACE_MANIFEST as It, renderRecoveryPacket as J, TargetSourceKind as Ja, captureItem as Ji, verifiedLinearCommitReadback as Jn, clauseAsksOwnQuestion as Jo, HostCapabilityEvaluation as Jr, semanticActionFromCommand as Js, firstStepGuidanceV6 as Jt, recoveryDigest as K, TargetCaptureStatus as Ka, ClauseSegment as Ki, parseGitCommandManifest as Kn, actionVerbMatches as Ko, HOST_COHORTS as Kr, requestedTargetAuthorizesMutation as Ks, claimedBatchHasRealRootInput as Kt, RecoveryCause as L, GuardOperation as La, CONFIRM_LINE_PATTERN as Li, GitPrestateCheck as Ln, DirectiveClass as Lo, ACTIVE_HOST_LAUNCHER_VERSION as Lr, STOP_PROTOCOL_VERSION as Ls, CommandSurfaceManifest as Lt, CLEANUP_CONDITION_RULE as M, GuardEvidence as Ma, segmentAuthorityBlocks as Mi, GitCommandManifest as Mn, capabilityFactOf as Mo, deriveProjection as Mr, BOUNDED_ARTIFACT_TYPES as Ms, bindingSatisfies as Mt, CLEANUP_CONDITION_RULE_COMPACT as N, GuardIntegrity as Na, TaskIntent as Ni, GitCommandParseResult as Nn, partialFailureOf as No, legacyRecordsNeedingReview as Nr, CERTIFICATE_VERSION as Ns, evidenceCoverage as Nt, SESSION_EVENT_ENVELOPE_INVALID as O, ExternalOperation as Oa, AuthorityBlock as Oi, GIT_COMMAND_MANIFEST_IDS as On, RemovalOutcomeReport as Oo, PROTOCOL_V4_NOTICE as Or, ACTION_MANIFEST as Os, sessionQueryV2 as Ot, CLEANUP_CONDITION_RULE_SHORT as P, GuardItem as Pa, UserInteractionKind as Pi, GitCommandRejected as Pn, removalIsComplete as Po, rootLocatorFlavor as Pr, CERTIFICATE_VERSION_V2 as Ps, evidenceMatchesItem as Pt, PROOF_KINDS_V2 as Q, WaitAuthorization as Qa, extractMethod as Qi, ShellParseStatus as Qn, governedClauseRestrictsExecution as Qo, HostCohortSelection as Qr, canonicalizePath as Qs, AuditedPackageExpectation as Qt, RecoveryOptions as R, GuardProjection as Ra, ParsedConfirmation as Ri, GitPrestateEnvelope as Rn, Executee as Ro, AuditedExecutable as Rr, STOP_PROTOCOL_VERSION_V2 as Rs, ManifestIssue as Rt, latestRootInstruction as S, DerivedEnvelope as Sa, SUPPORTED_HOST_VERSIONS as Si, HostTrustedPackage as Sn, DependencyStatus as So, itemDiagnosis as Sr, reportingHeadGoverns as Ss, proofHostSurfacesOf as St, testOutcomePredicate as T, EvidenceParseStatus as Ta, parseHostVersion as Ti, parseHostTrust as Tn, ProcessExitStatus as To, CAPTURE_V042_NOTICE as Tr, splitTextFragments as Ts, requiredSubjectsOf as Tt, cleanupConditionFor as U, PersistenceAuthorization as Ua, bindingIndividuallyAccepted as Ui, createGitPrestateEnvelope as Un, QualificationReason as Uo, ExecutableIdentityBinding as Ur, boundedArtifactChoiceMatches as Us, FirstStepInjection as Ut, V6_ORDINARY_COMPLETION_RULE_SHORT as V, NeedsReviewFact as Va, CheckpointResult as Vi, commitIndexSnapshotDigest as Vn, InterpretOptions as Vo, EXPECTED_HOST_PACKAGES as Vr, StatefulAction as Vs, ClaimedMessage as Vt, closingHint as W, SourceSpan as Wa, certifyCheckpoint as Wi, executeRevalidatedGitEffect as Wn, QualificationStatus as Wo, GOAL_HOST_PACKAGES as Wr, isStatefulAction as Ws, FirstStepPreviewInput as Wt, PROOF_CAPABILITY_MATRIX as X, TargetValue as Xa, environmentDefaultRepositoryTarget as Xi, CanonicalCommandSurface as Xn, clauseIsProtected as Xo, HostCapabilityRequest as Xr, validateActionManifest as Xs, previewFirstStepInjection as Xt, v6CurrentRootBoundaries as Y, TargetTuple as Ya, classifyClause as Yi, CanonicalArgv as Yn, clauseIsGoverned as Yo, HostCapabilityId as Yr, semanticActionFromText as Ys, lifecyclePhase as Yt, PROOF_KINDS as Z, VerificationContract as Za, extractArtifactPaths as Zi, ParsedShell as Zn, explanationHasActionResidue as Zo, HostCohort as Zr, validateActionTarget as Zs, ActiveProfileHostLock as Zt, decideTurnStopping as _, DeferAuthorization as _a, HostVersionStatus as _i, resolveActiveProfileHostLock as _n, CapabilityFact as _o, TaskKind as _r, opensConditionLead as _s, createProofManifestV2 as _t, AssistantOutcomeObservation as a, BoundaryRequest as aa, HostToolSurface as ai, auditedHostImplementation as an, ReleaseSettlement as ao, ToolCallInput as ar, isExecutableItem as as, ProofKindV2 as at, isWholeTaskCompletionClaim as b, DeriveResult as ba, ParsedHostVersion as bi, HostRebindTrust as bn, DEPENDENCY_FREE_ONLY_CONDITION as bo, deriveItemDiagnosis as br, qualificationOfClause as bs, proofDigestV2 as bt, CurrentActionBasis as c, availableBoundaryQualifications as ca, evaluateExternalWaitCapability as ci, evaluateConfiguredHostLock as cn, RebindArgs as co, evidenceFromPersistedToolResult as cr, isOpenObligation as cs, ProofObligation as ct, TurnStoppingDecision as d, qualifyBoundary as da, evaluateHostLock as di, injectActiveProfileHostLock as dn, proposeRebind as do, isDeterministicCheck as dr, itemHoldsExecutionAuthority as ds, SessionQuery as dt, isInformationalMessage as ea, normalizeClause as ec, HostLockContext as ei, TargetHostGraph as en, createProjection as eo, isRunExecutable as er, hasQuestionScope as es, PROOF_PROTOCOL_VERSION as et, assessmentAction as f, AssetInterpretationFact as fa, evaluateToolSurfaceCapability as fi, inspectTargetHostGraph as fn, proposeRebindOutcome as fo, persistedToolResultStatus as fr, kindOfScope as fs, SessionQueryV2 as ft, decideTurnBoundary as g, BoundaryQualificationKind as ga, HostVersionDecision as gi, readActiveHostGraph as gn, replayRebindResult as go, Repairability as gr, namedActions as gs, createProofManifest as gt, currentActionBases as h, BoundaryDisposition as ha, HOST_VALIDATED_VERSIONS as hi, prepareActiveHostTrust as hn, rebindResponse as ho, DiagnosisNextAction as hr, maskQuotedSpans as hs, canonicalProjection as ht, supersedeItem as i, BoundaryQualification as ia, HostProfileKind as ii, auditedForegroundRenderers as in, ReleaseOperation as io, hasCurrentCertificate as ir, introducesActionClause as is, ProofKindCapability as it, snapshotSessionEvents as j, GuardCheckpoint as ja, authorityCaptureCounts as ji, GitCommandAccepted as jn, capabilityConsequence as jo, applyUpgradeEligibility as jr, ActionSpec as js, EvidenceFacetCoverage as jt, SessionApiError as k, GoalRef as ka, AuthorityBlockKind as ki, GIT_COMMAND_TEMPLATES as kn, actionHasCertificationPath as ko, PROTOCOL_V5_NOTICE as kr, ACTION_MANIFEST_VERSION as ks, validateProofManifest as kt, NO_PROGRESS_RECORD_PREFIX as l, effectuateBoundary as la, evaluateGraphDerivedHostLock as li, hostLockContextFromComposedDump as ln, RebindProposal as lo, extractTextContent as lr, isQuestionScopeNeedingReview as ls, ProofObligationV2 as lt, classifyCompletionClaim as m, BindingActionClosure as ma, selectHostCohort as mi, packageRowsFromPnpmLock as mn, rebindAttemptKey as mo, CertificationSupport as mr, maskCodeSpans as ms, bindProofV2ToProjection as mt, projectSessionCoreV2 as n, BOUNDARY_RECORD_PREFIX as na, sanitizeUrl as nc, HostLockStatus as ni, auditedDefaultWorkdirHost as nn, ReleaseGateDecision as no, parseShellCommand as nr, interpretClause as ns, ProofHostSurface as nt, CONTROL_RECORD_PREFIX as o, GoalActivationState as oa, bindExecutableIdentity as oi, combineHostPolicy as on, BoundedSource as oo, ToolResultInput as or, isExplanationScope as os, ProofManifest as ot, assessmentOutcomePredicate as p, AssetObligation as pa, hostVersionFromPackages as pi, packageRowsFromActiveGraph as pn, proposeRebindV042 as po, withDurability as pr, legacyQuestionReadingIsInformational as ps, bindProofToProjection as pt, recoveryTitle as q, TargetSource as qa, captureClause as qi, revalidateGitPrestate as qn, clarifiedSpanOf as qo, HostAuditProvenance as qr, requestedTargetMatchesResolved as qs, firstStepGuidance as qt, projectCoreV2 as r, BoundaryEffectuation as ra, sha256 as rc, HostPlatform as ri, auditedDefaultWorkdirProvider as rn, ReleaseObservedIdentity as ro, goalCompletionDenial as rr, interpretMessage as rs, ProofKind as rt, CompletionDisposition as s, GoalBoundaryAccess as sa, bindLiveGoalCapability as si, evaluateActiveHostLock as sn, ProposeOutcome as so, ToolSubject as sr, isInformationalFragment as ss, ProofManifestV2 as st, RC020_RC1_HOST_PACKAGES as t, segmentClauses as ta, sanitizeClauseText as tc, HostLockEvaluation as ti, activeRendererModule as tn, PackageRow as to, parsePwshCommand as tr, hasWorkPredicate as ts, PROOF_PROTOCOL_VERSION_V2 as tt, NO_PROGRESS_TURNS_BEFORE_STOP as u, isCurrentAcceptedBoundary as ua, evaluateHostCapability as ui, hostLockRowsFromComposedDump as un, confirmRebind as uo, extractToolSubject as ur, isRestatement as us, ProofSurface as ut, decisionBoundaryKey as v, DelegationRef as va, LATEST_TESTED_HOST_VERSION as vi, resolveInstalledHostLock as vn, CapabilityGap as vo, UnifiedItemDiagnosis as vr, opensWithDirective as vs, proofCapabilityReport as vt, progressFingerprint as w, EvidenceOutcome as wa, evaluateMinimumHostVersion as wi, hostTrustDigest as wn, OperationAttribution as wo, relevantEvidence as wr, semanticActionOfScope as ws, proofV2Rejection as wt, latestAssistantText as x, DeriveScope as xa, SUPPORTED_HOST_RANGE as xi, HostTrustError as xn, DeclaredOperationResult as xo, evidenceAvailabilityReason as xr, questionHeadsClause as xs, proofEvidenceConstraints as xt, isRootPauseRequest as y, DeriveConfig as ya, MIN_SUPPORTED_HOST_VERSION as yi, verifyComposedHostLockDump as yn, CapabilityRemedy as yo, capabilityRemedyPhrase as yr, presentExplanationHead as ys, proofDigest as yt, V6_ORDINARY_COMPLETION_RULE as z, HostStatus as za, isFrozenV042RebindResponse as zi, GitTargetIdentity as zn, ExecutionQualification as zo, BASE_HOST_PACKAGES as zr, SUPPORTED_EVIDENCE_ADAPTERS as zs, OperationVerbEntry as zt };

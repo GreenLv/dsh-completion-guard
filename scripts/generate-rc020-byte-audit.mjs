@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Regenerate the host byte-audit manifest from the published 0.2.0-rc.1
 // tarballs. Per package: download the exact registry tarball, verify its
-// SHA-256 against the reviewed study, then hash every `lib/**/*.js` module
+// SHA-256 against the reviewed study, then hash every `lib/**/*.{js,cjs,mjs}` module
 // plus package.json. The study's per-tarball SHA-256 and registry SRI are the
 // identity inputs; this script only derives per-file digests.
 import { createHash } from 'node:crypto'
@@ -39,7 +39,7 @@ try {
   const rows = packages.map(({ binding, url, tarballSha, integrity }) => {
     const prefix = 'package/'
     const list = execFileSync('tar', ['-tzf', join(work, binding.name.replaceAll('/', '_') + '.tgz')], { encoding: 'utf8' })
-      .split('\n').filter((line) => line.startsWith(prefix + 'lib/') && line.endsWith('.js'))
+      .split('\n').filter((line) => line.startsWith(prefix + 'lib/') && /\.(?:[cm]?js)$/.test(line))
     const modules = {}
     for (const entry of [...list, prefix + 'package.json'].sort()) {
       const content = execFileSync('tar', ['-xzf', join(work, binding.name.replaceAll('/', '_') + '.tgz'), '-O', entry], { maxBuffer: 64 * 1024 * 1024 })

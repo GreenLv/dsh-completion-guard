@@ -452,6 +452,7 @@
       "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.0-rc.1.tgz",
       "sha256": "5f26f58226db1c8b9fabb21121176360826cc0b8f9ecc183ae5c78ca89e12ade",
       "modules": {
+        "lib/worker.cjs": "cadd901598e2bb8a847409a980f59deea639eeadf21e30da324fb674a4ed8038",
         "lib/index.js": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
         "package.json": "01debc5bef48135fba71b78f9f0212e097f7a31ad30a14a64c3f6cb12638ef48"
       }

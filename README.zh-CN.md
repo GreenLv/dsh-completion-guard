@@ -4,13 +4,13 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.8.1 要求 DSH `0.2.0-rc.1` 和 Cordis `4.0.4`。** 请先升级 DSH，再安装本版本，然后用随附的宿主锁工具（`inject` + `verify-dump`）为每个 Guard Profile 重建宿主锁并重启该 Profile。重建成功会读回 `supported`；`host_lock_version_below_minimum` 表示 DSH 版本仍低于下限，`host_lock_version_mismatch`/`host_lock_installed_graph_drift` 表示已安装依赖图与被审计身份不一致，`host_lock_migration_required` 表示工具运行时缺少 runtime/profile 配置。0.1.7.x 已不再支持。本版同时保留 0.7.1 的恢复反馈，在每次新鲜判定时按已发布字节重新校验宿主依赖路由，并理解新宿主的崩溃恢复工具结果（未知结果绝不计为成功）。
+> **0.8.1 要求 DSH `>=0.2.0-rc.1`。** 请先升级 DSH、安装 Guard，再为每个 Profile 执行宿主锁工具的 `inspect`、`inject` 和 `verify-dump`，最后重启该 Profile。这些命令绑定实际安装包及其经过验证的路由；安装 Guard 本身不会重建锁。已测试的宿主基线是 DSH `0.2.0-rc.1`、Cordis `4.0.4`；较新版本仍需通过身份和适配契约检查。版本准入、重绑及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
 ## 快速开始
 
-先升级到 DSH `0.2.0-rc.1`，再把 Guard 安装到需要保护的 Profile：
+先升级到 DSH `0.2.0-rc.1` 或更高版本，再把 Guard 安装到需要保护的 Profile：
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.8.1
@@ -18,7 +18,7 @@ dsh plugin --profile web add dsh-completion-guard@0.8.1
 
 **先升级并重启 DSH，再执行下面的宿主锁检查。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
 
-查看每条命令 JSON 输出中的 `status`，确认它为 `supported`。`inspect`、`inject` 和 `verify-dump` 即使报告 `unsupported`，退出码也可能为 `0`，因此不能只看命令是否正常退出。
+查看每条命令 JSON 输出中的 `status`，确认它为 `supported`。失败会报告具体原因并以非零退出码结束。较新兼容宿主需给三条命令都加上 `--rebind-registry`，先验证官方 registry 的包归档，再重建锁；步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。
 
 ```sh
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
@@ -30,7 +30,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。各版本的原生验收与发布证据在[验收记录](docs/LOCAL_ACCEPTANCE.md)中按版本绑定其精确制品字节单独记录；任何版本的源码与确定性证据都不能等同于该版本已安装制品的结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、混装、重复或不属于已检查环境，Guard 会保持不可用。
+Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。各版本的原生验收与发布证据在[验收记录](docs/LOCAL_ACCEPTANCE.md)中按版本绑定其精确制品字节单独记录；任何版本的源码与确定性证据都不能等同于该版本已安装制品的结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、重复、不可信或不同于已绑定环境，Guard 会保持不可用。
 
 然后重启 DSH Web，打开会话并启用 Guard：
 
@@ -57,7 +57,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.8.1 仅支持 **DSH `0.2.0-rc.1`**，配合 Cordis `4.0.4`；元数据、宿主锁和运行时使用同一精确版本。0.1.7.x 全线、其它 RC、正式版、未来版本、缺包及混合图均被拒绝。46 个关键包的身份及实现字节绑定到已发布的 0.2.0-rc.1 npm tarball，历史宿主不再进入生产选择器。
+0.8.1 的版本准入范围是 **DSH `>=0.2.0-rc.1`**，没有版本上限。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.1` 46 包依赖图保留为已审查基线；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。未知或变化的 Session/API 实现会报告具体资格缺口，旧证书不能转移到新锁。已在 `0.2.0-rc.1` 的真实安装图上执行源码入口测量；最终制品的 macOS/Windows 原生验收和未来版本原生证据仍须分别建立。
 
 升级后重新检查并注入 host-lock，再重启对应 Profile，步骤见[宿主锁升级](docs/HOST_LOCK_UPGRADE.md)。旧会话由 DSH 迁移为 V4；Guard 保留旧 ledger 和证书，但不会重签或把旧身份升级为当前权限。Goal 为可选能力，宿主安装不代表它已启用。
 

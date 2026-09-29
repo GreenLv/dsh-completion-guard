@@ -10,40 +10,40 @@
       "path": "README.md",
       "role": "readme",
       "language": "default",
-      "sha256": "3799e4deed9aa8c0f08e3fc973e8bc028a9322edee59eae7acea1b2a7a2049f1"
+      "sha256": "afbcd9f20ac903a699c7df696de2dd4c92c8de5ff1cbd5aa046d3e0db8e7f5d2"
     },
     {
       "path": "README.zh-CN.md",
       "role": "readme",
       "language": "zh",
-      "sha256": "c490fe7b653bf686d6dc9ac4219bd48314fd4ff8e797769dd564dfca549b807d"
+      "sha256": "c81dc416b5dd2e79e811594ea6e41f73e518052a9ad7f02f2bb7067d29afd2ba"
     },
     {
       "path": "CHANGELOG.md",
       "role": "changelog",
       "language": "default",
-      "sha256": "dbc23946cc0452e3843f79557338dea43d8d12282fc5b21e8fd84d8748686140"
+      "sha256": "5c00ac4a6f7fd37cd1796d0430a80e7eb6d34b3373ee6de74eaa139373da3e78"
     },
     {
       "path": "CHANGELOG.zh-CN.md",
       "role": "changelog",
       "language": "zh",
-      "sha256": "b54300bcd1ec8f20c7207d686f099ea561ac645563fa43f313467f52871c40f7"
+      "sha256": "5a5a10938d343041fa1527cdba2633cf214fe78d7bed2c7065d183c268d3b1b6"
     },
     {
       "path": "docs/COMPATIBILITY.md",
       "role": "readme",
       "language": "default",
-      "sha256": "4e22f8945e62f93a8e2d591978b88a982401492c2cb9aff1c3daa479813f9831"
+      "sha256": "de32cf413e1713016732c0fc6d39c152668d063bd3a369bc8accd1ed98c8f17e"
     },
     {
       "path": "docs/HOST_LOCK_UPGRADE.md",
       "role": "readme",
       "language": "default",
-      "sha256": "cd4740700abe5d91508f4ed4d44d1a65ebef694aa5c679e38d3052d69a5cbfbb"
+      "sha256": "12179a5b43169e95d9b6ba8a5844a27e331cccb274c23907764c37c366780a71"
     }
   ],
-  "document_set_sha256": "43d28f6a85a9a1454ef79881adf711d65885c9077722e8227f5b7705d5474776",
+  "document_set_sha256": "4b0fb2e6c3699f72d6bedbffa085b2d6b1e99a86367098dc0f98c1d1657ffd98",
   "method": {
     "kind": "cold_read",
     "implementation_context_used": false,
@@ -62,7 +62,7 @@
         "docs/COMPATIBILITY.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "each file carries the correct role: readmes orient, changelogs record, compatibility/upgrade guides instruct"
+      "note": "Read the final six files as user-facing instructions and change records; references carry the technical qualification details."
     },
     {
       "id": "reader_outcome",
@@ -73,7 +73,7 @@
         "README.zh-CN.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "version note and upgrade steps lead with user actions (upgrade DSH, install Guard, inject+verify-dump, restart) and the success signal (supported readback)"
+      "note": "Both readmes give upgrade, backup, inspect/inject/dump verification, supported readback and controlled restart; the guide distinguishes DSH profile selection from host-lock root arguments."
     },
     {
       "id": "term_onboarding",
@@ -83,7 +83,7 @@
         "README.md",
         "docs/COMPATIBILITY.md"
       ],
-      "note": "host lock, cohort, graph-derived rebind and audit provenance are introduced before they gate any instruction"
+      "note": "The installed package lock and version floor are introduced before detailed cohort, provenance and qualification terms in references."
     },
     {
       "id": "evidence_boundary",
@@ -94,7 +94,7 @@
         "CHANGELOG.md",
         "CHANGELOG.zh-CN.md"
       ],
-      "note": "version admission (>=0.2.0-rc.1) is separated from native validation; 0.8.0 history keeps its own 0.1.7-rc.2 scope; old timings marked historical"
+      "note": "Reviewed baseline, installed-graph source harness, synthetic future-version contracts and pending native artifact acceptance remain distinct. Unknown executable semantics require qualification; pnpm installation is not floor enforcement evidence."
     },
     {
       "id": "density_and_order",
@@ -105,7 +105,7 @@
         "CHANGELOG.zh-CN.md",
         "docs/HOST_LOCK_UPGRADE.md"
       ],
-      "note": "0.8.1 opens with migration requirements before observable changes; mechanisms live in reference sections"
+      "note": "Upgrade actions and success signals precede the implementation details. Failure readbacks are separate actionable bullets; 0.8.1 changelog has four observable-change bullets."
     },
     {
       "id": "language_independence",
@@ -117,12 +117,12 @@
         "CHANGELOG.md",
         "CHANGELOG.zh-CN.md"
       ],
-      "note": "bilingual pairs state the same requirements and steps; neither language promises what the other restricts"
+      "note": "Read the English and Chinese introductions, commands, support sections and 0.8.1 entries separately; the version, rebind, native evidence and old-certificate limits agree."
     }
   ],
   "findings": [],
   "limitations": [
-    "the review covers the listed reader-path files; deep reference documents outside install/upgrade/compatibility are out of scope",
-    "scans (grep for personal paths/private identifiers over the tracked tree and the frozen tgz members) are auxiliary; the cold read is the human check"
+    "Covers the six listed reader-path documents, including their retained historical sections; other deep references are outside this cold-read receipt.",
+    "Final source and archive privacy scans are auxiliary checks recorded separately; they do not establish readability."
   ]
 }

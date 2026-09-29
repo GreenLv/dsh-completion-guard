@@ -12,9 +12,9 @@ import {
 import { RC020_RC1_HOST_PACKAGES } from '../src/domain/rc020-rc1-host.js'
 
 describe('0.8.1 floor-admission host version policy', () => {
-  // Evidence oracle modeled on production wiring: a row's integrity is valid
+  // Independent row-verifier oracle for the pure helper (not provenance acquisition): a row's integrity is valid
   // only when the install lockfile declares the same package@version with the
-  // same SRI (the package manager wrote that line at install time).
+  // same SRI (production must additionally acquire registry metadata and archive bytes).
   const lockYaml = [
     "lockfileVersion: '9.0'", '', 'packages:',
     ...RC020_RC1_HOST_PACKAGES.map((row) => [
@@ -37,6 +37,7 @@ describe('0.8.1 floor-admission host version policy', () => {
       expect(satisfiesSupportedHostRange(version), version).toBe(false)
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'below_minimum', reasonCode: 'host_version_below_minimum' })
     }
+    for (const bad of ['01.2.0', '0.2.0-rc.01', '0.2.0+bad..meta', '0.2.0-', 'v0.2.1']) expect(evaluateMinimumHostVersion(bad).status, bad).toBe('unparseable')
     expect(evaluateMinimumHostVersion('nonsense-v')).toMatchObject({ status: 'unparseable' })
   })
 
@@ -49,7 +50,7 @@ describe('0.8.1 floor-admission host version policy', () => {
     expect(HOST_VALIDATED_VERSIONS.length).toBeLessThan(3)
   })
 
-  it('a future-version graph with REAL lockfile SRI rebinds to a graph-derived cohort', () => {
+  it('the pure evaluator binds a verified future graph rebinds to a graph-derived cohort', () => {
     // Future manifests: same 46 names, version 0.2.1-rc.1, real rc.1 byte
     // digests in the lockfile (install-time evidence).
     const rows = RC020_RC1_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.1-rc.1' }))

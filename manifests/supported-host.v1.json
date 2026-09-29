@@ -1,6 +1,6 @@
 {
   "registryVersion": 2,
-  "description": "Only DSH 0.2.0-rc.1 with Cordis 4.0.4 is supported. Registry identities do not establish loaded bytes or native acceptance.",
+  "description": "Reviewed baseline DSH 0.2.0-rc.1 / Cordis 4.0.4. Admission is DSH >=0.2.0-rc.1; compatible newer graphs require qualified registry rebind. Registry identities do not establish loaded bytes or native acceptance.",
   "packageGroups": {
     "base": [
       "@deepseek-ai/cordis",

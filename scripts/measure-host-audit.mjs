@@ -1,35 +1,20 @@
 #!/usr/bin/env node
-// Executable host-audit measurement device for the isolated rc.020 graph.
-//
-// Modes:
-//   1. `--synthesize <dir>`  build an isolated dependency graph whose bytes
-//      come from the exact published rc.1 tarballs listed in
-//      manifests/rc020-rc1-byte-audit.json (download + SHA-256 verified).
-//   2. `--measure <runtimeRoot> <profileRoot> [--profile web|headless]`
-//      run N fresh Node processes; each performs one cold full
-//      revalidateCoreLock followed by two warm runs; prints per-process wall
-//      times and the audit count (exactly one full validation per attach).
-//
-// The coordinator runs mode 2 against the real macOS host graph; development
-// verifies the device on the synthesized graph. Nothing here touches a user
-// profile or a running host.
-//
-// Mode 2 measures the graph half (readActiveHostGraph + evaluate) AND the
-// byte/route audit body (auditedHostImplementation) per round — together the
-// full validation composition. It also reports the per-protocol entry counts
-// from the v081 production suites' observed invariants (mount 1, checkpoint 1,
-// publish without ref 2, with ref 3, Goal/Stop 1 each) so the numbers come
-// from the same production wiring the suites execute.
+// Source harness for production attach/replay/checkpoint/publish/Goal/Stop.
+// --synthesize downloads the reviewed archives into a new disposable graph.
+// --measure runs five fresh source-harness workers, observing full validations.
+// No daily host is started; external mutations are mocked. Use --installed-graph
+// only when the explicit roots are a real installation, rather than fixtures.
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, existsSync, cpSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const argv = process.argv.slice(2)
 const manifest = JSON.parse(readFileSync(new URL('../manifests/rc020-rc1-byte-audit.json', import.meta.url), 'utf8'))
 
 function synthesize(targetDir) {
-  rmSync(targetDir, { recursive: true, force: true })
+  if (existsSync(targetDir)) throw new Error('synthesis requires a new unused directory')
   mkdirSync(targetDir, { recursive: true })
   const modules = join(targetDir, 'runtime', 'node_modules')
   const records = { '.': { url: '..', dependencies: {} } }
@@ -118,53 +103,35 @@ function synthesize(targetDir) {
 }
 
 function measure(runtimeRoot, profileRoot, profile) {
-  // revalidateCoreLock is not on the public dist export surface (it is an
-  // internal production entry). Following the 2026-09-27 baseline method: copy
-  // the exact dist bytes to a temp file and append ONLY an export of the
-  // internal function — the audited bytes stay byte-identical and nothing is
-  // written to any user profile.
-  const script = `
-const distUrl = process.argv[4]
-const { readActiveHostGraph, evaluateHostLock } = await import(distUrl)
-const runtimeRoot = process.argv[1], profileRoot = process.argv[2], profile = process.argv[3]
-const rows = readActiveHostGraph(runtimeRoot, profileRoot)
-const expected = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: profile })
-const config = {
-  hostLockPolicy: 'dsh-core/v1',
-  hostLockRuntimeRoot: runtimeRoot,
-  hostLockProfileRoot: profileRoot,
-  hostLockPlatform: process.platform === 'win32' ? 'windows' : 'posix',
-  hostLockProfile: profile,
-}
-const times = []
-let audits = 0
-for (let round = 0; round < 3; round++) {
-  const start = performance.now()
-  const rows = readActiveHostGraph(runtimeRoot, profileRoot)
-  const verdict = evaluateHostLock(rows, { platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: profile })
-  times.push(Math.round((performance.now() - start) * 100) / 100)
-  audits += 1
-  if (verdict.status !== 'supported') { console.log(JSON.stringify({ error: 'unsupported', status: verdict.status, reasonCode: verdict.reasonCode, integrityViolations: verdict.integrityViolations })); process.exit(1) }
-  audits += 1
-}
-console.log(JSON.stringify({ times, audits, cold: times[0], warm: times.slice(1) }))
-` + ''
-  const results = []
-  for (let process_ = 0; process_ < 5; process_++) {
-    const distUrl = new URL('../dist/domain/index.js', import.meta.url).href
-    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script, runtimeRoot, profileRoot, profile, distUrl], { encoding: 'utf8' })
-    results.push(JSON.parse(out.trim().split('\n').at(-1)))
+  const repo = fileURLToPath(new URL('../', import.meta.url))
+  const graphKind = argv.includes('--installed-graph') ? 'installed-graph/source-harness' : 'synthetic/source-harness'
+  const results = [], raw = []
+  for (let index = 0; index < 5; index++) {
+    const out = execFileSync('pnpm', ['exec', 'vitest', 'run', 'tests/v081-host-protocol-measurement.test.ts', '--maxWorkers', '1'], {
+      cwd: repo, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, DSH_MEASURE_RUNTIME: runtimeRoot, DSH_MEASURE_PROFILE: profileRoot,
+        DSH_MEASURE_KIND: profile, DSH_MEASURE_GRAPH_KIND: graphKind },
+    })
+    raw.push(out)
+    const match = out.match(/DSH_HOST_MEASUREMENT=(.+)/)
+    if (!match) throw new Error('production measurement did not emit its observed result')
+    results.push(JSON.parse(match[1]))
   }
-  const cold = results.map((r) => r.cold).sort((a, b) => a - b)
-  console.log(JSON.stringify({
-    profile,
-    note: 'wall times cover graph readback + evaluate (the graph half of one full validation; the byte/route audit body is covered by the v080/v081 suites on real published bytes, and the coordinator measures the same composition on the real macOS host where revalidateCoreLock is reachable in-process)',
-    processes: results.length,
-    cold_all: results.map((r) => r.cold),
-    cold_median: cold[2],
-    cold_p95_nearest_rank: cold.at(-1),
-    warm_medians: results.map((r) => r.warm).map((w) => w[0]).sort((a, b) => a - b)[2],
-    audits_per_process: results[0].audits,
+  const files = [...new Set([...execFileSync('git', ['ls-files', '--', 'src', 'manifests', 'package.json', 'pnpm-lock.yaml',
+    'scripts/measure-host-audit.mjs', 'tests/v081-host-protocol-measurement.test.ts'], { cwd: repo, encoding: 'utf8' }).trim().split('\n'),
+    'src/domain/host-trust.ts', 'tests/v081-host-protocol-measurement.test.ts'])].sort()
+  const sourceSha256 = Object.fromEntries(files.map((file) => [file, createHash('sha256').update(readFileSync(join(repo, file))).digest('hex')]))
+  const entries = Object.fromEntries(results[0].measurements.map(({ entry }) => {
+    const samples = results.map((r) => r.measurements.find((m) => m.entry === entry))
+    const sorted = samples.map((s) => s.wall_ms).sort((a, b) => a - b)
+    return [entry, { samples, median_ms: sorted[2], p95_nearest_rank_ms: sorted.at(-1) }]
+  }))
+  console.log(JSON.stringify({ schema: 'dsh-host-entry-measurement/v1', profile, graph_kind: graphKind,
+    note: 'Five fresh Vitest worker processes; cold is first production attach in each. OS cache is not dropped. Wall clock includes actual entry awaits and final veto. Audits observed through onHostLockValidation. External publish effects are mocked; no DSH host is launched.',
+    commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
+    source_sha256: sourceSha256, artifact: null, artifact_note: 'source harness; no exact tgz acceptance claim',
+    installed_graph_inputs: [runtimeRoot, profileRoot].map((root) => Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'node_modules/.package-map.json'].map((file) => [file, createHash('sha256').update(readFileSync(join(root, file))).digest('hex')]))),
+    processes: results.length, results, entries, raw_outputs: raw,
   }, null, 2))
 }
 

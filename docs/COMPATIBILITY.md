@@ -1,10 +1,16 @@
 # Compatibility
 
-Compatibility is pinned to exact host package sets. A nearby version or a partial package match is not treated as supported.
+Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
-## 0.8.1: DSH 0.2.0-rc.1 only
+## 0.8.1: DSH >=0.2.0-rc.1
 
-Current metadata and the production selector accept exactly `0.2.0-rc.1`, with Cordis `4.0.4`. The sole cohort is `dsh-0.2.0-rc.1-core-v1`: 46 exact package identities, backed by published-tarball SHA-256, SRI and installed module/manifest and actual dependency-path checks in `manifests/rc020-rc1-byte-audit.json`. Any other version — including the entire retired `0.1.7.x` line — is refused as below-minimum or unregistered, never supported. Old cohorts exist only as historical test data.
+Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.1`, with no upper limit. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.
+
+The reviewed host baseline is DSH `0.2.0-rc.1` / Cordis `4.0.4`, with 46 package identities and published implementation digests in `manifests/rc020-rc1-byte-audit.json`. Real installed-graph source entry measurements exist for that baseline. Native acceptance of the final Guard artifact on each platform remains a separate gate; no native validation of a future host is claimed.
+
+A newer compatible installation can be rebound with `--rebind-registry`, without adding an internal version row. The generator checks exact official registry metadata, archive SRI, installed manifests/modules and both CJS/ESM routes. This adapter separately requires reviewed implementation equivalence for consumed semantics. Unknown Session bytes report `host_contract_session_incompatible`; other unknown consumed implementations report `host_contract_api_qualification_required`. A verified download alone does not qualify changed semantics. An unqualified optional Goal implementation disables only Goal integration and reports `host_contract_goal_qualification_required`; independent core work stays available. Different dependency package versions are allowed when their individual identities and routes agree. New graph/module expectations create a new digest, so prior certificates cannot transfer. See [rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions).
+
+The plain npm/node-semver expression `>=0.2.0-rc.1` excludes later-tuple prereleases by default. The installed DSH `0.2.0-rc.1` plugin manager and market discovery explicitly include prereleases: input probes accept `0.2.1-rc.1` and `0.3.0-rc.1`, and reject below-floor values without exemptions. pnpm 11.22.0's peer helper uses `includePrerelease: true`, and isolated version-form registry fixtures resolve those RCs. In the tested install mode it also resolved a below-floor peer despite strict-peer flags; package installation is therefore not a version-admission proof. The DSH and Guard floor checks independently reject that version. Other consumers must opt into equivalent semantics; plain npm matching is not the runtime version rule.
 
 ## 0.8.0: DSH 0.1.7-rc.2 (historical fact, unchanged)
 
@@ -77,7 +83,7 @@ from any of them fails closed under the 0.8.0–0.8.1 policy.
 
 ## Rejection rules
 
-The sole current core graph is recorded in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json); older graphs remain only in historical test fixtures. All core rows and actual critical dependency routes must match the current graph. Missing, mixed, duplicate, unknown or integrity-drifted core rows reject certification.
+The reviewed baseline core graph is recorded in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json); older graphs remain only in historical test fixtures. For the baseline lock all core rows must match that graph. For a registry rebind, exact individual identities and qualified module expectations bind the new graph. Mixed dependency versions are allowed; missing required, duplicate, untrusted or integrity-drifted identities and wrong critical routes reject certification.
 
 Market versions do not select a core cohort. Market restart has its own protocol and loaded-instance checks; an unavailable adapter does not disable the core or erase pending restart work. Changing the actual core graph changes its digest and invalidates earlier certificates.
 
@@ -97,7 +103,7 @@ The plugin accepts an `activation` configuration value of `opt-in` or `always`. 
 
 Before the Guard can certify work, generate and verify the host lock from the active DSH runtime and profile. Use the packaged `dsh-completion-guard-host-lock inspect|inject|verify-dump` flow in the README. The default patch has no `hostLockPackages`, so the Guard fails closed until this flow succeeds.
 
-Since 0.4.3, the generator injects `hostLockPolicy: dsh-core/v1`, the runtime/profile source roots, `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile` together. Replay rechecks those actual graph sources; legacy configuration without the policy and roots reports `host_lock_migration_required`. Each critical package row records the exact resolved version and registry tarball integrity. The Guard does not infer a missing identity from a nearby lockfile: missing, duplicate, multi-version, or drifted rows fail closed. The audited identities are defined in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json).
+Since 0.4.3, the generator injects `hostLockPolicy: dsh-core/v1`, the runtime/profile source roots, `hostLockPackages`, `hostLockPlatform`, and `hostLockProfile` together. Mount and protected entries recheck those actual graph sources; ordinary replay uses the mount result; legacy configuration without the policy and roots reports `host_lock_migration_required`. Each critical package row records the exact resolved version and registry tarball integrity. The Guard does not infer a missing identity from a nearby lockfile: missing, duplicate reachable instances, untrusted, or drifted rows fail closed. The audited identities are defined in [`../manifests/supported-host.v1.json`](../manifests/supported-host.v1.json).
 
 ### Capability groups
 
@@ -127,17 +133,16 @@ The ordinary runtime packages are host-provided peers:
 - `@deepseek-ai/dsh-session`; and
 - `@deepseek-ai/dsh-tools`.
 
-Goal support uses two exact optional peers as one capability. `@deepseek-ai/dsh-goal` owns Goal state, while `@deepseek-ai/dsh-tool-goal` owns the audited `update_goal` name, schema, and arguments. Both host-graph rows and the live Goal service and tool must agree. A profile without this complete pair can still load, but Goal-dependent integration stays inactive.
+Goal support uses two identity-bound optional peers as one capability. `@deepseek-ai/dsh-goal` owns Goal state, while `@deepseek-ai/dsh-tool-goal` owns the audited `update_goal` name, schema, and arguments. Both host-graph rows and the live Goal service and tool must agree. A profile without this complete pair can still load, but Goal-dependent integration stays inactive.
 
-Version 0.5.2 publishes `0.1.5-rc.2 || 0.1.5-rc.1` in top-level
+The historical 0.5.2 artifact publishes `0.1.5-rc.2 || 0.1.5-rc.1` in top-level
 `engines.dsh`, nested `dsh.engines.dsh`, and every DSH peer dependency. Cordis
 is versioned independently and remains `^4.0.2`. Plugin markets and package
 managers therefore see the same two exact host releases as the host-lock
 registry; neither an unregistered stable release nor a future version is
 implicitly admitted.
 
-The development dependencies retain exact `0.1.5-rc.1` pins as the build
-baseline. Historical peer declarations belong to their own release sections
+That historical artifact retained exact `0.1.5-rc.1` development pins. The current build pins DSH `0.2.0-rc.1` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
 above and are not part of the 0.5.2 contract.
 
 ## Terminal outcome contract

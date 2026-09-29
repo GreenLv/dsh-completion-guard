@@ -25,11 +25,8 @@ function sessionWithCommit(label: string) {
 }
 
 describe('UX11 regression: the evidence remediation chain always reaches a decidable state', () => {
-  // Original incident shape: mixed evidence E1+E2 was refused with advice to
-  // remove E1; after following it, E2-only was STILL refused with
-  // semantic_action_mismatch — the chain could not reach an acceptable state.
-  // The current contract instead names ONE exact missing fact per step, and
-  // following the advice in ANY order reaches certification deterministically.
+  // Analogue only: effect-only -> add-state is not the historical
+  // E1+E2 -> remove-E1 -> E2-only sequence. Original incident remains pending.
   it('effect-only names exactly the state fact; adding it certifies', () => {
     const session = sessionWithCommit('ux11-effect-only')
     const events = session.snapshotEvents() as never
@@ -66,15 +63,14 @@ describe('UX11 regression: the evidence remediation chain always reaches a decid
       observedState: { post_head_oid: '1'.repeat(40) }, effectEvidenceId: effect.id, stateEvidenceIds: [state.id] }], 'C-ux11-step2', false)
     expect(certified.status, JSON.stringify(certified.rejectedBindings)).toBe('certified')
   })
-  it('the same canonical input yields the identical diagnosis on repeat evaluation', () => {
-    // The original report mistook changed bindings for a contradiction; the
-    // contract requires identical canonical inputs to diagnose identically.
-    const session = sessionWithCommit('ux11-deterministic')
-    for (let round = 0; round < 3; round++) {
+  it('three independent evaluations of identical canonical input agree', () => {
+    const outputs = Array.from({ length: 3 }, () => {
+      const session = sessionWithCommit('ux11-deterministic')
       const projection = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST).projection
       const commit = [...projection.items.values()].find((row) => row.semanticAction === 'commit')!
-      const diagnosis = deriveItemDiagnosis(projection, commit)
-      expect(JSON.stringify(diagnosis)).toBe(JSON.stringify(deriveItemDiagnosis(projection, commit)))
-    }
+      return JSON.stringify(deriveItemDiagnosis(projection, commit))
+    })
+    expect(outputs[1]).toBe(outputs[0])
+    expect(outputs[2]).toBe(outputs[0])
   })
 })

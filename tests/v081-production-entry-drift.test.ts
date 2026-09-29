@@ -11,12 +11,13 @@ import { createUserMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { rmSync } from 'node:fs'
-import { apply } from '../src/runtime.js'
+import { apply, revalidateCoreLock } from '../src/runtime.js'
 import { executableIdentity } from '../src/tools/evidence.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES, type HostLockEvaluation } from '../src/domain/host-lock.js'
-import { readActiveHostGraph } from '../src/domain/host-resolver.js'
+import { evaluateActiveHostLock, injectActiveProfileHostLock, readActiveHostGraph, resolveActiveProfileHostLock, verifyComposedHostLockDump } from '../src/domain/host-resolver.js'
 import { deriveProjection, PROTOCOL_V5_NOTICE } from '../src/domain/derive.js'
 import { applyPrivateLedger, readPrivateLedger } from '../src/domain/private-ledger.js'
+import { acquireHostTrust, type HostRebindTrust } from '../src/domain/host-trust.js'
 import { createHostAuditSession } from '../src/domain/host-audit-session.js'
 
 // Real production ENTRIES over a real rc.2-shaped host: the same session
@@ -127,6 +128,7 @@ function makeHost() {
       activation: 'always' as const,
       policy: 'release' as const,
       hostLockPolicy: 'dsh-core/v1',
+      hostLockTrust: undefined as string | undefined,
       hostLockRuntimeRoot: runtimeRoot,
       hostLockProfileRoot: profileRoot,
       hostLockPlatform: 'posix' as const,
@@ -200,6 +202,65 @@ async function packFixture(root: string, name: string, version: string, gitHead:
   const path = join(output, `${name}-${version}.tgz`)
   await writeFile(path, gzipSync(tar, { level: 9 }))
   return path
+}
+
+/** Contract fixture only: compatible newer mixed versions, independently
+ * registry-attested tar bytes. No future native-acceptance claim. */
+async function makeFutureHost(options: { unknownGoal?: boolean } = {}) {
+  const host = makeHost()
+  const archives = new Map<string, { bytes: Buffer; name: string; version: string; integrity: string }>()
+  const rows = EXPECTED_HOST_PACKAGES.map((p, index) => {
+    const version = p.name === '@deepseek-ai/cordis' ? p.version! : index % 2 ? '0.3.0-rc.1' : '0.2.1-rc.1'
+    const manifest = Buffer.from(canonicalManifest(p.name, version))
+    const module = Buffer.from(options.unknownGoal && ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(p.name) ? 'export const changedGoal = true\n' : AUDITED_MODULE_TEXT)
+    const tar = Buffer.concat([
+      tarHeader('package/package.json', manifest.length), manifest, Buffer.alloc((512 - manifest.length % 512) % 512),
+      tarHeader('package/lib/index.js', module.length), module, Buffer.alloc((512 - module.length % 512) % 512), Buffer.alloc(1024),
+    ])
+    const bytes = gzipSync(tar)
+    const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
+    archives.set(p.name, { bytes, name: p.name, version, integrity })
+    return { name: p.name, version, integrity }
+  })
+  for (const root of [host.runtimeRoot, host.profileRoot]) {
+    const mapPath = join(root, 'node_modules', '.package-map.json')
+    const map = JSON.parse(readFileSync(mapPath, 'utf8')) as { packages: Record<string, { url: string; dependencies: Record<string, string> }> }
+    const ids = new Map(rows.map((p) => [p.name, `${p.name}@${p.version}`]))
+    const records: typeof map.packages = {}
+    for (const [id, record] of Object.entries(map.packages)) {
+      const row = rows.find((p) => id === `${p.name}@${EXPECTED_HOST_PACKAGES.find((r) => r.name === p.name)!.version}`)
+      if (row) {
+        writeFileSync(join(root, 'node_modules', record.url, 'package.json'), canonicalManifest(row.name, row.version))
+        if (options.unknownGoal && ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(row.name)) writeFileSync(join(root, 'node_modules', record.url, 'lib/index.js'), 'export const changedGoal = true\n')
+      }
+      records[row ? ids.get(row.name)! : id] = { ...record, dependencies: Object.fromEntries(Object.entries(record.dependencies).map(([name, target]) => [name, ids.get(name) ?? target])) }
+    }
+    writeFileSync(mapPath, JSON.stringify({ packages: records }))
+    const present = rows.filter((p) => Object.hasOwn(records, ids.get(p.name)!))
+    writeFileSync(join(root, 'pnpm-lock.yaml'), ["lockfileVersion: '9.0'", '', 'packages:',
+      ...present.flatMap((p) => [`  '${p.name}@${p.version}':`, `    resolution: {integrity: ${p.integrity}}`, '']), 'snapshots:', ''].join('\n'))
+  }
+  const plugin = join(host.profileRoot, 'node_modules', 'plugin')
+  const manifest = JSON.parse(readFileSync(join(plugin, 'package.json'), 'utf8'))
+  manifest.main = 'lib/index.js'
+  writeFileSync(join(plugin, 'package.json'), JSON.stringify(manifest))
+  mkdirSync(join(plugin, 'lib'), { recursive: true })
+  writeFileSync(join(plugin, 'lib', 'index.js'), 'export const fixturePlugin = true\n')
+  const fetcher = (async (input: string | URL) => {
+    const url = String(input)
+    if (url.includes('/-/')) {
+      const p = [...archives.values()].find((p) => url.endsWith(`/${encodeURIComponent(p.name)}.tgz`))!
+      return new Response(new Uint8Array(p.bytes))
+    }
+    const name = decodeURIComponent(url.slice('https://registry.npmjs.org/'.length).split('/')[0])
+    const p = archives.get(name)!
+    return Response.json({ name, version: p.version, dist: { integrity: p.integrity,
+      tarball: `https://registry.npmjs.org/-/${encodeURIComponent(name)}.tgz` } })
+  }) as unknown as typeof fetch
+  const trust = await acquireHostTrust(readActiveHostGraph(host.runtimeRoot, host.profileRoot), fetcher)
+  host.config.hostLockTrust = JSON.stringify(trust)
+  host.config.hostLockPackages = readActiveHostGraph(host.runtimeRoot, host.profileRoot)
+  return host
 }
 
 function execution(session: Session, callId: string, name: string) {
@@ -325,10 +386,11 @@ async function publishChain(setup: {
   withRef?: boolean
   onIdentityRead?: (executable: string) => void
   onAudit?: (count: number) => void
+  futureHost?: boolean
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-entry-'))
   temporaryRoots.push(root)
-  const host = makeHost()
+  const host = setup.futureHost ? await makeFutureHost() : makeHost()
   const published: string[][] = []
   const registryState = { integrity: `sha512-${Buffer.alloc(64, 5).toString('base64')}` }
   const fetcher = (async (input: string | URL) => {
@@ -562,4 +624,81 @@ describe('real production entries validate freshly and share one audit per decis
     expect(chain.published).toHaveLength(0)
     expect(chain.validations, 'the entry still validates for its own decision').toHaveLength(3)
   })
+})
+
+describe('registry-qualified floor through the production composition', () => {
+  it('rebinds a compatible mixed future graph, verifies composed config and completes a protected mock publish', async () => {
+    const chain = await publishChain({ futureHost: true })
+    const trust = JSON.parse(chain.host.config.hostLockTrust!) as HostRebindTrust
+    const pluginDir = join(chain.host.profileRoot, 'node_modules', 'dsh-completion-guard')
+    mkdirSync(pluginDir, { recursive: true })
+    writeFileSync(join(pluginDir, 'package.json'), JSON.stringify({ name: 'dsh-completion-guard', version: '0.8.1' }))
+    writeFileSync(join(chain.host.profileRoot, 'package.json'), JSON.stringify({ dependencies: { 'dsh-completion-guard': '0.8.1' }, dsh: { profile: { bundles: ['dsh-completion-guard'] } } }))
+    const active = resolveActiveProfileHostLock(chain.host.runtimeRoot, chain.host.profileRoot, '0.8.1', trust)
+    expect(active.evaluation.status).toBe('supported')
+    const patch = injectActiveProfileHostLock(active)
+    expect(verifyComposedHostLockDump(readFileSync(patch, 'utf8'), active.evaluation, active).digest).toBe(active.evaluation.digest)
+    const before = chain.validations.length
+    const result = await chain.action('future-publish')
+    expect(result.status, JSON.stringify(result)).toBe('completed')
+    expect(chain.validations.length - before).toBe(2)
+    expect(chain.published).toHaveLength(1)
+    const baseline = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
+    expect(active.evaluation.digest).not.toBe(baseline.digest)
+    expect(revalidateCoreLock(chain.host.config, baseline).reasonCode).toBe('host_lock_installed_graph_drift')
+    const module = join(chain.host.sessionPackageDir, 'lib', 'index.js')
+    writeFileSync(module, 'export const incompatibleSession = true\n')
+    const denied = await chain.action('future-drift')
+    expect(denied.status).toBe('unavailable')
+    expect(chain.published).toHaveLength(1)
+  })
+
+  it('refuses untrusted description and higher incompatible Session/API before granting authority', async () => {
+    const host = await makeFutureHost()
+    const trust = JSON.parse(host.config.hostLockTrust!) as HostRebindTrust
+    const context = { platform: 'posix' as const, profileKind: 'headless' as const }
+    expect(() => evaluateActiveHostLock(host.runtimeRoot, host.profileRoot, context, undefined,
+      JSON.stringify({ ...trust, source: 'local-manifest' }))).toThrow('host_trust_source_untrusted')
+    for (const [name, reason] of [['@deepseek-ai/dsh-session', 'host_contract_session_incompatible'],
+      ['@deepseek-ai/dsh-tools', 'host_contract_api_qualification_required']]) {
+      const bad = structuredClone(trust)
+      bad.packages.find((p) => p.name === name)!.modules['lib/index.js'] = '0'.repeat(64)
+      expect(() => evaluateActiveHostLock(host.runtimeRoot, host.profileRoot, context, undefined, JSON.stringify(bad))).toThrow(reason)
+    }
+  })
+})
+
+describe('qualified rebind keeps fresh identity and routing gates', () => {
+  it('rejects a future host nearer scope without granting publish effects', async () => {
+    const chain = await publishChain({ futureHost: true })
+    const before = chain.published.length
+    writeFileSync(join(chain.host.profileRoot, 'node_modules', 'plugin', 'lib', 'package.json'), JSON.stringify({
+      name: '@deepseek-ai/dsh-session', exports: { '.': './index.js' },
+    }))
+    const result = await chain.action('future-shadow')
+    expect(result.status).toBe('unavailable')
+    expect(chain.published.length).toBe(before)
+  })
+
+  it('rejects local SRI claims when the registry or the fetched archive disagrees', async () => {
+    const rows = [EXPECTED_HOST_PACKAGES[0]]
+    const badMetadata = (async () => Response.json({ name: rows[0].name, version: rows[0].version,
+      dist: { integrity: 'sha512-forged', tarball: 'https://registry.npmjs.org/-/x.tgz' } })) as typeof fetch
+    await expect(acquireHostTrust(rows, badMetadata)).rejects.toThrow('host_trust_registry_identity_mismatch')
+    let calls = 0
+    const badArchive = (async () => ++calls === 1 ? Response.json({ name: rows[0].name, version: rows[0].version,
+      dist: { integrity: rows[0].integrity, tarball: 'https://registry.npmjs.org/-/x.tgz' } }) : new Response('forged')) as typeof fetch
+    await expect(acquireHostTrust(rows, badArchive)).rejects.toThrow('host_trust_archive_integrity_mismatch')
+  })
+})
+
+it('keeps unrelated core work available when only the optional Goal implementation lacks qualification', async () => {
+  const host = await makeFutureHost({ unknownGoal: true })
+  const actual = evaluateActiveHostLock(host.runtimeRoot, host.profileRoot, { platform: 'posix', profileKind: 'headless' }, undefined, host.config.hostLockTrust)
+  expect(actual).toMatchObject({ status: 'supported', goalAvailable: false, goalQualificationFailure: 'host_contract_goal_qualification_required' })
+  const session = Session.create(SessionId('optional-goal'), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('optional-goal'), createdAt: 1, cwd: host.root })
+  const runtime = startRuntime(session, host, { privateLedgerRoot: join(host.root, 'ledger') })
+  expect(runtime.validations).toHaveLength(1)
+  const checkpoint = await runTool(session, runtime.tools, 'context_guard_checkpoint', 'core-without-goal', { bindings: [] })
+  expect(checkpoint.status, JSON.stringify(checkpoint)).toBe('certified')
 })

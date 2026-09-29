@@ -11,6 +11,7 @@ export const Config: z<{
   hostLockPolicy?: string
   hostLockRuntimeRoot?: string
   hostLockProfileRoot?: string
+  hostLockTrust?: string
 }> = z.object({
   activation: z.string().default('opt-in'),
   policy: z.string().default('standard'),
@@ -19,6 +20,7 @@ export const Config: z<{
   hostLockPolicy: z.string(),
   hostLockRuntimeRoot: z.string(),
   hostLockProfileRoot: z.string(),
+  hostLockTrust: z.string(),
   hostLockPackages: z.array(z.object({
     name: z.string().required(),
     version: z.string(),
@@ -43,6 +45,7 @@ export interface ResolvedConfig {
   hostLockPolicy?: string
   hostLockRuntimeRoot?: string
   hostLockProfileRoot?: string
+  hostLockTrust?: string
 }
 
 export function resolveConfig(config: {
@@ -54,6 +57,7 @@ export function resolveConfig(config: {
   hostLockPolicy?: unknown
   hostLockRuntimeRoot?: unknown
   hostLockProfileRoot?: unknown
+  hostLockTrust?: unknown
 }): ResolvedConfig {
   const activation = config.activation ?? 'opt-in'
   if (activation !== 'opt-in' && activation !== 'always') {
@@ -85,10 +89,11 @@ export function resolveConfig(config: {
   if (hasHostRows !== (config.hostLockPlatform !== undefined) || hasHostRows !== (config.hostLockProfile !== undefined)) {
     throw new TypeError('hostLockPackages, hostLockPlatform, and hostLockProfile must be injected together')
   }
-  for (const key of ['hostLockPolicy', 'hostLockRuntimeRoot', 'hostLockProfileRoot'] as const) {
+  for (const key of ['hostLockPolicy', 'hostLockRuntimeRoot', 'hostLockProfileRoot', 'hostLockTrust'] as const) {
     if (config[key] !== undefined && (typeof config[key] !== 'string' || !config[key])) throw new TypeError(`${key} must be a non-empty string`)
   }
   return {
+    ...(typeof config.hostLockTrust === 'string' ? { hostLockTrust: config.hostLockTrust } : {}),
     ...(typeof config.hostLockPolicy === 'string' ? { hostLockPolicy: config.hostLockPolicy } : {}),
     ...(typeof config.hostLockRuntimeRoot === 'string' ? { hostLockRuntimeRoot: config.hostLockRuntimeRoot } : {}),
     ...(typeof config.hostLockProfileRoot === 'string' ? { hostLockProfileRoot: config.hostLockProfileRoot } : {}),

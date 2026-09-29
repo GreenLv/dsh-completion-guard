@@ -287,7 +287,7 @@ describe('audited host cohort registry', () => {
     const peers = manifest.peerDependencies
     expect(manifest.engines.dsh).toBe(SUPPORTED_HOST_RANGE)
     expect(manifest.dsh.engines.dsh).toBe(SUPPORTED_HOST_RANGE)
-    expect(peers['@deepseek-ai/cordis']).toBe('4.0.4')
+    expect(peers['@deepseek-ai/cordis']).toBe('>=4.0.4')
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
       expect(peers[name]).toBe(SUPPORTED_HOST_RANGE)
     }
