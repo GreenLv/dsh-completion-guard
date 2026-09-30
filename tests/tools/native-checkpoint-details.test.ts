@@ -79,7 +79,7 @@ it('requires a completed successful foreground command before requesting a test 
 
 it.each(['short', 'long'])('retrieves a %s Windows test template through the native driver and certifies it', async length => {
  const { readProbeTestBinding, readProbeItem } = await import(probeModule)
- const cwd = 'C:\\Users\\green\\AppData\\Local\\Temp\\' + (length === 'long' ? 'isolated-home-'.repeat(18) : '') + 'dsh-guard-host-abcdefgh\\work'
+ const cwd = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\' + (length === 'long' ? 'isolated-home-'.repeat(18) : '') + 'dsh-guard-host-abcdefgh\\work'
  const p = deriveProjection([
   { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run pnpm test.' }] } },
   { seq: 2, type: 'tool/call', data: { callId: 'native-12345-1', name: 'pwsh', arguments: JSON.stringify({ command: 'pnpm test' }) } },
