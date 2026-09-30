@@ -209,7 +209,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --dir tests/fixtures/host-composition install --ignore-workspace --frozen-lockfile
+pnpm --dir tests/fixtures/host-composition install --frozen-lockfile
 pnpm run test:stats
 pnpm run typecheck
 pnpm test

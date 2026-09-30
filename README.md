@@ -214,7 +214,7 @@ The daily workflow publishes through the last day whose counts are unchanged in 
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --dir tests/fixtures/host-composition install --ignore-workspace --frozen-lockfile
+pnpm --dir tests/fixtures/host-composition install --frozen-lockfile
 pnpm run test:stats
 pnpm run typecheck
 pnpm test

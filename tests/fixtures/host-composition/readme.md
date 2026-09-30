@@ -12,7 +12,7 @@ Installing here must never touch the root dependency graph. The committed
 
 ```sh
 cd tests/fixtures/host-composition
-pnpm install --ignore-workspace --frozen-lockfile
+pnpm install --frozen-lockfile
 ```
 
 Then run the composed suites from the repository root (they resolve this
@@ -23,8 +23,11 @@ cd ../../..
 env -u NODE_PATH npx vitest run tests/domain/v051-goal-lifecycle-composed.test.ts
 ```
 
-`.npmrc` disables workspace linking and the shared lockfile, so the install is
-confined to this directory. `node_modules/` is generated. The lockfile is versioned source and must remain unchanged during a frozen install.
+Its own workspace configuration and `.npmrc` keep the install confined to this
+directory. Keep that workspace configuration enabled: it contains the exact
+audited version exceptions for pnpm's release-age policy. `node_modules/` is
+generated. The lockfile is versioned source and must remain unchanged during a
+frozen install.
 
 Every version is pinned to the audited `0.2.0-rc.2` host set (Cordis `4.0.4`,
 which is versioned independently). The fixture is a test dependency only: it is

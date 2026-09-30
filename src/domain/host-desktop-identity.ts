@@ -2,6 +2,15 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+/** Shared with the native PowerShell regression: JSON arrays must retain
+ * their element shape on Windows PowerShell 5.1. Algorithms are case-insensitive
+ * tokens; the archive path and digest retain their exact comparisons. */
+export const DESKTOP_HEADER_RESOURCE_CHECK: string = String.raw`
+  $rows = [System.Text.Encoding]::UTF8.GetString($bytes).TrimEnd([char]0) | ConvertFrom-Json
+  $selected = @($rows | Where-Object { $_.file -ceq 'resources\app.asar' -and $_.alg -eq 'sha256' })
+  if ($selected.Count -ne 1 -or $selected[0].value -cne $env:DSH_GUARD_DESKTOP_HEADER) { throw 'desktop signed archive header mismatch' }
+`
+
 /** Authenticate the archive header through the vendor-signed carrier rather
  * than through metadata stored in that same archive. Never execute app code. */
 export function verifyDesktopCarrier(archivePath: string, headerSha256: string): string {
@@ -61,9 +70,7 @@ try {
   if ($ptr -eq [IntPtr]::Zero) { throw 'desktop archive resource unreadable' }
   $bytes = New-Object byte[] $n
   [System.Runtime.InteropServices.Marshal]::Copy($ptr, $bytes, 0, $n)
-  $rows = @([System.Text.Encoding]::UTF8.GetString($bytes).TrimEnd([char]0) | ConvertFrom-Json)
-  $selected = @($rows | Where-Object { $_.file -ceq 'resources\app.asar' -and $_.alg -ceq 'sha256' })
-  if ($selected.Count -ne 1 -or $selected[0].value -cne $env:DSH_GUARD_DESKTOP_HEADER) { throw 'desktop signed archive header mismatch' }
+${DESKTOP_HEADER_RESOURCE_CHECK}
   [Console]::Write('verified')
 } finally { [void][DshGuardResource]::FreeLibrary($h) }
 `

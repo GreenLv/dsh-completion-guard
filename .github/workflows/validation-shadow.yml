@@ -64,7 +64,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install isolated host fixture
         working-directory: tests/fixtures/host-composition
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Run repository-owned selected gates
         env:
           VALIDATION_PLAN: ${{ needs.classify.outputs.plan }}

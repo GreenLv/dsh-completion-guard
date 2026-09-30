@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } f
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { verifyDesktopCarrier } from '../src/domain/host-desktop-identity.js'
+import { DESKTOP_HEADER_RESOURCE_CHECK, verifyDesktopCarrier } from '../src/domain/host-desktop-identity.js'
 import { readAsarIndex } from '../src/domain/host-desktop.js'
 
 const roots: string[] = []
@@ -19,7 +19,33 @@ describe('Desktop vendor carrier authentication', () => {
     writeFileSync(archive, 'counterfeit')
     writeFileSync(join(installation, 'DeepSeek Harness.exe'), 'unsigned executable')
     expect(() => verifyDesktopCarrier(archive, 'a'.repeat(64))).toThrow()
-  })
+    // The verifier itself has a 30-second child limit. Windows certificate
+    // initialization can exceed Vitest's default five seconds on CI.
+  }, 40_000)
+
+  it.skipIf(process.platform !== 'win32')('checks actual PowerShell 5.1 resource-array parsing with positive and negative controls', () => {
+    const expected = 'a'.repeat(64)
+    const entry = { file: 'resources\\app.asar', alg: 'SHA256', value: expected }
+    const other = { file: 'resources\\default_app.asar', alg: 'SHA256', value: 'b'.repeat(64) }
+    const cases = [
+      { rows: [entry, other], accepted: true },
+      { rows: [{ ...entry, alg: 'sha256' }, other], accepted: true },
+      { rows: [{ ...entry, value: 'b'.repeat(64) }, other], accepted: false },
+      { rows: [{ ...entry, alg: 'SHA1' }, other], accepted: false },
+      { rows: [entry, entry, other], accepted: false },
+      { rows: [{ ...entry, file: 'resources\\APP.ASAR' }, other], accepted: false },
+      { rows: [other], accepted: false },
+    ]
+    const controls = cases.map(({ rows, accepted }, index) => {
+      const json = JSON.stringify(rows).replaceAll("'", "''")
+      return `$bytes = [System.Text.Encoding]::UTF8.GetBytes('${json}')\n$accepted = $false\ntry { ${DESKTOP_HEADER_RESOURCE_CHECK}\n$accepted = $true } catch {}\nif ($accepted -ne $${accepted}) { throw 'resource control ${index} failed' }`
+    }).join('\n')
+    const script = `$ErrorActionPreference = 'Stop'\n$env:DSH_GUARD_DESKTOP_HEADER = '${expected}'\n${controls}\n[Console]::Write('controls=7')`
+    const shell = join(process.env.SystemRoot!, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    expect(execFileSync(shell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8', timeout: 30_000, maxBuffer: 64 * 1024,
+    }).trim()).toBe('controls=7')
+  }, 40_000)
 
   it('refuses a copied standalone archive outside its signed carrier', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-detached-desktop-'))
@@ -33,7 +59,7 @@ describe('Desktop vendor carrier authentication', () => {
     const archive = process.env.DSH_DESKTOP_ASAR!
     expect(verifyDesktopCarrier(archive, readAsarIndex(archive).headerSha256)).toMatch(/DeepSeek Harness(?:\.exe)?$/)
     expect(() => verifyDesktopCarrier(archive, 'a'.repeat(64))).toThrow(/header/)
-  })
+  }, 70_000)
 
   it.skipIf(!process.env.DSH_DESKTOP_ASAR)('round-trips the production CLI through the real boot-free Desktop composition API', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-composition-'))
