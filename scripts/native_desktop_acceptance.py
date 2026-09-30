@@ -25,7 +25,7 @@ _spec.loader.exec_module(host)
 DESKTOP_GATES = {
     "package_inventory", "manifest_identity", "package_parity", "isolated_install",
     "strict_second_noop", "installed_syntax", "desktop_carrier_and_graph",
-    "desktop_package_parity", "desktop_strict_second_noop", "desktop_host_lock",
+    "desktop_package_parity", "desktop_strict_second_noop", "desktop_installed_inspect", "desktop_host_lock",
     "desktop_host_lock_readback", "desktop_probe_composition", "desktop_loaded_backend",
     "desktop_graceful_stop", "desktop_uninstall", "desktop_cleanup",
     *("desktop_" + case for case in host.PROBE_V070_CASES),
@@ -131,7 +131,7 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         if api.tree_digest(installed) != tree:
             raise RuntimeError("Desktop installed package differs from the frozen tgz")
         passed("desktop_package_parity")
-        tracked = [profile / name for name in ("package.json", "pnpm-lock.yaml", "cordis.patch.yml", "node_modules/.package-map.json")]
+        tracked = [profile / name for name in ("package.json", "pnpm-lock.yaml", "cordis.patch.yml", "node_modules/.package-map.json", "node_modules/.modules.yaml")]
         before = {path.name: api.sha256(path) for path in tracked if path.is_file()}
         stage = "desktop_second_install"
         command(*install)
@@ -140,9 +140,14 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
             raise RuntimeError("Desktop second install was not a strict no-op")
         passed("desktop_strict_second_noop")
         locker = installed / "bin" / "dsh-completion-guard-host-lock.mjs"
+        stage = "desktop_installed_inspect"
+        inspected = json.loads(command("node", str(locker), "inspect", *lock_args))
+        if inspected["status"] != "supported" or inspected.get("inspection_scope") != "active_profile":
+            raise RuntimeError("Desktop installed inspection did not audit the active importer")
+        passed("desktop_installed_inspect")
         stage = "desktop_host_lock"
         readback = json.loads(command("node", str(locker), "inject", *lock_args))
-        if readback["status"] != "supported":
+        if readback["status"] != "supported" or readback["host_lock_digest"] != inspected["host_lock_digest"]:
             raise RuntimeError("Desktop injected lock unavailable")
         result["host_lock_digests"] = {"desktop": readback["host_lock_digest"]}
         result["desktop_runtime"] = {key: value for key, value in graph["desktop_runtime"].items() if key != "asar_realpath"}

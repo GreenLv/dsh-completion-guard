@@ -7,6 +7,12 @@ import { spawnSync } from 'node:child_process'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const families = Object.freeze({
+  'desktop-importer': [
+    'tests/v082-desktop-cli.test.ts',
+    'tests/v082-desktop-profile.test.ts',
+    'tests/v082-desktop-carrier.test.ts',
+    'tests/domain/host-node-conditions.test.ts',
+  ],
   'rc017-adaptation': [
     'tests/v080-rc017-host.test.ts',
     'tests/domain/host-dependency-audit.test.ts',

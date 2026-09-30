@@ -299,6 +299,16 @@ function readJsonObjectFile(path: string, code: string): Record<string, unknown>
   throw new HostProfileError(code, `invalid JSON object: ${path}`)
 }
 
+/** Importer state selects the active audit; its presence grants no trust. */
+export function hasDesktopImporterState(profileRoot: string): boolean {
+  return ['node_modules', '.dsh-module-fallback', 'pnpm-lock.yaml'].some((name) => {
+    try { lstatSync(join(profileRoot, name)); return true } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+      throw error
+    }
+  })
+}
+
 /**
  * Pre-install inspection of a Desktop target: the profile must be the
  * Desktop-owned dependency-free profile, and the runtime half must come from
@@ -312,10 +322,8 @@ export function readDesktopTargetGraph(appAsarPath: string, profileRoot: string)
   if (manifest.name !== DESKTOP_PROFILE_PACKAGE_NAME) {
     throw new HostProfileError('target_profile_not_desktop', 'the profile is not the Desktop-owned dsh-profile-desktop')
   }
-  for (const managed of ['node_modules', '.dsh-module-fallback', 'pnpm-lock.yaml']) {
-    if (existsSync(join(profile, managed))) {
-      throw new HostProfileError('target_profile_unmanaged_modules', `desktop profiles are managed by the app: ${managed} exists`)
-    }
+  if (hasDesktopImporterState(profile)) {
+    throw new HostProfileError('target_profile_unmanaged_modules', 'desktop profiles are managed by the app: importer state exists')
   }
   const dependencies = isRecord(manifest.dependencies) ? manifest.dependencies : {}
   if (Object.keys(dependencies).length > 0) {

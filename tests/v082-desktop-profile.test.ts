@@ -12,6 +12,7 @@ import {
   readDesktopAppRuntime,
   readDesktopDependency,
   readDesktopTargetGraph,
+  hasDesktopImporterState,
   DESKTOP_PROFILE_PACKAGE_NAME,
 } from '../src/domain/host-desktop.js'
 import { evaluateConfiguredHostLock, injectActiveProfileHostLock, inspectDesktopTargetGraph, resolveActiveProfileHostLock, revalidateDesktopCoreLock, verifyComposedHostLockDump } from '../src/domain/host-resolver.js'
@@ -262,6 +263,17 @@ describe('desktop installed-byte audit', () => {
 })
 
 describe('desktop profile identity and preflight', () => {
+  it.each(['node_modules', '.dsh-module-fallback', 'pnpm-lock.yaml'])
+  ('refuses even dangling importer state at %s before granting pre-install admission', (name) => {
+    const root = temporaryRoot(), profile = writeDesktopProfile(root)
+    expect(hasDesktopImporterState(profile)).toBe(false)
+    const target = join(root, 'disposable-target')
+    mkdirSync(target)
+    symlinkSync(target, join(profile, name), 'junction')
+    rmSync(target, { recursive: true })
+    expect(hasDesktopImporterState(profile)).toBe(true)
+    expect(() => readDesktopTargetGraph(join(root, 'app.asar'), profile)).toThrow(/importer state/)
+  })
   it('inspects the dependency-free desktop profile against the official bundle', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)

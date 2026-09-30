@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -11,6 +11,7 @@ import {
   prepareDesktopHostTrust,
   inspectTargetHostGraph,
   inspectDesktopTargetGraph,
+  hasDesktopImporterState,
   evaluateConfiguredHostLock,
   resolveActiveProfileHostLock,
   verifyComposedHostLockDump,
@@ -79,7 +80,7 @@ try {
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   const profile = selectedProfile()
   if (profile === 'desktop' && (command === 'inspect-graph'
-    || (command === 'inspect' && !existsSync(join(option('--profile-root'), 'node_modules', '.package-map.json'))))) {
+    || (command === 'inspect' && !hasDesktopImporterState(option('--profile-root'))))) {
     const runtimeRoot = option('--runtime-root')
     const profileRoot = option('--profile-root')
     const trust = hasFlag('--rebind-registry') ? await prepareDesktopHostTrust(runtimeRoot, profileRoot) : undefined
@@ -166,7 +167,9 @@ try {
   if (command === 'verify-dump') {
     verifyComposedHostLockDump(readFileSync(option('--dump-config') === '-' ? 0 : option('--dump-config'), 'utf8'), active.evaluation, active)
   }
-  process.stdout.write(`${JSON.stringify(summary(active.evaluation))}\n`)
+  process.stdout.write(`${JSON.stringify({ ...summary(active.evaluation),
+    ...(command === 'inspect' ? { inspection_scope: 'active_profile' } : {}),
+  })}\n`)
 } catch (error) {
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'host_lock_command_failed'
   process.stderr.write(`${JSON.stringify({ status: 'unavailable', reason_code: code })}\n`)
