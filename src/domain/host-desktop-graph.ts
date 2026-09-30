@@ -7,6 +7,23 @@ import type { DependencyAuditGraph } from './host-dependency-audit.js'
 import { readAsarFile, readAsarIndex } from './host-desktop.js'
 import type { AuditedPackageExpectation } from './host-resolver.js'
 
+const packageNamePattern = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/
+
+/** Canonical record ID, before resolving any filesystem path. */
+export function desktopInstallationLocation(value: unknown, name: string,
+  platform: NodeJS.Platform = process.platform): string {
+  if (typeof value !== 'string') throw Error('Desktop installation location invalid')
+  // pnpm writes native separators on Windows. Keep one forward-slash record
+  // identity so equivalent spellings still collide in the index audit.
+  const path = platform === 'win32' ? value.replaceAll('\\', '/') : value
+  if (!path.startsWith('node_modules/')) throw Error('Desktop installation location invalid')
+  const id = path.slice('node_modules/'.length), parts = id.split('/node_modules/')
+  if (!parts.every(part => packageNamePattern.test(part)) || parts.at(-1) !== name) {
+    throw Error('Desktop installation location invalid')
+  }
+  return id
+}
+
 /** Desktop's bundled pnpm 11.7 emits a physical hoisted tree and JSON
  * .modules.yaml, without a package map. Read that actual installation index;
  * never write a substitute map or infer registry trust from local metadata.
@@ -24,7 +41,7 @@ export function desktopHoistedProfileGraph(profile: string, session: HostAuditSe
     || !metadata.hoistedLocations || typeof metadata.hoistedLocations !== 'object' || Array.isArray(metadata.hoistedLocations)) {
     throw Error('Desktop installation index unsupported')
   }
-  const names = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/
+  const names = packageNamePattern
   const records: DependencyAuditGraph['records'] = Object.create(null) as DependencyAuditGraph['records']
   records['.'] = { url: '..', dependencies: Object.create(null) as Record<string, string> }
   const rootIndex = records['.'].dependencies as Record<string, string>
@@ -34,9 +51,8 @@ export function desktopHoistedProfileGraph(profile: string, session: HostAuditSe
     const name = reference.slice(0, boundary), version = reference.slice(boundary + 1)
     if (boundary < 1 || !names.test(name) || !version || !Array.isArray(paths) || !paths.length) throw Error('Desktop installation reference invalid')
     for (const path of paths) {
-      if (typeof path !== 'string' || !path.startsWith('node_modules/')) throw Error('Desktop installation location invalid')
-      const id = path.slice('node_modules/'.length), parts = id.split('/node_modules/')
-      if (!parts.every(part => names.test(part)) || parts.at(-1) !== name || locations.has(id)) throw Error('Desktop installation location invalid')
+      const id = desktopInstallationLocation(path, name), parts = id.split('/node_modules/')
+      if (locations.has(id)) throw Error('Desktop installation location invalid')
       const configured = resolve(modules, id), root = session.realpath(configured)
       // This adapter covers the bundled physical hoisted layout only.
       if (root !== configured || !root.startsWith(modules + sep) || roots.has(root)) throw Error('Desktop installation location escaped or linked')

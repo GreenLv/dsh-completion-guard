@@ -355,6 +355,27 @@ describe('desktop runtime attach (revalidation)', () => {
     expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).digest).not.toBe(active.evaluation.digest)
   })
 
+  it.skipIf(process.platform !== 'win32')('audits the official Windows backslash importer through the active resolver', () => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root), profile = physicalImporterProfile(root)
+    const path = join(profile, 'node_modules', '.modules.yaml')
+    const metadata = JSON.parse(readFileSync(path, 'utf8'))
+    metadata.hoistedLocations['dsh-completion-guard@file:../guard.tgz'] = ['node_modules\\dsh-completion-guard']
+    writeFileSync(path, JSON.stringify(metadata))
+    const active = resolveActiveProfileHostLock(asar, profile, '0.8.2')
+    expect(active.evaluation.status).toBe('supported')
+    expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).digest).toBe(active.evaluation.digest)
+  })
+
+  it('refuses duplicate Windows-normalized index locations without granting another identity', () => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root), profile = physicalImporterProfile(root)
+    const path = join(profile, 'node_modules', '.modules.yaml'), metadata = JSON.parse(readFileSync(path, 'utf8'))
+    metadata.hoistedLocations['dsh-completion-guard@file:../guard.tgz'] = [
+      'node_modules/dsh-completion-guard', 'node_modules\\dsh-completion-guard',
+    ]
+    writeFileSync(path, JSON.stringify(metadata))
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrowError(expect.objectContaining({ code: 'active_graph_invalid' }))
+  })
+
   it.each(['unsupported-manager', 'wrong-linker', 'omitted-package', 'invented-package', 'escaped-location', 'missing-index'])
   ('refuses an invalid physical importer: %s', (change) => {
     const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)

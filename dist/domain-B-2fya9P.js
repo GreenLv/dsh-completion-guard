@@ -9437,6 +9437,16 @@ function readDesktopDependency(appAsarPath, name) {
 
 //#endregion
 //#region src/domain/host-desktop-graph.ts
+const packageNamePattern = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/;
+/** Canonical record ID, before resolving any filesystem path. */
+function desktopInstallationLocation(value, name, platform = process.platform) {
+	if (typeof value !== "string") throw Error("Desktop installation location invalid");
+	const path$1 = platform === "win32" ? value.replaceAll("\\", "/") : value;
+	if (!path$1.startsWith("node_modules/")) throw Error("Desktop installation location invalid");
+	const id = path$1.slice(13), parts = id.split("/node_modules/");
+	if (!parts.every((part) => packageNamePattern.test(part)) || parts.at(-1) !== name) throw Error("Desktop installation location invalid");
+	return id;
+}
 /** Desktop's bundled pnpm 11.7 emits a physical hoisted tree and JSON
 * .modules.yaml, without a package map. Read that actual installation index;
 * never write a substitute map or infer registry trust from local metadata.
@@ -9451,7 +9461,7 @@ function desktopHoistedProfileGraph(profile, session) {
 	if (bytes$1.length > 2 * 1024 * 1024) throw Error("Desktop installation index too large");
 	const metadata = JSON.parse(bytes$1.toString("utf8"));
 	if (metadata.nodeLinker !== "hoisted" || metadata.layoutVersion !== 5 || metadata.packageManager !== "pnpm@11.7.0" || !metadata.hoistedLocations || typeof metadata.hoistedLocations !== "object" || Array.isArray(metadata.hoistedLocations)) throw Error("Desktop installation index unsupported");
-	const names = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/;
+	const names = packageNamePattern;
 	const records = Object.create(null);
 	records["."] = {
 		url: "..",
@@ -9464,9 +9474,8 @@ function desktopHoistedProfileGraph(profile, session) {
 		const name = reference.slice(0, boundary), version$1 = reference.slice(boundary + 1);
 		if (boundary < 1 || !names.test(name) || !version$1 || !Array.isArray(paths) || !paths.length) throw Error("Desktop installation reference invalid");
 		for (const path$1 of paths) {
-			if (typeof path$1 !== "string" || !path$1.startsWith("node_modules/")) throw Error("Desktop installation location invalid");
-			const id = path$1.slice(13), parts = id.split("/node_modules/");
-			if (!parts.every((part) => names.test(part)) || parts.at(-1) !== name || locations.has(id)) throw Error("Desktop installation location invalid");
+			const id = desktopInstallationLocation(path$1, name), parts = id.split("/node_modules/");
+			if (locations.has(id)) throw Error("Desktop installation location invalid");
 			const configured = resolve(modules, id), root = session.realpath(configured);
 			if (root !== configured || !root.startsWith(modules + sep) || roots.has(root)) throw Error("Desktop installation location escaped or linked");
 			const manifest = session.readJson(join(root, "package.json"));
