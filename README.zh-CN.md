@@ -4,16 +4,16 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.8.1 要求 DSH `>=0.2.0-rc.1`。** 请先停止宿主、升级 DSH 并安装 Guard，再为每个 Profile 执行宿主锁工具的 `inspect`、`inject` 和 `verify-dump`，最后按需启动该 Profile。这些命令绑定实际安装包及其经过验证的路由；安装 Guard 本身不会重建锁。已测试的宿主基线是 DSH `0.2.0-rc.1`、Cordis `4.0.4`；较新版本仍需通过身份和适配契约检查。版本准入、重绑及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
+> **0.8.2 要求 DSH `>=0.2.0-rc.2`，并支持官方 Desktop 应用。** 请先停止宿主、升级 DSH 并安装 Guard，再为每个 Profile 执行宿主锁工具的 `inspect`、`inject` 和 `verify-dump`，最后按需启动该 Profile。对 Desktop 应用请传入 `--profile desktop`，并以应用归档作为 runtime root。这些命令绑定实际安装包及其经过验证的路由；安装 Guard 本身不会重建锁。已测试的宿主基线是 DSH `0.2.0-rc.2`、Cordis `4.0.4`；较新版本仍需通过身份和适配契约检查。版本准入、重绑及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
 ## 快速开始
 
-先停止宿主并升级到 DSH `0.2.0-rc.1` 或更高版本，再把 Guard 安装到需要保护的 Profile：
+先停止宿主并升级到 DSH `0.2.0-rc.2` 或更高版本，再把 Guard 安装到需要保护的 Profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.8.1
+dsh plugin --profile web add dsh-completion-guard@0.8.2
 ```
 
 **升级和执行下面的安装图检查时，保持宿主停止。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -31,6 +31,8 @@ dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root 
 ```
 
 Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。各版本的原生验收与发布证据在[验收记录](docs/LOCAL_ACCEPTANCE.md)中按版本绑定其精确制品字节单独记录；任何版本的源码与确定性证据都不能等同于该版本已安装制品的结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、重复、不可信或不同于已绑定环境，Guard 会保持不可用。
+
+Desktop 请使用应用附带的 CLI 安装，再以 `--profile desktop`、应用 `app.asar` 和实际 profile 路径建立宿主锁。它的 CLI 不提供 `--dump-config`，请用 Guard 的 `dump-desktop` 生成组合配置再回读；见[Desktop 升级步骤](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile)。
 
 需要使用时，再启动 DSH Web，打开会话并启用 Guard：
 
@@ -57,7 +59,7 @@ Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard
 
 ## 状态与兼容性
 
-0.8.1 的版本准入范围是 **DSH `>=0.2.0-rc.1`**，没有版本上限。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.1` 46 包依赖图保留为已审查基线；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。变化的 Session/API 实现须通过有限行为探针，不兼容行为会报告具体资格缺口，旧证书不能转移到新锁。已在 `0.2.0-rc.1` 的真实安装图上执行源码入口测量；最终制品的 macOS/Windows 原生验收和未来版本原生证据仍须分别建立。
+0.8.2 的版本准入范围是 **DSH `>=0.2.0-rc.2`**，没有版本上限，并把官方 Desktop 应用纳为独立 profile（`desktop`）：应用自有的 `dsh-profile-desktop` 按名称识别，其内置依赖图从已签名的 `app.asar` 原位读取，安装字节按发布 tarball 逐文件核验。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.2` 46 包依赖图为已审查基线（rc.1 图保留为历史证据）；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。变化的 Session/API 实现须通过有限行为探针，不兼容行为会报告具体资格缺口，旧证书不能转移到新锁。最终制品的 macOS/Windows 原生验收、未来版本原生证据与 Desktop 原生验收仍须分别建立。
 
 升级后重新检查、注入并验证 host-lock，再按需启动对应 Profile，步骤见[宿主锁升级](docs/HOST_LOCK_UPGRADE.md)。旧会话由 DSH 迁移为 V4；Guard 保留旧 ledger 和证书，但不会重签或把旧身份升级为当前权限。Goal 为可选能力，宿主安装不代表它已启用。
 
@@ -80,7 +82,7 @@ Context Guard 有两种启用模式：
 
 启用模式只控制 Guard 是否保护会话，不是 DSH 的会话模式（例如会话开始时所选的标准模式、极简模式）。Guard 不再在第一条消息之前写入任何内容，因此 DSH 会话模式可以在会话尚为新会话时选择。`/context-guard on` 和 `/context-guard off` 只负责开启或关闭 Guard 保护，不会改变 DSH 会话模式。
 
-如果希望 DSH 会话自动启用保护，请在当前 DSH 启动方式使用的 `cordis.patch.yml` 中增加：
+如果希望 DSH 会话自动启用保护，请把实际 profile 的 `cordis.patch.yml` 中已有 `context-guard` 项设为 `activation: always`，保留已注入的宿主锁字段。下面的片段只显示要修改的字段，不用于替换整份配置：
 
 ```yaml
 - id: context-guard
@@ -89,12 +91,14 @@ Context Guard 有两种启用模式：
     activation: always
 ```
 
-DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH；**Headless** 是不打开网页界面，通常从终端或自动化任务运行 DSH。两种方式使用不同的配置文件。你用哪一种就修改哪一个；两种都用时需要分别修改：
+DSH 的 Web 网页、Headless 终端和 Desktop 桌面应用使用独立配置。请修改实际使用的 profile；多种方式都用时分别修改：
 
 | 系统 | 你怎么使用 DSH | 默认路径 |
 | --- | --- | --- |
 | macOS / Linux | Web | `$HOME/.dsh/profiles/web/cordis.patch.yml` |
 | macOS / Linux | Headless | `$HOME/.dsh/profiles/headless/cordis.patch.yml` |
+| macOS | Desktop | `$HOME/.dsh/profiles/desktop/cordis.patch.yml` |
+| Windows | Desktop | `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml` |
 | Windows | Web | `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` |
 | Windows | Headless | `%USERPROFILE%\.dsh\profiles\headless\cordis.patch.yml` |
 
@@ -102,7 +106,7 @@ DSH 有两种运行方式：**Web** 是在浏览器的网页界面里使用 DSH�
 
 不想手动改文件，也可以把下面这段话直接发给 DSH：
 
-> 请把 `dsh-completion-guard` 设为 `always` 模式。根据我当前使用 DSH 的方式（网页界面或无网页界面），自动找到对应的 `cordis.patch.yml`，先备份该文件，只把 `id: context-guard` 这一项的 `activation` 设为 `always`，不要修改其他配置，也不要替我重启 DSH。完成后告诉我文件的绝对路径，并显示准确的修改内容。
+> 请把 `dsh-completion-guard` 设为 `always` 模式。根据我当前使用 DSH 的方式（Web、Headless 或 Desktop），自动找到对应的 `cordis.patch.yml`，先备份该文件，只把 `id: context-guard` 这一项的 `activation` 设为 `always`，不要修改其他配置，也不要替我重启 DSH。完成后告诉我文件的绝对路径，并显示准确的修改内容。
 
 修改完成后，重启 DSH。
 
@@ -205,6 +209,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm --dir tests/fixtures/host-composition install --ignore-workspace --frozen-lockfile
 pnpm run test:stats
 pnpm run typecheck
 pnpm test

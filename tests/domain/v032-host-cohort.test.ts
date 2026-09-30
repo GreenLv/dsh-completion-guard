@@ -13,7 +13,7 @@ import { hostNodeConditions } from '../../src/domain/host-node-conditions.js'
 import { hostLockDigest } from '../../src/domain/digest.js'
 import { ALPHA3_HOST_PACKAGES } from '../helpers/alpha3-host.js'
 import { RC1_HOST_PACKAGES } from '../helpers/rc1-host.js'
-import { RC020_RC1_HOST_PACKAGES } from '../../src/domain/rc020-rc1-host.js'
+import { RC020_RC2_HOST_PACKAGES } from '../../src/domain/rc020-rc2-host.js'
 import { LEGACY_HOST_COHORTS as HOST_COHORTS, ALPHA2_HOST_PACKAGES, ALPHA2_DSHMARKET_139_HOST_PACKAGES } from '../helpers/historical-host.js'
 import {
   MIN_SUPPORTED_HOST_VERSION,
@@ -89,7 +89,7 @@ describe('audited host cohort registry', () => {
     expect(alpha2Market139Cohort.packages.some((row) => row.name.includes('skin-center'))).toBe(false)
   })
 
-  it('records the 0.1.5-rc.1 active cohort as registry-derived, not natively audited', () => {
+  it('records legacy cohorts as registry-derived, not natively audited', () => {
     // The rows are the exact published registry identities, so the graph lock
     // can certify them, but no native host load has happened in this round:
     // the cohort must say so rather than implying a platform audit.
@@ -97,7 +97,7 @@ describe('audited host cohort registry', () => {
     expect(rc015Cohort.auditedPlatforms).toEqual([])
     expect(rc015Cohort.acceptedPlatforms).toEqual(['posix', 'windows'])
     expect(rc015Cohort.supportedGoalVersions).toEqual(['0.1.5-rc.1'])
-    const evaluation = evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const evaluation = evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluation.auditProvenance).toBe('registry-derived-pending-native-audit')
     expect(CORE_HOST_COHORTS[0].auditProvenance).toBe('registry-derived-pending-native-audit')
     expect(CORE_HOST_COHORTS[0].capabilities).toContainEqual({
@@ -132,14 +132,14 @@ describe('audited host cohort registry', () => {
     expect(registryDerived).not.toBe(native)
     // The replication above is faithful: it reproduces the digests the real
     // evaluation reports, so the difference is attributable to provenance alone.
-    expect(registryDerived).toBe(evaluateHostLock(RC020_RC1_HOST_PACKAGES, context).digest)
+    expect(registryDerived).toBe(evaluateHostLock(RC020_RC2_HOST_PACKAGES, context).digest)
     expect(cohort.auditProvenance).toBe('registry-derived-pending-native-audit')
     // The same graph evaluated as if it had been natively audited is exactly the
     // identity that must NOT be reachable in this round.
-    expect(evaluateHostLock(RC020_RC1_HOST_PACKAGES, context).digest).not.toBe(native)
+    expect(evaluateHostLock(RC020_RC2_HOST_PACKAGES, context).digest).not.toBe(native)
   })
 
-  it('selects the active 0.1.5-rc.1 cohort atomically and closes every historical cohort', () => {
+  it('selects the active 0.2.0-rc.2 cohort atomically and closes every historical cohort', () => {
     // 0.5.1 support policy: the active allowlist is exactly 0.1.5-rc.1.
     // Historical audited graphs keep their identities in LEGACY_HOST_COHORTS as
     // verification data but are no longer active support entries.
@@ -152,7 +152,7 @@ describe('audited host cohort registry', () => {
     const rc1 = evaluateHostLock(rc1Cohort.packages, { platform: 'posix', profileKind: 'web' })
     expect(rc1.status).toBe('unsupported')
     expect(rc1.reasonCode).toBe('host_lock_version_mismatch')
-    const current = evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const current = evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(current).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
     expect(current.capabilities.web_control.status).toBe('supported')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
@@ -205,11 +205,11 @@ describe('audited host cohort registry', () => {
     // difference from a natively audited cohort is reported through
     // `auditProvenance`, never hidden.
     for (const platform of ['posix', 'windows'] as const) {
-      expect(selectHostCohort(RC020_RC1_HOST_PACKAGES, platform)).toMatchObject({
+      expect(selectHostCohort(RC020_RC2_HOST_PACKAGES, platform)).toMatchObject({
         consistent: true,
         cohort: { id: ACTIVE_COHORT_ID },
       })
-      const evaluation = evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform, profileKind: 'web' })
+      const evaluation = evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform, profileKind: 'web' })
       expect(evaluation).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
       expect(evaluation.auditProvenance).toBe('registry-derived-pending-native-audit')
     }
@@ -266,10 +266,10 @@ describe('audited host cohort registry', () => {
   })
 
   it('binds hostLockDigest to the active cohort so a cohort switch stales old certificates', () => {
-    const current = evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform: 'posix' })
+    const current = evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform: 'posix' })
     expect(current.status).toBe('supported')
     expect(current.digest).toMatch(/^[0-9a-f]{64}$/)
-    const again = evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform: 'posix' })
+    const again = evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform: 'posix' })
     expect(again.digest).toBe(current.digest)
     for (const historical of [
       rc2Cohort.packages, alpha2Cohort.packages, ALPHA2_DSHMARKET_139_HOST_PACKAGES,
@@ -293,11 +293,11 @@ describe('audited host cohort registry', () => {
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
       expect(peers[name]).toBe(SUPPORTED_HOST_RANGE)
     }
-    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.0-rc.1')
-    for (const version of ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1', '0.3.0-rc.1', '1.0.0']) {
+    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.0-rc.2')
+    for (const version of ['0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1', '0.3.0-rc.1', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.1.7-rc.2', '0.1.8-rc.2', '0.2.0-alpha.9', '0.2.0-rc.0']) {
+    for (const version of ['0.1.5', '0.1.6', '0.1.6-rc.1', '0.1.7-rc.2', '0.1.8-rc.2', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
     expect(Object.values(peers)).not.toContain('*')
@@ -330,9 +330,9 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     })
   }
 
-  it('locks the 0.1.5-rc.1 core as the supported web_control target on both platforms', () => {
+  it('locks the 0.2.0-rc.2 core as the supported web_control target on both platforms', () => {
     for (const platform of ['posix', 'windows'] as const) {
-      const evaluation = evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform, profileKind: 'web' })
+      const evaluation = evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform, profileKind: 'web' })
       expect(evaluation).toMatchObject({ status: 'supported', cohortId: ACTIVE_COHORT_ID })
       expect(evaluation.capabilities.web_control.status).toBe('supported')
       expect(evaluateHostCapability(evaluation, { action: 'apply', platform, profileKind: 'web' }).status).toBe('supported')
@@ -345,10 +345,10 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     // stays closed regardless of which market row accompanies it.
     const marketRow = rc1Cohort.packages.find((row) => row.name === 'dshmarket')!
     for (const extra of [[marketRow], [{ name: 'dshmarket', version: '99.0.0', integrity: 'sha512-drift' }]]) {
-      const evaluation = evaluateHostLock([...RC020_RC1_HOST_PACKAGES, ...extra], { platform: 'posix', profileKind: 'web' })
+      const evaluation = evaluateHostLock([...RC020_RC2_HOST_PACKAGES, ...extra], { platform: 'posix', profileKind: 'web' })
       expect(evaluation.status).toBe('supported')
       expect(evaluation.reasonCode).toBeUndefined()
-      expect(evaluation.digest).toBe(evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).digest)
+      expect(evaluation.digest).toBe(evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).digest)
     }
     for (const historical of [alpha3Cohort, rc1Cohort]) {
       const mixed = historical.packages.map((row) => row.name === 'dshmarket' ? marketRow : row)
@@ -360,7 +360,7 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
     for (const cohort of HOST_COHORTS) {
       expect(cohort.packages.some((row) => row.name.includes('skin-center'))).toBe(false)
     }
-    const withSkinCenter = [...RC020_RC1_HOST_PACKAGES, {
+    const withSkinCenter = [...RC020_RC2_HOST_PACKAGES, {
       name: '@linxin666/dsh-client-ui-skin-center', version: '0.3.20', integrity: 'sha512-AAAA',
     }]
     expect(selectHostCohort(withSkinCenter, 'posix').reasonCode).toBe('host_cohort_unknown_package')
@@ -368,11 +368,11 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
   })
 
   it('fails web_control projection closed when the web graph rows are missing or drifted', () => {
-    const withoutWebApp = RC020_RC1_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh-web-app')
+    const withoutWebApp = RC020_RC2_HOST_PACKAGES.filter((row) => row.name !== '@deepseek-ai/dsh-web-app')
     const missing = evaluateHostLock(withoutWebApp, { platform: 'posix', profileKind: 'web' })
     expect(missing.status).toBe('unavailable')
     expect(missing.reasonCode).toBe('host_lock_missing')
-    const drifted = RC020_RC1_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-web-app'
+    const drifted = RC020_RC2_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-web-app'
       ? { ...row, integrity: 'sha512-drift' }
       : row)
     const driftedEvaluation = evaluateHostLock(drifted, { platform: 'posix', profileKind: 'web' })

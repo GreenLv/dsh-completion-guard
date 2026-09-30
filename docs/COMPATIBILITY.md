@@ -2,6 +2,42 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
+## 0.8.2: DSH >=0.2.0-rc.2 and official Desktop
+
+Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.2`, with no upper limit. `0.2.0-rc.1` keeps its recorded-evidence row but is refused as below the floor. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.
+
+The reviewed host baseline is DSH `0.2.0-rc.2` / Cordis `4.0.4`, with 46 package identities and published implementation digests in `manifests/rc020-rc2-byte-audit.json`, regenerated from the published `0.2.0-rc.2` tarballs (upstream commit `639ed015397290b3745d163aafe02ffee4aa3f84`). Compared with rc.1, only six cohort packages carry real `lib` changes in rc.2 (`dsh`, `dsh-commands`, `dsh-goal`, `dsh-llm` typert tables; `dsh-tool-bash`/`dsh-tool-pwsh` tool descriptions); every other package differs only in its `package.json` dependency pins. Native acceptance of the final Guard artifact on each platform remains a separate gate; no native validation of a future host is claimed.
+
+### Official Desktop (CG-RC2-002)
+
+The application owns the `desktop` profile (`dsh-profile-desktop`). Its CLI carrier permits plugin management for that profile but refuses CLI boot and `--dump-config`. Use the carrier installed with the app for installation, and Guard's `dump-desktop` command for boot-free composition. See the [Desktop upgrade steps](HOST_LOCK_UPGRADE.md#official-desktop-profile).
+
+Guard identifies the profile by its manifest name. A Desktop profile contains the Web bundle, so bundle presence alone cannot identify the running surface. For macOS, Guard verifies the app's Developer ID signature and DeepSeek team/identifier; for Windows, it verifies the executable's Authenticode status and DeepSeek publisher. It then compares the ASAR header with the integrity value embedded in the signed carrier. A detached archive or a self-reported digest table cannot establish carrier identity.
+
+The archive is read in place. The registry baseline closes the executable/JSON inventory of each critical package, including scripts outside `lib`. Its bytes must match the acquired official tarball digests. The signed archive metadata authenticates the packager's rewritten manifests; executable files have no rewrite exception. Nested critical packages, unlisted code and changed dependency routes are refused. The same fresh route and byte audit also checks critical peers selected from the physical profile.
+
+The lock binds the canonical archive, signed header, runtime manifest and metadata, carrier bytes, installed Guard manifest, profile manifest, map and lockfile. Inject and runtime revalidation use one evaluation path, including foreground renderers and default-workdir providers. Changed inputs refuse the injected lock. Receipts stay under physical, contained profile directories; directory links cannot redirect them elsewhere.
+
+`hostLockProfile: "desktop"` is preserved through composition and readback. Guard refuses Desktop restart with `host_capability_request_unsupported`; the graphical app owns its lifecycle. Exact-artifact backend acceptance, graphical-shell acceptance and real-model behavior are separate gates. Their results belong to the matching Release annexes.
+
+### 0.8.2 中文说明
+
+0.8.2 延续 0.8.x 的任务、证书与数据协议，主要适配 DSH RC.2、增加 Desktop 宿主锁并修复退出证据判定。最低 DSH 版本升至 `0.2.0-rc.2`；请先升级宿主，再安装 Guard、重新注入锁并回读。版本准入没有上限，但版本号相符仍不足以证明实现兼容。Cordis 的独立要求为 `>=4.0.4`。
+
+Desktop 按应用自有的 `dsh-profile-desktop` 名称识别。安装须使用应用附带的 CLI；该 CLI 允许管理 Desktop 插件，但拒绝通过 CLI 启动 Desktop 或执行 `--dump-config`。Guard 的 `dump-desktop` 使用应用内同一套配置组合 API，不启动宿主。具体操作见[Desktop 升级步骤](HOST_LOCK_UPGRADE.md#official-desktop-profile)。
+
+Guard 先核验 macOS 的 DeepSeek Developer ID 签名或 Windows 的 DeepSeek Authenticode 发布者，再将 ASAR 头与签名载体内的摘要比对。随后原位读取归档，按独立获取的官方 tarball 清单核验关键包内全部可执行/JSON 文件，包括 `lib` 外的脚本。签名归档的元数据只用于认证打包器改写的 manifest；新增代码、嵌套关键包、错误依赖路由及本地被改动的关键 peer 均拒绝。宿主锁同时绑定应用、载体、profile、安装映射与锁文件；注入和运行时复验采用同一链路，并核验 shell 渲染器及默认工作目录提供者。
+
+Desktop 应用重启仍由应用自行管理，Guard 不提供该能力。最终制品的后端生命周期、图形界面和真实模型验收分别记录在对应 Release annex 中。定时提醒及超时问题的晚到答案仍不授予根指令权限；退出标记被后续 prose 遮挡时，结果保持 `unknown`，不再误判成功。
+
+### RC.2 message sources (CG-RC2-004 / CG-RC2-005)
+
+RC.2 delivers scheduled reminders as `user/message` events with `source.kind === 'schedule'` and late answers to timed questions as `source.kind === 'user-question-reply'`. Neither is root user input: neither activates Guard, counts as real root input, creates work units, or is scanned for instructions. The authority for a schedule is the real user turn that created it, recorded in the durable log; the framing of a scheduled message (rc.2 renders it as "from the user") does not change that classification. A late answer belongs to its question/answer contract, never to a new instruction. Only `source.kind === 'user'` carries root authority, and unknown future source kinds fail closed the same way.
+
+### Consumer prerelease semantics
+
+The plain npm/node-semver expression `>=0.2.0-rc.2` excludes later-tuple prereleases by default. The installed DSH plugin compatibility check (`dsh-app-boot`'s `evaluatePluginCompatibility`) uses `semver.satisfies(..., { includePrerelease: true })`, so a `>=0.2.0-rc.2` peer declaration admits `0.2.1-rc.1` and later RCs on the same tuple, and refuses below-floor values. `benchmarks/incidents/acceptance/semver-matrix.json` records the verified matrix for the new floor. pnpm's peer helper behaves the same way; package installation is not a version-admission proof — Guard's own floor check rejects a below-floor host independently.
+
 ## 0.8.1: DSH >=0.2.0-rc.1
 
 Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.1`, with no upper limit. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// Regenerate the host byte-audit manifest from the published 0.2.0-rc.1
+// Regenerate the host byte-audit manifest from the published 0.2.0-rc.2
 // tarballs. Per package: download the exact registry tarball, verify its
-// SHA-256 against the reviewed study, then hash every `lib/**/*.{js,cjs,mjs}` module
+// SHA-256 against the reviewed study, then hash every executable/JSON file
 // plus package.json. The study's per-tarball SHA-256 and registry SRI are the
 // identity inputs; this script only derives per-file digests.
 import { parse } from 'acorn'
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, copyFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 const studyPath = process.argv[2]
-const outputPath = process.argv[3] ?? 'manifests/rc020-rc1-byte-audit.json'
+const outputPath = process.argv[3] ?? 'manifests/rc020-rc2-byte-audit.json'
 if (!studyPath) {
   console.error('usage: generate-rc020-byte-audit.mjs <reviewed-input-study.json> [output-manifest.json]\n\nThe reviewed input is the maintainer-reviewed upstream study binding the exact\ncohort tarballs; it is supplied explicitly per run and never hardcoded.')
   process.exit(1)
@@ -22,11 +22,37 @@ const upstreamCommit = study.upstream.commit
 const hostVersion = study.upstream.version
 
 const work = mkdtempSync(join(tmpdir(), 'rc020-audit-'))
+// Bounded transport retry: identity is never accepted from a transport —
+// every attempt's bytes are still verified against the reviewed study below.
+// curl is tried first; when its TLS connection keeps failing, npm's own
+// registry transport fetches the exact same published tarball, which the
+// study verification then authenticates byte-for-byte.
+function fetchTarball(url, tgzPath, name, version, attempts = 5) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      execFileSync('curl', ['-sfL', '--retry', '3', '-o', tgzPath, url], { stdio: 'pipe' })
+      return
+    } catch (error) {
+      if (attempt >= attempts) {
+        const packed = execFileSync('npm', ['pack', `${name}@${version}`, '--pack-destination', work], { stdio: ['ignore', 'pipe', 'ignore'] })
+          .toString().trim().split('\n').pop()
+        const packedPath = join(work, String(packed).trim())
+        if (packed && existsSync(packedPath)) {
+          copyFileSync(packedPath, tgzPath)
+          return
+        }
+        throw error
+      }
+      console.error(`retry ${attempt}/${attempts - 1} for ${name} (${error.status})`)
+      execFileSync('sleep', ['3'])
+    }
+  }
+}
 try {
   const packages = study.package_bindings.map((binding) => {
     const url = `https://registry.npmjs.org/${binding.name}/-/${binding.name.split('/')[1] ?? binding.name}-${binding.new_version}.tgz`
     const tgzPath = join(work, binding.name.replaceAll('/', '_') + '.tgz')
-    execFileSync('curl', ['-sfL', '--retry', '3', '-o', tgzPath, url], { stdio: 'pipe' })
+    fetchTarball(url, tgzPath, binding.name, binding.new_version)
     const tarballSha = createHash('sha256').update(readFileSync(tgzPath)).digest('hex')
     if (tarballSha !== binding.new_tarball_sha256) {
       throw new Error(`tarball sha mismatch for ${binding.name}: ${tarballSha}`)
@@ -40,7 +66,7 @@ try {
   const rows = packages.map(({ binding, url, tarballSha, integrity }) => {
     const prefix = 'package/'
     const list = execFileSync('tar', ['-tzf', join(work, binding.name.replaceAll('/', '_') + '.tgz')], { encoding: 'utf8' })
-      .split('\n').filter((line) => line.startsWith(prefix + 'lib/') && /\.(?:[cm]?js)$/.test(line))
+      .split('\n').filter((line) => line.startsWith(prefix) && /\.(?:[cm]?js|json)$/.test(line) && line !== prefix + 'package.json')
     const modules = {}, programs = {}; let loadingDigest
     for (const entry of [...list, prefix + 'package.json'].sort()) {
       const content = execFileSync('tar', ['-xzf', join(work, binding.name.replaceAll('/', '_') + '.tgz'), '-O', entry], { maxBuffer: 64 * 1024 * 1024 })
@@ -49,7 +75,7 @@ try {
       if (file === 'package.json') {
         const manifest = JSON.parse(content), fields = ['name', 'type', 'main', 'exports', 'imports', 'dependencies', 'peerDependencies', 'peerDependenciesMeta', 'optionalDependencies']
         loadingDigest = createHash('sha256').update(JSON.stringify(Object.fromEntries(fields.filter(key => Object.hasOwn(manifest, key)).map(key => [key, manifest[key]])))).digest('hex')
-      } else {
+      } else if (/\.[cm]?js$/.test(file)) {
         const ast = parse(content.toString('utf8'), { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true })
         const normalized = JSON.stringify(ast, function (key, value) { return (['start', 'end', 'loc'].includes(key) && typeof this.type === 'string') || (key === 'raw' && this.type === 'Literal') ? undefined : typeof value === 'bigint' ? { bigint: String(value) } : value })
         programs[file] = createHash('sha256').update(normalized).digest('hex')

@@ -37,7 +37,7 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
     name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../manifests/rc020-rc1-byte-audit.json', async (original) => {
+vi.mock('../manifests/rc020-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')

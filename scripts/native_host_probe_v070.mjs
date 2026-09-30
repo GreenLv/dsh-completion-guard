@@ -59,6 +59,10 @@ export function nativeTestFixturePackage(exitCode, name = 'native-test-fixture')
  * registered Guard runtime. A package-list-only digest is stale whenever the
  * runtime binds an audited foreground renderer into its Host Lock. */
 export function probeHostLock(domain, config, platform) {
+  if (config.profile === 'desktop') return domain.resolveDesktopProfileHostLock(
+    config.desktopArchive, config.profileRoot,
+    JSON.parse(readFileSync(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'package.json'))).version,
+  ).evaluation
   const context = { platform, profileKind: config.profile }
   const expected = domain.evaluateHostLock(config.hostPackages, context)
   const actual = domain.evaluateHostLock(domain.readActiveHostGraph(config.runtimeRoot, config.profileRoot), context)

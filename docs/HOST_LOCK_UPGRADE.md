@@ -1,8 +1,8 @@
 # Upgrading the core host lock
 
-Version 0.8.1 requires DSH `>=0.2.0-rc.1` and qualified Cordis `>=4.0.4`. Upgrade order and what each step produces:
+Version 0.8.2 requires DSH `>=0.2.0-rc.2` and qualified Cordis `>=4.0.4`. Upgrade order and what each step produces:
 
-1. Stop the host, upgrade DSH to `0.2.0-rc.1` or a later version, then install this Guard version.
+1. Stop the host, upgrade DSH to `0.2.0-rc.2` or a later version, then install this Guard version.
 2. Rebuild the host lock for each Guard profile by running `inspect`, `inject` and `verify-dump` from an accepted package or matching source checkout:
    `node bin/dsh-completion-guard-host-lock.mjs inject --runtime-root <DSH runtime> --profile-root <profile>` — then verify with `... verify-dump --dump-config <file>`. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
 3. Start each Web/Headless profile when needed so it reads the rebuilt lock. The checks above do not require a running host.
@@ -10,11 +10,11 @@ Version 0.8.1 requires DSH `>=0.2.0-rc.1` and qualified Cordis `>=4.0.4`. Upgrad
 Failure readbacks distinguish these cases:
 
 - `host_lock_migration_required`: the configuration lacks the policy or source roots. Supply `--runtime-root` and `--profile-root` when rebuilding the lock.
-- `host_lock_version_below_minimum`: DSH is older than `0.2.0-rc.1`. Upgrade DSH first.
+- `host_lock_version_below_minimum`: DSH is older than `0.2.0-rc.2`. Upgrade DSH first.
 - `host_lock_version_mismatch`: the installed graph differs from the reviewed baseline in version or integrity. For a later compatible version, use `--rebind-registry` to acquire and qualify the published graph. For the baseline, restore the recorded identities.
 - `host_lock_installed_graph_drift`: installed bytes or routes changed after the audit. Inspect the change before rebuilding the lock.
 
-The floor is `>=0.2.0-rc.1` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
+The floor is `>=0.2.0-rc.2` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 
@@ -66,7 +66,7 @@ profile remains a separate user action.
 
 A DSH Headless profile can have no external dependencies and no private `node_modules` or lockfile. From an accepted package or matching source checkout, `node bin/dsh-completion-guard-host-lock.mjs inspect-graph --runtime-root <runtime> --profile-root <profile>` checks that state without initializing or launching the profile.
 
-This narrow case requires exactly the installation-owned `dsh-base` and `dsh-headless` bundles, a complete audited runtime core, and matching bundle versions, package-map origins and patch files. Declared but uninstalled dependencies, partial map/lock pairs, unexplained local modules and foreign parent-module fallbacks are rejected. Existing profiles with both graph files retain their active-importer checks; damaged files are not treated as an empty graph.
+This narrow case requires the installation-owned `dsh-base` and `dsh-headless` bundles, with the RC.2 `dsh-web-app` bundle allowed between them, a complete audited runtime core, and matching bundle versions, package-map origins and patch files. Declared but uninstalled dependencies, partial map/lock pairs, unexplained local modules and foreign parent-module fallbacks are rejected. Existing profiles with both graph files retain their active-importer checks; damaged files are not treated as an empty graph.
 
 The result labels `inspection_scope: pre_install_target` and `profile_graph.state: dependency_free_headless`, with the manifest hash and bundle identities. Its package rows describe the verified runtime core used for this installation target, not a private profile importer or a live boot. After installing Guard, the `inspect`, `inject` and runtime replay checks still require the profile's package map, lockfile and installed plugin binding. This pre-install result cannot replace those checks.
 
@@ -81,7 +81,7 @@ certificate authority — completion certificates, mutation authorization,
 release pre-effect decisions and Goal/Stop boundaries — validates the lock
 freshly at the moment of its own decision.
 
-Version 0.8.1 registers `dsh-0.2.0-rc.1-core-v1` as the audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
+Version 0.8.2 registers `dsh-0.2.0-rc.2-core-v1` as the audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
 The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
@@ -100,8 +100,30 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.1.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.2.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
+
+## Official Desktop profile
+
+Stop the Desktop app before installing or rebuilding its lock. Use the CLI carrier shipped with that app: `Contents/Resources/runtime/cli/bin/dsh` on macOS, or `resources\runtime\cli\bin\dsh.cmd` in the Windows installation. A separately installed `dsh` CLI cannot manage the reserved Desktop profile.
+
+Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.8.2`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
+
+```sh
+DSH_DESKTOP_ASAR=/absolute/path/to/DeepSeek-Harness.app/Contents/Resources/app.asar
+DSH_DESKTOP_PROFILE=/absolute/path/to/.dsh/profiles/desktop
+GUARD_DESKTOP_LOCK="$DSH_DESKTOP_PROFILE/node_modules/.bin/dsh-completion-guard-host-lock"
+"$GUARD_DESKTOP_LOCK" inspect --profile desktop --runtime-root "$DSH_DESKTOP_ASAR" --profile-root "$DSH_DESKTOP_PROFILE"
+"$GUARD_DESKTOP_LOCK" inject --profile desktop --runtime-root "$DSH_DESKTOP_ASAR" --profile-root "$DSH_DESKTOP_PROFILE"
+"$GUARD_DESKTOP_LOCK" dump-desktop --profile desktop --runtime-root "$DSH_DESKTOP_ASAR" --profile-root "$DSH_DESKTOP_PROFILE" > desktop-composed.yml
+"$GUARD_DESKTOP_LOCK" verify-dump --profile desktop --runtime-root "$DSH_DESKTOP_ASAR" --profile-root "$DSH_DESKTOP_PROFILE" --dump-config desktop-composed.yml
+```
+
+On Windows use the `.cmd` host-lock launcher and the installation's `resources\app.asar` path. `dump-desktop` authenticates the carrier and uses the app's bundled configuration APIs to compose the same bundle/profile/home layers, without starting a host. It writes the profile's empty loader anchor as the official dump API does. Preserve any composed output privately because user configuration may contain secrets; it is not a Release attachment.
+
+Check `supported` on inspect, inject and verify-dump. Keep Desktop stopped until all checks pass, then open the app when needed. Guard never edits the app archive or restarts the graphical app.
+
+Desktop 升级顺序相同：先停止应用并升级宿主，再用应用附带的 CLI 安装 Guard。普通外部 CLI 无法管理保留的 Desktop profile。以应用的 `app.asar` 和实际 Desktop profile 路径执行 `inspect`、`inject`、`dump-desktop`、`verify-dump`，确认三项 JSON 回读均为 `supported` 后再打开应用。`dump-desktop` 不启动宿主；配置输出可能包含私人信息，请留在本机。Guard 不修改应用归档，也不负责应用重启。
 
 ## Market and restart
 
@@ -132,7 +154,7 @@ exact artifact and platform; publication is recorded on its GitHub Release.
 
 ## Historical 0.5.1 evidence
 
-Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.1.
+Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.2.
 
 ## Rebinding compatible package versions
 

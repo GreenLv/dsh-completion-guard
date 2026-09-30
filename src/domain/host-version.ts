@@ -1,5 +1,5 @@
-/** Version admission floor. Since 0.8.1 the public DSH support range is
- * `>=0.2.0-rc.1` with NO implied upper bound: every host version at or above
+/** Version admission floor. Since 0.8.2 the public DSH support range is
+ * `>=0.2.0-rc.2` with NO implied upper bound: every host version at or above
  * this floor (including later RCs on any tuple, stable and future releases)
  * passes VERSION ADMISSION. The floor only rises when a future Guard release
  * actively adopts a newer DSH; the runtime never raises it from a remote
@@ -7,12 +7,13 @@
  * metadata ignored. Version admission is one gate of several — it never
  * claims native validation of a not-yet-tested host, and the graph/byte/
  * contract audits below still run on every admission. */
-export const MIN_SUPPORTED_HOST_VERSION = '0.2.0-rc.1'
+export const MIN_SUPPORTED_HOST_VERSION = '0.2.0-rc.2'
 export const SUPPORTED_HOST_RANGE: string = `>=${MIN_SUPPORTED_HOST_VERSION}`
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
  * ledger, NOT an admission whitelist: a missing row never refuses a
- * version-above-floor host. */
-export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1']
+ * version-above-floor host. rc.1 keeps its historical row after the floor
+ * moved to rc.2; the row records past evidence, not current admission. */
+export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1', '0.2.0-rc.2']
 /** Historical alias retained for evidence-list readers; the admission rule is
  * the floor above, never this list. */
 export const SUPPORTED_HOST_VERSIONS: readonly string[] = HOST_VALIDATED_VERSIONS
@@ -106,8 +107,8 @@ export function evaluateMinimumHostVersion(
 }
 
 /** Version admission: at or above the floor by strict SemVer precedence
- * (prerelease-aware; build metadata ignored). `0.2.0-rc.0` and the whole
- * `0.1.7.x` line stay below the floor; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.0`,
+ * (prerelease-aware; build metadata ignored). `0.2.0-rc.1` and the whole
+ * `0.1.7.x` line stay below the floor; `0.2.0-rc.2`, `0.2.0`,
  * later patch/minor RCs and releases all admit. */
 export function satisfiesSupportedHostRange(version: string): boolean {
   const normalized = version.trim()

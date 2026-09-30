@@ -2,7 +2,7 @@
 
 This directory is a **standalone pnpm package** with its own `package.json`,
 `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `node_modules/`. It exists so that
-Context Guard's integration tests can compose the real DSH 0.1.5-rc.1 host
+Context Guard's integration tests can compose the real DSH 0.2.0-rc.2 host
 packages — including `@deepseek-ai/dsh-agent-loop`, whose peers would otherwise
 enter the repository root's lockfile and change the set of **critical package
 identities** that `evaluateHostLock` reads.
@@ -26,7 +26,7 @@ env -u NODE_PATH npx vitest run tests/domain/v051-goal-lifecycle-composed.test.t
 `.npmrc` disables workspace linking and the shared lockfile, so the install is
 confined to this directory. `node_modules/` is generated. The lockfile is versioned source and must remain unchanged during a frozen install.
 
-Every version is pinned to the audited `0.1.5-rc.1` host set (Cordis `4.0.2`,
+Every version is pinned to the audited `0.2.0-rc.2` host set (Cordis `4.0.4`,
 which is versioned independently). The fixture is a test dependency only: it is
 not a product runtime dependency, it is never packaged, and it does not extend
 the plugin's host certification range.

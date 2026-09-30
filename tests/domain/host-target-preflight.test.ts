@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RC020_RC1_HOST_PACKAGES } from '../../src/domain/rc020-rc1-host.js'
+import { RC020_RC2_HOST_PACKAGES } from '../../src/domain/rc020-rc2-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
@@ -13,7 +13,7 @@ import { revalidateCoreLock } from '../../src/runtime.js'
 
 // Structural fixtures carry an explicit synthetic published-byte oracle. The
 // shipped CLI has its real baseline and must refuse these synthetic bytes.
-vi.mock('../../manifests/rc020-rc1-byte-audit.json', async (original) => {
+vi.mock('../../manifests/rc020-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
   return { default: { ...source.default, packages: source.default.packages.map(row => ({ ...row, modules: {
@@ -30,7 +30,7 @@ const version = MIN_SUPPORTED_HOST_VERSION
 // The active core cohort already excludes dshmarket (market identity is not a
 // core lock input), so the fixture is the exact active graph plus the two
 // installation-owned Headless bundles.
-const core = RC020_RC1_HOST_PACKAGES
+const core = RC020_RC2_HOST_PACKAGES
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 function json(path: string, value: unknown) {
@@ -88,13 +88,13 @@ function installGuard(f: ReturnType<typeof fixture>) {
 
 describe('dependency-free Headless target inspection', () => {
   it('reads the reachable official hoisted renderer layout without accepting aliases, duplicates or drift', () => {
-    const f = fixture('bare', RC020_RC1_HOST_PACKAGES)
+    const f = fixture('bare', RC020_RC2_HOST_PACKAGES)
     const name = '@deepseek-ai/dsh-tool-pwsh'
     const module = join(f.modules, name)
     mkdirSync(join(module, 'lib'), { recursive: true })
     writeFileSync(join(module, 'lib', 'index.js'), 'audited fixture bytes\n')
     const expected = createHash('sha256').update('audited fixture bytes\n').digest('hex')
-    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC020_RC1_HOST_PACKAGES)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC020_RC2_HOST_PACKAGES)
     expect(activeRendererModule(f.modules, name)?.bytes).toBe(expected)
 
     // A changed file is read afresh; the caller's pinned-byte comparison
@@ -127,24 +127,24 @@ describe('dependency-free Headless target inspection', () => {
   })
 
   it('retains a single versioned pnpm mapping and rejects its manifest version drift', () => {
-    const f = fixture('versioned', RC020_RC1_HOST_PACKAGES)
+    const f = fixture('versioned', RC020_RC2_HOST_PACKAGES)
     const name = '@deepseek-ai/dsh-shell'
-    const id = `${name}@0.2.0-rc.1`
+    const id = `${name}@0.2.0-rc.2`
     const url = './.pnpm/dsh-shell/node_modules/@deepseek-ai/dsh-shell'
     f.records[id].url = url
     json(f.mapPath, { packages: f.records })
     const module = join(f.modules, url)
-    json(join(module, 'package.json'), { name, version: '0.2.0-rc.1' })
+    json(join(module, 'package.json'), { name, version: '0.2.0-rc.2' })
     mkdirSync(join(module, 'lib'), { recursive: true })
     writeFileSync(join(module, 'lib', 'index.js'), 'versioned bytes\n')
     expect(activeRendererModule(f.modules, name)?.bytes).toBe(createHash('sha256').update('versioned bytes\n').digest('hex'))
-    json(join(module, 'package.json'), { name, version: '0.2.0-rc.0' })
+    json(join(module, 'package.json'), { name, version: '0.2.0-rc.1' })
     expect(activeRendererModule(f.modules, name)).toBeUndefined()
   })
   it.each(['versioned', 'bare'] as const)('accepts the exact rc.020 graph with %s mapping and binds its launcher', (mapKey) => {
-    const f = fixture(mapKey, RC020_RC1_HOST_PACKAGES)
-    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC020_RC1_HOST_PACKAGES)
-    json(join(f.modules, '@deepseek-ai/dsh', 'package.json'), { name: '@deepseek-ai/dsh', version: '0.2.0-rc.0' })
+    const f = fixture(mapKey, RC020_RC2_HOST_PACKAGES)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC020_RC2_HOST_PACKAGES)
+    json(join(f.modules, '@deepseek-ai/dsh', 'package.json'), { name: '@deepseek-ai/dsh', version: '0.2.0-rc.1' })
     expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
   })
 

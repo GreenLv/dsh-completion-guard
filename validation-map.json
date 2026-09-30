@@ -326,14 +326,18 @@
       "paths": [
         "scripts/native_acceptance.py",
         "scripts/native_host_acceptance.py",
+        "scripts/native_desktop_acceptance.py",
+        "scripts/native_desktop_tools.mjs",
         "scripts/native_host_probe.mjs",
         "scripts/native_host_probe_v070.mjs",
         "scripts/native_release_fixture_v070.mjs",
         "schemas/native-host-probe-v2.schema.json",
         "schemas/native-host-bound-v4.schema.json",
+        "schemas/native-desktop-bound-v1.schema.json",
         "scripts/validate_native_v070.py",
         "tests/validate_native_v070_test.py",
         "tests/native_acceptance_test.py",
+        "tests/native_desktop_acceptance_test.py",
         "scripts/native_cleanup_probe.py",
         "tests/native_cleanup_probe_test.py",
         "tests/rc017-native-shell.node.mjs",
@@ -413,6 +417,7 @@
       "paths": [
         "scripts/generate-rc020-byte-audit.mjs",
         "scripts/measure-host-audit.mjs",
+        "scripts/measure-projection-scaling.mjs",
         "manifests/rc020-rc1-byte-audit.json",
         "manifests/supported-host.v1.json"
       ],

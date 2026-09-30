@@ -3,9 +3,9 @@ import * as path from "node:path";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 
@@ -468,8 +468,9 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 }
 
 //#endregion
-//#region manifests/rc020-rc1-byte-audit.json
-var packages = [
+//#region manifests/rc020-rc2-byte-audit.json
+var hostVersion = "0.2.0-rc.2";
+var packages$1 = [
 	{
 		"name": "@deepseek-ai/cordis",
 		"version": "4.0.4",
@@ -477,45 +478,49 @@ var packages = [
 		"tarball": "https://registry.npmjs.org/@deepseek-ai/cordis/-/cordis-4.0.4.tgz",
 		"sha256": "99a5cdb344de37cb033cb4e3a1dcfd29585d46f7d3a9c64bca9991554927185c",
 		"modules": {
+			"bin.js": "cf84978c7e4165bf090b0d50c34c1986d06577f2ada27c902660783a142c3f81",
 			"lib/index.js": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
 			"package.json": "41c9dee4715a89ef94f227384460c8445857c8faf33493eb545604a948828649"
 		},
-		"programs": { "lib/index.js": "80e38b85f7f608fa7cac756beb911a1a05c2274396fe2e7ee16952f0c8d78202" },
+		"programs": {
+			"lib/index.js": "80e38b85f7f608fa7cac756beb911a1a05c2274396fe2e7ee16952f0c8d78202",
+			"bin.js": "c4ee390e978fc564ad126ab7bb718aa0f5aec2c20a823ccbbb3bb0bf526d03a1"
+		},
 		"loadingDigest": "a883ad98b889c0cb667e23c5dd2f9179f88e825aed6355feae69f4c30b77cd69"
 	},
 	{
 		"name": "@deepseek-ai/dsh",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.1.tgz",
-		"sha256": "ceb66bebe8117044e05f6932deaca15daea6a1ae1d0cffad079e33895f10d216",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.2.tgz",
+		"sha256": "bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859",
 		"modules": {
-			"lib/bin.js": "935e95d05f4dc70a8a013eea59da80028946b5c139e45c6351dcaf2810ca00a1",
+			"lib/bin.js": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
 			"lib/dump-config-BEDI-dNY.js": "fa34d3397b9ac9423f3b98a9f4798b9205f684e1eaf368352e0a93c09831d28f",
 			"lib/dump-config-crgOY3tW.js": "4183d3918048badf0a5194fb3c86fbb37b7bf8ccbf638c14bd2ff2b1c545721a",
 			"lib/dump-config-schema-DhhNOaro.js": "85c7eef6eee4532570133d3b90487996e912216b96825e33c1bb659036a269f1",
-			"lib/plugin-DkYIj96-.js": "2103210a39731866ca191faf1a1396f33f248ed3fe81690a592fee7a8f3276c1",
+			"lib/plugin-BGnVfe_D.js": "300438e9e181847cff2e01b8bc404806da532c0801a505a2dc94a94c14c72836",
 			"lib/profile-boot-BZ2ZjNWi.js": "c394b2aa2ce08a3b1fcc8c544257c7d689dd4d0b1cfaf8602687e65eeaba5aa1",
 			"lib/profile-boot.js": "c53d4e2caf21428e263b525e657dafaf63fd183f7ef016aabda56af7998b6c4f",
-			"package.json": "6c5d2b98ca97920fffe81eaff8455dfd1e97524c8b3a7a3b0cac4c960ebb363c"
+			"package.json": "0a85203e3e907dd2e3bec34324a2494758ca6cdee234b07090a7c8df0b11acac"
 		},
 		"programs": {
-			"lib/bin.js": "b6e681187d19f85261155f6866d32f3c59a0c44d3130e4166c73ea0c2f8f09d2",
+			"lib/bin.js": "b1554a9c330b6e9cbc1e1fd1213c55378053ea605ef2b22c629520a8706236cd",
 			"lib/dump-config-BEDI-dNY.js": "c475a93f3cbd928b951bc2abaeb88fa641a4deb3d30b067296e542eec1a0c0d9",
 			"lib/dump-config-crgOY3tW.js": "55205480d865c9194e020b41fc4a701a19acbbc2f39129fdb3678d7dc04b4b38",
 			"lib/dump-config-schema-DhhNOaro.js": "85c21562a5ac9c3aefb15ea6baf27d0afda2fad8b0dd4ed377bff45a2c180c1f",
-			"lib/plugin-DkYIj96-.js": "8eb1965ca0e64e9668f9926e0175610fbda401bf65f92db9840615e4a6bc6a97",
+			"lib/plugin-BGnVfe_D.js": "b7ae45128c1481c0c73de9df8183813bc4de66773cd4d28716cd89f6649a6c3c",
 			"lib/profile-boot-BZ2ZjNWi.js": "5826cf68cc33e0c89b1379bd047b92cf209cece56a2e16b01d34f5be5b68c068",
 			"lib/profile-boot.js": "29f32dc66585887e03529fc468f1df7cab368ca546d8395c8ceb528cc1d0c853"
 		},
-		"loadingDigest": "6ffb4f27956f1c86920fef7f1bc92c1dab4d1f5f9e97686fe85be3b4d09fc692"
+		"loadingDigest": "ce671c4381bcaeaf992121f21147547c9e0196288d8a9975c73c6de2e0fcf94d"
 	},
 	{
 		"name": "@deepseek-ai/dsh-agent",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-PQ4Qtu7QiI6j2n730p8RJ+u4l7ywwhVJ4NeIe/Tj86hBYYZNvNT8iMhViECn+GSepAk7GmM/1eb7e7hvmYhsKA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.2.0-rc.1.tgz",
-		"sha256": "dd21ff4bc625edc78928cbfc5f8fa7a1ea03fc9ecab6028bb9b50b940def0cfe",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-CUkbU+c1G0ETXkpoLkpAFo5midz66FQGtlgQOP9pzvU9H3zJQVl4H5LrhhGVbEXKLFgdbtQiOynEW8hpWn3y0Q==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.2.0-rc.2.tgz",
+		"sha256": "38f021f47d4693de490ba82dc4bf5e2c083f2ad54b07d20c7059f0c44206be59",
 		"modules": {
 			"lib/index.js": "7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93",
 			"lib/invariant.js": "f9d8c2d1d72f407ffd93b9b04212f7c59dd655908daf68f656e05cca9b93befc",
@@ -528,7 +533,7 @@ var packages = [
 			"lib/types/projection.js": "43ab89acd14b20b3c2a85c8307f236b38dfa27671dd31b703554777270abc534",
 			"lib/types/runtime-types.js": "72347f43fb79c35cff8565b6428c6d7b96a78267cf8994ea3ffd0830a83a21d2",
 			"lib/types/types.js": "f4ef7228255d5f64ba546ed2a2b6be63601b77c7b58ac3a58a74f4e8f970cb30",
-			"package.json": "4c07ec3f1ece7f5029e9b1e8d12d7a045bd5732208bb798fbb36c9480d54d3f2"
+			"package.json": "224385aa84ec7d522f81b169f2ac50443ead741e403a1489d6fbe78e12c73d49"
 		},
 		"programs": {
 			"lib/index.js": "cff96bcb59f9c2998af20c5b17d6511e8088bb99b687973fef47010c33dc7eca",
@@ -543,48 +548,48 @@ var packages = [
 			"lib/types/runtime-types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "80ab1ef5e697a73acc875ef0dff2d9bbcdca82c1b77c3d43aaed08398195d1a9"
+		"loadingDigest": "f78f0b0230388e3b72cf2bcfe0b8656b899941f96769994c14706fd997f2b4e5"
 	},
 	{
 		"name": "@deepseek-ai/dsh-agent-loop",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-01JWFfTcne/44tqfGLAOH0KkMicq6VVFBV1YjQbO9vj6Q0SmcHsPObm11fP0opEZIqEmdUN5wwS6LAzCjViDlg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.2.0-rc.1.tgz",
-		"sha256": "446c70a8fa8b83a35fc19f35c5f8e018946391844bfe9372a4d1d747d8572f8e",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-Ayi1L7s1LIJAq3iCCRFDCGM9Y2lriGlV6nblIYXhKrq+J8bUFQtOdfBYNE1N39WcYb3CwSvTNHDtzZ4oW6MZ6A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.2.0-rc.2.tgz",
+		"sha256": "be780a4137fbaaf9e6c4691031c0388747dc71ec2a7d4c986c42a85666d284cc",
 		"modules": {
 			"lib/index.js": "00c4814d63f3d1e2754eb09144832d19b30499d6ea444730473f740b587948c2",
 			"lib/invariant.js": "c577dcdde278b761b5810d9a941131d423de40c22ff57f98a3982681ed3bf772",
-			"package.json": "e7ecfbef09d7dfd50be40d70a32ca87b1ee43ac3cefdfeb050468c7f0e31b0ea"
+			"package.json": "341ca7d03c75d0c04803516479267cec1067229361e01a3ee87d7fcdbf50f0ae"
 		},
 		"programs": {
 			"lib/index.js": "29355ba39cd6f2d9276b2a353538c54811745f05f5fb65ee0fd722a962b270bf",
 			"lib/invariant.js": "7aaf9659b7faf875f37181ef774c6dc0b64a51456e3bb473622e383a2bec9353"
 		},
-		"loadingDigest": "d59a5938a28425b5e995ddf1b7ce23f3cab61c9b29083a2733addeaf1f787487"
+		"loadingDigest": "4e7919142271de682a6a5a358a74bb85d093e8473d21708944d899456ce9b9c9"
 	},
 	{
 		"name": "@deepseek-ai/dsh-app-boot",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-iHUYI+Tc3FlaYay0aLg4LsmZELi8wNWd6DSYrd46enUv0SWgm3qXVFLZivlcKqKWxcjuuvL5JxNemxGiMRIWxQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.2.0-rc.1.tgz",
-		"sha256": "a5881b46f9f982da59cede0facc77aeb0ec3cc4995b67fc494110e617986eef6",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-WvgNhBHSj85Z7u9vC1oQr9C7yZQ/L/JS+eVK4bueWEkaoqdEna504V5bi7qtWXxAz5JkeVZTy1sX86p8XG7LJg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.2.0-rc.2.tgz",
+		"sha256": "4e1618db99050164e702c2ba5b991ed8a4371fba18f527c097229fcae2310a3f",
 		"modules": {
 			"lib/index.js": "234db45e1b3f8c683b5bc1f551948b2a2ec52a6468c7b6937725a23f1c0e0d96",
 			"lib/worker/profile-resolution-bootstrap.js": "4efac00eba95637481deb245ac4e5b497fceebb55db8e199675406b6bf53dbed",
-			"package.json": "8f4d5cfc5b81e44c77928e115cb8a28070892c2ce4454afd1962cbd0f4d32f49"
+			"package.json": "38ed12cd4992736d37c1251d7c3f1696e2903d0f398a7686f1e692c171e56525"
 		},
 		"programs": {
 			"lib/index.js": "b73271cd64ae1b30291fea15032f524eb2fc4558076be4c9e1038b1e0f4da183",
 			"lib/worker/profile-resolution-bootstrap.js": "36c6e937266951b9be2f3e13453e66a784420b721f051bec27d1e74804a9a592"
 		},
-		"loadingDigest": "11c28f05919a2c73c0890e1182c146ad939cdfb9a8e131e8acfe5d584bc2fda7"
+		"loadingDigest": "15560017f1ba7c6ec59c9618b7aee913d0ca26910ae4d174346ecda8d852911a"
 	},
 	{
 		"name": "@deepseek-ai/dsh-attachment",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-aKKFE9fGYYn1BCzDtun7IYkpiMANYt7s51vwPukkCnobNiLfxHrIyANLWNmMTSpq0iENfqREXPR805K/um8Hfw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.2.0-rc.1.tgz",
-		"sha256": "f11e40a5184b10ae0b5a528a575d31254f6b485ab6e416965ff2dcdffb65c3e8",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-asUDLv+mfb30vjjlQtMI9aBnC+kmPoUxS1ooadhwAd8wssIlLetq97nzC5W1qd0GQGwZtPG/gpljVAMcSwPr1g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.2.0-rc.2.tgz",
+		"sha256": "59a5e3e94c1bd2f97359c4bcc2d35b61104a05403d8b3aaa10c76490ee63517e",
 		"modules": {
 			"lib/index.js": "9cd6c01a6cca9431f789be334afdfe4f5cf647224bb394cc0215056796520f58",
 			"lib/types/admission.js": "e4afabe831d34e00d96416bf902a77bb3cbe3754769b09b0d14142466a340684",
@@ -593,7 +598,7 @@ var packages = [
 			"lib/types/index.js": "c96d48d63936a055a525e9e5eec624ce6796e50af5e3f3bd53adddfcbcba967b",
 			"lib/types/request-projection.js": "8d184a401ec5ea5b7fc3708870205042cc1afc666655e4e8e4d1d11eefdadf9d",
 			"lib/types/types.js": "9a08e59bd2b21a42126b01c3598b057bb5d3be987c200562800e29806e10e50d",
-			"package.json": "08debb8c62d78d1ea524b0d82378f651196c6a57ed8bfc6c936f2cf323c7a259"
+			"package.json": "a3deb103ea6f17c70133f7a296a28e85a20b6b79bc40930dff8f296ef411dfd2"
 		},
 		"programs": {
 			"lib/index.js": "3c344b50d80af13c4469250a58573ccea600319bc8be53f4ccb4ea9d29cec841",
@@ -604,142 +609,142 @@ var packages = [
 			"lib/types/request-projection.js": "918f29b1549200f0268e104250b47b5feb6841b697f6d56088f16032cd5223a9",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "dcf42d68f9de89b973734dbf1f7b9fa1e414463caf168fdc2ff41da93b95570b"
+		"loadingDigest": "fcea2e67cea666fae4f2d0fb0dbdbf5395b155d4d0351a04e53a4c7e40e06d84"
 	},
 	{
 		"name": "@deepseek-ai/dsh-base",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-5knjWdy+/lFOcwjuliaK4Pc+xPfDXMOoN/+CCza5JkQG5JI+GajicpAh7XFH/At6WzWjf9m8OwLGYABVz1pIxA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.2.0-rc.1.tgz",
-		"sha256": "664cf31c422dc9cc8337fe908153341a9505ee8d3a6f399e945554e51bb050c6",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-AclHClefnPmUe2qoPrKMUvauA/KelYevYlxFdHLZGcPRqrDH+D21HyrwJmj4f7Iu5OO0IqfjB4zBOkwMp5h1ug==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.2.0-rc.2.tgz",
+		"sha256": "0e9ab8b101fd34088716c63dcfd7644c27240cbc68871d3551e54f7bea4ac086",
 		"modules": {
 			"lib/index.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
-			"package.json": "683a76071c6483acaa890b6c333037b34add96fc33a20ba995401cc5b909a060"
+			"package.json": "a6a92d062ef5e30a3e4b9d52a3dc8530e909cd0905168e0a2834437c10e02124"
 		},
 		"programs": { "lib/index.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8" },
-		"loadingDigest": "f44d4963e2b2e9ec3a592ca8f3a0023844259674df9536827a10d37aaec24d7c"
+		"loadingDigest": "c57d1c3d28688328607fabe58972df404f31056248eb57dd9a1784b5c44191d9"
 	},
 	{
 		"name": "@deepseek-ai/dsh-bash-local",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-thF8D96F78QWem0y0C4oqef6h+x3kahGlsTKE9elXrM506sys6EGwHs+PwQqyMyQCGUJlJCVwd2gT6m4ipdplg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.2.0-rc.1.tgz",
-		"sha256": "157173b9701653979b5159c20318ee6609c59e2a385720c18b27c395d974a21a",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-38cihtu0JSBfj4GAH8pPX0v2tPDZBcPbgX9CjjMTPbhNRF30C+Ncg5zhJo5weaHQR0RnqOIJVuDHxcJ3yT50gg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.2.0-rc.2.tgz",
+		"sha256": "938330aaf1e1872cc8a79b4e4e2e87411870ab18ab2b1832dd3275a8a0bb50d0",
 		"modules": {
 			"lib/index.js": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
-			"package.json": "e20248d48f2868419d5c22b3f66a519c908fc707b5b8e275f866c1f34b22ac9f"
+			"package.json": "880e1fdb42911bd02b82007de08ad7f4ded21e5522da46d120bc2f182e11c6b0"
 		},
 		"programs": { "lib/index.js": "bad1dad01d2dc853e47f5b3452db5e871039e54d3f1859086931b7dd74675508" },
-		"loadingDigest": "2be7840d6fc827e5b1c54dc6bb242957645a1d001d596c2a93d280c87e8a50ba"
+		"loadingDigest": "c78894b4cf4fe2fd9c90c408217d9a81991c5e884bd67e5c37d1f8bbae1a703d"
 	},
 	{
 		"name": "@deepseek-ai/dsh-bash-sandbox",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-/+vnsleF/U7kKjZdUynHiWTpjAVr9i3ZCPwuWiwecd588VUjOvm9nDeiSUd8Zl60XZFtsYAjdSYU+gunSC98PQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.2.0-rc.1.tgz",
-		"sha256": "14ee57a5b8cf6e3620db44e463df3fa74d5f7f1e921c89f42504542556d97da8",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-PNTarU5/b5rmkpMVqk5iHq12dktFL68B7dGofWoG9S3xKe7QXTmjQCZXPxyfMqEujtTxDE8HyLcLDE+46Nlchw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.2.0-rc.2.tgz",
+		"sha256": "68be94a15149935cbeb5410b561aabbd9051ee0a95e0f8139b1941df78dfcde7",
 		"modules": {
 			"lib/index.js": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
-			"package.json": "4698a8d47699af3451b3d58f8e02573ece1297d321addda7bc16eb8ba7e7c703"
+			"package.json": "7f3cf039564659f6357f07d82b7c14790ce648a2f2ea0cecebd2038e9e05db9a"
 		},
 		"programs": { "lib/index.js": "007bc497922220ffe1723faaa96bd367356c81558c1b50b81c1c0601bff281ab" },
-		"loadingDigest": "932ccfcdf2987ab32f85d36a929ae2d5c6de32157eba27b372aadc425a3efd18"
+		"loadingDigest": "4285f38c00448dbe37279e45c4d5e4da4ca20209647b728a6365f165a0caf889"
 	},
 	{
 		"name": "@deepseek-ai/dsh-commands",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-VZOWNwjBDBkX3kXVJcD24oAoKeGRpLnHZjRiPm0gq41ZClCYy9CzNnFdl6IVtJHfG+bz9/HDnONilpiRwBg2lQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.2.0-rc.1.tgz",
-		"sha256": "7c4685987a66feba87a04f76204bb087c7fb76be7f701aa5d9ac86cfcfbc82b0",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-pU5oUyOMPDN0yxEjE1wJRInNeC5hs5vJnbOG8MSSfkFov/7Q8hrfwETxZtcRnbrpzzeG19wsvtRz1twkEMKZBA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.2.0-rc.2.tgz",
+		"sha256": "dcfe0e98b6ce5fd417fdf058331ee0c8766e96f8ad9092151447af10ad800243",
 		"modules": {
 			"lib/index.js": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
 			"lib/invariant.js": "e6dcb52cba426f2cebe18d351ecb968233d41f7e3cf292be192618d0f52774fc",
-			"lib/typert.host.js": "fb0f8aba6dcc824b6e50be022c5428319b98cacf802ba4face67bd8523110e95",
+			"lib/typert.host.js": "f6129d24263644c49e4551bcba7c2eed07d43505c67b222d512a2a77a33666bf",
 			"lib/typert.remote-client.js": "19783415466cb498a5dd560c6568716cad39223e2587fc0a16350b591fe051ab",
 			"lib/types/brand.js": "50808fed83c5cfe09b80df4165108abba0188645b9b9d39d0426b293e8f188dd",
 			"lib/types/index.js": "e3a06e7bf8da759c727a529d1e6b30c831232318602fcd28e66297ba200ef495",
 			"lib/types/invariant.js": "e4bdb34890eb5b917fb26e5d8987929ef61be4e0587f8975c6cb7692e22be996",
 			"lib/types/types.js": "06f43511aa44249a435d74bf2b168bc767460930d874764c69add444510579b3",
-			"package.json": "2bf9983819f8e38713da5fb9432e5d09170a66c3e0eca4b2204a5fa2eb774e5d"
+			"package.json": "c627cd7296b112ce4ecd97f562eb6c089d500a0493117008ef808938869f1056"
 		},
 		"programs": {
 			"lib/index.js": "f9f0a77cc19a11675b449261467e8d07934d696e4e543c56b0e4a341a12edb0f",
 			"lib/invariant.js": "102e78feaec5e02ddc7a10881b3dd04d21ac00af2d1eed34c09f7a8e1462b348",
-			"lib/typert.host.js": "7cead6105db0b9b58b6e92efe7090f3066f05de753068bf7d1e70d41672f8a3e",
+			"lib/typert.host.js": "42b49d64652c10a433b3ffa9065debd688dc2bd68d34fed8db7637d3a5a73b90",
 			"lib/typert.remote-client.js": "4441213e7a6f512ecf80ba975cc3a0fab0b30055fd36ce2d02c7666b7e7b858c",
 			"lib/types/brand.js": "3892c532b1fcdaefadef5093c73d5b6bb6f718d1befee5ad68b1f8c66a9d817a",
 			"lib/types/index.js": "0ca9432876c5276664b12bcb83c0228f88020b4c9e911bdb59fcf4b36e6ed954",
 			"lib/types/invariant.js": "2af033be5a6a236dbb98e2e6916d586a009043f43c5098f148e311b6940cb68c",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "985c3bcddbd2128244218d5c39171f094c8d43b2062bf584bac2c33c80c8bf5f"
+		"loadingDigest": "b2d560cde2a15f2e533b6cc6474bd19d5bf7bc6825fcb3fd79812784b1121baf"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-IWjXn/BsoWwT5dti/Jfkrx49GDGi1H7B3cuTgwRvxIQl6o86eb7ns+3mQiBpFyrCrVOMV+1t8FC1ipiIxol+gA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.2.0-rc.1.tgz",
-		"sha256": "dc7ede4bfbf35bef54fca2db4a382e20fde49fb9f70816833da76550995d3f8e",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-PuVcI7drTwa19Key54DROoqnDFTTFkl8TPlyrTnS3BSnykm+jKbB13ES/PQEJoRunNdQkNZa12jtbUI4BP/EHw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.2.0-rc.2.tgz",
+		"sha256": "fe68fd0284b5912cfc9610e3cc3f124186266cea997ac07cd8edb2a06b8630f0",
 		"modules": {
 			"lib/index.js": "b165659f1eff0607222a7fe761bc56bae03fec8337c2e25affd064a3047dacb9",
 			"lib/invariant.js": "c3398ff0da3cf65facc78c3ed287ee088afcb0f6179f6b15eb2f618e759af4bb",
-			"package.json": "aad483456e100274e985871679ed2fd82a354b7003beb0d2f19efc5ad0f92887"
+			"package.json": "7aa321549b06260f1349c328fe41f93759440d07be464bd18220fd2c6b3303ec"
 		},
 		"programs": {
 			"lib/index.js": "7c8ece277d8308c7b11b07ebe59453d8800aec42d7845ea7016ac3a1305fb612",
 			"lib/invariant.js": "de826317b9fb50f2195cb2686b06b471a9cae0cb2fcbf0612cc916dd41380e0e"
 		},
-		"loadingDigest": "56789270f90c7a1077d3a0ef01c179ec65991fbb1c4ed25e80f207406f38a31f"
+		"loadingDigest": "92014f722c4113b10f057b6c4081b8c878c397892b1eb7ec3befad11df72c9f8"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-local",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-ntgv1fFhXEuL2ncfbORPprI+mVppaBSdVsUNLN1mfigO6snU6ORU5V2kohL3rop0Q5605lGA/+pGiiGIJYdxQg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.2.0-rc.1.tgz",
-		"sha256": "d300481c8c670587fa0689da7c4f1c247fbbb583402e01d30b7b1d452f64b33d",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-lDzh5VlQsXf3nI+E0+T0weYdH1VAoo+htj6Kwc62P7/Lx+xjnYSLQYTeGeaJR1d8H2iQv2FvlwaDKv60AorKdA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.2.0-rc.2.tgz",
+		"sha256": "e97e4408fb47d10f71701b804b954c67faeefe93e0f515f2b72deda71a43be70",
 		"modules": {
 			"lib/index.js": "63fbb41d2c33e07111884b798be507e68c2752acab8249c821c20ade436e894f",
-			"package.json": "b875f7af3ffb1d57f43b81a7f62c5c10fe7039eb5edc2bbdf780f4785b614abe"
+			"package.json": "f8ee919241e00faa8bb84fd319adfc5b50b37a8851ffb57ea4ae24697584576f"
 		},
 		"programs": { "lib/index.js": "e5163b8d9882f25941b64f9dd84ca3f5b879b9077faedbbc2d2298f94e1d3714" },
-		"loadingDigest": "0c24809933eb25f92ace3895fd1de77a8744ba12aa2309c61548623e3155c081"
+		"loadingDigest": "e6264d9c11c44038619c68c5e330d2e1bd95f6f7c180f49ee6ee567c1d3c367d"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-observation-policy",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-odxCFuRQAyruog2mYSl0DxJJ//piwUEJuQpC0rY3Hrt4Zv3GjtNhZ42hwvIAug6ueqkJ8nWuR1XevJoRu518SA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.2.0-rc.1.tgz",
-		"sha256": "44feaec8907fa8c8c74730b14769af3326b5fac214d4d098ad1e40668b6504ac",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-YPqpJ+WPhYUHS6PtUN4abjUx/dK6bexUiQdFGeQ81F0CEWbIfxyT1QzadKPvU5PrjxpG5e+UtjoEmAQKSCrsiA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.2.0-rc.2.tgz",
+		"sha256": "829b14d18ab307c2595c6f8ad8d95816ed45fa4fc944a80474afc354150cddb1",
 		"modules": {
 			"lib/index.js": "e36b54cdb5c6fa01ccfa29f0433753e810ec1ac29a6a22be349d66b77eb64b03",
-			"package.json": "25d8d29bd1157e189048f112aeccb4157c73e0280cdce81c4db97be718724a27"
+			"package.json": "526d94524f0917153085e6df461ec120e9ca0930ff1b09ec75eebe1761412a77"
 		},
 		"programs": { "lib/index.js": "4021ffd6e41bb82344eea4b471cc2130053802170a508a037b87771383461867" },
-		"loadingDigest": "eb3acae13118b9b7cc537ca6f95e54e60722f4ccb60577ce1d08d57b5774776e"
+		"loadingDigest": "81ff4c8c54ace2c839d0aaea0acaae055b4209da478941b217458929c021d87a"
 	},
 	{
 		"name": "@deepseek-ai/dsh-fs-sandbox",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-5pIVWc3mGUHigSCSq6R1eUuQB7NjwhdhQ9E6BbrTYXC/qzezvxLJSYEF7z0Vr6ajd7qhV00Wih8OyS1zGkJ9ww==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.2.0-rc.1.tgz",
-		"sha256": "49cbd96b99a8b58389357d405b569e0d9de7a369b4b25c4acec074e200e98739",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-y1RCQ64FOXzKXsLLHKVcExn8wKVN3klZY+OBeLYpiTEGZemADk6lf/5bNXQP9v6EwXK4bi4FRkTe8vURZMB/HQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.2.0-rc.2.tgz",
+		"sha256": "d7483237b89b2426109479130935e41f067ca9ab44925a74d0c230e9a0f9d9a2",
 		"modules": {
 			"lib/index.js": "cac65e21a0f0895b073cb9a447196ac265f2a171cc7f67c7434a6b3b7782caf5",
-			"package.json": "5018476647b5eb3e9be0fb6a03557cb4c8effe28636d37417752926e2c9452cb"
+			"package.json": "9c4a6551c4d654679c7dbfb8c24bc7b073f181800c87a1b1bf2672172879b871"
 		},
 		"programs": { "lib/index.js": "514de2a11be8e3997b98a38549dde1a1f35e620fee69feabb4797c0be4bfa083" },
-		"loadingDigest": "17256d5beb07a458ae45655c40d1da643361620dd4c106cc574e0cb9fd66f5c9"
+		"loadingDigest": "7212df66f1fc5024688eac1db25b34a77c486725bfa625865d45bf1aa736fbbe"
 	},
 	{
 		"name": "@deepseek-ai/dsh-goal",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-gqpN0MvHofDjqw/c23JF9EQ93VQnRrOFiyVG6XMl3d+PHPVizmLxEHsm4lIE+dU42+iA1dYVtPS1IUkH6l0jFA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.2.0-rc.1.tgz",
-		"sha256": "15835bb53f7d3f4328ed717a188cd2bc4a583a702c8f1767a892ae4eebe6d021",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-dxjUpSl1WAmg6GqO+m9dYGKPAV+whMR+0xqQCoapb8C60FEmeHa2YdopGKKRLziUzB9H5JoDXjtv5HsfuRQRjA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.2.0-rc.2.tgz",
+		"sha256": "b44a39589dc82304e5dfff50bd71a095df586a4480f52e58be4848116358d187",
 		"modules": {
 			"lib/index.js": "8ec52107ead3d31f4d8ca95894c851046a2cbbd1b2033a0ea22fedf17c043ae4",
 			"lib/invariant.js": "468a099beed22d243daba4d97ae3e9e785f5c97309a656c0b8f1815537927246",
-			"lib/typert.host.js": "a1849a6a248d103478577e8f6812fb7927f74d1ff38677f5734cefb2278164b8",
+			"lib/typert.host.js": "de203df419148be8809ca32bf37bfae9fcc50bd3ac28eb4137fbb5074751aca3",
 			"lib/typert.remote-client.js": "35df09d652b62cc8a3edf5ed9a4f0e84fbfdffbf9c67f778024dfe97758bd7a9",
 			"lib/types/client.js": "4aba033a3236db59a8413dc50ac0640890afe381f5abb93b7bf565b7185e5e8d",
 			"lib/types/domain.js": "4e60898de0faed31865df162479770e0d77cffe654528cef7720ca6c5be419af",
@@ -748,12 +753,12 @@ var packages = [
 			"lib/types/invariant.js": "2eda87df2fffc21e2f761b138d54c9be523627e3b41bd1508906be5cf69a410d",
 			"lib/types/runtime.js": "3c6cf442aba70e119669f6a349768fe98b7f4cd0cdec9d389fb51437bf97745b",
 			"lib/types/types.js": "956a9ec9381a09458c283fba5deb4b8b695be6e078e49bbc94d1aa4e586cd32c",
-			"package.json": "076c418e3611453205952af6087d44ff53115ee836e6c70744dccb2e343c92de"
+			"package.json": "652c79f11bba8eb891fe2e8ebe4de46d16cb3781df458b73f35dc31ed9eadb97"
 		},
 		"programs": {
 			"lib/index.js": "595a64de68075083e3ef611b3d9ad20860cc7fc836fc74f7b2086c9c6aa4a46c",
 			"lib/invariant.js": "57ff6c3842d90de6440a9b710d9ebe6f4faae735690846d097ca9a3a2cf6b7da",
-			"lib/typert.host.js": "fd40deb26c5d1a654b39e61e3bdd2ccbbb2fb1a86b91a7f18712daabf363391c",
+			"lib/typert.host.js": "e99010840aa261a588c924bcde21c4930114cd294d289eee6ebfa98d01ed50f2",
 			"lib/typert.remote-client.js": "7566ae9ffb0de5be418b28a8426d89a0cba55caf6f18083ca97848c371003f1f",
 			"lib/types/client.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
 			"lib/types/domain.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
@@ -763,57 +768,57 @@ var packages = [
 			"lib/types/runtime.js": "318984bcd709ef43f6b2d4dda7c9a49950078246f7b51b7b621a333a17e0b53f",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "d02ad02c4d13c4c797adfcbc7fa6365723d84a057c97744d8e65d60da973e964"
+		"loadingDigest": "c2880e7c946163e2f289233b8779ded83c191d5c3618e7963100995c907644d3"
 	},
 	{
 		"name": "@deepseek-ai/dsh-goal-round-driver",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-9MlObGRGkFE/DIp2kHV3GBS5/1zcx6eVysXDfWs9AvMYb0Etk8gJK5nHumyBAIXT97seiaFa30IBITTYemsi7w==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.0-rc.1.tgz",
-		"sha256": "9954d23e8b7686ed66e2273ea1e82cd3f2624222132eccaf5b007bf55bafc899",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-9J+uUo7+US98xqboK+JPXUF1TIGDwN3BB5AdhiDRDweLi1T3wBefpAHD4+ngM3C2e81MnUHk7FIFmK5IUY4B9A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.0-rc.2.tgz",
+		"sha256": "2dbece0ca4ad220dc61783322956f908610ffd03fc83e3543d33ce701d2526a7",
 		"modules": {
 			"lib/index.js": "3bca01a2e87de1683fa8b55ad54688eefc4e366c971c20e9afd654db3b5ab450",
 			"lib/invariant.js": "66d6cf4a66dc84c239cd2efaec29606b645ec7f6a8f6c332209464b090df1c83",
-			"package.json": "eb6712fabe459a6e57dfa3c6be10c3c4ccc603dd573340ba4ac514c308618b94"
+			"package.json": "9df8dbb3332dc317a758c8edc2666ba2c9ed48dcae4ee6089b42cb50722f49b6"
 		},
 		"programs": {
 			"lib/index.js": "7424d5e5202b23369fed831c932addc766123f637e648b05bfc4f0c1435f43b8",
 			"lib/invariant.js": "02b035daf22e24b83ce36d10cc5341891d2228560022b6d5d947cbf12604cb8c"
 		},
-		"loadingDigest": "9d98137351ceb0635d6ae9b6512a9b3bf5369e7cdae1acdafed7c4723456e339"
+		"loadingDigest": "6c69c100babf037d6da2066ed79de76fd702291baee62062bf561c049b0216c7"
 	},
 	{
 		"name": "@deepseek-ai/dsh-headless",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-xdx3LXmRmeu1bXBvXOppaitF5UxsudhsIy8IrYpMkIRh63LWVbxJGMTCgwk6pM8Jrg1ayW7vhi8Fw7ewukMDtA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.2.0-rc.1.tgz",
-		"sha256": "57e632a633b08b0d05a5454759d438058a24cfc9b80c5c50a7c7129973758476",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-qe1X+9fV0bgStRFlegsaXvIV34Y6gP/7Cxlf2MmhRduXtUQhvHAX+OJC8oySCiy1xKGeaFjB3POG3Bh5Er2y4g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.2.0-rc.2.tgz",
+		"sha256": "f832e81edda5961ff44a7c9a02916131eb183b3fd6fff3cf10fd2a53bf0da25f",
 		"modules": {
 			"lib/index.js": "31a4caa307b6a3bc0133e01d765c9449ff808725058639e32ebf0d020524e267",
 			"lib/json-stream-BA-F3lfb.js": "b6ede8da01119f5caf4baa8051ce8bcd8b956b5b163cf58af91d583b80028c0c",
 			"lib/startup.js": "66bb82dc445d5852de776401a00c1ad963276c741e39749d187c4c292b86330b",
-			"package.json": "bbb9bad4a389d263a6349ddc5d9920f7e35be016ecac8068d8b476775a3084a4"
+			"package.json": "17322dc6102a870211c534e19c6608ab5ccaef38836ea05e4ad2c901834be5e6"
 		},
 		"programs": {
 			"lib/index.js": "c60f4fe96003b24bcd2c3d173f25f552da1736750a61a3eb18601509c7240d1c",
 			"lib/json-stream-BA-F3lfb.js": "f6c8737078ab95bf80fa2d921cd7d5425d2da1d994c648b9f3fb490adfecc698",
 			"lib/startup.js": "0444aea7aa5190fc45f532ee56bd4cac29e1f317e02728ba6c3379b3dc6612e5"
 		},
-		"loadingDigest": "78bf1d7b0019be5565bc8bcf828b17c819323344eabfc450861fff292f888c63"
+		"loadingDigest": "7910c95025ccc0ad5b7b0b258c4395f3de6620a8a38aee996c6b0f626ef0ea00"
 	},
 	{
 		"name": "@deepseek-ai/dsh-host-plugin-inventory",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-9jPsILbbodim7gswvWzCuvHgzXbvDMvVnR11pGY+FaSVEt4beWVdSPglxHmGHGbEOotSnhbwUnl6vouyRQo7eg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.2.0-rc.1.tgz",
-		"sha256": "2a4b9d6c33c9eb3cbbfef7cf0c5a59823866548fa64a24c4894ebafcc7cdffc0",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-l/ESrOGxkk0aemM4t2b8yV3AvMZQ9oxSmgo4b1FSK3CYeaDoPJHC6iKW41DhmnJ0igdLpVIw+rg7R3KN0DREdg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.2.0-rc.2.tgz",
+		"sha256": "2b392c53edd748ac2c8ec00ef6693535cb0c996a76755427694159d13bb1979e",
 		"modules": {
 			"lib/index.js": "f8e50fb2e24c92302570a41baa007e409cf4651bed0a65605b0871ba14325d30",
 			"lib/typert.host.js": "dc44ff7a2d5775a7b932ba96688c76803ce776c79303f60fd3b22a19c43d051d",
 			"lib/typert.remote-client.js": "66129f7bd3aabf40020ed60059a6e18712ce7acf8925117212576d05ccd2c6da",
 			"lib/types/index.js": "757079258b5ec9280890180c220a6b9caf3d498b2e71dc63a1ca146a245859cc",
 			"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
-			"package.json": "6cef7d98aca9f2d2cc0ebebafe06524d13998f2df2e2a1f1dc8342a935fad0b5"
+			"package.json": "77cd72ceba8cf3c2d3068ea8be953ca24c98c41ae096368e21a223f3c5e4d406"
 		},
 		"programs": {
 			"lib/index.js": "10f002fd905783c52115b2456f55e37cc1af632214d91e553ddb1e60389551a1",
@@ -822,27 +827,27 @@ var packages = [
 			"lib/types/index.js": "e128c3b8d32cf32ce3aa473ddf6cc5c4c2f2c41c130ce9efe0c28f596ff1b391",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "bac2380c9c39390c6c6ef6d20bdef5a2bb4c3db928dee3f8b062647f57aafd4e"
+		"loadingDigest": "a6adc49a345d5f763c6ac534e9c752394c5737ee26c7cd1f9d42d7fa84d21a88"
 	},
 	{
 		"name": "@deepseek-ai/dsh-host-webserver",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-/LkuSWupB7vijPty3Iypt9DZrBli9wsNh/E485m+xgo4uBbgloANQA+nyIpB0n+N20zleyV4EFYbe6Lb6k2oqQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.2.0-rc.1.tgz",
-		"sha256": "0ebef41935e446f4a8f7241640d0312a8366e37ab4dbff5e67fae5d18a34d46b",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-0zvI44emJMRr928Tfl//cPJlx/hiTGWfD1zaDlXu35eGIgOATFJlTPkJLApJvJOPVPPAlSOSdhI2L+j1TnzStw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.2.0-rc.2.tgz",
+		"sha256": "3f4274e172f6933005f48ea0e7545a9233458d13f5e0cb9405eda998a219465b",
 		"modules": {
 			"lib/index.js": "6efea1375eadeff62d5cfb6d1f515ff75a939d40405a62e5d138e8e7a6b18df5",
-			"package.json": "98ec06b6a0e2a3208268f56e66da7cfcc8931f8d334bfc6cc909ce2317f507b8"
+			"package.json": "77b7719fbd781c23f5ae2bfba6b0a8e297f1acf6646ccbfb1032a2fa6e787ed6"
 		},
 		"programs": { "lib/index.js": "b0c70fa39f2e01e0115fb64087659be3920443dc31cf287db2d53cc792dbeb44" },
 		"loadingDigest": "a5b3106e5990d4891e43f5a9711f56b03011dee0a8557dcaf0bbe06780e7a2f3"
 	},
 	{
 		"name": "@deepseek-ai/dsh-jobs",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-ewueg51ZSEF+/sLXEhi5ySqFu2egKWI4koBwBciE2sAaOwBY2Ou9BqYUHFN1wGRaUYVZ/DrMpn18c0XBC37j0A==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.2.0-rc.1.tgz",
-		"sha256": "a096930a52a464e15a9eb9f49edcb2bbb9bf8fd93f0d782ae19c121f34e33348",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-SuCCfXZDabBxsKbHoulXEeQrRSYuOYLSfhvnflQf+CYeb68wggKraejkLyO60LrCGnBJsgCqKIdIKLCUvIeN+g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.2.0-rc.2.tgz",
+		"sha256": "9820037f3e5a111166decd788b6cefd1e726c29d487bda77cf41db958758ec09",
 		"modules": {
 			"lib/index.js": "909240e722c34877282c6868cd0e06915669e0ceaef690b1738ae72b4c3ef049",
 			"lib/invariant.js": "afe38795a9485abb3a50a0696e2670571113f90a20e6f4c6fc5fdba4b29c0662",
@@ -852,7 +857,7 @@ var packages = [
 			"lib/types/invariant.js": "8d7b9de3a4928849ef504ea379642e4c60826ec0032ff92ff6fe89839f7fb490",
 			"lib/types/types.js": "f0761bbfcdfd477f36a2fc181d328cc4e1c89b157cabd00426c4151a67b00ba9",
 			"lib/types/view.js": "a83eb92b29b5f9f747211fd0cc66d44dff47784f77a2b32f96d0d6f8fdf7b4e0",
-			"package.json": "9d810293ccd369ba93e636b8f868b7cfbac1c55d3e5c222fcfae8281a69633fa"
+			"package.json": "2cbd5a16c39b7dbf7ea844e73ae7368e2430c4ce83821c88d8b50d8ef55f1eb3"
 		},
 		"programs": {
 			"lib/index.js": "a3ddd087677521a51f4c1065ee87e57295e0e3187a93e049109e54ecbce85bb7",
@@ -864,31 +869,31 @@ var packages = [
 			"lib/types/types.js": "ba8bb16a02cf17594a7084afbb7d48926ba5d135205821dc32e62b3f3fd0d7ce",
 			"lib/types/view.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "a21f146983f3554f86eff34a134ca3ae6af882610fe92e4f56bbcc2e487db07f"
+		"loadingDigest": "e0581654e7b55ca626f1d979af285261d5e359a16161c395dd3d14caef7eb13a"
 	},
 	{
 		"name": "@deepseek-ai/dsh-jobs-local",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-h8N5VxKl+cvc6NoZ73ymnFTyf2HPlzbAImEjvzmmhMPiotooXSFW/YCFAimrL883L9m0d4XZBsJOnlLekfHNFQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.2.0-rc.1.tgz",
-		"sha256": "9a860b0cfdb15ef3babca22e22e23b5e4a6a035373eb2120717d9a851024fcf0",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-sNyolYfcNVodxGyoWUM3G0f+numJexMrqwR0HC4x9kvzzZNR1WZV7ca4lCAzlaRSEvY8UPYxKC6Fi4T+MnBkSQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.2.0-rc.2.tgz",
+		"sha256": "df82aa1b617448639581a73a4fc6caf81e6fad46176dcd631afe92e180e028e4",
 		"modules": {
 			"lib/index.js": "3bed0cd38c649f39b148752e742ff1ef57696a6b9b11b15ff8cc6cd1d4f08f26",
-			"package.json": "f5f62efb897c568eb0a0f41bd13ffdebc06490790db9c49fb7d8e0ff1f2541bc"
+			"package.json": "b92565184856196f38124be5fbba65af475fd740225b3cf04210c4a5707d49fd"
 		},
 		"programs": { "lib/index.js": "f045c307bccf2d8b873f86e427d3235a56568779fcb526228444692745ad43d3" },
-		"loadingDigest": "38f0a6ca909766b116c5246823043c5c3e38598e82c3187cbbc4f814dd8104d8"
+		"loadingDigest": "8554c075ff39e218051906802a1b88f7af0eb0b51ba21fde06c4ae8e4a859c17"
 	},
 	{
 		"name": "@deepseek-ai/dsh-llm",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-F5ZlBG8z8o5PfEWeEF/PN9t/A1N/oEErvqmpqE4J8f9mJR85DvBdV+rjDs7OjAbMJsJ8INjkbroruG5NNKDg5A==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.0-rc.1.tgz",
-		"sha256": "8fc47d00410abc90f802e1648280b2b63350e42395e260d0efc58e8c5f08947c",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-6QFrQn/h0iNqCfPpgQidnHtLSpA99A7ZND/uYKaGSd/4BGP8KBhuRd0w63e9s4u+hfW8jc3j29WKcNLIOeUfcA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.0-rc.2.tgz",
+		"sha256": "5fa090883aed0a63e6a3f5f2fa7609cb63a93f76c0b974ec10b4c0345cb91fd3",
 		"modules": {
 			"lib/index.js": "9132c8a8053ee82b9fb1ded4f98c85cf557f288a15a85c552c6b1fb319ead120",
 			"lib/invariant.js": "8cb78641252b7a41523fef2c571dd42c698de4c9475dd91683191cefa4dced48",
-			"lib/typert.host.js": "49bac9ae980b700f4c20d71896595d5282642e818569d1556d221fc4c3679a22",
+			"lib/typert.host.js": "2f55bba215082d35da78c9bd1e9336582d60f29eb00c4b817f9c78725ad8c291",
 			"lib/typert.remote-client.js": "8be01248041bd25c89117f1ad76934638f74808166bc1f0ae027a6ed24a5c6e8",
 			"lib/types/adapter-failure.js": "f1213f11f11e0f20aae26c09a5e0cf3d72512c1f1519e1b3f107edf64af43c28",
 			"lib/types/api-key.js": "254b774234c0bd38dd759765c0fd1e60788651a22106f5559ec2760a39935f2d",
@@ -904,12 +909,12 @@ var packages = [
 			"lib/types/message.js": "c87812f77a2afd284f271af071575edcadfde3daa7b6554d77b96810ce4688e0",
 			"lib/types/retry-policy.js": "f0a8fe075ac24c56ed2aa5d5e359a85539f5ffa237af54b68d3f4fc5124b5d83",
 			"lib/types/types.js": "14106d660103de2db746964fbb5be90c5eb2a7ff736779e2501e9faff956cbf5",
-			"package.json": "7255a085c517b8ae60a751533a871ef32a370b61a2eafc80901d3959b5ff9643"
+			"package.json": "6fb2d880b26d0c69b792d2830efbb1642f1d849537e24114301e0d9fbe9e8e4e"
 		},
 		"programs": {
 			"lib/index.js": "9afd2af0666b5574d461092a4a3e1cd08ab07e412a51ff999d9dfc5096bf50e4",
 			"lib/invariant.js": "055b3783ab0d070598b830d01bf07f21c6f8efee91eb89b72ef05a75f7d2d60e",
-			"lib/typert.host.js": "512e8aaa8b2e73829474aa6803108e27d56b054111399c19b9e75b6164de41b6",
+			"lib/typert.host.js": "e97a5e98c9cb39d8c47f6779c04322a3a6983262a8fb4e4734893643b93ba86a",
 			"lib/typert.remote-client.js": "fa4a384abb4e1bafcf3c43a9043e5bafe198d55c28c2b31d5a3868c8dfad9ef3",
 			"lib/types/adapter-failure.js": "c571e84e60dd5e3e60fc2ebd7c9b6650cb1d9eb86f5b4cc208b00c2d9bec5c03",
 			"lib/types/api-key.js": "0e10fc8e2737d8f0ce092517d629928df6825c698048bd2a941182dcfd89bc3f",
@@ -926,14 +931,14 @@ var packages = [
 			"lib/types/retry-policy.js": "a1d4a7ee0cbdede6fe666f1529455f6f73703a4d04e96ff957b1251ce12d901a",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "11ed0054e954fa8cadd72c2a9c989c886f3b00b0c59decc4b293c5d3ae44c4a2"
+		"loadingDigest": "edc946ace6098d6ba1e5b364796744360338b0580bb47d53efd2ce20f5314279"
 	},
 	{
 		"name": "@deepseek-ai/dsh-plugin-manager",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-5GVhQcwQi1O9UG4YTNgvR+PO3BDV9+XAAF2+YrIm2ycFwQ60bk2wevpepm7Pcw+g4dD9pmjigg4OY0pC4YBHjg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.2.0-rc.1.tgz",
-		"sha256": "02879d58e0ee75edfde2d1cc5a39c63cbbaa61bc21ee3cf311ea5218d23b27fe",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-WnLDgkj3snW8YnOESlAhHTYerLSZBVEqYlup8XHJBXly2SnOTG6GG11phLvngocSDbhvMI6PB3L2oWkFNTYNFQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.2.0-rc.2.tgz",
+		"sha256": "e49d37158d16049a5cdf2669ad9597e93145d5bc64df2451483709705b2f618c",
 		"modules": {
 			"lib/index.js": "f46a48b3422927eea5605a70b78502e06ef9ceaa29d7a73f4a7f742361ff51c8",
 			"lib/typert.host.js": "fca5b000a2fdd995d56da7ba21a33921e4765898332db283c255df0cacac4b25",
@@ -950,7 +955,7 @@ var packages = [
 			"lib/types/run-tree.js": "3e65f458bd298dd2d3a8e3b48b30d771bb8e60a097bc2e6e924dad647f953e4b",
 			"lib/types/tools.js": "b7314b13486bd32657b20b931826a5f91bf2c421983438f29f7491ecd69d8eb0",
 			"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
-			"package.json": "8cb610f905ccf45fc6a2bd0db78e336a3ae05824d1f09e882594ab55af15bdb7"
+			"package.json": "7b3f421da9c0ef2b6288095bf63f51c5fc41a0c30f5c4d908e72505e674ef4fc"
 		},
 		"programs": {
 			"lib/index.js": "1d96c11c99db39da0960084c808ec67e097a2ce9ff05232d8e1252fcb7c92714",
@@ -969,83 +974,83 @@ var packages = [
 			"lib/types/tools.js": "9dab7451db4dff6edd0cec0a321c13c8d34d37383ecd3135235d02afbb6c85ca",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "7d0f18d29e6f8ee50c49091ddc179686efe0a569568e3894662c7a43d1bbf569"
+		"loadingDigest": "91f50727807c7e91236539bad66dd689af9a5224c1f05e2ac86848040b0056ea"
 	},
 	{
 		"name": "@deepseek-ai/dsh-ptc-runtime",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-bz4ObfDeRZyBCejUMrSiDKpIffCImGafgktIWqTEAqNCprVWLRUHT+rHGFPcxHJRBsvxFQLlXHkYc/ccfqIB4A==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.2.0-rc.1.tgz",
-		"sha256": "2859d0360281d8312a3c58e89bf527b07bb7659269b0b73dccdbd2723e4c8f85",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-HR/3h1VFRcNlAAjCtCAxZ4V3F5pViYicXcLBuYLGjzXWpOhr4zKzeFKh9+UMLjsc9XWIarJMoSvxl662nDV/xQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.2.0-rc.2.tgz",
+		"sha256": "ce72193368e88468189e6b0daca7ffa456444bbdb10c1f073710022828c04f03",
 		"modules": {
 			"lib/index.js": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
-			"package.json": "9aef21b169a5b665336caa1c8a5a1dc1e41c28ddff69daf28577cf5e35154217"
+			"package.json": "ced80cf971b6fccd3448a06e2e82df13bb24046453a99b0e1361c2454744620a"
 		},
 		"programs": { "lib/index.js": "2cce6f19ca57740a864a07852bc885d4114c48711326b83a50cabc302e892e3f" },
-		"loadingDigest": "bae6af62627d8d58de77d8222f9dcac4c4a41af6a89fd7f9fa579a5f43e7e7fe"
+		"loadingDigest": "15a2a21d617715fcaa0018e1517fadbf9564a8e193d7d09860f64e3e5c6df9ee"
 	},
 	{
 		"name": "@deepseek-ai/dsh-pwsh-local",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-iKi2MdBcU1B6y0qe6oDvB7JUPL2DyMOfmNGww/+4eFh8jRnlJe+uoTJSRmcq5ofKHzChWfuuXpepiBJr9NFt7A==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.2.0-rc.1.tgz",
-		"sha256": "effecad22900271997bfce9d2da31940d9c54b896aa895859df7fefb5bc79c10",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-WNKHUCDkNeT108RB5o/clJ696K3vp9dw38Ekr23wRlWX1EDyxYmTzRDt7WfWDZoeQ+sh5CguLrUbFoPsOy9uEg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.2.0-rc.2.tgz",
+		"sha256": "30b01e57a7029a64c26ccfe9f50a133ec2b88d9d75dabc11fc197d73260209fc",
 		"modules": {
 			"lib/index.js": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e",
-			"package.json": "65cee3e788b661f07ae97029e7cbb190cd8210e381da1002936f83cee8164314"
+			"package.json": "32d9c5bc82210f6e5fd8c456305b18d7962a208c3277f116541ba0a3f7660efe"
 		},
 		"programs": { "lib/index.js": "4e2cb7f3aeaf7cfe3380c9fd7b0b48c06313060680bd9fefc639aa2cdca67fc7" },
-		"loadingDigest": "c3e055b258a2022af26ff6959719692297a898f84cd2ca812345af6091f4d16c"
+		"loadingDigest": "bdd5e74810b850c92caa6eb96655ac538b264f257f02b47729f72d03159dacc6"
 	},
 	{
 		"name": "@deepseek-ai/dsh-pwsh-sandbox",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-1vxcRjpRCk5ynQn1+QZM407P9v2oeFztZatg60Ti6LBO1JoXUBDdtcGDtpD+MXOu7LT/wxRdNpqnCyqXs5k/Ig==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.2.0-rc.1.tgz",
-		"sha256": "814e75a90b29560fc6390c1318bc4c177c5d87afdad0e6d0eda9f5820986fd3a",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-V59arHVNWPhPHWZaEtdsl3hQ+9E1dZuqW85aGp5N/Vh2IdvEW99BcKL18jB5o+uZ1eI4PmAQ6HHWDU95ephmyA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.2.0-rc.2.tgz",
+		"sha256": "463f27d21dc9d70b979f1fa6f359f406cd816991111716b04206e2fb037c554d",
 		"modules": {
 			"lib/index.js": "bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783",
-			"package.json": "7b0785ef8cbdb64df136e3f05d998c1b10d7aed038541512420e8237883a9d0e"
+			"package.json": "7c388c88475b7823909164d404647eec86bb21041078e05cfca1fe44bf77c896"
 		},
 		"programs": { "lib/index.js": "23755f4bc2a1797364c319e7a7954998925e39eaaa7e3bb223c7b15544a826bb" },
-		"loadingDigest": "ed543842b927a8ea370c850ffb1e4794dc64be9cb795567c83261ab0407b9ca6"
+		"loadingDigest": "1b258e8ef5b041297c2eaae03baeb08da1d8921a0e01c70de38aa0ef1b14c643"
 	},
 	{
 		"name": "@deepseek-ai/dsh-sandbox",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-NnEHqSf4SKoM5cIqtHg+utLUZYJX4r9u2PwQbEpYwiOYSvOW5G4DRtLRpIX7J6V2HOC6CXo2Xcm3DJBOsbKYOA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.2.0-rc.1.tgz",
-		"sha256": "0b1c6e45b6b2f0e1bf07403e355b2e009ff3735d503c83446d7794ed04760b16",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-luKF7ey6HRZkGhImqLCB5Npt4f4omDRk1r+x5qQNqqdNOuN9LXciKDMNPfnSbHfKCcqSZbH3sK+APOmKzRAhVA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.2.0-rc.2.tgz",
+		"sha256": "7c331ccfd4eff8ff53e9943839e7e9981e6e9b8898ca1ebb189f710aa649e444",
 		"modules": {
 			"lib/index.js": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
-			"package.json": "c819086d3245ccc6d006627637fd9bf7f450e9af3f39531129487e39572580ca"
+			"package.json": "def47b64b401fb7a9f4d2094397d0ec375ad75de5dc349679f832640aa954e48"
 		},
 		"programs": { "lib/index.js": "65c26fbec4020c6c5be45f62317151c2d4b082409099415dcfd21962535d4dd0" },
-		"loadingDigest": "b4c44dc5d88a2eebd5145567efce78827bd1bdeeb532f5865eaf907ce2dd1032"
+		"loadingDigest": "fce2ef8df127bce810e8f86d20c6c14b0862f3831975dd70632e87b6e6fc9774"
 	},
 	{
 		"name": "@deepseek-ai/dsh-sandbox-policy",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-O850xvmnU+Bxpq7F7d0QjiFm3Y581GwFxfvBvLohzyAC81M6iXGBrbxt4EcX/CUPJEIHB0KSOUrX9/3xQulNZw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.2.0-rc.1.tgz",
-		"sha256": "4058a212d031fafb2c073e49dadbdf52b07cb1b2d937f4f3fdc12dba816c7c30",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-0xXVqWw908/V6scohMyyU9SZSiQJYji+S1hMPulcUNLb3iew89d+WPWMIkWQBJRvcJzdQ2ghHwCESRkONXTJnQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.2.0-rc.2.tgz",
+		"sha256": "de1b3293cb70d55127d4ecb721f833d0f758497b053b47ab4b126de792a4efb8",
 		"modules": {
 			"lib/index.js": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
 			"lib/invariant.js": "265d56bbd39b0c383a6d8e5f07dda3a56d3bffcc69424b60a40babe99856873a",
-			"package.json": "30bbef60ae3f30666ed9ae5718a629de22460c65d04902f9dd9d2b7719cc07dd"
+			"package.json": "e32b6619022c84a2218aed1dff41ea61ea5e92f0c57766cb2bc952c78ca61106"
 		},
 		"programs": {
 			"lib/index.js": "e6cdd6cb194a74188917ec769fd289f47641d943af5053cac004ba7a47681b4b",
 			"lib/invariant.js": "8d49b466edf0f0db733e2a4af5233e36e28e9c2d13a955841801b03297af2722"
 		},
-		"loadingDigest": "0ac97ed1268223acf55fb3db47435f32431a0c39e62175000dedabc2ed5f28dd"
+		"loadingDigest": "70ea3d9af534a1ec70013961c7f1802f8369b9045ad54ee02e9502a7543f2eca"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-KUDCUk8kmiJCwvV3gDbkUSpkyoGHdg36nIhKsEh6iBoYDuIQCuvX2htiVRXCm099XZO6rCBVInmm1193UoPYcA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.2.0-rc.1.tgz",
-		"sha256": "56ee80a9b292368ce9959b348f8b933e54d7c4456a032e05e3d55901708d4e49",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-wj+6MeqCYbDcbEvKH3puHyEGdjyu51JwBoN6Ua2tz6griLufDgLM5HpSU40L5xgpbOfrYVhXZs4vRgOrMlFY2g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.2.0-rc.2.tgz",
+		"sha256": "022a019616d2fc7041f6e2f921697416d4d4d7fedbc3c973bd64d5a13a03f8df",
 		"modules": {
 			"lib/index.js": "87ea85e2fb5318bf1f826db9a1c88c1b26d3ea328027a7f32b211880c4d62b9d",
 			"lib/invariant.js": "53066dc4945c0159fb5b48944b578a2d2d22f2f3bd5042599f2f6278edc84466",
@@ -1060,7 +1065,7 @@ var packages = [
 			"lib/types/surface.js": "7e9d4bd3b7c5b2eceed0f8b035e9c021237c72baa2b53e4c6fc941e8b417580e",
 			"lib/types/tool-history.js": "2d2c4f4cbb6717aa2f487af52ce6a81e2002ce2c768cb5a4210c867ec49a0e95",
 			"lib/types/types.js": "a03acad09eec657b94441109af0da31b5b29668feae35d1b9e72fd99beca505f",
-			"package.json": "2f443f9ef9f0e4dd5b975641a41694bc24596fab629abb51c42969b7c8c0e01d"
+			"package.json": "5f513d38e301396ea82021593efc9e475817957e8f8dce0e64c3e5d722ed403e"
 		},
 		"programs": {
 			"lib/index.js": "9651af6288386b1d01a8a1cc096b4da63763e0958aaf68d0ef081f1fcb3bdd20",
@@ -1077,205 +1082,207 @@ var packages = [
 			"lib/types/tool-history.js": "daa7e0e3e791f1b7001ab5567376faa493d9609ca5899182f258c43dc4d84911",
 			"lib/types/types.js": "10e24b6be50f234352ffcdca6d57c0c185ba64843b6db2e1bf1e3286abf0635c"
 		},
-		"loadingDigest": "47ad4022ceb88fee1b13b5ac947443f96ce253dfb22f8c39ac397280ad29692b"
+		"loadingDigest": "cc51753145a870f00a5c908fcf3ae155c553253d4f073ea110f2dca96f90dd60"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-format-v3-to-v4",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-vnplfHQOqTXpe7EMN/0h0VZyBS10+kzzjm5x/X01iu5lynbOQs2jRdi4Lrzp9fgnAUEJYaESZZLlWKY40arLCw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.2.0-rc.1.tgz",
-		"sha256": "fbee2c059776093ae18889bf8ac82ab3397e2e42c5ea2bb2ecbceb7bbfbee499",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-UkiNDdGS8cwJKqjvHs52BKi+3NuKhoziz/l0IrDoDYpSdgDfK8HrrXkvIxOi+QaBUgIxNTQzA6tsI+TAIMDsGQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.2.0-rc.2.tgz",
+		"sha256": "1656da41a0a30617a749a65ffa555428b2b46f5b68cbb196357c0b7120dc4456",
 		"modules": {
 			"lib/index.js": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
-			"package.json": "72632c0f2042c2db7f42012ac198e3504a19dc4919c2ebd58267d0238c80429c"
+			"package.json": "6c9b42581a60e182370c10d3d4f33b7cb64071ad8cd93785827d0969c533197b"
 		},
 		"programs": { "lib/index.js": "6145523403f90c1984c02da07549762f3e04fcb302b5e314a001f7c3f962805f" },
-		"loadingDigest": "5b040372a4432fafc6bf1c0e04be48d1be916c3495816d4e8dd30468952121a4"
+		"loadingDigest": "696ce914b40724255c9b35b3a4c1e517a9974eb9e3567a562a8d255e7ae3c191"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-persistence",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-OAHmDpR3LasgEXzpmGyajlgcG5tOEzlUSclovllLtKaY402hcTn6Vm7W/EzRMwc+jvSfEQyXDY1g7wG3t3Ch+g==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.2.0-rc.1.tgz",
-		"sha256": "af6ff71617c6e1df006c88a873c7416552cdc1a1317fb33c79bd3279c49a3a26",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-2OoRHZYWi5Vy0+1bPU37Y/NTh6uQiZ3VdpvDmW1oCgsapQr2JS/Lbody1gXOMJ1KXglCSLmePgTMC00uKw/UIg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.2.0-rc.2.tgz",
+		"sha256": "1cc71f9c81fc3f9c6183f394864f087c87dfb275d170d06f58b9a5d1061ed3c6",
 		"modules": {
 			"lib/index.js": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
-			"package.json": "a5a768a7fa9dff906404056185bdf186dbecd12e62b0725a762fc71fc4269df8"
+			"package.json": "90eeba20c596a12b409facb6922890d75a4c7b11945f7b4b711ac54f6bbe2274"
 		},
 		"programs": { "lib/index.js": "9ba15ebd7b22c52163c672b518e0ea1a2a2c23662695cc932e1f3726cdd51154" },
-		"loadingDigest": "ada72328490fccb2f2a6f5f747a473e106fcca5e3d086786b6896b8f110e54ac"
+		"loadingDigest": "f14859c3033a0f6fbb6a0f16e17b4ae5bdc91f62e6d91ed53923b5428dec7b62"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-persistence-jsonl",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-16hp5zx1Q1SIVJfQI/hrxASHMkE/r+pHeELn1b/GZCpKwCD1nwiQapqHhgq/+WEb9SRvRpWAxE5dQWEscZghEw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.0-rc.1.tgz",
-		"sha256": "5f26f58226db1c8b9fabb21121176360826cc0b8f9ecc183ae5c78ca89e12ade",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-iAzXWC8jmiLYjK+wuN/fAKXLniAfClWm0CmEIwSxZnJGVy8c0iy7j5v8UfOqUbwuGfqo5HUWfyLGgxbWH7SG3g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.0-rc.2.tgz",
+		"sha256": "f5650bef896ef852dc5e5599aae5a0066b295c36674b9e4032c3c1d1e40bb7c8",
 		"modules": {
-			"lib/worker.cjs": "cadd901598e2bb8a847409a980f59deea639eeadf21e30da324fb674a4ed8038",
 			"lib/index.js": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
-			"package.json": "01debc5bef48135fba71b78f9f0212e097f7a31ad30a14a64c3f6cb12638ef48"
+			"lib/worker.cjs": "cadd901598e2bb8a847409a980f59deea639eeadf21e30da324fb674a4ed8038",
+			"package.json": "5cb0f10f78e4336e4391912f2963d2f456cef1e3639916b20bebaebc5f8e9284"
 		},
 		"programs": {
-			"lib/worker.cjs": "cacc573e51f6c37084d06bb04b8aa74f41f96615ad38055b2594f88083406681",
-			"lib/index.js": "4d4e99e13a1c2cffec557d01071f5cf2c811fb0904f3cd0b4b67655a3334e160"
+			"lib/index.js": "4d4e99e13a1c2cffec557d01071f5cf2c811fb0904f3cd0b4b67655a3334e160",
+			"lib/worker.cjs": "cacc573e51f6c37084d06bb04b8aa74f41f96615ad38055b2594f88083406681"
 		},
-		"loadingDigest": "8475d09a64f63d103c07ab7346d7098ab2e0df44b1b1e2336be9d3cf4ea5c319"
+		"loadingDigest": "a0a9475b899b68bf1f363a7cd5d88db092cc57ddfab1e672702c78d2676a44be"
 	},
 	{
 		"name": "@deepseek-ai/dsh-session-projection",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-6ymxQyycjXlxayjgVfxAsQv8POk3oKny/mrpxPcz30/Sv8FRsWnEnKaWf1pQvlBsGQcN6atOqXWsNyvHSyT/zw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.2.0-rc.1.tgz",
-		"sha256": "f4518edd373985721a7615c9381b5703434f38b6b31cff15d7bfd3b486443b3c",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-caJ+XGjmR8ouws0LrvuXrabrzi21akB2l8CniUHdx4IpT6GkLapFYlWLbjZlDYqEWB3ktR+q32nxW2s+f27GSA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.2.0-rc.2.tgz",
+		"sha256": "f556aa108c0d8541c8b7d0d37f97cd739794c655752093247226191d702b52a8",
 		"modules": {
 			"lib/index.js": "022f1d13e25aeb3c18e10407d84c69e018c1c05a65c9ee36ed14d89b185a4fa8",
 			"lib/types/index.js": "f3daccbaa1cc82749411fadc7923ff9275cc96b7ec594e65f3e01a3dbbe29444",
 			"lib/types/types.js": "d6b9f7a57fe4dacd7b1a6403a34e6cd1ccd088c2e024e02cbf577166faca6ffb",
-			"package.json": "ac165c17714f1af15fc9018a06d7cda0fdab44bb4483ab16eafdc282b9f2aafe"
+			"package.json": "024051dfdd53bfd6542ada25415c4d5a382055f24d1688fd6c76764e134a067a"
 		},
 		"programs": {
 			"lib/index.js": "0893b519f2b8c9957e229e159ca3da0e84135b7574251eba1cd5e2b6e2158808",
 			"lib/types/index.js": "42eb631f64dff8d190095e0cc0cc7aa746b688d52d4ccf7abceabf1362b2c3ea",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "e0d506e976f0c0820d6769bf9398dc786e066a546fa1d12d62e6431b6239389f"
+		"loadingDigest": "950ca2878ddd70008ccbae0b972de4a754a51d2abe8e858187f1ab86434afaf5"
 	},
 	{
 		"name": "@deepseek-ai/dsh-shell",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-gdugmqfA+BA1y+qLxHjtHuw8Jc1Dnar2dCaKlawagUxnBCK7mcqkYstTaeiANM7o+2tWELLIt/Pjj46PnMY8iA==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.2.0-rc.1.tgz",
-		"sha256": "85fba32b588dd3ff0bb990d102a043f9eb2e2ba39ec45c8fc815bdbf1a79fbf8",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-+3uBpxhXSzukUZx7XjdnUVfItj/w4maPQAcDXnVxF8vVt/dHa2NDJBXyYC9fzIA4PnXqVHFURdrhMfFgeD7GJA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.2.0-rc.2.tgz",
+		"sha256": "2e04a8751886ea395a207263bdced1f44f1325857fecdead4bd2773e2d60424b",
 		"modules": {
 			"lib/index.js": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
-			"package.json": "a2967633b7fe3ab32cbdf807e1bea04363b7441bc2b802f2257819abd12b28e8"
+			"package.json": "2c0e19b89b054aaeedcd18565dabd4ec9772bd6fd13dc3e390f93a51cffae60e"
 		},
 		"programs": { "lib/index.js": "acac3b2a24b6341887e38401f79b0c311147d1778c0dce9847801cbc3aa88c93" },
-		"loadingDigest": "109d3d27b92d74b80e41e5ef60bd42dd1d378c6b759288d1a929b6f631552918"
+		"loadingDigest": "427a9b41a153c7cc7dca45ab52610006dd77df68e2cc5c11e2a436807cdcce55"
 	},
 	{
 		"name": "@deepseek-ai/dsh-shell-env",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-4qOlCOg7Bs/dieRpYFK5aTycWLuJU3RLsbGHtgwz9hyjCyI339pCR9Sd4TyZstENhPHI9k/mjKy1IsbT4T+wig==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.2.0-rc.1.tgz",
-		"sha256": "4983c6317892ca5cce6e0d16378ddf47293f571fc667d3ab11816fe9685af05e",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-Cl4i32DPSLPra4mt8wBPNVDbV4+mG6UBLGF1EXsmjpj51Xg8slVqPMcs7ThkgesHBG+Fvpbvu4Y0aGhOckcXYw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.2.0-rc.2.tgz",
+		"sha256": "8a0d52dfcb3e6b719fd579fe31f97d029cae38fe286db1c39a50cfb80c9c955c",
 		"modules": {
 			"lib/index.js": "82b1e6663968307a387fd7f300ff9db5e3c1ff707b32953da82c3dfa12024364",
-			"package.json": "01eea37e115c18bfbba18c6976e2455895fbac1a9298a42d90b068769be6d319"
+			"package.json": "02f9153381841dad34373a148ef978d6228beae825d9594393c50e548d668192"
 		},
 		"programs": { "lib/index.js": "4791ba7c803bbeb87fb45fe6b6c13d319fb8ad39d5bacf0c88ff2436676a0077" },
-		"loadingDigest": "2fe7ec6308e351f64ec605f2bacf7d77d44b529d4704e727c9df17267ee90acd"
+		"loadingDigest": "cdd9329877ac1238f0dbd3b594d2e2a56d239cb936ba051b1adf4738bb131eb5"
 	},
 	{
 		"name": "@deepseek-ai/dsh-subprocess-local",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-rO0VCIPqEk6A47rlVZxvHXXaoQ2MS8pW5yhXpb3+hqc/2NQA33ZOMViqeDeVyyBlhLTxn7p972kETEB1EhEZfw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.2.0-rc.1.tgz",
-		"sha256": "3bfabfdb8091e0540ccaf3d352566048151e8c89f0551e2019cf3eaf9d96146a",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-RKEhReGv6bAOHNeMd9kBwY1mQSuhm0OEiK+wnXkOD8CvesYaYXNUmtoIf9VJdrRhG5DF35gVNQAN79Si9d/BHw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.2.0-rc.2.tgz",
+		"sha256": "97e0ff8d96689a660a883b755f857fc8693d9114eadeb73694ef5e708eb0cc21",
 		"modules": {
 			"lib/index.js": "e40106ed35a1e1744c016e77f2cf59b07f87969bb7c4b424d26fb08da75e3922",
 			"lib/output.js": "4f77ef6da608d36df168c99177e9b527e7145df1418845eba567635e64a4c2a3",
 			"lib/runner-launch-B2zsQ1Dz.js": "6df08adc4a27f278878a5f4cde8b551b51e647b922ac7d6591fd62d272ced153",
 			"lib/runner.js": "4e21528dfdb3e92bdce2340945dc4dcb202e4a4af0bbeb8b97585f67735d30c1",
-			"package.json": "45e100772a6e1b2273fcf06fbe069a823be0c3f22407869dd3ee6c2a5ebaf16c"
+			"package.json": "9b47e357ccece5d25dc09a5a549a4c6e362131cabe2f8eebd0ef41769edbfffa",
+			"scripts/ensure-spawn-helper.mjs": "ca5509febf1e6ec1356df121835ebe5ed2f9cace4bdc2ba6d83d41c7e45e0f1b"
 		},
 		"programs": {
 			"lib/index.js": "5c310b56dfb45674442ad28c249ddcb69cb01317958db2530a198c24d52b456d",
 			"lib/output.js": "847fa903d1373f700f9c3455c93432e35052bbb93eb6ebd57aeedd82a8e291d7",
 			"lib/runner-launch-B2zsQ1Dz.js": "37e251b01260c34613374e70b997cc51dd0015523bfc42037ee5fd8a25431890",
-			"lib/runner.js": "53bc0d336ca33fb2cf4ff08916149f1f3230e09c7be3cd1d9f6c47f2a19ad661"
+			"lib/runner.js": "53bc0d336ca33fb2cf4ff08916149f1f3230e09c7be3cd1d9f6c47f2a19ad661",
+			"scripts/ensure-spawn-helper.mjs": "029255dea2faa10541345ddeb1e55748c27e058aea3d43c0bfb6cf47a6ae954e"
 		},
-		"loadingDigest": "727cfa9aa41b1940d3b6d61dd5827b5ba6c86046f8e22cd8f7b171591459a889"
+		"loadingDigest": "18ae7971d50666aa869a9c2ddc8441fce8375c2ecb0150b576bc2c5879a0969e"
 	},
 	{
 		"name": "@deepseek-ai/dsh-system-prompt",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-AZC0HBWaiopkVcJXh/WEzyyF19+/yBPnbuLrZoD7h+UJYF8iG8tlDabauWfMw+dvgoYe9hIiTV2EcFRv4AgJhw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.2.0-rc.1.tgz",
-		"sha256": "986c461e1fd98644f74a749f3423e3bb73ea192db46fefef0601a1477f9c92aa",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-ZZNk2gkXFV8CIT0IOZXS+pFaxNVJaRknYyH2vc4ZgZAiHKT+RqUYNr8e1F5Kp0AaN0DNlcTkjOGP5MCxeXfDjg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.2.0-rc.2.tgz",
+		"sha256": "a15ae0a27f767554cd140032dc4b1c6b87d42e7f44319789d740ddcc5059c79d",
 		"modules": {
 			"lib/index.js": "ff422afac6ba85f89afa985d921aed0b603feb354a05a549c48eae04cf0d2f57",
 			"lib/invariant.js": "64c55f06e5583df9b577d613c64b6bac9f04d189ff5ef2d613caa65ae9f79d75",
-			"package.json": "15b3df1dd7402705398d2429f49343106393f71d198b0d90cc966815b798547a"
+			"package.json": "6d83e7a42f04ca54f86f8bc5dbbdd7cabb52968bf51c4d864a2634d70bfd1437"
 		},
 		"programs": {
 			"lib/index.js": "f143b76b0ac707d4b881859deb979884de738230594f57f3e0da7960ab252f96",
 			"lib/invariant.js": "c4b2b4ca734001b7b84295bb0fbea061eeae3303b1c0412da41d3a56ec57feb1"
 		},
-		"loadingDigest": "94fbc4352b4fb7c9b04e0d3eb1405f3a68a844b74ad988f39161ba98f521aeab"
+		"loadingDigest": "0c8990685566597c3be423cacf830ba9aff1e749e905ca047e2bbbe8434defb0"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-bash",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-/uF4JXgGIc141xAOsA89c3jlaxVcEjOeXmJ6WDtcg6IcEVvpXbIW4DFvgd49VFCskcGoyzy0eOVPATkIryyo2A==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.2.0-rc.1.tgz",
-		"sha256": "bc20060ddce3e3ec6bc7821a5c4126b6ae7447400fb3921a8070e218f09fab9d",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-0yjnxm5C7yqX/XWJYFXZVBWXrM6E/6FnjOjt7sN8Itsb5eSHXCz9e5XpKXpLSAPbzq8Kh49yFOw2ZUJRBkOHyw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.2.0-rc.2.tgz",
+		"sha256": "3e5ba321c02e0673770d14e70ad5ecae61fa39cc3ea2fb995fdca2596922b644",
 		"modules": {
-			"lib/index.js": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
-			"package.json": "0e3f1f40650fffaf358eaebd6cdb7dc4fb11be4508fc068bc35358ea0c4cd5fc"
+			"lib/index.js": "0c63a09e4b80ec22db256eac4ecab6f7de3a342e16ec590348a40c5f356eff1a",
+			"package.json": "99cd45e7b90c2abea661dbb7cfa33633a151204fcc558d5829218dc2b2cc1920"
 		},
-		"programs": { "lib/index.js": "60a0584841178397132ea6861531b6f75d5f266ef6b0227624f918ba0d3e8de6" },
-		"loadingDigest": "5fb429f1ed7099b2a8e6a1d24994321985aae12d8de58bcfcefcd97a54f08a3e"
+		"programs": { "lib/index.js": "235d25d275d1584d3d5d22ce5cf01d5411613c327d01a489e68a7ebfbda5b223" },
+		"loadingDigest": "6209134b2ac2c7a7b868e7d9d137297b78cef24a3327f58a17991df19adf087b"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-fs",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-B6CY0yldjoWXQ2RY/5XNtQd9UHgcWRjw7jgZt9wk2i0vw6FuusQ/1VF9b0FPotmOhQ5W6MHiNaOwx0LS5lSfUQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.2.0-rc.1.tgz",
-		"sha256": "0ca591b9f6a8d9ad4d1db30fb2527225606373b5325a4aef312e3d662342325a",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-QDtVmZoc84iDwrM4ftMDwzuttQd5dXu93NMeas5cSsUvptnW4CiPrMOkYswRXmSry5WRWn7Gk0lSRJ1bpynwiQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.2.0-rc.2.tgz",
+		"sha256": "95b1399c791fa01599017141f1763ad7a72182922f7dc05354c769ee988eb518",
 		"modules": {
 			"lib/index.js": "66742231de99695b98400cdbc7bcf47b8ef2bf24600cf86f66bb35591981427f",
-			"package.json": "e5cac7e89436d03212ea527ce8a43fc0603228a1c5abebaa1bbc0f080603e2cf"
+			"package.json": "f17b78c320cedee9b0ec74ec37120761fbe1225812f742629391e70ded8dce82"
 		},
 		"programs": { "lib/index.js": "6a1a2ef79f388e46436ed703e7ecc083c5d1329d49d16bbe9fb9cc9f15464312" },
-		"loadingDigest": "61ef2cd955dd990b1820ba04bfd1540b3b7476fc3180a5f080b4fc8d27a168da"
+		"loadingDigest": "e113cbf3e7f32f8bb26a424abea6ae725d1b005eb516acbcc69088f214366245"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-goal",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-EIrmvt28dsJ1/ujj/7B6cd6URYeIiBg3pigjViTr9hI5XeGdbUsIie3TiIHixdB4HK8+f1TE27kDvWoIpCIslg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.2.0-rc.1.tgz",
-		"sha256": "227e7b0a18a4c0adb03dc1127a8fb8f9e8d7fb45ffe725d99b8fcec50a88b579",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-UeMd6NocvpXMU+jT0ujY/jU6S9SVSYY7H7oMnspBmWSPNdlh7eYHkQbQN9af7SWEhaDKBq5rsYPIOsYiSs2bZQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.2.0-rc.2.tgz",
+		"sha256": "b06653a1eea696f034a399d00a47bca31ac25425de96499e8830c91b5f598605",
 		"modules": {
 			"lib/index.js": "7220fa7b5b7c95c94377ac32c6b01ecac5b4853d9dec3a48ab17d371cda63e6c",
-			"package.json": "185e65b45116b1d1b8ea1cc2f9eede2b3551a1f2d9b851a7ae8716eb2fc4d1f0"
+			"package.json": "9b921fa34e7bb7858c973644dd1d87958e45df96d79d534f573e479297838c3d"
 		},
 		"programs": { "lib/index.js": "1d2190e8352f2a3cd78f8df8c8b23d9e6ee4223483a72322ea2fb0ba5f8f3963" },
-		"loadingDigest": "5eaf4abf59e453f00b1ac8077c8e636b2bac5d75e92bfbdd78fbd8a92d98773e"
+		"loadingDigest": "3743f69611922c427b8e492045994eae5768cd0ed14f95d71eedbee509e627cc"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-jobs",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-drRwecBoDKmjY3iS16w9/Tpt7qc+uJYmFpuYk7PaSFvRGEINQQWVlcrwoV6NFSr2DRTJnBEomEnQ7zCzMRy3hw==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.2.0-rc.1.tgz",
-		"sha256": "80a675da52edaeaed1d363e3794156f7281913c3d2afe7a73f630f91b10c03a0",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-6mqWCkYm+XExCfJbix+pcJ2qcQLNTUtNZQOmfV1IFmpT4j0pGju6b4GbiKaS26yDPegIz71ZW2/tXWzijIsjyg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.2.0-rc.2.tgz",
+		"sha256": "7097ef534b0cef4ec19e269daa76fb1203e89439b1123f35471ba0bfde55a7ab",
 		"modules": {
 			"lib/index.js": "660066155801b20c67e6e288820961a365fe65738ffee1a16e50a2394ac9c7c6",
-			"package.json": "d0b6f47c0ae26f9b3c7a3ef3a71d7b4d80be8c3be22704b8b3eec1c8053a6d55"
+			"package.json": "c710f1240c6486f89f1d0e411f4aa800a4fdf8fa83a6fe4a6909dd8d51e71e26"
 		},
 		"programs": { "lib/index.js": "b45d13d983e98d28aa8164d7997c125d1c28bae8976784c8e235bf8430224e8b" },
-		"loadingDigest": "351320b650ef0f38efa22884cdfec1903e72ec55b9393d80eae8e7851baa1010"
+		"loadingDigest": "a2edc6626da2ac54207e42dae4e272cf1a0af91d0d79e0ca61b8ae3e12e60466"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tool-pwsh",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-jxKcyzZ1c9/1tRdBweae+fivnx4WhYMWco+9AG5ANmVHTOXaSCJ8RtUfBQyB7/HUXsLEU1jtHWg3kEcLxZK33Q==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.2.0-rc.1.tgz",
-		"sha256": "b670a0cace67e87f241c737f2a3b52fe300dd4008f76233c3a7692ccf010202d",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-kFL84s7zQSRd2IquZl2LK7g56x4MUWSilSWLoRVwGTTQoW3RMFGjAsMZ9ZmtGjdLGrLeCnBwiXucwswTeqYCmw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.2.0-rc.2.tgz",
+		"sha256": "4bc8ca9d1a751925560bbfbb5f8e6becb7c198953d257f911f555938c01e6ff0",
 		"modules": {
-			"lib/index.js": "59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c",
-			"package.json": "0ab2225df3c4b818c74e6398f6c41e5d97013459c8f0fdc9388b40178a9d508e"
+			"lib/index.js": "1a49cd8de831423a4ae0a2c57a4674a64cec538f64ae603aaa2c388d78aec790",
+			"package.json": "43550a960a0281fe7905d362ef4600effe54fa8b4841739f08b2aa2055d002f1"
 		},
-		"programs": { "lib/index.js": "685e36eb7326cedc2da4792c7492c2081049ef2c9bb855e9c36d5c7b60b6b645" },
-		"loadingDigest": "fdb4841ece36f7e32e53b8774aa1f4c5122bbfa5e6333d7a7eddc1a7b2927925"
+		"programs": { "lib/index.js": "f615ce20ce782944a55d095801ee659d4d615f31af2d716251cb74d737864faa" },
+		"loadingDigest": "68d468d190843e9d5266a07f87fff40e3602b25b698f04936dc0c451660b9584"
 	},
 	{
 		"name": "@deepseek-ai/dsh-tools",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-HmXY+X4HBoeuGBJWkS+q91GEGK61XgNc3qCXT+QqI+nzCcg1VOIwWvjgOnr1c76x5HKPyxR7FF3PMMq3+hO7oQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.2.0-rc.1.tgz",
-		"sha256": "173440b373cf1a6f8bd21ddc7c867137c5069d2388023bba23c832a6249795c7",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-vquUz8PjHWE4zaS3wH70IpYjL441p2UlUcG8TN2yJZN1RhDkuiHum4bWCsjEPyWLS/aB1QJvzdXC2EK/PRkbsQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.2.0-rc.2.tgz",
+		"sha256": "8153481d80867d9c8df8af22f5292bbfaf6948fd78feaf55d8754fa8a9cec893",
 		"modules": {
 			"lib/index.js": "40f47709337c3c205d4e09e647f8588f4977e66f6d52f019b3cc7ef81159d84f",
 			"lib/invariant.js": "41a09fa8d0e0857c6232e8d3b13c8658929b6b6300c6b3a2c53980c05309c282",
@@ -1289,7 +1296,7 @@ var packages = [
 			"lib/types/testing.js": "c6784f546e950dc38323baaad4009bb197eb25acf3a16adaa2893a44c7b7a650",
 			"lib/types/ts-types.js": "3c2f80465d6a420f15c75dcd023daa73af97307c3e22478c0bae67cf71c50d1e",
 			"lib/types/types.js": "d53c54d32353419ece121f485a5534ee054842b74ebab7b4a4d3325545d0179a",
-			"package.json": "4d94a4285686e430c153c87b5311e4656f3b3833fdbbcf3591110406a84ef227"
+			"package.json": "fa34d96a62f4b40ee3add8e23dab87e50379781e04faeaceeddd084c258435af"
 		},
 		"programs": {
 			"lib/index.js": "4d83f27020473369e5d5d2bd00a5089dc72a4078f541c21e5ce16c6604535423",
@@ -1305,21 +1312,21 @@ var packages = [
 			"lib/types/ts-types.js": "43a7ec56be4712c758ab51258748ce5f019b54b96d2109f1a53c9238bb993d2b",
 			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
 		},
-		"loadingDigest": "1cd29c06e528ffaaa72a892ee8f108aef2918520f3df43dd70c9ae41a39e21dd"
+		"loadingDigest": "b889164e150ce9fcee5e2fcc7340d2f12de71d73cb5778d583589c976d9623b3"
 	},
 	{
 		"name": "@deepseek-ai/dsh-user-approval",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-0d2sFESHYhnnwuIPDw7sNImFE+HWU6kbX9cWZSPntMXLMhr8lgJFmtZFmrZwobQO7lhpEZKcvX8Jhzmc3OCdWQ==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.2.0-rc.1.tgz",
-		"sha256": "2f54cc7a3905930af5a540fb2ad8ebfb1c458e56e9d0a547b81e6fb7a2f81799",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-fZMfDp4IeWZMwAKEQkuAYCiGRrwoVWNObvAbpdmQNUavjfYCtwwduWqYQz+5lMQq8vENdczBj7cxnO/pOQ1oZQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.2.0-rc.2.tgz",
+		"sha256": "2a36501107f8e3d96ba1b4cf6de6ca0ceb6a4dca1fdc8f822240a73257ace4fb",
 		"modules": {
 			"lib/index.js": "6a5ad1ba3c3dc3abbbae52e6c8c4463970ee0c1c8988cebb0d5cf2acd17ee90b",
 			"lib/invariant.js": "4c4d4f497a9cf8b2397ce0f029456c5d9dc52005f0e60e3fb6365695b3cded7a",
 			"lib/types/index.js": "0b2e00fe1b2cedc9b6349a38e07e26a05a09492da838f069c10b76cf13f6d6e8",
 			"lib/types/invariant.js": "0ee679ea1449b99266df9dc3c53606a61573caa432cfca3d44badfdac71a0ef8",
 			"lib/types/types.js": "525e6f38c039c0b20c6d071bfe06799e8fbc41b2af2ce8db7b1feb3faebad75f",
-			"package.json": "eff21ab4e65ee041c7eabc61f03b9fba28b21471463ca9e51af50f57fa965ad6"
+			"package.json": "301cb8ee3967a1190308a2ae44b804b4ed8bcad30c5bda527bcaf013f48b5a8a"
 		},
 		"programs": {
 			"lib/index.js": "0541b7516a8abb2cf468a933bded14ab0cc6f6d6be2edf66d1105a8bb2bc0ec5",
@@ -1328,47 +1335,48 @@ var packages = [
 			"lib/types/invariant.js": "9349b8ab02632d47cadb7c7e5397088781f0687dc5abe64ff60a48b67dcf518a",
 			"lib/types/types.js": "59c2241ede0957a0d4e93789fff530e3fc3eb5f358267346777eaf82a7fe0058"
 		},
-		"loadingDigest": "27ab167b7c7a7c54dee1f03f75dab32491fc8706e7877d683a1236643321616f"
+		"loadingDigest": "c4211df0a593655483d52187f78b2a8651c3a0cd59b1bfe8ce9c243ef25511b2"
 	},
 	{
 		"name": "@deepseek-ai/dsh-util-values",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-Eh1HH0LFvztBwU2xotdfW5oCwLlWGjK2ygCC5+PnC3tkSDh9gvVQpEf0ezK+Kk6vpLz117V7VPehhR1+gs90+Q==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.2.0-rc.1.tgz",
-		"sha256": "7840c210683d0c79c4054b63b39b869d8fb06f2c5095c35ce0eb836beedd361d",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-qgpsbgiZABuE9UvgNaVo9b2HiWwLeU93CTl9PFXqE0jN8ap1ALxzQsLGvr/q2MJuWDYqnFBg60XnqnY8ZxPWEg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.2.0-rc.2.tgz",
+		"sha256": "6f84a799894f5a5b42b2d4acb3232adffb580c41079cd1894514065f5af94947",
 		"modules": {
 			"lib/index.js": "d291828dc4ff9c4b43a67e7ed81625c8f90ebdcf4de2f5cbf2c33f38208ce2b8",
-			"package.json": "7f5894851834711e41f529d77e95f8a74c4892e6fd07cafff0f50f359f0b7b4b"
+			"package.json": "2a15152e51019eb526463b6a2a8b87d9ba08717af623af1b139d4fbcd87e0bb8"
 		},
 		"programs": { "lib/index.js": "d50891d897458af7cd7e4bc116748073d5f35421f7ffdf93536237454b521deb" },
 		"loadingDigest": "2cdd26d82f4bc97d962b1ff7dc419ca7fc6afdd4c382d5e4a8ff3861300befdd"
 	},
 	{
 		"name": "@deepseek-ai/dsh-web-app",
-		"version": "0.2.0-rc.1",
-		"integrity": "sha512-Gho07L3/1hk0UdVc7PjYtl01CPRb9famTmgsw9KrzuBfUcv5co1gKdAJYF+urZdx7mqkux6lZDBqUNbOIrPgBg==",
-		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.2.0-rc.1.tgz",
-		"sha256": "430cb785d6a800a6112a3b57d916d6450d90bb94134af19b3394ecd5a9b2e3f7",
+		"version": "0.2.0-rc.2",
+		"integrity": "sha512-pCIMPLfTKVfY942dP4eJSDVw7iUw86pemzfOr/e5DWP7CdCKTfvA82kP0RJAKJcyKJd8s679hqtCue/p4P20Dg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.2.0-rc.2.tgz",
+		"sha256": "f633daba9d434233f3664553292ca31e996ee2395bfe97e38631fd2ea4928d74",
 		"modules": {
 			"lib/index.js": "50c7ce5b93e8a7ac0117e066699cd31b553a5a135d38b7051d6a8364ac691af4",
 			"lib/startup.js": "95a47053483fbe8ec86711369b8791bccb592c303fcc89300458a4bd07c6c252",
-			"package.json": "0623b04fee889a1622cc6d4d3aa8d5b347f9260a06d11ff9b7160ce40cee5df6"
+			"package.json": "8d1324675ff120ed1ce834ddd689546deed093d41cc50faf4a5b4d6515a1b233"
 		},
 		"programs": {
 			"lib/index.js": "875b581fb8a2918f226d082e98119488a8f229239effe9fe0ec8f79536730561",
 			"lib/startup.js": "f1aba5df366d09c63960d8b8a8be6699e3ddd1b9d8a2baf841794190d9c49368"
 		},
-		"loadingDigest": "1ef78bb1d0084433fefe46ab2589207a1b425d0ddcd83faa0800a5096b483485"
+		"loadingDigest": "8c10c6004d1f3b78e18e84d1e8ba1b8ae2d589b9451c9771bb1d093beff00f19"
 	}
 ];
 
 //#endregion
-//#region src/domain/rc020-rc1-host.ts
+//#region src/domain/rc020-rc2-host.ts
 /** One source for verified registry identities and published executable bytes.
-* Bound to the published dsh-v0.2.0-rc.1 tarballs (upstream
-* 4878cdabd87d4041bdaff61d04c966883b9fd07a). Native platform acceptance
-* remains a separate, currently pending fact. */
-const RC020_RC1_HOST_PACKAGES = packages.map(({ name, version: version$1, integrity }) => ({
+* Bound to the published dsh-v0.2.0-rc.2 tarballs (upstream
+* 639ed015397290b3745d163aafe02ffee4aa3f84). Native platform acceptance
+* remains a separate, currently pending fact. The rc.1 rows remain available
+* in `rc020-rc1-host.ts` as historical evidence. */
+const RC020_RC2_HOST_PACKAGES = packages$1.map(({ name, version: version$1, integrity }) => ({
 	name,
 	version: version$1,
 	integrity
@@ -1708,10 +1716,10 @@ function hostLockDigest(manifest) {
 	}
 	const rawPackages = manifest.packages;
 	if (rawPackages !== void 0 && !Array.isArray(rawPackages)) throw new DigestError("packages must be a list or absent");
-	const packages$1 = rawPackages ?? [];
-	const names = packages$1.map((p) => expectString(p.name, "package.name"));
+	const packages$2 = rawPackages ?? [];
+	const names = packages$2.map((p) => expectString(p.name, "package.name"));
 	if (new Set(names).size !== names.length) throw new DigestError("duplicate package rows");
-	for (const pkg of [...packages$1].sort((a, b) => byUtf8(a.name, b.name))) {
+	for (const pkg of [...packages$2].sort((a, b) => byUtf8(a.name, b.name))) {
 		requireExactKeys(pkg, PACKAGE_KEYS, "package row");
 		for (const label of ["version", "integrity"]) {
 			const value = pkg[label];
@@ -2537,8 +2545,8 @@ function validateActionManifest() {
 
 //#endregion
 //#region src/domain/host-version.ts
-/** Version admission floor. Since 0.8.1 the public DSH support range is
-* `>=0.2.0-rc.1` with NO implied upper bound: every host version at or above
+/** Version admission floor. Since 0.8.2 the public DSH support range is
+* `>=0.2.0-rc.2` with NO implied upper bound: every host version at or above
 * this floor (including later RCs on any tuple, stable and future releases)
 * passes VERSION ADMISSION. The floor only rises when a future Guard release
 * actively adopts a newer DSH; the runtime never raises it from a remote
@@ -2546,12 +2554,13 @@ function validateActionManifest() {
 * metadata ignored. Version admission is one gate of several — it never
 * claims native validation of a not-yet-tested host, and the graph/byte/
 * contract audits below still run on every admission. */
-const MIN_SUPPORTED_HOST_VERSION = "0.2.0-rc.1";
+const MIN_SUPPORTED_HOST_VERSION = "0.2.0-rc.2";
 const SUPPORTED_HOST_RANGE = `>=${MIN_SUPPORTED_HOST_VERSION}`;
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
 * ledger, NOT an admission whitelist: a missing row never refuses a
-* version-above-floor host. */
-const HOST_VALIDATED_VERSIONS = ["0.2.0-rc.1"];
+* version-above-floor host. rc.1 keeps its historical row after the floor
+* moved to rc.2; the row records past evidence, not current admission. */
+const HOST_VALIDATED_VERSIONS = ["0.2.0-rc.1", "0.2.0-rc.2"];
 /** Historical alias retained for evidence-list readers; the admission rule is
 * the floor above, never this list. */
 const SUPPORTED_HOST_VERSIONS = HOST_VALIDATED_VERSIONS;
@@ -2633,8 +2642,8 @@ function evaluateMinimumHostVersion(version$1, minimum = MIN_SUPPORTED_HOST_VERS
 	};
 }
 /** Version admission: at or above the floor by strict SemVer precedence
-* (prerelease-aware; build metadata ignored). `0.2.0-rc.0` and the whole
-* `0.1.7.x` line stay below the floor; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.0`,
+* (prerelease-aware; build metadata ignored). `0.2.0-rc.1` and the whole
+* `0.1.7.x` line stay below the floor; `0.2.0-rc.2`, `0.2.0`,
 * later patch/minor RCs and releases all admit. */
 function satisfiesSupportedHostRange(version$1) {
 	const parsed = parseHostVersion(version$1.trim());
@@ -2664,7 +2673,7 @@ function satisfiesSupportedHostRange(version$1) {
 * Capability expectations shared by every registered cohort.
 *
 * Every row is a host contract Guard actually consumes, re-checked against the
-* 0.2.0-rc.1 package surfaces: `ctx.sessions.flush()` still returns whether a
+* 0.2.0-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
 * durability listener participated; `tools.guard()` is still a monotonic
 * post-policy denial; the Goal service still exposes `get`/`disarm` with a
 * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
@@ -2734,7 +2743,7 @@ const AUDITED_CAPABILITY_ROWS = [
 		}
 	}))
 ];
-function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages$1, auditProvenance = "native-audited", acceptedPlatforms = auditedPlatforms) {
+function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages$2, auditProvenance = "native-audited", acceptedPlatforms = auditedPlatforms) {
 	return {
 		id,
 		manifestVersion: 1,
@@ -2742,7 +2751,7 @@ function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages$1, a
 		auditedPlatforms,
 		acceptedPlatforms,
 		auditProvenance,
-		packages: packages$1,
+		packages: packages$2,
 		capabilities: [
 			{
 				name: "host_cohort",
@@ -2763,14 +2772,14 @@ function defineCohort(id, supportedGoalVersions, auditedPlatforms, packages$1, a
 	};
 }
 /** Baseline cohort retained for callers that need a default fixture. */
-const ACTIVE_HOST_COHORT_ID = "dsh-0.2.0-rc.1";
+const ACTIVE_HOST_COHORT_ID = "dsh-0.2.0-rc.2";
 const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID];
 /** Core-lock/v1 separates optional market identity from the rc.2 critical
 * graph. Historical cohorts live only in test data. Version ordering cannot
 * authorize an unregistered graph, and graph identity is separate from native
 * acceptance of a Guard artifact.
 */
-const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.0-rc.1"], [], RC020_RC1_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
+const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.0-rc.2"], [], RC020_RC2_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,
@@ -2801,7 +2810,7 @@ const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.0-rc.1"], [], RC
 	]
 }));
 /**
-* Baseline fixture package identities (DSH 0.2.0-rc.1). The cohort
+* Baseline fixture package identities (DSH 0.2.0-rc.2). The cohort
 * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
 * unknown-version, unbound, OR MISSING row fails the whole lock closed
 * (`host_lock_missing`); no capability inherits independence from a partially
@@ -3080,7 +3089,7 @@ function evaluateGraphDerivedHostLock(rows, context = {}, verifyLockfileSri = ()
 	};
 }
 function capabilityEvaluations(rows, cohort) {
-	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages$1]) => [id, statusForPackages(id, rows, packages$1, cohort)]));
+	return Object.fromEntries(Object.entries(HOST_CAPABILITY_PACKAGE_GROUPS).map(([id, packages$2]) => [id, statusForPackages(id, rows, packages$2, cohort)]));
 }
 function cohortForEvaluation(evaluation) {
 	return evaluation.derivedCohort ?? HOST_COHORTS.find((cohort) => cohort.id === evaluation.cohortId) ?? HOST_COHORTS[0];
@@ -3100,7 +3109,7 @@ function evaluateHostLock(rows, context = {}) {
 	const registryNames = new Set(HOST_COHORTS.flatMap((entry) => entry.packages.map((row$3) => row$3.name)));
 	const unknown = supplied.find((row$3) => !registryNames.has(row$3.name));
 	const hostVersionValue = context.hostVersion ?? hostVersionFromPackages(supplied);
-	const hostVersion = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
+	const hostVersion$1 = hostVersionValue === void 0 ? void 0 : evaluateMinimumHostVersion(hostVersionValue);
 	const baseResult = {
 		digest: digest$1,
 		goalAvailable,
@@ -3109,7 +3118,7 @@ function evaluateHostLock(rows, context = {}) {
 		cohortId: cohort.id,
 		auditProvenance: cohort.auditProvenance,
 		missingPackages,
-		...hostVersion ? { hostVersion } : {},
+		...hostVersion$1 ? { hostVersion: hostVersion$1 } : {},
 		...context.platform ? { platform: context.platform } : {},
 		...context.profileKind ? { profileKind: context.profileKind } : {}
 	};
@@ -3185,11 +3194,11 @@ function evaluateHostLock(rows, context = {}) {
 			reasonCode: failure.reasonCode
 		};
 	}
-	if (hostVersion?.status === "below_minimum" || hostVersion?.status === "unparseable") return {
+	if (hostVersion$1?.status === "below_minimum" || hostVersion$1?.status === "unparseable") return {
 		...baseResult,
 		status: "unsupported",
 		goalAvailable: false,
-		reasonCode: hostVersion.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable"
+		reasonCode: hostVersion$1.status === "below_minimum" ? "host_lock_version_below_minimum" : "host_lock_version_unparseable"
 	};
 	return {
 		...baseResult,
@@ -3229,6 +3238,14 @@ function evaluateHostCapability(evaluation, request) {
 	if (request.action === "install" || request.action === "apply") groups.push("dsh_cli");
 	if (request.action === "apply") groups.push("plugin_inventory");
 	if (request.action === "restart" && profileKind === "web") groups.push("web_control");
+	if (request.action === "restart" && profileKind === "desktop") return {
+		id: "action.restart",
+		status: "unavailable",
+		digest: evaluation.digest,
+		requiredPackages: [],
+		missingPackages: [],
+		reasonCode: "host_capability_request_unsupported"
+	};
 	if (request.action === "restart" && profileKind !== "web") return {
 		id: "action.restart",
 		status: "unavailable",
@@ -3302,7 +3319,7 @@ function evaluateToolSurfaceCapability(evaluation, surface) {
 	};
 	return result;
 }
-function safeHostLockDigest(packages$1, context = {}, cohort) {
+function safeHostLockDigest(packages$2, context = {}, cohort) {
 	try {
 		const capabilities = [
 			...cohort.capabilities,
@@ -3339,11 +3356,11 @@ function safeHostLockDigest(packages$1, context = {}, cohort) {
 			manifestVersion: cohort.manifestVersion,
 			supportedGoalVersions: [...cohort.supportedGoalVersions],
 			capabilities,
-			packages: [...packages$1]
+			packages: [...packages$2]
 		});
 	} catch {
 		const bounded = {
-			packages: packages$1.map((row$3) => [
+			packages: packages$2.map((row$3) => [
 				String(row$3.name),
 				row$3.version ?? null,
 				row$3.integrity ?? null
@@ -8691,8 +8708,8 @@ function canonical$1(value) {
 	return JSON.stringify(value, (_key, current) => current && typeof current === "object" && !Array.isArray(current) ? Object.fromEntries(Object.entries(current).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : current);
 }
 const hash$3 = (value) => createHash("sha256").update(canonical$1(value)).digest("hex");
-function bindingDigest$1(packages$1, dependencies = []) {
-	return hash$3([...packages$1, ...dependencies].sort((a, b) => a.name < b.name ? -1 : 1));
+function bindingDigest$1(packages$2, dependencies = []) {
+	return hash$3([...packages$2, ...dependencies].sort((a, b) => a.name < b.name ? -1 : 1));
 }
 function receiptPath(profileRoot, digest$1) {
 	return join(profileRoot, ".dsh-completion-guard", "host-contracts", digest$1 + ".json");
@@ -8718,7 +8735,7 @@ function readReceipt(profileRoot, trust) {
 function qualifyHostTrust(value, profileRoot) {
 	const trust = value;
 	if (trust?.schema !== "dsh-host-registry-trust/v1" || trust.source !== "https://registry.npmjs.org/" || trust.qualification !== HOST_CONTRACT_SCHEMA || !Array.isArray(trust.packages)) return fail("host_trust_source_untrusted");
-	const known = new Set(packages.map((p) => p.name)), names = /* @__PURE__ */ new Set();
+	const known = new Set(packages$1.map((p) => p.name)), names = /* @__PURE__ */ new Set();
 	for (const row$3 of [...trust.packages, ...trust.probeDependencies ?? []]) {
 		if (!row$3 || names.has(row$3.name) || !parseHostVersion(row$3.version) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(row$3.integrity) || !row$3.modules || Array.isArray(row$3.modules) || !/^[a-f0-9]{64}$/.test(row$3.modules["package.json"])) return fail("host_trust_identity_invalid");
 		for (const [file, digest$1] of Object.entries(row$3.modules)) if (!/^[a-f0-9]{64}$/.test(digest$1) || file.startsWith("/") || file.includes("\\") || file.split("/").some((part) => !part || part === "." || part === "..")) return fail("host_trust_identity_invalid");
@@ -8741,7 +8758,7 @@ function parseHostTrust(text, profileRoot) {
 	}
 }
 function hostTrustDigest(trust) {
-	const packages$1 = [...trust.packages].sort((a, b) => a.name.localeCompare(b.name)).map((row$3) => ({
+	const packages$2 = [...trust.packages].sort((a, b) => a.name.localeCompare(b.name)).map((row$3) => ({
 		name: row$3.name,
 		version: row$3.version,
 		integrity: row$3.integrity,
@@ -8749,7 +8766,7 @@ function hostTrustDigest(trust) {
 	}));
 	return createHash("sha256").update(JSON.stringify({
 		...trust,
-		packages: packages$1
+		packages: packages$2
 	})).digest("hex");
 }
 /** Closed-world regular-file tar projection. Never extract or execute archives. */
@@ -8787,7 +8804,7 @@ function registryArchiveModules(bytes$1, row$3) {
 	return Object.fromEntries(Object.entries(registryArchiveFiles(bytes$1, row$3)).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]));
 }
 async function acquireHostTrust(rows, fetcher = fetch, options) {
-	const packages$1 = [], dependencies = [], archives = [];
+	const packages$2 = [], dependencies = [], archives = [];
 	const acquire = async (row$3) => {
 		if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(row$3.name) || row$3.name.length > 214 || !row$3.version || !parseHostVersion(row$3.version) || !row$3.integrity) return fail("host_trust_identity_invalid");
 		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row$3.name)}/${encodeURIComponent(row$3.version)}`, {
@@ -8816,11 +8833,11 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			modules: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]))
 		};
 	};
-	for (const row$3 of rows) packages$1.push(await acquire(row$3));
+	for (const row$3 of rows) packages$2.push(await acquire(row$3));
 	if (!options?.profileRoot) return fail("host_trust_receipt_root_missing");
 	const targets = [], checks = [], equivalent = /* @__PURE__ */ new Set();
 	const reviewedEquivalent = (row$3, files) => {
-		const reference = packages.find((p) => p.name === row$3.name);
+		const reference = packages$1.find((p) => p.name === row$3.name);
 		if (!reference) return false;
 		return hostManifestLoadingDigest(files["package.json"].toString()) === reference.loadingDigest && Object.entries(reference.modules).filter(([file]) => file !== "package.json").every(([file, digest$1]) => {
 			if (!files[file]) return false;
@@ -8833,13 +8850,13 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			}
 		});
 	};
-	for (const row$3 of packages$1) {
-		if (!packages.find((p) => p.name === row$3.name)) return fail("host_trust_identity_invalid");
+	for (const row$3 of packages$2) {
+		if (!packages$1.find((p) => p.name === row$3.name)) return fail("host_trust_identity_invalid");
 		const files = archives.find((a) => a.name === row$3.name).files;
 		if (reviewedEquivalent(row$3, files)) equivalent.add(row$3.name);
 		else targets.push(row$3.name);
 	}
-	const visited = /* @__PURE__ */ new Set(), queue = [...new Set([...targets, ...packages$1.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name)).map((p) => p.name)])];
+	const visited = /* @__PURE__ */ new Set(), queue = [...new Set([...targets, ...packages$2.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name)).map((p) => p.name)])];
 	while (queue.length) {
 		const name = queue.shift();
 		if (visited.has(name)) continue;
@@ -8872,7 +8889,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			...manifest.peerDependencies
 		}).filter((n) => !manifest.peerDependenciesMeta?.[n]?.optional || n in (manifest.dependencies ?? {})).every((n) => graphEquivalent(n, seen));
 	};
-	for (const row$3 of [...packages$1, ...dependencies.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name))]) if (equivalent.has(row$3.name)) if (HOST_CONTRACT_CONSUMERS.includes(row$3.name) && !graphEquivalent(row$3.name)) {
+	for (const row$3 of [...packages$2, ...dependencies.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name))]) if (equivalent.has(row$3.name)) if (HOST_CONTRACT_CONSUMERS.includes(row$3.name) && !graphEquivalent(row$3.name)) {
 		targets.push(row$3.name);
 		checks.push("reviewed_program_bytes:" + row$3.name);
 	} else checks.push("reviewed_program_equivalence:" + row$3.name);
@@ -8886,7 +8903,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 	const optional = result.failures.length ? targets.filter((name) => ["@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal"].includes(name)) : [];
 	const receipt = {
 		schema: HOST_CONTRACT_SCHEMA,
-		bindingDigest: bindingDigest$1(packages$1, dependencies),
+		bindingDigest: bindingDigest$1(packages$2, dependencies),
 		conditionsDigest: hostNodeConditions().digest,
 		checks: [...checks, ...result.checks].sort(),
 		unqualifiedOptionalPackages: optional.sort()
@@ -8904,7 +8921,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		schema: "dsh-host-registry-trust/v1",
 		source: "https://registry.npmjs.org/",
 		qualification: HOST_CONTRACT_SCHEMA,
-		packages: packages$1,
+		packages: packages$2,
 		probeDependencies: dependencies,
 		contract: {
 			schema: HOST_CONTRACT_SCHEMA,
@@ -8913,6 +8930,552 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			conditionsDigest: receipt.conditionsDigest
 		}
 	}, options.profileRoot);
+}
+
+//#endregion
+//#region src/domain/host-desktop-identity.ts
+/** Authenticate the archive header through the vendor-signed carrier rather
+* than through metadata stored in that same archive. Never execute app code. */
+function verifyDesktopCarrier(archivePath, headerSha256) {
+	const archive = realpathSync(archivePath);
+	if (!/^[a-f0-9]{64}$/.test(headerSha256)) throw new Error("desktop header identity missing");
+	const options = {
+		encoding: "utf8",
+		timeout: 3e4,
+		maxBuffer: 256 * 1024,
+		stdio: [
+			"ignore",
+			"pipe",
+			"pipe"
+		]
+	};
+	if (process.platform === "darwin") {
+		const contents = dirname(dirname(archive));
+		const app = dirname(contents);
+		if (!app.endsWith(".app") || archive !== join(contents, "Resources", "app.asar")) throw new Error("desktop archive is outside its signed app carrier");
+		execFileSync("/usr/bin/codesign", [
+			"--verify",
+			"--deep",
+			"--strict",
+			"-R",
+			"=anchor apple generic and certificate leaf[subject.OU] = \"NAN929V4UM\" and identifier \"com.deepseek.dsh\"",
+			app
+		], options);
+		const info = join(contents, "Info.plist");
+		const integrity = JSON.parse(execFileSync("/usr/bin/plutil", [
+			"-extract",
+			"ElectronAsarIntegrity",
+			"json",
+			"-o",
+			"-",
+			info
+		], options));
+		if (integrity["Resources/app.asar"]?.algorithm !== "SHA256" || integrity["Resources/app.asar"]?.hash !== headerSha256) throw new Error("desktop signed archive header mismatch");
+		const executableName = execFileSync("/usr/bin/plutil", [
+			"-extract",
+			"CFBundleExecutable",
+			"raw",
+			"-o",
+			"-",
+			info
+		], options).trim();
+		if (!executableName || executableName.includes("/") || executableName.includes("\\")) throw new Error("desktop carrier executable invalid");
+		return realpathSync(join(contents, "MacOS", executableName));
+	}
+	if (process.platform === "win32") {
+		const installation = dirname(dirname(archive));
+		if (archive !== join(installation, "resources", "app.asar")) throw new Error("desktop archive is outside its signed carrier");
+		const executable = join(installation, "DeepSeek Harness.exe");
+		if (!existsSync(executable)) throw new Error("desktop carrier executable missing");
+		const script = String.raw`
+$ErrorActionPreference = 'Stop'
+$p = $env:DSH_GUARD_DESKTOP_EXECUTABLE
+$sig = Get-AuthenticodeSignature -LiteralPath $p
+if ($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -notin @('Hangzhou DeepSeek Artificial Intelligence Co., Ltd.', 'Hangzhou DeepSeek Artificial Intelligence Co., Ltd')) { throw 'desktop vendor signature mismatch' }
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class DshGuardResource {
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr LoadLibraryEx(string file, IntPtr unused, uint flags);
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr FindResource(IntPtr module, string name, string type);
+  [DllImport("kernel32.dll")] public static extern IntPtr LoadResource(IntPtr module, IntPtr resource);
+  [DllImport("kernel32.dll")] public static extern IntPtr LockResource(IntPtr resource);
+  [DllImport("kernel32.dll")] public static extern uint SizeofResource(IntPtr module, IntPtr resource);
+  [DllImport("kernel32.dll")] public static extern bool FreeLibrary(IntPtr module);
+}
+'@
+$h = [DshGuardResource]::LoadLibraryEx($p, [IntPtr]::Zero, 0x60)
+if ($h -eq [IntPtr]::Zero) { throw 'desktop carrier resource unavailable' }
+try {
+  $r = [DshGuardResource]::FindResource($h, 'ElectronAsar', 'Integrity')
+  if ($r -eq [IntPtr]::Zero) { throw 'desktop signed archive resource missing' }
+  $n = [DshGuardResource]::SizeofResource($h, $r)
+  if ($n -eq 0 -or $n -gt 65536) { throw 'desktop archive resource invalid' }
+  $ptr = [DshGuardResource]::LockResource([DshGuardResource]::LoadResource($h, $r))
+  if ($ptr -eq [IntPtr]::Zero) { throw 'desktop archive resource unreadable' }
+  $bytes = New-Object byte[] $n
+  [System.Runtime.InteropServices.Marshal]::Copy($ptr, $bytes, 0, $n)
+  $rows = @([System.Text.Encoding]::UTF8.GetString($bytes).TrimEnd([char]0) | ConvertFrom-Json)
+  $selected = @($rows | Where-Object { $_.file -ceq 'resources\app.asar' -and $_.alg -ceq 'sha256' })
+  if ($selected.Count -ne 1 -or $selected[0].value -cne $env:DSH_GUARD_DESKTOP_HEADER) { throw 'desktop signed archive header mismatch' }
+  [Console]::Write('verified')
+} finally { [void][DshGuardResource]::FreeLibrary($h) }
+`;
+		const systemRoot = process.env.SystemRoot ?? process.env.SYSTEMROOT;
+		if (!systemRoot) throw new Error("desktop signature verifier unavailable");
+		if (execFileSync(join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), [
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			script
+		], {
+			...options,
+			env: {
+				SystemRoot: systemRoot,
+				WINDIR: systemRoot,
+				DSH_GUARD_DESKTOP_EXECUTABLE: executable,
+				DSH_GUARD_DESKTOP_HEADER: headerSha256
+			}
+		}).trim() !== "verified") throw new Error("desktop signature verifier result invalid");
+		return realpathSync(executable);
+	}
+	throw new Error("desktop signature verifier unsupported platform");
+}
+
+//#endregion
+//#region src/domain/host-desktop.ts
+/**
+* Official Desktop adapter (CG-RC2-002).
+*
+* The Desktop app is the only authority for the `desktop` profile: its
+* `package.json` is named `dsh-profile-desktop`, its dependency graph lives
+* inside the signed `app.asar` of the installation, and there is no pnpm
+* package map or lockfile to read. This adapter therefore reads the official
+* graph IN PLACE from the asar container — it never unpacks the bundle and
+* never fabricates a map. The identities the manifest declares are qualified
+* through the same registry acquisition and host-contract probe as a CLI
+* graph rebind (`acquireDesktopHostTrust`), and the actually installed bytes
+* are verified file-by-file from the asar against that qualification
+* (`auditDesktopInstalledImplementation`). Every mismatch fails closed.
+*
+* The asar container format is a flat archive: a JSON header (with per-file
+* offsets) followed by the file bytes. Reading a file means header lookup +
+* one bounded positioned read, so an audited file set costs no more I/O than
+* reading the same files from a directory, and a tampered byte changes its
+* digest exactly as on disk.
+*/
+const DESKTOP_PROFILE_PACKAGE_NAME = "dsh-profile-desktop";
+const DESKTOP_RUNTIME_PACKAGE_NAME = "@deepseek-ai/dsh-desktop-runtime";
+const DESKTOP_RUNTIME_MANIFEST_ENTRY = "dsh/package.json";
+const DESKTOP_RUNTIME_METADATA_ENTRY = "dsh/desktop-runtime.json";
+const DESKTOP_GRAPH_ROOT = "dsh/node_modules";
+const DESKTOP_CARRIER_ENTRY = "dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js";
+const MAX_ASAR_HEADER_BYTES = 128 * 1024 * 1024;
+const MAX_ASAR_FILE_BYTES = 64 * 1024 * 1024;
+/** Read the asar header (the JSON index) without extracting any payload. */
+function readAsarIndex(archivePath) {
+	const header = Buffer.alloc(16);
+	const fd = openSync(archivePath, "r");
+	try {
+		const stat = fstatSync(fd);
+		if (!stat.isFile() || stat.size < 16) throw new HostProfileError("desktop_app_invalid", "asar archive is too small");
+		if (readSync(fd, header, 0, 16, 0) !== 16) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
+		const magic = header.readUInt32LE(0);
+		const headerSize = header.readUInt32LE(4);
+		const innerPayloadSize = header.readUInt32LE(8);
+		const jsonSize = header.readUInt32LE(12);
+		if (magic !== 4 || headerSize < jsonSize + 8 || innerPayloadSize !== headerSize - 4 || jsonSize <= 0 || jsonSize > MAX_ASAR_HEADER_BYTES) throw new HostProfileError("desktop_app_invalid", "asar header is malformed");
+		const json = Buffer.alloc(jsonSize);
+		if (readSync(fd, json, 0, jsonSize, 16) !== jsonSize) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
+		let root;
+		try {
+			root = JSON.parse(json.toString("utf8"));
+		} catch {
+			throw new HostProfileError("desktop_app_invalid", "asar header is not valid JSON");
+		}
+		if (!root || typeof root !== "object" || !root.files || typeof root.files !== "object") throw new HostProfileError("desktop_app_invalid", "asar header has no file index");
+		let fileCount = 0;
+		const count = (node, depth) => {
+			if (depth > 64 || fileCount > 2e6) throw new HostProfileError("desktop_app_invalid", "asar index is too deep or too large");
+			if (!node.files) {
+				fileCount += 1;
+				return;
+			}
+			for (const child of Object.values(node.files)) count(child, depth + 1);
+		};
+		count(root, 0);
+		return {
+			dataOffset: 8 + headerSize,
+			root,
+			headerSha256: createHash("sha256").update(json).digest("hex"),
+			fileCount
+		};
+	} finally {
+		closeSync(fd);
+	}
+}
+function asarNode(index$1, pathParts) {
+	let node = index$1.root;
+	for (const part of pathParts) {
+		if (!node.files || typeof node.files !== "object") return void 0;
+		node = node.files[part];
+		if (!node) return void 0;
+	}
+	return node;
+}
+/**
+* Read one file's exact bytes from the asar in place. Unpacked entries are
+* read from the sibling `app.asar.unpacked` tree, which is where the app
+* itself loads them; a path that escapes that tree fails closed.
+*/
+function readAsarFile(archivePath, index$1, entryPath) {
+	const parts = entryPath.split("/");
+	if (parts.some((part) => !part || part === "." || part === ".." || part.includes("\\"))) throw new HostProfileError("desktop_app_invalid", "asar entry path is not canonical");
+	const node = asarNode(index$1, parts);
+	if (!node || node.files) throw new HostProfileError("desktop_app_invalid", `asar entry is not a file: ${entryPath}`);
+	if (!Number.isSafeInteger(node.size) || node.size < 0 || !node.unpacked && (typeof node.offset !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(node.offset) || !Number.isSafeInteger(Number(node.offset)))) throw new HostProfileError("desktop_app_invalid", `asar entry has no bounded offset: ${entryPath}`);
+	const size = node.size;
+	if (size > MAX_ASAR_FILE_BYTES) throw new HostProfileError("desktop_app_invalid", `asar entry is too large: ${entryPath}`);
+	const verify = (bytes$1) => {
+		if (bytes$1.length !== size) throw new HostProfileError("desktop_app_invalid", "asar file size mismatch");
+		if (isRecord(node.integrity) && (node.integrity.algorithm !== "SHA256" || node.integrity.hash !== createHash("sha256").update(bytes$1).digest("hex"))) throw new HostProfileError("desktop_app_invalid", "asar file integrity mismatch");
+		return bytes$1;
+	};
+	if (node.unpacked) {
+		const unpackedRoot = `${realpathSync(archivePath)}.unpacked`;
+		const target = realpathSync(join(unpackedRoot, ...parts));
+		if (!target.startsWith(`${unpackedRoot}${sep}`)) throw new HostProfileError("desktop_app_invalid", `unpacked entry escapes the app bundle: ${entryPath}`);
+		const fd$1 = openSync(target, "r");
+		try {
+			if (fstatSync(fd$1).size !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file size mismatch");
+			const bytes$1 = Buffer.alloc(size);
+			if (size && readSync(fd$1, bytes$1, 0, size, 0) !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file truncated");
+			return verify(bytes$1);
+		} finally {
+			closeSync(fd$1);
+		}
+	}
+	const start = index$1.dataOffset + Number(node.offset);
+	const buffer = Buffer.alloc(size);
+	const fd = openSync(archivePath, "r");
+	try {
+		if (!Number.isSafeInteger(start) || start < index$1.dataOffset || start + size > fstatSync(fd).size) throw new HostProfileError("desktop_app_invalid", "asar file offset escapes the archive");
+		if (size > 0 && readSync(fd, buffer, 0, size, start) !== size) throw new HostProfileError("desktop_app_invalid", `asar entry is truncated: ${entryPath}`);
+	} finally {
+		closeSync(fd);
+	}
+	return verify(buffer);
+}
+function isRecord(value) {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+/**
+* Read the official Desktop runtime graph from the app bundle. `appAsarPath`
+* is the absolute path of `app.asar` (a file, not a directory). The runtime
+* identity binds: the asar header itself, the `@deepseek-ai/dsh-desktop-runtime`
+* manifest, the `desktop-runtime.json` metadata block, and the official CLI
+* carrier entry the app installs.
+*/
+function readDesktopAppRuntime(appAsarPath) {
+	if (!isAbsolute(appAsarPath)) throw new HostProfileError("desktop_app_invalid", "the app archive path must be absolute");
+	if (!existsSync(appAsarPath) || !lstatSync(appAsarPath).isFile()) throw new HostProfileError("desktop_app_missing", "the official app archive was not found");
+	const asarRealpath = realpathSync(appAsarPath);
+	const index$1 = readAsarIndex(asarRealpath);
+	if (!asarNode(index$1, DESKTOP_CARRIER_ENTRY.split("/"))) throw new HostProfileError("desktop_app_invalid", "the official CLI carrier entry is missing from the app bundle");
+	readAsarFile(asarRealpath, index$1, DESKTOP_CARRIER_ENTRY);
+	const manifestBytes = readAsarFile(asarRealpath, index$1, DESKTOP_RUNTIME_MANIFEST_ENTRY);
+	const metadataBytes = readAsarFile(asarRealpath, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
+	const manifest = JSON.parse(manifestBytes.toString("utf8"));
+	const metadata = JSON.parse(metadataBytes.toString("utf8"));
+	if (manifest.name !== DESKTOP_RUNTIME_PACKAGE_NAME) throw new HostProfileError("desktop_app_invalid", "the app runtime manifest is not the official desktop runtime");
+	const runtimeVersion = typeof manifest.version === "string" ? manifest.version : "";
+	if (!parseHostVersion(runtimeVersion) || !satisfiesSupportedHostRange(runtimeVersion)) throw new HostProfileError("desktop_host_version_below_minimum", "the app runtime version is not an admitted host version");
+	const dependencies = isRecord(manifest.dependencies) ? manifest.dependencies : void 0;
+	if (!dependencies) throw new HostProfileError("desktop_app_invalid", "the app runtime manifest declares no dependencies");
+	const dshVersion = dependencies["@deepseek-ai/dsh"];
+	if (typeof dshVersion !== "string" || dshVersion !== runtimeVersion) throw new HostProfileError("desktop_app_invalid", "the app runtime does not pin the audited DSH version");
+	const desktopVersion = isRecord(metadata.release) && typeof metadata.release.version === "string" ? metadata.release.version : "";
+	const nodeVersion = isRecord(metadata.release) && typeof metadata.release.nodeVersion === "string" ? metadata.release.nodeVersion : "";
+	const pnpmVersion = isRecord(metadata.release) && typeof metadata.release.pnpmVersion === "string" ? metadata.release.pnpmVersion : "";
+	const fileTable = Array.isArray(metadata.files) ? metadata.files : [];
+	if (!parseHostVersion(desktopVersion) || !satisfiesSupportedHostRange(desktopVersion) || typeof metadata.platform !== "string" || !metadata.platform || typeof metadata.arch !== "string" || !metadata.arch || !nodeVersion || !pnpmVersion || fileTable.length === 0 || fileTable.length > 2e5 || !fileTable.every((entry) => isRecord(entry) && typeof entry.path === "string" && !!entry.path && !entry.path.startsWith("/") && !entry.path.includes("\\") && !entry.path.includes("..") && /^[a-f0-9]{64}$/.test(String(entry.sha256)))) throw new HostProfileError("desktop_app_invalid", "the desktop runtime metadata block is incomplete");
+	const { CRITICAL_NAME_SET } = criticalNames();
+	const rows = [];
+	for (const [name, version$1] of Object.entries(dependencies).sort(([a], [b]) => a.localeCompare(b))) {
+		if (!CRITICAL_NAME_SET.has(name)) continue;
+		if (typeof version$1 !== "string" || !parseHostVersion(version$1)) throw new HostProfileError("desktop_app_invalid", `the app pins an unparsable version for ${name}`);
+		rows.push({
+			name,
+			version: version$1
+		});
+	}
+	return {
+		asarRealpath,
+		headerSha256: index$1.headerSha256,
+		manifestSha256: createHash("sha256").update(manifestBytes).digest("hex"),
+		metadataSha256: createHash("sha256").update(metadataBytes).digest("hex"),
+		hostVersion: dshVersion,
+		runtimeVersion,
+		metadata: {
+			desktopVersion,
+			platform: String(metadata.platform),
+			arch: String(metadata.arch),
+			node: nodeVersion,
+			pnpm: pnpmVersion,
+			fileTableEntries: fileTable.length
+		},
+		rows
+	};
+}
+function criticalNames() {
+	return { CRITICAL_NAME_SET: new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$3) => row$3.name))) };
+}
+function readJsonObjectFile(path$1, code) {
+	try {
+		const value = JSON.parse(readFileSync(path$1, "utf8"));
+		if (isRecord(value)) return value;
+	} catch {}
+	throw new HostProfileError(code, `invalid JSON object: ${path$1}`);
+}
+/**
+* Pre-install inspection of a Desktop target: the profile must be the
+* Desktop-owned dependency-free profile, and the runtime half must come from
+* the official app bundle. Structural discovery grants no authority — the
+* caller must still qualify and byte-audit before any install decision.
+*/
+function readDesktopTargetGraph(appAsarPath, profileRoot) {
+	const profile = resolve(profileRoot);
+	const manifestPath = join(profile, "package.json");
+	const manifest = readJsonObjectFile(manifestPath, "profile_manifest_invalid");
+	if (manifest.name !== DESKTOP_PROFILE_PACKAGE_NAME) throw new HostProfileError("target_profile_not_desktop", "the profile is not the Desktop-owned dsh-profile-desktop");
+	for (const managed of [
+		"node_modules",
+		".dsh-module-fallback",
+		"pnpm-lock.yaml"
+	]) if (existsSync(join(profile, managed))) throw new HostProfileError("target_profile_unmanaged_modules", `desktop profiles are managed by the app: ${managed} exists`);
+	const dependencies = isRecord(manifest.dependencies) ? manifest.dependencies : {};
+	if (Object.keys(dependencies).length > 0) throw new HostProfileError("target_profile_dependency_uninstalled", "the desktop profile declares dependencies without an importer");
+	const dsh = isRecord(manifest.dsh) ? manifest.dsh : void 0;
+	const bundles = (isRecord(dsh?.profile) ? dsh.profile : void 0)?.bundles;
+	if (!Array.isArray(bundles) || !bundles.includes("@deepseek-ai/dsh-base") || !bundles.includes("@deepseek-ai/dsh-web-app")) throw new HostProfileError("target_profile_bundles_unsupported", "not the official Desktop bundle tuple");
+	if (bundles.includes("@deepseek-ai/dsh-headless") || bundles.includes("dshmarket")) throw new HostProfileError("desktop_profile_bundle_conflict", "the desktop profile carries a web/headless-only bundle");
+	const runtime = readDesktopAppRuntime(appAsarPath);
+	return {
+		packages: runtime.rows,
+		profileGraph: {
+			state: "dependency_free_desktop",
+			manifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
+			bundles: bundles.map(String)
+		},
+		runtime
+	};
+}
+/**
+* Verify the actually installed app bytes against the acquired qualification.
+* Each critical package's closed module inventory (every `.cm?js|json` file
+* under its asar root plus its manifest) is digested from the asar in place
+* and compared with the trust rows; any extra, missing, or changed file fails
+* closed. A critical package that also appears NESTED anywhere in the app
+* graph is an ambiguity no adapter resolves, so its presence fails closed
+* before any digest is computed.
+*/
+function auditDesktopInstalledImplementation(appAsarPath, expectations) {
+	try {
+		const realArchive = realpathSync(appAsarPath);
+		const index$1 = readAsarIndex(realArchive);
+		const { CRITICAL_NAME_SET } = criticalNames();
+		const topLevelRoot = DESKTOP_GRAPH_ROOT.split("/");
+		const scan = (node, parts, depth) => {
+			if (depth > 64) throw new HostProfileError("desktop_app_invalid", "asar index is too deep");
+			if (node.files) {
+				for (const [name, child] of Object.entries(node.files)) scan(child, [...parts, name], depth + 1);
+				return;
+			}
+			const relative$1 = parts.join("/");
+			if (!relative$1.endsWith("/package.json")) return;
+			for (const critical of CRITICAL_NAME_SET) {
+				if (relative$1 === `${DESKTOP_GRAPH_ROOT}/${critical}/package.json`) continue;
+				if (relative$1.endsWith(`/node_modules/${critical}/package.json`)) throw new HostProfileError("desktop_graph_ambiguous", `critical package ${critical} is nested inside the app graph`);
+			}
+		};
+		scan(index$1.root, [], 0);
+		const fileTable = /* @__PURE__ */ new Map();
+		const metadataBytes = readAsarFile(realArchive, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
+		const metadata = JSON.parse(metadataBytes.toString("utf8"));
+		if (Array.isArray(metadata.files)) {
+			for (const entry of metadata.files) if (entry && typeof entry === "object" && typeof entry.path === "string" && /^[a-f0-9]{64}$/.test(String(entry.sha256))) fileTable.set(`dsh/${entry.path}`, String(entry.sha256));
+		}
+		for (const expected of expectations) {
+			const parts = [...topLevelRoot, ...expected.name.split("/")];
+			const node = asarNode(index$1, parts);
+			if (!node || !node.files) return false;
+			const manifestBytes = readAsarFile(realArchive, index$1, [...parts, "package.json"].join("/"));
+			const manifest = JSON.parse(manifestBytes.toString("utf8"));
+			if (manifest.name !== expected.name || manifest.version !== expected.version) return false;
+			const inventory = [];
+			const walk = (current, prefix, depth) => {
+				if (depth > 32 || inventory.length > 1e4) throw new HostProfileError("desktop_app_invalid", "package inventory is too deep or too large");
+				if (current.files) {
+					for (const [name, child] of Object.entries(current.files)) {
+						if (name === "node_modules") continue;
+						walk(child, [...prefix, name], depth + 1);
+					}
+					return;
+				}
+				const file = prefix.join("/");
+				if (/\.(?:[cm]?js|json)$/.test(file)) inventory.push(file);
+			};
+			walk(node, [], 0);
+			const registryFiles = Object.keys(expected.modules ?? {});
+			if (inventory.some((file) => !registryFiles.includes(file))) return false;
+			for (const file of inventory) {
+				const tableEntry = fileTable.get(`${DESKTOP_GRAPH_ROOT}/${expected.name}/${file}`);
+				if (tableEntry === void 0) return false;
+				if (tableEntry !== createHash("sha256").update(readAsarFile(realArchive, index$1, [...parts, ...file.split("/")].join("/"))).digest("hex")) return false;
+			}
+			for (const file of Object.keys(expected.modules ?? {})) {
+				const actual = createHash("sha256").update(readAsarFile(realArchive, index$1, [...parts, ...file.split("/")].join("/"))).digest("hex");
+				if (expected.modules[file] === actual) continue;
+				if (file === "package.json") continue;
+				return false;
+			}
+		}
+		return true;
+	} catch (error) {
+		if (error instanceof HostProfileError && error.code === "desktop_graph_ambiguous") throw error;
+		return false;
+	}
+}
+/** Persist the app-bundle identity next to the profile contract receipts so a
+* native annex can bind its readback to the exact inspected bundle. */
+function writeDesktopRuntimeReceipt(profileRoot, runtime) {
+	const receipt = {
+		schema: "dsh-desktop-runtime-readback/v1",
+		asarRealpath: runtime.asarRealpath,
+		headerSha256: runtime.headerSha256,
+		manifestSha256: runtime.manifestSha256,
+		metadataSha256: runtime.metadataSha256,
+		hostVersion: runtime.hostVersion,
+		runtimeVersion: runtime.runtimeVersion,
+		metadata: runtime.metadata,
+		rows: runtime.rows
+	};
+	const directory = join(realpathSync(profileRoot), ".dsh-completion-guard");
+	for (const dir of [directory, join(directory, "desktop")]) {
+		try {
+			mkdirSync(dir, { mode: 448 });
+		} catch (error) {
+			if (error.code !== "EEXIST") throw error;
+		}
+		if (!lstatSync(dir).isDirectory() || lstatSync(dir).isSymbolicLink() || realpathSync(dir) !== dir) throw new HostProfileError("desktop_receipt_path_invalid", "desktop receipt directory is not a contained physical directory");
+	}
+	const path$1 = join(directory, "desktop", `${runtime.manifestSha256}.json`);
+	if (!existsSync(path$1)) writeFileSync(path$1, JSON.stringify(receipt, null, 2) + "\n", {
+		encoding: "utf8",
+		flag: "wx",
+		mode: 384
+	});
+	return path$1;
+}
+const DESKTOP_IDENTITY_FACTS = {
+	profilePackageName: DESKTOP_PROFILE_PACKAGE_NAME,
+	runtimePackageName: DESKTOP_RUNTIME_PACKAGE_NAME,
+	carrierEntry: DESKTOP_CARRIER_ENTRY
+};
+/**
+* Resolve one dependency's exact installed identity from the official app
+* graph by its top-level manifest. Used by the host-contract probe's
+* dependency acquisition; a name with no top-level manifest is unbound (the
+* installed-byte audit separately refuses nested critical duplicates, so a
+* nested-only dependency can never be silently resolved here).
+*/
+function readDesktopDependency(appAsarPath, name) {
+	const realArchive = realpathSync(appAsarPath);
+	const index$1 = readAsarIndex(realArchive);
+	const manifestPath = `${DESKTOP_GRAPH_ROOT}/${name}/package.json`;
+	if (!asarNode(index$1, manifestPath.split("/"))) throw new HostProfileError("host_contract_probe_dependency_unbound", `dependency ${name} has no top-level manifest in the app graph`);
+	const bytes$1 = readAsarFile(realArchive, index$1, manifestPath);
+	const manifest = JSON.parse(bytes$1.toString("utf8"));
+	if (manifest.name !== name || typeof manifest.version !== "string" || !parseHostVersion(manifest.version)) throw new HostProfileError("host_contract_probe_dependency_unbound", `dependency ${name} has an invalid manifest identity`);
+	return {
+		name,
+		version: manifest.version
+	};
+}
+
+//#endregion
+//#region src/domain/host-desktop-graph.ts
+/** Present real ASAR entries to the existing fresh dual-lane route auditor.
+* This is an in-memory graph of the archive's actual namespace/manifests;
+* it never creates or asserts a pnpm package map for the app. */
+function desktopDependencyGraph(archive, expectations, base = createHostAuditSession()) {
+	const index$1 = readAsarIndex(archive);
+	const prefix = archive + sep;
+	const entry = (path$1) => path$1.startsWith(prefix) ? lookup(path$1.slice(prefix.length).split(sep)) : void 0;
+	function lookup(parts) {
+		let node = index$1.root;
+		for (const part of parts) {
+			if (!node?.files || !part || part === "." || part === "..") return void 0;
+			node = node.files[part];
+		}
+		return node;
+	}
+	const session = {
+		...base,
+		exists: (path$1) => path$1.startsWith(prefix) ? entry(path$1) !== void 0 : base.exists(path$1),
+		realpath: (path$1) => {
+			if (!path$1.startsWith(prefix)) return base.realpath(path$1);
+			if (!entry(path$1)) throw new Error("desktop route entry missing");
+			return path$1;
+		},
+		stat: (path$1) => {
+			if (!path$1.startsWith(prefix)) return base.stat(path$1);
+			const node = entry(path$1);
+			if (!node) throw new Error("desktop route entry missing");
+			return {
+				isFile: () => !node.files,
+				isDirectory: () => !!node.files
+			};
+		},
+		readFile: (path$1) => path$1.startsWith(prefix) ? base.memo("asar-bytes:" + path$1, () => readAsarFile(archive, index$1, path$1.slice(prefix.length).split(sep).join("/"))) : base.readFile(path$1),
+		readJson: (path$1) => path$1.startsWith(prefix) ? base.memo("asar-json:" + path$1, () => JSON.parse(session.readFile(path$1).toString("utf8"))) : base.readJson(path$1),
+		fileDigest: (path$1) => path$1.startsWith(prefix) ? base.memo("asar-digest:" + path$1, () => createHash("sha256").update(session.readFile(path$1)).digest("hex")) : base.fileDigest(path$1),
+		resolvePaths: (importer, name) => base.memo(`desktop-paths:${importer}\0${name}`, () => createRequire(importer).resolve.paths(name) ?? [])
+	};
+	const modules = join(archive, "dsh", "node_modules");
+	const names = new Set(expectations.map((row$3) => row$3.name));
+	const records = { ".": {
+		url: "..",
+		dependencies: Object.fromEntries([...names].map((name) => [name, name]))
+	} };
+	const packages$2 = /* @__PURE__ */ new Map();
+	for (const expected of expectations) {
+		const root = join(modules, expected.name);
+		const manifest = session.readJson(join(root, "package.json"));
+		const declared = {
+			...manifest.dependencies,
+			...manifest.peerDependencies,
+			...manifest.optionalDependencies
+		};
+		records[expected.name] = {
+			url: "./" + expected.name,
+			dependencies: Object.fromEntries([...new Set([expected.name, ...Object.keys(declared).filter((name) => names.has(name))])].map((name) => [name, name]))
+		};
+		packages$2.set(expected.name, {
+			root,
+			manifest,
+			files: Object.keys(expected.modules ?? {})
+		});
+	}
+	return {
+		session,
+		graph: {
+			modules,
+			records,
+			reachable: new Set(Object.keys(records)),
+			packages: packages$2
+		}
+	};
 }
 
 //#endregion
@@ -9020,9 +9583,9 @@ function activeGraphRecords(packageMapText) {
 		throw new HostProfileError("active_graph_invalid", "invalid package map");
 	}
 	if (!document || typeof document !== "object") throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
-	const packages$1 = document.packages;
-	if (!packages$1 || typeof packages$1 !== "object" || Array.isArray(packages$1)) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
-	const records = packages$1;
+	const packages$2 = document.packages;
+	if (!packages$2 || typeof packages$2 !== "object" || Array.isArray(packages$2)) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
+	const records = packages$2;
 	if (!records["."] || Object.keys(records).length > 2e4) throw new HostProfileError("active_graph_invalid", "invalid reachable package map");
 	const reachable = /* @__PURE__ */ new Set();
 	const queue = ["."];
@@ -9183,13 +9746,14 @@ function probeDependencyIdentity(runtime, profile, name, importer) {
 /** Byte and dual-lane route audit over both graphs. Expectations are either
 * the published baseline or operator-owned, registry-acquired qualified module
 * digests. A missing digest set never authenticates unknown implementation. */
-function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations) {
+function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations, installationGraph) {
 	const session = providedSession ?? createHostAuditSession();
 	try {
-		const expectedPackages = expectations ?? packages;
-		const seen = /* @__PURE__ */ new Set();
-		const graphs = [];
+		const expectedPackages = expectations ?? packages$1;
+		const seen = new Set(installationGraph?.packages.keys());
+		const graphs = installationGraph ? [installationGraph] : [];
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
+			if (installationGraph && rootPath === runtimeRoot) continue;
 			const modulesPath = join(rootPath, "node_modules");
 			if (!session.exists(join(modulesPath, ".package-map.json"))) {
 				if (rootPath === runtimeRoot) return false;
@@ -9281,8 +9845,8 @@ function walkLibFiles(session, root) {
 	return found;
 }
 const AUDITED_FOREGROUND_BYTES = {
-	"@deepseek-ai/dsh-tool-bash": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
-	"@deepseek-ai/dsh-tool-pwsh": "59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c",
+	"@deepseek-ai/dsh-tool-bash": "0c63a09e4b80ec22db256eac4ecab6f7de3a342e16ec590348a40c5f356eff1a",
+	"@deepseek-ai/dsh-tool-pwsh": "1a49cd8de831423a4ae0a2c57a4674a64cec538f64ae603aaa2c388d78aec790",
 	"@deepseek-ai/dsh-shell": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1"
 };
 const AUDITED_DEFAULT_WORKDIR_BYTES = {
@@ -9292,6 +9856,7 @@ const AUDITED_DEFAULT_WORKDIR_BYTES = {
 	"@deepseek-ai/dsh-bash-local": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
 	"@deepseek-ai/dsh-pwsh-local": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e"
 };
+const AUDITED_HOST_VERSION_REGEX = hostVersion.replaceAll(".", "\\.");
 function activeRendererModule(nodeModulesRoot, name, providedSession) {
 	const session = providedSession ?? createHostAuditSession();
 	const modules = session.realpath(nodeModulesRoot);
@@ -9300,7 +9865,7 @@ function activeRendererModule(nodeModulesRoot, name, providedSession) {
 	const ids = session.memo(`renderer-ids:${modules}\u0000${name}`, () => [...reachable].filter((id$1) => id$1 === name || id$1.startsWith(`${name}@`)));
 	if (ids.length !== 1) return void 0;
 	const id = ids[0];
-	const version$1 = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? "0\\.2\\.0-rc\\.1" : void 0;
+	const version$1 = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? AUDITED_HOST_VERSION_REGEX : void 0;
 	if (!version$1 || id !== name && !(/* @__PURE__ */ new RegExp(`^${name.replace("/", "\\/")}@${version$1}(?:\\(|$)`)).test(id)) return void 0;
 	const url = records[id]?.url;
 	if (typeof url !== "string" || url !== `./${name}` && !url.startsWith("./.pnpm/")) return void 0;
@@ -9320,6 +9885,20 @@ function activeRendererModule(nodeModulesRoot, name, providedSession) {
 function activeRendererBytes(nodeModulesRoot, name, session) {
 	return activeRendererModule(nodeModulesRoot, name, session)?.bytes;
 }
+function selectedRuntimeRenderer(runtimeRoot, name, session) {
+	if (!session.stat(runtimeRoot).isFile()) return activeRendererModule(join(runtimeRoot, "node_modules"), name, session);
+	const index$1 = session.memo(`desktop-index:${runtimeRoot}`, () => readAsarIndex(runtimeRoot));
+	const entry = `dsh/node_modules/${name}/lib/index.js`;
+	try {
+		const bytes$1 = session.memo(`desktop-renderer:${runtimeRoot}\0${name}`, () => readAsarFile(runtimeRoot, index$1, entry));
+		return {
+			bytes: createHash("sha256").update(bytes$1).digest("hex"),
+			path: join(runtimeRoot, "dsh", "node_modules", name, "lib", "index.js")
+		};
+	} catch {
+		return;
+	}
+}
 /** Verify active, reachable producer bytes without reading credentials or
 * accepting historical package-map entries. Missing/ambiguous paths fail
 * closed for the ordinary markerless-test shortcut. */
@@ -9329,7 +9908,7 @@ function auditedForegroundRenderers(runtimeRoot, profileRoot, providedSession) {
 	const checked = (name) => {
 		const found = [];
 		for (const root of roots) try {
-			const value = activeRendererBytes(root, name, session);
+			const value = root === roots[0] ? selectedRuntimeRenderer(runtimeRoot, name, session)?.bytes : activeRendererBytes(root, name, session);
 			if (value) found.push(value);
 		} catch {}
 		return found.length > 0 && found.every((value) => value === AUDITED_FOREGROUND_BYTES[name]);
@@ -9350,7 +9929,7 @@ function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, providedSessi
 	for (const name of names) {
 		const found = [];
 		for (const root of [runtimeRoot, profileRoot]) try {
-			const digest$1 = activeRendererBytes(join(root, "node_modules"), name, session);
+			const digest$1 = root === runtimeRoot ? selectedRuntimeRenderer(runtimeRoot, name, session)?.bytes : activeRendererBytes(join(root, "node_modules"), name, session);
 			if (digest$1) found.push(digest$1);
 		} catch {}
 		if (!found.length || !found.every((digest$1) => digest$1 === AUDITED_DEFAULT_WORKDIR_BYTES[name])) return false;
@@ -9369,7 +9948,7 @@ async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, pro
 		if (!value || typeof value !== "object") return false;
 		const paths = /* @__PURE__ */ new Set();
 		for (const root of [runtimeRoot, profileRoot]) try {
-			const module = activeRendererModule(join(root, "node_modules"), name, session);
+			const module = root === runtimeRoot ? selectedRuntimeRenderer(runtimeRoot, name, session) : activeRendererModule(join(root, "node_modules"), name, session);
 			if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path);
 		} catch {}
 		if (paths.size !== 1) return false;
@@ -9437,7 +10016,13 @@ function readTargetHostGraph(runtimeRoot, profileRoot) {
 	}
 	const bundles = manifest.dsh?.profile?.bundles;
 	const names = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"];
-	if (!Array.isArray(bundles) || bundles.length !== names.length || bundles.some((name, index$1) => name !== names[index$1])) throw new HostProfileError("target_profile_bundles_unsupported", "not the installation-owned Headless bundle tuple");
+	const installationOwned = [
+		"@deepseek-ai/dsh-base",
+		"@deepseek-ai/dsh-web-app",
+		"@deepseek-ai/dsh-headless"
+	];
+	const bundleList = Array.isArray(bundles) ? bundles.map(String) : void 0;
+	if (!bundleList || JSON.stringify(bundleList) !== JSON.stringify(names) && JSON.stringify(bundleList) !== JSON.stringify(installationOwned)) throw new HostProfileError("target_profile_bundles_unsupported", "not the installation-owned Headless bundle tuple");
 	const modules = realpathSync(join(runtime, "node_modules"));
 	const mapText = readFileSync(join(modules, ".package-map.json"), "utf8");
 	const lockText = readFileSync(join(runtime, "pnpm-lock.yaml"), "utf8");
@@ -9497,6 +10082,10 @@ async function prepareTargetHostTrust(runtime, profile, fetcher = fetch) {
 function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion, providedTrust) {
 	const runtime = resolve(runtimeRoot);
 	const profile = resolve(profileRoot);
+	const desktopCheckManifestPath = join(profile, "package.json");
+	if (existsSync(desktopCheckManifestPath)) {
+		if (readJsonObject(desktopCheckManifestPath, "profile_manifest_invalid").name === DESKTOP_PROFILE_PACKAGE_NAME) return resolveDesktopProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion, providedTrust);
+	}
 	const lockPath = join(runtime, "pnpm-lock.yaml");
 	const mapPath = join(runtime, "node_modules", ".package-map.json");
 	const profileManifestPath = join(profile, "package.json");
@@ -9520,7 +10109,10 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 	const bundles = profileConfig && typeof profileConfig === "object" ? profileConfig.bundles : void 0;
 	if (!dependencies || typeof dependencies !== "object" || typeof dependencies["dsh-completion-guard"] !== "string" || !Array.isArray(bundles) || !bundles.includes("dsh-completion-guard")) throw new HostProfileError("profile_plugin_unbound", "profile does not bind the dsh-completion-guard dependency and bundle");
 	if (installedPlugin.name !== "dsh-completion-guard" || installedPlugin.version !== expectedPluginVersion) throw new HostProfileError("profile_plugin_version_mismatch", "installed profile plugin identity does not match the generator version");
-	const profileKind = bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("dshmarket") ? "web" : "headless";
+	const bundleList = Array.isArray(bundles) ? bundles.map(String) : [];
+	const isDesktopProfile = profileManifest.name === DESKTOP_PROFILE_PACKAGE_NAME;
+	if (isDesktopProfile && (bundleList.includes("@deepseek-ai/dsh-headless") || bundleList.includes("dshmarket"))) throw new HostProfileError("desktop_profile_bundle_conflict", "the desktop profile carries a web/headless-only bundle");
+	const profileKind = isDesktopProfile ? "desktop" : bundleList.includes("@deepseek-ai/dsh-headless") ? "headless" : bundleList.includes("@deepseek-ai/dsh-web-app") || bundleList.includes("dshmarket") ? "web" : "headless";
 	const platform = process.platform === "win32" ? "windows" : "posix";
 	const evaluation = evaluateActiveHostLock(runtime, profile, {
 		platform,
@@ -9537,6 +10129,174 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 		...trust ? { trust } : {}
 	};
 }
+function asarRowsWithIntegrity(runtime, source) {
+	const byName = new Map(source.map((row$3) => [row$3.name, row$3]));
+	return runtime.rows.map((row$3) => {
+		const qualified = byName.get(row$3.name);
+		if (!qualified || qualified.version !== row$3.version) throw new HostProfileError("desktop_runtime_unqualified", `the app runtime row ${row$3.name}@${row$3.version} has no acquired registry identity`);
+		return {
+			name: row$3.name,
+			version: row$3.version,
+			integrity: qualified.integrity
+		};
+	});
+}
+function desktopProfileRows(profileRoot, session) {
+	const auditSession = session ?? createHostAuditSession();
+	const mapPath = join(profileRoot, "node_modules", ".package-map.json");
+	const lockPath = join(profileRoot, "pnpm-lock.yaml");
+	if (!existsSync(mapPath) && !existsSync(lockPath)) return [];
+	if (!existsSync(mapPath) || !existsSync(lockPath)) throw new HostProfileError("active_graph_missing", "partial desktop profile importer");
+	const graph = auditSession.memo(`graph:${mapPath}`, () => activeGraphRecords(auditSession.readFile(mapPath).toString("utf8")));
+	return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString("utf8"), join(profileRoot, "node_modules"), auditSession);
+}
+/** Complete Desktop composition: the official app bundle is the runtime half,
+* the Desktop-managed profile is the profile half. No structural discovery
+* grants authority — the installed asar bytes are verified against the same
+* qualification chain a CLI graph rebind uses. */
+function resolveDesktopProfileHostLock(appAsarPath, profileRoot, expectedPluginVersion, providedTrust) {
+	const profile = resolve(profileRoot);
+	const runtime = readDesktopAppRuntime(appAsarPath);
+	const trust = providedTrust ? qualifyHostTrust(providedTrust, profile) : void 0;
+	verifyDesktopPluginIdentity(profile, expectedPluginVersion);
+	const evaluation = reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust);
+	if (evaluation.status !== "supported") throw new HostProfileError("host_implementation_bytes_mismatch", "the Desktop graph does not match the qualified published implementation");
+	writeDesktopRuntimeReceipt(profile, runtime);
+	return {
+		evaluation,
+		runtimeRoot: runtime.asarRealpath,
+		profileRoot: profile,
+		pluginVersion: expectedPluginVersion,
+		platform: process.platform === "win32" ? "windows" : "posix",
+		profileKind: "desktop",
+		...trust ? { trust } : {}
+	};
+}
+/** An active Desktop lock requires a real installed Guard importer. The
+* dependency-free application-owned profile has its own preinstall path. */
+function verifyDesktopPluginIdentity(profileRoot, expectedPluginVersion) {
+	if (!existsSync(join(profileRoot, "node_modules", ".package-map.json"))) throw new HostProfileError("profile_plugin_unbound", "the desktop profile has no installed plugin importer");
+	const profile = readJsonObject(join(profileRoot, "package.json"), "profile_manifest_invalid");
+	const dsh = profile.dsh && typeof profile.dsh === "object" ? profile.dsh : {};
+	const settings = dsh.profile && typeof dsh.profile === "object" ? dsh.profile : {};
+	const bundles = Array.isArray(settings.bundles) ? settings.bundles : [];
+	const dependencies = profile.dependencies && typeof profile.dependencies === "object" ? profile.dependencies : {};
+	if (profile.name !== DESKTOP_PROFILE_PACKAGE_NAME || typeof dependencies["dsh-completion-guard"] !== "string" || !bundles.includes("dsh-completion-guard") || !bundles.includes("@deepseek-ai/dsh-base") || !bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("@deepseek-ai/dsh-headless") || bundles.includes("dshmarket")) throw new HostProfileError("profile_plugin_unbound", "the desktop profile does not bind the installed plugin and official bundles");
+	const pluginManifestPath = join(profileRoot, "node_modules", "dsh-completion-guard", "package.json");
+	if (!existsSync(pluginManifestPath)) throw new HostProfileError("profile_plugin_unbound", "the desktop profile importer does not carry the dsh-completion-guard plugin");
+	const installedPlugin = readJsonObject(pluginManifestPath, "installed_plugin_invalid");
+	if (installedPlugin.name !== "dsh-completion-guard" || installedPlugin.version !== expectedPluginVersion) throw new HostProfileError("profile_plugin_version_mismatch", "installed profile plugin identity does not match the generator version");
+}
+/** One desktop evaluation: graph readback (app rows + profile importer rows),
+* qualification, and the installed-byte audit. Shared by inject and every
+* fresh runtime revalidation, so both compute the same digest. */
+function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
+	const profile = resolve(profileRoot);
+	const runtime = readDesktopAppRuntime(appAsarPath);
+	const session = createHostAuditSession();
+	const executable = verifyDesktopCarrier(runtime.asarRealpath, runtime.headerSha256);
+	const pluginManifestPath = join(profile, "node_modules", "dsh-completion-guard", "package.json");
+	const installedPlugin = session.readJson(pluginManifestPath);
+	verifyDesktopPluginIdentity(profile, String(installedPlugin.version));
+	const profileRows = desktopProfileRows(profile, session);
+	const runtimeRows = asarRowsWithIntegrity(runtime, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : cohortIntegrityRows(runtime));
+	const runtimeKeys = new Set(runtimeRows.map((row$3) => `${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`));
+	const evaluation = evaluateConfiguredHostLock([...runtimeRows, ...profileRows.filter((row$3) => !runtimeKeys.has(`${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`))], {
+		platform: process.platform === "win32" ? "windows" : "posix",
+		profileKind: "desktop"
+	}, trust ? JSON.stringify(trust) : void 0, profile);
+	if (evaluation.status !== "supported") return evaluation;
+	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : packages$1;
+	if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations)) return {
+		...evaluation,
+		status: "unsupported",
+		goalAvailable: false,
+		reasonCode: "host_lock_installed_graph_drift"
+	};
+	const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session);
+	if (!auditedHostImplementation(join(runtime.asarRealpath, "dsh"), profile, archiveGraph.session, expectations, archiveGraph.graph)) return {
+		...evaluation,
+		status: "unsupported",
+		goalAvailable: false,
+		reasonCode: "host_lock_installed_graph_drift"
+	};
+	const profileManifest = session.fileDigest(join(profile, "package.json"));
+	const digest$1 = createHash("sha256").update("dsh.desktop-core-host/v1\0").update(evaluation.digest).update("\0").update(runtime.asarRealpath).update("\0").update(runtime.headerSha256).update("\0").update(runtime.manifestSha256).update("\0").update(runtime.metadataSha256).update("\0").update(executable).update("\0").update(session.fileDigest(executable)).update("\0").update(profile).update("\0").update(profileManifest).update("\0").update(session.fileDigest(pluginManifestPath)).update("\0").update(session.fileDigest(join(profile, "node_modules", ".package-map.json"))).update("\0").update(session.fileDigest(join(profile, "pnpm-lock.yaml"))).digest("hex");
+	const audited = auditedForegroundRenderers(runtime.asarRealpath, profile, session);
+	return audited.length ? {
+		...evaluation,
+		auditedForegroundRenderers: audited,
+		digest: createHash("sha256").update(`dsh.core-host-renderer/v1\0${digest$1}\0${audited.join(",")}`).digest("hex")
+	} : {
+		...evaluation,
+		digest: digest$1
+	};
+}
+/** The audited cohort rows, used as the registry-derived expectation source
+* when no operator trust is supplied. A runtime row whose version the audited
+* cohort never registered cannot be attested this way and fails closed. */
+function cohortIntegrityRows(runtime) {
+	const auditRows = new Map(packages$1.map((row$3) => [row$3.name, row$3]));
+	return runtime.rows.map((row$3) => {
+		const audited = auditRows.get(row$3.name);
+		if (!audited || audited.version !== row$3.version) throw new HostProfileError("desktop_runtime_unqualified", `the app runtime row ${row$3.name}@${row$3.version} is not the audited cohort identity; acquire registry trust to qualify it`);
+		return audited;
+	});
+}
+/** Desktop pre-install inspection: the Desktop-owned dependency-free profile
+* plus the official app bundle, evaluated and byte-audited like any target. */
+function inspectDesktopTargetGraph(appAsarPath, profileRoot, trust) {
+	const target = readDesktopTargetGraph(appAsarPath, profileRoot);
+	verifyDesktopCarrier(target.runtime.asarRealpath, target.runtime.headerSha256);
+	const runtimeRows = asarRowsWithIntegrity(target.runtime, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : cohortIntegrityRows(target.runtime));
+	const evaluation = evaluateConfiguredHostLock(runtimeRows, {
+		platform: process.platform === "win32" ? "windows" : "posix",
+		profileKind: "desktop"
+	}, trust ? JSON.stringify(trust) : void 0, profileRoot);
+	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : packages$1;
+	if (evaluation.status !== "supported" || !auditDesktopInstalledImplementation(target.runtime.asarRealpath, expectations)) throw new HostProfileError("target_runtime_unsupported", "desktop pre-install target fails host qualification or byte audit");
+	const archiveGraph = desktopDependencyGraph(target.runtime.asarRealpath, expectations);
+	if (!auditedHostImplementation(join(target.runtime.asarRealpath, "dsh"), resolve(profileRoot), archiveGraph.session, expectations, archiveGraph.graph)) throw new HostProfileError("target_runtime_unsupported", "desktop pre-install target fails dependency route audit");
+	return {
+		packages: runtimeRows,
+		runtime: target.runtime,
+		profileGraph: target.profileGraph
+	};
+}
+/** Fresh runtime readback for an injected desktop lock: the same evaluation
+* chain the inject path used, so the digest the runtime compares against its
+* injected expectation is computed identically. */
+function revalidateDesktopCoreLock(appAsarPath, profileRoot, expected, trustText) {
+	return reevaluateDesktopCoreLock(appAsarPath, profileRoot, trustText ? parseHostTrust(trustText, resolve(profileRoot)) : void 0);
+}
+/** Registry acquisition for the Desktop graph: the app manifest pins exact
+* versions; the INTEGRITY comes from the registry metadata for exactly that
+* name@version, and the archive bytes are verified by the same acquisition
+* and host-contract probe a CLI rebind uses. */
+async function prepareDesktopHostTrust(appAsarPath, profileRoot, fetcher = fetch) {
+	const runtime = readDesktopAppRuntime(appAsarPath);
+	const qualified = [];
+	for (const row$3 of runtime.rows) {
+		if (!row$3.version) throw new HostTrustError("host_trust_identity_invalid");
+		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row$3.name)}/${encodeURIComponent(row$3.version)}`, {
+			signal: AbortSignal.timeout(3e4),
+			redirect: "error"
+		});
+		if (!response.ok) throw new HostTrustError("host_trust_registry_unavailable");
+		const metadata = await response.json();
+		const integrity = metadata.dist?.integrity;
+		if (metadata.name !== row$3.name || metadata.version !== row$3.version || typeof integrity !== "string") throw new HostTrustError("host_trust_registry_identity_mismatch");
+		qualified.push({
+			name: row$3.name,
+			version: row$3.version,
+			integrity
+		});
+	}
+	return acquireHostTrust(qualified, fetcher, {
+		profileRoot,
+		dependencyIdentity: (name) => readDesktopDependency(appAsarPath, name)
+	});
+}
 function readJsonObject(path$1, code) {
 	try {
 		const value = JSON.parse(readFileSync(path$1, "utf8"));
@@ -9547,7 +10307,7 @@ function readJsonObject(path$1, code) {
 function yamlQuote(value) {
 	return JSON.stringify(value);
 }
-function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot, profileRoot, trust) {
+function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot, profileRoot, trust, desktopDigest) {
 	const lines = [
 		HOST_LOCK_MARKER_BEGIN,
 		"- id: context-guard",
@@ -9561,6 +10321,7 @@ function renderManagedPatch(rows, platform, profileKind, activation, runtimeRoot
 	lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`);
 	lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`);
 	if (trust) lines.push(`    hostLockTrust: ${yamlQuote(JSON.stringify(trust))}`);
+	if (profileKind === "desktop" && desktopDigest) lines.push(`    hostLockDesktopDigest: ${yamlQuote(desktopDigest)}`);
 	lines.push("    hostLockPackages:");
 	for (const row$3 of rows) {
 		lines.push(`      - name: ${yamlQuote(row$3.name)}`);
@@ -9619,11 +10380,12 @@ function normalizeEmptyPatchBase(text) {
 }
 /** Atomically inject a repeatable managed patch into the selected profile only. */
 function injectActiveProfileHostLock(input) {
+	if (input.evaluation.status !== "supported") throw new HostProfileError("profile_host_lock_unsupported", "an unsupported host cannot replace the managed lock");
 	const patchPath = join(input.profileRoot, "cordis.patch.yml");
 	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
-	const managed = renderManagedPatch(input.evaluation.packages.filter((row$3) => row$3.version && row$3.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot, input.trust);
+	const managed = renderManagedPatch(input.evaluation.packages.filter((row$3) => row$3.version && row$3.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot, input.trust, input.profileKind === "desktop" ? input.evaluation.digest : void 0);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
 	writeFileSync(temporary, next, {
@@ -9713,7 +10475,7 @@ function hostLockContextFromComposedDump(text) {
 	const profileKind = profileValue ? parseYamlScalar(profileValue) : void 0;
 	return {
 		...platform === "posix" || platform === "windows" ? { platform } : {},
-		...profileKind === "headless" || profileKind === "web" ? { profileKind } : {}
+		...profileKind === "headless" || profileKind === "web" || profileKind === "desktop" ? { profileKind } : {}
 	};
 }
 function verifyComposedHostLockDump(text, expected, roots) {
@@ -9740,6 +10502,20 @@ function verifyComposedHostLockDump(text, expected, roots) {
 	const trustIndex = trustLines[0];
 	const trustText = trustIndex === void 0 ? void 0 : parseYamlField(entry, trustIndex, entry[trustIndex].slice(entry[trustIndex].indexOf(":") + 1));
 	const actual = evaluateConfiguredHostLock(hostLockRowsFromComposedDump(text), context, trustText, settings.hostLockProfileRoot);
+	if (context.profileKind === "desktop") {
+		const lines$1 = entry.filter((line) => line.startsWith("    hostLockDesktopDigest:"));
+		const stored = lines$1.length === 1 ? parseYamlScalar(lines$1[0].slice(lines$1[0].indexOf(":") + 1)) : void 0;
+		const expectedRows = evaluateConfiguredHostLock(expected.packages, {
+			platform: expected.platform,
+			profileKind: "desktop"
+		}, trustText, settings.hostLockProfileRoot);
+		if (!roots || actual.status !== "supported" || actual.digest !== expectedRows.digest || stored !== expected.digest || !/^[a-f0-9]{64}$/.test(stored ?? "")) throw new HostProfileError("host_lock_readback_mismatch", "composed Desktop identity does not match the active graph");
+		return {
+			...actual,
+			digest: expected.digest,
+			auditedForegroundRenderers: expected.auditedForegroundRenderers
+		};
+	}
 	if (actual.status !== "supported" || actual.digest !== expected.digest) throw new HostProfileError("host_lock_readback_mismatch", "composed config host lock does not match the active graph");
 	return actual;
 }
@@ -19676,10 +20452,11 @@ function extractTerminalFacts(textContent) {
 		} else break;
 		index$1 -= 1;
 	}
+	const obscured = !marked && lines.some((line) => TERMINAL_EXIT_MARKER.test(line.trim().toLowerCase()) || TERMINAL_NEGATIVE_MARKER.test(line.trim()));
 	return {
 		exitCode,
 		negative,
-		marked
+		marked: marked || obscured
 	};
 }
 /**
@@ -19773,7 +20550,10 @@ function resolveDeclaredTerminalFacts(meta, textContent) {
 function shellOutcome(surface, terminal, resultError, backgrounded) {
 	if (backgrounded) return "unknown";
 	if (resultError || terminal.negative) return "failure";
-	if (terminal.exitCode === void 0) return (surface === "bash" || surface === "pwsh") && !terminal.marked ? "success" : "unknown";
+	if (terminal.exitCode === void 0) {
+		if (terminal.marked) return "unknown";
+		return surface === "bash" || surface === "pwsh" ? "success" : "unknown";
+	}
 	return terminal.exitCode === 0 ? "success" : "failure";
 }
 /**
@@ -25800,4 +26580,911 @@ async function executeRevalidatedGitEffect(resolved, manifest, target, currentSt
 }
 
 //#endregion
-export { PROOF_KINDS as $, hostVersionFromPackages as $i, capabilityConsequence as $n, statefulActionsOfScope as $r, reservationFor as $t, PROTOCOL_V4_NOTICE as A, RC020_RC1_HOST_PACKAGES as Aa, HostTrustError as Ai, isCurrentAcceptedBoundary as An, interpretMessage as Ar, carriesCleanupCondition as At, extractToolSubject as B, BASE_HOST_PACKAGES as Bi, replayRebindResult as Bn, legacyQuestionReadingIsInformational as Br, sourceItemForCoreRequirement as Bt, SESSION_EVENT_ENVELOPE_INVALID as C, requestedIdentityKey as Ca, packageRowsFromPnpmLock as Ci, hasCurrentCertificate as Cn, clauseIsProtected as Cr, CLEANUP_CONDITION_RULE_COMPACT as Ct, CAPTURE_V042_NOTICE as D, semanticActionFromText as Da, resolveActiveProfileHostLock as Di, BOUNDARY_RECORD_PREFIX as Dn, hasQuestionScope as Dr, V6_ORDINARY_COMPLETION_RULE as Dt, projectCoreV2 as E, semanticActionFromCommand as Ea, readActiveHostGraph as Ei, unitDescendantIds as En, hasOrderedCoordination as Er, MIN_RECOVERY_CHAR_BUDGET as Et, legacyRecordsNeedingReview as F, registryArchiveFiles as Fi, proposeRebind as Fn, isOpenObligation as Fr, recoveryTitle as Ft, isRunExecutable as G, HOST_COHORTS as Gi, deriveItemDiagnosis as Gn, opensWithDirective as Gr, inFlightReservation as Gt, persistedToolResultStatus as H, EXPECTED_HOST_PACKAGES as Hi, isFrozenV042RebindResponse as Hn, maskQuotedSpans as Hr, RELEASE_OPERATIONS as Ht, rootLocatorFlavor as I, registryArchiveModules as Ii, proposeRebindOutcome as In, isQuestionScopeNeedingReview as Ir, renderRecoveryPacket as It, authorityCaptureCounts as J, evaluateExternalWaitCapability as Ji, nativeFileTwoRole as Jn, questionHeadsClause as Jr, normalizeSettlement as Jt, parsePwshCommand as K, bindExecutableIdentity as Ki, evidenceAvailabilityReason as Kn, presentExplanationHead as Kr, normalizeReleaseContract as Kt, supersedeItem as L, ACTIVE_HOST_COHORT_ID as Li, proposeRebindV042 as Ln, isRestatement as Lr, v6CurrentRootBoundaries as Lt, PROTOCOL_V6_NOTICE as M, hostTrustDigest as Mi, currentContractDigest as Mn, isExecutableItem as Mr, closingHint as Mt, applyUpgradeEligibility as N, parseHostTrust as Ni, createProjection as Nn, isExplanationScope as Nr, openItems as Nt, DEFAULT_DELEGATION_TOOL_NAMES as O, validateActionManifest as Oa, resolveInstalledHostLock as Oi, availableBoundaryQualifications as On, hasWorkPredicate as Or, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ot, deriveProjection as P, qualifyHostTrust as Pi, confirmRebind as Pn, isInformationalFragment as Pr, recoveryDigest as Pt, PROOF_CAPABILITY_MATRIX as Q, evaluateToolSurfaceCapability as Qi, admissibleForRemoval as Qn, splitTextFragments as Qr, releasePreEffectDecision as Qt, evidenceFromPersistedToolResult as R, ACTIVE_HOST_COHORT_IDS as Ri, rebindAttemptKey as Rn, itemHoldsExecutionAuthority as Rr, currentV6Feedback as Rt, SESSION_API_UNSUPPORTED as S, isStatefulAction as Sa, packageRowsFromActiveGraph as Si, goalCompletionDenial as Sn, clauseIsGoverned as Sr, CLEANUP_CONDITION_RULE as St, snapshotSessionEvents as T, requestedTargetMatchesResolved as Ta, prepareTargetHostTrust as Ti, certificateClosure as Tn, governedClauseRestrictsExecution as Tr, DEFAULT_RECOVERY_CHAR_BUDGET as Tt, withDurability as U, GOAL_HOST_PACKAGES as Ui, parseConfirmationMessage as Un, namedActions as Ur, RELEASE_OPERATION_SURFACES as Ut, isDeterministicCheck as V, DEFAULT_HOST_LOCK as Vi, CONFIRM_LINE_PATTERN as Vn, maskCodeSpans as Vr, OUTCOME_STRENGTH as Vt, canonicalArgvFromCommand as W, HOST_CAPABILITY_PACKAGE_GROUPS as Wi, capabilityRemedyPhrase as Wn, opensConditionLead as Wr, contractById as Wt, bindingIndividuallyAccepted as X, evaluateHostCapability as Xi, DEPENDENCY_FREE_ONLY_CONDITION as Xn, restatedContentOf as Xr, releaseContractFor as Xt, segmentAuthorityBlocks as Y, evaluateGraphDerivedHostLock as Yi, relevantEvidence as Yn, reportingHeadGoverns as Yr, readbackSettlesContract as Yt, certifyCheckpoint as Z, evaluateHostLock as Zi, actionHasCertificationPath as Zn, semanticActionOfScope as Zr, releaseCoverage as Zt, projectSessionCoreV2 as _, STOP_PROTOCOL_VERSION as _a, evaluateConfiguredHostLock as _i, latestRootInstruction as _n, GRANTED_QUALIFICATION as _r, scopeCoverageDigest as _t, createGitPrestateEnvelope as a, SUPPORTED_HOST_VERSIONS as aa, normalizeClause as ai, NO_PROGRESS_RECORD_PREFIX as an, captureItem as ar, bindProofV2ToProjection as at, captureHostWorkdir as b, actionCompatible as ba, injectActiveProfileHostLock as bi, testOutcomePredicate as bn, clarifiedSpanOf as br, validateProofManifest as bt, parseGitCommandManifest as c, parseHostVersion as ca, sha256 as ci, assessmentOutcomePredicate as cn, extractArtifactPaths as cr, createProofManifestV2 as ct, FIRST_STEP_GUIDANCE as d, ACTION_MANIFEST_VERSION as da, auditedDefaultWorkdirHost as di, decideTurnBoundary as dn, isInformationalMessage as dr, proofDigestV2 as dt, selectHostCohort as ea, verbIsNegated as ei, bindingSatisfies as en, capabilityFactOf as er, PROOF_KINDS_V2 as et, claimedBatchHasRealRootInput as f, BOUNDED_ARTIFACT_TYPES as fa, auditedDefaultWorkdirProvider as fi, decideTurnStopping as fn, segmentClauses as fr, proofEvidenceConstraints as ft, previewFirstStepInjection as g, STATEFUL_ACTIONS as ga, evaluateActiveHostLock as gi, latestAssistantText as gn, classifyUserInteraction as gr, requiredSubjectsOf as gt, lifecyclePhase as h, SEMANTIC_ACTIONS as ha, combineHostPolicy as hi, isWholeTaskCompletionClaim as hn, classifyTaskIntent as hr, proofV2Rejection as ht, commitTreeSnapshotDigest as i, SUPPORTED_HOST_RANGE as ia, digestStrings as ii, CONTROL_RECORD_PREFIX as in, captureClause as ir, bindProofToProjection as it, PROTOCOL_V5_NOTICE as j, createHostAuditSession as ja, acquireHostTrust as ji, qualifyBoundary as jn, introducesActionClause as jr, cleanupConditionFor as jt, PROTOCOL_V3_NOTICE as k, validateActionTarget as ka, verifyComposedHostLockDump as ki, effectuateBoundary as kn, interpretClause as kr, V6_ORDINARY_COMPLETION_RULE_SHORT as kt, revalidateGitPrestate as l, satisfiesSupportedHostRange as la, HostProfileError as li, classifyCompletionClaim as ln, extractMethod as lr, proofCapabilityReport as lt, firstStepGuidanceV6 as m, CERTIFICATE_VERSION_V2 as ma, auditedHostImplementation as mi, isRootPauseRequest as mn, npmEscapedPackageName as mr, proofOperationMatches as mt, GIT_COMMAND_TEMPLATES as n, LATEST_TESTED_HOST_VERSION as na, validateManifest as ni, evidenceMatchesItem as nn, removalIsComplete as nr, PROOF_PROTOCOL_VERSION as nt, executeRevalidatedGitEffect as o, compareHostVersions as oa, sanitizeClauseText as oi, NO_PROGRESS_TURNS_BEFORE_STOP as on, classifyClause as or, canonicalProjection as ot, firstStepGuidance as p, CERTIFICATE_VERSION as pa, auditedForegroundRenderers as pi, decisionBoundaryKey as pn, canonicalRegistryBase as pr, proofHostSurfacesOf as pt, parseShellCommand as q, bindLiveGoalCapability as qi, itemDiagnosis as qn, qualificationOfClause as qr, normalizeReservation as qt, commitIndexSnapshotDigest as r, MIN_SUPPORTED_HOST_VERSION as ra, canonicalizePath as ri, isVerifyingCapability as rn, removalIsPartiallyKnown as rr, PROOF_PROTOCOL_VERSION_V2 as rt, gitCommandMatchesTarget as s, evaluateMinimumHostVersion as sa, sanitizeUrl as si, assessmentAction as sn, environmentDefaultRepositoryTarget as sr, createProofManifest as st, GIT_COMMAND_MANIFEST_IDS as t, HOST_VALIDATED_VERSIONS as ta, COMMAND_SURFACE_MANIFEST as ti, evidenceCoverage as tn, partialFailureOf as tr, PROOF_MANIFEST_DOMAIN_V2 as tt, verifiedLinearCommitReadback as u, ACTION_MANIFEST as ua, activeRendererModule as ui, currentActionBases as un, extractOperation as ur, proofDigest as ut, sessionCoreSnapshot as v, STOP_PROTOCOL_VERSION_V2 as va, hostLockContextFromComposedDump as vi, observeAssistantOutcome as vn, LEGACY_QUALIFICATION as vr, sessionQuery as vt, SessionApiError as w, requestedTargetAuthorizesMutation as wa, prepareActiveHostTrust as wi, certifiableOpenItems as wn, explanationHasActionResidue as wr, CLEANUP_CONDITION_RULE_SHORT as wt, sourcedNamedTestRoot as x, boundedArtifactChoiceMatches as xa, inspectTargetHostGraph as xi, v6TestPredicate as xn, clauseAsksOwnQuestion as xr, validateProofManifestV2 as xt, HOST_WORKDIR_PREFIX as y, SUPPORTED_EVIDENCE_ADAPTERS as ya, hostLockRowsFromComposedDump as yi, progressFingerprint as yn, actionVerbMatches as yr, sessionQueryV2 as yt, extractTextContent as z, ACTIVE_HOST_LAUNCHER_VERSION as zi, rebindResponse as zn, kindOfScope as zr, isV6PendingRootWait as zt };
+//#region manifests/rc020-rc1-byte-audit.json
+var packages = [
+	{
+		"name": "@deepseek-ai/cordis",
+		"version": "4.0.4",
+		"integrity": "sha512-obgyxqWAmFn3Re8kvsuUnyW+ihrz6eJCnJO4fh1cQzDtmPYz/zzVeUkH9R94I0OwSVOocK67Kgakm04j/oQXzg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/cordis/-/cordis-4.0.4.tgz",
+		"sha256": "99a5cdb344de37cb033cb4e3a1dcfd29585d46f7d3a9c64bca9991554927185c",
+		"modules": {
+			"lib/index.js": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
+			"package.json": "41c9dee4715a89ef94f227384460c8445857c8faf33493eb545604a948828649"
+		},
+		"programs": { "lib/index.js": "80e38b85f7f608fa7cac756beb911a1a05c2274396fe2e7ee16952f0c8d78202" },
+		"loadingDigest": "a883ad98b889c0cb667e23c5dd2f9179f88e825aed6355feae69f4c30b77cd69"
+	},
+	{
+		"name": "@deepseek-ai/dsh",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.1.tgz",
+		"sha256": "ceb66bebe8117044e05f6932deaca15daea6a1ae1d0cffad079e33895f10d216",
+		"modules": {
+			"lib/bin.js": "935e95d05f4dc70a8a013eea59da80028946b5c139e45c6351dcaf2810ca00a1",
+			"lib/dump-config-BEDI-dNY.js": "fa34d3397b9ac9423f3b98a9f4798b9205f684e1eaf368352e0a93c09831d28f",
+			"lib/dump-config-crgOY3tW.js": "4183d3918048badf0a5194fb3c86fbb37b7bf8ccbf638c14bd2ff2b1c545721a",
+			"lib/dump-config-schema-DhhNOaro.js": "85c7eef6eee4532570133d3b90487996e912216b96825e33c1bb659036a269f1",
+			"lib/plugin-DkYIj96-.js": "2103210a39731866ca191faf1a1396f33f248ed3fe81690a592fee7a8f3276c1",
+			"lib/profile-boot-BZ2ZjNWi.js": "c394b2aa2ce08a3b1fcc8c544257c7d689dd4d0b1cfaf8602687e65eeaba5aa1",
+			"lib/profile-boot.js": "c53d4e2caf21428e263b525e657dafaf63fd183f7ef016aabda56af7998b6c4f",
+			"package.json": "6c5d2b98ca97920fffe81eaff8455dfd1e97524c8b3a7a3b0cac4c960ebb363c"
+		},
+		"programs": {
+			"lib/bin.js": "b6e681187d19f85261155f6866d32f3c59a0c44d3130e4166c73ea0c2f8f09d2",
+			"lib/dump-config-BEDI-dNY.js": "c475a93f3cbd928b951bc2abaeb88fa641a4deb3d30b067296e542eec1a0c0d9",
+			"lib/dump-config-crgOY3tW.js": "55205480d865c9194e020b41fc4a701a19acbbc2f39129fdb3678d7dc04b4b38",
+			"lib/dump-config-schema-DhhNOaro.js": "85c21562a5ac9c3aefb15ea6baf27d0afda2fad8b0dd4ed377bff45a2c180c1f",
+			"lib/plugin-DkYIj96-.js": "8eb1965ca0e64e9668f9926e0175610fbda401bf65f92db9840615e4a6bc6a97",
+			"lib/profile-boot-BZ2ZjNWi.js": "5826cf68cc33e0c89b1379bd047b92cf209cece56a2e16b01d34f5be5b68c068",
+			"lib/profile-boot.js": "29f32dc66585887e03529fc468f1df7cab368ca546d8395c8ceb528cc1d0c853"
+		},
+		"loadingDigest": "6ffb4f27956f1c86920fef7f1bc92c1dab4d1f5f9e97686fe85be3b4d09fc692"
+	},
+	{
+		"name": "@deepseek-ai/dsh-agent",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-PQ4Qtu7QiI6j2n730p8RJ+u4l7ywwhVJ4NeIe/Tj86hBYYZNvNT8iMhViECn+GSepAk7GmM/1eb7e7hvmYhsKA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.2.0-rc.1.tgz",
+		"sha256": "dd21ff4bc625edc78928cbfc5f8fa7a1ea03fc9ecab6028bb9b50b940def0cfe",
+		"modules": {
+			"lib/index.js": "7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93",
+			"lib/invariant.js": "f9d8c2d1d72f407ffd93b9b04212f7c59dd655908daf68f656e05cca9b93befc",
+			"lib/types/archive-admission.js": "d42fbc10fbf357f1343d4c57eab55d3c7a6bd53fe20a29469cf0b1b67e55c4dd",
+			"lib/types/consumed-work.js": "e20ac9e88d81db3f5e25908a50ad4532cd1d93f410ad5ec4933ef9aa24da5c2d",
+			"lib/types/dispatch.js": "f29567a8eb2f04aaf34523e597d52e46f0fb5bed273db4bf7fa25bc38e2877da",
+			"lib/types/index.js": "7e7c47fc0b82f0718b73e1705c07ad9496cfdbc21598db94de858f718cd23490",
+			"lib/types/invariant.js": "ff96b77450ecd0b7b75d94e7aa07f073e7d378924f2484866a6a04ffe4542bc3",
+			"lib/types/model-selection.js": "47f758ea21ebf7544b4633d2ef8cbe5afafddf3b4aaf9892276cda9e98af11e7",
+			"lib/types/projection.js": "43ab89acd14b20b3c2a85c8307f236b38dfa27671dd31b703554777270abc534",
+			"lib/types/runtime-types.js": "72347f43fb79c35cff8565b6428c6d7b96a78267cf8994ea3ffd0830a83a21d2",
+			"lib/types/types.js": "f4ef7228255d5f64ba546ed2a2b6be63601b77c7b58ac3a58a74f4e8f970cb30",
+			"package.json": "4c07ec3f1ece7f5029e9b1e8d12d7a045bd5732208bb798fbb36c9480d54d3f2"
+		},
+		"programs": {
+			"lib/index.js": "cff96bcb59f9c2998af20c5b17d6511e8088bb99b687973fef47010c33dc7eca",
+			"lib/invariant.js": "d0bcf526586bf8ce576764cad03e360cbece4ed3e63772a889493adc9a96cb20",
+			"lib/types/archive-admission.js": "0a416ad4ab32c0320bff23688f5e0a6ad0e9f59229eacd4cd726466d7554ef26",
+			"lib/types/consumed-work.js": "8164baade680544227db7833a0f8fc4e78ae687a654bff9fe08837ef0fdda3e7",
+			"lib/types/dispatch.js": "47931884087a468200025ba734288ec3bbcea6d24cc8bc781f5cd6772ff56439",
+			"lib/types/index.js": "269df03e27eb3f9d3388213f848be7db7cfb39048100891b1d3201ac53f2c05e",
+			"lib/types/invariant.js": "a30ffbc9609a932aa43c5b6ae0e4024d82b78b663a7afca7e5ae2ea643b98132",
+			"lib/types/model-selection.js": "637571f734adabd810c5b743b2850c0bffd30ed14df7787556db19c3922d0270",
+			"lib/types/projection.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+			"lib/types/runtime-types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "80ab1ef5e697a73acc875ef0dff2d9bbcdca82c1b77c3d43aaed08398195d1a9"
+	},
+	{
+		"name": "@deepseek-ai/dsh-agent-loop",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-01JWFfTcne/44tqfGLAOH0KkMicq6VVFBV1YjQbO9vj6Q0SmcHsPObm11fP0opEZIqEmdUN5wwS6LAzCjViDlg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-agent-loop/-/dsh-agent-loop-0.2.0-rc.1.tgz",
+		"sha256": "446c70a8fa8b83a35fc19f35c5f8e018946391844bfe9372a4d1d747d8572f8e",
+		"modules": {
+			"lib/index.js": "00c4814d63f3d1e2754eb09144832d19b30499d6ea444730473f740b587948c2",
+			"lib/invariant.js": "c577dcdde278b761b5810d9a941131d423de40c22ff57f98a3982681ed3bf772",
+			"package.json": "e7ecfbef09d7dfd50be40d70a32ca87b1ee43ac3cefdfeb050468c7f0e31b0ea"
+		},
+		"programs": {
+			"lib/index.js": "29355ba39cd6f2d9276b2a353538c54811745f05f5fb65ee0fd722a962b270bf",
+			"lib/invariant.js": "7aaf9659b7faf875f37181ef774c6dc0b64a51456e3bb473622e383a2bec9353"
+		},
+		"loadingDigest": "d59a5938a28425b5e995ddf1b7ce23f3cab61c9b29083a2733addeaf1f787487"
+	},
+	{
+		"name": "@deepseek-ai/dsh-app-boot",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-iHUYI+Tc3FlaYay0aLg4LsmZELi8wNWd6DSYrd46enUv0SWgm3qXVFLZivlcKqKWxcjuuvL5JxNemxGiMRIWxQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-app-boot/-/dsh-app-boot-0.2.0-rc.1.tgz",
+		"sha256": "a5881b46f9f982da59cede0facc77aeb0ec3cc4995b67fc494110e617986eef6",
+		"modules": {
+			"lib/index.js": "234db45e1b3f8c683b5bc1f551948b2a2ec52a6468c7b6937725a23f1c0e0d96",
+			"lib/worker/profile-resolution-bootstrap.js": "4efac00eba95637481deb245ac4e5b497fceebb55db8e199675406b6bf53dbed",
+			"package.json": "8f4d5cfc5b81e44c77928e115cb8a28070892c2ce4454afd1962cbd0f4d32f49"
+		},
+		"programs": {
+			"lib/index.js": "b73271cd64ae1b30291fea15032f524eb2fc4558076be4c9e1038b1e0f4da183",
+			"lib/worker/profile-resolution-bootstrap.js": "36c6e937266951b9be2f3e13453e66a784420b721f051bec27d1e74804a9a592"
+		},
+		"loadingDigest": "11c28f05919a2c73c0890e1182c146ad939cdfb9a8e131e8acfe5d584bc2fda7"
+	},
+	{
+		"name": "@deepseek-ai/dsh-attachment",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-aKKFE9fGYYn1BCzDtun7IYkpiMANYt7s51vwPukkCnobNiLfxHrIyANLWNmMTSpq0iENfqREXPR805K/um8Hfw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-attachment/-/dsh-attachment-0.2.0-rc.1.tgz",
+		"sha256": "f11e40a5184b10ae0b5a528a575d31254f6b485ab6e416965ff2dcdffb65c3e8",
+		"modules": {
+			"lib/index.js": "9cd6c01a6cca9431f789be334afdfe4f5cf647224bb394cc0215056796520f58",
+			"lib/types/admission.js": "e4afabe831d34e00d96416bf902a77bb3cbe3754769b09b0d14142466a340684",
+			"lib/types/brand.js": "5481fe7d3a244f161d54dc7646612fd7654401782d3f0d5fd657247480f6747d",
+			"lib/types/error.js": "eb1952755b936373075d1cc7567815b46b44bf4938e79d54c12c23ffee0161bc",
+			"lib/types/index.js": "c96d48d63936a055a525e9e5eec624ce6796e50af5e3f3bd53adddfcbcba967b",
+			"lib/types/request-projection.js": "8d184a401ec5ea5b7fc3708870205042cc1afc666655e4e8e4d1d11eefdadf9d",
+			"lib/types/types.js": "9a08e59bd2b21a42126b01c3598b057bb5d3be987c200562800e29806e10e50d",
+			"package.json": "08debb8c62d78d1ea524b0d82378f651196c6a57ed8bfc6c936f2cf323c7a259"
+		},
+		"programs": {
+			"lib/index.js": "3c344b50d80af13c4469250a58573ccea600319bc8be53f4ccb4ea9d29cec841",
+			"lib/types/admission.js": "ff7bb33a61e5b1800aaaa1c9c716a0bc30e48dae7f0b94742480ec40fadfc292",
+			"lib/types/brand.js": "219810967eac99fa85fcd3132a30f6298ee9b663c0c1473cdca6bd901aecddfe",
+			"lib/types/error.js": "b92a638198af9cbaae01c1aad4cf3f92e0b7526fb02cf1808995c7b0732371fc",
+			"lib/types/index.js": "d6eea1297cbd2013cd813675063f917c2913eb7b674cc1956711e6252a176db1",
+			"lib/types/request-projection.js": "918f29b1549200f0268e104250b47b5feb6841b697f6d56088f16032cd5223a9",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "dcf42d68f9de89b973734dbf1f7b9fa1e414463caf168fdc2ff41da93b95570b"
+	},
+	{
+		"name": "@deepseek-ai/dsh-base",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-5knjWdy+/lFOcwjuliaK4Pc+xPfDXMOoN/+CCza5JkQG5JI+GajicpAh7XFH/At6WzWjf9m8OwLGYABVz1pIxA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.2.0-rc.1.tgz",
+		"sha256": "664cf31c422dc9cc8337fe908153341a9505ee8d3a6f399e945554e51bb050c6",
+		"modules": {
+			"lib/index.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+			"package.json": "683a76071c6483acaa890b6c333037b34add96fc33a20ba995401cc5b909a060"
+		},
+		"programs": { "lib/index.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8" },
+		"loadingDigest": "f44d4963e2b2e9ec3a592ca8f3a0023844259674df9536827a10d37aaec24d7c"
+	},
+	{
+		"name": "@deepseek-ai/dsh-bash-local",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-thF8D96F78QWem0y0C4oqef6h+x3kahGlsTKE9elXrM506sys6EGwHs+PwQqyMyQCGUJlJCVwd2gT6m4ipdplg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-local/-/dsh-bash-local-0.2.0-rc.1.tgz",
+		"sha256": "157173b9701653979b5159c20318ee6609c59e2a385720c18b27c395d974a21a",
+		"modules": {
+			"lib/index.js": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
+			"package.json": "e20248d48f2868419d5c22b3f66a519c908fc707b5b8e275f866c1f34b22ac9f"
+		},
+		"programs": { "lib/index.js": "bad1dad01d2dc853e47f5b3452db5e871039e54d3f1859086931b7dd74675508" },
+		"loadingDigest": "2be7840d6fc827e5b1c54dc6bb242957645a1d001d596c2a93d280c87e8a50ba"
+	},
+	{
+		"name": "@deepseek-ai/dsh-bash-sandbox",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-/+vnsleF/U7kKjZdUynHiWTpjAVr9i3ZCPwuWiwecd588VUjOvm9nDeiSUd8Zl60XZFtsYAjdSYU+gunSC98PQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-bash-sandbox/-/dsh-bash-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "14ee57a5b8cf6e3620db44e463df3fa74d5f7f1e921c89f42504542556d97da8",
+		"modules": {
+			"lib/index.js": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
+			"package.json": "4698a8d47699af3451b3d58f8e02573ece1297d321addda7bc16eb8ba7e7c703"
+		},
+		"programs": { "lib/index.js": "007bc497922220ffe1723faaa96bd367356c81558c1b50b81c1c0601bff281ab" },
+		"loadingDigest": "932ccfcdf2987ab32f85d36a929ae2d5c6de32157eba27b372aadc425a3efd18"
+	},
+	{
+		"name": "@deepseek-ai/dsh-commands",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-VZOWNwjBDBkX3kXVJcD24oAoKeGRpLnHZjRiPm0gq41ZClCYy9CzNnFdl6IVtJHfG+bz9/HDnONilpiRwBg2lQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-commands/-/dsh-commands-0.2.0-rc.1.tgz",
+		"sha256": "7c4685987a66feba87a04f76204bb087c7fb76be7f701aa5d9ac86cfcfbc82b0",
+		"modules": {
+			"lib/index.js": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
+			"lib/invariant.js": "e6dcb52cba426f2cebe18d351ecb968233d41f7e3cf292be192618d0f52774fc",
+			"lib/typert.host.js": "fb0f8aba6dcc824b6e50be022c5428319b98cacf802ba4face67bd8523110e95",
+			"lib/typert.remote-client.js": "19783415466cb498a5dd560c6568716cad39223e2587fc0a16350b591fe051ab",
+			"lib/types/brand.js": "50808fed83c5cfe09b80df4165108abba0188645b9b9d39d0426b293e8f188dd",
+			"lib/types/index.js": "e3a06e7bf8da759c727a529d1e6b30c831232318602fcd28e66297ba200ef495",
+			"lib/types/invariant.js": "e4bdb34890eb5b917fb26e5d8987929ef61be4e0587f8975c6cb7692e22be996",
+			"lib/types/types.js": "06f43511aa44249a435d74bf2b168bc767460930d874764c69add444510579b3",
+			"package.json": "2bf9983819f8e38713da5fb9432e5d09170a66c3e0eca4b2204a5fa2eb774e5d"
+		},
+		"programs": {
+			"lib/index.js": "f9f0a77cc19a11675b449261467e8d07934d696e4e543c56b0e4a341a12edb0f",
+			"lib/invariant.js": "102e78feaec5e02ddc7a10881b3dd04d21ac00af2d1eed34c09f7a8e1462b348",
+			"lib/typert.host.js": "7cead6105db0b9b58b6e92efe7090f3066f05de753068bf7d1e70d41672f8a3e",
+			"lib/typert.remote-client.js": "4441213e7a6f512ecf80ba975cc3a0fab0b30055fd36ce2d02c7666b7e7b858c",
+			"lib/types/brand.js": "3892c532b1fcdaefadef5093c73d5b6bb6f718d1befee5ad68b1f8c66a9d817a",
+			"lib/types/index.js": "0ca9432876c5276664b12bcb83c0228f88020b4c9e911bdb59fcf4b36e6ed954",
+			"lib/types/invariant.js": "2af033be5a6a236dbb98e2e6916d586a009043f43c5098f148e311b6940cb68c",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "985c3bcddbd2128244218d5c39171f094c8d43b2062bf584bac2c33c80c8bf5f"
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-IWjXn/BsoWwT5dti/Jfkrx49GDGi1H7B3cuTgwRvxIQl6o86eb7ns+3mQiBpFyrCrVOMV+1t8FC1ipiIxol+gA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.2.0-rc.1.tgz",
+		"sha256": "dc7ede4bfbf35bef54fca2db4a382e20fde49fb9f70816833da76550995d3f8e",
+		"modules": {
+			"lib/index.js": "b165659f1eff0607222a7fe761bc56bae03fec8337c2e25affd064a3047dacb9",
+			"lib/invariant.js": "c3398ff0da3cf65facc78c3ed287ee088afcb0f6179f6b15eb2f618e759af4bb",
+			"package.json": "aad483456e100274e985871679ed2fd82a354b7003beb0d2f19efc5ad0f92887"
+		},
+		"programs": {
+			"lib/index.js": "7c8ece277d8308c7b11b07ebe59453d8800aec42d7845ea7016ac3a1305fb612",
+			"lib/invariant.js": "de826317b9fb50f2195cb2686b06b471a9cae0cb2fcbf0612cc916dd41380e0e"
+		},
+		"loadingDigest": "56789270f90c7a1077d3a0ef01c179ec65991fbb1c4ed25e80f207406f38a31f"
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs-local",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-ntgv1fFhXEuL2ncfbORPprI+mVppaBSdVsUNLN1mfigO6snU6ORU5V2kohL3rop0Q5605lGA/+pGiiGIJYdxQg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-local/-/dsh-fs-local-0.2.0-rc.1.tgz",
+		"sha256": "d300481c8c670587fa0689da7c4f1c247fbbb583402e01d30b7b1d452f64b33d",
+		"modules": {
+			"lib/index.js": "63fbb41d2c33e07111884b798be507e68c2752acab8249c821c20ade436e894f",
+			"package.json": "b875f7af3ffb1d57f43b81a7f62c5c10fe7039eb5edc2bbdf780f4785b614abe"
+		},
+		"programs": { "lib/index.js": "e5163b8d9882f25941b64f9dd84ca3f5b879b9077faedbbc2d2298f94e1d3714" },
+		"loadingDigest": "0c24809933eb25f92ace3895fd1de77a8744ba12aa2309c61548623e3155c081"
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs-observation-policy",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-odxCFuRQAyruog2mYSl0DxJJ//piwUEJuQpC0rY3Hrt4Zv3GjtNhZ42hwvIAug6ueqkJ8nWuR1XevJoRu518SA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-observation-policy/-/dsh-fs-observation-policy-0.2.0-rc.1.tgz",
+		"sha256": "44feaec8907fa8c8c74730b14769af3326b5fac214d4d098ad1e40668b6504ac",
+		"modules": {
+			"lib/index.js": "e36b54cdb5c6fa01ccfa29f0433753e810ec1ac29a6a22be349d66b77eb64b03",
+			"package.json": "25d8d29bd1157e189048f112aeccb4157c73e0280cdce81c4db97be718724a27"
+		},
+		"programs": { "lib/index.js": "4021ffd6e41bb82344eea4b471cc2130053802170a508a037b87771383461867" },
+		"loadingDigest": "eb3acae13118b9b7cc537ca6f95e54e60722f4ccb60577ce1d08d57b5774776e"
+	},
+	{
+		"name": "@deepseek-ai/dsh-fs-sandbox",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-5pIVWc3mGUHigSCSq6R1eUuQB7NjwhdhQ9E6BbrTYXC/qzezvxLJSYEF7z0Vr6ajd7qhV00Wih8OyS1zGkJ9ww==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-fs-sandbox/-/dsh-fs-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "49cbd96b99a8b58389357d405b569e0d9de7a369b4b25c4acec074e200e98739",
+		"modules": {
+			"lib/index.js": "cac65e21a0f0895b073cb9a447196ac265f2a171cc7f67c7434a6b3b7782caf5",
+			"package.json": "5018476647b5eb3e9be0fb6a03557cb4c8effe28636d37417752926e2c9452cb"
+		},
+		"programs": { "lib/index.js": "514de2a11be8e3997b98a38549dde1a1f35e620fee69feabb4797c0be4bfa083" },
+		"loadingDigest": "17256d5beb07a458ae45655c40d1da643361620dd4c106cc574e0cb9fd66f5c9"
+	},
+	{
+		"name": "@deepseek-ai/dsh-goal",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-gqpN0MvHofDjqw/c23JF9EQ93VQnRrOFiyVG6XMl3d+PHPVizmLxEHsm4lIE+dU42+iA1dYVtPS1IUkH6l0jFA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal/-/dsh-goal-0.2.0-rc.1.tgz",
+		"sha256": "15835bb53f7d3f4328ed717a188cd2bc4a583a702c8f1767a892ae4eebe6d021",
+		"modules": {
+			"lib/index.js": "8ec52107ead3d31f4d8ca95894c851046a2cbbd1b2033a0ea22fedf17c043ae4",
+			"lib/invariant.js": "468a099beed22d243daba4d97ae3e9e785f5c97309a656c0b8f1815537927246",
+			"lib/typert.host.js": "a1849a6a248d103478577e8f6812fb7927f74d1ff38677f5734cefb2278164b8",
+			"lib/typert.remote-client.js": "35df09d652b62cc8a3edf5ed9a4f0e84fbfdffbf9c67f778024dfe97758bd7a9",
+			"lib/types/client.js": "4aba033a3236db59a8413dc50ac0640890afe381f5abb93b7bf565b7185e5e8d",
+			"lib/types/domain.js": "4e60898de0faed31865df162479770e0d77cffe654528cef7720ca6c5be419af",
+			"lib/types/fold.js": "fefc4395d38e76e4780165e1881f593cceecc6bb9edb1cc89bf9749902bde881",
+			"lib/types/index.js": "0b0fb502e97ce59f6aed62dc49ca81ef6afe3ea349dd1b85dcc5fa064597e0a9",
+			"lib/types/invariant.js": "2eda87df2fffc21e2f761b138d54c9be523627e3b41bd1508906be5cf69a410d",
+			"lib/types/runtime.js": "3c6cf442aba70e119669f6a349768fe98b7f4cd0cdec9d389fb51437bf97745b",
+			"lib/types/types.js": "956a9ec9381a09458c283fba5deb4b8b695be6e078e49bbc94d1aa4e586cd32c",
+			"package.json": "076c418e3611453205952af6087d44ff53115ee836e6c70744dccb2e343c92de"
+		},
+		"programs": {
+			"lib/index.js": "595a64de68075083e3ef611b3d9ad20860cc7fc836fc74f7b2086c9c6aa4a46c",
+			"lib/invariant.js": "57ff6c3842d90de6440a9b710d9ebe6f4faae735690846d097ca9a3a2cf6b7da",
+			"lib/typert.host.js": "fd40deb26c5d1a654b39e61e3bdd2ccbbb2fb1a86b91a7f18712daabf363391c",
+			"lib/typert.remote-client.js": "7566ae9ffb0de5be418b28a8426d89a0cba55caf6f18083ca97848c371003f1f",
+			"lib/types/client.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+			"lib/types/domain.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+			"lib/types/fold.js": "7b45a8c74e7d07714193c09b749cc8705b0df4c26d62f469ead03658dfb74535",
+			"lib/types/index.js": "16c0dd37f1d80198aa06b58a2a5b9e3996105ef090a7a119b8b60de78ccc09fa",
+			"lib/types/invariant.js": "86d378954b35b50a82384489efd196ba0de8d0887c01fb6e3a67d9f7198ba1bf",
+			"lib/types/runtime.js": "318984bcd709ef43f6b2d4dda7c9a49950078246f7b51b7b621a333a17e0b53f",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "d02ad02c4d13c4c797adfcbc7fa6365723d84a057c97744d8e65d60da973e964"
+	},
+	{
+		"name": "@deepseek-ai/dsh-goal-round-driver",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-9MlObGRGkFE/DIp2kHV3GBS5/1zcx6eVysXDfWs9AvMYb0Etk8gJK5nHumyBAIXT97seiaFa30IBITTYemsi7w==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.0-rc.1.tgz",
+		"sha256": "9954d23e8b7686ed66e2273ea1e82cd3f2624222132eccaf5b007bf55bafc899",
+		"modules": {
+			"lib/index.js": "3bca01a2e87de1683fa8b55ad54688eefc4e366c971c20e9afd654db3b5ab450",
+			"lib/invariant.js": "66d6cf4a66dc84c239cd2efaec29606b645ec7f6a8f6c332209464b090df1c83",
+			"package.json": "eb6712fabe459a6e57dfa3c6be10c3c4ccc603dd573340ba4ac514c308618b94"
+		},
+		"programs": {
+			"lib/index.js": "7424d5e5202b23369fed831c932addc766123f637e648b05bfc4f0c1435f43b8",
+			"lib/invariant.js": "02b035daf22e24b83ce36d10cc5341891d2228560022b6d5d947cbf12604cb8c"
+		},
+		"loadingDigest": "9d98137351ceb0635d6ae9b6512a9b3bf5369e7cdae1acdafed7c4723456e339"
+	},
+	{
+		"name": "@deepseek-ai/dsh-headless",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-xdx3LXmRmeu1bXBvXOppaitF5UxsudhsIy8IrYpMkIRh63LWVbxJGMTCgwk6pM8Jrg1ayW7vhi8Fw7ewukMDtA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-headless/-/dsh-headless-0.2.0-rc.1.tgz",
+		"sha256": "57e632a633b08b0d05a5454759d438058a24cfc9b80c5c50a7c7129973758476",
+		"modules": {
+			"lib/index.js": "31a4caa307b6a3bc0133e01d765c9449ff808725058639e32ebf0d020524e267",
+			"lib/json-stream-BA-F3lfb.js": "b6ede8da01119f5caf4baa8051ce8bcd8b956b5b163cf58af91d583b80028c0c",
+			"lib/startup.js": "66bb82dc445d5852de776401a00c1ad963276c741e39749d187c4c292b86330b",
+			"package.json": "bbb9bad4a389d263a6349ddc5d9920f7e35be016ecac8068d8b476775a3084a4"
+		},
+		"programs": {
+			"lib/index.js": "c60f4fe96003b24bcd2c3d173f25f552da1736750a61a3eb18601509c7240d1c",
+			"lib/json-stream-BA-F3lfb.js": "f6c8737078ab95bf80fa2d921cd7d5425d2da1d994c648b9f3fb490adfecc698",
+			"lib/startup.js": "0444aea7aa5190fc45f532ee56bd4cac29e1f317e02728ba6c3379b3dc6612e5"
+		},
+		"loadingDigest": "78bf1d7b0019be5565bc8bcf828b17c819323344eabfc450861fff292f888c63"
+	},
+	{
+		"name": "@deepseek-ai/dsh-host-plugin-inventory",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-9jPsILbbodim7gswvWzCuvHgzXbvDMvVnR11pGY+FaSVEt4beWVdSPglxHmGHGbEOotSnhbwUnl6vouyRQo7eg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-plugin-inventory/-/dsh-host-plugin-inventory-0.2.0-rc.1.tgz",
+		"sha256": "2a4b9d6c33c9eb3cbbfef7cf0c5a59823866548fa64a24c4894ebafcc7cdffc0",
+		"modules": {
+			"lib/index.js": "f8e50fb2e24c92302570a41baa007e409cf4651bed0a65605b0871ba14325d30",
+			"lib/typert.host.js": "dc44ff7a2d5775a7b932ba96688c76803ce776c79303f60fd3b22a19c43d051d",
+			"lib/typert.remote-client.js": "66129f7bd3aabf40020ed60059a6e18712ce7acf8925117212576d05ccd2c6da",
+			"lib/types/index.js": "757079258b5ec9280890180c220a6b9caf3d498b2e71dc63a1ca146a245859cc",
+			"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
+			"package.json": "6cef7d98aca9f2d2cc0ebebafe06524d13998f2df2e2a1f1dc8342a935fad0b5"
+		},
+		"programs": {
+			"lib/index.js": "10f002fd905783c52115b2456f55e37cc1af632214d91e553ddb1e60389551a1",
+			"lib/typert.host.js": "c221897b9c4f8c4932cdff99baf118348188df4a819d2ffb0b31739b97c346b3",
+			"lib/typert.remote-client.js": "450d742bc19023ef7c030e3b18cac2f0e50b9a5c6c8efe4f187950f21a5395e3",
+			"lib/types/index.js": "e128c3b8d32cf32ce3aa473ddf6cc5c4c2f2c41c130ce9efe0c28f596ff1b391",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "bac2380c9c39390c6c6ef6d20bdef5a2bb4c3db928dee3f8b062647f57aafd4e"
+	},
+	{
+		"name": "@deepseek-ai/dsh-host-webserver",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-/LkuSWupB7vijPty3Iypt9DZrBli9wsNh/E485m+xgo4uBbgloANQA+nyIpB0n+N20zleyV4EFYbe6Lb6k2oqQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-host-webserver/-/dsh-host-webserver-0.2.0-rc.1.tgz",
+		"sha256": "0ebef41935e446f4a8f7241640d0312a8366e37ab4dbff5e67fae5d18a34d46b",
+		"modules": {
+			"lib/index.js": "6efea1375eadeff62d5cfb6d1f515ff75a939d40405a62e5d138e8e7a6b18df5",
+			"package.json": "98ec06b6a0e2a3208268f56e66da7cfcc8931f8d334bfc6cc909ce2317f507b8"
+		},
+		"programs": { "lib/index.js": "b0c70fa39f2e01e0115fb64087659be3920443dc31cf287db2d53cc792dbeb44" },
+		"loadingDigest": "a5b3106e5990d4891e43f5a9711f56b03011dee0a8557dcaf0bbe06780e7a2f3"
+	},
+	{
+		"name": "@deepseek-ai/dsh-jobs",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-ewueg51ZSEF+/sLXEhi5ySqFu2egKWI4koBwBciE2sAaOwBY2Ou9BqYUHFN1wGRaUYVZ/DrMpn18c0XBC37j0A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs/-/dsh-jobs-0.2.0-rc.1.tgz",
+		"sha256": "a096930a52a464e15a9eb9f49edcb2bbb9bf8fd93f0d782ae19c121f34e33348",
+		"modules": {
+			"lib/index.js": "909240e722c34877282c6868cd0e06915669e0ceaef690b1738ae72b4c3ef049",
+			"lib/invariant.js": "afe38795a9485abb3a50a0696e2670571113f90a20e6f4c6fc5fdba4b29c0662",
+			"lib/types/archive-admission.js": "bd07b6e184331641ca4f9720c2405097b27040efe23d1eaaa1c68dc351ccc718",
+			"lib/types/brand.js": "a72a6e317ac1adb10352bfda79c1de3b5999ad7625eac487e952576e0d26daea",
+			"lib/types/index.js": "97dc78378b0537b431313fb1b8dfbcf06f09b4a85feacde07d5064764a0318bf",
+			"lib/types/invariant.js": "8d7b9de3a4928849ef504ea379642e4c60826ec0032ff92ff6fe89839f7fb490",
+			"lib/types/types.js": "f0761bbfcdfd477f36a2fc181d328cc4e1c89b157cabd00426c4151a67b00ba9",
+			"lib/types/view.js": "a83eb92b29b5f9f747211fd0cc66d44dff47784f77a2b32f96d0d6f8fdf7b4e0",
+			"package.json": "9d810293ccd369ba93e636b8f868b7cfbac1c55d3e5c222fcfae8281a69633fa"
+		},
+		"programs": {
+			"lib/index.js": "a3ddd087677521a51f4c1065ee87e57295e0e3187a93e049109e54ecbce85bb7",
+			"lib/invariant.js": "47327bf113ae9c0a1f240f697df15e8c5111472eda9bfec7ff2fa59baa3f63cc",
+			"lib/types/archive-admission.js": "23fee40642c845c02f2498329ee3367908665129d1772c8171d8f59fb32a6055",
+			"lib/types/brand.js": "d09800469dda7b6b692aa47d0001e3013928b753878244488195986307002d67",
+			"lib/types/index.js": "5ad9c610e11ed44805b7222c9de1fa4896296511b171d5dc6e1cae47a7c4bf84",
+			"lib/types/invariant.js": "d4d980d0a93f783cbfbed29b5fbf9cd6244cdc2632b6ccada624fe78159811d3",
+			"lib/types/types.js": "ba8bb16a02cf17594a7084afbb7d48926ba5d135205821dc32e62b3f3fd0d7ce",
+			"lib/types/view.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "a21f146983f3554f86eff34a134ca3ae6af882610fe92e4f56bbcc2e487db07f"
+	},
+	{
+		"name": "@deepseek-ai/dsh-jobs-local",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-h8N5VxKl+cvc6NoZ73ymnFTyf2HPlzbAImEjvzmmhMPiotooXSFW/YCFAimrL883L9m0d4XZBsJOnlLekfHNFQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-jobs-local/-/dsh-jobs-local-0.2.0-rc.1.tgz",
+		"sha256": "9a860b0cfdb15ef3babca22e22e23b5e4a6a035373eb2120717d9a851024fcf0",
+		"modules": {
+			"lib/index.js": "3bed0cd38c649f39b148752e742ff1ef57696a6b9b11b15ff8cc6cd1d4f08f26",
+			"package.json": "f5f62efb897c568eb0a0f41bd13ffdebc06490790db9c49fb7d8e0ff1f2541bc"
+		},
+		"programs": { "lib/index.js": "f045c307bccf2d8b873f86e427d3235a56568779fcb526228444692745ad43d3" },
+		"loadingDigest": "38f0a6ca909766b116c5246823043c5c3e38598e82c3187cbbc4f814dd8104d8"
+	},
+	{
+		"name": "@deepseek-ai/dsh-llm",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-F5ZlBG8z8o5PfEWeEF/PN9t/A1N/oEErvqmpqE4J8f9mJR85DvBdV+rjDs7OjAbMJsJ8INjkbroruG5NNKDg5A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.0-rc.1.tgz",
+		"sha256": "8fc47d00410abc90f802e1648280b2b63350e42395e260d0efc58e8c5f08947c",
+		"modules": {
+			"lib/index.js": "9132c8a8053ee82b9fb1ded4f98c85cf557f288a15a85c552c6b1fb319ead120",
+			"lib/invariant.js": "8cb78641252b7a41523fef2c571dd42c698de4c9475dd91683191cefa4dced48",
+			"lib/typert.host.js": "49bac9ae980b700f4c20d71896595d5282642e818569d1556d221fc4c3679a22",
+			"lib/typert.remote-client.js": "8be01248041bd25c89117f1ad76934638f74808166bc1f0ae027a6ed24a5c6e8",
+			"lib/types/adapter-failure.js": "f1213f11f11e0f20aae26c09a5e0cf3d72512c1f1519e1b3f107edf64af43c28",
+			"lib/types/api-key.js": "254b774234c0bd38dd759765c0fd1e60788651a22106f5559ec2760a39935f2d",
+			"lib/types/assembler.js": "35a4754ab854055942b9142934c595c3e6358a717947daa2d8d89847aef988f7",
+			"lib/types/assistant-stream.js": "7e0cc96a4d60aed34381b552f9cb4549d70df36dbd28c0630da4cd93fa44b7a1",
+			"lib/types/attribution.js": "6f61d7b685175f7c74ed2a0498212258240f2a7fd93e939349cf7daccf33414b",
+			"lib/types/brand.js": "6b70219e0478d3307d865309523e7e7be3f169b06c04f4eef0d49b54aaef72a2",
+			"lib/types/call-config.js": "170f3ce7c7136b93087e2f5d50faa8b69815894ec3ebdf26c36d57e4c7a17a03",
+			"lib/types/content.js": "79802e2e6bece64114c8f6857943c2cd23742bd2c20b067cd06298d397f9b85e",
+			"lib/types/error.js": "2a630a88b278ef18da72abbca0e1288b7a6b221434cbe51a69aeaf70d178da4f",
+			"lib/types/index.js": "23d7367c444252733783e682f31badc56d25ec08bf8817a056892b2b805e8f1e",
+			"lib/types/invariant.js": "31e6ab4e29731d461b2bd49fd285666ea1a1fb96fa71ecd5c449c6c27e95d889",
+			"lib/types/message.js": "c87812f77a2afd284f271af071575edcadfde3daa7b6554d77b96810ce4688e0",
+			"lib/types/retry-policy.js": "f0a8fe075ac24c56ed2aa5d5e359a85539f5ffa237af54b68d3f4fc5124b5d83",
+			"lib/types/types.js": "14106d660103de2db746964fbb5be90c5eb2a7ff736779e2501e9faff956cbf5",
+			"package.json": "7255a085c517b8ae60a751533a871ef32a370b61a2eafc80901d3959b5ff9643"
+		},
+		"programs": {
+			"lib/index.js": "9afd2af0666b5574d461092a4a3e1cd08ab07e412a51ff999d9dfc5096bf50e4",
+			"lib/invariant.js": "055b3783ab0d070598b830d01bf07f21c6f8efee91eb89b72ef05a75f7d2d60e",
+			"lib/typert.host.js": "512e8aaa8b2e73829474aa6803108e27d56b054111399c19b9e75b6164de41b6",
+			"lib/typert.remote-client.js": "fa4a384abb4e1bafcf3c43a9043e5bafe198d55c28c2b31d5a3868c8dfad9ef3",
+			"lib/types/adapter-failure.js": "c571e84e60dd5e3e60fc2ebd7c9b6650cb1d9eb86f5b4cc208b00c2d9bec5c03",
+			"lib/types/api-key.js": "0e10fc8e2737d8f0ce092517d629928df6825c698048bd2a941182dcfd89bc3f",
+			"lib/types/assembler.js": "f8318a579e1276a37823faec87dc8d2fe04822cd59da62615f6c6197b856b787",
+			"lib/types/assistant-stream.js": "cfc1dd13092d98758e4fc42729e738d36ea087eca6780df5e7bd1bf5f7bd86fe",
+			"lib/types/attribution.js": "2431d3ad09c8850e80c6bacc8a75b1103313d17e2f1b19f15795372f73ee7ded",
+			"lib/types/brand.js": "74738a90eff8875d2a07900769f7fc3fb7ebfdd0ad2cc59696a35da1d5181392",
+			"lib/types/call-config.js": "2cd854c3b1ba061f29c8de2f1ee49ddd112b2948e2c5b35cf53de782a70c8c9f",
+			"lib/types/content.js": "77267c51ed16f8511c336b0cf69f2f2ffe2b8d27c16f4950deeaec82109d1038",
+			"lib/types/error.js": "cced43803403777def3d37bcd4be60ba0b4852d162410ad34b13fa886e8ac33a",
+			"lib/types/index.js": "68b8d4663d6c1a1d631cac40195c65697a73e8d38eb274c6e0e5b05b84796d01",
+			"lib/types/invariant.js": "80736ac01b0b98c24908dcdce249ca5fead6e593aaa1fcf9a2cfb1bae6376092",
+			"lib/types/message.js": "c065bac7cc1052ed136aa8fb9db4d1ff0c57fb4940313614ed18ebb18a57eb78",
+			"lib/types/retry-policy.js": "a1d4a7ee0cbdede6fe666f1529455f6f73703a4d04e96ff957b1251ce12d901a",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "11ed0054e954fa8cadd72c2a9c989c886f3b00b0c59decc4b293c5d3ae44c4a2"
+	},
+	{
+		"name": "@deepseek-ai/dsh-plugin-manager",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-5GVhQcwQi1O9UG4YTNgvR+PO3BDV9+XAAF2+YrIm2ycFwQ60bk2wevpepm7Pcw+g4dD9pmjigg4OY0pC4YBHjg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-plugin-manager/-/dsh-plugin-manager-0.2.0-rc.1.tgz",
+		"sha256": "02879d58e0ee75edfde2d1cc5a39c63cbbaa61bc21ee3cf311ea5218d23b27fe",
+		"modules": {
+			"lib/index.js": "f46a48b3422927eea5605a70b78502e06ef9ceaa29d7a73f4a7f742361ff51c8",
+			"lib/typert.host.js": "fca5b000a2fdd995d56da7ba21a33921e4765898332db283c255df0cacac4b25",
+			"lib/typert.remote-client.js": "41292d52847b26265f4b55807ad3118b75d46a02edc7bbb66ab04cdc2f88822d",
+			"lib/types/build-approval.js": "a94c5e9217cf7c94af97e73910a292e63a9b54bd2a2bff44739f616c792394c4",
+			"lib/types/failure.js": "144c57fa0f5e7c1fb9d850f97d80d46885e92aaf6cbc4b6180b9797f07de2303",
+			"lib/types/github-connection.js": "0f3acd07fdbb50e7c73b147a242b69281c446d12a15004bd75cf078679936c30",
+			"lib/types/index.js": "0332934b288025bbaa89d73e782cb1347d9cafc5c92025b5caf51308ca471b92",
+			"lib/types/install-failure.js": "fc22ec581dbf3a04ebed6fa2bd9785298a8cd80873a999cb909e9a7e45f7627c",
+			"lib/types/install-spec.js": "27ae5899b75ec2dbe113aa0c35874d983ddd345285bfaf5502e8ac5da26241ea",
+			"lib/types/operations.js": "bf511a06b6ff2d7aab1f7725fcc80f304eb32a9541790e22cd28f8a9617b2c68",
+			"lib/types/patch.js": "cc014a3a09880220026a22792d49628e484edfe99ba4e03658b64891816adfb5",
+			"lib/types/registry.js": "9b8e2a742c989c4741dc4e5a2ba25a00b305d71b5eea90213d24a38ebb53ae5d",
+			"lib/types/run-tree.js": "3e65f458bd298dd2d3a8e3b48b30d771bb8e60a097bc2e6e924dad647f953e4b",
+			"lib/types/tools.js": "b7314b13486bd32657b20b931826a5f91bf2c421983438f29f7491ecd69d8eb0",
+			"lib/types/types.js": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2",
+			"package.json": "8cb610f905ccf45fc6a2bd0db78e336a3ae05824d1f09e882594ab55af15bdb7"
+		},
+		"programs": {
+			"lib/index.js": "1d96c11c99db39da0960084c808ec67e097a2ce9ff05232d8e1252fcb7c92714",
+			"lib/typert.host.js": "7097d160ec797056f2c305669ee891825b4eb4ae687d79eb6d8803adbf910550",
+			"lib/typert.remote-client.js": "e84419d2efd4869140230be52ea05d1503bbf9754bd597c5eee3138be6ee6106",
+			"lib/types/build-approval.js": "9ffcf7c5197dea8ee245b4b785249543b78f1f4ebcafb715782dc3702d7f2634",
+			"lib/types/failure.js": "65d11e7ee0de6bb654f5f8043c65e68b75f9cacea1dc7662cbb665e0ebb31aea",
+			"lib/types/github-connection.js": "e453b9ca17a06e279e5ff657f351c3a71671515d3412e3574f69ddb0de39f682",
+			"lib/types/index.js": "d016158f45e808e1284e9c308c551ea330586fe667ffadc38d562bbe9ca4597b",
+			"lib/types/install-failure.js": "8f4b491b61a3127e587d39dd1a8cc4039b5b9f8eac79993391b073c9e0f04ba0",
+			"lib/types/install-spec.js": "cd9bb9831a1ac7ab0bbe21230eacfb0df65dedbb66fd0acbf833de2b68d1cefe",
+			"lib/types/operations.js": "db34772938f440315c05b3f9ebfad53bd900ac18c372c441fe76eb5625109ba5",
+			"lib/types/patch.js": "daee69ee2ebe04f6f0119ebc4c0f0d3df854766426300cad04c303fe45cf158f",
+			"lib/types/registry.js": "ea79cc0de53100722bfbb0159ebce8a1116101c8d171b974f97775fd2d2bcad2",
+			"lib/types/run-tree.js": "f8be76dc4b9890935c4db2e636774c0a2f30576beedb1c2fcf636d86f68903f5",
+			"lib/types/tools.js": "9dab7451db4dff6edd0cec0a321c13c8d34d37383ecd3135235d02afbb6c85ca",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "7d0f18d29e6f8ee50c49091ddc179686efe0a569568e3894662c7a43d1bbf569"
+	},
+	{
+		"name": "@deepseek-ai/dsh-ptc-runtime",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-bz4ObfDeRZyBCejUMrSiDKpIffCImGafgktIWqTEAqNCprVWLRUHT+rHGFPcxHJRBsvxFQLlXHkYc/ccfqIB4A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.2.0-rc.1.tgz",
+		"sha256": "2859d0360281d8312a3c58e89bf527b07bb7659269b0b73dccdbd2723e4c8f85",
+		"modules": {
+			"lib/index.js": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
+			"package.json": "9aef21b169a5b665336caa1c8a5a1dc1e41c28ddff69daf28577cf5e35154217"
+		},
+		"programs": { "lib/index.js": "2cce6f19ca57740a864a07852bc885d4114c48711326b83a50cabc302e892e3f" },
+		"loadingDigest": "bae6af62627d8d58de77d8222f9dcac4c4a41af6a89fd7f9fa579a5f43e7e7fe"
+	},
+	{
+		"name": "@deepseek-ai/dsh-pwsh-local",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-iKi2MdBcU1B6y0qe6oDvB7JUPL2DyMOfmNGww/+4eFh8jRnlJe+uoTJSRmcq5ofKHzChWfuuXpepiBJr9NFt7A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.2.0-rc.1.tgz",
+		"sha256": "effecad22900271997bfce9d2da31940d9c54b896aa895859df7fefb5bc79c10",
+		"modules": {
+			"lib/index.js": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e",
+			"package.json": "65cee3e788b661f07ae97029e7cbb190cd8210e381da1002936f83cee8164314"
+		},
+		"programs": { "lib/index.js": "4e2cb7f3aeaf7cfe3380c9fd7b0b48c06313060680bd9fefc639aa2cdca67fc7" },
+		"loadingDigest": "c3e055b258a2022af26ff6959719692297a898f84cd2ca812345af6091f4d16c"
+	},
+	{
+		"name": "@deepseek-ai/dsh-pwsh-sandbox",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-1vxcRjpRCk5ynQn1+QZM407P9v2oeFztZatg60Ti6LBO1JoXUBDdtcGDtpD+MXOu7LT/wxRdNpqnCyqXs5k/Ig==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "814e75a90b29560fc6390c1318bc4c177c5d87afdad0e6d0eda9f5820986fd3a",
+		"modules": {
+			"lib/index.js": "bed19d2cea875b152f9e811116b59c2a45e6711b1c6cf1d8bacc4d20e15c6783",
+			"package.json": "7b0785ef8cbdb64df136e3f05d998c1b10d7aed038541512420e8237883a9d0e"
+		},
+		"programs": { "lib/index.js": "23755f4bc2a1797364c319e7a7954998925e39eaaa7e3bb223c7b15544a826bb" },
+		"loadingDigest": "ed543842b927a8ea370c850ffb1e4794dc64be9cb795567c83261ab0407b9ca6"
+	},
+	{
+		"name": "@deepseek-ai/dsh-sandbox",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-NnEHqSf4SKoM5cIqtHg+utLUZYJX4r9u2PwQbEpYwiOYSvOW5G4DRtLRpIX7J6V2HOC6CXo2Xcm3DJBOsbKYOA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.2.0-rc.1.tgz",
+		"sha256": "0b1c6e45b6b2f0e1bf07403e355b2e009ff3735d503c83446d7794ed04760b16",
+		"modules": {
+			"lib/index.js": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
+			"package.json": "c819086d3245ccc6d006627637fd9bf7f450e9af3f39531129487e39572580ca"
+		},
+		"programs": { "lib/index.js": "65c26fbec4020c6c5be45f62317151c2d4b082409099415dcfd21962535d4dd0" },
+		"loadingDigest": "b4c44dc5d88a2eebd5145567efce78827bd1bdeeb532f5865eaf907ce2dd1032"
+	},
+	{
+		"name": "@deepseek-ai/dsh-sandbox-policy",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-O850xvmnU+Bxpq7F7d0QjiFm3Y581GwFxfvBvLohzyAC81M6iXGBrbxt4EcX/CUPJEIHB0KSOUrX9/3xQulNZw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.2.0-rc.1.tgz",
+		"sha256": "4058a212d031fafb2c073e49dadbdf52b07cb1b2d937f4f3fdc12dba816c7c30",
+		"modules": {
+			"lib/index.js": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
+			"lib/invariant.js": "265d56bbd39b0c383a6d8e5f07dda3a56d3bffcc69424b60a40babe99856873a",
+			"package.json": "30bbef60ae3f30666ed9ae5718a629de22460c65d04902f9dd9d2b7719cc07dd"
+		},
+		"programs": {
+			"lib/index.js": "e6cdd6cb194a74188917ec769fd289f47641d943af5053cac004ba7a47681b4b",
+			"lib/invariant.js": "8d49b466edf0f0db733e2a4af5233e36e28e9c2d13a955841801b03297af2722"
+		},
+		"loadingDigest": "0ac97ed1268223acf55fb3db47435f32431a0c39e62175000dedabc2ed5f28dd"
+	},
+	{
+		"name": "@deepseek-ai/dsh-session",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-KUDCUk8kmiJCwvV3gDbkUSpkyoGHdg36nIhKsEh6iBoYDuIQCuvX2htiVRXCm099XZO6rCBVInmm1193UoPYcA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.2.0-rc.1.tgz",
+		"sha256": "56ee80a9b292368ce9959b348f8b933e54d7c4456a032e05e3d55901708d4e49",
+		"modules": {
+			"lib/index.js": "87ea85e2fb5318bf1f826db9a1c88c1b26d3ea328027a7f32b211880c4d62b9d",
+			"lib/invariant.js": "53066dc4945c0159fb5b48944b578a2d2d22f2f3bd5042599f2f6278edc84466",
+			"lib/types/fork.js": "72ca7ae2cce506eb607e565f2e6b15fc6e3c2663de8403f79e37fc3a469e34cf",
+			"lib/types/index.js": "71b3a3578b85704f026b590462e7d5e8bceb6dededd4e8782a83696138ec7da7",
+			"lib/types/invariant.js": "975e1640ad5dba930b6031315ee7d98dd01151155d2db7e993021de1feef4f32",
+			"lib/types/known-event-types.js": "8f38e6fc9439bb4e47f2bd3aa21c86d5141ef9679f41181c9d9a48765c67d3be",
+			"lib/types/preparation.js": "78dea29f5e11a4d220945a572b3eb26cb66460e6a368a423bf597c3ef05a5faa",
+			"lib/types/repair.js": "ee2e02d4e924bf01af621c38c27e030b89eaa8e0abfdf801a6220eca95aa2038",
+			"lib/types/request-header.js": "3f73ee59af794df50df159a9c45c606f0fbce364c482b371831d1e8f26b87aea",
+			"lib/types/seq-ranges.js": "68a127c76affa98edeeb50e302eb43f154f4d24f7d04cb95ba8b323e88f3d09e",
+			"lib/types/surface.js": "7e9d4bd3b7c5b2eceed0f8b035e9c021237c72baa2b53e4c6fc941e8b417580e",
+			"lib/types/tool-history.js": "2d2c4f4cbb6717aa2f487af52ce6a81e2002ce2c768cb5a4210c867ec49a0e95",
+			"lib/types/types.js": "a03acad09eec657b94441109af0da31b5b29668feae35d1b9e72fd99beca505f",
+			"package.json": "2f443f9ef9f0e4dd5b975641a41694bc24596fab629abb51c42969b7c8c0e01d"
+		},
+		"programs": {
+			"lib/index.js": "9651af6288386b1d01a8a1cc096b4da63763e0958aaf68d0ef081f1fcb3bdd20",
+			"lib/invariant.js": "3acff48f80faa83e2cbdc9587e6796ded28cb26481ed0018015f7ea935009945",
+			"lib/types/fork.js": "3e0864827e6549c55671f223ad42f155edaf4fef0268b2a203db7c60b15c7199",
+			"lib/types/index.js": "f3ac8b0a33879e6de9b00c44393ed6eeae225de487411910a927655c4fb7cd37",
+			"lib/types/invariant.js": "f91d6ce96ed4b0dde07f2682eaa4666ae39fe1c6e2a90c2462bb08a2133d843e",
+			"lib/types/known-event-types.js": "40ac520c8c2c01fd835f7b19cdd94ac5863cd717bde5e00b6e65d4851f186791",
+			"lib/types/preparation.js": "ecdfaae0935446a69d242a0b9c77ca62954f8c68fe30dc0e3a0b858402023a8b",
+			"lib/types/repair.js": "05ccaf6d1fa81e8715a34a8d82317e91f714a399067dadd83230c3a84d8f1b20",
+			"lib/types/request-header.js": "39c9649ebc8c4a51cea47a67398d904b80bf81d6e03f0dea0fadb1cebd116f9c",
+			"lib/types/seq-ranges.js": "89edd0f398abfac359eba0130c9b1f525a363c48a656d34edabd9f9aaea8499d",
+			"lib/types/surface.js": "a148742e392fb75a1993a5dd89866cee8bb0b90d2fd22d8a5f1df9310b1b383d",
+			"lib/types/tool-history.js": "daa7e0e3e791f1b7001ab5567376faa493d9609ca5899182f258c43dc4d84911",
+			"lib/types/types.js": "10e24b6be50f234352ffcdca6d57c0c185ba64843b6db2e1bf1e3286abf0635c"
+		},
+		"loadingDigest": "47ad4022ceb88fee1b13b5ac947443f96ce253dfb22f8c39ac397280ad29692b"
+	},
+	{
+		"name": "@deepseek-ai/dsh-session-format-v3-to-v4",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-vnplfHQOqTXpe7EMN/0h0VZyBS10+kzzjm5x/X01iu5lynbOQs2jRdi4Lrzp9fgnAUEJYaESZZLlWKY40arLCw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-format-v3-to-v4/-/dsh-session-format-v3-to-v4-0.2.0-rc.1.tgz",
+		"sha256": "fbee2c059776093ae18889bf8ac82ab3397e2e42c5ea2bb2ecbceb7bbfbee499",
+		"modules": {
+			"lib/index.js": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
+			"package.json": "72632c0f2042c2db7f42012ac198e3504a19dc4919c2ebd58267d0238c80429c"
+		},
+		"programs": { "lib/index.js": "6145523403f90c1984c02da07549762f3e04fcb302b5e314a001f7c3f962805f" },
+		"loadingDigest": "5b040372a4432fafc6bf1c0e04be48d1be916c3495816d4e8dd30468952121a4"
+	},
+	{
+		"name": "@deepseek-ai/dsh-session-persistence",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-OAHmDpR3LasgEXzpmGyajlgcG5tOEzlUSclovllLtKaY402hcTn6Vm7W/EzRMwc+jvSfEQyXDY1g7wG3t3Ch+g==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence/-/dsh-session-persistence-0.2.0-rc.1.tgz",
+		"sha256": "af6ff71617c6e1df006c88a873c7416552cdc1a1317fb33c79bd3279c49a3a26",
+		"modules": {
+			"lib/index.js": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
+			"package.json": "a5a768a7fa9dff906404056185bdf186dbecd12e62b0725a762fc71fc4269df8"
+		},
+		"programs": { "lib/index.js": "9ba15ebd7b22c52163c672b518e0ea1a2a2c23662695cc932e1f3726cdd51154" },
+		"loadingDigest": "ada72328490fccb2f2a6f5f747a473e106fcca5e3d086786b6896b8f110e54ac"
+	},
+	{
+		"name": "@deepseek-ai/dsh-session-persistence-jsonl",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-16hp5zx1Q1SIVJfQI/hrxASHMkE/r+pHeELn1b/GZCpKwCD1nwiQapqHhgq/+WEb9SRvRpWAxE5dQWEscZghEw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-persistence-jsonl/-/dsh-session-persistence-jsonl-0.2.0-rc.1.tgz",
+		"sha256": "5f26f58226db1c8b9fabb21121176360826cc0b8f9ecc183ae5c78ca89e12ade",
+		"modules": {
+			"lib/worker.cjs": "cadd901598e2bb8a847409a980f59deea639eeadf21e30da324fb674a4ed8038",
+			"lib/index.js": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
+			"package.json": "01debc5bef48135fba71b78f9f0212e097f7a31ad30a14a64c3f6cb12638ef48"
+		},
+		"programs": {
+			"lib/worker.cjs": "cacc573e51f6c37084d06bb04b8aa74f41f96615ad38055b2594f88083406681",
+			"lib/index.js": "4d4e99e13a1c2cffec557d01071f5cf2c811fb0904f3cd0b4b67655a3334e160"
+		},
+		"loadingDigest": "8475d09a64f63d103c07ab7346d7098ab2e0df44b1b1e2336be9d3cf4ea5c319"
+	},
+	{
+		"name": "@deepseek-ai/dsh-session-projection",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-6ymxQyycjXlxayjgVfxAsQv8POk3oKny/mrpxPcz30/Sv8FRsWnEnKaWf1pQvlBsGQcN6atOqXWsNyvHSyT/zw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.2.0-rc.1.tgz",
+		"sha256": "f4518edd373985721a7615c9381b5703434f38b6b31cff15d7bfd3b486443b3c",
+		"modules": {
+			"lib/index.js": "022f1d13e25aeb3c18e10407d84c69e018c1c05a65c9ee36ed14d89b185a4fa8",
+			"lib/types/index.js": "f3daccbaa1cc82749411fadc7923ff9275cc96b7ec594e65f3e01a3dbbe29444",
+			"lib/types/types.js": "d6b9f7a57fe4dacd7b1a6403a34e6cd1ccd088c2e024e02cbf577166faca6ffb",
+			"package.json": "ac165c17714f1af15fc9018a06d7cda0fdab44bb4483ab16eafdc282b9f2aafe"
+		},
+		"programs": {
+			"lib/index.js": "0893b519f2b8c9957e229e159ca3da0e84135b7574251eba1cd5e2b6e2158808",
+			"lib/types/index.js": "42eb631f64dff8d190095e0cc0cc7aa746b688d52d4ccf7abceabf1362b2c3ea",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "e0d506e976f0c0820d6769bf9398dc786e066a546fa1d12d62e6431b6239389f"
+	},
+	{
+		"name": "@deepseek-ai/dsh-shell",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-gdugmqfA+BA1y+qLxHjtHuw8Jc1Dnar2dCaKlawagUxnBCK7mcqkYstTaeiANM7o+2tWELLIt/Pjj46PnMY8iA==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell/-/dsh-shell-0.2.0-rc.1.tgz",
+		"sha256": "85fba32b588dd3ff0bb990d102a043f9eb2e2ba39ec45c8fc815bdbf1a79fbf8",
+		"modules": {
+			"lib/index.js": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
+			"package.json": "a2967633b7fe3ab32cbdf807e1bea04363b7441bc2b802f2257819abd12b28e8"
+		},
+		"programs": { "lib/index.js": "acac3b2a24b6341887e38401f79b0c311147d1778c0dce9847801cbc3aa88c93" },
+		"loadingDigest": "109d3d27b92d74b80e41e5ef60bd42dd1d378c6b759288d1a929b6f631552918"
+	},
+	{
+		"name": "@deepseek-ai/dsh-shell-env",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-4qOlCOg7Bs/dieRpYFK5aTycWLuJU3RLsbGHtgwz9hyjCyI339pCR9Sd4TyZstENhPHI9k/mjKy1IsbT4T+wig==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-shell-env/-/dsh-shell-env-0.2.0-rc.1.tgz",
+		"sha256": "4983c6317892ca5cce6e0d16378ddf47293f571fc667d3ab11816fe9685af05e",
+		"modules": {
+			"lib/index.js": "82b1e6663968307a387fd7f300ff9db5e3c1ff707b32953da82c3dfa12024364",
+			"package.json": "01eea37e115c18bfbba18c6976e2455895fbac1a9298a42d90b068769be6d319"
+		},
+		"programs": { "lib/index.js": "4791ba7c803bbeb87fb45fe6b6c13d319fb8ad39d5bacf0c88ff2436676a0077" },
+		"loadingDigest": "2fe7ec6308e351f64ec605f2bacf7d77d44b529d4704e727c9df17267ee90acd"
+	},
+	{
+		"name": "@deepseek-ai/dsh-subprocess-local",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-rO0VCIPqEk6A47rlVZxvHXXaoQ2MS8pW5yhXpb3+hqc/2NQA33ZOMViqeDeVyyBlhLTxn7p972kETEB1EhEZfw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-subprocess-local/-/dsh-subprocess-local-0.2.0-rc.1.tgz",
+		"sha256": "3bfabfdb8091e0540ccaf3d352566048151e8c89f0551e2019cf3eaf9d96146a",
+		"modules": {
+			"lib/index.js": "e40106ed35a1e1744c016e77f2cf59b07f87969bb7c4b424d26fb08da75e3922",
+			"lib/output.js": "4f77ef6da608d36df168c99177e9b527e7145df1418845eba567635e64a4c2a3",
+			"lib/runner-launch-B2zsQ1Dz.js": "6df08adc4a27f278878a5f4cde8b551b51e647b922ac7d6591fd62d272ced153",
+			"lib/runner.js": "4e21528dfdb3e92bdce2340945dc4dcb202e4a4af0bbeb8b97585f67735d30c1",
+			"package.json": "45e100772a6e1b2273fcf06fbe069a823be0c3f22407869dd3ee6c2a5ebaf16c"
+		},
+		"programs": {
+			"lib/index.js": "5c310b56dfb45674442ad28c249ddcb69cb01317958db2530a198c24d52b456d",
+			"lib/output.js": "847fa903d1373f700f9c3455c93432e35052bbb93eb6ebd57aeedd82a8e291d7",
+			"lib/runner-launch-B2zsQ1Dz.js": "37e251b01260c34613374e70b997cc51dd0015523bfc42037ee5fd8a25431890",
+			"lib/runner.js": "53bc0d336ca33fb2cf4ff08916149f1f3230e09c7be3cd1d9f6c47f2a19ad661"
+		},
+		"loadingDigest": "727cfa9aa41b1940d3b6d61dd5827b5ba6c86046f8e22cd8f7b171591459a889"
+	},
+	{
+		"name": "@deepseek-ai/dsh-system-prompt",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-AZC0HBWaiopkVcJXh/WEzyyF19+/yBPnbuLrZoD7h+UJYF8iG8tlDabauWfMw+dvgoYe9hIiTV2EcFRv4AgJhw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.2.0-rc.1.tgz",
+		"sha256": "986c461e1fd98644f74a749f3423e3bb73ea192db46fefef0601a1477f9c92aa",
+		"modules": {
+			"lib/index.js": "ff422afac6ba85f89afa985d921aed0b603feb354a05a549c48eae04cf0d2f57",
+			"lib/invariant.js": "64c55f06e5583df9b577d613c64b6bac9f04d189ff5ef2d613caa65ae9f79d75",
+			"package.json": "15b3df1dd7402705398d2429f49343106393f71d198b0d90cc966815b798547a"
+		},
+		"programs": {
+			"lib/index.js": "f143b76b0ac707d4b881859deb979884de738230594f57f3e0da7960ab252f96",
+			"lib/invariant.js": "c4b2b4ca734001b7b84295bb0fbea061eeae3303b1c0412da41d3a56ec57feb1"
+		},
+		"loadingDigest": "94fbc4352b4fb7c9b04e0d3eb1405f3a68a844b74ad988f39161ba98f521aeab"
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-bash",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-/uF4JXgGIc141xAOsA89c3jlaxVcEjOeXmJ6WDtcg6IcEVvpXbIW4DFvgd49VFCskcGoyzy0eOVPATkIryyo2A==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-bash/-/dsh-tool-bash-0.2.0-rc.1.tgz",
+		"sha256": "bc20060ddce3e3ec6bc7821a5c4126b6ae7447400fb3921a8070e218f09fab9d",
+		"modules": {
+			"lib/index.js": "9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707",
+			"package.json": "0e3f1f40650fffaf358eaebd6cdb7dc4fb11be4508fc068bc35358ea0c4cd5fc"
+		},
+		"programs": { "lib/index.js": "60a0584841178397132ea6861531b6f75d5f266ef6b0227624f918ba0d3e8de6" },
+		"loadingDigest": "5fb429f1ed7099b2a8e6a1d24994321985aae12d8de58bcfcefcd97a54f08a3e"
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-fs",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-B6CY0yldjoWXQ2RY/5XNtQd9UHgcWRjw7jgZt9wk2i0vw6FuusQ/1VF9b0FPotmOhQ5W6MHiNaOwx0LS5lSfUQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-fs/-/dsh-tool-fs-0.2.0-rc.1.tgz",
+		"sha256": "0ca591b9f6a8d9ad4d1db30fb2527225606373b5325a4aef312e3d662342325a",
+		"modules": {
+			"lib/index.js": "66742231de99695b98400cdbc7bcf47b8ef2bf24600cf86f66bb35591981427f",
+			"package.json": "e5cac7e89436d03212ea527ce8a43fc0603228a1c5abebaa1bbc0f080603e2cf"
+		},
+		"programs": { "lib/index.js": "6a1a2ef79f388e46436ed703e7ecc083c5d1329d49d16bbe9fb9cc9f15464312" },
+		"loadingDigest": "61ef2cd955dd990b1820ba04bfd1540b3b7476fc3180a5f080b4fc8d27a168da"
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-goal",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-EIrmvt28dsJ1/ujj/7B6cd6URYeIiBg3pigjViTr9hI5XeGdbUsIie3TiIHixdB4HK8+f1TE27kDvWoIpCIslg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-goal/-/dsh-tool-goal-0.2.0-rc.1.tgz",
+		"sha256": "227e7b0a18a4c0adb03dc1127a8fb8f9e8d7fb45ffe725d99b8fcec50a88b579",
+		"modules": {
+			"lib/index.js": "7220fa7b5b7c95c94377ac32c6b01ecac5b4853d9dec3a48ab17d371cda63e6c",
+			"package.json": "185e65b45116b1d1b8ea1cc2f9eede2b3551a1f2d9b851a7ae8716eb2fc4d1f0"
+		},
+		"programs": { "lib/index.js": "1d2190e8352f2a3cd78f8df8c8b23d9e6ee4223483a72322ea2fb0ba5f8f3963" },
+		"loadingDigest": "5eaf4abf59e453f00b1ac8077c8e636b2bac5d75e92bfbdd78fbd8a92d98773e"
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-jobs",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-drRwecBoDKmjY3iS16w9/Tpt7qc+uJYmFpuYk7PaSFvRGEINQQWVlcrwoV6NFSr2DRTJnBEomEnQ7zCzMRy3hw==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-jobs/-/dsh-tool-jobs-0.2.0-rc.1.tgz",
+		"sha256": "80a675da52edaeaed1d363e3794156f7281913c3d2afe7a73f630f91b10c03a0",
+		"modules": {
+			"lib/index.js": "660066155801b20c67e6e288820961a365fe65738ffee1a16e50a2394ac9c7c6",
+			"package.json": "d0b6f47c0ae26f9b3c7a3ef3a71d7b4d80be8c3be22704b8b3eec1c8053a6d55"
+		},
+		"programs": { "lib/index.js": "b45d13d983e98d28aa8164d7997c125d1c28bae8976784c8e235bf8430224e8b" },
+		"loadingDigest": "351320b650ef0f38efa22884cdfec1903e72ec55b9393d80eae8e7851baa1010"
+	},
+	{
+		"name": "@deepseek-ai/dsh-tool-pwsh",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-jxKcyzZ1c9/1tRdBweae+fivnx4WhYMWco+9AG5ANmVHTOXaSCJ8RtUfBQyB7/HUXsLEU1jtHWg3kEcLxZK33Q==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.2.0-rc.1.tgz",
+		"sha256": "b670a0cace67e87f241c737f2a3b52fe300dd4008f76233c3a7692ccf010202d",
+		"modules": {
+			"lib/index.js": "59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c",
+			"package.json": "0ab2225df3c4b818c74e6398f6c41e5d97013459c8f0fdc9388b40178a9d508e"
+		},
+		"programs": { "lib/index.js": "685e36eb7326cedc2da4792c7492c2081049ef2c9bb855e9c36d5c7b60b6b645" },
+		"loadingDigest": "fdb4841ece36f7e32e53b8774aa1f4c5122bbfa5e6333d7a7eddc1a7b2927925"
+	},
+	{
+		"name": "@deepseek-ai/dsh-tools",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-HmXY+X4HBoeuGBJWkS+q91GEGK61XgNc3qCXT+QqI+nzCcg1VOIwWvjgOnr1c76x5HKPyxR7FF3PMMq3+hO7oQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.2.0-rc.1.tgz",
+		"sha256": "173440b373cf1a6f8bd21ddc7c867137c5069d2388023bba23c832a6249795c7",
+		"modules": {
+			"lib/index.js": "40f47709337c3c205d4e09e647f8588f4977e66f6d52f019b3cc7ef81159d84f",
+			"lib/invariant.js": "41a09fa8d0e0857c6232e8d3b13c8658929b6b6300c6b3a2c53980c05309c282",
+			"lib/types/index.js": "05d701b98fa465ad159555dedeee7470ac63f8fcd67d94a6ecc2c6570cbe9f4b",
+			"lib/types/invariant.js": "955311912d27f945c9298bc2add074b04fd04414312ef4f9dec92635639dd121",
+			"lib/types/json-schema.js": "912e04e68c2455cbb77651031449574f992720c90311e6cbecb1d35020bc1072",
+			"lib/types/presentation.js": "253894265253e38fa9db12f3696d9dac9fd2bed1363c04ce3f95c0f19a6c16da",
+			"lib/types/ptc.js": "3bb2d4b127bd21dd2b17c0ae219f851c4e37420a9bab73ab13d9fc51ca9131d5",
+			"lib/types/py-types.js": "50f65c90c88370f456bd7d565fa0c788da750fc4cdcfc72064c4296960191afc",
+			"lib/types/schema.js": "c3dd33029e3f80e6ab9ad9b0d853ba80b88177c1c2423080a94a2db91e6f33f9",
+			"lib/types/testing.js": "c6784f546e950dc38323baaad4009bb197eb25acf3a16adaa2893a44c7b7a650",
+			"lib/types/ts-types.js": "3c2f80465d6a420f15c75dcd023daa73af97307c3e22478c0bae67cf71c50d1e",
+			"lib/types/types.js": "d53c54d32353419ece121f485a5534ee054842b74ebab7b4a4d3325545d0179a",
+			"package.json": "4d94a4285686e430c153c87b5311e4656f3b3833fdbbcf3591110406a84ef227"
+		},
+		"programs": {
+			"lib/index.js": "4d83f27020473369e5d5d2bd00a5089dc72a4078f541c21e5ce16c6604535423",
+			"lib/invariant.js": "127d7c760bd223ec075c32e66bda35ef9c69e7dd355a836bac591a1e5efb071e",
+			"lib/types/index.js": "730ec4e2a8eab42e2e4c2a2eaed46157fddc07182ec847eaf599b8ca886aadc6",
+			"lib/types/invariant.js": "8aad8b5b3b4c58c777ac36654d64a083a2515016ccfb1c50e14bc78ca1d2cb55",
+			"lib/types/json-schema.js": "ecabc88dab43baab4d01db4ebe4895654b81749f278588c01e7924faa84700a5",
+			"lib/types/presentation.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8",
+			"lib/types/ptc.js": "8fb872b42219113fbaa8abd7a871994feb81c1c3c0c8954f2e98467ed99305cd",
+			"lib/types/py-types.js": "02ac8a88bae5aaeacfe42f5969c730b31b749d400343e8b0ac79c949060b0d92",
+			"lib/types/schema.js": "1bdffb85241b37c3203c1589fd5aa363326244ea679d4a015ea116c50facccbb",
+			"lib/types/testing.js": "8cc6510c709aaa842a557ed738a2fae77076504abe75b87d319bc4496d02ca7a",
+			"lib/types/ts-types.js": "43a7ec56be4712c758ab51258748ce5f019b54b96d2109f1a53c9238bb993d2b",
+			"lib/types/types.js": "6d4c56442eea53afbdee5dda8e3ebb48ebc9af423f69c8ba3c36d084ce7b42a8"
+		},
+		"loadingDigest": "1cd29c06e528ffaaa72a892ee8f108aef2918520f3df43dd70c9ae41a39e21dd"
+	},
+	{
+		"name": "@deepseek-ai/dsh-user-approval",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-0d2sFESHYhnnwuIPDw7sNImFE+HWU6kbX9cWZSPntMXLMhr8lgJFmtZFmrZwobQO7lhpEZKcvX8Jhzmc3OCdWQ==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.2.0-rc.1.tgz",
+		"sha256": "2f54cc7a3905930af5a540fb2ad8ebfb1c458e56e9d0a547b81e6fb7a2f81799",
+		"modules": {
+			"lib/index.js": "6a5ad1ba3c3dc3abbbae52e6c8c4463970ee0c1c8988cebb0d5cf2acd17ee90b",
+			"lib/invariant.js": "4c4d4f497a9cf8b2397ce0f029456c5d9dc52005f0e60e3fb6365695b3cded7a",
+			"lib/types/index.js": "0b2e00fe1b2cedc9b6349a38e07e26a05a09492da838f069c10b76cf13f6d6e8",
+			"lib/types/invariant.js": "0ee679ea1449b99266df9dc3c53606a61573caa432cfca3d44badfdac71a0ef8",
+			"lib/types/types.js": "525e6f38c039c0b20c6d071bfe06799e8fbc41b2af2ce8db7b1feb3faebad75f",
+			"package.json": "eff21ab4e65ee041c7eabc61f03b9fba28b21471463ca9e51af50f57fa965ad6"
+		},
+		"programs": {
+			"lib/index.js": "0541b7516a8abb2cf468a933bded14ab0cc6f6d6be2edf66d1105a8bb2bc0ec5",
+			"lib/invariant.js": "7cbce7e84635d209db0e1670399eaa025c03df8aaad32c3cbc4ae78e680f960a",
+			"lib/types/index.js": "c061d0951a79a8795c3fdd304ff647c76ee199b48519586639cf065f87c7c4a1",
+			"lib/types/invariant.js": "9349b8ab02632d47cadb7c7e5397088781f0687dc5abe64ff60a48b67dcf518a",
+			"lib/types/types.js": "59c2241ede0957a0d4e93789fff530e3fc3eb5f358267346777eaf82a7fe0058"
+		},
+		"loadingDigest": "27ab167b7c7a7c54dee1f03f75dab32491fc8706e7877d683a1236643321616f"
+	},
+	{
+		"name": "@deepseek-ai/dsh-util-values",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-Eh1HH0LFvztBwU2xotdfW5oCwLlWGjK2ygCC5+PnC3tkSDh9gvVQpEf0ezK+Kk6vpLz117V7VPehhR1+gs90+Q==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.2.0-rc.1.tgz",
+		"sha256": "7840c210683d0c79c4054b63b39b869d8fb06f2c5095c35ce0eb836beedd361d",
+		"modules": {
+			"lib/index.js": "d291828dc4ff9c4b43a67e7ed81625c8f90ebdcf4de2f5cbf2c33f38208ce2b8",
+			"package.json": "7f5894851834711e41f529d77e95f8a74c4892e6fd07cafff0f50f359f0b7b4b"
+		},
+		"programs": { "lib/index.js": "d50891d897458af7cd7e4bc116748073d5f35421f7ffdf93536237454b521deb" },
+		"loadingDigest": "2cdd26d82f4bc97d962b1ff7dc419ca7fc6afdd4c382d5e4a8ff3861300befdd"
+	},
+	{
+		"name": "@deepseek-ai/dsh-web-app",
+		"version": "0.2.0-rc.1",
+		"integrity": "sha512-Gho07L3/1hk0UdVc7PjYtl01CPRb9famTmgsw9KrzuBfUcv5co1gKdAJYF+urZdx7mqkux6lZDBqUNbOIrPgBg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-web-app/-/dsh-web-app-0.2.0-rc.1.tgz",
+		"sha256": "430cb785d6a800a6112a3b57d916d6450d90bb94134af19b3394ecd5a9b2e3f7",
+		"modules": {
+			"lib/index.js": "50c7ce5b93e8a7ac0117e066699cd31b553a5a135d38b7051d6a8364ac691af4",
+			"lib/startup.js": "95a47053483fbe8ec86711369b8791bccb592c303fcc89300458a4bd07c6c252",
+			"package.json": "0623b04fee889a1622cc6d4d3aa8d5b347f9260a06d11ff9b7160ce40cee5df6"
+		},
+		"programs": {
+			"lib/index.js": "875b581fb8a2918f226d082e98119488a8f229239effe9fe0ec8f79536730561",
+			"lib/startup.js": "f1aba5df366d09c63960d8b8a8be6699e3ddd1b9d8a2baf841794190d9c49368"
+		},
+		"loadingDigest": "1ef78bb1d0084433fefe46ab2589207a1b425d0ddcd83faa0800a5096b483485"
+	}
+];
+
+//#endregion
+//#region src/domain/rc020-rc1-host.ts
+/** One source for verified registry identities and published executable bytes.
+* Bound to the published dsh-v0.2.0-rc.1 tarballs (upstream
+* 4878cdabd87d4041bdaff61d04c966883b9fd07a). Native platform acceptance
+* remains a separate, currently pending fact. */
+const RC020_RC1_HOST_PACKAGES = packages.map(({ name, version: version$1, integrity }) => ({
+	name,
+	version: version$1,
+	integrity
+}));
+
+//#endregion
+export { PROOF_CAPABILITY_MATRIX as $, ACTIVE_HOST_COHORT_IDS as $i, admissibleForRemoval as $n, splitTextFragments as $r, releasePreEffectDecision as $t, PROTOCOL_V3_NOTICE as A, SEMANTIC_ACTIONS as Aa, resolveActiveProfileHostLock as Ai, effectuateBoundary as An, interpretClause as Ar, V6_ORDINARY_COMPLETION_RULE_SHORT as At, extractTextContent as B, requestedTargetMatchesResolved as Ba, readAsarIndex as Bi, rebindResponse as Bn, kindOfScope as Br, isV6PendingRootWait as Bt, SESSION_API_UNSUPPORTED as C, parseHostVersion as Ca, inspectTargetHostGraph as Ci, goalCompletionDenial as Cn, clauseIsGoverned as Cr, CLEANUP_CONDITION_RULE as Ct, projectCoreV2 as D, BOUNDED_ARTIFACT_TYPES as Da, prepareDesktopHostTrust as Di, unitDescendantIds as Dn, hasOrderedCoordination as Dr, MIN_RECOVERY_CHAR_BUDGET as Dt, snapshotSessionEvents as E, ACTION_MANIFEST_VERSION as Ea, prepareActiveHostTrust as Ei, certificateClosure as En, governedClauseRestrictsExecution as Er, DEFAULT_RECOVERY_CHAR_BUDGET as Et, deriveProjection as F, actionCompatible as Fa, DESKTOP_IDENTITY_FACTS as Fi, confirmRebind as Fn, isInformationalFragment as Fr, recoveryDigest as Ft, canonicalArgvFromCommand as G, RC020_RC2_HOST_PACKAGES as Ga, HostTrustError as Gi, capabilityRemedyPhrase as Gn, opensConditionLead as Gr, contractById as Gt, isDeterministicCheck as H, semanticActionFromText as Ha, readDesktopDependency as Hi, CONFIRM_LINE_PATTERN as Hn, maskCodeSpans as Hr, OUTCOME_STRENGTH as Ht, legacyRecordsNeedingReview as I, boundedArtifactChoiceMatches as Ia, DESKTOP_PROFILE_PACKAGE_NAME as Ii, proposeRebind as In, isOpenObligation as Ir, recoveryTitle as It, parseShellCommand as J, parseHostTrust as Ji, itemDiagnosis as Jn, qualificationOfClause as Jr, normalizeReservation as Jt, isRunExecutable as K, createHostAuditSession as Ka, acquireHostTrust as Ki, deriveItemDiagnosis as Kn, opensWithDirective as Kr, inFlightReservation as Kt, rootLocatorFlavor as L, isStatefulAction as La, DESKTOP_RUNTIME_PACKAGE_NAME as Li, proposeRebindOutcome as Ln, isQuestionScopeNeedingReview as Lr, renderRecoveryPacket as Lt, PROTOCOL_V5_NOTICE as M, STOP_PROTOCOL_VERSION as Ma, resolveInstalledHostLock as Mi, qualifyBoundary as Mn, introducesActionClause as Mr, cleanupConditionFor as Mt, PROTOCOL_V6_NOTICE as N, STOP_PROTOCOL_VERSION_V2 as Na, revalidateDesktopCoreLock as Ni, currentContractDigest as Nn, isExecutableItem as Nr, closingHint as Nt, CAPTURE_V042_NOTICE as O, CERTIFICATE_VERSION as Oa, prepareTargetHostTrust as Oi, BOUNDARY_RECORD_PREFIX as On, hasQuestionScope as Or, V6_ORDINARY_COMPLETION_RULE as Ot, applyUpgradeEligibility as P, SUPPORTED_EVIDENCE_ADAPTERS as Pa, verifyComposedHostLockDump as Pi, createProjection as Pn, isExplanationScope as Pr, openItems as Pt, certifyCheckpoint as Q, ACTIVE_HOST_COHORT_ID as Qi, actionHasCertificationPath as Qn, semanticActionOfScope as Qr, releaseCoverage as Qt, supersedeItem as R, requestedIdentityKey as Ra, auditDesktopInstalledImplementation as Ri, proposeRebindV042 as Rn, isRestatement as Rr, v6CurrentRootBoundaries as Rt, sourcedNamedTestRoot as S, evaluateMinimumHostVersion as Sa, inspectDesktopTargetGraph as Si, v6TestPredicate as Sn, clauseAsksOwnQuestion as Sr, validateProofManifestV2 as St, SessionApiError as T, ACTION_MANIFEST as Ta, packageRowsFromPnpmLock as Ti, certifiableOpenItems as Tn, explanationHasActionResidue as Tr, CLEANUP_CONDITION_RULE_SHORT as Tt, persistedToolResultStatus as U, validateActionManifest as Ua, readDesktopTargetGraph as Ui, isFrozenV042RebindResponse as Un, maskQuotedSpans as Ur, RELEASE_OPERATIONS as Ut, extractToolSubject as V, semanticActionFromCommand as Va, readDesktopAppRuntime as Vi, replayRebindResult as Vn, legacyQuestionReadingIsInformational as Vr, sourceItemForCoreRequirement as Vt, withDurability as W, validateActionTarget as Wa, writeDesktopRuntimeReceipt as Wi, parseConfirmationMessage as Wn, namedActions as Wr, RELEASE_OPERATION_SURFACES as Wt, segmentAuthorityBlocks as X, registryArchiveFiles as Xi, relevantEvidence as Xn, reportingHeadGoverns as Xr, readbackSettlesContract as Xt, authorityCaptureCounts as Y, qualifyHostTrust as Yi, nativeFileTwoRole as Yn, questionHeadsClause as Yr, normalizeSettlement as Yt, bindingIndividuallyAccepted as Z, registryArchiveModules as Zi, DEPENDENCY_FREE_ONLY_CONDITION as Zn, restatedContentOf as Zr, releaseContractFor as Zt, previewFirstStepInjection as _, LATEST_TESTED_HOST_VERSION as _a, evaluateActiveHostLock as _i, latestAssistantText as _n, classifyUserInteraction as _r, requiredSubjectsOf as _t, commitTreeSnapshotDigest as a, HOST_CAPABILITY_PACKAGE_GROUPS as aa, digestStrings as ai, CONTROL_RECORD_PREFIX as an, captureClause as ar, bindProofToProjection as at, HOST_WORKDIR_PREFIX as b, SUPPORTED_HOST_VERSIONS as ba, hostLockRowsFromComposedDump as bi, progressFingerprint as bn, actionVerbMatches as br, sessionQueryV2 as bt, gitCommandMatchesTarget as c, bindLiveGoalCapability as ca, sanitizeUrl as ci, assessmentAction as cn, environmentDefaultRepositoryTarget as cr, createProofManifest as ct, verifiedLinearCommitReadback as d, evaluateHostCapability as da, activeRendererModule as di, currentActionBases as dn, extractOperation as dr, proofDigest as dt, ACTIVE_HOST_LAUNCHER_VERSION as ea, statefulActionsOfScope as ei, reservationFor as en, capabilityConsequence as er, PROOF_KINDS as et, FIRST_STEP_GUIDANCE as f, evaluateHostLock as fa, auditedDefaultWorkdirHost as fi, decideTurnBoundary as fn, isInformationalMessage as fr, proofDigestV2 as ft, lifecyclePhase as g, HOST_VALIDATED_VERSIONS as ga, combineHostPolicy as gi, isWholeTaskCompletionClaim as gn, classifyTaskIntent as gr, proofV2Rejection as gt, firstStepGuidanceV6 as h, selectHostCohort as ha, auditedHostImplementation as hi, isRootPauseRequest as hn, npmEscapedPackageName as hr, proofOperationMatches as ht, commitIndexSnapshotDigest as i, GOAL_HOST_PACKAGES as ia, canonicalizePath as ii, isVerifyingCapability as in, removalIsPartiallyKnown as ir, PROOF_PROTOCOL_VERSION_V2 as it, PROTOCOL_V4_NOTICE as j, STATEFUL_ACTIONS as ja, resolveDesktopProfileHostLock as ji, isCurrentAcceptedBoundary as jn, interpretMessage as jr, carriesCleanupCondition as jt, DEFAULT_DELEGATION_TOOL_NAMES as k, CERTIFICATE_VERSION_V2 as ka, readActiveHostGraph as ki, availableBoundaryQualifications as kn, hasWorkPredicate as kr, V6_ORDINARY_COMPLETION_RULE_COMPACT as kt, parseGitCommandManifest as l, evaluateExternalWaitCapability as la, sha256 as li, assessmentOutcomePredicate as ln, extractArtifactPaths as lr, createProofManifestV2 as lt, firstStepGuidance as m, hostVersionFromPackages as ma, auditedForegroundRenderers as mi, decisionBoundaryKey as mn, canonicalRegistryBase as mr, proofHostSurfacesOf as mt, GIT_COMMAND_MANIFEST_IDS as n, DEFAULT_HOST_LOCK as na, COMMAND_SURFACE_MANIFEST as ni, evidenceCoverage as nn, partialFailureOf as nr, PROOF_MANIFEST_DOMAIN_V2 as nt, createGitPrestateEnvelope as o, HOST_COHORTS as oa, normalizeClause as oi, NO_PROGRESS_RECORD_PREFIX as on, captureItem as or, bindProofV2ToProjection as ot, claimedBatchHasRealRootInput as p, evaluateToolSurfaceCapability as pa, auditedDefaultWorkdirProvider as pi, decideTurnStopping as pn, segmentClauses as pr, proofEvidenceConstraints as pt, parsePwshCommand as q, hostTrustDigest as qi, evidenceAvailabilityReason as qn, presentExplanationHead as qr, normalizeReleaseContract as qt, GIT_COMMAND_TEMPLATES as r, EXPECTED_HOST_PACKAGES as ra, validateManifest as ri, evidenceMatchesItem as rn, removalIsComplete as rr, PROOF_PROTOCOL_VERSION as rt, executeRevalidatedGitEffect as s, bindExecutableIdentity as sa, sanitizeClauseText as si, NO_PROGRESS_TURNS_BEFORE_STOP as sn, classifyClause as sr, canonicalProjection as st, RC020_RC1_HOST_PACKAGES as t, BASE_HOST_PACKAGES as ta, verbIsNegated as ti, bindingSatisfies as tn, capabilityFactOf as tr, PROOF_KINDS_V2 as tt, revalidateGitPrestate as u, evaluateGraphDerivedHostLock as ua, HostProfileError as ui, classifyCompletionClaim as un, extractMethod as ur, proofCapabilityReport as ut, projectSessionCoreV2 as v, MIN_SUPPORTED_HOST_VERSION as va, evaluateConfiguredHostLock as vi, latestRootInstruction as vn, GRANTED_QUALIFICATION as vr, scopeCoverageDigest as vt, SESSION_EVENT_ENVELOPE_INVALID as w, satisfiesSupportedHostRange as wa, packageRowsFromActiveGraph as wi, hasCurrentCertificate as wn, clauseIsProtected as wr, CLEANUP_CONDITION_RULE_COMPACT as wt, captureHostWorkdir as x, compareHostVersions as xa, injectActiveProfileHostLock as xi, testOutcomePredicate as xn, clarifiedSpanOf as xr, validateProofManifest as xt, sessionCoreSnapshot as y, SUPPORTED_HOST_RANGE as ya, hostLockContextFromComposedDump as yi, observeAssistantOutcome as yn, LEGACY_QUALIFICATION as yr, sessionQuery as yt, evidenceFromPersistedToolResult as z, requestedTargetAuthorizesMutation as za, readAsarFile as zi, rebindAttemptKey as zn, itemHoldsExecutionAuthority as zr, currentV6Feedback as zt };

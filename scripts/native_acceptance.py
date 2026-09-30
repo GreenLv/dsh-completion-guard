@@ -295,6 +295,14 @@ def preflight_inputs(args: argparse.Namespace) -> Any:
         resolve_executable(command)
     if args.gate_profile == "portable_artifact":
         return None
+    if args.gate_profile == "desktop_bound":
+        helper = Path(__file__).with_name("native_desktop_acceptance.py")
+        spec = importlib.util.spec_from_file_location("native_desktop_acceptance", helper)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.preflight_desktop_inputs(root, args.runtime_root.resolve(), args.desktop_cohort)
+        return module
     helper = Path(__file__).with_name("native_host_acceptance.py")
     spec = importlib.util.spec_from_file_location("native_host_acceptance", helper)
     assert spec and spec.loader
@@ -322,11 +330,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--t06", action="store_true", help="include owned held-handle cleanup fixture")
     parser.add_argument("--run-url")
-    parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound", "host_bound_v070"), default="portable_artifact")
+    parser.add_argument("--gate-profile", choices=("portable_artifact", "host_bound", "host_bound_v070", "desktop_bound"), default="portable_artifact")
     parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--web-cohort")
     parser.add_argument("--web-market-version", help="exact target version, or none")
     parser.add_argument("--headless-cohort")
+    parser.add_argument("--desktop-cohort", help="exact Desktop DSH version, required for desktop_bound")
     parser.add_argument("--target-web-profile", type=Path)
     parser.add_argument("--target-headless-profile", type=Path)
     parser.add_argument("--transfer-receipt", type=Path)
@@ -336,11 +345,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("artifact SHA-256 and source commit must be full lowercase digests")
     if args.gate_profile != "portable_artifact" and args.runtime_root is None:
         parser.error("host_bound requires --runtime-root pointing to the audited DSH installation")
-    if args.gate_profile != "portable_artifact" and not (args.web_cohort and args.headless_cohort):
+    if args.gate_profile in ("host_bound", "host_bound_v070") and not (args.web_cohort and args.headless_cohort):
         parser.error("host_bound requires explicit --web-cohort and --headless-cohort")
-    if args.gate_profile != "portable_artifact" and (not args.web_market_version or
+    if args.gate_profile in ("host_bound", "host_bound_v070") and (not args.web_market_version or
             (args.web_market_version != "none" and not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", args.web_market_version))):
         parser.error("host_bound requires --web-market-version VERSION (or none)")
+    if args.gate_profile == "desktop_bound" and not args.desktop_cohort:
+        parser.error("desktop_bound requires --desktop-cohort with the exact DSH version")
+    if args.gate_profile == "desktop_bound" and (args.target_web_profile or args.target_headless_profile):
+        parser.error("desktop_bound does not accept Web/Headless target paths")
     if bool(args.target_web_profile) != bool(args.target_headless_profile):
         parser.error("supply both target profile paths, or neither for standalone isolated acceptance")
     try:
@@ -370,7 +383,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.repo_root.resolve(), args.artifact.resolve(), args.artifact_sha256,
         args.source_commit, args.run_url,
     )
-    if args.gate_profile != "portable_artifact":
+    if args.gate_profile == "desktop_bound":
+        from types import SimpleNamespace
+        api = SimpleNamespace(gate=gate, sha256=sha256, tree_digest=tree_digest, timestamp=timestamp)
+        result = module.desktop_acceptance(api, args.repo_root.resolve(), args.artifact.resolve(),
+                                           args.artifact_sha256, args.runtime_root.resolve(), result,
+                                           args.desktop_cohort, diagnostics_output)
+    elif args.gate_profile != "portable_artifact":
         # Pass this module's checked artifact helpers without relying on the
         # caller's sys.path or loading an arbitrary external runner.
         from types import SimpleNamespace

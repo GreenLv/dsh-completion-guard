@@ -1,4 +1,4 @@
-import { RC020_RC1_HOST_PACKAGES } from './rc020-rc1-host.js'
+import { RC020_RC2_HOST_PACKAGES } from './rc020-rc2-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -7,13 +7,21 @@ import { hostNodeConditions } from './host-node-conditions.js'
 
 export type HostLockStatus = 'supported' | 'unsupported' | 'unavailable'
 export type HostPlatform = 'posix' | 'windows'
-export type HostProfileKind = 'headless' | 'web'
+/**
+ * Host profile identity. `headless` and `web` are the explicitly managed CLI
+ * runtime profiles. `desktop` is the official Desktop app's own profile
+ * (name `dsh-profile-desktop`): its graph lives in the signed app bundle and
+ * is evaluated through the dedicated Desktop adapter, never by the Web
+ * bundle/market inference — a Desktop profile bundles the Web app too, so
+ * bundle presence alone misidentifies it.
+ */
+export type HostProfileKind = 'headless' | 'web' | 'desktop'
 
 /**
  * Capability expectations shared by every registered cohort.
  *
  * Every row is a host contract Guard actually consumes, re-checked against the
- * 0.2.0-rc.1 package surfaces: `ctx.sessions.flush()` still returns whether a
+ * 0.2.0-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
  * durability listener participated; `tools.guard()` is still a monotonic
  * post-policy denial; the Goal service still exposes `get`/`disarm` with a
  * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
@@ -96,7 +104,7 @@ function defineCohort(
 }
 
 /** Baseline cohort retained for callers that need a default fixture. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.0-rc.1'
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.0-rc.2'
 export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
 /** Core-lock/v1 separates optional market identity from the rc.2 critical
@@ -105,7 +113,7 @@ export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
  * acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.0-rc.1'], [], RC020_RC1_HOST_PACKAGES,
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.0-rc.2'], [], RC020_RC2_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))
@@ -123,7 +131,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   }))
 
 /**
- * Baseline fixture package identities (DSH 0.2.0-rc.1). The cohort
+ * Baseline fixture package identities (DSH 0.2.0-rc.2). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially
@@ -647,6 +655,19 @@ export function evaluateHostCapability(
   if (request.action === 'install' || request.action === 'apply') groups.push('dsh_cli')
   if (request.action === 'apply') groups.push('plugin_inventory')
   if (request.action === 'restart' && profileKind === 'web') groups.push('web_control')
+  if (request.action === 'restart' && profileKind === 'desktop') {
+    // The Desktop lifecycle belongs to the official graphical app; there is
+    // no audited webserver/managed restart carrier for a desktop profile, so
+    // the request is refused rather than satisfied by the Web control group.
+    return {
+      id: 'action.restart',
+      status: 'unavailable',
+      digest: evaluation.digest,
+      requiredPackages: [],
+      missingPackages: [],
+      reasonCode: 'host_capability_request_unsupported',
+    }
+  }
   if (request.action === 'restart' && profileKind !== 'web') {
     return {
       id: 'action.restart',

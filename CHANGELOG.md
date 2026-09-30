@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.8.2
+
+- Adds a separate host lock for the official Desktop app. Guard reads the application archive in place, checks its vendor signature and signed archive header, and verifies installed modules and dependency routes. Web and Headless keep their existing paths; Desktop application restart remains unavailable through Guard.
+- Requires DSH `>=0.2.0-rc.2`. The current 46-package baseline and development dependencies now bind RC.2. Upgrade DSH first, install Guard, then rebuild the lock for each profile; old locks and completion certificates cannot transfer to the new installation.
+- Refuses to certify a shell result when its terminal exit marker is obscured by later prose or a malformed marker. Clean success and failure tails retain their existing meaning. Scheduled reminders and late answers to timed questions remain outside root instruction authority.
+- Fixes Desktop command selection, archive identity drift, locally modified critical peers, and receipt-directory symlink escape. The `inspect`, `inject` and `verify-dump` commands accept explicit `--profile desktop`; the archive, carrier and installed profile are bound to the same freshly checked identity.
+- Adds `dump-desktop` for boot-free configuration readback through the app's bundled APIs, and stores the full Desktop identity for runtime comparison. The versioned native entrypoint now has a separate Desktop backend profile; graphical-shell and real-model acceptance remain separate.
+- Adds measurements for 0/100/1000/10000-event projections and short/long private ledgers. The observed full-log cost is recorded without adding a persistent trust cache. See [compatibility and evidence scope](docs/COMPATIBILITY.md) for native-platform and model acceptance limits.
+
 ## 0.8.1
 
 - DSH version admission now starts at `0.2.0-rc.1`, with no upper limit; Cordis uses an independent qualified `>=4.0.4` range. Upgrade DSH, install Guard, explicitly run `inspect`/`inject`/`verify-dump`, then restart each protected profile. Compatible later package versions can bind a registry-verified lock with `--rebind-registry`; changed consumed programs pass a versioned API/Session probe with an exact-byte receipt. Old certificates remain historical. The tested baseline is `0.2.0-rc.1` / Cordis `4.0.4`; final-artifact and future-version native acceptance are separate.

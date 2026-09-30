@@ -1,6 +1,6 @@
 import { auditHostDependencyRoutes, reachableIdsByName, type DependencyAuditGraph } from './host-dependency-audit.js'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
-import hostByteAudit from '../../manifests/rc020-rc1-byte-audit.json' with { type: 'json' }
+import hostByteAudit from '../../manifests/rc020-rc2-byte-audit.json' with { type: 'json' }
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
@@ -16,8 +16,21 @@ import {
   type HostProfileKind,
 } from './host-lock.js'
 import { satisfiesSupportedHostRange } from './host-version.js'
-import { acquireHostTrust, hostTrustDigest, parseHostTrust, qualifyHostTrust, type HostRebindTrust } from './host-trust.js'
+import { acquireHostTrust, hostTrustDigest, parseHostTrust, qualifyHostTrust, type HostRebindTrust, HostTrustError } from './host-trust.js'
 import type { PackageRow } from './digest.js'
+import { verifyDesktopCarrier } from './host-desktop-identity.js'
+import { desktopDependencyGraph } from './host-desktop-graph.js'
+import {
+  auditDesktopInstalledImplementation,
+  readDesktopAppRuntime,
+  readDesktopDependency,
+  readDesktopTargetGraph,
+  readAsarFile,
+  readAsarIndex,
+  writeDesktopRuntimeReceipt,
+  DESKTOP_PROFILE_PACKAGE_NAME,
+  type DesktopAppRuntime,
+} from './host-desktop.js'
 
 /**
  * Names registered in any cohort; rows outside the union are unknown.
@@ -353,13 +366,15 @@ export interface AuditedPackageExpectation {
  * the published baseline or operator-owned, registry-acquired qualified module
  * digests. A missing digest set never authenticates unknown implementation. */
 export function auditedHostImplementation(runtimeRoot: string, profileRoot: string,
-  providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[]): boolean {
+  providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[],
+  installationGraph?: DependencyAuditGraph): boolean {
   const session = providedSession ?? createHostAuditSession()
   try {
     const expectedPackages: readonly AuditedPackageExpectation[] = expectations ?? (hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[])
-    const seen = new Set<string>()
-    const graphs: DependencyAuditGraph[] = []
+    const seen = new Set<string>(installationGraph?.packages.keys())
+    const graphs: DependencyAuditGraph[] = installationGraph ? [installationGraph] : []
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
+      if (installationGraph && rootPath === runtimeRoot) continue
       const modulesPath = join(rootPath, 'node_modules')
       if (!session.exists(join(modulesPath, '.package-map.json'))) {
         if (rootPath === runtimeRoot) return false
@@ -455,20 +470,23 @@ function walkLibFiles(session: HostAuditSession, root: string): string[] {
   return found
 }
 
-// The reviewed 0.2.0-rc.1 foreground tools have these exact published bytes
-// (unchanged from rc.2 — these packages are not in the seven-package JS-change
-// set; re-verified against the published 0.2.0-rc.1 tarballs).
+// The reviewed 0.2.0-rc.2 foreground tools have these exact published bytes
+// (the shell renderer bytes are unchanged from rc.1 — that package is not in
+// the rc.2 JS-change set, re-verified against the published 0.2.0-rc.2
+// tarballs; the bash/pwsh tool descriptions changed, so their bytes moved).
 // This is a separate check from npm SRI: a modified installed lib/index.js
 // must not inherit the graph's markerless-terminal interpretation.
 const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-tool-bash': '9a32c2a9f1b7b16c2287861272cc9dfb7c3b3cc85e64c8e9d9a834fb0868e707',
-  '@deepseek-ai/dsh-tool-pwsh': '59a26ff0b2a13e27aa945d42f663a66befec6dbbffcae03a2cd595946c06bf3c',
+  '@deepseek-ai/dsh-tool-bash': '0c63a09e4b80ec22db256eac4ecab6f7de3a342e16ec590348a40c5f356eff1a',
+  '@deepseek-ai/dsh-tool-pwsh': '1a49cd8de831423a4ae0a2c57a4674a64cec538f64ae603aaa2c388d78aec790',
   '@deepseek-ai/dsh-shell': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
 }
 
 // The default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
+// All five bytes are unchanged from rc.1 (re-verified against the published
+// 0.2.0-rc.2 tarballs).
 const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-sandbox-policy': '772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924',
   '@deepseek-ai/dsh-sandbox': 'b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743',
@@ -477,6 +495,10 @@ const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-pwsh-local': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
 }
 
+// The audited byte maps bind to the audited cohort's exact host version, so
+// the renderer identity regex tracks the manifest instead of a hardcoded
+// literal that a cohort bump could strand.
+const AUDITED_HOST_VERSION_REGEX: string = hostByteAudit.hostVersion.replaceAll('.', '\\.')
 export function activeRendererModule(nodeModulesRoot: string, name: string,
   providedSession?: HostAuditSession): { bytes: string; path: string } | undefined {
   const session = providedSession ?? createHostAuditSession()
@@ -488,7 +510,7 @@ export function activeRendererModule(nodeModulesRoot: string, name: string,
     [...reachable].filter((id) => id === name || id.startsWith(`${name}@`)))
   if (ids.length !== 1) return undefined
   const id = ids[0]!
-  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? '0\\.2\\.0-rc\\.1' : undefined
+  const version = AUDITED_DEFAULT_WORKDIR_BYTES[name] || AUDITED_FOREGROUND_BYTES[name] ? AUDITED_HOST_VERSION_REGEX : undefined
   if (!version || (id !== name && !new RegExp(`^${name.replace('/', '\\/')}@${version}(?:\\(|$)`).test(id))) return undefined
   const url = records[id]?.url
   if (typeof url !== 'string' || (url !== `./${name}` && !url.startsWith('./.pnpm/'))) return undefined
@@ -507,6 +529,16 @@ function activeRendererBytes(nodeModulesRoot: string, name: string, session?: Ho
   return activeRendererModule(nodeModulesRoot, name, session)?.bytes
 }
 
+function selectedRuntimeRenderer(runtimeRoot: string, name: string, session: HostAuditSession): { bytes: string; path: string } | undefined {
+  if (!session.stat(runtimeRoot).isFile()) return activeRendererModule(join(runtimeRoot, 'node_modules'), name, session)
+  const index = session.memo(`desktop-index:${runtimeRoot}`, () => readAsarIndex(runtimeRoot))
+  const entry = `dsh/node_modules/${name}/lib/index.js`
+  try {
+    const bytes = session.memo(`desktop-renderer:${runtimeRoot}\0${name}`, () => readAsarFile(runtimeRoot, index, entry))
+    return { bytes: createHash('sha256').update(bytes).digest('hex'), path: join(runtimeRoot, 'dsh', 'node_modules', name, 'lib', 'index.js') }
+  } catch { return undefined }
+}
+
 /** Verify active, reachable producer bytes without reading credentials or
  * accepting historical package-map entries. Missing/ambiguous paths fail
  * closed for the ordinary markerless-test shortcut. */
@@ -518,7 +550,7 @@ export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: str
     const found: string[] = []
     for (const root of roots) {
       try {
-        const value = activeRendererBytes(root, name, session)
+        const value = root === roots[0] ? selectedRuntimeRenderer(runtimeRoot, name, session)?.bytes : activeRendererBytes(root, name, session)
         if (value) found.push(value)
       } catch { /* package absent in this half of the active graph */ }
     }
@@ -544,7 +576,7 @@ export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: stri
     const found: string[] = []
     for (const root of [runtimeRoot, profileRoot]) {
       try {
-        const digest = activeRendererBytes(join(root, 'node_modules'), name, session)
+        const digest = root === runtimeRoot ? selectedRuntimeRenderer(runtimeRoot, name, session)?.bytes : activeRendererBytes(join(root, 'node_modules'), name, session)
         if (digest) found.push(digest)
       } catch { /* package absent in this half of the graph */ }
     }
@@ -569,7 +601,7 @@ export async function auditedDefaultWorkdirProvider(runtimeRoot: string, profile
     const paths = new Set<string>()
     for (const root of [runtimeRoot, profileRoot]) {
       try {
-        const module = activeRendererModule(join(root, 'node_modules'), name, session)
+        const module = root === runtimeRoot ? selectedRuntimeRenderer(runtimeRoot, name, session) : activeRendererModule(join(root, 'node_modules'), name, session)
         if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path)
       } catch { /* absent active package in this graph half */ }
     }
@@ -656,8 +688,13 @@ function readTargetHostGraph(runtimeRoot: string, profileRoot: string): TargetHo
   }
   const dsh = manifest.dsh as { profile?: { bundles?: unknown } } | undefined
   const bundles = dsh?.profile?.bundles
+  // rc.2 ships two exact Headless tuples: the classic template and the
+  // installation-owned tuple that also carries the web app bundle (which the
+  // installation ships anyway). Anything else is not the Headless target.
   const names = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
-  if (!Array.isArray(bundles) || bundles.length !== names.length || bundles.some((name, index) => name !== names[index])) {
+  const installationOwned = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless']
+  const bundleList = Array.isArray(bundles) ? bundles.map(String) : undefined
+  if (!bundleList || (JSON.stringify(bundleList) !== JSON.stringify(names) && JSON.stringify(bundleList) !== JSON.stringify(installationOwned))) {
     throw new HostProfileError('target_profile_bundles_unsupported', 'not the installation-owned Headless bundle tuple')
   }
   const modules = realpathSync(join(runtime, 'node_modules'))
@@ -749,6 +786,15 @@ export function resolveActiveProfileHostLock(
 ): ActiveProfileHostLock {
   const runtime = resolve(runtimeRoot)
   const profile = resolve(profileRoot)
+  // Desktop identity comes first: the Desktop-owned profile carries the Web
+  // app bundle too, so any bundle-based inference would misidentify it.
+  const desktopCheckManifestPath = join(profile, 'package.json')
+  if (existsSync(desktopCheckManifestPath)) {
+    const manifest = readJsonObject(desktopCheckManifestPath, 'profile_manifest_invalid')
+    if (manifest.name === DESKTOP_PROFILE_PACKAGE_NAME) {
+      return resolveDesktopProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion, providedTrust)
+    }
+  }
   const lockPath = join(runtime, 'pnpm-lock.yaml')
   const mapPath = join(runtime, 'node_modules', '.package-map.json')
   const profileManifestPath = join(profile, 'package.json')
@@ -775,7 +821,20 @@ export function resolveActiveProfileHostLock(
   if (installedPlugin.name !== 'dsh-completion-guard' || installedPlugin.version !== expectedPluginVersion) {
     throw new HostProfileError('profile_plugin_version_mismatch', 'installed profile plugin identity does not match the generator version')
   }
-  const profileKind: HostProfileKind = bundles.includes('@deepseek-ai/dsh-web-app') || bundles.includes('dshmarket') ? 'web' : 'headless'
+  // Profile identity: the official Desktop name wins (its bundle list also
+  // contains the web app, so web markers must never shadow it); the headless
+  // marker beats web markers because the rc.2 installation-owned headless
+  // tuple carries the web app too; dshmarket/web-app then mean web.
+  const bundleList = Array.isArray(bundles) ? bundles.map(String) : []
+  const isDesktopProfile = profileManifest.name === DESKTOP_PROFILE_PACKAGE_NAME
+  if (isDesktopProfile && (bundleList.includes('@deepseek-ai/dsh-headless') || bundleList.includes('dshmarket'))) {
+    throw new HostProfileError('desktop_profile_bundle_conflict', 'the desktop profile carries a web/headless-only bundle')
+  }
+  const profileKind: HostProfileKind = isDesktopProfile
+    ? 'desktop'
+    : bundleList.includes('@deepseek-ai/dsh-headless')
+      ? 'headless'
+      : bundleList.includes('@deepseek-ai/dsh-web-app') || bundleList.includes('dshmarket') ? 'web' : 'headless'
   const platform: HostPlatform = process.platform === 'win32' ? 'windows' : 'posix'
   const evaluation = evaluateActiveHostLock(runtime, profile, { platform, profileKind }, session, trust ? JSON.stringify(trust) : undefined)
   if (evaluation.status !== 'supported') {
@@ -783,6 +842,195 @@ export function resolveActiveProfileHostLock(
       evaluation.reasonCode === 'host_lock_installed_graph_drift' ? 'reachable host modules differ from the qualified published implementation' : 'active runtime graph does not match the supported host manifest')
   }
   return { evaluation, runtimeRoot: runtime, profileRoot: profile, pluginVersion: expectedPluginVersion, platform, profileKind, ...(trust ? { trust } : {}) }
+}
+
+function asarRowsWithIntegrity(runtime: DesktopAppRuntime, source: readonly { name: string; version: string; integrity: string }[]): PackageRow[] {
+  // The asar manifest declares name+version only; the integrity bound into
+  // the evaluation is the ACQUIRED registry identity for exactly that
+  // name@version — a row the acquisition never qualified fails closed.
+  const byName = new Map(source.map((row) => [row.name, row]))
+  return runtime.rows.map((row) => {
+    const qualified = byName.get(row.name)
+    if (!qualified || qualified.version !== row.version) {
+      throw new HostProfileError('desktop_runtime_unqualified', `the app runtime row ${row.name}@${row.version} has no acquired registry identity`)
+    }
+    return { name: row.name, version: row.version, integrity: qualified.integrity }
+  })
+}
+
+function desktopProfileRows(profileRoot: string, session?: HostAuditSession): PackageRow[] {
+  // When the app's plugin manager has installed plugins, the profile half of
+  // the graph is a real importer; read it with the strict standard reader.
+  // A dependency-free desktop profile contributes no rows of its own.
+  const auditSession = session ?? createHostAuditSession()
+  const mapPath = join(profileRoot, 'node_modules', '.package-map.json')
+  const lockPath = join(profileRoot, 'pnpm-lock.yaml')
+  if (!existsSync(mapPath) && !existsSync(lockPath)) return []
+  if (!existsSync(mapPath) || !existsSync(lockPath)) throw new HostProfileError('active_graph_missing', 'partial desktop profile importer')
+  const graph = auditSession.memo(`graph:${mapPath}`, () => activeGraphRecords(auditSession.readFile(mapPath).toString('utf8')))
+  return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString('utf8'), join(profileRoot, 'node_modules'), auditSession)
+}
+
+/** Complete Desktop composition: the official app bundle is the runtime half,
+ * the Desktop-managed profile is the profile half. No structural discovery
+ * grants authority — the installed asar bytes are verified against the same
+ * qualification chain a CLI graph rebind uses. */
+export function resolveDesktopProfileHostLock(
+  appAsarPath: string,
+  profileRoot: string,
+  expectedPluginVersion: string,
+  providedTrust?: HostRebindTrust,
+): ActiveProfileHostLock {
+  const profile = resolve(profileRoot)
+  const runtime = readDesktopAppRuntime(appAsarPath)
+  const trust = providedTrust ? qualifyHostTrust(providedTrust, profile) : undefined
+  verifyDesktopPluginIdentity(profile, expectedPluginVersion)
+  const evaluation = reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust)
+  if (evaluation.status !== 'supported') throw new HostProfileError('host_implementation_bytes_mismatch',
+    'the Desktop graph does not match the qualified published implementation')
+  writeDesktopRuntimeReceipt(profile, runtime)
+  return { evaluation, runtimeRoot: runtime.asarRealpath, profileRoot: profile, pluginVersion: expectedPluginVersion, platform: process.platform === 'win32' ? 'windows' : 'posix', profileKind: 'desktop', ...(trust ? { trust } : {}) }
+}
+
+/** An active Desktop lock requires a real installed Guard importer. The
+ * dependency-free application-owned profile has its own preinstall path. */
+function verifyDesktopPluginIdentity(profileRoot: string, expectedPluginVersion: string): void {
+  const importerMap = join(profileRoot, 'node_modules', '.package-map.json')
+  if (!existsSync(importerMap)) throw new HostProfileError('profile_plugin_unbound', 'the desktop profile has no installed plugin importer')
+  const profile = readJsonObject(join(profileRoot, 'package.json'), 'profile_manifest_invalid')
+  const dsh = profile.dsh && typeof profile.dsh === 'object' ? profile.dsh as Record<string, unknown> : {}
+  const settings = dsh.profile && typeof dsh.profile === 'object' ? dsh.profile as Record<string, unknown> : {}
+  const bundles = Array.isArray(settings.bundles) ? settings.bundles : []
+  const dependencies = profile.dependencies && typeof profile.dependencies === 'object' ? profile.dependencies as Record<string, unknown> : {}
+  if (profile.name !== DESKTOP_PROFILE_PACKAGE_NAME || typeof dependencies['dsh-completion-guard'] !== 'string'
+    || !bundles.includes('dsh-completion-guard') || !bundles.includes('@deepseek-ai/dsh-base')
+    || !bundles.includes('@deepseek-ai/dsh-web-app') || bundles.includes('@deepseek-ai/dsh-headless') || bundles.includes('dshmarket')) {
+    throw new HostProfileError('profile_plugin_unbound', 'the desktop profile does not bind the installed plugin and official bundles')
+  }
+  const pluginManifestPath = join(profileRoot, 'node_modules', 'dsh-completion-guard', 'package.json')
+  if (!existsSync(pluginManifestPath)) {
+    throw new HostProfileError('profile_plugin_unbound', 'the desktop profile importer does not carry the dsh-completion-guard plugin')
+  }
+  const installedPlugin = readJsonObject(pluginManifestPath, 'installed_plugin_invalid')
+  if (installedPlugin.name !== 'dsh-completion-guard' || installedPlugin.version !== expectedPluginVersion) {
+    throw new HostProfileError('profile_plugin_version_mismatch', 'installed profile plugin identity does not match the generator version')
+  }
+}
+
+/** One desktop evaluation: graph readback (app rows + profile importer rows),
+ * qualification, and the installed-byte audit. Shared by inject and every
+ * fresh runtime revalidation, so both compute the same digest. */
+function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
+  trust: HostRebindTrust | undefined): HostLockEvaluation {
+  const profile = resolve(profileRoot)
+  const runtime = readDesktopAppRuntime(appAsarPath)
+  const session = createHostAuditSession()
+  const executable = verifyDesktopCarrier(runtime.asarRealpath, runtime.headerSha256)
+  const pluginManifestPath = join(profile, 'node_modules', 'dsh-completion-guard', 'package.json')
+  const installedPlugin = session.readJson(pluginManifestPath)
+  verifyDesktopPluginIdentity(profile, String(installedPlugin.version))
+  const profileRows = desktopProfileRows(profile, session)
+  const runtimeRows = asarRowsWithIntegrity(runtime, trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : cohortIntegrityRows(runtime))
+  const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`))
+  const rows = [...runtimeRows, ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`))]
+  const platform: HostPlatform = process.platform === 'win32' ? 'windows' : 'posix'
+  const evaluation = evaluateConfiguredHostLock(rows, { platform, profileKind: 'desktop' }, trust ? JSON.stringify(trust) : undefined, profile)
+  if (evaluation.status !== 'supported') return evaluation
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[]
+  if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations)) {
+    return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
+  }
+  const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session)
+  if (!auditedHostImplementation(join(runtime.asarRealpath, 'dsh'), profile, archiveGraph.session, expectations, archiveGraph.graph)) {
+    return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
+  }
+  // Runtime and profile identity must survive fresh validation: a changed app
+  // header, metadata, manifest, archive path or profile is a different lock.
+  const profileManifest = session.fileDigest(join(profile, 'package.json'))
+  const digest = createHash('sha256').update('dsh.desktop-core-host/v1\0')
+    .update(evaluation.digest).update('\0').update(runtime.asarRealpath).update('\0')
+    .update(runtime.headerSha256).update('\0').update(runtime.manifestSha256).update('\0')
+    .update(runtime.metadataSha256).update('\0').update(executable).update('\0').update(session.fileDigest(executable)).update('\0')
+    .update(profile).update('\0').update(profileManifest).update('\0')
+    .update(session.fileDigest(pluginManifestPath)).update('\0')
+    .update(session.fileDigest(join(profile, 'node_modules', '.package-map.json'))).update('\0')
+    .update(session.fileDigest(join(profile, 'pnpm-lock.yaml'))).digest('hex')
+  const audited = auditedForegroundRenderers(runtime.asarRealpath, profile, session)
+  return audited.length ? { ...evaluation, auditedForegroundRenderers: audited,
+    digest: createHash('sha256').update(`dsh.core-host-renderer/v1\0${digest}\0${audited.join(',')}`).digest('hex') } : { ...evaluation, digest }
+}
+
+/** The audited cohort rows, used as the registry-derived expectation source
+ * when no operator trust is supplied. A runtime row whose version the audited
+ * cohort never registered cannot be attested this way and fails closed. */
+function cohortIntegrityRows(runtime: DesktopAppRuntime): Array<{ name: string; version: string; integrity: string }> {
+  const auditRows = new Map(hostByteAudit.packages.map((row) => [row.name as string, row as unknown as { name: string; version: string; integrity: string }]))
+  return runtime.rows.map((row) => {
+    const audited = auditRows.get(row.name)
+    if (!audited || audited.version !== row.version) {
+      throw new HostProfileError('desktop_runtime_unqualified', `the app runtime row ${row.name}@${row.version} is not the audited cohort identity; acquire registry trust to qualify it`)
+    }
+    return audited
+  })
+}
+
+/** Desktop pre-install inspection: the Desktop-owned dependency-free profile
+ * plus the official app bundle, evaluated and byte-audited like any target. */
+export function inspectDesktopTargetGraph(appAsarPath: string, profileRoot: string, trust?: HostRebindTrust): { packages: PackageRow[]; runtime: DesktopAppRuntime; profileGraph: { state: 'dependency_free_desktop'; manifestSha256: string; bundles: string[] } } {
+  const target = readDesktopTargetGraph(appAsarPath, profileRoot)
+  verifyDesktopCarrier(target.runtime.asarRealpath, target.runtime.headerSha256)
+  const runtimeRows = asarRowsWithIntegrity(target.runtime, trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : cohortIntegrityRows(target.runtime))
+  const evaluation = evaluateConfiguredHostLock(runtimeRows, {
+    platform: process.platform === 'win32' ? 'windows' : 'posix',
+    profileKind: 'desktop',
+  }, trust ? JSON.stringify(trust) : undefined, profileRoot)
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[]
+  if (evaluation.status !== 'supported' || !auditDesktopInstalledImplementation(target.runtime.asarRealpath, expectations)) {
+    throw new HostProfileError('target_runtime_unsupported', 'desktop pre-install target fails host qualification or byte audit')
+  }
+  const archiveGraph = desktopDependencyGraph(target.runtime.asarRealpath, expectations)
+  if (!auditedHostImplementation(join(target.runtime.asarRealpath, 'dsh'), resolve(profileRoot), archiveGraph.session, expectations, archiveGraph.graph)) {
+    throw new HostProfileError('target_runtime_unsupported', 'desktop pre-install target fails dependency route audit')
+  }
+  return { packages: runtimeRows, runtime: target.runtime, profileGraph: target.profileGraph }
+}
+
+/** Fresh runtime readback for an injected desktop lock: the same evaluation
+ * chain the inject path used, so the digest the runtime compares against its
+ * injected expectation is computed identically. */
+export function revalidateDesktopCoreLock(appAsarPath: string, profileRoot: string,
+  expected: HostLockEvaluation, trustText?: string): HostLockEvaluation {
+  void expected
+  const trust = trustText ? parseHostTrust(trustText, resolve(profileRoot)) : undefined
+  return reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust)
+}
+
+/** Registry acquisition for the Desktop graph: the app manifest pins exact
+ * versions; the INTEGRITY comes from the registry metadata for exactly that
+ * name@version, and the archive bytes are verified by the same acquisition
+ * and host-contract probe a CLI rebind uses. */
+export async function prepareDesktopHostTrust(appAsarPath: string, profileRoot: string,
+  fetcher: typeof fetch = fetch): Promise<HostRebindTrust> {
+  const runtime = readDesktopAppRuntime(appAsarPath)
+  const qualified: PackageRow[] = []
+  for (const row of runtime.rows) {
+    if (!row.version) throw new HostTrustError('host_trust_identity_invalid')
+    const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row.name)}/${encodeURIComponent(row.version)}`,
+      { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+    if (!response.ok) throw new HostTrustError('host_trust_registry_unavailable')
+    const metadata = await response.json() as { name?: string; version?: string; dist?: { integrity?: string } }
+    const integrity = metadata.dist?.integrity
+    if (metadata.name !== row.name || metadata.version !== row.version || typeof integrity !== 'string') {
+      throw new HostTrustError('host_trust_registry_identity_mismatch')
+    }
+    qualified.push({ name: row.name, version: row.version, integrity })
+  }
+  return acquireHostTrust(qualified, fetcher, {
+    profileRoot,
+    // Every probe dependency the consumed adapters import resolves from the
+    // same official app graph, by exact top-level manifest identity.
+    dependencyIdentity: (name) => readDesktopDependency(appAsarPath, name),
+  })
 }
 
 function readJsonObject(path: string, code: string): Record<string, unknown> {
@@ -808,6 +1056,7 @@ function renderManagedPatch(
   runtimeRoot?: string,
   profileRoot?: string,
   trust?: HostRebindTrust,
+  desktopDigest?: string,
 ): string {
   const lines = [HOST_LOCK_MARKER_BEGIN, '- id: context-guard', '  name: dsh-completion-guard', '  config:']
   lines.push('    hostLockPolicy: "dsh-core/v1"')
@@ -817,6 +1066,7 @@ function renderManagedPatch(
   lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`)
   lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`)
   if (trust) lines.push(`    hostLockTrust: ${yamlQuote(JSON.stringify(trust))}`)
+  if (profileKind === 'desktop' && desktopDigest) lines.push(`    hostLockDesktopDigest: ${yamlQuote(desktopDigest)}`)
   lines.push('    hostLockPackages:')
   for (const row of rows) {
     lines.push(`      - name: ${yamlQuote(row.name)}`)
@@ -884,6 +1134,8 @@ function normalizeEmptyPatchBase(text: string): string {
 
 /** Atomically inject a repeatable managed patch into the selected profile only. */
 export function injectActiveProfileHostLock(input: ActiveProfileHostLock): string {
+  if (input.evaluation.status !== 'supported') throw new HostProfileError('profile_host_lock_unsupported',
+    'an unsupported host cannot replace the managed lock')
   const patchPath = join(input.profileRoot, 'cordis.patch.yml')
   const original = existsSync(patchPath) ? readFileSync(patchPath, 'utf8') : ''
   const stripped = stripManagedPatch(original)
@@ -898,6 +1150,7 @@ export function injectActiveProfileHostLock(input: ActiveProfileHostLock): strin
     input.runtimeRoot,
     input.profileRoot,
     input.trust,
+    input.profileKind === 'desktop' ? input.evaluation.digest : undefined,
   )
   const next = `${base.trimEnd()}${base.trim() ? '\n\n' : ''}${managed}`
   const temporary = `${patchPath}.context-guard-${process.pid}.tmp`
@@ -980,7 +1233,7 @@ export function hostLockContextFromComposedDump(text: string): { platform?: Host
   const profileKind = profileValue ? parseYamlScalar(profileValue) : undefined
   return {
     ...(platform === 'posix' || platform === 'windows' ? { platform } : {}),
-    ...(profileKind === 'headless' || profileKind === 'web' ? { profileKind } : {}),
+    ...(profileKind === 'headless' || profileKind === 'web' || profileKind === 'desktop' ? { profileKind } : {}),
   }
 }
 
@@ -1012,6 +1265,18 @@ export function verifyComposedHostLockDump(
   const trustIndex = trustLines[0]
   const trustText = trustIndex === undefined ? undefined : parseYamlField(entry, trustIndex, entry[trustIndex].slice(entry[trustIndex].indexOf(':') + 1))
   const actual = evaluateConfiguredHostLock(hostLockRowsFromComposedDump(text), context, trustText, settings.hostLockProfileRoot)
+  if (context.profileKind === 'desktop') {
+    const lines = entry.filter(line => line.startsWith('    hostLockDesktopDigest:'))
+    const stored = lines.length === 1 ? parseYamlScalar(lines[0].slice(lines[0].indexOf(':') + 1)) : undefined
+    const expectedRows = evaluateConfiguredHostLock(expected.packages, {
+      platform: expected.platform, profileKind: 'desktop',
+    }, trustText, settings.hostLockProfileRoot)
+    if (!roots || actual.status !== 'supported' || actual.digest !== expectedRows.digest
+      || stored !== expected.digest || !/^[a-f0-9]{64}$/.test(stored ?? '')) {
+      throw new HostProfileError('host_lock_readback_mismatch', 'composed Desktop identity does not match the active graph')
+    }
+    return { ...actual, digest: expected.digest, auditedForegroundRenderers: expected.auditedForegroundRenderers }
+  }
   if (actual.status !== 'supported' || actual.digest !== expected.digest) {
     throw new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph')
   }

@@ -12,6 +12,7 @@ export const Config: z<{
   hostLockRuntimeRoot?: string
   hostLockProfileRoot?: string
   hostLockTrust?: string
+  hostLockDesktopDigest?: string
 }> = z.object({
   activation: z.string().default('opt-in'),
   policy: z.string().default('standard'),
@@ -21,6 +22,7 @@ export const Config: z<{
   hostLockRuntimeRoot: z.string(),
   hostLockProfileRoot: z.string(),
   hostLockTrust: z.string(),
+  hostLockDesktopDigest: z.string(),
   hostLockPackages: z.array(z.object({
     name: z.string().required(),
     version: z.string(),
@@ -46,6 +48,7 @@ export interface ResolvedConfig {
   hostLockRuntimeRoot?: string
   hostLockProfileRoot?: string
   hostLockTrust?: string
+  hostLockDesktopDigest?: string
 }
 
 export function resolveConfig(config: {
@@ -58,6 +61,7 @@ export function resolveConfig(config: {
   hostLockRuntimeRoot?: unknown
   hostLockProfileRoot?: unknown
   hostLockTrust?: unknown
+  hostLockDesktopDigest?: unknown
 }): ResolvedConfig {
   const activation = config.activation ?? 'opt-in'
   if (activation !== 'opt-in' && activation !== 'always') {
@@ -82,8 +86,8 @@ export function resolveConfig(config: {
   if (config.hostLockPlatform !== undefined && config.hostLockPlatform !== 'posix' && config.hostLockPlatform !== 'windows') {
     throw new TypeError('hostLockPlatform must be "posix" or "windows"')
   }
-  if (config.hostLockProfile !== undefined && config.hostLockProfile !== 'headless' && config.hostLockProfile !== 'web') {
-    throw new TypeError('hostLockProfile must be "headless" or "web"')
+  if (config.hostLockProfile !== undefined && config.hostLockProfile !== 'headless' && config.hostLockProfile !== 'web' && config.hostLockProfile !== 'desktop') {
+    throw new TypeError('hostLockProfile must be "headless", "web", or "desktop"')
   }
   const hasHostRows = hostLockPackages !== undefined
   if (hasHostRows !== (config.hostLockPlatform !== undefined) || hasHostRows !== (config.hostLockProfile !== undefined)) {
@@ -92,7 +96,12 @@ export function resolveConfig(config: {
   for (const key of ['hostLockPolicy', 'hostLockRuntimeRoot', 'hostLockProfileRoot', 'hostLockTrust'] as const) {
     if (config[key] !== undefined && (typeof config[key] !== 'string' || !config[key])) throw new TypeError(`${key} must be a non-empty string`)
   }
+  if (config.hostLockDesktopDigest !== undefined && (config.hostLockProfile !== 'desktop'
+    || typeof config.hostLockDesktopDigest !== 'string' || !/^[a-f0-9]{64}$/.test(config.hostLockDesktopDigest))) {
+    throw new TypeError('hostLockDesktopDigest must be an injected Desktop SHA-256')
+  }
   return {
+    ...(typeof config.hostLockDesktopDigest === 'string' ? { hostLockDesktopDigest: config.hostLockDesktopDigest } : {}),
     ...(typeof config.hostLockTrust === 'string' ? { hostLockTrust: config.hostLockTrust } : {}),
     ...(typeof config.hostLockPolicy === 'string' ? { hostLockPolicy: config.hostLockPolicy } : {}),
     ...(typeof config.hostLockRuntimeRoot === 'string' ? { hostLockRuntimeRoot: config.hostLockRuntimeRoot } : {}),

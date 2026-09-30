@@ -69,7 +69,7 @@ import {
 } from './domain/release.js'
 import { createContextGuardCommand } from './commands/context-guard.js'
 import { resolveConfig, type ResolvedConfig } from './config.js'
-import { auditedDefaultWorkdirProvider, auditedForegroundRenderers } from './domain/host-resolver.js'
+import { auditedDefaultWorkdirProvider, auditedForegroundRenderers, revalidateDesktopCoreLock } from './domain/host-resolver.js'
 import { createHostAuditSession, type HostAuditSession } from './domain/host-audit-session.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
 import { captureHostWorkdir, HOST_WORKDIR_PREFIX, sourcedNamedTestRoot } from './domain/host-workdir.js'
@@ -823,6 +823,31 @@ export function revalidateCoreLock(config: ResolvedConfig, expected: HostLockEva
   if (config.hostLockPolicy !== 'dsh-core/v1' || !config.hostLockRuntimeRoot || !config.hostLockProfileRoot) {
     return { ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_migration_required' }
   }
+  // A desktop runtime root is the official app archive, not a package tree:
+  // its graph readback goes through the desktop adapter with the same fresh
+  // validation and digest comparison as a CLI profile.
+  if (config.hostLockProfile === 'desktop') {
+    if (!config.hostLockDesktopDigest) return {
+      ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_migration_required',
+    }
+    try {
+      const configured = evaluateConfiguredHostLock(config.hostLockPackages ?? [], {
+        platform: config.hostLockPlatform, profileKind: 'desktop',
+      }, config.hostLockTrust, config.hostLockProfileRoot)
+      if (configured.status !== 'supported') return configured
+      const actual = revalidateDesktopCoreLock(config.hostLockRuntimeRoot, config.hostLockProfileRoot, expected, config.hostLockTrust)
+      if (actual.status !== 'supported') return actual
+      const currentRows = evaluateConfiguredHostLock(actual.packages, {
+        platform: config.hostLockPlatform, profileKind: 'desktop',
+      }, config.hostLockTrust, config.hostLockProfileRoot)
+      if (actual.digest !== config.hostLockDesktopDigest || currentRows.digest !== configured.digest) return {
+        ...actual, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift',
+      }
+      return actual
+    } catch {
+      return { ...expected, status: 'unavailable', goalAvailable: false, reasonCode: 'host_lock_missing' }
+    }
+  }
   // ONE bounded validation: the graph readback, the byte/route audit and the
   // renderer audit share a single operation-scoped memo table, so the same
   // real path, manifest or digest is read once per validation and never
@@ -928,15 +953,18 @@ export function apply(ctx: Context, rawConfig: {
   hostLockRuntimeRoot?: unknown
   hostLockProfileRoot?: unknown
   hostLockTrust?: unknown
+  hostLockDesktopDigest?: unknown
 } = {}, seams: RuntimeExecutorSeams = {}): void {
   const config: ResolvedConfig = resolveConfig(rawConfig)
   // Runtime authority must come from the active profile/package graph, not a
   // nearest lockfile (profiles and the DSH runtime have separate locks). The
   // acceptance installer injects this bounded identity; absence is unknown.
-  const installedHostLock = seams.hostLock ?? evaluateConfiguredHostLock(config.hostLockPackages ?? [], {
+  const configuredHostLock = seams.hostLock ?? evaluateConfiguredHostLock(config.hostLockPackages ?? [], {
     platform: config.hostLockPlatform,
     profileKind: config.hostLockProfile,
   }, config.hostLockTrust, config.hostLockProfileRoot)
+  const installedHostLock = seams.hostLock ?? (config.hostLockProfile === 'desktop' && config.hostLockDesktopDigest
+    ? { ...configuredHostLock, digest: config.hostLockDesktopDigest } : configuredHostLock)
   const runtimes = new Map<Agent, GuardRuntime>()
   const privateLedgerRoot = seams.privateLedgerRoot
     ?? resolvePrivateLedgerRoot(undefined, process.env.DSH_HOME, homedir())

@@ -320,7 +320,14 @@ function extractTerminalFacts(textContent: string): TerminalFacts {
     }
     index -= 1
   }
-  return { exitCode, negative, marked }
+  // A marker that is NOT at the readable tail (after the whitespace/reset
+  // skip the loop above reached) means the renderer's terminal statement is
+  // not the last statement: prose or corruption sits after it. The renderer
+  // contract only defines the tail marker, so the result is marked but its
+  // exit code is unreadable — callers must fail closed instead of applying
+  // the no-marker success shortcut.
+  const obscured = !marked && lines.some((line) => TERMINAL_EXIT_MARKER.test(line.trim().toLowerCase()) || TERMINAL_NEGATIVE_MARKER.test(line.trim()))
+  return { exitCode, negative, marked: marked || obscured }
 }
 
 /**
@@ -403,7 +410,14 @@ function shellOutcome(
   if (backgrounded) return 'unknown'
   if (resultError || terminal.negative) return 'failure'
   if (terminal.exitCode === undefined) {
-    return (surface === 'bash' || surface === 'pwsh') && !terminal.marked ? 'success' : 'unknown'
+    // The no-marker success shortcut holds ONLY for a result whose tail is
+    // genuinely unmarked. If the tail carries a marker-like line the scanner
+    // recognized (marked) but no readable exit code — e.g. prose was edited
+    // in after the marker, or the marker was corrupted — the renderer
+    // contract does not tell us the terminal state, and a nonzero exit may
+    // be hiding behind the interruption. Fail closed to `unknown`.
+    if (terminal.marked) return 'unknown'
+    return surface === 'bash' || surface === 'pwsh' ? 'success' : 'unknown'
   }
   return terminal.exitCode === 0 ? 'success' : 'failure'
 }

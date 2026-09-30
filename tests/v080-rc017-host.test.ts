@@ -4,16 +4,16 @@ import { join, dirname, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
-import audit from '../manifests/rc020-rc1-byte-audit.json' with {type:'json'}
+import audit from '../manifests/rc020-rc2-byte-audit.json' with {type:'json'}
 import manifest from '../manifests/supported-host.v1.json' with {type:'json'}
-import { RC020_RC1_HOST_PACKAGES } from '../src/domain/rc020-rc1-host.js'
+import { RC020_RC2_HOST_PACKAGES } from '../src/domain/rc020-rc2-host.js'
 import { auditedHostImplementation, packageRowsFromActiveGraph, auditedForegroundRenderers, readActiveHostGraph, evaluateActiveHostLock } from '../src/domain/host-resolver.js'
 import { evaluateHostLock } from '../src/domain/host-lock.js'
 
 describe('rc.2 published identity and executable-byte audit', () => {
   it('keeps the public registry exactly equal to its single audited input source', () => {
     expect(manifest.cohorts).toHaveLength(1)
-    expect(manifest.cohorts[0].packages).toEqual(RC020_RC1_HOST_PACKAGES)
+    expect(manifest.cohorts[0].packages).toEqual(RC020_RC2_HOST_PACKAGES)
     expect(manifest.cohorts[0].auditedPlatforms).toEqual([])
     expect(audit.packages.every(p=>Object.keys(p.modules).length>0)).toBe(true)
     expect(audit.packages.every(p=>/^[a-f0-9]{64}$/.test(p.sha256))).toBe(true)
