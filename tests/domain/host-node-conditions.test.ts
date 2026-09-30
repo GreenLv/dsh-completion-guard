@@ -12,7 +12,7 @@ function file(path: string, text: string) { mkdirSync(dirname(path), { recursive
 function oracle(profile: boolean, conditions: Record<string, string>, args: string[], options = '') {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'host-conditions-'))); roots.push(root)
   file(join(root, 'package.json'), '{"type":"module"}')
-  for (const module of ['host-node-conditions', 'host-audit-session', 'host-dependency-audit']) {
+  for (const module of ['host-node-conditions', 'host-physical-fs', 'host-audit-session', 'host-dependency-audit']) {
     file(join(root, module + '.js'), ts.transpileModule(readFileSync(join(process.cwd(), 'src/domain', module + '.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText)
   }
   const runtime = join(root, 'runtime'), owner = profile ? join(root, 'profile') : runtime

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync, type Stats } from 'node:fs'
+import type { Stats } from 'node:fs'
+import { physicalFs } from './host-physical-fs.js'
+const { existsSync, readFileSync, readdirSync, realpathSync, statSync } = physicalFs
 import { createRequire } from 'node:module'
 
 /**

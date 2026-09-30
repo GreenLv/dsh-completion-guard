@@ -85,7 +85,28 @@ describe('Desktop vendor carrier authentication', () => {
     expect(dump).toContain('hostLockDesktopDigest:')
     const verified = JSON.parse(run('verify-dump', ['--dump-config', dumpFile]))
     expect(verified).toMatchObject({ status: 'supported', profile: 'desktop', host_lock_digest: injected.host_lock_digest })
+    const archive = process.env.DSH_DESKTOP_ASAR!
+    const executable = verifyDesktopCarrier(archive, readAsarIndex(archive).headerSha256)
+    const script = `
+      import assert from 'node:assert/strict';
+      import { pathToFileURL } from 'node:url';
+      import { join } from 'node:path';
+      const [archive, profile, expected] = process.argv.slice(1);
+      const noAsar = process.noAsar;
+      const domain = await import(pathToFileURL(join(profile, 'node_modules/dsh-completion-guard/dist/domain/index.js')).href);
+      const active = domain.resolveDesktopProfileHostLock(archive, profile, '0.8.2');
+      const fresh = domain.revalidateDesktopCoreLock(archive, profile, active.evaluation);
+      assert.equal(fresh.status, 'supported');
+      assert.equal(fresh.digest, expected);
+      assert.equal(process.noAsar, noAsar);
+      process.stdout.write('electron-fresh-lock=matched');
+    `
+    expect(execFileSync(executable, ['--expose-internals', '--input-type=module', '-e', script,
+      archive, profile, injected.host_lock_digest], {
+      encoding: 'utf8', timeout: 90_000, maxBuffer: 64 * 1024,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', DSH_HOME: root },
+    })).toBe('electron-fresh-lock=matched')
     // This fixture exercises source composition against the real archive.
     // It is not an installed-tgz or loaded application acceptance result.
-  }, 90_000)
+  }, 180_000)
 })

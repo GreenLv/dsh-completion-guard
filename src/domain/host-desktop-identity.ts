@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
+import { physicalFs } from './host-physical-fs.js'
+const { existsSync, realpathSync } = physicalFs
 import { dirname, join } from 'node:path'
 
 /** Shared with the native PowerShell regression: JSON arrays must retain

@@ -3,13 +3,25 @@ import * as path from "node:path";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import * as nodeFs from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 
+//#region src/domain/host-physical-fs.ts
+/** Host identity reads must see physical files. Electron's ordinary fs turns
+* app.asar into a virtual directory, including guessed stat results. Its
+* built-in original-fs keeps these audits on the same raw bytes as the CLI.
+* Never change process.noAsar: the rest of the host needs archive loading.
+* A missing original-fs in Electron is a failed audit, not a fallback.
+*/
+const physicalFs = process.versions.electron ? createRequire(import.meta.url)("original-fs") : nodeFs;
+
+//#endregion
 //#region src/domain/host-audit-session.ts
+const { existsSync: existsSync$4, readFileSync: readFileSync$3, readdirSync, realpathSync: realpathSync$4, statSync: statSync$2 } = physicalFs;
 function createHostAuditSession(onPhysicalRead) {
 	const cache = /* @__PURE__ */ new Map();
 	const once = (key, compute) => {
@@ -35,12 +47,12 @@ function createHostAuditSession(onPhysicalRead) {
 	};
 	const readBytes = (path$1) => once(`read:${path$1}`, () => {
 		onPhysicalRead?.(path$1);
-		return readFileSync(path$1);
+		return readFileSync$3(path$1);
 	});
 	const session = {
-		realpath: (path$1) => once(`realpath:${path$1}`, () => realpathSync(path$1)),
-		exists: (path$1) => once(`exists:${path$1}`, () => existsSync(path$1)),
-		stat: (path$1) => once(`stat:${path$1}`, () => statSync(path$1)),
+		realpath: (path$1) => once(`realpath:${path$1}`, () => realpathSync$4(path$1)),
+		exists: (path$1) => once(`exists:${path$1}`, () => existsSync$4(path$1)),
+		stat: (path$1) => once(`stat:${path$1}`, () => statSync$2(path$1)),
 		readFile: (path$1) => readBytes(path$1),
 		readJson: (path$1) => once(`json:${path$1}`, () => JSON.parse(session.readFile(path$1).toString("utf8"))),
 		fileDigest: (path$1) => once(`digest:${path$1}`, () => createFileDigest(session.readFile(path$1))),
@@ -8934,6 +8946,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 
 //#endregion
 //#region src/domain/host-desktop-identity.ts
+const { existsSync: existsSync$3, realpathSync: realpathSync$3 } = physicalFs;
 /** Shared with the native PowerShell regression: JSON arrays must retain
 * their element shape on Windows PowerShell 5.1. Algorithms are case-insensitive
 * tokens; the archive path and digest retain their exact comparisons. */
@@ -8945,7 +8958,7 @@ const DESKTOP_HEADER_RESOURCE_CHECK = String.raw`
 /** Authenticate the archive header through the vendor-signed carrier rather
 * than through metadata stored in that same archive. Never execute app code. */
 function verifyDesktopCarrier(archivePath, headerSha256) {
-	const archive = realpathSync(archivePath);
+	const archive = realpathSync$3(archivePath);
 	if (!/^[a-f0-9]{64}$/.test(headerSha256)) throw new Error("desktop header identity missing");
 	const options = {
 		encoding: "utf8",
@@ -8988,13 +9001,13 @@ function verifyDesktopCarrier(archivePath, headerSha256) {
 			info
 		], options).trim();
 		if (!executableName || executableName.includes("/") || executableName.includes("\\")) throw new Error("desktop carrier executable invalid");
-		return realpathSync(join(contents, "MacOS", executableName));
+		return realpathSync$3(join(contents, "MacOS", executableName));
 	}
 	if (process.platform === "win32") {
 		const installation = dirname(dirname(archive));
 		if (archive !== join(installation, "resources", "app.asar")) throw new Error("desktop archive is outside its signed carrier");
 		const executable = join(installation, "DeepSeek Harness.exe");
-		if (!existsSync(executable)) throw new Error("desktop carrier executable missing");
+		if (!existsSync$3(executable)) throw new Error("desktop carrier executable missing");
 		const script = String.raw`
 $ErrorActionPreference = 'Stop'
 $p = $env:DSH_GUARD_DESKTOP_EXECUTABLE
@@ -9043,13 +9056,14 @@ ${DESKTOP_HEADER_RESOURCE_CHECK}
 				DSH_GUARD_DESKTOP_HEADER: headerSha256
 			}
 		}).trim() !== "verified") throw new Error("desktop signature verifier result invalid");
-		return realpathSync(executable);
+		return realpathSync$3(executable);
 	}
 	throw new Error("desktop signature verifier unsupported platform");
 }
 
 //#endregion
 //#region src/domain/host-desktop.ts
+const { closeSync: closeSync$1, existsSync: existsSync$2, fstatSync: fstatSync$1, lstatSync: lstatSync$2, mkdirSync: mkdirSync$1, openSync: openSync$1, readFileSync: readFileSync$2, readSync, realpathSync: realpathSync$2, writeFileSync: writeFileSync$2 } = physicalFs;
 /**
 * Official Desktop adapter (CG-RC2-002).
 *
@@ -9081,9 +9095,9 @@ const MAX_ASAR_FILE_BYTES = 64 * 1024 * 1024;
 /** Read the asar header (the JSON index) without extracting any payload. */
 function readAsarIndex(archivePath) {
 	const header = Buffer.alloc(16);
-	const fd = openSync(archivePath, "r");
+	const fd = openSync$1(archivePath, "r");
 	try {
-		const stat = fstatSync(fd);
+		const stat = fstatSync$1(fd);
 		if (!stat.isFile() || stat.size < 16) throw new HostProfileError("desktop_app_invalid", "asar archive is too small");
 		if (readSync(fd, header, 0, 16, 0) !== 16) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
 		const magic = header.readUInt32LE(0);
@@ -9117,7 +9131,7 @@ function readAsarIndex(archivePath) {
 			fileCount
 		};
 	} finally {
-		closeSync(fd);
+		closeSync$1(fd);
 	}
 }
 function asarNode(index$1, pathParts) {
@@ -9148,27 +9162,27 @@ function readAsarFile(archivePath, index$1, entryPath) {
 		return bytes$1;
 	};
 	if (node.unpacked) {
-		const unpackedRoot = `${realpathSync(archivePath)}.unpacked`;
-		const target = realpathSync(join(unpackedRoot, ...parts));
+		const unpackedRoot = `${realpathSync$2(archivePath)}.unpacked`;
+		const target = realpathSync$2(join(unpackedRoot, ...parts));
 		if (!target.startsWith(`${unpackedRoot}${sep}`)) throw new HostProfileError("desktop_app_invalid", `unpacked entry escapes the app bundle: ${entryPath}`);
-		const fd$1 = openSync(target, "r");
+		const fd$1 = openSync$1(target, "r");
 		try {
-			if (fstatSync(fd$1).size !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file size mismatch");
+			if (fstatSync$1(fd$1).size !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file size mismatch");
 			const bytes$1 = Buffer.alloc(size);
 			if (size && readSync(fd$1, bytes$1, 0, size, 0) !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file truncated");
 			return verify(bytes$1);
 		} finally {
-			closeSync(fd$1);
+			closeSync$1(fd$1);
 		}
 	}
 	const start = index$1.dataOffset + Number(node.offset);
 	const buffer = Buffer.alloc(size);
-	const fd = openSync(archivePath, "r");
+	const fd = openSync$1(archivePath, "r");
 	try {
-		if (!Number.isSafeInteger(start) || start < index$1.dataOffset || start + size > fstatSync(fd).size) throw new HostProfileError("desktop_app_invalid", "asar file offset escapes the archive");
+		if (!Number.isSafeInteger(start) || start < index$1.dataOffset || start + size > fstatSync$1(fd).size) throw new HostProfileError("desktop_app_invalid", "asar file offset escapes the archive");
 		if (size > 0 && readSync(fd, buffer, 0, size, start) !== size) throw new HostProfileError("desktop_app_invalid", `asar entry is truncated: ${entryPath}`);
 	} finally {
-		closeSync(fd);
+		closeSync$1(fd);
 	}
 	return verify(buffer);
 }
@@ -9184,8 +9198,8 @@ function isRecord(value) {
 */
 function readDesktopAppRuntime(appAsarPath) {
 	if (!isAbsolute(appAsarPath)) throw new HostProfileError("desktop_app_invalid", "the app archive path must be absolute");
-	if (!existsSync(appAsarPath) || !lstatSync(appAsarPath).isFile()) throw new HostProfileError("desktop_app_missing", "the official app archive was not found");
-	const asarRealpath = realpathSync(appAsarPath);
+	if (!existsSync$2(appAsarPath) || !lstatSync$2(appAsarPath).isFile()) throw new HostProfileError("desktop_app_missing", "the official app archive was not found");
+	const asarRealpath = realpathSync$2(appAsarPath);
 	const index$1 = readAsarIndex(asarRealpath);
 	if (!asarNode(index$1, DESKTOP_CARRIER_ENTRY.split("/"))) throw new HostProfileError("desktop_app_invalid", "the official CLI carrier entry is missing from the app bundle");
 	readAsarFile(asarRealpath, index$1, DESKTOP_CARRIER_ENTRY);
@@ -9238,7 +9252,7 @@ function criticalNames() {
 }
 function readJsonObjectFile(path$1, code) {
 	try {
-		const value = JSON.parse(readFileSync(path$1, "utf8"));
+		const value = JSON.parse(readFileSync$2(path$1, "utf8"));
 		if (isRecord(value)) return value;
 	} catch {}
 	throw new HostProfileError(code, `invalid JSON object: ${path$1}`);
@@ -9258,7 +9272,7 @@ function readDesktopTargetGraph(appAsarPath, profileRoot) {
 		"node_modules",
 		".dsh-module-fallback",
 		"pnpm-lock.yaml"
-	]) if (existsSync(join(profile, managed))) throw new HostProfileError("target_profile_unmanaged_modules", `desktop profiles are managed by the app: ${managed} exists`);
+	]) if (existsSync$2(join(profile, managed))) throw new HostProfileError("target_profile_unmanaged_modules", `desktop profiles are managed by the app: ${managed} exists`);
 	const dependencies = isRecord(manifest.dependencies) ? manifest.dependencies : {};
 	if (Object.keys(dependencies).length > 0) throw new HostProfileError("target_profile_dependency_uninstalled", "the desktop profile declares dependencies without an importer");
 	const dsh = isRecord(manifest.dsh) ? manifest.dsh : void 0;
@@ -9270,7 +9284,7 @@ function readDesktopTargetGraph(appAsarPath, profileRoot) {
 		packages: runtime.rows,
 		profileGraph: {
 			state: "dependency_free_desktop",
-			manifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
+			manifestSha256: createHash("sha256").update(readFileSync$2(manifestPath)).digest("hex"),
 			bundles: bundles.map(String)
 		},
 		runtime
@@ -9287,7 +9301,7 @@ function readDesktopTargetGraph(appAsarPath, profileRoot) {
 */
 function auditDesktopInstalledImplementation(appAsarPath, expectations) {
 	try {
-		const realArchive = realpathSync(appAsarPath);
+		const realArchive = realpathSync$2(appAsarPath);
 		const index$1 = readAsarIndex(realArchive);
 		const { CRITICAL_NAME_SET } = criticalNames();
 		const topLevelRoot = DESKTOP_GRAPH_ROOT.split("/");
@@ -9366,17 +9380,17 @@ function writeDesktopRuntimeReceipt(profileRoot, runtime) {
 		metadata: runtime.metadata,
 		rows: runtime.rows
 	};
-	const directory = join(realpathSync(profileRoot), ".dsh-completion-guard");
+	const directory = join(realpathSync$2(profileRoot), ".dsh-completion-guard");
 	for (const dir of [directory, join(directory, "desktop")]) {
 		try {
-			mkdirSync(dir, { mode: 448 });
+			mkdirSync$1(dir, { mode: 448 });
 		} catch (error) {
 			if (error.code !== "EEXIST") throw error;
 		}
-		if (!lstatSync(dir).isDirectory() || lstatSync(dir).isSymbolicLink() || realpathSync(dir) !== dir) throw new HostProfileError("desktop_receipt_path_invalid", "desktop receipt directory is not a contained physical directory");
+		if (!lstatSync$2(dir).isDirectory() || lstatSync$2(dir).isSymbolicLink() || realpathSync$2(dir) !== dir) throw new HostProfileError("desktop_receipt_path_invalid", "desktop receipt directory is not a contained physical directory");
 	}
 	const path$1 = join(directory, "desktop", `${runtime.manifestSha256}.json`);
-	if (!existsSync(path$1)) writeFileSync(path$1, JSON.stringify(receipt, null, 2) + "\n", {
+	if (!existsSync$2(path$1)) writeFileSync$2(path$1, JSON.stringify(receipt, null, 2) + "\n", {
 		encoding: "utf8",
 		flag: "wx",
 		mode: 384
@@ -9396,7 +9410,7 @@ const DESKTOP_IDENTITY_FACTS = {
 * nested-only dependency can never be silently resolved here).
 */
 function readDesktopDependency(appAsarPath, name) {
-	const realArchive = realpathSync(appAsarPath);
+	const realArchive = realpathSync$2(appAsarPath);
 	const index$1 = readAsarIndex(realArchive);
 	const manifestPath = `${DESKTOP_GRAPH_ROOT}/${name}/package.json`;
 	if (!asarNode(index$1, manifestPath.split("/"))) throw new HostProfileError("host_contract_probe_dependency_unbound", `dependency ${name} has no top-level manifest in the app graph`);
@@ -9563,6 +9577,7 @@ function desktopDependencyGraph(archive, expectations, base = createHostAuditSes
 
 //#endregion
 //#region src/domain/host-resolver.ts
+const { existsSync: existsSync$1, lstatSync: lstatSync$1, readFileSync: readFileSync$1, realpathSync: realpathSync$1, renameSync, statSync: statSync$1, writeFileSync: writeFileSync$1 } = physicalFs;
 /**
 * Names registered in any cohort; rows outside the union are unknown.
 *
@@ -9585,7 +9600,7 @@ function findUp(start, filename) {
 	let directory = start;
 	while (true) {
 		const candidate = join(directory, filename);
-		if (existsSync(candidate)) return candidate;
+		if (existsSync$1(candidate)) return candidate;
 		const parent = dirname(directory);
 		if (parent === directory) return void 0;
 		directory = parent;
@@ -9653,7 +9668,7 @@ function resolveInstalledHostLock(moduleUrl = import.meta.url) {
 	const lockPath = findUp(dirname(fileURLToPath(moduleUrl)), "pnpm-lock.yaml");
 	if (!lockPath) return combineHostPolicy(evaluateHostLock([]));
 	try {
-		return combineHostPolicy(evaluateHostLock(packageRowsFromPnpmLock(readFileSync(lockPath, "utf8"))));
+		return combineHostPolicy(evaluateHostLock(packageRowsFromPnpmLock(readFileSync$1(lockPath, "utf8"))));
 	} catch {
 		return combineHostPolicy(evaluateHostLock([]));
 	}
@@ -9806,21 +9821,21 @@ async function prepareActiveHostTrust(runtime, profile, fetcher = fetch) {
 function probeDependencyIdentity(runtime, profile, name, importer) {
 	for (const owner of [runtime, profile]) {
 		const modules = join(owner, "node_modules"), mapPath = join(modules, ".package-map.json");
-		if (!existsSync(mapPath)) continue;
-		const { records, reachable } = activeGraphRecords(readFileSync(mapPath, "utf8"));
+		if (!existsSync$1(mapPath)) continue;
+		const { records, reachable } = activeGraphRecords(readFileSync$1(mapPath, "utf8"));
 		const id = [...reachable].find((key) => key === importer || key.startsWith(importer + "@"));
 		if (!id || typeof records[id]?.url !== "string") continue;
-		const packageRoot = packageFromAnchor(join(realpathSync(resolve(modules, records[id].url)), "package.json"), name);
+		const packageRoot = packageFromAnchor(join(realpathSync$1(resolve(modules, records[id].url)), "package.json"), name);
 		if (!packageRoot) continue;
 		for (const graphRoot of [runtime, profile]) {
-			if (!existsSync(join(graphRoot, "node_modules"))) continue;
-			const graphModules = realpathSync(join(graphRoot, "node_modules"));
-			const graph = activeGraphRecords(readFileSync(join(graphModules, ".package-map.json"), "utf8"));
+			if (!existsSync$1(join(graphRoot, "node_modules"))) continue;
+			const graphModules = realpathSync$1(join(graphRoot, "node_modules"));
+			const graph = activeGraphRecords(readFileSync$1(join(graphModules, ".package-map.json"), "utf8"));
 			const ids = [...graph.reachable].filter((key) => key === name || key.startsWith(name + "@"));
-			if (ids.length !== 1 || typeof graph.records[ids[0]]?.url !== "string" || realpathSync(resolve(graphModules, graph.records[ids[0]].url)) !== packageRoot) continue;
+			if (ids.length !== 1 || typeof graph.records[ids[0]]?.url !== "string" || realpathSync$1(resolve(graphModules, graph.records[ids[0]].url)) !== packageRoot) continue;
 			if (!within(graphModules, packageRoot)) continue;
 			const manifest = readJsonObject(join(packageRoot, "package.json"), "host_contract_probe_dependency_unbound");
-			const matches = packageRowsFromPnpmLock(readFileSync(join(graphRoot, "pnpm-lock.yaml"), "utf8"), [name]).filter((row$3) => row$3.version === manifest.version && row$3.integrity);
+			const matches = packageRowsFromPnpmLock(readFileSync$1(join(graphRoot, "pnpm-lock.yaml"), "utf8"), [name]).filter((row$3) => row$3.version === manifest.version && row$3.integrity);
 			if (manifest.name === name && matches.length === 1) return matches[0];
 		}
 	}
@@ -10049,7 +10064,7 @@ async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, pro
 }
 function pathPresent(path$1) {
 	try {
-		lstatSync(path$1);
+		lstatSync$1(path$1);
 		return true;
 	} catch (error) {
 		if (error.code === "ENOENT") return false;
@@ -10064,8 +10079,8 @@ function packageFromAnchor(anchor, name) {
 	for (const directory of createRequire(anchor).resolve.paths(name) ?? []) {
 		const candidate = join(directory, name);
 		if (pathPresent(candidate)) {
-			if (!existsSync(join(candidate, "package.json"))) throw new HostProfileError("target_bundle_unresolved", "invalid resolver-visible package");
-			return realpathSync(candidate);
+			if (!existsSync$1(join(candidate, "package.json"))) throw new HostProfileError("target_bundle_unresolved", "invalid resolver-visible package");
+			return realpathSync$1(candidate);
 		}
 	}
 }
@@ -10075,8 +10090,8 @@ function packageFromAnchor(anchor, name) {
 * absence rule to inject or runtime replay, which still call the strict reader.
 */
 function readTargetHostGraph(runtimeRoot, profileRoot) {
-	const runtime = realpathSync(runtimeRoot);
-	const profile = realpathSync(profileRoot);
+	const runtime = realpathSync$1(runtimeRoot);
+	const profile = realpathSync$1(profileRoot);
 	const mapPath = join(profile, "node_modules", ".package-map.json");
 	const lockPath = join(profile, "pnpm-lock.yaml");
 	if (pathPresent(mapPath) && pathPresent(lockPath)) return {
@@ -10107,39 +10122,39 @@ function readTargetHostGraph(runtimeRoot, profileRoot) {
 	];
 	const bundleList = Array.isArray(bundles) ? bundles.map(String) : void 0;
 	if (!bundleList || JSON.stringify(bundleList) !== JSON.stringify(names) && JSON.stringify(bundleList) !== JSON.stringify(installationOwned)) throw new HostProfileError("target_profile_bundles_unsupported", "not the installation-owned Headless bundle tuple");
-	const modules = realpathSync(join(runtime, "node_modules"));
-	const mapText = readFileSync(join(modules, ".package-map.json"), "utf8");
-	const lockText = readFileSync(join(runtime, "pnpm-lock.yaml"), "utf8");
+	const modules = realpathSync$1(join(runtime, "node_modules"));
+	const mapText = readFileSync$1(join(modules, ".package-map.json"), "utf8");
+	const lockText = readFileSync$1(join(runtime, "pnpm-lock.yaml"), "utf8");
 	const rows = packageRowsFromActiveGraph(mapText, lockText, modules);
 	const { records, reachable } = activeGraphRecords(mapText);
-	const launcher = realpathSync(join(modules, "@deepseek-ai", "dsh"));
+	const launcher = realpathSync$1(join(modules, "@deepseek-ai", "dsh"));
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
 	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
-	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync$1(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
 		if (!packageRoot || !within(modules, packageRoot) || ids.length !== 1) throw new HostProfileError("target_bundle_unresolved", "bundle is not uniquely installation-owned");
 		const record = records[ids[0]];
-		if (typeof record.url !== "string" || realpathSync(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
+		if (typeof record.url !== "string" || realpathSync$1(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
 		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
 		const patch = installed.dsh?.bundle?.patch;
 		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$3) => row$3.version === host.version && row$3.integrity);
-		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync(resolve(packageRoot, patch))) || !statSync(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
+		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync$1(resolve(packageRoot, patch))) || !statSync$1(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
 		return locked[0];
 	});
 	for (const name of [...CRITICAL_NAMES, ...names]) {
 		const visible = packageFromAnchor(manifestPath, name);
 		if (!visible) continue;
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
-		if (ids.length !== 1 || typeof records[ids[0]].url !== "string" || !within(modules, visible) || realpathSync(resolve(modules, records[ids[0]].url)) !== visible) throw new HostProfileError("target_profile_module_shadow", "profile lookup differs from the audited installation");
+		if (ids.length !== 1 || typeof records[ids[0]].url !== "string" || !within(modules, visible) || realpathSync$1(resolve(modules, records[ids[0]].url)) !== visible) throw new HostProfileError("target_profile_module_shadow", "profile lookup differs from the audited installation");
 	}
 	return {
 		packages: rows,
 		profileGraph: {
 			state: "dependency_free_headless",
-			manifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
+			manifestSha256: createHash("sha256").update(readFileSync$1(manifestPath)).digest("hex"),
 			bundles: bundleRows
 		}
 	};
@@ -10167,7 +10182,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 	const runtime = resolve(runtimeRoot);
 	const profile = resolve(profileRoot);
 	const desktopCheckManifestPath = join(profile, "package.json");
-	if (existsSync(desktopCheckManifestPath)) {
+	if (existsSync$1(desktopCheckManifestPath)) {
 		if (readJsonObject(desktopCheckManifestPath, "profile_manifest_invalid").name === DESKTOP_PROFILE_PACKAGE_NAME) return resolveDesktopProfileHostLock(runtimeRoot, profileRoot, expectedPluginVersion, providedTrust);
 	}
 	const lockPath = join(runtime, "pnpm-lock.yaml");
@@ -10183,7 +10198,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 		profileMapPath,
 		profileManifestPath,
 		pluginManifestPath
-	]) if (!existsSync(path$1)) throw new HostProfileError("active_graph_missing", `required active graph file is missing: ${path$1}`);
+	]) if (!existsSync$1(path$1)) throw new HostProfileError("active_graph_missing", `required active graph file is missing: ${path$1}`);
 	const session = createHostAuditSession();
 	const trust = providedTrust ? qualifyHostTrust(providedTrust, profile) : void 0;
 	const profileManifest = readJsonObject(profileManifestPath, "profile_manifest_invalid");
@@ -10229,8 +10244,8 @@ function desktopProfileRows(profileRoot, session) {
 	const auditSession = session ?? createHostAuditSession();
 	const lockPath = join(profileRoot, "pnpm-lock.yaml");
 	const layout = desktopProfileLayout(profileRoot, auditSession);
-	if (!layout && !existsSync(lockPath)) return [];
-	if (!layout || !existsSync(lockPath)) throw new HostProfileError("active_graph_missing", "partial desktop profile importer");
+	if (!layout && !existsSync$1(lockPath)) return [];
+	if (!layout || !existsSync$1(lockPath)) throw new HostProfileError("active_graph_missing", "partial desktop profile importer");
 	const graph = layout.graph;
 	return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString("utf8"), join(profileRoot, "node_modules"), auditSession);
 }
@@ -10284,7 +10299,7 @@ function resolveDesktopProfileHostLock(appAsarPath, profileRoot, expectedPluginV
 /** An active Desktop lock requires a real installed Guard importer. The
 * dependency-free application-owned profile has its own preinstall path. */
 function verifyDesktopPluginIdentity(profileRoot, expectedPluginVersion) {
-	if (!existsSync(join(profileRoot, "node_modules", ".package-map.json")) && !existsSync(join(profileRoot, "node_modules", ".modules.yaml"))) throw new HostProfileError("profile_plugin_unbound", "the desktop profile has no installed plugin importer");
+	if (!existsSync$1(join(profileRoot, "node_modules", ".package-map.json")) && !existsSync$1(join(profileRoot, "node_modules", ".modules.yaml"))) throw new HostProfileError("profile_plugin_unbound", "the desktop profile has no installed plugin importer");
 	const profile = readJsonObject(join(profileRoot, "package.json"), "profile_manifest_invalid");
 	const dsh = profile.dsh && typeof profile.dsh === "object" ? profile.dsh : {};
 	const settings = dsh.profile && typeof dsh.profile === "object" ? dsh.profile : {};
@@ -10292,7 +10307,7 @@ function verifyDesktopPluginIdentity(profileRoot, expectedPluginVersion) {
 	const dependencies = profile.dependencies && typeof profile.dependencies === "object" ? profile.dependencies : {};
 	if (profile.name !== DESKTOP_PROFILE_PACKAGE_NAME || typeof dependencies["dsh-completion-guard"] !== "string" || !bundles.includes("dsh-completion-guard") || !bundles.includes("@deepseek-ai/dsh-base") || !bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("@deepseek-ai/dsh-headless") || bundles.includes("dshmarket")) throw new HostProfileError("profile_plugin_unbound", "the desktop profile does not bind the installed plugin and official bundles");
 	const pluginManifestPath = join(profileRoot, "node_modules", "dsh-completion-guard", "package.json");
-	if (!existsSync(pluginManifestPath)) throw new HostProfileError("profile_plugin_unbound", "the desktop profile importer does not carry the dsh-completion-guard plugin");
+	if (!existsSync$1(pluginManifestPath)) throw new HostProfileError("profile_plugin_unbound", "the desktop profile importer does not carry the dsh-completion-guard plugin");
 	const installedPlugin = readJsonObject(pluginManifestPath, "installed_plugin_invalid");
 	if (installedPlugin.name !== "dsh-completion-guard" || installedPlugin.version !== expectedPluginVersion) throw new HostProfileError("profile_plugin_version_mismatch", "installed profile plugin identity does not match the generator version");
 }
@@ -10409,7 +10424,7 @@ async function prepareDesktopHostTrust(appAsarPath, profileRoot, fetcher = fetch
 }
 function readJsonObject(path$1, code) {
 	try {
-		const value = JSON.parse(readFileSync(path$1, "utf8"));
+		const value = JSON.parse(readFileSync$1(path$1, "utf8"));
 		if (value && typeof value === "object" && !Array.isArray(value)) return value;
 	} catch {}
 	throw new HostProfileError(code, `invalid JSON object: ${path$1}`);
@@ -10492,13 +10507,13 @@ function normalizeEmptyPatchBase(text) {
 function injectActiveProfileHostLock(input) {
 	if (input.evaluation.status !== "supported") throw new HostProfileError("profile_host_lock_unsupported", "an unsupported host cannot replace the managed lock");
 	const patchPath = join(input.profileRoot, "cordis.patch.yml");
-	const stripped = stripManagedPatch(existsSync(patchPath) ? readFileSync(patchPath, "utf8") : "");
+	const stripped = stripManagedPatch(existsSync$1(patchPath) ? readFileSync$1(patchPath, "utf8") : "");
 	const base = normalizeEmptyPatchBase(stripped.base);
 	const activation = activationFromPatch(base) ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : void 0);
 	const managed = renderManagedPatch(input.evaluation.packages.filter((row$3) => row$3.version && row$3.integrity), input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot, input.trust, input.profileKind === "desktop" ? input.evaluation.digest : void 0);
 	const next = `${base.trimEnd()}${base.trim() ? "\n\n" : ""}${managed}`;
 	const temporary = `${patchPath}.context-guard-${process.pid}.tmp`;
-	writeFileSync(temporary, next, {
+	writeFileSync$1(temporary, next, {
 		encoding: "utf8",
 		flag: "wx"
 	});

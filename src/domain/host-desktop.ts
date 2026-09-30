@@ -1,4 +1,5 @@
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } from 'node:fs'
+import { physicalFs } from './host-physical-fs.js'
+const { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } = physicalFs
 import { createHash } from 'node:crypto'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 import type { PackageRow } from './digest.js'
