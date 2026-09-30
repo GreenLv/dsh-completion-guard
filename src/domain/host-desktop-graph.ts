@@ -1,11 +1,85 @@
 import { createRequire } from 'node:module'
-import { join, sep } from 'node:path'
+import { join, sep, resolve } from 'node:path'
 import type { Stats } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 import type { DependencyAuditGraph } from './host-dependency-audit.js'
 import { readAsarFile, readAsarIndex } from './host-desktop.js'
 import type { AuditedPackageExpectation } from './host-resolver.js'
+
+/** Desktop's bundled pnpm 11.7 emits a physical hoisted tree and JSON
+ * .modules.yaml, without a package map. Read that actual installation index;
+ * never write a substitute map or infer registry trust from local metadata.
+ * The ordinary byte/route auditor still authenticates every selected peer.
+ */
+export function desktopHoistedProfileGraph(profile: string, session: HostAuditSession): DependencyAuditGraph {
+  const modules = session.realpath(join(profile, 'node_modules'))
+  if (!modules.startsWith(session.realpath(profile) + sep)) throw Error('Desktop profile modules escape')
+  const metadataPath = join(modules, '.modules.yaml')
+  if (session.realpath(metadataPath) !== metadataPath) throw Error('Desktop installation index is linked')
+  const bytes = session.readFile(metadataPath)
+  if (bytes.length > 2 * 1024 * 1024) throw Error('Desktop installation index too large')
+  const metadata = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
+  if (metadata.nodeLinker !== 'hoisted' || metadata.layoutVersion !== 5 || metadata.packageManager !== 'pnpm@11.7.0'
+    || !metadata.hoistedLocations || typeof metadata.hoistedLocations !== 'object' || Array.isArray(metadata.hoistedLocations)) {
+    throw Error('Desktop installation index unsupported')
+  }
+  const names = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/
+  const records: DependencyAuditGraph['records'] = Object.create(null) as DependencyAuditGraph['records']
+  records['.'] = { url: '..', dependencies: Object.create(null) as Record<string, string> }
+  const rootIndex = records['.'].dependencies as Record<string, string>
+  const locations = new Set<string>(), roots = new Set<string>()
+  for (const [reference, paths] of Object.entries(metadata.hoistedLocations as Record<string, unknown>)) {
+    const boundary = reference.indexOf('@', reference.startsWith('@') ? 1 : 0)
+    const name = reference.slice(0, boundary), version = reference.slice(boundary + 1)
+    if (boundary < 1 || !names.test(name) || !version || !Array.isArray(paths) || !paths.length) throw Error('Desktop installation reference invalid')
+    for (const path of paths) {
+      if (typeof path !== 'string' || !path.startsWith('node_modules/')) throw Error('Desktop installation location invalid')
+      const id = path.slice('node_modules/'.length), parts = id.split('/node_modules/')
+      if (!parts.every(part => names.test(part)) || parts.at(-1) !== name || locations.has(id)) throw Error('Desktop installation location invalid')
+      const configured = resolve(modules, id), root = session.realpath(configured)
+      // This adapter covers the bundled physical hoisted layout only.
+      if (root !== configured || !root.startsWith(modules + sep) || roots.has(root)) throw Error('Desktop installation location escaped or linked')
+      const manifest = session.readJson(join(root, 'package.json'))
+      if (manifest.name !== name || typeof manifest.version !== 'string'
+        || (!version.startsWith('file:') && manifest.version !== version.split('(', 1)[0])) throw Error('Desktop installation identity mismatch')
+      roots.add(root); locations.add(id)
+      records[id] = { url: './' + id, dependencies: { [name]: id } }
+      if (parts.length === 1) rootIndex[name] = id
+      if (locations.size > 20_000) throw Error('Desktop installation index too large')
+    }
+  }
+  // Reject omitted or invented physical packages. Traverse package-owned
+  // node_modules only; lib-level shadows are checked by the route auditor.
+  const actual = new Set<string>()
+  const walk = (directory: string, prefix: string, depth: number): void => {
+    if (depth > 32 || !session.listDir) throw Error('Desktop installation inventory unavailable')
+    for (const item of session.listDir(directory)) {
+      if (item.name.startsWith('.')) continue
+      if (!item.isDirectory) throw Error('Desktop physical package expected')
+      if (item.name.startsWith('@')) {
+        for (const scoped of session.listDir(join(directory, item.name))) {
+          const name = item.name + '/' + scoped.name
+          if (!scoped.isDirectory || !names.test(name)) throw Error('Desktop scoped package invalid')
+          visit(name)
+        }
+      } else {
+        if (!names.test(item.name)) throw Error('Desktop physical package invalid')
+        visit(item.name)
+      }
+    }
+    function visit(name: string): void {
+      const id = prefix + name, root = join(directory, name)
+      actual.add(id)
+      if (actual.size > 20_000) throw Error('Desktop installation inventory too large')
+      const nested = join(root, 'node_modules')
+      if (session.exists(nested)) walk(nested, id + '/node_modules/', depth + 1)
+    }
+  }
+  walk(modules, '', 0)
+  if (actual.size !== locations.size || [...actual].some(id => !locations.has(id))) throw Error('Desktop installation index differs from disk')
+  return { modules, records, reachable: new Set(Object.keys(records)), packages: new Map() }
+}
 
 /** Present real ASAR entries to the existing fresh dual-lane route auditor.
  * This is an in-memory graph of the archive's actual namespace/manifests;

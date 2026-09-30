@@ -2684,7 +2684,7 @@ interface AuditedPackageExpectation {
 /** Byte and dual-lane route audit over both graphs. Expectations are either
 * the published baseline or operator-owned, registry-acquired qualified module
 * digests. A missing digest set never authenticates unknown implementation. */
-declare function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[], installationGraph?: DependencyAuditGraph): boolean;
+declare function auditedHostImplementation(runtimeRoot: string, profileRoot: string, providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[], installationGraph?: DependencyAuditGraph, profileInstallationGraph?: DependencyAuditGraph): boolean;
 declare function activeRendererModule(nodeModulesRoot: string, name: string, providedSession?: HostAuditSession): {
   bytes: string;
   path: string;

@@ -68,7 +68,24 @@ def known_error_code(data: bytes) -> str | None:
     # Only fixed diagnostic labels may leave local process output.
     import re
     codes = ("ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND", "ERR_ACCESS_DENIED", "EACCES", "EPERM", "ENOENT")
-    return next((code for code in codes if re.search(rb"\b" + code.encode() + rb"\b", data)), None)
+    system_code = next((code for code in codes if re.search(rb"\b" + code.encode() + rb"\b", data)), None)
+    if system_code:
+        return system_code
+    # The shipped host-lock CLI deliberately emits only these fixed labels.
+    # Parse its JSON envelope without exporting arbitrary messages or fields.
+    host_codes = {"profile_plugin_unbound", "profile_plugin_version_mismatch",
+                  "active_graph_missing", "active_graph_invalid",
+                  "host_implementation_bytes_mismatch", "host_lock_command_failed",
+                  "desktop_runtime_unqualified", "target_runtime_unsupported"}
+    for line in data[-8192:].splitlines():
+        try:
+            envelope = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if (isinstance(envelope, dict) and envelope.get("status") == "unavailable"
+                and isinstance(envelope.get("reason_code"), str) and envelope["reason_code"] in host_codes):
+            return envelope["reason_code"]
+    return None
 
 
 def redacted_host_stderr(data: bytes) -> str:

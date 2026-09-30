@@ -9411,6 +9411,83 @@ function readDesktopDependency(appAsarPath, name) {
 
 //#endregion
 //#region src/domain/host-desktop-graph.ts
+/** Desktop's bundled pnpm 11.7 emits a physical hoisted tree and JSON
+* .modules.yaml, without a package map. Read that actual installation index;
+* never write a substitute map or infer registry trust from local metadata.
+* The ordinary byte/route auditor still authenticates every selected peer.
+*/
+function desktopHoistedProfileGraph(profile, session) {
+	const modules = session.realpath(join(profile, "node_modules"));
+	if (!modules.startsWith(session.realpath(profile) + sep)) throw Error("Desktop profile modules escape");
+	const metadataPath = join(modules, ".modules.yaml");
+	if (session.realpath(metadataPath) !== metadataPath) throw Error("Desktop installation index is linked");
+	const bytes$1 = session.readFile(metadataPath);
+	if (bytes$1.length > 2 * 1024 * 1024) throw Error("Desktop installation index too large");
+	const metadata = JSON.parse(bytes$1.toString("utf8"));
+	if (metadata.nodeLinker !== "hoisted" || metadata.layoutVersion !== 5 || metadata.packageManager !== "pnpm@11.7.0" || !metadata.hoistedLocations || typeof metadata.hoistedLocations !== "object" || Array.isArray(metadata.hoistedLocations)) throw Error("Desktop installation index unsupported");
+	const names = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/;
+	const records = Object.create(null);
+	records["."] = {
+		url: "..",
+		dependencies: Object.create(null)
+	};
+	const rootIndex = records["."].dependencies;
+	const locations = /* @__PURE__ */ new Set(), roots = /* @__PURE__ */ new Set();
+	for (const [reference, paths] of Object.entries(metadata.hoistedLocations)) {
+		const boundary = reference.indexOf("@", reference.startsWith("@") ? 1 : 0);
+		const name = reference.slice(0, boundary), version$1 = reference.slice(boundary + 1);
+		if (boundary < 1 || !names.test(name) || !version$1 || !Array.isArray(paths) || !paths.length) throw Error("Desktop installation reference invalid");
+		for (const path$1 of paths) {
+			if (typeof path$1 !== "string" || !path$1.startsWith("node_modules/")) throw Error("Desktop installation location invalid");
+			const id = path$1.slice(13), parts = id.split("/node_modules/");
+			if (!parts.every((part) => names.test(part)) || parts.at(-1) !== name || locations.has(id)) throw Error("Desktop installation location invalid");
+			const configured = resolve(modules, id), root = session.realpath(configured);
+			if (root !== configured || !root.startsWith(modules + sep) || roots.has(root)) throw Error("Desktop installation location escaped or linked");
+			const manifest = session.readJson(join(root, "package.json"));
+			if (manifest.name !== name || typeof manifest.version !== "string" || !version$1.startsWith("file:") && manifest.version !== version$1.split("(", 1)[0]) throw Error("Desktop installation identity mismatch");
+			roots.add(root);
+			locations.add(id);
+			records[id] = {
+				url: "./" + id,
+				dependencies: { [name]: id }
+			};
+			if (parts.length === 1) rootIndex[name] = id;
+			if (locations.size > 2e4) throw Error("Desktop installation index too large");
+		}
+	}
+	const actual = /* @__PURE__ */ new Set();
+	const walk = (directory, prefix, depth) => {
+		if (depth > 32 || !session.listDir) throw Error("Desktop installation inventory unavailable");
+		for (const item of session.listDir(directory)) {
+			if (item.name.startsWith(".")) continue;
+			if (!item.isDirectory) throw Error("Desktop physical package expected");
+			if (item.name.startsWith("@")) for (const scoped of session.listDir(join(directory, item.name))) {
+				const name = item.name + "/" + scoped.name;
+				if (!scoped.isDirectory || !names.test(name)) throw Error("Desktop scoped package invalid");
+				visit(name);
+			}
+			else {
+				if (!names.test(item.name)) throw Error("Desktop physical package invalid");
+				visit(item.name);
+			}
+		}
+		function visit(name) {
+			const id = prefix + name, root = join(directory, name);
+			actual.add(id);
+			if (actual.size > 2e4) throw Error("Desktop installation inventory too large");
+			const nested = join(root, "node_modules");
+			if (session.exists(nested)) walk(nested, id + "/node_modules/", depth + 1);
+		}
+	};
+	walk(modules, "", 0);
+	if (actual.size !== locations.size || [...actual].some((id) => !locations.has(id))) throw Error("Desktop installation index differs from disk");
+	return {
+		modules,
+		records,
+		reachable: new Set(Object.keys(records)),
+		packages: /* @__PURE__ */ new Map()
+	};
+}
 /** Present real ASAR entries to the existing fresh dual-lane route auditor.
 * This is an in-memory graph of the archive's actual namespace/manifests;
 * it never creates or asserts a pnpm package map for the app. */
@@ -9752,7 +9829,7 @@ function probeDependencyIdentity(runtime, profile, name, importer) {
 /** Byte and dual-lane route audit over both graphs. Expectations are either
 * the published baseline or operator-owned, registry-acquired qualified module
 * digests. A missing digest set never authenticates unknown implementation. */
-function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations, installationGraph) {
+function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations, installationGraph, profileInstallationGraph) {
 	const session = providedSession ?? createHostAuditSession();
 	try {
 		const expectedPackages = expectations ?? packages$1;
@@ -9761,13 +9838,14 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, ex
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
 			if (installationGraph && rootPath === runtimeRoot) continue;
 			const modulesPath = join(rootPath, "node_modules");
-			if (!session.exists(join(modulesPath, ".package-map.json"))) {
+			const supplied = rootPath === profileRoot ? profileInstallationGraph : void 0;
+			if (!supplied && !session.exists(join(modulesPath, ".package-map.json"))) {
 				if (rootPath === runtimeRoot) return false;
 				continue;
 			}
-			const modules = session.realpath(modulesPath);
+			const modules = supplied?.modules ?? session.realpath(modulesPath);
 			const mapPath = join(modules, ".package-map.json");
-			const { records, reachable } = session.memo(`graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString("utf8")));
+			const { records, reachable } = supplied ?? session.memo(`graph:${mapPath}`, () => activeGraphRecords(session.readFile(mapPath).toString("utf8")));
 			const graph = {
 				modules,
 				records,
@@ -10149,12 +10227,37 @@ function asarRowsWithIntegrity(runtime, source) {
 }
 function desktopProfileRows(profileRoot, session) {
 	const auditSession = session ?? createHostAuditSession();
-	const mapPath = join(profileRoot, "node_modules", ".package-map.json");
 	const lockPath = join(profileRoot, "pnpm-lock.yaml");
-	if (!existsSync(mapPath) && !existsSync(lockPath)) return [];
-	if (!existsSync(mapPath) || !existsSync(lockPath)) throw new HostProfileError("active_graph_missing", "partial desktop profile importer");
-	const graph = auditSession.memo(`graph:${mapPath}`, () => activeGraphRecords(auditSession.readFile(mapPath).toString("utf8")));
+	const layout = desktopProfileLayout(profileRoot, auditSession);
+	if (!layout && !existsSync(lockPath)) return [];
+	if (!layout || !existsSync(lockPath)) throw new HostProfileError("active_graph_missing", "partial desktop profile importer");
+	const graph = layout.graph;
 	return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString("utf8"), join(profileRoot, "node_modules"), auditSession);
+}
+function desktopProfileLayout(profile, session) {
+	return session.memo(`desktop-profile-layout:${profile}`, () => {
+		const modules = join(profile, "node_modules"), mapPath = join(modules, ".package-map.json");
+		if (session.exists(mapPath)) return {
+			graph: {
+				...activeGraphRecords(session.readFile(mapPath).toString("utf8")),
+				modules: session.realpath(modules),
+				packages: /* @__PURE__ */ new Map()
+			},
+			identityPath: mapPath,
+			kind: "package-map"
+		};
+		const metadataPath = join(modules, ".modules.yaml");
+		if (!session.exists(metadataPath)) return void 0;
+		try {
+			return {
+				graph: desktopHoistedProfileGraph(profile, session),
+				identityPath: metadataPath,
+				kind: "pnpm-11.7-hoisted"
+			};
+		} catch {
+			throw new HostProfileError("active_graph_invalid", "Desktop physical importer index does not match its installed tree");
+		}
+	});
 }
 /** Complete Desktop composition: the official app bundle is the runtime half,
 * the Desktop-managed profile is the profile half. No structural discovery
@@ -10181,7 +10284,7 @@ function resolveDesktopProfileHostLock(appAsarPath, profileRoot, expectedPluginV
 /** An active Desktop lock requires a real installed Guard importer. The
 * dependency-free application-owned profile has its own preinstall path. */
 function verifyDesktopPluginIdentity(profileRoot, expectedPluginVersion) {
-	if (!existsSync(join(profileRoot, "node_modules", ".package-map.json"))) throw new HostProfileError("profile_plugin_unbound", "the desktop profile has no installed plugin importer");
+	if (!existsSync(join(profileRoot, "node_modules", ".package-map.json")) && !existsSync(join(profileRoot, "node_modules", ".modules.yaml"))) throw new HostProfileError("profile_plugin_unbound", "the desktop profile has no installed plugin importer");
 	const profile = readJsonObject(join(profileRoot, "package.json"), "profile_manifest_invalid");
 	const dsh = profile.dsh && typeof profile.dsh === "object" ? profile.dsh : {};
 	const settings = dsh.profile && typeof dsh.profile === "object" ? dsh.profile : {};
@@ -10220,14 +10323,15 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 		reasonCode: "host_lock_installed_graph_drift"
 	};
 	const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session);
-	if (!auditedHostImplementation(join(runtime.asarRealpath, "dsh"), profile, archiveGraph.session, expectations, archiveGraph.graph)) return {
+	const layout = desktopProfileLayout(profile, session);
+	if (!auditedHostImplementation(join(runtime.asarRealpath, "dsh"), profile, archiveGraph.session, expectations, archiveGraph.graph, layout.graph)) return {
 		...evaluation,
 		status: "unsupported",
 		goalAvailable: false,
 		reasonCode: "host_lock_installed_graph_drift"
 	};
 	const profileManifest = session.fileDigest(join(profile, "package.json"));
-	const digest$1 = createHash("sha256").update("dsh.desktop-core-host/v1\0").update(evaluation.digest).update("\0").update(runtime.asarRealpath).update("\0").update(runtime.headerSha256).update("\0").update(runtime.manifestSha256).update("\0").update(runtime.metadataSha256).update("\0").update(executable).update("\0").update(session.fileDigest(executable)).update("\0").update(profile).update("\0").update(profileManifest).update("\0").update(session.fileDigest(pluginManifestPath)).update("\0").update(session.fileDigest(join(profile, "node_modules", ".package-map.json"))).update("\0").update(session.fileDigest(join(profile, "pnpm-lock.yaml"))).digest("hex");
+	const digest$1 = createHash("sha256").update("dsh.desktop-core-host/v1\0").update(evaluation.digest).update("\0").update(runtime.asarRealpath).update("\0").update(runtime.headerSha256).update("\0").update(runtime.manifestSha256).update("\0").update(runtime.metadataSha256).update("\0").update(executable).update("\0").update(session.fileDigest(executable)).update("\0").update(profile).update("\0").update(profileManifest).update("\0").update(session.fileDigest(pluginManifestPath)).update("\0").update(layout.kind).update("\0").update(session.fileDigest(layout.identityPath)).update("\0").update(session.fileDigest(join(profile, "pnpm-lock.yaml"))).digest("hex");
 	const audited = auditedForegroundRenderers(runtime.asarRealpath, profile, session);
 	return audited.length ? {
 		...evaluation,

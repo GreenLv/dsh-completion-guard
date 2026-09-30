@@ -19,7 +19,7 @@ import { satisfiesSupportedHostRange } from './host-version.js'
 import { acquireHostTrust, hostTrustDigest, parseHostTrust, qualifyHostTrust, type HostRebindTrust, HostTrustError } from './host-trust.js'
 import type { PackageRow } from './digest.js'
 import { verifyDesktopCarrier } from './host-desktop-identity.js'
-import { desktopDependencyGraph } from './host-desktop-graph.js'
+import { desktopDependencyGraph, desktopHoistedProfileGraph } from './host-desktop-graph.js'
 import {
   auditDesktopInstalledImplementation,
   readDesktopAppRuntime,
@@ -367,7 +367,7 @@ export interface AuditedPackageExpectation {
  * digests. A missing digest set never authenticates unknown implementation. */
 export function auditedHostImplementation(runtimeRoot: string, profileRoot: string,
   providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[],
-  installationGraph?: DependencyAuditGraph): boolean {
+  installationGraph?: DependencyAuditGraph, profileInstallationGraph?: DependencyAuditGraph): boolean {
   const session = providedSession ?? createHostAuditSession()
   try {
     const expectedPackages: readonly AuditedPackageExpectation[] = expectations ?? (hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[])
@@ -376,13 +376,14 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
       if (installationGraph && rootPath === runtimeRoot) continue
       const modulesPath = join(rootPath, 'node_modules')
-      if (!session.exists(join(modulesPath, '.package-map.json'))) {
+      const supplied = rootPath === profileRoot ? profileInstallationGraph : undefined
+      if (!supplied && !session.exists(join(modulesPath, '.package-map.json'))) {
         if (rootPath === runtimeRoot) return false
         continue
       }
-      const modules = session.realpath(modulesPath)
+      const modules = supplied?.modules ?? session.realpath(modulesPath)
       const mapPath = join(modules, '.package-map.json')
-      const { records, reachable } = session.memo(`graph:${mapPath}`,
+      const { records, reachable } = supplied ?? session.memo(`graph:${mapPath}`,
         () => activeGraphRecords(session.readFile(mapPath).toString('utf8')))
       const graph: DependencyAuditGraph = { modules, records, reachable, packages: new Map() }
       graphs.push(graph)
@@ -863,12 +864,30 @@ function desktopProfileRows(profileRoot: string, session?: HostAuditSession): Pa
   // the graph is a real importer; read it with the strict standard reader.
   // A dependency-free desktop profile contributes no rows of its own.
   const auditSession = session ?? createHostAuditSession()
-  const mapPath = join(profileRoot, 'node_modules', '.package-map.json')
   const lockPath = join(profileRoot, 'pnpm-lock.yaml')
-  if (!existsSync(mapPath) && !existsSync(lockPath)) return []
-  if (!existsSync(mapPath) || !existsSync(lockPath)) throw new HostProfileError('active_graph_missing', 'partial desktop profile importer')
-  const graph = auditSession.memo(`graph:${mapPath}`, () => activeGraphRecords(auditSession.readFile(mapPath).toString('utf8')))
+  const layout = desktopProfileLayout(profileRoot, auditSession)
+  if (!layout && !existsSync(lockPath)) return []
+  if (!layout || !existsSync(lockPath)) throw new HostProfileError('active_graph_missing', 'partial desktop profile importer')
+  const graph = layout.graph
   return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString('utf8'), join(profileRoot, 'node_modules'), auditSession)
+}
+
+function desktopProfileLayout(profile: string, session: HostAuditSession):
+  { graph: DependencyAuditGraph; identityPath: string; kind: string } | undefined {
+  return session.memo(`desktop-profile-layout:${profile}`, () => {
+    const modules = join(profile, 'node_modules'), mapPath = join(modules, '.package-map.json')
+    if (session.exists(mapPath)) {
+      const parsed = activeGraphRecords(session.readFile(mapPath).toString('utf8'))
+      return { graph: { ...parsed, modules: session.realpath(modules), packages: new Map() }, identityPath: mapPath, kind: 'package-map' }
+    }
+    const metadataPath = join(modules, '.modules.yaml')
+    if (!session.exists(metadataPath)) return undefined
+    try {
+      return { graph: desktopHoistedProfileGraph(profile, session), identityPath: metadataPath, kind: 'pnpm-11.7-hoisted' }
+    } catch {
+      throw new HostProfileError('active_graph_invalid', 'Desktop physical importer index does not match its installed tree')
+    }
+  })
 }
 
 /** Complete Desktop composition: the official app bundle is the runtime half,
@@ -896,7 +915,9 @@ export function resolveDesktopProfileHostLock(
  * dependency-free application-owned profile has its own preinstall path. */
 function verifyDesktopPluginIdentity(profileRoot: string, expectedPluginVersion: string): void {
   const importerMap = join(profileRoot, 'node_modules', '.package-map.json')
-  if (!existsSync(importerMap)) throw new HostProfileError('profile_plugin_unbound', 'the desktop profile has no installed plugin importer')
+  if (!existsSync(importerMap) && !existsSync(join(profileRoot, 'node_modules', '.modules.yaml'))) {
+    throw new HostProfileError('profile_plugin_unbound', 'the desktop profile has no installed plugin importer')
+  }
   const profile = readJsonObject(join(profileRoot, 'package.json'), 'profile_manifest_invalid')
   const dsh = profile.dsh && typeof profile.dsh === 'object' ? profile.dsh as Record<string, unknown> : {}
   const settings = dsh.profile && typeof dsh.profile === 'object' ? dsh.profile as Record<string, unknown> : {}
@@ -941,7 +962,8 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
   const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session)
-  if (!auditedHostImplementation(join(runtime.asarRealpath, 'dsh'), profile, archiveGraph.session, expectations, archiveGraph.graph)) {
+  const layout = desktopProfileLayout(profile, session)!
+  if (!auditedHostImplementation(join(runtime.asarRealpath, 'dsh'), profile, archiveGraph.session, expectations, archiveGraph.graph, layout.graph)) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
   // Runtime and profile identity must survive fresh validation: a changed app
@@ -953,7 +975,7 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
     .update(runtime.metadataSha256).update('\0').update(executable).update('\0').update(session.fileDigest(executable)).update('\0')
     .update(profile).update('\0').update(profileManifest).update('\0')
     .update(session.fileDigest(pluginManifestPath)).update('\0')
-    .update(session.fileDigest(join(profile, 'node_modules', '.package-map.json'))).update('\0')
+    .update(layout.kind).update('\0').update(session.fileDigest(layout.identityPath)).update('\0')
     .update(session.fileDigest(join(profile, 'pnpm-lock.yaml'))).digest('hex')
   const audited = auditedForegroundRenderers(runtime.asarRealpath, profile, session)
   return audited.length ? { ...evaluation, auditedForegroundRenderers: audited,

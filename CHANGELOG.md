@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Refuses to certify a shell result when its terminal exit marker is obscured by later prose or a malformed marker. Clean success and failure tails retain their existing meaning. Scheduled reminders and late answers to timed questions remain outside root instruction authority.
 - Fixes Desktop command selection, archive identity drift, locally modified critical peers, and receipt-directory symlink escape. The `inspect`, `inject` and `verify-dump` commands accept explicit `--profile desktop`; the archive, carrier and installed profile are bound to the same freshly checked identity.
 - Adds `dump-desktop` for boot-free configuration readback through the app's bundled APIs, and stores the full Desktop identity for runtime comparison. The versioned native entrypoint now has a separate Desktop backend profile; graphical-shell and real-model acceptance remain separate.
+- Supports the physical hoisted plugin tree produced by Desktop's bundled pnpm 11.7, which has no package map. Guard cross-checks its installation index against disk, authenticates selected critical peers and routes, and binds the index into fresh runtime validation.
 - Adds measurements for 0/100/1000/10000-event projections and short/long private ledgers. The observed full-log cost is recorded without adding a persistent trust cache. See [compatibility and evidence scope](docs/COMPATIBILITY.md) for native-platform and model acceptance limits.
 
 ## 0.8.1

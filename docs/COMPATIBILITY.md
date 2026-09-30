@@ -14,6 +14,8 @@ The application owns the `desktop` profile (`dsh-profile-desktop`). Its CLI carr
 
 Guard identifies the profile by its manifest name. A Desktop profile contains the Web bundle, so bundle presence alone cannot identify the running surface. For macOS, Guard verifies the app's Developer ID signature and DeepSeek team/identifier; for Windows, it verifies the executable's Authenticode status and DeepSeek publisher. It then compares the ASAR header with the integrity value embedded in the signed carrier. A detached archive or a self-reported digest table cannot establish carrier identity.
 
+Desktop's bundled pnpm 11.7 produces a physical hoisted plugin tree with a JSON `.modules.yaml` index and no package map. Guard verifies the index against the actual tree, then applies the same published-byte and dependency-route checks to local critical peers. Missing, unlisted, duplicate, escaped or changed critical packages are refused. A supported package-map layout remains accepted when present; malformed maps never fall back to the physical-tree path.
+
 The archive is read in place. The registry baseline closes the executable/JSON inventory of each critical package, including scripts outside `lib`. Its bytes must match the acquired official tarball digests. The signed archive metadata authenticates the packager's rewritten manifests; executable files have no rewrite exception. Nested critical packages, unlisted code and changed dependency routes are refused. The same fresh route and byte audit also checks critical peers selected from the physical profile.
 
 The lock binds the canonical archive, signed header, runtime manifest and metadata, carrier bytes, installed Guard manifest, profile manifest, map and lockfile. Inject and runtime revalidation use one evaluation path, including foreground renderers and default-workdir providers. Changed inputs refuse the injected lock. Receipts stay under physical, contained profile directories; directory links cannot redirect them elsewhere.
@@ -25,6 +27,8 @@ The lock binds the canonical archive, signed header, runtime manifest and metada
 0.8.2 延续 0.8.x 的任务、证书与数据协议，主要适配 DSH RC.2、增加 Desktop 宿主锁并修复退出证据判定。最低 DSH 版本升至 `0.2.0-rc.2`；请先升级宿主，再安装 Guard、重新注入锁并回读。版本准入没有上限，但版本号相符仍不足以证明实现兼容。Cordis 的独立要求为 `>=4.0.4`。
 
 Desktop 按应用自有的 `dsh-profile-desktop` 名称识别。安装须使用应用附带的 CLI；该 CLI 允许管理 Desktop 插件，但拒绝通过 CLI 启动 Desktop 或执行 `--dump-config`。Guard 的 `dump-desktop` 使用应用内同一套配置组合 API，不启动宿主。具体操作见[Desktop 升级步骤](HOST_LOCK_UPGRADE.md#official-desktop-profile)。
+
+Desktop 自带 pnpm 11.7 生成平铺插件目录，安装索引为 JSON 格式的 `.modules.yaml`，不含 package-map。Guard 核对索引与实际目录，再对本地关键 peer 执行相同的官方字节与依赖路由认证。关键包缺失、未登记、重复、越界或发生改写时均拒绝准入；若存在受支持的 package-map，则使用该布局，损坏的 map 不会回退到平铺目录路径。
 
 Guard 先核验 macOS 的 DeepSeek Developer ID 签名或 Windows 的 DeepSeek Authenticode 发布者，再将 ASAR 头与签名载体内的摘要比对。随后原位读取归档，按独立获取的官方 tarball 清单核验关键包内全部可执行/JSON 文件，包括 `lib` 外的脚本。签名归档的元数据只用于认证打包器改写的 manifest；新增代码、嵌套关键包、错误依赖路由及本地被改动的关键 peer 均拒绝。宿主锁同时绑定应用、载体、profile、安装映射与锁文件；注入和运行时复验采用同一链路，并核验 shell 渲染器及默认工作目录提供者。
 

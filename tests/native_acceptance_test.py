@@ -490,6 +490,15 @@ class HostBoundEntrypointTests(unittest.TestCase):
         unknown = self.host.redacted_host_stderr(b"secret arbitrary text" * 10000)
         self.assertEqual(unknown, "unrecognized_host_error")
 
+    def test_host_lock_json_reason_is_preserved_without_arbitrary_fields(self):
+        payload = b'{"status":"unavailable","reason_code":"profile_plugin_unbound","private":"secret"}\n'
+        self.assertEqual(self.host.known_error_code(payload), "profile_plugin_unbound")
+        self.assertEqual(self.host.redacted_host_stderr(payload), "profile_plugin_unbound")
+        for unknown in [b'{"status":"unavailable","reason_code":"private-secret"}',
+                        b'{"status":"supported","reason_code":"active_graph_invalid"}',
+                        b'{"status":"unavailable","reason_code":["active_graph_invalid"]}']:
+            self.assertIsNone(self.host.known_error_code(unknown))
+
     def test_windows_process_query_uses_utf8_bytes_and_preserves_failed_exit(self):
         success = subprocess.CompletedProcess([], 0, '中文路径'.encode(), b'')
         with mock.patch.object(self.host.subprocess, "run", return_value=success) as run:

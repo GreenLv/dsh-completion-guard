@@ -317,6 +317,97 @@ describe('desktop runtime attach (revalidation)', () => {
     return profile
   }
 
+  function physicalImporterProfile(root: string): string {
+    const profile = importerProfile(root)
+    rmSync(join(profile, 'node_modules', '.package-map.json'))
+    writeFileSync(join(profile, 'node_modules', '.modules.yaml'), JSON.stringify({
+      nodeLinker: 'hoisted', layoutVersion: 5, packageManager: 'pnpm@11.7.0',
+      hoistedLocations: { 'dsh-completion-guard@file:../guard.tgz': ['node_modules/dsh-completion-guard'] },
+    }))
+    const guard = join(profile, 'node_modules', 'dsh-completion-guard')
+    mkdirSync(join(guard, 'dist'))
+    writeFileSync(join(guard, 'dist', 'index.js'), 'export const name = "context-guard"\n')
+    writeFileSync(join(guard, 'package.json'), JSON.stringify({ name: 'dsh-completion-guard', version: '0.8.2',
+      main: 'dist/index.js', peerDependencies: { '@deepseek-ai/dsh-session': '>=0.2.0-rc.2' } }))
+    return profile
+  }
+
+  it('accepts the bundled pnpm 11.7 physical importer and freshly binds its index', () => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
+    const profile = physicalImporterProfile(root)
+    const active = resolveActiveProfileHostLock(asar, profile, '0.8.2')
+    expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).digest).toBe(active.evaluation.digest)
+    const path = join(profile, 'node_modules', '.modules.yaml')
+    const metadata = JSON.parse(readFileSync(path, 'utf8'))
+    writeFileSync(path, JSON.stringify({ ...metadata, prunedAt: 'different index bytes' }))
+    expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).digest).not.toBe(active.evaluation.digest)
+  })
+
+  it.each(['unsupported-manager', 'wrong-linker', 'omitted-package', 'invented-package', 'escaped-location', 'missing-index'])
+  ('refuses an invalid physical importer: %s', (change) => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
+    const profile = physicalImporterProfile(root)
+    const path = join(profile, 'node_modules', '.modules.yaml')
+    const metadata = JSON.parse(readFileSync(path, 'utf8'))
+    if (change === 'unsupported-manager') metadata.packageManager = 'pnpm@99.0.0'
+    if (change === 'wrong-linker') metadata.nodeLinker = 'isolated'
+    if (change === 'omitted-package') metadata.hoistedLocations = {}
+    if (change === 'invented-package') metadata.hoistedLocations['absent@1.0.0'] = ['node_modules/absent']
+    if (change === 'escaped-location') metadata.hoistedLocations['dsh-completion-guard@file:../guard.tgz'] = ['node_modules/../outside']
+    writeFileSync(path, JSON.stringify(metadata))
+    if (change === 'missing-index') rmSync(path)
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
+  })
+
+  it('audits local critical bytes and rejects nested duplicates in a physical importer', () => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
+    const profile = physicalImporterProfile(root)
+    const row = RC020_RC2_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh-session')!
+    const local = join(profile, 'node_modules', row.name)
+    mkdirSync(join(local, 'lib'), { recursive: true })
+    writeFileSync(join(local, 'package.json'), syntheticManifestBytes(row.name, row.version!))
+    writeFileSync(join(local, 'lib', 'index.js'), SYNTHETIC_LIB_BYTES)
+    // A nearer package omitted from pnpm's index must never become fallback.
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
+    const path = join(profile, 'node_modules', '.modules.yaml')
+    const metadata = JSON.parse(readFileSync(path, 'utf8'))
+    metadata.hoistedLocations[`${row.name}@${row.version}`] = ['node_modules/' + row.name]
+    writeFileSync(path, JSON.stringify(metadata))
+    writeFileSync(join(profile, 'pnpm-lock.yaml'), `lockfileVersion: '9.0'\npackages:\n  '${row.name}@${row.version}':\n    resolution: {integrity: ${row.integrity}}\nsnapshots: {}\n`)
+    const active = resolveActiveProfileHostLock(asar, profile, '0.8.2')
+    writeFileSync(join(local, 'lib', 'index.js'), 'export const synthetic = false\n')
+    expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).status).toBe('unsupported')
+    writeFileSync(join(local, 'lib', 'index.js'), SYNTHETIC_LIB_BYTES)
+    const nestedId = 'dsh-completion-guard/node_modules/' + row.name
+    const nested = join(profile, 'node_modules', nestedId)
+    mkdirSync(join(nested, 'lib'), { recursive: true })
+    writeFileSync(join(nested, 'package.json'), syntheticManifestBytes(row.name, row.version!))
+    writeFileSync(join(nested, 'lib', 'index.js'), SYNTHETIC_LIB_BYTES)
+    metadata.hoistedLocations[`${row.name}@${row.version}`].push('node_modules/' + nestedId)
+    writeFileSync(path, JSON.stringify(metadata))
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
+  })
+
+  it('rejects a nearer critical shadow below the physical Guard entrypoint', () => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
+    const profile = physicalImporterProfile(root)
+    const shadow = join(profile, 'node_modules/dsh-completion-guard/dist/node_modules/@deepseek-ai/dsh-session')
+    mkdirSync(join(shadow, 'lib'), { recursive: true })
+    writeFileSync(join(shadow, 'package.json'), syntheticManifestBytes('@deepseek-ai/dsh-session', RC2_VERSION))
+    writeFileSync(join(shadow, 'lib', 'index.js'), SYNTHETIC_LIB_BYTES)
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
+  })
+
+  it('rejects a physical importer index redirected outside its profile', () => {
+    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
+    const profile = physicalImporterProfile(root), path = join(profile, 'node_modules/.modules.yaml')
+    const outside = join(root, 'external-index.json')
+    writeFileSync(outside, readFileSync(path))
+    rmSync(path)
+    symlinkSync(outside, path)
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
+  })
+
   it('does not treat a pre-install profile as an active protected installation', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)
