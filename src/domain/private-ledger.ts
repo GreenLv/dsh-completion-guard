@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -111,220 +111,315 @@ function readVerifiedLedgerRecords(root: string, context: PrivateLedgerContext, 
 }
 
 /**
- * CG-083-BUG01/R2/F1: generation-protocol writer lock. See
- * docs/WRITER_LOCK_PROTOCOL.md for the state machine and linearization
- * argument. Summary: the active generation is the highest-numbered
- * `gen-NNNNNNNN` directory; the lock file lives INSIDE it; recovery of a
- * provably dead lock creates the NEXT generation (atomic mkdir) and never
- * renames or unlinks any file another actor created; a writer verifies the
- * generation is still current AFTER acquiring and retries through the
- * next generation otherwise; release unlinks only the actor's own
- * nonce-verified file. Only ESRCH proves a recorded owner is gone; any other
- * liveness answer refuses fail-closed (PID reuse included).
+ * CG-083-BUG01/R2/F1 (revision 2): slot + pending + evict-intent writer lock.
+ * See docs/WRITER_LOCK_PROTOCOL.md "Revision 2" for the state machine and the
+ * linearization argument. Summary:
+ *
+ * - `slot.json` IS the holder: present = one writer inside its critical
+ *   section. It is a hard link to a complete owner record; its content never
+ *   changes while present (invariant S1), so a recovery decision made on its
+ *   current nonce can be executed safely.
+ * - A candidate creates `pending.<nonce>.json` (O_EXCL), writes its owner
+ *   record and hard-links it to `slot.json`. link() is the atomic admission:
+ *   EEXIST means someone else holds. Pending files carry no authority.
+ * - Recovery of a PROVABLY dead slot owner (same host, ESRCH only) creates
+ *   `evict-intent` O_EXCL (atomic, blocks nothing for reading but marks the
+ *   linearization), then re-reads the slot and unlinks it ONLY if the current
+ *   nonce is still the observed dead one. A delayed recoverer whose
+ *   observation is stale reads a different (live) nonce and aborts — it can
+ *   never evict a live holder (L1/L2). A recoverer that dies holding the
+ *   intent is adopted by the next actor through its own provably dead creator
+ *   record.
+ * - Legacy root-level `.writer.lock` files from version <=2 are never
+ *   modified by this protocol; their presence REFUSES acquisition (L3) so
+ *   old and new writers never share the write section.
  */
 const WRITER_LOCK_VERSION = 3
-const WRITER_LOCK_NAME = '.writer.lock'
-const GENERATION_DIGITS = 8
+const SLOT_NAME = 'slot.json'
+const PENDING_PREFIX = 'pending.'
+const INTENT_NAME = 'evict-intent'
+const LEGACY_LOCK_PATHS = ['.writer.lock', '.writer.lock.stale', '.writer.lock.recovery']
 interface WriterLockRecord { version: 3; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
-interface HeldLock { dir: string; nonce: string }
+interface HeldLock { nonce: string }
 
 export type WriterLockState = 'absent' | 'held' | 'abandoned_recoverable' | 'unknown_owner'
 
-/** Read-only diagnostics over the CURRENT generation's lock (CG-083-BUG01). */
-export function writerLockState(root: string): WriterLockState {
-  const dir = currentGeneration(root)
-  if (dir === undefined) return 'absent'
-  return lockStateFor(join(dir, WRITER_LOCK_NAME))
-}
+function slotPath(root: string): string { return join(root, SLOT_NAME) }
+function pendingPath(root: string, nonce: string): string { return join(root, `${PENDING_PREFIX}${nonce}.json`) }
+function intentPath(root: string): string { return join(root, INTENT_NAME) }
 
-/** Test/ops helper: the current generation's lock file, if any generation exists. */
-export function currentWriterLockFile(root: string): string | undefined {
-  const dir = currentGeneration(root)
-  return dir === undefined ? undefined : join(dir, WRITER_LOCK_NAME)
-}
-
-/** The active generation directory itself (test/ops helper). */
-export function currentGenerationDir(root: string): string | undefined {
-  return currentGeneration(root)
-}
-
-function lockStateFor(path: string): WriterLockState {
-  let size: number | undefined
-  try { size = lstatSync(path).size } catch { return 'absent' }
-  if (size === 0) return 'abandoned_recoverable'
-  const record = readLockRecord(path)
-  if (record === undefined) return 'absent'
-  if (record === 'legacy') return 'unknown_owner'
-  if (record.hostname !== hostname()) return 'unknown_owner'
-  return processExists(record.pid) ? 'held' : 'abandoned_recoverable'
-}
-
-function readLockRecord(path: string): WriterLockRecord | 'legacy' | undefined {
+function readRecord(path: string, versions: readonly number[] = [WRITER_LOCK_VERSION]): WriterLockRecord | 'legacy' | undefined {
   let raw: string
   try { raw = readFileSync(path, 'utf8') } catch { return undefined }
   if (!raw.trim()) return 'legacy'
   try {
     const value = JSON.parse(raw) as Partial<WriterLockRecord>
-    if (value && value.version === WRITER_LOCK_VERSION && typeof value.nonce === 'string' && value.nonce.length === 32
+    if (value && (versions as readonly number[]).includes(value.version as number)
+      && typeof value.nonce === 'string' && (value.nonce.length === 32 || (value.version as number) === 2)
       && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
       && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number') return value as WriterLockRecord
   } catch { /* unparsable record */ }
   return 'legacy'
 }
 
-/** Only ESRCH proves the recorded owner is gone; any other answer refuses. */
+interface IntentRecord { evicting: string; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+
+function readIntent(path: string): IntentRecord | 'legacy' | undefined {
+  let raw: string
+  try { raw = readFileSync(path, 'utf8') } catch { return undefined }
+  if (!raw.trim()) return 'legacy'
+  try {
+    const value = JSON.parse(raw) as Partial<IntentRecord>
+    if (value && typeof value.evicting === 'string' && typeof value.nonce === 'string' && value.nonce.length === 32
+      && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
+      && typeof value.hostname === 'string') return value as IntentRecord
+  } catch { /* unparsable record */ }
+  return 'legacy'
+}
+
+/** Only ESRCH proves a recorded owner is gone; any other answer refuses. */
 function processExists(pid: number): boolean {
   try { process.kill(pid, 0); return true } catch (error) {
     return (error as NodeJS.ErrnoException).code !== 'ESRCH'
   }
 }
 
+function recordIsProvablyDead(record: WriterLockRecord): boolean {
+  return record.hostname === hostname() && !processExists(record.pid)
+}
+
 /**
- * The lock is safe to recover: a provably dead recorded owner, or a
- * ZERO-LENGTH file — the creator died between O_EXCL creation and its owner
- * record. A live acquirer never enters its critical section before the
- * post-acquire generation verification, so recovering a mid-write file can
- * at worst make that acquirer release its own file and retry in the next
- * generation (docs/WRITER_LOCK_PROTOCOL.md §3).
+ * Classification shared by the slot and legacy diagnostics: a well-formed
+ * record of the RUNNING protocol reports held / abandoned_recoverable; any
+ * other state (other version, other host, unparsable, anonymous) is an
+ * unknown owner and refuses fail-closed (L3).
  */
-function lockIsRecoverable(path: string): boolean {
-  let size: number | undefined
-  try { size = lstatSync(path).size } catch { return false }
-  if (size === 0) return true
-  const record = readLockRecord(path)
-  return record !== undefined && record !== 'legacy'
-    && record.hostname === hostname() && !processExists(record.pid)
+function classifyRecord(record: WriterLockRecord | 'legacy' | undefined): WriterLockState | undefined {
+  if (record === undefined) return undefined
+  if (record === 'legacy') return 'unknown_owner'
+  if (record.hostname !== hostname()) return 'unknown_owner'
+  return processExists(record.pid) ? 'held' : 'abandoned_recoverable'
 }
 
-/** The active generation directory: the highest-numbered gen-NNNNNNNN. */
-function currentGeneration(root: string): string | undefined {
-  let best: { n: number; dir: string } | undefined
-  let entries: string[]
-  try { entries = readdirSync(root) } catch { return undefined }
-  for (const entry of entries) {
-    if (!entry.startsWith('gen-') || entry.length !== 4 + GENERATION_DIGITS) continue
-    const n = Number.parseInt(entry.slice(4), 10)
-    if (!Number.isSafeInteger(n) || n < 0) continue
-    if (best === undefined || n > best.n) best = { n, dir: join(root, entry) }
+/** Read-only diagnostics for the current holder or a blocking legacy lock. */
+export function writerLockState(root: string): WriterLockState {
+  const slot = classifyRecord(readRecord(slotPath(root)))
+  if (slot !== undefined) return slot
+  for (const name of LEGACY_LOCK_PATHS) {
+    const legacy = classifyRecord(readRecord(join(root, name), [WRITER_LOCK_VERSION, 2]))
+    if (legacy !== undefined) return legacy
   }
-  return best?.dir
+  return 'absent'
 }
 
-function nextGenerationDir(root: string): { dir: string; created: boolean } {
-  const current = currentGeneration(root)
-  const nextN = (current === undefined ? 0
-    : Number.parseInt(current.slice(current.lastIndexOf('gen-') + 4), 10)) + 1
-  const dir = join(root, `gen-${String(nextN).padStart(GENERATION_DIGITS, '0')}`)
-  try {
-    mkdirSync(dir, { mode: 0o700 })
-    return { dir, created: true }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return { dir, created: false }
-    throw error
-  }
+/** Test/ops helper: the current slot file (undefined when no holder). */
+export function currentWriterLockFile(root: string): string | undefined {
+  return existsSync(slotPath(root)) ? slotPath(root) : undefined
 }
 
-function firstGenerationDir(root: string): { dir: string; created: boolean } {
-  const dir = join(root, `gen-${'0'.repeat(GENERATION_DIGITS - 1)}1`)
-  try {
-    mkdirSync(dir, { mode: 0o700 })
-    return { dir, created: true }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return { dir, created: false }
-    throw error
-  }
-}
-
-/** Unlink the actor's OWN lock file: only when the content still carries its nonce. */
-function releaseOwnLock(dir: string, nonce: string): void {
-  const path = join(dir, WRITER_LOCK_NAME)
-  const record = readLockRecord(path)
-  if (record !== 'legacy' && record !== undefined && record.nonce === nonce) {
-    try { unlinkSync(path) } catch { /* best effort */ }
+/** Unlink a path when it exists; other errors propagate. */
+function unlinkIfExists(path: string): void {
+  try { unlinkSync(path) } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
 }
 
 /**
- * Acquire the writer lock under the generation protocol. Returns the held
- * lock, or undefined when acquisition is refused (live/unknown owner in the
- * current generation). See docs/WRITER_LOCK_PROTOCOL.md §3.
+ * Recovery handshake for a provably dead slot owner (docs/WRITER_LOCK_PROTOCOL.md
+ * Revision 2, recovery steps 1–2). Returns true when this call finalized the
+ * eviction (slot removed), false when the slot content no longer names the
+ * dead owner (stale observation — abort) or another live intent creator owns
+ * the handshake.
+ */
+function evictDeadHolder(root: string, dead: WriterLockRecord): boolean {
+  const intent: IntentRecord = {
+    evicting: dead.nonce,
+    nonce: randomBytes(16).toString('hex'),
+    pid: process.pid,
+    hostname: hostname(),
+    created_at_epoch_ms: Date.now(),
+  }
+  let fd: number
+  try {
+    fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    const winner = readIntent(intentPath(root))
+    if (winner === undefined || winner === 'legacy') return false
+    // The creator is provably dead: adopt the handshake (unlink and recreate).
+    if (!recordIsProvablyDead({ version: WRITER_LOCK_VERSION, nonce: winner.nonce, pid: winner.pid,
+      hostname: winner.hostname, created_at_epoch_ms: winner.created_at_epoch_ms })) {
+      return false // a live recoverer owns the handshake; refuse this round
+    }
+    try { unlinkSync(intentPath(root)) } catch (adoptError) {
+      if ((adoptError as NodeJS.ErrnoException).code !== 'ENOENT') return false
+    }
+    try {
+      fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+    } catch (retryError) {
+      if ((retryError as NodeJS.ErrnoException).code === 'EEXIST') return false
+      throw retryError
+    }
+  }
+  try {
+    const record: IntentRecord = {
+      evicting: intent.evicting, nonce: intent.nonce, pid: intent.pid,
+      hostname: intent.hostname, created_at_epoch_ms: intent.created_at_epoch_ms,
+    }
+    writeAll(fd, `${canonical(record)}\n`)
+    fsyncSync(fd)
+  } finally {
+    try { closeSync(fd) } catch { /* already closed */ }
+  }
+  try {
+    // Linearization: re-read the slot WITH the intent in place and finalize
+    // only on the exact dead nonce. While present, slot content is immutable
+    // (S1); a new holder cannot appear between this read and the unlink
+    // because admission requires the slot to be absent.
+    const current = readRecord(slotPath(root))
+    if (current !== undefined && current !== 'legacy' && current.nonce === dead.nonce) {
+      unlinkIfExists(slotPath(root))
+      unlinkIfExists(pendingPath(root, dead.nonce))
+      return true
+    }
+    return false
+  } finally {
+    unlinkIfExists(intentPath(root))
+  }
+}
+
+/** Remove this actor's pending file by name (identity-safe GC). */
+function removeOwnPending(root: string, nonce: string): void {
+  unlinkIfExists(pendingPath(root, nonce))
+}
+
+/** GC a pending file whose creator is provably dead (by name). */
+function gcDeadPending(root: string, nonce: string): void {
+  const record = readRecord(pendingPath(root, nonce))
+  if (record !== undefined && record !== 'legacy' && recordIsProvablyDead(record)) {
+    unlinkIfExists(pendingPath(root, nonce))
+  }
+}
+
+/**
+ * Acquire the writer lock. Returns the held nonce, or undefined when
+ * acquisition is refused (live/unknown holder, legacy lock, live intent
+ * creator, or contention). See docs/WRITER_LOCK_PROTOCOL.md Revision 2.
  */
 function acquireWriterLock(root: string): HeldLock | undefined {
-  let dir = currentGeneration(root)
-  if (dir === undefined) dir = firstGenerationDir(root).created
-    ? join(root, `gen-${'0'.repeat(GENERATION_DIGITS - 1)}1`)
-    : currentGeneration(root)!
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    let fd: number
-    try {
-      fd = openRegular(join(dir, WRITER_LOCK_NAME), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-      if (lockIsRecoverable(join(dir, WRITER_LOCK_NAME))) {
-        // R: advance the generation. mkdir is the whole recovery; the dead
-        // file is abandoned, never renamed or unlinked. Losing the creation
-        // race is fine — the winner's generation becomes current for all.
-        dir = nextGenerationDir(root).dir
-        continue
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    // L3: a legacy root-level lock (version <=2) must never be shared with
+    // the v3 write section. Refuse without touching its bytes.
+    for (const name of LEGACY_LOCK_PATHS) {
+      const legacy = readRecord(join(root, name), [WRITER_LOCK_VERSION, 2])
+      if (legacy !== undefined) return undefined
+    }
+    // GC pass over ALL pending files: identity-safe by name, only provably
+    // dead creators are removed (a live candidate may be mid-link).
+    for (const entry of readdirSync(root)) {
+      if (!entry.startsWith(PENDING_PREFIX)) continue
+      const candidate = readRecord(join(root, entry))
+      if (candidate !== undefined && candidate !== 'legacy' && recordIsProvablyDead(candidate)) {
+        unlinkIfExists(join(root, entry))
       }
-      return undefined
     }
     const nonce = randomBytes(16).toString('hex')
+    let pendingFd: number
     try {
-      const record: WriterLockRecord = {
-        version: WRITER_LOCK_VERSION,
-        nonce,
-        pid: process.pid,
-        hostname: hostname(),
-        created_at_epoch_ms: Date.now(),
-      }
-      writeAll(fd, `${canonical(record)}\n`)
-      fsyncSync(fd)
+      pendingFd = openRegular(pendingPath(root, nonce), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
     } catch (error) {
-      // Our own O_EXCL-created file failed to record: remove it. No other
-      // actor can have replaced it (nothing in the protocol replaces foreign
-      // files), so this unlink targets only what this actor created.
-      try { unlinkSync(join(dir, WRITER_LOCK_NAME)) } catch { /* best effort */ }
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') { gcDeadPending(root, nonce); continue }
       throw error
-    } finally {
-      try { closeSync(fd) } catch { /* already closed */ }
     }
-    // V: the generation must still be current AFTER our acquire. A recovery
-    // that advanced past G could only have observed our lock as dead, which
-    // it is not while we hold it, so this re-read settles the linearization.
-    const current = currentGeneration(root)
-    if (current === dir) return { dir, nonce }
-    releaseOwnLock(dir, nonce)
-    dir = current ?? nextGenerationDir(root).dir
+    let own: WriterLockRecord
+    try {
+      own = { version: WRITER_LOCK_VERSION, nonce, pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now() }
+      writeAll(pendingFd, `${canonical(own)}\n`)
+      fsyncSync(pendingFd)
+    } catch (error) {
+      try { closeSync(pendingFd) } catch { /* already closed */ }
+      removeOwnPending(root, nonce)
+      throw error
+    }
+    try { closeSync(pendingFd) } catch { /* already closed */ }
+    try {
+      // Atomic admission: link succeeds only when the slot is absent.
+      linkSync(pendingPath(root, nonce), slotPath(root))
+      return { nonce }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        removeOwnPending(root, nonce)
+        throw error
+      }
+    }
+    // Slot taken: decide from its CURRENT record.
+    const holder = readRecord(slotPath(root))
+    if (holder !== undefined && holder !== 'legacy' && recordIsProvablyDead(holder)) {
+      if (evictDeadHolder(root, holder)) continue // recovered; retry admission
+      removeOwnPending(root, nonce)
+      return undefined
+    }
+    removeOwnPending(root, nonce)
+    return undefined
   }
   return undefined
 }
 
 function releaseWriterLock(root: string, held: HeldLock | undefined): void {
   if (held === undefined) return
-  void root
-  releaseOwnLock(held.dir, held.nonce)
+  const holder = readRecord(slotPath(root))
+  if (holder !== undefined && holder !== 'legacy' && holder.nonce === held.nonce) {
+    unlinkIfExists(slotPath(root))
+  }
+  removeOwnPending(root, held.nonce)
 }
 
 /**
- * CG-083-PERF05 (F1 revision): prune abandoned generation directories. Only
- * the holder of the CURRENT generation's lock may prune, and only strictly
- * older generations — by docs/WRITER_LOCK_PROTOCOL.md §5 no non-current
- * generation can contain a live-content lock, so pruning cannot evict an
- * active writer. Bounded garbage per crash instead of unbounded growth.
+ * Test-only deterministic-interleaving hooks (docs/WRITER_LOCK_PROTOCOL.md
+ * Revision 2 test obligations). They expose the protocol's atomic steps so
+ * tests can pause a real process between an observation and its action
+ * WITHOUT reimplementing the protocol; production callers ignore this export.
  */
-function pruneGenerations(root: string, held: HeldLock): void {
-  const current = currentGeneration(root)
-  if (current === undefined || current !== held.dir) return
-  const currentN = Number.parseInt(current.slice(current.lastIndexOf('gen-') + 4), 10)
-  let entries: string[]
-  try { entries = readdirSync(root) } catch { return }
-  for (const entry of entries) {
-    if (!entry.startsWith('gen-') || entry.length !== 4 + GENERATION_DIGITS) continue
-    const n = Number.parseInt(entry.slice(4), 10)
-    if (!Number.isSafeInteger(n) || n < 0 || n >= currentN) continue
-    try { rmSync(join(root, entry), { recursive: true, force: true }) } catch { /* best effort */ }
-  }
+export const __writerLockInternals = {
+  acquire: (root: string): HeldLock | undefined => acquireWriterLock(root),
+  release: (root: string, held: HeldLock | undefined): void => releaseWriterLock(root, held),
+  readSlot: (root: string): WriterLockRecord | 'legacy' | undefined => readRecord(slotPath(root)),
+  slotPath: (root: string): string => slotPath(root),
+  evictDeadHolder: (root: string, dead: WriterLockRecord): boolean => evictDeadHolder(root, dead),
+  /** L2 fixture: phase 1 — create a pending candidate (no authority). */
+  prepareCandidate: (root: string, nonce: string): WriterLockRecord => {
+    const own: WriterLockRecord = {
+      version: WRITER_LOCK_VERSION, nonce,
+      pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }
+    const fd = openRegular(pendingPath(root, nonce), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+    try { writeAll(fd, `${canonical(own)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+    return own
+  },
+  /** L2 fixture: phase 2 — attempt atomic admission against the live slot. */
+  linkCandidate: (root: string, nonce: string): 'linked' | 'eexist' => {
+    try {
+      linkSync(pendingPath(root, nonce), slotPath(root))
+      return 'linked'
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'eexist'
+      throw error
+    }
+  },
+  createIntent: (root: string, evicting: string): boolean => {
+    const intent: IntentRecord = {
+      evicting, nonce: randomBytes(16).toString('hex'), pid: process.pid,
+      hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }
+    try {
+      const fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+      try { writeAll(fd, `${canonical(intent)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+      throw error
+    }
+  },
 }
 
 export function readPrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): PrivateLedgerSnapshot {
@@ -406,9 +501,6 @@ export function appendPrivateLedger(root: string | undefined, input: PrivateLedg
     const fd = openRegular(ledgerPath(root, context), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
     try { writeAll(fd, `${canonical(record)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
     syncDirectory(root)
-    // Bounded garbage: while holding the CURRENT generation's lock, abandon
-    // strictly older generations (docs/WRITER_LOCK_PROTOCOL.md §5).
-    if (lockFd !== undefined) pruneGenerations(root, lockFd)
     return true
   } catch { return false } finally {
     releaseWriterLock(root, lockFd)

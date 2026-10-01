@@ -28,6 +28,41 @@ function waitBarrier(): void {
   }
 }
 
+if (label === 'slowappend') {
+  // Recovery race fixture: append once and hold the slot briefly so the
+  // parent can run its delayed finalize against the live holder.
+  const ok = appendPrivateLedger(root, context, 'restart_intent', {
+    resolutionCallId: 'slowappend-1', serviceId: 's', preGeneration: 'g',
+  })
+  if (!ok) {
+    process.stdout.write(JSON.stringify({ appended: false }))
+    process.exit(0)
+  }
+  // Hold until the parent removes the barrier file OR a safety timeout.
+  process.stdout.write(JSON.stringify({ appended: true, holding: true }))
+  const deadline = Date.now() + 30_000
+  while (existsSync(`${root}/start-barrier`) && Date.now() < deadline) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
+  }
+  process.exit(0)
+}
+if (label === 'slowpending') {
+  // Deterministic L2: create a pending candidate (phase 1, no authority),
+  // pause on the barrier while the parent takes the slot, then attempt the
+  // link (phase 2) — it must fail EEXIST and the candidate must refuse.
+  const internals = (await import('../../src/domain/private-ledger.js')).__writerLockInternals
+  const nonce = 'b'.repeat(32)
+  internals.prepareCandidate(root, nonce)
+  waitBarrier()
+  const linked = internals.linkCandidate(root, nonce)
+  const slot = internals.readSlot(root)
+  process.stdout.write(JSON.stringify({
+    linked,
+    refused: linked === 'eexist',
+    holderIsParent: slot !== 'legacy' && slot !== undefined,
+  }))
+  process.exit(0)
+}
 if (label === 'repeat') {
   // Back-to-back appends so the parent can catch the process INSIDE the
   // critical section (the lock file exists) and SIGKILL it there.

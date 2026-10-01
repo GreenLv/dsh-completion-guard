@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
-import { appendPrivateLedger, initializePrivateLedger, readPrivateLedger, writerLockState, currentWriterLockFile, currentGenerationDir } from '../src/domain/private-ledger.js'
+import { appendPrivateLedger, initializePrivateLedger, readPrivateLedger, writerLockState } from '../src/domain/private-ledger.js'
 import type { PrivateLedgerContext } from '../src/domain/private-ledger.js'
 
-// CG-083-BUG01/R2/F1: the generation-protocol writer lock. Locks live inside
-// the current `gen-NNNNNNNN` directory; recovery ADVANCES the generation and
-// never mutates another actor's file; only ESRCH proves death.
+// CG-083-BUG01/R2/F1 revision 2: slot + pending + evict-intent protocol.
+// The holder is slot.json (a hard link to a complete owner record); recovery
+// requires the evict-intent handshake and aborts on a stale observation; only
+// ESRCH proves death; legacy root locks REFUSE (L3).
 
 const context: PrivateLedgerContext = {
   sessionId: 'lock-test-session',
@@ -26,33 +27,25 @@ const deadPid = (() => {
   throw new Error('no free pid found for the fixture')
 })()
 
-function writeDeadOwnerLock(root: string): void {
-  const dir = currentGenerationDir(root)
-  if (!dir) throw new Error('no generation directory')
-  writeFileSync(join(dir, '.writer.lock'), JSON.stringify({
+function slotPath(root: string): string {
+  return join(root, 'slot.json')
+}
+
+function writeDeadSlot(root: string): void {
+  writeFileSync(slotPath(root), JSON.stringify({
     version: 3, nonce: randomBytes(16).toString('hex'), pid: deadPid,
     hostname: hostname(), created_at_epoch_ms: Date.now(),
   }) + '\n', 'utf8')
 }
 
-it('recovers a dead owner by advancing the generation; the dead file is abandoned, not mutated', () => {
+it('recovers a provably dead slot holder and keeps the chain intact', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
-    writeDeadOwnerLock(root)
-    const deadDir = currentGenerationDir(root)!
-    const deadPath = join(deadDir, '.writer.lock')
-    const deadBytes = readFileSync(deadPath, 'utf8')
-    // Read-only observation never mutates the dead generation.
+    writeDeadSlot(root)
     expect(writerLockState(root)).toBe('abandoned_recoverable')
-    expect(readFileSync(deadPath, 'utf8')).toBe(deadBytes)
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c1', serviceId: 's', preGeneration: 'g' })).toBe(true)
-    // The append ran in a NEW generation — the dead lock was never reused,
-    // and recovery itself never renamed or unlinked it (it may only later be
-    // PRUNED by the current-lock holder, protocol §5).
-    expect(currentGenerationDir(root)).not.toBe(deadDir)
-    expect(currentGenerationDir(root)).toBe(join(root, 'gen-00000002'))
-    expect(existsSync(currentWriterLockFile(root)!)).toBe(false)
+    expect(existsSync(slotPath(root))).toBe(false)
     const snapshot = readPrivateLedger(root, context)
     expect(snapshot.damaged).toBe(false)
     expect(snapshot.records).toHaveLength(1)
@@ -61,7 +54,7 @@ it('recovers a dead owner by advancing the generation; the dead file is abandone
   }
 })
 
-it('never steals a lock held by a live owner (PID reuse included)', () => {
+it('never steals a slot held by a live owner (PID reuse included)', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-live-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
@@ -69,97 +62,88 @@ it('never steals a lock held by a live owner (PID reuse included)', () => {
       version: 3, nonce: randomBytes(16).toString('hex'), pid: process.pid,
       hostname: hostname(), created_at_epoch_ms: Date.now(),
     }) + '\n'
-    writeFileSync(join(currentGenerationDir(root)!, '.writer.lock'), held, 'utf8')
+    writeFileSync(slotPath(root), held, 'utf8')
     expect(writerLockState(root)).toBe('held')
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c2', serviceId: 's', preGeneration: 'g' })).toBe(false)
-    expect(readFileSync(join(currentGenerationDir(root)!, '.writer.lock'), 'utf8')).toBe(held)
+    expect(readFileSync(slotPath(root), 'utf8')).toBe(held)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
 
-it('refuses legacy/anonymous/foreign-owner locks left by older versions without touching them', () => {
+it('L3: legacy root locks REFUSE acquisition with bytes untouched', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-legacy-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
-    const dir = currentGenerationDir(root)!
-    // Legacy root-level artifacts are ignored by the protocol entirely.
+    // (a) anonymous legacy lock (old crashed writer): unknown owner.
     writeFileSync(join(root, '.writer.lock'), '', 'utf8')
-    // An old-format record inside the current generation is an unknown owner.
-    writeFileSync(join(dir, '.writer.lock'), JSON.stringify({
-      version: 2, nonce: randomBytes(16).toString('hex'), pid: deadPid,
-      hostname: hostname(), created_at_epoch_ms: Date.now(),
-    }) + '\n', 'utf8')
     expect(writerLockState(root)).toBe('unknown_owner')
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c3', serviceId: 's', preGeneration: 'g' })).toBe(false)
-    expect(readFileSync(join(dir, '.writer.lock'), 'utf8')).toContain('"version":2')
+    expect(readFileSync(join(root, '.writer.lock'), 'utf8')).toBe('')
+    // (b) same-host LIVE v2 owner: held.
+    rmSync(join(root, '.writer.lock'))
+    writeFileSync(join(root, '.writer.lock'), JSON.stringify({
+      version: 2, nonce: randomBytes(16).toString('hex'), pid: process.pid,
+      hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }) + '\n', 'utf8')
+    expect(writerLockState(root)).toBe('held')
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c4', serviceId: 's', preGeneration: 'g' })).toBe(false)
+    expect(existsSync(join(root, '.writer.lock'))).toBe(true)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
 
-it('refuses a foreign-host dead-owner lock', () => {
+it('refuses a foreign-host dead-owner slot', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-foreign-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
-    writeFileSync(join(currentGenerationDir(root)!, '.writer.lock'), JSON.stringify({
+    writeFileSync(slotPath(root), JSON.stringify({
       version: 3, nonce: randomBytes(16).toString('hex'), pid: deadPid,
       hostname: 'some-other-host.example', created_at_epoch_ms: Date.now(),
     }) + '\n', 'utf8')
     expect(writerLockState(root)).toBe('unknown_owner')
-    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c4', serviceId: 's', preGeneration: 'g' })).toBe(false)
-    expect(existsSync(join(currentGenerationDir(root)!, '.writer.lock'))).toBe(true)
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c5', serviceId: 's', preGeneration: 'g' })).toBe(false)
+    expect(existsSync(slotPath(root))).toBe(true)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
 
-it('keeps sequential appends correct, the lock released, and one generation', () => {
+it('keeps sequential appends correct with the slot released', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-seq-'))
   try {
     for (let index = 0; index < 4; index += 1) {
       expect(appendPrivateLedger(root, context, 'restart_intent', {
         resolutionCallId: `c${index}`, serviceId: 's', preGeneration: 'g',
       })).toBe(true)
-      expect(existsSync(currentWriterLockFile(root)!)).toBe(false)
+      expect(existsSync(slotPath(root))).toBe(false)
     }
     const snapshot = readPrivateLedger(root, context)
     expect(snapshot.records.map((record) => record.position)).toEqual([1, 2, 3, 4])
     expect(writerLockState(root)).toBe('absent')
-    expect(currentGenerationDir(root)).toBe(join(root, 'gen-00000001'))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
 
-it('recovers a ZERO-LENGTH lock left by a creator killed mid-record (BUG-01 window)', () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-zero-'))
+it('garbage-collects a pending file left by a provably dead creator', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-pending-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
-    // A writer that died between O_EXCL creation and its owner-record write.
-    writeFileSync(join(currentGenerationDir(root)!, '.writer.lock'), '', 'utf8')
-    expect(writerLockState(root)).toBe('abandoned_recoverable')
+    // A creator that died before linking leaves pending.<nonce>.json; the
+    // next acquire GCs it by name (identity-safe), including the retry path
+    // where its own nonce collides with the dead leftover.
+    const deadNonce = randomBytes(16).toString('hex')
+    writeFileSync(join(root, `pending.${deadNonce}.json`), JSON.stringify({
+      version: 3, nonce: deadNonce, pid: deadPid,
+      hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }) + '\n', 'utf8')
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'z1', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    expect(existsSync(join(root, `pending.${deadNonce}.json`))).toBe(false)
+    const leftovers = readdirSync(root).filter((name) => name.startsWith('pending.'))
+    expect(leftovers).toEqual([])
     expect(readPrivateLedger(root, context).records).toHaveLength(1)
-    expect(currentGenerationDir(root)).toBe(join(root, 'gen-00000002'))
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
-})
-
-it('prunes abandoned generations once the current lock is held', () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-prune-'))
-  try {
-    expect(initializePrivateLedger(root, context)).toBe(true)
-    // Two crash generations accumulate; each following append (which holds the
-    // current lock) prunes strictly older generations.
-    writeDeadOwnerLock(root)
-    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'p1', serviceId: 's', preGeneration: 'g' })).toBe(true)
-    writeDeadOwnerLock(root)
-    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'p2', serviceId: 's', preGeneration: 'g' })).toBe(true)
-    const generations = readdirSync(root).filter((entry) => entry.startsWith('gen-'))
-    expect(generations).toEqual(['gen-00000003'])
-    expect(readPrivateLedger(root, context).records.map((record) => record.position)).toEqual([1, 2])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

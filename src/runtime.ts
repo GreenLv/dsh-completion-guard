@@ -658,6 +658,16 @@ export function createRuntime(
    */
   const provenImmutableSnapshots = new WeakSet<readonly unknown[]>()
   const IMMUTABILITY_PROOF_NODE_BUDGET = 400_000
+  /**
+   * F2 (round 3): freezing a container does NOT freeze its content when a
+   * property is an accessor — a frozen getter's return value follows its
+   * closure. Eligibility therefore requires every property to be an ordinary
+   * DATA descriptor whose value is itself provably immutable. Accessor
+   * descriptors (get/set) make the whole snapshot unprovable: full rebuild,
+   * never cached. The value of a data descriptor is read for the recursion
+   * only — a single read is not treated as a permanent immutability proof of
+   * anything mutable; only the descriptor SHAPE plus frozen containers are.
+   */
   const snapshotIsProvablyImmutable = (events: readonly unknown[]): boolean => {
     if (provenImmutableSnapshots.has(events)) return true
     let visited = 0
@@ -666,7 +676,10 @@ export function createRuntime(
       if (++visited > IMMUTABILITY_PROOF_NODE_BUDGET) return false
       if (!Object.isFrozen(value)) return false
       for (const key of Object.keys(value as object)) {
-        if (!walk((value as Record<string, unknown>)[key])) return false
+        const descriptor = Object.getOwnPropertyDescriptor(value, key)
+        if (!descriptor) return false
+        if (descriptor.get !== undefined || descriptor.set !== undefined) return false
+        if (descriptor.value !== undefined && !walk(descriptor.value)) return false
       }
       return true
     }

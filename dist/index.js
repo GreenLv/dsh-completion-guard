@@ -3,7 +3,7 @@ import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeSync } from "node:fs";
 import { gunzip } from "node:zlib";
 import { execFile } from "node:child_process";
 import { homedir, hostname, tmpdir } from "node:os";
@@ -5709,21 +5709,48 @@ function readVerifiedLedgerRecords(root, context, session, expectedContext) {
 	return records;
 }
 /**
-* CG-083-BUG01/R2/F1: generation-protocol writer lock. See
-* docs/WRITER_LOCK_PROTOCOL.md for the state machine and linearization
-* argument. Summary: the active generation is the highest-numbered
-* `gen-NNNNNNNN` directory; the lock file lives INSIDE it; recovery of a
-* provably dead lock creates the NEXT generation (atomic mkdir) and never
-* renames or unlinks any file another actor created; a writer verifies the
-* generation is still current AFTER acquiring and retries through the
-* next generation otherwise; release unlinks only the actor's own
-* nonce-verified file. Only ESRCH proves a recorded owner is gone; any other
-* liveness answer refuses fail-closed (PID reuse included).
+* CG-083-BUG01/R2/F1 (revision 2): slot + pending + evict-intent writer lock.
+* See docs/WRITER_LOCK_PROTOCOL.md "Revision 2" for the state machine and the
+* linearization argument. Summary:
+*
+* - `slot.json` IS the holder: present = one writer inside its critical
+*   section. It is a hard link to a complete owner record; its content never
+*   changes while present (invariant S1), so a recovery decision made on its
+*   current nonce can be executed safely.
+* - A candidate creates `pending.<nonce>.json` (O_EXCL), writes its owner
+*   record and hard-links it to `slot.json`. link() is the atomic admission:
+*   EEXIST means someone else holds. Pending files carry no authority.
+* - Recovery of a PROVABLY dead slot owner (same host, ESRCH only) creates
+*   `evict-intent` O_EXCL (atomic, blocks nothing for reading but marks the
+*   linearization), then re-reads the slot and unlinks it ONLY if the current
+*   nonce is still the observed dead one. A delayed recoverer whose
+*   observation is stale reads a different (live) nonce and aborts — it can
+*   never evict a live holder (L1/L2). A recoverer that dies holding the
+*   intent is adopted by the next actor through its own provably dead creator
+*   record.
+* - Legacy root-level `.writer.lock` files from version <=2 are never
+*   modified by this protocol; their presence REFUSES acquisition (L3) so
+*   old and new writers never share the write section.
 */
 const WRITER_LOCK_VERSION = 3;
-const WRITER_LOCK_NAME = ".writer.lock";
-const GENERATION_DIGITS = 8;
-function readLockRecord(path) {
+const SLOT_NAME = "slot.json";
+const PENDING_PREFIX = "pending.";
+const INTENT_NAME = "evict-intent";
+const LEGACY_LOCK_PATHS = [
+	".writer.lock",
+	".writer.lock.stale",
+	".writer.lock.recovery"
+];
+function slotPath(root) {
+	return join(root, SLOT_NAME);
+}
+function pendingPath(root, nonce) {
+	return join(root, `${PENDING_PREFIX}${nonce}.json`);
+}
+function intentPath(root) {
+	return join(root, INTENT_NAME);
+}
+function readRecord(path, versions = [WRITER_LOCK_VERSION]) {
 	let raw;
 	try {
 		raw = readFileSync(path, "utf8");
@@ -5733,11 +5760,25 @@ function readLockRecord(path) {
 	if (!raw.trim()) return "legacy";
 	try {
 		const value = JSON.parse(raw);
-		if (value && value.version === WRITER_LOCK_VERSION && typeof value.nonce === "string" && value.nonce.length === 32 && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string" && typeof value.created_at_epoch_ms === "number") return value;
+		if (value && versions.includes(value.version) && typeof value.nonce === "string" && (value.nonce.length === 32 || value.version === 2) && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string" && typeof value.created_at_epoch_ms === "number") return value;
 	} catch {}
 	return "legacy";
 }
-/** Only ESRCH proves the recorded owner is gone; any other answer refuses. */
+function readIntent(path) {
+	let raw;
+	try {
+		raw = readFileSync(path, "utf8");
+	} catch {
+		return;
+	}
+	if (!raw.trim()) return "legacy";
+	try {
+		const value = JSON.parse(raw);
+		if (value && typeof value.evicting === "string" && typeof value.nonce === "string" && value.nonce.length === 32 && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string") return value;
+	} catch {}
+	return "legacy";
+}
+/** Only ESRCH proves a recorded owner is gone; any other answer refuses. */
 function processExists(pid) {
 	try {
 		process.kill(pid, 0);
@@ -5746,169 +5787,163 @@ function processExists(pid) {
 		return error.code !== "ESRCH";
 	}
 }
-/**
-* The lock is safe to recover: a provably dead recorded owner, or a
-* ZERO-LENGTH file — the creator died between O_EXCL creation and its owner
-* record. A live acquirer never enters its critical section before the
-* post-acquire generation verification, so recovering a mid-write file can
-* at worst make that acquirer release its own file and retry in the next
-* generation (docs/WRITER_LOCK_PROTOCOL.md §3).
-*/
-function lockIsRecoverable(path) {
-	let size$1;
-	try {
-		size$1 = lstatSync(path).size;
-	} catch {
-		return false;
-	}
-	if (size$1 === 0) return true;
-	const record$2 = readLockRecord(path);
-	return record$2 !== void 0 && record$2 !== "legacy" && record$2.hostname === hostname() && !processExists(record$2.pid);
+function recordIsProvablyDead(record$2) {
+	return record$2.hostname === hostname() && !processExists(record$2.pid);
 }
-/** The active generation directory: the highest-numbered gen-NNNNNNNN. */
-function currentGeneration(root) {
-	let best;
-	let entries;
+/** Unlink a path when it exists; other errors propagate. */
+function unlinkIfExists(path) {
 	try {
-		entries = readdirSync(root);
-	} catch {
-		return;
-	}
-	for (const entry of entries) {
-		if (!entry.startsWith("gen-") || entry.length !== 4 + GENERATION_DIGITS) continue;
-		const n = Number.parseInt(entry.slice(4), 10);
-		if (!Number.isSafeInteger(n) || n < 0) continue;
-		if (best === void 0 || n > best.n) best = {
-			n,
-			dir: join(root, entry)
-		};
-	}
-	return best?.dir;
-}
-function nextGenerationDir(root) {
-	const current = currentGeneration(root);
-	const nextN = (current === void 0 ? 0 : Number.parseInt(current.slice(current.lastIndexOf("gen-") + 4), 10)) + 1;
-	const dir = join(root, `gen-${String(nextN).padStart(GENERATION_DIGITS, "0")}`);
-	try {
-		mkdirSync(dir, { mode: 448 });
-		return {
-			dir,
-			created: true
-		};
-	} catch (error) {
-		if (error.code === "EEXIST") return {
-			dir,
-			created: false
-		};
-		throw error;
-	}
-}
-function firstGenerationDir(root) {
-	const dir = join(root, `gen-${"0".repeat(GENERATION_DIGITS - 1)}1`);
-	try {
-		mkdirSync(dir, { mode: 448 });
-		return {
-			dir,
-			created: true
-		};
-	} catch (error) {
-		if (error.code === "EEXIST") return {
-			dir,
-			created: false
-		};
-		throw error;
-	}
-}
-/** Unlink the actor's OWN lock file: only when the content still carries its nonce. */
-function releaseOwnLock(dir, nonce) {
-	const path = join(dir, WRITER_LOCK_NAME);
-	const record$2 = readLockRecord(path);
-	if (record$2 !== "legacy" && record$2 !== void 0 && record$2.nonce === nonce) try {
 		unlinkSync(path);
-	} catch {}
+	} catch (error) {
+		if (error.code !== "ENOENT") throw error;
+	}
 }
 /**
-* Acquire the writer lock under the generation protocol. Returns the held
-* lock, or undefined when acquisition is refused (live/unknown owner in the
-* current generation). See docs/WRITER_LOCK_PROTOCOL.md §3.
+* Recovery handshake for a provably dead slot owner (docs/WRITER_LOCK_PROTOCOL.md
+* Revision 2, recovery steps 1–2). Returns true when this call finalized the
+* eviction (slot removed), false when the slot content no longer names the
+* dead owner (stale observation — abort) or another live intent creator owns
+* the handshake.
+*/
+function evictDeadHolder(root, dead) {
+	const intent = {
+		evicting: dead.nonce,
+		nonce: randomBytes(16).toString("hex"),
+		pid: process.pid,
+		hostname: hostname(),
+		created_at_epoch_ms: Date.now()
+	};
+	let fd;
+	try {
+		fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+	} catch (error) {
+		if (error.code !== "EEXIST") throw error;
+		const winner = readIntent(intentPath(root));
+		if (winner === void 0 || winner === "legacy") return false;
+		if (!recordIsProvablyDead({
+			version: WRITER_LOCK_VERSION,
+			nonce: winner.nonce,
+			pid: winner.pid,
+			hostname: winner.hostname,
+			created_at_epoch_ms: winner.created_at_epoch_ms
+		})) return false;
+		try {
+			unlinkSync(intentPath(root));
+		} catch (adoptError) {
+			if (adoptError.code !== "ENOENT") return false;
+		}
+		try {
+			fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+		} catch (retryError) {
+			if (retryError.code === "EEXIST") return false;
+			throw retryError;
+		}
+	}
+	try {
+		const record$2 = {
+			evicting: intent.evicting,
+			nonce: intent.nonce,
+			pid: intent.pid,
+			hostname: intent.hostname,
+			created_at_epoch_ms: intent.created_at_epoch_ms
+		};
+		writeAll(fd, `${canonical(record$2)}\n`);
+		fsyncSync(fd);
+	} finally {
+		try {
+			closeSync(fd);
+		} catch {}
+	}
+	try {
+		const current = readRecord(slotPath(root));
+		if (current !== void 0 && current !== "legacy" && current.nonce === dead.nonce) {
+			unlinkIfExists(slotPath(root));
+			unlinkIfExists(pendingPath(root, dead.nonce));
+			return true;
+		}
+		return false;
+	} finally {
+		unlinkIfExists(intentPath(root));
+	}
+}
+/** Remove this actor's pending file by name (identity-safe GC). */
+function removeOwnPending(root, nonce) {
+	unlinkIfExists(pendingPath(root, nonce));
+}
+/** GC a pending file whose creator is provably dead (by name). */
+function gcDeadPending(root, nonce) {
+	const record$2 = readRecord(pendingPath(root, nonce));
+	if (record$2 !== void 0 && record$2 !== "legacy" && recordIsProvablyDead(record$2)) unlinkIfExists(pendingPath(root, nonce));
+}
+/**
+* Acquire the writer lock. Returns the held nonce, or undefined when
+* acquisition is refused (live/unknown holder, legacy lock, live intent
+* creator, or contention). See docs/WRITER_LOCK_PROTOCOL.md Revision 2.
 */
 function acquireWriterLock(root) {
-	let dir = currentGeneration(root);
-	if (dir === void 0) dir = firstGenerationDir(root).created ? join(root, `gen-${"0".repeat(GENERATION_DIGITS - 1)}1`) : currentGeneration(root);
-	for (let attempt = 0; attempt < 8; attempt += 1) {
-		let fd;
-		try {
-			fd = openRegular(join(dir, WRITER_LOCK_NAME), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-		} catch (error) {
-			if (error.code !== "EEXIST") throw error;
-			if (lockIsRecoverable(join(dir, WRITER_LOCK_NAME))) {
-				dir = nextGenerationDir(root).dir;
-				continue;
-			}
-			return;
+	for (let attempt = 0; attempt < 16; attempt += 1) {
+		for (const name$1 of LEGACY_LOCK_PATHS) if (readRecord(join(root, name$1), [WRITER_LOCK_VERSION, 2]) !== void 0) return void 0;
+		for (const entry of readdirSync(root)) {
+			if (!entry.startsWith(PENDING_PREFIX)) continue;
+			const candidate = readRecord(join(root, entry));
+			if (candidate !== void 0 && candidate !== "legacy" && recordIsProvablyDead(candidate)) unlinkIfExists(join(root, entry));
 		}
 		const nonce = randomBytes(16).toString("hex");
+		let pendingFd;
 		try {
-			const record$2 = {
+			pendingFd = openRegular(pendingPath(root, nonce), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+		} catch (error) {
+			if (error.code === "EEXIST") {
+				gcDeadPending(root, nonce);
+				continue;
+			}
+			throw error;
+		}
+		let own;
+		try {
+			own = {
 				version: WRITER_LOCK_VERSION,
 				nonce,
 				pid: process.pid,
 				hostname: hostname(),
 				created_at_epoch_ms: Date.now()
 			};
-			writeAll(fd, `${canonical(record$2)}\n`);
-			fsyncSync(fd);
+			writeAll(pendingFd, `${canonical(own)}\n`);
+			fsyncSync(pendingFd);
 		} catch (error) {
 			try {
-				unlinkSync(join(dir, WRITER_LOCK_NAME));
+				closeSync(pendingFd);
 			} catch {}
+			removeOwnPending(root, nonce);
 			throw error;
-		} finally {
-			try {
-				closeSync(fd);
-			} catch {}
 		}
-		const current = currentGeneration(root);
-		if (current === dir) return {
-			dir,
-			nonce
-		};
-		releaseOwnLock(dir, nonce);
-		dir = current ?? nextGenerationDir(root).dir;
+		try {
+			closeSync(pendingFd);
+		} catch {}
+		try {
+			linkSync(pendingPath(root, nonce), slotPath(root));
+			return { nonce };
+		} catch (error) {
+			if (error.code !== "EEXIST") {
+				removeOwnPending(root, nonce);
+				throw error;
+			}
+		}
+		const holder = readRecord(slotPath(root));
+		if (holder !== void 0 && holder !== "legacy" && recordIsProvablyDead(holder)) {
+			if (evictDeadHolder(root, holder)) continue;
+			removeOwnPending(root, nonce);
+			return;
+		}
+		removeOwnPending(root, nonce);
+		return;
 	}
 }
 function releaseWriterLock(root, held) {
 	if (held === void 0) return;
-	releaseOwnLock(held.dir, held.nonce);
-}
-/**
-* CG-083-PERF05 (F1 revision): prune abandoned generation directories. Only
-* the holder of the CURRENT generation's lock may prune, and only strictly
-* older generations — by docs/WRITER_LOCK_PROTOCOL.md §5 no non-current
-* generation can contain a live-content lock, so pruning cannot evict an
-* active writer. Bounded garbage per crash instead of unbounded growth.
-*/
-function pruneGenerations(root, held) {
-	const current = currentGeneration(root);
-	if (current === void 0 || current !== held.dir) return;
-	const currentN = Number.parseInt(current.slice(current.lastIndexOf("gen-") + 4), 10);
-	let entries;
-	try {
-		entries = readdirSync(root);
-	} catch {
-		return;
-	}
-	for (const entry of entries) {
-		if (!entry.startsWith("gen-") || entry.length !== 4 + GENERATION_DIGITS) continue;
-		const n = Number.parseInt(entry.slice(4), 10);
-		if (!Number.isSafeInteger(n) || n < 0 || n >= currentN) continue;
-		try {
-			rmSync(join(root, entry), {
-				recursive: true,
-				force: true
-			});
-		} catch {}
-	}
+	const holder = readRecord(slotPath(root));
+	if (holder !== void 0 && holder !== "legacy" && holder.nonce === held.nonce) unlinkIfExists(slotPath(root));
+	removeOwnPending(root, held.nonce);
 }
 function readPrivateLedger(root, input) {
 	if (!root) return {
@@ -6077,7 +6112,6 @@ function appendPrivateLedger(root, input, kind, payload) {
 			closeSync(fd);
 		}
 		syncDirectory(root);
-		if (lockFd !== void 0) pruneGenerations(root, lockFd);
 		return true;
 	} catch {
 		return false;
@@ -6545,6 +6579,16 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	*/
 	const provenImmutableSnapshots = /* @__PURE__ */ new WeakSet();
 	const IMMUTABILITY_PROOF_NODE_BUDGET = 4e5;
+	/**
+	* F2 (round 3): freezing a container does NOT freeze its content when a
+	* property is an accessor — a frozen getter's return value follows its
+	* closure. Eligibility therefore requires every property to be an ordinary
+	* DATA descriptor whose value is itself provably immutable. Accessor
+	* descriptors (get/set) make the whole snapshot unprovable: full rebuild,
+	* never cached. The value of a data descriptor is read for the recursion
+	* only — a single read is not treated as a permanent immutability proof of
+	* anything mutable; only the descriptor SHAPE plus frozen containers are.
+	*/
 	const snapshotIsProvablyImmutable = (events) => {
 		if (provenImmutableSnapshots.has(events)) return true;
 		let visited = 0;
@@ -6552,7 +6596,12 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			if (value === null || typeof value !== "object") return true;
 			if (++visited > IMMUTABILITY_PROOF_NODE_BUDGET) return false;
 			if (!Object.isFrozen(value)) return false;
-			for (const key of Object.keys(value)) if (!walk(value[key])) return false;
+			for (const key of Object.keys(value)) {
+				const descriptor = Object.getOwnPropertyDescriptor(value, key);
+				if (!descriptor) return false;
+				if (descriptor.get !== void 0 || descriptor.set !== void 0) return false;
+				if (descriptor.value !== void 0 && !walk(descriptor.value)) return false;
+			}
 			return true;
 		};
 		if (!walk(events)) return false;

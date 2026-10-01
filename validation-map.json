@@ -38,6 +38,7 @@
     {
       "id": "non_packaged_docs",
       "paths": [
+        ".oxlintrc.json",
         ".reader-review-*.json",
         "AGENTS.md",
         "CONTEXT_GUARD_FINDING_*.md",
@@ -45,6 +46,7 @@
         "IMPLEMENTATION_RESULT.md",
         "UPSTREAM_API_AUDIT.md",
         "assets/**",
+        "docs/WRITER_LOCK_PROTOCOL.md",
         "screenshots.json"
       ],
       "gates": [

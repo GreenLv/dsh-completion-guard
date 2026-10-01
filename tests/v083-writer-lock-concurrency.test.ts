@@ -1,20 +1,19 @@
 import { expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, existsSync, symlinkSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
-import { appendPrivateLedger, initializePrivateLedger, readPrivateLedger, writerLockState, currentGenerationDir, currentWriterLockFile } from '../src/domain/private-ledger.js'
+import { appendPrivateLedger, initializePrivateLedger, readPrivateLedger, writerLockState, currentWriterLockFile, __writerLockInternals } from '../src/domain/private-ledger.js'
 import type { PrivateLedgerContext } from '../src/domain/private-ledger.js'
 
-// CG-083-F1: REAL-parallelism concurrency matrix for the generation-protocol
-// writer lock (docs/WRITER_LOCK_PROTOCOL.md). The previous suite used
-// execFileSync in a loop, which serialized the children and never raced them.
-// Here bundled child processes block on a shared start barrier and are
-// released together, each performing recovery-and-append under real
-// contention; every atomic step's owner/file expectations are asserted.
+// CG-083-F1 round 3: REAL-parallelism and DETERMINISTIC interleavings for the
+// slot + pending + evict-intent protocol (docs/WRITER_LOCK_PROTOCOL.md
+// Revision 2). The review's L1/L2 counterexamples become standing regressions:
+// a recoverer with a stale dead observation must abort, and a candidate paused
+// in the pending phase must never enter or be evicted.
 
 const context: PrivateLedgerContext = {
   sessionId: 'lock-race-session',
@@ -31,10 +30,8 @@ const deadPid = (() => {
   throw new Error('no free pid for fixture')
 })()
 
-function writeDeadOwnerLock(root: string): void {
-  const dir = currentGenerationDir(root)
-  if (!dir) throw new Error('no generation directory')
-  writeFileSync(join(dir, '.writer.lock'), JSON.stringify({
+function writeDeadSlot(root: string): void {
+  writeFileSync(join(root, 'slot.json'), JSON.stringify({
     version: 3, nonce: randomBytes(16).toString('hex'), pid: deadPid,
     hostname: hostname(), created_at_epoch_ms: Date.now(),
   }) + '\n', 'utf8')
@@ -58,11 +55,10 @@ async function bundledRunner(): Promise<string> {
   return bundlePromise
 }
 
-/** Spawn children that block on a start barrier, then release them together. */
-async function raceChildren(runner: string, root: string, labels: string[]): Promise<Array<{ label: string; code: number; stdout: string; stderr: string }>> {
+async function raceChildren(runner: string, root: string, labels: string[], withBarrier = true): Promise<Array<{ label: string; code: number; stdout: string; stderr: string }>> {
   const barrier = join(root, 'start-barrier')
-  writeFileSync(barrier, 'go: when deleted\n')
-  const children = labels.map((label) => spawn(process.execPath, [runner, root, label, barrier], {
+  if (withBarrier) writeFileSync(barrier, 'go: when deleted\n')
+  const children = labels.map((label) => spawn(process.execPath, [runner, root, label, ...(withBarrier ? [barrier] : [])], {
     stdio: ['ignore', 'pipe', 'pipe'],
   }))
   const collected = children.map((child, index) => new Promise<{ label: string; code: number; stdout: string; stderr: string }>((resolve) => {
@@ -72,16 +68,15 @@ async function raceChildren(runner: string, root: string, labels: string[]): Pro
     child.stderr.on('data', (chunk) => { stderr += chunk })
     child.on('close', (code) => resolve({ label: labels[index]!, code: code ?? -1, stdout, stderr }))
   }))
-  rmSync(barrier)
+  if (withBarrier) rmSync(barrier)
   return Promise.all(collected)
 }
 
 it('four simultaneously released processes race recovery and append; the chain stays unique and contiguous', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r2-mp-'))
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r3-mp-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
-    // One dead writer lock: every child must contend for recovery.
-    writeDeadOwnerLock(root)
+    writeDeadSlot(root)
     const runner = await bundledRunner()
     const results = await raceChildren(runner, root, ['a', 'b', 'c', 'd'])
     for (const row of results) {
@@ -89,53 +84,109 @@ it('four simultaneously released processes race recovery and append; the chain s
       expect(row.code, `child ${row.label} exit`).toBe(0)
     }
     const snapshot = readPrivateLedger(root, context)
-    const outcomes = results.map((row) => JSON.parse(row.stdout) as { label: string; succeeded: number; refused: number })
-    const totalSucceeded = outcomes.reduce((sum, row) => sum + row.succeeded, 0)
-    // Every success is durable exactly once; positions unique; prior chain contiguous.
+    const totalSucceeded = results.reduce((sum, row) => sum + (JSON.parse(row.stdout) as { succeeded: number }).succeeded, 0)
     expect(snapshot.damaged).toBe(false)
     expect(snapshot.records.map((record) => record.position)).toEqual(snapshot.records.map((_, index) => index + 1))
     expect(snapshot.records.length).toBe(totalSucceeded)
     expect(new Set(snapshot.records.map((record) => String(record.payload.resolutionCallId))).size).toBe(snapshot.records.length)
-    // Progress happened despite contention.
     expect(totalSucceeded).toBeGreaterThanOrEqual(1)
-    // Post-condition: no live lock anywhere in any generation.
     expect(existsSync(currentWriterLockFile(root)!)).toBe(false)
-    for (const entry of readdirSync(root).filter((name) => name.startsWith('gen-'))) {
-      expect(existsSync(join(root, entry, '.writer.lock'))).toBe(false)
-    }
+    // One more acquire sweeps every pending file whose creator is dead.
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'sweep', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    expect(readdirSync(root).filter((name) => name.startsWith('pending.'))).toEqual([])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 }, 120_000)
 
-it('two children racing PLAIN acquire/release (no dead lock) still serialize the chain', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r2-plain-'))
+it('L1 (standing regression): a stale dead-slot observation cannot evict a live holder', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r3-l1-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // A dead holder appears; process A observes it (stale observation) and
+    // then PAUSES. B recovers the same dead holder and ENTERS its critical
+    // section. A's delayed finalize must abort and B must finish.
+    writeDeadSlot(root)
+    const stale = __writerLockInternals.readSlot(root)
+    expect(stale).toBeDefined()
+    expect(stale).not.toBe('legacy')
+    const deadNonce = (stale as { nonce: string }).nonce
+    // B recovers and holds: run one append in a child and WAIT until it is
+    // inside the critical section (slot present with a live pid), then run
+    // A's delayed finalize from THIS process.
+    const runner = await bundledRunner()
+    const child = spawn(process.execPath, [runner, root, 'slowappend'], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const deadline = Date.now() + 30_000
+    let bHolding = false
+    while (Date.now() < deadline) {
+      const slotFile = currentWriterLockFile(root)
+      if (slotFile !== undefined && existsSync(slotFile)) {
+        const holder = __writerLockInternals.readSlot(root)
+        if (holder !== 'legacy' && holder !== undefined && holder.nonce !== deadNonce) { bHolding = true; break }
+      }
+      if (child.exitCode !== null) break
+    }
+    expect(bHolding, 'child B entered its critical section').toBe(true)
+    // A's delayed finalize with the STALE dead nonce must not evict B.
+    const finalized = __writerLockInternals.evictDeadHolder(root, stale as { version: 3; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number })
+    expect(finalized, 'stale observation must abort').toBe(false)
+    // B completes and its records are intact.
+    await new Promise<void>((resolve) => child.on('close', () => resolve()))
+    const snapshot = readPrivateLedger(root, context)
+    expect(snapshot.damaged).toBe(false)
+    expect(snapshot.records.length).toBeGreaterThanOrEqual(1)
+    expect(existsSync(currentWriterLockFile(root)!)).toBe(false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 120_000)
+
+it('L2 (standing regression): a paused pending-phase candidate cannot enter or be evicted', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r3-l2-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
     const runner = await bundledRunner()
-    const results = await raceChildren(runner, root, ['x', 'y'])
-    for (const row of results) {
-      expect(row.stderr, `child ${row.label} stderr: ${row.stderr.slice(-500)}`).toBe('')
-      expect(row.code, `child ${row.label} exit`).toBe(0)
+    // B creates its pending file (no authority), pauses on the barrier; A
+    // (parent) takes the slot with a full append; B resumes: link fails
+    // EEXIST, candidate refuses, A's slot is never evicted.
+    const barrier = join(root, 'start-barrier')
+    writeFileSync(barrier, 'go: when deleted\n')
+    const child = spawn(process.execPath, [runner, root, 'slowpending', barrier], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const deadline = Date.now() + 30_000
+    let prepared = false
+    while (Date.now() < deadline) {
+      if (readdirSync(root).some((name) => name.startsWith('pending.'))) { prepared = true; break }
+      if (child.exitCode !== null) break
     }
+    expect(prepared, 'child created its pending candidate').toBe(true)
+    // The parent HOLDS the slot across the child's resume (a plain append
+    // would release before the child links).
+    const held = __writerLockInternals.acquire(root)
+    expect(held, 'parent acquired the slot').toBeDefined()
+    rmSync(barrier)
+    let stdout = ''
+    child.stdout.on('data', (chunk) => { stdout += chunk })
+    await new Promise<void>((resolve) => child.on('close', () => resolve()))
+    const outcome = JSON.parse(stdout) as { refused: boolean; holderIsParent: boolean }
+    expect(outcome, `child outcome: ${stdout}`).toMatchObject({ refused: true, holderIsParent: true })
+    // Parent releases; the ledger was never written under the paused
+    // candidate (no authority), and a normal append works afterwards.
+    __writerLockInternals.release(root, held)
+    expect(existsSync(currentWriterLockFile(root)!)).toBe(false)
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'post-l2', serviceId: 's', preGeneration: 'g' })).toBe(true)
     const snapshot = readPrivateLedger(root, context)
-    const total = results.map((row) => JSON.parse(row.stdout) as { succeeded: number }).reduce((sum, row) => sum + row.succeeded, 0)
     expect(snapshot.damaged).toBe(false)
-    expect(snapshot.records.length).toBe(total)
-    expect(snapshot.records.map((record) => record.position)).toEqual(snapshot.records.map((_, index) => index + 1))
+    expect(snapshot.records).toHaveLength(1)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 }, 120_000)
 
 it('a child killed INSIDE the critical section does not wedge the ledger', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r2-crash-'))
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r3-crash-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
     const runner = await bundledRunner()
-    // The repeat runner appends back-to-back; the parent polls for the lock
-    // file and SIGKILLs the child the moment it is INSIDE the critical
-    // section (lock exists), so no release/finally can run.
     const child = spawn(process.execPath, [runner, root, 'repeat'], { stdio: ['ignore', 'pipe', 'pipe'] })
     let killed = false
     const deadline = Date.now() + 60_000
@@ -152,7 +203,6 @@ it('a child killed INSIDE the critical section does not wedge the ledger', async
     expect(killed, 'parent caught the child inside the critical section').toBe(true)
     expect(existsSync(currentWriterLockFile(root)!)).toBe(true)
     expect(writerLockState(root)).toBe('abandoned_recoverable')
-    // A normal writer must recover and continue the chain.
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'after-crash', serviceId: 's', preGeneration: 'g' })).toBe(true)
     const snapshot = readPrivateLedger(root, context)
     expect(snapshot.damaged).toBe(false)
@@ -163,15 +213,15 @@ it('a child killed INSIDE the critical section does not wedge the ledger', async
   }
 }, 120_000)
 
-it('refuses a symlinked current-generation lock instead of following it', () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r2-link-'))
+it('refuses a symlinked slot instead of following it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r3-link-'))
   try {
     expect(initializePrivateLedger(root, context)).toBe(true)
-    const outside = mkdtempSync(join(tmpdir(), 'dsh-cg-r2-outside-'))
+    const outside = mkdtempSync(join(tmpdir(), 'dsh-cg-r3-outside-'))
     try {
       writeFileSync(join(outside, 'target'), '', 'utf8')
-      rmSync(join(currentGenerationDir(root)!, '.writer.lock'), { force: true })
-      symlinkSync(join(outside, 'target'), join(currentGenerationDir(root)!, '.writer.lock'))
+      rmSync(join(root, 'slot.json'), { force: true })
+      symlinkSync(join(outside, 'target'), join(root, 'slot.json'))
       expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c3', serviceId: 's', preGeneration: 'g' })).toBe(false)
     } finally {
       rmSync(outside, { recursive: true, force: true })

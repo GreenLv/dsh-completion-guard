@@ -178,6 +178,36 @@ it('never serves the fast path for a snapshot whose immutability is not provable
       expect(derive.mock.calls.length).toBe(afterInit)
     } finally { deepReader.mockRestore() }
 
+    // 3b. F2 round-3: a frozen container whose property is an ACCESSOR is
+    // not provable — the getter's return value follows its closure. The fast
+    // path must never engage, and a closure change must be visible.
+    {
+      const getterSession = newSession('Explain the first requirement.')
+      let hiddenText = 'Explain the first requirement.'
+      const getterEvents = [structuredClone((getterSession.snapshotEvents() as unknown as Array<Record<string, unknown>>)[0] as Record<string, unknown>)]
+      const part = (getterEvents[0] as { data: { content: Array<{ type: string; text: string }> } }).data
+      Object.defineProperty(part.content, 0, {
+        enumerable: true,
+        get() { return { type: 'text', text: hiddenText } },
+      })
+      // Freeze every container along the chain (array, envelope, data, content).
+      Object.freeze(part.content)
+      Object.freeze(part)
+      Object.freeze(getterEvents[0])
+      Object.freeze(getterEvents)
+      const getterReader = vi.spyOn(getterSession, 'snapshotEvents').mockReturnValue(getterEvents as never)
+      try {
+        const runtime = makeRuntime(getterSession)
+        runtime.sync()
+        const calls = derive.mock.calls.length
+        expect([...runtime.projection.items.values()].some((item) => item.normalizedText.includes('Explain the first'))).toBe(true)
+        hiddenText = 'Run the tests now.'
+        runtime.sync()
+        expect(derive.mock.calls.length, 'accessor snapshot: full rebuild, never cached').toBe(calls + 1)
+        expect([...runtime.projection.items.values()].some((item) => item.normalizedText.includes('Run the tests now'))).toBe(true)
+      } finally { getterReader.mockRestore() }
+    }
+
     // 4. Positive control: the OFFICIAL Session snapshot is deeply frozen and
     // reuses its array, so the production host keeps the fast path.
     const official = newSession('Explain the first requirement.')
