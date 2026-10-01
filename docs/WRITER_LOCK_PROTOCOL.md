@@ -61,3 +61,47 @@ Dead locks accumulate one file per crash inside old generation directories. The 
 ## 7. Test obligations
 
 The concurrency suite must (a) run four REAL child processes released simultaneously by a shared start barrier, (b) cover: writer-crash recovery, recovery-lock-holder death (a recoverer dying between mkdir and acquire), double recoverer, plain acquire/release interleave, PID reuse (live pid recorded), unknown/foreign owners, and (c) assert the final ledger chain is unique and contiguous. A deterministic counterexample for the PREVIOUS scheme (check-then-rename) is kept in the suite history via the protocol document reference, not as a live regression of removed code.
+
+
+---
+
+# Revision 2 (round 3): slot + pending + evict-intent protocol
+
+The generation protocol above is RETIRED. Two real interleavings defeated it (both reproduced with production appends and real child processes in the round-3 review):
+
+- L1: a recoverer that observed generation G1's owner dead paused; another writer legally advanced to G2 and entered its critical section; the paused recoverer then created G3 from a FRESH max-generation read and its prune deleted G2 while B still held it. The protocol's check (G1) and action (mkdir after re-reading the max) were not the same epoch.
+- L2: a recoverer observed a ZERO-LENGTH lock (creator paused between O_EXCL and the owner-record write); while it was paused the creator finished writing, passed verification and entered its critical section; the recoverer's zero-byte observation then advanced the generation and evicted a live holder. Zero bytes do not prove death, and "fixed oldN+1" does not help: a delayed recoverer acts after the holder's verification regardless of how many times the holder verified.
+
+Root cause: with a fixed slot name, EVERY recovery action (unlink/rename/rmtree) re-resolves the pathname at action time, so an observation made earlier can evict a DIFFERENT, live holder. No number of re-reads closes this — the pause can sit between the last read and the act.
+
+## Revised state machine
+
+Resources (all in the ledger root; no subdirectories, no generations):
+
+- `slot.json` — THE holder. Present = exactly one writer is inside its critical section; its content is a hard link to a complete owner record `{version:3, nonce, pid, hostname, created_at}`. Invariant S1: while present, slot.json's CONTENT NEVER CHANGES (it is a hard link to a file the holder wrote before linking and never modifies afterwards); the holder identity changes only through full removal (holder release or verified recovery) followed by a new `link()`.
+- `pending.<nonce>.json` — a candidate's own owner record, created O_EXCL, written, fsynced, then hard-linked to `slot.json` (atomic EEXIST admission) and unlinked again by its creator. A pending file carries NO authority.
+- `evict-intent` — the recovery handshake, created O_EXCL; content records the creating recoverer `{nonce, pid, hostname, created_at}` and the dead nonce being evicted.
+
+Writer critical-section entry: create pending → write owner → fsync → `link(pending, slot.json)`:
+- success → holder (unlink the pending link is optional bookkeeping; the file itself is kept as the pending record and unlinked at release);
+- EEXIST → read slot owner: live or not-provably-dead → remove own pending, refuse (fail closed); provably dead → recovery handshake below.
+
+Recovery of a provably dead slot owner (same host, `kill(pid,0)` answers ESRCH):
+1. Create `evict-intent` O_EXCL. Loser of the creation reads the winner's record: live creator → refuse this round (the creator will finish); dead creator → adoption: unlink the intent (idempotent; ENOENT harmless), recreate own intent, continue.
+2. WITH the intent in place, read `slot.json` and finalize ONLY if its nonce equals the dead nonce being evicted: unlink `slot.json`, remove the dead holder's `pending.<deadNonce>.json` by name (identity-safe), remove the intent. If the slot's nonce differs (a new live holder linked meanwhile, or the slot was already recovered and re-linked), remove the intent and abort — the stale observation must not evict anyone.
+3. Progress: a recoverer that dies holding the intent leaves a file whose creator is provably dead; the next actor adopts per step 1. A live creator always finishes (finalize or abort removes the intent).
+
+Why this is race-free (linearization argument):
+
+- Entry is `link()` with EEXIST: while slot.json exists, no second holder can be created; L1's "advance past a live writer" has no analogue — there is no generation to advance to, and the only mutation of the slot by a non-holder (recovery) is gated behind the intent handshake.
+- A delayed recoverer cannot evict a live holder: its finalize step compares the slot's CURRENT nonce with the observed dead nonce and aborts on mismatch; between that read and the unlink the content cannot change (S1: content is immutable while present; the only way it changes is removal, which only this finalize performs once the nonce matches — a concurrent finalize of the SAME dead nonce is idempotent, second unlink gets ENOENT), and a NEW holder cannot appear between the read and the unlink because linking requires the slot to be absent and the intent's presence forbids... even if a writer races a link in its own check-then-link window, the link itself fails EEXIST while the dead slot is present; a link that SUCCEEDS implies the slot was absent, which implies the earlier finalize already removed it and this recoverer's read could not have observed the dead nonce after that point. The read and the dead slot's removal are therefore ordered: whoever reads the dead nonce removes exactly the dead holder.
+- Zero-byte / mid-creation states carry no authority: a pending file is never linked by anyone but its creator, and a creator that dies leaves a pending file whose pid is provably dead — GC removes it BY NAME (identity-safe). There is no observable "empty lock" that could be mistaken for a holder: the slot only ever appears atomically via link of a complete record.
+- Release: read slot.json; unlink it only if the record's nonce equals the releaser's own nonce; then remove the releaser's pending file by name.
+
+## Legacy root locks (L3)
+
+Version-2 and earlier writers kept a root-level `.writer.lock`. The v3 protocol never removes or rewrites legacy files, but their PRESENCE refuses acquisition: an empty/unparsable/foreign-host record reports `unknown_owner` (operator removes the file to finish the upgrade — it carries no ledger data), a same-host record whose pid answers alive reports `held`. Either way v3 writers refuse the shared write area while a legacy lock exists, so old and new writers never share the write section unsafely.
+
+## Test obligations (round 3)
+
+Deterministic, real-process interleavings must cover: (a) a recoverer whose dead observation is stale by the time it acts — it must abort and the live writer must finish; (b) a candidate paused in the pending phase must never enter while another writer holds, and must not be evicted; (c) kill inside the critical section, then recovery; (d) barrier-released multi-process contention with a unique contiguous chain; (e) legacy root locks refuse (empty, live v2, foreign) with bytes untouched; (f) a getter-bearing (accessor) snapshot is NOT eligible for the projection fast path (see F2).
