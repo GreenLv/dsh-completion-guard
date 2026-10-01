@@ -14,7 +14,9 @@
 | 第三轮复核 subject | `f5c0d2e690f9c10161933791572e52bd4ea8c8fa`（L1/L2/L3/F2/V3/H1 → 本轮关闭） |
 | 第三轮实现提交 | `3bd4277c1c2286cdf653e21d6dd6e0d383cbe9ce` |
 | 第四轮复核 subject | `8f86f3f94e6b3288e05f9fcff88619b4c202c6f8`（S1/S2/S3/F2/V3/H1 → 本轮关闭；V3 已在第三轮落地并获复核确认） |
-| 第四轮实现提交 | `d5460fd9e8387b8f4a345b75005b0297ca220171`（仅本地，未 push） |
+| 第四轮实现提交 | `d5460fd9e8387b8f4a345b75005b0297ca220171` |
+| 第五轮复核 subject | `ab7fa703b5a620421ee6c889217a0c068ad55b54`（L4.1/L4.2/L4.3/F2/ H1 → 本轮关闭） |
+| 第五轮实现提交 | `aafb5a93edbb17b93e73af65ad68cde1c0172577`（仅本地，未 push） |
 | 版本 | 0.8.3 |
 | dirty state | 受跟踪文件干净；未跟踪：三份计划/提示词文件、两份复核/返修交接文件、`HANDOFF_0_8_3_REPAIR_RESULT.json`（完整清单见 handoff 的 dirty_scope） |
 | dist | 从干净提交树重建，`git diff --exit-code -- dist` 通过 |
@@ -70,6 +72,18 @@ archive-045 维持 pending（Codex 经私有映射读取封存原记录：raw_co
 | V3 | （复核确认第三轮已落地：真实计数 disposer、100 次归零、重附重建、敏感性对照） | 无需变更 | `tests/v083-lifecycle-recycle.test.ts` 1/1 | 已确认关闭 |
 | H1 | execution v2 的 candidate.commit 为 ab35e1e（协议文档提交），非实现提交 | 库内新增 `dsh-0.8.3-library-execution.v3.json`：以第四轮实现提交（d5460fd）为主体的**全新 39 文件执行**（716 unique testcases、0 失败）；v2（及 v1）身份原样保留；输入按 45 case_input_sha256 未变规则复用 | execution v3 + incident validate exit 0 | 已关闭 |
 
+### 第五轮复核（第四轮返修后的独立复核）追加结案
+
+| ID | 发现 | 修复 | 正反例 | 状态 |
+| --- | --- | --- | --- | --- |
+| L4.1 | 旧 barrier 观察删除新活 barrier：A 读到死 v2 owner 后暂停；B 完成恢复入临界区；A 恢复后按 pathname 删 B 的活 barrier，再以 prev=B 提交 claim 获准——临界区实际重叠；另 legacy 死记录未查 hostname 即删除 | **adopt 语义**：legacy barrier 永不被协议移除——admission 分类（unknown/异机/活→拒绝；同机死→ADOPT，文件原样保留），持有者租期内由死文件持续阻挡 v2，release 不删除非自有文件（nonce 校验），文档写明可验证迁移约束（确认无 Guard 进程后手动移除）。叠加重放规则修正（见 L4.3/claim 规则） | L4.1 standing regression：B 持锁入临界区后，A 的过期 admission 被拒、B 的 barrier 字节原样未动 | 已关闭 |
+| L4.2 | 尾部修复截掉另一 writer 的完整 claim：A 解析 validBytes 后暂停；B 追加完整 claim 入临界区；A truncate 撤销已生效决策 | **删除一切截断**：重放跳过不可解析行（torn 记录从未生效，跳过不撤销），后续完整记录保持可见；appender 在日志不以换行结尾时前置 '\n' 保持行对齐。残余竞争只会使带 active holder 的记录错位并被重放拒绝（fail-closed），不可能撤销持有者或产生双持有者 | L4.2 standing regression：append 与 active holder 竞争 → fail-closed 拒绝、holder 原样存活 | 已关闭 |
+| L4.3 | 压缩覆盖已获准 writer 并重装已释放 holder：A release 后 compact，rename 覆盖 B 的 claim，基线写成已释放的 A | 压缩移入**已验证租期内**（租期内并发记录不可能生效：claim 需空槽、evict 需死持有者），基线重装当前持有者（状态等价）；rename 窗口至多丢无效记录 | L4.3 standing regression：租期内压缩 holder 状态等价、并发 admission 仍拒、压缩后链继续 | 已关闭 |
+| F2 | 非枚举 accessor 修复未进入提交（Object.keys 漏非枚举键） | 资格证明改用 `Object.getOwnPropertyNames` 枚举全部自有键；非枚举 getter 反例与枚举版同批固化 | sync 矩阵 3c：全链冻结+非枚举 getter，closure 改变后必须重建 | 已关闭 |
+| H1 | execution v3 subject 为协议文档提交 ab35e1e 而非实现 | 库内新增 execution **v4**：以第五轮实现提交 aafb5a93 为主体重跑 39 owning 文件（716 unique testcases、0 失败）；v1–v3 身份保留 | execution v4 + incident validate exit 0 | 已关闭 |
+
+claim 重放规则同步收紧：**claim 仅在空槽生效**——记录在活持有者之上的 claim 存储但无效，claimant 读回后 fail-closed 退出；直接 claim-over-holder 路径由重放本身封闭，与 barrier 状态无关。
+
 ## 3. 合同保持
 
 fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durability、release reservation/settlement、上游 pin 均未变。`DSH_GUARD_DISABLE_INDEXES=1` 仍关闭索引层；memo 缓存均为纯函数解析缓存（文本→解析结果），不是跨 entry 信任缓存。
@@ -103,7 +117,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 | --- | --- |
 | typecheck（tsc --noEmit） | 0 errors |
 | lint（oxlint src tests） | 0 errors / 91 warnings（与基线同水平） |
-| tests（vitest run） | 187 files passed / 1 skipped；**2933 passed / 11 skipped**（含四轮新增回归） |
+| tests（vitest run） | 187 files passed / 1 skipped；**2937 passed / 11 skipped**（含五轮新增回归） |
 | release-pack node tests | 4/4 |
 | stats node tests | 10/10 |
 | build + dist parity | 重建后 `git diff --exit-code -- dist` 通过 |
