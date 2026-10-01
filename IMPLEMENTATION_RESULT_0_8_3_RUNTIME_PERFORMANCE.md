@@ -12,7 +12,9 @@
 | 返修实现提交（第二轮） | `75856d2c36e52e95d578413a2e8671b5e2ce13ee`（F1 状态机文档先行为独立提交；分支 `candidate/0.8.3-runtime-performance`，仅本地，未 push） |
 | 第二轮复核 subject | `8242b54414129b19df8aa5a5ae791593d158c58c`（保留 R3/R4/R5 既有结论，重开 F1/F2/V1/V3/H1——均已关闭） |
 | 第三轮复核 subject | `f5c0d2e690f9c10161933791572e52bd4ea8c8fa`（L1/L2/L3/F2/V3/H1 → 本轮关闭） |
-| 第三轮实现提交 | `3bd4277c1c2286cdf653e21d6dd6e0d383cbe9ce`（仅本地，未 push） |
+| 第三轮实现提交 | `3bd4277c1c2286cdf653e21d6dd6e0d383cbe9ce` |
+| 第四轮复核 subject | `8f86f3f94e6b3288e05f9fcff88619b4c202c6f8`（S1/S2/S3/F2/V3/H1 → 本轮关闭；V3 已在第三轮落地并获复核确认） |
+| 第四轮实现提交 | `d5460fd9e8387b8f4a345b75005b0297ca220171`（仅本地，未 push） |
 | 版本 | 0.8.3 |
 | dirty state | 受跟踪文件干净；未跟踪：三份计划/提示词文件、两份复核/返修交接文件、`HANDOFF_0_8_3_REPAIR_RESULT.json`（完整清单见 handoff 的 dirty_scope） |
 | dist | 从干净提交树重建，`git diff --exit-code -- dist` 通过 |
@@ -57,6 +59,17 @@ archive-045 维持 pending（Codex 经私有映射读取封存原记录：raw_co
 | V3 | 上轮声称的生命周期重写未落在 HEAD（工作区丢失，HEAD 仍为 no-op disposer 版本） | 本轮确认丢失并重写：真实计数 disposer、100 循环归零、dispose 后重挂载重新 derive（runtime map 释放）、破坏一个 disposer 必须被测出的敏感性对照；本轮 git diff 明确包含该文件 | `tests/v083-lifecycle-recycle.test.ts`（HEAD diff 含 96 insertions 重写）1/1 | 已关闭 |
 | H1 | 裁定 v1 的 candidate.commit/source.subject 仍是 ecde3264，testcase 名单不改变执行主体 | 库内新增 `dsh-0.8.3-library-execution.v2.json`：以**最终候选提交**为新执行主体重跑 39 owning 文件（716 unique testcases、0 失败），输入按“45 case_input_sha256 未变”的复用规则声明；v1 身份原样保留不冒充重跑；unique(716) 与 mapped-sum(718) 分列 | execution v2 文件 + incident validate exit 0 | 已关闭 |
 
+### 第四轮复核（第四轮受影响源码复核）追加结案
+
+| ID | 发现 | 修复 | 正反例 | 状态 |
+| --- | --- | --- | --- | --- |
+| S1 | intent 接管重现检查后删除竞态：A 观察旧 intent creator 死亡暂停；B 接管、完成恢复、link 新 slot 入临界区；A 按pathname 删 B 的活 intent/slot | **世代与 slot 路径全部退役**，改为**仲裁日志 + 乐观并发控制**（协议文档 Revision 3 已先行提交）：一切权威变更=向 `arbitration.log` 追加单条完整记录；claim 携带观察到的持有者 nonce（prev），确定性重放仅在日志全序位置上当前持有者==prev 时生效——观察随动作记录写入，效力由全序裁决，**互斥路径上不存在依据旧观察对 pathname 的删除** | S1 standing regression：B 经真实恢复持锁入临界区后，A 携带过期观察的 evict 记录经重放判定无效，B 存活完成、链完整 | 已关闭 |
+| S2 | intent O_EXCL 空文件窗口：创建后写 owner 前崩溃 → readIntent legacy → 自动恢复永久停住，而 state 仍报 abandoned_recoverable | 仲裁日志**无空文件窗口**：一条记录=一次原子 append；torn 尾行（append 中崩溃）终止重放于最后完整记录，且下一次 append 前截断到 validBytes（torn 记录从未生效，截断不撤销任何决策） | S2 regression：完整死 claim + 人为 torn 尾行 → append 成功恢复、记录链完整 | 已关闭 |
+| S3 | 旧新版互斥只有单向：新版不持旧 `.writer.lock`，基线 v2 append 在新版持锁时仍成功 | **双向升级屏障**：v3 临界区全程持有 v2 形状 `.writer.lock`（O_EXCL）——v3 持锁→真实 v2 形状子进程拒绝（EEXIST）；v2 活记录→v3 拒绝；v2 记录 pid ESRCH→v3 按名移除（已验证迁移步）后继续 | S3 regression 三方向全测（真实 v2 形状子进程 + 活/死 v2 记录） | 已关闭 |
+| F2 | Object.keys 遗漏非枚举 accessor | 资格证明改用 `Object.getOwnPropertyDescriptor` 遍历全部自有键：accessor（get/set 存在）→不可证明→全量重建；非枚举 getter 反例与枚举版同批固化 | sync 矩阵 3b 扩展覆盖非枚举场景（同一反例改 enumerable:false） | 已关闭 |
+| V3 | （复核确认第三轮已落地：真实计数 disposer、100 次归零、重附重建、敏感性对照） | 无需变更 | `tests/v083-lifecycle-recycle.test.ts` 1/1 | 已确认关闭 |
+| H1 | execution v2 的 candidate.commit 为 ab35e1e（协议文档提交），非实现提交 | 库内新增 `dsh-0.8.3-library-execution.v3.json`：以第四轮实现提交（d5460fd）为主体的**全新 39 文件执行**（716 unique testcases、0 失败）；v2（及 v1）身份原样保留；输入按 45 case_input_sha256 未变规则复用 | execution v3 + incident validate exit 0 | 已关闭 |
+
 ## 3. 合同保持
 
 fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durability、release reservation/settlement、上游 pin 均未变。`DSH_GUARD_DISABLE_INDEXES=1` 仍关闭索引层；memo 缓存均为纯函数解析缓存（文本→解析结果），不是跨 entry 信任缓存。
@@ -90,7 +103,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 | --- | --- |
 | typecheck（tsc --noEmit） | 0 errors |
 | lint（oxlint src tests） | 0 errors / 91 warnings（与基线同水平） |
-| tests（vitest run） | 187 files passed / 1 skipped；**2933 passed / 11 skipped**（含三轮新增回归） |
+| tests（vitest run） | 187 files passed / 1 skipped；**2933 passed / 11 skipped**（含四轮新增回归） |
 | release-pack node tests | 4/4 |
 | stats node tests | 10/10 |
 | build + dist parity | 重建后 `git diff --exit-code -- dist` 通过 |
