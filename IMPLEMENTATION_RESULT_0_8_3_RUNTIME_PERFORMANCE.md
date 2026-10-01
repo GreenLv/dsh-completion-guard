@@ -10,7 +10,9 @@
 | 首轮实现提交 | `45bb8099`（被复核否决） |
 | 首轮交回 | `3c6a7bf0`（REVIEW 否决其正确性与证据） |
 | 返修实现提交（第二轮） | `75856d2c36e52e95d578413a2e8671b5e2ce13ee`（F1 状态机文档先行为独立提交；分支 `candidate/0.8.3-runtime-performance`，仅本地，未 push） |
-| 第二轮复核 subject | `8242b54414129b19df8aa5a5ae791593d158c58c`（保留 R3/R4/R5 既有结论，本轮仅重开 F1/F2/V1/V3/H1） |
+| 第二轮复核 subject | `8242b54414129b19df8aa5a5ae791593d158c58c`（保留 R3/R4/R5 既有结论，重开 F1/F2/V1/V3/H1——均已关闭） |
+| 第三轮复核 subject | `f5c0d2e690f9c10161933791572e52bd4ea8c8fa`（L1/L2/L3/F2/V3/H1 → 本轮关闭） |
+| 第三轮实现提交 | `3bd4277c1c2286cdf653e21d6dd6e0d383cbe9ce`（仅本地，未 push） |
 | 版本 | 0.8.3 |
 | dirty state | 受跟踪文件干净；未跟踪：三份计划/提示词文件、两份复核/返修交接文件、`HANDOFF_0_8_3_REPAIR_RESULT.json`（完整清单见 handoff 的 dirty_scope） |
 | dist | 从干净提交树重建，`git diff --exit-code -- dist` 通过 |
@@ -44,6 +46,17 @@
 
 archive-045 维持 pending（Codex 经私有映射读取封存原记录：raw_control_included=false、documented_only，Hook/语法/时效/封装未知；当前资料不足以还原场景，不编造测试、不宣布不适用），owner：用户/Codex。
 
+### 第三轮复核（REVIEW_0_8_3_REPAIR_ROUND_3）追加结案
+
+| ID | 发现 | 修复 | 正反例 | 状态 |
+| --- | --- | --- | --- | --- |
+| L1 | 恢复者观察到 G1 死亡后暂停；B 合法推进到 G2 并入临界区；恢复者按新 max 建出 G3 并 prune 掉 B 活跃持有的 G2 | 世代协议整体退役，改为 **slot+pending+evict-intent 协议**（协议文档 Revision 2 先行提交）：slot.json=唯一持有者（硬链接，在场期间内容不变——S1 不变量）；准入=link() EEXIST；恢复必须先建 `evict-intent`（O_EXCL），**然后重读 slot，仅当当前 nonce 仍等于观察的死 nonce 才 unlink**——观察过期即 abort，任何延迟恢复者都无法驱逐活持有者；intent 创建者死亡由下一 actor 采用（ESRCH 证明），保证进展 | `tests/v083-writer-lock-concurrency.test.ts` L1 standing regression：B 经真实恢复入临界区后，携带过期观察的 finalize 必须 abort、B 完成且链完整；4 进程 barrier 竞争、临界区内击杀、symlink 拒绝保留 | 已关闭（论证见协议文档 Revision 2） |
+| L2 | 零字节观察（创建者停在写 owner 前）即便绑定同世代也能越过已入临界区的 writer；“oldN+1”不可救 | pending 文件**不携带权威**：slot 只经由完整 owner 记录的 link() 原子出现，不存在可误判的“空锁”；暂停于 pending 相位的候选在他人持锁时 link 必 EEXIST→refuse，永不被驱逐 | L2 standing regression：真实子进程 prepare 后暂停→父持 slot→恢复后 link EEXIST→refused=true、holder=父、链完整 | 已关闭 |
+| L3 | 旧版根级 `.writer.lock` 被忽略：新旧进程可共享写区 | 根级 legacy 锁存在即**拒绝**：空/不可解析/异机→unknown_owner，同机活 pid→held；字节原样保留（迁移由操作者按文档手动移除，文件不含账本数据） | `tests/v083-private-ledger-lock.test.ts` L3 用例：匿名锁与活 v2 锁均拒绝且字节未动 | 已关闭 |
+| F2 | 冻结容器可含 accessor：getter 返回值随闭包变化，isFrozen+keys 不检查描述符 | 资格证明要求每个属性为**数据描述符**（get/set 存在即不可证明→全量重建）；描述符 value 仅用于递归，不把单次读取当永久证明；官方深冻正控保留 | sync 矩阵 3b：全链冻结+enumerable getter，closure 改变后普通 sync 必须重建并可见新任务 | 已关闭 |
+| V3 | 上轮声称的生命周期重写未落在 HEAD（工作区丢失，HEAD 仍为 no-op disposer 版本） | 本轮确认丢失并重写：真实计数 disposer、100 循环归零、dispose 后重挂载重新 derive（runtime map 释放）、破坏一个 disposer 必须被测出的敏感性对照；本轮 git diff 明确包含该文件 | `tests/v083-lifecycle-recycle.test.ts`（HEAD diff 含 96 insertions 重写）1/1 | 已关闭 |
+| H1 | 裁定 v1 的 candidate.commit/source.subject 仍是 ecde3264，testcase 名单不改变执行主体 | 库内新增 `dsh-0.8.3-library-execution.v2.json`：以**最终候选提交**为新执行主体重跑 39 owning 文件（716 unique testcases、0 失败），输入按“45 case_input_sha256 未变”的复用规则声明；v1 身份原样保留不冒充重跑；unique(716) 与 mapped-sum(718) 分列 | execution v2 文件 + incident validate exit 0 | 已关闭 |
+
 ## 3. 合同保持
 
 fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durability、release reservation/settlement、上游 pin 均未变。`DSH_GUARD_DISABLE_INDEXES=1` 仍关闭索引层；memo 缓存均为纯函数解析缓存（文本→解析结果），不是跨 entry 信任缓存。
@@ -63,7 +76,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 | 工具密集 | warm_sync | 393.0 ms | 0.2 ms | derive 1→0 | [1]→[0] |
 | 字节梯度/账本三档 | longout 与 private_ledger_* | — | — | 噪声内（双方 <5ms，账本 0.96–1.08×） | [0] |
 
-峰值 RSS（进程树采样 median）：3000:roots tree-sum 608→590 MB、max-single 355→357 MB；3000 工具密集 tree-sum 553→530 MB、max-single 300→299 MB。10k roots 档本轮未复测；上一轮（candidate-final.json，5.89× 挂载）作为开发参考保留并已注明测量时代码状态由 source_sha256 区分。
+峰值 RSS（进程树采样 median）：3000:roots tree-sum 608→590 MB、max-single 355→357 MB；3000 工具密集 tree-sum 553→530 MB、max-single 300→299 MB。10k roots 档与第三轮未复测（本轮为锁协议重设计+观测修复，无投影路径改动；第三轮 review 亦未要求重复昂贵 A/B）；上一轮数字作为开发参考保留，代码状态由 source_sha256 区分。
 
 预算对照：无变化纯投影 ≤5ms ✓；attach 一次 fold 一次 host validation ✓；普通 shell 0 audit ✓（计数回归）；重历史首轮投影根密集 3k 档 ≥4× ✓（4.18×）；纯 fold 自身 1.8–2.2×（无独立预算，仅记录）。**未测/pending**：cold-30/warm-100 发布级采样、端到端 UI、事件循环阻塞分级、保护入口逐类计时、配对 absent/off 对照——原生/UI/发布测量，pending（Codex）。
 
@@ -77,7 +90,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 | --- | --- |
 | typecheck（tsc --noEmit） | 0 errors |
 | lint（oxlint src tests） | 0 errors / 91 warnings（与基线同水平） |
-| tests（vitest run） | 187 files passed / 1 skipped；**2933 passed / 11 skipped**（含两轮新增回归） |
+| tests（vitest run） | 187 files passed / 1 skipped；**2933 passed / 11 skipped**（含三轮新增回归） |
 | release-pack node tests | 4/4 |
 | stats node tests | 10/10 |
 | build + dist parity | 重建后 `git diff --exit-code -- dist` 通过 |
