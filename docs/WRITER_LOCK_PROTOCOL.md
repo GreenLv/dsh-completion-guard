@@ -105,3 +105,55 @@ Version-2 and earlier writers kept a root-level `.writer.lock`. The v3 protocol 
 ## Test obligations (round 3)
 
 Deterministic, real-process interleavings must cover: (a) a recoverer whose dead observation is stale by the time it acts — it must abort and the live writer must finish; (b) a candidate paused in the pending phase must never enter while another writer holds, and must not be evicted; (c) kill inside the critical section, then recovery; (d) barrier-released multi-process contention with a unique contiguous chain; (e) legacy root locks refuse (empty, live v2, foreign) with bytes untouched; (f) a getter-bearing (accessor) snapshot is NOT eligible for the projection fast path (see F2).
+
+
+---
+
+# Revision 3 (round 4): arbitration log with optimistic concurrency control
+
+Revision 2's evict-intent was defeated by the same root cause as generations and rename: a recovery action applied to a REUSED PATHNAME on the basis of an EARLIER observation. Deterministic round-4 counterexamples: (S1) A observes an intent creator dead, pauses; the real creator B adopts, finalizes, links a new slot and enters its critical section; A's delayed intent-removal deletes B's live intent and A's slot-unlink then deletes B's live slot — the read of slot.json and the unlink are two operations on a pathname that other actors mutate in between. (S2) the intent file itself is created empty (O_EXCL) before its record is written; a crash in that window wedges automatic recovery forever. No protocol built from "observe pathname state, then act on the pathname" can close these: the pause can always sit between observation and action, and no amount of re-reading helps.
+
+## Linearization through an append-only arbitration log
+
+The round-4 protocol removes pathname mutation from the mutual-exclusion path entirely. All authority decisions are RECORDS appended to one file, `arbitration.log`, with these atomicity assumptions (the same class of assumptions the protocol already makes for O_EXCL and fsync):
+
+- A1: a single `write()` of a complete record to a file opened O_APPEND is placed atomically at the end of the file on the local filesystems in scope (ext4/APFS/NTFS), so concurrent appends interleave whole records.
+- A2: a read of the whole file after one's own append returns a total order of records that includes every earlier append and one's own.
+
+Every record is one JSON line `{v:3, op, nonce, pid, hostname, created_at, prev?}`:
+
+- `claim {prev}` — prev is the nonce of the holder the claimant OBSERVED (or null for an empty slot). Effective in the replay ONLY if the replay's current holder equals `prev`; otherwise the record is stored but has no effect. This is an optimistic CAS: the observation travels inside the action, and the total order of the log adjudicates it.
+- `release {prev}` — effective only if the current holder equals `prev` (the releaser's own nonce).
+- `evict {prev}` — effective only if the current holder equals `prev`. The actor appends it only after an ESRCH liveness probe of the recorded holder returned "does not exist". ESRCH is a fact about the pid at probe time; a later pid reuse concerns a DIFFERENT process and cannot resurrect the dead holder, so the eviction remains correct.
+
+Replay rule (deterministic, total order by file offset): `holder := null`; for each record in order — claim: if `holder?.nonce === prev` (or `prev === null && holder === null`) then `holder := {nonce, pid, hostname, created_at}` else no effect; release: if `holder?.nonce === prev` then `holder := null`; evict: if `holder?.nonce === prev` then `holder := null`.
+
+## Protocol
+
+Admission (writer W):
+1. Legacy gate (L3): if a root-level `.writer.lock` exists in v2 form with a live same-host pid — or in any unparseable/foreign/anonymous form — REFUSE. A structured v2 record whose pid answers ESRCH is removed by name (the v2 writer is gone; v2 had no self-recovery, so removing a provably dead v2 lock is the migration step) and acquisition continues.
+2. Create the v2-COMPATIBLE lock `​.writer.lock` O_EXCL and write a version-2-shaped owner record with the claimant's pid. This is the bidirectional upgrade barrier: a live v2 writer refuses because the file exists; a v3 writer refuses while a live/unknown v2 record exists. The file is held for the whole critical section and removed at release (or left behind on crash, where step 1's ESRCH rule recovers it).
+3. Append `claim {prev: observedHolder}` where observedHolder is read BEFORE the append; read the log back (A2) and replay. If the replay's current holder is W's own nonce → W is inside the critical section. If not (the optimistic CAS lost — someone else claimed, recovered or evicted first) → remove W's own `.writer.lock` (nonce-conditional) and REFUSE (or retry from 1; callers treat refusal as contention).
+
+Release: append `release {prev: own nonce}`, read back, verify the holder is gone; remove the v2 `.writer.lock` (nonce-conditional).
+
+Recovery: admission's replay shows a current holder whose pid answers ESRCH → append `evict {prev: that nonce}` → read back → retry the claim with the new observed holder. The eviction is a LOG RECORD, not a pathname deletion: L1's delayed recoverer appends `evict {prev: D}` after B already holds — the replay evaluates it against the CURRENT holder B, does not match, and the record has no effect. B is never touched. L2's paused candidate has no log record at all before its link-equivalent (its claim simply lands whenever it lands and is adjudicated by the same rule); there is no empty-file window because an append is a single complete record (S2).
+
+## Why the counterexamples are structurally impossible
+
+- No pathname in the mutual-exclusion path is ever removed or replaced on the basis of an earlier observation. The only pathname action is the v2-compat `.writer.lock`, whose lifecycle (create O_EXCL / remove own by nonce / remove a provably dead v2 record) is itself bidirectionally verified (S3).
+- Every authority decision is the replay of a TOTAL ORDER of append records; an actor's observation is carried inside its record (`prev`) and adjudicated at that record's position in the order. A pause between observation and action moves the record's position and therefore its verdict — the loser exits instead of evicting.
+- A crash at ANY point leaves at most a suffix of complete records (A1) or a torn last line, which the replay ignores (a line that does not parse terminates the replay). The next actor's evict recovers a dead holder's claim (BUG-01); an empty-file wedge cannot exist (S2).
+
+## Bounded growth
+
+On release, a holder whose log exceeds a record cap writes a compaction file containing only its own baseline claim and renames it over the log. The rename window can drop a concurrent claim — the dropped writer's read-back then shows it is not the holder and it exits: fail-closed, never two holders.
+
+## v2/v3 bidirectional matrix (S3)
+
+| order | outcome |
+| --- | --- |
+| v3 holds → v2 appends | v2's O_EXCL on `.writer.lock` fails (v3 created and holds it) → v2 refuses |
+| v2 holds → v3 appends | v3 reads a structured v2 record with a live pid → refuses |
+| v2 crashes → v3 appends | v2 record pid answers ESRCH → v3 removes it by name and proceeds (the migration step) |
+| v3 crashes → v2 appends | v2 refuses on the leftover file (as v2 always did; the operator/v3 cleans it) — upgrade direction only |
