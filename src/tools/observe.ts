@@ -7,7 +7,7 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { snapshotSessionEvents } from '../domain/session-events.js'
 import { canonicalArgvFromCommand } from '../domain/shell-parse.js'
-import { extractTextContent, persistedToolResultStatus } from '../domain/evidence.js'
+import { extractTextContent, persistedToolResultStatus, shellReadbackOutcome, nativeGitParentOidVerified, NATIVE_GIT_ROOT_PARENT_OID } from '../domain/evidence.js'
 import type { GuardProjection } from '../domain/types.js'
 
 const execFileAsync = promisify(execFile)
@@ -154,10 +154,21 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
         || (call.name !== 'bash' && call.name !== 'pwsh')) return missing('native_effect_missing')
       const message = record(result.message); const source = record(message?.source)
       if (source?.kind !== 'tool' || source.callId !== args.effect_call_id) return missing('native_effect_missing')
-      const resultStatus = persistedToolResultStatus(result, args.effect_call_id)
-      if (resultStatus !== 'clean') return missing(resultStatus === 'failure' ? 'native_effect_failed' : 'native_effect_untrusted')
       let effectArgs: RecordValue | undefined
       try { effectArgs = record(JSON.parse(String(call.arguments))) } catch { return missing('native_effect_arguments_invalid') }
+      const resultStatus = persistedToolResultStatus(result, args.effect_call_id)
+      if (resultStatus !== 'clean') return missing(resultStatus === 'failure' ? 'native_effect_failed' : 'native_effect_untrusted')
+      // CG-083-BUG03: the observer claims `observed` only when the shell
+      // result itself classifies as a completed foreground success. A failed
+      // hook that echoes the OLD head with an exit marker, a backgrounded,
+      // truncated or unclassifiable result is never a completed Git effect.
+      const readbackOutcome = shellReadbackOutcome(call.name, effectArgs ?? {}, {
+        meta: result.meta,
+        textContent: Array.isArray(message?.content) ? extractTextContent(message.content) : '',
+      })
+      if (readbackOutcome !== 'success') {
+        return missing(readbackOutcome === 'failure' ? 'native_effect_failed' : 'native_effect_untrusted')
+      }
       const command = effectArgs?.command; const repository = effectArgs?.workdir
       if (typeof command !== 'string' || typeof repository !== 'string' || !repository) return missing('native_git_target_missing')
       const parsed = canonicalArgvFromCommand(command, call.name)
@@ -167,7 +178,13 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
       if (action !== 'commit' && action !== 'push') return missing('native_git_command_unsupported')
       const gitAction: 'commit' | 'push' = action
       const output = Array.isArray(message?.content) ? extractTextContent(message.content) : ''
-      const git = async (...query: string[]) => (await execFileAsync('git', ['-C', repository, ...query], { encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024 })).stdout.trim()
+      // CG-083-BUG03: every subprocess receives the caller's cancellation and
+      // one bounded overall deadline, so several serial 5s query timeouts can
+      // no longer accumulate into an unbounded observer call.
+      const combinedSignal = typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([exec.signal, AbortSignal.timeout(20_000)])
+        : (exec.signal ?? AbortSignal.timeout(20_000))
+      const git = async (...query: string[]) => (await execFileAsync('git', ['-C', repository, ...query], { encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024, signal: combinedSignal })).stdout.trim()
       try {
         const top = await git('rev-parse', '--show-toplevel')
         if (!top || await realpath(top) !== await realpath(repository)) return missing('native_git_repository_mismatch')
@@ -181,7 +198,16 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
         if (!/^[0-9a-f]{40,64}$/.test(postOid)) return missing('native_git_readback_unavailable')
         if (action === 'commit') {
           if (argv.length !== 4 || argv[2] !== '-m' || !argv[3] || !new RegExp(`\\b${postOid.slice(0, 7)}[0-9a-f]*\\b`).test(output)) return missing('native_git_effect_output_unbound')
-          const parentOid = await git('rev-parse', 'HEAD^')
+          // CG-083-BUG02: read the parent identity from the commit OBJECT
+          // itself. A repository's first commit has no parent — that is an
+          // explicit VERIFIED `root` state, never a missing readback. An
+          // existing commit's missing parent cannot be manufactured by git,
+          // so the token list is authoritative either way.
+          const parentsLine = await git('rev-list', '--parents', '-n', '1', 'HEAD')
+          const parentTokens = parentsLine.split(/\s+/).filter(Boolean)
+          if (parentTokens[0] !== postOid || parentTokens.length < 1) return missing('native_git_readback_unavailable')
+          const parentOid = parentTokens.length === 1 ? NATIVE_GIT_ROOT_PARENT_OID : parentTokens[1]!
+          if (parentOid !== NATIVE_GIT_ROOT_PARENT_OID && !nativeGitParentOidVerified(parentOid)) return missing('native_git_readback_unavailable')
           const treeOid = await git('rev-parse', 'HEAD^{tree}')
           return { status: 'observed' as const, reason_code: 'git_commit_observed', effect_call_id: args.effect_call_id,
             action: gitAction, repository: observedRepository, branch, remote: '', refspec: '', post_oid: postOid, parent_oid: parentOid, tree_oid: treeOid }

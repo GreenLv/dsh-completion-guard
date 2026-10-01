@@ -229,6 +229,82 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
   // revision for a fact that belongs to an earlier root.
   const revisionByRootSeq = new Map(usedRoots.map((root, index) => [root.seq, index + 1]))
   const revisionFor = (seq: number): number => revisionByRootSeq.get(seq)!
+
+  // CG-083-PERF02: shared per-snapshot indexes. The historical adapter
+  // re-scanned the whole evidence map inside every per-requirement loop,
+  // which made long histories O(requirements x evidence^2). The indexes are
+  // groupings of the SAME evidence map, and every consumer keeps its exact
+  // original predicate; candidate order is restored to the evidence map's
+  // insertion order. Set DSH_GUARD_DISABLE_INDEXES=1 to force the original
+  // inline scans (the differential harness compares both paths).
+  type EvidenceRow = GuardProjection['evidence'] extends Map<string, infer T> ? T : never
+  const ix = process.env.DSH_GUARD_DISABLE_INDEXES !== '1'
+  const evidenceList = ix ? [...projection.evidence.values()] : []
+  const evidenceOrdinal = new Map<EvidenceRow, number>()
+  const evidenceByCallIx = new Map<string, EvidenceRow[]>()
+  const evidenceBySubjectIx = new Map<string, EvidenceRow[]>()
+  const readinessByItemIx = new Map<string, EvidenceRow[]>()
+  if (ix) {
+    evidenceList.forEach((fact, ordinal) => {
+      evidenceOrdinal.set(fact, ordinal)
+      const push = (map: Map<string, EvidenceRow[]>, key: string | undefined): void => {
+        if (key === undefined) return
+        const bucket = map.get(key)
+        if (bucket) bucket.push(fact)
+        else map.set(key, [fact])
+      }
+      push(evidenceByCallIx, fact.callId)
+      for (const subject of fact.subjects) push(evidenceBySubjectIx, subject)
+      push(readinessByItemIx, fact.readinessForItemId)
+    })
+  }
+  const candidatesForSubjects = (targets: ReadonlyArray<string | undefined>): EvidenceRow[] => {
+    if (!ix) return evidenceList.length ? evidenceList : [...projection.evidence.values()]
+    const selected = new Set<EvidenceRow>()
+    for (const target of targets) {
+      if (target === undefined) continue
+      for (const fact of evidenceBySubjectIx.get(target) ?? []) selected.add(fact)
+    }
+    const ordered = [...selected]
+    ordered.sort((left, right) => evidenceOrdinal.get(left)! - evidenceOrdinal.get(right)!)
+    return ordered
+  }
+  const evidenceByCall = (callId: string): EvidenceRow[] => ix
+    ? evidenceByCallIx.get(callId) ?? []
+    : [...projection.evidence.values()].filter((fact) => fact.callId === callId)
+  const evidenceReadyFor = (itemId: string): EvidenceRow[] => ix
+    ? readinessByItemIx.get(itemId) ?? []
+    : [...projection.evidence.values()].filter((fact) => fact.readinessForItemId === itemId)
+  const successModifyEffects = ix
+    ? evidenceList.filter((fact) => fact.semanticAction === 'modify' && fact.evidenceRole === 'effect' && fact.outcome === 'success')
+    : undefined
+  const successFileStateEvidence = ix
+    ? evidenceList.filter((fact) => fact.evidenceRole === 'state' && fact.toolName === 'context_guard_observe_file' && fact.outcome === 'success')
+    : undefined
+  const testEffectEvidence = ix
+    ? evidenceList.filter((entry) => entry.semanticAction === 'test' && entry.evidenceRole === 'effect'
+      && entry.parseStatus === 'supported' && entry.processFacts?.operationAttribution === 'single_operation')
+    : undefined
+  // Per-root immutable text/digest/bytes, computed once per root.
+  const rootCache = new Map<number, { text: string; digest: string; bytes: Buffer; byteLength: number }>()
+  const rootInfo = (root: DerivedEnvelope): { text: string; digest: string; bytes: Buffer; byteLength: number } => {
+    let info = rootCache.get(root.seq)
+    if (!info) {
+      const text = rootText(root)
+      info = { text, digest: hash(text), bytes: Buffer.from(text, 'utf8'), byteLength: Buffer.byteLength(text, 'utf8') }
+      rootCache.set(root.seq, info)
+    }
+    return info
+  }
+  const itemsByRootSeq = new Map<number, GuardItem[]>()
+  for (const item of currentItems) {
+    const seq = sourceSeq(item)
+    if (seq === undefined) continue
+    const bucket = itemsByRootSeq.get(seq)
+    if (bucket) bucket.push(item)
+    else itemsByRootSeq.set(seq, [item])
+  }
+  const peersOf = (item: GuardItem): GuardItem[] => itemsByRootSeq.get(sourceSeq(item) ?? -1) ?? []
   const supersessionOf = (item: GuardItem): { seq: number; sourceId: string; requirementId: string } | undefined => {
     if (item.status !== 'superseded' || !item.supersededBy) return undefined
     const successor = projection.items.get(item.supersededBy)
@@ -236,12 +312,12 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const successorRoot = seq === undefined ? undefined : rootBySeq.get(seq)
     const successorSpan = successor?.spans?.[0]
     const successorClause = successorRoot && successorSpan?.partIndex === 0
-      ? Buffer.from(rootText(successorRoot), 'utf8').subarray(successorSpan.start, successorSpan.end).toString('utf8') : undefined
+      ? rootInfo(successorRoot).bytes.subarray(successorSpan.start, successorSpan.end).toString('utf8') : undefined
     const predecessorSeq = sourceSeq(item)
     const predecessorRoot = predecessorSeq === undefined ? undefined : rootBySeq.get(predecessorSeq)
     const predecessorSpan = item.spans?.[0]
     const predecessorClause = predecessorRoot && predecessorSpan?.partIndex === 0
-      ? Buffer.from(rootText(predecessorRoot), 'utf8').subarray(predecessorSpan.start, predecessorSpan.end).toString('utf8') : undefined
+      ? rootInfo(predecessorRoot).bytes.subarray(predecessorSpan.start, predecessorSpan.end).toString('utf8') : undefined
     // The current v6 duplicate capture only replaces the same root duty.
     // A stored status/link and a later root with the same object are not a
     // substitute for source bytes that restate that duty.
@@ -258,25 +334,37 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
   }
   if (!currentItems.every((item) => {
     const root = rootBySeq.get(sourceSeq(item) ?? -1)
-    return root && item.rawTextSha256 === hash(rootText(root))
+    return root && item.rawTextSha256 === rootInfo(root).digest
   })) return undefined
   const sources: Array<Record<string, unknown>> = usedRoots.map((root) => {
-    const text = rootText(root)
-    return { id: `root:${root.seq}`, seq: root.seq, kind: 'root', unit, revision: revisionFor(root.seq), sha256: hash(text),
-      byte_length: Buffer.byteLength(text, 'utf8'), text, call_id: null, turn: String(row(root.data).turn ?? turn),
+    const info = rootInfo(root)
+    return { id: `root:${root.seq}`, seq: root.seq, kind: 'root', unit, revision: revisionFor(root.seq), sha256: info.digest,
+      byte_length: info.byteLength, text: info.text, call_id: null, turn: String(row(root.data).turn ?? turn),
       ...(projection.rootLocatorContexts.get(root.seq) ? { locator_base: projection.rootLocatorContexts.get(root.seq)!.base,
         locator_flavor: projection.rootLocatorContexts.get(root.seq)!.flavor } : {}) }
   })
+  const sourceIds = new Set<string>(sources.map((source) => String(source.id)))
+  const sourceById = new Map(sources.map((source) => [String(source.id), source]))
+  const addSource = (row: Record<string, unknown>): void => {
+    const id = String(row.id)
+    if (!sourceIds.has(id)) {
+      sourceIds.add(id)
+      sourceById.set(id, row)
+      sources.push(row)
+    }
+  }
   const requirements: Array<Record<string, unknown>> = []
   const facts: Array<Record<string, unknown>> = []
   const actions: Array<Record<string, unknown>> = []
   const conditions: Array<Record<string, unknown>> = []
   const coverage: Array<Record<string, unknown>> = []
   for (const root of usedRoots) {
-    const text = rootText(root), digest = hash(text), byteLength = Buffer.byteLength(text, 'utf8')
+    const info = rootInfo(root)
+    const text = info.text, digest = info.digest, byteLength = info.byteLength
     const span = (start: number, end: number) => ({ source_id: `root:${root.seq}`, start, end, sha256: digest })
-    const sortedSpans = currentItems.filter((item) => sourceSeq(item) === root.seq)
-      .flatMap((item) => { const own = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq)); return own ? [own] : [] }).sort((a,b) => a.start-b.start || a.end-b.end)
+    const rootItems = itemsByRootSeq.get(root.seq) ?? []
+    const sortedSpans = rootItems
+      .flatMap((item) => { const own = sourceSpan(item, text, rootItems); return own ? [own] : [] }).sort((a,b) => a.start-b.start || a.end-b.end)
     let cursor = 0
     for (const s of sortedSpans) {
       if (s.start > cursor) coverage.push({ source: span(cursor, s.start), kind: 'unknown' })
@@ -322,16 +410,17 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const root = rootBySeq.get(sourceSeq(item) ?? -1)
     if (!root) continue
     const itemRevision = revisionFor(root.seq)
-    const text = rootText(root), digest = hash(text)
+    const info = rootInfo(root)
+    const text = info.text, digest = info.digest
     const span = (start: number, end: number) => ({ source_id: `root:${root.seq}`, start, end, sha256: digest })
-    const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq))
+    const itemSpan = sourceSpan(item, text, peersOf(item))
     if (!itemSpan) continue
-    if (item.observerMethod && item.rawTextSha256 === hash(text) && item.authority === 'root_instruction') {
+    if (item.observerMethod && item.rawTextSha256 === digest && item.authority === 'root_instruction') {
       // Each requested observer has its own sourced predicate. One readiness
       // result cannot silently stand in for the file readback method (or vice
       // versa), and a later tool call never fills an earlier Stop watermark.
-      const methodSource = { source_id: `root:${root.seq}`, start: itemSpan.start, end: itemSpan.end, sha256: hash(text) }
-      const methodConstraint = Buffer.from(text, 'utf8').subarray(itemSpan.start, itemSpan.end).toString('utf8')
+      const methodSource = { source_id: `root:${root.seq}`, start: itemSpan.start, end: itemSpan.end, sha256: digest }
+      const methodConstraint = info.bytes.subarray(itemSpan.start, itemSpan.end).toString('utf8')
       for (const [index, tool] of item.observerMethod.tools.entries()) {
         const related = projection.items.get(item.observerMethod.targetItemIds[index]!)
         if (!related || related.rawTextSha256 !== item.rawTextSha256 || related.unitId !== item.unitId
@@ -344,7 +433,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         const subjectKind = tool === 'context_guard_observe_file' ? 'filesystem' : 'opaque'
         const relatedSpan = related.spans?.[0]
         const targetBytes = Buffer.from(target, 'utf8')
-        const targetAt = relatedSpan ? Buffer.from(text, 'utf8').subarray(relatedSpan.start, relatedSpan.end).indexOf(targetBytes) : -1
+        const targetAt = relatedSpan ? info.bytes.subarray(relatedSpan.start, relatedSpan.end).indexOf(targetBytes) : -1
         // A literal target in the earlier root duty is already an exact root
         // constraint. A method has no power to choose another target; without
         // a literal, the actual Host selection must supply the work-unit choice.
@@ -362,17 +451,17 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
           sourceStart: itemSpan.start, sourceEnd: itemSpan.end })
         if (!fact || !pair) continue
         const callId = `call:${fact.callId}`, resultId = `result:${fact.callId}`
-        if (!sources.some((source) => source.id === callId)) {
+        if (!sourceIds.has(callId)) {
           const callBytes = String(row(pair.call.data).arguments ?? '')
           const resultBytes = Array.isArray(row(row(pair.result.data).message).content)
             ? (row(row(pair.result.data).message).content as unknown[]).filter((part) => row(part).type === 'text')
               .map((part) => String(row(part).text ?? '')).join('\n') : ''
           const callTurn = String(row(pair.call.data).turn ?? turn)
-          sources.push({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: itemRevision,
+          addSource({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: itemRevision,
             sha256: hash(callBytes), byte_length: Buffer.byteLength(callBytes, 'utf8'), text: null,
             call_id: fact.callId, turn: callTurn, target, target_kind: subjectKind,
             origin_root_source_id: `root:${root.seq}` })
-          sources.push({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: itemRevision,
+          addSource({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: itemRevision,
             sha256: hash(resultBytes), byte_length: Buffer.byteLength(resultBytes, 'utf8'), text: null,
             call_id: fact.callId, turn: String(row(pair.result.data).turn ?? callTurn) })
         }
@@ -396,7 +485,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       }))) continue
     const kind = kindOf(item)
     const named = targetOf(item)
-    const raw = Buffer.from(text, 'utf8')
+    const raw = info.bytes
     const namedBytes = named ? Buffer.from(named, 'utf8') : undefined
     const atWithin = namedBytes ? raw.subarray(itemSpan.start, itemSpan.end).indexOf(namedBytes) : -1
     const at = atWithin >= 0 ? itemSpan.start + atWithin : -1
@@ -414,7 +503,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     // root path span; competing mentions never become an invented identity.
     const referents = kind === 'constraint' ? currentItems.flatMap((candidate) => {
       if (candidate.taskKind !== 'context' || sourceSeq(candidate) !== root.seq) return []
-      const own = sourceSpan(candidate, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq))
+      const own = sourceSpan(candidate, text, peersOf(candidate))
       const path = candidate.requestedTarget?.artifact_id
       const base = projection.rootLocatorContexts.get(root.seq)?.base
       if (!own || own.end > itemSpan.start || typeof path !== 'string' || !base || !portableContains(base, path)) return []
@@ -441,17 +530,16 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       : typeof item.requestedTarget?.artifact_id === 'string' ? item.requestedTarget.artifact_id : undefined
     const editScope = directoryLiteral && scopeValue ? portableResolve(scopeValue, directoryLiteral) : scopeValue
     const editChoices = item.semanticAction === 'modify' && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === 'string'
-      ? [...projection.evidence.values()].filter((fact) => fact.semanticAction === 'modify' && fact.evidenceRole === 'effect'
+      ? (successModifyEffects ?? [...projection.evidence.values()]).filter((fact) => fact.semanticAction === 'modify' && fact.evidenceRole === 'effect'
         && fact.outcome === 'success' && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq
         && fact.subjects.length === 1 && typeof fact.subjects[0] === 'string'
         && portableContains(editScope, fact.subjects[0])) : []
     const selectedEdit = editChoices.length === 1 ? editChoices[0] : undefined
-    const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) =>
+    const readbackChoices = fileReadback ? (successFileStateEvidence ?? [...projection.evidence.values()]).filter((fact) =>
       fact.evidenceRole === 'state' && fact.toolName === 'context_guard_observe_file' && fact.outcome === 'success'
       && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq
       && (!anaphoricReadback || (typeof readbackReferent === 'string' && fact.subjects[0] === readbackReferent))
-      && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId
-        && effect.semanticAction === 'modify' && effect.evidenceRole === 'effect' && effect.outcome === 'success'
+      && evidenceByCall(fact.causedByCallId ?? '').some((effect) => effect.semanticAction === 'modify' && effect.evidenceRole === 'effect' && effect.outcome === 'success'
         && effect.subjects.includes(fact.subjects[0]!) && effect.toolResultSeq < fact.toolResultSeq)) : []
     const selectedReadback = readbackChoices.length === 1 ? readbackChoices[0] : undefined
     const subjectKind = forbiddenFile || fileReadback || ['modify','create','commit','push'].includes(item.semanticAction ?? '') ? 'filesystem' : 'opaque'
@@ -463,12 +551,12 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       : ownConstraintSpan
     const needsReadiness = item.semanticAction === 'test' || (item.semanticAction === 'verify' && !fileReadback)
     const readinessPredicate = item.semanticAction === 'test' ? 'test_passed' : 'verification_passed'
-    const selectedReadiness = needsReadiness && !guarded ? [...projection.evidence.values()].find((fact) => {
+    const selectedReadiness = needsReadiness && !guarded ? evidenceReadyFor(item.id).find((fact) => {
       const pair = sourceByCall.get(fact.callId)
       const assessmentEffect = item.semanticAction !== 'verify'
         || (!fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256)
-        || [...projection.evidence.values()].some((effect) =>
-        effect.callId === fact.readinessEffectCallId && effect.toolResultSeq < fact.toolResultSeq
+        || evidenceByCall(fact.readinessEffectCallId ?? '').some((effect) =>
+        effect.toolResultSeq < fact.toolResultSeq
         && effect.epoch === fact.epoch && effect.outcome === 'success' && effect.parseStatus === 'supported'
         && effect.semanticAction === 'modify' && effect.evidenceRole === 'effect'
         && effect.operations?.some((operation) => operation.op === 'modify' && operation.path === fact.readinessSelectedPath))
@@ -509,12 +597,12 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const selectedScope = (selectedReadiness || selectedDirectTest) && typeof item.requestedTarget?.scope === 'string' ? item.requestedTarget.scope : undefined
     const target = forbiddenFile?.path ?? selectedScope ?? selectedEdit?.subjects[0] ?? selectedReadback?.subjects[0] ?? (relativeLiteral && named ? named : at >= 0 && named ? named : trimmed)
     if (!target) continue
-    const knownForbiddenEffect = forbiddenFile && [...projection.evidence.values()].some((fact) =>
+    const knownForbiddenEffect = forbiddenFile && candidatesForSubjects([target]).some((fact) =>
       fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq
       && fact.evidenceRole === 'effect' && fact.outcome === 'success' && fact.subjects.includes(target)
       && ['write','write_file','edit','edit_file'].includes(fact.toolName)
       && fact.operations?.some((operation) => ['create','modify'].includes(operation.op) && operation.path === target))
-    const uncertainForbiddenEffect = forbiddenFile && !knownForbiddenEffect && [...projection.evidence.values()].some((fact) =>
+    const uncertainForbiddenEffect = forbiddenFile && !knownForbiddenEffect && candidatesForSubjects([target]).some((fact) =>
       fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq
       && fact.evidenceRole === 'effect' && fact.subjects.includes(target)
       && (['write','write_file','edit','edit_file'].includes(fact.toolName)
@@ -584,7 +672,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
           resolved_constraint: portableResolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral!),
         } : {}),
         selection_source_id: kind === 'constraint' ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedDirectTest ? `call:${selectedDirectTest.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}`
-          : relativeLiteral ? (() => { const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === 'modify'
+          : relativeLiteral ? (() => { const fact = (successModifyEffects ?? [...projection.evidence.values()]).find((entry) => entry.semanticAction === 'modify'
             && entry.evidenceRole === 'effect' && entry.outcome === 'success' && entry.subjects.includes(target) && sourceByCall.has(entry.callId))
             return fact ? `call:${fact.callId}` : null })() : null } })
     if (kind === 'information' && item.answeredBy) {
@@ -599,10 +687,10 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         // to that test's latest attributed Host terminal result. An optional
         // suggestion to repair after failure cannot extend the root scope.
         const isTestReport = /\b(?:report|summari[sz]e)\b[^。.!?？]{0,80}\b(?:result|outcome)\b|(?:报告|汇报|说明)[^。.!?？]{0,80}(?:结果|运行情况)/iu.test(item.normalizedText)
-        const rootTests = currentItems.filter((candidate) => sourceSeq(candidate) === root.seq && candidate.semanticAction === 'test')
+        const rootTests = (itemsByRootSeq.get(root.seq) ?? []).filter((candidate) => candidate.semanticAction === 'test')
         const reportTest = isTestReport && rootTests.length === 1 ? rootTests[0] : undefined
         const expectedCommand = reportTest ? /\b(npm|pnpm)\s+test\b/iu.exec(reportTest.normalizedText)?.[0]?.toLowerCase() : undefined
-        const run = expectedCommand ? [...projection.evidence.values()].filter((entry) => {
+        const run = expectedCommand ? (testEffectEvidence ?? [...projection.evidence.values()]).filter((entry) => {
           const pair = sourceByCall.get(entry.callId)
           if (!pair || pair.call.seq <= root.seq || pair.result.seq >= delivery.seq
             || entry.semanticAction !== 'test' || entry.evidenceRole !== 'effect' || entry.parseStatus !== 'supported'
@@ -642,7 +730,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
             ? /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败))/iu.test(assertedText)
             : false
         if (reportTest && (conflictingStatus || !numericReport && !statusReport)) continue
-        if (!sources.some((source) => source.id === deliveryId)) sources.push({ id: deliveryId, seq: delivery.seq, kind: 'final_delivery', unit, revision: itemRevision,
+        if (!sourceIds.has(deliveryId)) addSource({ id: deliveryId, seq: delivery.seq, kind: 'final_delivery', unit, revision: itemRevision,
           sha256: hash(deliveredText), byte_length: Buffer.byteLength(deliveredText, 'utf8'), text: null, call_id: null, turn })
         // One final message may satisfy several separate information items.
         // Reuse its source, but bind each fact identity to its requirement.
@@ -651,7 +739,10 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
           requirement_id: item.id, condition_id: null, invalidates: [] })
       }
     }
-    for (const evidence of guarded ? [] : projection.evidence.values()) {
+    const evidenceCandidates = guarded ? []
+      : candidatesForSubjects([target, needsReadiness && typeof item.requestedTarget?.scope === 'string'
+        ? item.requestedTarget.scope : undefined])
+    for (const evidence of evidenceCandidates) {
       const inTestScope = needsReadiness && typeof item.requestedTarget?.scope === 'string'
         && evidence.subjects.includes(item.requestedTarget.scope)
       if (evidence.epoch !== projection.epoch || (!evidence.subjects.includes(target) && !inTestScope)
@@ -680,7 +771,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       if (fileReadback && (evidence.evidenceRole !== 'state' || evidence.toolName !== 'context_guard_observe_file')) continue
       if (evidence.toolName === 'context_guard_observe_test_readiness' && evidence.readinessForItemId !== item.id) continue
       if (evidence.evidenceRole === 'state' && evidence.toolName !== 'context_guard_observe_test_readiness') {
-        const cause = [...projection.evidence.values()].find((fact) => fact.callId === evidence.causedByCallId
+        const cause = evidenceByCall(evidence.causedByCallId ?? '').find((fact) => fact.callId === evidence.causedByCallId
           && fact.epoch === evidence.epoch && fact.outcome === 'success' && fact.toolResultSeq < evidence.toolResultSeq
           && fact.subjects.includes(target) && fact.semanticAction === evidence.semanticAction)
         if (!cause || !['context_guard_observe_file', 'context_guard_observe_git'].includes(evidence.toolName)) continue
@@ -708,7 +799,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`
       // One persisted Host exchange has one source identity. Do not copy it
       // into another root revision just to satisfy a later requirement.
-      const existingCall = sources.find((source) => source.id === callId)
+      const existingCall = sourceById.get(callId)
       if (existingCall && existingCall.revision !== itemRevision) continue
       const callName = String(row(pair.call.data).name ?? '')
       let callArgs: Record<string, unknown> = {}
@@ -723,7 +814,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       // fill the call target from the requirement being evaluated.
       const hostTarget = fileCall ? fileCallTarget : evidence.subjects[0]
       if (!hostTarget || (fileCall && evidence.parseStatus !== 'supported')) continue
-      if (!sources.some((source) => source.id === callId)) {
+      if (!sourceIds.has(callId)) {
         const callTurn = String(row(pair.call.data).turn ?? turn)
         const resultTurn = String(row(pair.result.data).turn ?? callTurn)
         const originRoot = usedRoots.filter((candidate) => candidate.seq <= pair.call.seq
@@ -732,11 +823,11 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         const resultBytes = Array.isArray(row(row(pair.result.data).message).content)
           ? (row(row(pair.result.data).message).content as unknown[]).filter((part) => row(part).type === 'text')
             .map((part) => String(row(part).text ?? '')).join('\n') : ''
-        sources.push({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: itemRevision, sha256: hash(callBytes),
+        addSource({ id: callId, seq: pair.call.seq, kind: 'host_call', unit, revision: itemRevision, sha256: hash(callBytes),
           byte_length: Buffer.byteLength(callBytes, 'utf8'), text: null, call_id: evidence.callId, turn: callTurn,
           target: hostTarget, target_kind: subjectKind,
           ...(originRoot ? { origin_root_source_id: `root:${originRoot.seq}` } : {}) })
-        sources.push({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: itemRevision, sha256: hash(resultBytes),
+        addSource({ id: resultId, seq: pair.result.seq, kind: 'host_result', unit, revision: itemRevision, sha256: hash(resultBytes),
           byte_length: Buffer.byteLength(resultBytes, 'utf8'), text: null, call_id: evidence.callId, turn: resultTurn })
       }
       const factKind = evidence.toolName === 'context_guard_observe_test_readiness' ? 'readiness'
@@ -757,9 +848,17 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
   }
   const latestText = rootText(latestRoot), latestDigest = hash(latestText)
   const resume = isResume(latestText)
+  const unitIdsByRootSeq = new Map<number, string[]>()
+  for (const entry of projection.units.values()) {
+    for (const ref of entry.rootInputRefs) {
+      const bucket = unitIdsByRootSeq.get(ref.seq)
+      if (bucket) { if (!bucket.includes(entry.unitId)) bucket.push(entry.unitId) }
+      else unitIdsByRootSeq.set(ref.seq, [entry.unitId])
+    }
+  }
   const selectedUnitAtRoot = (seq: number): string | undefined => {
-    const selected = [...projection.units.values()].filter((entry) => entry.rootInputRefs.some((ref) => ref.seq === seq))
-    return selected.length === 1 ? selected[0]?.unitId : undefined
+    const selected = unitIdsByRootSeq.get(seq) ?? []
+    return selected.length === 1 ? selected[0] : undefined
   }
   const controls = rootControls(usedRoots, requirements, sources, facts, unit, selectedUnitAtRoot)
   const snapshot = { schema: 'core-observation/v2', unit, revision: revisionFor(latestRoot.seq), as_of: events.at(-1)?.seq ?? latestRoot.seq, turn,

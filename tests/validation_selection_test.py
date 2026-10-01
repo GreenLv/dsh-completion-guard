@@ -126,5 +126,41 @@ class ValidationSelectionTests(unittest.TestCase):
             self.classify("../outside")
 
 
+class GateVocabularyTests(unittest.TestCase):
+    """CG-083-VAL03: the map, the selector and the runner share ONE gate word
+    list. A rule may only emit gates the runner can execute; anything else
+    would turn a mapped plan into `empty or unknown gate set` at run time."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.mapping, _ = SELECTOR.load_map(ROOT / "validation-map.json")
+        runner_spec = importlib.util.spec_from_file_location("run_selected_validation", ROOT / "scripts" / "run_selected_validation.py")
+        assert runner_spec and runner_spec.loader
+        cls.runner = importlib.util.module_from_spec(runner_spec)
+        runner_spec.loader.exec_module(cls.runner)
+
+    def classify(self, *paths: str) -> dict[str, object]:
+        mapping, map_sha256 = SELECTOR.load_map(ROOT / "validation-map.json")
+        return SELECTOR.classify(mapping, list(paths), map_sha256=map_sha256, base="a" * 40, head="b" * 40)
+
+    def test_every_rule_gate_is_known_to_the_runner(self) -> None:
+        known = self.runner.KNOWN_GATES
+        emitted: set[str] = {self.mapping["full_gate"], *self.mapping["default"]["gates"]}
+        for rule in self.mapping["rules"]:
+            emitted.update(rule["gates"])
+        self.assertEqual(sorted(emitted - known), [], "map emits gates the runner cannot execute")
+
+    def test_host_audit_tooling_plan_is_executable(self) -> None:
+        plan = self.classify("scripts/measure-host-audit.mjs")
+        self.assertIn("static_contracts", plan["gates"])
+        commands = self.runner.commands_for(plan)
+        self.assertTrue(commands, "host_audit_tooling plan must map to a closed command set")
+
+    def test_runner_rejects_unknown_gate_fail_closed(self) -> None:
+        with self.assertRaises(self.runner.RunSelectionError):
+            self.runner.commands_for({"schema": "change-scoped-validation-plan/v1", "gates": ["static_contracts", "unknown_gate"],
+                                      "changed_paths": ["scripts/measure-host-audit.mjs"]})
+
+
 if __name__ == "__main__":
     unittest.main()

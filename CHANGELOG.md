@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.8.3
+
+- Speeds up session mounting and steady-state execution. One attach performs at most one full projection of the durable log, an unchanged session no longer replays the history fold, and the core/v2 view consumes the same validated event snapshot as the contract projection. Long histories capture and project through per-fold indexes that preserve the original derivation exactly; the original full-scan paths stay available behind `DSH_GUARD_DISABLE_INDEXES=1` and are compared against them on every event prefix.
+- Reduces repeated reads inside one Desktop host validation: the archive index, manifest, metadata and module bytes are read once per validation and shared by the runtime identity check, the byte audit, the dependency routes and the renderer audit. Every validation still reads the current bytes; nothing is cached across entries.
+- Ordinary foreground shell calls that cannot possibly produce a trusted workdir receipt skip the full host audit entirely; calls that may produce one (a foreground root `npm test` / `pnpm test` obligation) keep the fresh audit.
+- The provider-invisible private ledger reads its shared anchors and record chain once per append instead of twice, and its writer lock now records an owner identity. A lock left by a crashed writer is reclaimed automatically when the owner is provably dead on the same host; locks from unknown or live owners keep refusing, and the observed state is available for diagnosis.
+- The native Git observer classifies the persisted shell result with the same terminal rules as the evidence layer, so a failed hook that echoes the old revision, a backgrounded or truncated result, or an unclassifiable terminal state is never reported as an observed commit or push. A repository's first commit is an explicit verified parent-less identity instead of a failed readback. Git readback queries receive cancellation and a bounded overall deadline.
+- Extends measurement coverage: the projection-scaling fixture folds as a normal confirmed v6 session from the first durable event, adds legacy/migration, anchor-count, peak-memory and unchanged-sync dimensions; the host-entry baseline reads the current RC.2 cohort manifest with a real Desktop measurement entry; the validation map's gate vocabulary is shared with the plan runner so a mapped plan can never contain an unexecutable gate.
+
 ## 0.8.2
 
 - Adds a separate host lock for the official Desktop app. Guard reads the application archive in place, checks its vendor signature and signed archive header, and verifies installed modules and dependency routes. Web and Headless keep their existing paths; Desktop application restart remains unavailable through Guard.

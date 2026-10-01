@@ -40,6 +40,20 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined
 }
 
+/**
+ * CG-083-BUG02: the explicit, VERIFIED no-parent state of a repository's
+ * first commit, minted only by the native Git observer after reading the
+ * commit object itself. It is distinct from a missing or unknown parent and
+ * binds into certificates like any other parent identity.
+ */
+export const NATIVE_GIT_ROOT_PARENT_OID = 'root'
+
+/** CG-083-BUG02 parent identity accepted for a commit readback. */
+export function nativeGitParentOidVerified(parentOid: unknown): boolean {
+  return parentOid === NATIVE_GIT_ROOT_PARENT_OID
+    || (typeof parentOid === 'string' && /^[0-9a-f]{40,64}$/.test(parentOid))
+}
+
 export function extractTextContent(content: readonly unknown[]): string {
   const parts: string[] = []
   for (const block of content) {
@@ -450,6 +464,27 @@ function shellOutcome(
  * frozen value is the historical record and this batch must not rewrite it; the
  * derived layer records its source and conflict flag instead of changing history.
  */
+/**
+ * CG-083-BUG03: the ONE terminal verdict a native observer may rely on for a
+ * persisted shell call. Reuses the evidence layer's terminal classification
+ * (structured facts, then audited renderer markers) so the observer cannot
+ * drift from the same-family producer rules: a failed hook, a backgrounded or
+ * truncated result, or an unclassifiable terminal state is never "success".
+ */
+export function shellReadbackOutcome(
+  surface: 'bash' | 'pwsh' | 'shell',
+  args: Record<string, unknown>,
+  result: { error?: unknown; meta?: unknown; textContent: string },
+): 'success' | 'failure' | 'unknown' {
+  const backgrounded = args.run_in_background === true
+    || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent)
+    || /^started background job \S+\s*$/.test(result.textContent)
+  const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent)
+  const terminal = legacyTerminalFacts(result.meta, result.textContent)
+  const outcome = shellOutcome(surface, terminal, result.error, backgrounded)
+  return outputIncomplete && outcome !== 'failure' ? 'unknown' : outcome
+}
+
 function shellProcessFacts(
   meta: unknown,
   textContent: string,
@@ -663,7 +698,7 @@ export function extractToolSubject(
       const remote = native?.remote; const refspec = native?.refspec
       const parentOid = native?.parentOid; const treeOid = native?.treeOid
       if (action === 'commit' && (typeof parentOid !== 'string' || typeof treeOid !== 'string'
-        || !/^[0-9a-f]{40,64}$/.test(parentOid) || !/^[0-9a-f]{40,64}$/.test(treeOid))) {
+        || !nativeGitParentOidVerified(parentOid) || !/^[0-9a-f]{40,64}$/.test(treeOid))) {
         return { capabilities: [], subjects: [], surfaces: [], outcome: 'unknown', parseStatus: 'adapter_unavailable', reasonCode: 'native_git_readback_unavailable' }
       }
       if (action === 'push' && (typeof remote !== 'string' || typeof refspec !== 'string')) {

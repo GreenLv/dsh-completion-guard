@@ -945,8 +945,12 @@ function verifyDesktopPluginIdentity(profileRoot: string, expectedPluginVersion:
 function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
   trust: HostRebindTrust | undefined): HostLockEvaluation {
   const profile = resolve(profileRoot)
-  const runtime = readDesktopAppRuntime(appAsarPath)
   const session = createHostAuditSession()
+  // CG-083-PERF03: ONE operation-scoped audit session for the whole desktop
+  // validation — runtime identity, byte audit, archive graph, physical layout
+  // and renderer audit share the same memoized asar index/bytes/digests. The
+  // session dies with this validation; no result crosses an entry boundary.
+  const runtime = readDesktopAppRuntime(appAsarPath, session)
   const executable = verifyDesktopCarrier(runtime.asarRealpath, runtime.headerSha256)
   const pluginManifestPath = join(profile, 'node_modules', 'dsh-completion-guard', 'package.json')
   const installedPlugin = session.readJson(pluginManifestPath)
@@ -959,7 +963,7 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
   const evaluation = evaluateConfiguredHostLock(rows, { platform, profileKind: 'desktop' }, trust ? JSON.stringify(trust) : undefined, profile)
   if (evaluation.status !== 'supported') return evaluation
   const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[]
-  if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations)) {
+  if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations, session)) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
   const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session)

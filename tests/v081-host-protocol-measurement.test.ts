@@ -38,12 +38,24 @@ afterEach(() => {
 function makeHost() {
   const runtimeRoot = process.env.DSH_MEASURE_RUNTIME!, profileRoot = process.env.DSH_MEASURE_PROFILE!
   if (!runtimeRoot || !profileRoot) throw new Error('measurement requires explicit installed/synthetic graph roots')
+  // CG-083-VAL02: the measured cohort is declared explicitly. `web` and
+  // `desktop` name their own profile kinds; anything else is `headless` and
+  // must never silently pose as a Desktop measurement. The Desktop entry is a
+  // real installed-app entry only: it measures the official app archive
+  // (app.asar) against the digest the installed lock was injected with, which
+  // the driver passes through DSH_MEASURE_DESKTOP_DIGEST.
+  const kind = process.env.DSH_MEASURE_KIND === 'web' ? 'web' as const
+    : process.env.DSH_MEASURE_KIND === 'desktop' ? 'desktop' as const : 'headless' as const
+  if (kind === 'desktop' && !process.env.DSH_MEASURE_DESKTOP_DIGEST) {
+    throw new Error('desktop measurement requires the injected DSH_MEASURE_DESKTOP_DIGEST')
+  }
   return { runtimeRoot, profileRoot, config: {
     activation: 'always' as const, policy: 'release' as const, hostLockPolicy: 'dsh-core/v1',
     hostLockRuntimeRoot: runtimeRoot, hostLockProfileRoot: profileRoot,
     hostLockPlatform: process.platform === 'win32' ? 'windows' as const : 'posix' as const,
-    hostLockProfile: process.env.DSH_MEASURE_KIND === 'web' ? 'web' as const : 'headless' as const,
+    hostLockProfile: kind,
     hostLockPackages: EXPECTED_HOST_PACKAGES,
+    ...(kind === 'desktop' ? { hostLockDesktopDigest: process.env.DSH_MEASURE_DESKTOP_DIGEST } : {}),
   } }
 }
 

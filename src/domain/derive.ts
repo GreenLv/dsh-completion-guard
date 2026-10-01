@@ -18,6 +18,7 @@ import {
 } from './semantics.js'
 import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
 import { supersedeItem } from './supersession.js'
+import { findPendingDuplicateFromIndex, indexesEnabled, nextIdFromIndex, nextNumericIdFromIndex, registerFoldItem } from './item-fold-index.js'
 import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type NeedsReviewReason, type SourceSpan, type TargetValue } from './types.js'
 import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
 import type { ReleaseContract } from './release.js'
@@ -237,6 +238,7 @@ function supersedeClauseByPartition(projection: GuardProjection, item: GuardItem
       interpretedFromUnresolved: item.id,
     }
     projection.items.set(id, sub)
+    registerFoldItem(projection.items, sub)
     projection.contractRevision = Math.max(projection.contractRevision, revision)
     return sub
   }
@@ -258,6 +260,10 @@ function supersedeClauseByPartition(projection: GuardProjection, item: GuardItem
 
 /** The next numeric id for a prefix, shared with nextId's numbering. */
 function nextNumericId(items: GuardProjection['items'], prefix: string): number {
+  // CG-083-PERF02: the index mirrors this scan exactly; the original loop
+  // stays as the fail-safe path when DSH_GUARD_DISABLE_INDEXES=1.
+  const indexed = nextNumericIdFromIndex(items, prefix)
+  if (indexed !== undefined) return indexed
   let max = 0
   for (const item of items.values()) {
     if (!item.id.startsWith(prefix)) continue
@@ -472,6 +478,9 @@ function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings
 }
 
 function nextId(items: GuardProjection['items'], kind: GuardItemKind): string {
+  // CG-083-PERF02: the index mirrors this kind-filtered scan exactly.
+  const indexed = nextIdFromIndex(items, kind)
+  if (indexed !== undefined) return indexed
   const prefix = kind === 'requirement' ? 'R' : kind === 'acceptance' ? 'A' : 'P'
   let max = 0
   for (const item of items.values()) {
@@ -1145,6 +1154,19 @@ function informationReadingNamesWork(text: string): boolean {
   return scopes.some((scope) => scope.authorityDisposition !== 'informational')
 }
 
+/** CG-083-PERF02: the interpretation rule is a pure function of the record's
+ * own bytes; a long history re-asks it per delivery, so memoize by text. */
+const informationReadingMemo = new Map<string, boolean>()
+function informationReadingNamesWorkMemoized(text: string): boolean {
+  const digest = sha256(text)
+  const cached = informationReadingMemo.get(digest)
+  if (cached !== undefined) return cached
+  const value = informationReadingNamesWork(text)
+  if (informationReadingMemo.size > 512) informationReadingMemo.clear()
+  informationReadingMemo.set(digest, value)
+  return value
+}
+
 /**
  * The pure upgrade-eligibility predicate: the records in the current closure
  * scope that may NOT be inherited as a current pass, with the reason that
@@ -1192,7 +1214,7 @@ function eligibilityReviewReasons(projection: GuardProjection): Array<[string, N
       findings.push([item.id, 'unknown_state_version'])
       continue
     }
-    if (informationReading && informationReadingNamesWork(item.normalizedText)) {
+    if (informationReading && informationReadingNamesWorkMemoized(item.normalizedText)) {
       findings.push([item.id, 'legacy_mixed_information_scope'])
       continue
     }
@@ -1468,14 +1490,19 @@ function insert(
     item.rawTextSha256 = provenance.rawTextSha256
     if (provenance.span) item.spans = [provenance.span]
   }
-  const duplicate = [...projection.items.values()].find(
-    (existing) => existing.kind === segment.kind
-      && existing.status === 'pending'
-      && existing.textSha256 === item.textSha256
-      && existing.verification.subject === subject,
-  )
+  const duplicate = indexesEnabled()
+    ? findPendingDuplicateFromIndex(projection.items, segment.kind, item.textSha256, subject)
+    : [...projection.items.values()].find(
+      (existing) => existing.kind === segment.kind
+        && existing.status === 'pending'
+        && existing.textSha256 === item.textSha256
+        && existing.verification.subject === subject,
+    )
   if (duplicate) supersedeItem(projection.items, duplicate.id, item)
-  else projection.items.set(id, item)
+  else {
+    projection.items.set(id, item)
+    registerFoldItem(projection.items, item)
+  }
   projection.contractRevision = item.revision
   return item
 }
@@ -1496,6 +1523,16 @@ export function rootLocatorFlavor(cwd: string): 'posix' | 'windows' | undefined 
   return windowsBase ? 'windows' : posixBase ? 'posix' : undefined
 }
 
+const eventBySeqCache = new WeakMap<readonly DerivedEnvelope[], Map<number, DerivedEnvelope>>()
+function eventsBySeq(sourceEvents: readonly DerivedEnvelope[]): Map<number, DerivedEnvelope> {
+  let bySeq = eventBySeqCache.get(sourceEvents)
+  if (!bySeq) {
+    bySeq = new Map(sourceEvents.map((event) => [event.seq, event]))
+    eventBySeqCache.set(sourceEvents, bySeq)
+  }
+  return bySeq
+}
+
 function refreshRootLocatorContext(
   projection: GuardProjection, sourceEvents: readonly DerivedEnvelope[], scope: DeriveScope, asOf: number,
 ): void {
@@ -1505,11 +1542,12 @@ function refreshRootLocatorContext(
   const flavor = rootLocatorFlavor(scope.cwd)
   if (!flavor) return
   const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : []
+  const bySeq = eventsBySeq(sourceEvents)
   for (const ref of refs) {
     if (ref.seq > asOf) continue
-    const source = sourceEvents.find((event) => event.seq === ref.seq && event.type === 'user/message'
-      && asRecord(asRecord(event.data)?.source)?.kind === 'user')
-    if (!source) continue
+    const source = bySeq.get(ref.seq)
+    if (!source || source.type !== 'user/message'
+      || asRecord(asRecord(source.data)?.source)?.kind !== 'user') continue
     const content = asRecord(source.data)?.content
     const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === 'text')
       .map((part) => String(asRecord(part)?.text ?? '')).join('') : ''

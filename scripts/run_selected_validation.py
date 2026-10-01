@@ -17,7 +17,7 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 KNOWN_GATES = {
     "artifact_identity", "build", "contract_tests", "docs_contract",
     "focused_tests", "full_candidate", "host_lock_tests", "lint",
-    "package_tests", "stats_tests", "typecheck",
+    "package_tests", "static_contracts", "stats_tests", "typecheck",
 }
 
 
@@ -93,6 +93,16 @@ def commands_for(value: Any) -> list[list[str]]:
                 "pnpm", "exec", "vitest", "run",
                 "tests/domain/v030-host-lock.test.ts",
                 "tests/domain/v032-host-cohort.test.ts",
+            ])
+        if "static_contracts" in gates:
+            # Measurement tooling and its manifests: the gated measurement
+            # suites still compile, collect and assert their contracts with the
+            # measurement gates unset (the long sampling loops skip), so this
+            # stays a bounded deterministic static check.
+            commands.append([
+                "pnpm", "exec", "vitest", "run",
+                "tests/v081-host-protocol-measurement.test.ts",
+                "tests/v082-projection-scaling.test.ts",
             ])
         if "focused_tests" in gates:
             related = [

@@ -9092,6 +9092,22 @@ const DESKTOP_GRAPH_ROOT = "dsh/node_modules";
 const DESKTOP_CARRIER_ENTRY = "dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js";
 const MAX_ASAR_HEADER_BYTES = 128 * 1024 * 1024;
 const MAX_ASAR_FILE_BYTES = 64 * 1024 * 1024;
+/**
+* CG-083-PERF03: operation-scoped asar reads. Within ONE host-lock
+* validation the same helpers used to re-open the archive and re-read the
+* header, metadata and module bytes several times; with a session, the index
+* and every entry's bytes are memoized on that operation's audit session —
+* they live and die with the validation and are never a cross-entry cache.
+* Without a session the original direct reads run unchanged.
+*/
+function memoizedAsarIndex(session, archivePath) {
+	if (!session) return readAsarIndex(archivePath);
+	return session.memo(`desktop-asar-index:${archivePath}`, () => readAsarIndex(archivePath));
+}
+function memoizedAsarFile(session, archivePath, index$1, entryPath) {
+	if (!session) return readAsarFile(archivePath, index$1, entryPath);
+	return session.memo(`desktop-asar-bytes:${archivePath}\u0000${entryPath}`, () => readAsarFile(archivePath, index$1, entryPath));
+}
 /** Read the asar header (the JSON index) without extracting any payload. */
 function readAsarIndex(archivePath) {
 	const header = Buffer.alloc(16);
@@ -9196,15 +9212,15 @@ function isRecord(value) {
 * manifest, the `desktop-runtime.json` metadata block, and the official CLI
 * carrier entry the app installs.
 */
-function readDesktopAppRuntime(appAsarPath) {
+function readDesktopAppRuntime(appAsarPath, session) {
 	if (!isAbsolute(appAsarPath)) throw new HostProfileError("desktop_app_invalid", "the app archive path must be absolute");
 	if (!existsSync$2(appAsarPath) || !lstatSync$2(appAsarPath).isFile()) throw new HostProfileError("desktop_app_missing", "the official app archive was not found");
 	const asarRealpath = realpathSync$2(appAsarPath);
-	const index$1 = readAsarIndex(asarRealpath);
+	const index$1 = memoizedAsarIndex(session, asarRealpath);
 	if (!asarNode(index$1, DESKTOP_CARRIER_ENTRY.split("/"))) throw new HostProfileError("desktop_app_invalid", "the official CLI carrier entry is missing from the app bundle");
-	readAsarFile(asarRealpath, index$1, DESKTOP_CARRIER_ENTRY);
-	const manifestBytes = readAsarFile(asarRealpath, index$1, DESKTOP_RUNTIME_MANIFEST_ENTRY);
-	const metadataBytes = readAsarFile(asarRealpath, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
+	memoizedAsarFile(session, asarRealpath, index$1, DESKTOP_CARRIER_ENTRY);
+	const manifestBytes = memoizedAsarFile(session, asarRealpath, index$1, DESKTOP_RUNTIME_MANIFEST_ENTRY);
+	const metadataBytes = memoizedAsarFile(session, asarRealpath, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
 	const manifest = JSON.parse(manifestBytes.toString("utf8"));
 	const metadata = JSON.parse(metadataBytes.toString("utf8"));
 	if (manifest.name !== DESKTOP_RUNTIME_PACKAGE_NAME) throw new HostProfileError("desktop_app_invalid", "the app runtime manifest is not the official desktop runtime");
@@ -9311,10 +9327,10 @@ function readDesktopTargetGraph(appAsarPath, profileRoot) {
 * graph is an ambiguity no adapter resolves, so its presence fails closed
 * before any digest is computed.
 */
-function auditDesktopInstalledImplementation(appAsarPath, expectations) {
+function auditDesktopInstalledImplementation(appAsarPath, expectations, session) {
 	try {
 		const realArchive = realpathSync$2(appAsarPath);
-		const index$1 = readAsarIndex(realArchive);
+		const index$1 = memoizedAsarIndex(session, realArchive);
 		const { CRITICAL_NAME_SET } = criticalNames();
 		const topLevelRoot = DESKTOP_GRAPH_ROOT.split("/");
 		const scan = (node, parts, depth) => {
@@ -9332,7 +9348,7 @@ function auditDesktopInstalledImplementation(appAsarPath, expectations) {
 		};
 		scan(index$1.root, [], 0);
 		const fileTable = /* @__PURE__ */ new Map();
-		const metadataBytes = readAsarFile(realArchive, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
+		const metadataBytes = memoizedAsarFile(session, realArchive, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
 		const metadata = JSON.parse(metadataBytes.toString("utf8"));
 		if (Array.isArray(metadata.files)) {
 			for (const entry of metadata.files) if (entry && typeof entry === "object" && typeof entry.path === "string" && /^[a-f0-9]{64}$/.test(String(entry.sha256))) fileTable.set(`dsh/${entry.path}`, String(entry.sha256));
@@ -9341,7 +9357,7 @@ function auditDesktopInstalledImplementation(appAsarPath, expectations) {
 			const parts = [...topLevelRoot, ...expected.name.split("/")];
 			const node = asarNode(index$1, parts);
 			if (!node || !node.files) return false;
-			const manifestBytes = readAsarFile(realArchive, index$1, [...parts, "package.json"].join("/"));
+			const manifestBytes = memoizedAsarFile(session, realArchive, index$1, [...parts, "package.json"].join("/"));
 			const manifest = JSON.parse(manifestBytes.toString("utf8"));
 			if (manifest.name !== expected.name || manifest.version !== expected.version) return false;
 			const inventory = [];
@@ -9363,10 +9379,10 @@ function auditDesktopInstalledImplementation(appAsarPath, expectations) {
 			for (const file of inventory) {
 				const tableEntry = fileTable.get(`${DESKTOP_GRAPH_ROOT}/${expected.name}/${file}`);
 				if (tableEntry === void 0) return false;
-				if (tableEntry !== createHash("sha256").update(readAsarFile(realArchive, index$1, [...parts, ...file.split("/")].join("/"))).digest("hex")) return false;
+				if (tableEntry !== createHash("sha256").update(memoizedAsarFile(session, realArchive, index$1, [...parts, ...file.split("/")].join("/"))).digest("hex")) return false;
 			}
 			for (const file of Object.keys(expected.modules ?? {})) {
-				const actual = createHash("sha256").update(readAsarFile(realArchive, index$1, [...parts, ...file.split("/")].join("/"))).digest("hex");
+				const actual = createHash("sha256").update(memoizedAsarFile(session, realArchive, index$1, [...parts, ...file.split("/")].join("/"))).digest("hex");
 				if (expected.modules[file] === actual) continue;
 				if (file === "package.json") continue;
 				return false;
@@ -9421,12 +9437,12 @@ const DESKTOP_IDENTITY_FACTS = {
 * installed-byte audit separately refuses nested critical duplicates, so a
 * nested-only dependency can never be silently resolved here).
 */
-function readDesktopDependency(appAsarPath, name) {
+function readDesktopDependency(appAsarPath, name, session) {
 	const realArchive = realpathSync$2(appAsarPath);
-	const index$1 = readAsarIndex(realArchive);
+	const index$1 = memoizedAsarIndex(session, realArchive);
 	const manifestPath = `${DESKTOP_GRAPH_ROOT}/${name}/package.json`;
 	if (!asarNode(index$1, manifestPath.split("/"))) throw new HostProfileError("host_contract_probe_dependency_unbound", `dependency ${name} has no top-level manifest in the app graph`);
-	const bytes$1 = readAsarFile(realArchive, index$1, manifestPath);
+	const bytes$1 = memoizedAsarFile(session, realArchive, index$1, manifestPath);
 	const manifest = JSON.parse(bytes$1.toString("utf8"));
 	if (manifest.name !== name || typeof manifest.version !== "string" || !parseHostVersion(manifest.version)) throw new HostProfileError("host_contract_probe_dependency_unbound", `dependency ${name} has an invalid manifest identity`);
 	return {
@@ -10337,8 +10353,8 @@ function verifyDesktopPluginIdentity(profileRoot, expectedPluginVersion) {
 * fresh runtime revalidation, so both compute the same digest. */
 function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 	const profile = resolve(profileRoot);
-	const runtime = readDesktopAppRuntime(appAsarPath);
 	const session = createHostAuditSession();
+	const runtime = readDesktopAppRuntime(appAsarPath, session);
 	const executable = verifyDesktopCarrier(runtime.asarRealpath, runtime.headerSha256);
 	const pluginManifestPath = join(profile, "node_modules", "dsh-completion-guard", "package.json");
 	const installedPlugin = session.readJson(pluginManifestPath);
@@ -10352,7 +10368,7 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 	}, trust ? JSON.stringify(trust) : void 0, profile);
 	if (evaluation.status !== "supported") return evaluation;
 	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : packages$1;
-	if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations)) return {
+	if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations, session)) return {
 		...evaluation,
 		status: "unsupported",
 		goalAvailable: false,
@@ -15168,6 +15184,92 @@ function capabilityRemedyPhrase(remedy) {
 }
 
 //#endregion
+//#region src/domain/item-fold-index.ts
+const itemFoldIndexes = /* @__PURE__ */ new WeakMap();
+const KIND_PREFIXES = {
+	requirement: "R",
+	acceptance: "A",
+	prohibition: "P"
+};
+function indexesEnabled() {
+	return process.env.DSH_GUARD_DISABLE_INDEXES !== "1";
+}
+function foldIndexOf(items) {
+	let index$1 = itemFoldIndexes.get(items);
+	if (!index$1) {
+		index$1 = {
+			idCounters: /* @__PURE__ */ new Map(),
+			prefixCounters: /* @__PURE__ */ new Map(),
+			duplicates: /* @__PURE__ */ new Map()
+		};
+		itemFoldIndexes.set(items, index$1);
+	}
+	return index$1;
+}
+/** Register one insertion into the item map. Cheap and idempotent per id. */
+function registerFoldItem(items, item) {
+	if (!indexesEnabled()) return;
+	const index$1 = foldIndexOf(items);
+	const kindMax = index$1.idCounters.get(item.kind);
+	const kindNum = Number(item.id.slice(KIND_PREFIXES[item.kind].length));
+	if (Number.isInteger(kindNum) && (kindMax === void 0 || kindNum > kindMax)) index$1.idCounters.set(item.kind, kindNum);
+	for (const prefix of Object.values(KIND_PREFIXES)) {
+		if (!item.id.startsWith(prefix)) continue;
+		const num = Number(item.id.slice(prefix.length));
+		const max = index$1.prefixCounters.get(prefix);
+		if (Number.isInteger(num) && (max === void 0 || num > max)) index$1.prefixCounters.set(prefix, num);
+	}
+	const key = `${item.kind}\0${item.textSha256}\0${item.verification.subject}`;
+	const bucket = index$1.duplicates.get(key);
+	if (bucket) bucket.push(item.id);
+	else index$1.duplicates.set(key, [item.id]);
+}
+/** nextId, with the same result as the historical full scan. */
+function nextIdFromIndex(items, kind) {
+	if (!indexesEnabled()) return void 0;
+	const index$1 = foldIndexOf(items);
+	const max = index$1.idCounters.get(kind);
+	if (max === void 0) {
+		let seeded = 0;
+		for (const item of items.values()) {
+			if (item.kind !== kind) continue;
+			const num = Number(item.id.slice(KIND_PREFIXES[kind].length));
+			if (Number.isInteger(num) && num > seeded) seeded = num;
+		}
+		index$1.idCounters.set(kind, seeded);
+		return `${KIND_PREFIXES[kind]}${String(seeded + 1).padStart(3, "0")}`;
+	}
+	return `${KIND_PREFIXES[kind]}${String(max + 1).padStart(3, "0")}`;
+}
+/** nextNumericId (literal prefix scan over all kinds), same result. */
+function nextNumericIdFromIndex(items, prefix) {
+	if (!indexesEnabled()) return void 0;
+	const index$1 = foldIndexOf(items);
+	const max = index$1.prefixCounters.get(prefix);
+	if (max === void 0) {
+		let seeded = 0;
+		for (const item of items.values()) {
+			if (!item.id.startsWith(prefix)) continue;
+			const num = Number(item.id.slice(prefix.length));
+			if (Number.isInteger(num) && num > seeded) seeded = num;
+		}
+		index$1.prefixCounters.set(prefix, seeded);
+		return seeded + 1;
+	}
+	return max + 1;
+}
+/** The pending duplicate the historical scan would have found, if any. */
+function findPendingDuplicateFromIndex(items, kind, textSha256, subject) {
+	if (!indexesEnabled()) return void 0;
+	const bucket = foldIndexOf(items).duplicates.get(`${kind}\0${textSha256}\0${subject}`);
+	if (!bucket) return void 0;
+	for (const id of bucket) {
+		const existing = items.get(id);
+		if (existing && existing.status === "pending" && existing.textSha256 === textSha256 && existing.verification.subject === subject) return existing;
+	}
+}
+
+//#endregion
 //#region src/domain/confirm-parse.ts
 const CONFIRM_LINE_PATTERN = /^确认重绑定 (RB-[a-f0-9]{24})$/;
 const REVERSAL_LEAD = /^(?:不要确认|请勿确认|取消(?:确认|刚才的)?|撤销(?:确认|刚才的)?|先不(?:要)?确认|暂不确认|先别确认|别确认)/;
@@ -15700,7 +15802,10 @@ function confirmRebind(p, proposalId, eventId, durable) {
 		proposal.status = "stale";
 		return true;
 	}
-	for (const item of replacements) p.items.set(item.id, item);
+	for (const item of replacements) {
+		p.items.set(item.id, item);
+		registerFoldItem(p.items, item);
+	}
 	old.status = "superseded";
 	old.supersededByItems = replacements.map((item) => item.id);
 	old.supersededBy = replacements[0].id;
@@ -20397,6 +20502,17 @@ function parseArguments$1(raw) {
 function asRecord$1(value) {
 	return typeof value === "object" && value !== null ? value : void 0;
 }
+/**
+* CG-083-BUG02: the explicit, VERIFIED no-parent state of a repository's
+* first commit, minted only by the native Git observer after reading the
+* commit object itself. It is distinct from a missing or unknown parent and
+* binds into certificates like any other parent identity.
+*/
+const NATIVE_GIT_ROOT_PARENT_OID = "root";
+/** CG-083-BUG02 parent identity accepted for a commit readback. */
+function nativeGitParentOidVerified(parentOid) {
+	return parentOid === NATIVE_GIT_ROOT_PARENT_OID || typeof parentOid === "string" && /^[0-9a-f]{40,64}$/.test(parentOid);
+}
 function extractTextContent(content) {
 	const parts = [];
 	for (const block$1 of content) {
@@ -20730,6 +20846,19 @@ function shellOutcome(surface, terminal, resultError, backgrounded) {
 * frozen value is the historical record and this batch must not rewrite it; the
 * derived layer records its source and conflict flag instead of changing history.
 */
+/**
+* CG-083-BUG03: the ONE terminal verdict a native observer may rely on for a
+* persisted shell call. Reuses the evidence layer's terminal classification
+* (structured facts, then audited renderer markers) so the observer cannot
+* drift from the same-family producer rules: a failed hook, a backgrounded or
+* truncated result, or an unclassifiable terminal state is never "success".
+*/
+function shellReadbackOutcome(surface, args, result) {
+	const backgrounded = args.run_in_background === true || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent) || /^started background job \S+\s*$/.test(result.textContent);
+	const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent);
+	const outcome = shellOutcome(surface, legacyTerminalFacts(result.meta, result.textContent), result.error, backgrounded);
+	return outputIncomplete && outcome !== "failure" ? "unknown" : outcome;
+}
 function shellProcessFacts(meta, textContent, frozenOutcome, resultError, surface, backgrounded, parseStatus$1) {
 	const { facts: terminal, source } = resolveDeclaredTerminalFacts(meta, textContent);
 	const declaredOperations = declaredOperationResults(meta);
@@ -20875,7 +21004,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 			const refspec = native?.refspec;
 			const parentOid = native?.parentOid;
 			const treeOid = native?.treeOid;
-			if (action === "commit" && (typeof parentOid !== "string" || typeof treeOid !== "string" || !/^[0-9a-f]{40,64}$/.test(parentOid) || !/^[0-9a-f]{40,64}$/.test(treeOid))) return {
+			if (action === "commit" && (typeof parentOid !== "string" || typeof treeOid !== "string" || !nativeGitParentOidVerified(parentOid) || !/^[0-9a-f]{40,64}$/.test(treeOid))) return {
 				capabilities: [],
 				subjects: [],
 				surfaces: [],
@@ -21266,6 +21395,7 @@ function supersedeItem(items, oldId, replacement) {
 	old.status = "superseded";
 	old.supersededBy = replacement.id;
 	items.set(replacement.id, replacement);
+	registerFoldItem(items, replacement);
 	return true;
 }
 
@@ -21694,6 +21824,7 @@ function supersedeClauseByPartition(projection, item, receipt) {
 			interpretedFromUnresolved: item.id
 		};
 		projection.items.set(id, sub);
+		registerFoldItem(projection.items, sub);
 		projection.contractRevision = Math.max(projection.contractRevision, revision);
 		return sub;
 	};
@@ -21714,6 +21845,8 @@ function supersedeClauseByPartition(projection, item, receipt) {
 }
 /** The next numeric id for a prefix, shared with nextId's numbering. */
 function nextNumericId(items, prefix) {
+	const indexed = nextNumericIdFromIndex(items, prefix);
+	if (indexed !== void 0) return indexed;
 	let max = 0;
 	for (const item of items.values()) {
 		if (!item.id.startsWith(prefix)) continue;
@@ -21937,6 +22070,8 @@ function restoreHistoricalCheckpoint(recorded, bindings, id) {
 	};
 }
 function nextId(items, kind) {
+	const indexed = nextIdFromIndex(items, kind);
+	if (indexed !== void 0) return indexed;
 	const prefix = kind === "requirement" ? "R" : kind === "acceptance" ? "A" : "P";
 	let max = 0;
 	for (const item of items.values()) {
@@ -22672,6 +22807,18 @@ function informationReadingNamesWork(text) {
 	if (scopes.length === 0) return false;
 	return scopes.some((scope) => scope.authorityDisposition !== "informational");
 }
+/** CG-083-PERF02: the interpretation rule is a pure function of the record's
+* own bytes; a long history re-asks it per delivery, so memoize by text. */
+const informationReadingMemo = /* @__PURE__ */ new Map();
+function informationReadingNamesWorkMemoized(text) {
+	const digest$1 = sha256(text);
+	const cached = informationReadingMemo.get(digest$1);
+	if (cached !== void 0) return cached;
+	const value = informationReadingNamesWork(text);
+	if (informationReadingMemo.size > 512) informationReadingMemo.clear();
+	informationReadingMemo.set(digest$1, value);
+	return value;
+}
 /**
 * The pure upgrade-eligibility predicate: the records in the current closure
 * scope that may NOT be inherited as a current pass, with the reason that
@@ -22720,7 +22867,7 @@ function eligibilityReviewReasons(projection) {
 			findings.push([item.id, "unknown_state_version"]);
 			continue;
 		}
-		if (informationReading && informationReadingNamesWork(item.normalizedText)) {
+		if (informationReading && informationReadingNamesWorkMemoized(item.normalizedText)) {
 			findings.push([item.id, "legacy_mixed_information_scope"]);
 			continue;
 		}
@@ -22940,9 +23087,12 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 		item.rawTextSha256 = provenance.rawTextSha256;
 		if (provenance.span) item.spans = [provenance.span];
 	}
-	const duplicate = [...projection.items.values()].find((existing) => existing.kind === segment.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
+	const duplicate = indexesEnabled() ? findPendingDuplicateFromIndex(projection.items, segment.kind, item.textSha256, subject) : [...projection.items.values()].find((existing) => existing.kind === segment.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
 	if (duplicate) supersedeItem(projection.items, duplicate.id, item);
-	else projection.items.set(id, item);
+	else {
+		projection.items.set(id, item);
+		registerFoldItem(projection.items, item);
+	}
 	projection.contractRevision = item.revision;
 	return item;
 }
@@ -22957,6 +23107,15 @@ function rootLocatorFlavor(cwd) {
 	const posixBase = cwd.startsWith("/") && !cwd.startsWith("//") && !cwd.includes("\\") && !cwd.includes("//") && !cwd.split("/").some((part) => part === "." || part === "..");
 	return /^[A-Za-z]:\\/.test(cwd) && !cwd.includes("/") && !cwd.slice(3).includes("\\\\") && !cwd.slice(3).includes(":") && !cwd.split("\\").some((part) => part === "." || part === "..") ? "windows" : posixBase ? "posix" : void 0;
 }
+const eventBySeqCache = /* @__PURE__ */ new WeakMap();
+function eventsBySeq(sourceEvents) {
+	let bySeq = eventBySeqCache.get(sourceEvents);
+	if (!bySeq) {
+		bySeq = new Map(sourceEvents.map((event) => [event.seq, event]));
+		eventBySeqCache.set(sourceEvents, bySeq);
+	}
+	return bySeq;
+}
 function refreshRootLocatorContext(projection, sourceEvents, scope, asOf) {
 	projection.rootLocatorContexts.clear();
 	projection.rootLocatorIdentity = void 0;
@@ -22964,10 +23123,11 @@ function refreshRootLocatorContext(projection, sourceEvents, scope, asOf) {
 	const flavor = rootLocatorFlavor(scope.cwd);
 	if (!flavor) return;
 	const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : [];
+	const bySeq = eventsBySeq(sourceEvents);
 	for (const ref$1 of refs) {
 		if (ref$1.seq > asOf) continue;
-		const source = sourceEvents.find((event) => event.seq === ref$1.seq && event.type === "user/message" && asRecord(asRecord(event.data)?.source)?.kind === "user");
-		if (!source) continue;
+		const source = bySeq.get(ref$1.seq);
+		if (!source || source.type !== "user/message" || asRecord(asRecord(source.data)?.source)?.kind !== "user") continue;
 		const content = asRecord(source.data)?.content;
 		const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === "text").map((part) => String(asRecord(part)?.text ?? "")).join("") : "";
 		projection.rootLocatorContexts.set(ref$1.seq, {
@@ -25654,17 +25814,75 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 	const rootBySeq = new Map(usedRoots.map((root) => [root.seq, root]));
 	const revisionByRootSeq = new Map(usedRoots.map((root, index$1) => [root.seq, index$1 + 1]));
 	const revisionFor = (seq) => revisionByRootSeq.get(seq);
+	const ix = process.env.DSH_GUARD_DISABLE_INDEXES !== "1";
+	const evidenceList = ix ? [...projection.evidence.values()] : [];
+	const evidenceOrdinal = /* @__PURE__ */ new Map();
+	const evidenceByCallIx = /* @__PURE__ */ new Map();
+	const evidenceBySubjectIx = /* @__PURE__ */ new Map();
+	const readinessByItemIx = /* @__PURE__ */ new Map();
+	if (ix) evidenceList.forEach((fact, ordinal) => {
+		evidenceOrdinal.set(fact, ordinal);
+		const push = (map, key) => {
+			if (key === void 0) return;
+			const bucket = map.get(key);
+			if (bucket) bucket.push(fact);
+			else map.set(key, [fact]);
+		};
+		push(evidenceByCallIx, fact.callId);
+		for (const subject of fact.subjects) push(evidenceBySubjectIx, subject);
+		push(readinessByItemIx, fact.readinessForItemId);
+	});
+	const candidatesForSubjects = (targets) => {
+		if (!ix) return evidenceList.length ? evidenceList : [...projection.evidence.values()];
+		const selected = /* @__PURE__ */ new Set();
+		for (const target of targets) {
+			if (target === void 0) continue;
+			for (const fact of evidenceBySubjectIx.get(target) ?? []) selected.add(fact);
+		}
+		const ordered = [...selected];
+		ordered.sort((left, right) => evidenceOrdinal.get(left) - evidenceOrdinal.get(right));
+		return ordered;
+	};
+	const evidenceByCall = (callId) => ix ? evidenceByCallIx.get(callId) ?? [] : [...projection.evidence.values()].filter((fact) => fact.callId === callId);
+	const evidenceReadyFor = (itemId) => ix ? readinessByItemIx.get(itemId) ?? [] : [...projection.evidence.values()].filter((fact) => fact.readinessForItemId === itemId);
+	const successModifyEffects = ix ? evidenceList.filter((fact) => fact.semanticAction === "modify" && fact.evidenceRole === "effect" && fact.outcome === "success") : void 0;
+	const successFileStateEvidence = ix ? evidenceList.filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success") : void 0;
+	const testEffectEvidence = ix ? evidenceList.filter((entry) => entry.semanticAction === "test" && entry.evidenceRole === "effect" && entry.parseStatus === "supported" && entry.processFacts?.operationAttribution === "single_operation") : void 0;
+	const rootCache = /* @__PURE__ */ new Map();
+	const rootInfo = (root) => {
+		let info = rootCache.get(root.seq);
+		if (!info) {
+			const text = rootText(root);
+			info = {
+				text,
+				digest: hash(text),
+				bytes: Buffer.from(text, "utf8"),
+				byteLength: Buffer.byteLength(text, "utf8")
+			};
+			rootCache.set(root.seq, info);
+		}
+		return info;
+	};
+	const itemsByRootSeq = /* @__PURE__ */ new Map();
+	for (const item of currentItems) {
+		const seq = sourceSeq(item);
+		if (seq === void 0) continue;
+		const bucket = itemsByRootSeq.get(seq);
+		if (bucket) bucket.push(item);
+		else itemsByRootSeq.set(seq, [item]);
+	}
+	const peersOf = (item) => itemsByRootSeq.get(sourceSeq(item) ?? -1) ?? [];
 	const supersessionOf = (item) => {
 		if (item.status !== "superseded" || !item.supersededBy) return void 0;
 		const successor = projection.items.get(item.supersededBy);
 		const seq = successor ? sourceSeq(successor) : void 0;
 		const successorRoot = seq === void 0 ? void 0 : rootBySeq.get(seq);
 		const successorSpan = successor?.spans?.[0];
-		const successorClause = successorRoot && successorSpan?.partIndex === 0 ? Buffer.from(rootText(successorRoot), "utf8").subarray(successorSpan.start, successorSpan.end).toString("utf8") : void 0;
+		const successorClause = successorRoot && successorSpan?.partIndex === 0 ? rootInfo(successorRoot).bytes.subarray(successorSpan.start, successorSpan.end).toString("utf8") : void 0;
 		const predecessorSeq = sourceSeq(item);
 		const predecessorRoot = predecessorSeq === void 0 ? void 0 : rootBySeq.get(predecessorSeq);
 		const predecessorSpan = item.spans?.[0];
-		const predecessorClause = predecessorRoot && predecessorSpan?.partIndex === 0 ? Buffer.from(rootText(predecessorRoot), "utf8").subarray(predecessorSpan.start, predecessorSpan.end).toString("utf8") : void 0;
+		const predecessorClause = predecessorRoot && predecessorSpan?.partIndex === 0 ? rootInfo(predecessorRoot).bytes.subarray(predecessorSpan.start, predecessorSpan.end).toString("utf8") : void 0;
 		const sourcedReplacement = Boolean(successorClause && predecessorClause && successorClause === predecessorClause && successor?.textSha256 === item.textSha256);
 		return successor?.unitId === unit && successor.kind === item.kind && successor.semanticAction === item.semanticAction && targetOf(successor) === targetOf(item) && successor.authorityDisposition === "executable_now" && sourcedReplacement && seq !== void 0 && seq > (sourceSeq(item) ?? -1) && rootBySeq.has(seq) && revisionFor(seq) > revisionFor(sourceSeq(item)) ? {
 			seq,
@@ -25674,19 +25892,19 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 	};
 	if (!currentItems.every((item) => {
 		const root = rootBySeq.get(sourceSeq(item) ?? -1);
-		return root && item.rawTextSha256 === hash(rootText(root));
+		return root && item.rawTextSha256 === rootInfo(root).digest;
 	})) return void 0;
 	const sources = usedRoots.map((root) => {
-		const text = rootText(root);
+		const info = rootInfo(root);
 		return {
 			id: `root:${root.seq}`,
 			seq: root.seq,
 			kind: "root",
 			unit,
 			revision: revisionFor(root.seq),
-			sha256: hash(text),
-			byte_length: Buffer.byteLength(text, "utf8"),
-			text,
+			sha256: info.digest,
+			byte_length: info.byteLength,
+			text: info.text,
 			call_id: null,
 			turn: String(row(root.data).turn ?? turn),
 			...projection.rootLocatorContexts.get(root.seq) ? {
@@ -25695,21 +25913,33 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			} : {}
 		};
 	});
+	const sourceIds = new Set(sources.map((source) => String(source.id)));
+	const sourceById = new Map(sources.map((source) => [String(source.id), source]));
+	const addSource = (row$3) => {
+		const id = String(row$3.id);
+		if (!sourceIds.has(id)) {
+			sourceIds.add(id);
+			sourceById.set(id, row$3);
+			sources.push(row$3);
+		}
+	};
 	const requirements = [];
 	const facts = [];
 	const actions = [];
 	const conditions = [];
 	const coverage = [];
 	for (const root of usedRoots) {
-		const text = rootText(root), digest$1 = hash(text), byteLength = Buffer.byteLength(text, "utf8");
+		const info = rootInfo(root);
+		const text = info.text, digest$1 = info.digest, byteLength = info.byteLength;
 		const span = (start, end) => ({
 			source_id: `root:${root.seq}`,
 			start,
 			end,
 			sha256: digest$1
 		});
-		const sortedSpans = currentItems.filter((item) => sourceSeq(item) === root.seq).flatMap((item) => {
-			const own = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+		const rootItems = itemsByRootSeq.get(root.seq) ?? [];
+		const sortedSpans = rootItems.flatMap((item) => {
+			const own = sourceSpan(item, text, rootItems);
 			return own ? [own] : [];
 		}).sort((a, b) => a.start - b.start || a.end - b.end);
 		let cursor = 0;
@@ -25795,23 +26025,24 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const root = rootBySeq.get(sourceSeq(item) ?? -1);
 		if (!root) continue;
 		const itemRevision = revisionFor(root.seq);
-		const text = rootText(root), digest$1 = hash(text);
+		const info = rootInfo(root);
+		const text = info.text, digest$1 = info.digest;
 		const span = (start, end) => ({
 			source_id: `root:${root.seq}`,
 			start,
 			end,
 			sha256: digest$1
 		});
-		const itemSpan = sourceSpan(item, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+		const itemSpan = sourceSpan(item, text, peersOf(item));
 		if (!itemSpan) continue;
-		if (item.observerMethod && item.rawTextSha256 === hash(text) && item.authority === "root_instruction") {
+		if (item.observerMethod && item.rawTextSha256 === digest$1 && item.authority === "root_instruction") {
 			const methodSource = {
 				source_id: `root:${root.seq}`,
 				start: itemSpan.start,
 				end: itemSpan.end,
-				sha256: hash(text)
+				sha256: digest$1
 			};
-			const methodConstraint = Buffer.from(text, "utf8").subarray(itemSpan.start, itemSpan.end).toString("utf8");
+			const methodConstraint = info.bytes.subarray(itemSpan.start, itemSpan.end).toString("utf8");
 			for (const [index$1, tool] of item.observerMethod.tools.entries()) {
 				const related = projection.items.get(item.observerMethod.targetItemIds[index$1]);
 				if (!related || related.rawTextSha256 !== item.rawTextSha256 || related.unitId !== item.unitId || sourceSeq(related) !== root.seq) continue;
@@ -25823,7 +26054,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				const subjectKind$1 = tool === "context_guard_observe_file" ? "filesystem" : "opaque";
 				const relatedSpan = related.spans?.[0];
 				const targetBytes = Buffer.from(target$1, "utf8");
-				const targetAt = relatedSpan ? Buffer.from(text, "utf8").subarray(relatedSpan.start, relatedSpan.end).indexOf(targetBytes) : -1;
+				const targetAt = relatedSpan ? info.bytes.subarray(relatedSpan.start, relatedSpan.end).indexOf(targetBytes) : -1;
 				const literalTarget = targetAt >= 0 && relatedSpan !== void 0;
 				const targetSource = literalTarget ? {
 					source_id: `root:${root.seq}`,
@@ -25868,11 +26099,11 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				});
 				if (!fact || !pair) continue;
 				const callId = `call:${fact.callId}`, resultId = `result:${fact.callId}`;
-				if (!sources.some((source) => source.id === callId)) {
+				if (!sourceIds.has(callId)) {
 					const callBytes = String(row(pair.call.data).arguments ?? "");
 					const resultBytes = Array.isArray(row(row(pair.result.data).message).content) ? row(row(pair.result.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
 					const callTurn = String(row(pair.call.data).turn ?? turn);
-					sources.push({
+					addSource({
 						id: callId,
 						seq: pair.call.seq,
 						kind: "host_call",
@@ -25887,7 +26118,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 						target_kind: subjectKind$1,
 						origin_root_source_id: `root:${root.seq}`
 					});
-					sources.push({
+					addSource({
 						id: resultId,
 						seq: pair.result.seq,
 						kind: "host_result",
@@ -25930,7 +26161,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		}))) continue;
 		const kind = kindOf(item);
 		const named = targetOf(item);
-		const raw = Buffer.from(text, "utf8");
+		const raw = info.bytes;
 		const namedBytes = named ? Buffer.from(named, "utf8") : void 0;
 		const atWithin = namedBytes ? raw.subarray(itemSpan.start, itemSpan.end).indexOf(namedBytes) : -1;
 		const at = atWithin >= 0 ? itemSpan.start + atWithin : -1;
@@ -25941,7 +26172,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const readbackReferent = readbackAntecedents.length === 1 ? readbackAntecedents[0].requestedTarget.artifact_id : void 0;
 		const referents = kind === "constraint" ? currentItems.flatMap((candidate) => {
 			if (candidate.taskKind !== "context" || sourceSeq(candidate) !== root.seq) return [];
-			const own = sourceSpan(candidate, text, currentItems.filter((peer) => sourceSeq(peer) === root.seq));
+			const own = sourceSpan(candidate, text, peersOf(candidate));
 			const path$1 = candidate.requestedTarget?.artifact_id;
 			const base = projection.rootLocatorContexts.get(root.seq)?.base;
 			if (!own || own.end > itemSpan.start || typeof path$1 !== "string" || !base || !portableContains(base, path$1)) return [];
@@ -25966,9 +26197,9 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const relativeAt = relativeLiteral ? itemSpan.start + raw.subarray(itemSpan.start, itemSpan.end).indexOf(Buffer.from(relativeLiteral, "utf8")) : -1;
 		const scopeValue = typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : typeof item.requestedTarget?.artifact_id === "string" ? item.requestedTarget.artifact_id : void 0;
 		const editScope = directoryLiteral && scopeValue ? portableResolve(scopeValue, directoryLiteral) : scopeValue;
-		const editChoices = item.semanticAction === "modify" && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === "string" ? [...projection.evidence.values()].filter((fact) => fact.semanticAction === "modify" && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.subjects.length === 1 && typeof fact.subjects[0] === "string" && portableContains(editScope, fact.subjects[0])) : [];
+		const editChoices = item.semanticAction === "modify" && (!item.requestedTarget?.artifact_id || directoryLiteral) && typeof editScope === "string" ? (successModifyEffects ?? [...projection.evidence.values()]).filter((fact) => fact.semanticAction === "modify" && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.subjects.length === 1 && typeof fact.subjects[0] === "string" && portableContains(editScope, fact.subjects[0])) : [];
 		const selectedEdit = editChoices.length === 1 ? editChoices[0] : void 0;
-		const readbackChoices = fileReadback ? [...projection.evidence.values()].filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success" && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && (!anaphoricReadback || typeof readbackReferent === "string" && fact.subjects[0] === readbackReferent) && [...projection.evidence.values()].some((effect) => effect.callId === fact.causedByCallId && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.outcome === "success" && effect.subjects.includes(fact.subjects[0]) && effect.toolResultSeq < fact.toolResultSeq)) : [];
+		const readbackChoices = fileReadback ? (successFileStateEvidence ?? [...projection.evidence.values()]).filter((fact) => fact.evidenceRole === "state" && fact.toolName === "context_guard_observe_file" && fact.outcome === "success" && fact.toolResultSeq > root.seq && fact.subjects.length === 1 && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && (!anaphoricReadback || typeof readbackReferent === "string" && fact.subjects[0] === readbackReferent) && evidenceByCall(fact.causedByCallId ?? "").some((effect) => effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.outcome === "success" && effect.subjects.includes(fact.subjects[0]) && effect.toolResultSeq < fact.toolResultSeq)) : [];
 		const selectedReadback = readbackChoices.length === 1 ? readbackChoices[0] : void 0;
 		const subjectKind = forbiddenFile || fileReadback || [
 			"modify",
@@ -25989,9 +26220,9 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		} : ownConstraintSpan;
 		const needsReadiness = item.semanticAction === "test" || item.semanticAction === "verify" && !fileReadback;
 		const readinessPredicate = item.semanticAction === "test" ? "test_passed" : "verification_passed";
-		const selectedReadiness = needsReadiness && !guarded ? [...projection.evidence.values()].find((fact) => {
+		const selectedReadiness = needsReadiness && !guarded ? evidenceReadyFor(item.id).find((fact) => {
 			const pair = sourceByCall.get(fact.callId);
-			const assessmentEffect = item.semanticAction !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || [...projection.evidence.values()].some((effect) => effect.callId === fact.readinessEffectCallId && effect.toolResultSeq < fact.toolResultSeq && effect.epoch === fact.epoch && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath));
+			const assessmentEffect = item.semanticAction !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || evidenceByCall(fact.readinessEffectCallId ?? "").some((effect) => effect.toolResultSeq < fact.toolResultSeq && effect.epoch === fact.epoch && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath));
 			return fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect && fact.toolName === "context_guard_observe_test_readiness" && fact.outcome === "success" && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === "string" && fact.subjects.includes(item.requestedTarget.scope);
 		}) : void 0;
 		const namedTest = item.semanticAction === "test" ? /\b((?:npm|pnpm))\s+test\b/iu.exec(item.normalizedText) : null;
@@ -26014,13 +26245,13 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const selectedScope = (selectedReadiness || selectedDirectTest) && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0;
 		const target = forbiddenFile?.path ?? selectedScope ?? selectedEdit?.subjects[0] ?? selectedReadback?.subjects[0] ?? (relativeLiteral && named ? named : at >= 0 && named ? named : trimmed);
 		if (!target) continue;
-		const knownForbiddenEffect = forbiddenFile && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.subjects.includes(target) && [
+		const knownForbiddenEffect = forbiddenFile && candidatesForSubjects([target]).some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.outcome === "success" && fact.subjects.includes(target) && [
 			"write",
 			"write_file",
 			"edit",
 			"edit_file"
 		].includes(fact.toolName) && fact.operations?.some((operation) => ["create", "modify"].includes(operation.op) && operation.path === target));
-		const uncertainForbiddenEffect = forbiddenFile && !knownForbiddenEffect && [...projection.evidence.values()].some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.subjects.includes(target) && ([
+		const uncertainForbiddenEffect = forbiddenFile && !knownForbiddenEffect && candidatesForSubjects([target]).some((fact) => fact.epoch === projection.epoch && fact.toolResultSeq > root.seq && (sourceByCall.get(fact.callId)?.call.seq ?? -1) > root.seq && fact.evidenceRole === "effect" && fact.subjects.includes(target) && ([
 			"write",
 			"write_file",
 			"edit",
@@ -26098,7 +26329,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				constraint_kind: forbiddenFile ? "exact" : directoryLiteral ? "directory" : relativeLiteral ? "exact" : selectedScope || selectedEdit || selectedReadback ? "work_unit" : "exact",
 				...(forbiddenFile || directoryLiteral || relativeLiteral) && rootBase ? { resolved_constraint: portableResolve(rootBase, forbiddenFile?.literal ?? directoryLiteral ?? relativeLiteral) } : {},
 				selection_source_id: kind === "constraint" ? null : selectedReadiness ? `call:${selectedReadiness.callId}` : selectedDirectTest ? `call:${selectedDirectTest.callId}` : selectedEdit ? `call:${selectedEdit.callId}` : selectedReadback ? `call:${selectedReadback.callId}` : relativeLiteral ? (() => {
-					const fact = [...projection.evidence.values()].find((entry) => entry.semanticAction === "modify" && entry.evidenceRole === "effect" && entry.outcome === "success" && entry.subjects.includes(target) && sourceByCall.has(entry.callId));
+					const fact = (successModifyEffects ?? [...projection.evidence.values()]).find((entry) => entry.semanticAction === "modify" && entry.evidenceRole === "effect" && entry.outcome === "success" && entry.subjects.includes(target) && sourceByCall.has(entry.callId));
 					return fact ? `call:${fact.callId}` : null;
 				})() : null
 			}
@@ -26109,10 +26340,10 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				const deliveryId = `delivery:${delivery.seq}:revision:${itemRevision}`;
 				const deliveredText = Array.isArray(row(row(delivery.data).message).content) ? row(row(delivery.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
 				const isTestReport = /\b(?:report|summari[sz]e)\b[^。.!?？]{0,80}\b(?:result|outcome)\b|(?:报告|汇报|说明)[^。.!?？]{0,80}(?:结果|运行情况)/iu.test(item.normalizedText);
-				const rootTests = currentItems.filter((candidate) => sourceSeq(candidate) === root.seq && candidate.semanticAction === "test");
+				const rootTests = (itemsByRootSeq.get(root.seq) ?? []).filter((candidate) => candidate.semanticAction === "test");
 				const reportTest = isTestReport && rootTests.length === 1 ? rootTests[0] : void 0;
 				const expectedCommand = reportTest ? /\b(npm|pnpm)\s+test\b/iu.exec(reportTest.normalizedText)?.[0]?.toLowerCase() : void 0;
-				const run = expectedCommand ? [...projection.evidence.values()].filter((entry) => {
+				const run = expectedCommand ? (testEffectEvidence ?? [...projection.evidence.values()]).filter((entry) => {
 					const pair = sourceByCall.get(entry.callId);
 					if (!pair || pair.call.seq <= root.seq || pair.result.seq >= delivery.seq || entry.semanticAction !== "test" || entry.evidenceRole !== "effect" || entry.parseStatus !== "supported" || entry.processFacts?.operationAttribution !== "single_operation" || !projection.auditedForegroundRenderers?.includes(entry.toolName) || persistedToolResultStatus(pair.result.data, entry.callId) === "unknown" || !entry.subjects.includes(String(reportTest?.requestedTarget?.scope ?? ""))) return false;
 					let args = {};
@@ -26134,7 +26365,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				const numericReport = declaredExit !== void 0 && reportedExits.length > 0 && reportedExits.every((value) => value === declaredExit);
 				const statusReport = run?.processFacts?.outcome === "success" ? /(?:test(?:s)?\s+(?:passed|succeeded)|测试(?:已)?通过|测试成功)/iu.test(assertedText) : trustedFailure ? /(?:test(?:s)?\s+(?:failed|did\s+not\s+pass)|测试(?:未通过|失败))/iu.test(assertedText) : false;
 				if (reportTest && (conflictingStatus || !numericReport && !statusReport)) continue;
-				if (!sources.some((source) => source.id === deliveryId)) sources.push({
+				if (!sourceIds.has(deliveryId)) addSource({
 					id: deliveryId,
 					seq: delivery.seq,
 					kind: "final_delivery",
@@ -26164,7 +26395,8 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				});
 			}
 		}
-		for (const evidence of guarded ? [] : projection.evidence.values()) {
+		const evidenceCandidates = guarded ? [] : candidatesForSubjects([target, needsReadiness && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0]);
+		for (const evidence of evidenceCandidates) {
 			const inTestScope = needsReadiness && typeof item.requestedTarget?.scope === "string" && evidence.subjects.includes(item.requestedTarget.scope);
 			if (evidence.epoch !== projection.epoch || !evidence.subjects.includes(target) && !inTestScope || evidence.toolResultSeq <= root.seq || attached.has(evidence.id) && !fileReadback) continue;
 			if (kind === "constraint" && (!forbiddenFile || evidence.evidenceRole !== "effect" || ![
@@ -26179,7 +26411,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			if (fileReadback && (evidence.evidenceRole !== "state" || evidence.toolName !== "context_guard_observe_file")) continue;
 			if (evidence.toolName === "context_guard_observe_test_readiness" && evidence.readinessForItemId !== item.id) continue;
 			if (evidence.evidenceRole === "state" && evidence.toolName !== "context_guard_observe_test_readiness") {
-				if (![...projection.evidence.values()].find((fact) => fact.callId === evidence.causedByCallId && fact.epoch === evidence.epoch && fact.outcome === "success" && fact.toolResultSeq < evidence.toolResultSeq && fact.subjects.includes(target) && fact.semanticAction === evidence.semanticAction) || !["context_guard_observe_file", "context_guard_observe_git"].includes(evidence.toolName)) continue;
+				if (!evidenceByCall(evidence.causedByCallId ?? "").find((fact) => fact.callId === evidence.causedByCallId && fact.epoch === evidence.epoch && fact.outcome === "success" && fact.toolResultSeq < evidence.toolResultSeq && fact.subjects.includes(target) && fact.semanticAction === evidence.semanticAction) || !["context_guard_observe_file", "context_guard_observe_git"].includes(evidence.toolName)) continue;
 			}
 			const pair = sourceByCall.get(evidence.callId);
 			const crossesNewConstraint = kind === "constraint" && forbiddenFile && pair && pair.call.seq <= root.seq && pair.result.seq >= root.seq;
@@ -26188,7 +26420,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			if (item.semanticAction === "test" && evidence.evidenceRole === "effect" && (namedTest ? !isDirectTestFact(evidence) : !selectedReadiness)) continue;
 			const outcome = hostResultStatus === "failure" || evidence.outcome === "failure" || evidence.processFacts?.outcome === "failure" ? "failure" : evidence.outcome !== "success" || evidence.processFacts?.outcome === "unknown" || hostResultStatus === "unknown" || evidence.evidenceRole === "effect" && evidence.processFacts && evidence.processFacts.operationAttribution !== "single_operation" || evidence.parseStatus !== "supported" ? "unknown" : "success";
 			const callId = `call:${evidence.callId}`, resultId = `result:${evidence.callId}`;
-			const existingCall = sources.find((source) => source.id === callId);
+			const existingCall = sourceById.get(callId);
 			if (existingCall && existingCall.revision !== itemRevision) continue;
 			const callName = String(row(pair.call.data).name ?? "");
 			let callArgs = {};
@@ -26207,13 +26439,13 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			const fileCallTarget = fileCall && typeof filePath === "string" && filePath ? portableResolve(rootBase, filePath) : void 0;
 			const hostTarget = fileCall ? fileCallTarget : evidence.subjects[0];
 			if (!hostTarget || fileCall && evidence.parseStatus !== "supported") continue;
-			if (!sources.some((source) => source.id === callId)) {
+			if (!sourceIds.has(callId)) {
 				const callTurn = String(row(pair.call.data).turn ?? turn);
 				const resultTurn = String(row(pair.result.data).turn ?? callTurn);
 				const originRoot = usedRoots.filter((candidate) => candidate.seq <= pair.call.seq && String(row(candidate.data).turn ?? turn) === callTurn).at(-1);
 				const callBytes = String(row(pair.call.data).arguments ?? "");
 				const resultBytes = Array.isArray(row(row(pair.result.data).message).content) ? row(row(pair.result.data).message).content.filter((part) => row(part).type === "text").map((part) => String(row(part).text ?? "")).join("\n") : "";
-				sources.push({
+				addSource({
 					id: callId,
 					seq: pair.call.seq,
 					kind: "host_call",
@@ -26228,7 +26460,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 					target_kind: subjectKind,
 					...originRoot ? { origin_root_source_id: `root:${originRoot.seq}` } : {}
 				});
-				sources.push({
+				addSource({
 					id: resultId,
 					seq: pair.result.seq,
 					kind: "host_result",
@@ -26283,9 +26515,16 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 	}
 	const latestText = rootText(latestRoot), latestDigest = hash(latestText);
 	const resume = isResume(latestText);
+	const unitIdsByRootSeq = /* @__PURE__ */ new Map();
+	for (const entry of projection.units.values()) for (const ref$1 of entry.rootInputRefs) {
+		const bucket = unitIdsByRootSeq.get(ref$1.seq);
+		if (bucket) {
+			if (!bucket.includes(entry.unitId)) bucket.push(entry.unitId);
+		} else unitIdsByRootSeq.set(ref$1.seq, [entry.unitId]);
+	}
 	const selectedUnitAtRoot = (seq) => {
-		const selected = [...projection.units.values()].filter((entry) => entry.rootInputRefs.some((ref$1) => ref$1.seq === seq));
-		return selected.length === 1 ? selected[0]?.unitId : void 0;
+		const selected = unitIdsByRootSeq.get(seq) ?? [];
+		return selected.length === 1 ? selected[0] : void 0;
 	};
 	const controls = rootControls(usedRoots, requirements, sources, facts, unit, selectedUnitAtRoot);
 	return {
@@ -27633,4 +27872,4 @@ const RC020_RC1_HOST_PACKAGES = packages.map(({ name, version: version$1, integr
 }));
 
 //#endregion
-export { PROOF_CAPABILITY_MATRIX as $, ACTIVE_HOST_COHORT_ID as $i, admissibleForRemoval as $n, splitTextFragments as $r, releasePreEffectDecision as $t, PROTOCOL_V3_NOTICE as A, CERTIFICATE_VERSION_V2 as Aa, resolveActiveProfileHostLock as Ai, effectuateBoundary as An, interpretClause as Ar, V6_ORDINARY_COMPLETION_RULE_SHORT as At, extractTextContent as B, requestedTargetAuthorizesMutation as Ba, readAsarFile as Bi, rebindResponse as Bn, kindOfScope as Br, isV6PendingRootWait as Bt, SESSION_API_UNSUPPORTED as C, evaluateMinimumHostVersion as Ca, inspectTargetHostGraph as Ci, goalCompletionDenial as Cn, clauseIsGoverned as Cr, CLEANUP_CONDITION_RULE as Ct, projectCoreV2 as D, ACTION_MANIFEST_VERSION as Da, prepareDesktopHostTrust as Di, unitDescendantIds as Dn, hasOrderedCoordination as Dr, MIN_RECOVERY_CHAR_BUDGET as Dt, snapshotSessionEvents as E, ACTION_MANIFEST as Ea, prepareActiveHostTrust as Ei, certificateClosure as En, governedClauseRestrictsExecution as Er, DEFAULT_RECOVERY_CHAR_BUDGET as Et, deriveProjection as F, SUPPORTED_EVIDENCE_ADAPTERS as Fa, DESKTOP_IDENTITY_FACTS as Fi, confirmRebind as Fn, isInformationalFragment as Fr, recoveryDigest as Ft, canonicalArgvFromCommand as G, validateActionTarget as Ga, writeDesktopRuntimeReceipt as Gi, capabilityRemedyPhrase as Gn, opensConditionLead as Gr, contractById as Gt, isDeterministicCheck as H, semanticActionFromCommand as Ha, readDesktopAppRuntime as Hi, CONFIRM_LINE_PATTERN as Hn, maskCodeSpans as Hr, OUTCOME_STRENGTH as Ht, legacyRecordsNeedingReview as I, actionCompatible as Ia, DESKTOP_PROFILE_PACKAGE_NAME as Ii, proposeRebind as In, isOpenObligation as Ir, recoveryTitle as It, parseShellCommand as J, hostTrustDigest as Ji, itemDiagnosis as Jn, qualificationOfClause as Jr, normalizeReservation as Jt, isRunExecutable as K, RC020_RC2_HOST_PACKAGES as Ka, HostTrustError as Ki, deriveItemDiagnosis as Kn, opensWithDirective as Kr, inFlightReservation as Kt, rootLocatorFlavor as L, boundedArtifactChoiceMatches as La, DESKTOP_RUNTIME_PACKAGE_NAME as Li, proposeRebindOutcome as Ln, isQuestionScopeNeedingReview as Lr, renderRecoveryPacket as Lt, PROTOCOL_V5_NOTICE as M, STATEFUL_ACTIONS as Ma, resolveInstalledHostLock as Mi, qualifyBoundary as Mn, introducesActionClause as Mr, cleanupConditionFor as Mt, PROTOCOL_V6_NOTICE as N, STOP_PROTOCOL_VERSION as Na, revalidateDesktopCoreLock as Ni, currentContractDigest as Nn, isExecutableItem as Nr, closingHint as Nt, CAPTURE_V042_NOTICE as O, BOUNDED_ARTIFACT_TYPES as Oa, prepareTargetHostTrust as Oi, BOUNDARY_RECORD_PREFIX as On, hasQuestionScope as Or, V6_ORDINARY_COMPLETION_RULE as Ot, applyUpgradeEligibility as P, STOP_PROTOCOL_VERSION_V2 as Pa, verifyComposedHostLockDump as Pi, createProjection as Pn, isExplanationScope as Pr, openItems as Pt, certifyCheckpoint as Q, registryArchiveModules as Qi, actionHasCertificationPath as Qn, semanticActionOfScope as Qr, releaseCoverage as Qt, supersedeItem as R, isStatefulAction as Ra, auditDesktopInstalledImplementation as Ri, proposeRebindV042 as Rn, isRestatement as Rr, v6CurrentRootBoundaries as Rt, sourcedNamedTestRoot as S, compareHostVersions as Sa, inspectDesktopTargetGraph as Si, v6TestPredicate as Sn, clauseAsksOwnQuestion as Sr, validateProofManifestV2 as St, SessionApiError as T, satisfiesSupportedHostRange as Ta, packageRowsFromPnpmLock as Ti, certifiableOpenItems as Tn, explanationHasActionResidue as Tr, CLEANUP_CONDITION_RULE_SHORT as Tt, persistedToolResultStatus as U, semanticActionFromText as Ua, readDesktopDependency as Ui, isFrozenV042RebindResponse as Un, maskQuotedSpans as Ur, RELEASE_OPERATIONS as Ut, extractToolSubject as V, requestedTargetMatchesResolved as Va, readAsarIndex as Vi, replayRebindResult as Vn, legacyQuestionReadingIsInformational as Vr, sourceItemForCoreRequirement as Vt, withDurability as W, validateActionManifest as Wa, readDesktopTargetGraph as Wi, parseConfirmationMessage as Wn, namedActions as Wr, RELEASE_OPERATION_SURFACES as Wt, segmentAuthorityBlocks as X, qualifyHostTrust as Xi, relevantEvidence as Xn, reportingHeadGoverns as Xr, readbackSettlesContract as Xt, authorityCaptureCounts as Y, parseHostTrust as Yi, nativeFileTwoRole as Yn, questionHeadsClause as Yr, normalizeSettlement as Yt, bindingIndividuallyAccepted as Z, registryArchiveFiles as Zi, DEPENDENCY_FREE_ONLY_CONDITION as Zn, restatedContentOf as Zr, releaseContractFor as Zt, previewFirstStepInjection as _, HOST_VALIDATED_VERSIONS as _a, evaluateActiveHostLock as _i, latestAssistantText as _n, classifyUserInteraction as _r, requiredSubjectsOf as _t, commitTreeSnapshotDigest as a, GOAL_HOST_PACKAGES as aa, digestStrings as ai, CONTROL_RECORD_PREFIX as an, captureClause as ar, bindProofToProjection as at, HOST_WORKDIR_PREFIX as b, SUPPORTED_HOST_RANGE as ba, hostLockRowsFromComposedDump as bi, progressFingerprint as bn, actionVerbMatches as br, sessionQueryV2 as bt, gitCommandMatchesTarget as c, bindExecutableIdentity as ca, sanitizeUrl as ci, assessmentAction as cn, environmentDefaultRepositoryTarget as cr, createProofManifest as ct, verifiedLinearCommitReadback as d, evaluateGraphDerivedHostLock as da, activeRendererModule as di, currentActionBases as dn, extractOperation as dr, proofDigest as dt, ACTIVE_HOST_COHORT_IDS as ea, statefulActionsOfScope as ei, reservationFor as en, capabilityConsequence as er, PROOF_KINDS as et, FIRST_STEP_GUIDANCE as f, evaluateHostCapability as fa, auditedDefaultWorkdirHost as fi, decideTurnBoundary as fn, isInformationalMessage as fr, proofDigestV2 as ft, lifecyclePhase as g, selectHostCohort as ga, combineHostPolicy as gi, isWholeTaskCompletionClaim as gn, classifyTaskIntent as gr, proofV2Rejection as gt, firstStepGuidanceV6 as h, hostVersionFromPackages as ha, auditedHostImplementation as hi, isRootPauseRequest as hn, npmEscapedPackageName as hr, proofOperationMatches as ht, commitIndexSnapshotDigest as i, EXPECTED_HOST_PACKAGES as ia, canonicalizePath as ii, isVerifyingCapability as in, removalIsPartiallyKnown as ir, PROOF_PROTOCOL_VERSION_V2 as it, PROTOCOL_V4_NOTICE as j, SEMANTIC_ACTIONS as ja, resolveDesktopProfileHostLock as ji, isCurrentAcceptedBoundary as jn, interpretMessage as jr, carriesCleanupCondition as jt, DEFAULT_DELEGATION_TOOL_NAMES as k, CERTIFICATE_VERSION as ka, readActiveHostGraph as ki, availableBoundaryQualifications as kn, hasWorkPredicate as kr, V6_ORDINARY_COMPLETION_RULE_COMPACT as kt, parseGitCommandManifest as l, bindLiveGoalCapability as la, sha256 as li, assessmentOutcomePredicate as ln, extractArtifactPaths as lr, createProofManifestV2 as lt, firstStepGuidance as m, evaluateToolSurfaceCapability as ma, auditedForegroundRenderers as mi, decisionBoundaryKey as mn, canonicalRegistryBase as mr, proofHostSurfacesOf as mt, GIT_COMMAND_MANIFEST_IDS as n, BASE_HOST_PACKAGES as na, COMMAND_SURFACE_MANIFEST as ni, evidenceCoverage as nn, partialFailureOf as nr, PROOF_MANIFEST_DOMAIN_V2 as nt, createGitPrestateEnvelope as o, HOST_CAPABILITY_PACKAGE_GROUPS as oa, normalizeClause as oi, NO_PROGRESS_RECORD_PREFIX as on, captureItem as or, bindProofV2ToProjection as ot, claimedBatchHasRealRootInput as p, evaluateHostLock as pa, auditedDefaultWorkdirProvider as pi, decideTurnStopping as pn, segmentClauses as pr, proofEvidenceConstraints as pt, parsePwshCommand as q, createHostAuditSession as qa, acquireHostTrust as qi, evidenceAvailabilityReason as qn, presentExplanationHead as qr, normalizeReleaseContract as qt, GIT_COMMAND_TEMPLATES as r, DEFAULT_HOST_LOCK as ra, validateManifest as ri, evidenceMatchesItem as rn, removalIsComplete as rr, PROOF_PROTOCOL_VERSION as rt, executeRevalidatedGitEffect as s, HOST_COHORTS as sa, sanitizeClauseText as si, NO_PROGRESS_TURNS_BEFORE_STOP as sn, classifyClause as sr, canonicalProjection as st, RC020_RC1_HOST_PACKAGES as t, ACTIVE_HOST_LAUNCHER_VERSION as ta, verbIsNegated as ti, bindingSatisfies as tn, capabilityFactOf as tr, PROOF_KINDS_V2 as tt, revalidateGitPrestate as u, evaluateExternalWaitCapability as ua, HostProfileError as ui, classifyCompletionClaim as un, extractMethod as ur, proofCapabilityReport as ut, projectSessionCoreV2 as v, LATEST_TESTED_HOST_VERSION as va, evaluateConfiguredHostLock as vi, latestRootInstruction as vn, GRANTED_QUALIFICATION as vr, scopeCoverageDigest as vt, SESSION_EVENT_ENVELOPE_INVALID as w, parseHostVersion as wa, packageRowsFromActiveGraph as wi, hasCurrentCertificate as wn, clauseIsProtected as wr, CLEANUP_CONDITION_RULE_COMPACT as wt, captureHostWorkdir as x, SUPPORTED_HOST_VERSIONS as xa, injectActiveProfileHostLock as xi, testOutcomePredicate as xn, clarifiedSpanOf as xr, validateProofManifest as xt, sessionCoreSnapshot as y, MIN_SUPPORTED_HOST_VERSION as ya, hostLockContextFromComposedDump as yi, observeAssistantOutcome as yn, LEGACY_QUALIFICATION as yr, sessionQuery as yt, evidenceFromPersistedToolResult as z, requestedIdentityKey as za, hasDesktopImporterState as zi, rebindAttemptKey as zn, itemHoldsExecutionAuthority as zr, currentV6Feedback as zt };
+export { segmentAuthorityBlocks as $, qualifyHostTrust as $i, relevantEvidence as $n, reportingHeadGoverns as $r, readbackSettlesContract as $t, PROTOCOL_V3_NOTICE as A, ACTION_MANIFEST_VERSION as Aa, prepareDesktopHostTrust as Ai, unitDescendantIds as An, hasOrderedCoordination as Ar, MIN_RECOVERY_CHAR_BUDGET as At, evidenceFromPersistedToolResult as B, boundedArtifactChoiceMatches as Ba, DESKTOP_RUNTIME_PACKAGE_NAME as Bi, proposeRebindOutcome as Bn, isQuestionScopeNeedingReview as Br, renderRecoveryPacket as Bt, SESSION_API_UNSUPPORTED as C, SUPPORTED_HOST_RANGE as Ca, hostLockRowsFromComposedDump as Ci, progressFingerprint as Cn, actionVerbMatches as Cr, sessionQueryV2 as Ct, projectCoreV2 as D, parseHostVersion as Da, packageRowsFromActiveGraph as Di, hasCurrentCertificate as Dn, clauseIsProtected as Dr, CLEANUP_CONDITION_RULE_COMPACT as Dt, snapshotSessionEvents as E, evaluateMinimumHostVersion as Ea, inspectTargetHostGraph as Ei, goalCompletionDenial as En, clauseIsGoverned as Er, CLEANUP_CONDITION_RULE as Et, deriveProjection as F, STATEFUL_ACTIONS as Fa, resolveInstalledHostLock as Fi, qualifyBoundary as Fn, introducesActionClause as Fr, cleanupConditionFor as Ft, persistedToolResultStatus as G, semanticActionFromCommand as Ga, readDesktopAppRuntime as Gi, CONFIRM_LINE_PATTERN as Gn, maskCodeSpans as Gr, OUTCOME_STRENGTH as Gt, extractToolSubject as H, requestedIdentityKey as Ha, hasDesktopImporterState as Hi, rebindAttemptKey as Hn, itemHoldsExecutionAuthority as Hr, currentV6Feedback as Ht, legacyRecordsNeedingReview as I, STOP_PROTOCOL_VERSION as Ia, revalidateDesktopCoreLock as Ii, currentContractDigest as In, isExecutableItem as Ir, closingHint as It, canonicalArgvFromCommand as J, validateActionTarget as Ja, writeDesktopRuntimeReceipt as Ji, capabilityRemedyPhrase as Jn, opensConditionLead as Jr, contractById as Jt, shellReadbackOutcome as K, semanticActionFromText as Ka, readDesktopDependency as Ki, isFrozenV042RebindResponse as Kn, maskQuotedSpans as Kr, RELEASE_OPERATIONS as Kt, rootLocatorFlavor as L, STOP_PROTOCOL_VERSION_V2 as La, verifyComposedHostLockDump as Li, createProjection as Ln, isExplanationScope as Lr, openItems as Lt, PROTOCOL_V5_NOTICE as M, CERTIFICATE_VERSION as Ma, readActiveHostGraph as Mi, availableBoundaryQualifications as Mn, hasWorkPredicate as Mr, V6_ORDINARY_COMPLETION_RULE_COMPACT as Mt, PROTOCOL_V6_NOTICE as N, CERTIFICATE_VERSION_V2 as Na, resolveActiveProfileHostLock as Ni, effectuateBoundary as Nn, interpretClause as Nr, V6_ORDINARY_COMPLETION_RULE_SHORT as Nt, CAPTURE_V042_NOTICE as O, satisfiesSupportedHostRange as Oa, packageRowsFromPnpmLock as Oi, certifiableOpenItems as On, explanationHasActionResidue as Or, CLEANUP_CONDITION_RULE_SHORT as Ot, applyUpgradeEligibility as P, SEMANTIC_ACTIONS as Pa, resolveDesktopProfileHostLock as Pi, isCurrentAcceptedBoundary as Pn, interpretMessage as Pr, carriesCleanupCondition as Pt, authorityCaptureCounts as Q, parseHostTrust as Qi, nativeFileTwoRole as Qn, questionHeadsClause as Qr, normalizeSettlement as Qt, supersedeItem as R, SUPPORTED_EVIDENCE_ADAPTERS as Ra, DESKTOP_IDENTITY_FACTS as Ri, confirmRebind as Rn, isInformationalFragment as Rr, recoveryDigest as Rt, sourcedNamedTestRoot as S, MIN_SUPPORTED_HOST_VERSION as Sa, hostLockContextFromComposedDump as Si, observeAssistantOutcome as Sn, LEGACY_QUALIFICATION as Sr, sessionQuery as St, SessionApiError as T, compareHostVersions as Ta, inspectDesktopTargetGraph as Ti, v6TestPredicate as Tn, clauseAsksOwnQuestion as Tr, validateProofManifestV2 as Tt, isDeterministicCheck as U, requestedTargetAuthorizesMutation as Ua, readAsarFile as Ui, rebindResponse as Un, kindOfScope as Ur, isV6PendingRootWait as Ut, extractTextContent as V, isStatefulAction as Va, auditDesktopInstalledImplementation as Vi, proposeRebindV042 as Vn, isRestatement as Vr, v6CurrentRootBoundaries as Vt, nativeGitParentOidVerified as W, requestedTargetMatchesResolved as Wa, readAsarIndex as Wi, replayRebindResult as Wn, legacyQuestionReadingIsInformational as Wr, sourceItemForCoreRequirement as Wt, parsePwshCommand as X, createHostAuditSession as Xa, acquireHostTrust as Xi, evidenceAvailabilityReason as Xn, presentExplanationHead as Xr, normalizeReleaseContract as Xt, isRunExecutable as Y, RC020_RC2_HOST_PACKAGES as Ya, HostTrustError as Yi, deriveItemDiagnosis as Yn, opensWithDirective as Yr, inFlightReservation as Yt, parseShellCommand as Z, hostTrustDigest as Zi, itemDiagnosis as Zn, qualificationOfClause as Zr, normalizeReservation as Zt, previewFirstStepInjection as _, evaluateToolSurfaceCapability as _a, auditedForegroundRenderers as _i, decisionBoundaryKey as _n, canonicalRegistryBase as _r, proofHostSurfacesOf as _t, commitTreeSnapshotDigest as a, BASE_HOST_PACKAGES as aa, COMMAND_SURFACE_MANIFEST as ai, evidenceCoverage as an, partialFailureOf as ar, PROOF_MANIFEST_DOMAIN_V2 as at, HOST_WORKDIR_PREFIX as b, HOST_VALIDATED_VERSIONS as ba, evaluateActiveHostLock as bi, latestAssistantText as bn, classifyUserInteraction as br, requiredSubjectsOf as bt, gitCommandMatchesTarget as c, GOAL_HOST_PACKAGES as ca, digestStrings as ci, CONTROL_RECORD_PREFIX as cn, captureClause as cr, bindProofToProjection as ct, verifiedLinearCommitReadback as d, bindExecutableIdentity as da, sanitizeUrl as di, assessmentAction as dn, environmentDefaultRepositoryTarget as dr, createProofManifest as dt, registryArchiveFiles as ea, restatedContentOf as ei, releaseContractFor as en, DEPENDENCY_FREE_ONLY_CONDITION as er, bindingIndividuallyAccepted as et, FIRST_STEP_GUIDANCE as f, bindLiveGoalCapability as fa, sha256 as fi, assessmentOutcomePredicate as fn, extractArtifactPaths as fr, createProofManifestV2 as ft, lifecyclePhase as g, evaluateHostLock as ga, auditedDefaultWorkdirProvider as gi, decideTurnStopping as gn, segmentClauses as gr, proofEvidenceConstraints as gt, firstStepGuidanceV6 as h, evaluateHostCapability as ha, auditedDefaultWorkdirHost as hi, decideTurnBoundary as hn, isInformationalMessage as hr, proofDigestV2 as ht, commitIndexSnapshotDigest as i, ACTIVE_HOST_LAUNCHER_VERSION as ia, verbIsNegated as ii, bindingSatisfies as in, capabilityFactOf as ir, PROOF_KINDS_V2 as it, PROTOCOL_V4_NOTICE as j, BOUNDED_ARTIFACT_TYPES as ja, prepareTargetHostTrust as ji, BOUNDARY_RECORD_PREFIX as jn, hasQuestionScope as jr, V6_ORDINARY_COMPLETION_RULE as jt, DEFAULT_DELEGATION_TOOL_NAMES as k, ACTION_MANIFEST as ka, prepareActiveHostTrust as ki, certificateClosure as kn, governedClauseRestrictsExecution as kr, DEFAULT_RECOVERY_CHAR_BUDGET as kt, parseGitCommandManifest as l, HOST_CAPABILITY_PACKAGE_GROUPS as la, normalizeClause as li, NO_PROGRESS_RECORD_PREFIX as ln, captureItem as lr, bindProofV2ToProjection as lt, firstStepGuidance as m, evaluateGraphDerivedHostLock as ma, activeRendererModule as mi, currentActionBases as mn, extractOperation as mr, proofDigest as mt, GIT_COMMAND_MANIFEST_IDS as n, ACTIVE_HOST_COHORT_ID as na, splitTextFragments as ni, releasePreEffectDecision as nn, admissibleForRemoval as nr, PROOF_CAPABILITY_MATRIX as nt, createGitPrestateEnvelope as o, DEFAULT_HOST_LOCK as oa, validateManifest as oi, evidenceMatchesItem as on, removalIsComplete as or, PROOF_PROTOCOL_VERSION as ot, claimedBatchHasRealRootInput as p, evaluateExternalWaitCapability as pa, HostProfileError as pi, classifyCompletionClaim as pn, extractMethod as pr, proofCapabilityReport as pt, withDurability as q, validateActionManifest as qa, readDesktopTargetGraph as qi, parseConfirmationMessage as qn, namedActions as qr, RELEASE_OPERATION_SURFACES as qt, GIT_COMMAND_TEMPLATES as r, ACTIVE_HOST_COHORT_IDS as ra, statefulActionsOfScope as ri, reservationFor as rn, capabilityConsequence as rr, PROOF_KINDS as rt, executeRevalidatedGitEffect as s, EXPECTED_HOST_PACKAGES as sa, canonicalizePath as si, isVerifyingCapability as sn, removalIsPartiallyKnown as sr, PROOF_PROTOCOL_VERSION_V2 as st, RC020_RC1_HOST_PACKAGES as t, registryArchiveModules as ta, semanticActionOfScope as ti, releaseCoverage as tn, actionHasCertificationPath as tr, certifyCheckpoint as tt, revalidateGitPrestate as u, HOST_COHORTS as ua, sanitizeClauseText as ui, NO_PROGRESS_TURNS_BEFORE_STOP as un, classifyClause as ur, canonicalProjection as ut, projectSessionCoreV2 as v, hostVersionFromPackages as va, auditedHostImplementation as vi, isRootPauseRequest as vn, npmEscapedPackageName as vr, proofOperationMatches as vt, SESSION_EVENT_ENVELOPE_INVALID as w, SUPPORTED_HOST_VERSIONS as wa, injectActiveProfileHostLock as wi, testOutcomePredicate as wn, clarifiedSpanOf as wr, validateProofManifest as wt, captureHostWorkdir as x, LATEST_TESTED_HOST_VERSION as xa, evaluateConfiguredHostLock as xi, latestRootInstruction as xn, GRANTED_QUALIFICATION as xr, scopeCoverageDigest as xt, sessionCoreSnapshot as y, selectHostCohort as ya, combineHostPolicy as yi, isWholeTaskCompletionClaim as yn, classifyTaskIntent as yr, proofV2Rejection as yt, NATIVE_GIT_ROOT_PARENT_OID as z, actionCompatible as za, DESKTOP_PROFILE_PACKAGE_NAME as zi, proposeRebind as zn, isOpenObligation as zr, recoveryTitle as zt };

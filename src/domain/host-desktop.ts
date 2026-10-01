@@ -5,6 +5,7 @@ import { isAbsolute, join, resolve, sep } from 'node:path'
 import type { PackageRow } from './digest.js'
 import { HostProfileError } from './host-resolver.js'
 import { parseHostVersion, satisfiesSupportedHostRange } from './host-version.js'
+import type { HostAuditSession } from './host-audit-session.js'
 import type { AuditedPackageExpectation } from './host-resolver.js'
 
 /**
@@ -36,6 +37,24 @@ const DESKTOP_GRAPH_ROOT = 'dsh/node_modules'
 const DESKTOP_CARRIER_ENTRY = 'dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'
 const MAX_ASAR_HEADER_BYTES = 128 * 1024 * 1024
 const MAX_ASAR_FILE_BYTES = 64 * 1024 * 1024
+
+/**
+ * CG-083-PERF03: operation-scoped asar reads. Within ONE host-lock
+ * validation the same helpers used to re-open the archive and re-read the
+ * header, metadata and module bytes several times; with a session, the index
+ * and every entry's bytes are memoized on that operation's audit session —
+ * they live and die with the validation and are never a cross-entry cache.
+ * Without a session the original direct reads run unchanged.
+ */
+function memoizedAsarIndex(session: HostAuditSession | undefined, archivePath: string): AsarIndex {
+  if (!session) return readAsarIndex(archivePath)
+  return session.memo(`desktop-asar-index:${archivePath}`, () => readAsarIndex(archivePath))
+}
+
+function memoizedAsarFile(session: HostAuditSession | undefined, archivePath: string, index: AsarIndex, entryPath: string): Buffer {
+  if (!session) return readAsarFile(archivePath, index, entryPath)
+  return session.memo(`desktop-asar-bytes:${archivePath}\u0000${entryPath}`, () => readAsarFile(archivePath, index, entryPath))
+}
 
 interface AsarNode {
   files?: Record<string, AsarNode>
@@ -194,21 +213,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * manifest, the `desktop-runtime.json` metadata block, and the official CLI
  * carrier entry the app installs.
  */
-export function readDesktopAppRuntime(appAsarPath: string): DesktopAppRuntime {
+export function readDesktopAppRuntime(appAsarPath: string, session?: HostAuditSession): DesktopAppRuntime {
   if (!isAbsolute(appAsarPath)) throw new HostProfileError('desktop_app_invalid', 'the app archive path must be absolute')
   if (!existsSync(appAsarPath) || !lstatSync(appAsarPath).isFile()) {
     throw new HostProfileError('desktop_app_missing', 'the official app archive was not found')
   }
   const asarRealpath = realpathSync(appAsarPath)
-  const index = readAsarIndex(asarRealpath)
+  const index = memoizedAsarIndex(session, asarRealpath)
   if (!asarNode(index, DESKTOP_CARRIER_ENTRY.split('/'))) {
     throw new HostProfileError('desktop_app_invalid', 'the official CLI carrier entry is missing from the app bundle')
   }
   // The carrier's bytes must agree with the header authenticated by the OS
   // signature verifier, not merely occupy a plausible archive pathname.
-  readAsarFile(asarRealpath, index, DESKTOP_CARRIER_ENTRY)
-  const manifestBytes = readAsarFile(asarRealpath, index, DESKTOP_RUNTIME_MANIFEST_ENTRY)
-  const metadataBytes = readAsarFile(asarRealpath, index, DESKTOP_RUNTIME_METADATA_ENTRY)
+  memoizedAsarFile(session, asarRealpath, index, DESKTOP_CARRIER_ENTRY)
+  const manifestBytes = memoizedAsarFile(session, asarRealpath, index, DESKTOP_RUNTIME_MANIFEST_ENTRY)
+  const metadataBytes = memoizedAsarFile(session, asarRealpath, index, DESKTOP_RUNTIME_METADATA_ENTRY)
   const manifest = JSON.parse(manifestBytes.toString('utf8')) as Record<string, unknown>
   const metadata = JSON.parse(metadataBytes.toString('utf8')) as Record<string, unknown>
   if (manifest.name !== DESKTOP_RUNTIME_PACKAGE_NAME) {
@@ -360,10 +379,10 @@ export function readDesktopTargetGraph(appAsarPath: string, profileRoot: string)
  * before any digest is computed.
  */
 export function auditDesktopInstalledImplementation(appAsarPath: string,
-  expectations: readonly AuditedPackageExpectation[]): boolean {
+  expectations: readonly AuditedPackageExpectation[], session?: HostAuditSession): boolean {
   try {
     const realArchive = realpathSync(appAsarPath)
-    const index = readAsarIndex(realArchive)
+    const index = memoizedAsarIndex(session, realArchive)
     const { CRITICAL_NAME_SET } = criticalNames()
     // Ambiguity scan over the header only: any second (nested) occurrence of
     // a critical package name inside the app graph makes resolution
@@ -392,7 +411,7 @@ export function auditDesktopInstalledImplementation(appAsarPath: string,
     // installed byte. It is the ONLY accepted authority for a rewritten
     // manifest, never for the executable modules themselves.
     const fileTable = new Map<string, string>()
-    const metadataBytes = readAsarFile(realArchive, index, DESKTOP_RUNTIME_METADATA_ENTRY)
+    const metadataBytes = memoizedAsarFile(session, realArchive, index, DESKTOP_RUNTIME_METADATA_ENTRY)
     const metadata = JSON.parse(metadataBytes.toString('utf8')) as { files?: unknown }
     if (Array.isArray(metadata.files)) {
       for (const entry of metadata.files) {
@@ -406,7 +425,7 @@ export function auditDesktopInstalledImplementation(appAsarPath: string,
       const parts = [...topLevelRoot, ...expected.name.split('/')]
       const node = asarNode(index, parts)
       if (!node || !node.files) return false
-      const manifestBytes = readAsarFile(realArchive, index, [...parts, 'package.json'].join('/'))
+      const manifestBytes = memoizedAsarFile(session, realArchive, index, [...parts, 'package.json'].join('/'))
       const manifest = JSON.parse(manifestBytes.toString('utf8')) as Record<string, unknown>
       if (manifest.name !== expected.name || manifest.version !== expected.version) return false
       const inventory: string[] = []
@@ -433,7 +452,7 @@ export function auditDesktopInstalledImplementation(appAsarPath: string,
       for (const file of inventory) {
         const tableEntry = fileTable.get(`${DESKTOP_GRAPH_ROOT}/${expected.name}/${file}`)
         if (tableEntry === undefined) return false
-        const attested = createHash('sha256').update(readAsarFile(realArchive, index, [...parts, ...file.split('/')].join('/'))).digest('hex')
+        const attested = createHash('sha256').update(memoizedAsarFile(session, realArchive, index, [...parts, ...file.split('/')].join('/'))).digest('hex')
         if (tableEntry !== attested) return false
       }
       // Registry equality: every audited module matches the published
@@ -442,7 +461,7 @@ export function auditDesktopInstalledImplementation(appAsarPath: string,
       // its bytes are attested by the official table, while an executable
       // module whose bytes differ from the published tarball always fails.
       for (const file of Object.keys(expected.modules ?? {})) {
-        const actual = createHash('sha256').update(readAsarFile(realArchive, index, [...parts, ...file.split('/')].join('/'))).digest('hex')
+        const actual = createHash('sha256').update(memoizedAsarFile(session, realArchive, index, [...parts, ...file.split('/')].join('/'))).digest('hex')
         if (expected.modules![file] === actual) continue
         if (file === 'package.json') continue
         return false
@@ -500,14 +519,14 @@ export const DESKTOP_IDENTITY_FACTS: Readonly<{
  * installed-byte audit separately refuses nested critical duplicates, so a
  * nested-only dependency can never be silently resolved here).
  */
-export function readDesktopDependency(appAsarPath: string, name: string): PackageRow {
+export function readDesktopDependency(appAsarPath: string, name: string, session?: HostAuditSession): PackageRow {
   const realArchive = realpathSync(appAsarPath)
-  const index = readAsarIndex(realArchive)
+  const index = memoizedAsarIndex(session, realArchive)
   const manifestPath = `${DESKTOP_GRAPH_ROOT}/${name}/package.json`
   if (!asarNode(index, manifestPath.split('/'))) {
     throw new HostProfileError('host_contract_probe_dependency_unbound', `dependency ${name} has no top-level manifest in the app graph`)
   }
-  const bytes = readAsarFile(realArchive, index, manifestPath)
+  const bytes = memoizedAsarFile(session, realArchive, index, manifestPath)
   const manifest = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
   if (manifest.name !== name || typeof manifest.version !== 'string' || !parseHostVersion(manifest.version)) {
     throw new HostProfileError('host_contract_probe_dependency_unbound', `dependency ${name} has an invalid manifest identity`)

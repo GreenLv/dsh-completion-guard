@@ -11,7 +11,15 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const argv = process.argv.slice(2)
-const manifest = JSON.parse(readFileSync(new URL('../manifests/rc020-rc1-byte-audit.json', import.meta.url), 'utf8'))
+// CG-083-VAL02: the measurement baseline is the CURRENT cohort manifest
+// (rc020-rc2-byte-audit.json). `rc020-rc1-byte-audit.json` is retained as
+// history for replaying older reports; selecting it is an explicit
+// `--manifest` decision, never the default.
+const defaultManifest = new URL('../manifests/rc020-rc2-byte-audit.json', import.meta.url)
+const manifestFlag = argv.indexOf('--manifest')
+const manifestPath = manifestFlag > 0 ? argv[manifestFlag + 1] : undefined
+const manifest = JSON.parse(readFileSync(manifestPath ?? defaultManifest, 'utf8'))
+const desktopDigestFlag = argv.indexOf('--desktop-digest')
 
 function synthesize(targetDir) {
   if (existsSync(targetDir)) throw new Error('synthesis requires a new unused directory')
@@ -106,12 +114,16 @@ function measure(runtimeRoot, profileRoot, profile) {
   const repo = fileURLToPath(new URL('../', import.meta.url))
   const graphKind = argv.includes('--installed-graph') ? 'installed-graph/source-harness' : 'synthetic/source-harness'
   const results = [], raw = []
+  const vitest = join(repo, 'node_modules', 'vitest', 'vitest.mjs')
   for (let index = 0; index < 5; index++) {
-    const out = execFileSync('pnpm', ['exec', 'vitest', 'run', 'tests/v081-host-protocol-measurement.test.ts', '--maxWorkers', '1'], {
-      cwd: repo, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, DSH_MEASURE_RUNTIME: runtimeRoot, DSH_MEASURE_PROFILE: profileRoot,
-        DSH_MEASURE_KIND: profile, DSH_MEASURE_GRAPH_KIND: graphKind },
-    })
+    const out = execFileSync(process.execPath, [vitest, 'run', 'tests/v081-host-protocol-measurement.test.ts', '--maxWorkers', '1'], {
+    cwd: repo, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, DSH_MEASURE_RUNTIME: runtimeRoot, DSH_MEASURE_PROFILE: profileRoot,
+      DSH_MEASURE_KIND: profile, DSH_MEASURE_GRAPH_KIND: graphKind,
+      ...(profile === 'desktop'
+        ? { DSH_MEASURE_DESKTOP_DIGEST: desktopDigestFlag > 0 ? argv[desktopDigestFlag + 1] : '' }
+        : {}) },
+  })
     raw.push(out)
     const match = out.match(/DSH_HOST_MEASUREMENT=(.+)/)
     if (!match) throw new Error('production measurement did not emit its observed result')
@@ -127,6 +139,8 @@ function measure(runtimeRoot, profileRoot, profile) {
     return [entry, { samples, median_ms: sorted[2], p95_nearest_rank_ms: sorted.at(-1) }]
   }))
   console.log(JSON.stringify({ schema: 'dsh-host-entry-measurement/v1', profile, graph_kind: graphKind,
+    manifest: { path: manifestPath ? String(manifestPath) : 'manifests/rc020-rc2-byte-audit.json',
+      sha256: createHash('sha256').update(readFileSync(manifestPath ?? defaultManifest)).digest('hex') },
     note: 'Five fresh Vitest worker processes; cold is first production attach in each. OS cache is not dropped. Wall clock includes actual entry awaits and final veto. Audits observed through onHostLockValidation. External publish effects are mocked; no DSH host is launched.',
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
     source_sha256: sourceSha256, artifact: null, artifact_note: 'source harness; no exact tgz acceptance claim',
@@ -136,9 +150,10 @@ function measure(runtimeRoot, profileRoot, profile) {
 }
 
 const mode = argv[0]
+const measureFlag = argv.indexOf('--measure')
 if (mode === '--synthesize') synthesize(argv[1])
-else if (mode === '--measure') measure(argv[1], argv[2], argv[3] ?? 'web')
+else if (measureFlag >= 0) measure(argv[measureFlag + 1], argv[measureFlag + 2], argv[measureFlag + 3] ?? 'web')
 else {
-  console.error('usage: measure-host-audit.mjs --synthesize <dir> | --measure <runtimeRoot> <profileRoot> [profile]')
+  console.error('usage: measure-host-audit.mjs --synthesize <dir> | --measure [--manifest <path>] [--desktop-digest <sha256>] <runtimeRoot> <profileRoot> [web|headless|desktop]')
   process.exit(1)
 }

@@ -612,6 +612,43 @@ export function createRuntime(
   const continuationAttempts = projection.continuationAttempts
   const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts
 
+  /**
+   * CG-083-PERF01: cheap per-input revisions for the unchanged fast path.
+   * Each input is checked against the values the last FULL rebuild consumed;
+   * any change (or an input that cannot be read cheaply) forces the full
+   * rebuild. A security-sensitive entry's `revalidateHostLock` always
+   * rebuilds, so fresh-validation semantics are untouched, and the private
+   * ledger and the Goal readback are re-read on every sync — their current
+   * values ARE the cache key, never a stale assumption.
+   */
+  interface SyncInputs {
+    sessionSeq: number | undefined
+    headerRef: unknown
+    durability: boolean
+    goalKey: string
+    ledgerKey: string
+    refreshEpoch: number
+  }
+  let refreshEpoch = 0
+  let lastFullSync: SyncInputs | undefined
+  const goalStateKey = (): string => {
+    if (!readGoalState) return 'none'
+    try {
+      const state = normalizeGoalState(readGoalState())
+      return state ? `${state.id}\0${state.revision}\0${state.phase}\0${state.activation}` : 'none'
+    } catch { return 'error' }
+  }
+  const ledgerSnapshotKey = (snapshot: PrivateLedgerSnapshot): string =>
+    `${snapshot.records.length}\0${snapshot.records.at(-1)?.record_sha256 ?? ''}\0${snapshot.damaged ? 'd' : '-'}\0${snapshot.anchored ? 'a' : '-'}`
+  const currentSessionSeq = (): number | undefined => {
+    // The DSH Session's own append counter is the cheapest reliable event
+    // revision: it advances with every durable append, and a resume/compact
+    // replaces the header. A session that does not expose it as a safe
+    // integer has no cheap revision and always gets the full rebuild.
+    const value = (session as unknown as { seq?: unknown }).seq
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+  }
+
   const rebuild = () => {
     const previousReleaseContracts = projection.releaseContracts.length
     // Host authority is an explicit input, never an implicit rescan: rebuild
@@ -634,8 +671,10 @@ export function createRuntime(
       const code = error instanceof SessionApiError ? error.code : 'session_snapshot_failed'
       projection.integrity = 'unknown'
       if (!projection.integrityViolations.includes(code)) projection.integrityViolations.push(code)
+      // The fast-path key is NOT updated: the next sync retries the snapshot.
       return
     }
+    let usedLedgerKey = ''
     const derived = deriveProjection(
       events as Parameters<typeof deriveProjection>[0],
       { activation: config.activation, policy: config.policy },
@@ -652,9 +691,20 @@ export function createRuntime(
         if (synchronizedOnce && previousReleaseContracts === 0 && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords()
         else privateSnapshot = { records: [], damaged: true, anchored: false }
       }
+      usedLedgerKey = ledgerSnapshotKey(privateSnapshot)
       applyPrivateLedger(projection, privateSnapshot)
     }
     synchronizedOnce = true
+    // Record the exact inputs this full rebuild consumed, so a later plain
+    // sync can prove nothing changed instead of replaying the history fold.
+    lastFullSync = {
+      sessionSeq: currentSessionSeq(),
+      headerRef: session.header,
+      durability: durabilityConfirmed,
+      goalKey: goalStateKey(),
+      ledgerKey: usedLedgerKey,
+      refreshEpoch,
+    }
     if (!sessionHeader) {
       projection.integrity = 'unknown'
       if (!projection.integrityViolations.includes('session_ref_unavailable')) {
@@ -683,7 +733,9 @@ export function createRuntime(
     if (projection.boundaryProtocol === 6 && durabilityWatermark === 'confirmed') {
       try {
         const displayOrigins: NonNullable<GuardProjection['coreV2RequirementOrigins']> = new Map()
-        projection.coreV2 = projectSessionCoreV2(session.snapshotEvents() as never, projection, displayOrigins)
+        // CG-083-PERF01: consume the same validated snapshot the derive fold
+        // used instead of taking a second full session snapshot for core/v2.
+        projection.coreV2 = projectSessionCoreV2(events as never, projection, displayOrigins)
         projection.coreV2RequirementOrigins = projection.coreV2 ? displayOrigins : undefined
         projection.coreV2Reason = projection.coreV2 ? undefined : 'source_not_projectable'
       } catch {
@@ -745,6 +797,26 @@ export function createRuntime(
           queueMicrotask(() => { cell.stale = true })
         }
       }
+      // A security-sensitive entry always rebuilds on its fresh validation:
+      // the fast path below never serves a revalidation entry.
+      refreshEpoch += 1
+    }
+    // CG-083-PERF01 unchanged fast path: a plain sync with the same session
+    // revision, the same header, the same durability, the same Goal readback
+    // and the same private-ledger view cannot derive anything new. The Goal
+    // readback and the private ledger are re-read here EVERY time — their
+    // current values are the key, so an external ledger append or a Goal edit
+    // still takes the full rebuild. A revalidation entry or a session without
+    // a cheap revision always rebuilds.
+    const sessionSeq = currentSessionSeq()
+    if (lastFullSync && sessionSeq !== undefined
+      && lastFullSync.refreshEpoch === refreshEpoch
+      && lastFullSync.sessionSeq === sessionSeq
+      && Object.is(lastFullSync.headerRef, session.header)
+      && lastFullSync.durability === durabilityConfirmed
+      && lastFullSync.goalKey === goalStateKey()
+      && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(readPrivateRecords()))) {
+      return
     }
     rebuild()
   }
@@ -879,19 +951,36 @@ export function registerPassiveHostWorkdirObserver(agent: Agent,
   const pending = new WeakMap<object, ReturnType<typeof captureHostWorkdir>>()
   const pre = agent.ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.agent === agent && (exec.name === 'bash' || exec.name === 'pwsh')) {
-      try {
-        // Context.get is the read-only service lookup without an inject
-        // requirement. The same scoped sandboxPolicy service is used by the
-        // audited Bash producer. A missing service produces no receipt.
-        const policy = agent.ctx.get('sandboxPolicy') as { resolve(request: { session: Session }): unknown } | undefined
-        // Trusted workdir evidence is validated fresh at each dispatch, and
-        // the lock readback and the route attestation share ONE bounded
-        // validation's memo table for this call.
-        const audit = createHostAuditSession()
-        const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(audit), policy,
-          await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy, audit), sourcedRootAtCall?.(exec) ?? null, SUPPORTED_SESSION_FORMAT_VERSION)
-        if (receipt) pending.set(exec, receipt)
-      } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
+      // CG-083-PERF04 cheap conservative pre-filter, extracted from the
+      // necessary conditions of `captureHostWorkdir` + `sourcedNamedTestRoot`
+      // (the receipt predicate itself stays the only authority). A call that
+      // cannot possibly produce a workdir receipt — anything but a foreground
+      // root `npm test` / `pnpm test` with no explicit workdir — skips the
+      // projection sync, the full host audit and the route attestation
+      // entirely. A call that MIGHT produce one keeps the original fresh
+      // path; when in doubt this filter never excludes.
+      const args = (typeof exec.arguments === 'object' && exec.arguments !== null ? exec.arguments : {}) as Record<string, unknown>
+      const command = String(args.command ?? '').trim()
+      const maybeReceiptTarget = exec.parent === undefined
+        && exec.rootCallId === exec.callId
+        && !Object.hasOwn(args, 'workdir')
+        && args.run_in_background !== true
+        && /^(?:npm|pnpm)\s+test$/u.test(command)
+      if (maybeReceiptTarget) {
+        try {
+          // Context.get is the read-only service lookup without an inject
+          // requirement. The same scoped sandboxPolicy service is used by the
+          // audited Bash producer. A missing service produces no receipt.
+          const policy = agent.ctx.get('sandboxPolicy') as { resolve(request: { session: Session }): unknown } | undefined
+          // Trusted workdir evidence is validated fresh at each dispatch, and
+          // the lock readback and the route attestation share ONE bounded
+          // validation's memo table for this call.
+          const audit = createHostAuditSession()
+          const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(audit), policy,
+            await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy, audit), sourcedRootAtCall?.(exec) ?? null, SUPPORTED_SESSION_FORMAT_VERSION)
+          if (receipt) pending.set(exec, receipt)
+        } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
+      }
     }
     return next()
   })
@@ -1000,8 +1089,9 @@ export function apply(ctx: Context, rawConfig: {
     hostLocks.set(agent, current)
     return current
   }
-  const ensure = (agent: Agent) => {
+  const ensure = (agent: Agent): { runtime: GuardRuntime; created: boolean } => {
     let runtime = runtimes.get(agent)
+    let created = false
     if (!runtime) {
       const goals = qualifiedGoalService(agent)
       // Exactly ONE full validation per attach: its result seeds the runtime
@@ -1014,18 +1104,19 @@ export function apply(ctx: Context, rawConfig: {
         privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined,
         privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined)
       runtimes.set(agent, runtime)
+      created = true
     }
-    return runtime
+    return { runtime, created }
   }
 
   // Register the slash command on the root commands service so it is visible
   // in the Web command directory and participates in first-slash parsing. The
   // per-agent runtime is resolved from the handler's `agent`.
   ctx.commands.register(createContextGuardCommand(
-    (agent) => ensure(agent).projection,
-    (agent, enabled) => ensure(agent).setEnabled(enabled),
-    (agent) => ensure(agent).sync(),
-    (agent) => ensure(agent).lifecycle,
+    (agent) => ensure(agent).runtime.projection,
+    (agent, enabled) => ensure(agent).runtime.setEnabled(enabled),
+    (agent) => ensure(agent).runtime.sync(),
+    (agent) => ensure(agent).runtime.lifecycle,
   ))
 
   // T0 stays silent: agent/created registers tools and the runtime, reads
@@ -1035,7 +1126,7 @@ export function apply(ctx: Context, rawConfig: {
   const attach = (agent: Agent, source?: string): undefined => {
     if (registrations.has(agent)) {
       if (source === 'resume' || source === 'compact') {
-        const runtime = ensure(agent)
+        const { runtime } = ensure(agent)
         runtime.sync()
         runtime.projection.lastRecoveryDigest = undefined
         runtime.markRecoveryNeeded(source === 'resume' ? 'resume' : 'compaction')
@@ -1050,8 +1141,13 @@ export function apply(ctx: Context, rawConfig: {
       guard: (...args: Parameters<typeof agent.ctx.tools.guard>) => own(agent.ctx.tools.guard(...args)),
     }
     try {
-    const runtime = ensure(agent)
-    runtime.sync()
+    // CG-083-PERF01: a freshly created runtime has already performed its one
+    // full rebuild inside createRuntime; attach adds no second projection of
+    // the identical log. An existing runtime (resume/compact on a live agent,
+    // or re-registration after a partial detach) still syncs so the history
+    // state is current before recovery is armed.
+    const { runtime, created } = ensure(agent)
+    if (!created) runtime.sync()
     if (source === 'resume' || source === 'compact') {
       // Forgetting the last injected digest guarantees the post-resume or
       // post-compaction reminder is injected at least once, even when the
@@ -1365,7 +1461,7 @@ export function apply(ctx: Context, rawConfig: {
   // formal projection still derives only from durable events.
   ctx.on('agent/pre-step', async ({ agent }, next) => {
     const durability = await ctx.sessions.flush(agent.session)
-    const runtime = ensure(agent)
+    const { runtime } = ensure(agent)
     runtime.setDurability(durability)
     runtime.sync()
     const decision = await next()
@@ -1430,7 +1526,7 @@ export function apply(ctx: Context, rawConfig: {
     return decision
   })
   ctx.on('agent/turn-stopping', async ({ agent }) => {
-    const runtime = ensure(agent)
+    const { runtime } = ensure(agent)
     const goals = qualifiedGoalService(agent)
     await handleGuardTurnStopping(agent, runtime, {
       flush: () => ctx.sessions.flush(agent.session),

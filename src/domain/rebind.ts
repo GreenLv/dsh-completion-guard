@@ -1,6 +1,7 @@
 import { sha256 } from './canonicalize.js'
 import { captureItem, extractMethod, extractOperation } from './capture.js'
 import { deriveItemDiagnosis, relevantEvidence } from './diagnostics.js'
+import { registerFoldItem } from './item-fold-index.js'
 import type { GuardItem, GuardProjection } from './types.js'
 import { isFrozenV042RebindResponse } from './confirm-parse.js'
 import { requestedIdentityKey } from './protocol-manifest.js'
@@ -429,7 +430,10 @@ export function confirmRebind(p: GuardProjection, proposalId: string, eventId: s
       verification: { ...captured.verification, ...old.verification } }
   })
   if (replacements.some(item => p.items.has(item.id) && !proposal.clarificationItemIds.includes(item.id))) { proposal.status = 'stale'; return true }
-  for (const item of replacements) p.items.set(item.id, item)
+  for (const item of replacements) {
+    p.items.set(item.id, item)
+    registerFoldItem(p.items, item)
+  }
   old.status = 'superseded'
   old.supersededByItems = replacements.map(item => item.id)
   old.supersededBy = replacements[0].id

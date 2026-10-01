@@ -1,5 +1,7 @@
 import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { hostname } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { sha256 } from './canonicalize.js'
 import { normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH, readbackSettlesContract } from './release.js'
 import type { GuardProjection } from './types.js'
@@ -85,6 +87,142 @@ function readAnchors(root: string): Map<string, string> {
   return anchors
 }
 
+/**
+ * The one full ledger read+chain-verify, shared by the read and append paths
+ * (CG-083-PERF05: an append used to re-read the anchors AND the whole ledger
+ * after already reading the anchors under the lock). Callers must already
+ * hold the writer lock or accept the unlocked-read race the public API had.
+ * Returns `undefined` for "ledger file missing" so callers can distinguish
+ * the anchored-but-missing (damaged) case from an empty ledger.
+ */
+function readVerifiedLedgerRecords(root: string, context: PrivateLedgerContext, session: string,
+  expectedContext: string): PrivateLedgerRecord[] | undefined {
+  const path = ledgerPath(root, context)
+  if (!existsSync(path)) return undefined
+  const fd = openRegular(path, constants.O_RDONLY); let raw: string
+  try { raw = readFileSync(fd, 'utf8') } finally { closeSync(fd) }
+  if (raw && !raw.endsWith('\n')) return undefined
+  const records: PrivateLedgerRecord[] = []; let prior: string | null = null
+  for (const [index, line] of raw.split('\n').filter(Boolean).entries()) {
+    const value = JSON.parse(line) as PrivateLedgerRecord; const { record_sha256, ...unsigned } = value
+    if (value.version !== 1 || value.session_sha256 !== session || value.context_sha256 !== expectedContext || value.position !== index + 1 || value.prior_sha256 !== prior || !['release_reservation','release_settlement','restart_intent'].includes(value.kind) || !value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload) || record_sha256 !== digestRecord(unsigned)) return undefined
+    records.push(value); prior = record_sha256
+  }
+  return records
+}
+
+/**
+ * CG-083-BUG01: the writer lock carries an owner identity instead of being an
+ * anonymous O_EXCL file. A crashed writer used to leave a lock that blocked
+ * every later append and initialize forever; a lock whose owner is PROVABLY
+ * dead (same host, recorded pid no longer exists) is reclaimed atomically,
+ * re-checking the lock's inode and content right before the unlink so a
+ * concurrent recovery or a fresh acquirer can never be evicted. An unknown
+ * owner — a legacy empty lock from an older version, a foreign host, a live
+ * pid, or an unparsable record — keeps the fail-closed refusal, with the
+ * observed state available through {@link writerLockState} for a controlled
+ * manual recovery.
+ */
+const WRITER_LOCK_VERSION = 2
+interface WriterLockRecord { version: 2; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+
+export type WriterLockState = 'absent' | 'held' | 'abandoned_recoverable' | 'unknown_owner'
+
+/** Read-only diagnostics for a lock that blocks acquisition (CG-083-BUG01). */
+export function writerLockState(root: string): WriterLockState {
+  const record = readWriterLockRecord(root)
+  if (record === undefined) return 'absent'
+  if (record === 'legacy') return 'unknown_owner'
+  if (record.hostname !== hostname()) return 'unknown_owner'
+  return writerProcessAlive(record.pid) ? 'held' : 'abandoned_recoverable'
+}
+
+function readWriterLockRecord(root: string): WriterLockRecord | 'legacy' | undefined {
+  let raw: string
+  try { raw = readFileSync(rootLockPath(root), 'utf8') } catch { return undefined }
+  if (!raw.trim()) return 'legacy'
+  try {
+    const value = JSON.parse(raw) as Partial<WriterLockRecord>
+    if (value && value.version === WRITER_LOCK_VERSION && typeof value.nonce === 'string' && value.nonce.length === 32
+      && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
+      && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number') return value as WriterLockRecord
+  } catch { /* unparsable record */ }
+  return 'legacy'
+}
+
+function writerProcessAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM' }
+}
+
+/**
+ * Try to reclaim a lock whose owner is provably dead. The recorded identity
+ * must match the file that is on disk right now (inode AND bytes), so a lock
+ * replaced between the read and the reclaim is never evicted; a live or
+ * unknown owner is never reclaimed.
+ */
+function reclaimAbandonedWriterLock(root: string): boolean {
+  const path = rootLockPath(root)
+  let stat: ReturnType<typeof lstatSync>
+  let raw: string
+  try {
+    stat = lstatSync(path)
+    if (!stat.isFile() || stat.isSymbolicLink()) return false
+    raw = readFileSync(path, 'utf8')
+  } catch { return false }
+  const record = readWriterLockRecord(root)
+  if (record === undefined || record === 'legacy') return false
+  if (record.hostname !== hostname() || writerProcessAlive(record.pid)) return false
+  try {
+    const fd = openSync(path, constants.O_RDONLY)
+    let current: string
+    try {
+      const currentStat = fstatSync(fd)
+      if (currentStat.ino !== stat.ino || currentStat.size !== stat.size) return false
+      current = readFileSync(fd, 'utf8')
+    } finally { closeSync(fd) }
+    if (String(current) !== raw) return false
+    unlinkSync(path)
+    return true
+  } catch { return false }
+}
+
+/** Acquire the writer lock, recovering a provably dead owner once (BUG-01). */
+function acquireWriterLock(root: string): number | undefined {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let fd: number
+    try {
+      fd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      if (!reclaimAbandonedWriterLock(root)) return undefined
+      continue
+    }
+    try {
+      const record: WriterLockRecord = {
+        version: WRITER_LOCK_VERSION,
+        nonce: randomBytes(16).toString('hex'),
+        pid: process.pid,
+        hostname: hostname(),
+        created_at_epoch_ms: Date.now(),
+      }
+      writeAll(fd, `${canonical(record)}\n`)
+      fsyncSync(fd)
+    } catch (error) {
+      try { closeSync(fd) } catch { /* already closed */ }
+      try { unlinkSync(rootLockPath(root)) } catch { /* best effort */ }
+      throw error
+    }
+    return fd
+  }
+  return undefined
+}
+
+function releaseWriterLock(root: string, lockFd: number | undefined): void {
+  if (lockFd === undefined) return
+  try { closeSync(lockFd) } catch { /* already closed */ }
+  try { unlinkSync(rootLockPath(root)) } catch { /* best effort */ }
+}
+
 export function readPrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): PrivateLedgerSnapshot {
   if (!root) return { records: [], damaged: true, anchored: false }
   try {
@@ -94,18 +232,14 @@ export function readPrivateLedger(root: string | undefined, input: PrivateLedger
     if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return { records: [], damaged: true, anchored: false }
     const session = sessionDigest(context.sessionId); const expectedContext = contextDigest(context, root); const anchored = readAnchors(root).get(session)
     if (anchored !== undefined && anchored !== expectedContext) return { records: [], damaged: true, anchored: true }
-    const path = ledgerPath(root, context)
-    if (!existsSync(path)) return { records: [], damaged: anchored !== undefined, anchored: anchored !== undefined }
-    if (anchored === undefined) return { records: [], damaged: true, anchored: false }
-    const fd = openRegular(path, constants.O_RDONLY); let raw: string
-    try { raw = readFileSync(fd, 'utf8') } finally { closeSync(fd) }
-    if (raw && !raw.endsWith('\n')) return { records: [], damaged: true, anchored: true }
-    const records: PrivateLedgerRecord[] = []; let prior: string | null = null
-    for (const [index, line] of raw.split('\n').filter(Boolean).entries()) {
-      const value = JSON.parse(line) as PrivateLedgerRecord; const { record_sha256, ...unsigned } = value
-      if (value.version !== 1 || value.session_sha256 !== session || value.context_sha256 !== expectedContext || value.position !== index + 1 || value.prior_sha256 !== prior || !['release_reservation','release_settlement','restart_intent'].includes(value.kind) || !value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload) || record_sha256 !== digestRecord(unsigned)) return { records: [], damaged: true, anchored: true }
-      records.push(value); prior = record_sha256
+    if (anchored === undefined) {
+      // Historical rule: a ledger FILE without an anchor is damaged state,
+      // while a missing file for an unanchored session is simply unused.
+      if (existsSync(ledgerPath(root, context))) return { records: [], damaged: true, anchored: false }
+      return { records: [], damaged: false, anchored: false }
     }
+    const records = readVerifiedLedgerRecords(root, context, session, expectedContext)
+    if (records === undefined) return { records: [], damaged: true, anchored: true }
     return { records, damaged: false, anchored: true }
   } catch { return { records: [], damaged: true, anchored: false } }
 }
@@ -116,7 +250,8 @@ export function initializePrivateLedger(root: string | undefined, input: Private
   let lockFd: number | undefined
   try {
     const context = normalizeContext(input); ensureRoot(root)
-    lockFd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+    lockFd = acquireWriterLock(root)
+    if (lockFd === undefined) return false
     const session = sessionDigest(context.sessionId); const expectedContext = contextDigest(context, root)
     const anchors = readAnchors(root); const anchored = anchors.get(session)
     if (anchored !== undefined) return anchored === expectedContext
@@ -127,7 +262,7 @@ export function initializePrivateLedger(root: string | undefined, input: Private
     try { fsyncSync(ledgerFd) } finally { closeSync(ledgerFd) }
     syncDirectory(root); return true
   } catch { return false } finally {
-    if (lockFd !== undefined) { try { closeSync(lockFd) } catch {}; try { unlinkSync(rootLockPath(root)) } catch {} }
+    releaseWriterLock(root, lockFd)
   }
 }
 
@@ -137,12 +272,20 @@ export function appendPrivateLedger(root: string | undefined, input: PrivateLedg
   try {
     const context = normalizeContext(input)
     ensureRoot(root)
-    lockFd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-    const session = sessionDigest(context.sessionId); const expectedContext = contextDigest(context, root); const anchors = readAnchors(root); const anchored = anchors.get(session)
+    lockFd = acquireWriterLock(root)
+    if (lockFd === undefined) return false
+    const session = sessionDigest(context.sessionId); const expectedContext = contextDigest(context, root); const anchored = readAnchors(root).get(session)
     if (anchored !== undefined && anchored !== expectedContext) return false
-    const snapshot = anchored === undefined ? { records: [], damaged: false } : readPrivateLedger(root, context)
-    if (snapshot.damaged) return false
-    if (anchored === undefined) {
+    // CG-083-PERF05: the ledger is read and chain-verified ONCE under this
+    // lock (the append used to re-read the anchors and the whole ledger after
+    // the read above). Cross-entry freshness is unchanged: every entry takes
+    // its own lock and re-reads the current files.
+    let records: PrivateLedgerRecord[] = []
+    if (anchored !== undefined) {
+      const verified = readVerifiedLedgerRecords(root, context, session, expectedContext)
+      if (verified === undefined) return false
+      records = verified
+    } else {
       const unsignedAnchor = { version: 1, session_sha256: session, context_sha256: expectedContext }
       const fd = openRegular(anchorPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
       try { writeAll(fd, `${canonical({ ...unsignedAnchor, anchor_sha256: sha256(canonical(unsignedAnchor)) })}\n`); fsyncSync(fd) } finally { closeSync(fd) }
@@ -150,18 +293,18 @@ export function appendPrivateLedger(root: string | undefined, input: PrivateLedg
     }
     if (kind === 'release_settlement') {
       const settlement = normalizeSettlement(payload)
-      const reservation = settlement && [...snapshot.records].reverse().find((record) => record.kind === 'release_reservation' && record.payload.contractId === settlement.contractId && record.payload.operation === settlement.operation && record.payload.callId === settlement.callId)
+      const reservation = settlement && [...records].reverse().find((record) => record.kind === 'release_reservation' && record.payload.contractId === settlement.contractId && record.payload.operation === settlement.operation && record.payload.callId === settlement.callId)
       if (!reservation) return false
       payload = { ...payload, reservation_sha256: reservation.record_sha256, contract_sha256: reservation.payload.contract_sha256, target_sha256: reservation.payload.target_sha256 }
     }
-    const unsigned: Omit<PrivateLedgerRecord, 'record_sha256'> = { version: 1, session_sha256: session, context_sha256: expectedContext, position: snapshot.records.length + 1, prior_sha256: snapshot.records.at(-1)?.record_sha256 ?? null, kind, payload }
+    const unsigned: Omit<PrivateLedgerRecord, 'record_sha256'> = { version: 1, session_sha256: session, context_sha256: expectedContext, position: records.length + 1, prior_sha256: records.at(-1)?.record_sha256 ?? null, kind, payload }
     const record: PrivateLedgerRecord = { ...unsigned, record_sha256: digestRecord(unsigned) }
     const fd = openRegular(ledgerPath(root, context), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
     try { writeAll(fd, `${canonical(record)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
     syncDirectory(root)
     return true
   } catch { return false } finally {
-    if (lockFd !== undefined) { try { closeSync(lockFd) } catch {}; try { unlinkSync(rootLockPath(root)) } catch {} }
+    releaseWriterLock(root, lockFd)
   }
 }
 

@@ -1,3 +1,4 @@
+import { registerFoldItem } from './item-fold-index.js'
 import type { GuardItem } from './types.js'
 
 export function supersedeItem(items: Map<string, GuardItem>, oldId: string, replacement: GuardItem): boolean {
@@ -6,5 +7,6 @@ export function supersedeItem(items: Map<string, GuardItem>, oldId: string, repl
   old.status = 'superseded'
   old.supersededBy = replacement.id
   items.set(replacement.id, replacement)
+  registerFoldItem(items, replacement)
   return true
 }

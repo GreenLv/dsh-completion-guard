@@ -16,9 +16,13 @@ const outputPath = outputIndex > 0 ? process.argv[outputIndex + 1] : undefined
 const sizes = (process.env.DSH_PROJECTION_SIZES ?? '0,100,1000,10000').split(',')
 
 const results = []
+// CG-083: run the local vitest binary directly. Spawning `pnpm exec` made the
+// measurement depend on pnpm's interactive deps-status maintenance, which
+// aborts without a TTY in a second worktree and is measurement noise.
+const vitest = join(repo, 'node_modules', 'vitest', 'vitest.mjs')
 for (const size of sizes) {
   for (let index = 0; index < 5; index += 1) {
-    const out = execFileSync('pnpm', ['exec', 'vitest', 'run', 'tests/v082-projection-scaling.test.ts', '--maxWorkers', '1'], {
+    const out = execFileSync(process.execPath, [vitest, 'run', 'tests/v082-projection-scaling.test.ts', '--maxWorkers', '1'], {
       cwd: repo, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env, DSH_PROJECTION_MEASUREMENT: '1', DSH_PROJECTION_SIZES: size },
     })
