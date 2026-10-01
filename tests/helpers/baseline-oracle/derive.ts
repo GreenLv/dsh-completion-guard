@@ -1,47 +1,41 @@
-// FROZEN BASELINE ORACLE (CG-083-V1): this file is the exact 0.8.2 fold
-// implementation from commit 913a4c7a6f0f600f4146ef4af694d3af6e477ef2, kept
-// as an independent oracle for the projection-index optimization. It must be
-// edited only by replacing it with another exact baseline snapshot. Sibling
-// imports point at the current src for modules the optimization did not
-// change (their behavior is covered by their own suites and by the shared
-// conformance fixtures).
-import { sha256 } from '../../../src/domain/canonicalize.js'
-import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from '../../../src/domain/rebind.js'
-import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses, type ClauseSegment } from '../../../src/domain/capture.js'
-import { certifyCheckpoint } from '../../../src/domain/checkpoint.js'
-import { BOUNDARY_RECORD_PREFIX, qualifyBoundary, type BoundaryRequest } from '../../../src/domain/boundary.js'
-import { classifyUserInteraction } from '../../../src/domain/conversation.js'
-import { CONFIRM_LINE_PATTERN, parseConfirmationMessage } from '../../../src/domain/confirm-parse.js'
-import { segmentAuthorityBlocks } from '../../../src/domain/contract-segment.js'
-import { sessionRefDigest } from '../../../src/domain/digest.js'
-import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from '../../../src/domain/host-lock.js'
-import { hasCurrentCertificate } from '../../../src/domain/goal-gate.js'
-import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from '../../../src/domain/evidence.js'
-import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, semanticActionFromText, type SemanticAction } from '../../../src/domain/protocol-manifest.js'
+// FROZEN BASELINE ORACLE (CG-083-V1): exact 913a4c7a6f0f600f4146ef4af694d3af6e477ef2 copy of src/domain/derive.ts. Do not edit except wholesale replacement.
+import { sha256 } from './canonicalize.js'
+import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from './rebind.js'
+import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses, type ClauseSegment } from './capture.js'
+import { certifyCheckpoint } from './checkpoint.js'
+import { BOUNDARY_RECORD_PREFIX, qualifyBoundary, type BoundaryRequest } from './boundary.js'
+import { classifyUserInteraction } from './conversation.js'
+import { CONFIRM_LINE_PATTERN, parseConfirmationMessage } from './confirm-parse.js'
+import { segmentAuthorityBlocks } from './contract-segment.js'
+import { sessionRefDigest } from './digest.js'
+import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from './host-lock.js'
+import { hasCurrentCertificate } from './goal-gate.js'
+import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from './evidence.js'
+import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
 import {
   hasWorkPredicate, interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans,
   opensConditionLead, presentExplanationHead,
   qualificationOfClause, splitTextFragments,
-} from '../../../src/domain/semantics.js'
-import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from '../../../src/domain/stop-policy.js'
-import { supersedeItem } from '../../../src/domain/supersession.js'
-import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type NeedsReviewReason, type SourceSpan, type TargetValue } from '../../../src/domain/types.js'
-import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from '../../../src/domain/types.js'
-import type { ReleaseContract } from '../../../src/domain/release.js'
-import { deriveTrustedDeliveries, informationItemIdsForDelivery } from '../../../src/domain/delivery.js'
+} from './semantics.js'
+import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
+import { supersedeItem } from './supersession.js'
+import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type NeedsReviewReason, type SourceSpan, type TargetValue } from './types.js'
+import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
+import type { ReleaseContract } from './release.js'
+import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
 import {
   explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensChildUnit,
   opensNewUnit, currentUnitHasOpenWork, recordDelegation, unitDescendantIds,
-} from '../../../src/domain/work-unit.js'
-import { spanClassOf, utf8ByteLength, utf8ByteOffset } from '../../../src/domain/spans.js'
-import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from '../../../src/domain/proof.js'
-import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from '../../../src/domain/host-selection.js'
-import { observerMethodEvidence } from '../../../src/domain/observer-method.js'
-import { defaultV6OrdinaryFeedbackScope } from '../../../src/domain/v6-feedback.js'
+} from './work-unit.js'
+import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
+import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
+import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
+import { observerMethodEvidence } from './observer-method.js'
+import { defaultV6OrdinaryFeedbackScope } from './v6-feedback.js'
 import {
   normalizeReleaseContract, normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH,
   RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX, RELEASE_REVOCATION_PREFIX,
-} from '../../../src/domain/release.js'
+} from './release.js'
 
 interface PendingCall {
   origin: 'tool/call' | 'tool/ptc-dispatch-start'
@@ -160,7 +154,6 @@ function assetReceiptMatches(receipt: unknown, asset: { messageSeq: number; part
 }
 
 /** Replay-stable comparison of the receipt's span echoes with the contract's spans. */
-// oxlint-disable-next-line no-unused-vars -- frozen baseline snapshot
 function clauseSpansMatch(receipt: unknown, spans: ReadonlyArray<{ partIndex: number; start: number; end: number }> | undefined): boolean {
   if (!Array.isArray(receipt) || spans === undefined || receipt.length !== spans.length) return false
   return spans.every((span, index) => {

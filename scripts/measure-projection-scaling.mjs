@@ -36,19 +36,52 @@ for (const size of sizes) {
     child.stdout.on('data', (chunk) => { out += chunk })
     let err = ''
     child.stderr.on('data', (chunk) => { err += chunk })
-    // Outer RSS sampler: 25ms poll of the worker's main process.
+    // CG-083-V3: sample the WHOLE measured process tree. The vitest main
+    // process delegates the test to a fork pool child, so main-pid-only
+    // sampling missed the actual workload RSS (review round 2). Every 25ms:
+    // enumerate main pid + descendants via pgrep -P, read each rss, and
+    // record per-process peaks plus the TREE-SUM peak. `settled` is not
+    // claimed: the last surviving sample is not a post-workload steady state.
     let peak = 0
-    const pid = child.pid
+    let treePeak = 0
+    let maxSingle = 0
     const samples = []
-    const poll = setInterval(() => {
-      try {
-        const rssLine = execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim()
-        const rss = Number.parseInt(rssLine, 10)
-        if (Number.isSafeInteger(rss) && rss > 0) {
-          samples.push(rss * 1024)
-          if (rss * 1024 > peak) peak = rss * 1024
+    const pid = child.pid
+    const treeOf = (rootPid) => {
+      const acc = [rootPid]
+      const expand = (parent) => {
+        let childPids = []
+        try {
+          childPids = execFileSync('pgrep', ['-P', String(parent)], { encoding: 'utf8' })
+            .split('\n').map((x) => Number.parseInt(x.trim(), 10)).filter(Number.isSafeInteger)
+        } catch { /* no children */ }
+        for (const cp of childPids) {
+          acc.push(cp)
+          expand(cp)
         }
-      } catch { /* worker exited */ }
+      }
+      expand(rootPid)
+      return acc
+    }
+    const readRss = (target) => {
+      try {
+        const rssLine = execFileSync('ps', ['-o', 'rss=', '-p', String(target)], { encoding: 'utf8' }).trim()
+        const rss = Number.parseInt(rssLine, 10)
+        return Number.isSafeInteger(rss) && rss > 0 ? rss * 1024 : 0
+      } catch { return 0 }
+    }
+    const poll = setInterval(() => {
+      const tree = treeOf(pid)
+      let treeSum = 0
+      for (const target of tree) {
+        const rss = readRss(target)
+        if (rss <= 0) continue
+        treeSum += rss
+        if (rss > maxSingle) maxSingle = rss
+        if (target === pid && rss > peak) peak = rss
+      }
+      if (treeSum > treePeak) treePeak = treeSum
+      samples.push({ at: samples.length, tree: treeSum })
     }, 25)
     await new Promise((resolve, reject) => {
       child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`worker exited ${code}: ${err.slice(-2000)}`)))
@@ -58,9 +91,13 @@ for (const size of sizes) {
     if (!match) throw new Error('projection measurement did not emit its observed result')
     const parsed = JSON.parse(match[1])
     results.push(...parsed.measurements)
-    peakSamples.push({ size, rep: index + 1, outer_peak_rss_bytes: peak, outer_samples: samples.length,
-      outer_settled_rss_bytes: samples.at(-1) ?? null })
-    console.error(`size=${size} rep=${index + 1}/5 done outer_peak_rss=${(peak / 1048576).toFixed(0)}MB samples=${samples.length}`)
+    peakSamples.push({ size, rep: index + 1,
+      outer_main_peak_rss_bytes: peak,
+      outer_tree_peak_rss_bytes: treePeak,
+      outer_max_single_process_rss_bytes: maxSingle,
+      outer_samples: samples.length,
+      worker_pid: parsed.worker_pid ?? null })
+    console.error(`size=${size} rep=${index + 1}/5 done main_peak=${(peak / 1048576).toFixed(0)}MB tree_peak=${(treePeak / 1048576).toFixed(0)}MB max_single=${(maxSingle / 1048576).toFixed(0)}MB samples=${samples.length}`)
   }
 }
 

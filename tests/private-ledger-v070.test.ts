@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { appendPrivateLedger, applyPrivateLedger, hasPrivateRestartIntent, privateLedgerContractDigest, readPrivateLedger, resolvePrivateLedgerRoot } from '../src/domain/private-ledger.js'
+import { currentGenerationDir } from '../src/domain/private-ledger.js'
 import { createProjection } from '../src/domain/types.js'
 
 const contract = { contractId: 'release-1', adoptedBy: { seq: 1, digest: 'a'.repeat(64) }, adoptedAtRevision: 1,
@@ -46,12 +47,16 @@ describe('v0.7 provider-invisible private ledger', () => {
     try {
       expect(appendPrivateLedger(root, 'session-a', 'release_reservation', reservation)).toBe(true)
       const path = join(root, readdirSync(root).find((name) => name.endsWith('.jsonl') && !name.startsWith('session-anchors'))!)
-      writeFileSync(join(root, '.writer.lock'), 'held')
+      // F1: locks live inside the current generation directory; a root-level
+      // .writer.lock is a legacy artifact the protocol ignores.
+      const lockDir = currentGenerationDir(root)
+      expect(lockDir).toBeDefined()
+      writeFileSync(join(lockDir!, '.writer.lock'), 'held')
       expect(appendPrivateLedger(root, 'session-a', 'release_settlement', {
         contractId: 'release-1', operation: 'npm_publish', callId: 'call-1', settledAtSeq: 0,
         readback: 'unavailable', outcome: 'unknown', settlement_source: 'effect',
       })).toBe(false)
-      rmSync(join(root, '.writer.lock'))
+      rmSync(join(lockDir!, '.writer.lock'))
       expect(appendPrivateLedger(root, 'session-b', 'restart_intent', {
         resolution_call_id: 'resolve', service_id: 'market', pre_generation: 'boot',
       })).toBe(true)

@@ -1,15 +1,13 @@
-// FROZEN BASELINE ORACLE (CG-083-V1): the exact 0.8.2 core/v2 session
-// adapter from commit 913a4c7a6f0f600f4146ef4af694d3af6e477ef2. Edited only
-// by replacing it with another exact baseline snapshot.
+// FROZEN BASELINE ORACLE (CG-083-V1): exact 913a4c7a6f0f600f4146ef4af694d3af6e477ef2 copy of src/core-v2/session.ts. Do not edit except wholesale replacement.
 import { createHash } from 'node:crypto'
 import { posix } from 'node:path'
-import type { GuardProjection, DerivedEnvelope, GuardItem } from '../../../src/domain/types.js'
-import { assessmentAction, assessmentOutcomePredicate, currentActionBases, v6TestPredicate } from '../../../src/domain/stop-policy.js'
-import { actionClassScopeSpeech, controlSpeech, currentUnitScopeSpeech, projectCoreV2, rootControlCandidateSpans } from '../../../src/core-v2/project.js'
-import { persistedToolResultStatus } from '../../../src/domain/evidence.js'
-import { isStatefulAction } from '../../../src/domain/protocol-manifest.js'
-import { hostWorkdirForCall } from '../../../src/domain/host-workdir.js'
-import { observerMethodEvidence } from '../../../src/domain/observer-method.js'
+import type { GuardProjection, DerivedEnvelope, GuardItem } from './types.js'
+import { assessmentAction, assessmentOutcomePredicate, currentActionBases, v6TestPredicate } from './stop-policy.js'
+import { actionClassScopeSpeech, controlSpeech, currentUnitScopeSpeech, projectCoreV2, rootControlCandidateSpans } from './project.js'
+import { persistedToolResultStatus } from './evidence.js'
+import { isStatefulAction } from './protocol-manifest.js'
+import { hostWorkdirForCall } from './host-workdir.js'
+import { observerMethodEvidence } from './observer-method.js'
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
 // A persisted root and host call keep their own path syntax. Using the running

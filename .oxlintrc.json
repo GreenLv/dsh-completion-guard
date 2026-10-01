@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["tests/helpers/baseline-oracle/**"]
+}

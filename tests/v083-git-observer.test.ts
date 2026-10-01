@@ -144,6 +144,66 @@ it('does not observe a backgrounded commit result', async () => {
   }
 }, 30_000)
 
+it('reads the raw parent when HEAD ITSELF is the shallow boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-shallowhead-'))
+  try {
+    const work = join(root, 'work')
+    await gitExec('git', ['init', '-b', 'main', work])
+    await gitExec('git', ['-C', work, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', work, 'config', 'user.email', 'fixture@example.invalid'])
+    await writeFile(join(work, 'a.txt'), 'first\n')
+    await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    await gitExec('git', ['-C', work, 'commit', '-m', 'first'])
+    const realParent = (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim()
+    await writeFile(join(work, 'a.txt'), 'second\n')
+    await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    const committed = await gitExec('git', ['-C', work, 'commit', '-m', 'second'])
+    const head = (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim()
+    // Mark HEAD ITSELF as the shallow boundary: a traversal view would hide
+    // its parent exactly like a depth-1 fetch boundary would.
+    await writeFile(join(work, '.git', 'shallow'), `${head}\n`)
+    const session = sessionFor('git-shallow-head', work, `Commit changes in repository ${work}.`)
+    appendCall(session, 'boundary-commit', 'bash', { command: 'git commit -m second', workdir: work })
+    appendResult(session, 'boundary-commit', committed.stdout)
+    const result = await observer.execute({ effect_call_id: 'boundary-commit' }, exec(session)) as { status: string; parent_oid: string }
+    expect(result, JSON.stringify(result)).toMatchObject({ status: 'observed', reason_code: 'git_commit_observed' })
+    expect(result.parent_oid).toBe(realParent)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+it('reads the raw parent when HEAD is replaced by a DIFFERENT-tree parentless object', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-replace2-'))
+  try {
+    const work = join(root, 'work')
+    await gitExec('git', ['init', '-b', 'main', work])
+    await gitExec('git', ['-C', work, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', work, 'config', 'user.email', 'fixture@example.invalid'])
+    await writeFile(join(work, 'a.txt'), 'first\n')
+    await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    await gitExec('git', ['-C', work, 'commit', '-m', 'first'])
+    const realParent = (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim()
+    await writeFile(join(work, 'a.txt'), 'second\n')
+    await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    const committed = await gitExec('git', ['-C', work, 'commit', '-m', 'second'])
+    // Forge a PARENTLESS commit over a DIFFERENT tree (the empty tree) and
+    // point a replace ref at HEAD: a traversal view would then report `root`.
+    const emptyTree = (await gitExec('git', ['-C', work, 'hash-object', '-t', 'tree', '/dev/null'])).stdout.trim()
+    const forged = (await gitExec('git', ['-C', work, 'commit-tree', emptyTree, '-m', 'forged root'])).stdout.trim()
+    await gitExec('git', ['-C', work, 'replace', (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim(), forged])
+    const session = sessionFor('git-replace-difftree', work, `Commit changes in repository ${work}.`)
+    appendCall(session, 'replaced-commit', 'bash', { command: 'git commit -m second', workdir: work })
+    appendResult(session, 'replaced-commit', committed.stdout)
+    const result = await observer.execute({ effect_call_id: 'replaced-commit' }, exec(session)) as { status: string; parent_oid: string }
+    expect(result, JSON.stringify(result)).toMatchObject({ status: 'observed', reason_code: 'git_commit_observed' })
+    expect(result.parent_oid).toBe(realParent)
+    expect(result.parent_oid).not.toBe(NATIVE_GIT_ROOT_PARENT_OID)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 it('reads the parent from the raw object under shallow boundaries and replace refs', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-raw-'))
   try {

@@ -1,0 +1,747 @@
+// FROZEN BASELINE ORACLE (CG-083-V1): exact 913a4c7a6f0f600f4146ef4af694d3af6e477ef2 copy of src/domain/checkpoint.ts. Do not edit except wholesale replacement.
+import { digestStrings, sha256 } from './canonicalize.js'
+import { NATIVE_OBSERVATION_SCHEMA, NATIVE_OBSERVATION_SCHEMA_V2, locatorCertificationDigest, nativeBindingDigest, nativeCertificationDigest, nativeObservationDigest, nativeObservationDigestV2 } from './native-observation.js'
+import { currentContractDigest } from './contract-digest.js'
+import {
+  bindingDigest as deriveBindingDigest, bindingStateClosure, certificationDigest, certificationDigestV2,
+  evidenceSha256Digest, predParamsDigest, resolveAllowlist,
+  type BindingRecord, type EvidenceFact, type Typed,
+} from './digest.js'
+import { bindingSatisfies, evidenceCoverage } from './matching.js'
+import { closingHint } from './recovery.js'
+import { certificateClosure, certifiableOpenItems, needsReviewObligations, ancestorConstraintForBinding } from './closure.js'
+import { proofV2Rejection, type ProofObligationV2 } from './proof.js'
+import {
+  ACTION_MANIFEST, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2,
+  actionCompatible, isStatefulAction, requestedTargetMatchesResolved, validateActionTarget,
+  type SemanticAction,
+} from './protocol-manifest.js'
+import type {
+  EvidenceBinding, ExpectedTransition, GuardCheckpoint, GuardEvidence,
+  GuardItem, GuardProjection, TargetTuple,
+} from './types.js'
+
+export interface RejectedBinding {
+  itemId: string
+  reason: string
+  reasonCode: string
+  offendingEvidenceIds?: string[]
+  hint?: string
+}
+
+export interface CheckpointResult {
+  status: GuardCheckpoint['result']
+  contractRevision: number
+  openItems: string[]
+  rejectedBindings: RejectedBinding[]
+  checkpoint?: GuardCheckpoint
+}
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+function tuplesEqual(left: TargetTuple | undefined, right: TargetTuple | undefined): boolean {
+  return stable(left ?? {}) === stable(right ?? {})
+}
+
+function transitionsEqual(left: ExpectedTransition | undefined, right: ExpectedTransition | undefined): boolean {
+  return stable(left) === stable(right)
+}
+
+function transitionIsSelfConsistent(action: SemanticAction, transition: ExpectedTransition | undefined): boolean {
+  if (!transition?.parameters
+    || transition.predicateId !== ACTION_MANIFEST.actions[action].predicateId
+    || transition.version !== 1
+    || transition.predParamsKind !== 'inline') return false
+  const recomputed = predParamsDigest(transition.parameters as Record<string, Typed>, resolveAllowlist('product'))
+  return transition.parametersDigest === undefined || transition.parametersDigest === recomputed
+}
+
+function evidenceFact(evidence: GuardEvidence): EvidenceFact {
+  return {
+    id: evidence.id, outcome: evidence.outcome, method: evidence.toolName,
+    operations: (evidence.operations ?? []).map((entry) => entry.op),
+    executables: evidence.executables ?? [], subjects: evidence.subjects,
+    surfaces: evidence.surfaces, semanticAction: evidence.semanticAction ?? 'generic_run',
+    evidenceRole: evidence.evidenceRole ?? 'effect', resolvedTarget: evidence.resolvedTarget ?? {},
+    observedState: evidence.observedState, parseStatus: evidence.parseStatus ?? 'adapter_unavailable',
+    reasonCode: evidence.reasonCode ?? (evidence.parseStatus ? undefined : 'adapter_unavailable'),
+    adapterId: evidence.adapterId, adapterVersion: evidence.adapterVersion,
+  }
+}
+
+function citedEvidence(projection: GuardProjection, binding: EvidenceBinding): GuardEvidence[] {
+  return binding.evidenceIds.map((id) => projection.evidence.get(id)).filter((value): value is GuardEvidence => value !== undefined)
+}
+
+function evidenceProblem(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): RejectedBinding | undefined {
+  const missing = binding.evidenceIds.filter((id) => !projection.evidence.has(id))
+  if (missing.length) return { itemId: item.id, reason: 'cited evidence is missing', reasonCode: 'evidence_missing', offendingEvidenceIds: missing }
+  if (item.reboundFrom) {
+    const sourceSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
+    const tooEarly = binding.evidenceIds.filter(id => !sourceSeq || projection.evidence.get(id)!.toolResultSeq < Number(sourceSeq[1]))
+    if (tooEarly.length) return { itemId: item.id, reason: 'evidence predates the authoritative root clause used by this replacement', reasonCode: 'rebind_evidence_predates_source', offendingEvidenceIds: tooEarly }
+  }
+  const wrongEpoch = binding.evidenceIds.filter((id) => projection.evidence.get(id)?.epoch !== projection.epoch)
+  if (wrongEpoch.length) return { itemId: item.id, reason: 'cited evidence belongs to a different epoch', reasonCode: 'evidence_wrong_epoch', offendingEvidenceIds: wrongEpoch }
+  const notSuccess = binding.evidenceIds.filter((id) => projection.evidence.get(id)?.outcome !== 'success')
+  if (notSuccess.length) return { itemId: item.id, reason: 'cited evidence outcome is not success', reasonCode: 'evidence_outcome_not_success', offendingEvidenceIds: notSuccess }
+
+  const requiredAction = item.semanticAction ?? 'generic_run'
+  // A clause that orders several actions is certified one action at a time, so
+  // the evidence it may cite is the union of what its plan needs. Judging every
+  // citation against the clause's own headline action alone made such a clause
+  // uncertifiable: the closure for the second action could never cite the
+  // evidence that action requires.
+  const compatibleWith = [requiredAction, ...(item.actionPlan ?? []).map((entry) => entry.action)]
+  const facts = citedEvidence(projection, binding)
+  const incompatible = facts.filter((fact) => !compatibleWith.some((action) => actionCompatible(action, fact.semanticAction ?? 'generic_run')))
+  if (incompatible.length) {
+    const compatibleCount = facts.length - incompatible.length
+    return {
+      itemId: item.id,
+      reason: compatibleCount > 0 ? 'binding contains evidence that matches no required facet' : 'semantic action does not match the contract',
+      reasonCode: compatibleCount > 0 ? 'evidence_matches_no_facet' : 'semantic_action_mismatch',
+      offendingEvidenceIds: incompatible.map((fact) => fact.id),
+      hint: compatibleCount > 0 ? `remove unrelated evidence: ${incompatible.map((fact) => fact.id).join(', ')}` : closingHint(projection, item, binding.evidenceIds),
+    }
+  }
+  if (!isStatefulAction(requiredAction)) {
+    const noFacet = facts.filter((fact) => {
+      const coverage = evidenceCoverage(item, fact)
+      return !coverage.artifact && !coverage.effect && !coverage.method && !coverage.verify && !coverage.run
+    })
+    if (noFacet.length) return {
+      itemId: item.id, reason: 'binding contains evidence that matches no required facet', reasonCode: 'evidence_matches_no_facet',
+      offendingEvidenceIds: noFacet.map((fact) => fact.id), hint: `remove unrelated evidence: ${noFacet.map((fact) => fact.id).join(', ')}`,
+    }
+  }
+  return undefined
+}
+
+/**
+ * The strict-policy proof obligation (C06). Only the surfaces the USER asked
+ * for add a requirement, and the requirement is a real readback from the v2
+ * capability matrix: a visual verification needs a fact that actually observed
+ * the output, a complete-scope verification needs a fact that actually covered
+ * the scope. Standard policy does not run this, and no ordinary action gains an
+ * approval step.
+ */
+function strictProofProblem(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): RejectedBinding | undefined {
+  const surface = item.verification.surface
+  if (surface !== 'visual' && surface !== 'scope') return undefined
+  const kind = surface === 'visual' ? 'output_visual_readback' : 'scope_coverage'
+  const obligation = {
+    obligationId: item.id,
+    kind,
+    surface,
+    subjectIds: [item.verification.subject ?? item.requestedTarget?.scope ?? 'scope'].filter((value): value is string => typeof value === 'string' && value.length > 0),
+    sourceIds: [],
+    operation: item.verification.operation ?? 'verify',
+    evidenceIds: binding.evidenceIds,
+  } as ProofObligationV2
+  const cited = citedEvidence(projection, binding)
+  const satisfying = cited.some((fact) => fact.outcome === 'success'
+    && fact.subjects.some((subject) => obligation.subjectIds.includes(subject))
+    && proofV2Rejection(fact, obligation) === undefined)
+  if (satisfying) return undefined
+  return {
+    itemId: item.id,
+    reason: `strict policy: the requested ${surface} verification needs a real readback fact from the current projection`,
+    reasonCode: 'strict_proof_required',
+    offendingEvidenceIds: cited.map((fact) => fact.id),
+    hint: closingHint(projection, item, binding.evidenceIds),
+  }
+}
+
+function expectedTransitionMatches(action: SemanticAction, transition: ExpectedTransition, resolved: TargetTuple, observed: TargetTuple): boolean {
+  const expectedPredicate = ACTION_MANIFEST.actions[action].predicateId
+  if (transition.predicateId !== expectedPredicate || transition.version !== 1 || transition.predParamsKind !== 'inline' || !transition.parameters) return false
+  const params = transition.parameters
+  const recomputed = predParamsDigest(params as Record<string, Typed>, resolveAllowlist('product'))
+  if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false
+  switch (action) {
+    case 'install':
+    case 'apply':
+    case 'publish':
+      return [action === 'publish' ? 'artifact_id' : 'package_id', 'version', 'integrity_digest', ...(action === 'publish' ? ['registry'] : ['profile'])]
+        .every((key) => stable(observed[key]) === stable(resolved[key]) && stable(params[key]) === stable(resolved[key]))
+    case 'create':
+    case 'modify': return stable(observed.post_digest) === stable(params.post_digest)
+    case 'restart': return stable(params.pre_generation) === stable(resolved.pre_generation)
+      && stable(observed.new_generation) !== stable(resolved.pre_generation)
+      && stable(observed.health) === stable(params.health)
+    case 'commit': return stable(params.pre_head_oid) === stable(resolved.pre_head_oid)
+      && stable(params.change_set_digest) === stable(resolved.change_set_digest)
+      && stable(observed.pre_head_oid) === stable(resolved.pre_head_oid)
+      && stable(observed.post_head_oid) !== stable(resolved.pre_head_oid)
+    case 'push': return stable(observed.remote_oid) === stable(resolved.local_oid) && stable(params.local_oid) === stable(resolved.local_oid)
+    case 'pull': return stable(resolved.pull_mode) === stable('ff-only') && stable(params.pull_mode) === stable('ff-only')
+      && stable(params.upstream_oid) === stable(resolved.upstream_oid)
+      && stable(params.pre_head_oid) === stable(resolved.pre_head_oid)
+      && stable(observed.post_head_oid) === stable(resolved.upstream_oid)
+      && stable(observed.tracking_ref_oid) === stable(resolved.upstream_oid)
+    case 'fetch': return stable(params.upstream_oid) === stable(resolved.upstream_oid)
+      && stable(params.pre_head_oid) === stable(resolved.pre_head_oid)
+      && stable(observed.tracking_ref_oid) === stable(resolved.upstream_oid)
+      && stable(observed.post_head_oid) === stable(resolved.pre_head_oid)
+    default: return true
+  }
+}
+
+function nonStatefulTransitionMatches(action: SemanticAction, transition: ExpectedTransition, resolved: TargetTuple, observed: TargetTuple): boolean {
+  if (transition.predicateId !== ACTION_MANIFEST.actions[action].predicateId
+    || transition.version !== 1
+    || transition.predParamsKind !== 'inline'
+    || !transition.parameters) return false
+  const params = transition.parameters
+  const recomputed = predParamsDigest(params as Record<string, Typed>, resolveAllowlist('product'))
+  if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false
+  if (action === 'inspect_remote_updates') {
+    return ['remote', 'version'].every((key) => stable(params[key]) === stable(resolved[key]))
+      && stable(params.upstream_oid) === stable(observed.upstream_oid)
+  }
+  return stable(params) === stable({ expected_outcome: { k: 'e', v: 'success' }, min_matches: 1 })
+}
+
+function richStatefulRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; rejected?: RejectedBinding } {
+  const action = item.semanticAction
+  if (!action || !isStatefulAction(action)) {
+    return { rejected: { itemId: item.id, reason: 'stateful certificate path received a non-stateful action', reasonCode: 'semantic_action_mismatch' } }
+  }
+  if (!binding.semanticAction || binding.semanticAction !== action) {
+    return { rejected: { itemId: item.id, reason: 'binding semantic action differs from the contract', reasonCode: 'semantic_action_mismatch' } }
+  }
+  if (!tuplesEqual(binding.requestedTarget, item.requestedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'requested target differs from the captured contract', reasonCode: 'requested_target_mismatch' } }
+  }
+  if (!requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'resolved target differs from an identity named in the root instruction', reasonCode: 'requested_resolved_target_mismatch' } }
+  }
+  if (ACTION_MANIFEST.actions[action].evidenceProducer !== 'supported') {
+    return { rejected: { itemId: item.id, reason: 'the pinned host exposes no safe independent producer for this action', reasonCode: 'stateful_adapter_unavailable' } }
+  }
+  if (!binding.resolutionEvidenceId || !binding.effectEvidenceId || !(binding.stateEvidenceIds?.length)) {
+    return { rejected: { itemId: item.id, reason: 'stateful action requires distinct resolution, effect, and state evidence', reasonCode: 'effect_only_insufficient_state_readback' } }
+  }
+  if (!validateActionTarget(action, binding.resolvedTarget, binding.observedState)) {
+    return { rejected: { itemId: item.id, reason: 'resolved target or observed state is incomplete', reasonCode: 'state_closure_incomplete' } }
+  }
+  const resolution = projection.evidence.get(binding.resolutionEvidenceId)
+  const effect = projection.evidence.get(binding.effectEvidenceId)
+  const states = binding.stateEvidenceIds.map((id) => projection.evidence.get(id)).filter((value): value is GuardEvidence => value !== undefined)
+  if (!resolution || !effect || states.length !== binding.stateEvidenceIds.length) {
+    return { rejected: { itemId: item.id, reason: 'role evidence is missing', reasonCode: 'evidence_missing' } }
+  }
+  if (resolution.evidenceRole !== 'resolution') {
+    return { rejected: { itemId: item.id, reason: 'resolution evidence is paired to the wrong role', reasonCode: 'binding_resolution_cross_pairing' } }
+  }
+  if (effect.evidenceRole !== 'effect' || states.some((state) => state.evidenceRole !== 'state')) {
+    return { rejected: { itemId: item.id, reason: 'evidence role matrix is invalid', reasonCode: 'binding_role_mismatch' } }
+  }
+  if (resolution.id === effect.id || states.some((state) => state.id === resolution.id || state.id === effect.id)) {
+    return { rejected: { itemId: item.id, reason: 'resolution, effect, and state evidence must be distinct', reasonCode: 'binding_role_mismatch' } }
+  }
+  if (!(resolution.toolResultSeq < effect.toolResultSeq)
+    || states.some((state) => !(effect.toolResultSeq < state.toolResultSeq))) {
+    return { rejected: { itemId: item.id, reason: 'resolution must precede effect and independent state readback', reasonCode: 'binding_role_order_invalid' } }
+  }
+  if (!tuplesEqual(binding.resolvedTarget, resolution.resolvedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'resolution evidence is paired to a different target', reasonCode: 'binding_resolution_cross_pairing' } }
+  }
+  if (!tuplesEqual(binding.resolvedTarget, effect.resolvedTarget) || states.some((state) => !tuplesEqual(binding.resolvedTarget, state.resolvedTarget))) {
+    return { rejected: { itemId: item.id, reason: 'effect/state evidence is paired to a different target', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  const mergedObserved: TargetTuple = {}
+  for (const state of states) {
+    for (const [key, value] of Object.entries(state.observedState ?? {})) {
+      if (Object.hasOwn(mergedObserved, key)) return { rejected: { itemId: item.id, reason: 'state observations overlap', reasonCode: 'binding_state_observation_overlap' } }
+      mergedObserved[key] = value
+    }
+  }
+  if (!tuplesEqual(binding.observedState, mergedObserved)) {
+    return { rejected: { itemId: item.id, reason: 'binding observed state does not close over state facts', reasonCode: 'binding_observed_state_mismatch' } }
+  }
+  if (!resolution.expectedTransition?.parameters) {
+    return { rejected: { itemId: item.id, reason: 'resolution fact does not freeze expected transition parameters', reasonCode: 'resolution_expected_transition_missing' } }
+  }
+  if (!resolution.expectedTransitionDigest) {
+    return { rejected: { itemId: item.id, reason: 'resolution fact does not bind an expected transition digest', reasonCode: 'resolution_expected_transition_digest_missing' } }
+  }
+  if (resolution.expectedTransitionDigest !== sha256(stable(resolution.expectedTransition))) {
+    return { rejected: { itemId: item.id, reason: 'resolution expected transition digest does not match its stable payload', reasonCode: 'resolution_expected_transition_digest_mismatch' } }
+  }
+  if (!transitionIsSelfConsistent(action, resolution.expectedTransition)) {
+    return { rejected: { itemId: item.id, reason: 'resolution fact contains an invalid expected transition', reasonCode: 'resolution_expected_transition_invalid' } }
+  }
+  if (!transitionsEqual(binding.expectedTransition, resolution.expectedTransition)) {
+    return { rejected: { itemId: item.id, reason: 'binding expected transition differs from the cited resolution fact', reasonCode: 'binding_expected_transition_mismatch' } }
+  }
+  if (!expectedTransitionMatches(action, resolution.expectedTransition, binding.resolvedTarget!, binding.observedState!)) {
+    return { rejected: { itemId: item.id, reason: 'observed state does not satisfy the versioned expected transition', reasonCode: 'expected_transition_mismatch' } }
+  }
+  const record: BindingRecord = {
+    item: item.id, semanticAction: action,
+    requestedTarget: binding.requestedTarget as Record<string, Typed>, resolvedTarget: binding.resolvedTarget as Record<string, Typed>,
+    observedState: binding.observedState as Record<string, Typed>, predId: resolution.expectedTransition.predicateId,
+    predVersion: resolution.expectedTransition.version, predParamsKind: 'inline',
+    predParams: resolution.expectedTransition.parameters as Record<string, Typed>, predParamsAllowlist: 'product',
+    resolutionEvidenceId: binding.resolutionEvidenceId, effectEvidenceId: binding.effectEvidenceId,
+    stateEvidenceIds: binding.stateEvidenceIds,
+  }
+  try {
+    bindingStateClosure({ binding: record, resolution: evidenceFact(resolution), effect: evidenceFact(effect), states: states.map(evidenceFact), evidenceFacts: citedEvidence(projection, binding).map(evidenceFact) })
+  } catch (error) {
+    return { rejected: { itemId: item.id, reason: error instanceof Error ? error.message : 'state closure rejected', reasonCode: 'binding_state_closure_rejected' } }
+  }
+  return { record }
+}
+
+/** Native file effects have no Guard-issued execution resolution. The host's
+ * persisted write/edit result and a later exact FS-provider readback are the
+ * two independent facts. Historical three-role bindings keep their old path. */
+function nativeFileRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; nativeDigest?: string; rejected?: RejectedBinding } {
+  const action = item.semanticAction
+  if (action !== 'create' && action !== 'modify') return { rejected: { itemId: item.id, reason: 'native file adapter unavailable for this action', reasonCode: 'stateful_adapter_unavailable' } }
+  if (action === 'create') return { rejected: { itemId: item.id, reason: 'native write did not preserve an independent absent prestate', reasonCode: 'evidence_insufficient' } }
+  if (binding.semanticAction !== action || !tuplesEqual(binding.requestedTarget, item.requestedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'native action or requested target differs from the requirement', reasonCode: 'requested_target_mismatch' } }
+  }
+  if (!requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'native target differs from the root constraint', reasonCode: 'requested_resolved_target_mismatch' } }
+  }
+  const effect = binding.effectEvidenceId ? projection.evidence.get(binding.effectEvidenceId) : undefined
+  const stateId = binding.stateEvidenceIds?.[0]
+  const state = stateId ? projection.evidence.get(stateId) : undefined
+  if (!effect || !state || binding.stateEvidenceIds?.length !== 1 || binding.evidenceIds.length !== 2
+    || !binding.evidenceIds.includes(effect.id) || !binding.evidenceIds.includes(state.id)) {
+    return { rejected: { itemId: item.id, reason: 'native effect and independent readback are required', reasonCode: 'effect_only_insufficient_state_readback' } }
+  }
+  const effectTool = ['edit', 'edit_file']
+  const path = binding.resolvedTarget?.artifact_id
+  const digest = state.observedState?.post_digest
+  if (typeof path !== 'string' || typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)
+    || effect.outcome !== 'success' || state.outcome !== 'success'
+    || !effectTool.includes(effect.toolName) || state.toolName !== 'context_guard_observe_file'
+    || state.causedByCallId !== effect.callId || effect.toolResultSeq >= state.toolResultSeq
+    || !effect.subjects.includes(path) || !state.subjects.includes(path)
+    || state.semanticAction !== action || state.evidenceRole !== 'state'
+    || !tuplesEqual(binding.observedState, { post_digest: digest })) {
+    return { rejected: { itemId: item.id, reason: 'native effect/readback lineage or state does not match', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  // A file state cannot retroactively prove create/no-overwrite preconditions.
+  // The native adapter certifies the observed write/edit action and post-state
+  // only; a root predicate requiring a particular prestate needs a producer
+  // that froze that prestate before the effect.
+  if (item.requestedTarget?.pre_digest !== undefined || item.requestedTarget?.change_set_digest !== undefined) {
+    return { rejected: { itemId: item.id, reason: 'required pre-effect identity was not observed', reasonCode: 'evidence_insufficient' } }
+  }
+  if (!bindingSatisfies(projection, item, binding.evidenceIds)) {
+    return { rejected: { itemId: item.id, reason: 'native facts do not satisfy the verification facets', reasonCode: 'binding_missing_required_facet' } }
+  }
+  const rootSeq = /^m(\d+)(?::|$)/.exec(item.sourceMessageId)
+  const rootBase = rootSeq ? projection.rootLocatorContexts.get(Number(rootSeq[1]))?.base : undefined
+  if (projection.boundaryProtocol === 6 && projection.rootLocatorIdentity
+    && (state.nativeCanonicalPath !== path || !rootBase || state.nativeCanonicalBase !== rootBase)) {
+    return { rejected: { itemId: item.id, reason: 'native file readback lacks canonical root-time path identity', reasonCode: 'native_canonical_path_unavailable' } }
+  }
+  return { nativeDigest: projection.boundaryProtocol === 6 && projection.rootLocatorIdentity
+    ? nativeObservationDigestV2(effect, state, projection.rootLocatorIdentity) : nativeObservationDigest(effect, state), record: {
+    item: item.id, semanticAction: action,
+    requestedTarget: binding.requestedTarget as Record<string, Typed>,
+    resolvedTarget: binding.resolvedTarget as Record<string, Typed>,
+    observedState: { post_digest: digest },
+    predId: `pred.${action}.v1`, predVersion: 1,
+    predParamsKind: 'inline', predParams: { post_digest: digest }, predParamsAllowlist: 'product',
+    effectEvidenceId: effect.id, stateEvidenceIds: [state.id],
+  } }
+}
+
+function nativeGitRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; nativeDigest?: string; rejected?: RejectedBinding } {
+  const action = item.semanticAction
+  if (action !== 'commit' && action !== 'push') return { rejected: { itemId: item.id, reason: 'native Git adapter unavailable for this action', reasonCode: 'stateful_adapter_unavailable' } }
+  if (binding.semanticAction !== action || !tuplesEqual(binding.requestedTarget, item.requestedTarget)
+    || !requestedTargetMatchesResolved(action, item.requestedTarget, binding.resolvedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'native Git target differs from the requirement', reasonCode: 'requested_resolved_target_mismatch' } }
+  }
+  const effect = binding.effectEvidenceId ? projection.evidence.get(binding.effectEvidenceId) : undefined
+  const state = binding.stateEvidenceIds?.length === 1 ? projection.evidence.get(binding.stateEvidenceIds[0]!) : undefined
+  if (!effect || !state || binding.evidenceIds.length !== 2 || !binding.evidenceIds.includes(effect.id)
+    || !binding.evidenceIds.includes(state.id)) return { rejected: { itemId: item.id, reason: 'native Git effect and readback required', reasonCode: 'effect_only_insufficient_state_readback' } }
+  const repo = binding.resolvedTarget?.repository
+  const postOid = state.observedState?.post_head_oid
+  const process = effect.processFacts
+  if (typeof repo !== 'string' || typeof postOid !== 'string' || !/^[0-9a-f]{40,64}$/.test(postOid)
+    || (effect.toolName !== 'bash' && effect.toolName !== 'pwsh') || state.toolName !== 'context_guard_observe_git'
+    || effect.semanticAction !== action || state.semanticAction !== action
+    || effect.outcome !== 'success' || state.outcome !== 'success'
+    || process?.outcome !== 'success' || process.operationAttribution !== 'single_operation'
+    || state.causedByCallId !== effect.callId || effect.toolResultSeq >= state.toolResultSeq
+    || !effect.subjects.includes(repo) && effect.resolvedTarget?.repository !== repo
+    || !state.subjects.includes(repo) || state.evidenceRole !== 'state') {
+    return { rejected: { itemId: item.id, reason: 'native Git effect/readback lineage is incomplete', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  if (action === 'commit') {
+    if (typeof state.nativeGitParentOid !== 'string' || typeof state.nativeGitTreeOid !== 'string'
+      || binding.observedState?.post_head_oid !== postOid || Object.keys(binding.observedState ?? {}).length !== 1
+      || binding.resolvedTarget?.branch !== state.resolvedTarget?.branch
+      || item.requestedTarget?.change_set_digest !== undefined || item.requestedTarget?.pre_head_oid !== undefined) {
+      return { rejected: { itemId: item.id, reason: 'native commit identity, branch or prestate is not proven', reasonCode: 'evidence_insufficient' } }
+    }
+  } else if (state.observedState?.remote_oid !== postOid || binding.observedState?.remote_oid !== postOid
+    || binding.resolvedTarget?.local_oid !== postOid || binding.resolvedTarget?.remote !== state.resolvedTarget?.remote
+    || binding.resolvedTarget?.refspec !== state.resolvedTarget?.refspec || binding.observedState?.post_head_oid !== postOid) {
+    return { rejected: { itemId: item.id, reason: 'native push readback does not bind the exact remote/refspec', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  return { nativeDigest: projection.boundaryProtocol === 6 && projection.rootLocatorIdentity
+    ? nativeObservationDigestV2(effect, state, projection.rootLocatorIdentity) : nativeObservationDigest(effect, state), record: {
+    item: item.id, semanticAction: action, requestedTarget: binding.requestedTarget as Record<string, Typed>,
+    resolvedTarget: binding.resolvedTarget as Record<string, Typed>, observedState: binding.observedState as Record<string, Typed>,
+    predId: `pred.${action}.v1`, predVersion: 1, predParamsKind: 'inline', predParams: {}, predParamsAllowlist: 'product',
+    effectEvidenceId: effect.id, stateEvidenceIds: [state.id],
+  } }
+}
+
+function simpleRecord(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): { record?: BindingRecord; rejected?: RejectedBinding } {
+  if (!bindingSatisfies(projection, item, binding.evidenceIds)) {
+    return { rejected: { itemId: item.id, reason: 'evidence does not match the current verification contract', reasonCode: 'binding_missing_required_facet', hint: closingHint(projection, item, binding.evidenceIds) } }
+  }
+  const action = item.semanticAction ?? 'generic_run'
+  if (!binding.semanticAction || binding.semanticAction !== action) {
+    return { rejected: { itemId: item.id, reason: 'binding semantic action differs from the contract', reasonCode: 'semantic_action_mismatch' } }
+  }
+  if (!tuplesEqual(binding.requestedTarget, item.requestedTarget)) {
+    return { rejected: { itemId: item.id, reason: 'requested target differs from the captured contract', reasonCode: 'requested_target_mismatch' } }
+  }
+  if (!binding.effectEvidenceId || binding.resolutionEvidenceId || (binding.stateEvidenceIds?.length ?? 0) > 0) {
+    return { rejected: { itemId: item.id, reason: 'non-stateful binding requires exactly one explicit effect role and no stateful role fields', reasonCode: 'non_stateful_role_manifest_invalid' } }
+  }
+  const effect = projection.evidence.get(binding.effectEvidenceId)
+  if (!effect || !binding.evidenceIds.includes(effect.id)) {
+    return { rejected: { itemId: item.id, reason: 'effect evidence is missing from the cited evidence set', reasonCode: 'evidence_missing' } }
+  }
+  if (action === 'test' && (effect.toolName === 'bash' || effect.toolName === 'pwsh')) {
+    const process = effect.processFacts
+    if (!process || process.outcome !== 'success'
+      || (process.operationAttribution !== 'single_operation'
+        && !(process.operationAttribution === 'declared_per_operation'
+          && process.declaredOperationResults?.length
+          && process.declaredOperationResults.every((row) => row.outcome === 'success')))) {
+      return { rejected: { itemId: item.id, reason: 'test process outcome is not attributable to the required operation', reasonCode: 'operation_unattributable' } }
+    }
+  }
+  if ((effect.evidenceRole ?? 'effect') !== 'effect') {
+    return { rejected: { itemId: item.id, reason: 'non-stateful evidence is paired to a non-effect role', reasonCode: 'binding_role_mismatch' } }
+  }
+  if (!bindingSatisfies(projection, item, [effect.id])) {
+    return { rejected: { itemId: item.id, reason: 'the explicit effect alone does not bind every required method, capability, and subject facet', reasonCode: 'binding_missing_required_facet', hint: closingHint(projection, item, [effect.id]) } }
+  }
+  const effectAction = effect.semanticAction ?? 'generic_run'
+  const effectTarget = effect.resolvedTarget ?? {}
+  const effectObserved = effect.observedState ?? {}
+  const compatibleProjection = Object.entries(binding.resolvedTarget ?? {}).every(([key, value]) => (
+    Object.hasOwn(effectTarget, key) && stable(value) === stable(effectTarget[key])
+  )) && Object.entries(binding.observedState ?? {}).every(([key, value]) => (
+    Object.hasOwn(effectObserved, key) && stable(value) === stable(effectObserved[key])
+  ))
+  if (!compatibleProjection || (effectAction === action
+    && (!tuplesEqual(binding.resolvedTarget, effectTarget) || !tuplesEqual(binding.observedState, effectObserved)))) {
+    return { rejected: { itemId: item.id, reason: 'binding target does not match the cited effect evidence', reasonCode: 'binding_state_cross_pairing' } }
+  }
+  if (!validateActionTarget(effectAction, effectTarget, effectObserved)) {
+    return { rejected: { itemId: item.id, reason: 'cited effect violates its own closed action manifest', reasonCode: 'resolved_target_incomplete' } }
+  }
+  if (!validateActionTarget(action, binding.resolvedTarget, binding.observedState ?? {})) {
+    return { rejected: { itemId: item.id, reason: 'effect lacks the action target required by the command manifest', reasonCode: 'resolved_target_incomplete' } }
+  }
+  if (!binding.expectedTransition || !nonStatefulTransitionMatches(action, binding.expectedTransition, binding.resolvedTarget!, binding.observedState ?? {})) {
+    return { rejected: { itemId: item.id, reason: 'non-stateful expected transition does not match the action manifest', reasonCode: 'expected_transition_mismatch' } }
+  }
+  return { record: {
+    item: item.id, semanticAction: action, requestedTarget: binding.requestedTarget as Record<string, Typed>,
+    resolvedTarget: binding.resolvedTarget as Record<string, Typed>, observedState: (binding.observedState ?? {}) as Record<string, Typed>,
+    predId: binding.expectedTransition.predicateId, predVersion: binding.expectedTransition.version,
+    predParamsKind: 'inline', predParams: binding.expectedTransition.parameters as Record<string, Typed>,
+    predParamsAllowlist: 'product', effectEvidenceId: binding.effectEvidenceId, stateEvidenceIds: [],
+  } }
+}
+
+/** Preview one evidence binding through the same per-item acceptance checks as
+ * certificate construction. This does not decide whole-contract closure. */
+export function bindingIndividuallyAccepted(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): boolean {
+  if (item.status === 'superseded' || item.targetCaptureStatus === 'clarification_required'
+    || binding.semanticAction !== item.semanticAction || !tuplesEqual(binding.requestedTarget, item.requestedTarget)
+    || evidenceProblem(projection, item, binding)
+    || (projection.policy === 'strict' && strictProofProblem(projection, item, binding))) return false
+  const built = isStatefulAction(item.semanticAction ?? 'generic_run')
+    ? binding.resolutionEvidenceId ? richStatefulRecord(projection, item, binding)
+      : item.semanticAction === 'commit' || item.semanticAction === 'push' ? nativeGitRecord(projection, item, binding) : nativeFileRecord(projection, item, binding)
+    : simpleRecord(projection, item, binding)
+  return built.record !== undefined && built.rejected === undefined
+}
+
+export function certifyCheckpoint(projection: GuardProjection, bindings: EvidenceBinding[], id: string, commit = true): CheckpointResult {
+  if (projection.integrity !== 'valid' || projection.hostStatus !== 'supported') {
+    return { status: 'unknown', contractRevision: projection.contractRevision, openItems: certifiableOpenItems(projection).map((item) => item.id), rejectedBindings: [] }
+  }
+  // The live v6 signing tool runs only after the Session watermark has been
+  // flushed and its shared-core projection is current. A legacy binding can
+  // still be individually valid while a later required outcome has failed;
+  // it must not mint a new certificate for that incomplete closure. Historical
+  // replay derives at the checkpoint's event watermark before the runtime
+  // attaches coreV2, and continues to verify the recorded certificate bytes.
+  if (projection.boundaryProtocol === 6 && projection.durabilityWatermark === 'confirmed'
+    && projection.coreV2?.certifiable !== true) {
+    return { status: 'incomplete', contractRevision: projection.contractRevision,
+      openItems: certifiableOpenItems(projection).map((item) => item.id),
+      rejectedBindings: [{ itemId: '*', reason: 'the current shared-core closure is not verified complete', reasonCode: 'current_closure_unmet' }] }
+  }
+  const rejectedBindings: RejectedBinding[] = []
+  const records: BindingRecord[] = []
+  const nativeDigests: string[] = []
+  const referencedFacts: EvidenceFact[] = []
+  for (const binding of bindings) {
+    const item = projection.items.get(binding.itemId)
+    if (!item || item.status === 'superseded') {
+      rejectedBindings.push({ itemId: binding.itemId, reason: 'item is missing or superseded', reasonCode: 'item_missing_or_superseded' }); continue
+    }
+    if (item.legacyFlags?.includes('legacy_authority_unclassified')) {
+      rejectedBindings.push({ itemId: item.id, reason: 'legacy item authority cannot be proven', reasonCode: 'legacy_authority_unclassified' }); continue
+    }
+    if (item.legacyFlags?.includes('legacy_generic_run')) {
+      rejectedBindings.push({ itemId: item.id, reason: 'legacy generic-run item is non-certifiable until deterministic rebind', reasonCode: 'legacy_generic_run_non_certifiable' }); continue
+    }
+    // C04 ancestor constraints: a prohibition or an unsatisfied condition the
+    // root declared in an ANCESTOR unit stays in force for this descendant
+    // obligation. The check runs before the evidence checks and against the
+    // binding's resolved target, so a descendant can neither discharge an
+    // ancestor's blanket ban nor certify the action the ancestor reserved.
+    const ancestorBlock = ancestorConstraintForBinding(projection, item, binding.resolvedTarget)
+    if (ancestorBlock) {
+      rejectedBindings.push({
+        itemId: item.id,
+        reason: ancestorBlock.kind === 'prohibition'
+          ? `an ancestor unit (${ancestorBlock.constraintUnitId}) holds prohibition ${ancestorBlock.constraintId} on this action and target`
+          : `an ancestor unit (${ancestorBlock.constraintUnitId}) holds the unsatisfied condition ${ancestorBlock.constraintId} that reserves this action`,
+        reasonCode: ancestorBlock.reasonCode,
+        hint: closingHint(projection, item),
+      }); continue
+    }
+    if (item.targetCaptureStatus === 'clarification_required') {
+      rejectedBindings.push({
+        itemId: item.id,
+        reason: 'the root instruction does not identify an action-specific target; clarify or explicitly rebind the item',
+        reasonCode: item.targetCaptureReasonCode ?? 'clarification_or_rebind_required',
+        hint: closingHint(projection, item),
+      }); continue
+    }
+    // A clause that ordered more than one action needs a closure for EACH
+    // action instance: its own resolved target and its own successful evidence.
+    // One action's evidence never covers another, the declared order is kept,
+    // and two instances of the same action on different targets stay separate.
+    // This is checked before the single-facet guard, so a missing action
+    // closure is reported as an incomplete action plan rather than as generic
+    // missing evidence.
+    if (item.actionPlan && item.actionPlan.length > 0) {
+      const planProblem = bindingActionPlanProblem(projection, item, binding)
+      if (planProblem) { rejectedBindings.push(planProblem); continue }
+    }
+    if (!binding.evidenceIds.length) {
+      rejectedBindings.push({ itemId: item.id, reason: 'no evidence cited', reasonCode: 'binding_missing_required_facet', hint: closingHint(projection, item) }); continue
+    }
+    const problem = evidenceProblem(projection, item, binding)
+    if (problem) { rejectedBindings.push(problem); continue }
+    // C06 strict policy: on top of standard it enforces the proof the user
+    // ALREADY asked for — a requested visual or complete-scope verification must
+    // be discharged by a real readback fact, not by any evidence that merely
+    // claims the surface. It adds no new approval for ordinary actions.
+    if (projection.policy === 'strict') {
+      const strictProblem = strictProofProblem(projection, item, binding)
+      if (strictProblem) { rejectedBindings.push(strictProblem); continue }
+    }
+    if ((item.semanticAction ?? 'generic_run') === 'generic_run') {
+      rejectedBindings.push({ itemId: item.id, reason: 'generic run evidence cannot prove a user-level completion contract', reasonCode: 'generic_run_non_certifiable' }); continue
+    }
+    if (projection.boundaryProtocol === 6 && item.unitId !== undefined && item.semanticAction !== 'publish' && binding.resolutionEvidenceId) {
+      rejectedBindings.push({ itemId: item.id, reason: 'ordinary current work cannot inherit the retired Guard resolution chain', reasonCode: 'legacy_evidence_non_authoritative' }); continue
+    }
+    const built = isStatefulAction(item.semanticAction ?? 'generic_run')
+      ? binding.resolutionEvidenceId ? richStatefulRecord(projection, item, binding)
+        : item.semanticAction === 'commit' || item.semanticAction === 'push' ? nativeGitRecord(projection, item, binding) : nativeFileRecord(projection, item, binding)
+      : simpleRecord(projection, item, binding)
+    if (built.rejected) { rejectedBindings.push(built.rejected); continue }
+    records.push(built.record!)
+    if ('nativeDigest' in built && typeof built.nativeDigest === 'string') nativeDigests.push(built.nativeDigest)
+    referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact))
+  }
+  // The certified scope comes from the single closure implementation: the
+  // current unit plus any pre-v5 obligations under a v5 boundary, or the whole
+  // session under the legacy contract.
+  // 0.6.3 K4: a record the upgrade eligibility check refused to inherit blocks
+  // the certificate ITSELF, not merely one binding. A record already `answered`
+  // carries no binding to reject, so a binding-level check could never see it —
+  // and that is exactly the state the 0.6.2 mixed-request misreading produced.
+  const unreusable = needsReviewObligations(projection)
+  if (unreusable.length > 0) {
+    return {
+      status: 'incomplete',
+      contractRevision: projection.contractRevision,
+      openItems: [...new Set([...certificateClosure(projection).itemIds, ...unreusable.map((item) => item.id)])],
+      rejectedBindings: unreusable.map((item) => ({
+        itemId: item.id,
+        reason: `a record captured under earlier rules cannot be inherited (${item.needsReview!.reason}); resolve it with the root before certifying`,
+        reasonCode: 'legacy_record_needs_review',
+      })),
+    }
+  }
+  const closure = certificateClosure(projection)
+  const open = closure.itemIds.filter((itemId) => !bindings.some((binding) => binding.itemId === itemId))
+  if (rejectedBindings.length || open.length) return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: closure.itemIds, rejectedBindings }
+  if (projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5 && closure.unitId === undefined) {
+    // Unreachable in a live session (the v5 boundary is written with the first
+    // real input, which opens U001); failing closed keeps a unit-less v2
+    // certificate from ever existing.
+    return {
+      status: 'incomplete', contractRevision: projection.contractRevision,
+      openItems: closure.itemIds,
+      rejectedBindings: [{ itemId: '*', reason: 'no current work unit is available for a v2 certificate', reasonCode: 'unit_unavailable' }],
+    }
+  }
+  try {
+    const contractSha256 = currentContractDigest(projection)
+    const openDigest = digestStrings(closure.itemIds)
+    const evidenceSha256 = evidenceSha256Digest(referencedFacts)
+    const legacyBindingDigest = deriveBindingDigest(records, resolveAllowlist('product'))
+    const bindingDigest = nativeDigests.length ? nativeBindingDigest(legacyBindingDigest, nativeDigests) : legacyBindingDigest
+    const checkpoint: GuardCheckpoint = projection.boundaryProtocol !== undefined && projection.boundaryProtocol >= 5
+      ? (() => {
+        const baseCertification = certificationDigestV2({
+          stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: CERTIFICATE_VERSION_V2, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256,
+          unitId: closure.unitId!, unitClosureDigest: openDigest, evidenceSha256, bindingDigest: legacyBindingDigest,
+          goalRef: projection.currentGoalRef ?? null,
+        })
+        const locatorIdentity = projection.boundaryProtocol === 6 ? projection.rootLocatorIdentity : undefined
+        const certification = locatorIdentity ? locatorCertificationDigest(baseCertification, bindingDigest, nativeDigests, locatorIdentity)
+          : nativeDigests.length ? nativeCertificationDigest(baseCertification, bindingDigest, nativeDigests) : baseCertification
+        return {
+          id, stopProtocolVersion: STOP_PROTOCOL_VERSION_V2, certificateVersion: locatorIdentity ? '4' : nativeDigests.length ? '3' : CERTIFICATE_VERSION_V2, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
+          ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
+          unitId: closure.unitId!, unitClosureDigest: openDigest,
+          ...(nativeDigests.length ? { nativeObservations: { schema: locatorIdentity ? NATIVE_OBSERVATION_SCHEMA_V2 : NATIVE_OBSERVATION_SCHEMA, digests: nativeDigests } } : {}),
+          ...(locatorIdentity ? { rootLocatorIdentity: locatorIdentity } : {}),
+          certificationDigest: certification, result: 'certified' as const,
+        }
+      })()
+      : (() => {
+        const baseCertification = certificationDigest({
+          stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: CERTIFICATE_VERSION, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256,
+          ...(projection.currentGoalRef ? { goalRef: projection.currentGoalRef } : {}), openDigest, evidenceSha256, bindingDigest: legacyBindingDigest,
+        })
+        const certification = nativeDigests.length ? nativeCertificationDigest(baseCertification, bindingDigest, nativeDigests) : baseCertification
+        return {
+          id, stopProtocolVersion: STOP_PROTOCOL_VERSION, certificateVersion: nativeDigests.length ? '3' : CERTIFICATE_VERSION, epoch: projection.epoch,
+          sessionRefDigest: projection.sessionRefDigest, hostLockDigest: projection.hostLockDigest,
+          contractRevision: projection.contractRevision, contractSha256, openDigest, evidenceSha256, bindingDigest, bindings,
+          ...(projection.currentGoalRef ? { goalRef: { ...projection.currentGoalRef } } : {}),
+          ...(nativeDigests.length ? { nativeObservations: { schema: NATIVE_OBSERVATION_SCHEMA, digests: nativeDigests } } : {}),
+          certificationDigest: certification, result: 'certified' as const,
+        }
+      })()
+    if (commit) {
+      projection.checkpoints.push(checkpoint)
+      for (const binding of bindings) projection.items.get(binding.itemId)!.status = 'passed'
+      projection.certificateStatusReason = undefined
+    }
+    return { status: 'certified', contractRevision: projection.contractRevision, openItems: [], rejectedBindings: [], checkpoint }
+  } catch (error) {
+    return { status: 'incomplete', contractRevision: projection.contractRevision, openItems: closure.itemIds, rejectedBindings: [{ itemId: '*', reason: error instanceof Error ? error.message : 'certificate manifest rejected', reasonCode: 'certificate_manifest_rejected' }] }
+  }
+}
+
+/**
+ * Per-action closure check for a multi-action clause. Each planned action needs
+ * a matching closure whose resolved target matches the target captured for that
+ * action, whose cited evidence succeeded, and whose evidence is not older than
+ * the item revision it is closing.
+ */
+function bindingActionPlanProblem(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): RejectedBinding | undefined {
+  const plan = item.actionPlan ?? []
+  const closures = binding.actionBindings ?? []
+  if (closures.length !== plan.length) {
+    return {
+      itemId: item.id,
+      reason: `the clause orders ${plan.map((entry) => entry.action).join(' + ')}; ${closures.length} action closure(s) supplied`,
+      reasonCode: 'action_plan_incomplete',
+      hint: closingHint(projection, item),
+    }
+  }
+  const ordered = [...closures].sort((a, b) => a.order - b.order)
+  for (const [index, planned] of plan.entries()) {
+    const closure = ordered[index]
+    if (!closure || closure.action !== planned.action) {
+      return {
+        itemId: item.id,
+        reason: `action closure ${index + 1} must be '${planned.action}' in the clause's order`,
+        reasonCode: 'action_plan_order_mismatch',
+      }
+    }
+    if (planned.targetCaptureStatus !== 'resolved') {
+      return {
+        itemId: item.id,
+        reason: `the clause does not identify an exact target for '${planned.action}'`,
+        reasonCode: planned.targetCaptureReasonCode ?? 'action_plan_target_missing',
+        hint: closingHint(projection, item),
+      }
+    }
+    if (!tuplesEqual(planned.requestedTarget, closure.resolvedTarget)) {
+      return {
+        itemId: item.id,
+        reason: `the closure for '${planned.action}' resolves a different target than the clause captured`,
+        reasonCode: 'action_plan_target_mismatch',
+      }
+    }
+    // Each closure is judged on its own merits: the target it resolves is
+    // compared with the target the clause captured before its citations are
+    // examined, so wrong target, order, and a citation another action already
+    // used are reported as different failures.
+    const reused = closure.evidenceIds.filter((id) => closures.some((other) => other !== closure && other.evidenceIds.includes(id)))
+    if (reused.length > 0) {
+      return { itemId: item.id, reason: `evidence cited for '${planned.action}' also closes another action`, reasonCode: 'action_plan_evidence_reused', offendingEvidenceIds: reused }
+    }
+    if (closure.evidenceIds.length === 0) {
+      return { itemId: item.id, reason: `no evidence cited for '${planned.action}'`, reasonCode: 'action_plan_evidence_missing' }
+    }
+    const cited = closure.evidenceIds.map((id) => projection.evidence.get(id))
+    const missing = closure.evidenceIds.filter((id) => !projection.evidence.has(id))
+    if (missing.length > 0) {
+      return { itemId: item.id, reason: `cited evidence for '${planned.action}' is missing`, reasonCode: 'evidence_missing', offendingEvidenceIds: missing }
+    }
+    for (const [position, evidence] of cited.entries()) {
+      if (!evidence) continue
+      if (evidence.epoch !== projection.epoch) {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' belongs to another epoch`, reasonCode: 'evidence_wrong_epoch', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+      if (evidence.outcome !== 'success') {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' did not succeed`, reasonCode: 'action_plan_evidence_not_successful', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+      if (evidence.toolResultSeq < 0) {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' predates the item`, reasonCode: 'action_plan_evidence_predates_item', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+      if (evidence.semanticAction && evidence.semanticAction !== planned.action) {
+        return { itemId: item.id, reason: `evidence for '${planned.action}' records '${evidence.semanticAction}'`, reasonCode: 'action_plan_action_mismatch', offendingEvidenceIds: [closure.evidenceIds[position]] }
+      }
+    }
+  }
+  return undefined
+}

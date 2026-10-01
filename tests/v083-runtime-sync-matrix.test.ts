@@ -119,6 +119,79 @@ it('rebuilds on append, replace, reorder, gap and snapshot failures; reuses only
   }
 })
 
+it('never serves the fast path for a snapshot whose immutability is not provable', () => {
+  const derive = vi.spyOn(deriveModule, 'deriveProjection')
+  try {
+    // 1. A session view that hands out the SAME MUTABLE array: an append
+    // between syncs must be visible (the review's before=1/after=1/forced=2
+    // counterexample must now read before=1, after=2).
+    const mutableSession = newSession('Explain the first requirement.')
+    const events = [...mutableSession.snapshotEvents()]
+    const mutableReader = vi.spyOn(mutableSession, 'snapshotEvents').mockReturnValue(events as never)
+    try {
+      const runtime = makeRuntime(mutableSession)
+      expect([...runtime.projection.items.values()].length).toBe(1)
+      runtime.sync()
+      expect(derive.mock.calls.length).toBe(2) // not provable: rebuilt
+      events.push({
+        seq: events.length as never, type: 'user/message',
+        data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run the tests.' }] },
+      } as never)
+      runtime.sync()
+      expect([...runtime.projection.items.values()].some((item) => item.normalizedText.includes('Run the tests'))).toBe(true)
+      expect(derive.mock.calls.length).toBe(3)
+    } finally { mutableReader.mockRestore() }
+
+    // 2. A frozen array with SHALLOW-FROZEN elements (data not frozen):
+    // in-place field mutation must be visible, so the fast path must not
+    // engage. Synthetic clone — official events are already deep-frozen.
+    const shallowSession = newSession('Explain the first requirement.')
+    const shallowEvents = Object.freeze([...shallowSession.snapshotEvents()].map((element) => Object.freeze(structuredClone(element))))
+    const shallowReader = vi.spyOn(shallowSession, 'snapshotEvents').mockReturnValue(shallowEvents as never)
+    try {
+      const runtime = makeRuntime(shallowSession)
+      runtime.sync()
+      const calls = derive.mock.calls.length
+      const element = shallowEvents[0] as { data?: { content?: Array<{ text?: string }> } }
+      element.data!.content![0]!.text = 'Run the tests now.'
+      runtime.sync()
+      expect(derive.mock.calls.length, 'shallow-frozen snapshot: full rebuild').toBe(calls + 1)
+      expect([...runtime.projection.items.values()].some((item) => item.normalizedText.includes('Run the tests now'))).toBe(true)
+    } finally { shallowReader.mockRestore() }
+
+    // 3. Positive control: a DEEP-FROZEN snapshot takes the fast path.
+    const deepSession = newSession('Explain the first requirement.')
+    const deepEvents = structuredClone(deepSession.snapshotEvents()) as unknown[]
+    const deepFreeze = (value: unknown): void => {
+      if (value === null || typeof value !== 'object') return
+      for (const key of Object.keys(value as object)) deepFreeze((value as Record<string, unknown>)[key])
+      Object.freeze(value)
+    }
+    deepFreeze(deepEvents)
+    const deepReader = vi.spyOn(deepSession, 'snapshotEvents').mockReturnValue(deepEvents as never)
+    try {
+      const runtime = makeRuntime(deepSession)
+      const afterInit = derive.mock.calls.length
+      runtime.sync()
+      expect(derive.mock.calls.length, 'deep-frozen snapshot: fast path').toBe(afterInit)
+      runtime.sync()
+      expect(derive.mock.calls.length).toBe(afterInit)
+    } finally { deepReader.mockRestore() }
+
+    // 4. Positive control: the OFFICIAL Session snapshot is deeply frozen and
+    // reuses its array, so the production host keeps the fast path.
+    const official = newSession('Explain the first requirement.')
+    const officialRuntime = makeRuntime(official)
+    const afterInit = derive.mock.calls.length
+    officialRuntime.sync()
+    expect(derive.mock.calls.length, 'official frozen snapshot: fast path').toBe(afterInit)
+    officialRuntime.sync()
+    expect(derive.mock.calls.length).toBe(afterInit)
+  } finally {
+    derive.mockRestore()
+  }
+})
+
 it('binds one Goal readback version to both the cache key and the overlay', () => {
   const session = newSession('Run the tests.')
   const derive = vi.spyOn(deriveModule, 'deriveProjection')

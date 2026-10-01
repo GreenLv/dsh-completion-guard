@@ -1,9 +1,9 @@
-import { $ as segmentAuthorityBlocks, $i as qualifyHostTrust, $n as relevantEvidence, $r as reportingHeadGoverns, $t as readbackSettlesContract, A as PROTOCOL_V3_NOTICE, Aa as ACTION_MANIFEST_VERSION, Ai as prepareDesktopHostTrust, An as unitDescendantIds, Ar as hasOrderedCoordination, At as MIN_RECOVERY_CHAR_BUDGET, B as evidenceFromPersistedToolResult, Ba as boundedArtifactChoiceMatches, Bi as DESKTOP_RUNTIME_PACKAGE_NAME, Bn as proposeRebindOutcome, Br as isQuestionScopeNeedingReview, Bt as renderRecoveryPacket, C as SESSION_API_UNSUPPORTED, Ca as SUPPORTED_HOST_RANGE, Ci as hostLockRowsFromComposedDump, Cn as progressFingerprint, Cr as actionVerbMatches, Ct as sessionQueryV2, D as projectCoreV2, Da as parseHostVersion, Di as packageRowsFromActiveGraph, Dn as hasCurrentCertificate, Dr as clauseIsProtected, Dt as CLEANUP_CONDITION_RULE_COMPACT, E as snapshotSessionEvents, Ea as evaluateMinimumHostVersion, Ei as inspectTargetHostGraph, En as goalCompletionDenial, Er as clauseIsGoverned, Et as CLEANUP_CONDITION_RULE, F as deriveProjection, Fa as STATEFUL_ACTIONS, Fi as resolveInstalledHostLock, Fn as qualifyBoundary, Fr as introducesActionClause, Ft as cleanupConditionFor, G as persistedToolResultStatus, Ga as semanticActionFromCommand, Gi as readDesktopAppRuntime, Gn as CONFIRM_LINE_PATTERN, Gr as maskCodeSpans, Gt as OUTCOME_STRENGTH, H as extractToolSubject, Ha as requestedIdentityKey, Hi as hasDesktopImporterState, Hn as rebindAttemptKey, Hr as itemHoldsExecutionAuthority, Ht as currentV6Feedback, I as legacyRecordsNeedingReview, Ia as STOP_PROTOCOL_VERSION, Ii as revalidateDesktopCoreLock, In as currentContractDigest, Ir as isExecutableItem, It as closingHint, J as canonicalArgvFromCommand, Ja as validateActionTarget, Ji as writeDesktopRuntimeReceipt, Jn as capabilityRemedyPhrase, Jr as opensConditionLead, Jt as contractById, K as shellReadbackOutcome, Ka as semanticActionFromText, Ki as readDesktopDependency, Kn as isFrozenV042RebindResponse, Kr as maskQuotedSpans, Kt as RELEASE_OPERATIONS, L as rootLocatorFlavor, La as STOP_PROTOCOL_VERSION_V2, Li as verifyComposedHostLockDump, Ln as createProjection, Lr as isExplanationScope, Lt as openItems, M as PROTOCOL_V5_NOTICE, Ma as CERTIFICATE_VERSION, Mi as readActiveHostGraph, Mn as availableBoundaryQualifications, Mr as hasWorkPredicate, Mt as V6_ORDINARY_COMPLETION_RULE_COMPACT, N as PROTOCOL_V6_NOTICE, Na as CERTIFICATE_VERSION_V2, Ni as resolveActiveProfileHostLock, Nn as effectuateBoundary, Nr as interpretClause, Nt as V6_ORDINARY_COMPLETION_RULE_SHORT, O as CAPTURE_V042_NOTICE, Oa as satisfiesSupportedHostRange, Oi as packageRowsFromPnpmLock, On as certifiableOpenItems, Or as explanationHasActionResidue, Ot as CLEANUP_CONDITION_RULE_SHORT, P as applyUpgradeEligibility, Pa as SEMANTIC_ACTIONS, Pi as resolveDesktopProfileHostLock, Pn as isCurrentAcceptedBoundary, Pr as interpretMessage, Pt as carriesCleanupCondition, Q as authorityCaptureCounts, Qi as parseHostTrust, Qn as nativeFileTwoRole, Qr as questionHeadsClause, Qt as normalizeSettlement, R as supersedeItem, Ra as SUPPORTED_EVIDENCE_ADAPTERS, Ri as DESKTOP_IDENTITY_FACTS, Rn as confirmRebind, Rr as isInformationalFragment, Rt as recoveryDigest, S as sourcedNamedTestRoot, Sa as MIN_SUPPORTED_HOST_VERSION, Si as hostLockContextFromComposedDump, Sn as observeAssistantOutcome, Sr as LEGACY_QUALIFICATION, St as sessionQuery, T as SessionApiError, Ta as compareHostVersions, Ti as inspectDesktopTargetGraph, Tn as v6TestPredicate, Tr as clauseAsksOwnQuestion, Tt as validateProofManifestV2, U as isDeterministicCheck, Ua as requestedTargetAuthorizesMutation, Ui as readAsarFile, Un as rebindResponse, Ur as kindOfScope, Ut as isV6PendingRootWait, V as extractTextContent, Va as isStatefulAction, Vi as auditDesktopInstalledImplementation, Vn as proposeRebindV042, Vr as isRestatement, Vt as v6CurrentRootBoundaries, W as nativeGitParentOidVerified, Wa as requestedTargetMatchesResolved, Wi as readAsarIndex, Wn as replayRebindResult, Wr as legacyQuestionReadingIsInformational, Wt as sourceItemForCoreRequirement, X as parsePwshCommand, Xa as createHostAuditSession, Xi as acquireHostTrust, Xn as evidenceAvailabilityReason, Xr as presentExplanationHead, Xt as normalizeReleaseContract, Y as isRunExecutable, Ya as RC020_RC2_HOST_PACKAGES, Yi as HostTrustError, Yn as deriveItemDiagnosis, Yr as opensWithDirective, Yt as inFlightReservation, Z as parseShellCommand, Zi as hostTrustDigest, Zn as itemDiagnosis, Zr as qualificationOfClause, Zt as normalizeReservation, _ as previewFirstStepInjection, _a as evaluateToolSurfaceCapability, _i as auditedForegroundRenderers, _n as decisionBoundaryKey, _r as canonicalRegistryBase, _t as proofHostSurfacesOf, a as commitTreeSnapshotDigest, aa as BASE_HOST_PACKAGES, ai as COMMAND_SURFACE_MANIFEST, an as evidenceCoverage, ar as partialFailureOf, at as PROOF_MANIFEST_DOMAIN_V2, b as HOST_WORKDIR_PREFIX, ba as HOST_VALIDATED_VERSIONS, bi as evaluateActiveHostLock, bn as latestAssistantText, br as classifyUserInteraction, bt as requiredSubjectsOf, c as gitCommandMatchesTarget, ca as GOAL_HOST_PACKAGES, ci as digestStrings, cn as CONTROL_RECORD_PREFIX, cr as captureClause, ct as bindProofToProjection, d as verifiedLinearCommitReadback, da as bindExecutableIdentity, di as sanitizeUrl, dn as assessmentAction, dr as environmentDefaultRepositoryTarget, dt as createProofManifest, ea as registryArchiveFiles, ei as restatedContentOf, en as releaseContractFor, er as DEPENDENCY_FREE_ONLY_CONDITION, et as bindingIndividuallyAccepted, f as FIRST_STEP_GUIDANCE, fa as bindLiveGoalCapability, fi as sha256, fn as assessmentOutcomePredicate, fr as extractArtifactPaths, ft as createProofManifestV2, g as lifecyclePhase, ga as evaluateHostLock, gi as auditedDefaultWorkdirProvider, gn as decideTurnStopping, gr as segmentClauses, gt as proofEvidenceConstraints, h as firstStepGuidanceV6, ha as evaluateHostCapability, hi as auditedDefaultWorkdirHost, hn as decideTurnBoundary, hr as isInformationalMessage, ht as proofDigestV2, i as commitIndexSnapshotDigest, ia as ACTIVE_HOST_LAUNCHER_VERSION, ii as verbIsNegated, in as bindingSatisfies, ir as capabilityFactOf, it as PROOF_KINDS_V2, j as PROTOCOL_V4_NOTICE, ja as BOUNDED_ARTIFACT_TYPES, ji as prepareTargetHostTrust, jn as BOUNDARY_RECORD_PREFIX, jr as hasQuestionScope, jt as V6_ORDINARY_COMPLETION_RULE, k as DEFAULT_DELEGATION_TOOL_NAMES, ka as ACTION_MANIFEST, ki as prepareActiveHostTrust, kn as certificateClosure, kr as governedClauseRestrictsExecution, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as parseGitCommandManifest, la as HOST_CAPABILITY_PACKAGE_GROUPS, li as normalizeClause, ln as NO_PROGRESS_RECORD_PREFIX, lr as captureItem, lt as bindProofV2ToProjection, m as firstStepGuidance, ma as evaluateGraphDerivedHostLock, mi as activeRendererModule, mn as currentActionBases, mr as extractOperation, mt as proofDigest, n as GIT_COMMAND_MANIFEST_IDS, na as ACTIVE_HOST_COHORT_ID, ni as splitTextFragments, nn as releasePreEffectDecision, nr as admissibleForRemoval, nt as PROOF_CAPABILITY_MATRIX, o as createGitPrestateEnvelope, oa as DEFAULT_HOST_LOCK, oi as validateManifest, on as evidenceMatchesItem, or as removalIsComplete, ot as PROOF_PROTOCOL_VERSION, p as claimedBatchHasRealRootInput, pa as evaluateExternalWaitCapability, pi as HostProfileError, pn as classifyCompletionClaim, pr as extractMethod, pt as proofCapabilityReport, q as withDurability, qa as validateActionManifest, qi as readDesktopTargetGraph, qn as parseConfirmationMessage, qr as namedActions, qt as RELEASE_OPERATION_SURFACES, r as GIT_COMMAND_TEMPLATES, ra as ACTIVE_HOST_COHORT_IDS, ri as statefulActionsOfScope, rn as reservationFor, rr as capabilityConsequence, rt as PROOF_KINDS, s as executeRevalidatedGitEffect, sa as EXPECTED_HOST_PACKAGES, si as canonicalizePath, sn as isVerifyingCapability, sr as removalIsPartiallyKnown, st as PROOF_PROTOCOL_VERSION_V2, t as RC020_RC1_HOST_PACKAGES, ta as registryArchiveModules, ti as semanticActionOfScope, tn as releaseCoverage, tr as actionHasCertificationPath, tt as certifyCheckpoint, u as revalidateGitPrestate, ua as HOST_COHORTS, ui as sanitizeClauseText, un as NO_PROGRESS_TURNS_BEFORE_STOP, ur as classifyClause, ut as canonicalProjection, v as projectSessionCoreV2, va as hostVersionFromPackages, vi as auditedHostImplementation, vn as isRootPauseRequest, vr as npmEscapedPackageName, vt as proofOperationMatches, w as SESSION_EVENT_ENVELOPE_INVALID, wa as SUPPORTED_HOST_VERSIONS, wi as injectActiveProfileHostLock, wn as testOutcomePredicate, wr as clarifiedSpanOf, wt as validateProofManifest, x as captureHostWorkdir, xa as LATEST_TESTED_HOST_VERSION, xi as evaluateConfiguredHostLock, xn as latestRootInstruction, xr as GRANTED_QUALIFICATION, xt as scopeCoverageDigest, y as sessionCoreSnapshot, ya as selectHostCohort, yi as combineHostPolicy, yn as isWholeTaskCompletionClaim, yr as classifyTaskIntent, yt as proofV2Rejection, z as NATIVE_GIT_ROOT_PARENT_OID, za as actionCompatible, zi as DESKTOP_PROFILE_PACKAGE_NAME, zn as proposeRebind, zr as isOpenObligation, zt as recoveryTitle } from "./domain-CiTDtBaT.js";
+import { $ as segmentAuthorityBlocks, $i as qualifyHostTrust, $n as relevantEvidence, $r as reportingHeadGoverns, $t as readbackSettlesContract, A as PROTOCOL_V3_NOTICE, Aa as ACTION_MANIFEST_VERSION, Ai as prepareDesktopHostTrust, An as unitDescendantIds, Ar as hasOrderedCoordination, At as MIN_RECOVERY_CHAR_BUDGET, B as evidenceFromPersistedToolResult, Ba as boundedArtifactChoiceMatches, Bi as DESKTOP_RUNTIME_PACKAGE_NAME, Bn as proposeRebindOutcome, Br as isQuestionScopeNeedingReview, Bt as renderRecoveryPacket, C as SESSION_API_UNSUPPORTED, Ca as SUPPORTED_HOST_RANGE, Ci as hostLockRowsFromComposedDump, Cn as progressFingerprint, Cr as actionVerbMatches, Ct as sessionQueryV2, D as projectCoreV2, Da as parseHostVersion, Di as packageRowsFromActiveGraph, Dn as hasCurrentCertificate, Dr as clauseIsProtected, Dt as CLEANUP_CONDITION_RULE_COMPACT, E as snapshotSessionEvents, Ea as evaluateMinimumHostVersion, Ei as inspectTargetHostGraph, En as goalCompletionDenial, Er as clauseIsGoverned, Et as CLEANUP_CONDITION_RULE, F as deriveProjection, Fa as STATEFUL_ACTIONS, Fi as resolveInstalledHostLock, Fn as qualifyBoundary, Fr as introducesActionClause, Ft as cleanupConditionFor, G as persistedToolResultStatus, Ga as semanticActionFromCommand, Gi as readDesktopAppRuntime, Gn as CONFIRM_LINE_PATTERN, Gr as maskCodeSpans, Gt as OUTCOME_STRENGTH, H as extractToolSubject, Ha as requestedIdentityKey, Hi as hasDesktopImporterState, Hn as rebindAttemptKey, Hr as itemHoldsExecutionAuthority, Ht as currentV6Feedback, I as legacyRecordsNeedingReview, Ia as STOP_PROTOCOL_VERSION, Ii as revalidateDesktopCoreLock, In as currentContractDigest, Ir as isExecutableItem, It as closingHint, J as canonicalArgvFromCommand, Ja as validateActionTarget, Ji as writeDesktopRuntimeReceipt, Jn as capabilityRemedyPhrase, Jr as opensConditionLead, Jt as contractById, K as shellReadbackOutcome, Ka as semanticActionFromText, Ki as readDesktopDependency, Kn as isFrozenV042RebindResponse, Kr as maskQuotedSpans, Kt as RELEASE_OPERATIONS, L as rootLocatorFlavor, La as STOP_PROTOCOL_VERSION_V2, Li as verifyComposedHostLockDump, Ln as createProjection, Lr as isExplanationScope, Lt as openItems, M as PROTOCOL_V5_NOTICE, Ma as CERTIFICATE_VERSION, Mi as readActiveHostGraph, Mn as availableBoundaryQualifications, Mr as hasWorkPredicate, Mt as V6_ORDINARY_COMPLETION_RULE_COMPACT, N as PROTOCOL_V6_NOTICE, Na as CERTIFICATE_VERSION_V2, Ni as resolveActiveProfileHostLock, Nn as effectuateBoundary, Nr as interpretClause, Nt as V6_ORDINARY_COMPLETION_RULE_SHORT, O as CAPTURE_V042_NOTICE, Oa as satisfiesSupportedHostRange, Oi as packageRowsFromPnpmLock, On as certifiableOpenItems, Or as explanationHasActionResidue, Ot as CLEANUP_CONDITION_RULE_SHORT, P as applyUpgradeEligibility, Pa as SEMANTIC_ACTIONS, Pi as resolveDesktopProfileHostLock, Pn as isCurrentAcceptedBoundary, Pr as interpretMessage, Pt as carriesCleanupCondition, Q as authorityCaptureCounts, Qi as parseHostTrust, Qn as nativeFileTwoRole, Qr as questionHeadsClause, Qt as normalizeSettlement, R as supersedeItem, Ra as SUPPORTED_EVIDENCE_ADAPTERS, Ri as DESKTOP_IDENTITY_FACTS, Rn as confirmRebind, Rr as isInformationalFragment, Rt as recoveryDigest, S as sourcedNamedTestRoot, Sa as MIN_SUPPORTED_HOST_VERSION, Si as hostLockContextFromComposedDump, Sn as observeAssistantOutcome, Sr as LEGACY_QUALIFICATION, St as sessionQuery, T as SessionApiError, Ta as compareHostVersions, Ti as inspectDesktopTargetGraph, Tn as v6TestPredicate, Tr as clauseAsksOwnQuestion, Tt as validateProofManifestV2, U as isDeterministicCheck, Ua as requestedTargetAuthorizesMutation, Ui as readAsarFile, Un as rebindResponse, Ur as kindOfScope, Ut as isV6PendingRootWait, V as extractTextContent, Va as isStatefulAction, Vi as auditDesktopInstalledImplementation, Vn as proposeRebindV042, Vr as isRestatement, Vt as v6CurrentRootBoundaries, W as nativeGitParentOidVerified, Wa as requestedTargetMatchesResolved, Wi as readAsarIndex, Wn as replayRebindResult, Wr as legacyQuestionReadingIsInformational, Wt as sourceItemForCoreRequirement, X as parsePwshCommand, Xa as createHostAuditSession, Xi as acquireHostTrust, Xn as evidenceAvailabilityReason, Xr as presentExplanationHead, Xt as normalizeReleaseContract, Y as isRunExecutable, Ya as RC020_RC2_HOST_PACKAGES, Yi as HostTrustError, Yn as deriveItemDiagnosis, Yr as opensWithDirective, Yt as inFlightReservation, Z as parseShellCommand, Zi as hostTrustDigest, Zn as itemDiagnosis, Zr as qualificationOfClause, Zt as normalizeReservation, _ as previewFirstStepInjection, _a as evaluateToolSurfaceCapability, _i as auditedForegroundRenderers, _n as decisionBoundaryKey, _r as canonicalRegistryBase, _t as proofHostSurfacesOf, a as commitTreeSnapshotDigest, aa as BASE_HOST_PACKAGES, ai as COMMAND_SURFACE_MANIFEST, an as evidenceCoverage, ar as partialFailureOf, at as PROOF_MANIFEST_DOMAIN_V2, b as HOST_WORKDIR_PREFIX, ba as HOST_VALIDATED_VERSIONS, bi as evaluateActiveHostLock, bn as latestAssistantText, br as classifyUserInteraction, bt as requiredSubjectsOf, c as gitCommandMatchesTarget, ca as GOAL_HOST_PACKAGES, ci as digestStrings, cn as CONTROL_RECORD_PREFIX, cr as captureClause, ct as bindProofToProjection, d as verifiedLinearCommitReadback, da as bindExecutableIdentity, di as sanitizeUrl, dn as assessmentAction, dr as environmentDefaultRepositoryTarget, dt as createProofManifest, ea as registryArchiveFiles, ei as restatedContentOf, en as releaseContractFor, er as DEPENDENCY_FREE_ONLY_CONDITION, et as bindingIndividuallyAccepted, f as FIRST_STEP_GUIDANCE, fa as bindLiveGoalCapability, fi as sha256, fn as assessmentOutcomePredicate, fr as extractArtifactPaths, ft as createProofManifestV2, g as lifecyclePhase, ga as evaluateHostLock, gi as auditedDefaultWorkdirProvider, gn as decideTurnStopping, gr as segmentClauses, gt as proofEvidenceConstraints, h as firstStepGuidanceV6, ha as evaluateHostCapability, hi as auditedDefaultWorkdirHost, hn as decideTurnBoundary, hr as isInformationalMessage, ht as proofDigestV2, i as commitIndexSnapshotDigest, ia as ACTIVE_HOST_LAUNCHER_VERSION, ii as verbIsNegated, in as bindingSatisfies, ir as capabilityFactOf, it as PROOF_KINDS_V2, j as PROTOCOL_V4_NOTICE, ja as BOUNDED_ARTIFACT_TYPES, ji as prepareTargetHostTrust, jn as BOUNDARY_RECORD_PREFIX, jr as hasQuestionScope, jt as V6_ORDINARY_COMPLETION_RULE, k as DEFAULT_DELEGATION_TOOL_NAMES, ka as ACTION_MANIFEST, ki as prepareActiveHostTrust, kn as certificateClosure, kr as governedClauseRestrictsExecution, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as parseGitCommandManifest, la as HOST_CAPABILITY_PACKAGE_GROUPS, li as normalizeClause, ln as NO_PROGRESS_RECORD_PREFIX, lr as captureItem, lt as bindProofV2ToProjection, m as firstStepGuidance, ma as evaluateGraphDerivedHostLock, mi as activeRendererModule, mn as currentActionBases, mr as extractOperation, mt as proofDigest, n as GIT_COMMAND_MANIFEST_IDS, na as ACTIVE_HOST_COHORT_ID, ni as splitTextFragments, nn as releasePreEffectDecision, nr as admissibleForRemoval, nt as PROOF_CAPABILITY_MATRIX, o as createGitPrestateEnvelope, oa as DEFAULT_HOST_LOCK, oi as validateManifest, on as evidenceMatchesItem, or as removalIsComplete, ot as PROOF_PROTOCOL_VERSION, p as claimedBatchHasRealRootInput, pa as evaluateExternalWaitCapability, pi as HostProfileError, pn as classifyCompletionClaim, pr as extractMethod, pt as proofCapabilityReport, q as withDurability, qa as validateActionManifest, qi as readDesktopTargetGraph, qn as parseConfirmationMessage, qr as namedActions, qt as RELEASE_OPERATION_SURFACES, r as GIT_COMMAND_TEMPLATES, ra as ACTIVE_HOST_COHORT_IDS, ri as statefulActionsOfScope, rn as reservationFor, rr as capabilityConsequence, rt as PROOF_KINDS, s as executeRevalidatedGitEffect, sa as EXPECTED_HOST_PACKAGES, si as canonicalizePath, sn as isVerifyingCapability, sr as removalIsPartiallyKnown, st as PROOF_PROTOCOL_VERSION_V2, t as RC020_RC1_HOST_PACKAGES, ta as registryArchiveModules, ti as semanticActionOfScope, tn as releaseCoverage, tr as actionHasCertificationPath, tt as certifyCheckpoint, u as revalidateGitPrestate, ua as HOST_COHORTS, ui as sanitizeClauseText, un as NO_PROGRESS_TURNS_BEFORE_STOP, ur as classifyClause, ut as canonicalProjection, v as projectSessionCoreV2, va as hostVersionFromPackages, vi as auditedHostImplementation, vn as isRootPauseRequest, vr as npmEscapedPackageName, vt as proofOperationMatches, w as SESSION_EVENT_ENVELOPE_INVALID, wa as SUPPORTED_HOST_VERSIONS, wi as injectActiveProfileHostLock, wn as testOutcomePredicate, wr as clarifiedSpanOf, wt as validateProofManifest, x as captureHostWorkdir, xa as LATEST_TESTED_HOST_VERSION, xi as evaluateConfiguredHostLock, xn as latestRootInstruction, xr as GRANTED_QUALIFICATION, xt as scopeCoverageDigest, y as sessionCoreSnapshot, ya as selectHostCohort, yi as combineHostPolicy, yn as isWholeTaskCompletionClaim, yr as classifyTaskIntent, yt as proofV2Rejection, z as NATIVE_GIT_ROOT_PARENT_OID, za as actionCompatible, zi as DESKTOP_PROFILE_PACKAGE_NAME, zn as proposeRebind, zr as isOpenObligation, zt as recoveryTitle } from "./domain-C7xfwqid.js";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeSync } from "node:fs";
 import { gunzip } from "node:zlib";
 import { execFile } from "node:child_process";
 import { homedir, hostname, tmpdir } from "node:os";
@@ -5709,29 +5709,20 @@ function readVerifiedLedgerRecords(root, context, session, expectedContext) {
 	return records;
 }
 /**
-* CG-083-BUG01/R2: the writer lock carries an owner identity instead of being
-* an anonymous O_EXCL file. A crashed writer used to leave a lock that
-* blocked every later append and initialize forever. A lock whose owner is
-* PROVABLY dead (same host, recorded pid answers ESRCH) is recovered by
-* ATOMICALLY RENAMING the dead owner's file out of the lock pathname — never
-* by unlinking the pathname, which could delete a live writer's fresh lock.
-* While the dead file still occupies the pathname no one can create a new
-* lock (O_EXCL fails), so the file moved by the rename is exactly the one
-* that was verified; after the rename the pathname is free and acquirers
-* race fairly through O_EXCL. Recovery of the writer lock is serialized by a
-* recovery lock with the same owner protocol, so two recoverers can never
-* both act; the recovery lock's own dead-owner file is renamed out the same
-* way, so a crash inside a recovery cannot wedge the ledger permanently. An
-* unknown owner — a legacy empty lock from an older version, a foreign host,
-* a live pid, or an unparsable record — keeps the fail-closed refusal with
-* the observed state available through {@link writerLockState}; the supported
-* manual recovery for such a lock is removing the named lock file, which
-* carries no ledger data.
+* CG-083-BUG01/R2/F1: generation-protocol writer lock. See
+* docs/WRITER_LOCK_PROTOCOL.md for the state machine and linearization
+* argument. Summary: the active generation is the highest-numbered
+* `gen-NNNNNNNN` directory; the lock file lives INSIDE it; recovery of a
+* provably dead lock creates the NEXT generation (atomic mkdir) and never
+* renames or unlinks any file another actor created; a writer verifies the
+* generation is still current AFTER acquiring and retries through the
+* next generation otherwise; release unlinks only the actor's own
+* nonce-verified file. Only ESRCH proves a recorded owner is gone; any other
+* liveness answer refuses fail-closed (PID reuse included).
 */
-const WRITER_LOCK_VERSION = 2;
+const WRITER_LOCK_VERSION = 3;
 const WRITER_LOCK_NAME = ".writer.lock";
-const RECOVERY_LOCK_NAME = ".writer.lock.recovery";
-const STALE_LOCK_SUFFIX = ".stale";
+const GENERATION_DIGITS = 8;
 function readLockRecord(path) {
 	let raw;
 	try {
@@ -5755,108 +5746,169 @@ function processExists(pid) {
 		return error.code !== "ESRCH";
 	}
 }
-function provablyDeadOwner(path) {
+/**
+* The lock is safe to recover: a provably dead recorded owner, or a
+* ZERO-LENGTH file — the creator died between O_EXCL creation and its owner
+* record. A live acquirer never enters its critical section before the
+* post-acquire generation verification, so recovering a mid-write file can
+* at worst make that acquirer release its own file and retry in the next
+* generation (docs/WRITER_LOCK_PROTOCOL.md §3).
+*/
+function lockIsRecoverable(path) {
+	let size$1;
+	try {
+		size$1 = lstatSync(path).size;
+	} catch {
+		return false;
+	}
+	if (size$1 === 0) return true;
 	const record$2 = readLockRecord(path);
 	return record$2 !== void 0 && record$2 !== "legacy" && record$2.hostname === hostname() && !processExists(record$2.pid);
 }
+/** The active generation directory: the highest-numbered gen-NNNNNNNN. */
+function currentGeneration(root) {
+	let best;
+	let entries;
+	try {
+		entries = readdirSync(root);
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		if (!entry.startsWith("gen-") || entry.length !== 4 + GENERATION_DIGITS) continue;
+		const n = Number.parseInt(entry.slice(4), 10);
+		if (!Number.isSafeInteger(n) || n < 0) continue;
+		if (best === void 0 || n > best.n) best = {
+			n,
+			dir: join(root, entry)
+		};
+	}
+	return best?.dir;
+}
+function nextGenerationDir(root) {
+	const current = currentGeneration(root);
+	const nextN = (current === void 0 ? 0 : Number.parseInt(current.slice(current.lastIndexOf("gen-") + 4), 10)) + 1;
+	const dir = join(root, `gen-${String(nextN).padStart(GENERATION_DIGITS, "0")}`);
+	try {
+		mkdirSync(dir, { mode: 448 });
+		return {
+			dir,
+			created: true
+		};
+	} catch (error) {
+		if (error.code === "EEXIST") return {
+			dir,
+			created: false
+		};
+		throw error;
+	}
+}
+function firstGenerationDir(root) {
+	const dir = join(root, `gen-${"0".repeat(GENERATION_DIGITS - 1)}1`);
+	try {
+		mkdirSync(dir, { mode: 448 });
+		return {
+			dir,
+			created: true
+		};
+	} catch (error) {
+		if (error.code === "EEXIST") return {
+			dir,
+			created: false
+		};
+		throw error;
+	}
+}
+/** Unlink the actor's OWN lock file: only when the content still carries its nonce. */
+function releaseOwnLock(dir, nonce) {
+	const path = join(dir, WRITER_LOCK_NAME);
+	const record$2 = readLockRecord(path);
+	if (record$2 !== "legacy" && record$2 !== void 0 && record$2.nonce === nonce) try {
+		unlinkSync(path);
+	} catch {}
+}
 /**
-* One named owner-identified lock file. `serialized` marks that stale
-* recovery must run under the recovery lock (the writer lock); the recovery
-* lock itself recovers its own dead owner directly, because only recovery
-* participants ever contend for it and their critical section is bounded.
+* Acquire the writer lock under the generation protocol. Returns the held
+* lock, or undefined when acquisition is refused (live/unknown owner in the
+* current generation). See docs/WRITER_LOCK_PROTOCOL.md §3.
 */
-var OwnerFileLock = class OwnerFileLock {
-	constructor(root, name$1, serialized) {
-		this.root = root;
-		this.name = name$1;
-		this.serialized = serialized;
-	}
-	get path() {
-		return join(this.root, this.name);
-	}
-	get stalePath() {
-		return join(this.root, `${this.name}${STALE_LOCK_SUFFIX}`);
-	}
-	acquire() {
-		for (let attempt = 0; attempt < 2; attempt += 1) {
-			let fd;
-			try {
-				fd = openRegular(this.path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-			} catch (error) {
-				if (error.code !== "EEXIST") throw error;
-				if (!this.recoverStale()) return void 0;
+function acquireWriterLock(root) {
+	let dir = currentGeneration(root);
+	if (dir === void 0) dir = firstGenerationDir(root).created ? join(root, `gen-${"0".repeat(GENERATION_DIGITS - 1)}1`) : currentGeneration(root);
+	for (let attempt = 0; attempt < 8; attempt += 1) {
+		let fd;
+		try {
+			fd = openRegular(join(dir, WRITER_LOCK_NAME), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+		} catch (error) {
+			if (error.code !== "EEXIST") throw error;
+			if (lockIsRecoverable(join(dir, WRITER_LOCK_NAME))) {
+				dir = nextGenerationDir(root).dir;
 				continue;
 			}
-			try {
-				const nonce = randomBytes(16).toString("hex");
-				const record$2 = {
-					version: WRITER_LOCK_VERSION,
-					nonce,
-					pid: process.pid,
-					hostname: hostname(),
-					created_at_epoch_ms: Date.now()
-				};
-				writeAll(fd, `${canonical(record$2)}\n`);
-				fsyncSync(fd);
-				return {
-					fd,
-					nonce
-				};
-			} catch (error) {
-				try {
-					closeSync(fd);
-				} catch {}
-				try {
-					unlinkSync(this.path);
-				} catch {}
-				throw error;
-			}
-		}
-	}
-	/** Move a provably dead owner's file out of the pathname atomically. */
-	recoverStale() {
-		if (!provablyDeadOwner(this.path)) return false;
-		if (!this.serialized) return this.renameStaleOut();
-		const recovery = new OwnerFileLock(this.root, RECOVERY_LOCK_NAME, false);
-		const held = recovery.acquire();
-		if (!held) return false;
-		try {
-			return this.renameStaleOut();
-		} finally {
-			recovery.release(held);
-		}
-	}
-	renameStaleOut() {
-		if (!provablyDeadOwner(this.path)) return false;
-		try {
-			renameSync(this.path, this.stalePath);
-			return true;
-		} catch (error) {
-			return error.code === "ENOENT";
-		}
-	}
-	/** Conditional release: only the file that still carries OUR nonce. */
-	release(held) {
-		try {
-			closeSync(held.fd);
-		} catch {}
-		let current;
-		try {
-			current = readLockRecord(this.path);
-		} catch {
 			return;
 		}
-		if (current !== "legacy" && current !== void 0 && current.nonce === held.nonce) try {
-			unlinkSync(this.path);
-		} catch {}
+		const nonce = randomBytes(16).toString("hex");
+		try {
+			const record$2 = {
+				version: WRITER_LOCK_VERSION,
+				nonce,
+				pid: process.pid,
+				hostname: hostname(),
+				created_at_epoch_ms: Date.now()
+			};
+			writeAll(fd, `${canonical(record$2)}\n`);
+			fsyncSync(fd);
+		} catch (error) {
+			try {
+				unlinkSync(join(dir, WRITER_LOCK_NAME));
+			} catch {}
+			throw error;
+		} finally {
+			try {
+				closeSync(fd);
+			} catch {}
+		}
+		const current = currentGeneration(root);
+		if (current === dir) return {
+			dir,
+			nonce
+		};
+		releaseOwnLock(dir, nonce);
+		dir = current ?? nextGenerationDir(root).dir;
 	}
-};
-function acquireWriterLock(root) {
-	return new OwnerFileLock(root, WRITER_LOCK_NAME, true).acquire();
 }
 function releaseWriterLock(root, held) {
 	if (held === void 0) return;
-	new OwnerFileLock(root, WRITER_LOCK_NAME, true).release(held);
+	releaseOwnLock(held.dir, held.nonce);
+}
+/**
+* CG-083-PERF05 (F1 revision): prune abandoned generation directories. Only
+* the holder of the CURRENT generation's lock may prune, and only strictly
+* older generations — by docs/WRITER_LOCK_PROTOCOL.md §5 no non-current
+* generation can contain a live-content lock, so pruning cannot evict an
+* active writer. Bounded garbage per crash instead of unbounded growth.
+*/
+function pruneGenerations(root, held) {
+	const current = currentGeneration(root);
+	if (current === void 0 || current !== held.dir) return;
+	const currentN = Number.parseInt(current.slice(current.lastIndexOf("gen-") + 4), 10);
+	let entries;
+	try {
+		entries = readdirSync(root);
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		if (!entry.startsWith("gen-") || entry.length !== 4 + GENERATION_DIGITS) continue;
+		const n = Number.parseInt(entry.slice(4), 10);
+		if (!Number.isSafeInteger(n) || n < 0 || n >= currentN) continue;
+		try {
+			rmSync(join(root, entry), {
+				recursive: true,
+				force: true
+			});
+		} catch {}
+	}
 }
 function readPrivateLedger(root, input) {
 	if (!root) return {
@@ -6025,6 +6077,7 @@ function appendPrivateLedger(root, input, kind, payload) {
 			closeSync(fd);
 		}
 		syncDirectory(root);
+		if (lockFd !== void 0) pruneGenerations(root, lockFd);
 		return true;
 	} catch {
 		return false;
@@ -6478,6 +6531,34 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		for (let index = 0; index < candidate.length; index += 1) if (candidate[index] !== consumed[index]) return false;
 		return true;
 	};
+	/**
+	* F2/R1: element-wise identity alone cannot protect the fast path when the
+	* session view hands out the SAME MUTABLE array (or mutably nested event
+	* objects): the saved reference compares equal to itself while its content
+	* drifts. The adapter only validates envelopes, not immutability, so the
+	* fast path is served ONLY for snapshots whose immutability is PROVABLE:
+	* every container in the snapshot is Object.isFrozen, checked recursively
+	* under a node budget. A snapshot that fails (or exhausts) the check is
+	* "not provable" and always takes the full rebuild — fail-closed, never
+	* cached. Passing results are remembered per array object: freezing is
+	* irreversible, so a previously proven snapshot cannot become mutable.
+	*/
+	const provenImmutableSnapshots = /* @__PURE__ */ new WeakSet();
+	const IMMUTABILITY_PROOF_NODE_BUDGET = 4e5;
+	const snapshotIsProvablyImmutable = (events) => {
+		if (provenImmutableSnapshots.has(events)) return true;
+		let visited = 0;
+		const walk = (value) => {
+			if (value === null || typeof value !== "object") return true;
+			if (++visited > IMMUTABILITY_PROOF_NODE_BUDGET) return false;
+			if (!Object.isFrozen(value)) return false;
+			for (const key of Object.keys(value)) if (!walk(value[key])) return false;
+			return true;
+		};
+		if (!walk(events)) return false;
+		provenImmutableSnapshots.add(events);
+		return true;
+	};
 	const readGoalOnce = () => {
 		if (!readGoalState) return {
 			state: void 0,
@@ -6611,7 +6692,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		}
 		const goal = readGoalOnce();
 		const ledger = readPrivateRecords ? readPrivateRecords() : void 0;
-		if (lastFullSync && lastFullSync.refreshEpoch === refreshEpoch && sameSnapshotIdentity(events, lastFullSync.events) && Object.is(lastFullSync.headerRef, session.header) && lastFullSync.durability === durabilityConfirmed && lastFullSync.goalKey === goalKeyOf(goal) && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(ledger))) return;
+		if (lastFullSync && snapshotIsProvablyImmutable(events) && lastFullSync.refreshEpoch === refreshEpoch && sameSnapshotIdentity(events, lastFullSync.events) && Object.is(lastFullSync.headerRef, session.header) && lastFullSync.durability === durabilityConfirmed && lastFullSync.goalKey === goalKeyOf(goal) && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(ledger))) return;
 		rebuild(events, goal, ledger);
 	};
 	const runHostLockEntry = async (operation) => {

@@ -46,11 +46,15 @@ describe('rc.2 V4 identity, fork and attribution', () => {
     const old={sessionId:'migrated',sessionHeader:{version:3,id:'migrated',createdAt:1},cwd:'/work',hostLockDigest:'old-host'}
     try {
       expect(appendPrivateLedger(root,old,'restart_intent',{resolution_call_id:'old-call',service_id:'market',pre_generation:'old'})).toBe(true)
-      const before=Object.fromEntries(readdirSync(root).map(file=>[file,readFileSync(join(root,file),'utf8')]))
+      // F1: the lock protocol keeps generations as directories; byte-freeze
+      // only regular files at the ledger root.
+      const snapshot=(()=>{const out:{[file:string]:string}={};const walk=(dir:string,prefix:string)=>{for(const entry of readdirSync(dir,{withFileTypes:true})){const full=join(dir,entry.name);const key=prefix+entry.name;if(entry.isDirectory())walk(full,key+'/');else out[key]=readFileSync(full,'utf8')}};walk(root,'');return out})()
+      const before=Object.fromEntries(Object.entries(snapshot))
       const current={...old,sessionHeader:{...old.sessionHeader,version:4},hostLockDigest:'rc2-host'}
       expect(readPrivateLedger(root,current).damaged).toBe(true)
       expect(readPrivateLedger(root,old).damaged).toBe(false)
-      expect(Object.fromEntries(readdirSync(root).map(file=>[file,readFileSync(join(root,file),'utf8')]))).toEqual(before)
+      const after=(()=>{const out:{[file:string]:string}={};const walk=(dir:string,prefix:string)=>{for(const entry of readdirSync(dir,{withFileTypes:true})){const full=join(dir,entry.name);const key=prefix+entry.name;if(entry.isDirectory())walk(full,key+'/');else out[key]=readFileSync(full,'utf8')}};walk(root,'');return out})()
+      expect(after).toEqual(before)
     } finally {rmSync(root,{recursive:true,force:true})}
   })
 

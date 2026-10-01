@@ -644,6 +644,36 @@ export function createRuntime(
     }
     return true
   }
+  /**
+   * F2/R1: element-wise identity alone cannot protect the fast path when the
+   * session view hands out the SAME MUTABLE array (or mutably nested event
+   * objects): the saved reference compares equal to itself while its content
+   * drifts. The adapter only validates envelopes, not immutability, so the
+   * fast path is served ONLY for snapshots whose immutability is PROVABLE:
+   * every container in the snapshot is Object.isFrozen, checked recursively
+   * under a node budget. A snapshot that fails (or exhausts) the check is
+   * "not provable" and always takes the full rebuild — fail-closed, never
+   * cached. Passing results are remembered per array object: freezing is
+   * irreversible, so a previously proven snapshot cannot become mutable.
+   */
+  const provenImmutableSnapshots = new WeakSet<readonly unknown[]>()
+  const IMMUTABILITY_PROOF_NODE_BUDGET = 400_000
+  const snapshotIsProvablyImmutable = (events: readonly unknown[]): boolean => {
+    if (provenImmutableSnapshots.has(events)) return true
+    let visited = 0
+    const walk = (value: unknown): boolean => {
+      if (value === null || typeof value !== 'object') return true
+      if (++visited > IMMUTABILITY_PROOF_NODE_BUDGET) return false
+      if (!Object.isFrozen(value)) return false
+      for (const key of Object.keys(value as object)) {
+        if (!walk((value as Record<string, unknown>)[key])) return false
+      }
+      return true
+    }
+    if (!walk(events)) return false
+    provenImmutableSnapshots.add(events)
+    return true
+  }
   interface GoalRead { state: GoalActivationState | undefined; failed: boolean }
   const readGoalOnce = (): GoalRead => {
     if (!readGoalState) return { state: undefined, failed: false }
@@ -814,6 +844,7 @@ export function createRuntime(
     const goal = readGoalOnce()
     const ledger = readPrivateRecords ? readPrivateRecords() : undefined
     if (lastFullSync
+      && snapshotIsProvablyImmutable(events)
       && lastFullSync.refreshEpoch === refreshEpoch
       && sameSnapshotIdentity(events, lastFullSync.events)
       && Object.is(lastFullSync.headerRef, session.header)

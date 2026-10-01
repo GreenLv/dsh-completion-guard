@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -111,40 +111,47 @@ function readVerifiedLedgerRecords(root: string, context: PrivateLedgerContext, 
 }
 
 /**
- * CG-083-BUG01/R2: the writer lock carries an owner identity instead of being
- * an anonymous O_EXCL file. A crashed writer used to leave a lock that
- * blocked every later append and initialize forever. A lock whose owner is
- * PROVABLY dead (same host, recorded pid answers ESRCH) is recovered by
- * ATOMICALLY RENAMING the dead owner's file out of the lock pathname — never
- * by unlinking the pathname, which could delete a live writer's fresh lock.
- * While the dead file still occupies the pathname no one can create a new
- * lock (O_EXCL fails), so the file moved by the rename is exactly the one
- * that was verified; after the rename the pathname is free and acquirers
- * race fairly through O_EXCL. Recovery of the writer lock is serialized by a
- * recovery lock with the same owner protocol, so two recoverers can never
- * both act; the recovery lock's own dead-owner file is renamed out the same
- * way, so a crash inside a recovery cannot wedge the ledger permanently. An
- * unknown owner — a legacy empty lock from an older version, a foreign host,
- * a live pid, or an unparsable record — keeps the fail-closed refusal with
- * the observed state available through {@link writerLockState}; the supported
- * manual recovery for such a lock is removing the named lock file, which
- * carries no ledger data.
+ * CG-083-BUG01/R2/F1: generation-protocol writer lock. See
+ * docs/WRITER_LOCK_PROTOCOL.md for the state machine and linearization
+ * argument. Summary: the active generation is the highest-numbered
+ * `gen-NNNNNNNN` directory; the lock file lives INSIDE it; recovery of a
+ * provably dead lock creates the NEXT generation (atomic mkdir) and never
+ * renames or unlinks any file another actor created; a writer verifies the
+ * generation is still current AFTER acquiring and retries through the
+ * next generation otherwise; release unlinks only the actor's own
+ * nonce-verified file. Only ESRCH proves a recorded owner is gone; any other
+ * liveness answer refuses fail-closed (PID reuse included).
  */
-const WRITER_LOCK_VERSION = 2
+const WRITER_LOCK_VERSION = 3
 const WRITER_LOCK_NAME = '.writer.lock'
-const RECOVERY_LOCK_NAME = '.writer.lock.recovery'
-const STALE_LOCK_SUFFIX = '.stale'
-interface WriterLockRecord { version: 2; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
-interface HeldLock { fd: number; nonce: string }
+const GENERATION_DIGITS = 8
+interface WriterLockRecord { version: 3; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+interface HeldLock { dir: string; nonce: string }
 
 export type WriterLockState = 'absent' | 'held' | 'abandoned_recoverable' | 'unknown_owner'
 
-/** Read-only diagnostics for a lock that blocks acquisition (CG-083-BUG01). */
+/** Read-only diagnostics over the CURRENT generation's lock (CG-083-BUG01). */
 export function writerLockState(root: string): WriterLockState {
-  return lockStateFor(join(root, WRITER_LOCK_NAME))
+  const dir = currentGeneration(root)
+  if (dir === undefined) return 'absent'
+  return lockStateFor(join(dir, WRITER_LOCK_NAME))
+}
+
+/** Test/ops helper: the current generation's lock file, if any generation exists. */
+export function currentWriterLockFile(root: string): string | undefined {
+  const dir = currentGeneration(root)
+  return dir === undefined ? undefined : join(dir, WRITER_LOCK_NAME)
+}
+
+/** The active generation directory itself (test/ops helper). */
+export function currentGenerationDir(root: string): string | undefined {
+  return currentGeneration(root)
 }
 
 function lockStateFor(path: string): WriterLockState {
+  let size: number | undefined
+  try { size = lstatSync(path).size } catch { return 'absent' }
+  if (size === 0) return 'abandoned_recoverable'
   const record = readLockRecord(path)
   if (record === undefined) return 'absent'
   if (record === 'legacy') return 'unknown_owner'
@@ -172,97 +179,152 @@ function processExists(pid: number): boolean {
   }
 }
 
-function provablyDeadOwner(path: string): boolean {
+/**
+ * The lock is safe to recover: a provably dead recorded owner, or a
+ * ZERO-LENGTH file — the creator died between O_EXCL creation and its owner
+ * record. A live acquirer never enters its critical section before the
+ * post-acquire generation verification, so recovering a mid-write file can
+ * at worst make that acquirer release its own file and retry in the next
+ * generation (docs/WRITER_LOCK_PROTOCOL.md §3).
+ */
+function lockIsRecoverable(path: string): boolean {
+  let size: number | undefined
+  try { size = lstatSync(path).size } catch { return false }
+  if (size === 0) return true
   const record = readLockRecord(path)
   return record !== undefined && record !== 'legacy'
     && record.hostname === hostname() && !processExists(record.pid)
 }
 
-/**
- * One named owner-identified lock file. `serialized` marks that stale
- * recovery must run under the recovery lock (the writer lock); the recovery
- * lock itself recovers its own dead owner directly, because only recovery
- * participants ever contend for it and their critical section is bounded.
- */
-class OwnerFileLock {
-  constructor(private readonly root: string, private readonly name: string, private readonly serialized: boolean) {}
-
-  private get path(): string { return join(this.root, this.name) }
-  private get stalePath(): string { return join(this.root, `${this.name}${STALE_LOCK_SUFFIX}`) }
-
-  acquire(): HeldLock | undefined {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      let fd: number
-      try {
-        fd = openRegular(this.path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-        if (!this.recoverStale()) return undefined
-        continue
-      }
-      try {
-        const nonce = randomBytes(16).toString('hex')
-        const record: WriterLockRecord = {
-          version: WRITER_LOCK_VERSION,
-          nonce,
-          pid: process.pid,
-          hostname: hostname(),
-          created_at_epoch_ms: Date.now(),
-        }
-        writeAll(fd, `${canonical(record)}\n`)
-        fsyncSync(fd)
-        return { fd, nonce }
-      } catch (error) {
-        // The lock could not be recorded: leave nothing at the pathname.
-        try { closeSync(fd) } catch { /* already closed */ }
-        try { unlinkSync(this.path) } catch { /* best effort */ }
-        throw error
-      }
-    }
-    return undefined
+/** The active generation directory: the highest-numbered gen-NNNNNNNN. */
+function currentGeneration(root: string): string | undefined {
+  let best: { n: number; dir: string } | undefined
+  let entries: string[]
+  try { entries = readdirSync(root) } catch { return undefined }
+  for (const entry of entries) {
+    if (!entry.startsWith('gen-') || entry.length !== 4 + GENERATION_DIGITS) continue
+    const n = Number.parseInt(entry.slice(4), 10)
+    if (!Number.isSafeInteger(n) || n < 0) continue
+    if (best === undefined || n > best.n) best = { n, dir: join(root, entry) }
   }
+  return best?.dir
+}
 
-  /** Move a provably dead owner's file out of the pathname atomically. */
-  private recoverStale(): boolean {
-    if (!provablyDeadOwner(this.path)) return false
-    if (!this.serialized) return this.renameStaleOut()
-    const recovery = new OwnerFileLock(this.root, RECOVERY_LOCK_NAME, false)
-    const held = recovery.acquire()
-    if (!held) return false
-    // Release the RECOVERY lock itself (the writer-lock pathname currently
-    // holds nothing: the dead owner's file has been renamed away).
-    try { return this.renameStaleOut() } finally { recovery.release(held) }
-  }
-
-  private renameStaleOut(): boolean {
-    // Re-verify under serialization, then RENAME. rename(2) is atomic and
-    // moves the exact verified file; the pathname becomes free for the fair
-    // O_EXCL race and no later acquisition can be evicted by us.
-    if (!provablyDeadOwner(this.path)) return false
-    try { renameSync(this.path, this.stalePath); return true } catch (error) {
-      // ENOENT: another serialized recoverer already moved it.
-      return (error as NodeJS.ErrnoException).code === 'ENOENT'
-    }
-  }
-
-  /** Conditional release: only the file that still carries OUR nonce. */
-  release(held: HeldLock): void {
-    try { closeSync(held.fd) } catch { /* already closed */ }
-    let current: WriterLockRecord | 'legacy' | undefined
-    try { current = readLockRecord(this.path) } catch { return }
-    if (current !== 'legacy' && current !== undefined && current.nonce === held.nonce) {
-      try { unlinkSync(this.path) } catch { /* best effort */ }
-    }
+function nextGenerationDir(root: string): { dir: string; created: boolean } {
+  const current = currentGeneration(root)
+  const nextN = (current === undefined ? 0
+    : Number.parseInt(current.slice(current.lastIndexOf('gen-') + 4), 10)) + 1
+  const dir = join(root, `gen-${String(nextN).padStart(GENERATION_DIGITS, '0')}`)
+  try {
+    mkdirSync(dir, { mode: 0o700 })
+    return { dir, created: true }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return { dir, created: false }
+    throw error
   }
 }
 
+function firstGenerationDir(root: string): { dir: string; created: boolean } {
+  const dir = join(root, `gen-${'0'.repeat(GENERATION_DIGITS - 1)}1`)
+  try {
+    mkdirSync(dir, { mode: 0o700 })
+    return { dir, created: true }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return { dir, created: false }
+    throw error
+  }
+}
+
+/** Unlink the actor's OWN lock file: only when the content still carries its nonce. */
+function releaseOwnLock(dir: string, nonce: string): void {
+  const path = join(dir, WRITER_LOCK_NAME)
+  const record = readLockRecord(path)
+  if (record !== 'legacy' && record !== undefined && record.nonce === nonce) {
+    try { unlinkSync(path) } catch { /* best effort */ }
+  }
+}
+
+/**
+ * Acquire the writer lock under the generation protocol. Returns the held
+ * lock, or undefined when acquisition is refused (live/unknown owner in the
+ * current generation). See docs/WRITER_LOCK_PROTOCOL.md §3.
+ */
 function acquireWriterLock(root: string): HeldLock | undefined {
-  return new OwnerFileLock(root, WRITER_LOCK_NAME, true).acquire()
+  let dir = currentGeneration(root)
+  if (dir === undefined) dir = firstGenerationDir(root).created
+    ? join(root, `gen-${'0'.repeat(GENERATION_DIGITS - 1)}1`)
+    : currentGeneration(root)!
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    let fd: number
+    try {
+      fd = openRegular(join(dir, WRITER_LOCK_NAME), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      if (lockIsRecoverable(join(dir, WRITER_LOCK_NAME))) {
+        // R: advance the generation. mkdir is the whole recovery; the dead
+        // file is abandoned, never renamed or unlinked. Losing the creation
+        // race is fine — the winner's generation becomes current for all.
+        dir = nextGenerationDir(root).dir
+        continue
+      }
+      return undefined
+    }
+    const nonce = randomBytes(16).toString('hex')
+    try {
+      const record: WriterLockRecord = {
+        version: WRITER_LOCK_VERSION,
+        nonce,
+        pid: process.pid,
+        hostname: hostname(),
+        created_at_epoch_ms: Date.now(),
+      }
+      writeAll(fd, `${canonical(record)}\n`)
+      fsyncSync(fd)
+    } catch (error) {
+      // Our own O_EXCL-created file failed to record: remove it. No other
+      // actor can have replaced it (nothing in the protocol replaces foreign
+      // files), so this unlink targets only what this actor created.
+      try { unlinkSync(join(dir, WRITER_LOCK_NAME)) } catch { /* best effort */ }
+      throw error
+    } finally {
+      try { closeSync(fd) } catch { /* already closed */ }
+    }
+    // V: the generation must still be current AFTER our acquire. A recovery
+    // that advanced past G could only have observed our lock as dead, which
+    // it is not while we hold it, so this re-read settles the linearization.
+    const current = currentGeneration(root)
+    if (current === dir) return { dir, nonce }
+    releaseOwnLock(dir, nonce)
+    dir = current ?? nextGenerationDir(root).dir
+  }
+  return undefined
 }
 
 function releaseWriterLock(root: string, held: HeldLock | undefined): void {
   if (held === undefined) return
-  new OwnerFileLock(root, WRITER_LOCK_NAME, true).release(held)
+  void root
+  releaseOwnLock(held.dir, held.nonce)
+}
+
+/**
+ * CG-083-PERF05 (F1 revision): prune abandoned generation directories. Only
+ * the holder of the CURRENT generation's lock may prune, and only strictly
+ * older generations — by docs/WRITER_LOCK_PROTOCOL.md §5 no non-current
+ * generation can contain a live-content lock, so pruning cannot evict an
+ * active writer. Bounded garbage per crash instead of unbounded growth.
+ */
+function pruneGenerations(root: string, held: HeldLock): void {
+  const current = currentGeneration(root)
+  if (current === undefined || current !== held.dir) return
+  const currentN = Number.parseInt(current.slice(current.lastIndexOf('gen-') + 4), 10)
+  let entries: string[]
+  try { entries = readdirSync(root) } catch { return }
+  for (const entry of entries) {
+    if (!entry.startsWith('gen-') || entry.length !== 4 + GENERATION_DIGITS) continue
+    const n = Number.parseInt(entry.slice(4), 10)
+    if (!Number.isSafeInteger(n) || n < 0 || n >= currentN) continue
+    try { rmSync(join(root, entry), { recursive: true, force: true }) } catch { /* best effort */ }
+  }
 }
 
 export function readPrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): PrivateLedgerSnapshot {
@@ -344,6 +406,9 @@ export function appendPrivateLedger(root: string | undefined, input: PrivateLedg
     const fd = openRegular(ledgerPath(root, context), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
     try { writeAll(fd, `${canonical(record)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
     syncDirectory(root)
+    // Bounded garbage: while holding the CURRENT generation's lock, abandon
+    // strictly older generations (docs/WRITER_LOCK_PROTOCOL.md §5).
+    if (lockFd !== undefined) pruneGenerations(root, lockFd)
     return true
   } catch { return false } finally {
     releaseWriterLock(root, lockFd)

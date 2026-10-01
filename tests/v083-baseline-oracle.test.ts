@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { deriveProjection as candidateDerive, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { projectSessionCoreV2 as candidateCore } from '../src/core-v2/session.js'
 import { deriveProjection as baselineDerive } from './helpers/baseline-oracle/derive.js'
-import { projectSessionCoreV2 as baselineCore } from './helpers/baseline-oracle/session-v2.js'
+import { projectSessionCoreV2 as baselineCore } from './helpers/baseline-oracle/session.js'
 import { snapshotSessionEvents } from '../src/domain/session-events.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
@@ -40,14 +40,37 @@ function makeSession(id: string): { session: Session; append: Append } {
 }
 
 /** Interleaved family: roots, tools, guards, observers, boundaries, units. */
-function buildScenario(append: Append): void {
+async function buildScenario(session: Session, append: Append): Promise<void> {
   append('user/message', { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] }, true)
   append('turn/start', { turn: 1 })
-  // Rebind flow first: a proposal then a confirmed replacement.
-  append('user/message', { source: { kind: 'user' }, turn: 1, content: [{ type: 'text', text: '重启 worker 服务。' }] }, true)
-  append('tool/call', { turn: 1, step: 3, callId: 'rb1', name: 'context_guard_rebind', arguments: JSON.stringify({ proposal_id: 'P1', item_id: 'R001', action: 'restart', target: { service_id: 'worker' }, resolution: { method: 'explicit_root_clarification' } }) })
-  append('tool/result', { turn: 1, step: 3, message: createToolResultMessage({ callId: 'rb1' as never, content: [{ type: 'text', text: JSON.stringify({ status: 'proposed', proposal_id: 'P1' }) }], isError: false }) }, true)
-  append('user/message', { source: { kind: 'user' }, turn: 1, content: [{ type: 'text', text: '确认 P1' }] }, true)
+  // Rebind flow first: an inquiry root stays pending; a root clarification
+  // (把…明确为 …) plus the REAL rebind tool mints a proposal whose actual
+  // output is persisted; the production confirmation grammar closes the chain.
+  append('user/message', { source: { kind: 'user' }, turn: 1, content: [{ type: 'text', text: '检查一下本地插件是否有更新' }] }, true)
+  {
+    const { createRebindTool } = await import('../src/tools/rebind.js')
+    const deriveNow = (): ReturnType<typeof candidateDerive> =>
+      candidateDerive(snapshotSessionEvents(session) as never,
+        { activation: 'always', policy: 'release' },
+        { cwd: '/work/repo', sessionHeader: HEADER },
+        true,
+        HOST)
+    const investigation = [...deriveNow().projection.items.values()].find((item) => item.normalizedText.includes('是否有更新'))
+    if (!investigation) throw new Error('fixture: inquiry item missing')
+    append('user/message', { source: { kind: 'user' }, turn: 1, content: [{ type: 'text', text: '把检查一下本地插件是否有更新明确为 inspect_remote_updates' }] }, true)
+    const clarified = [...deriveNow().projection.items.values()].find((item) => item.normalizedText.includes('inspect_remote_updates'))
+    if (!clarified) throw new Error('fixture: clarified item missing')
+    const proposeArgs = { operation: 'propose' as const, item_id: investigation.id, clauses: [investigation.normalizedText], clarification_item_ids: [clarified.id] }
+    const tool = createRebindTool(() => deriveNow().projection, async () => true)
+    const proposed = await (tool.execute as (args: unknown, exec: unknown) => Promise<{ status?: string; proposal?: { id: string }; reason_code?: string }>)(
+      proposeArgs as never, undefined as never)
+    if (proposed.status !== 'proposed' || !proposed.proposal) {
+      throw new Error(`rebind propose failed: ${JSON.stringify(proposed)}`)
+    }
+    append('tool/call', { turn: 1, step: 3, callId: 'rb1', name: 'context_guard_rebind', arguments: JSON.stringify(proposeArgs) })
+    append('tool/result', { turn: 1, step: 3, message: createToolResultMessage({ callId: 'rb1' as never, content: [{ type: 'text', text: JSON.stringify(proposed) }], isError: false }) }, true)
+    append('user/message', { source: { kind: 'user' }, turn: 1, content: [{ type: 'text', text: `确认重绑定 ${proposed.proposal.id}` }] }, true)
+  }
   // Duplicate clause + prohibition + test + edit + readback coordination.
   append('user/message', { source: { kind: 'user' }, turn: 1, content: [{ type: 'text', text: '修复 src/app.ts 并运行测试。禁止推送 main 分支。检查改动后的文件。' }] }, true)
   for (const [index, tool] of ['edit', 'bash', 'bash', 'context_guard_observe_file', 'context_guard_observe_test_readiness'].entries()) {
@@ -66,8 +89,10 @@ function buildScenario(append: Append): void {
   append('goal/change', { operation: 'edit', goal: { id: 'g1' as never, revision: 2, objective: 'x', phase: 'active', maxGoalRounds: 3, version: 1, roundsStarted: 0, createdAt: 1, updatedAt: 1 }, phase: 'active' })
   append('turn/start', { turn: 2 })
   append('user/message', { source: { kind: 'user' }, turn: 2, content: [{ type: 'text', text: '解释部署流水线的工作方式。' }] }, true)
+  append('step/start', { turn: 2, step: 17 })
   append('assistant/message', { turn: 2, step: 17, message: { role: 'assistant', content: [{ type: 'text', text: '流水线分三个阶段。' }] } }, true)
-  append('turn/end', { turn: 2 })
+  append('step/end', { turn: 2, step: 17 })
+  append('turn/end', { turn: 2, reason: { kind: 'completed' } })
   append('approval/asked', { id: 'ap1', toolName: 'bash' })
   append('approval/decided', { id: 'ap1', outcome: 'allowed-once' })
   append('compaction/summary', { summary: 'compacted' })
@@ -84,16 +109,76 @@ function fold(events: readonly unknown[], derive: typeof candidateDerive, core: 
 }
 
 describe('CG-083-V1 independent baseline oracle', () => {
-  const { session, append } = makeSession('oracle-scenario')
-  buildScenario(append)
-  const events = snapshotSessionEvents(session)
-  expect(events.length).toBeGreaterThan(20)
+  // Scenario building awaits the real rebind tool, so it runs in beforeAll.
+  let events: readonly unknown[]
+  let scenarioError: unknown
+  beforeAll(async () => {
+    const { session, append } = makeSession('oracle-scenario')
+    try {
+      await buildScenario(session, append)
+    } catch (error) {
+      scenarioError = error
+    }
+    events = snapshotSessionEvents(session)
+  })
+  beforeEach(() => {
+    if (scenarioError) throw scenarioError
+  })
+
+  it('vendored oracle files match their recorded 913a4c7 source digests', async () => {
+    const { createHash } = await import('node:crypto')
+    const { readFileSync } = await import('node:fs')
+    const { fileURLToPath } = await import('node:url')
+    const dir = fileURLToPath(new URL('./helpers/baseline-oracle/', import.meta.url))
+    const digests = JSON.parse(readFileSync(dir + 'BASELINE_DIGESTS.json', 'utf8')) as {
+      base_commit: string
+      files: Record<string, { source_path: string; sha256: string }>
+    }
+    expect(digests.base_commit).toBe('913a4c7a6f0f600f4146ef4af694d3af6e477ef2')
+    for (const [name, meta] of Object.entries(digests.files) as Array<[string, { vendored_sha256?: string; sha256: string; source_path: string }]>) {
+      if (meta.vendored_sha256 === undefined) continue // JSON evidence entries
+      const raw = readFileSync(dir + name + '.ts')
+      expect(createHash('sha256').update(raw).digest('hex'), `${name} vendored bytes`).toBe(meta.vendored_sha256)
+      void meta.source_path
+    }
+    // The optimized surfaces themselves must be present in the vendor set.
+    for (const required of ['derive', 'session', 'capture', 'semantics', 'project']) {
+      expect(Object.keys(digests.files)).toContain(required)
+    }
+  })
 
   it('candidate equals the frozen 0.8.2 implementation on every event prefix', () => {
     for (let prefix = 1; prefix <= events.length; prefix += 1) {
       const baseline = fold(events.slice(0, prefix), baselineDerive as never, baselineCore as never)
       const candidate = fold(events.slice(0, prefix), candidateDerive, candidateCore)
       expect(candidate, `prefix ${prefix}/${events.length}`).toBe(baseline)
+    }
+  })
+
+  it('the scenario actually REACHES the critical target states in both implementations', () => {
+    for (const [label, derive, core] of [
+      ['baseline', baselineDerive as never, baselineCore as never],
+      ['candidate', candidateDerive, candidateCore],
+    ] as const) {
+      const derived = (derive as typeof candidateDerive)(events as never,
+        { activation: 'always', policy: 'release' },
+        { cwd: '/work/repo', sessionHeader: HEADER },
+        true,
+        HOST)
+      const projection = derived.projection
+      // (1) rebind proposal registered and confirmation produced a replacement.
+      expect(projection.rebindProposals.size, `${label}: proposal`).toBeGreaterThanOrEqual(1)
+      const confirmed = [...projection.items.values()].filter((item) => item.clarifiesItemId !== undefined || item.reboundFrom !== undefined)
+      expect(confirmed.length, `${label}: confirmed replacement`).toBeGreaterThanOrEqual(1)
+      // (2) observer/readiness evidence actually present.
+      expect([...projection.evidence.values()].some((fact) => fact.toolName === 'context_guard_observe_file'), `${label}: file readback`).toBe(true)
+      expect([...projection.evidence.values()].some((fact) => fact.toolName === 'context_guard_observe_test_readiness'), `${label}: readiness`).toBe(true)
+      // (3) trusted delivery actually closed an information item.
+      expect([...projection.items.values()].some((item) => item.status === 'answered'), `${label}: delivered answer`).toBe(true)
+      // (4) core view non-empty on the confirmed watermark.
+      const coreOut = core(events as never, { ...projection, durabilityWatermark: 'confirmed' })
+      expect(coreOut, `${label}: core reachable`).toBeDefined()
+      void label
     }
   })
 

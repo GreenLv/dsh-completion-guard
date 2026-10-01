@@ -353,5 +353,6 @@ it('projection scaling measurement (gated: DSH_PROJECTION_MEASUREMENT=1)', { tim
   expect(measurements.length).toBeGreaterThan(0)
   // Emitted for scripts/measure-projection-scaling.mjs; buffered consoles can
   // reorder lines, so the marker carries the whole payload on one line.
-  console.log(`DSH_PROJECTION_MEASUREMENT=${JSON.stringify({ classification: 'synthetic', measurements })}`)
+  // V3: the worker reports its own pid so the driver can attribute samples.
+  console.log(`DSH_PROJECTION_MEASUREMENT=${JSON.stringify({ classification: 'synthetic', worker_pid: process.pid, measurements })}`)
 })
