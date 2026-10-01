@@ -9,7 +9,8 @@
 | 审查基线 | `913a4c7a6f0f600f4146ef4af694d3af6e477ef2`（0.8.2） |
 | 首轮实现提交 | `45bb8099`（被复核否决） |
 | 首轮交回 | `3c6a7bf0`（REVIEW 否决其正确性与证据） |
-| 返修实现提交 | `ecde32644dc87fc94142475a59ad12838a43b8d5`（分支 `candidate/0.8.3-runtime-performance`，仅本地，未 push） |
+| 返修实现提交（第二轮） | `75856d2c36e52e95d578413a2e8671b5e2ce13ee`（F1 状态机文档先行为独立提交；分支 `candidate/0.8.3-runtime-performance`，仅本地，未 push） |
+| 第二轮复核 subject | `8242b54414129b19df8aa5a5ae791593d158c58c`（保留 R3/R4/R5 既有结论，本轮仅重开 F1/F2/V1/V3/H1） |
 | 版本 | 0.8.3 |
 | dirty state | 受跟踪文件干净；未跟踪：三份计划/提示词文件、两份复核/返修交接文件、`HANDOFF_0_8_3_REPAIR_RESULT.json`（完整清单见 handoff 的 dirty_scope） |
 | dist | 从干净提交树重建，`git diff --exit-code -- dist` 通过 |
@@ -31,42 +32,52 @@
 
 首轮 11 项（PERF-01~05、BUG-01~03、VAL-01~03）的修复主体保留并经本轮加深：凡 R1–R5 覆盖的面，以本轮矩阵为准；VAL-02/03 修复未再变化。既有 desktop digest 漂移复核结论维持：0.8.2 基线代码计算结果相同，属安装后环境漂移，非候选回归；数字验收待 Codex 原生批次重注入。
 
+### 第二轮复核（REVIEW_0_8_3_REPAIR_ROUND_2）追加结案
+
+| ID | 发现 | 修复 | 正反例 | 状态 |
+| --- | --- | --- | --- | --- |
+| F1/R2 | 恢复锁自身 serialized=false，双恢复者竞争可 rename 掉活 recovery lock；旧并发测试 execFileSync 串行未产生竞争 | 重设计为**世代协议**（`docs/WRITER_LOCK_PROTOCOL.md` 先行独立提交）：活动世代=highest `gen-NNNNNNNN`；死/零字节锁恢复=mkdir 下一世代（原子），从不 rename/unlink 他者文件；acquire 后重读当前世代为线性化点，落后则释放自己 nonce 文件并前进重试；释放仅删自己 nonce 文件；持当前锁者可剪枝严格更旧世代（§5 证明不可伤活 writer） | `tests/v083-writer-lock-concurrency.test.ts` 4/4：**barrier 同时放行**的 4 子进程恢复竞争、纯 acquire 交错、**临界区内击杀**（父进程轮询到锁文件即刻 SIGKILL）、符号链接拒绝、链唯一连续；`tests/v083-private-ledger-lock.test.ts` 7/7（含零字节窗口回归） | 已关闭（状态转换与线性化依据见协议文档 §3–§4） |
+| F2/R1 | `lastFullSync.events` 保存可变数组引用，逐元素比较对同数组 append/元素原地修改失效 | 快路径仅服务**可证明不可变**快照：递归 `Object.isFrozen` + 节点预算，通过者按数组对象记忆（freeze 不可逆）；不可证明输入每次全量重建（fail-closed），不缓存 | `tests/v083-runtime-sync-matrix.test.ts` 新 4 例：可变数组 append 可见、浅冻结元素原地修改可见、深冻结正控走快路径、官方 Session 正控走快路径 | 已关闭 |
+| V1 | oracle 仍从 src 导入 capture/semantics（本轮 memo 恰在其内）；rebind 夹具非生产语法；R3 overlay 未达 HEAD 自身边界 | oracle vendor **完整本地依赖闭包 45 模块 + cohort/manifest JSON**（记录 raw+vendored SHA-256，测试断言逐文件字节一致）；rebind 流改真实工具铸造 proposal + 生产确认语法；断言 proposal/confirmed/observer/readiness/delivery/core 在**两实现**实际可达后逐前缀比较；HEAD=shallow boundary、HEAD replace 为不同树无父对象两个 overlay 纳入正式测试 | `tests/v083-baseline-oracle.test.ts` 5/5；`tests/v083-git-observer.test.ts` 8/8 | 已关闭 |
+| V3 | RSS 只采 vitest 主 pid（fork pool 下实际 worker ~558MB 被漏采）；生命周期计数只看根 handler、disposer 全 no-op | 驱动 **25ms 进程树采样**（pgrep -P 递归）：分报 main-peak / tree-sum-peak / max-single-process + worker_pid 归因，不声称 settled；生命周期换**真实计数 disposer**（100 循环归零、dispose 后重挂载重新 derive 证明 runtime map 释放、破坏一个 disposer 的敏感性对照必须被测出） | `tests/v083-lifecycle-recycle.test.ts` 1/1；A/B 报告分列三类峰值（§4） | 已关闭 |
+| H1 | 交回把全库总门槛标 passed + “实际执行42”与 archive-045 not_run 冲突 | 拆分 `historical_library_source_inventory`（passed）、`historical_library_source_regressions`（passed），**总门槛 `historical_library_acceptance` 保持 pending**；执行数修正为 41 passed/3 不适用/1 pending；裁定 JSON 每案附 testcase 级结果（file_results，1838 例） | 裁定文件已更新（incident validate exit 0） | 已关闭 |
+
+archive-045 维持 pending（Codex 经私有映射读取封存原记录：raw_control_included=false、documented_only，Hook/语法/时效/封装未知；当前资料不足以还原场景，不编造测试、不宣布不适用），owner：用户/Codex。
+
 ## 3. 合同保持
 
 fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durability、release reservation/settlement、上游 pin 均未变。`DSH_GUARD_DISABLE_INDEXES=1` 仍关闭索引层；memo 缓存均为纯函数解析缓存（文本→解析结果），不是跨 entry 信任缓存。
 
-## 4. 性能 A/B（修复后终版，5 fresh worker/档，median，外部 25ms RSS 采样）
+## 4. 性能 A/B（第二轮返修后终版，5 fresh worker/档，median，外部 25ms 进程树采样）
 
-同输入同方法、独占运行、macOS arm64 / Node v25.1.0。分布规格 `size:distribution`；`roots`=根输入密集（计划口径），`tool`=工具密集，`longout`=定事件数字节梯度。
+同输入同方法、独占运行、macOS arm64 / Node v25.1.0。分布规格 `size:distribution`；`roots`=根输入密集（计划口径），`tool`=工具密集，`longout`=定事件数字节梯度。**峰值 RSS 语义自本轮修正**：main-peak=派生主进程；tree-sum-peak=主进程+全部后代每 25ms 采样之和的峰值；max-single=树内单进程最大——三者分列，不再以主进程数字冒充测试进程峰值，不声称 settled 稳态。
 
 | 场景 | entry | 0.8.2 | 0.8.3 | 加速 | derive |
 | --- | --- | ---: | ---: | ---: | --- |
-| 3000 根输入密集（12001 events） | first_mount_warm_process:roots | 4062.4 ms | 936.4 ms | **4.34×** | [2]→[1] |
-| 3000 根输入密集 | confirmed_sync_first:roots | 3944.4 ms | 1398.4 ms | 2.82× | [1]→[1] |
-| 3000 根输入密集 | warm_sync:roots | 4042.4 ms | 0.6 ms | derive 1→0 | [1]→[0] |
-| 3000 根输入密集 | derive_projection:roots | 1668.1 ms | 949.0 ms | 1.76× | — |
-| 10000 根输入密集（40001 events） | first_mount_warm_process:roots | 34162.0 ms | 5802.3 ms | **5.89×** | [2]→[1] |
-| 10000 根输入密集 | confirmed_sync_first:roots | 38797.5 ms | 8650.1 ms | 4.49× | [1]→[1] |
-| 10000 根输入密集 | warm_sync:roots | 39082.0 ms | 0.8 ms | derive 1→0 | [1]→[0] |
-| 工具密集（3004 events） | first_mount_warm_process | 352.5 ms | 87.0 ms | 4.05× | [2]→[1] |
-| 工具密集 | confirmed_sync_first | 366.5 ms | 140.4 ms | 2.61× | [1]→[1] |
-| 工具密集 | warm_sync | 343.9 ms | 0.1 ms | derive 1→0 | [1]→[0] |
-| 字节梯度（3004:longout） | first_mount_warm_process:longout | 358.7 ms | 90.9 ms | 3.95× | [2]→[1] |
-| 账本 short/long/1000-anchors | private_ledger_* | 0.1–3.6 ms | 0.2–4.2 ms | 噪声内（双方均 <5ms） | [0] |
+| 3000 根输入密集（12001 events） | first_mount_warm_process:roots | 4615.3 ms | 1103.2 ms | **4.18×** | [2]→[1] |
+| 3000 根输入密集 | confirmed_sync_first:roots | 4464.6 ms | 1569.8 ms | 2.84× | [1]→[1] |
+| 3000 根输入密集 | warm_sync:roots | 4467.0 ms | 0.7 ms | derive 1→0 | [1]→[0] |
+| 3000 根输入密集 | derive_projection:roots | 1930.7 ms | 1086.2 ms | 1.78× | — |
+| 工具密集（3004 events） | first_mount_warm_process | 407.8 ms | 104.6 ms | 3.90× | [2]→[1] |
+| 工具密集 | confirmed_sync_first | 415.3 ms | 168.7 ms | 2.46× | [1]→[1] |
+| 工具密集 | warm_sync | 393.0 ms | 0.2 ms | derive 1→0 | [1]→[0] |
+| 字节梯度/账本三档 | longout 与 private_ledger_* | — | — | 噪声内（双方 <5ms，账本 0.96–1.08×） | [0] |
 
-预算对照（计划 §5.3）：无变化纯投影 ≤1k p95 ≤5ms ✓（0.1–0.8ms，derive/core 0 次）；attach 一次 fold 一次 host validation ✓（计数回归）；不可能产收据的普通 shell full/route audit 0 ✓；重历史首轮投影根密集 3k 档 ≥4× ✓（4.34×，工具密集 4.05×）；10k 压力档完成、无卡死/OOM ✓（外部峰值 RSS：候选 207MB vs 基线 227MB，各规格一致）。**未达标/未测**：单次全量 fold 本身仅 1.7–2.3×（为 derive 内语义解析成本，已 profile 定向优化两轮）；端到端 UI/暖切换 p95、cold 30/warm 100 样本量、事件循环阻塞分级、保护入口逐类计时与配对 absent/off 对照属原生/UI/发布测量，pending（Codex），本报告不以开发 smoke（5 次）冒充发布 p95。
+峰值 RSS（进程树采样 median）：3000:roots tree-sum 608→590 MB、max-single 355→357 MB；3000 工具密集 tree-sum 553→530 MB、max-single 300→299 MB。10k roots 档本轮未复测；上一轮（candidate-final.json，5.89× 挂载）作为开发参考保留并已注明测量时代码状态由 source_sha256 区分。
+
+预算对照：无变化纯投影 ≤5ms ✓；attach 一次 fold 一次 host validation ✓；普通 shell 0 audit ✓（计数回归）；重历史首轮投影根密集 3k 档 ≥4× ✓（4.18×）；纯 fold 自身 1.8–2.2×（无独立预算，仅记录）。**未测/pending**：cold-30/warm-100 发布级采样、端到端 UI、事件循环阻塞分级、保护入口逐类计时、配对 absent/off 对照——原生/UI/发布测量，pending（Codex）。
 
 ## 5. 证据身份与存放
 
 匿名 evidence id：`dsh-cg-evidence-083`（机器本地私有证据库，路径不入公共文档；需要原文件时由用户或 Codex 的本地私有证据索引提供）。其中：`baseline-final.json`/`candidate-final.json`（schema `dsh-projection-scaling/v1`，含每 worker source_sha256 与外部 RSS 样本）、`baseline-distributions.json`/`candidate-distributions.json`（首轮分布 A/B）、`baseline-projection-scaling-full.json`/`candidate-projection-scaling.json`（首轮工具密集全档）。candidate 报告的 source hash 与当前对应文件的一致性已由复核确认；报告 `commit` 字段为测量时的基线提交号，实际源码以 source_sha256 区分——本轮终版报告以 `candidate-final.json` 为准。
 
-## 6. 命令与结果（返修实现提交 `ecde3264` 上执行；实现提交与报告提交见 §1）
+## 6. 命令与结果（第二轮实现提交 `75856d2c` 上执行）
 
 | 检查 | 结果 |
 | --- | --- |
 | typecheck（tsc --noEmit） | 0 errors |
 | lint（oxlint src tests） | 0 errors / 91 warnings（与基线同水平） |
-| tests（vitest run） | 187 files passed / 1 skipped；**2927 passed / 11 skipped**（含本轮新增 8 个测试文件 24 项） |
+| tests（vitest run） | 187 files passed / 1 skipped；**2933 passed / 11 skipped**（含两轮新增回归） |
 | release-pack node tests | 4/4 |
 | stats node tests | 10/10 |
 | build + dist parity | 重建后 `git diff --exit-code -- dist` 通过 |
@@ -93,7 +104,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 
 按用户 2026-10-01 补充要求执行。库=该私有研究仓库（其 AGENTS.md 与 docs/INCIDENT_WORKFLOW.md 为入口）；未以旧归档条数或产品测试子集代替全库清单，未修改库内任何既有案例/谱系/expected。
 
-**清单计数**：原始记录 45（legacy 冻结谱系 16 + 本机归档正式记录 29）；案例文件 56；显式 supersedes 替代 11（archive-013…021、windows-stop-feedback-review、prepare-output-invalid）；活动案例 **45**（codex 29 / dsh 16）；适用案例 **42**；实际执行 **42**（owning 回归联合执行）+ 3 条 not_applicable 的新鲜复核。裁定文件以库自身惯例新增于其 `benchmarks/incidents/acceptance/dsh-0.8.3-full-library-adjudication.v1.json`（未提交、未推送，结构校验 `incident validate`/`doctor` 均 exit 0）；库提交绑定 `d31504dd3c4f2679311480699994b6170afd0d5a`，逐案输入 SHA-256 与候选 `ecde3264` 绑定存私有证据库（匿名 evidence id：dsh-cg-evidence-083，机器路径见私有索引）。
+**清单计数**：原始记录 45（legacy 冻结谱系 16 + 本机归档正式记录 29）；案例文件 56；显式 supersedes 替代 11（archive-013…021、windows-stop-feedback-review、prepare-output-invalid）；活动案例 **45**（codex 29 / dsh 16）；适用案例 **42**；source 泳道实际执行 **41** 案通过（owning 回归联合执行，1838 个 testcase 级结果）+ 3 条 not_applicable 的新鲜复核 + 1 案 pending（archive-045，原始材料不足，不编造）。裁定文件以库自身惯例新增于其 `benchmarks/incidents/acceptance/dsh-0.8.3-full-library-adjudication.v1.json`（未提交、未推送，结构校验 `incident validate`/`doctor` 均 exit 0）；库提交绑定 `d31504dd3c4f2679311480699994b6170afd0d5a`，逐案输入 SHA-256 与候选绑定存私有证据库（本轮绑定更新为最终 HEAD，见 handoff）（匿名 evidence id：dsh-cg-evidence-083，机器路径见私有索引）。
 
 **逐案结果矩阵**（45 活动案例；`passed`=owning 回归在本候选执行并通过，非 native_verified）：
 
@@ -106,4 +117,4 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 
 执行方法：v4 全库裁定的案例→守卫面映射逐案复核后，39 个 owning 测试文件在本候选联合 `vitest run`：**715 passed / 1 skipped / 0 failed**；本轮返修触及面（R3 原始对象 parent、R4 结构化终态、R1 暖同步计数、PERF-03 单审计会话）向相关案例（043、042、shell-process-operation-boundary、stop-performance-timeout、warm-resolver-scope-drift）追加本轮新增回归并同批通过。`warm-resolver-scope-drift` 的 repro.patch 绑定 0.8.1 缺陷基线（受控故障注入），本轮未重放；其现行 oracle（host-dependency-audit.warm-review 等）已在本候选通过。
 
-**剩余平台门槛（逐项 pending，owner Codex）**：16 例 windows 观察案例的 Windows 原生泳道、macOS 原生泳道（Desktop digest 漂移待重注入）、真实宿主/UI/模型泳道、compaction-continuation 与 windows-stop-feedback-confirmed-chain 的原始事件级核验。source 泳道通过不构成 native_verified，也不以其他产品/平台通过推断本平台通过；`incident validate` 仅证明库结构有效，不代替本节行为验收。
+**门槛拆分（H1 修正）**：`historical_library_source_inventory`=passed（45 原始记录=16+29、56 案例文件、11 替代、45 活动、逐案 SHA-256 绑定，无缺失/额外 ID）；`historical_library_source_regressions`=passed（41 案 source 泳道 executed_passed，1838 个 testcase 级结果附于裁定 JSON，0 失败）；**`historical_library_acceptance`（全库总验收）=pending**——native/replay/UI/模型泳道未执行，source 通过不构成 native_verified，也不以其他产品/平台通过推断本平台通过；`incident validate` 仅证明库结构有效，不代替行为验收。16 例 windows 观察案例的 Windows 原生泳道、macOS 原生泳道（Desktop digest 漂移待重注入）、真实宿主/UI/模型泳道、compaction-continuation 与 windows-stop-feedback-confirmed-chain 的原始事件级核验均 pending（owner Codex）。
