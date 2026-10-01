@@ -249,7 +249,6 @@ interface ExecutionQualification {
   /** The governing head that restricted the clause, when one exists. */
   governedBy?: string;
 }
-/** Blank out every quoted span of the text. */
 declare function maskQuotedSpans(text: string): string;
 /**
 * Whether the clause's OWN span asks something, even when no governed head was
@@ -1619,6 +1618,14 @@ interface ClauseSegment {
   /** The one interpretation this segment came from; never re-derived downstream. */
   interpretation: ScopeInterpretation;
 }
+/**
+* CG-083-PERF02 (profile-guided): segmentClauses is a pure parse of the text,
+* and the v6 capture path asks the SAME strings many times (splitIndependent
+* re-parses left/right fragments per delimiter, the coordination and
+* explanation paths re-parse prefixes). Cache the parse result by exact input
+* and default options — a pure parse cache over immutable strings, not a
+* trust cache. Options other than the default bypass the cache.
+*/
 declare function segmentClauses(text: string, options?: InterpretOptions): ClauseSegment[];
 /**
 * Build a GuardItem from an already-classified clause body and a resolved
@@ -2206,11 +2213,16 @@ interface ToolOperation {
 * derived layer records its source and conflict flag instead of changing history.
 */
 /**
-* CG-083-BUG03: the ONE terminal verdict a native observer may rely on for a
-* persisted shell call. Reuses the evidence layer's terminal classification
-* (structured facts, then audited renderer markers) so the observer cannot
-* drift from the same-family producer rules: a failed hook, a backgrounded or
-* truncated result, or an unclassifiable terminal state is never "success".
+* CG-083-BUG03/R4: the ONE terminal verdict a native observer may rely on for
+* a persisted shell call. Reuses the evidence layer's AUTHORITATIVE terminal
+* resolution (the run's own `contextGuardProcess` declaration, then any other
+* structured meta fact, then the audited renderer markers) and cross-checks
+* it against the rendered markers: a declared failure is never upgraded, and
+* a declared verdict that CONTRADICTS the rendered markers is unresolvable
+* and stays `unknown`. A failed hook, a backgrounded or truncated result, or
+* an unclassifiable terminal state is therefore never "success". This reads
+* the CURRENT observation only; the historical frozen `outcome` of
+* already-recorded evidence is not rewritten.
 */
 declare function shellReadbackOutcome(surface: "bash" | "pwsh" | "shell", args: Record<string, unknown>, result: {
   error?: unknown;

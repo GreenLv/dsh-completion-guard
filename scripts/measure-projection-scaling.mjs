@@ -5,7 +5,7 @@
 // host, no installed graph, no model. Usage:
 //   node scripts/measure-projection-scaling.mjs [--output <file>]
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,21 +16,51 @@ const outputPath = outputIndex > 0 ? process.argv[outputIndex + 1] : undefined
 const sizes = (process.env.DSH_PROJECTION_SIZES ?? '0,100,1000,10000').split(',')
 
 const results = []
+const peakSamples = []
 // CG-083: run the local vitest binary directly. Spawning `pnpm exec` made the
 // measurement depend on pnpm's interactive deps-status maintenance, which
 // aborts without a TTY in a second worktree and is measurement noise.
 const vitest = join(repo, 'node_modules', 'vitest', 'vitest.mjs')
+// CG-083-V3: sample each worker's RSS from OUTSIDE the measured process. The
+// in-process setInterval cannot run while the synchronous fold blocks the
+// thread, so it missed exactly the peaks this report cares about. The
+// sampler polls `ps` at 25ms and records the high-water mark plus the
+// settled value after the worker exits.
 for (const size of sizes) {
   for (let index = 0; index < 5; index += 1) {
-    const out = execFileSync(process.execPath, [vitest, 'run', 'tests/v082-projection-scaling.test.ts', '--maxWorkers', '1'], {
-      cwd: repo, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
-      env: { ...process.env, DSH_PROJECTION_MEASUREMENT: '1', DSH_PROJECTION_SIZES: size },
+    const child = spawn(process.execPath, [vitest, 'run', 'tests/v082-projection-scaling.test.ts', '--maxWorkers', '1'], {
+      cwd: repo, env: { ...process.env, DSH_PROJECTION_MEASUREMENT: '1', DSH_PROJECTION_SIZES: size },
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
+    let out = ''
+    child.stdout.on('data', (chunk) => { out += chunk })
+    let err = ''
+    child.stderr.on('data', (chunk) => { err += chunk })
+    // Outer RSS sampler: 25ms poll of the worker's main process.
+    let peak = 0
+    const pid = child.pid
+    const samples = []
+    const poll = setInterval(() => {
+      try {
+        const rssLine = execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim()
+        const rss = Number.parseInt(rssLine, 10)
+        if (Number.isSafeInteger(rss) && rss > 0) {
+          samples.push(rss * 1024)
+          if (rss * 1024 > peak) peak = rss * 1024
+        }
+      } catch { /* worker exited */ }
+    }, 25)
+    await new Promise((resolve, reject) => {
+      child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`worker exited ${code}: ${err.slice(-2000)}`)))
+    })
+    clearInterval(poll)
     const match = out.match(/^DSH_PROJECTION_MEASUREMENT=(\{.*)$/m)
     if (!match) throw new Error('projection measurement did not emit its observed result')
     const parsed = JSON.parse(match[1])
     results.push(...parsed.measurements)
-    console.error(`size=${size} rep=${index + 1}/5 done`)
+    peakSamples.push({ size, rep: index + 1, outer_peak_rss_bytes: peak, outer_samples: samples.length,
+      outer_settled_rss_bytes: samples.at(-1) ?? null })
+    console.error(`size=${size} rep=${index + 1}/5 done outer_peak_rss=${(peak / 1048576).toFixed(0)}MB samples=${samples.length}`)
   }
 }
 
@@ -69,6 +99,7 @@ const report = {
   commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
   source_sha256,
   sizes, entries, raw_results: results,
+  outer_peak_rss: peakSamples,
 }
 const rendered = JSON.stringify(report, null, 2)
 if (outputPath) writeFileSync(outputPath, rendered)

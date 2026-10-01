@@ -1,9 +1,9 @@
-import { $ as segmentAuthorityBlocks, $i as qualifyHostTrust, $n as relevantEvidence, $r as reportingHeadGoverns, $t as readbackSettlesContract, A as PROTOCOL_V3_NOTICE, Aa as ACTION_MANIFEST_VERSION, Ai as prepareDesktopHostTrust, An as unitDescendantIds, Ar as hasOrderedCoordination, At as MIN_RECOVERY_CHAR_BUDGET, B as evidenceFromPersistedToolResult, Ba as boundedArtifactChoiceMatches, Bi as DESKTOP_RUNTIME_PACKAGE_NAME, Bn as proposeRebindOutcome, Br as isQuestionScopeNeedingReview, Bt as renderRecoveryPacket, C as SESSION_API_UNSUPPORTED, Ca as SUPPORTED_HOST_RANGE, Ci as hostLockRowsFromComposedDump, Cn as progressFingerprint, Cr as actionVerbMatches, Ct as sessionQueryV2, D as projectCoreV2, Da as parseHostVersion, Di as packageRowsFromActiveGraph, Dn as hasCurrentCertificate, Dr as clauseIsProtected, Dt as CLEANUP_CONDITION_RULE_COMPACT, E as snapshotSessionEvents, Ea as evaluateMinimumHostVersion, Ei as inspectTargetHostGraph, En as goalCompletionDenial, Er as clauseIsGoverned, Et as CLEANUP_CONDITION_RULE, F as deriveProjection, Fa as STATEFUL_ACTIONS, Fi as resolveInstalledHostLock, Fn as qualifyBoundary, Fr as introducesActionClause, Ft as cleanupConditionFor, G as persistedToolResultStatus, Ga as semanticActionFromCommand, Gi as readDesktopAppRuntime, Gn as CONFIRM_LINE_PATTERN, Gr as maskCodeSpans, Gt as OUTCOME_STRENGTH, H as extractToolSubject, Ha as requestedIdentityKey, Hi as hasDesktopImporterState, Hn as rebindAttemptKey, Hr as itemHoldsExecutionAuthority, Ht as currentV6Feedback, I as legacyRecordsNeedingReview, Ia as STOP_PROTOCOL_VERSION, Ii as revalidateDesktopCoreLock, In as currentContractDigest, Ir as isExecutableItem, It as closingHint, J as canonicalArgvFromCommand, Ja as validateActionTarget, Ji as writeDesktopRuntimeReceipt, Jn as capabilityRemedyPhrase, Jr as opensConditionLead, Jt as contractById, K as shellReadbackOutcome, Ka as semanticActionFromText, Ki as readDesktopDependency, Kn as isFrozenV042RebindResponse, Kr as maskQuotedSpans, Kt as RELEASE_OPERATIONS, L as rootLocatorFlavor, La as STOP_PROTOCOL_VERSION_V2, Li as verifyComposedHostLockDump, Ln as createProjection, Lr as isExplanationScope, Lt as openItems, M as PROTOCOL_V5_NOTICE, Ma as CERTIFICATE_VERSION, Mi as readActiveHostGraph, Mn as availableBoundaryQualifications, Mr as hasWorkPredicate, Mt as V6_ORDINARY_COMPLETION_RULE_COMPACT, N as PROTOCOL_V6_NOTICE, Na as CERTIFICATE_VERSION_V2, Ni as resolveActiveProfileHostLock, Nn as effectuateBoundary, Nr as interpretClause, Nt as V6_ORDINARY_COMPLETION_RULE_SHORT, O as CAPTURE_V042_NOTICE, Oa as satisfiesSupportedHostRange, Oi as packageRowsFromPnpmLock, On as certifiableOpenItems, Or as explanationHasActionResidue, Ot as CLEANUP_CONDITION_RULE_SHORT, P as applyUpgradeEligibility, Pa as SEMANTIC_ACTIONS, Pi as resolveDesktopProfileHostLock, Pn as isCurrentAcceptedBoundary, Pr as interpretMessage, Pt as carriesCleanupCondition, Q as authorityCaptureCounts, Qi as parseHostTrust, Qn as nativeFileTwoRole, Qr as questionHeadsClause, Qt as normalizeSettlement, R as supersedeItem, Ra as SUPPORTED_EVIDENCE_ADAPTERS, Ri as DESKTOP_IDENTITY_FACTS, Rn as confirmRebind, Rr as isInformationalFragment, Rt as recoveryDigest, S as sourcedNamedTestRoot, Sa as MIN_SUPPORTED_HOST_VERSION, Si as hostLockContextFromComposedDump, Sn as observeAssistantOutcome, Sr as LEGACY_QUALIFICATION, St as sessionQuery, T as SessionApiError, Ta as compareHostVersions, Ti as inspectDesktopTargetGraph, Tn as v6TestPredicate, Tr as clauseAsksOwnQuestion, Tt as validateProofManifestV2, U as isDeterministicCheck, Ua as requestedTargetAuthorizesMutation, Ui as readAsarFile, Un as rebindResponse, Ur as kindOfScope, Ut as isV6PendingRootWait, V as extractTextContent, Va as isStatefulAction, Vi as auditDesktopInstalledImplementation, Vn as proposeRebindV042, Vr as isRestatement, Vt as v6CurrentRootBoundaries, W as nativeGitParentOidVerified, Wa as requestedTargetMatchesResolved, Wi as readAsarIndex, Wn as replayRebindResult, Wr as legacyQuestionReadingIsInformational, Wt as sourceItemForCoreRequirement, X as parsePwshCommand, Xa as createHostAuditSession, Xi as acquireHostTrust, Xn as evidenceAvailabilityReason, Xr as presentExplanationHead, Xt as normalizeReleaseContract, Y as isRunExecutable, Ya as RC020_RC2_HOST_PACKAGES, Yi as HostTrustError, Yn as deriveItemDiagnosis, Yr as opensWithDirective, Yt as inFlightReservation, Z as parseShellCommand, Zi as hostTrustDigest, Zn as itemDiagnosis, Zr as qualificationOfClause, Zt as normalizeReservation, _ as previewFirstStepInjection, _a as evaluateToolSurfaceCapability, _i as auditedForegroundRenderers, _n as decisionBoundaryKey, _r as canonicalRegistryBase, _t as proofHostSurfacesOf, a as commitTreeSnapshotDigest, aa as BASE_HOST_PACKAGES, ai as COMMAND_SURFACE_MANIFEST, an as evidenceCoverage, ar as partialFailureOf, at as PROOF_MANIFEST_DOMAIN_V2, b as HOST_WORKDIR_PREFIX, ba as HOST_VALIDATED_VERSIONS, bi as evaluateActiveHostLock, bn as latestAssistantText, br as classifyUserInteraction, bt as requiredSubjectsOf, c as gitCommandMatchesTarget, ca as GOAL_HOST_PACKAGES, ci as digestStrings, cn as CONTROL_RECORD_PREFIX, cr as captureClause, ct as bindProofToProjection, d as verifiedLinearCommitReadback, da as bindExecutableIdentity, di as sanitizeUrl, dn as assessmentAction, dr as environmentDefaultRepositoryTarget, dt as createProofManifest, ea as registryArchiveFiles, ei as restatedContentOf, en as releaseContractFor, er as DEPENDENCY_FREE_ONLY_CONDITION, et as bindingIndividuallyAccepted, f as FIRST_STEP_GUIDANCE, fa as bindLiveGoalCapability, fi as sha256, fn as assessmentOutcomePredicate, fr as extractArtifactPaths, ft as createProofManifestV2, g as lifecyclePhase, ga as evaluateHostLock, gi as auditedDefaultWorkdirProvider, gn as decideTurnStopping, gr as segmentClauses, gt as proofEvidenceConstraints, h as firstStepGuidanceV6, ha as evaluateHostCapability, hi as auditedDefaultWorkdirHost, hn as decideTurnBoundary, hr as isInformationalMessage, ht as proofDigestV2, i as commitIndexSnapshotDigest, ia as ACTIVE_HOST_LAUNCHER_VERSION, ii as verbIsNegated, in as bindingSatisfies, ir as capabilityFactOf, it as PROOF_KINDS_V2, j as PROTOCOL_V4_NOTICE, ja as BOUNDED_ARTIFACT_TYPES, ji as prepareTargetHostTrust, jn as BOUNDARY_RECORD_PREFIX, jr as hasQuestionScope, jt as V6_ORDINARY_COMPLETION_RULE, k as DEFAULT_DELEGATION_TOOL_NAMES, ka as ACTION_MANIFEST, ki as prepareActiveHostTrust, kn as certificateClosure, kr as governedClauseRestrictsExecution, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as parseGitCommandManifest, la as HOST_CAPABILITY_PACKAGE_GROUPS, li as normalizeClause, ln as NO_PROGRESS_RECORD_PREFIX, lr as captureItem, lt as bindProofV2ToProjection, m as firstStepGuidance, ma as evaluateGraphDerivedHostLock, mi as activeRendererModule, mn as currentActionBases, mr as extractOperation, mt as proofDigest, n as GIT_COMMAND_MANIFEST_IDS, na as ACTIVE_HOST_COHORT_ID, ni as splitTextFragments, nn as releasePreEffectDecision, nr as admissibleForRemoval, nt as PROOF_CAPABILITY_MATRIX, o as createGitPrestateEnvelope, oa as DEFAULT_HOST_LOCK, oi as validateManifest, on as evidenceMatchesItem, or as removalIsComplete, ot as PROOF_PROTOCOL_VERSION, p as claimedBatchHasRealRootInput, pa as evaluateExternalWaitCapability, pi as HostProfileError, pn as classifyCompletionClaim, pr as extractMethod, pt as proofCapabilityReport, q as withDurability, qa as validateActionManifest, qi as readDesktopTargetGraph, qn as parseConfirmationMessage, qr as namedActions, qt as RELEASE_OPERATION_SURFACES, r as GIT_COMMAND_TEMPLATES, ra as ACTIVE_HOST_COHORT_IDS, ri as statefulActionsOfScope, rn as reservationFor, rr as capabilityConsequence, rt as PROOF_KINDS, s as executeRevalidatedGitEffect, sa as EXPECTED_HOST_PACKAGES, si as canonicalizePath, sn as isVerifyingCapability, sr as removalIsPartiallyKnown, st as PROOF_PROTOCOL_VERSION_V2, t as RC020_RC1_HOST_PACKAGES, ta as registryArchiveModules, ti as semanticActionOfScope, tn as releaseCoverage, tr as actionHasCertificationPath, tt as certifyCheckpoint, u as revalidateGitPrestate, ua as HOST_COHORTS, ui as sanitizeClauseText, un as NO_PROGRESS_TURNS_BEFORE_STOP, ur as classifyClause, ut as canonicalProjection, v as projectSessionCoreV2, va as hostVersionFromPackages, vi as auditedHostImplementation, vn as isRootPauseRequest, vr as npmEscapedPackageName, vt as proofOperationMatches, w as SESSION_EVENT_ENVELOPE_INVALID, wa as SUPPORTED_HOST_VERSIONS, wi as injectActiveProfileHostLock, wn as testOutcomePredicate, wr as clarifiedSpanOf, wt as validateProofManifest, x as captureHostWorkdir, xa as LATEST_TESTED_HOST_VERSION, xi as evaluateConfiguredHostLock, xn as latestRootInstruction, xr as GRANTED_QUALIFICATION, xt as scopeCoverageDigest, y as sessionCoreSnapshot, ya as selectHostCohort, yi as combineHostPolicy, yn as isWholeTaskCompletionClaim, yr as classifyTaskIntent, yt as proofV2Rejection, z as NATIVE_GIT_ROOT_PARENT_OID, za as actionCompatible, zi as DESKTOP_PROFILE_PACKAGE_NAME, zn as proposeRebind, zr as isOpenObligation, zt as recoveryTitle } from "./domain-B1VX5Jwl.js";
+import { $ as segmentAuthorityBlocks, $i as qualifyHostTrust, $n as relevantEvidence, $r as reportingHeadGoverns, $t as readbackSettlesContract, A as PROTOCOL_V3_NOTICE, Aa as ACTION_MANIFEST_VERSION, Ai as prepareDesktopHostTrust, An as unitDescendantIds, Ar as hasOrderedCoordination, At as MIN_RECOVERY_CHAR_BUDGET, B as evidenceFromPersistedToolResult, Ba as boundedArtifactChoiceMatches, Bi as DESKTOP_RUNTIME_PACKAGE_NAME, Bn as proposeRebindOutcome, Br as isQuestionScopeNeedingReview, Bt as renderRecoveryPacket, C as SESSION_API_UNSUPPORTED, Ca as SUPPORTED_HOST_RANGE, Ci as hostLockRowsFromComposedDump, Cn as progressFingerprint, Cr as actionVerbMatches, Ct as sessionQueryV2, D as projectCoreV2, Da as parseHostVersion, Di as packageRowsFromActiveGraph, Dn as hasCurrentCertificate, Dr as clauseIsProtected, Dt as CLEANUP_CONDITION_RULE_COMPACT, E as snapshotSessionEvents, Ea as evaluateMinimumHostVersion, Ei as inspectTargetHostGraph, En as goalCompletionDenial, Er as clauseIsGoverned, Et as CLEANUP_CONDITION_RULE, F as deriveProjection, Fa as STATEFUL_ACTIONS, Fi as resolveInstalledHostLock, Fn as qualifyBoundary, Fr as introducesActionClause, Ft as cleanupConditionFor, G as persistedToolResultStatus, Ga as semanticActionFromCommand, Gi as readDesktopAppRuntime, Gn as CONFIRM_LINE_PATTERN, Gr as maskCodeSpans, Gt as OUTCOME_STRENGTH, H as extractToolSubject, Ha as requestedIdentityKey, Hi as hasDesktopImporterState, Hn as rebindAttemptKey, Hr as itemHoldsExecutionAuthority, Ht as currentV6Feedback, I as legacyRecordsNeedingReview, Ia as STOP_PROTOCOL_VERSION, Ii as revalidateDesktopCoreLock, In as currentContractDigest, Ir as isExecutableItem, It as closingHint, J as canonicalArgvFromCommand, Ja as validateActionTarget, Ji as writeDesktopRuntimeReceipt, Jn as capabilityRemedyPhrase, Jr as opensConditionLead, Jt as contractById, K as shellReadbackOutcome, Ka as semanticActionFromText, Ki as readDesktopDependency, Kn as isFrozenV042RebindResponse, Kr as maskQuotedSpans, Kt as RELEASE_OPERATIONS, L as rootLocatorFlavor, La as STOP_PROTOCOL_VERSION_V2, Li as verifyComposedHostLockDump, Ln as createProjection, Lr as isExplanationScope, Lt as openItems, M as PROTOCOL_V5_NOTICE, Ma as CERTIFICATE_VERSION, Mi as readActiveHostGraph, Mn as availableBoundaryQualifications, Mr as hasWorkPredicate, Mt as V6_ORDINARY_COMPLETION_RULE_COMPACT, N as PROTOCOL_V6_NOTICE, Na as CERTIFICATE_VERSION_V2, Ni as resolveActiveProfileHostLock, Nn as effectuateBoundary, Nr as interpretClause, Nt as V6_ORDINARY_COMPLETION_RULE_SHORT, O as CAPTURE_V042_NOTICE, Oa as satisfiesSupportedHostRange, Oi as packageRowsFromPnpmLock, On as certifiableOpenItems, Or as explanationHasActionResidue, Ot as CLEANUP_CONDITION_RULE_SHORT, P as applyUpgradeEligibility, Pa as SEMANTIC_ACTIONS, Pi as resolveDesktopProfileHostLock, Pn as isCurrentAcceptedBoundary, Pr as interpretMessage, Pt as carriesCleanupCondition, Q as authorityCaptureCounts, Qi as parseHostTrust, Qn as nativeFileTwoRole, Qr as questionHeadsClause, Qt as normalizeSettlement, R as supersedeItem, Ra as SUPPORTED_EVIDENCE_ADAPTERS, Ri as DESKTOP_IDENTITY_FACTS, Rn as confirmRebind, Rr as isInformationalFragment, Rt as recoveryDigest, S as sourcedNamedTestRoot, Sa as MIN_SUPPORTED_HOST_VERSION, Si as hostLockContextFromComposedDump, Sn as observeAssistantOutcome, Sr as LEGACY_QUALIFICATION, St as sessionQuery, T as SessionApiError, Ta as compareHostVersions, Ti as inspectDesktopTargetGraph, Tn as v6TestPredicate, Tr as clauseAsksOwnQuestion, Tt as validateProofManifestV2, U as isDeterministicCheck, Ua as requestedTargetAuthorizesMutation, Ui as readAsarFile, Un as rebindResponse, Ur as kindOfScope, Ut as isV6PendingRootWait, V as extractTextContent, Va as isStatefulAction, Vi as auditDesktopInstalledImplementation, Vn as proposeRebindV042, Vr as isRestatement, Vt as v6CurrentRootBoundaries, W as nativeGitParentOidVerified, Wa as requestedTargetMatchesResolved, Wi as readAsarIndex, Wn as replayRebindResult, Wr as legacyQuestionReadingIsInformational, Wt as sourceItemForCoreRequirement, X as parsePwshCommand, Xa as createHostAuditSession, Xi as acquireHostTrust, Xn as evidenceAvailabilityReason, Xr as presentExplanationHead, Xt as normalizeReleaseContract, Y as isRunExecutable, Ya as RC020_RC2_HOST_PACKAGES, Yi as HostTrustError, Yn as deriveItemDiagnosis, Yr as opensWithDirective, Yt as inFlightReservation, Z as parseShellCommand, Zi as hostTrustDigest, Zn as itemDiagnosis, Zr as qualificationOfClause, Zt as normalizeReservation, _ as previewFirstStepInjection, _a as evaluateToolSurfaceCapability, _i as auditedForegroundRenderers, _n as decisionBoundaryKey, _r as canonicalRegistryBase, _t as proofHostSurfacesOf, a as commitTreeSnapshotDigest, aa as BASE_HOST_PACKAGES, ai as COMMAND_SURFACE_MANIFEST, an as evidenceCoverage, ar as partialFailureOf, at as PROOF_MANIFEST_DOMAIN_V2, b as HOST_WORKDIR_PREFIX, ba as HOST_VALIDATED_VERSIONS, bi as evaluateActiveHostLock, bn as latestAssistantText, br as classifyUserInteraction, bt as requiredSubjectsOf, c as gitCommandMatchesTarget, ca as GOAL_HOST_PACKAGES, ci as digestStrings, cn as CONTROL_RECORD_PREFIX, cr as captureClause, ct as bindProofToProjection, d as verifiedLinearCommitReadback, da as bindExecutableIdentity, di as sanitizeUrl, dn as assessmentAction, dr as environmentDefaultRepositoryTarget, dt as createProofManifest, ea as registryArchiveFiles, ei as restatedContentOf, en as releaseContractFor, er as DEPENDENCY_FREE_ONLY_CONDITION, et as bindingIndividuallyAccepted, f as FIRST_STEP_GUIDANCE, fa as bindLiveGoalCapability, fi as sha256, fn as assessmentOutcomePredicate, fr as extractArtifactPaths, ft as createProofManifestV2, g as lifecyclePhase, ga as evaluateHostLock, gi as auditedDefaultWorkdirProvider, gn as decideTurnStopping, gr as segmentClauses, gt as proofEvidenceConstraints, h as firstStepGuidanceV6, ha as evaluateHostCapability, hi as auditedDefaultWorkdirHost, hn as decideTurnBoundary, hr as isInformationalMessage, ht as proofDigestV2, i as commitIndexSnapshotDigest, ia as ACTIVE_HOST_LAUNCHER_VERSION, ii as verbIsNegated, in as bindingSatisfies, ir as capabilityFactOf, it as PROOF_KINDS_V2, j as PROTOCOL_V4_NOTICE, ja as BOUNDED_ARTIFACT_TYPES, ji as prepareTargetHostTrust, jn as BOUNDARY_RECORD_PREFIX, jr as hasQuestionScope, jt as V6_ORDINARY_COMPLETION_RULE, k as DEFAULT_DELEGATION_TOOL_NAMES, ka as ACTION_MANIFEST, ki as prepareActiveHostTrust, kn as certificateClosure, kr as governedClauseRestrictsExecution, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as parseGitCommandManifest, la as HOST_CAPABILITY_PACKAGE_GROUPS, li as normalizeClause, ln as NO_PROGRESS_RECORD_PREFIX, lr as captureItem, lt as bindProofV2ToProjection, m as firstStepGuidance, ma as evaluateGraphDerivedHostLock, mi as activeRendererModule, mn as currentActionBases, mr as extractOperation, mt as proofDigest, n as GIT_COMMAND_MANIFEST_IDS, na as ACTIVE_HOST_COHORT_ID, ni as splitTextFragments, nn as releasePreEffectDecision, nr as admissibleForRemoval, nt as PROOF_CAPABILITY_MATRIX, o as createGitPrestateEnvelope, oa as DEFAULT_HOST_LOCK, oi as validateManifest, on as evidenceMatchesItem, or as removalIsComplete, ot as PROOF_PROTOCOL_VERSION, p as claimedBatchHasRealRootInput, pa as evaluateExternalWaitCapability, pi as HostProfileError, pn as classifyCompletionClaim, pr as extractMethod, pt as proofCapabilityReport, q as withDurability, qa as validateActionManifest, qi as readDesktopTargetGraph, qn as parseConfirmationMessage, qr as namedActions, qt as RELEASE_OPERATION_SURFACES, r as GIT_COMMAND_TEMPLATES, ra as ACTIVE_HOST_COHORT_IDS, ri as statefulActionsOfScope, rn as reservationFor, rr as capabilityConsequence, rt as PROOF_KINDS, s as executeRevalidatedGitEffect, sa as EXPECTED_HOST_PACKAGES, si as canonicalizePath, sn as isVerifyingCapability, sr as removalIsPartiallyKnown, st as PROOF_PROTOCOL_VERSION_V2, t as RC020_RC1_HOST_PACKAGES, ta as registryArchiveModules, ti as semanticActionOfScope, tn as releaseCoverage, tr as actionHasCertificationPath, tt as certifyCheckpoint, u as revalidateGitPrestate, ua as HOST_COHORTS, ui as sanitizeClauseText, un as NO_PROGRESS_TURNS_BEFORE_STOP, ur as classifyClause, ut as canonicalProjection, v as projectSessionCoreV2, va as hostVersionFromPackages, vi as auditedHostImplementation, vn as isRootPauseRequest, vr as npmEscapedPackageName, vt as proofOperationMatches, w as SESSION_EVENT_ENVELOPE_INVALID, wa as SUPPORTED_HOST_VERSIONS, wi as injectActiveProfileHostLock, wn as testOutcomePredicate, wr as clarifiedSpanOf, wt as validateProofManifest, x as captureHostWorkdir, xa as LATEST_TESTED_HOST_VERSION, xi as evaluateConfiguredHostLock, xn as latestRootInstruction, xr as GRANTED_QUALIFICATION, xt as scopeCoverageDigest, y as sessionCoreSnapshot, ya as selectHostCohort, yi as combineHostPolicy, yn as isWholeTaskCompletionClaim, yr as classifyTaskIntent, yt as proofV2Rejection, z as NATIVE_GIT_ROOT_PARENT_OID, za as actionCompatible, zi as DESKTOP_PROFILE_PACKAGE_NAME, zn as proposeRebind, zr as isOpenObligation, zt as recoveryTitle } from "./domain-CiTDtBaT.js";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from "node:fs";
 import { gunzip } from "node:zlib";
 import { execFile } from "node:child_process";
 import { homedir, hostname, tmpdir } from "node:os";
@@ -4056,11 +4056,17 @@ function createNativeGitObserver(host) {
 				if (!/^[0-9a-f]{40,64}$/.test(postOid)) return missing("native_git_readback_unavailable");
 				if (action === "commit") {
 					if (argv.length !== 4 || argv[2] !== "-m" || !argv[3] || !(/* @__PURE__ */ new RegExp(`\\b${postOid.slice(0, 7)}[0-9a-f]*\\b`)).test(output)) return missing("native_git_effect_output_unbound");
-					const parentTokens = (await git$1("rev-list", "--parents", "-n", "1", "HEAD")).split(/\s+/).filter(Boolean);
-					if (parentTokens[0] !== postOid || parentTokens.length < 1) return missing("native_git_readback_unavailable");
-					const parentOid = parentTokens.length === 1 ? NATIVE_GIT_ROOT_PARENT_OID : parentTokens[1];
-					if (parentOid !== NATIVE_GIT_ROOT_PARENT_OID && !nativeGitParentOidVerified(parentOid)) return missing("native_git_readback_unavailable");
-					const treeOid = await git$1("rev-parse", "HEAD^{tree}");
+					const headerLines = (await git$1("--no-replace-objects", "cat-file", "commit", postOid)).split("\n");
+					const headerEnd = headerLines.indexOf("");
+					const header = (headerEnd >= 0 ? headerLines.slice(0, headerEnd) : headerLines).filter(Boolean);
+					const treeLine = header.find((line) => line.startsWith("tree "));
+					const parentLines = header.filter((line) => line.startsWith("parent "));
+					const objectOid = /^[0-9a-f]{40,64}$/.test(treeLine?.slice(5).trim() ?? "") ? treeLine.slice(5).trim() : void 0;
+					if (!treeLine || objectOid === void 0) return missing("native_git_readback_unavailable");
+					const treeOid = objectOid;
+					const parents = parentLines.map((line) => line.slice(7).trim());
+					if (parents.some((oid$1) => !/^[0-9a-f]{40,64}$/.test(oid$1))) return missing("native_git_readback_unavailable");
+					const parentOid = parents.length === 0 ? NATIVE_GIT_ROOT_PARENT_OID : parents[0];
 					return {
 						status: "observed",
 						reason_code: "git_commit_observed",
@@ -5593,7 +5599,6 @@ const contextDigest = (context, root) => sha256(canonical({
 }));
 const ledgerPath = (root, context) => join(root, `${sessionDigest(context.sessionId)}.jsonl`);
 const anchorPath = (root) => join(root, "session-anchors.v1.jsonl");
-const rootLockPath = (root) => join(root, ".writer.lock");
 const privateLedgerContractDigest = (contract) => {
 	if (!contract || typeof contract !== "object" || Array.isArray(contract)) return sha256(canonical(contract));
 	const { revokedAtSeq: _mutableRevocation,...immutable } = contract;
@@ -5704,22 +5709,33 @@ function readVerifiedLedgerRecords(root, context, session, expectedContext) {
 	return records;
 }
 /**
-* CG-083-BUG01: the writer lock carries an owner identity instead of being an
-* anonymous O_EXCL file. A crashed writer used to leave a lock that blocked
-* every later append and initialize forever; a lock whose owner is PROVABLY
-* dead (same host, recorded pid no longer exists) is reclaimed atomically,
-* re-checking the lock's inode and content right before the unlink so a
-* concurrent recovery or a fresh acquirer can never be evicted. An unknown
-* owner — a legacy empty lock from an older version, a foreign host, a live
-* pid, or an unparsable record — keeps the fail-closed refusal, with the
-* observed state available through {@link writerLockState} for a controlled
-* manual recovery.
+* CG-083-BUG01/R2: the writer lock carries an owner identity instead of being
+* an anonymous O_EXCL file. A crashed writer used to leave a lock that
+* blocked every later append and initialize forever. A lock whose owner is
+* PROVABLY dead (same host, recorded pid answers ESRCH) is recovered by
+* ATOMICALLY RENAMING the dead owner's file out of the lock pathname — never
+* by unlinking the pathname, which could delete a live writer's fresh lock.
+* While the dead file still occupies the pathname no one can create a new
+* lock (O_EXCL fails), so the file moved by the rename is exactly the one
+* that was verified; after the rename the pathname is free and acquirers
+* race fairly through O_EXCL. Recovery of the writer lock is serialized by a
+* recovery lock with the same owner protocol, so two recoverers can never
+* both act; the recovery lock's own dead-owner file is renamed out the same
+* way, so a crash inside a recovery cannot wedge the ledger permanently. An
+* unknown owner — a legacy empty lock from an older version, a foreign host,
+* a live pid, or an unparsable record — keeps the fail-closed refusal with
+* the observed state available through {@link writerLockState}; the supported
+* manual recovery for such a lock is removing the named lock file, which
+* carries no ledger data.
 */
 const WRITER_LOCK_VERSION = 2;
-function readWriterLockRecord(root) {
+const WRITER_LOCK_NAME = ".writer.lock";
+const RECOVERY_LOCK_NAME = ".writer.lock.recovery";
+const STALE_LOCK_SUFFIX = ".stale";
+function readLockRecord(path) {
 	let raw;
 	try {
-		raw = readFileSync(rootLockPath(root), "utf8");
+		raw = readFileSync(path, "utf8");
 	} catch {
 		return;
 	}
@@ -5730,92 +5746,117 @@ function readWriterLockRecord(root) {
 	} catch {}
 	return "legacy";
 }
-function writerProcessAlive(pid) {
+/** Only ESRCH proves the recorded owner is gone; any other answer refuses. */
+function processExists(pid) {
 	try {
 		process.kill(pid, 0);
 		return true;
 	} catch (error) {
-		return error.code === "EPERM";
+		return error.code !== "ESRCH";
 	}
+}
+function provablyDeadOwner(path) {
+	const record$2 = readLockRecord(path);
+	return record$2 !== void 0 && record$2 !== "legacy" && record$2.hostname === hostname() && !processExists(record$2.pid);
 }
 /**
-* Try to reclaim a lock whose owner is provably dead. The recorded identity
-* must match the file that is on disk right now (inode AND bytes), so a lock
-* replaced between the read and the reclaim is never evicted; a live or
-* unknown owner is never reclaimed.
+* One named owner-identified lock file. `serialized` marks that stale
+* recovery must run under the recovery lock (the writer lock); the recovery
+* lock itself recovers its own dead owner directly, because only recovery
+* participants ever contend for it and their critical section is bounded.
 */
-function reclaimAbandonedWriterLock(root) {
-	const path = rootLockPath(root);
-	let stat;
-	let raw;
-	try {
-		stat = lstatSync(path);
-		if (!stat.isFile() || stat.isSymbolicLink()) return false;
-		raw = readFileSync(path, "utf8");
-	} catch {
-		return false;
+var OwnerFileLock = class OwnerFileLock {
+	constructor(root, name$1, serialized) {
+		this.root = root;
+		this.name = name$1;
+		this.serialized = serialized;
 	}
-	const record$2 = readWriterLockRecord(root);
-	if (record$2 === void 0 || record$2 === "legacy") return false;
-	if (record$2.hostname !== hostname() || writerProcessAlive(record$2.pid)) return false;
-	try {
-		const fd = openSync(path, constants.O_RDONLY);
+	get path() {
+		return join(this.root, this.name);
+	}
+	get stalePath() {
+		return join(this.root, `${this.name}${STALE_LOCK_SUFFIX}`);
+	}
+	acquire() {
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			let fd;
+			try {
+				fd = openRegular(this.path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+			} catch (error) {
+				if (error.code !== "EEXIST") throw error;
+				if (!this.recoverStale()) return void 0;
+				continue;
+			}
+			try {
+				const nonce = randomBytes(16).toString("hex");
+				const record$2 = {
+					version: WRITER_LOCK_VERSION,
+					nonce,
+					pid: process.pid,
+					hostname: hostname(),
+					created_at_epoch_ms: Date.now()
+				};
+				writeAll(fd, `${canonical(record$2)}\n`);
+				fsyncSync(fd);
+				return {
+					fd,
+					nonce
+				};
+			} catch (error) {
+				try {
+					closeSync(fd);
+				} catch {}
+				try {
+					unlinkSync(this.path);
+				} catch {}
+				throw error;
+			}
+		}
+	}
+	/** Move a provably dead owner's file out of the pathname atomically. */
+	recoverStale() {
+		if (!provablyDeadOwner(this.path)) return false;
+		if (!this.serialized) return this.renameStaleOut();
+		const recovery = new OwnerFileLock(this.root, RECOVERY_LOCK_NAME, false);
+		const held = recovery.acquire();
+		if (!held) return false;
+		try {
+			return this.renameStaleOut();
+		} finally {
+			recovery.release(held);
+		}
+	}
+	renameStaleOut() {
+		if (!provablyDeadOwner(this.path)) return false;
+		try {
+			renameSync(this.path, this.stalePath);
+			return true;
+		} catch (error) {
+			return error.code === "ENOENT";
+		}
+	}
+	/** Conditional release: only the file that still carries OUR nonce. */
+	release(held) {
+		try {
+			closeSync(held.fd);
+		} catch {}
 		let current;
 		try {
-			const currentStat = fstatSync(fd);
-			if (currentStat.ino !== stat.ino || currentStat.size !== stat.size) return false;
-			current = readFileSync(fd, "utf8");
-		} finally {
-			closeSync(fd);
+			current = readLockRecord(this.path);
+		} catch {
+			return;
 		}
-		if (String(current) !== raw) return false;
-		unlinkSync(path);
-		return true;
-	} catch {
-		return false;
+		if (current !== "legacy" && current !== void 0 && current.nonce === held.nonce) try {
+			unlinkSync(this.path);
+		} catch {}
 	}
-}
-/** Acquire the writer lock, recovering a provably dead owner once (BUG-01). */
+};
 function acquireWriterLock(root) {
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		let fd;
-		try {
-			fd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-		} catch (error) {
-			if (error.code !== "EEXIST") throw error;
-			if (!reclaimAbandonedWriterLock(root)) return void 0;
-			continue;
-		}
-		try {
-			const record$2 = {
-				version: WRITER_LOCK_VERSION,
-				nonce: randomBytes(16).toString("hex"),
-				pid: process.pid,
-				hostname: hostname(),
-				created_at_epoch_ms: Date.now()
-			};
-			writeAll(fd, `${canonical(record$2)}\n`);
-			fsyncSync(fd);
-		} catch (error) {
-			try {
-				closeSync(fd);
-			} catch {}
-			try {
-				unlinkSync(rootLockPath(root));
-			} catch {}
-			throw error;
-		}
-		return fd;
-	}
+	return new OwnerFileLock(root, WRITER_LOCK_NAME, true).acquire();
 }
-function releaseWriterLock(root, lockFd) {
-	if (lockFd === void 0) return;
-	try {
-		closeSync(lockFd);
-	} catch {}
-	try {
-		unlinkSync(rootLockPath(root));
-	} catch {}
+function releaseWriterLock(root, held) {
+	if (held === void 0) return;
+	new OwnerFileLock(root, WRITER_LOCK_NAME, true).release(held);
 }
 function readPrivateLedger(root, input) {
 	if (!root) return {
@@ -6432,35 +6473,35 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 	const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts;
 	let refreshEpoch = 0;
 	let lastFullSync;
-	const goalStateKey = () => {
-		if (!readGoalState) return "none";
+	const sameSnapshotIdentity = (candidate, consumed) => {
+		if (candidate.length !== consumed.length) return false;
+		for (let index = 0; index < candidate.length; index += 1) if (candidate[index] !== consumed[index]) return false;
+		return true;
+	};
+	const readGoalOnce = () => {
+		if (!readGoalState) return {
+			state: void 0,
+			failed: false
+		};
 		try {
-			const state = normalizeGoalState(readGoalState());
-			return state ? `${state.id}\0${state.revision}\0${state.phase}\0${state.activation}` : "none";
+			return {
+				state: normalizeGoalState(readGoalState()),
+				failed: false
+			};
 		} catch {
-			return "error";
+			return {
+				state: void 0,
+				failed: true
+			};
 		}
 	};
+	const goalKeyOf = (goal) => goal.failed ? "error" : goal.state ? `${goal.state.id}\0${goal.state.revision}\0${goal.state.phase}\0${goal.state.activation}` : "none";
 	const ledgerSnapshotKey = (snapshot$1) => `${snapshot$1.records.length}\0${snapshot$1.records.at(-1)?.record_sha256 ?? ""}\0${snapshot$1.damaged ? "d" : "-"}\0${snapshot$1.anchored ? "a" : "-"}`;
-	const currentSessionSeq = () => {
-		const value = session.seq;
-		return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : void 0;
-	};
-	const rebuild = () => {
+	const rebuild = (events, goal, ledger) => {
 		const previousReleaseContracts = projection.releaseContracts.length;
 		const header = session.header;
 		const priorRecoveryDigest = projection.lastRecoveryDigest;
 		const sessionHeader = sessionHeaderForDigest(session);
-		let events;
-		try {
-			events = snapshotSessionEvents(session);
-		} catch (error) {
-			const code = error instanceof SessionApiError ? error.code : "session_snapshot_failed";
-			projection.integrity = "unknown";
-			if (!projection.integrityViolations.includes(code)) projection.integrityViolations.push(code);
-			return;
-		}
-		let usedLedgerKey = "";
 		const derived = deriveProjection(events, {
 			activation: config.activation,
 			policy: config.policy
@@ -6469,8 +6510,8 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			sessionHeader
 		}, durabilityConfirmed, hostLock);
 		Object.assign(projection, derived.projection);
-		if (readPrivateRecords) {
-			let privateSnapshot = readPrivateRecords();
+		if (readPrivateRecords && ledger) {
+			let privateSnapshot = ledger;
 			if (!synchronizedOnce && events.length === 0 && !privateSnapshot.damaged && !privateSnapshot.anchored && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords();
 			if (projection.releaseContracts.length > 0 && !privateSnapshot.damaged && !privateSnapshot.anchored) if (synchronizedOnce && previousReleaseContracts === 0 && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords();
 			else privateSnapshot = {
@@ -6478,31 +6519,28 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 				damaged: true,
 				anchored: false
 			};
-			usedLedgerKey = ledgerSnapshotKey(privateSnapshot);
 			applyPrivateLedger(projection, privateSnapshot);
+			ledger = privateSnapshot;
 		}
 		synchronizedOnce = true;
 		lastFullSync = {
-			sessionSeq: currentSessionSeq(),
+			events,
 			headerRef: session.header,
 			durability: durabilityConfirmed,
-			goalKey: goalStateKey(),
-			ledgerKey: usedLedgerKey,
+			goalKey: goalKeyOf(goal),
+			ledgerKey: ledger ? ledgerSnapshotKey(ledger) : "",
 			refreshEpoch
 		};
 		if (!sessionHeader) {
 			projection.integrity = "unknown";
 			if (!projection.integrityViolations.includes("session_ref_unavailable")) projection.integrityViolations.push("session_ref_unavailable");
 		}
-		if (readGoalState) try {
-			const state = normalizeGoalState(readGoalState());
-			if (state && projection.currentGoalRef?.id === state.id && projection.currentGoalRef.revision === state.revision) {
-				projection.currentGoalPhase = state.phase;
-				projection.currentGoalActivation = state.activation;
-			}
-		} catch {
+		if (goal.failed) {
 			projection.integrity = "unknown";
 			projection.integrityViolations.push("goal_readback_unavailable");
+		} else if (goal.state && projection.currentGoalRef?.id === goal.state.id && projection.currentGoalRef.revision === goal.state.revision) {
+			projection.currentGoalPhase = goal.state.phase;
+			projection.currentGoalActivation = goal.state.activation;
 		}
 		projection.continuationAttempts = continuationAttempts;
 		projection.persistenceCorrectionAttempts = persistenceCorrectionAttempts;
@@ -6561,9 +6599,20 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 			}
 			refreshEpoch += 1;
 		}
-		const sessionSeq = currentSessionSeq();
-		if (lastFullSync && sessionSeq !== void 0 && lastFullSync.refreshEpoch === refreshEpoch && lastFullSync.sessionSeq === sessionSeq && Object.is(lastFullSync.headerRef, session.header) && lastFullSync.durability === durabilityConfirmed && lastFullSync.goalKey === goalStateKey() && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(readPrivateRecords()))) return;
-		rebuild();
+		let events;
+		try {
+			events = snapshotSessionEvents(session);
+		} catch (error) {
+			const code = error instanceof SessionApiError ? error.code : "session_snapshot_failed";
+			projection.integrity = "unknown";
+			if (!projection.integrityViolations.includes(code)) projection.integrityViolations.push(code);
+			lastFullSync = void 0;
+			return;
+		}
+		const goal = readGoalOnce();
+		const ledger = readPrivateRecords ? readPrivateRecords() : void 0;
+		if (lastFullSync && lastFullSync.refreshEpoch === refreshEpoch && sameSnapshotIdentity(events, lastFullSync.events) && Object.is(lastFullSync.headerRef, session.header) && lastFullSync.durability === durabilityConfirmed && lastFullSync.goalKey === goalKeyOf(goal) && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(ledger))) return;
+		rebuild(events, goal, ledger);
 	};
 	const runHostLockEntry = async (operation) => {
 		if (!refreshHostLock) return await operation();
@@ -6590,7 +6639,7 @@ function createRuntime(agent, config, hostLock = DEFAULT_HOST_LOCK, readGoalStat
 		pendingRecoveryCauses = /* @__PURE__ */ new Set();
 		return was;
 	};
-	rebuild();
+	sync();
 	return {
 		projection,
 		session,

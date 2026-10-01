@@ -7,7 +7,7 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { snapshotSessionEvents } from '../domain/session-events.js'
 import { canonicalArgvFromCommand } from '../domain/shell-parse.js'
-import { extractTextContent, persistedToolResultStatus, shellReadbackOutcome, nativeGitParentOidVerified, NATIVE_GIT_ROOT_PARENT_OID } from '../domain/evidence.js'
+import { extractTextContent, persistedToolResultStatus, shellReadbackOutcome, NATIVE_GIT_ROOT_PARENT_OID } from '../domain/evidence.js'
 import type { GuardProjection } from '../domain/types.js'
 
 const execFileAsync = promisify(execFile)
@@ -198,17 +198,24 @@ export function createNativeGitObserver(host: { flush?: (session: unknown) => Pr
         if (!/^[0-9a-f]{40,64}$/.test(postOid)) return missing('native_git_readback_unavailable')
         if (action === 'commit') {
           if (argv.length !== 4 || argv[2] !== '-m' || !argv[3] || !new RegExp(`\\b${postOid.slice(0, 7)}[0-9a-f]*\\b`).test(output)) return missing('native_git_effect_output_unbound')
-          // CG-083-BUG02: read the parent identity from the commit OBJECT
-          // itself. A repository's first commit has no parent — that is an
-          // explicit VERIFIED `root` state, never a missing readback. An
-          // existing commit's missing parent cannot be manufactured by git,
-          // so the token list is authoritative either way.
-          const parentsLine = await git('rev-list', '--parents', '-n', '1', 'HEAD')
-          const parentTokens = parentsLine.split(/\s+/).filter(Boolean)
-          if (parentTokens[0] !== postOid || parentTokens.length < 1) return missing('native_git_readback_unavailable')
-          const parentOid = parentTokens.length === 1 ? NATIVE_GIT_ROOT_PARENT_OID : parentTokens[1]!
-          if (parentOid !== NATIVE_GIT_ROOT_PARENT_OID && !nativeGitParentOidVerified(parentOid)) return missing('native_git_readback_unavailable')
-          const treeOid = await git('rev-parse', 'HEAD^{tree}')
+          // CG-083-BUG02/R3: resolve the parent and tree identity from the
+          // RAW commit object at the already-bound postOid. A traversal view
+          // (rev-list, HEAD^{tree}) applies shallow boundaries, grafts and
+          // replace refs and can hide the original parents; the object's own
+          // header cannot. Only a true parentless object mints the verified
+          // `root` sentinel; an unreadable or inconsistent object refuses.
+          const rawCommit = await git('--no-replace-objects', 'cat-file', 'commit', postOid)
+          const headerLines = rawCommit.split('\n')
+          const headerEnd = headerLines.indexOf('')
+          const header = (headerEnd >= 0 ? headerLines.slice(0, headerEnd) : headerLines).filter(Boolean)
+          const treeLine = header.find((line) => line.startsWith('tree '))
+          const parentLines = header.filter((line) => line.startsWith('parent '))
+          const objectOid = /^[0-9a-f]{40,64}$/.test(treeLine?.slice(5).trim() ?? '') ? treeLine!.slice(5).trim() : undefined
+          if (!treeLine || objectOid === undefined) return missing('native_git_readback_unavailable')
+          const treeOid = objectOid
+          const parents = parentLines.map((line) => line.slice(7).trim())
+          if (parents.some((oid) => !/^[0-9a-f]{40,64}$/.test(oid))) return missing('native_git_readback_unavailable')
+          const parentOid = parents.length === 0 ? NATIVE_GIT_ROOT_PARENT_OID : parents[0]!
           return { status: 'observed' as const, reason_code: 'git_commit_observed', effect_call_id: args.effect_call_id,
             action: gitAction, repository: observedRepository, branch, remote: '', refspec: '', post_oid: postOid, parent_oid: parentOid, tree_oid: treeOid }
         }

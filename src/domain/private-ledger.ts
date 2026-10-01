@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -29,7 +29,6 @@ const sessionDigest = (sessionId: string): string => sha256(`dsh-completion-guar
 const contextDigest = (context: PrivateLedgerContext, root: string): string => sha256(canonical({ session_sha256: sessionDigest(context.sessionId), session_header: context.sessionHeader, cwd_sha256: sha256(context.cwd), host_lock_sha256: context.hostLockDigest, ledger_root_sha256: sha256(realpathSync(root)) }))
 const ledgerPath = (root: string, context: PrivateLedgerContext): string => join(root, `${sessionDigest(context.sessionId)}.jsonl`)
 const anchorPath = (root: string): string => join(root, 'session-anchors.v1.jsonl')
-const rootLockPath = (root: string): string => join(root, '.writer.lock')
 
 export const privateLedgerContractDigest = (contract: unknown): string => {
   if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return sha256(canonical(contract))
@@ -112,34 +111,50 @@ function readVerifiedLedgerRecords(root: string, context: PrivateLedgerContext, 
 }
 
 /**
- * CG-083-BUG01: the writer lock carries an owner identity instead of being an
- * anonymous O_EXCL file. A crashed writer used to leave a lock that blocked
- * every later append and initialize forever; a lock whose owner is PROVABLY
- * dead (same host, recorded pid no longer exists) is reclaimed atomically,
- * re-checking the lock's inode and content right before the unlink so a
- * concurrent recovery or a fresh acquirer can never be evicted. An unknown
- * owner — a legacy empty lock from an older version, a foreign host, a live
- * pid, or an unparsable record — keeps the fail-closed refusal, with the
- * observed state available through {@link writerLockState} for a controlled
- * manual recovery.
+ * CG-083-BUG01/R2: the writer lock carries an owner identity instead of being
+ * an anonymous O_EXCL file. A crashed writer used to leave a lock that
+ * blocked every later append and initialize forever. A lock whose owner is
+ * PROVABLY dead (same host, recorded pid answers ESRCH) is recovered by
+ * ATOMICALLY RENAMING the dead owner's file out of the lock pathname — never
+ * by unlinking the pathname, which could delete a live writer's fresh lock.
+ * While the dead file still occupies the pathname no one can create a new
+ * lock (O_EXCL fails), so the file moved by the rename is exactly the one
+ * that was verified; after the rename the pathname is free and acquirers
+ * race fairly through O_EXCL. Recovery of the writer lock is serialized by a
+ * recovery lock with the same owner protocol, so two recoverers can never
+ * both act; the recovery lock's own dead-owner file is renamed out the same
+ * way, so a crash inside a recovery cannot wedge the ledger permanently. An
+ * unknown owner — a legacy empty lock from an older version, a foreign host,
+ * a live pid, or an unparsable record — keeps the fail-closed refusal with
+ * the observed state available through {@link writerLockState}; the supported
+ * manual recovery for such a lock is removing the named lock file, which
+ * carries no ledger data.
  */
 const WRITER_LOCK_VERSION = 2
+const WRITER_LOCK_NAME = '.writer.lock'
+const RECOVERY_LOCK_NAME = '.writer.lock.recovery'
+const STALE_LOCK_SUFFIX = '.stale'
 interface WriterLockRecord { version: 2; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+interface HeldLock { fd: number; nonce: string }
 
 export type WriterLockState = 'absent' | 'held' | 'abandoned_recoverable' | 'unknown_owner'
 
 /** Read-only diagnostics for a lock that blocks acquisition (CG-083-BUG01). */
 export function writerLockState(root: string): WriterLockState {
-  const record = readWriterLockRecord(root)
+  return lockStateFor(join(root, WRITER_LOCK_NAME))
+}
+
+function lockStateFor(path: string): WriterLockState {
+  const record = readLockRecord(path)
   if (record === undefined) return 'absent'
   if (record === 'legacy') return 'unknown_owner'
   if (record.hostname !== hostname()) return 'unknown_owner'
-  return writerProcessAlive(record.pid) ? 'held' : 'abandoned_recoverable'
+  return processExists(record.pid) ? 'held' : 'abandoned_recoverable'
 }
 
-function readWriterLockRecord(root: string): WriterLockRecord | 'legacy' | undefined {
+function readLockRecord(path: string): WriterLockRecord | 'legacy' | undefined {
   let raw: string
-  try { raw = readFileSync(rootLockPath(root), 'utf8') } catch { return undefined }
+  try { raw = readFileSync(path, 'utf8') } catch { return undefined }
   if (!raw.trim()) return 'legacy'
   try {
     const value = JSON.parse(raw) as Partial<WriterLockRecord>
@@ -150,77 +165,104 @@ function readWriterLockRecord(root: string): WriterLockRecord | 'legacy' | undef
   return 'legacy'
 }
 
-function writerProcessAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM' }
+/** Only ESRCH proves the recorded owner is gone; any other answer refuses. */
+function processExists(pid: number): boolean {
+  try { process.kill(pid, 0); return true } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH'
+  }
+}
+
+function provablyDeadOwner(path: string): boolean {
+  const record = readLockRecord(path)
+  return record !== undefined && record !== 'legacy'
+    && record.hostname === hostname() && !processExists(record.pid)
 }
 
 /**
- * Try to reclaim a lock whose owner is provably dead. The recorded identity
- * must match the file that is on disk right now (inode AND bytes), so a lock
- * replaced between the read and the reclaim is never evicted; a live or
- * unknown owner is never reclaimed.
+ * One named owner-identified lock file. `serialized` marks that stale
+ * recovery must run under the recovery lock (the writer lock); the recovery
+ * lock itself recovers its own dead owner directly, because only recovery
+ * participants ever contend for it and their critical section is bounded.
  */
-function reclaimAbandonedWriterLock(root: string): boolean {
-  const path = rootLockPath(root)
-  let stat: ReturnType<typeof lstatSync>
-  let raw: string
-  try {
-    stat = lstatSync(path)
-    if (!stat.isFile() || stat.isSymbolicLink()) return false
-    raw = readFileSync(path, 'utf8')
-  } catch { return false }
-  const record = readWriterLockRecord(root)
-  if (record === undefined || record === 'legacy') return false
-  if (record.hostname !== hostname() || writerProcessAlive(record.pid)) return false
-  try {
-    const fd = openSync(path, constants.O_RDONLY)
-    let current: string
-    try {
-      const currentStat = fstatSync(fd)
-      if (currentStat.ino !== stat.ino || currentStat.size !== stat.size) return false
-      current = readFileSync(fd, 'utf8')
-    } finally { closeSync(fd) }
-    if (String(current) !== raw) return false
-    unlinkSync(path)
-    return true
-  } catch { return false }
-}
+class OwnerFileLock {
+  constructor(private readonly root: string, private readonly name: string, private readonly serialized: boolean) {}
 
-/** Acquire the writer lock, recovering a provably dead owner once (BUG-01). */
-function acquireWriterLock(root: string): number | undefined {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    let fd: number
-    try {
-      fd = openRegular(rootLockPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-      if (!reclaimAbandonedWriterLock(root)) return undefined
-      continue
-    }
-    try {
-      const record: WriterLockRecord = {
-        version: WRITER_LOCK_VERSION,
-        nonce: randomBytes(16).toString('hex'),
-        pid: process.pid,
-        hostname: hostname(),
-        created_at_epoch_ms: Date.now(),
+  private get path(): string { return join(this.root, this.name) }
+  private get stalePath(): string { return join(this.root, `${this.name}${STALE_LOCK_SUFFIX}`) }
+
+  acquire(): HeldLock | undefined {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let fd: number
+      try {
+        fd = openRegular(this.path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        if (!this.recoverStale()) return undefined
+        continue
       }
-      writeAll(fd, `${canonical(record)}\n`)
-      fsyncSync(fd)
-    } catch (error) {
-      try { closeSync(fd) } catch { /* already closed */ }
-      try { unlinkSync(rootLockPath(root)) } catch { /* best effort */ }
-      throw error
+      try {
+        const nonce = randomBytes(16).toString('hex')
+        const record: WriterLockRecord = {
+          version: WRITER_LOCK_VERSION,
+          nonce,
+          pid: process.pid,
+          hostname: hostname(),
+          created_at_epoch_ms: Date.now(),
+        }
+        writeAll(fd, `${canonical(record)}\n`)
+        fsyncSync(fd)
+        return { fd, nonce }
+      } catch (error) {
+        // The lock could not be recorded: leave nothing at the pathname.
+        try { closeSync(fd) } catch { /* already closed */ }
+        try { unlinkSync(this.path) } catch { /* best effort */ }
+        throw error
+      }
     }
-    return fd
+    return undefined
   }
-  return undefined
+
+  /** Move a provably dead owner's file out of the pathname atomically. */
+  private recoverStale(): boolean {
+    if (!provablyDeadOwner(this.path)) return false
+    if (!this.serialized) return this.renameStaleOut()
+    const recovery = new OwnerFileLock(this.root, RECOVERY_LOCK_NAME, false)
+    const held = recovery.acquire()
+    if (!held) return false
+    // Release the RECOVERY lock itself (the writer-lock pathname currently
+    // holds nothing: the dead owner's file has been renamed away).
+    try { return this.renameStaleOut() } finally { recovery.release(held) }
+  }
+
+  private renameStaleOut(): boolean {
+    // Re-verify under serialization, then RENAME. rename(2) is atomic and
+    // moves the exact verified file; the pathname becomes free for the fair
+    // O_EXCL race and no later acquisition can be evicted by us.
+    if (!provablyDeadOwner(this.path)) return false
+    try { renameSync(this.path, this.stalePath); return true } catch (error) {
+      // ENOENT: another serialized recoverer already moved it.
+      return (error as NodeJS.ErrnoException).code === 'ENOENT'
+    }
+  }
+
+  /** Conditional release: only the file that still carries OUR nonce. */
+  release(held: HeldLock): void {
+    try { closeSync(held.fd) } catch { /* already closed */ }
+    let current: WriterLockRecord | 'legacy' | undefined
+    try { current = readLockRecord(this.path) } catch { return }
+    if (current !== 'legacy' && current !== undefined && current.nonce === held.nonce) {
+      try { unlinkSync(this.path) } catch { /* best effort */ }
+    }
+  }
 }
 
-function releaseWriterLock(root: string, lockFd: number | undefined): void {
-  if (lockFd === undefined) return
-  try { closeSync(lockFd) } catch { /* already closed */ }
-  try { unlinkSync(rootLockPath(root)) } catch { /* best effort */ }
+function acquireWriterLock(root: string): HeldLock | undefined {
+  return new OwnerFileLock(root, WRITER_LOCK_NAME, true).acquire()
+}
+
+function releaseWriterLock(root: string, held: HeldLock | undefined): void {
+  if (held === undefined) return
+  new OwnerFileLock(root, WRITER_LOCK_NAME, true).release(held)
 }
 
 export function readPrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): PrivateLedgerSnapshot {
@@ -247,7 +289,7 @@ export function readPrivateLedger(root: string | undefined, input: PrivateLedger
 /** Establish the provider-invisible anchor when a live runtime observes a new adoption. */
 export function initializePrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): boolean {
   if (!root) return false
-  let lockFd: number | undefined
+  let lockFd: HeldLock | undefined
   try {
     const context = normalizeContext(input); ensureRoot(root)
     lockFd = acquireWriterLock(root)
@@ -268,7 +310,7 @@ export function initializePrivateLedger(root: string | undefined, input: Private
 
 export function appendPrivateLedger(root: string | undefined, input: PrivateLedgerContext | string, kind: PrivateLedgerKind, payload: Record<string, unknown>): boolean {
   if (!root) return false
-  let lockFd: number | undefined
+  let lockFd: HeldLock | undefined
   try {
     const context = normalizeContext(input)
     ensureRoot(root)

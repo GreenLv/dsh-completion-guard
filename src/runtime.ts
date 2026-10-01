@@ -613,16 +613,22 @@ export function createRuntime(
   const persistenceCorrectionAttempts = projection.persistenceCorrectionAttempts
 
   /**
-   * CG-083-PERF01: cheap per-input revisions for the unchanged fast path.
-   * Each input is checked against the values the last FULL rebuild consumed;
-   * any change (or an input that cannot be read cheaply) forces the full
-   * rebuild. A security-sensitive entry's `revalidateHostLock` always
-   * rebuilds, so fresh-validation semantics are untouched, and the private
-   * ledger and the Goal readback are re-read on every sync — their current
-   * values ARE the cache key, never a stale assumption.
+   * CG-083-PERF01/R1: the unchanged fast path is keyed on the CURRENT,
+   * validated snapshot identity — not on sequence counters. Every sync takes
+   * the snapshot through the same envelope-validating adapter the rebuild
+   * uses; reuse requires the snapshot to be ELEMENT-WISE the same immutable
+   * object list the last full rebuild consumed, so an equal-length snapshot
+   * replacement, a deletion/reorder/gap, or a snapshot API failure can never
+   * be mistaken for "unchanged". The Goal readback and the private ledger are
+   * read ONCE per sync and the SAME versions feed both the cache key and the
+   * rebuild overlay, so key and state can never bind different readbacks. A
+   * snapshot/flush/Goal/ledger failure invalidates the cached state; the
+   * next successful sync re-derives. A security-sensitive entry's
+   * `revalidateHostLock` always rebuilds, so fresh-validation semantics are
+   * untouched.
    */
   interface SyncInputs {
-    sessionSeq: number | undefined
+    events: readonly unknown[]
     headerRef: unknown
     durability: boolean
     goalKey: string
@@ -631,25 +637,27 @@ export function createRuntime(
   }
   let refreshEpoch = 0
   let lastFullSync: SyncInputs | undefined
-  const goalStateKey = (): string => {
-    if (!readGoalState) return 'none'
-    try {
-      const state = normalizeGoalState(readGoalState())
-      return state ? `${state.id}\0${state.revision}\0${state.phase}\0${state.activation}` : 'none'
-    } catch { return 'error' }
+  const sameSnapshotIdentity = (candidate: readonly unknown[], consumed: readonly unknown[]): boolean => {
+    if (candidate.length !== consumed.length) return false
+    for (let index = 0; index < candidate.length; index += 1) {
+      if (candidate[index] !== consumed[index]) return false
+    }
+    return true
   }
+  interface GoalRead { state: GoalActivationState | undefined; failed: boolean }
+  const readGoalOnce = (): GoalRead => {
+    if (!readGoalState) return { state: undefined, failed: false }
+    try { return { state: normalizeGoalState(readGoalState()), failed: false } }
+    catch { return { state: undefined, failed: true } }
+  }
+  const goalKeyOf = (goal: GoalRead): string =>
+    goal.failed ? 'error'
+      : goal.state ? `${goal.state.id}\0${goal.state.revision}\0${goal.state.phase}\0${goal.state.activation}`
+        : 'none'
   const ledgerSnapshotKey = (snapshot: PrivateLedgerSnapshot): string =>
     `${snapshot.records.length}\0${snapshot.records.at(-1)?.record_sha256 ?? ''}\0${snapshot.damaged ? 'd' : '-'}\0${snapshot.anchored ? 'a' : '-'}`
-  const currentSessionSeq = (): number | undefined => {
-    // The DSH Session's own append counter is the cheapest reliable event
-    // revision: it advances with every durable append, and a resume/compact
-    // replaces the header. A session that does not expose it as a safe
-    // integer has no cheap revision and always gets the full rebuild.
-    const value = (session as unknown as { seq?: unknown }).seq
-    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
-  }
 
-  const rebuild = () => {
+  const rebuild = (events: readonly unknown[], goal: GoalRead, ledger: PrivateLedgerSnapshot | undefined) => {
     const previousReleaseContracts = projection.releaseContracts.length
     // Host authority is an explicit input, never an implicit rescan: rebuild
     // consumes the host-lock result this runtime was given (or that a caller's
@@ -661,20 +669,6 @@ export function createRuntime(
     // projection's undefined.
     const priorRecoveryDigest = projection.lastRecoveryDigest
     const sessionHeader = sessionHeaderForDigest(session)
-    let events: readonly unknown[]
-    try {
-      events = snapshotSessionEvents(session)
-    } catch (error) {
-      // A session that does not expose the V3 snapshot API is an unsupported
-      // host, not an empty log: fail closed and keep the previous derivation
-      // instead of projecting a session whose events were never read.
-      const code = error instanceof SessionApiError ? error.code : 'session_snapshot_failed'
-      projection.integrity = 'unknown'
-      if (!projection.integrityViolations.includes(code)) projection.integrityViolations.push(code)
-      // The fast-path key is NOT updated: the next sync retries the snapshot.
-      return
-    }
-    let usedLedgerKey = ''
     const derived = deriveProjection(
       events as Parameters<typeof deriveProjection>[0],
       { activation: config.activation, policy: config.policy },
@@ -683,26 +677,28 @@ export function createRuntime(
       hostLock,
     )
     Object.assign(projection, derived.projection)
-    if (readPrivateRecords) {
-      let privateSnapshot = readPrivateRecords()
+    if (readPrivateRecords && ledger) {
+      let privateSnapshot = ledger
       if (!synchronizedOnce && events.length === 0 && !privateSnapshot.damaged && !privateSnapshot.anchored
         && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords()
       if (projection.releaseContracts.length > 0 && !privateSnapshot.damaged && !privateSnapshot.anchored) {
         if (synchronizedOnce && previousReleaseContracts === 0 && initializePrivateRecords?.()) privateSnapshot = readPrivateRecords()
         else privateSnapshot = { records: [], damaged: true, anchored: false }
       }
-      usedLedgerKey = ledgerSnapshotKey(privateSnapshot)
       applyPrivateLedger(projection, privateSnapshot)
+      // Record the exact ledger view this rebuild actually applied (the
+      // initialization paths above may have re-read it within this entry).
+      ledger = privateSnapshot
     }
     synchronizedOnce = true
     // Record the exact inputs this full rebuild consumed, so a later plain
     // sync can prove nothing changed instead of replaying the history fold.
     lastFullSync = {
-      sessionSeq: currentSessionSeq(),
+      events,
       headerRef: session.header,
       durability: durabilityConfirmed,
-      goalKey: goalStateKey(),
-      ledgerKey: usedLedgerKey,
+      goalKey: goalKeyOf(goal),
+      ledgerKey: ledger ? ledgerSnapshotKey(ledger) : '',
       refreshEpoch,
     }
     if (!sessionHeader) {
@@ -711,17 +707,12 @@ export function createRuntime(
         projection.integrityViolations.push('session_ref_unavailable')
       }
     }
-    if (readGoalState) {
-      try {
-        const state = normalizeGoalState(readGoalState())
-        if (state && projection.currentGoalRef?.id === state.id && projection.currentGoalRef.revision === state.revision) {
-          projection.currentGoalPhase = state.phase
-          projection.currentGoalActivation = state.activation
-        }
-      } catch {
-        projection.integrity = 'unknown'
-        projection.integrityViolations.push('goal_readback_unavailable')
-      }
+    if (goal.failed) {
+      projection.integrity = 'unknown'
+      projection.integrityViolations.push('goal_readback_unavailable')
+    } else if (goal.state && projection.currentGoalRef?.id === goal.state.id && projection.currentGoalRef.revision === goal.state.revision) {
+      projection.currentGoalPhase = goal.state.phase
+      projection.currentGoalActivation = goal.state.activation
     }
     // Liveness state must survive rebuilds: the per-turn attempt cap, the
     // one-shot recovery arm, and the durability watermark are owned by the
@@ -801,24 +792,37 @@ export function createRuntime(
       // the fast path below never serves a revalidation entry.
       refreshEpoch += 1
     }
-    // CG-083-PERF01 unchanged fast path: a plain sync with the same session
-    // revision, the same header, the same durability, the same Goal readback
-    // and the same private-ledger view cannot derive anything new. The Goal
-    // readback and the private ledger are re-read here EVERY time — their
-    // current values are the key, so an external ledger append or a Goal edit
-    // still takes the full rebuild. A revalidation entry or a session without
-    // a cheap revision always rebuilds.
-    const sessionSeq = currentSessionSeq()
-    if (lastFullSync && sessionSeq !== undefined
-      && lastFullSync.refreshEpoch === refreshEpoch
-      && lastFullSync.sessionSeq === sessionSeq
-      && Object.is(lastFullSync.headerRef, session.header)
-      && lastFullSync.durability === durabilityConfirmed
-      && lastFullSync.goalKey === goalStateKey()
-      && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(readPrivateRecords()))) {
+    // CG-083-PERF01/R1: take the CURRENT snapshot through the same validating
+    // adapter every sync. A failed or replaced snapshot invalidates the fast
+    // path; the fast path may only serve an element-wise identical snapshot.
+    let events: readonly unknown[]
+    try {
+      events = snapshotSessionEvents(session)
+    } catch (error) {
+      // A session that does not expose the V3 snapshot API is an unsupported
+      // host, not an empty log: fail closed, keep the previous derivation but
+      // mark it unreadable, and invalidate the cache so the next successful
+      // snapshot re-derives instead of being served from the fast path.
+      const code = error instanceof SessionApiError ? error.code : 'session_snapshot_failed'
+      projection.integrity = 'unknown'
+      if (!projection.integrityViolations.includes(code)) projection.integrityViolations.push(code)
+      lastFullSync = undefined
       return
     }
-    rebuild()
+    // ONE read per input per sync: the same Goal readback and the same
+    // private-ledger view feed both the cache key and, on a miss, the rebuild.
+    const goal = readGoalOnce()
+    const ledger = readPrivateRecords ? readPrivateRecords() : undefined
+    if (lastFullSync
+      && lastFullSync.refreshEpoch === refreshEpoch
+      && sameSnapshotIdentity(events, lastFullSync.events)
+      && Object.is(lastFullSync.headerRef, session.header)
+      && lastFullSync.durability === durabilityConfirmed
+      && lastFullSync.goalKey === goalKeyOf(goal)
+      && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(ledger!))) {
+      return
+    }
+    rebuild(events, goal, ledger)
   }
   const runHostLockEntry = async <T>(operation: () => Promise<T> | T): Promise<T> => {
     if (!refreshHostLock) return await operation()
@@ -852,7 +856,10 @@ export function createRuntime(
     return was
   }
 
-  rebuild()
+  // Initial attach: the sync entry takes and validates the snapshot through the
+  // same path as every later sync, so the first projection and the fast-path
+  // key are bound to the same validated snapshot version.
+  sync()
   return {
     projection,
     session,

@@ -9614,7 +9614,7 @@ function desktopDependencyGraph(archive, expectations, base = createHostAuditSes
 
 //#endregion
 //#region src/domain/host-resolver.ts
-const { existsSync: existsSync$1, lstatSync: lstatSync$1, readFileSync: readFileSync$1, realpathSync: realpathSync$1, renameSync, statSync: statSync$1, writeFileSync: writeFileSync$1 } = physicalFs;
+const { existsSync: existsSync$1, lstatSync: lstatSync$1, readFileSync: readFileSync$1, realpathSync: realpathSync$1, renameSync: renameSync$1, statSync: statSync$1, writeFileSync: writeFileSync$1 } = physicalFs;
 /**
 * Names registered in any cohort; rows outside the union are unknown.
 *
@@ -10554,7 +10554,7 @@ function injectActiveProfileHostLock(input) {
 		encoding: "utf8",
 		flag: "wx"
 	});
-	renameSync(temporary, patchPath);
+	renameSync$1(temporary, patchPath);
 	return patchPath;
 }
 function parseYamlScalar(value) {
@@ -11350,9 +11350,22 @@ function quotedSpans(text) {
 		inside
 	};
 }
-/** Blank out every quoted span of the text. */
+/**
+* CG-083-PERF02 (profile-guided): maskQuotedSpans is a pure function of the
+* text and capture re-asks it many times per clause on long histories
+* (segmentsForBoundary, captureItem, the observer-method scan all mask the
+* same strings). Memoize by exact input in a bounded map — a pure parse cache
+* over immutable strings, not a trust cache; any change of text produces a
+* different key.
+*/
+const quotedMaskCache = /* @__PURE__ */ new Map();
 function maskQuotedSpans(text) {
-	return quotedSpans(text).masked;
+	const cached = quotedMaskCache.get(text);
+	if (cached !== void 0) return cached;
+	const masked = quotedSpans(text).masked;
+	if (quotedMaskCache.size > 4096) quotedMaskCache.clear();
+	quotedMaskCache.set(text, masked);
+	return masked;
 }
 /** Whether the offset lies inside a quoted span. */
 function insideQuote(masked, index$1) {
@@ -14282,7 +14295,25 @@ function extractArtifactPaths(text) {
 	}
 	return [...found];
 }
+const clauseSegmentCache = /* @__PURE__ */ new Map();
+/**
+* CG-083-PERF02 (profile-guided): segmentClauses is a pure parse of the text,
+* and the v6 capture path asks the SAME strings many times (splitIndependent
+* re-parses left/right fragments per delimiter, the coordination and
+* explanation paths re-parse prefixes). Cache the parse result by exact input
+* and default options — a pure parse cache over immutable strings, not a
+* trust cache. Options other than the default bypass the cache.
+*/
 function segmentClauses(text, options = {}) {
+	if (Object.keys(options).length > 0) return segmentClausesUncached(text, options);
+	const cached = clauseSegmentCache.get(text);
+	if (cached !== void 0) return cached;
+	const segments = segmentClausesUncached(text);
+	if (clauseSegmentCache.size > 4096) clauseSegmentCache.clear();
+	clauseSegmentCache.set(text, segments);
+	return segments;
+}
+function segmentClausesUncached(text, options = {}) {
 	const normalized = normalizeClause(text);
 	if (!normalized) return [];
 	return interpretMessage(normalized, options).filter((interpretation) => interpretation.text.trim().length > 0).map((interpretation) => ({
@@ -20847,16 +20878,28 @@ function shellOutcome(surface, terminal, resultError, backgrounded) {
 * derived layer records its source and conflict flag instead of changing history.
 */
 /**
-* CG-083-BUG03: the ONE terminal verdict a native observer may rely on for a
-* persisted shell call. Reuses the evidence layer's terminal classification
-* (structured facts, then audited renderer markers) so the observer cannot
-* drift from the same-family producer rules: a failed hook, a backgrounded or
-* truncated result, or an unclassifiable terminal state is never "success".
+* CG-083-BUG03/R4: the ONE terminal verdict a native observer may rely on for
+* a persisted shell call. Reuses the evidence layer's AUTHORITATIVE terminal
+* resolution (the run's own `contextGuardProcess` declaration, then any other
+* structured meta fact, then the audited renderer markers) and cross-checks
+* it against the rendered markers: a declared failure is never upgraded, and
+* a declared verdict that CONTRADICTS the rendered markers is unresolvable
+* and stays `unknown`. A failed hook, a backgrounded or truncated result, or
+* an unclassifiable terminal state is therefore never "success". This reads
+* the CURRENT observation only; the historical frozen `outcome` of
+* already-recorded evidence is not rewritten.
 */
 function shellReadbackOutcome(surface, args, result) {
 	const backgrounded = args.run_in_background === true || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent) || /^started background job \S+\s*$/.test(result.textContent);
 	const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent);
-	const outcome = shellOutcome(surface, legacyTerminalFacts(result.meta, result.textContent), result.error, backgrounded);
+	const declaredFacts = resolveDeclaredTerminalFacts(result.meta, result.textContent).facts;
+	const renderedFacts = extractTerminalFacts(result.textContent);
+	const declared = shellOutcome(surface, declaredFacts, result.error, backgrounded);
+	const rendered = shellOutcome(surface, renderedFacts, result.error, backgrounded);
+	let outcome;
+	if (declared === rendered) outcome = declared;
+	else if (declared === "failure" && rendered === "success" && !renderedFacts.marked) outcome = "failure";
+	else outcome = "unknown";
 	return outputIncomplete && outcome !== "failure" ? "unknown" : outcome;
 }
 function shellProcessFacts(meta, textContent, frozenOutcome, resultError, surface, backgrounded, parseStatus$1) {
@@ -22595,7 +22638,8 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 * files or embeds prohibitions.
 */
 function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId, provenance, clarificationText) {
-	const before = new Set(projection.items.keys());
+	const freshItems = [];
+	const isFresh = /* @__PURE__ */ new Set();
 	let coveredSpans = 0;
 	const usedOccurrences = /* @__PURE__ */ new Set();
 	for (const segment of segmentsForBoundary(text, coordinationSplit, projection.boundaryProtocol === 6 && !legacy)) {
@@ -22624,13 +22668,13 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 					const item = insert(projection, segment, sourceMessageId, target, "scope", unitId, provenance ? {
 						rawTextSha256: provenance.rawTextSha256,
 						span
-					} : void 0);
+					} : void 0, freshItems);
 					item.targetSource = { kind: "explicit_path" };
 				} else {
 					const item = insert(projection, segment, sourceMessageId, "scope", "scope", unitId, provenance ? {
 						rawTextSha256: provenance.rawTextSha256,
 						span
-					} : void 0);
+					} : void 0, freshItems);
 					delete item.requestedTarget?.scope;
 					item.targetCaptureStatus = "clarification_required";
 					delete item.targetSource;
@@ -22643,7 +22687,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 				insert(projection, segment, sourceMessageId, resolved.replace(/[\\/]package\.json$/iu, "") || resolved, "scope", unitId, provenance ? {
 					rawTextSha256: provenance.rawTextSha256,
 					span
-				} : void 0);
+				} : void 0, freshItems);
 				continue;
 			}
 		}
@@ -22651,16 +22695,17 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance ? {
 				rawTextSha256: provenance.rawTextSha256,
 				span
-			} : void 0);
+			} : void 0, freshItems);
 			continue;
 		}
 		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId, provenance ? {
 			rawTextSha256: provenance.rawTextSha256,
 			span
-		} : void 0);
+		} : void 0, freshItems);
 	}
+	for (const added of freshItems) isFresh.add(added.id);
 	if (projection.boundaryProtocol === 6 && !legacy && provenance) {
-		const fresh = [...projection.items.values()].filter((item) => !before.has(item.id) && item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256 && item.spans?.[0]?.partIndex === 0).sort((a, b) => a.spans[0].start - b.spans[0].start);
+		const fresh = freshItems.filter((item) => item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256 && item.spans?.[0]?.partIndex === 0).sort((a, b) => a.spans[0].start - b.spans[0].start);
 		for (const method of fresh) {
 			const text$1 = maskQuotedSpans(method.normalizedText).trim();
 			if (!/^(?:(?:for\s+[^,，]{1,100}[,，]\s*)?(?:use|consult|invoke|call)\b|(?:为|针对|对)[^,，。]{1,80}(?:调用|使用))/iu.test(text$1) || method.kind !== "requirement" || [
@@ -22686,9 +22731,9 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			};
 		}
 		let parent;
+		const raw = Buffer.from(provenance.rawText, "utf8");
 		for (const item of fresh) {
 			const own = item.spans[0];
-			const raw = Buffer.from(provenance.rawText, "utf8");
 			const clause = raw.subarray(own.start, own.end).toString("utf8");
 			if (item.semanticAction === "modify" && item.authorityDisposition === "executable_now" && item.requestedTarget?.artifact_id) {
 				parent = item;
@@ -22720,7 +22765,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		}
 	}
 	for (const [id, item] of projection.items) {
-		if (before.has(id)) continue;
+		if (!isFresh.has(id)) continue;
 		if (item.kind !== "requirement" || item.waitAuthorization || item.authorityDisposition === "conditional_wait") continue;
 		if (item.authorityDisposition !== void 0 && item.authorityDisposition !== "executable_now") continue;
 		for (const [otherId, other] of projection.items) {
@@ -22735,12 +22780,12 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		}
 	}
 	if (clarificationText) for (const [id, item] of projection.items) {
-		if (before.has(id)) continue;
+		if (!isFresh.has(id)) continue;
 		if (item.kind === "prohibition" || item.status !== "pending") continue;
 		if (item.authorityDisposition !== "executable_now") continue;
 		if (!item.semanticAction || item.semanticAction === "generic_run") continue;
 		for (const [otherId, other] of projection.items) {
-			if (otherId === id || !before.has(otherId)) continue;
+			if (otherId === id || isFresh.has(otherId)) continue;
 			if (other.status !== "pending" || other.kind === "prohibition") continue;
 			if (other.waitAuthorization || other.legacyFlags?.length) continue;
 			if (!(other.semanticAction === "generic_run" && (other.authorityDisposition === "executable_now" || other.authorityDisposition === "unresolved"))) continue;
@@ -22753,7 +22798,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		}
 	}
 	for (let round = 0; round < 8; round += 1) {
-		const unresolved = [...projection.items].filter(([id, item]) => !before.has(id) && item.targetSource?.kind === "environment_default");
+		const unresolved = [...projection.items].filter(([id, item]) => isFresh.has(id) && item.targetSource?.kind === "environment_default");
 		if (unresolved.length === 0) break;
 		let resolvedAny = false;
 		for (const [, item] of unresolved) {
@@ -22763,7 +22808,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		if (!resolvedAny) break;
 	}
 	for (const [id, item] of projection.items) {
-		if (before.has(id)) continue;
+		if (!isFresh.has(id)) continue;
 		if (legacy) if (legacyAuthorityProven && item.semanticAction !== void 0 && item.semanticAction !== "generic_run" && item.targetCaptureStatus === "resolved") {
 			item.authority = authority;
 			item.legacyFlags = void 0;
@@ -23005,7 +23050,7 @@ function resolveInheritedGitTarget(projection, item) {
 	item.targetCaptureStatus = "clarification_required";
 	item.targetCaptureReasonCode = repositories.size > 1 ? "requested_target_repository_ambiguous" : "requested_target_repository_missing";
 }
-function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance) {
+function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance, freshOut) {
 	const revision = projection.contractRevision + 1;
 	const id = nextId(projection.items, segment.kind);
 	const method = extractMethod(segment.body);
@@ -23093,6 +23138,7 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 		projection.items.set(id, item);
 		registerFoldItem(projection.items, item);
 	}
+	freshOut?.push(item);
 	projection.contractRevision = item.revision;
 	return item;
 }
@@ -23107,23 +23153,23 @@ function rootLocatorFlavor(cwd) {
 	const posixBase = cwd.startsWith("/") && !cwd.startsWith("//") && !cwd.includes("\\") && !cwd.includes("//") && !cwd.split("/").some((part) => part === "." || part === "..");
 	return /^[A-Za-z]:\\/.test(cwd) && !cwd.includes("/") && !cwd.slice(3).includes("\\\\") && !cwd.slice(3).includes(":") && !cwd.split("\\").some((part) => part === "." || part === "..") ? "windows" : posixBase ? "posix" : void 0;
 }
-const eventBySeqCache = /* @__PURE__ */ new WeakMap();
-function eventsBySeq(sourceEvents) {
-	let bySeq = eventBySeqCache.get(sourceEvents);
-	if (!bySeq) {
-		bySeq = new Map(sourceEvents.map((event) => [event.seq, event]));
-		eventBySeqCache.set(sourceEvents, bySeq);
-	}
-	return bySeq;
+/**
+* CG-083-R5: the seq index is scoped to ONE derive call and built from the
+* exact array that call consumes. It is never cached across calls: the
+* exported derive API accepts any event array and its immutability is not a
+* verified premise, so an array that was appended to between two derives must
+* resolve its newly added sequences.
+*/
+function buildEventsBySeq(sourceEvents) {
+	return new Map(sourceEvents.map((event) => [event.seq, event]));
 }
-function refreshRootLocatorContext(projection, sourceEvents, scope, asOf) {
+function refreshRootLocatorContext(projection, bySeq, scope, asOf) {
 	projection.rootLocatorContexts.clear();
 	projection.rootLocatorIdentity = void 0;
 	if (projection.boundaryProtocol !== 6 || !scope.sessionHeader || typeof scope.cwd !== "string") return;
 	const flavor = rootLocatorFlavor(scope.cwd);
 	if (!flavor) return;
 	const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : [];
-	const bySeq = eventsBySeq(sourceEvents);
 	for (const ref$1 of refs) {
 		if (ref$1.seq > asOf) continue;
 		const source = bySeq.get(ref$1.seq);
@@ -23198,6 +23244,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	const turnUnitIds = /* @__PURE__ */ new Map();
 	let activeTurn;
 	const unitSemanticsActive = () => v5BoundarySeq !== void 0 && !scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== "subagent";
+	const eventsBySeq = buildEventsBySeq(sourceEvents);
 	for (const event of sourceEvents) {
 		projection.enabled = enabled;
 		projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq);
@@ -23634,7 +23681,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						break;
 					}
 					const id = `C${projection.checkpoints.length + 1}`;
-					refreshRootLocatorContext(projection, sourceEvents, scope, event.seq);
+					refreshRootLocatorContext(projection, eventsBySeq, scope, event.seq);
 					const result = certifyCheckpoint(projection, call.bindings ?? [], id, false);
 					if (result.status !== "certified" || !result.checkpoint || !recordedCertificateMatches(recorded.certificate, result.checkpoint)) {
 						projection.integrity = "corrupt";
@@ -23746,7 +23793,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 		if (item.status !== "pending" || !item.observerMethod?.tools.length) continue;
 		if (item.observerMethod.tools.every((_, index$1) => observerMethodEvidence(projection, sourceEvents, item, index$1))) item.status = "passed";
 	}
-	refreshRootLocatorContext(projection, sourceEvents, scope, sourceEvents.at(-1)?.seq ?? 0);
+	refreshRootLocatorContext(projection, eventsBySeq, scope, sourceEvents.at(-1)?.seq ?? 0);
 	applyUpgradeEligibility(projection);
 	if (interpretationFacts.length > 64) interpretationFacts.splice(0, interpretationFacts.length - 64);
 	projection.interpretationFacts = interpretationFacts;

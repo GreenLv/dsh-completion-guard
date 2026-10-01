@@ -79,10 +79,10 @@ function begin(): { at: number; first: number } {
   const first = rssSamples.length
   return { at: performance.now(), first }
 }
-function record(entry: string, events: number, window: { at: number; first: number }, wall_ms: number): void {
+function record(entry: string, events: number, window: { at: number; first: number }, wall_ms: number, suffix = ''): void {
   let peak = process.memoryUsage.rss()
   for (let index = window.first; index < rssSamples.length; index += 1) peak = Math.max(peak, rssSamples[index]!.rss)
-  measurements.push({ entry, events, wall_ms, rss_bytes: process.memoryUsage.rss(), peak_rss_bytes: peak,
+  measurements.push({ entry: `${entry}${suffix}`, events, wall_ms, rss_bytes: process.memoryUsage.rss(), peak_rss_bytes: peak,
     physical_reads: io.reads, read_bytes: io.bytes, projection_calls: projections.mock.calls.length })
 }
 
@@ -109,6 +109,21 @@ function appendTurnSlab(session: Session, index: number, longOutputBytes: number
       turn, step: session.seq,
       message: createToolResultMessage({ callId: callId as never, content: [{ type: 'text', text: long }], isError: false }),
     }, { surfaceOp: 'append' })
+  }
+}
+
+/** CG-083-V2 root-input-dense distribution: N independent simple root
+ * requests and nothing else (the plan's "3,000 root inputs" shape). */
+function appendRootDense(session: Session, count: number): void {
+  for (let index = 0; index < count; index += 1) {
+    const turn = index + 1
+    append(session, 'turn/start', { turn })
+    append(session, 'user/message', {
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: `Explain requirement ${index} of this task and continue with step ${index}.` }],
+    }, { surfaceOp: 'append' })
+    append(session, 'assistant/message', { turn, step: session.seq, message: { role: 'assistant', content: [{ type: 'text', text: `Requirement ${index} acknowledged.` }] } }, { surfaceOp: 'append' })
+    append(session, 'turn/end', { turn })
   }
 }
 
@@ -146,17 +161,35 @@ async function seedLedger(root: string, records: number, payloadBytes: number, c
   return ledgerRoot
 }
 
-async function measureSize(events: number): Promise<void> {
+/**
+ * CG-083-V2 distribution knob (set by the driver):
+ *  - `tool` (default): the historical interleaved tool-dense slab, one long
+ *    output per slab (byte gradient kept separate from the event gradient);
+ *  - `roots`: root-input-dense — N independent root requests, no tool events
+ *    (the plan's "3,000 root inputs" scenario);
+ *  - `longout`: the tool slab with a FIXED moderate event count but a byte
+ *    gradient, isolating per-output byte cost from event count.
+ */
+type Distribution = 'tool' | 'roots' | 'longout'
+async function measureSize(events: number, distribution: Distribution = 'tool'): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-scaling-'))
+  const suffix = distribution === 'tool' ? '' : `:${distribution}`
   try {
     const session = createSession(root, 'projection-scaling')
     // The 0-event control must be a genuinely empty session: the boundary
     // notice is itself a durable event and part of the workload.
     if (events > 0) appendV6Boundary(session)
-    // Eight events per slab; every slab includes one sized tool output.
-    const longOutputBytes = events >= 10000 ? 200_000 : 2_000
-    for (let index = 0; index < Math.ceil(events / 6) && session.seq < events; index += 1) {
-      appendTurnSlab(session, index, longOutputBytes)
+    // The byte gradient for tool/longout distributions (kept separate from
+    // the event gradient).
+    const longOutputBytes = distribution === 'longout'
+      ? (events >= 10000 ? 200_000 : 20_000)
+      : (events >= 10000 ? 200_000 : 2_000)
+    if (distribution === 'roots') {
+      appendRootDense(session, events)
+    } else {
+      for (let index = 0; index < Math.ceil(events / 6) && session.seq < events; index += 1) {
+        appendTurnSlab(session, index, longOutputBytes)
+      }
     }
     const actualEvents = session.snapshotEvents().length
     const eventsRead = snapshotSessionEvents(session)
@@ -184,14 +217,14 @@ async function measureSize(events: number): Promise<void> {
     // 1. Session snapshot (V4 read + envelope validation).
     let window = begin()
     snapshotSessionEvents(session)
-    record('snapshot', actualEvents, window, performance.now() - window.at)
+    record('snapshot', actualEvents, window, performance.now() - window.at, suffix)
 
     // 2. Full projection derivation (pure fold over the whole log).
     window = begin()
     const derived = deriveProjection(eventsRead as never,
       { activation: 'always', policy: 'release' },
       { cwd: String(session.header.cwd) }, true)
-    record('derive_projection', actualEvents, window, performance.now() - window.at)
+    record('derive_projection', actualEvents, window, performance.now() - window.at, suffix)
     void derived
 
     // 2b. Legacy/migration对照: the same history with the boundary AFTER it
@@ -199,8 +232,11 @@ async function measureSize(events: number): Promise<void> {
     // normal v6 entries.
     {
       const legacy = createSession(root, 'projection-scaling-legacy')
-      for (let index = 0; index < Math.ceil(events / 6) && legacy.seq < events; index += 1) {
-        appendTurnSlab(legacy, index, longOutputBytes)
+      if (distribution === 'roots') appendRootDense(legacy, events)
+      else {
+        for (let index = 0; index < Math.ceil(events / 6) && legacy.seq < events; index += 1) {
+          appendTurnSlab(legacy, index, longOutputBytes)
+        }
       }
       appendV6Boundary(legacy)
       const legacyEvents = snapshotSessionEvents(legacy)
@@ -208,7 +244,7 @@ async function measureSize(events: number): Promise<void> {
       const legacyDerived = deriveProjection(legacyEvents as never,
         { activation: 'always', policy: 'release' },
         { cwd: String(legacy.header.cwd) }, true)
-      record('derive_projection_legacy', actualEvents, window, performance.now() - window.at)
+      record('derive_projection_legacy', actualEvents, window, performance.now() - window.at, suffix)
       expect(legacyDerived.projection.boundaryProtocol).toBe(6)
     }
 
@@ -232,7 +268,10 @@ async function measureSize(events: number): Promise<void> {
       ctx: { tools: { register: () => () => {}, guard: () => () => {}, get: () => undefined }, get: () => undefined },
     }
     for (const handler of handlers['agent/created'] ?? []) (handler as (payload: unknown) => void)({ agent, source: 'startup' })
-    record('cold_mount', actualEvents, window, performance.now() - window.at)
+    // CG-083-V3: this entry follows the semantics pre-check, the snapshot,
+    // the derive and the legacy derive in this worker, so it is a FIRST
+    // MOUNT of a new runtime in a warm process, not a cold first operation.
+    record('first_mount_warm_process', actualEvents, window, performance.now() - window.at, suffix)
 
     // 4. The production confirmed path: one agent/pre-step flush→
     // setDurability(true)→sync. This is the only entry whose durability
@@ -248,13 +287,13 @@ async function measureSize(events: number): Promise<void> {
     }
     window = begin()
     await runPreStep()
-    record('confirmed_sync_first', actualEvents, window, performance.now() - window.at)
+    record('confirmed_sync_first', actualEvents, window, performance.now() - window.at, suffix)
 
     // 4b. Unchanged warm sync: the same session, no new durable events. The
     // production path must not re-run the history fold for this entry.
     window = begin()
     await runPreStep()
-    record('warm_sync', actualEvents, window, performance.now() - window.at)
+    record('warm_sync', actualEvents, window, performance.now() - window.at, suffix)
 
     // 5. Private-ledger read: short (4 records) and long (400 records with a
     // sized payload) ledgers, full chain verification on every read. The
@@ -294,11 +333,20 @@ it('projection scaling measurement (gated: DSH_PROJECTION_MEASUREMENT=1)', { tim
     // script sets the gate and reads the emitted result.
     return
   }
-  const sizes = (process.env.DSH_PROJECTION_SIZES ?? '0,100,1000,10000')
-    .split(',').map((value) => Number.parseInt(value, 10)).filter((value) => Number.isSafeInteger(value) && value >= 0)
+  // CG-083-V2: a spec is either `size` (default tool distribution) or
+  // `size:distribution`. Example: 3000:roots,3000,10000:longout
+  const specs = (process.env.DSH_PROJECTION_SIZES ?? '0,100,1000,10000')
+    .split(',').map((value) => value.trim()).filter(Boolean)
   startSampler()
   try {
-    for (const size of sizes) await measureSize(size)
+    for (const spec of specs) {
+      const [sizeText, distributionText] = spec.split(':')
+      const size = Number.parseInt(sizeText, 10)
+      if (!Number.isSafeInteger(size) || size < 0) continue
+      const distribution = (['tool', 'roots', 'longout'] as const).includes(distributionText as never)
+        ? distributionText as Distribution : 'tool'
+      await measureSize(size, distribution)
+    }
   } finally {
     stopSampler()
   }

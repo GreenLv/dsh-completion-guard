@@ -839,7 +839,29 @@ export interface ClauseSegment {
   /** The one interpretation this segment came from; never re-derived downstream. */
   interpretation: ScopeInterpretation
 }
+const clauseSegmentCache = new Map<string, ClauseSegment[]>()
+
+/**
+ * CG-083-PERF02 (profile-guided): segmentClauses is a pure parse of the text,
+ * and the v6 capture path asks the SAME strings many times (splitIndependent
+ * re-parses left/right fragments per delimiter, the coordination and
+ * explanation paths re-parse prefixes). Cache the parse result by exact input
+ * and default options — a pure parse cache over immutable strings, not a
+ * trust cache. Options other than the default bypass the cache.
+ */
 export function segmentClauses(text: string, options: InterpretOptions = {}): ClauseSegment[] {
+  if (Object.keys(options).length > 0) {
+    return segmentClausesUncached(text, options)
+  }
+  const cached = clauseSegmentCache.get(text)
+  if (cached !== undefined) return cached
+  const segments = segmentClausesUncached(text)
+  if (clauseSegmentCache.size > 4096) clauseSegmentCache.clear()
+  clauseSegmentCache.set(text, segments)
+  return segments
+}
+
+function segmentClausesUncached(text: string, options: InterpretOptions = {}): ClauseSegment[] {
   const normalized = normalizeClause(text)
   if (!normalized) return []
   return interpretMessage(normalized, options)

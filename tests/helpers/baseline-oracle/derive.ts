@@ -1,41 +1,47 @@
-import { sha256 } from './canonicalize.js'
-import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from './rebind.js'
-import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses, type ClauseSegment } from './capture.js'
-import { certifyCheckpoint } from './checkpoint.js'
-import { BOUNDARY_RECORD_PREFIX, qualifyBoundary, type BoundaryRequest } from './boundary.js'
-import { classifyUserInteraction } from './conversation.js'
-import { CONFIRM_LINE_PATTERN, parseConfirmationMessage } from './confirm-parse.js'
-import { segmentAuthorityBlocks } from './contract-segment.js'
-import { sessionRefDigest } from './digest.js'
-import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from './host-lock.js'
-import { hasCurrentCertificate } from './goal-gate.js'
-import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from './evidence.js'
-import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, semanticActionFromText, type SemanticAction } from './protocol-manifest.js'
+// FROZEN BASELINE ORACLE (CG-083-V1): this file is the exact 0.8.2 fold
+// implementation from commit 913a4c7a6f0f600f4146ef4af694d3af6e477ef2, kept
+// as an independent oracle for the projection-index optimization. It must be
+// edited only by replacing it with another exact baseline snapshot. Sibling
+// imports point at the current src for modules the optimization did not
+// change (their behavior is covered by their own suites and by the shared
+// conformance fixtures).
+import { sha256 } from '../../../src/domain/canonicalize.js'
+import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from '../../../src/domain/rebind.js'
+import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses, type ClauseSegment } from '../../../src/domain/capture.js'
+import { certifyCheckpoint } from '../../../src/domain/checkpoint.js'
+import { BOUNDARY_RECORD_PREFIX, qualifyBoundary, type BoundaryRequest } from '../../../src/domain/boundary.js'
+import { classifyUserInteraction } from '../../../src/domain/conversation.js'
+import { CONFIRM_LINE_PATTERN, parseConfirmationMessage } from '../../../src/domain/confirm-parse.js'
+import { segmentAuthorityBlocks } from '../../../src/domain/contract-segment.js'
+import { sessionRefDigest } from '../../../src/domain/digest.js'
+import { DEFAULT_HOST_LOCK, type HostLockEvaluation } from '../../../src/domain/host-lock.js'
+import { hasCurrentCertificate } from '../../../src/domain/goal-gate.js'
+import { evidenceFromPersistedToolResult, extractTextContent, persistedToolResultStatus, withDurability } from '../../../src/domain/evidence.js'
+import { ACTION_MANIFEST, isStatefulAction, requestedIdentityKey, requestedTargetMatchesResolved, semanticActionFromText, type SemanticAction } from '../../../src/domain/protocol-manifest.js'
 import {
   hasWorkPredicate, interpretMessage, legacyQuestionReadingIsInformational, maskCodeSpans, maskQuotedSpans,
   opensConditionLead, presentExplanationHead,
   qualificationOfClause, splitTextFragments,
-} from './semantics.js'
-import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from './stop-policy.js'
-import { supersedeItem } from './supersession.js'
-import { findPendingDuplicateFromIndex, indexesEnabled, nextIdFromIndex, nextNumericIdFromIndex, registerFoldItem } from './item-fold-index.js'
-import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type NeedsReviewReason, type SourceSpan, type TargetValue } from './types.js'
-import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from './types.js'
-import type { ReleaseContract } from './release.js'
-import { deriveTrustedDeliveries, informationItemIdsForDelivery } from './delivery.js'
+} from '../../../src/domain/semantics.js'
+import { CONTROL_RECORD_PREFIX, NO_PROGRESS_RECORD_PREFIX } from '../../../src/domain/stop-policy.js'
+import { supersedeItem } from '../../../src/domain/supersession.js'
+import { createProjection, type BindingActionClosure, type GuardCheckpoint, type GuardProjection, type EvidenceBinding, type GuardItem, type GuardItemKind, type NeedsReviewReason, type SourceSpan, type TargetValue } from '../../../src/domain/types.js'
+import type { DeriveConfig, DeriveResult, DeriveScope, DerivedEnvelope } from '../../../src/domain/types.js'
+import type { ReleaseContract } from '../../../src/domain/release.js'
+import { deriveTrustedDeliveries, informationItemIdsForDelivery } from '../../../src/domain/delivery.js'
 import {
   explicitlyLinkedToCurrentUnit, foldIntoCurrentUnit, openUnit, opensChildUnit,
   opensNewUnit, currentUnitHasOpenWork, recordDelegation, unitDescendantIds,
-} from './work-unit.js'
-import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
-import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
-import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
-import { observerMethodEvidence } from './observer-method.js'
-import { defaultV6OrdinaryFeedbackScope } from './v6-feedback.js'
+} from '../../../src/domain/work-unit.js'
+import { spanClassOf, utf8ByteLength, utf8ByteOffset } from '../../../src/domain/spans.js'
+import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from '../../../src/domain/proof.js'
+import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from '../../../src/domain/host-selection.js'
+import { observerMethodEvidence } from '../../../src/domain/observer-method.js'
+import { defaultV6OrdinaryFeedbackScope } from '../../../src/domain/v6-feedback.js'
 import {
   normalizeReleaseContract, normalizeReservation, normalizeSettlement, OUTCOME_STRENGTH,
   RELEASE_CONTRACT_PREFIX, RELEASE_RESERVATION_PREFIX, RELEASE_SETTLEMENT_PREFIX, RELEASE_REVOCATION_PREFIX,
-} from './release.js'
+} from '../../../src/domain/release.js'
 
 interface PendingCall {
   origin: 'tool/call' | 'tool/ptc-dispatch-start'
@@ -154,6 +160,7 @@ function assetReceiptMatches(receipt: unknown, asset: { messageSeq: number; part
 }
 
 /** Replay-stable comparison of the receipt's span echoes with the contract's spans. */
+// oxlint-disable-next-line no-unused-vars -- frozen baseline snapshot
 function clauseSpansMatch(receipt: unknown, spans: ReadonlyArray<{ partIndex: number; start: number; end: number }> | undefined): boolean {
   if (!Array.isArray(receipt) || spans === undefined || receipt.length !== spans.length) return false
   return spans.every((span, index) => {
@@ -238,7 +245,6 @@ function supersedeClauseByPartition(projection: GuardProjection, item: GuardItem
       interpretedFromUnresolved: item.id,
     }
     projection.items.set(id, sub)
-    registerFoldItem(projection.items, sub)
     projection.contractRevision = Math.max(projection.contractRevision, revision)
     return sub
   }
@@ -260,10 +266,6 @@ function supersedeClauseByPartition(projection: GuardProjection, item: GuardItem
 
 /** The next numeric id for a prefix, shared with nextId's numbering. */
 function nextNumericId(items: GuardProjection['items'], prefix: string): number {
-  // CG-083-PERF02: the index mirrors this scan exactly; the original loop
-  // stays as the fail-safe path when DSH_GUARD_DISABLE_INDEXES=1.
-  const indexed = nextNumericIdFromIndex(items, prefix)
-  if (indexed !== undefined) return indexed
   let max = 0
   for (const item of items.values()) {
     if (!item.id.startsWith(prefix)) continue
@@ -478,9 +480,6 @@ function restoreHistoricalCheckpoint(recorded: Record<string, unknown>, bindings
 }
 
 function nextId(items: GuardProjection['items'], kind: GuardItemKind): string {
-  // CG-083-PERF02: the index mirrors this kind-filtered scan exactly.
-  const indexed = nextIdFromIndex(items, kind)
-  if (indexed !== undefined) return indexed
   const prefix = kind === 'requirement' ? 'R' : kind === 'acceptance' ? 'A' : 'P'
   let max = 0
   for (const item of items.values()) {
@@ -559,7 +558,6 @@ function captureRootText(
       provenance ? { ...provenance, blockOffset, blockText: block.text, blockAuthority: block.authority } : undefined,
       clarification ? text : undefined,
     )
-
   }
   if (provenance) {
     projection.coverage.push({
@@ -886,13 +884,7 @@ function insertItems(
   provenance?: { rawTextSha256: string; rawText: string; blockOffset?: number; blockText: string; blockAuthority: string },
   clarificationText?: string,
 ): number {
-  // CG-083-PERF02: collect the items this capture adds instead of snapshotting
-  // all item keys per message (the historical `before` Set made long histories
-  // O(messages x items) on key copying alone). `before` semantics are preserved
-  // exactly: `isFresh` identifies keys added by THIS call; every other existing
-  // key is pre-existing.
-  const freshItems: GuardItem[] = []
-  const isFresh = new Set<string>()
+  const before = new Set(projection.items.keys())
   let coveredSpans = 0
   // Scopes are resolved in stack order, not text order, so each segment takes
   // the first occurrence of its verbatim text that no earlier segment claimed.
@@ -925,11 +917,11 @@ function insertItems(
         const target = located?.[2]
         if (target && rootLocatorFlavor(target)) {
           const item = insert(projection, segment, sourceMessageId, target, 'scope', unitId,
-            provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined, freshItems)
+            provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
           item.targetSource = { kind: 'explicit_path' }
         } else {
           const item = insert(projection, segment, sourceMessageId, 'scope', 'scope', unitId,
-            provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined, freshItems)
+            provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
           delete item.requestedTarget?.scope
           item.targetCaptureStatus = 'clarification_required'
           delete item.targetSource
@@ -941,25 +933,24 @@ function insertItems(
         const resolved = resolveArtifact(manifests[0]!, scope)
         const project = resolved.replace(/[\\/]package\.json$/iu, '')
         insert(projection, segment, sourceMessageId, project || resolved, 'scope', unitId,
-          provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined, freshItems)
+          provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
         continue
       }
     }
     if (segment.paths.length === 0) {
-      insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined, freshItems)
+      insert(projection, segment, sourceMessageId, scope.cwd || 'scope', 'scope', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
       continue
     }
     for (const path of segment.paths) {
-      insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined, freshItems)
+      insert(projection, segment, sourceMessageId, resolveArtifact(path, scope), 'artifact', unitId, provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined)
     }
   }
-  for (const added of freshItems) isFresh.add(added.id)
   // Direct coordination in this immutable root is the only source of a v6
   // repair-child edge. A later pause/persistence clause cannot manufacture
   // parentage from sibling items that happen to share a work unit.
   if (projection.boundaryProtocol === 6 && !legacy && provenance) {
-    const fresh = freshItems.filter((item) => item.sourceMessageId === sourceMessageId
-      && item.rawTextSha256 === provenance.rawTextSha256
+    const fresh = [...projection.items.values()].filter((item) => !before.has(item.id)
+      && item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256
       && item.spans?.[0]?.partIndex === 0)
       .sort((a, b) => a.spans![0]!.start - b.spans![0]!.start)
     // A named read-only observer is a method of the preceding root work, not
@@ -1005,9 +996,9 @@ function insertItems(
       method.observerMethod = { tools, targetItemIds: targetIds as string[] }
     }
     let parent: GuardItem | undefined
-    const raw = Buffer.from(provenance.rawText, 'utf8')
     for (const item of fresh) {
       const own = item.spans![0]!
+      const raw = Buffer.from(provenance.rawText, 'utf8')
       const clause = raw.subarray(own.start, own.end).toString('utf8')
       if (item.semanticAction === 'modify' && item.authorityDisposition === 'executable_now'
         && item.requestedTarget?.artifact_id) { parent = item; continue }
@@ -1034,7 +1025,7 @@ function insertItems(
   // superseded, so no stale waiting obligation is left behind. The release is
   // derived from the durable message, never from model text.
   for (const [id, item] of projection.items) {
-    if (!isFresh.has(id)) continue
+    if (before.has(id)) continue
     if (item.kind !== 'requirement' || item.waitAuthorization || item.authorityDisposition === 'conditional_wait') continue
     // Only a genuinely executable instruction releases a reservation. 0.6.1
     // (W060-02): a narrative or informational scope that merely names the same
@@ -1060,12 +1051,12 @@ function insertItems(
   // qualify, so nothing unrelated is deleted by similar wording.
   if (clarificationText) {
     for (const [id, item] of projection.items) {
-      if (!isFresh.has(id)) continue
+      if (before.has(id)) continue
       if (item.kind === 'prohibition' || item.status !== 'pending') continue
       if (item.authorityDisposition !== 'executable_now') continue
       if (!item.semanticAction || item.semanticAction === 'generic_run') continue
       for (const [otherId, other] of projection.items) {
-        if (otherId === id || isFresh.has(otherId)) continue
+        if (otherId === id || !before.has(otherId)) continue
         if (other.status !== 'pending' || other.kind === 'prohibition') continue
         if (other.waitAuthorization || other.legacyFlags?.length) continue
         // A verbatim clarification refines a generic duty OR an unresolved
@@ -1091,7 +1082,7 @@ function insertItems(
   // it, so each newly resolved obligation can unblock the next.
   for (let round = 0; round < 8; round += 1) {
     const unresolved = [...projection.items]
-      .filter(([id, item]) => isFresh.has(id) && item.targetSource?.kind === 'environment_default')
+      .filter(([id, item]) => !before.has(id) && item.targetSource?.kind === 'environment_default')
     if (unresolved.length === 0) break
     let resolvedAny = false
     for (const [, item] of unresolved) {
@@ -1101,7 +1092,7 @@ function insertItems(
     if (!resolvedAny) break
   }
   for (const [id, item] of projection.items) {
-    if (!isFresh.has(id)) continue
+    if (before.has(id)) continue
     if (legacy) {
       const deterministicRebind = legacyAuthorityProven
         && item.semanticAction !== undefined && item.semanticAction !== 'generic_run'
@@ -1162,19 +1153,6 @@ function informationReadingNamesWork(text: string): boolean {
   return scopes.some((scope) => scope.authorityDisposition !== 'informational')
 }
 
-/** CG-083-PERF02: the interpretation rule is a pure function of the record's
- * own bytes; a long history re-asks it per delivery, so memoize by text. */
-const informationReadingMemo = new Map<string, boolean>()
-function informationReadingNamesWorkMemoized(text: string): boolean {
-  const digest = sha256(text)
-  const cached = informationReadingMemo.get(digest)
-  if (cached !== undefined) return cached
-  const value = informationReadingNamesWork(text)
-  if (informationReadingMemo.size > 512) informationReadingMemo.clear()
-  informationReadingMemo.set(digest, value)
-  return value
-}
-
 /**
  * The pure upgrade-eligibility predicate: the records in the current closure
  * scope that may NOT be inherited as a current pass, with the reason that
@@ -1222,7 +1200,7 @@ function eligibilityReviewReasons(projection: GuardProjection): Array<[string, N
       findings.push([item.id, 'unknown_state_version'])
       continue
     }
-    if (informationReading && informationReadingNamesWorkMemoized(item.normalizedText)) {
+    if (informationReading && informationReadingNamesWork(item.normalizedText)) {
       findings.push([item.id, 'legacy_mixed_information_scope'])
       continue
     }
@@ -1418,7 +1396,6 @@ function insert(
   surface: 'artifact' | 'scope',
   unitId?: string,
   provenance?: { rawTextSha256: string; span?: SourceSpan },
-  freshOut?: GuardItem[],
 ): GuardItem {
   const revision = projection.contractRevision + 1
   const id = nextId(projection.items, segment.kind)
@@ -1499,22 +1476,14 @@ function insert(
     item.rawTextSha256 = provenance.rawTextSha256
     if (provenance.span) item.spans = [provenance.span]
   }
-  const duplicate = indexesEnabled()
-    ? findPendingDuplicateFromIndex(projection.items, segment.kind, item.textSha256, subject)
-    : [...projection.items.values()].find(
-      (existing) => existing.kind === segment.kind
-        && existing.status === 'pending'
-        && existing.textSha256 === item.textSha256
-        && existing.verification.subject === subject,
-    )
+  const duplicate = [...projection.items.values()].find(
+    (existing) => existing.kind === segment.kind
+      && existing.status === 'pending'
+      && existing.textSha256 === item.textSha256
+      && existing.verification.subject === subject,
+  )
   if (duplicate) supersedeItem(projection.items, duplicate.id, item)
-  else {
-    projection.items.set(id, item)
-    registerFoldItem(projection.items, item)
-  }
-  // CG-083-PERF02: the caller tracks exactly which items THIS capture added,
-  // so the per-message post-passes never diff the whole item map.
-  freshOut?.push(item)
+  else projection.items.set(id, item)
   projection.contractRevision = item.revision
   return item
 }
@@ -1535,19 +1504,8 @@ export function rootLocatorFlavor(cwd: string): 'posix' | 'windows' | undefined 
   return windowsBase ? 'windows' : posixBase ? 'posix' : undefined
 }
 
-/**
- * CG-083-R5: the seq index is scoped to ONE derive call and built from the
- * exact array that call consumes. It is never cached across calls: the
- * exported derive API accepts any event array and its immutability is not a
- * verified premise, so an array that was appended to between two derives must
- * resolve its newly added sequences.
- */
-function buildEventsBySeq(sourceEvents: readonly DerivedEnvelope[]): Map<number, DerivedEnvelope> {
-  return new Map(sourceEvents.map((event) => [event.seq, event]))
-}
-
 function refreshRootLocatorContext(
-  projection: GuardProjection, bySeq: Map<number, DerivedEnvelope>, scope: DeriveScope, asOf: number,
+  projection: GuardProjection, sourceEvents: readonly DerivedEnvelope[], scope: DeriveScope, asOf: number,
 ): void {
   projection.rootLocatorContexts.clear()
   projection.rootLocatorIdentity = undefined
@@ -1557,9 +1515,9 @@ function refreshRootLocatorContext(
   const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : []
   for (const ref of refs) {
     if (ref.seq > asOf) continue
-    const source = bySeq.get(ref.seq)
-    if (!source || source.type !== 'user/message'
-      || asRecord(asRecord(source.data)?.source)?.kind !== 'user') continue
+    const source = sourceEvents.find((event) => event.seq === ref.seq && event.type === 'user/message'
+      && asRecord(asRecord(event.data)?.source)?.kind === 'user')
+    if (!source) continue
     const content = asRecord(source.data)?.content
     const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === 'text')
       .map((part) => String(asRecord(part)?.text ?? '')).join('') : ''
@@ -1666,8 +1624,6 @@ export function deriveProjection(
     && !scope.sessionHeader?.delegationDepth
     && scope.sessionHeader?.origin !== 'subagent'
 
-  // CG-083-R5: one seq index per derive, over the exact array this call reads.
-  const eventsBySeq = buildEventsBySeq(sourceEvents)
   for (const event of sourceEvents) {
     projection.enabled = enabled
     projection.lastObservedSourceSeq = Math.max(projection.lastObservedSourceSeq, event.seq)
@@ -2251,7 +2207,7 @@ export function deriveProjection(
           // A v6 certificate binds the root locator as it stood when this
           // result was persisted. Compute it before replay, not only after the
           // entire log has been folded (which would reject a valid v4 record).
-          refreshRootLocatorContext(projection, eventsBySeq, scope, event.seq)
+          refreshRootLocatorContext(projection, sourceEvents, scope, event.seq)
           const result = certifyCheckpoint(projection, call.bindings ?? [], id, false)
           if (result.status !== 'certified' || !result.checkpoint || !recordedCertificateMatches(recorded.certificate, result.checkpoint)) {
             projection.integrity = 'corrupt'
@@ -2421,7 +2377,7 @@ export function deriveProjection(
       item.status = 'passed'
     }
   }
-  refreshRootLocatorContext(projection, eventsBySeq, scope, sourceEvents.at(-1)?.seq ?? 0)
+  refreshRootLocatorContext(projection, sourceEvents, scope, sourceEvents.at(-1)?.seq ?? 0)
   // 0.6.3 K4: the upgrade eligibility check runs BEFORE any terminal filtering,
   // so a record 0.6.2 closed as `answered` is still re-read and, when its own
   // text orders work, marked `needs_review` for the CURRENT layer.

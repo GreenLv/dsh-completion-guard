@@ -465,11 +465,16 @@ function shellOutcome(
  * derived layer records its source and conflict flag instead of changing history.
  */
 /**
- * CG-083-BUG03: the ONE terminal verdict a native observer may rely on for a
- * persisted shell call. Reuses the evidence layer's terminal classification
- * (structured facts, then audited renderer markers) so the observer cannot
- * drift from the same-family producer rules: a failed hook, a backgrounded or
- * truncated result, or an unclassifiable terminal state is never "success".
+ * CG-083-BUG03/R4: the ONE terminal verdict a native observer may rely on for
+ * a persisted shell call. Reuses the evidence layer's AUTHORITATIVE terminal
+ * resolution (the run's own `contextGuardProcess` declaration, then any other
+ * structured meta fact, then the audited renderer markers) and cross-checks
+ * it against the rendered markers: a declared failure is never upgraded, and
+ * a declared verdict that CONTRADICTS the rendered markers is unresolvable
+ * and stays `unknown`. A failed hook, a backgrounded or truncated result, or
+ * an unclassifiable terminal state is therefore never "success". This reads
+ * the CURRENT observation only; the historical frozen `outcome` of
+ * already-recorded evidence is not rewritten.
  */
 export function shellReadbackOutcome(
   surface: 'bash' | 'pwsh' | 'shell',
@@ -480,8 +485,18 @@ export function shellReadbackOutcome(
     || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent)
     || /^started background job \S+\s*$/.test(result.textContent)
   const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent)
-  const terminal = legacyTerminalFacts(result.meta, result.textContent)
-  const outcome = shellOutcome(surface, terminal, result.error, backgrounded)
+  const declaredFacts = resolveDeclaredTerminalFacts(result.meta, result.textContent).facts
+  const renderedFacts = extractTerminalFacts(result.textContent)
+  const declared = shellOutcome(surface, declaredFacts, result.error, backgrounded)
+  const rendered = shellOutcome(surface, renderedFacts, result.error, backgrounded)
+  let outcome: 'success' | 'failure' | 'unknown'
+  if (declared === rendered) outcome = declared
+  else if (declared === 'failure' && rendered === 'success' && !renderedFacts.marked) {
+    // The run's own declaration of failure outranks the unmarked-tail success
+    // SHORTCUT (an inference from the absence of a marker), never the other
+    // way around.
+    outcome = 'failure'
+  } else outcome = 'unknown'
   return outputIncomplete && outcome !== 'failure' ? 'unknown' : outcome
 }
 

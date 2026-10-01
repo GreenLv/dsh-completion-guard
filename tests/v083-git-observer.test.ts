@@ -144,6 +144,84 @@ it('does not observe a backgrounded commit result', async () => {
   }
 }, 30_000)
 
+it('reads the parent from the raw object under shallow boundaries and replace refs', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-raw-'))
+  try {
+    const origin = join(root, 'origin')
+    await gitExec('git', ['init', '-b', 'main', origin])
+    await gitExec('git', ['-C', origin, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', origin, 'config', 'user.email', 'fixture@example.invalid'])
+    await writeFile(join(origin, 'a.txt'), 'first\n')
+    await gitExec('git', ['-C', origin, 'add', 'a.txt'])
+    await gitExec('git', ['-C', origin, 'commit', '-m', 'first'])
+    await writeFile(join(origin, 'a.txt'), 'second\n')
+    await gitExec('git', ['-C', origin, 'add', 'a.txt'])
+    await gitExec('git', ['-C', origin, 'commit', '-m', 'second'])
+    const secondOid = (await gitExec('git', ['-C', origin, 'rev-parse', 'HEAD'])).stdout.trim()
+
+    // 1. A replace ref that swaps HEAD for a PARENTLESS object would make a
+    // traversal view (rev-list) report `root`; the raw object still has the
+    // real parent.
+    const fakeRootTree = (await gitExec('git', ['-C', origin, 'rev-parse', 'HEAD^{tree}'])).stdout.trim()
+    const fakeRoot = (await gitExec('git', ['-C', origin, 'commit-tree', fakeRootTree, '-m', 'forged root'])).stdout.trim()
+    await gitExec('git', ['-C', origin, 'replace', secondOid, fakeRoot])
+    const shallowClone = join(root, 'shallow')
+    // 2. A shallow clone hides the boundary commit's parents from rev-list.
+    await gitExec('git', ['clone', '--depth', '1', '--no-local', origin, shallowClone])
+    await gitExec('git', ['-C', shallowClone, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', shallowClone, 'config', 'user.email', 'fixture@example.invalid'])
+    await writeFile(join(shallowClone, 'b.txt'), 'third\n')
+    await gitExec('git', ['-C', shallowClone, 'add', 'b.txt'])
+    const shallowCommit = (await gitExec('git', ['-C', shallowClone, 'commit', '-m', 'third'])).stdout
+    const shallowHead = (await gitExec('git', ['-C', shallowClone, 'rev-parse', 'HEAD'])).stdout.trim()
+    const session = sessionFor('git-raw-object', shallowClone, `Commit changes in repository ${shallowClone}.`)
+    appendCall(session, 'raw-commit', 'bash', { command: 'git commit -m third', workdir: shallowClone })
+    appendResult(session, 'raw-commit', shallowCommit)
+    const result = await observer.execute({ effect_call_id: 'raw-commit' }, exec(session)) as { status: string; reason_code: string; parent_oid: string; post_oid: string }
+    expect(result, JSON.stringify({ result, shallowHead, secondOid })).toMatchObject({ status: 'observed', reason_code: 'git_commit_observed' })
+    // Under BOTH the replace ref and the shallow boundary, the parent comes
+    // from the raw object: the shallow clone's boundary parent (the origin's
+    // second commit) must be reported, never the forged `root`.
+    expect(result.parent_oid).toBe(secondOid)
+    expect(result.parent_oid).not.toBe(NATIVE_GIT_ROOT_PARENT_OID)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}, 60_000)
+
+it('reports the first parent of a merge commit', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-merge-'))
+  try {
+    const work = join(root, 'work')
+    await gitExec('git', ['init', '-b', 'main', work])
+    await gitExec('git', ['-C', work, 'config', 'user.name', 'Fixture'])
+    await gitExec('git', ['-C', work, 'config', 'user.email', 'fixture@example.invalid'])
+    await writeFile(join(work, 'a.txt'), 'base\n')
+    await gitExec('git', ['-C', work, 'add', 'a.txt'])
+    await gitExec('git', ['-C', work, 'commit', '-m', 'base'])
+    const firstParent = (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim()
+    await gitExec('git', ['-C', work, 'checkout', '-b', 'side'])
+    await writeFile(join(work, 'b.txt'), 'side\n')
+    await gitExec('git', ['-C', work, 'add', 'b.txt'])
+    await gitExec('git', ['-C', work, 'commit', '-m', 'side'])
+    const secondParent = (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim()
+    await gitExec('git', ['-C', work, 'checkout', 'main'])
+    await gitExec('git', ['-C', work, 'merge', '--no-ff', '--no-edit', 'side'])
+    const mergeOid = (await gitExec('git', ['-C', work, 'rev-parse', 'HEAD'])).stdout.trim()
+    const session = sessionFor('git-merge', work, `Commit changes in repository ${work}.`)
+    appendCall(session, 'merge-commit', 'bash', { command: 'git commit -m merged', workdir: work })
+    // The merge was created out-of-band; the observer only verifies what the
+    // persisted call/result bind, so echo the merge's own summary like a real
+    // foreground commit would print.
+    appendResult(session, 'merge-commit', `[main ${mergeOid.slice(0, 7)}] merged`)
+    const result = await observer.execute({ effect_call_id: 'merge-commit' }, exec(session)) as { status: string; parent_oid: string }
+    expect(result, JSON.stringify({ result, firstParent, secondParent, mergeOid })).toMatchObject({ status: 'observed', reason_code: 'git_commit_observed' })
+    expect(result.parent_oid).toBe(firstParent)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}, 60_000)
+
 it('propagates cancellation into the git subprocesses', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-cg-git-cancel-'))
   try {

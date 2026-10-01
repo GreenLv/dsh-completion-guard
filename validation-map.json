@@ -41,6 +41,7 @@
         ".reader-review-*.json",
         "AGENTS.md",
         "CONTEXT_GUARD_FINDING_*.md",
+        "IMPLEMENTATION_RESULT*.md",
         "IMPLEMENTATION_RESULT.md",
         "UPSTREAM_API_AUDIT.md",
         "assets/**",

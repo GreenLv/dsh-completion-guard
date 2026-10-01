@@ -625,9 +625,22 @@ function quotedSpans(text: string): { masked: string; inside: boolean[] } {
   return { masked, inside }
 }
 
-/** Blank out every quoted span of the text. */
+/**
+ * CG-083-PERF02 (profile-guided): maskQuotedSpans is a pure function of the
+ * text and capture re-asks it many times per clause on long histories
+ * (segmentsForBoundary, captureItem, the observer-method scan all mask the
+ * same strings). Memoize by exact input in a bounded map — a pure parse cache
+ * over immutable strings, not a trust cache; any change of text produces a
+ * different key.
+ */
+const quotedMaskCache = new Map<string, string>()
 export function maskQuotedSpans(text: string): string {
-  return quotedSpans(text).masked
+  const cached = quotedMaskCache.get(text)
+  if (cached !== undefined) return cached
+  const masked = quotedSpans(text).masked
+  if (quotedMaskCache.size > 4096) quotedMaskCache.clear()
+  quotedMaskCache.set(text, masked)
+  return masked
 }
 
 /** Whether the offset lies inside a quoted span. */
