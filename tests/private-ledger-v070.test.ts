@@ -46,15 +46,14 @@ describe('v0.7 provider-invisible private ledger', () => {
     try {
       expect(appendPrivateLedger(root, 'session-a', 'release_reservation', reservation)).toBe(true)
       const path = join(root, readdirSync(root).find((name) => name.endsWith('.jsonl') && !name.startsWith('session-anchors'))!)
-      // Revision 2: the holder is slot.json; an unparsable slot record is an
-      // unknown owner and refuses.
-      const lockDir = root
-      writeFileSync(join(lockDir, 'slot.json'), 'held')
+      // Revision 3: an unparsable v2 record at the legacy path is an unknown
+      // owner and refuses (L3).
+      writeFileSync(join(root, '.writer.lock'), 'held')
       expect(appendPrivateLedger(root, 'session-a', 'release_settlement', {
         contractId: 'release-1', operation: 'npm_publish', callId: 'call-1', settledAtSeq: 0,
         readback: 'unavailable', outcome: 'unknown', settlement_source: 'effect',
       })).toBe(false)
-      rmSync(join(lockDir, 'slot.json'))
+      rmSync(join(root, '.writer.lock'))
       expect(appendPrivateLedger(root, 'session-b', 'restart_intent', {
         resolution_call_id: 'resolve', service_id: 'market', pre_generation: 'boot',
       })).toBe(true)

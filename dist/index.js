@@ -1,9 +1,9 @@
-import { $ as segmentAuthorityBlocks, $i as qualifyHostTrust, $n as relevantEvidence, $r as reportingHeadGoverns, $t as readbackSettlesContract, A as PROTOCOL_V3_NOTICE, Aa as ACTION_MANIFEST_VERSION, Ai as prepareDesktopHostTrust, An as unitDescendantIds, Ar as hasOrderedCoordination, At as MIN_RECOVERY_CHAR_BUDGET, B as evidenceFromPersistedToolResult, Ba as boundedArtifactChoiceMatches, Bi as DESKTOP_RUNTIME_PACKAGE_NAME, Bn as proposeRebindOutcome, Br as isQuestionScopeNeedingReview, Bt as renderRecoveryPacket, C as SESSION_API_UNSUPPORTED, Ca as SUPPORTED_HOST_RANGE, Ci as hostLockRowsFromComposedDump, Cn as progressFingerprint, Cr as actionVerbMatches, Ct as sessionQueryV2, D as projectCoreV2, Da as parseHostVersion, Di as packageRowsFromActiveGraph, Dn as hasCurrentCertificate, Dr as clauseIsProtected, Dt as CLEANUP_CONDITION_RULE_COMPACT, E as snapshotSessionEvents, Ea as evaluateMinimumHostVersion, Ei as inspectTargetHostGraph, En as goalCompletionDenial, Er as clauseIsGoverned, Et as CLEANUP_CONDITION_RULE, F as deriveProjection, Fa as STATEFUL_ACTIONS, Fi as resolveInstalledHostLock, Fn as qualifyBoundary, Fr as introducesActionClause, Ft as cleanupConditionFor, G as persistedToolResultStatus, Ga as semanticActionFromCommand, Gi as readDesktopAppRuntime, Gn as CONFIRM_LINE_PATTERN, Gr as maskCodeSpans, Gt as OUTCOME_STRENGTH, H as extractToolSubject, Ha as requestedIdentityKey, Hi as hasDesktopImporterState, Hn as rebindAttemptKey, Hr as itemHoldsExecutionAuthority, Ht as currentV6Feedback, I as legacyRecordsNeedingReview, Ia as STOP_PROTOCOL_VERSION, Ii as revalidateDesktopCoreLock, In as currentContractDigest, Ir as isExecutableItem, It as closingHint, J as canonicalArgvFromCommand, Ja as validateActionTarget, Ji as writeDesktopRuntimeReceipt, Jn as capabilityRemedyPhrase, Jr as opensConditionLead, Jt as contractById, K as shellReadbackOutcome, Ka as semanticActionFromText, Ki as readDesktopDependency, Kn as isFrozenV042RebindResponse, Kr as maskQuotedSpans, Kt as RELEASE_OPERATIONS, L as rootLocatorFlavor, La as STOP_PROTOCOL_VERSION_V2, Li as verifyComposedHostLockDump, Ln as createProjection, Lr as isExplanationScope, Lt as openItems, M as PROTOCOL_V5_NOTICE, Ma as CERTIFICATE_VERSION, Mi as readActiveHostGraph, Mn as availableBoundaryQualifications, Mr as hasWorkPredicate, Mt as V6_ORDINARY_COMPLETION_RULE_COMPACT, N as PROTOCOL_V6_NOTICE, Na as CERTIFICATE_VERSION_V2, Ni as resolveActiveProfileHostLock, Nn as effectuateBoundary, Nr as interpretClause, Nt as V6_ORDINARY_COMPLETION_RULE_SHORT, O as CAPTURE_V042_NOTICE, Oa as satisfiesSupportedHostRange, Oi as packageRowsFromPnpmLock, On as certifiableOpenItems, Or as explanationHasActionResidue, Ot as CLEANUP_CONDITION_RULE_SHORT, P as applyUpgradeEligibility, Pa as SEMANTIC_ACTIONS, Pi as resolveDesktopProfileHostLock, Pn as isCurrentAcceptedBoundary, Pr as interpretMessage, Pt as carriesCleanupCondition, Q as authorityCaptureCounts, Qi as parseHostTrust, Qn as nativeFileTwoRole, Qr as questionHeadsClause, Qt as normalizeSettlement, R as supersedeItem, Ra as SUPPORTED_EVIDENCE_ADAPTERS, Ri as DESKTOP_IDENTITY_FACTS, Rn as confirmRebind, Rr as isInformationalFragment, Rt as recoveryDigest, S as sourcedNamedTestRoot, Sa as MIN_SUPPORTED_HOST_VERSION, Si as hostLockContextFromComposedDump, Sn as observeAssistantOutcome, Sr as LEGACY_QUALIFICATION, St as sessionQuery, T as SessionApiError, Ta as compareHostVersions, Ti as inspectDesktopTargetGraph, Tn as v6TestPredicate, Tr as clauseAsksOwnQuestion, Tt as validateProofManifestV2, U as isDeterministicCheck, Ua as requestedTargetAuthorizesMutation, Ui as readAsarFile, Un as rebindResponse, Ur as kindOfScope, Ut as isV6PendingRootWait, V as extractTextContent, Va as isStatefulAction, Vi as auditDesktopInstalledImplementation, Vn as proposeRebindV042, Vr as isRestatement, Vt as v6CurrentRootBoundaries, W as nativeGitParentOidVerified, Wa as requestedTargetMatchesResolved, Wi as readAsarIndex, Wn as replayRebindResult, Wr as legacyQuestionReadingIsInformational, Wt as sourceItemForCoreRequirement, X as parsePwshCommand, Xa as createHostAuditSession, Xi as acquireHostTrust, Xn as evidenceAvailabilityReason, Xr as presentExplanationHead, Xt as normalizeReleaseContract, Y as isRunExecutable, Ya as RC020_RC2_HOST_PACKAGES, Yi as HostTrustError, Yn as deriveItemDiagnosis, Yr as opensWithDirective, Yt as inFlightReservation, Z as parseShellCommand, Zi as hostTrustDigest, Zn as itemDiagnosis, Zr as qualificationOfClause, Zt as normalizeReservation, _ as previewFirstStepInjection, _a as evaluateToolSurfaceCapability, _i as auditedForegroundRenderers, _n as decisionBoundaryKey, _r as canonicalRegistryBase, _t as proofHostSurfacesOf, a as commitTreeSnapshotDigest, aa as BASE_HOST_PACKAGES, ai as COMMAND_SURFACE_MANIFEST, an as evidenceCoverage, ar as partialFailureOf, at as PROOF_MANIFEST_DOMAIN_V2, b as HOST_WORKDIR_PREFIX, ba as HOST_VALIDATED_VERSIONS, bi as evaluateActiveHostLock, bn as latestAssistantText, br as classifyUserInteraction, bt as requiredSubjectsOf, c as gitCommandMatchesTarget, ca as GOAL_HOST_PACKAGES, ci as digestStrings, cn as CONTROL_RECORD_PREFIX, cr as captureClause, ct as bindProofToProjection, d as verifiedLinearCommitReadback, da as bindExecutableIdentity, di as sanitizeUrl, dn as assessmentAction, dr as environmentDefaultRepositoryTarget, dt as createProofManifest, ea as registryArchiveFiles, ei as restatedContentOf, en as releaseContractFor, er as DEPENDENCY_FREE_ONLY_CONDITION, et as bindingIndividuallyAccepted, f as FIRST_STEP_GUIDANCE, fa as bindLiveGoalCapability, fi as sha256, fn as assessmentOutcomePredicate, fr as extractArtifactPaths, ft as createProofManifestV2, g as lifecyclePhase, ga as evaluateHostLock, gi as auditedDefaultWorkdirProvider, gn as decideTurnStopping, gr as segmentClauses, gt as proofEvidenceConstraints, h as firstStepGuidanceV6, ha as evaluateHostCapability, hi as auditedDefaultWorkdirHost, hn as decideTurnBoundary, hr as isInformationalMessage, ht as proofDigestV2, i as commitIndexSnapshotDigest, ia as ACTIVE_HOST_LAUNCHER_VERSION, ii as verbIsNegated, in as bindingSatisfies, ir as capabilityFactOf, it as PROOF_KINDS_V2, j as PROTOCOL_V4_NOTICE, ja as BOUNDED_ARTIFACT_TYPES, ji as prepareTargetHostTrust, jn as BOUNDARY_RECORD_PREFIX, jr as hasQuestionScope, jt as V6_ORDINARY_COMPLETION_RULE, k as DEFAULT_DELEGATION_TOOL_NAMES, ka as ACTION_MANIFEST, ki as prepareActiveHostTrust, kn as certificateClosure, kr as governedClauseRestrictsExecution, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as parseGitCommandManifest, la as HOST_CAPABILITY_PACKAGE_GROUPS, li as normalizeClause, ln as NO_PROGRESS_RECORD_PREFIX, lr as captureItem, lt as bindProofV2ToProjection, m as firstStepGuidance, ma as evaluateGraphDerivedHostLock, mi as activeRendererModule, mn as currentActionBases, mr as extractOperation, mt as proofDigest, n as GIT_COMMAND_MANIFEST_IDS, na as ACTIVE_HOST_COHORT_ID, ni as splitTextFragments, nn as releasePreEffectDecision, nr as admissibleForRemoval, nt as PROOF_CAPABILITY_MATRIX, o as createGitPrestateEnvelope, oa as DEFAULT_HOST_LOCK, oi as validateManifest, on as evidenceMatchesItem, or as removalIsComplete, ot as PROOF_PROTOCOL_VERSION, p as claimedBatchHasRealRootInput, pa as evaluateExternalWaitCapability, pi as HostProfileError, pn as classifyCompletionClaim, pr as extractMethod, pt as proofCapabilityReport, q as withDurability, qa as validateActionManifest, qi as readDesktopTargetGraph, qn as parseConfirmationMessage, qr as namedActions, qt as RELEASE_OPERATION_SURFACES, r as GIT_COMMAND_TEMPLATES, ra as ACTIVE_HOST_COHORT_IDS, ri as statefulActionsOfScope, rn as reservationFor, rr as capabilityConsequence, rt as PROOF_KINDS, s as executeRevalidatedGitEffect, sa as EXPECTED_HOST_PACKAGES, si as canonicalizePath, sn as isVerifyingCapability, sr as removalIsPartiallyKnown, st as PROOF_PROTOCOL_VERSION_V2, t as RC020_RC1_HOST_PACKAGES, ta as registryArchiveModules, ti as semanticActionOfScope, tn as releaseCoverage, tr as actionHasCertificationPath, tt as certifyCheckpoint, u as revalidateGitPrestate, ua as HOST_COHORTS, ui as sanitizeClauseText, un as NO_PROGRESS_TURNS_BEFORE_STOP, ur as classifyClause, ut as canonicalProjection, v as projectSessionCoreV2, va as hostVersionFromPackages, vi as auditedHostImplementation, vn as isRootPauseRequest, vr as npmEscapedPackageName, vt as proofOperationMatches, w as SESSION_EVENT_ENVELOPE_INVALID, wa as SUPPORTED_HOST_VERSIONS, wi as injectActiveProfileHostLock, wn as testOutcomePredicate, wr as clarifiedSpanOf, wt as validateProofManifest, x as captureHostWorkdir, xa as LATEST_TESTED_HOST_VERSION, xi as evaluateConfiguredHostLock, xn as latestRootInstruction, xr as GRANTED_QUALIFICATION, xt as scopeCoverageDigest, y as sessionCoreSnapshot, ya as selectHostCohort, yi as combineHostPolicy, yn as isWholeTaskCompletionClaim, yr as classifyTaskIntent, yt as proofV2Rejection, z as NATIVE_GIT_ROOT_PARENT_OID, za as actionCompatible, zi as DESKTOP_PROFILE_PACKAGE_NAME, zn as proposeRebind, zr as isOpenObligation, zt as recoveryTitle } from "./domain-C7xfwqid.js";
+import { $ as segmentAuthorityBlocks, $i as qualifyHostTrust, $n as relevantEvidence, $r as reportingHeadGoverns, $t as readbackSettlesContract, A as PROTOCOL_V3_NOTICE, Aa as ACTION_MANIFEST_VERSION, Ai as prepareDesktopHostTrust, An as unitDescendantIds, Ar as hasOrderedCoordination, At as MIN_RECOVERY_CHAR_BUDGET, B as evidenceFromPersistedToolResult, Ba as boundedArtifactChoiceMatches, Bi as DESKTOP_RUNTIME_PACKAGE_NAME, Bn as proposeRebindOutcome, Br as isQuestionScopeNeedingReview, Bt as renderRecoveryPacket, C as SESSION_API_UNSUPPORTED, Ca as SUPPORTED_HOST_RANGE, Ci as hostLockRowsFromComposedDump, Cn as progressFingerprint, Cr as actionVerbMatches, Ct as sessionQueryV2, D as projectCoreV2, Da as parseHostVersion, Di as packageRowsFromActiveGraph, Dn as hasCurrentCertificate, Dr as clauseIsProtected, Dt as CLEANUP_CONDITION_RULE_COMPACT, E as snapshotSessionEvents, Ea as evaluateMinimumHostVersion, Ei as inspectTargetHostGraph, En as goalCompletionDenial, Er as clauseIsGoverned, Et as CLEANUP_CONDITION_RULE, F as deriveProjection, Fa as STATEFUL_ACTIONS, Fi as resolveInstalledHostLock, Fn as qualifyBoundary, Fr as introducesActionClause, Ft as cleanupConditionFor, G as persistedToolResultStatus, Ga as semanticActionFromCommand, Gi as readDesktopAppRuntime, Gn as CONFIRM_LINE_PATTERN, Gr as maskCodeSpans, Gt as OUTCOME_STRENGTH, H as extractToolSubject, Ha as requestedIdentityKey, Hi as hasDesktopImporterState, Hn as rebindAttemptKey, Hr as itemHoldsExecutionAuthority, Ht as currentV6Feedback, I as legacyRecordsNeedingReview, Ia as STOP_PROTOCOL_VERSION, Ii as revalidateDesktopCoreLock, In as currentContractDigest, Ir as isExecutableItem, It as closingHint, J as canonicalArgvFromCommand, Ja as validateActionTarget, Ji as writeDesktopRuntimeReceipt, Jn as capabilityRemedyPhrase, Jr as opensConditionLead, Jt as contractById, K as shellReadbackOutcome, Ka as semanticActionFromText, Ki as readDesktopDependency, Kn as isFrozenV042RebindResponse, Kr as maskQuotedSpans, Kt as RELEASE_OPERATIONS, L as rootLocatorFlavor, La as STOP_PROTOCOL_VERSION_V2, Li as verifyComposedHostLockDump, Ln as createProjection, Lr as isExplanationScope, Lt as openItems, M as PROTOCOL_V5_NOTICE, Ma as CERTIFICATE_VERSION, Mi as readActiveHostGraph, Mn as availableBoundaryQualifications, Mr as hasWorkPredicate, Mt as V6_ORDINARY_COMPLETION_RULE_COMPACT, N as PROTOCOL_V6_NOTICE, Na as CERTIFICATE_VERSION_V2, Ni as resolveActiveProfileHostLock, Nn as effectuateBoundary, Nr as interpretClause, Nt as V6_ORDINARY_COMPLETION_RULE_SHORT, O as CAPTURE_V042_NOTICE, Oa as satisfiesSupportedHostRange, Oi as packageRowsFromPnpmLock, On as certifiableOpenItems, Or as explanationHasActionResidue, Ot as CLEANUP_CONDITION_RULE_SHORT, P as applyUpgradeEligibility, Pa as SEMANTIC_ACTIONS, Pi as resolveDesktopProfileHostLock, Pn as isCurrentAcceptedBoundary, Pr as interpretMessage, Pt as carriesCleanupCondition, Q as authorityCaptureCounts, Qi as parseHostTrust, Qn as nativeFileTwoRole, Qr as questionHeadsClause, Qt as normalizeSettlement, R as supersedeItem, Ra as SUPPORTED_EVIDENCE_ADAPTERS, Ri as DESKTOP_IDENTITY_FACTS, Rn as confirmRebind, Rr as isInformationalFragment, Rt as recoveryDigest, S as sourcedNamedTestRoot, Sa as MIN_SUPPORTED_HOST_VERSION, Si as hostLockContextFromComposedDump, Sn as observeAssistantOutcome, Sr as LEGACY_QUALIFICATION, St as sessionQuery, T as SessionApiError, Ta as compareHostVersions, Ti as inspectDesktopTargetGraph, Tn as v6TestPredicate, Tr as clauseAsksOwnQuestion, Tt as validateProofManifestV2, U as isDeterministicCheck, Ua as requestedTargetAuthorizesMutation, Ui as readAsarFile, Un as rebindResponse, Ur as kindOfScope, Ut as isV6PendingRootWait, V as extractTextContent, Va as isStatefulAction, Vi as auditDesktopInstalledImplementation, Vn as proposeRebindV042, Vr as isRestatement, Vt as v6CurrentRootBoundaries, W as nativeGitParentOidVerified, Wa as requestedTargetMatchesResolved, Wi as readAsarIndex, Wn as replayRebindResult, Wr as legacyQuestionReadingIsInformational, Wt as sourceItemForCoreRequirement, X as parsePwshCommand, Xa as createHostAuditSession, Xi as acquireHostTrust, Xn as evidenceAvailabilityReason, Xr as presentExplanationHead, Xt as normalizeReleaseContract, Y as isRunExecutable, Ya as RC020_RC2_HOST_PACKAGES, Yi as HostTrustError, Yn as deriveItemDiagnosis, Yr as opensWithDirective, Yt as inFlightReservation, Z as parseShellCommand, Zi as hostTrustDigest, Zn as itemDiagnosis, Zr as qualificationOfClause, Zt as normalizeReservation, _ as previewFirstStepInjection, _a as evaluateToolSurfaceCapability, _i as auditedForegroundRenderers, _n as decisionBoundaryKey, _r as canonicalRegistryBase, _t as proofHostSurfacesOf, a as commitTreeSnapshotDigest, aa as BASE_HOST_PACKAGES, ai as COMMAND_SURFACE_MANIFEST, an as evidenceCoverage, ar as partialFailureOf, at as PROOF_MANIFEST_DOMAIN_V2, b as HOST_WORKDIR_PREFIX, ba as HOST_VALIDATED_VERSIONS, bi as evaluateActiveHostLock, bn as latestAssistantText, br as classifyUserInteraction, bt as requiredSubjectsOf, c as gitCommandMatchesTarget, ca as GOAL_HOST_PACKAGES, ci as digestStrings, cn as CONTROL_RECORD_PREFIX, cr as captureClause, ct as bindProofToProjection, d as verifiedLinearCommitReadback, da as bindExecutableIdentity, di as sanitizeUrl, dn as assessmentAction, dr as environmentDefaultRepositoryTarget, dt as createProofManifest, ea as registryArchiveFiles, ei as restatedContentOf, en as releaseContractFor, er as DEPENDENCY_FREE_ONLY_CONDITION, et as bindingIndividuallyAccepted, f as FIRST_STEP_GUIDANCE, fa as bindLiveGoalCapability, fi as sha256, fn as assessmentOutcomePredicate, fr as extractArtifactPaths, ft as createProofManifestV2, g as lifecyclePhase, ga as evaluateHostLock, gi as auditedDefaultWorkdirProvider, gn as decideTurnStopping, gr as segmentClauses, gt as proofEvidenceConstraints, h as firstStepGuidanceV6, ha as evaluateHostCapability, hi as auditedDefaultWorkdirHost, hn as decideTurnBoundary, hr as isInformationalMessage, ht as proofDigestV2, i as commitIndexSnapshotDigest, ia as ACTIVE_HOST_LAUNCHER_VERSION, ii as verbIsNegated, in as bindingSatisfies, ir as capabilityFactOf, it as PROOF_KINDS_V2, j as PROTOCOL_V4_NOTICE, ja as BOUNDED_ARTIFACT_TYPES, ji as prepareTargetHostTrust, jn as BOUNDARY_RECORD_PREFIX, jr as hasQuestionScope, jt as V6_ORDINARY_COMPLETION_RULE, k as DEFAULT_DELEGATION_TOOL_NAMES, ka as ACTION_MANIFEST, ki as prepareActiveHostTrust, kn as certificateClosure, kr as governedClauseRestrictsExecution, kt as DEFAULT_RECOVERY_CHAR_BUDGET, l as parseGitCommandManifest, la as HOST_CAPABILITY_PACKAGE_GROUPS, li as normalizeClause, ln as NO_PROGRESS_RECORD_PREFIX, lr as captureItem, lt as bindProofV2ToProjection, m as firstStepGuidance, ma as evaluateGraphDerivedHostLock, mi as activeRendererModule, mn as currentActionBases, mr as extractOperation, mt as proofDigest, n as GIT_COMMAND_MANIFEST_IDS, na as ACTIVE_HOST_COHORT_ID, ni as splitTextFragments, nn as releasePreEffectDecision, nr as admissibleForRemoval, nt as PROOF_CAPABILITY_MATRIX, o as createGitPrestateEnvelope, oa as DEFAULT_HOST_LOCK, oi as validateManifest, on as evidenceMatchesItem, or as removalIsComplete, ot as PROOF_PROTOCOL_VERSION, p as claimedBatchHasRealRootInput, pa as evaluateExternalWaitCapability, pi as HostProfileError, pn as classifyCompletionClaim, pr as extractMethod, pt as proofCapabilityReport, q as withDurability, qa as validateActionManifest, qi as readDesktopTargetGraph, qn as parseConfirmationMessage, qr as namedActions, qt as RELEASE_OPERATION_SURFACES, r as GIT_COMMAND_TEMPLATES, ra as ACTIVE_HOST_COHORT_IDS, ri as statefulActionsOfScope, rn as reservationFor, rr as capabilityConsequence, rt as PROOF_KINDS, s as executeRevalidatedGitEffect, sa as EXPECTED_HOST_PACKAGES, si as canonicalizePath, sn as isVerifyingCapability, sr as removalIsPartiallyKnown, st as PROOF_PROTOCOL_VERSION_V2, t as RC020_RC1_HOST_PACKAGES, ta as registryArchiveModules, ti as semanticActionOfScope, tn as releaseCoverage, tr as actionHasCertificationPath, tt as certifyCheckpoint, u as revalidateGitPrestate, ua as HOST_COHORTS, ui as sanitizeClauseText, un as NO_PROGRESS_TURNS_BEFORE_STOP, ur as classifyClause, ut as canonicalProjection, v as projectSessionCoreV2, va as hostVersionFromPackages, vi as auditedHostImplementation, vn as isRootPauseRequest, vr as npmEscapedPackageName, vt as proofOperationMatches, w as SESSION_EVENT_ENVELOPE_INVALID, wa as SUPPORTED_HOST_VERSIONS, wi as injectActiveProfileHostLock, wn as testOutcomePredicate, wr as clarifiedSpanOf, wt as validateProofManifest, x as captureHostWorkdir, xa as LATEST_TESTED_HOST_VERSION, xi as evaluateConfiguredHostLock, xn as latestRootInstruction, xr as GRANTED_QUALIFICATION, xt as scopeCoverageDigest, y as sessionCoreSnapshot, ya as selectHostCohort, yi as combineHostPolicy, yn as isWholeTaskCompletionClaim, yr as classifyTaskIntent, yt as proofV2Rejection, z as NATIVE_GIT_ROOT_PARENT_OID, za as actionCompatible, zi as DESKTOP_PROFILE_PACKAGE_NAME, zn as proposeRebind, zr as isOpenObligation, zt as recoveryTitle } from "./domain-CiTDtBaT.js";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, truncateSync, unlinkSync, writeSync } from "node:fs";
 import { gunzip } from "node:zlib";
 import { execFile } from "node:child_process";
 import { homedir, hostname, tmpdir } from "node:os";
@@ -5709,74 +5709,94 @@ function readVerifiedLedgerRecords(root, context, session, expectedContext) {
 	return records;
 }
 /**
-* CG-083-BUG01/R2/F1 (revision 2): slot + pending + evict-intent writer lock.
-* See docs/WRITER_LOCK_PROTOCOL.md "Revision 2" for the state machine and the
-* linearization argument. Summary:
+* CG-083-F1 (revision 3): arbitration-log writer lock with optimistic
+* concurrency control. See docs/WRITER_LOCK_PROTOCOL.md "Revision 3".
 *
-* - `slot.json` IS the holder: present = one writer inside its critical
-*   section. It is a hard link to a complete owner record; its content never
-*   changes while present (invariant S1), so a recovery decision made on its
-*   current nonce can be executed safely.
-* - A candidate creates `pending.<nonce>.json` (O_EXCL), writes its owner
-*   record and hard-links it to `slot.json`. link() is the atomic admission:
-*   EEXIST means someone else holds. Pending files carry no authority.
-* - Recovery of a PROVABLY dead slot owner (same host, ESRCH only) creates
-*   `evict-intent` O_EXCL (atomic, blocks nothing for reading but marks the
-*   linearization), then re-reads the slot and unlinks it ONLY if the current
-*   nonce is still the observed dead one. A delayed recoverer whose
-*   observation is stale reads a different (live) nonce and aborts — it can
-*   never evict a live holder (L1/L2). A recoverer that dies holding the
-*   intent is adopted by the next actor through its own provably dead creator
-*   record.
-* - Legacy root-level `.writer.lock` files from version <=2 are never
-*   modified by this protocol; their presence REFUSES acquisition (L3) so
-*   old and new writers never share the write section.
+* All authority decisions are records appended to `arbitration.log` (atomicity
+* assumptions A1/A2 in the doc). A claim carries `prev` — the holder nonce the
+* claimant observed — and the deterministic replay grants it only if the
+* current holder at its log position equals `prev`. Recovery appends
+* `evict {prev: deadNonce}` after an ESRCH probe; a delayed recoverer's record
+* is adjudicated against the CURRENT holder and simply has no effect when the
+* holder changed (L1/L2 structurally impossible: nothing is ever deleted from
+* or done to a pathname on the basis of an older observation).
+*
+* Bidirectional v2 upgrade barrier (L3): the v3 critical section also holds
+* the v2-shaped root `.writer.lock` (O_EXCL, version-2-shaped owner record).
+* A live v2 writer refuses (file exists); v3 refuses while a live/unknown v2
+* record exists; a v2 record whose pid answers ESRCH is removed by name (v2
+* has no self-recovery) and the migration proceeds.
 */
-const WRITER_LOCK_VERSION = 3;
-const SLOT_NAME = "slot.json";
-const PENDING_PREFIX = "pending.";
-const INTENT_NAME = "evict-intent";
-const LEGACY_LOCK_PATHS = [
-	".writer.lock",
-	".writer.lock.stale",
-	".writer.lock.recovery"
-];
-function slotPath(root) {
-	return join(root, SLOT_NAME);
+const ARBITRATION_NAME = "arbitration.log";
+const LEGACY_V2_LOCK_NAME = ".writer.lock";
+const LOG_COMPACTION_RECORDS = 8192;
+function arbitrationPath(root) {
+	return join(root, ARBITRATION_NAME);
 }
-function pendingPath(root, nonce) {
-	return join(root, `${PENDING_PREFIX}${nonce}.json`);
+function legacyV2Path(root) {
+	return join(root, LEGACY_V2_LOCK_NAME);
 }
-function intentPath(root) {
-	return join(root, INTENT_NAME);
-}
-function readRecord(path, versions = [WRITER_LOCK_VERSION]) {
+/**
+* Parse the log; a torn (unparseable) trailing line terminates the replay.
+* `validBytes` covers exactly the complete prefix — records after a torn line
+* were never part of any replay, so appending REQUIRES truncating to this
+* boundary first (otherwise the new record would land after the torn line and
+* be invisible to every future replay, wedging recovery).
+*/
+function parseArbitration(root) {
 	let raw;
 	try {
-		raw = readFileSync(path, "utf8");
+		raw = readFileSync(arbitrationPath(root), "utf8");
 	} catch {
-		return;
+		return {
+			records: [],
+			validBytes: 0
+		};
 	}
-	if (!raw.trim()) return "legacy";
-	try {
-		const value = JSON.parse(raw);
-		if (value && versions.includes(value.version) && typeof value.nonce === "string" && (value.nonce.length === 32 || value.version === 2) && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string" && typeof value.created_at_epoch_ms === "number") return value;
-	} catch {}
-	return "legacy";
+	const records = [];
+	let consumed = 0;
+	for (const line of raw.split("\n")) {
+		if (line === "") continue;
+		const bytes = Buffer.byteLength(line, "utf8") + 1;
+		try {
+			const value = JSON.parse(line);
+			if (value && value.v === 3 && (value.op === "claim" || value.op === "release" || value.op === "evict") && typeof value.nonce === "string" && value.nonce.length === 32 && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string" && typeof value.created_at_epoch_ms === "number" && (value.prev === null || typeof value.prev === "string")) {
+				records.push(value);
+				consumed += bytes;
+				continue;
+			}
+		} catch {}
+		return {
+			records,
+			validBytes: consumed
+		};
+	}
+	return {
+		records,
+		validBytes: consumed
+	};
 }
-function readIntent(path) {
-	let raw;
-	try {
-		raw = readFileSync(path, "utf8");
-	} catch {
-		return;
+/** Deterministic replay (docs/WRITER_LOCK_PROTOCOL.md Revision 3). */
+function replayHolder(records) {
+	let holder = null;
+	for (const record$2 of records) {
+		const isHolder = holder !== null && holder.nonce === record$2.prev;
+		const isEmptyOk = holder === null && record$2.prev === null;
+		if (record$2.op === "claim") {
+			if (isHolder || isEmptyOk) holder = {
+				nonce: record$2.nonce,
+				pid: record$2.pid,
+				hostname: record$2.hostname,
+				created_at_epoch_ms: record$2.created_at_epoch_ms
+			};
+		} else if (record$2.op === "release" || record$2.op === "evict") {
+			if (isHolder) holder = null;
+		}
 	}
-	if (!raw.trim()) return "legacy";
-	try {
-		const value = JSON.parse(raw);
-		if (value && typeof value.evicting === "string" && typeof value.nonce === "string" && value.nonce.length === 32 && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string") return value;
-	} catch {}
-	return "legacy";
+	return holder;
+}
+function readHolder(root) {
+	return replayHolder(parseArbitration(root).records);
 }
 /** Only ESRCH proves a recorded owner is gone; any other answer refuses. */
 function processExists(pid) {
@@ -5787,10 +5807,6 @@ function processExists(pid) {
 		return error.code !== "ESRCH";
 	}
 }
-function recordIsProvablyDead(record$2) {
-	return record$2.hostname === hostname() && !processExists(record$2.pid);
-}
-/** Unlink a path when it exists; other errors propagate. */
 function unlinkIfExists(path) {
 	try {
 		unlinkSync(path);
@@ -5798,152 +5814,125 @@ function unlinkIfExists(path) {
 		if (error.code !== "ENOENT") throw error;
 	}
 }
-/**
-* Recovery handshake for a provably dead slot owner (docs/WRITER_LOCK_PROTOCOL.md
-* Revision 2, recovery steps 1–2). Returns true when this call finalized the
-* eviction (slot removed), false when the slot content no longer names the
-* dead owner (stale observation — abort) or another live intent creator owns
-* the handshake.
-*/
-function evictDeadHolder(root, dead) {
-	const intent = {
-		evicting: dead.nonce,
-		nonce: randomBytes(16).toString("hex"),
-		pid: process.pid,
-		hostname: hostname(),
-		created_at_epoch_ms: Date.now()
-	};
-	let fd;
+function appendArbitration(root, record$2) {
+	const { validBytes } = parseArbitration(root);
+	if ((existsSync(arbitrationPath(root)) ? lstatSync(arbitrationPath(root)).size : 0) !== validBytes) truncateSync(arbitrationPath(root), validBytes);
+	const fd = openRegular(arbitrationPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND, 384);
 	try {
-		fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-	} catch (error) {
-		if (error.code !== "EEXIST") throw error;
-		const winner = readIntent(intentPath(root));
-		if (winner === void 0 || winner === "legacy") return false;
-		if (!recordIsProvablyDead({
-			version: WRITER_LOCK_VERSION,
-			nonce: winner.nonce,
-			pid: winner.pid,
-			hostname: winner.hostname,
-			created_at_epoch_ms: winner.created_at_epoch_ms
-		})) return false;
-		try {
-			unlinkSync(intentPath(root));
-		} catch (adoptError) {
-			if (adoptError.code !== "ENOENT") return false;
-		}
-		try {
-			fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-		} catch (retryError) {
-			if (retryError.code === "EEXIST") return false;
-			throw retryError;
-		}
-	}
-	try {
-		const record$2 = {
-			evicting: intent.evicting,
-			nonce: intent.nonce,
-			pid: intent.pid,
-			hostname: intent.hostname,
-			created_at_epoch_ms: intent.created_at_epoch_ms
-		};
 		writeAll(fd, `${canonical(record$2)}\n`);
 		fsyncSync(fd);
 	} finally {
-		try {
-			closeSync(fd);
-		} catch {}
+		closeSync(fd);
 	}
+}
+function readLegacyV2(root) {
+	let raw;
 	try {
-		const current = readRecord(slotPath(root));
-		if (current !== void 0 && current !== "legacy" && current.nonce === dead.nonce) {
-			unlinkIfExists(slotPath(root));
-			unlinkIfExists(pendingPath(root, dead.nonce));
-			return true;
-		}
-		return false;
-	} finally {
-		unlinkIfExists(intentPath(root));
+		raw = readFileSync(legacyV2Path(root), "utf8");
+	} catch {
+		return;
 	}
+	if (!raw.trim()) return "legacy";
+	try {
+		const value = JSON.parse(raw);
+		if (value && (value.version === 2 || value.version === 3) && typeof value.nonce === "string" && (value.nonce.length === 32 || value.version === 2) && typeof value.pid === "number" && Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.hostname === "string" && typeof value.created_at_epoch_ms === "number") return value;
+	} catch {}
+	return "legacy";
 }
-/** Remove this actor's pending file by name (identity-safe GC). */
-function removeOwnPending(root, nonce) {
-	unlinkIfExists(pendingPath(root, nonce));
-}
-/** GC a pending file whose creator is provably dead (by name). */
-function gcDeadPending(root, nonce) {
-	const record$2 = readRecord(pendingPath(root, nonce));
-	if (record$2 !== void 0 && record$2 !== "legacy" && recordIsProvablyDead(record$2)) unlinkIfExists(pendingPath(root, nonce));
+/** Append one arbitration record (the ONLY mutation of the log). */
+function appendLog(root, op, nonce, prev) {
+	appendArbitration(root, {
+		v: 3,
+		op,
+		nonce,
+		prev,
+		pid: process.pid,
+		hostname: hostname(),
+		created_at_epoch_ms: Date.now()
+	});
 }
 /**
-* Acquire the writer lock. Returns the held nonce, or undefined when
-* acquisition is refused (live/unknown holder, legacy lock, live intent
-* creator, or contention). See docs/WRITER_LOCK_PROTOCOL.md Revision 2.
+* Acquire the writer lock. Returns the held nonce, or undefined when refused
+* (live/unknown holder, v2 barrier, or a lost optimistic claim).
 */
 function acquireWriterLock(root) {
 	for (let attempt = 0; attempt < 16; attempt += 1) {
-		for (const name$1 of LEGACY_LOCK_PATHS) if (readRecord(join(root, name$1), [WRITER_LOCK_VERSION, 2]) !== void 0) return void 0;
-		for (const entry of readdirSync(root)) {
-			if (!entry.startsWith(PENDING_PREFIX)) continue;
-			const candidate = readRecord(join(root, entry));
-			if (candidate !== void 0 && candidate !== "legacy" && recordIsProvablyDead(candidate)) unlinkIfExists(join(root, entry));
+		const legacy = readLegacyV2(root);
+		if (legacy !== void 0) {
+			if (legacy === "legacy") return void 0;
+			if (!processExists(legacy.pid)) unlinkIfExists(legacyV2Path(root));
+			else return void 0;
 		}
-		const nonce = randomBytes(16).toString("hex");
-		let pendingFd;
-		try {
-			pendingFd = openRegular(pendingPath(root, nonce), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-		} catch (error) {
-			if (error.code === "EEXIST") {
-				gcDeadPending(root, nonce);
+		const observed = readHolder(root);
+		if (observed !== null) {
+			if (observed.hostname !== hostname()) {
+				unlinkIfExists(legacyV2Path(root));
+				return;
+			}
+			if (!processExists(observed.pid)) {
+				appendLog(root, "evict", randomBytes(16).toString("hex"), observed.nonce);
 				continue;
 			}
+		}
+		const nonce = randomBytes(16).toString("hex");
+		let v2Fd;
+		try {
+			v2Fd = openSync(legacyV2Path(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
+		} catch (error) {
+			if (error.code === "EEXIST") return void 0;
 			throw error;
 		}
-		let own;
 		try {
-			own = {
-				version: WRITER_LOCK_VERSION,
+			const v2Record = {
+				version: 2,
 				nonce,
 				pid: process.pid,
 				hostname: hostname(),
 				created_at_epoch_ms: Date.now()
 			};
-			writeAll(pendingFd, `${canonical(own)}\n`);
-			fsyncSync(pendingFd);
-		} catch (error) {
+			writeAll(v2Fd, `${canonical(v2Record)}\n`);
+			fsyncSync(v2Fd);
+		} finally {
 			try {
-				closeSync(pendingFd);
+				closeSync(v2Fd);
 			} catch {}
-			removeOwnPending(root, nonce);
-			throw error;
 		}
-		try {
-			closeSync(pendingFd);
-		} catch {}
-		try {
-			linkSync(pendingPath(root, nonce), slotPath(root));
-			return { nonce };
-		} catch (error) {
-			if (error.code !== "EEXIST") {
-				removeOwnPending(root, nonce);
-				throw error;
-			}
-		}
-		const holder = readRecord(slotPath(root));
-		if (holder !== void 0 && holder !== "legacy" && recordIsProvablyDead(holder)) {
-			if (evictDeadHolder(root, holder)) continue;
-			removeOwnPending(root, nonce);
-			return;
-		}
-		removeOwnPending(root, nonce);
+		appendLog(root, "claim", nonce, observed === null ? null : observed.nonce);
+		const holder = readHolder(root);
+		if (holder !== null && holder.nonce === nonce) return { nonce };
+		unlinkIfExists(legacyV2Path(root));
 		return;
 	}
 }
 function releaseWriterLock(root, held) {
 	if (held === void 0) return;
-	const holder = readRecord(slotPath(root));
-	if (holder !== void 0 && holder !== "legacy" && holder.nonce === held.nonce) unlinkIfExists(slotPath(root));
-	removeOwnPending(root, held.nonce);
+	appendLog(root, "release", held.nonce, held.nonce);
+	if (readHolder(root) === null) {
+		unlinkIfExists(legacyV2Path(root));
+		const { records } = parseArbitration(root);
+		if (records.length > LOG_COMPACTION_RECORDS) {
+			const baseline = {
+				v: 3,
+				op: "claim",
+				nonce: held.nonce,
+				pid: process.pid,
+				hostname: hostname(),
+				created_at_epoch_ms: Date.now(),
+				prev: null
+			};
+			const tmp = join(root, `${ARBITRATION_NAME}.compact`);
+			const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 384);
+			try {
+				writeAll(fd, `${canonical(baseline)}\n`);
+				fsyncSync(fd);
+			} finally {
+				closeSync(fd);
+			}
+			try {
+				renameSync(tmp, arbitrationPath(root));
+			} catch {}
+		}
+	}
 }
 function readPrivateLedger(root, input) {
 	if (!root) return {

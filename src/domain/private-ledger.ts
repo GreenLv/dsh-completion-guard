@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, truncateSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -111,70 +111,96 @@ function readVerifiedLedgerRecords(root: string, context: PrivateLedgerContext, 
 }
 
 /**
- * CG-083-BUG01/R2/F1 (revision 2): slot + pending + evict-intent writer lock.
- * See docs/WRITER_LOCK_PROTOCOL.md "Revision 2" for the state machine and the
- * linearization argument. Summary:
+ * CG-083-F1 (revision 3): arbitration-log writer lock with optimistic
+ * concurrency control. See docs/WRITER_LOCK_PROTOCOL.md "Revision 3".
  *
- * - `slot.json` IS the holder: present = one writer inside its critical
- *   section. It is a hard link to a complete owner record; its content never
- *   changes while present (invariant S1), so a recovery decision made on its
- *   current nonce can be executed safely.
- * - A candidate creates `pending.<nonce>.json` (O_EXCL), writes its owner
- *   record and hard-links it to `slot.json`. link() is the atomic admission:
- *   EEXIST means someone else holds. Pending files carry no authority.
- * - Recovery of a PROVABLY dead slot owner (same host, ESRCH only) creates
- *   `evict-intent` O_EXCL (atomic, blocks nothing for reading but marks the
- *   linearization), then re-reads the slot and unlinks it ONLY if the current
- *   nonce is still the observed dead one. A delayed recoverer whose
- *   observation is stale reads a different (live) nonce and aborts — it can
- *   never evict a live holder (L1/L2). A recoverer that dies holding the
- *   intent is adopted by the next actor through its own provably dead creator
- *   record.
- * - Legacy root-level `.writer.lock` files from version <=2 are never
- *   modified by this protocol; their presence REFUSES acquisition (L3) so
- *   old and new writers never share the write section.
+ * All authority decisions are records appended to `arbitration.log` (atomicity
+ * assumptions A1/A2 in the doc). A claim carries `prev` — the holder nonce the
+ * claimant observed — and the deterministic replay grants it only if the
+ * current holder at its log position equals `prev`. Recovery appends
+ * `evict {prev: deadNonce}` after an ESRCH probe; a delayed recoverer's record
+ * is adjudicated against the CURRENT holder and simply has no effect when the
+ * holder changed (L1/L2 structurally impossible: nothing is ever deleted from
+ * or done to a pathname on the basis of an older observation).
+ *
+ * Bidirectional v2 upgrade barrier (L3): the v3 critical section also holds
+ * the v2-shaped root `.writer.lock` (O_EXCL, version-2-shaped owner record).
+ * A live v2 writer refuses (file exists); v3 refuses while a live/unknown v2
+ * record exists; a v2 record whose pid answers ESRCH is removed by name (v2
+ * has no self-recovery) and the migration proceeds.
  */
-const WRITER_LOCK_VERSION = 3
-const SLOT_NAME = 'slot.json'
-const PENDING_PREFIX = 'pending.'
-const INTENT_NAME = 'evict-intent'
-const LEGACY_LOCK_PATHS = ['.writer.lock', '.writer.lock.stale', '.writer.lock.recovery']
-interface WriterLockRecord { version: 3; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+const ARBITRATION_NAME = 'arbitration.log'
+const LEGACY_V2_LOCK_NAME = '.writer.lock'
+const LOG_COMPACTION_RECORDS = 8192
+interface WriterLockRecord { version: 2 | 3; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+interface ArbitrationRecord {
+  v: 3
+  op: 'claim' | 'release' | 'evict'
+  nonce: string
+  pid: number
+  hostname: string
+  created_at_epoch_ms: number
+  /** Expected holder nonce at the moment of observation (null = empty slot). */
+  prev: string | null
+}
 interface HeldLock { nonce: string }
+export interface ArbitrationHolder { nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
 
 export type WriterLockState = 'absent' | 'held' | 'abandoned_recoverable' | 'unknown_owner'
 
-function slotPath(root: string): string { return join(root, SLOT_NAME) }
-function pendingPath(root: string, nonce: string): string { return join(root, `${PENDING_PREFIX}${nonce}.json`) }
-function intentPath(root: string): string { return join(root, INTENT_NAME) }
+function arbitrationPath(root: string): string { return join(root, ARBITRATION_NAME) }
+function legacyV2Path(root: string): string { return join(root, LEGACY_V2_LOCK_NAME) }
 
-function readRecord(path: string, versions: readonly number[] = [WRITER_LOCK_VERSION]): WriterLockRecord | 'legacy' | undefined {
+/**
+ * Parse the log; a torn (unparseable) trailing line terminates the replay.
+ * `validBytes` covers exactly the complete prefix — records after a torn line
+ * were never part of any replay, so appending REQUIRES truncating to this
+ * boundary first (otherwise the new record would land after the torn line and
+ * be invisible to every future replay, wedging recovery).
+ */
+function parseArbitration(root: string): { records: ArbitrationRecord[]; validBytes: number } {
   let raw: string
-  try { raw = readFileSync(path, 'utf8') } catch { return undefined }
-  if (!raw.trim()) return 'legacy'
-  try {
-    const value = JSON.parse(raw) as Partial<WriterLockRecord>
-    if (value && (versions as readonly number[]).includes(value.version as number)
-      && typeof value.nonce === 'string' && (value.nonce.length === 32 || (value.version as number) === 2)
-      && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
-      && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number') return value as WriterLockRecord
-  } catch { /* unparsable record */ }
-  return 'legacy'
+  try { raw = readFileSync(arbitrationPath(root), 'utf8') } catch { return { records: [], validBytes: 0 } }
+  const records: ArbitrationRecord[] = []
+  let consumed = 0
+  for (const line of raw.split('\n')) {
+    if (line === '') continue // the artifact after the trailing newline adds no bytes
+    const bytes = Buffer.byteLength(line, 'utf8') + 1
+    try {
+      const value = JSON.parse(line) as Partial<ArbitrationRecord>
+      if (value && value.v === 3
+        && (value.op === 'claim' || value.op === 'release' || value.op === 'evict')
+        && typeof value.nonce === 'string' && value.nonce.length === 32
+        && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
+        && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number'
+        && (value.prev === null || typeof value.prev === 'string')) {
+        records.push(value as ArbitrationRecord)
+        consumed += bytes
+        continue
+      }
+    } catch { /* torn line */ }
+    return { records, validBytes: consumed }
+  }
+  return { records, validBytes: consumed }
 }
 
-interface IntentRecord { evicting: string; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
+/** Deterministic replay (docs/WRITER_LOCK_PROTOCOL.md Revision 3). */
+function replayHolder(records: readonly ArbitrationRecord[]): ArbitrationHolder | null {
+  let holder: ArbitrationHolder | null = null
+  for (const record of records) {
+    const isHolder = holder !== null && holder.nonce === record.prev
+    const isEmptyOk = holder === null && record.prev === null
+    if (record.op === 'claim') {
+      if (isHolder || isEmptyOk) holder = { nonce: record.nonce, pid: record.pid, hostname: record.hostname, created_at_epoch_ms: record.created_at_epoch_ms }
+    } else if (record.op === 'release' || record.op === 'evict') {
+      if (isHolder) holder = null
+    }
+  }
+  return holder
+}
 
-function readIntent(path: string): IntentRecord | 'legacy' | undefined {
-  let raw: string
-  try { raw = readFileSync(path, 'utf8') } catch { return undefined }
-  if (!raw.trim()) return 'legacy'
-  try {
-    const value = JSON.parse(raw) as Partial<IntentRecord>
-    if (value && typeof value.evicting === 'string' && typeof value.nonce === 'string' && value.nonce.length === 32
-      && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
-      && typeof value.hostname === 'string') return value as IntentRecord
-  } catch { /* unparsable record */ }
-  return 'legacy'
+function readHolder(root: string): ArbitrationHolder | null {
+  return replayHolder(parseArbitration(root).records)
 }
 
 /** Only ESRCH proves a recorded owner is gone; any other answer refuses. */
@@ -184,182 +210,124 @@ function processExists(pid: number): boolean {
   }
 }
 
-function recordIsProvablyDead(record: WriterLockRecord): boolean {
-  return record.hostname === hostname() && !processExists(record.pid)
-}
-
-/**
- * Classification shared by the slot and legacy diagnostics: a well-formed
- * record of the RUNNING protocol reports held / abandoned_recoverable; any
- * other state (other version, other host, unparsable, anonymous) is an
- * unknown owner and refuses fail-closed (L3).
- */
-function classifyRecord(record: WriterLockRecord | 'legacy' | undefined): WriterLockState | undefined {
-  if (record === undefined) return undefined
-  if (record === 'legacy') return 'unknown_owner'
-  if (record.hostname !== hostname()) return 'unknown_owner'
-  return processExists(record.pid) ? 'held' : 'abandoned_recoverable'
-}
-
-/** Read-only diagnostics for the current holder or a blocking legacy lock. */
-export function writerLockState(root: string): WriterLockState {
-  const slot = classifyRecord(readRecord(slotPath(root)))
-  if (slot !== undefined) return slot
-  for (const name of LEGACY_LOCK_PATHS) {
-    const legacy = classifyRecord(readRecord(join(root, name), [WRITER_LOCK_VERSION, 2]))
-    if (legacy !== undefined) return legacy
-  }
-  return 'absent'
-}
-
-/** Test/ops helper: the current slot file (undefined when no holder). */
-export function currentWriterLockFile(root: string): string | undefined {
-  return existsSync(slotPath(root)) ? slotPath(root) : undefined
-}
-
-/** Unlink a path when it exists; other errors propagate. */
 function unlinkIfExists(path: string): void {
   try { unlinkSync(path) } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
 }
 
-/**
- * Recovery handshake for a provably dead slot owner (docs/WRITER_LOCK_PROTOCOL.md
- * Revision 2, recovery steps 1–2). Returns true when this call finalized the
- * eviction (slot removed), false when the slot content no longer names the
- * dead owner (stale observation — abort) or another live intent creator owns
- * the handshake.
- */
-function evictDeadHolder(root: string, dead: WriterLockRecord): boolean {
-  const intent: IntentRecord = {
-    evicting: dead.nonce,
-    nonce: randomBytes(16).toString('hex'),
-    pid: process.pid,
-    hostname: hostname(),
-    created_at_epoch_ms: Date.now(),
-  }
-  let fd: number
-  try {
-    fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-    const winner = readIntent(intentPath(root))
-    if (winner === undefined || winner === 'legacy') return false
-    // The creator is provably dead: adopt the handshake (unlink and recreate).
-    if (!recordIsProvablyDead({ version: WRITER_LOCK_VERSION, nonce: winner.nonce, pid: winner.pid,
-      hostname: winner.hostname, created_at_epoch_ms: winner.created_at_epoch_ms })) {
-      return false // a live recoverer owns the handshake; refuse this round
-    }
-    try { unlinkSync(intentPath(root)) } catch (adoptError) {
-      if ((adoptError as NodeJS.ErrnoException).code !== 'ENOENT') return false
-    }
-    try {
-      fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-    } catch (retryError) {
-      if ((retryError as NodeJS.ErrnoException).code === 'EEXIST') return false
-      throw retryError
-    }
-  }
-  try {
-    const record: IntentRecord = {
-      evicting: intent.evicting, nonce: intent.nonce, pid: intent.pid,
-      hostname: intent.hostname, created_at_epoch_ms: intent.created_at_epoch_ms,
-    }
-    writeAll(fd, `${canonical(record)}\n`)
-    fsyncSync(fd)
-  } finally {
-    try { closeSync(fd) } catch { /* already closed */ }
-  }
-  try {
-    // Linearization: re-read the slot WITH the intent in place and finalize
-    // only on the exact dead nonce. While present, slot content is immutable
-    // (S1); a new holder cannot appear between this read and the unlink
-    // because admission requires the slot to be absent.
-    const current = readRecord(slotPath(root))
-    if (current !== undefined && current !== 'legacy' && current.nonce === dead.nonce) {
-      unlinkIfExists(slotPath(root))
-      unlinkIfExists(pendingPath(root, dead.nonce))
-      return true
-    }
-    return false
-  } finally {
-    unlinkIfExists(intentPath(root))
-  }
+function appendArbitration(root: string, record: ArbitrationRecord): void {
+  // A torn trailing line would hide every later record from the replay, so it
+  // is truncated to the valid prefix before appending. The torn record never
+  // took effect (the replay stopped at it), so the truncation revokes nothing.
+  const { validBytes } = parseArbitration(root)
+  const size = existsSync(arbitrationPath(root)) ? lstatSync(arbitrationPath(root)).size : 0
+  if (size !== validBytes) truncateSync(arbitrationPath(root), validBytes)
+  const fd = openRegular(arbitrationPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND, 0o600)
+  try { writeAll(fd, `${canonical(record)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
 }
 
-/** Remove this actor's pending file by name (identity-safe GC). */
-function removeOwnPending(root: string, nonce: string): void {
-  unlinkIfExists(pendingPath(root, nonce))
+/** Classification shared by diagnostics: structured v2 records classify by pid; anything else is unknown. */
+function classifyLegacy(record: WriterLockRecord | 'legacy' | undefined): WriterLockState | undefined {
+  if (record === undefined) return undefined
+  if (record === 'legacy') return 'unknown_owner'
+  if (record.hostname !== hostname()) return 'unknown_owner'
+  return processExists(record.pid) ? 'held' : 'abandoned_recoverable'
 }
 
-/** GC a pending file whose creator is provably dead (by name). */
-function gcDeadPending(root: string, nonce: string): void {
-  const record = readRecord(pendingPath(root, nonce))
-  if (record !== undefined && record !== 'legacy' && recordIsProvablyDead(record)) {
-    unlinkIfExists(pendingPath(root, nonce))
+function readLegacyV2(root: string): WriterLockRecord | 'legacy' | undefined {
+  let raw: string
+  try { raw = readFileSync(legacyV2Path(root), 'utf8') } catch { return undefined }
+  if (!raw.trim()) return 'legacy'
+  try {
+    const value = JSON.parse(raw) as Partial<WriterLockRecord>
+    if (value && (value.version === 2 || value.version === 3)
+      && typeof value.nonce === 'string' && (value.nonce.length === 32 || value.version === 2)
+      && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
+      && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number') return value as WriterLockRecord
+  } catch { /* unparsable */ }
+  return 'legacy'
+}
+
+/** Read-only diagnostics: the arbitration holder, else the v2 upgrade barrier. */
+export function writerLockState(root: string): WriterLockState {
+  const holder = readHolder(root)
+  if (holder !== null) {
+    if (holder.hostname !== hostname()) return 'unknown_owner'
+    return processExists(holder.pid) ? 'held' : 'abandoned_recoverable'
   }
+  return classifyLegacy(readLegacyV2(root)) ?? 'absent'
+}
+
+/** Test/ops helper: the arbitration log file (undefined when no log exists). */
+export function currentWriterLockFile(root: string): string | undefined {
+  return existsSync(arbitrationPath(root)) ? arbitrationPath(root) : undefined
+}
+
+/** Append one arbitration record (the ONLY mutation of the log). */
+function appendLog(root: string, op: ArbitrationRecord['op'], nonce: string, prev: string | null): void {
+  appendArbitration(root, {
+    v: 3, op, nonce, prev,
+    pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
+  })
 }
 
 /**
- * Acquire the writer lock. Returns the held nonce, or undefined when
- * acquisition is refused (live/unknown holder, legacy lock, live intent
- * creator, or contention). See docs/WRITER_LOCK_PROTOCOL.md Revision 2.
+ * Acquire the writer lock. Returns the held nonce, or undefined when refused
+ * (live/unknown holder, v2 barrier, or a lost optimistic claim).
  */
 function acquireWriterLock(root: string): HeldLock | undefined {
   for (let attempt = 0; attempt < 16; attempt += 1) {
-    // L3: a legacy root-level lock (version <=2) must never be shared with
-    // the v3 write section. Refuse without touching its bytes.
-    for (const name of LEGACY_LOCK_PATHS) {
-      const legacy = readRecord(join(root, name), [WRITER_LOCK_VERSION, 2])
-      if (legacy !== undefined) return undefined
+    // L3 upgrade barrier, v2 direction: a structured v2 record with a live
+    // pid — or anything unparseable/anonymous/foreign — refuses. A record
+    // whose pid answers ESRCH is removed by name: the v2 writer is gone and
+    // v2 has no self-recovery, so this is the verified migration step.
+    const legacy = readLegacyV2(root)
+    if (legacy !== undefined) {
+      if (legacy === 'legacy') return undefined
+      if (!processExists(legacy.pid)) unlinkIfExists(legacyV2Path(root))
+      else return undefined
     }
-    // GC pass over ALL pending files: identity-safe by name, only provably
-    // dead creators are removed (a live candidate may be mid-link).
-    for (const entry of readdirSync(root)) {
-      if (!entry.startsWith(PENDING_PREFIX)) continue
-      const candidate = readRecord(join(root, entry))
-      if (candidate !== undefined && candidate !== 'legacy' && recordIsProvablyDead(candidate)) {
-        unlinkIfExists(join(root, entry))
+    const observed = readHolder(root)
+    // An observed holder whose pid answers ESRCH is recovered by an evict
+    // record carrying that observation as `prev`.
+    if (observed !== null) {
+      // A foreign-host holder cannot be liveness-verified from this host:
+      // refuse instead of taking over (migration is a manual, verified step).
+      if (observed.hostname !== hostname()) {
+        unlinkIfExists(legacyV2Path(root))
+        return undefined
+      }
+      if (!processExists(observed.pid)) {
+        appendLog(root, 'evict', randomBytes(16).toString('hex'), observed.nonce)
+        continue
       }
     }
     const nonce = randomBytes(16).toString('hex')
-    let pendingFd: number
+    // v2 upgrade barrier, v3 direction: hold the v2-shaped lock for the whole
+    // critical section so a live v2 writer refuses on O_EXCL.
+    let v2Fd: number
     try {
-      pendingFd = openRegular(pendingPath(root, nonce), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+      v2Fd = openSync(legacyV2Path(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') { gcDeadPending(root, nonce); continue }
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined
       throw error
     }
-    let own: WriterLockRecord
     try {
-      own = { version: WRITER_LOCK_VERSION, nonce, pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now() }
-      writeAll(pendingFd, `${canonical(own)}\n`)
-      fsyncSync(pendingFd)
-    } catch (error) {
-      try { closeSync(pendingFd) } catch { /* already closed */ }
-      removeOwnPending(root, nonce)
-      throw error
-    }
-    try { closeSync(pendingFd) } catch { /* already closed */ }
-    try {
-      // Atomic admission: link succeeds only when the slot is absent.
-      linkSync(pendingPath(root, nonce), slotPath(root))
-      return { nonce }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        removeOwnPending(root, nonce)
-        throw error
+      const v2Record: WriterLockRecord = {
+        version: 2, nonce,
+        pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
       }
+      writeAll(v2Fd, `${canonical(v2Record)}\n`)
+      fsyncSync(v2Fd)
+    } finally {
+      try { closeSync(v2Fd) } catch { /* already closed */ }
     }
-    // Slot taken: decide from its CURRENT record.
-    const holder = readRecord(slotPath(root))
-    if (holder !== undefined && holder !== 'legacy' && recordIsProvablyDead(holder)) {
-      if (evictDeadHolder(root, holder)) continue // recovered; retry admission
-      removeOwnPending(root, nonce)
-      return undefined
-    }
-    removeOwnPending(root, nonce)
+    appendLog(root, 'claim', nonce, observed === null ? null : observed.nonce)
+    const holder = readHolder(root)
+    if (holder !== null && holder.nonce === nonce) return { nonce }
+    // Optimistic CAS lost: exit fail-closed (no pathname was touched).
+    unlinkIfExists(legacyV2Path(root))
     return undefined
   }
   return undefined
@@ -367,59 +335,41 @@ function acquireWriterLock(root: string): HeldLock | undefined {
 
 function releaseWriterLock(root: string, held: HeldLock | undefined): void {
   if (held === undefined) return
-  const holder = readRecord(slotPath(root))
-  if (holder !== undefined && holder !== 'legacy' && holder.nonce === held.nonce) {
-    unlinkIfExists(slotPath(root))
+  appendLog(root, 'release', held.nonce, held.nonce)
+  const holder = readHolder(root)
+  if (holder === null) {
+    unlinkIfExists(legacyV2Path(root))
+    // Bounded growth: compact only when the holder (us, verified by the
+    // release replay) observes an oversized log. The rename window can drop a
+    // concurrent claim; the dropped writer's read-back then shows it is not
+    // the holder and it exits — fail-closed, never two holders.
+    const { records } = parseArbitration(root)
+    if (records.length > LOG_COMPACTION_RECORDS) {
+      const baseline: ArbitrationRecord = {
+        v: 3, op: 'claim', nonce: held.nonce,
+        pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(), prev: null,
+      }
+      const tmp = join(root, `${ARBITRATION_NAME}.compact`)
+      const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600)
+      try { writeAll(fd, `${canonical(baseline)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+      try { renameSync(tmp, arbitrationPath(root)) } catch { /* best effort; log stays oversized */ }
+    }
   }
-  removeOwnPending(root, held.nonce)
 }
 
 /**
- * Test-only deterministic-interleaving hooks (docs/WRITER_LOCK_PROTOCOL.md
- * Revision 2 test obligations). They expose the protocol's atomic steps so
- * tests can pause a real process between an observation and its action
- * WITHOUT reimplementing the protocol; production callers ignore this export.
+ * Test-only deterministic-interleaving hooks (Revision 3 test obligations).
+ * Expose the arbitration steps so tests can pause a real process between its
+ * observation and its append WITHOUT reimplementing the protocol.
  */
 export const __writerLockInternals = {
+  readHolder: (root: string): ArbitrationHolder | null => readHolder(root),
+  /** Observe + append one evict with the observed holder as prev. */
+  delayedEvict: (root: string, observed: ArbitrationHolder): void => {
+    appendLog(root, 'evict', randomBytes(16).toString('hex'), observed.nonce)
+  },
   acquire: (root: string): HeldLock | undefined => acquireWriterLock(root),
   release: (root: string, held: HeldLock | undefined): void => releaseWriterLock(root, held),
-  readSlot: (root: string): WriterLockRecord | 'legacy' | undefined => readRecord(slotPath(root)),
-  slotPath: (root: string): string => slotPath(root),
-  evictDeadHolder: (root: string, dead: WriterLockRecord): boolean => evictDeadHolder(root, dead),
-  /** L2 fixture: phase 1 — create a pending candidate (no authority). */
-  prepareCandidate: (root: string, nonce: string): WriterLockRecord => {
-    const own: WriterLockRecord = {
-      version: WRITER_LOCK_VERSION, nonce,
-      pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
-    }
-    const fd = openRegular(pendingPath(root, nonce), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-    try { writeAll(fd, `${canonical(own)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
-    return own
-  },
-  /** L2 fixture: phase 2 — attempt atomic admission against the live slot. */
-  linkCandidate: (root: string, nonce: string): 'linked' | 'eexist' => {
-    try {
-      linkSync(pendingPath(root, nonce), slotPath(root))
-      return 'linked'
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'eexist'
-      throw error
-    }
-  },
-  createIntent: (root: string, evicting: string): boolean => {
-    const intent: IntentRecord = {
-      evicting, nonce: randomBytes(16).toString('hex'), pid: process.pid,
-      hostname: hostname(), created_at_epoch_ms: Date.now(),
-    }
-    try {
-      const fd = openRegular(intentPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
-      try { writeAll(fd, `${canonical(intent)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
-      return true
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
-      throw error
-    }
-  },
 }
 
 export function readPrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): PrivateLedgerSnapshot {

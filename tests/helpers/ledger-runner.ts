@@ -28,6 +28,29 @@ function waitBarrier(): void {
   }
 }
 
+if (label === 'v2compat') {
+  // S3 direction 1: behave like the 0.8.2 (v2) writer — O_EXCL on the root
+  // .writer.lock; EEXIST means a v3 holder (or anyone) is present → refuse.
+  waitBarrier()
+  const { openSync, writeSync, closeSync, unlinkSync } = await import('node:fs')
+  let fd: number
+  try {
+    fd = openSync(`${root}/.writer.lock`, 'wx')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      process.stdout.write(JSON.stringify({ refused: true }))
+      process.exit(0)
+    }
+    throw error
+  }
+  try { writeSync(fd, JSON.stringify({ version: 2, nonce: 'v'.repeat(32), pid: process.pid, hostname: '', created_at_epoch_ms: Date.now() }) + '\n') } finally { closeSync(fd) }
+  const ok = appendPrivateLedger(root, context, 'restart_intent', {
+    resolutionCallId: 'v2compat-1', serviceId: 's', preGeneration: 'g',
+  })
+  unlinkSync(`${root}/.writer.lock`)
+  process.stdout.write(JSON.stringify({ refused: false, appended: ok }))
+  process.exit(0)
+}
 if (label === 'slowappend') {
   // Recovery race fixture: append once and hold the slot briefly so the
   // parent can run its delayed finalize against the live holder.
@@ -44,23 +67,6 @@ if (label === 'slowappend') {
   while (existsSync(`${root}/start-barrier`) && Date.now() < deadline) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
   }
-  process.exit(0)
-}
-if (label === 'slowpending') {
-  // Deterministic L2: create a pending candidate (phase 1, no authority),
-  // pause on the barrier while the parent takes the slot, then attempt the
-  // link (phase 2) — it must fail EEXIST and the candidate must refuse.
-  const internals = (await import('../../src/domain/private-ledger.js')).__writerLockInternals
-  const nonce = 'b'.repeat(32)
-  internals.prepareCandidate(root, nonce)
-  waitBarrier()
-  const linked = internals.linkCandidate(root, nonce)
-  const slot = internals.readSlot(root)
-  process.stdout.write(JSON.stringify({
-    linked,
-    refused: linked === 'eexist',
-    holderIsParent: slot !== 'legacy' && slot !== undefined,
-  }))
   process.exit(0)
 }
 if (label === 'repeat') {
