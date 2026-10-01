@@ -91,6 +91,27 @@ it('L3: legacy root locks REFUSE acquisition with bytes untouched', () => {
   }
 })
 
+it('L3 adopt: a provably dead v2 lock is adopted (append proceeds, bytes stay)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-adopt-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // A v2 writer crashed leaving its lock: the v3 protocol adopts the file
+    // (never removes it) and proceeds; new v2 writers stay refused by the
+    // file until the documented manual migration removes it.
+    const deadV2 = JSON.stringify({
+      version: 2, nonce: randomBytes(16).toString('hex'), pid: deadPid,
+      hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }) + '\n'
+    writeFileSync(join(root, '.writer.lock'), deadV2, 'utf8')
+    expect(writerLockState(root)).toBe('abandoned_recoverable')
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'adopt-1', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    expect(readFileSync(join(root, '.writer.lock'), 'utf8')).toBe(deadV2)
+    expect(readPrivateLedger(root, context).records).toHaveLength(1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 it('refuses a foreign-host dead holder', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-lock-foreign-'))
   try {

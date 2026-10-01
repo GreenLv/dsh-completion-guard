@@ -675,7 +675,13 @@ export function createRuntime(
       if (value === null || typeof value !== 'object') return true
       if (++visited > IMMUTABILITY_PROOF_NODE_BUDGET) return false
       if (!Object.isFrozen(value)) return false
-      for (const key of Object.keys(value as object)) {
+      // F2 (round 5): Object.keys enumerates only ENUMERABLE keys, so a
+      // non-enumerable accessor would be skipped and its getter — whose
+      // return value follows its closure — would silently pass the proof.
+      // Enumerate ALL owned string keys (symbols cannot be read by the
+      // string-keyed consumers) and require every property to be an ordinary
+      // data descriptor.
+      for (const key of Object.getOwnPropertyNames(value as object)) {
         const descriptor = Object.getOwnPropertyDescriptor(value, key)
         if (!descriptor) return false
         if (descriptor.get !== undefined || descriptor.set !== undefined) return false

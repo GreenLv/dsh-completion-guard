@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, symlinkSync, openSync, closeSync, appendFileSync, writeSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, symlinkSync, openSync, closeSync, appendFileSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -123,7 +123,11 @@ it('S1/L1 (standing regression): a delayed evict from a stale observation cannot
     if (!stale) throw new Error('fixture: dead claim not visible')
     expect(stale.pid).toBe(deadPid)
     const runner = await bundledRunner()
-    const child = spawn(process.execPath, [runner, root, 'slowappend'], { stdio: ['ignore', 'pipe', 'pipe'] })
+    // B holds the lock until the hold barrier disappears, so the parent's
+    // delayed evict lands against a genuinely live holder.
+    const holdBarrier = join(root, 'start-barrier')
+    writeFileSync(holdBarrier, 'hold\n')
+    const child = spawn(process.execPath, [runner, root, 'slowappend', holdBarrier], { stdio: ['ignore', 'pipe', 'pipe'] })
     const deadline = Date.now() + 30_000
     let bHolding = false
     while (Date.now() < deadline) {
@@ -137,10 +141,16 @@ it('S1/L1 (standing regression): a delayed evict from a stale observation cannot
     __writerLockInternals.delayedEvict(root, stale)
     const after = __writerLockInternals.readHolder(root)
     expect(after, 'the live holder must survive a stale evict').toEqual(before)
+    rmSync(holdBarrier) // release B
     await new Promise<void>((resolve) => child.on('close', () => resolve()))
+    // The holder is empty again and a fresh append works: recovery left the
+    // ledger fully usable. (slowappend holds the lock only; it writes no
+    // ledger records.)
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'post-s1', serviceId: 's', preGeneration: 'g' })).toBe(true)
     const snapshot = readPrivateLedger(root, context)
     expect(snapshot.damaged).toBe(false)
-    expect(snapshot.records.length).toBeGreaterThanOrEqual(1)
+    expect(snapshot.records).toHaveLength(1)
     expect(__writerLockInternals.readHolder(root)).toBeNull()
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -170,15 +180,121 @@ it('S3 (standing regression): bidirectional v2/v3 upgrade barrier', async () => 
     writeFileSync(join(root, '.writer.lock'), JSON.stringify(v2record) + '\n')
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'v2-held', serviceId: 's', preGeneration: 'g' })).toBe(false)
     expect(existsSync(join(root, '.writer.lock'))).toBe(true)
-    // Direction 3: v2 crashed (dead pid) → v3 recovers by ESRCH and proceeds.
+    // Direction 3: v2 crashed (dead pid) → v3 ADOPTS the barrier file
+    // (it stays, keeping v2 writers refused; documented migration constraint)
+    // and proceeds.
     const deadV2 = { version: 2, nonce: randomBytes(16).toString('hex'), pid: deadPid, hostname: hostname(), created_at_epoch_ms: Date.now() }
     writeFileSync(join(root, '.writer.lock'), JSON.stringify(deadV2) + '\n')
     expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'v2-dead', serviceId: 's', preGeneration: 'g' })).toBe(true)
-    expect(existsSync(join(root, '.writer.lock'))).toBe(false)
+    expect(existsSync(join(root, '.writer.lock'))).toBe(true)
+    // The adopted dead barrier keeps new v2 writers refused...
+    writeFileSync(join(root, '.writer.lock'), JSON.stringify({ version: 2, nonce: randomBytes(16).toString('hex'), pid: deadPid, hostname: hostname(), created_at_epoch_ms: Date.now() }) + '\n')
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'v2-dead-2', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    // and the log holder is empty between operations.
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 }, 120_000)
+
+it('L4.1 (standing regression): a stale dead-legacy observation cannot evict a live v3 holder', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r5-l41-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // A legacy barrier with a provably dead owner appears; A observes it and
+    // PAUSES (the old protocol would unlink it here). B adopts the same dead
+    // file, claims and enters its critical section. A resumes: the protocol
+    // NEVER removes the legacy file, so B's tenure is untouched and A must
+    // refuse on the live log holder.
+    writeDeadClaim(root)
+    writeFileSync(join(root, '.writer.lock'), JSON.stringify({
+      version: 2, nonce: randomBytes(16).toString('hex'), pid: deadPid,
+      hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }) + '\n', 'utf8')
+    const staleBarrierBytes = readFileSync(join(root, '.writer.lock'), 'utf8')
+    const runner = await bundledRunner()
+    // The runner holds until start-barrier disappears; create it so B stays
+    // inside its critical section while A's stale admission lands.
+    const holdBarrier = join(root, 'start-barrier')
+    writeFileSync(holdBarrier, 'hold\n')
+    const child = spawn(process.execPath, [runner, root, 'slowappend', holdBarrier], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const deadline = Date.now() + 30_000
+    let bHolding = false
+    while (Date.now() < deadline) {
+      const holder = __writerLockInternals.readHolder(root)
+      // B's holder is LIVE (its pid differs from the dead fixture pid).
+      if (holder !== null && holder.pid !== deadPid) { bHolding = true; break }
+      if (child.exitCode !== null) break
+    }
+    expect(bHolding, 'child B entered its critical section').toBe(true)
+    const barrierBefore = readFileSync(join(root, '.writer.lock'), 'utf8')
+    // A resumes its stale admission: the adopt path touches nothing and the
+    // live holder refuses it.
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'stale-a', serviceId: 's', preGeneration: 'g' })).toBe(false)
+    expect(readFileSync(join(root, '.writer.lock'), 'utf8'), 'B barrier untouched').toBe(barrierBefore)
+    rmSync(holdBarrier) // release B
+    await new Promise<void>((resolve) => child.on('close', () => resolve()))
+    // The holder is empty again and a fresh append works: recovery left the
+    // ledger fully usable. (slowappend holds the lock only; it writes no
+    // ledger records.)
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'post-s1', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    const snapshot = readPrivateLedger(root, context)
+    expect(snapshot.damaged).toBe(false)
+    expect(snapshot.records).toHaveLength(1)
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
+    void staleBarrierBytes
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 120_000)
+
+it('L4.2 (standing regression): an append raced with an active holder fails closed without revoking it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r5-l42-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // B claims and holds (its claim is granted and verified). A concurrent
+    // writer A appends while B holds: the replay marks A's claim ineffective
+    // and A must exit fail-closed. B's holder state must survive untouched —
+    // there is no truncation anywhere that could revoke it.
+    const held = __writerLockInternals.acquire(root)
+    expect(held).toBeDefined()
+    expect(__writerLockInternals.readHolder(root)?.nonce).toBe(held!.nonce)
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'racer', serviceId: 's', preGeneration: 'g' })).toBe(false)
+    expect(__writerLockInternals.readHolder(root)?.nonce, 'live holder survives the raced append').toBe(held!.nonce)
+    __writerLockInternals.release(root, held)
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+it('L4.3 (standing regression): tenure-scoped compaction keeps the holder state equivalent', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r5-l43-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // B holds; compaction runs mid-tenure (the exact code the acquire path
+    // runs when the log is oversized). The holder state must be equivalent
+    // before and after, and a concurrent admission must stay refused.
+    const held = __writerLockInternals.acquire(root)
+    expect(held).toBeDefined()
+    const before = __writerLockInternals.readHolder(root)
+    __writerLockInternals.compactInTenure(root, held!)
+    const after = __writerLockInternals.readHolder(root)
+    expect(after, 'compaction is state-equivalent').toEqual(before)
+    expect(after?.nonce).toBe(held!.nonce)
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'racer', serviceId: 's', preGeneration: 'g' })).toBe(false)
+    __writerLockInternals.release(root, held)
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
+    // The compacted log replays to a working ledger.
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'post', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    const snapshot = readPrivateLedger(root, context)
+    expect(snapshot.damaged).toBe(false)
+    expect(snapshot.records.map((record) => record.position)).toEqual([1])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
 it('S2: a torn trailing line (crash mid-append) leaves the log recoverable', async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r4-s2-'))

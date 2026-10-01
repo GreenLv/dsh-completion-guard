@@ -208,6 +208,35 @@ it('never serves the fast path for a snapshot whose immutability is not provable
       } finally { getterReader.mockRestore() }
     }
 
+    // 3c. F2 round-5: a NON-ENUMERABLE accessor on frozen containers is
+    // equally unprovable — Object.keys would have skipped it, so the proof
+    // must enumerate all owned keys. The fast path must never engage.
+    {
+      const neSession = newSession('Explain the first requirement.')
+      let hiddenText = 'Explain the first requirement.'
+      const neEvents = [structuredClone((neSession.snapshotEvents() as unknown as Array<Record<string, unknown>>)[0] as Record<string, unknown>)]
+      const neData = (neEvents[0] as { data: { content: Array<{ type: string; text: string }> } }).data
+      Object.defineProperty(neData.content, 0, {
+        enumerable: false,
+        get() { return { type: 'text', text: hiddenText } },
+      })
+      Object.freeze(neData.content)
+      Object.freeze(neData)
+      Object.freeze(neEvents[0])
+      Object.freeze(neEvents)
+      const neReader = vi.spyOn(neSession, 'snapshotEvents').mockReturnValue(neEvents as never)
+      try {
+        const runtime = makeRuntime(neSession)
+        runtime.sync()
+        const calls = derive.mock.calls.length
+        expect([...runtime.projection.items.values()].some((item) => item.normalizedText.includes('Explain the first'))).toBe(true)
+        hiddenText = 'Run the tests now.'
+        runtime.sync()
+        expect(derive.mock.calls.length, 'non-enumerable accessor snapshot: full rebuild').toBe(calls + 1)
+        expect([...runtime.projection.items.values()].some((item) => item.normalizedText.includes('Run the tests now'))).toBe(true)
+      } finally { neReader.mockRestore() }
+    }
+
     // 4. Positive control: the OFFICIAL Session snapshot is deeply frozen and
     // reuses its array, so the production host keeps the fast path.
     const official = newSession('Explain the first requirement.')

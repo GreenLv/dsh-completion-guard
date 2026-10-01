@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, truncateSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -143,7 +143,7 @@ interface ArbitrationRecord {
   /** Expected holder nonce at the moment of observation (null = empty slot). */
   prev: string | null
 }
-interface HeldLock { nonce: string }
+interface HeldLock { nonce: string; ownedBarrier: boolean }
 export interface ArbitrationHolder { nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
 
 export type WriterLockState = 'absent' | 'held' | 'abandoned_recoverable' | 'unknown_owner'
@@ -152,20 +152,19 @@ function arbitrationPath(root: string): string { return join(root, ARBITRATION_N
 function legacyV2Path(root: string): string { return join(root, LEGACY_V2_LOCK_NAME) }
 
 /**
- * Parse the log; a torn (unparseable) trailing line terminates the replay.
- * `validBytes` covers exactly the complete prefix — records after a torn line
- * were never part of any replay, so appending REQUIRES truncating to this
- * boundary first (otherwise the new record would land after the torn line and
- * be invisible to every future replay, wedging recovery).
+ * Parse the log (docs/WRITER_LOCK_PROTOCOL.md Revision 3.1, correction 3).
+ * Unparseable lines — torn tails from a crash mid-append — are SKIPPED: they
+ * never took effect, so skipping revokes nothing, and later complete records
+ * stay visible (there is no truncation anywhere in the protocol, so a
+ * truncate-and-revive race cannot exist). A final line without a trailing
+ * newline is still replayed when it parses: it was fully written.
  */
-function parseArbitration(root: string): { records: ArbitrationRecord[]; validBytes: number } {
+function parseArbitration(root: string): ArbitrationRecord[] {
   let raw: string
-  try { raw = readFileSync(arbitrationPath(root), 'utf8') } catch { return { records: [], validBytes: 0 } }
+  try { raw = readFileSync(arbitrationPath(root), 'utf8') } catch { return [] }
   const records: ArbitrationRecord[] = []
-  let consumed = 0
   for (const line of raw.split('\n')) {
-    if (line === '') continue // the artifact after the trailing newline adds no bytes
-    const bytes = Buffer.byteLength(line, 'utf8') + 1
+    if (line === '') continue
     try {
       const value = JSON.parse(line) as Partial<ArbitrationRecord>
       if (value && value.v === 3
@@ -175,23 +174,25 @@ function parseArbitration(root: string): { records: ArbitrationRecord[]; validBy
         && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number'
         && (value.prev === null || typeof value.prev === 'string')) {
         records.push(value as ArbitrationRecord)
-        consumed += bytes
-        continue
       }
-    } catch { /* torn line */ }
-    return { records, validBytes: consumed }
+    } catch { /* torn line: never took effect, skip */ }
   }
-  return { records, validBytes: consumed }
+  return records
 }
 
-/** Deterministic replay (docs/WRITER_LOCK_PROTOCOL.md Revision 3). */
+/**
+ * Deterministic replay (docs/WRITER_LOCK_PROTOCOL.md Revision 3.1). A claim
+ * is effective ONLY when the slot is empty: a claim recorded while another
+ * holder is current (e.g. one whose barrier was stolen on a stale legacy
+ * observation) is stored but INEFFECTIVE, and the claimant exits on its
+ * read-back. Release/evict take effect only for the current holder nonce.
+ */
 function replayHolder(records: readonly ArbitrationRecord[]): ArbitrationHolder | null {
   let holder: ArbitrationHolder | null = null
   for (const record of records) {
     const isHolder = holder !== null && holder.nonce === record.prev
-    const isEmptyOk = holder === null && record.prev === null
     if (record.op === 'claim') {
-      if (isHolder || isEmptyOk) holder = { nonce: record.nonce, pid: record.pid, hostname: record.hostname, created_at_epoch_ms: record.created_at_epoch_ms }
+      if (holder === null) holder = { nonce: record.nonce, pid: record.pid, hostname: record.hostname, created_at_epoch_ms: record.created_at_epoch_ms }
     } else if (record.op === 'release' || record.op === 'evict') {
       if (isHolder) holder = null
     }
@@ -200,7 +201,7 @@ function replayHolder(records: readonly ArbitrationRecord[]): ArbitrationHolder 
 }
 
 function readHolder(root: string): ArbitrationHolder | null {
-  return replayHolder(parseArbitration(root).records)
+  return replayHolder(parseArbitration(root))
 }
 
 /** Only ESRCH proves a recorded owner is gone; any other answer refuses. */
@@ -217,14 +218,19 @@ function unlinkIfExists(path: string): void {
 }
 
 function appendArbitration(root: string, record: ArbitrationRecord): void {
-  // A torn trailing line would hide every later record from the replay, so it
-  // is truncated to the valid prefix before appending. The torn record never
-  // took effect (the replay stopped at it), so the truncation revokes nothing.
-  const { validBytes } = parseArbitration(root)
-  const size = existsSync(arbitrationPath(root)) ? lstatSync(arbitrationPath(root)).size : 0
-  if (size !== validBytes) truncateSync(arbitrationPath(root), validBytes)
+  // Line alignment: if the log's last line is torn (no trailing newline — a
+  // previous writer crashed mid-append), prepend a newline so this record
+  // starts on its own line and stays visible to the replay. The check can
+  // only race another crash-torn tail; a misaligned record is then skipped by
+  // every replay and its writer exits fail-closed on the read-back — it can
+  // never revoke the active holder or admit two holders (no truncation).
+  let needsNewline = false
+  try {
+    const raw = readFileSync(arbitrationPath(root), 'utf8')
+    needsNewline = raw.length > 0 && !raw.endsWith('\n')
+  } catch { needsNewline = false }
   const fd = openRegular(arbitrationPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND, 0o600)
-  try { writeAll(fd, `${canonical(record)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+  try { writeAll(fd, `${needsNewline ? '\n' : ''}${canonical(record)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
 }
 
 /** Classification shared by diagnostics: structured v2 records classify by pid; anything else is unknown. */
@@ -276,85 +282,123 @@ function appendLog(root: string, op: ArbitrationRecord['op'], nonce: string, pre
  * Acquire the writer lock. Returns the held nonce, or undefined when refused
  * (live/unknown holder, v2 barrier, or a lost optimistic claim).
  */
+/**
+ * Admission (Revision 3.1). The legacy barrier is ADOPTED when its owner is
+ * provably dead (ESRCH, same host) — never removed on the basis of an
+ * observation; unknown/live/foreign owners refuse. When no barrier exists one
+ * is created O_EXCL (creation cannot steal a live writer's file). The log
+ * claim is effective only on an empty slot and is verified by read-back; a
+ * failed claimant removes only a barrier it created itself (nonce-conditional).
+ */
 function acquireWriterLock(root: string): HeldLock | undefined {
   for (let attempt = 0; attempt < 16; attempt += 1) {
-    // L3 upgrade barrier, v2 direction: a structured v2 record with a live
-    // pid — or anything unparseable/anonymous/foreign — refuses. A record
-    // whose pid answers ESRCH is removed by name: the v2 writer is gone and
-    // v2 has no self-recovery, so this is the verified migration step.
+    // 1. Legacy barrier classification. Refuse on unknown/anonymous/foreign/
+    // live owners; ADOPT on provably dead (the dead file keeps blocking v2
+    // writers for our tenure and stays for the documented manual migration).
+    let barrierState: 'absent' | 'adopted' | 'live' | 'unknown' = 'absent'
     const legacy = readLegacyV2(root)
     if (legacy !== undefined) {
-      if (legacy === 'legacy') return undefined
-      if (!processExists(legacy.pid)) unlinkIfExists(legacyV2Path(root))
-      else return undefined
+      if (legacy === 'legacy') barrierState = 'unknown'
+      else if (legacy.hostname !== hostname()) barrierState = 'unknown'
+      else if (processExists(legacy.pid)) barrierState = 'live'
+      else barrierState = 'adopted'
     }
+    if (barrierState === 'unknown' || barrierState === 'live') return undefined
+    // 2. Log holder liveness. Refuse live/foreign; evict provably dead.
     const observed = readHolder(root)
-    // An observed holder whose pid answers ESRCH is recovered by an evict
-    // record carrying that observation as `prev`.
     if (observed !== null) {
-      // A foreign-host holder cannot be liveness-verified from this host:
-      // refuse instead of taking over (migration is a manual, verified step).
-      if (observed.hostname !== hostname()) {
-        unlinkIfExists(legacyV2Path(root))
-        return undefined
-      }
+      if (observed.hostname !== hostname()) return undefined
       if (!processExists(observed.pid)) {
         appendLog(root, 'evict', randomBytes(16).toString('hex'), observed.nonce)
-        continue
+        continue // the holder is now empty; re-classify and claim
       }
+      return undefined
     }
+    // 3. Claim on the empty slot. Adopt the dead barrier file if present
+    // (it blocks v2 writers for our tenure); otherwise create our own.
     const nonce = randomBytes(16).toString('hex')
-    // v2 upgrade barrier, v3 direction: hold the v2-shaped lock for the whole
-    // critical section so a live v2 writer refuses on O_EXCL.
-    let v2Fd: number
-    try {
-      v2Fd = openSync(legacyV2Path(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined
-      throw error
-    }
-    try {
-      const v2Record: WriterLockRecord = {
-        version: 2, nonce,
-        pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
+    let ownedBarrier = false
+    if (barrierState === 'absent') {
+      let v2Fd: number
+      try {
+        v2Fd = openSync(legacyV2Path(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue // re-classify
+        throw error
       }
-      writeAll(v2Fd, `${canonical(v2Record)}\n`)
-      fsyncSync(v2Fd)
-    } finally {
-      try { closeSync(v2Fd) } catch { /* already closed */ }
+      try {
+        const barrierRecord: WriterLockRecord = {
+          version: 2, nonce,
+          pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
+        }
+        writeAll(v2Fd, `${canonical(barrierRecord)}\n`)
+        fsyncSync(v2Fd)
+      } finally {
+        try { closeSync(v2Fd) } catch { /* already closed */ }
+      }
+      ownedBarrier = true
     }
-    appendLog(root, 'claim', nonce, observed === null ? null : observed.nonce)
+    appendLog(root, 'claim', nonce, null)
     const holder = readHolder(root)
-    if (holder !== null && holder.nonce === nonce) return { nonce }
-    // Optimistic CAS lost: exit fail-closed (no pathname was touched).
-    unlinkIfExists(legacyV2Path(root))
+    if (holder !== null && holder.nonce === nonce) {
+      // Bounded growth inside the tenure (Revision 3.1, correction 4).
+      compactLogInTenure(root, { nonce, ownedBarrier })
+      return { nonce, ownedBarrier }
+    }
+    // Lost or ineffective: exit fail-closed. Remove only a barrier this actor
+    // created itself (its nonce is ours); an adopted dead file stays.
+    if (ownedBarrier) {
+      const barrier = readLegacyV2(root)
+      if (barrier !== undefined && barrier !== 'legacy' && barrier.nonce === nonce) {
+        unlinkIfExists(legacyV2Path(root))
+      }
+    }
     return undefined
   }
   return undefined
 }
 
+/**
+ * Release (Revision 3.1): append the release record, then remove ONLY a
+ * barrier this writer created in its own critical section (nonce-conditional).
+ * An ADOPTED legacy barrier is left untouched — it keeps blocking v2 writers
+ * until the documented manual migration removes it, and every later v3
+ * admission re-adopts it.
+ */
 function releaseWriterLock(root: string, held: HeldLock | undefined): void {
   if (held === undefined) return
   appendLog(root, 'release', held.nonce, held.nonce)
-  const holder = readHolder(root)
-  if (holder === null) {
-    unlinkIfExists(legacyV2Path(root))
-    // Bounded growth: compact only when the holder (us, verified by the
-    // release replay) observes an oversized log. The rename window can drop a
-    // concurrent claim; the dropped writer's read-back then shows it is not
-    // the holder and it exits — fail-closed, never two holders.
-    const { records } = parseArbitration(root)
-    if (records.length > LOG_COMPACTION_RECORDS) {
-      const baseline: ArbitrationRecord = {
-        v: 3, op: 'claim', nonce: held.nonce,
-        pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(), prev: null,
-      }
-      const tmp = join(root, `${ARBITRATION_NAME}.compact`)
-      const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600)
-      try { writeAll(fd, `${canonical(baseline)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
-      try { renameSync(tmp, arbitrationPath(root)) } catch { /* best effort; log stays oversized */ }
+  if (held.ownedBarrier) {
+    const barrier = readLegacyV2(root)
+    if (barrier !== undefined && barrier !== 'legacy' && barrier.nonce === held.nonce) {
+      unlinkIfExists(legacyV2Path(root))
     }
   }
+}
+
+/** Compaction threshold; test-overridable via the internals hook. */
+let compactionRecordThreshold = LOG_COMPACTION_RECORDS
+
+/**
+ * Compaction (Revision 3.1, correction 4): performed ONLY by the current
+ * holder inside its verified critical section. During a live holder's tenure
+ * no concurrent record can be effective (claims need an empty slot; evicts
+ * need a dead holder), so the rename window cannot drop an effective record:
+ * the baseline re-installs the holder, and readers see the old or the new
+ * file, both replaying to the same holder. State-equivalence is asserted by
+ * the lock tests.
+ */
+function compactLogInTenure(root: string, held: HeldLock): void {
+  const records = parseArbitration(root)
+  if (records.length <= compactionRecordThreshold) return
+  const baseline: ArbitrationRecord = {
+    v: 3, op: 'claim', nonce: held.nonce,
+    pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(), prev: null,
+  }
+  const tmp = join(root, `${ARBITRATION_NAME}.compact`)
+  const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600)
+  try { writeAll(fd, `${canonical(baseline)}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+  try { renameSync(tmp, arbitrationPath(root)) } catch { /* best effort; log stays oversized */ }
 }
 
 /**
@@ -364,6 +408,9 @@ function releaseWriterLock(root: string, held: HeldLock | undefined): void {
  */
 export const __writerLockInternals = {
   readHolder: (root: string): ArbitrationHolder | null => readHolder(root),
+  /** L4.3 fixture: run the same compaction the acquire path runs, mid-tenure. */
+  compactInTenure: (root: string, held: HeldLock): void => compactLogInTenure(root, held),
+  setCompactionThreshold: (n: number): void => { compactionRecordThreshold = n },
   /** Observe + append one evict with the observed holder as prev. */
   delayedEvict: (root: string, observed: ArbitrationHolder): void => {
     appendLog(root, 'evict', randomBytes(16).toString('hex'), observed.nonce)

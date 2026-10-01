@@ -52,21 +52,21 @@ if (label === 'v2compat') {
   process.exit(0)
 }
 if (label === 'slowappend') {
-  // Recovery race fixture: append once and hold the slot briefly so the
-  // parent can run its delayed finalize against the live holder.
-  const ok = appendPrivateLedger(root, context, 'restart_intent', {
-    resolutionCallId: 'slowappend-1', serviceId: 's', preGeneration: 'g',
-  })
-  if (!ok) {
+  // Recovery race fixture: HOLD the lock (via the production acquire path)
+  // until the parent removes the barrier file, so the parent can run its
+  // stale-admission attempt against a genuinely live holder.
+  const internals = (await import('../../src/domain/private-ledger.js')).__writerLockInternals
+  const held = internals.acquire(root)
+  if (!held) {
     process.stdout.write(JSON.stringify({ appended: false }))
     process.exit(0)
   }
-  // Hold until the parent removes the barrier file OR a safety timeout.
   process.stdout.write(JSON.stringify({ appended: true, holding: true }))
   const deadline = Date.now() + 30_000
   while (existsSync(`${root}/start-barrier`) && Date.now() < deadline) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
   }
+  internals.release(root, held)
   process.exit(0)
 }
 if (label === 'repeat') {
