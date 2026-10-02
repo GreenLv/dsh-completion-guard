@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -13,6 +14,19 @@ NATIVE = base.NATIVE
 
 class DesktopEntrypointTests(unittest.TestCase):
     fixture = base.NativeAcceptanceEntrypointTests.fixture
+
+    def test_schema_accepts_complete_producer_gate_inventory(self):
+        root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location("desktop_contract", root / "scripts/native_desktop_acceptance.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        gates = json.loads((root / "schemas/native-desktop-bound-v1.schema.json").read_text())["properties"]["gates"]
+        # The producer added a probe gate; a stale 25-item consumer rejected real
+        # successful 26-gate native receipts on both platforms.
+        count = len(module.DESKTOP_GATES)
+        self.assertEqual(gates["minItems"], count)
+        self.assertEqual(gates["maxItems"], count)
+
     def test_desktop_requires_its_own_declared_cohort(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:

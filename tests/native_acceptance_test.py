@@ -22,6 +22,28 @@ SPEC.loader.exec_module(NATIVE)
 
 
 class NativeAcceptanceEntrypointTests(unittest.TestCase):
+    def test_relative_result_sidecar_survives_child_workdir_change(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            root, output, args = self.fixture(directory)
+            args[args.index("--output") + 1] = os.path.relpath(output)
+            args += ["--gate-profile", "host_bound_v070", "--runtime-root", str(root),
+                     "--web-cohort", "web", "--headless-cohort", "headless", "--web-market-version", "none"]
+            def host(*positional, diagnostics_output):
+                self.assertTrue(diagnostics_output.is_absolute())
+                progress = Path(str(diagnostics_output) + ".stages.jsonl")
+                # Exercise the real cwd boundary that caused Windows ENOENT.
+                import sys
+                subprocess.run([sys.executable, "-c", "from pathlib import Path; import sys; Path(sys.argv[1]).write_text('probe started')",
+                                str(progress)], cwd=root, check=True)
+                return {"status": "passed"}
+            with mock.patch.object(NATIVE, "preflight_inputs", return_value=SimpleNamespace(host_acceptance=host)), \
+                    mock.patch.object(NATIVE, "portable_acceptance", return_value={}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(NATIVE.main(args), 0)
+            self.assertEqual(Path(str(output) + ".diagnostics.json.stages.jsonl").read_text(), "probe started")
+            self.assertEqual(json.loads(output.read_text())["status"], "passed")
+
     def test_failed_host_capability_prevents_portable_install(self):
         with tempfile.TemporaryDirectory() as directory:
             _, output, args = self.fixture(directory)

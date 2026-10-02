@@ -341,6 +341,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--transfer-receipt", type=Path)
     parser.add_argument("--transport-url")
     args = parser.parse_args(argv)
+    # Child hosts run inside disposable work directories. Bind result paths to
+    # the invoking cwd before deriving sidecars or crossing that cwd boundary.
+    # absolute() preserves a final symlink for check_output_path to reject.
+    args.output = args.output.absolute()
+    if args.transfer_receipt is not None:
+        args.transfer_receipt = args.transfer_receipt.absolute()
     if not HEX64.fullmatch(args.artifact_sha256) or not HEX40.fullmatch(args.source_commit):
         parser.error("artifact SHA-256 and source commit must be full lowercase digests")
     if args.gate_profile != "portable_artifact" and args.runtime_root is None:
