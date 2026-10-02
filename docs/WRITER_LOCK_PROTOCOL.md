@@ -171,3 +171,38 @@ Round-4 deterministic counterexamples showed three races in the Revision 3 proto
 4. **Compaction only inside the tenure.** Release-time compaction is removed. While a writer holds, no concurrent record can be effective (claims need an empty slot; evicts need a dead holder, which the live holder is not; other writers refuse without appending), so the holder may compact the log to a state-equivalent baseline (its own claim) with the rename window unable to drop an effective record or change the holder. Readers see the old or the new file; both replay to the same holder.
 
 Admission now reads: classify the legacy barrier (refuse on unknown/live/foreign; adopt on provably dead) → read the log holder (refuse on live/foreign; append evict on provably dead → re-read) → append claim → read back → enter only if the holder is oneself; otherwise remove only a barrier one created oneself (nonce-conditional) and exit fail-closed. Release: append release → remove only one's own created barrier (an adopted file stays). Every pathname removal in the protocol is therefore nonce-conditional on a file the actor created in the same critical section; no removal is ever performed on the basis of an observation of somebody else's file.
+
+
+---
+
+# Revision 3.2 (round-6 correction): atomic barrier publication via prepare-and-link
+
+Round-5 review reproduced the one remaining crash window INSIDE the protocol's own admission: the v2-compat barrier was created O_EXCL and the owner record written as a second step; a SIGKILL between the two left a ZERO-BYTE `.writer.lock` that classified as `legacy` (unknown owner) and wedged every later append forever (S2). A partial owner write was equally possible. Adopt cannot help — the file has no owner record to prove dead — and content-based deletion of an empty file is pathname-observation recovery, which rounds 1–4 eliminated.
+
+## Correction: the barrier is published atomically
+
+The admission no longer creates `.writer.lock` directly. Instead:
+
+1. **Prepare**: create `pending.<nonce>` O_EXCL (a name unique to this attempt; nobody else reads or writes it), write the COMPLETE v2-shaped owner record `{version:2, nonce, pid, hostname, created_at}` in one writeAll, fsync.
+2. **Publish**: `link(pending.<nonce>, .writer.lock)`. `link()` is atomic and succeeds only when the destination does not exist; the published barrier's content is, at every observable moment, the fully written and fsynced owner record. There is no state in which `.writer.lock` exists with empty or partial content **from this protocol** — the only producer of such a file is a V2 writer's own crash (v2 creates and writes in two steps), which stays under the existing unknown_owner refusal + manual migration constraint.
+3. **Cleanup**: unlink `pending.<nonce>` after a successful link (the barrier holds the content); on failure paths remove it by name. A crash before the link leaves the pending file behind: it is inert (unique name, never consulted as authority, blocks nothing) and is garbage-collected by name when its creator's record shows a provably dead same-host pid; a pending file with a live creator is left alone (safe-control test), and an unparseable pending file (crash mid-write) is left as bounded inert garbage (its creator cannot be identified without guessing).
+
+Assumption A3 (per platform): hard links are supported for regular files within the ledger root (APFS, ext4, NTFS — the supported cohorts). Ledger roots live under the user's home on all platforms.
+
+##barrier state matrix after the correction
+
+| `.writer.lock` observed | classification | admission |
+| --- | --- | --- |
+| absent | — | prepare + publish (link) → claim |
+| complete v2/v3-shaped record, same host, pid ESRCH | abandoned_recoverable | ADOPT (file untouched) → claim |
+| complete record, same host, pid alive | held | refuse |
+| complete record, foreign host | unknown_owner | refuse |
+| empty/unparseable (only producible by a v2 writer's crash) | unknown_owner | refuse + documented manual migration |
+
+No protocol step deletes or truncates any file on the basis of a pathname observation: the only removals are (a) the holder's own nonce-conditional barrier unlink at release, (b) by-name GC of pending files whose embedded creator is provably dead, (c) the holder's own pending unlink after a successful publish. All three act on names whose content the actor itself wrote or fully verified at action time.
+
+## Regression obligations (round 6)
+
+- A real child performing production appends is SIGKILLed when the parent observes the admission window (a `pending.*` file appears); after each kill, subsequent production appends must succeed, any `.writer.lock` present must parse as a complete record, the chain stays intact, and a killed-before-link attempt's pending garbage is reclaimed by the dead-creator GC.
+- Safe control: a pending file whose embedded creator is ALIVE is left untouched by concurrent admissions (no takeover of a live creator).
+- A partial (unparseable) pending file is inert: admission proceeds with it present.
