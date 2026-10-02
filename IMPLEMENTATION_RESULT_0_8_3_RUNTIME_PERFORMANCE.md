@@ -16,7 +16,9 @@
 | 第四轮复核 subject | `8f86f3f94e6b3288e05f9fcff88619b4c202c6f8`（S1/S2/S3/F2/V3/H1 → 本轮关闭；V3 已在第三轮落地并获复核确认） |
 | 第四轮实现提交 | `d5460fd9e8387b8f4a345b75005b0297ca220171` |
 | 第五轮复核 subject | `ab7fa703b5a620421ee6c889217a0c068ad55b54`（L4.1/L4.2/L4.3/F2/ H1 → 本轮关闭） |
-| 第五轮实现提交 | `aafb5a93edbb17b93e73af65ad68cde1c0172577`（仅本地，未 push） |
+| 第五轮实现提交 | `aafb5a93edbb17b93e73af65ad68cde1c0172577` |
+| 第五轮复核 subject | `cbd30714bf445804b383ff7f703fa05b754564c5`（S2 唯一阻断 → 本轮关闭；F2/H1 已获确认） |
+| 第六轮实现提交 | `4e858a1df05089ccd186fbc0cc75ced536a8e11a`（仅本地，未 push） |
 | 版本 | 0.8.3 |
 | dirty state | 受跟踪文件干净；未跟踪：三份计划/提示词文件、两份复核/返修交接文件、`HANDOFF_0_8_3_REPAIR_RESULT.json`（完整清单见 handoff 的 dirty_scope） |
 | dist | 从干净提交树重建，`git diff --exit-code -- dist` 通过 |
@@ -84,6 +86,14 @@ archive-045 维持 pending（Codex 经私有映射读取封存原记录：raw_co
 
 claim 重放规则同步收紧：**claim 仅在空槽生效**——记录在活持有者之上的 claim 存储但无效，claimant 读回后 fail-closed 退出；直接 claim-over-holder 路径由重放本身封闭，与 barrier 状态无关。
 
+### 第六轮复核（第五轮返修后的独立复核）追加结案
+
+| ID | 发现 | 修复 | 正反例 | 状态 |
+| --- | --- | --- | --- | --- |
+| S2 | 本协议自身的 barrier 创建窗口：O_EXCL 建空文件后、owner 写入前被 SIGKILL → 零字节 barrier 永久 unknown_owner，三次后续 append 全 false（协调者独立重放 freshV3BarrierCrash=true） | **准备-再发布**（协议文档 Revision 3.2 先行提交）：admission 先写完整 v2 形状 owner 记录到唯一 `pending.<nonce>`（O_EXCL+writeAll+fsync），再 `link(pending, .writer.lock)` 原子发布——barrier 在本协议下任何可观察时刻都是完整内容，空/部分窗口结构性不存在。崩溃于 link 前只留惰性 pending 文件；崩溃于 link 后留完整死 owner 记录（可恢复）。pending 垃圾按名 GC（内嵌 creator 同机 ESRCH 才删）；活 creator 与不可解析 pending 永不触碰 | S2 standing regression：6 轮真实子进程生产 append，父进程轮询 pending 出现即 SIGKILL（覆盖不同子窗口）——每轮后 3 次生产 append 全部恢复、存在的 barrier 必为完整 JSON 记录、链唯一连续；安全对照：活 creator 的 pending 永不被接管；partial pending 惰性对照：admission 照常进行 | 已关闭 |
+
+claim/evict/发布之外无任何按 pathname 观察的删除：协议中仅存三类移除——持有者自己的 nonce 条件 barrier unlink（release）、按名 GC 死 creator 的 pending、成功发布后自己的 pending unlink——全部作用于 actor 自己写完并验证过的内容。
+
 ## 3. 合同保持
 
 fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durability、release reservation/settlement、上游 pin 均未变。`DSH_GUARD_DISABLE_INDEXES=1` 仍关闭索引层；memo 缓存均为纯函数解析缓存（文本→解析结果），不是跨 entry 信任缓存。
@@ -117,7 +127,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 | --- | --- |
 | typecheck（tsc --noEmit） | 0 errors |
 | lint（oxlint src tests） | 0 errors / 91 warnings（与基线同水平） |
-| tests（vitest run） | 187 files passed / 1 skipped；**2937 passed / 11 skipped**（含五轮新增回归） |
+| tests（vitest run） | 187 files passed / 1 skipped；**2940 passed / 11 skipped**（含六轮新增回归） |
 | release-pack node tests | 4/4 |
 | stats node tests | 10/10 |
 | build + dist parity | 重建后 `git diff --exit-code -- dist` 通过 |
