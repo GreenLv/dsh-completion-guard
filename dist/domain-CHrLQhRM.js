@@ -22661,6 +22661,26 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			}
 		}
 		if (span) coveredSpans += 1;
+		const frontedTest = segment.interpretation.fingerprint.startsWith("v6-locative:") && /^\s*(?:in|within)\s+.+?[,，]\s*(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?:\s|[.!?]|$)/iu.test(segment.body);
+		if (segment.interpretation.fingerprint.startsWith("v6-test:") || frontedTest) {
+			const location = frontedTest ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment.body) : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment.body);
+			if (location && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace[.!?]?$/iu.test(location[1])) {
+				const raw = location[1].replace(/[.!?。！？]$/, "").trim();
+				const target = /^(["'`])([^"'`]+)\1$/u.exec(raw)?.[2] ?? (/^[^\s"'`]+$/u.test(raw) ? raw : void 0);
+				const resolved = target && rootLocatorFlavor(target) && !/(?:^|[\\/])package\.json$/iu.test(target);
+				const item = insert(projection, segment, sourceMessageId, resolved ? target : "scope", "scope", unitId, provenance ? {
+					rawTextSha256: provenance.rawTextSha256,
+					span
+				} : void 0, freshItems);
+				if (resolved) item.targetSource = { kind: "explicit_path" };
+				else {
+					delete item.requestedTarget?.scope;
+					item.targetCaptureStatus = "clarification_required";
+					delete item.targetSource;
+				}
+				continue;
+			}
+		}
 		if (segment.interpretation.fingerprint.startsWith("v6-package-script:")) {
 			if (/\b(?:in|within)\s+["'`]/iu.test(segment.body)) {
 				const target = /\b(?:in|within)\s+(["'`])([^"'`]+)\1(?:\s*[.!?])?\s*$/iu.exec(segment.body)?.[2];

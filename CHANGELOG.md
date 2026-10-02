@@ -4,6 +4,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 
 ## 0.8.3
 
+- Preserves an explicitly named absolute test directory instead of silently using the session's working directory. Unresolved location clauses require clarification; passing tests in the parent directory cannot satisfy the child-directory requirement.
 - Reduces repeated work when mounting and updating a session. Unchanged, provably immutable event snapshots reuse the existing projection; mutable or accessor-backed inputs rebuild it. Per-derivation indexes speed up long histories. Regression fixtures compare event prefixes with an independently frozen 0.8.2 implementation; this does not promise a fixed loading time for every history or host.
 - Shares archive and module reads within each Desktop host validation. Each new validation still checks the current installed bytes. Ordinary shell calls that cannot produce a trusted workdir receipt avoid the full host audit; eligible root test obligations retain it.
 - Reads private-ledger anchors and records once per append. Writer admission publishes a complete owner record atomically, and a provably dead same-host writer can be recovered without deleting another writer's lock. Unknown and live owners are refused. An adopted stale barrier continues to block older writers; downgrading requires the controlled maintenance procedure in the [writer-lock reference](docs/WRITER_LOCK_PROTOCOL.md).

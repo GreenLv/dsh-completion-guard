@@ -918,6 +918,31 @@ function insertItems(
       }
     }
     if (span) coveredSpans += 1
+    // An explicit test location is authority, not an optional hint. Do not
+    // silently substitute the session cwd when this bounded grammar cannot
+    // resolve a location supplied by the user.
+    const frontedTest = segment.interpretation.fingerprint.startsWith('v6-locative:')
+      && /^\s*(?:in|within)\s+.+?[,，]\s*(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?:\s|[.!?]|$)/iu.test(segment.body)
+    if (segment.interpretation.fingerprint.startsWith('v6-test:') || frontedTest) {
+      const location = frontedTest
+        ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment.body)
+        : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment.body)
+      if (location && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace[.!?]?$/iu.test(location[1]!)) {
+        const raw = location[1]!.replace(/[.!?。！？]$/, '').trim()
+        const quoted = /^(["'`])([^"'`]+)\1$/u.exec(raw)
+        const target = quoted?.[2] ?? (/^[^\s"'`]+$/u.test(raw) ? raw : undefined)
+        const resolved = target && rootLocatorFlavor(target) && !/(?:^|[\\/])package\.json$/iu.test(target)
+        const item = insert(projection, segment, sourceMessageId, resolved ? target! : 'scope', 'scope', unitId,
+          provenance ? { rawTextSha256: provenance.rawTextSha256, span } : undefined, freshItems)
+        if (resolved) item.targetSource = { kind: 'explicit_path' }
+        else {
+          delete item.requestedTarget?.scope
+          item.targetCaptureStatus = 'clarification_required'
+          delete item.targetSource
+        }
+        continue
+      }
+    }
     if (segment.interpretation.fingerprint.startsWith('v6-package-script:')) {
       const quotedScope = /\b(?:in|within)\s+["'`]/iu.test(segment.body)
       if (quotedScope) {

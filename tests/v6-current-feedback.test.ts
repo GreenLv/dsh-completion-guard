@@ -34,14 +34,23 @@ function fixture(root = 'Run pnpm test in /work.') {
   return { session, derive }
 }
 
-function appendTest(session: Session, id: string, failed = false, command = 'pnpm test') {
-  session.append('tool/call', { turn: 1, step: 1, callId: id as never, name: 'bash', arguments: JSON.stringify({ command, workdir: '/work' }) })
+function appendTest(session: Session, id: string, failed = false, command = 'pnpm test', workdir = '/work') {
+  session.append('tool/call', { turn: 1, step: 1, callId: id as never, name: 'bash', arguments: JSON.stringify({ command, workdir }) })
   session.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({ callId: id as never,
     content: [{ type: 'text', text: failed ? '1 test failed' : '10 tests passed' }], isError: failed }),
     ...(failed ? { error: { name: 'ProcessError', message: 'failed' } } : {}) } as never, { surfaceOp: 'append' })
 }
 
 describe('default v6 current feedback', () => {
+  it('accepts only successful evidence from the explicitly requested child directory', () => {
+    const { session, derive } = fixture('Run pnpm test in /work/child.')
+    appendTest(session, 'wrong-parent')
+    expect(derive().coreV2?.predicates).not.toMatchObject({ R001: 'satisfied' })
+    appendTest(session, 'child-failed', true, 'pnpm test', '/work/child')
+    expect(derive().coreV2?.predicates).not.toMatchObject({ R001: 'satisfied' })
+    appendTest(session, 'child-success', false, 'pnpm test', '/work/child')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied' })
+  })
   it('keeps a sourced root test action in a materialized ordinary checkpoint row', async () => {
     const { derive } = fixture('Run npm test in /work.')
     const projection = derive()
