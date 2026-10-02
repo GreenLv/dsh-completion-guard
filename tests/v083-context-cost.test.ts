@@ -7,6 +7,7 @@ import { firstStepGuidanceV6 } from '../src/domain/lifecycle.js'
 import { renderRecoveryPacket, recoveryDigest } from '../src/domain/recovery.js'
 import { projectSessionCoreV2 } from '../src/core-v2/session.js'
 import { createPrepareTool } from '../src/tools/prepare.js'
+import { createEvidenceTool } from '../src/tools/evidence.js'
 import { createCheckpointTool } from '../src/tools/checkpoint.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
@@ -44,6 +45,10 @@ it('inventories every registered schema and task replay cost using explicit byte
   expect(definitions.length).toBeGreaterThanOrEqual(10)
   const schemas = definitions.map(tool => ({ name: tool.name, cost: size({ name: tool.name,
     description: tool.description, parameters: tool.parameters, input: tool.input, output: tool.output }) }))
+  const legacyEvidence = await createEvidenceTool().execute({ semantic_action: 'modify', evidence_role: 'effect' } as never, undefined as never)
+  expect(JSON.stringify(legacyEvidence)).toContain('ordinary_evidence_migrated_to_host_facts')
+  expect(JSON.stringify(legacyEvidence)).toContain('Do not repeat')
+  const representative_tool_outputs = { legacy_evidence_migration: size(legacyEvidence) }
   const rows: unknown[] = []
   for (const language of ['en', 'zh']) {
     const root = language === 'en'
@@ -77,7 +82,7 @@ it('inventories every registered schema and task replay cost using explicit byte
   }
   if (process.env.DSH_CONTEXT_COST === '1') console.log(`DSH_CONTEXT_COST=${JSON.stringify({
     classification: 'synthetic_character_utf8_proxy', actual_model_usage: null,
-    tokenizer: null, cached_input_usage: null, uncached_input_usage: null, schemas, tasks: rows,
+    tokenizer: null, cached_input_usage: null, uncached_input_usage: null, schemas, representative_tool_outputs, tasks: rows,
     first_guidance: size(firstStepGuidanceV6()), strict_guidance: size(firstStepGuidanceV6('strict')),
     boundary: size(PROTOCOL_V6_NOTICE), correction: size(PROTOCOL_CORRECTION_NOTICE) })}`)
 })

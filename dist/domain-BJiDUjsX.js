@@ -10751,30 +10751,58 @@ function sanitizeUrl(value) {
 //#region src/domain/parse-cache.ts
 /** Pure parser storage only. Never store projections, evidence or authority. */
 var ParseCache = class {
-	entries = /* @__PURE__ */ new Map();
+	probation = /* @__PURE__ */ new Map();
+	protected = /* @__PURE__ */ new Map();
 	bytes = 0;
+	protectedBytes = 0;
 	constructor(byteBudget, entryBudget = 32768) {
 		this.byteBudget = byteBudget;
 		this.entryBudget = entryBudget;
 	}
 	get(key) {
-		return this.entries.get(key)?.value;
+		const hot = this.protected.get(key);
+		if (hot) {
+			this.protected.delete(key);
+			this.protected.set(key, hot);
+			return hot.value;
+		}
+		const entry = this.probation.get(key);
+		if (!entry) return void 0;
+		this.probation.delete(key);
+		this.protected.set(key, entry);
+		this.protectedBytes += entry.bytes;
+		while (this.protectedBytes > this.byteBudget * .75) {
+			const oldest = this.protected.keys().next().value;
+			const row$3 = this.protected.get(oldest);
+			this.protected.delete(oldest);
+			this.protectedBytes -= row$3.bytes;
+			this.probation.set(oldest, row$3);
+		}
+		return entry.value;
 	}
 	set(key, value, valueBytes) {
 		const bytes$1 = key.length * 2 + valueBytes + 128;
 		if (bytes$1 > this.byteBudget) return;
-		const prior = this.entries.get(key);
-		if (prior) {
-			this.bytes -= prior.bytes;
-			this.entries.delete(key);
+		const cold = this.probation.get(key), hot = this.protected.get(key);
+		if (cold) {
+			this.bytes -= cold.bytes;
+			this.probation.delete(key);
 		}
-		while (this.bytes + bytes$1 > this.byteBudget || this.entries.size >= this.entryBudget) {
-			const oldest = this.entries.keys().next().value;
+		if (hot) {
+			this.bytes -= hot.bytes;
+			this.protectedBytes -= hot.bytes;
+			this.protected.delete(key);
+		}
+		while (this.bytes + bytes$1 > this.byteBudget || this.probation.size + this.protected.size >= this.entryBudget) {
+			const segment = this.probation.size ? this.probation : this.protected;
+			const oldest = segment.keys().next().value;
 			if (oldest === void 0) break;
-			this.bytes -= this.entries.get(oldest).bytes;
-			this.entries.delete(oldest);
+			const row$3 = segment.get(oldest);
+			this.bytes -= row$3.bytes;
+			if (segment === this.protected) this.protectedBytes -= row$3.bytes;
+			segment.delete(oldest);
 		}
-		this.entries.set(key, {
+		this.probation.set(key, {
 			value,
 			bytes: bytes$1
 		});
@@ -10783,7 +10811,7 @@ var ParseCache = class {
 	/** Deterministic storage diagnostics, without exposing keys or parsed text. */
 	storage() {
 		return {
-			entries: this.entries.size,
+			entries: this.probation.size + this.protected.size,
 			bytes: this.bytes
 		};
 	}

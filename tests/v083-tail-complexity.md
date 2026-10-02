@@ -9,7 +9,7 @@ selection and pure parser storage, not the trust or completion contracts.
 | Core root coverage | Filter all coverage for each root | Build stable source buckets once, sort each selected bucket | Core conformance and frozen adapter oracle |
 | Interpreted coverage | Scan all current/historical requirements and controls per span | Group requirements and validated controls by source once | Supersession, watermark, cross-unit and negative identity suites |
 | Current action bases | Recompute across projection for each item | Compute once, group by item | Deterministic 80-item count assertion and oracle |
-| Clause and mask parse | Entire cache reset at entry threshold | Evict oldest individual entries at accounted storage/entry limits | Pollution, oversized admission, eviction, old capacity cliffs and option identity |
+| Clause and mask parse | Entire cache reset at entry threshold | Protect reused parses; evict probationary entries at storage/entry limits | Pollution, oversized admission, eviction, old capacity cliffs and option identity |
 | Model-facing text | Repeated descriptive prose | Shorter tool descriptions and v6 first guidance | Schema inventory and bilingual synthetic replay budgets; existing recovery/lifecycle suites |
 
 Parser caches bind exact immutable text, and nondefault options bypass storage,
@@ -19,7 +19,9 @@ The qualification singleton exposed by the old miss path cannot be modified
 through these returned records. Cache storage is capped at 8 MiB for clauses
 and 4 MiB for each mask cache, plus a 32768-entry cap. Accounted bytes include
 UTF-16 keys/values and conservative entry overhead; they are not measured RSS.
-FIFO admission costs amortized O(1) per entry. Working sets larger than these
+A protected segment takes at most 75% of accounted bytes. Hits promote parses;
+new one-use fragments stay in probation. Promotion/demotion and admission cost
+amortized O(1) per entry. Working sets larger than these
 budgets can still miss on repeated sequential scans; this is not a universal
 latency SLA. Cloning adds linear work in the returned parse size.
 

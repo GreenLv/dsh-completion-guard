@@ -54,3 +54,22 @@ it('crosses old 64/4096 cliffs without whole-cache clearing or semantic drift', 
     expect(segmentClauses(text)).toEqual(oracleSegments(text))
   }
 })
+
+it('protects reused parses through an over-capacity scan of one-use fragments', () => {
+  const cache = new ParseCache<string>(1600, 10)
+  cache.set('hot', 'preserved', 20)
+  expect(cache.get('hot')).toBe('preserved')
+  for (let i = 0; i < 200; i++) cache.set(`fragment${i}`, 'one-use', 20)
+  expect(cache.get('hot')).toBe('preserved')
+  expect(cache.storage().bytes).toBeLessThanOrEqual(1600)
+  expect(cache.storage().entries).toBeLessThanOrEqual(10)
+  // A larger recurring hot set also remains bounded: promotion demotes the
+  // oldest hot entries rather than retaining them forever.
+  for (let i = 0; i < 200; i++) {
+    cache.set(`hot${i}`, 'reused', 20)
+    cache.get(`hot${i}`)
+  }
+  expect(cache.storage().bytes).toBeLessThanOrEqual(1600)
+  expect(cache.storage().entries).toBeLessThanOrEqual(10)
+  expect(cache.get('hot')).toBeUndefined()
+})
