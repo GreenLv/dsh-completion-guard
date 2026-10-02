@@ -296,6 +296,93 @@ it('L4.3 (standing regression): tenure-scoped compaction keeps the holder state 
   }
 })
 
+it('S2 (standing regression): SIGKILL inside the admission window leaves every later append recoverable', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r6-s2-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    const runner = await bundledRunner()
+    // Repeat: spawn a real child performing production appends; the parent
+    // polls for the admission window (a pending.<nonce> file appears between
+    // prepare and publish) and SIGKILLs the child the moment it opens. Every
+    // kill lands in a different sub-window across iterations (before write,
+    // after write, after link, after claim).
+    for (let round = 0; round < 6; round += 1) {
+      const child = spawn(process.execPath, [runner, root, `s2-${round}`], { stdio: ['ignore', 'pipe', 'pipe'] })
+      const deadline = Date.now() + 30_000
+      let killed = false
+      while (Date.now() < deadline) {
+        const pending = readdirSync(root).filter((name) => name.startsWith('pending.'))
+        if (pending.length > 0) {
+          process.kill(child.pid!, 'SIGKILL')
+          killed = true
+          break
+        }
+        if (child.exitCode !== null) break
+      }
+      await new Promise<void>((resolve) => child.on('close', () => resolve()))
+      if (!killed) break // the child finished all 5 appends before the window opened
+      // The barrier, if present, must be a COMPLETE record — never empty or
+      // partial (that is the S2 invariant the publication fixes).
+      const barrierPath = join(root, '.writer.lock')
+      if (existsSync(barrierPath)) {
+        const raw = readFileSync(barrierPath, 'utf8')
+        expect(() => JSON.parse(raw), `round ${round}: barrier must be complete JSON, got ${raw.slice(0, 60)}`).not.toThrow()
+        expect(JSON.parse(raw).version, `round ${round}`).toBe(2)
+      }
+      // Subsequent production appends MUST recover (BUG-01): no permanent
+      // unknown_owner wedge, and any dead-creator pending garbage is swept.
+      for (let followUp = 0; followUp < 3; followUp += 1) {
+        expect(appendPrivateLedger(root, context, 'restart_intent', {
+          resolutionCallId: `s2-${round}-${followUp}`, serviceId: 's', preGeneration: 'g',
+        }), `round ${round} follow-up ${followUp}`).toBe(true)
+      }
+    }
+    // The ledger chain is unique and contiguous across all recovered windows.
+    const snapshot = readPrivateLedger(root, context)
+    expect(snapshot.damaged).toBe(false)
+    expect(snapshot.records.map((record) => record.position)).toEqual(snapshot.records.map((_, index) => index + 1))
+    expect(new Set(snapshot.records.map((record) => String(record.payload.resolutionCallId))).size).toBe(snapshot.records.length)
+    expect(snapshot.records.length).toBeGreaterThanOrEqual(1)
+    expect(__writerLockInternals.readHolder(root)).toBeNull()
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 120_000)
+
+it('S2 safe control: a pending file whose creator is ALIVE is never taken over', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r6-alive-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // A live creator's pending file (same process = provably alive): the
+    // admission must leave it untouched while proceeding with its own state.
+    const livePending = join(root, `pending.${'a'.repeat(32)}.json`)
+    writeFileSync(livePending, JSON.stringify({
+      version: 2, nonce: 'a'.repeat(32), pid: process.pid,
+      hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }) + '\n', 'utf8')
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'ctrl', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    expect(existsSync(livePending), 'live creator pending file untouched').toBe(true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+it('S2 partial pending write: inert garbage, admission proceeds', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r6-partial-'))
+  try {
+    expect(initializePrivateLedger(root, context)).toBe(true)
+    // A creator killed mid-write leaves an unparseable pending file; it
+    // cannot be identified so it is left in place — and must not wedge
+    // anything.
+    writeFileSync(join(root, 'pending.bbbb.json'), '{"version":2,"non', 'utf8')
+    expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'partial', serviceId: 's', preGeneration: 'g' })).toBe(true)
+    expect(existsSync(join(root, 'pending.bbbb.json'))).toBe(true)
+    expect(readPrivateLedger(root, context).records).toHaveLength(1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 it('S2: a torn trailing line (crash mid-append) leaves the log recoverable', async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r4-s2-'))
   try {

@@ -21,7 +21,7 @@ const physicalFs = process.versions.electron ? createRequire(import.meta.url)("o
 
 //#endregion
 //#region src/domain/host-audit-session.ts
-const { existsSync: existsSync$4, readFileSync: readFileSync$3, readdirSync, realpathSync: realpathSync$4, statSync: statSync$2 } = physicalFs;
+const { existsSync: existsSync$4, readFileSync: readFileSync$3, readdirSync: readdirSync$1, realpathSync: realpathSync$4, statSync: statSync$2 } = physicalFs;
 function createHostAuditSession(onPhysicalRead) {
 	const cache = /* @__PURE__ */ new Map();
 	const once = (key, compute) => {
@@ -56,7 +56,7 @@ function createHostAuditSession(onPhysicalRead) {
 		readFile: (path$1) => readBytes(path$1),
 		readJson: (path$1) => once(`json:${path$1}`, () => JSON.parse(session.readFile(path$1).toString("utf8"))),
 		fileDigest: (path$1) => once(`digest:${path$1}`, () => createFileDigest(session.readFile(path$1))),
-		listDir: (dir) => once(`listdir:${dir}`, () => readdirSync(dir, { withFileTypes: true }).map((entry) => ({
+		listDir: (dir) => once(`listdir:${dir}`, () => readdirSync$1(dir, { withFileTypes: true }).map((entry) => ({
 			name: entry.name,
 			isFile: entry.isFile(),
 			isDirectory: entry.isDirectory()

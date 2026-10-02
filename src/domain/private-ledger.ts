@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -131,6 +131,7 @@ function readVerifiedLedgerRecords(root: string, context: PrivateLedgerContext, 
  */
 const ARBITRATION_NAME = 'arbitration.log'
 const LEGACY_V2_LOCK_NAME = '.writer.lock'
+const PENDING_PREFIX = 'pending.'
 const LOG_COMPACTION_RECORDS = 8192
 interface WriterLockRecord { version: 2 | 3; nonce: string; pid: number; hostname: string; created_at_epoch_ms: number }
 interface ArbitrationRecord {
@@ -270,6 +271,32 @@ export function currentWriterLockFile(root: string): string | undefined {
   return existsSync(arbitrationPath(root)) ? arbitrationPath(root) : undefined
 }
 
+function pendingPath(root: string, nonce: string): string {
+  return join(root, `${PENDING_PREFIX}${nonce}.json`)
+}
+
+function removeOwnPending(root: string, nonce: string): void {
+  unlinkIfExists(pendingPath(root, nonce))
+}
+
+function readRecord(path: string): WriterLockRecord | 'legacy' | undefined {
+  let raw: string
+  try { raw = readFileSync(path, 'utf8') } catch { return undefined }
+  if (!raw.trim()) return 'legacy'
+  try {
+    const value = JSON.parse(raw) as Partial<WriterLockRecord>
+    if (value && (value.version === 2 || value.version === 3)
+      && typeof value.nonce === 'string' && (value.nonce.length === 32 || value.version === 2)
+      && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
+      && typeof value.hostname === 'string' && typeof value.created_at_epoch_ms === 'number') return value as WriterLockRecord
+  } catch { /* unparsable record */ }
+  return 'legacy'
+}
+
+function recordIsProvablyDead(record: WriterLockRecord): boolean {
+  return record.hostname === hostname() && !processExists(record.pid)
+}
+
 /** Append one arbitration record (the ONLY mutation of the log). */
 function appendLog(root: string, op: ArbitrationRecord['op'], nonce: string, prev: string | null): void {
   appendArbitration(root, {
@@ -283,18 +310,27 @@ function appendLog(root: string, op: ArbitrationRecord['op'], nonce: string, pre
  * (live/unknown holder, v2 barrier, or a lost optimistic claim).
  */
 /**
- * Admission (Revision 3.1). The legacy barrier is ADOPTED when its owner is
- * provably dead (ESRCH, same host) — never removed on the basis of an
- * observation; unknown/live/foreign owners refuse. When no barrier exists one
- * is created O_EXCL (creation cannot steal a live writer's file). The log
- * claim is effective only on an empty slot and is verified by read-back; a
- * failed claimant removes only a barrier it created itself (nonce-conditional).
+ * Admission (Revision 3.1 + 3.2). The v2-compat barrier is PUBLISHED
+ * atomically: the writer prepares `pending.<nonce>` with its complete owner
+ * record (write + fsync) and hard-links it to `.writer.lock` — the barrier
+ * therefore never exists with empty or partial content from this protocol
+ * (S2 closed: a crash before the link leaves only an inert pending file, and
+ * a crash after it leaves a complete record naming a provably dead owner,
+ * both recoverable). A barrier left by a crashed V2 WRITER (empty, partial,
+ * or complete-with-dead-pid) is classified separately: unknown owners refuse
+ * with the documented manual migration; a complete same-host record whose
+ * pid answers ESRCH is ADOPTED untouched. The log claim is effective only on
+ * an empty slot and is verified by read-back.
  */
 function acquireWriterLock(root: string): HeldLock | undefined {
   for (let attempt = 0; attempt < 16; attempt += 1) {
+    // 0. Garbage-collect pending files whose creator is provably dead
+    // (by-name, identity-safe; live creators and unparseable files are left).
+    gcPendingFiles(root)
     // 1. Legacy barrier classification. Refuse on unknown/anonymous/foreign/
-    // live owners; ADOPT on provably dead (the dead file keeps blocking v2
-    // writers for our tenure and stays for the documented manual migration).
+    // live owners; ADOPT a complete same-host record whose pid is provably
+    // dead (the file keeps blocking v2 writers and stays for the documented
+    // manual migration).
     let barrierState: 'absent' | 'adopted' | 'live' | 'unknown' = 'absent'
     const legacy = readLegacyV2(root)
     if (legacy !== undefined) {
@@ -314,28 +350,12 @@ function acquireWriterLock(root: string): HeldLock | undefined {
       }
       return undefined
     }
-    // 3. Claim on the empty slot. Adopt the dead barrier file if present
-    // (it blocks v2 writers for our tenure); otherwise create our own.
+    // 3. Claim on the empty slot. An adopted dead barrier file already blocks
+    // v2 writers for our tenure; otherwise publish ours atomically.
     const nonce = randomBytes(16).toString('hex')
     let ownedBarrier = false
     if (barrierState === 'absent') {
-      let v2Fd: number
-      try {
-        v2Fd = openSync(legacyV2Path(root), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue // re-classify
-        throw error
-      }
-      try {
-        const barrierRecord: WriterLockRecord = {
-          version: 2, nonce,
-          pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
-        }
-        writeAll(v2Fd, `${canonical(barrierRecord)}\n`)
-        fsyncSync(v2Fd)
-      } finally {
-        try { closeSync(v2Fd) } catch { /* already closed */ }
-      }
+      if (!publishBarrier(root, nonce)) continue // lost a publish race; re-classify
       ownedBarrier = true
     }
     appendLog(root, 'claim', nonce, null)
@@ -345,17 +365,69 @@ function acquireWriterLock(root: string): HeldLock | undefined {
       compactLogInTenure(root, { nonce, ownedBarrier })
       return { nonce, ownedBarrier }
     }
-    // Lost or ineffective: exit fail-closed. Remove only a barrier this actor
-    // created itself (its nonce is ours); an adopted dead file stays.
+    // Lost or ineffective: exit fail-closed. Remove only state this actor
+    // created itself: a published barrier carries our nonce (checked), and
+    // our pending file is removed by name; an adopted dead file stays.
     if (ownedBarrier) {
       const barrier = readLegacyV2(root)
       if (barrier !== undefined && barrier !== 'legacy' && barrier.nonce === nonce) {
         unlinkIfExists(legacyV2Path(root))
       }
     }
+    unlinkIfExists(pendingPath(root, nonce))
     return undefined
   }
   return undefined
+}
+
+/**
+ * Publish the v2-compat barrier atomically (Revision 3.2): write the complete
+ * owner record to a unique pending file (O_EXCL + fsync), then hard-link it
+ * onto the barrier pathname. link() succeeds only when the barrier is absent,
+ * and the linked content is the fully written record — the barrier can never
+ * be observed empty or partial from this protocol. Returns false when the
+ * barrier exists (caller re-classifies).
+ */
+function publishBarrier(root: string, nonce: string): boolean {
+  const pending = pendingPath(root, nonce)
+  let fd: number
+  try {
+    fd = openRegular(pending, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+    throw error
+  }
+  try {
+    const record: WriterLockRecord = {
+      version: 2, nonce,
+      pid: process.pid, hostname: hostname(), created_at_epoch_ms: Date.now(),
+    }
+    writeAll(fd, `${canonical(record)}\n`)
+    fsyncSync(fd)
+  } finally {
+    try { closeSync(fd) } catch { /* already closed */ }
+  }
+  try {
+    linkSync(pending, legacyV2Path(root))
+    return true
+  } catch (error) {
+    unlinkIfExists(pending)
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+    throw error
+  }
+}
+
+/** GC pending files whose embedded creator is provably dead (by name). */
+function gcPendingFiles(root: string): void {
+  let entries: string[]
+  try { entries = readdirSync(root) } catch { return }
+  for (const entry of entries) {
+    if (!entry.startsWith(PENDING_PREFIX)) continue
+    const record = readRecord(join(root, entry))
+    if (record !== undefined && record !== 'legacy' && recordIsProvablyDead(record)) {
+      unlinkIfExists(join(root, entry))
+    }
+  }
 }
 
 /**
@@ -374,6 +446,7 @@ function releaseWriterLock(root: string, held: HeldLock | undefined): void {
       unlinkIfExists(legacyV2Path(root))
     }
   }
+  removeOwnPending(root, held.nonce)
 }
 
 /** Compaction threshold; test-overridable via the internals hook. */
