@@ -444,13 +444,17 @@ function bindingTemplate(projection, item) {
 		}
 	}
 }
-function openItemForTool(projection, item, matched = false, rejection) {
+function openItemForTool(projection, item, requestMatched = false, rejection) {
 	const action = item.semanticAction ?? "generic_run";
 	const spec = ACTION_MANIFEST.actions[action];
-	const template = matched ? void 0 : bindingTemplate(projection, item);
 	const diagnosis = deriveItemDiagnosis(projection, item);
+	const evidenceGap = diagnosis.reason_code === "missing_evidence";
+	const matched = requestMatched && evidenceGap;
+	const bindingRejection = evidenceGap ? rejection : void 0;
+	const template = matched || !evidenceGap ? void 0 : bindingTemplate(projection, item);
+	const candidateHints = !matched && evidenceGap && !template && diagnosis.capability.actionSupported && spec.evidenceProducer === "supported" && !isStatefulAction(action) && !["generic_run", "inspect_remote_updates"].includes(action);
 	const compact = itemDiagnosis(projection, item);
-	const effectCandidates = matched || template ? [] : [...projection.evidence.values()].filter((e) => e.epoch === projection.epoch && e.outcome === "success" && e.semanticAction === action && (e.evidenceRole ?? "effect") === "effect").sort((a, b) => b.toolResultSeq - a.toolResultSeq).slice(0, 3).map((e) => ({
+	const effectCandidates = !candidateHints ? [] : [...projection.evidence.values()].filter((e) => e.epoch === projection.epoch && e.outcome === "success" && e.semanticAction === action && (e.evidenceRole ?? "effect") === "effect").sort((a, b) => b.toolResultSeq - a.toolResultSeq).slice(0, 3).map((e) => ({
 		evidence_id: e.id,
 		resolved_target: targetForTool(e.resolvedTarget),
 		matches_captured_target: sameTuple(item.requestedTarget, pick$1(e.resolvedTarget ?? {}, Object.keys(item.requestedTarget ?? {})))
@@ -468,9 +472,9 @@ function openItemForTool(projection, item, matched = false, rejection) {
 		semantic_action: action,
 		requested_target: targetForTool(item.requestedTarget),
 		certifiable: compact.certifiable,
-		reason_code: matched ? "binding_matched_not_certified" : rejection?.reasonCode ?? (targetDiscrepancy ? "successful_effect_target_mismatch" : diagnosis.reason_code),
+		reason_code: matched ? "binding_matched_not_certified" : bindingRejection?.reasonCode ?? (targetDiscrepancy ? "successful_effect_target_mismatch" : diagnosis.reason_code),
 		...matched ? { binding_status: "matched_not_certified" } : {},
-		next_step: matched ? "This request binding matches individually; the item is still pending and no certificate was issued. Retain it while resolving the whole-contract blockers; do not repeat the effect or collect the same evidence again." : rejection && template ? "Correct the rejected binding using binding_template unchanged; retain the successful effect and do not rerun it merely to repair binding syntax." : rejection ? `${rejection.reason.slice(0, 150)}. Inspect captured target and successful evidence before another action.` : targetDiscrepancy ? "Successful effect candidates target a different scope. Retain them and resolve the captured/effect target discrepancy against the root instruction before another action." : diagnosis.capability.remedy === "await_root_input" ? (diagnosis.next_action.resume_condition ?? capabilityRemedyPhrase(diagnosis.capability.remedy)).slice(0, 240) : capabilityRemedyPhrase(diagnosis.capability.remedy),
+		next_step: matched ? "This request binding matches individually; the item is still pending and no certificate was issued. Retain it while resolving the whole-contract blockers; do not repeat the effect or collect the same evidence again." : bindingRejection && template ? "Correct the rejected binding using binding_template unchanged; retain the successful effect and do not rerun it merely to repair binding syntax." : bindingRejection ? `${bindingRejection.reason.slice(0, 150)}. Inspect captured target and successful evidence before another action.` : targetDiscrepancy ? "Successful effect candidates target a different scope. Retain them and resolve the captured/effect target discrepancy against the root instruction before another action." : diagnosis.capability.remedy === "await_root_input" ? (diagnosis.next_action.resume_condition ?? capabilityRemedyPhrase(diagnosis.capability.remedy)).slice(0, 240) : capabilityRemedyPhrase(diagnosis.capability.remedy),
 		...item.targetCaptureStatus ? { target_capture_status: item.targetCaptureStatus } : {},
 		capability: {
 			action_supported: diagnosis.capability.actionSupported,
@@ -489,7 +493,7 @@ function openItemForTool(projection, item, matched = false, rejection) {
 			pred_params_kind: "inline"
 		},
 		...template ? { binding_template: template } : {},
-		...!matched && !template && !isStatefulAction(action) && !["generic_run", "inspect_remote_updates"].includes(action) ? {
+		...candidateHints ? {
 			expected_transition_template: expectedTransitionForTool({
 				predicateId: spec.predicateId,
 				version: 1,

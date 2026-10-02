@@ -141,13 +141,21 @@ function bindingTemplate(projection: GuardProjection, item: GuardItem): Record<s
   return undefined
 }
 
-function openItemForTool(projection: GuardProjection, item: GuardItem, matched = false, rejection?: { reasonCode: string; reason: string }): Record<string, JsonValue> {
+function openItemForTool(projection: GuardProjection, item: GuardItem, requestMatched = false, rejection?: { reasonCode: string; reason: string }): Record<string, JsonValue> {
   const action = item.semanticAction ?? 'generic_run'
   const spec = ACTION_MANIFEST.actions[action]
-  const template = matched ? undefined : bindingTemplate(projection, item)
   const diagnosis = deriveItemDiagnosis(projection, item)
+  // Binding repair is subordinate to authority, target and host diagnoses.
+  // In particular, successful evidence cannot authorize a declared root wait.
+  const evidenceGap = diagnosis.reason_code === 'missing_evidence'
+  const matched = requestMatched && evidenceGap
+  const bindingRejection = evidenceGap ? rejection : undefined
+  const template = matched || !evidenceGap ? undefined : bindingTemplate(projection, item)
+  const candidateHints = !matched && evidenceGap && !template && diagnosis.capability.actionSupported
+    && spec.evidenceProducer === 'supported' && !isStatefulAction(action)
+    && !['generic_run', 'inspect_remote_updates'].includes(action)
   const compact = itemDiagnosis(projection, item)
-  const effectCandidates = matched || template ? [] : [...projection.evidence.values()].filter(e => e.epoch === projection.epoch
+  const effectCandidates = !candidateHints ? [] : [...projection.evidence.values()].filter(e => e.epoch === projection.epoch
     && e.outcome === 'success' && e.semanticAction === action && (e.evidenceRole ?? 'effect') === 'effect')
     .sort((a, b) => b.toolResultSeq - a.toolResultSeq).slice(0, 3).map(e => ({
       evidence_id: e.id, resolved_target: targetForTool(e.resolvedTarget),
@@ -166,7 +174,7 @@ function openItemForTool(projection: GuardProjection, item: GuardItem, matched =
     semantic_action: action,
     requested_target: targetForTool(item.requestedTarget),
     certifiable: compact.certifiable,
-    reason_code: matched ? 'binding_matched_not_certified' : rejection?.reasonCode ?? (targetDiscrepancy ? 'successful_effect_target_mismatch' : diagnosis.reason_code),
+    reason_code: matched ? 'binding_matched_not_certified' : bindingRejection?.reasonCode ?? (targetDiscrepancy ? 'successful_effect_target_mismatch' : diagnosis.reason_code),
     ...(matched ? { binding_status: 'matched_not_certified' } : {}),
     // The bounded page keeps the item row small: the remedy phrase is the
     // machine-readable capability remedy (0.6.2 D062-01), not the full
@@ -174,8 +182,8 @@ function openItemForTool(projection: GuardProjection, item: GuardItem, matched =
     // declared ROOT WAIT is the exception — its exact resume event is the one
     // fact a caller must not lose, so that condition travels verbatim.
     next_step: matched ? 'This request binding matches individually; the item is still pending and no certificate was issued. Retain it while resolving the whole-contract blockers; do not repeat the effect or collect the same evidence again.'
-      : rejection && template ? 'Correct the rejected binding using binding_template unchanged; retain the successful effect and do not rerun it merely to repair binding syntax.'
-      : rejection ? `${rejection.reason.slice(0, 150)}. Inspect captured target and successful evidence before another action.`
+      : bindingRejection && template ? 'Correct the rejected binding using binding_template unchanged; retain the successful effect and do not rerun it merely to repair binding syntax.'
+      : bindingRejection ? `${bindingRejection.reason.slice(0, 150)}. Inspect captured target and successful evidence before another action.`
       : targetDiscrepancy ? 'Successful effect candidates target a different scope. Retain them and resolve the captured/effect target discrepancy against the root instruction before another action.'
       : diagnosis.capability.remedy === 'await_root_input'
       ? (diagnosis.next_action.resume_condition ?? capabilityRemedyPhrase(diagnosis.capability.remedy)).slice(0, 240)
@@ -202,7 +210,7 @@ function openItemForTool(projection: GuardProjection, item: GuardItem, matched =
       pred_params_kind: 'inline',
     },
     ...(template ? { binding_template: template } : {}),
-    ...(!matched && !template && !isStatefulAction(action) && !['generic_run', 'inspect_remote_updates'].includes(action) ? {
+    ...(candidateHints ? {
       expected_transition_template: expectedTransitionForTool({ predicateId: spec.predicateId, version: 1,
         predParamsKind: 'inline', parameters: expectedParameters(action, {}, {}) }),
       binding_template_unavailable: 'no_matching_successful_effect',

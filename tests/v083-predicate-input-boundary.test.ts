@@ -1,5 +1,7 @@
 import { createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { expect, it } from 'vitest'
+import { captureClause } from '../src/domain/capture.js'
+import { capabilityRemedyPhrase, deriveItemDiagnosis } from '../src/domain/diagnostics.js'
 import { createCheckpointTool } from '../src/tools/checkpoint.js'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { projectSessionCoreV2 } from '../src/core-v2/session.js'
@@ -145,5 +147,49 @@ it('the same invalid parameter boundary protects every declared action', async (
     const result = certifyCheckpoint(p, [binding], 'preview', false)
     expect(result.status).toBe('incomplete')
     expect(result.rejectedBindings.some(row => row.reasonCode === 'expected_transition_parameters_invalid')).toBe(true)
+  }
+})
+
+
+it('binding diagnostics preserve authority, target, capability and host priorities', async () => {
+  const cases = ['root_wait_generic', 'root_wait_supported', 'clarification', 'host', 'prohibition', 'interpretation', 'generic', 'stateful'] as const
+  for (const scenario of cases) {
+    const { p, template } = await submitted()
+    const item = p.items.get('R001')!
+    // Explicit root-wait capture exercises the production representation; the
+    // supported-action variant proves precedence is independent of adapters.
+    if (scenario.startsWith('root_wait')) {
+      const wait = captureClause('After I confirm, run pnpm test in /fixture/one.', 'root-wait', 'R001', 1, { cwd: '/fixture/one' })
+      p.items.set(item.id, scenario === 'root_wait_supported' ? { ...item, waitAuthorization: wait.waitAuthorization, condition: wait.condition, resumeEvent: wait.resumeEvent } : wait)
+    } else if (scenario === 'clarification') item.targetCaptureStatus = 'clarification_required'
+    else if (scenario === 'host') p.hostStatus = 'unavailable'
+    else if (scenario === 'prohibition') item.kind = 'prohibition'
+    else if (scenario === 'interpretation') item.authorityDisposition = 'unresolved'
+    else if (scenario === 'generic') item.semanticAction = 'generic_run'
+    else if (scenario === 'stateful') item.semanticAction = 'install'
+    for (const evidence of p.evidence.values()) {
+      evidence.semanticAction = p.items.get(item.id)!.semanticAction
+      if (scenario !== 'root_wait_supported') evidence.resolvedTarget = { scope: '/fixture/elsewhere' }
+    }
+    if (scenario === 'root_wait_supported') expect(bindingIndividuallyAccepted(p, p.items.get(item.id)!, domainBinding(template))).toBe(true)
+    const diagnosis = deriveItemDiagnosis(p, p.items.get(item.id)!)
+    const expectedReason = { root_wait_generic: 'root_condition_pending', root_wait_supported: 'root_condition_pending',
+      clarification: 'target_clarification_required', host: 'host_unavailable', prohibition: 'prohibition_active',
+      interpretation: 'interpretation_unresolved', generic: 'generic_run_non_certifiable', stateful: 'missing_evidence' }[scenario]
+    expect(diagnosis.reason_code, scenario).toBe(expectedReason)
+    const tool = createCheckpointTool(() => p, () => {}, async () => true)
+    for (const bindings of [[], [{ ...template, expected_transition: { ...template.expected_transition, parameters: { outcome: 'success' } } }], [template]]) {
+      const result = await tool.execute({ bindings, item_ids: ['R001'] } as never, undefined as never) as any
+      const row = result.open_items[0]
+      if (scenario !== 'stateful') {
+        expect(row.reason_code, scenario).toBe(diagnosis.reason_code)
+        expect(row.next_step, scenario).toBe(diagnosis.capability.remedy === 'await_root_input'
+          ? diagnosis.next_action.resume_condition!.slice(0, 240) : capabilityRemedyPhrase(diagnosis.capability.remedy))
+        expect(row.binding_template, scenario).toBeUndefined()
+      }
+      expect(row.successful_effect_candidates, scenario).toBeUndefined()
+      expect(row.expected_transition_template, scenario).toBeUndefined()
+      expect(result.certificate, scenario).toBeUndefined()
+    }
   }
 })
