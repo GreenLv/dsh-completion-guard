@@ -1,6 +1,8 @@
-# Upstream API audit: DSH 0.1.7-rc.2
+# Historical upstream API audit: DSH 0.1.7-rc.2
 
-The current adapter targets only npm `0.1.7-rc.2`, upstream commit `477b4f420553e8a52c2fbccc464d7561b239c443`, and Cordis `4.0.4`. Planning inputs remain in [the evidence manifest](docs/dsh-0.1.7-rc.2-planning-evidence.json). This is source and local composition evidence, not acceptance of an installed Guard artifact.
+This historical 0.8.0 adaptation targeted npm `0.1.7-rc.2`, upstream commit `477b4f420553e8a52c2fbccc464d7561b239c443`, and Cordis `4.0.4`. Planning inputs remain in [the evidence manifest](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/dsh-0.1.7-rc.2-planning-evidence.json). This is source and local composition evidence, not acceptance of an installed Guard artifact.
+
+Current host support is documented in [compatibility](docs/COMPATIBILITY.md). The observations and pending checks below retain their original 0.8.0 scope.
 
 ## Published inputs and composition
 
@@ -41,4 +43,4 @@ The host's persistence reader owns unknown required-event rejection before publi
 
 ## Acceptance boundaries
 
-CLI syntax was read from the exact published launcher and checked against its help/config output. Versioned native drivers retain their existing annex interface and await the real Agent factory. Synthetic adopted-release probes are explicitly mock registry controls, not real model or publication evidence. Restart, dual-platform lifecycle, full promoted-job completion, and old-session native migration remain subject to the [A01–A16 acceptance record](docs/DSH_0_1_7_RC2_ACCEPTANCE.md).
+CLI syntax was read from the exact published launcher and checked against its help/config output. Versioned native drivers retain their existing annex interface and await the real Agent factory. Synthetic adopted-release probes are explicitly mock registry controls, not real model or publication evidence. Restart, dual-platform lifecycle, full promoted-job completion, and old-session native migration remain subject to the [A01–A16 acceptance record](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md).

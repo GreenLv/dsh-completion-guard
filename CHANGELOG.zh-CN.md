@@ -43,7 +43,7 @@
 - Goal 反馈只提供可逐项认证的原生编辑／回读和前台测试绑定，并引导原生编辑完成回读，不再误要求历史 resolution 链。
 - 保留 0.7.1 恢复反馈与现有 proof、Goal、release 边界。升级需重建 host-lock 并重启；旧证书不会重新签发。
 
-安装 0.8.0 前先升级 DSH，再为各 Profile 重新生成宿主锁。步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md)。[源码阶段证据快照](docs/DSH_0_1_7_RC2_ACCEPTANCE.md)保留开发检查及其限制；精确制品验收另记于 Release 附件。
+安装 0.8.0 前先升级 DSH，再为各 Profile 重新生成宿主锁。步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md)。[源码阶段证据快照](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md)保留开发检查及其限制；精确制品验收另记于 Release 附件。
 
 ## 0.7.1（2026-09-22）
 

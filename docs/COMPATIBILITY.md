@@ -62,7 +62,7 @@ The plain npm/node-semver expression `>=0.2.0-rc.1` excludes later-tuple prerele
 
 0.8.0 metadata and its production selector accepted exactly `0.1.7-rc.2`, with Cordis `4.0.4`, cohort `dsh-0.1.7-rc.2-core-v1`, manifest `manifests/rc017-rc2-byte-audit.json`. That historical support scope is a property of the released 0.8.0 and is not rewritten by the 0.8.1 adaptation.
 
-Missing, duplicated, mixed, escaped or modified critical packages fail closed. A matching version or `allow-version` cannot bypass host identity. `auditedPlatforms: []` remains empty: local graph/module verification is separate from native acceptance of a frozen Guard tgz. See the [A01–A16 record](DSH_0_1_7_RC2_ACCEPTANCE.md).
+Missing, duplicated, mixed, escaped or modified critical packages fail closed. A matching version or `allow-version` cannot bypass host identity. `auditedPlatforms: []` remains empty: local graph/module verification is separate from native acceptance of a frozen Guard tgz. See the [A01–A16 record](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md).
 
 Upgrade DSH first, install an accepted Guard artifact, rebuild the host lock and restart each profile. Goal is optional; neither Goal nor Inspector nor scheduling is assumed to be enabled. The 0.7.1 recovery fixes and independent proof, Goal and release gates remain in force.
 

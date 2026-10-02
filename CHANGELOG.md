@@ -43,7 +43,7 @@ All notable changes to this project are documented here. The project is pre-1.0;
 - Goal feedback now offers only individually certifiable native edit/readback and foreground test bindings, and guides native edits to their readback without demanding a historical resolution chain.
 - Preserve 0.7.1 recovery feedback and independent proof, Goal and release gates. Upgrade requires a new host lock and restart; old certificates are not re-signed.
 
-Upgrade DSH before installing 0.8.0, then regenerate the host lock for each profile. Follow the [upgrade guide](docs/HOST_LOCK_UPGRADE.md). The [source-stage evidence snapshot](docs/DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks and their limits; exact-artifact acceptance is recorded separately in Release attachments.
+Upgrade DSH before installing 0.8.0, then regenerate the host lock for each profile. Follow the [upgrade guide](docs/HOST_LOCK_UPGRADE.md). The [source-stage evidence snapshot](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks and their limits; exact-artifact acceptance is recorded separately in Release attachments.
 
 ## 0.7.1 - 2026-09-22
 

@@ -2,7 +2,7 @@
 
 ## 0.8.3 RC.2 and Desktop acceptance
 
-The candidate keeps the 0.8.x task, certificate and data protocols. Its changed host floor is DSH `0.2.0-rc.2`; use the [upgrade guide](HOST_LOCK_UPGRADE.md) before establishing a new lock. The [development plan](DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md) defines the source, portability, exact-package, native, model and reader gates.
+The candidate keeps the 0.8.x task, certificate and data protocols. Its host floor remains DSH `0.2.0-rc.2`; use the [upgrade guide](HOST_LOCK_UPGRADE.md) before establishing a new lock. The historical [RC.2/Desktop development plan](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md) records the original adaptation scope; the current source, portability, exact-package, native, model and reader gates are defined below and in the repository instructions.
 
 Run the repository entrypoint twice for each native platform, always with the same frozen tgz and source commit. `host_bound_v070` covers Web/Headless. `desktop_bound` takes the physical app archive as `--runtime-root` and the exact DSH version as `--desktop-cohort`; it creates an isolated profile and uses the signed app's bundled CLI and actual Electron Node backend. Pass `--preflight` to each intended command before execution, with distinct unused external output and transfer-receipt paths.
 
@@ -16,7 +16,7 @@ The backend annex also covers carrier/graph authentication, installation parity,
 
 ## 0.8.0 rc.2 source-stage snapshot
 
-The [A01–A16 source-stage snapshot](DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks before exact-artifact acceptance. Final CI, platform and model results belong to the matching artifact receipts and Release attachments. This source snapshot neither predicts those results nor transfers earlier acceptance to the changed rc.2 adapter.
+The [A01–A16 source-stage snapshot](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks before exact-artifact acceptance. Final CI, platform and model results belong to the matching artifact receipts and Release attachments. This source snapshot neither predicts those results nor transfers earlier acceptance to the changed rc.2 adapter.
 
 ## 0.7.1 recovery feedback patch (2026-09-22; source evidence)
 
