@@ -1,5 +1,10 @@
 # DSH Completion Guard 0.8.3 实施结果（返修版）
 
+> 协调复核更新（2026-10-02）：第六轮源码 S2 在四个确定性生产子进程窗口通过独立验证：pending 写入前、部分写入后、link 前、link 后且 claim 前。每个窗口检查活 creator 安全行为，再 SIGKILL 并等待退出，后继三次 append 均恢复且链完整。正式轮询测试已替换为这四个持久回归。F2 与 H1 v4 源码身份此前已通过；CI、精确制品、双平台 native、UI/模型及历史库总验收仍未完成。
+>
+> 下文为历轮实施交回记录：表内“已关闭”表示该轮实施者的交回声明，不能跨轮当作当前验收结论。已废弃的世代、slot/intent、截断及 release-time compact 设计均不再适用；当前规范只见 `docs/WRITER_LOCK_PROTOCOL.md`。各轮测试数字只绑定当时输入，后续复核与新增测试不回填冒充原执行。
+
+
 日期：2026-10-01。本文件是返修后的实施交回（agent-handoff/v1 见仓库根目录 `HANDOFF_0_8_3_REPAIR_RESULT.json`），不是发布记录，也不代表跨平台或发布验收。分工（用户指定）：本仓库实现、本地回归、A/B 性能对照、文档与本地候选交回由 ZCode 完成；独立复核、最终文档/候选 CI、唯一制品冻结、macOS/Windows 原生、UI/模型验收及发布由 Codex 负责。
 
 ## 1. 候选身份
@@ -82,7 +87,7 @@ archive-045 维持 pending（Codex 经私有映射读取封存原记录：raw_co
 | L4.2 | 尾部修复截掉另一 writer 的完整 claim：A 解析 validBytes 后暂停；B 追加完整 claim 入临界区；A truncate 撤销已生效决策 | **删除一切截断**：重放跳过不可解析行（torn 记录从未生效，跳过不撤销），后续完整记录保持可见；appender 在日志不以换行结尾时前置 '\n' 保持行对齐。残余竞争只会使带 active holder 的记录错位并被重放拒绝（fail-closed），不可能撤销持有者或产生双持有者 | L4.2 standing regression：append 与 active holder 竞争 → fail-closed 拒绝、holder 原样存活 | 已关闭 |
 | L4.3 | 压缩覆盖已获准 writer 并重装已释放 holder：A release 后 compact，rename 覆盖 B 的 claim，基线写成已释放的 A | 压缩移入**已验证租期内**（租期内并发记录不可能生效：claim 需空槽、evict 需死持有者），基线重装当前持有者（状态等价）；rename 窗口至多丢无效记录 | L4.3 standing regression：租期内压缩 holder 状态等价、并发 admission 仍拒、压缩后链继续 | 已关闭 |
 | F2 | 非枚举 accessor 修复未进入提交（Object.keys 漏非枚举键） | 资格证明改用 `Object.getOwnPropertyNames` 枚举全部自有键；非枚举 getter 反例与枚举版同批固化 | sync 矩阵 3c：全链冻结+非枚举 getter，closure 改变后必须重建 | 已关闭 |
-| H1 | execution v3 subject 为协议文档提交 ab35e1e 而非实现 | 库内新增 execution **v4**：以第五轮实现提交 aafb5a93 为主体重跑 39 owning 文件（716 unique testcases、0 失败）；v1–v3 身份保留 | execution v4 + incident validate exit 0 | 已关闭 |
+| H1 | 历史 execution v2 曾绑定协议文档提交 ab35e1e；v3 已正确绑定 d5460fd9，v4 为第五轮新执行 | 库内新增 execution **v4**：以第五轮实现提交 aafb5a93 为主体重跑 39 owning 文件（716 unique testcases、0 失败）；v1–v3 身份保留 | execution v4 + incident validate exit 0 | 已关闭 |
 
 claim 重放规则同步收紧：**claim 仅在空槽生效**——记录在活持有者之上的 claim 存储但无效，claimant 读回后 fail-closed 退出；直接 claim-over-holder 路径由重放本身封闭，与 barrier 状态无关。
 
@@ -90,7 +95,7 @@ claim 重放规则同步收紧：**claim 仅在空槽生效**——记录在活�
 
 | ID | 发现 | 修复 | 正反例 | 状态 |
 | --- | --- | --- | --- | --- |
-| S2 | 本协议自身的 barrier 创建窗口：O_EXCL 建空文件后、owner 写入前被 SIGKILL → 零字节 barrier 永久 unknown_owner，三次后续 append 全 false（协调者独立重放 freshV3BarrierCrash=true） | **准备-再发布**（协议文档 Revision 3.2 先行提交）：admission 先写完整 v2 形状 owner 记录到唯一 `pending.<nonce>`（O_EXCL+writeAll+fsync），再 `link(pending, .writer.lock)` 原子发布——barrier 在本协议下任何可观察时刻都是完整内容，空/部分窗口结构性不存在。崩溃于 link 前只留惰性 pending 文件；崩溃于 link 后留完整死 owner 记录（可恢复）。pending 垃圾按名 GC（内嵌 creator 同机 ESRCH 才删）；活 creator 与不可解析 pending 永不触碰 | S2 standing regression：6 轮真实子进程生产 append，父进程轮询 pending 出现即 SIGKILL（覆盖不同子窗口）——每轮后 3 次生产 append 全部恢复、存在的 barrier 必为完整 JSON 记录、链唯一连续；安全对照：活 creator 的 pending 永不被接管；partial pending 惰性对照：admission 照常进行 | 已关闭 |
+| S2 | 本协议自身的 barrier 创建窗口：O_EXCL 建空文件后、owner 写入前被 SIGKILL → 零字节 barrier 永久 unknown_owner，三次后续 append 全 false（协调者独立重放 freshV3BarrierCrash=true） | **准备-再发布**（协议文档 Revision 3.2 先行提交）：admission 先写完整 v2 形状 owner 记录到唯一 `pending.<nonce>`（O_EXCL+writeAll+fsync），再 `link(pending, .writer.lock)` 原子发布——barrier 在本协议下任何可观察时刻都是完整内容，空/部分窗口结构性不存在。崩溃于 link 前只留惰性 pending 文件；崩溃于 link 后留完整死 owner 记录（可恢复）。pending 垃圾按名 GC（内嵌 creator 同机 ESRCH 才删）；活 creator 与不可解析 pending 永不触碰 | S2 standing regression：当轮以 pending 轮询触发 SIGKILL；该测试未证明六次击杀或各子窗口覆盖，现已替换为四个精确屏障的生产子进程回归——每轮后 3 次生产 append 全部恢复、存在的 barrier 必为完整 JSON 记录、链唯一连续；安全对照：活 creator 的 pending 永不被接管；partial pending 惰性对照：admission 照常进行 | 已关闭 |
 
 claim/evict/发布之外无任何按 pathname 观察的删除：协议中仅存三类移除——持有者自己的 nonce 条件 barrier unlink（release）、按名 GC 死 creator 的 pending、成功发布后自己的 pending unlink——全部作用于 actor 自己写完并验证过的内容。
 

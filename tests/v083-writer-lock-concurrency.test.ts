@@ -296,58 +296,59 @@ it('L4.3 (standing regression): tenure-scoped compaction keeps the holder state 
   }
 })
 
-it('S2 (standing regression): SIGKILL inside the admission window leaves every later append recoverable', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r6-s2-'))
-  try {
-    expect(initializePrivateLedger(root, context)).toBe(true)
+it.each(['before-write', 'partial-write', 'before-link', 'after-link'])(
+  'S2: exact admission checkpoint %s preserves live safety and crash recovery', async (stage) => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cg-s2-checkpoint-'))
     const runner = await bundledRunner()
-    // Repeat: spawn a real child performing production appends; the parent
-    // polls for the admission window (a pending.<nonce> file appears between
-    // prepare and publish) and SIGKILLs the child the moment it opens. Every
-    // kill lands in a different sub-window across iterations (before write,
-    // after write, after link, after claim).
-    for (let round = 0; round < 6; round += 1) {
-      const child = spawn(process.execPath, [runner, root, `s2-${round}`], { stdio: ['ignore', 'pipe', 'pipe'] })
-      const deadline = Date.now() + 30_000
-      let killed = false
-      while (Date.now() < deadline) {
-        const pending = readdirSync(root).filter((name) => name.startsWith('pending.'))
-        if (pending.length > 0) {
-          process.kill(child.pid!, 'SIGKILL')
-          killed = true
-          break
-        }
-        if (child.exitCode !== null) break
+    const child = spawn(process.execPath, [
+      join(process.cwd(), 'tests', 'helpers', 'barrier-crash-runner.mjs'), runner, root, stage,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', (chunk) => { stderr += chunk })
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()))
+    try {
+      const marker = join(root, 'paused')
+      const deadline = Date.now() + 10_000
+      while (!existsSync(marker) && child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
       }
-      await new Promise<void>((resolve) => child.on('close', () => resolve()))
-      if (!killed) break // the child finished all 5 appends before the window opened
-      // The barrier, if present, must be a COMPLETE record — never empty or
-      // partial (that is the S2 invariant the publication fixes).
-      const barrierPath = join(root, '.writer.lock')
-      if (existsSync(barrierPath)) {
-        const raw = readFileSync(barrierPath, 'utf8')
-        expect(() => JSON.parse(raw), `round ${round}: barrier must be complete JSON, got ${raw.slice(0, 60)}`).not.toThrow()
-        expect(JSON.parse(raw).version, `round ${round}`).toBe(2)
-      }
-      // Subsequent production appends MUST recover (BUG-01): no permanent
-      // unknown_owner wedge, and any dead-creator pending garbage is swept.
-      for (let followUp = 0; followUp < 3; followUp += 1) {
+      expect(existsSync(marker), `checkpoint missing: ${stderr}`).toBe(true)
+      expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({ stage, pid: child.pid })
+      const pending = readdirSync(root).filter((name) => name.startsWith('pending.'))
+      expect(pending).toHaveLength(1)
+      const pendingFile = join(root, pending[0]!)
+      const original = readFileSync(pendingFile)
+      expect(existsSync(join(root, '.writer.lock'))).toBe(stage === 'after-link')
+      if (stage === 'before-write') expect(original.length).toBe(0)
+      else if (stage === 'partial-write') expect(original.length).toBe(10)
+      else expect(JSON.parse(original.toString()).pid).toBe(child.pid)
+
+      // A pending file is inert; a published live barrier must exclude us.
+      expect(appendPrivateLedger(root, context, 'restart_intent', {
+        resolutionCallId: 'live-control', serviceId: 's', preGeneration: 'g',
+      })).toBe(stage !== 'after-link')
+      expect(readFileSync(pendingFile)).toEqual(original)
+      expect(child.kill('SIGKILL')).toBe(true)
+      await closed
+      for (let index = 0; index < 3; index += 1) {
         expect(appendPrivateLedger(root, context, 'restart_intent', {
-          resolutionCallId: `s2-${round}-${followUp}`, serviceId: 's', preGeneration: 'g',
-        }), `round ${round} follow-up ${followUp}`).toBe(true)
+          resolutionCallId: `recovered-${index}`, serviceId: 's', preGeneration: 'g',
+        })).toBe(true)
       }
+      const snapshot = readPrivateLedger(root, context)
+      expect(snapshot.damaged).toBe(false)
+      expect(snapshot.records).toHaveLength(stage === 'after-link' ? 3 : 4)
+      expect(snapshot.records.map((record) => record.position)).toEqual(snapshot.records.map((_, index) => index + 1))
+      expect(new Set(snapshot.records.map((record) => String(record.payload.resolutionCallId))).size).toBe(snapshot.records.length)
+      expect(writerLockState(root)).not.toBe('unknown_owner')
+      expect(__writerLockInternals.readHolder(root)).toBeNull()
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      await closed
+      rmSync(root, { recursive: true, force: true })
     }
-    // The ledger chain is unique and contiguous across all recovered windows.
-    const snapshot = readPrivateLedger(root, context)
-    expect(snapshot.damaged).toBe(false)
-    expect(snapshot.records.map((record) => record.position)).toEqual(snapshot.records.map((_, index) => index + 1))
-    expect(new Set(snapshot.records.map((record) => String(record.payload.resolutionCallId))).size).toBe(snapshot.records.length)
-    expect(snapshot.records.length).toBeGreaterThanOrEqual(1)
-    expect(__writerLockInternals.readHolder(root)).toBeNull()
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
-}, 120_000)
+  }, 30_000,
+)
 
 it('S2 safe control: a pending file whose creator is ALIVE is never taken over', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-cg-r6-alive-'))

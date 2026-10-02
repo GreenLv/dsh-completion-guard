@@ -4,7 +4,7 @@
 
 面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
 
-> **0.8.2 要求 DSH `>=0.2.0-rc.2`，并支持官方 Desktop 应用。** 请先停止宿主、升级 DSH 并安装 Guard，再为每个 Profile 执行宿主锁工具的 `inspect`、`inject` 和 `verify-dump`，最后按需启动该 Profile。对 Desktop 应用请传入 `--profile desktop`，并以应用归档作为 runtime root。这些命令绑定实际安装包及其经过验证的路由；安装 Guard 本身不会重建锁。已测试的宿主基线是 DSH `0.2.0-rc.2`、Cordis `4.0.4`；较新版本仍需通过身份和适配契约检查。版本准入、重绑及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
+> **0.8.3 要求 DSH `>=0.2.0-rc.2`，并支持官方 Desktop 应用。** 请先停止宿主、升级 DSH 并安装 Guard，再为每个 Profile 执行宿主锁工具的 `inspect`、`inject` 和 `verify-dump`，最后按需启动该 Profile。对 Desktop 应用请传入 `--profile desktop`，并以应用归档作为 runtime root。这些命令绑定实际安装包及其经过验证的路由；安装 Guard 本身不会重建锁。已测试的宿主基线是 DSH `0.2.0-rc.2`、Cordis `4.0.4`；较新版本仍需通过身份和适配契约检查。版本准入、重绑及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
 
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
@@ -13,7 +13,7 @@
 先停止宿主并升级到 DSH `0.2.0-rc.2` 或更高版本，再把 Guard 安装到需要保护的 Profile：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.8.2
+dsh plugin --profile web add dsh-completion-guard@0.8.3
 ```
 
 **升级和执行下面的安装图检查时，保持宿主停止。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
@@ -59,7 +59,7 @@ Desktop 请使用应用附带的 CLI 安装，再以 `--profile desktop`、应�
 
 ## 状态与兼容性
 
-0.8.2 的版本准入范围是 **DSH `>=0.2.0-rc.2`**，没有版本上限，并把官方 Desktop 应用纳为独立 profile（`desktop`）：应用自有的 `dsh-profile-desktop` 按名称识别，其内置依赖图从已签名的 `app.asar` 原位读取，安装字节按发布 tarball 逐文件核验。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.2` 46 包依赖图为已审查基线（rc.1 图保留为历史证据）；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。变化的 Session/API 实现须通过有限行为探针，不兼容行为会报告具体资格缺口，旧证书不能转移到新锁。最终制品的 macOS/Windows 原生验收、未来版本原生证据与 Desktop 原生验收仍须分别建立。
+0.8.3 的版本准入范围是 **DSH `>=0.2.0-rc.2`**，没有版本上限，并支持官方 Desktop 应用的独立 profile（`desktop`）：应用自有的 `dsh-profile-desktop` 按名称识别，其内置依赖图从已签名的 `app.asar` 原位读取，安装字节按发布 tarball 逐文件核验。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.2` 46 包依赖图为已审查基线（rc.1 图保留为历史证据）；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。变化的 Session/API 实现须通过有限行为探针，不兼容行为会报告具体资格缺口，旧证书不能转移到新锁。最终制品的 macOS/Windows 原生验收、未来版本原生证据与 Desktop 原生验收仍须分别建立。
 
 升级后重新检查、注入并验证 host-lock，再按需启动对应 Profile，步骤见[宿主锁升级](docs/HOST_LOCK_UPGRADE.md)。旧会话由 DSH 迁移为 V4；Guard 保留旧 ledger 和证书，但不会重签或把旧身份升级为当前权限。Goal 为可选能力，宿主安装不代表它已启用。
 
