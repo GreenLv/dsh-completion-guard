@@ -3,7 +3,7 @@ import { NATIVE_OBSERVATION_SCHEMA, NATIVE_OBSERVATION_SCHEMA_V2, locatorCertifi
 import { currentContractDigest } from './contract-digest.js'
 import {
   bindingDigest as deriveBindingDigest, bindingStateClosure, certificationDigest, certificationDigestV2,
-  evidenceSha256Digest, predParamsDigest, resolveAllowlist,
+  evidenceSha256Digest, predParamsDigest, resolveAllowlist, DigestError,
   type BindingRecord, type EvidenceFact, type Typed,
 } from './digest.js'
 import { bindingSatisfies, evidenceCoverage } from './matching.js'
@@ -52,12 +52,29 @@ function transitionsEqual(left: ExpectedTransition | undefined, right: ExpectedT
   return stable(left) === stable(right)
 }
 
+/** Canonical digest rules remain strict; untrusted parameters become rejection,
+ * never an exception escaping the live tool or persisted replay. */
+function checkedPredParamsDigest(parameters: unknown): string | undefined {
+  try { return predParamsDigest(parameters as Record<string, Typed>, resolveAllowlist('product')) }
+  catch (error) { if (error instanceof DigestError) return undefined; throw error }
+}
+
+function bindingParametersProblem(binding: EvidenceBinding): RejectedBinding | undefined {
+  const parameters = binding.expectedTransition?.parameters
+  if (parameters !== undefined && checkedPredParamsDigest(parameters) === undefined) {
+    return { itemId: binding.itemId, reasonCode: 'expected_transition_parameters_invalid',
+      reason: 'predicate parameters violate the frozen key/type/size rules; use the supplied expected_transition parameters unchanged' }
+  }
+  return undefined
+}
+
 function transitionIsSelfConsistent(action: SemanticAction, transition: ExpectedTransition | undefined): boolean {
   if (!transition?.parameters
     || transition.predicateId !== ACTION_MANIFEST.actions[action].predicateId
     || transition.version !== 1
     || transition.predParamsKind !== 'inline') return false
-  const recomputed = predParamsDigest(transition.parameters as Record<string, Typed>, resolveAllowlist('product'))
+  const recomputed = checkedPredParamsDigest(transition.parameters)
+  if (recomputed === undefined) return false
   return transition.parametersDigest === undefined || transition.parametersDigest === recomputed
 }
 
@@ -162,7 +179,8 @@ function expectedTransitionMatches(action: SemanticAction, transition: ExpectedT
   const expectedPredicate = ACTION_MANIFEST.actions[action].predicateId
   if (transition.predicateId !== expectedPredicate || transition.version !== 1 || transition.predParamsKind !== 'inline' || !transition.parameters) return false
   const params = transition.parameters
-  const recomputed = predParamsDigest(params as Record<string, Typed>, resolveAllowlist('product'))
+  const recomputed = checkedPredParamsDigest(params)
+  if (recomputed === undefined) return false
   if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false
   switch (action) {
     case 'install':
@@ -199,7 +217,8 @@ function nonStatefulTransitionMatches(action: SemanticAction, transition: Expect
     || transition.predParamsKind !== 'inline'
     || !transition.parameters) return false
   const params = transition.parameters
-  const recomputed = predParamsDigest(params as Record<string, Typed>, resolveAllowlist('product'))
+  const recomputed = checkedPredParamsDigest(params)
+  if (recomputed === undefined) return false
   if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false
   if (action === 'inspect_remote_updates') {
     return ['remote', 'version'].every((key) => stable(params[key]) === stable(resolved[key]))
@@ -473,7 +492,7 @@ function simpleRecord(projection: GuardProjection, item: GuardItem, binding: Evi
 /** Preview one evidence binding through the same per-item acceptance checks as
  * certificate construction. This does not decide whole-contract closure. */
 export function bindingIndividuallyAccepted(projection: GuardProjection, item: GuardItem, binding: EvidenceBinding): boolean {
-  if (item.status === 'superseded' || item.targetCaptureStatus === 'clarification_required'
+  if (bindingParametersProblem(binding) || item.status === 'superseded' || item.targetCaptureStatus === 'clarification_required'
     || binding.semanticAction !== item.semanticAction || !tuplesEqual(binding.requestedTarget, item.requestedTarget)
     || evidenceProblem(projection, item, binding)
     || (projection.policy === 'strict' && strictProofProblem(projection, item, binding))) return false
@@ -494,17 +513,15 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
   // it must not mint a new certificate for that incomplete closure. Historical
   // replay derives at the checkpoint's event watermark before the runtime
   // attaches coreV2, and continues to verify the recorded certificate bytes.
-  if (projection.boundaryProtocol === 6 && projection.durabilityWatermark === 'confirmed'
-    && projection.coreV2?.certifiable !== true) {
-    return { status: 'incomplete', contractRevision: projection.contractRevision,
-      openItems: certifiableOpenItems(projection).map((item) => item.id),
-      rejectedBindings: [{ itemId: '*', reason: 'the current shared-core closure is not verified complete', reasonCode: 'current_closure_unmet' }] }
-  }
+  const coreIncomplete = projection.boundaryProtocol === 6 && projection.durabilityWatermark === 'confirmed'
+    && projection.coreV2?.certifiable !== true
   const rejectedBindings: RejectedBinding[] = []
   const records: BindingRecord[] = []
   const nativeDigests: string[] = []
   const referencedFacts: EvidenceFact[] = []
   for (const binding of bindings) {
+    const parameterProblem = bindingParametersProblem(binding)
+    if (parameterProblem) { rejectedBindings.push(parameterProblem); continue }
     const item = projection.items.get(binding.itemId)
     if (!item || item.status === 'superseded') {
       rejectedBindings.push({ itemId: binding.itemId, reason: 'item is missing or superseded', reasonCode: 'item_missing_or_superseded' }); continue
@@ -553,6 +570,12 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     if (!binding.evidenceIds.length) {
       rejectedBindings.push({ itemId: item.id, reason: 'no evidence cited', reasonCode: 'binding_missing_required_facet', hint: closingHint(projection, item) }); continue
     }
+    if (binding.semanticAction !== undefined && binding.semanticAction !== item.semanticAction) {
+      rejectedBindings.push({ itemId: item.id, reason: 'binding semantic action differs from the captured contract', reasonCode: 'semantic_action_mismatch' }); continue
+    }
+    if (binding.requestedTarget !== undefined && !tuplesEqual(binding.requestedTarget, item.requestedTarget)) {
+      rejectedBindings.push({ itemId: item.id, reason: 'requested target differs from the captured contract; use the captured requested_target unchanged', reasonCode: 'requested_target_mismatch' }); continue
+    }
     const problem = evidenceProblem(projection, item, binding)
     if (problem) { rejectedBindings.push(problem); continue }
     // C06 strict policy: on top of standard it enforces the proof the user
@@ -577,6 +600,13 @@ export function certifyCheckpoint(projection: GuardProjection, bindings: Evidenc
     records.push(built.record!)
     if ('nativeDigest' in built && typeof built.nativeDigest === 'string') nativeDigests.push(built.nativeDigest)
     referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact))
+  }
+  // Diagnose every supplied binding before the global gate, without issuing
+  // or persisting partial authority. Replay uses the same input boundary.
+  if (coreIncomplete) {
+    return { status: 'incomplete', contractRevision: projection.contractRevision,
+      openItems: certifiableOpenItems(projection).map(item => item.id),
+      rejectedBindings: [...rejectedBindings, { itemId: '*', reason: 'the current shared-core closure is not verified complete', reasonCode: 'current_closure_unmet' }] }
   }
   // The certified scope comes from the single closure implementation: the
   // current unit plus any pre-v5 obligations under a v5 boundary, or the whole

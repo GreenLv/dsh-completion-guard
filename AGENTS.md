@@ -105,6 +105,18 @@ node scripts/release-pack.mjs --source . --output-dir <outside-repository-dir>
   separately establish install, strict second no-op, package parity, host-lock
   readback, required Web/Headless lifecycle, cleanup, and any explicitly
   required real-model boundary. Keep capability skips visible.
+- Desktop adopts `dsh-desktop-bound/v2` layered no-op acceptance: install Guard
+  alone, then immediately repeat its add and require every tracked file plus the
+  Guard package tree to be byte-identical (`single_package_strict_noop`). Only
+  after that gate, add the inert update fixture and repeat the multi-package add
+  (`multi_package_semantic_noop`). In that second gate only object-key order in
+  `node_modules/.modules.yaml` may differ; complete values, array order and types
+  must match under the observed strict JSON format. Duplicate keys, invalid or
+  unsupported JSON/YAML, other tracked byte changes and Guard tree changes fail.
+  Never normalize or restore installed metadata, retry to obtain a pass, or
+  relabel historical Desktop v1 strict failures as v2 passes. pnpm 11.7.0's
+  asynchronous hoisted-location insertion is a known host serialization limit;
+  this contract does not patch or establish a fix in the signed host.
 - Invoke the repository-owned versioned native-acceptance entrypoint for
   portable or host-bound runs. It emits a redacted annex bound to the source
   commit and artifact digest; a handwritten command transcript is not an

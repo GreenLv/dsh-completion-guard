@@ -20,7 +20,7 @@ class DesktopEntrypointTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("desktop_contract", root / "scripts/native_desktop_acceptance.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        gates = json.loads((root / "schemas/native-desktop-bound-v1.schema.json").read_text())["properties"]["gates"]
+        gates = json.loads((root / "schemas/native-desktop-bound-v2.schema.json").read_text())["properties"]["gates"]
         # The producer added a probe gate; a stale 25-item consumer rejected real
         # successful 26-gate native receipts on both platforms.
         count = len(module.DESKTOP_GATES)
@@ -112,6 +112,76 @@ class StrictNoopDiagnosticTests(unittest.TestCase):
                 with self.assertRaises(self.module.StrictNoopFailure):
                     self.module.check_strict_noop({"a": "one"}, after, {}, [], Path("."), "tree", tree, Path("diagnostic"))
             self.assertEqual(receipt.call_count, 3)
+
+    def semantic_check(self, before_value, after_value, *, before_other="same", after_other="same", after_tree="tree"):
+        import hashlib
+        encode = lambda value: json.dumps(value, ensure_ascii=False, indent=2).encode()
+        left, right = encode(before_value), encode(after_value)
+        before = {".modules.yaml": hashlib.sha256(left).hexdigest(), "package.json": before_other}
+        after = {".modules.yaml": hashlib.sha256(right).hexdigest(), "package.json": after_other}
+        with mock.patch.object(self.module, "noop_snapshot", return_value={"node_modules/.modules.yaml": right}), \
+                mock.patch.object(self.module, "strict_noop_receipt", return_value={}):
+            self.module.check_multi_package_semantic_noop(before, after, {"node_modules/.modules.yaml": left},
+                [], Path("."), "tree", after_tree, Path("diagnostic"))
+            return 0
+
+    def test_semantic_gate_accepts_only_object_key_order_and_never_writes_metadata(self):
+        before = {"hoistedLocations": {"guard": ["guard"], "fixture": ["fixture"]}, "unknown": {"x": 1, "y": True}}
+        after = {"unknown": {"y": True, "x": 1}, "hoistedLocations": {"fixture": ["fixture"], "guard": ["guard"]}}
+        self.assertEqual(self.semantic_check(before, after), 0)
+
+    def test_real_metadata_files_are_read_only_during_semantic_success(self):
+        import tempfile
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory) / "profile"
+            modules = profile / "node_modules" / ".modules.yaml"
+            modules.parent.mkdir(parents=True)
+            left = json.dumps({"hoistedLocations": {"guard": ["guard"], "fixture": ["fixture"]}}, indent=2).encode()
+            right = json.dumps({"hoistedLocations": {"fixture": ["fixture"], "guard": ["guard"]}}, indent=2).encode()
+            modules.write_bytes(left)
+            captured = self.module.noop_snapshot([modules], profile)
+            modules.write_bytes(right)
+            diagnostic = Path(directory) / "diagnostic.json"
+            self.module.check_multi_package_semantic_noop({".modules.yaml": hashlib.sha256(left).hexdigest()},
+                {".modules.yaml": hashlib.sha256(right).hexdigest()}, captured, [modules], profile, "tree", "tree", diagnostic)
+            self.assertEqual(modules.read_bytes(), right)
+            self.assertFalse(diagnostic.exists())
+            self.assertFalse(diagnostic.with_name(diagnostic.name + ".strict-noop-private").exists())
+            delta = self.module.noop_difference(left, right, True)
+            self.assertEqual(delta["changed_top_level_fields"], ["hoistedLocations"])
+
+    def test_semantic_gate_rejects_every_value_type_and_array_order_change(self):
+        before = {"unknown": {"flag": True}, "hoistedLocations": {"guard": ["first", "second"]}}
+        for after in ({"unknown": {"flag": 1}, "hoistedLocations": before["hoistedLocations"]},
+                      {"unknown": {"flag": False}, "hoistedLocations": before["hoistedLocations"]},
+                      {"unknown": before["unknown"], "hoistedLocations": {"guard": ["second", "first"]}},
+                      {"unknown": before["unknown"], "hoistedLocations": {"guard": ["first"]}},
+                      {"hoistedLocations": before["hoistedLocations"]}):
+            with self.subTest(after=after), self.assertRaises(self.module.StrictNoopFailure):
+                self.semantic_check(before, after)
+        with self.assertRaises(self.module.StrictNoopFailure):
+            self.semantic_check({"x": 1}, {"x": 1.0})
+
+    def test_semantic_gate_keeps_other_files_and_package_tree_strict(self):
+        for kwargs in ({"after_other": "changed"}, {"after_tree": "changed"}, {"after_other": None}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(self.module.StrictNoopFailure):
+                self.semantic_check({"x": 1}, {"x": 1}, **kwargs)
+
+    def test_semantic_parser_rejects_duplicate_keys_yaml_and_unobserved_serialization(self):
+        for data in (b'{"x":1,"x":1}', b'{"x":{"y":1,"y":1}}', b'x: 1\n', b'[]',
+                     b'{"x":NaN}', b'{"x":Infinity}', b'{"x":1e309}', b'\xff', None, b'{"x":1}',
+                     b'{\n  "x": 1\n}\n'):
+            with self.subTest(data=data), self.assertRaises((ValueError, UnicodeError)):
+                self.module.modules_json_value(data)
+
+    def test_semantic_gate_validates_even_byte_identical_invalid_metadata(self):
+        data = b'{"x":1,"x":1}'
+        with mock.patch.object(self.module, "noop_snapshot", return_value={"node_modules/.modules.yaml": data}), \
+                mock.patch.object(self.module, "strict_noop_receipt", return_value={}):
+            with self.assertRaises(self.module.StrictNoopFailure):
+                self.module.check_multi_package_semantic_noop({".modules.yaml": "same"}, {".modules.yaml": "same"},
+                    {"node_modules/.modules.yaml": data}, [], Path("."), "tree", "tree", Path("diagnostic"))
 
     def test_regular_snapshot_in_native_temporary_directory(self):
         import tempfile

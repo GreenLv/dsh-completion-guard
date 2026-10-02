@@ -48,6 +48,14 @@ export const families = Object.freeze({
     'tests/domain/v063-core-alignment.test.ts',
     'tests/tools/v063-host-materialization.test.ts',
   ],
+  'checkpoint-input': [
+    'tests/v083-predicate-input-boundary.test.ts',
+    'tests/v083-checkpoint-binding-feedback.test.ts',
+    'tests/tools/checkpoint.test.ts',
+    'tests/tools/native-checkpoint-details.test.ts',
+    'tests/domain/digest-v3.test.ts',
+    'tests/domain/portable-semantics.test.ts',
+  ],
   upgrade: [
     'tests/domain/v063-upgrade-chain.test.ts',
     'tests/domain/v063-legacy-upgrade.test.ts',

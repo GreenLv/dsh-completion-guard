@@ -18990,9 +18990,28 @@ function tuplesEqual(left, right) {
 function transitionsEqual(left, right) {
 	return stable$1(left) === stable$1(right);
 }
+/** Canonical digest rules remain strict; untrusted parameters become rejection,
+* never an exception escaping the live tool or persisted replay. */
+function checkedPredParamsDigest(parameters) {
+	try {
+		return predParamsDigest(parameters, resolveAllowlist("product"));
+	} catch (error) {
+		if (error instanceof DigestError) return void 0;
+		throw error;
+	}
+}
+function bindingParametersProblem(binding) {
+	const parameters = binding.expectedTransition?.parameters;
+	if (parameters !== void 0 && checkedPredParamsDigest(parameters) === void 0) return {
+		itemId: binding.itemId,
+		reasonCode: "expected_transition_parameters_invalid",
+		reason: "predicate parameters violate the frozen key/type/size rules; use the supplied expected_transition parameters unchanged"
+	};
+}
 function transitionIsSelfConsistent(action, transition) {
 	if (!transition?.parameters || transition.predicateId !== ACTION_MANIFEST.actions[action].predicateId || transition.version !== 1 || transition.predParamsKind !== "inline") return false;
-	const recomputed = predParamsDigest(transition.parameters, resolveAllowlist("product"));
+	const recomputed = checkedPredParamsDigest(transition.parameters);
+	if (recomputed === void 0) return false;
 	return transition.parametersDigest === void 0 || transition.parametersDigest === recomputed;
 }
 function evidenceFact(evidence) {
@@ -19112,7 +19131,8 @@ function expectedTransitionMatches(action, transition, resolved, observed) {
 	const expectedPredicate = ACTION_MANIFEST.actions[action].predicateId;
 	if (transition.predicateId !== expectedPredicate || transition.version !== 1 || transition.predParamsKind !== "inline" || !transition.parameters) return false;
 	const params = transition.parameters;
-	const recomputed = predParamsDigest(params, resolveAllowlist("product"));
+	const recomputed = checkedPredParamsDigest(params);
+	if (recomputed === void 0) return false;
 	if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false;
 	switch (action) {
 		case "install":
@@ -19136,7 +19156,8 @@ function expectedTransitionMatches(action, transition, resolved, observed) {
 function nonStatefulTransitionMatches(action, transition, resolved, observed) {
 	if (transition.predicateId !== ACTION_MANIFEST.actions[action].predicateId || transition.version !== 1 || transition.predParamsKind !== "inline" || !transition.parameters) return false;
 	const params = transition.parameters;
-	const recomputed = predParamsDigest(params, resolveAllowlist("product"));
+	const recomputed = checkedPredParamsDigest(params);
+	if (recomputed === void 0) return false;
 	if (transition.parametersDigest && transition.parametersDigest !== recomputed) return false;
 	if (action === "inspect_remote_updates") return ["remote", "version"].every((key) => stable$1(params[key]) === stable$1(resolved[key])) && stable$1(params.upstream_oid) === stable$1(observed.upstream_oid);
 	return stable$1(params) === stable$1({
@@ -19519,7 +19540,7 @@ function simpleRecord(projection, item, binding) {
 /** Preview one evidence binding through the same per-item acceptance checks as
 * certificate construction. This does not decide whole-contract closure. */
 function bindingIndividuallyAccepted(projection, item, binding) {
-	if (item.status === "superseded" || item.targetCaptureStatus === "clarification_required" || binding.semanticAction !== item.semanticAction || !tuplesEqual(binding.requestedTarget, item.requestedTarget) || evidenceProblem(projection, item, binding) || projection.policy === "strict" && strictProofProblem(projection, item, binding)) return false;
+	if (bindingParametersProblem(binding) || item.status === "superseded" || item.targetCaptureStatus === "clarification_required" || binding.semanticAction !== item.semanticAction || !tuplesEqual(binding.requestedTarget, item.requestedTarget) || evidenceProblem(projection, item, binding) || projection.policy === "strict" && strictProofProblem(projection, item, binding)) return false;
 	const built = isStatefulAction(item.semanticAction ?? "generic_run") ? binding.resolutionEvidenceId ? richStatefulRecord(projection, item, binding) : item.semanticAction === "commit" || item.semanticAction === "push" ? nativeGitRecord(projection, item, binding) : nativeFileRecord(projection, item, binding) : simpleRecord(projection, item, binding);
 	return built.record !== void 0 && built.rejected === void 0;
 }
@@ -19530,21 +19551,17 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		openItems: certifiableOpenItems(projection).map((item) => item.id),
 		rejectedBindings: []
 	};
-	if (projection.boundaryProtocol === 6 && projection.durabilityWatermark === "confirmed" && projection.coreV2?.certifiable !== true) return {
-		status: "incomplete",
-		contractRevision: projection.contractRevision,
-		openItems: certifiableOpenItems(projection).map((item) => item.id),
-		rejectedBindings: [{
-			itemId: "*",
-			reason: "the current shared-core closure is not verified complete",
-			reasonCode: "current_closure_unmet"
-		}]
-	};
+	const coreIncomplete = projection.boundaryProtocol === 6 && projection.durabilityWatermark === "confirmed" && projection.coreV2?.certifiable !== true;
 	const rejectedBindings = [];
 	const records = [];
 	const nativeDigests = [];
 	const referencedFacts = [];
 	for (const binding of bindings) {
+		const parameterProblem = bindingParametersProblem(binding);
+		if (parameterProblem) {
+			rejectedBindings.push(parameterProblem);
+			continue;
+		}
 		const item = projection.items.get(binding.itemId);
 		if (!item || item.status === "superseded") {
 			rejectedBindings.push({
@@ -19605,6 +19622,22 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 			});
 			continue;
 		}
+		if (binding.semanticAction !== void 0 && binding.semanticAction !== item.semanticAction) {
+			rejectedBindings.push({
+				itemId: item.id,
+				reason: "binding semantic action differs from the captured contract",
+				reasonCode: "semantic_action_mismatch"
+			});
+			continue;
+		}
+		if (binding.requestedTarget !== void 0 && !tuplesEqual(binding.requestedTarget, item.requestedTarget)) {
+			rejectedBindings.push({
+				itemId: item.id,
+				reason: "requested target differs from the captured contract; use the captured requested_target unchanged",
+				reasonCode: "requested_target_mismatch"
+			});
+			continue;
+		}
 		const problem = evidenceProblem(projection, item, binding);
 		if (problem) {
 			rejectedBindings.push(problem);
@@ -19642,6 +19675,16 @@ function certifyCheckpoint(projection, bindings, id, commit = true) {
 		if ("nativeDigest" in built && typeof built.nativeDigest === "string") nativeDigests.push(built.nativeDigest);
 		referencedFacts.push(...citedEvidence(projection, binding).map(evidenceFact));
 	}
+	if (coreIncomplete) return {
+		status: "incomplete",
+		contractRevision: projection.contractRevision,
+		openItems: certifiableOpenItems(projection).map((item) => item.id),
+		rejectedBindings: [...rejectedBindings, {
+			itemId: "*",
+			reason: "the current shared-core closure is not verified complete",
+			reasonCode: "current_closure_unmet"
+		}]
+	};
 	const unreusable = needsReviewObligations(projection);
 	if (unreusable.length > 0) return {
 		status: "incomplete",

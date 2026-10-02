@@ -110,6 +110,8 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
       next_step: typeof row.next_step === 'string' ? row.next_step.slice(0, 240) : undefined,
       adapter_disposition: row.adapter_disposition,
       ...(row.binding_template !== undefined ? { binding_template: row.binding_template } : {}),
+      ...(row.expected_transition_template !== undefined ? { expected_transition_template: row.expected_transition_template,
+        binding_template_unavailable: row.binding_template_unavailable, binding_guidance: row.binding_guidance } : {}),
       omitted: true, detail_id: lookup(String(row.id ?? row.item_id)) }
   }
   for (const key of LANES) {

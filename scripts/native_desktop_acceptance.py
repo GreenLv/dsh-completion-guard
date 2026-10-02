@@ -25,7 +25,7 @@ _spec.loader.exec_module(host)
 DESKTOP_GATES = {
     "package_inventory", "manifest_identity", "package_parity", "isolated_install",
     "strict_second_noop", "installed_syntax", "desktop_carrier_and_graph",
-    "desktop_package_parity", "desktop_strict_second_noop", "desktop_installed_inspect", "desktop_host_lock",
+    "desktop_package_parity", "single_package_strict_noop", "multi_package_semantic_noop", "desktop_installed_inspect", "desktop_host_lock",
     "desktop_host_lock_readback", "desktop_probe_composition", "desktop_loaded_backend",
     "desktop_graceful_stop", "desktop_uninstall", "desktop_cleanup",
     *("desktop_" + case for case in host.PROBE_V070_CASES),
@@ -37,7 +37,7 @@ NOOP_CAPTURE_LIMIT = 4 * 1024 * 1024
 NOOP_FIELDS = frozenset(("hoistPattern", "included", "layoutVersion", "nodeLinker", "packageManager",
                         "pendingBuilds", "prunedAt", "publicHoistPattern", "registries", "skipped",
                         "storeDir", "virtualStoreDir", "virtualStoreDirMaxLength", "hoistedDependencies",
-                        "injectedDeps"))
+                        "injectedDeps", "hoistedLocations"))
 
 
 class StrictNoopFailure(RuntimeError):
@@ -46,6 +46,14 @@ class StrictNoopFailure(RuntimeError):
     def __init__(self, receipt: dict[str, Any]):
         super().__init__("Desktop second install was not a strict no-op")
         self.receipt = receipt
+
+
+class SemanticNoopFailure(StrictNoopFailure):
+    diagnostic_code = "SEMANTIC_SECOND_NOOP_MISMATCH"
+
+    def __init__(self, receipt: dict[str, Any]):
+        super().__init__(receipt)
+        self.args = ("Desktop multi-package install was not a semantic no-op",)
 
 
 def noop_snapshot(paths: list[Path], profile: Path) -> dict[str, bytes | None]:
@@ -83,8 +91,8 @@ def noop_difference(before: bytes, after: bytes, modules: bool = False) -> dict[
     if modules:
         import re
         def blocks(data: bytes) -> dict[str, bytes]:
-            matches = list(re.finditer(rb"(?m)^([A-Za-z][A-Za-z0-9]*):", data))
-            return {match.group(1).decode("ascii"): data[match.start():matches[i + 1].start() if i + 1 < len(matches) else len(data)]
+            matches = list(re.finditer(rb'(?m)^(?:([A-Za-z][A-Za-z0-9]*):|  "([A-Za-z][A-Za-z0-9]*)":)', data))
+            return {(match.group(1) or match.group(2)).decode("ascii"): data[match.start():matches[i + 1].start() if i + 1 < len(matches) else len(data)]
                     for i, match in enumerate(matches)}
         left, right = blocks(before), blocks(after)
         changed = {key for key in left.keys() | right.keys() if left.get(key) != right.get(key)}
@@ -139,6 +147,62 @@ def check_strict_noop(before: dict[str, str], after: dict[str, str], before_byte
     if before != after or tree_before != tree_after:
         raise StrictNoopFailure(strict_noop_receipt(before, after, before_bytes,
             noop_snapshot(tracked, profile), tree_before, tree_after, diagnostic))
+
+
+def modules_json_value(data: bytes | None) -> dict[str, Any]:
+    """Only the observed pnpm JSON format; duplicate keys and YAML fail closed."""
+    if data is None or len(data) > NOOP_CAPTURE_LIMIT:
+        raise ValueError("modules JSON unavailable")
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate modules JSON key")
+            result[key] = value
+        return result
+    def invalid_constant(value: str) -> None:
+        raise ValueError("non-finite modules JSON constant")
+    value = json.loads(data.decode("utf-8"), object_pairs_hook=unique_object, parse_constant=invalid_constant)
+    if not isinstance(value, dict):
+        raise ValueError("modules JSON must be an object")
+    # Permit object-key order only, rather than treating arbitrary formatting
+    # changes as no-op. pnpm 11.7 emits JSON.stringify(..., null, 2), no newline.
+    if json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8") != data:
+        raise ValueError("unsupported modules JSON serialization")
+    return value
+
+
+def strict_json_value_equal(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(strict_json_value_equal(left[key], right[key]) for key in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(strict_json_value_equal(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def check_multi_package_semantic_noop(before: dict[str, str], after: dict[str, str],
+                                     before_bytes: dict[str, bytes | None], tracked: list[Path], profile: Path,
+                                     tree_before: str, tree_after: str, diagnostic: Path) -> None:
+    after_bytes = noop_snapshot(tracked, profile)
+    reason = None
+    try:
+        left = modules_json_value(before_bytes.get("node_modules/.modules.yaml"))
+        right = modules_json_value(after_bytes.get("node_modules/.modules.yaml"))
+        if not strict_json_value_equal(left, right):
+            reason = "modules_json_value_changed"
+    except (ValueError, UnicodeError, RecursionError):
+        reason = "modules_json_invalid_or_unavailable"
+    if ({key: value for key, value in before.items() if key != ".modules.yaml"}
+            != {key: value for key, value in after.items() if key != ".modules.yaml"}):
+        reason = "other_tracked_bytes_changed"
+    if tree_before != tree_after:
+        reason = "package_tree_changed"
+    if reason:
+        receipt = strict_noop_receipt(before, after, before_bytes, after_bytes, tree_before, tree_after, diagnostic)
+        receipt.update({"contract": "multi_package_semantic_noop", "failure_reason": reason})
+        raise SemanticNoopFailure(receipt)
 
 
 def desktop_driver_digest(root: Path) -> str:
@@ -196,7 +260,11 @@ def preflight_desktop_inputs(root: Path, archive: Path, version: str) -> None:
 def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
                        archive: Path, result: dict[str, Any], version: str,
                        diagnostics_output: Path) -> dict[str, Any]:
-    result["gate_profile"] = "dsh-desktop-bound/v1"
+    result["gate_profile"] = "dsh-desktop-bound/v2"
+    result["desktop_noop_contract"] = {"schema": "dsh-desktop-noop/v2",
+        "single_package": "all_tracked_bytes_and_package_tree",
+        "multi_package": "only_modules_json_object_key_order",
+        "modules_format": "pnpm_json_indent_2_no_duplicate_keys"}
     result["capability_skips"] = ["real_model_request", "graphical_shell"]
     result["host_lock_policy"] = "dsh-core/v1"
     result["host_driver_sha256"] = desktop_driver_digest(root)
@@ -229,7 +297,7 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         fixture_old = host.package_fixture(temporary, "1.0.0")
         fixture_new = host.package_fixture(temporary, "1.0.1")
         install = electron_command(archive, cli, "plugin", "--profile", "desktop", "add",
-                                   "--ignore-scripts", "--config.auto-install-peers=false", str(artifact), str(fixture_old))
+                                   "--ignore-scripts", "--config.auto-install-peers=false", str(artifact))
         stage = "desktop_install"
         command(*install)
         installed = profile / "node_modules" / "dsh-completion-guard"
@@ -243,12 +311,26 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         tracked = [profile / name for name in ("package.json", "pnpm-lock.yaml", "cordis.patch.yml", "node_modules/.package-map.json", "node_modules/.modules.yaml")]
         before = {path.name: api.sha256(path) for path in tracked if path.is_file()}
         before_bytes = noop_snapshot(tracked, profile)
-        stage = "desktop_second_install"
+        stage = "single_package_strict_noop"
         command(*install)
         after = {path.name: api.sha256(path) for path in tracked if path.is_file()}
         after_tree = api.tree_digest(installed)
         check_strict_noop(before, after, before_bytes, tracked, profile, tree, after_tree, diagnostics_output)
-        passed("desktop_strict_second_noop")
+        passed("single_package_strict_noop")
+        # Add the inert update fixture only after Guard's unchanged strict gate.
+        multi_install = [*install, str(fixture_old)]
+        stage = "desktop_fixture_install"
+        command(*multi_install)
+        if api.tree_digest(installed) != tree:
+            raise RuntimeError("Adding the fixture changed the frozen Guard package")
+        before = {path.name: api.sha256(path) for path in tracked if path.is_file()}
+        before_bytes = noop_snapshot(tracked, profile)
+        stage = "multi_package_semantic_noop"
+        command(*multi_install)
+        after = {path.name: api.sha256(path) for path in tracked if path.is_file()}
+        check_multi_package_semantic_noop(before, after, before_bytes, tracked, profile,
+                                         tree, api.tree_digest(installed), diagnostics_output)
+        passed("multi_package_semantic_noop")
         locker = installed / "bin" / "dsh-completion-guard-host-lock.mjs"
         stage = "desktop_installed_inspect"
         inspected = json.loads(command("node", str(locker), "inspect", *lock_args))

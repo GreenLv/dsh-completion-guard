@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GreenLv/dsh-completion-guard/schemas/native-desktop-bound-v2.schema.json",
+  "title": "Desktop backend exact-artifact layered no-op acceptance",
+  "type": "object",
+  "required": [
+    "schema",
+    "status",
+    "product",
+    "gate_profile",
+    "repository",
+    "runtime_tree_sha256",
+    "artifact",
+    "platform",
+    "gates",
+    "cleanup",
+    "run",
+    "unperformed_actions",
+    "capability_skips",
+    "host_lock_policy",
+    "host_driver_sha256",
+    "host_lock_digests",
+    "desktop_runtime",
+    "desktop_noop_contract"
+  ],
+  "properties": {
+    "schema": {
+      "const": "native-acceptance/v2"
+    },
+    "status": {
+      "const": "passed"
+    },
+    "product": {
+      "const": "dsh_completion_guard"
+    },
+    "gate_profile": {
+      "const": "dsh-desktop-bound/v2"
+    },
+    "repository": {
+      "type": "object",
+      "required": [
+        "url",
+        "commit"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "runtime_tree_sha256": {
+      "type": "null"
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "filename",
+        "sha256",
+        "size_bytes",
+        "file_count",
+        "git_head"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "git_head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "required": [
+        "os",
+        "shell",
+        "toolchain"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "macos",
+            "windows"
+          ]
+        },
+        "shell": {
+          "const": "python-subprocess"
+        },
+        "toolchain": {
+          "type": "object"
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 27,
+      "maxItems": 27,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "required",
+          "status",
+          "subject",
+          "exit_code",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "desktop_carrier_and_graph",
+              "desktop_cleanup",
+              "desktop_graceful_stop",
+              "desktop_host_lock",
+              "desktop_host_lock_readback",
+              "desktop_installed_inspect",
+              "desktop_loaded_backend",
+              "desktop_package_parity",
+              "desktop_probe_composition",
+              "desktop_uninstall",
+              "desktop_v070_explicit_release_minimum",
+              "desktop_v070_future_vs_current_stop",
+              "desktop_v070_goal_adoption_current_closure",
+              "desktop_v070_history_compaction_restart",
+              "desktop_v070_legacy_migration",
+              "desktop_v070_ordinary_file_edit_readback",
+              "desktop_v070_ordinary_test_and_checkpoint",
+              "desktop_v070_root_v6_delivery",
+              "desktop_v070_short_resume_and_persistence",
+              "installed_syntax",
+              "isolated_install",
+              "manifest_identity",
+              "multi_package_semantic_noop",
+              "package_inventory",
+              "package_parity",
+              "single_package_strict_noop",
+              "strict_second_noop"
+            ]
+          },
+          "required": {
+            "const": true
+          },
+          "status": {
+            "const": "passed"
+          },
+          "exit_code": {
+            "const": 0
+          },
+          "subject": {
+            "type": "object"
+          },
+          "evidence": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "required": [
+        "status",
+        "remaining_ids"
+      ],
+      "properties": {
+        "status": {
+          "const": "passed"
+        },
+        "remaining_ids": {
+          "const": []
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "started_at",
+        "finished_at"
+      ]
+    },
+    "unperformed_actions": {
+      "type": "array",
+      "uniqueItems": true
+    },
+    "capability_skips": {
+      "const": [
+        "real_model_request",
+        "graphical_shell"
+      ]
+    },
+    "host_lock_policy": {
+      "const": "dsh-core/v1"
+    },
+    "host_driver_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "host_lock_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "desktop"
+      ],
+      "properties": {
+        "desktop": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "desktop_runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_sha256",
+        "header_sha256",
+        "metadata_sha256",
+        "host_version",
+        "desktop_version",
+        "payload_file_count"
+      ],
+      "properties": {
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "header_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "metadata_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "host_version": {
+          "type": "string"
+        },
+        "desktop_version": {
+          "type": "string"
+        },
+        "payload_file_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "desktop_noop_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "single_package",
+        "multi_package",
+        "modules_format"
+      ],
+      "properties": {
+        "schema": {
+          "const": "dsh-desktop-noop/v2"
+        },
+        "single_package": {
+          "const": "all_tracked_bytes_and_package_tree"
+        },
+        "multi_package": {
+          "const": "only_modules_json_object_key_order"
+        },
+        "modules_format": {
+          "const": "pnpm_json_indent_2_no_duplicate_keys"
+        }
+      }
+    }
+  }
+}
