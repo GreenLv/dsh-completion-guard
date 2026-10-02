@@ -2,7 +2,9 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
-## 0.8.2: DSH >=0.2.0-rc.2 and official Desktop
+## 0.8.2–0.8.3: DSH >=0.2.0-rc.2 and official Desktop
+
+0.8.3 retains the host admission and Desktop support introduced in 0.8.2. Each release still requires its own artifact acceptance.
 
 Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.2`, with no upper limit. `0.2.0-rc.1` keeps its recorded-evidence row but is refused as below the floor. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.
 
@@ -22,7 +24,9 @@ The lock binds the canonical archive, signed header, runtime manifest and metada
 
 `hostLockProfile: "desktop"` is preserved through composition and readback. Guard refuses Desktop restart with `host_capability_request_unsupported`; the graphical app owns its lifecycle. Exact-artifact backend acceptance, graphical-shell acceptance and real-model behavior are separate gates. Their results belong to the matching Release annexes.
 
-### 0.8.2 中文说明
+### 0.8.2–0.8.3 中文说明
+
+0.8.3 保留 0.8.2 的宿主准入范围与 Desktop 支持；各版本仍须独立核对制品验收结果。
 
 0.8.2 延续 0.8.x 的任务、证书与数据协议，主要适配 DSH RC.2、增加 Desktop 宿主锁并修复退出证据判定。最低 DSH 版本升至 `0.2.0-rc.2`；请先升级宿主，再安装 Guard、重新注入锁并回读。版本准入没有上限，但版本号相符仍不足以证明实现兼容。Cordis 的独立要求为 `>=4.0.4`。
 
@@ -188,7 +192,7 @@ managers therefore see the same two exact host releases as the host-lock
 registry; neither an unregistered stable release nor a future version is
 implicitly admitted.
 
-That historical artifact retained exact `0.1.5-rc.1` development pins. The current build pins DSH `0.2.0-rc.1` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
+That historical artifact retained exact `0.1.5-rc.1` development pins. The current 0.8.3 build pins DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
 above and are not part of the 0.5.2 contract.
 
 ## Terminal outcome contract

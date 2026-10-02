@@ -1,6 +1,6 @@
 # Upgrading the core host lock
 
-Version 0.8.2 requires DSH `>=0.2.0-rc.2` and qualified Cordis `>=4.0.4`. Upgrade order and what each step produces:
+Version 0.8.3 requires DSH `>=0.2.0-rc.2` and qualified Cordis `>=4.0.4`. Upgrade order and what each step produces:
 
 1. Stop the host, upgrade DSH to `0.2.0-rc.2` or a later version, then install this Guard version.
 2. Rebuild the host lock for each Guard profile by running `inspect`, `inject` and `verify-dump` from an accepted package or matching source checkout:
@@ -81,7 +81,7 @@ certificate authority — completion certificates, mutation authorization,
 release pre-effect decisions and Goal/Stop boundaries — validates the lock
 freshly at the moment of its own decision.
 
-Version 0.8.2 registers `dsh-0.2.0-rc.2-core-v1` as the audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
+Version 0.8.3 registers `dsh-0.2.0-rc.2-core-v1` as the audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
 The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
@@ -100,14 +100,14 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.2.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.8.3.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 ## Official Desktop profile
 
 Stop the Desktop app before installing or rebuilding its lock. Use the CLI carrier shipped with that app: `Contents/Resources/runtime/cli/bin/dsh` on macOS, or `resources\runtime\cli\bin\dsh.cmd` in the Windows installation. A separately installed `dsh` CLI cannot manage the reserved Desktop profile.
 
-Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.8.2`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
+Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.8.3`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
 
 ```sh
 DSH_DESKTOP_ASAR=/absolute/path/to/DeepSeek-Harness.app/Contents/Resources/app.asar
@@ -154,7 +154,7 @@ exact artifact and platform; publication is recorded on its GitHub Release.
 
 ## Historical 0.5.1 evidence
 
-Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.2.
+Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.8.3.
 
 ## Rebinding compatible package versions
 
