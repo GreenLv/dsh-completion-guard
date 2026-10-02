@@ -53,11 +53,27 @@ function ensureRoot(root: string): void {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('private_ledger_root_unsafe')
 }
 function openRegular(path: string, flags: number, mode = 0o600): number {
+  // Windows does not expose O_NOFOLLOW. Reject an existing link before open,
+  // then verify the opened file against the current directory entry before
+  // reading or writing through the descriptor.
+  try {
+    const entry = lstatSync(path)
+    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error('private_ledger_file_unsafe')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
   const fd = openSync(path, flags | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW), mode)
-  const stat = fstatSync(fd)
-  if (!stat.isFile()) { closeSync(fd); throw new Error('private_ledger_file_unsafe') }
-  if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) fchmodSync(fd, 0o600)
-  return fd
+  try {
+    const stat = fstatSync(fd)
+    const entry = lstatSync(path)
+    if (!stat.isFile() || !entry.isFile() || entry.isSymbolicLink()
+      || stat.dev !== entry.dev || stat.ino !== entry.ino) throw new Error('private_ledger_file_unsafe')
+    if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) fchmodSync(fd, 0o600)
+    return fd
+  } catch (error) {
+    closeSync(fd)
+    throw error
+  }
 }
 function writeAll(fd: number, text: string): void {
   const bytes = Buffer.from(text); let offset = 0

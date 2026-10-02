@@ -442,6 +442,7 @@ it('refuses to write the ledger through a symlinked arbitration log', () => {
       rmSync(join(root, 'arbitration.log'), { force: true })
       symlinkSync(join(outside, 'target'), join(root, 'arbitration.log'))
       expect(appendPrivateLedger(root, context, 'restart_intent', { resolutionCallId: 'c3', serviceId: 's', preGeneration: 'g' })).toBe(false)
+      expect(readFileSync(join(outside, 'target'), 'utf8')).toBe('')
     } finally {
       rmSync(outside, { recursive: true, force: true })
     }

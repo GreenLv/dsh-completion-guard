@@ -1,3 +1,4 @@
 tests/fixtures/conformance/** text eol=lf
+tests/helpers/baseline-oracle/** text eol=lf
 src/core-v2/*.json text eol=lf
 dist/** text eol=lf

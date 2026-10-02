@@ -5621,14 +5621,23 @@ function ensureRoot(root) {
 	if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("private_ledger_root_unsafe");
 }
 function openRegular(path, flags, mode = 384) {
-	const fd = openSync(path, flags | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW), mode);
-	const stat = fstatSync(fd);
-	if (!stat.isFile()) {
-		closeSync(fd);
-		throw new Error("private_ledger_file_unsafe");
+	try {
+		const entry = lstatSync(path);
+		if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("private_ledger_file_unsafe");
+	} catch (error) {
+		if (error.code !== "ENOENT") throw error;
 	}
-	if (process.platform !== "win32" && (stat.mode & 63) !== 0) fchmodSync(fd, 384);
-	return fd;
+	const fd = openSync(path, flags | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW), mode);
+	try {
+		const stat = fstatSync(fd);
+		const entry = lstatSync(path);
+		if (!stat.isFile() || !entry.isFile() || entry.isSymbolicLink() || stat.dev !== entry.dev || stat.ino !== entry.ino) throw new Error("private_ledger_file_unsafe");
+		if (process.platform !== "win32" && (stat.mode & 63) !== 0) fchmodSync(fd, 384);
+		return fd;
+	} catch (error) {
+		closeSync(fd);
+		throw error;
+	}
 }
 function writeAll(fd, text) {
 	const bytes = Buffer.from(text);
