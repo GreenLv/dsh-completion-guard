@@ -15,6 +15,8 @@ function capture(text: string, cwd = '/work/parent') {
 describe('explicit foreground test scope', () => {
   it.each([
     ['Run pnpm test in /work/parent/child.', '/work/parent/child'],
+    ['Run npm test in /work/child before finishing.', '/work/child'],
+    ['Run npm test in "/work/child" before finishing.', '/work/child'],
     ['In /work/child, run pnpm test.', '/work/child'],
     ['运行测试，在 /work/child。', '/work/child'],
     ['Run pnpm test within "/work/a directory".', '/work/a directory'],
@@ -37,7 +39,7 @@ describe('explicit foreground test scope', () => {
     expect(item.requestedTarget?.scope).toBeUndefined()
   })
 
-  it.each(['Run pnpm test.', 'Run pnpm test in the workspace.', 'Run pnpm test in this workspace.', 'In this workspace, run npm test.', '现在运行测试。'])('preserves implicit workspace scope: %s', root => {
+  it.each(['Run pnpm test.', 'Run pnpm test in the workspace.', 'Run pnpm test in this workspace.', 'Run npm test in this workspace before finishing.', 'In this workspace, run npm test.', '现在运行测试。'])('preserves implicit workspace scope: %s', root => {
     expect(capture(root).requestedTarget?.scope).toBe('/work/parent')
   })
 })

@@ -927,8 +927,9 @@ function insertItems(
       const location = frontedTest
         ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment.body)
         : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment.body)
-      if (location && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace[.!?]?$/iu.test(location[1]!)) {
-        const raw = location[1]!.replace(/[.!?。！？]$/, '').trim()
+      const locationText = location?.[1]?.replace(/[.!?。！？]$/, '').trim().replace(/\s+before\s+finishing$/iu, '').trim()
+      if (locationText && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace$/iu.test(locationText)) {
+        const raw = locationText
         const quoted = /^(["'`])([^"'`]+)\1$/u.exec(raw)
         const target = quoted?.[2] ?? (/^[^\s"'`]+$/u.test(raw) ? raw : undefined)
         const resolved = target && rootLocatorFlavor(target) && !/(?:^|[\\/])package\.json$/iu.test(target)

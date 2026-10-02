@@ -22663,9 +22663,9 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		if (span) coveredSpans += 1;
 		const frontedTest = segment.interpretation.fingerprint.startsWith("v6-locative:") && /^\s*(?:in|within)\s+.+?[,，]\s*(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?:\s|[.!?]|$)/iu.test(segment.body);
 		if (segment.interpretation.fingerprint.startsWith("v6-test:") || frontedTest) {
-			const location = frontedTest ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment.body) : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment.body);
-			if (location && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace[.!?]?$/iu.test(location[1])) {
-				const raw = location[1].replace(/[.!?。！？]$/, "").trim();
+			const locationText = (frontedTest ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment.body) : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment.body))?.[1]?.replace(/[.!?。！？]$/, "").trim().replace(/\s+before\s+finishing$/iu, "").trim();
+			if (locationText && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace$/iu.test(locationText)) {
+				const raw = locationText;
 				const target = /^(["'`])([^"'`]+)\1$/u.exec(raw)?.[2] ?? (/^[^\s"'`]+$/u.test(raw) ? raw : void 0);
 				const resolved = target && rootLocatorFlavor(target) && !/(?:^|[\\/])package\.json$/iu.test(target);
 				const item = insert(projection, segment, sourceMessageId, resolved ? target : "scope", "scope", unitId, provenance ? {
