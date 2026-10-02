@@ -112,9 +112,9 @@ export function firstStepGuidance(policy: 'standard' | 'strict' | 'release' = 's
 }
 export const FIRST_STEP_GUIDANCE: string = firstStepGuidance('standard')
 export function firstStepGuidanceV6(policy: 'standard' | 'strict' | 'release' = 'standard'): string {
-  return 'Context Guard records requirements and verifies completion from persisted host tool results and independent readback. Run ordinary edits, tests, and Git work with host tools; use read-only Guard observers and context_guard_checkpoint when a requirement needs certified completion. Older Guard action and evidence records remain historical and do not authorize or certify current ordinary work.'
-    + (policy === 'strict' ? ' Explicit visual or complete-scope proof still requires a real readback.' : '')
-    + ' Goal completion protection applies only after explicit /context-guard on adoption; an adopted release contract keeps its separate release checks.'
+  return 'Context Guard verifies requirements from persisted host results and independent readback. Use host tools for ordinary edits, tests and Git; read-only Guard observers and context_guard_checkpoint provide required certification. Older Guard action/evidence records are historical: they neither authorize nor certify current work.'
+    + (policy === 'strict' ? ' Explicit visual or complete-scope proof requires real readback.' : '')
+    + ' Goal protection requires explicit /context-guard on adoption; adopted releases keep separate checks.'
 }
 /**
  * Lifecycle phase derived from durable facts. `enabled` is the log-derived

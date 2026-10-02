@@ -1,3 +1,4 @@
+import { ParseCache } from './parse-cache.js'
 import { normalizeClause, sanitizeClauseText, sha256 } from './canonicalize.js'
 import { classifyTaskIntent } from './conversation.js'
 import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
@@ -839,7 +840,14 @@ export interface ClauseSegment {
   /** The one interpretation this segment came from; never re-derived downstream. */
   interpretation: ScopeInterpretation
 }
-const clauseSegmentCache = new Map<string, ClauseSegment[]>()
+const clauseSegmentCache = new ParseCache<ClauseSegment[]>(8 * 1024 * 1024)
+
+// ScopeInterpretation and qualification contain scalars; paths is the only
+// nested array. Keep cache ownership private even on the first miss.
+function copySegments(segments: ClauseSegment[]): ClauseSegment[] {
+  return segments.map(segment => ({ ...segment, paths: [...segment.paths],
+    interpretation: { ...segment.interpretation, qualification: { ...segment.interpretation.qualification } } }))
+}
 
 /**
  * CG-083-PERF02 (profile-guided): segmentClauses is a pure parse of the text,
@@ -850,15 +858,14 @@ const clauseSegmentCache = new Map<string, ClauseSegment[]>()
  * trust cache. Options other than the default bypass the cache.
  */
 export function segmentClauses(text: string, options: InterpretOptions = {}): ClauseSegment[] {
-  if (Object.keys(options).length > 0) {
-    return segmentClausesUncached(text, options)
+  if (Reflect.ownKeys(options).length > 0) {
+    return copySegments(segmentClausesUncached(text, options))
   }
   const cached = clauseSegmentCache.get(text)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) return copySegments(cached)
   const segments = segmentClausesUncached(text)
-  if (clauseSegmentCache.size > 4096) clauseSegmentCache.clear()
-  clauseSegmentCache.set(text, segments)
-  return segments
+  clauseSegmentCache.set(text, copySegments(segments), JSON.stringify(segments).length * 2)
+  return copySegments(segments)
 }
 
 function segmentClausesUncached(text: string, options: InterpretOptions = {}): ClauseSegment[] {

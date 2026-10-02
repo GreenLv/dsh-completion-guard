@@ -126,7 +126,7 @@ function discoveryItemIds(p: GuardProjection): string[] {
 export function createPrepareTool(options: PrepareToolOptions): ToolDefinition {
   return defineTool({
     name: 'context_guard_prepare',
-    description: 'Read-only diagnosis of open contract items. Ordinary changes use native host tools and observed facts; this tool never grants execution permission. Omit item_id for a paginated item list.',
+    description: 'Read-only contract diagnosis; grants no permission. Use host tools for ordinary work. Omit item_id to list items; page_cursor continues.',
     parameters: {
       item_id: { type: 'string' },
       item_revision: { type: 'number' },

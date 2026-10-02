@@ -6,7 +6,7 @@ import { rebindResponse, type RebindArgs } from '../domain/rebind.js'
 export function createRebindTool(getProjection: () => GuardProjection | undefined, prepare: () => Promise<boolean>): ToolDefinition {
   return defineTool({
     name: 'context_guard_rebind',
-    description: 'Propose an exact source-clause partition, query, or withdraw it. Only a durable root-user confirmation can replace the contract; no execution authority is added.',
+    description: 'Propose, query or withdraw an exact source-clause partition. Replacement requires durable root-user confirmation; adds no execution authority.',
     parameters: {
       operation: { type: 'string', required: true, enum: ['propose', 'query', 'withdraw'] },
       item_id: { type: 'string' }, proposal_id: { type: 'string' },

@@ -1059,8 +1059,8 @@ function insertItems(
   // RELEASES the reservation it matches: the wait a trusted input satisfies is
   // superseded, so no stale waiting obligation is left behind. The release is
   // derived from the durable message, never from model text.
-  for (const [id, item] of projection.items) {
-    if (!isFresh.has(id)) continue
+  for (const item of freshItems) {
+    const id = item.id
     if (item.kind !== 'requirement' || item.waitAuthorization || item.authorityDisposition === 'conditional_wait') continue
     // Only a genuinely executable instruction releases a reservation. 0.6.1
     // (W060-02): a narrative or informational scope that merely names the same
@@ -1085,8 +1085,8 @@ function insertItems(
   // legacy items, and a refined duty that would change the action never
   // qualify, so nothing unrelated is deleted by similar wording.
   if (clarificationText) {
-    for (const [id, item] of projection.items) {
-      if (!isFresh.has(id)) continue
+    for (const item of freshItems) {
+      const id = item.id
       if (item.kind === 'prohibition' || item.status !== 'pending') continue
       if (item.authorityDisposition !== 'executable_now') continue
       if (!item.semanticAction || item.semanticAction === 'generic_run') continue
@@ -1116,18 +1116,16 @@ function insertItems(
   // repository on ONE clause, and the other clause of the same message inherits
   // it, so each newly resolved obligation can unblock the next.
   for (let round = 0; round < 8; round += 1) {
-    const unresolved = [...projection.items]
-      .filter(([id, item]) => isFresh.has(id) && item.targetSource?.kind === 'environment_default')
+    const unresolved = freshItems.filter(item => item.targetSource?.kind === 'environment_default')
     if (unresolved.length === 0) break
     let resolvedAny = false
-    for (const [, item] of unresolved) {
+    for (const item of unresolved) {
       resolveInheritedGitTarget(projection, item)
       if (item.targetSource?.kind === 'unit_inherited') resolvedAny = true
     }
     if (!resolvedAny) break
   }
-  for (const [id, item] of projection.items) {
-    if (!isFresh.has(id)) continue
+  for (const item of freshItems) {
     if (legacy) {
       const deterministicRebind = legacyAuthorityProven
         && item.semanticAction !== undefined && item.semanticAction !== 'generic_run'

@@ -1,3 +1,4 @@
+import { ParseCache } from './parse-cache.js'
 import { normalizeClause } from './canonicalize.js'
 import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
 import { isStatefulAction, semanticActionFromText, type StatefulAction } from './protocol-manifest.js'
@@ -144,15 +145,13 @@ export function kindOfScope(directive: DirectiveClass, body = ''): GuardItemKind
  * Backticks are Markdown emphasis, but they are also how a log line or a
  * command is quoted — and a quoted command is data, never an order.
  */
-const MASK_CACHE = new Map<string, string>()
-const MASK_CACHE_LIMIT = 64
+const MASK_CACHE = new ParseCache<string>(4 * 1024 * 1024)
 
 export function maskCodeSpans(text: string): string {
   const cached = MASK_CACHE.get(text)
   if (cached !== undefined) return cached
   const masked = computeMaskedSpans(text)
-  if (MASK_CACHE.size >= MASK_CACHE_LIMIT) MASK_CACHE.clear()
-  MASK_CACHE.set(text, masked)
+  MASK_CACHE.set(text, masked, masked.length * 2)
   return masked
 }
 
@@ -633,13 +632,12 @@ function quotedSpans(text: string): { masked: string; inside: boolean[] } {
  * over immutable strings, not a trust cache; any change of text produces a
  * different key.
  */
-const quotedMaskCache = new Map<string, string>()
+const quotedMaskCache = new ParseCache<string>(4 * 1024 * 1024)
 export function maskQuotedSpans(text: string): string {
   const cached = quotedMaskCache.get(text)
   if (cached !== undefined) return cached
   const masked = quotedSpans(text).masked
-  if (quotedMaskCache.size > 4096) quotedMaskCache.clear()
-  quotedMaskCache.set(text, masked)
+  quotedMaskCache.set(text, masked, masked.length * 2)
   return masked
 }
 

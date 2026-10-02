@@ -90,7 +90,7 @@ function itemExtent(spans: ReadonlyArray<{ start: number; end: number }>): { sta
 export function createInterpretTool(options: InterpretToolOptions): ToolDefinition {
   return defineTool({
     name: 'context_guard_interpret',
-    description: 'Record the interpretation of one unresolved obligation: pass the item ID from context_guard_prepare plus the partition of its input spans you read as information (information_spans) and the sub-spans you could not resolve (unknown_spans); for an attached asset, the partition is unnecessary. Contract bookkeeping only — performs no action, grants no authority. Information sub-spans close when this turn\'s host-confirmed final answer is delivered; unknown sub-spans remain pending obligations. Correctness is never certified.',
+    description: 'Record unresolved input: use an item ID from context_guard_prepare and partition information_spans/unknown_spans (unneeded for attached assets). Bookkeeping only; no action or authority. Information closes on this turn\'s host-confirmed final answer; unknown stays pending. Correctness stays uncertified.',
     parameters: {
       item_id: { type: 'string', required: true },
       information_spans: { type: 'array', items: { type: 'object', additionalProperties: true } },

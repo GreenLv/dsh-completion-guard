@@ -340,6 +340,18 @@ function foldRootControls(snapshot: Row, sources: Map<string, Row>, requirements
   return { states, errors, represented, resumed }
 }
 
+/** Stable buckets are local to one validated snapshot; rows stay in source order. */
+function bySource(rows: Row[]): Map<string, Row[]> {
+  const result = new Map<string, Row[]>()
+  for (const row of rows) {
+    const key = row.source.source_id as string
+    const bucket = result.get(key)
+    if (bucket) bucket.push(row)
+    else result.set(key, [row])
+  }
+  return result
+}
+
 /** Pure, host-neutral core/v2 projection. The adapter owns event trust and durability. */
 export function projectCoreV2(snapshot: Row): Row {
   validateCoreSnapshot(snapshot, observationSchema as Row)
@@ -385,10 +397,11 @@ export function projectCoreV2(snapshot: Row): Row {
     ...listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark
       && units.has(sources.get(control.source.source_id)?.unit)).map((control) => control.source.source_id as string),
   ])
+  const coverageBySource = bySource(listed(snapshot.coverage))
   const coverageErrors: string[] = [], unknownCoverage: string[] = []
   for (const [key, source] of sources) {
     if (source.kind !== 'root' || !activeRootIds.has(key)) continue
-    const spans = listed(snapshot.coverage).filter((c) => c.source.source_id === key).sort((a,b) => a.source.start-b.source.start)
+    const spans = (coverageBySource.get(key) ?? []).slice().sort((a,b) => a.source.start-b.source.start)
     let cursor = 0
     for (const coverage of spans) {
       const span = coverage.source
@@ -446,14 +459,15 @@ export function projectCoreV2(snapshot: Row): Row {
     && req.superseded_at_seq <= watermark && sourceMatches(req.source, sources, true)))
   const structuralGap = (raw: Uint8Array, start: number, end: number): boolean =>
     Buffer.from(raw.subarray(start, end)).toString('utf8').replace(/^[ \t\r\n,，。.!?？；;：:、]+|[ \t\r\n,，。.!?？；;：:、]+$/gu, '').length > 0
+  const explainedBySource = bySource([...current.values(), ...historicalExplained.values()])
+  const controlsBySource = bySource(listed(snapshot.root_controls ?? []).filter(control => control.seq <= watermark
+    && sourceMatches(control.source, sources, true)))
   for (const coverage of listed(snapshot.coverage)) {
     const span = coverage.source, source = sources.get(span.source_id)
     if (!source || !units.has(source.unit) || coverage.kind !== 'interpreted') continue
     const covered: Array<[number, number]> = [
-      ...[...current.values(), ...historicalExplained.values()].filter((r) => r.source.source_id === span.source_id
-        && r.source.start < span.end && r.source.end > span.start).map((r): [number, number] => [r.source.start, r.source.end]),
-      ...listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark
-        && control.source.source_id === span.source_id && sourceMatches(control.source, sources, true))
+      ...(explainedBySource.get(span.source_id) ?? []).filter((r) => r.source.start < span.end && r.source.end > span.start).map((r): [number, number] => [r.source.start, r.source.end]),
+      ...(controlsBySource.get(span.source_id) ?? [])
         .map((control): [number, number] => [control.source.start, control.source.end]),
     ].sort((a,b)=>a[0]-b[0] || a[1]-b[1])
     let cursor=span.start

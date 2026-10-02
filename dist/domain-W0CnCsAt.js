@@ -10748,6 +10748,48 @@ function sanitizeUrl(value) {
 }
 
 //#endregion
+//#region src/domain/parse-cache.ts
+/** Pure parser storage only. Never store projections, evidence or authority. */
+var ParseCache = class {
+	entries = /* @__PURE__ */ new Map();
+	bytes = 0;
+	constructor(byteBudget, entryBudget = 32768) {
+		this.byteBudget = byteBudget;
+		this.entryBudget = entryBudget;
+	}
+	get(key) {
+		return this.entries.get(key)?.value;
+	}
+	set(key, value, valueBytes) {
+		const bytes$1 = key.length * 2 + valueBytes + 128;
+		if (bytes$1 > this.byteBudget) return;
+		const prior = this.entries.get(key);
+		if (prior) {
+			this.bytes -= prior.bytes;
+			this.entries.delete(key);
+		}
+		while (this.bytes + bytes$1 > this.byteBudget || this.entries.size >= this.entryBudget) {
+			const oldest = this.entries.keys().next().value;
+			if (oldest === void 0) break;
+			this.bytes -= this.entries.get(oldest).bytes;
+			this.entries.delete(oldest);
+		}
+		this.entries.set(key, {
+			value,
+			bytes: bytes$1
+		});
+		this.bytes += bytes$1;
+	}
+	/** Deterministic storage diagnostics, without exposing keys or parsed text. */
+	storage() {
+		return {
+			entries: this.entries.size,
+			bytes: this.bytes
+		};
+	}
+};
+
+//#endregion
 //#region src/domain/manifest.ts
 const COMMAND_SURFACE_MANIFEST = {
 	fileTools: [
@@ -10939,14 +10981,12 @@ function kindOfScope(directive, body = "") {
 * Backticks are Markdown emphasis, but they are also how a log line or a
 * command is quoted — and a quoted command is data, never an order.
 */
-const MASK_CACHE = /* @__PURE__ */ new Map();
-const MASK_CACHE_LIMIT = 64;
+const MASK_CACHE = new ParseCache(4 * 1024 * 1024);
 function maskCodeSpans(text) {
 	const cached = MASK_CACHE.get(text);
 	if (cached !== void 0) return cached;
 	const masked = computeMaskedSpans(text);
-	if (MASK_CACHE.size >= MASK_CACHE_LIMIT) MASK_CACHE.clear();
-	MASK_CACHE.set(text, masked);
+	MASK_CACHE.set(text, masked, masked.length * 2);
 	return masked;
 }
 function computeMaskedSpans(text) {
@@ -11358,13 +11398,12 @@ function quotedSpans(text) {
 * over immutable strings, not a trust cache; any change of text produces a
 * different key.
 */
-const quotedMaskCache = /* @__PURE__ */ new Map();
+const quotedMaskCache = new ParseCache(4 * 1024 * 1024);
 function maskQuotedSpans(text) {
 	const cached = quotedMaskCache.get(text);
 	if (cached !== void 0) return cached;
 	const masked = quotedSpans(text).masked;
-	if (quotedMaskCache.size > 4096) quotedMaskCache.clear();
-	quotedMaskCache.set(text, masked);
+	quotedMaskCache.set(text, masked, masked.length * 2);
 	return masked;
 }
 /** Whether the offset lies inside a quoted span. */
@@ -14295,7 +14334,17 @@ function extractArtifactPaths(text) {
 	}
 	return [...found];
 }
-const clauseSegmentCache = /* @__PURE__ */ new Map();
+const clauseSegmentCache = new ParseCache(8 * 1024 * 1024);
+function copySegments(segments) {
+	return segments.map((segment) => ({
+		...segment,
+		paths: [...segment.paths],
+		interpretation: {
+			...segment.interpretation,
+			qualification: { ...segment.interpretation.qualification }
+		}
+	}));
+}
 /**
 * CG-083-PERF02 (profile-guided): segmentClauses is a pure parse of the text,
 * and the v6 capture path asks the SAME strings many times (splitIndependent
@@ -14305,13 +14354,12 @@ const clauseSegmentCache = /* @__PURE__ */ new Map();
 * trust cache. Options other than the default bypass the cache.
 */
 function segmentClauses(text, options = {}) {
-	if (Object.keys(options).length > 0) return segmentClausesUncached(text, options);
+	if (Reflect.ownKeys(options).length > 0) return copySegments(segmentClausesUncached(text, options));
 	const cached = clauseSegmentCache.get(text);
-	if (cached !== void 0) return cached;
+	if (cached !== void 0) return copySegments(cached);
 	const segments = segmentClausesUncached(text);
-	if (clauseSegmentCache.size > 4096) clauseSegmentCache.clear();
-	clauseSegmentCache.set(text, segments);
-	return segments;
+	clauseSegmentCache.set(text, copySegments(segments), JSON.stringify(segments).length * 2);
+	return copySegments(segments);
 }
 function segmentClausesUncached(text, options = {}) {
 	const normalized = normalizeClause(text);
@@ -22784,8 +22832,8 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			};
 		}
 	}
-	for (const [id, item] of projection.items) {
-		if (!isFresh.has(id)) continue;
+	for (const item of freshItems) {
+		const id = item.id;
 		if (item.kind !== "requirement" || item.waitAuthorization || item.authorityDisposition === "conditional_wait") continue;
 		if (item.authorityDisposition !== void 0 && item.authorityDisposition !== "executable_now") continue;
 		for (const [otherId, other] of projection.items) {
@@ -22799,8 +22847,8 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			break;
 		}
 	}
-	if (clarificationText) for (const [id, item] of projection.items) {
-		if (!isFresh.has(id)) continue;
+	if (clarificationText) for (const item of freshItems) {
+		const id = item.id;
 		if (item.kind === "prohibition" || item.status !== "pending") continue;
 		if (item.authorityDisposition !== "executable_now") continue;
 		if (!item.semanticAction || item.semanticAction === "generic_run") continue;
@@ -22818,27 +22866,24 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		}
 	}
 	for (let round = 0; round < 8; round += 1) {
-		const unresolved = [...projection.items].filter(([id, item]) => isFresh.has(id) && item.targetSource?.kind === "environment_default");
+		const unresolved = freshItems.filter((item) => item.targetSource?.kind === "environment_default");
 		if (unresolved.length === 0) break;
 		let resolvedAny = false;
-		for (const [, item] of unresolved) {
+		for (const item of unresolved) {
 			resolveInheritedGitTarget(projection, item);
 			if (item.targetSource?.kind === "unit_inherited") resolvedAny = true;
 		}
 		if (!resolvedAny) break;
 	}
-	for (const [id, item] of projection.items) {
-		if (!isFresh.has(id)) continue;
-		if (legacy) if (legacyAuthorityProven && item.semanticAction !== void 0 && item.semanticAction !== "generic_run" && item.targetCaptureStatus === "resolved") {
-			item.authority = authority;
-			item.legacyFlags = void 0;
-		} else {
-			item.authority = "legacy_authority_unclassified";
-			item.semanticAction = "generic_run";
-			item.legacyFlags = ["legacy_generic_run", "legacy_authority_unclassified"];
-		}
-		else item.authority = authority;
+	for (const item of freshItems) if (legacy) if (legacyAuthorityProven && item.semanticAction !== void 0 && item.semanticAction !== "generic_run" && item.targetCaptureStatus === "resolved") {
+		item.authority = authority;
+		item.legacyFlags = void 0;
+	} else {
+		item.authority = "legacy_authority_unclassified";
+		item.semanticAction = "generic_run";
+		item.legacyFlags = ["legacy_generic_run", "legacy_authority_unclassified"];
 	}
+	else item.authority = authority;
 	return coveredSpans;
 }
 /** The 0.6.3 eligibility check identity for a legacy record's own reading. */
@@ -25191,6 +25236,17 @@ function foldRootControls(snapshot, sources, requirements, facts, units, waterma
 		resumed
 	};
 }
+/** Stable buckets are local to one validated snapshot; rows stay in source order. */
+function bySource(rows) {
+	const result = /* @__PURE__ */ new Map();
+	for (const row$3 of rows) {
+		const key = row$3.source.source_id;
+		const bucket = result.get(key);
+		if (bucket) bucket.push(row$3);
+		else result.set(key, [row$3]);
+	}
+	return result;
+}
 /** Pure, host-neutral core/v2 projection. The adapter owns event trust and durability. */
 function projectCoreV2(snapshot) {
 	validateCoreSnapshot(snapshot, observation_schema_default);
@@ -25239,10 +25295,11 @@ function projectCoreV2(snapshot) {
 		...[...requirements.values()].filter((req) => units.has(req.unit)).map((req) => req.source.source_id),
 		...listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark && units.has(sources.get(control.source.source_id)?.unit)).map((control) => control.source.source_id)
 	]);
+	const coverageBySource = bySource(listed(snapshot.coverage));
 	const coverageErrors = [], unknownCoverage = [];
 	for (const [key, source] of sources) {
 		if (source.kind !== "root" || !activeRootIds.has(key)) continue;
-		const spans = listed(snapshot.coverage).filter((c) => c.source.source_id === key).sort((a, b) => a.source.start - b.source.start);
+		const spans = (coverageBySource.get(key) ?? []).slice().sort((a, b) => a.source.start - b.source.start);
 		let cursor = 0;
 		for (const coverage of spans) {
 			const span = coverage.source;
@@ -25306,10 +25363,12 @@ function projectCoreV2(snapshot) {
 	}
 	const historicalExplained = new Map([...requirements].filter(([, req]) => units.has(req.unit) && req.status === "superseded" && req.superseded_at_seq !== void 0 && req.superseded_at_seq <= watermark && sourceMatches(req.source, sources, true)));
 	const structuralGap = (raw, start, end) => Buffer.from(raw.subarray(start, end)).toString("utf8").replace(/^[ \t\r\n,，。.!?？；;：:、]+|[ \t\r\n,，。.!?？；;：:、]+$/gu, "").length > 0;
+	const explainedBySource = bySource([...current.values(), ...historicalExplained.values()]);
+	const controlsBySource = bySource(listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark && sourceMatches(control.source, sources, true)));
 	for (const coverage of listed(snapshot.coverage)) {
 		const span = coverage.source, source = sources.get(span.source_id);
 		if (!source || !units.has(source.unit) || coverage.kind !== "interpreted") continue;
-		const covered = [...[...current.values(), ...historicalExplained.values()].filter((r) => r.source.source_id === span.source_id && r.source.start < span.end && r.source.end > span.start).map((r) => [r.source.start, r.source.end]), ...listed(snapshot.root_controls ?? []).filter((control) => control.seq <= watermark && control.source.source_id === span.source_id && sourceMatches(control.source, sources, true)).map((control) => [control.source.start, control.source.end])].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+		const covered = [...(explainedBySource.get(span.source_id) ?? []).filter((r) => r.source.start < span.end && r.source.end > span.start).map((r) => [r.source.start, r.source.end]), ...(controlsBySource.get(span.source_id) ?? []).map((control) => [control.source.start, control.source.end])].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 		let cursor = span.start;
 		const raw = bytes(source.text);
 		for (const [start, end] of covered) {
@@ -26087,6 +26146,12 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			result
 		});
 	}
+	const basesByItem = /* @__PURE__ */ new Map();
+	for (const base of currentActionBases(projection, false)) {
+		const bucket = basesByItem.get(base.itemId);
+		if (bucket) bucket.push(base);
+		else basesByItem.set(base.itemId, [base]);
+	}
 	const attached = /* @__PURE__ */ new Set();
 	for (const item of currentItems) {
 		const root = rootBySeq.get(sourceSeq(item) ?? -1);
@@ -26559,7 +26624,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			});
 			if (!fileReadback) attached.add(evidence.id);
 		}
-		for (const base of currentActionBases(projection, false).filter((base$1) => base$1.itemId === item.id)) {
+		for (const base of basesByItem.get(item.id) ?? []) {
 			const ready = facts.filter((fact) => fact.requirement_id === item.id && fact.kind === "readiness" && fact.outcome === "success").map((fact) => fact.id);
 			if (!ready.length) continue;
 			actions.push({
@@ -26715,7 +26780,7 @@ function firstStepGuidance(policy = "standard") {
 }
 const FIRST_STEP_GUIDANCE = firstStepGuidance("standard");
 function firstStepGuidanceV6(policy = "standard") {
-	return "Context Guard records requirements and verifies completion from persisted host tool results and independent readback. Run ordinary edits, tests, and Git work with host tools; use read-only Guard observers and context_guard_checkpoint when a requirement needs certified completion. Older Guard action and evidence records remain historical and do not authorize or certify current ordinary work." + (policy === "strict" ? " Explicit visual or complete-scope proof still requires a real readback." : "") + " Goal completion protection applies only after explicit /context-guard on adoption; an adopted release contract keeps its separate release checks.";
+	return "Context Guard verifies requirements from persisted host results and independent readback. Use host tools for ordinary edits, tests and Git; read-only Guard observers and context_guard_checkpoint provide required certification. Older Guard action/evidence records are historical: they neither authorize nor certify current work." + (policy === "strict" ? " Explicit visual or complete-scope proof requires real readback." : "") + " Goal protection requires explicit /context-guard on adoption; adopted releases keep separate checks.";
 }
 /**
 * Lifecycle phase derived from durable facts. `enabled` is the log-derived

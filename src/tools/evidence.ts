@@ -1267,7 +1267,7 @@ export function createActionTool(options: EvidenceToolRoots = {}): ToolDefinitio
   const roots = normalizedRoots(options)
   return defineTool({
     name: ACTION_TOOL,
-    description: 'Compatibility entry for older sessions. Ordinary mutations return a migration diagnosis without side effects; only an explicitly adopted registry publication can use the controlled release path.',
+    description: 'Legacy compatibility: ordinary mutations return migration diagnostics without effects. Only explicitly adopted registry publication uses the controlled path.',
     parameters: {
       semantic_action: { type: 'string', required: true, enum: ['install', 'apply', 'restart', 'publish', 'commit', 'push', 'pull', 'fetch'] },
       resolution_call_id: { type: 'string', required: true },

@@ -405,6 +405,12 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
       || row(call.data).step !== row(result.data).step) continue
     sourceByCall.set(id, { call, result })
   }
+  const basesByItem = new Map<string, ReturnType<typeof currentActionBases>>()
+  for (const base of currentActionBases(projection, false)) {
+    const bucket = basesByItem.get(base.itemId)
+    if (bucket) bucket.push(base)
+    else basesByItem.set(base.itemId, [base])
+  }
   const attached = new Set<string>()
   for (const item of currentItems) {
     const root = rootBySeq.get(sourceSeq(item) ?? -1)
@@ -837,7 +843,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         outcome, operation_id: null, requirement_id: item.id, condition_id: null, invalidates: [] })
       if (!fileReadback) attached.add(evidence.id)
     }
-    for (const base of currentActionBases(projection, false).filter((base) => base.itemId === item.id)) {
+    for (const base of basesByItem.get(item.id) ?? []) {
       const ready = facts.filter((fact) => fact.requirement_id === item.id && fact.kind === 'readiness' && fact.outcome === 'success').map((fact) => fact.id)
       if (!ready.length) continue
       actions.push({ schema: 'current-action-basis/v1', requirement_id: item.id, unit, revision: itemRevision,

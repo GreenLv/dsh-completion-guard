@@ -28,7 +28,7 @@ export function createNativeFileObserver(host: {
 }): ToolDefinition {
   return defineTool({
     name: 'context_guard_observe_file',
-    description: 'Read back the exact UTF-8 file after an already persisted native write or edit. This tool does not modify files or authorize the edit.',
+    description: 'Read back exact UTF-8 bytes after a persisted native write/edit. Does not modify files or authorize edits.',
     parameters: { effect_call_id: { type: 'string', required: true } },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {

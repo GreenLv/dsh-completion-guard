@@ -41,7 +41,7 @@ export const RELEASE_TOOL = 'context_guard_release'
 export function createReleaseTool(options: ReleaseToolOptions): ToolDefinition {
   return defineTool({
     name: RELEASE_TOOL,
-    description: 'Read the explicit release state, or reconcile a release attempt whose effect was unknown by reading back the external identity. This tool never re-sends a release.',
+    description: 'Read release state or reconcile an unknown effect through external identity readback. Never re-sends a release.',
     parameters: {
       operation: { type: 'string', required: true, enum: ['status', 'reconcile'] },
       contract_id: { type: 'string' },
