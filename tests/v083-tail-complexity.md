@@ -12,8 +12,8 @@ selection and pure parser storage, not the trust or completion contracts.
 | Clause and mask parse | Entire cache reset at entry threshold | Protect reused parses; evict probationary entries at storage/entry limits | Pollution, oversized admission, eviction, old capacity cliffs and option identity |
 | Model-facing text | Repeated descriptive prose | Shorter tool descriptions and v6 first guidance | Schema inventory and bilingual synthetic replay budgets; existing recovery/lifecycle suites |
 
-Parser caches bind exact immutable text, and nondefault options bypass storage,
-including nonenumerable/getter options. Clause callers receive independent
+Parser caches bind exact immutable text, and every explicit options object bypasses storage,
+including empty, inherited, nonenumerable and getter-bearing options. Clause callers receive independent
 arrays, paths, interpretation and qualification objects on hits and misses.
 The qualification singleton exposed by the old miss path cannot be modified
 through these returned records. Cache storage is capped at 8 MiB for clauses

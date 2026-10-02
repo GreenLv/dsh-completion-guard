@@ -39,11 +39,18 @@ it('nondefault, nonenumerable and getter options retain uncached semantics', () 
   segmentClauses(text)
   for (const options of [Object.freeze({ coordinationSplit: false }),
     Object.defineProperty({}, 'coordinationSplit', { value: false }),
-    Object.defineProperty({}, 'coordinationSplit', { get: () => false })]) {
+    Object.defineProperty({}, 'coordinationSplit', { get: () => false }),
+    Object.create({ coordinationSplit: false }),
+    Object.create(Object.defineProperty({}, 'coordinationSplit', { get: () => false }))]) {
     // Frozen oracle has an unsafe default-only cache for nonenumerable keys;
     // use a fresh enumerable option to obtain its actual parser result.
     expect(segmentClauses(text, options)).toEqual(oracleSegments(text, { coordinationSplit: false }))
   }
+  const mutable = { coordinationSplit: false }
+  expect(segmentClauses(text, mutable)).toEqual(oracleSegments(text, { coordinationSplit: false }))
+  mutable.coordinationSplit = true
+  expect(segmentClauses(text, mutable)).toEqual(oracleSegments(text, { coordinationSplit: true }))
+  expect(segmentClauses(text, Object.freeze({}))).toEqual(oracleSegments(text, { coordinationSplit: true }))
 })
 
 it('crosses old 64/4096 cliffs without whole-cache clearing or semantic drift', () => {

@@ -14378,11 +14378,12 @@ function copySegments(segments) {
 * and the v6 capture path asks the SAME strings many times (splitIndependent
 * re-parses left/right fragments per delimiter, the coordination and
 * explanation paths re-parse prefixes). Cache the parse result by exact input
-* and default options — a pure parse cache over immutable strings, not a
-* trust cache. Options other than the default bypass the cache.
+* and omitted options — a pure parse cache over immutable strings, not a
+* trust cache. Every explicit options object bypasses storage, including empty,
+* inherited and accessor-bearing objects; no enumeration can prove identity.
 */
-function segmentClauses(text, options = {}) {
-	if (Reflect.ownKeys(options).length > 0) return copySegments(segmentClausesUncached(text, options));
+function segmentClauses(text, options) {
+	if (options !== void 0) return copySegments(segmentClausesUncached(text, options));
 	const cached = clauseSegmentCache.get(text);
 	if (cached !== void 0) return copySegments(cached);
 	const segments = segmentClausesUncached(text);
