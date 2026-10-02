@@ -46,7 +46,7 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
   if (item_ids?.length) {
     rows.open_items = rows.open_items.filter(row => item_ids.includes(String(row.id)))
     rows.active_constraints = rows.active_constraints.filter(row => item_ids.includes(String(row.id)))
-    rows.rejected_bindings = rows.rejected_bindings.filter(row => item_ids.includes(String(row.item_id)))
+    rows.rejected_bindings = rows.rejected_bindings.filter(row => row.item_id === '*' || item_ids.includes(String(row.item_id)))
   }
   if (evidence_ids?.length) rows.available_evidence = rows.available_evidence.filter(row => evidence_ids.includes(String(row.id)))
   if (lane && offset > rows[lane].length) return invalid('invalid_cursor_offset')
@@ -59,7 +59,8 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
     let chunk = data.slice(detail_offset, detail_offset + 1600)
     while (size(chunk) > 8000) chunk = chunk.slice(0, -100)
     return { status: full.status, contract_revision: p.contractRevision, detail_id: lookup(detail_id), detail_offset, detail_chunk: chunk,
-      next_detail_offset: detail_offset + chunk.length < data.length ? detail_offset + chunk.length : null, snapshot: identity }
+      next_detail_offset: detail_offset + chunk.length < data.length ? detail_offset + chunk.length : null, snapshot: identity,
+      ...(full.signing_feedback ? { blockers: full.signing_feedback, certificate_status: 'not_issued' } : {}) }
   }
   const reasons = new Map<string, number>()
   for (const row of [...rows.open_items, ...rows.rejected_bindings]) {
@@ -75,6 +76,10 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
     output.current_actions = ((full.current_actions ?? []) as unknown[]).slice(0, 8)
     output.current_action_total = ((full.current_actions ?? []) as unknown[]).length
     output.certificate_status = 'not_requested'
+  }
+  if (full.signing_feedback) {
+    Object.assign(output.blockers as Record<string, unknown>, full.signing_feedback)
+    output.certificate_status = 'not_issued'
   }
   if (full.certificate) output.certificate = full.certificate
   // The presented proof's binding state is part of the answer, not a range
@@ -101,6 +106,7 @@ export function checkpointPage(p: GuardProjection, query: PageQuery, full: Recor
     return { id: String(row.id ?? row.item_id).slice(0, 128), reason_code: row.reason_code, certifiable: row.certifiable,
       source_item_id: row.source_item_id, revision: row.revision, kind: row.kind,
       semantic_action: row.semantic_action,
+      status: row.status, binding_status: row.binding_status,
       next_step: typeof row.next_step === 'string' ? row.next_step.slice(0, 240) : undefined,
       adapter_disposition: row.adapter_disposition,
       ...(row.binding_template !== undefined ? { binding_template: row.binding_template } : {}),

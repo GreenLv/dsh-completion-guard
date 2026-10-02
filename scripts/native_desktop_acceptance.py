@@ -32,6 +32,115 @@ DESKTOP_GATES = {
 }
 
 
+# Diagnostic capture is bounded and private; it never relaxes the hash gate.
+NOOP_CAPTURE_LIMIT = 4 * 1024 * 1024
+NOOP_FIELDS = frozenset(("hoistPattern", "included", "layoutVersion", "nodeLinker", "packageManager",
+                        "pendingBuilds", "prunedAt", "publicHoistPattern", "registries", "skipped",
+                        "storeDir", "virtualStoreDir", "virtualStoreDirMaxLength", "hoistedDependencies",
+                        "injectedDeps"))
+
+
+class StrictNoopFailure(RuntimeError):
+    diagnostic_code = "STRICT_SECOND_NOOP_MISMATCH"
+
+    def __init__(self, receipt: dict[str, Any]):
+        super().__init__("Desktop second install was not a strict no-op")
+        self.receipt = receipt
+
+
+def noop_snapshot(paths: list[Path], profile: Path) -> dict[str, bytes | None]:
+    captured = {}
+    for path in paths:
+        relative = path.relative_to(profile)
+        try:
+            # The explicitly selected profile is the trust boundary. System
+            # aliases above it (macOS /var, for example) are not redirects
+            # inside the fixture. Refuse every redirected descendant and escape.
+            descendants = (profile.joinpath(*relative.parts[:i]) for i in range(1, len(relative.parts) + 1))
+            safe = path.resolve().is_relative_to(profile.resolve()) and not any(
+                descendant.is_symlink() for descendant in descendants)
+            data = path.read_bytes() if safe and path.is_file() and path.stat().st_size <= NOOP_CAPTURE_LIMIT else None
+        except (OSError, RuntimeError):
+            data = None
+        captured[relative.as_posix()] = data
+    return captured
+
+
+def noop_difference(before: bytes, after: bytes, modules: bool = False) -> dict[str, Any]:
+    count, first, last = 0, None, None
+    for i, (left, right) in enumerate(zip(before, after)):
+        if left != right:
+            count += 1
+            first = i if first is None else first
+            last = i
+    tail = abs(len(before) - len(after))
+    receipt: dict[str, Any] = {"before_size": len(before), "after_size": len(after),
+        "different_byte_count": count + tail}
+    if count or tail:
+        receipt["first_difference_offset"] = first if first is not None else min(len(before), len(after))
+        receipt["last_difference_offset"] = max(last if last is not None else -1,
+                                                 max(len(before), len(after)) - 1 if tail else -1)
+    if modules:
+        import re
+        def blocks(data: bytes) -> dict[str, bytes]:
+            matches = list(re.finditer(rb"(?m)^([A-Za-z][A-Za-z0-9]*):", data))
+            return {match.group(1).decode("ascii"): data[match.start():matches[i + 1].start() if i + 1 < len(matches) else len(data)]
+                    for i, match in enumerate(matches)}
+        left, right = blocks(before), blocks(after)
+        changed = {key for key in left.keys() | right.keys() if left.get(key) != right.get(key)}
+        receipt["changed_top_level_fields"] = sorted(changed & NOOP_FIELDS)
+        receipt["other_changed_field_count"] = len(changed - NOOP_FIELDS)
+    return receipt
+
+
+def strict_noop_receipt(before: dict[str, str], after: dict[str, str],
+                        before_bytes: dict[str, bytes | None], after_bytes: dict[str, bytes | None],
+                        tree_before: str, tree_after: str, diagnostic: Path) -> dict[str, Any]:
+    rows = []
+    private = diagnostic.with_name(diagnostic.name + ".strict-noop-private")
+    changed = [name for name in before_bytes if before.get(Path(name).name) != after.get(Path(name).name)]
+    capture_status = "not_needed"
+    if changed:
+        try:
+            private.parent.mkdir(parents=True, exist_ok=True)
+            private.mkdir(mode=0o700, parents=False, exist_ok=False)
+            for index, name in enumerate(changed):
+                for phase, snapshots in (("before", before_bytes), ("after", after_bytes)):
+                    data = snapshots[name]
+                    if data is not None:
+                        fd = os.open(private / f"{index}-{phase}.bin", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                        with os.fdopen(fd, "wb") as output:
+                            # Local raw context is redacted before persistence; exact hashes
+                            # and offsets above still describe the original in-memory bytes.
+                            import re
+                            redacted = re.sub(rb"(?im)^([^\r\n]*(?:token|password|secret|_auth|credential)[^:\r\n]*:).*?$",
+                                              rb"\1 <redacted>", data)
+                            redacted = re.sub(rb"(https?://)[^/\s\"']+@", rb"\1<redacted>@", redacted)
+                            output.write(redacted)
+            capture_status = "private_local_redacted"
+        except OSError:
+            capture_status = "unavailable"
+    for name in changed:
+        row: dict[str, Any] = {"file": name, "before_sha256": before.get(Path(name).name),
+                               "after_sha256": after.get(Path(name).name)}
+        left, right = before_bytes[name], after_bytes[name]
+        row["bounded_bytes_available"] = left is not None and right is not None
+        if left is not None and right is not None:
+            row.update(noop_difference(left, right, name == "node_modules/.modules.yaml"))
+        rows.append(row)
+    return {"schema": "dsh-strict-noop-difference/v1", "files": rows,
+            "package_tree_changed": tree_before != tree_after, "package_tree_before": tree_before,
+            "package_tree_after": tree_after, "raw_capture": capture_status}
+
+
+def check_strict_noop(before: dict[str, str], after: dict[str, str], before_bytes: dict[str, bytes | None],
+                      tracked: list[Path], profile: Path, tree_before: str, tree_after: str,
+                      diagnostic: Path) -> None:
+    if before != after or tree_before != tree_after:
+        raise StrictNoopFailure(strict_noop_receipt(before, after, before_bytes,
+            noop_snapshot(tracked, profile), tree_before, tree_after, diagnostic))
+
+
 def desktop_driver_digest(root: Path) -> str:
     import hashlib
     files = [root / "scripts" / name for name in (
@@ -133,11 +242,12 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         passed("desktop_package_parity")
         tracked = [profile / name for name in ("package.json", "pnpm-lock.yaml", "cordis.patch.yml", "node_modules/.package-map.json", "node_modules/.modules.yaml")]
         before = {path.name: api.sha256(path) for path in tracked if path.is_file()}
+        before_bytes = noop_snapshot(tracked, profile)
         stage = "desktop_second_install"
         command(*install)
         after = {path.name: api.sha256(path) for path in tracked if path.is_file()}
-        if before != after or api.tree_digest(installed) != tree:
-            raise RuntimeError("Desktop second install was not a strict no-op")
+        after_tree = api.tree_digest(installed)
+        check_strict_noop(before, after, before_bytes, tracked, profile, tree, after_tree, diagnostics_output)
         passed("desktop_strict_second_noop")
         locker = installed / "bin" / "dsh-completion-guard-host-lock.mjs"
         stage = "desktop_installed_inspect"
@@ -200,7 +310,8 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
     except (OSError, ValueError, KeyError, StopIteration, RuntimeError, subprocess.SubprocessError) as error:
         result["gates"].append(api.gate("desktop_acceptance", digest, passed=False,
                                       note=host.failure_note(stage, error)))
-        host.write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"])
+        host.write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"],
+                                   progress={"strict_second_noop": error.receipt} if isinstance(error, StrictNoopFailure) else None)
     finally:
         if process is not None and process.poll() is None:
             if platform.system() == "Windows":

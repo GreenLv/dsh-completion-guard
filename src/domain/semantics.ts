@@ -2027,7 +2027,10 @@ function negatedSpanEnd(text: string, start: number): number {
     if (character === '。' || character === '！' || character === '？' || character === '!' || character === '?') return cursor
     // An ASCII period ends a sentence only when whitespace or the end follows,
     // so a dotted file name inside a ban is not a boundary.
-    if (character === '.' && (cursor + 1 >= text.length || /\s/.test(text[cursor + 1]))) return cursor
+    if (character === '.') {
+      if (cursor + 1 >= text.length || /\s/.test(text[cursor + 1])) return cursor
+      continue // Internal filename/version dots are not generic separators.
+    }
     if (character === '但' && text[cursor + 1] !== '是') return cursor
     if (character === '而' && text[cursor + 1] === '是') return cursor
     if (character === '；' || character === ';') return cursor

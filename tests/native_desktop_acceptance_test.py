@@ -57,5 +57,113 @@ class DesktopEntrypointTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
 
+class StrictNoopDiagnosticTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location("desktop_diagnostic", root / "scripts/native_desktop_acceptance.py")
+        cls.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.module)
+
+    def test_field_receipt_contains_names_and_offsets_only(self):
+        before = b"prunedAt: old-secret\nstoreDir: private-home\nunknownCredential: token-one\n"
+        after = b"prunedAt: new-secret\nstoreDir: other-home\nunknownCredential: token-two\n"
+        receipt = self.module.noop_difference(before, after, True)
+        self.assertEqual(receipt["changed_top_level_fields"], ["prunedAt", "storeDir"])
+        self.assertEqual(receipt["other_changed_field_count"], 1)
+        self.assertGreater(receipt["different_byte_count"], 0)
+        serialized = json.dumps(receipt)
+        for secret in ("secret", "home", "Credential", "token"):
+            self.assertNotIn(secret, serialized)
+
+    def test_binary_and_length_changes_have_exact_bounded_offsets(self):
+        self.assertEqual(self.module.noop_difference(b"abc", b"axcdef"), {
+            "before_size": 3, "after_size": 6, "different_byte_count": 4,
+            "first_difference_offset": 1, "last_difference_offset": 5})
+        self.assertEqual(self.module.noop_difference(b"", b"x")["first_difference_offset"], 0)
+
+    def test_failure_preserves_private_raw_bytes_and_does_not_overwrite(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostic = Path(directory) / "diagnostic.json"
+            name = "node_modules/.modules.yaml"
+            before, after = {".modules.yaml": "a"}, {".modules.yaml": "b"}
+            receipt = self.module.strict_noop_receipt(before, after, {name: b"old"}, {name: b"new"}, "tree", "tree", diagnostic)
+            private = diagnostic.with_name(diagnostic.name + ".strict-noop-private")
+            self.assertEqual(receipt["raw_capture"], "private_local_redacted")
+            self.assertEqual((private / "0-before.bin").read_bytes(), b"old")
+            self.assertEqual((private / "0-after.bin").read_bytes(), b"new")
+            if __import__("os").name != "nt":
+                self.assertEqual(private.stat().st_mode & 0o777, 0o700)
+                self.assertEqual((private / "0-before.bin").stat().st_mode & 0o777, 0o600)
+            again = self.module.strict_noop_receipt(before, after, {name: b"replace"}, {name: b"replace"}, "tree", "tree", diagnostic)
+            self.assertEqual(again["raw_capture"], "unavailable")
+            self.assertEqual((private / "0-before.bin").read_bytes(), b"old")
+            self.assertNotIn(str(directory), json.dumps(receipt))
+            error = self.module.StrictNoopFailure(receipt)
+            self.assertEqual(json.loads(self.module.host.failure_note("desktop_second_install", error))["diagnostic_code"], "STRICT_SECOND_NOOP_MISMATCH")
+
+    def test_strict_gate_never_captures_on_success_and_never_ignores_hash_or_tree_change(self):
+        with mock.patch.object(self.module, "strict_noop_receipt", return_value={}) as receipt, \
+                mock.patch.object(self.module, "noop_snapshot", return_value={}):
+            self.module.check_strict_noop({"a": "one"}, {"a": "one"}, {}, [], Path("."), "tree", "tree", Path("diagnostic"))
+            receipt.assert_not_called()
+            for after, tree in (({"a": "two"}, "tree"), ({"a": "one"}, "changed"), ({}, "tree")):
+                with self.assertRaises(self.module.StrictNoopFailure):
+                    self.module.check_strict_noop({"a": "one"}, after, {}, [], Path("."), "tree", tree, Path("diagnostic"))
+            self.assertEqual(receipt.call_count, 3)
+
+    def test_regular_snapshot_in_native_temporary_directory(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory) / "profile"
+            profile.mkdir()
+            path = profile / ".modules.yaml"
+            path.write_bytes(b"layoutVersion: 5\n")
+            self.assertEqual(self.module.noop_snapshot([path], profile), {".modules.yaml": b"layoutVersion: 5\n"})
+
+    def test_selected_root_alias_is_allowed_but_descendant_redirects_are_refused(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real = root / "real"
+            profile = real / "profile"
+            profile.mkdir(parents=True)
+            normal = profile / "normal"
+            normal.write_bytes(b"normal")
+            alias = root / "system-root-alias"
+            alias.symlink_to(real, target_is_directory=True)
+            selected = alias / "profile"
+            # Reproduce macOS /var -> /private/var without depending on OS.
+            self.assertEqual(self.module.noop_snapshot([selected / "normal"], selected), {"normal": b"normal"})
+            internal = profile / "internal"
+            internal.mkdir()
+            (internal / "file").write_bytes(b"internal")
+            (profile / "redirected-parent").symlink_to(internal, target_is_directory=True)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "file").write_bytes(b"outside")
+            (profile / "escaped-parent").symlink_to(outside, target_is_directory=True)
+            redirected = selected / "redirected-parent" / "file"
+            escaped = selected / "escaped-parent" / "file"
+            self.assertEqual(self.module.noop_snapshot([redirected, escaped], selected), {
+                "redirected-parent/file": None, "escaped-parent/file": None})
+
+    def test_capture_refuses_redirected_and_oversized_files(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "profile"
+            profile.mkdir()
+            external = root / "external"
+            external.write_bytes(b"private")
+            redirected = profile / "redirected"
+            redirected.symlink_to(external)
+            large = profile / "large"
+            large.write_bytes(b"12345")
+            with mock.patch.object(self.module, "NOOP_CAPTURE_LIMIT", 4):
+                self.assertEqual(self.module.noop_snapshot([redirected, large], profile), {"redirected": None, "large": None})
+
+
 if __name__ == "__main__":
     unittest.main()

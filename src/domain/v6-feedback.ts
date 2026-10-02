@@ -96,6 +96,14 @@ function verifiedCore(projection: GuardProjection): { reason: string } | { core:
   }
 }
 
+/** Read-only core diagnostics for signing feedback; adoption never becomes
+ * ordinary completion. This grants no certificate or execution authority. */
+export function confirmedV6CoreDiagnostic(projection: GuardProjection): VerifiedCore | undefined {
+  if (projection.boundaryProtocol !== 6 || projection.hostStatus !== 'supported' || needsReviewObligations(projection).length) return undefined
+  const verified = verifiedCore(projection)
+  return 'reason' in verified ? undefined : verified.core
+}
+
 /**
  * The core's condition-release map, but ONLY from a core object that passed
  * the full verification chain above. A corrupt, unconfirmed or unsourceable

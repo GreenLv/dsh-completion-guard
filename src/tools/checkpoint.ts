@@ -1,3 +1,4 @@
+import { signingFeedback } from './checkpoint-feedback.js'
 import { checkpointPage, type PageQuery } from './checkpoint-page.js'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
@@ -140,10 +141,10 @@ function bindingTemplate(projection: GuardProjection, item: GuardItem): Record<s
   return undefined
 }
 
-function openItemForTool(projection: GuardProjection, item: GuardItem): Record<string, JsonValue> {
+function openItemForTool(projection: GuardProjection, item: GuardItem, matched = false): Record<string, JsonValue> {
   const action = item.semanticAction ?? 'generic_run'
   const spec = ACTION_MANIFEST.actions[action]
-  const template = bindingTemplate(projection, item)
+  const template = matched ? undefined : bindingTemplate(projection, item)
   const diagnosis = deriveItemDiagnosis(projection, item)
   const compact = itemDiagnosis(projection, item)
   const row = {
@@ -158,13 +159,15 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
     semantic_action: action,
     requested_target: targetForTool(item.requestedTarget),
     certifiable: compact.certifiable,
-    reason_code: diagnosis.reason_code,
+    reason_code: matched ? 'binding_matched_not_certified' : diagnosis.reason_code,
+    ...(matched ? { binding_status: 'matched_not_certified' } : {}),
     // The bounded page keeps the item row small: the remedy phrase is the
     // machine-readable capability remedy (0.6.2 D062-01), not the full
     // resume-condition prose, which the detail/prepare surfaces carry. A
     // declared ROOT WAIT is the exception — its exact resume event is the one
     // fact a caller must not lose, so that condition travels verbatim.
-    next_step: diagnosis.capability.remedy === 'await_root_input'
+    next_step: matched ? 'This request binding matches individually; the item is still pending and no certificate was issued. Retain it while resolving the whole-contract blockers; do not repeat the effect or collect the same evidence again.'
+      : diagnosis.capability.remedy === 'await_root_input'
       ? (diagnosis.next_action.resume_condition ?? capabilityRemedyPhrase(diagnosis.capability.remedy)).slice(0, 240)
       : capabilityRemedyPhrase(diagnosis.capability.remedy),
     ...(item.targetCaptureStatus ? { target_capture_status: item.targetCaptureStatus } : {}),
@@ -175,7 +178,7 @@ function openItemForTool(projection: GuardProjection, item: GuardItem): Record<s
       action_supported: diagnosis.capability.actionSupported,
       certifiable: diagnosis.capability.certifiable,
       gap: diagnosis.capability.gap,
-      remedy: diagnosis.capability.remedy,
+      remedy: matched ? 'none' : diagnosis.capability.remedy,
     },
     producer_disposition: ACTION_MANIFEST.actions[action].evidenceProducer,
     ...(item.targetCaptureReasonCode ? { target_capture_reason_code: item.targetCaptureReasonCode } : {}),
@@ -288,7 +291,7 @@ export function createCheckpointTool(
           feedback_source: { type: 'string', enum: ['confirmed_core_v2'] },
           current_actions: { type: 'array', items: { type: 'object', additionalProperties: true } },
           current_action_total: { type: 'integer' },
-          certificate_status: { type: 'string', enum: ['not_requested'] },
+          certificate_status: { type: 'string', enum: ['not_requested', 'not_issued'] },
           contract_revision: { type: 'integer' },
           active_constraints: { type: 'array', items: { type: 'object', additionalProperties: true } },
           open_items: { type: 'array', items: { type: 'object', additionalProperties: true } },
@@ -510,12 +513,14 @@ export function createCheckpointTool(
             },
           } : {}),
         }))
+      const feedback = signingFeedback(projection, bindings, result, args.item_ids)
       return checkpointPage(projection, args, {
+        ...(feedback ? { signing_feedback: feedback.summary, certificate_status: 'not_issued' } : {}),
         status: result.status,
         proof_state: proofState,
         contract_revision: result.contractRevision,
-        blocking_total: result.openItems.length,
-        open_items: (args.item_ids?.length ? args.item_ids : result.openItems).map((id) => projection.items.get(id)).filter((item): item is GuardItem => Boolean(item)).sort((a, b) => b.revision - a.revision || a.id.localeCompare(b.id)).map((item) => openItemForTool(projection, item)),
+        blocking_total: feedback ? Math.max(feedback.remaining.size, feedback.summary.unresolved_global ? 1 : 0) : result.openItems.length,
+        open_items: (args.item_ids?.length ? args.item_ids : result.openItems).map((id) => projection.items.get(id)).filter((item): item is GuardItem => Boolean(item)).sort((a, b) => b.revision - a.revision || a.id.localeCompare(b.id)).map((item) => openItemForTool(projection, item, feedback?.matched.has(item.id))),
         active_constraints: [...projection.items.values()].filter(item => item.kind === 'prohibition' && item.status === 'pending').map(item => openItemForTool(projection, item)),
         available_evidence,
         available_qualifications: availableBoundaryQualifications(projection).map((row) => ({
