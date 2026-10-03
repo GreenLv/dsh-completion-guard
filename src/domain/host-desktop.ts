@@ -354,8 +354,8 @@ export function readDesktopTargetGraph(appAsarPath: string, profileRoot: string)
   if (!Array.isArray(bundles) || !bundles.includes('@deepseek-ai/dsh-base') || !bundles.includes('@deepseek-ai/dsh-web-app')) {
     throw new HostProfileError('target_profile_bundles_unsupported', 'not the official Desktop bundle tuple')
   }
-  if (bundles.includes('@deepseek-ai/dsh-headless') || bundles.includes('dshmarket')) {
-    throw new HostProfileError('desktop_profile_bundle_conflict', 'the desktop profile carries a web/headless-only bundle')
+  if (bundles.includes('@deepseek-ai/dsh-headless')) {
+    throw new HostProfileError('desktop_profile_bundle_conflict', 'the desktop profile carries the headless-only bundle')
   }
   const runtime = readDesktopAppRuntime(appAsarPath)
   return {

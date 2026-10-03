@@ -1,6 +1,6 @@
 # Private-ledger writer lock
 
-This document describes the current 0.8.3 protocol (Revision 3.2). It replaces the generation, slot/intent and earlier arbitration designs recorded in Git history. Those earlier designs are not operational instructions.
+This document describes the current 0.8.4 protocol (Revision 3.2). It replaces the generation, slot/intent and earlier arbitration designs recorded in Git history. Those earlier designs are not operational instructions.
 
 ## Purpose and limits
 

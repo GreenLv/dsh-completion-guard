@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.8.4
+
+- The official Desktop app can now coexist with the official plugin market (`dshmarket`). Earlier versions refused any Desktop profile whose bundle list carried the market — the pre-install check rejected it as a bundle conflict and the installed/runtime check misreported it as an unbound plugin. The market is now treated like any other third-party profile plugin on Desktop. Official profile identity, Guard binding, the Headless bundle conflict, implementation byte and route audits, and host-lock digests are unchanged and keep failing closed.
+- Installing or removing the market changes the Desktop profile's importer, so an existing Desktop lock no longer matches and Guard refuses the stale digest. Rebuild the machine's lock through the formal flow (`inspect`, `inject`, `verify-dump` or `dump-desktop` readback) after any market change. Web keeps using the market bundle as a Web identity marker; the market restart adapter remains unavailable, and Desktop restart remains unsupported.
+- Adds a versioned native acceptance entrypoint for real-market Desktop coexistence (`desktop-market-coexistence/v1`) with its schema and validator. It installs the declared market cohort through the official plugin CLI into an owned isolated Desktop profile, verifies lock drift on install and removal, and probes the loaded backend in the final coexistence state. It complements, and does not replace, the existing Desktop layered no-op gate; graphical-shell and real-model observations remain separate gates.
+
 ## 0.8.3
 
 - Rejects invalid checkpoint predicate parameters as structured binding errors during live calls and persisted replay, while retaining the whole-contract signing gate. Filtered feedback exposes target/transition errors and provides exact predicate parameters instead of sending callers back to a successful test.

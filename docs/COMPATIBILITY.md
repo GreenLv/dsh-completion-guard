@@ -2,9 +2,9 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
-## 0.8.2–0.8.3: DSH >=0.2.0-rc.2 and official Desktop
+## 0.8.2–0.8.4: DSH >=0.2.0-rc.2 and official Desktop
 
-0.8.3 retains the host admission and Desktop support introduced in 0.8.2. Each release still requires its own artifact acceptance.
+0.8.4 retains the host admission and Desktop support introduced in 0.8.2. Each release still requires its own artifact acceptance.
 
 Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.2`, with no upper limit. `0.2.0-rc.1` keeps its recorded-evidence row but is refused as below the floor. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.
 
@@ -18,21 +18,25 @@ Guard identifies the profile by its manifest name. A Desktop profile contains th
 
 Desktop's bundled pnpm 11.7 produces a physical hoisted plugin tree with a JSON `.modules.yaml` index and no package map. Guard verifies the index against the actual tree, then applies the same published-byte and dependency-route checks to local critical peers. Missing, unlisted, duplicate, escaped or changed critical packages are refused. A supported package-map layout remains accepted when present; malformed maps never fall back to the physical-tree path.
 
+The official market (`dshmarket`) is an ordinary third-party profile plugin on a Desktop profile: its bundle presence neither conflicts with the official bundle tuple nor identifies the surface as Web, and its package name grants no trust. Installing or removing the market changes the profile's importer, so the previous Desktop lock stops matching and must be rebuilt through the formal flow. Real-market coexistence acceptance (`desktop-market-coexistence/v1`) is recorded separately from the layered no-op gate in the matching Release annex; graphical-shell and real-model observations remain separate gates.
+
 The archive is read in place. The registry baseline closes the executable/JSON inventory of each critical package, including scripts outside `lib`. Its bytes must match the acquired official tarball digests. The signed archive metadata authenticates the packager's rewritten manifests; executable files have no rewrite exception. Nested critical packages, unlisted code and changed dependency routes are refused. The same fresh route and byte audit also checks critical peers selected from the physical profile.
 
 The lock binds the canonical archive, signed header, runtime manifest and metadata, carrier bytes, installed Guard manifest, profile manifest, map and lockfile. Inject and runtime revalidation use one evaluation path, including foreground renderers and default-workdir providers. Changed inputs refuse the injected lock. Receipts stay under physical, contained profile directories; directory links cannot redirect them elsewhere.
 
 `hostLockProfile: "desktop"` is preserved through composition and readback. Guard refuses Desktop restart with `host_capability_request_unsupported`; the graphical app owns its lifecycle. Exact-artifact backend acceptance, graphical-shell acceptance and real-model behavior are separate gates. Their results belong to the matching Release annexes.
 
-### 0.8.2–0.8.3 中文说明
+### 0.8.2–0.8.4 中文说明
 
-0.8.3 保留 0.8.2 的宿主准入范围与 Desktop 支持；各版本仍须独立核对制品验收结果。
+0.8.4 保留 0.8.2 的宿主准入范围与 Desktop 支持；各版本仍须独立核对制品验收结果。
 
 0.8.2 延续 0.8.x 的任务、证书与数据协议，主要适配 DSH RC.2、增加 Desktop 宿主锁并修复退出证据判定。最低 DSH 版本升至 `0.2.0-rc.2`；请先升级宿主，再安装 Guard、重新注入锁并回读。版本准入没有上限，但版本号相符仍不足以证明实现兼容。Cordis 的独立要求为 `>=4.0.4`。
 
 Desktop 按应用自有的 `dsh-profile-desktop` 名称识别。安装须使用应用附带的 CLI；该 CLI 允许管理 Desktop 插件，但拒绝通过 CLI 启动 Desktop 或执行 `--dump-config`。Guard 的 `dump-desktop` 使用应用内同一套配置组合 API，不启动宿主。具体操作见[Desktop 升级步骤](HOST_LOCK_UPGRADE.md#official-desktop-profile)。
 
 Desktop 自带 pnpm 11.7 生成平铺插件目录，安装索引为 JSON 格式的 `.modules.yaml`，不含 package-map。Guard 核对索引与实际目录，再对本地关键 peer 执行相同的官方字节与依赖路由认证。关键包缺失、未登记、重复、越界或发生改写时均拒绝准入；若存在受支持的 package-map，则使用该布局，损坏的 map 不会回退到平铺目录路径。
+
+官方插件市场（`dshmarket`）在 Desktop profile 上是普通第三方 profile 插件：它的 bundle 既不与官方 bundle 元组冲突，也不能把运行面识别成 Web，其包名本身不授予任何信任。安装或移除市场会改变 profile 的 importer，旧 Desktop 锁因此不再匹配，必须按正式流程重建。真实市场共存验收（`desktop-market-coexistence/v1`）在对应 Release annex 中与分层 no-op 门槛分开记录；图形界面与真实模型观察仍是独立门槛。
 
 Guard 先核验 macOS 的 DeepSeek Developer ID 签名或 Windows 的 DeepSeek Authenticode 发布者，再将 ASAR 头与签名载体内的摘要比对。随后原位读取归档，按独立获取的官方 tarball 清单核验关键包内全部可执行/JSON 文件，包括 `lib` 外的脚本。签名归档的元数据只用于认证打包器改写的 manifest；新增代码、嵌套关键包、错误依赖路由及本地被改动的关键 peer 均拒绝。宿主锁同时绑定应用、载体、profile、安装映射与锁文件；注入和运行时复验采用同一链路，并核验 shell 渲染器及默认工作目录提供者。
 
@@ -192,7 +196,7 @@ managers therefore see the same two exact host releases as the host-lock
 registry; neither an unregistered stable release nor a future version is
 implicitly admitted.
 
-That historical artifact retained exact `0.1.5-rc.1` development pins. The current 0.8.3 build pins DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
+That historical artifact retained exact `0.1.5-rc.1` development pins. The current 0.8.4 build pins DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
 above and are not part of the 0.5.2 contract.
 
 ## Terminal outcome contract

@@ -9306,7 +9306,7 @@ function readDesktopTargetGraph(appAsarPath, profileRoot) {
 	const dsh = isRecord(manifest.dsh) ? manifest.dsh : void 0;
 	const bundles = (isRecord(dsh?.profile) ? dsh.profile : void 0)?.bundles;
 	if (!Array.isArray(bundles) || !bundles.includes("@deepseek-ai/dsh-base") || !bundles.includes("@deepseek-ai/dsh-web-app")) throw new HostProfileError("target_profile_bundles_unsupported", "not the official Desktop bundle tuple");
-	if (bundles.includes("@deepseek-ai/dsh-headless") || bundles.includes("dshmarket")) throw new HostProfileError("desktop_profile_bundle_conflict", "the desktop profile carries a web/headless-only bundle");
+	if (bundles.includes("@deepseek-ai/dsh-headless")) throw new HostProfileError("desktop_profile_bundle_conflict", "the desktop profile carries the headless-only bundle");
 	const runtime = readDesktopAppRuntime(appAsarPath);
 	return {
 		packages: runtime.rows,
@@ -10246,9 +10246,7 @@ function resolveActiveProfileHostLock(runtimeRoot, profileRoot, expectedPluginVe
 	if (!dependencies || typeof dependencies !== "object" || typeof dependencies["dsh-completion-guard"] !== "string" || !Array.isArray(bundles) || !bundles.includes("dsh-completion-guard")) throw new HostProfileError("profile_plugin_unbound", "profile does not bind the dsh-completion-guard dependency and bundle");
 	if (installedPlugin.name !== "dsh-completion-guard" || installedPlugin.version !== expectedPluginVersion) throw new HostProfileError("profile_plugin_version_mismatch", "installed profile plugin identity does not match the generator version");
 	const bundleList = Array.isArray(bundles) ? bundles.map(String) : [];
-	const isDesktopProfile = profileManifest.name === DESKTOP_PROFILE_PACKAGE_NAME;
-	if (isDesktopProfile && (bundleList.includes("@deepseek-ai/dsh-headless") || bundleList.includes("dshmarket"))) throw new HostProfileError("desktop_profile_bundle_conflict", "the desktop profile carries a web/headless-only bundle");
-	const profileKind = isDesktopProfile ? "desktop" : bundleList.includes("@deepseek-ai/dsh-headless") ? "headless" : bundleList.includes("@deepseek-ai/dsh-web-app") || bundleList.includes("dshmarket") ? "web" : "headless";
+	const profileKind = profileManifest.name === DESKTOP_PROFILE_PACKAGE_NAME ? "desktop" : bundleList.includes("@deepseek-ai/dsh-headless") ? "headless" : bundleList.includes("@deepseek-ai/dsh-web-app") || bundleList.includes("dshmarket") ? "web" : "headless";
 	const platform = process.platform === "win32" ? "windows" : "posix";
 	const evaluation = evaluateActiveHostLock(runtime, profile, {
 		platform,
@@ -10342,7 +10340,7 @@ function verifyDesktopPluginIdentity(profileRoot, expectedPluginVersion) {
 	const settings = dsh.profile && typeof dsh.profile === "object" ? dsh.profile : {};
 	const bundles = Array.isArray(settings.bundles) ? settings.bundles : [];
 	const dependencies = profile.dependencies && typeof profile.dependencies === "object" ? profile.dependencies : {};
-	if (profile.name !== DESKTOP_PROFILE_PACKAGE_NAME || typeof dependencies["dsh-completion-guard"] !== "string" || !bundles.includes("dsh-completion-guard") || !bundles.includes("@deepseek-ai/dsh-base") || !bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("@deepseek-ai/dsh-headless") || bundles.includes("dshmarket")) throw new HostProfileError("profile_plugin_unbound", "the desktop profile does not bind the installed plugin and official bundles");
+	if (profile.name !== DESKTOP_PROFILE_PACKAGE_NAME || typeof dependencies["dsh-completion-guard"] !== "string" || !bundles.includes("dsh-completion-guard") || !bundles.includes("@deepseek-ai/dsh-base") || !bundles.includes("@deepseek-ai/dsh-web-app") || bundles.includes("@deepseek-ai/dsh-headless")) throw new HostProfileError("profile_plugin_unbound", "the desktop profile does not bind the installed plugin and official bundles");
 	const pluginManifestPath = join(profileRoot, "node_modules", "dsh-completion-guard", "package.json");
 	if (!existsSync$1(pluginManifestPath)) throw new HostProfileError("profile_plugin_unbound", "the desktop profile importer does not carry the dsh-completion-guard plugin");
 	const installedPlugin = readJsonObject(pluginManifestPath, "installed_plugin_invalid");

@@ -4,7 +4,7 @@
 
 An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
 
-> **0.8.3 requires DSH `>=0.2.0-rc.2` and supports the official Desktop app.** Stop the host, upgrade DSH and install Guard, then run the host-lock tool's `inspect`, `inject` and `verify-dump` commands for each profile before starting it when needed. For the Desktop app, pass `--profile desktop` with the app archive as the runtime root. These commands bind the installed packages and their verified routes; installing Guard does not rebuild the lock. The tested host baseline is DSH `0.2.0-rc.2` with Cordis `4.0.4`; later versions must pass the same identity and adapter checks. See [compatibility](docs/COMPATIBILITY.md) for version admission, rebinding and native-evidence limits.
+> **0.8.4 requires DSH `>=0.2.0-rc.2` and supports the official Desktop app.** Stop the host, upgrade DSH and install Guard, then run the host-lock tool's `inspect`, `inject` and `verify-dump` commands for each profile before starting it when needed. For the Desktop app, pass `--profile desktop` with the app archive as the runtime root. These commands bind the installed packages and their verified routes; installing Guard does not rebuild the lock. The tested host baseline is DSH `0.2.0-rc.2` with Cordis `4.0.4`; later versions must pass the same identity and adapter checks. See [compatibility](docs/COMPATIBILITY.md) for version admission, rebinding and native-evidence limits.
 
 ![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
 
@@ -13,7 +13,7 @@ An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks
 Stop the host, upgrade to DSH `0.2.0-rc.2` or later, then install Guard in the profile you want to protect:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.8.3
+dsh plugin --profile web add dsh-completion-guard@0.8.4
 ```
 
 **Keep the host stopped while upgrading and checking the installed graph below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
@@ -32,7 +32,7 @@ dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root 
 
 On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. Native acceptance and publication evidence is recorded per version, bound to that version's exact bytes, in the [acceptance record](docs/LOCAL_ACCEPTANCE.md); a version's source and deterministic evidence never substitutes for its own installed-artifact claim. Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, duplicated, untrusted, or different from the bound setup.
 
-For Desktop, install through the app's bundled CLI and bind `--profile desktop` to its `app.asar` and actual profile directory. Its CLI does not offer `--dump-config`; use Guard's `dump-desktop` to compose the configuration before readback. Follow the [Desktop upgrade steps](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile).
+For Desktop, install through the app's bundled CLI and bind `--profile desktop` to its `app.asar` and actual profile directory. Its CLI does not offer `--dump-config`; use Guard's `dump-desktop` to compose the configuration before readback. Follow the [Desktop upgrade steps](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile). The official plugin market (`dshmarket`) can be installed alongside Guard in the Desktop profile; after installing or removing it, rebuild the Desktop lock with the same three commands.
 
 When ready to use Guard, start DSH Web, open a session, and enable it:
 
@@ -59,7 +59,7 @@ The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.
 
 ## Status and compatibility
 
-Version 0.8.3 admits **DSH `>=0.2.0-rc.2`** without an upper version limit, and supports the official Desktop app as an independent profile (`desktop`): the app-owned `dsh-profile-desktop` profile is identified by its own name, its bundled graph is read in place from the signed `app.asar`, and its installed bytes are verified against the published tarballs. Cordis has an independent `>=4.0.4` peer range and must pass its adapter qualification. The published `0.2.0-rc.2` 46-package graph is the reviewed baseline (the rc.1 graph remains historical evidence); a newer mixed-version graph can receive its own registry-backed lock when the consumed implementations qualify. Changed Session/API implementations run a finite contract probe; incompatible behavior reports a qualification failure, and an old certificate cannot transfer to the new lock. Exact-artifact macOS/Windows native acceptance and future-version native evidence remain separate; Desktop backend, graphical-shell and real-model results are recorded separately for each exact artifact.
+Version 0.8.4 admits **DSH `>=0.2.0-rc.2`** without an upper version limit, and supports the official Desktop app as an independent profile (`desktop`): the app-owned `dsh-profile-desktop` profile is identified by its own name, its bundled graph is read in place from the signed `app.asar`, and its installed bytes are verified against the published tarballs. Cordis has an independent `>=4.0.4` peer range and must pass its adapter qualification. The published `0.2.0-rc.2` 46-package graph is the reviewed baseline (the rc.1 graph remains historical evidence); a newer mixed-version graph can receive its own registry-backed lock when the consumed implementations qualify. Changed Session/API implementations run a finite contract probe; incompatible behavior reports a qualification failure, and an old certificate cannot transfer to the new lock. Exact-artifact macOS/Windows native acceptance and future-version native evidence remain separate; Desktop backend, graphical-shell and real-model results are recorded separately for each exact artifact.
 
 After upgrading, inspect, inject and verify the new host lock, then start the profile when needed; follow the [host-lock upgrade guide](docs/HOST_LOCK_UPGRADE.md). DSH migrates old sessions to V4. Guard retains old ledgers and certificates without re-signing them or promoting their old identity to current authority. Goal remains optional; installing the host does not imply it is enabled.
 

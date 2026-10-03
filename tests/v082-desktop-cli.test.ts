@@ -72,4 +72,17 @@ describe('Desktop CLI importer selection', () => {
     }
     expect(f.run('inspect-graph')).toBe('target_profile_unmanaged_modules')
   })
+
+  it('never special-cases the market bundle in the shipped CLI routing', () => {
+    // 0.8.3 refused Desktop+market profiles downstream; the CLI's route
+    // selection itself must stay purely importer-state based whether or not
+    // the bundle tuple carries dshmarket (0.8.4 coexistence).
+    const f = fixture()
+    expect(f.run('inspect')).toBe('test_pre_install_selected')
+    mkdirSync(join(f.profile, 'node_modules'))
+    writeFileSync(join(f.profile, 'node_modules', '.package-map.json'), '{}')
+    for (const command of ['inspect', 'inject', 'verify-dump', 'dump-desktop']) {
+      expect(f.run(command)).toBe('test_active_audit_selected')
+    }
+  })
 })

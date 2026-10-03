@@ -287,9 +287,21 @@ describe('desktop profile identity and preflight', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)
     expect(() => inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { name: 'dsh-profile-web' }))).toThrowError(/not the Desktop-owned/)
-    expect(() => inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] }))).toThrowError(/web\/headless-only bundle/)
-    expect(() => inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'] }))).toThrowError(/web\/headless-only bundle/)
+    expect(() => inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'] }))).toThrowError(/headless-only bundle/)
     expect(() => inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { dependencies: { 'dsh-completion-guard': '0.8.2' } }))).toThrowError(/without an importer/)
+  })
+
+  it('keeps the official market a third-party bundle that does not conflict with the Desktop tuple', () => {
+    // 0.8.3 misread dshmarket as a web/headless-only bundle and refused the
+    // official Desktop profile (DSH-2026-10-03 desktop-market report); a
+    // legal market bundle must pass the pre-install target inspection like
+    // any other third-party profile plugin, without granting extra trust.
+    const root = temporaryRoot()
+    const asar = writeAsar(bundleFileSpecs(), root)
+    const market = inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] }))
+    expect(market.profileGraph.state).toBe('dependency_free_desktop')
+    expect(market.profileGraph.bundles).toContain('dshmarket')
+    expect(market.packages.map((row) => row.name).sort()).toEqual(RC020_RC2_HOST_PACKAGES.map((row) => row.name).sort())
   })
 })
 

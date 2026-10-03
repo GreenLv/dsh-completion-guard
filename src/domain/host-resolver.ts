@@ -824,14 +824,13 @@ export function resolveActiveProfileHostLock(
     throw new HostProfileError('profile_plugin_version_mismatch', 'installed profile plugin identity does not match the generator version')
   }
   // Profile identity: the official Desktop name wins (its bundle list also
-  // contains the web app, so web markers must never shadow it); the headless
-  // marker beats web markers because the rc.2 installation-owned headless
-  // tuple carries the web app too; dshmarket/web-app then mean web.
+  // contains the web app, so web markers must never shadow it) and is
+  // dispatched to the dedicated Desktop resolver above, so it never reaches
+  // the CLI-managed inference here. The headless marker beats web markers
+  // because the rc.2 installation-owned headless tuple carries the web app
+  // too; dshmarket/web-app then mean web for the non-Desktop profiles.
   const bundleList = Array.isArray(bundles) ? bundles.map(String) : []
   const isDesktopProfile = profileManifest.name === DESKTOP_PROFILE_PACKAGE_NAME
-  if (isDesktopProfile && (bundleList.includes('@deepseek-ai/dsh-headless') || bundleList.includes('dshmarket'))) {
-    throw new HostProfileError('desktop_profile_bundle_conflict', 'the desktop profile carries a web/headless-only bundle')
-  }
   const profileKind: HostProfileKind = isDesktopProfile
     ? 'desktop'
     : bundleList.includes('@deepseek-ai/dsh-headless')
@@ -924,9 +923,14 @@ function verifyDesktopPluginIdentity(profileRoot: string, expectedPluginVersion:
   const settings = dsh.profile && typeof dsh.profile === 'object' ? dsh.profile as Record<string, unknown> : {}
   const bundles = Array.isArray(settings.bundles) ? settings.bundles : []
   const dependencies = profile.dependencies && typeof profile.dependencies === 'object' ? profile.dependencies as Record<string, unknown> : {}
+  // The Desktop identity requires the official bundle tuple bound to the
+  // installed plugin. Third-party profile plugins such as dshmarket are
+  // ordinary profile imports: their package name neither conflicts with the
+  // Desktop tuple nor grants any trust — graph, byte and route audits still
+  // cover everything they introduce.
   if (profile.name !== DESKTOP_PROFILE_PACKAGE_NAME || typeof dependencies['dsh-completion-guard'] !== 'string'
     || !bundles.includes('dsh-completion-guard') || !bundles.includes('@deepseek-ai/dsh-base')
-    || !bundles.includes('@deepseek-ai/dsh-web-app') || bundles.includes('@deepseek-ai/dsh-headless') || bundles.includes('dshmarket')) {
+    || !bundles.includes('@deepseek-ai/dsh-web-app') || bundles.includes('@deepseek-ai/dsh-headless')) {
     throw new HostProfileError('profile_plugin_unbound', 'the desktop profile does not bind the installed plugin and official bundles')
   }
   const pluginManifestPath = join(profileRoot, 'node_modules', 'dsh-completion-guard', 'package.json')
