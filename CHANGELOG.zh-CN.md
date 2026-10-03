@@ -5,7 +5,7 @@
 ## 0.8.4
 
 - 官方 Desktop 应用现在可以与官方插件市场（`dshmarket`）共存。更早的版本会拒绝 bundles 中带有市场的任何 Desktop profile——预安装检查将其报为 bundle 冲突，已安装/运行时检查则误报为插件未绑定。现在市场在 Desktop 上与其他普通第三方 profile 插件同等对待。官方 profile 身份、Guard 绑定、Headless bundle 冲突、实现字节与路由审计以及宿主锁摘要全部保持不变并继续 fail closed。
-- 安装或移除市场会改变 Desktop profile 的 importer，旧锁因此不再匹配，Guard 会拒绝过期摘要。每次市场变化后请按正式流程重建本机锁（`inspect`、`inject`、`verify-dump` 或 `dump-desktop` 回读）。Web 继续把市场 bundle 用作 Web 身份线索；market 重启适配器仍不可用，Desktop 重启仍不受支持。
+- 安装或移除市场会改变 Desktop profile 的 importer，旧锁因此不再匹配，Guard 会拒绝过期摘要。每次市场变化后，先用 `inspect`、`inject` 重建本机锁，再用 `dump-desktop` 生成新的组合配置，最后用 `verify-dump` 校验这份新配置。Web 继续把市场 bundle 用作 Web 身份线索；market 重启适配器仍不可用，Desktop 重启仍不受支持。
 - 新增真实市场 Desktop 共存的版本化原生验收入口（`desktop-market-coexistence/v1`）及其 schema 和 validator。它通过官方插件 CLI 向受控隔离 Desktop profile 安装声明的市场版本，验证安装与移除时的锁漂移，并在最终共存状态下探测已加载后端。它补充而不取代现有 Desktop 分层 no-op 门槛；图形界面与真实模型观察仍是独立门槛。
 
 ## 0.8.3
