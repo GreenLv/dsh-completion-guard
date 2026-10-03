@@ -32,7 +32,7 @@ dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root 
 
 Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。各版本的原生验收与发布证据在[验收记录](docs/LOCAL_ACCEPTANCE.md)中按版本绑定其精确制品字节单独记录；任何版本的源码与确定性证据都不能等同于该版本已安装制品的结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、重复、不可信或不同于已绑定环境，Guard 会保持不可用。
 
-Desktop 请使用应用附带的 CLI 安装，再以 `--profile desktop`、应用 `app.asar` 和实际 profile 路径建立宿主锁。它的 CLI 不提供 `--dump-config`，请用 Guard 的 `dump-desktop` 生成组合配置再回读；见[Desktop 升级步骤](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile)。官方插件市场（`dshmarket`）现在可以在 Desktop profile 中与 Guard 共存；安装或移除市场后，请用相同三个子命令重建 Desktop 锁。
+Desktop 请使用应用附带的 CLI 安装，再以 `--profile desktop`、应用 `app.asar` 和实际 profile 路径建立宿主锁。它的 CLI 不提供 `--dump-config`，请用 Guard 的 `dump-desktop` 生成组合配置再回读；见[Desktop 升级步骤](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile)。官方插件市场（`dshmarket`）现在可以在 Desktop profile 中与 Guard 共存；安装或移除市场后，请按完整四步流程重建 Desktop 锁（`inspect`、`inject`、用 `dump-desktop` 新生成的组合配置、以及对新配置执行的 `verify-dump`）。
 
 需要使用时，再启动 DSH Web，打开会话并启用 Guard：
 

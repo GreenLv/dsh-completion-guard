@@ -21,9 +21,11 @@ assert SPEC and SPEC.loader
 VALIDATOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VALIDATOR)
 
+HEX64 = "0123456789abcdef" * 4
+
 
 class DesktopMarketAnnexTests(unittest.TestCase):
-    def annex(self, directory: str):
+    def annex(self, directory: str, *, digest_slots=None):
         artifact = Path(directory) / "fixture.tgz"
         commit = "a" * 40
         data = json.dumps({"name": "fixture", "version": "0.8.4", "gitHead": commit}).encode()
@@ -33,7 +35,12 @@ class DesktopMarketAnnexTests(unittest.TestCase):
             archive.addfile(row, io.BytesIO(data))
         sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
         driver = "b" * 64
-        locks = {"desktop_pre_market": "c" * 64, "desktop_coexistence": "d" * 64, "desktop_final": "e" * 64}
+        slots = digest_slots or {
+            "desktop_pre_market": "c" * 64,
+            "desktop_coexistence": "d" * 64,
+            "desktop_removed_rebind": "c" * 64,
+            "desktop_final": "d" * 64,
+        }
         gates = [{"id": gate_id, "required": True, "status": "passed", "exit_code": 0,
                   "subject": {"kind": "artifact", "id": sha}, "evidence": {"mode": "executed"}}
                  for gate_id in sorted(VALIDATOR.EXPECTED_GATES)]
@@ -48,12 +55,15 @@ class DesktopMarketAnnexTests(unittest.TestCase):
                  "run": {"started_at": "2026-10-03T00:00:00Z", "finished_at": "2026-10-03T00:01:00Z"},
                  "unperformed_actions": ["tag", "package_publish", "release"],
                  "capability_skips": ["real_model_request", "graphical_shell", "market_gui"],
-                 "host_lock_policy": "dsh-core/v1", "host_driver_sha256": driver, "host_lock_digests": locks,
+                 "host_lock_policy": "dsh-core/v1", "host_driver_sha256": driver, "host_lock_digests": slots,
                  "market_coexistence_contract": copy.deepcopy(VALIDATOR.CONTRACT),
                  "market": {"package": "dshmarket", "version": "1.66.6", "registry_integrity": "sha512-" + "A" * 86 + "=="},
+                 "market_observation": {"schema": "dsh-desktop-market-observation/v1", "status": "observed",
+                                        "api_schema": "dsh-market/update-api/v1", "api_version": 1,
+                                        "market_version": "1.66.6", "boot_id": "4242-1699000000000", "port": 45123},
                  "desktop_runtime": {"manifest_sha256": "f" * 64, "header_sha256": "a" * 64, "metadata_sha256": "b" * 64,
                                      "host_version": "0.2.0-rc.2", "desktop_version": "0.2.0", "payload_file_count": 1}}
-        return artifact, commit, driver, locks, valid
+        return artifact, commit, driver, slots, valid
 
     def check(self, value, *, tar, commit, driver, os_name, locks):
         return VALIDATOR.valid_market_annex(value, tar, commit, driver, os_name, locks)
@@ -64,7 +74,33 @@ class DesktopMarketAnnexTests(unittest.TestCase):
             self.assertTrue(self.check(valid, tar=artifact, commit=commit, driver=driver,
                                        os_name="macos", locks=locks))
 
-    def test_rejects_every_identity_and_gate_drift(self):
+    def test_lock_states_follow_bytes_not_lifecycle_counters(self):
+        # The final reinstall restored the exact bound bytes, so final == the
+        # first coexistence identity is a legal rebind, not a defect.
+        with tempfile.TemporaryDirectory() as directory:
+            artifact, commit, driver, locks, valid = self.annex(directory)
+            self.assertEqual(locks["desktop_final"], locks["desktop_coexistence"])
+            self.assertTrue(self.check(valid, tar=artifact, commit=commit, driver=driver,
+                                       os_name="macos", locks=locks))
+        # A metadata serialization change after removal yields a fresh removed
+        # and final identity; every slot may be distinct as well.
+        with tempfile.TemporaryDirectory() as directory:
+            slots = {"desktop_pre_market": "c" * 64, "desktop_coexistence": "d" * 64,
+                     "desktop_removed_rebind": "e" * 64, "desktop_final": "9" * 64}
+            artifact, commit, driver, _, valid = self.annex(directory, digest_slots=slots)
+            self.assertTrue(self.check(valid, tar=artifact, commit=commit, driver=driver,
+                                       os_name="macos", locks=slots))
+        # The market install necessarily rewrites the bound profile manifest,
+        # so a receipt whose coexistence digest equals the pre-market digest
+        # proves no market install happened and must not validate.
+        with tempfile.TemporaryDirectory() as directory:
+            slots = {"desktop_pre_market": "c" * 64, "desktop_coexistence": "c" * 64,
+                     "desktop_removed_rebind": "c" * 64, "desktop_final": "c" * 64}
+            artifact, commit, driver, _, valid = self.annex(directory, digest_slots=slots)
+            self.assertFalse(self.check(valid, tar=artifact, commit=commit, driver=driver,
+                                        os_name="macos", locks=slots))
+
+    def test_rejects_every_identity_gate_and_observation_drift(self):
         with tempfile.TemporaryDirectory() as directory:
             artifact, commit, driver, locks, valid = self.annex(directory)
             self.assertFalse(self.check(valid, tar=artifact, commit=commit, driver=driver,
@@ -86,13 +122,15 @@ class DesktopMarketAnnexTests(unittest.TestCase):
                     lambda v: v["gates"][0].update(status="failed"),
                     lambda v: v["cleanup"].update(status="failed", remaining_ids=["owned_process"]),
                     lambda v: v["host_lock_digests"].update(desktop_final="9" * 64),
-                    # A coexistence run whose locks are all identical proves no
-                    # market lifecycle happened; the annex must not validate.
-                    lambda v: v["host_lock_digests"].update(desktop_coexistence=v["host_lock_digests"]["desktop_pre_market"]),
+                    lambda v: v["host_lock_digests"].pop("desktop_removed_rebind"),
                     lambda v: v["market_coexistence_contract"].update(lock_drift="silent_trust"),
                     lambda v: v["market"].update(version="not-a-version"),
                     lambda v: v["market"].update(package="other-market"),
                     lambda v: v["market"].update(registry_integrity="md5-deadbeef"),
+                    lambda v: v["market_observation"].update(status="not_observed"),
+                    lambda v: v["market_observation"].update(market_version="1.0.0"),
+                    lambda v: v["market_observation"].pop("boot_id"),
+                    lambda v: v["market_observation"].update(port=0),
                     lambda v: v["desktop_runtime"].update(header_sha256="invalid"),
                     lambda v: v["unperformed_actions"].remove("tag"),
             ):
@@ -113,7 +151,8 @@ class DesktopMarketAnnexTests(unittest.TestCase):
                     "--repo-root", directory, "--expected-platform", "macos",
                     "--desktop-pre-market-lock-digest", "c" * 64,
                     "--desktop-coexistence-lock-digest", "d" * 64,
-                    "--desktop-final-lock-digest", "e" * 64]
+                    "--desktop-removed-rebind-lock-digest", "c" * 64,
+                    "--desktop-final-lock-digest", "d" * 64]
             with mock.patch.object(sys, "argv", argv), \
                     mock.patch.object(VALIDATOR.subprocess, "check_output", side_effect=["a" * 40, " M src/runtime.ts"]), \
                     mock.patch.object(VALIDATOR, "market_driver_digest", return_value="b" * 64), \

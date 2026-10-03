@@ -22,7 +22,8 @@
     "host_lock_digests",
     "desktop_runtime",
     "market",
-    "market_coexistence_contract"
+    "market_coexistence_contract",
+    "market_observation"
   ],
   "properties": {
     "schema": {
@@ -111,8 +112,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 29,
-      "maxItems": 29,
+      "minItems": 30,
+      "maxItems": 30,
       "items": {
         "type": "object",
         "required": [
@@ -155,7 +156,8 @@
               "manifest_identity",
               "package_inventory",
               "package_parity",
-              "strict_second_noop"
+              "strict_second_noop",
+              "desktop_market_api"
             ]
           },
           "required": {
@@ -222,6 +224,7 @@
       "required": [
         "desktop_pre_market",
         "desktop_coexistence",
+        "desktop_removed_rebind",
         "desktop_final"
       ],
       "properties": {
@@ -234,6 +237,10 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "desktop_final": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "desktop_removed_rebind": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         }
@@ -314,10 +321,50 @@
           "const": "official_plugin_cli_registry_spec"
         },
         "lock_drift": {
-          "const": "old_dump_verify_fails_after_market_change"
+          "const": "superseded_dump_verify_fails_with_readback_mismatch"
         },
         "final_state": {
           "const": "market_installed_with_rebound_lock"
+        }
+      }
+    },
+    "market_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "status",
+        "api_schema",
+        "api_version",
+        "market_version",
+        "boot_id",
+        "port"
+      ],
+      "properties": {
+        "schema": {
+          "const": "dsh-desktop-market-observation/v1"
+        },
+        "status": {
+          "const": "observed"
+        },
+        "api_schema": {
+          "const": "dsh-market/update-api/v1"
+        },
+        "api_version": {
+          "const": 1
+        },
+        "market_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+        },
+        "boot_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         }
       }
     }

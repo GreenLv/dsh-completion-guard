@@ -16,7 +16,7 @@ import tarfile
 from pathlib import Path
 from typing import Any
 
-from native_desktop_market_acceptance import LOCK_SLOTS, market_driver_digest
+from native_desktop_market_acceptance import CONTRACT, LOCK_SLOTS, market_driver_digest
 
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -38,13 +38,9 @@ EXPECTED_GATES = BASE_GATES | {
     "desktop_market_coexistence_lock", "desktop_market_remove_restore",
     "desktop_market_final_coexistence", "desktop_market_probe_composition",
     "desktop_market_loaded_backend", "desktop_market_graceful_stop",
-    "desktop_market_uninstall", "desktop_market_cleanup",
+    "desktop_market_uninstall", "desktop_market_cleanup", "desktop_market_api",
     *("desktop_market_" + case for case in PROBE_V070_CASES),
 }
-CONTRACT = {"schema": "dsh-desktop-market-coexistence/v1",
-            "market_install_entry": "official_plugin_cli_registry_spec",
-            "lock_drift": "old_dump_verify_fails_after_market_change",
-            "final_state": "market_installed_with_rebound_lock"}
 
 
 def digest(path: Path) -> str:
@@ -60,15 +56,21 @@ def valid_market_annex(value: Any, artifact: Path, source_commit: str, driver_di
             or set(expected_locks) != set(LOCK_SLOTS)
             or not all(isinstance(row, str) and HEX64.fullmatch(row) for row in expected_locks.values())):
         return False
+    # Lock slots are states defined by their bound graph and bytes, not
+    # lifecycle counters: the final reinstall may legitimately restore the
+    # first coexistence identity, and a removed-state rebind may legitimately
+    # differ from the historical pre-market digest when installer metadata
+    # changed. Only the market install necessarily rewrites the bound profile
+    # manifest, so only pre_market != coexistence is a byte-bound requirement.
     locks = value.get("host_lock_digests")
-    if not isinstance(locks, dict) or set(locks) != set(LOCK_SLOTS) or len(set(locks.values())) != len(LOCK_SLOTS):
+    if not isinstance(locks, dict) or set(locks) != set(LOCK_SLOTS):
+        return False
+    if any(not isinstance(row, str) or not HEX64.fullmatch(row) for row in locks.values()):
         return False
     # The annex must carry exactly the digests the coordinating acceptance
-    # read back on that machine, not merely three well-formed identities.
+    # read back on that machine, not merely well-formed identities.
     if locks != expected_locks:
         return False
-    # The market lifecycle must have produced a distinct lock identity in the
-    # coexistence state; the restored/final locks are read back separately.
     if locks["desktop_pre_market"] == locks["desktop_coexistence"]:
         return False
     if value.get("schema") != "native-acceptance/v2" or value.get("gate_profile") != "desktop-market-coexistence/v1":
@@ -122,11 +124,25 @@ def valid_market_annex(value: Any, artifact: Path, source_commit: str, driver_di
     if value.get("market_coexistence_contract") != CONTRACT:
         return False
     market = value.get("market")
-    if not isinstance(market, dict) or market.get("package") != "dshmarket":
+    if not isinstance(market, dict) or market.get("package") != "dshmarket" \
+            or set(market) != {"package", "version", "registry_integrity"}:
         return False
     if not isinstance(market.get("version"), str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", market["version"]):
         return False
     if not isinstance(market.get("registry_integrity"), str) or not re.fullmatch(r"sha512-[A-Za-z0-9+/]{86}==", market["registry_integrity"]):
+        return False
+    market_observation = value.get("market_observation")
+    if not isinstance(market_observation, dict) \
+            or set(market_observation) != {"schema", "status", "api_schema", "api_version",
+                                            "market_version", "boot_id", "port"} \
+            or market_observation.get("schema") != "dsh-desktop-market-observation/v1" \
+            or market_observation.get("status") != "observed" \
+            or market_observation.get("api_schema") != "dsh-market/update-api/v1" \
+            or market_observation.get("api_version") != 1 \
+            or market_observation.get("market_version") != market.get("version"):
+        return False
+    if not isinstance(market_observation.get("boot_id"), str) or not market_observation["boot_id"] \
+            or type(market_observation.get("port")) is not int or not 0 < market_observation["port"] < 65536:
         return False
     runtime = value.get("desktop_runtime")
     if not isinstance(runtime, dict) or set(runtime) != {"manifest_sha256", "header_sha256", "metadata_sha256", "host_version", "desktop_version", "payload_file_count"}:
@@ -156,6 +172,7 @@ def main() -> int:
     parser.add_argument("--expected-platform", choices=("macos", "windows"), required=True)
     parser.add_argument("--desktop-pre-market-lock-digest", required=True)
     parser.add_argument("--desktop-coexistence-lock-digest", required=True)
+    parser.add_argument("--desktop-removed-rebind-lock-digest", required=True)
     parser.add_argument("--desktop-final-lock-digest", required=True)
     args = parser.parse_args()
     try:
@@ -167,6 +184,7 @@ def main() -> int:
             args.expected_platform, {
                 "desktop_pre_market": args.desktop_pre_market_lock_digest,
                 "desktop_coexistence": args.desktop_coexistence_lock_digest,
+                "desktop_removed_rebind": args.desktop_removed_rebind_lock_digest,
                 "desktop_final": args.desktop_final_lock_digest,
             })
     except (OSError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError, ImportError, AttributeError):
