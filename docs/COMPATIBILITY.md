@@ -2,9 +2,9 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
-## 0.8.2–0.8.4: DSH >=0.2.0-rc.2 and official Desktop
+## 0.8.2–0.9.0: DSH >=0.2.0-rc.2 and official Desktop
 
-0.8.4 retains the host admission and Desktop support introduced in 0.8.2. Each release still requires its own artifact acceptance.
+0.9.0 retains the host admission and Desktop support introduced in 0.8.2. Each release still requires its own artifact acceptance.
 
 Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.2`, with no upper limit. `0.2.0-rc.1` keeps its recorded-evidence row but is refused as below the floor. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.
 
@@ -26,9 +26,9 @@ The lock binds the canonical archive, signed header, runtime manifest and metada
 
 `hostLockProfile: "desktop"` is preserved through composition and readback. Guard refuses Desktop restart with `host_capability_request_unsupported`; the graphical app owns its lifecycle. Exact-artifact backend acceptance, graphical-shell acceptance and real-model behavior are separate gates. Their results belong to the matching Release annexes.
 
-### 0.8.2–0.8.4 中文说明
+### 0.8.2–0.9.0 中文说明
 
-0.8.4 保留 0.8.2 的宿主准入范围与 Desktop 支持；各版本仍须独立核对制品验收结果。
+0.9.0 保留 0.8.2 的宿主准入范围与 Desktop 支持；各版本仍须独立核对制品验收结果。
 
 0.8.2 延续 0.8.x 的任务、证书与数据协议，主要适配 DSH RC.2、增加 Desktop 宿主锁并修复退出证据判定。最低 DSH 版本升至 `0.2.0-rc.2`；请先升级宿主，再安装 Guard、重新注入锁并回读。版本准入没有上限，但版本号相符仍不足以证明实现兼容。Cordis 的独立要求为 `>=4.0.4`。
 
@@ -151,7 +151,11 @@ Market versions do not select a core cohort. Market restart has its own protocol
 
 The package exposes a named `apply(ctx)` function and a named `inject` array (`['sessions', 'commands', 'fs']`) with no default export. Its `dsh.bundle.patch` points at `cordis.patch.yml`, which inserts the `context-guard` bundle row.
 
-The plugin accepts an `activation` configuration value of `opt-in` or `always`. The default is `opt-in`; `always` means every session is protected automatically from its first real user message. Since 0.5.0, session start writes nothing into the session log: the versioned protocol boundary and first-step guidance are delivered inside the same step batch as — and ahead of — the first real user message, so a new session stays blank (`seq === 0`) and a DSH preset can be selected before anything is sent. An explicit `off` suppresses `always` in that session until the next `on`. Invalid values fail during plugin configuration instead of silently falling back. A DSH profile can select `always` with an ID-targeted `config` override in its `cordis.patch.yml`; see the README quick start for the complete example.
+The plugin accepts explicit `opt-in` or `always`, preserving omitted configuration through the real Cordis schema. Since 0.9.0 only newly created, unseeded root sessions default to `always`. Old sessions retain the pre-upgrade effective mode through [verified migration bindings](ACTIVATION_MIGRATION.md), including empty sessions. Existing bindings override a profile default; contradictory explicit configuration refuses with `activation_mode_conflict`. Persisted off/on controls replay enablement. Mode selection does not grant authority, certify work or change the default `standard` policy. Invalid values refuse configuration.
+
+A qualified official `agent/created` startup path may bind fresh roots. Resume, clear, compact and late attach only read existing bindings; missing or corrupt records refuse certification. Qualification checks public live Agent/Session identity and the supported host composition. This trusts the audited host call chain; the public API provides no factory issuer token and does not defend against arbitrary hostile in-process plugins. Fork/seed mode comes from a verified parent binding; exact inherited-cut validation belongs to the official Session/persistence contract, not a guessed event count. At T0 the Guard may write its private sidecar but writes no Session log messages, preserving the blank preset picker. First real input receives the boundary and guidance in the same entered step. Blank input does not activate; attachments do.
+
+旧会话通过升级前模式清点及核验收据保留有效模式和重放 epoch，不重新解释旧证书。缺省变化只影响新建无继承根会话。恢复、清空、压缩及迟挂载不补建缺失记录；显式模式冲突拒绝认证。官方宿主公开身份与调用链是来源边界，不声称有逐调用 issuer token 或防御任意同进程伪造。父模式绑定和官方 persistence 的精确 cut 分别核验；未知来源保持诊断，不清历史、不重签。见[迁移说明](ACTIVATION_MIGRATION.md)。
 
 ### Host-lock setup
 
@@ -196,7 +200,7 @@ managers therefore see the same two exact host releases as the host-lock
 registry; neither an unregistered stable release nor a future version is
 implicitly admitted.
 
-That historical artifact retained exact `0.1.5-rc.1` development pins. The current 0.8.4 build pins DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
+That historical artifact retained exact `0.1.5-rc.1` development pins. The current 0.9.0 build pins DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
 above and are not part of the 0.5.2 contract.
 
 ## Terminal outcome contract

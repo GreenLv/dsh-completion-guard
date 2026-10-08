@@ -36,10 +36,18 @@ verdict is never inherited from a file-level or family-level green run.
   regression set, kept outside this repository; raw records, private session
   material and machine-local mappings are never copied into public files.
   The per-record table below is a historical producer statement for a former
-  28-record subset and is superseded for acceptance purposes by the current
-  full-library adjudication (56 cases / 45 active — 29 Codex, 16 DSH — plus a
-  frozen 16-record legacy lineage), whose per-case verdicts, execution lanes
-  and candidate binding are tracked in that sanitized set.
+  28-record subset. An earlier full-library snapshot recorded 56 cases / 45
+  active (29 Codex, 16 DSH), plus a separate frozen 16-record legacy lineage;
+  those counts are historical and are not the current acceptance denominator.
+- The 2026-10-08 inventory review covered 70 case records / 53 active, plus
+  the separately counted frozen legacy lineage of 16 records / 8 active.
+  Every record was reviewed for lineage, DSH applicability, named source
+  controls and remaining inputs. This is a per-record inventory review, not
+  replay of every original incident or native-platform acceptance. Source
+  analogues, original reproductions and exact-artifact native runs remain
+  separate evidence; the old execution results below keep their original
+  dates and subjects. The maintainer's sanitized per-case review retains the
+  complete verdicts and candidate bindings without publishing private mappings.
 
 ## New adaptation tests added for this adjudication
 

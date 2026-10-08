@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { apply } from '../src/runtime.js'
+import { applyWithFixtureActivation as apply } from './activation-fixture.js'
 import { EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
 /**

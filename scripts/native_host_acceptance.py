@@ -35,7 +35,7 @@ PROBE_V070_CASES = {
     "v070_ordinary_test_and_checkpoint", "v070_future_vs_current_stop",
     "v070_short_resume_and_persistence", "v070_legacy_migration",
     "v070_goal_adoption_current_closure", "v070_explicit_release_minimum",
-    "v070_history_compaction_restart",
+    "v070_history_compaction_restart", "v090_activation_birth_restore_adoption",
 }
 PROBE_V070_DRIVER_FILES = (
     "native_host_probe.mjs", "native_host_probe_v070.mjs", "native_release_fixture_v070.mjs",
@@ -670,8 +670,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                       **({"progressOutput": str(progress_path)} if progress_path else {})}
             # JSON is valid YAML. Isolated Headless loads its real base services
             # with the interactive task driver disabled; no model is requested.
-            patches = [{"id": "context-guard", "config": {"activation": "always",
-                         "hostLockPackages": packages, "hostLockPlatform": "windows" if platform.system() == "Windows" else "posix",
+            patches = [{"id": "context-guard", "config": {"hostLockPackages": packages, "hostLockPlatform": "windows" if platform.system() == "Windows" else "posix",
                          "hostLockProfile": profile, "hostLockPolicy": "dsh-core/v1",
                          "hostLockRuntimeRoot": str(runtime_root), "hostLockProfileRoot": str(profile_root)}},
                        native_probe_patch(probe, config)]

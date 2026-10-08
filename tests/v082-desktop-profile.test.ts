@@ -9,12 +9,16 @@ import {
   auditDesktopInstalledImplementation,
   readAsarIndex,
   readAsarFile,
+  memoizedAsarIndex,
+  memoizedAsarFile,
   readDesktopAppRuntime,
   readDesktopDependency,
   readDesktopTargetGraph,
   hasDesktopImporterState,
   DESKTOP_PROFILE_PACKAGE_NAME,
 } from '../src/domain/host-desktop.js'
+import { createHostAuditSession } from '../src/domain/host-audit-session.js'
+import { desktopDependencyGraph } from '../src/domain/host-desktop-graph.js'
 import { evaluateConfiguredHostLock, injectActiveProfileHostLock, inspectDesktopTargetGraph, resolveActiveProfileHostLock, revalidateDesktopCoreLock, verifyComposedHostLockDump } from '../src/domain/host-resolver.js'
 import { evaluateHostCapability, evaluateHostLock, type HostProfileKind } from '../src/domain/host-lock.js'
 import { resolveConfig } from '../src/config.js'
@@ -171,6 +175,29 @@ function writeDesktopProfile(root: string, options?: {
 // ---------------------------------------------------------------------------
 
 describe('desktop asar adapter', () => {
+  it('shares verified archive bytes across auditors only within one operation', () => {
+    const root = temporaryRoot()
+    const files = bundleFileSpecs()
+    const asar = writeAsar(files, root)
+    const audit = createHostAuditSession()
+    const index = memoizedAsarIndex(audit, asar)
+    const entry = 'dsh/node_modules/@deepseek-ai/dsh-session/package.json'
+    const original = memoizedAsarFile(audit, asar, index, entry)
+    const graph = desktopDependencyGraph(asar, [], audit)
+    expect(graph.session.readFile(join(asar, ...entry.split('/')))).toBe(original)
+    expect(memoizedAsarIndex(audit, asar)).toBe(index)
+
+    // A later validation must observe same-length byte replacement, even
+    // when the archive path and package name/version have not changed.
+    writeAsar(files.map(file => file.path === entry
+      ? { ...file, content: Buffer.from(file.content.toString().replace('index.js', 'other.js')) }
+      : file), root)
+    const next = desktopDependencyGraph(asar, [], createHostAuditSession())
+    expect(next.session.readFile(join(asar, ...entry.split('/')))).not.toEqual(original)
+    writeFileSync(asar, Buffer.from('truncated'))
+    expect(() => desktopDependencyGraph(asar, [], createHostAuditSession())).toThrow()
+  })
+
   it('reads the official runtime identity in place from the app bundle', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)

@@ -3,7 +3,7 @@ import type { PackageRow } from './domain/digest.js'
 import type { HostPlatform, HostProfileKind } from './domain/host-lock.js'
 
 export const Config: z<{
-  activation: string
+  activation?: string
   policy?: string
   hostLockPackages?: PackageRow[]
   hostLockPlatform?: HostPlatform
@@ -14,7 +14,7 @@ export const Config: z<{
   hostLockTrust?: string
   hostLockDesktopDigest?: string
 }> = z.object({
-  activation: z.string().default('opt-in'),
+  activation: z.string(),
   policy: z.string().default('standard'),
   hostLockPlatform: z.string() as z<HostPlatform>,
   hostLockProfile: z.string() as z<HostProfileKind>,
@@ -27,7 +27,7 @@ export const Config: z<{
     name: z.string().required(),
     version: z.string(),
     integrity: z.string(),
-  })),
+  })).default(undefined as never),
 })
 
 /**
@@ -39,6 +39,7 @@ export type GuardPolicy = 'standard' | 'strict' | 'release'
 
 export interface ResolvedConfig {
   activation: 'opt-in' | 'always'
+  activationSource?: 'default' | 'explicit'
   /** Absent reads as `standard`. */
   policy?: GuardPolicy
   hostLockPackages?: PackageRow[]
@@ -63,7 +64,7 @@ export function resolveConfig(config: {
   hostLockTrust?: unknown
   hostLockDesktopDigest?: unknown
 }): ResolvedConfig {
-  const activation = config.activation ?? 'opt-in'
+  const activation = config.activation ?? 'always'
   if (activation !== 'opt-in' && activation !== 'always') {
     throw new TypeError(`activation must be "opt-in" or "always", received ${JSON.stringify(activation)}`)
   }
@@ -107,6 +108,7 @@ export function resolveConfig(config: {
     ...(typeof config.hostLockRuntimeRoot === 'string' ? { hostLockRuntimeRoot: config.hostLockRuntimeRoot } : {}),
     ...(typeof config.hostLockProfileRoot === 'string' ? { hostLockProfileRoot: config.hostLockProfileRoot } : {}),
     activation,
+    activationSource: config.activation == null ? 'default' : 'explicit',
     policy,
     ...(hostLockPackages ? { hostLockPackages } : {}),
     ...(config.hostLockPlatform ? { hostLockPlatform: config.hostLockPlatform } : {}),

@@ -98,7 +98,7 @@ describe('shipped artifact entries', () => {
   })
 
   it('advertises only entry points that exist in the built tree', () => {
-    expect(manifest.version).toBe('0.8.4')
+    expect(manifest.version).toBe('0.9.0')
     expect(manifest.main).toBe('dist/index.js')
     for (const [subpath, target] of Object.entries(manifest.exports)) {
       for (const field of ['types', 'default'] as const) {

@@ -4,7 +4,7 @@ import type { Stats } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 import type { DependencyAuditGraph } from './host-dependency-audit.js'
-import { readAsarFile, readAsarIndex } from './host-desktop.js'
+import { memoizedAsarFile, memoizedAsarIndex } from './host-desktop.js'
 import type { AuditedPackageExpectation } from './host-resolver.js'
 
 const packageNamePattern = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/
@@ -103,7 +103,10 @@ export function desktopHoistedProfileGraph(profile: string, session: HostAuditSe
 export function desktopDependencyGraph(archive: string,
   expectations: readonly AuditedPackageExpectation[], base: HostAuditSession = createHostAuditSession()):
   { graph: DependencyAuditGraph; session: HostAuditSession } {
-  const index = readAsarIndex(archive)
+  // Share the exact index and verified bytes already consumed by the runtime
+  // and installed-byte auditors in THIS operation. A separate memo namespace
+  // here used to read and parse the same archive a second time.
+  const index = memoizedAsarIndex(base, archive)
   const prefix = archive + sep
   const entry = (path: string): ReturnType<typeof lookup> | undefined => path.startsWith(prefix)
     ? lookup(path.slice(prefix.length).split(sep)) : undefined
@@ -129,8 +132,8 @@ export function desktopDependencyGraph(archive: string,
       if (!node) throw new Error('desktop route entry missing')
       return { isFile: () => !node.files, isDirectory: () => !!node.files } as Stats
     },
-    readFile: (path) => path.startsWith(prefix) ? base.memo('asar-bytes:' + path,
-      () => readAsarFile(archive, index, path.slice(prefix.length).split(sep).join('/'))) : base.readFile(path),
+    readFile: (path) => path.startsWith(prefix)
+      ? memoizedAsarFile(base, archive, index, path.slice(prefix.length).split(sep).join('/')) : base.readFile(path),
     readJson: (path) => path.startsWith(prefix) ? base.memo('asar-json:' + path,
       () => JSON.parse(session.readFile(path).toString('utf8')) as Record<string, unknown>) : base.readJson(path),
     fileDigest: (path) => path.startsWith(prefix) ? base.memo('asar-digest:' + path,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { apply } from '../src/runtime.js'
+import { applyWithFixtureActivation as apply } from './activation-fixture.js'
 import { deriveProjection, PROTOCOL_V3_NOTICE, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { certifyCheckpoint } from '../src/domain/checkpoint.js'
 import { firstStepGuidanceV6 } from '../src/domain/lifecycle.js'
@@ -110,14 +110,14 @@ function persistStep(session: Session, messages: unknown[]) {
   rawAppend(session)('turn/end', { turn, reason: { kind: 'completed' } })
 }
 
-function guardApply(ctx: ReturnType<typeof fakeCtx>, activation: 'opt-in' | 'always') {
+function guardApply(ctx: ReturnType<typeof fakeCtx>, activation?: 'opt-in' | 'always') {
   apply(ctx as never, {
     activation, hostLockPackages: TEST_HOST_ROWS, hostLockPlatform: 'posix', hostLockProfile: 'web',
   })
 }
 
 describe('A01: fresh empty sessions stay silent at T0', () => {
-  for (const activation of ['always', 'opt-in'] as const) {
+  for (const activation of [undefined, 'always', 'opt-in'] as const) {
     it(`${activation}: session-start, status, and refresh append nothing and keep the session blank`, () => {
       const session = Session.create(SessionId(`a01-${activation}`))
       const ctx = fakeCtx()
@@ -143,10 +143,10 @@ describe('A01: fresh empty sessions stay silent at T0', () => {
     })
   }
 
-  it('always: the first real claimed input activates with boundary-first delivery exactly once', async () => {
+  it('implicit always: the first real claimed input activates with boundary-first delivery exactly once', async () => {
     const session = Session.create(SessionId('a01-activation'))
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
 
@@ -181,7 +181,7 @@ describe('A02: first real input is covered exactly once, including asset-only in
   it('an image-only first input activates protection but creates no empty contract certificate', async () => {
     const session = Session.create(SessionId('a02-image-only'))
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
 
@@ -200,7 +200,7 @@ describe('A02: first real input is covered exactly once, including asset-only in
   it('a whitespace-only message neither activates nor fabricates a task', async () => {
     const session = Session.create(SessionId('a02-whitespace'))
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
 
@@ -215,7 +215,7 @@ describe('A03/A04: rejected, canceled, filtered, and non-root batches never acti
   it('a rejected step injects nothing and the next legal input still activates', async () => {
     const session = Session.create(SessionId('a03-reject'))
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
 
@@ -233,7 +233,7 @@ describe('A03/A04: rejected, canceled, filtered, and non-root batches never acti
   it('plugin, tool, and imported batches do not root-activate; delegated sessions never inject', async () => {
     const session = Session.create(SessionId('a04-nonroot'))
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
 
@@ -260,7 +260,7 @@ describe('A05: explicit commands, presets, and concurrent sessions', () => {
     const session = Session.create(SessionId('a05-off'))
     enableCommand(session, 'off')
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
 
@@ -272,7 +272,7 @@ describe('A05: explicit commands, presets, and concurrent sessions', () => {
 
   it('two concurrent sessions inject independently and never share activation state', async () => {
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const first = Session.create(SessionId('a05-s1'))
     const second = Session.create(SessionId('a05-s2'))
     const agent1 = guardedAgent(first)
@@ -295,7 +295,7 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
   it('resume delivers recovery at the next entered step without re-injecting the boundary', async () => {
     const session = Session.create(SessionId('a06-resume'))
     const ctx = fakeCtx()
-    guardApply(ctx, 'always')
+    guardApply(ctx)
     const { agent, registered } = guardedAgent(session)
     startGuard(ctx, agent, 'new')
     const claimed = [createUserMessage({ content: [{ type: 'text', text: '修改 f.txt 并运行 pnpm test' }], source: { kind: 'user' } })]
@@ -353,7 +353,7 @@ describe('A06: resume, compaction, and old-session upgrade', () => {
 it('does not activate when a downstream pre-step gate filters the claimed root input', async () => {
   const session = Session.create(SessionId('filtered-root'))
   const ctx = fakeCtx()
-  guardApply(ctx, 'always')
+  guardApply(ctx)
   const { agent } = guardedAgent(session)
   startGuard(ctx, agent, 'new')
   const claimed = [createUserMessage({ content: [{ type: 'text', text: '请检查代码' }], source: { kind: 'user' } })]

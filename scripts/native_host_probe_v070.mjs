@@ -3,7 +3,7 @@
  * Certificates belong to explicitly adopted proof, Goal, or release paths. */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, appendFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, appendFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolCall, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
@@ -24,7 +24,7 @@ const INITIAL_CASES = [
   'v070_ordinary_test_and_checkpoint', 'v070_future_vs_current_stop',
   'v070_short_resume_and_persistence', 'v070_legacy_migration',
   'v070_goal_adoption_current_closure', 'v070_explicit_release_minimum',
-  'v070_history_compaction_restart',
+  'v070_history_compaction_restart', 'v090_activation_birth_restore_adoption',
 ]
 const textOf = event => Array.isArray(event?.data?.content)
   ? event.data.content.filter(part => part?.type === 'text').map(part => part.text).join('') : ''
@@ -157,9 +157,13 @@ export function apply(ctx, config) {
       progress.record('initialize', 'started')
     const runtime = runtimeRequire(config.runtimeRoot)
     const { createUserMessage, createToolResultMessage, createAssistantMessage } = await progress.timed('import_llm', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
-    const { SessionId } = await progress.timed('import_session', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href))
+    const { SessionId, SESSION_FORMAT_VERSION } = await progress.timed('import_session', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href))
     const domain = await progress.timed('import_domain', () => import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href))
     progress.record('initialize', 'passed')
+    const observedSources = new Map()
+    ctx.on('agent/created', ({ agent, source }) => { observedSources.set(String(agent.id), source); return undefined })
+    const modeRoot = domain.resolveActivationBindingsRoot(process.env.DSH_HOME)
+    const modeOf = agent => domain.readActivationBinding(modeRoot, domain.sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount))
     let ordinal = 0
     const sessionFor = label => SessionId(`guard-native-${config.nonce}-${label}`)
     const open = async (label, resume = false) => {
@@ -248,6 +252,47 @@ export function apply(ctx, config) {
           return { positive: true, negative: page.status !== 'certified' || !!page.certificate }
         })
       } else {
+        await check('v090_activation_birth_restore_adoption', async () => {
+          const fresh = await open('mode-birth')
+          assert.equal(observedSources.get(String(fresh.id)), 'startup')
+          assert.equal(fresh.session.seq, 0)
+          assert.equal(modeOf(fresh).status, 'bound')
+          assert.equal(modeOf(fresh).mode, 'always')
+          const identity = domain.sessionBirthIdentity(fresh.session.header, fresh.session.inheritedEventCount)
+          const path = domain.activationBindingPath(modeRoot, identity.id)
+          const before = readFileSync(path)
+          await flush()
+          const restored = await open('mode-birth', true)
+          assert.equal(observedSources.get(String(restored.id)), 'resume')
+          assert.equal(restored.session.seq, 0)
+          assert.deepEqual(readFileSync(path), before)
+          assert.equal(modeOf(restored).mode, 'always')
+          unlinkSync(path)
+          await open('mode-birth', true)
+          assert.equal(modeOf(handle.agent).reasonCode, 'activation_mode_unknown')
+          assert.equal(existsSync(path), false, 'restore cannot recreate a deleted binding')
+          // Synthetic historical empty Session, persisted through the real
+          // official API. This is not a claim about a day-use old config.
+          const oldId = sessionFor('mode-old')
+          const stored = await ctx.sessionPersistence.create({ version: SESSION_FORMAT_VERSION,
+            id: oldId, createdAt: 1, cwd: config.workRoot, isSeeded: false })
+          await stored.flush()
+          const oldBirth = domain.sessionBirthIdentity(stored.header, stored.inheritedEventCount)
+          await stored.close()
+          const inventory = await domain.inspectActivationInventory(ctx.sessionPersistence)
+          assert.ok(inventory.some(row => domain.activationDigest(row) === domain.activationDigest(oldBirth)))
+          const receipt = domain.createActivationMigrationReceipt([{ identity: oldBirth, mode: 'opt-in', cohort: 'native-synthetic-old' }],
+            { fixture: domain.activationDigest(oldBirth) })
+          assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).status, 'complete')
+          const oldPath = domain.activationBindingPath(modeRoot, String(oldId)), adopted = readFileSync(oldPath)
+          assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).entries[0].created, false)
+          assert.deepEqual(readFileSync(oldPath), adopted)
+          const old = await open('mode-old', true)
+          assert.equal(observedSources.get(String(old.id)), 'resume')
+          assert.equal(old.session.seq, 0)
+          assert.equal(modeOf(old).mode, 'opt-in')
+          return { positive: true, negative: true }
+        })
         await check('v070_root_v6_delivery', async () => {
           await open('root')
           assert.equal(events().filter(event => event.type === 'user/message').length, 0)

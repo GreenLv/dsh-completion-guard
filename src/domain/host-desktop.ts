@@ -46,12 +46,12 @@ const MAX_ASAR_FILE_BYTES = 64 * 1024 * 1024
  * they live and die with the validation and are never a cross-entry cache.
  * Without a session the original direct reads run unchanged.
  */
-function memoizedAsarIndex(session: HostAuditSession | undefined, archivePath: string): AsarIndex {
+export function memoizedAsarIndex(session: HostAuditSession | undefined, archivePath: string): AsarIndex {
   if (!session) return readAsarIndex(archivePath)
   return session.memo(`desktop-asar-index:${archivePath}`, () => readAsarIndex(archivePath))
 }
 
-function memoizedAsarFile(session: HostAuditSession | undefined, archivePath: string, index: AsarIndex, entryPath: string): Buffer {
+export function memoizedAsarFile(session: HostAuditSession | undefined, archivePath: string, index: AsarIndex, entryPath: string): Buffer {
   if (!session) return readAsarFile(archivePath, index, entryPath)
   return session.memo(`desktop-asar-bytes:${archivePath}\u0000${entryPath}`, () => readAsarFile(archivePath, index, entryPath))
 }

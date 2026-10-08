@@ -80,7 +80,12 @@ export async function runNativeReleaseFixture(config) {
     get: () => undefined,
     sessions: { flush: async () => true },
   }
+  const activationBindingsRoot = join(root, 'activation-bindings')
+  assert.equal(domain.writeActivationBinding(activationBindingsRoot,
+    domain.sessionBirthIdentity(session.header, session.inheritedEventCount), 'always', 'legacy_adoption',
+    domain.activationDigest({ fixture: 'native-synthetic-release', sessionId })).status, 'bound')
   product.apply(ctx, { activation: 'always', policy: 'release' }, {
+    activationBindingsRoot,
     commandRunner: async () => { publishCount++ }, fetcher,
     allowLoopbackHttpRegistry: true,
     hostLock: { ...domain.evaluateHostLock(config.hostPackages, {

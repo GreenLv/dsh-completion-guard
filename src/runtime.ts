@@ -1,10 +1,14 @@
 import './message-source.js'
+import { privateStorageToolDenial } from './domain/private-storage-guard.js'
+import { resolveActivationBindingsRoot, resolveSessionActivation, readActivationBinding } from './domain/activation-bindings.js'
+import { sessionBirthIdentity, type SessionActivationRead } from './domain/session-activation.js'
 import { evaluateActiveHostLock, evaluateConfiguredHostLock } from './domain/host-resolver.js'
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import { createRebindTool } from './tools/rebind.js'
 import { createHash } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -97,6 +101,7 @@ export interface GuardRuntime {
   readonly projection: GuardProjection
   readonly session: Session
   /** Startup lifecycle: armed (waiting for the first real root input), active, or disabled. */
+  readonly initialActivation?: 'opt-in' | 'always'
   readonly lifecycle: LifecyclePhase
   /** The durable log already carries the 0.5 first-step protocol boundary. */
   readonly protocolV4Present: boolean
@@ -403,6 +408,8 @@ export async function handleGuardTurnStopping(
   // last projection refresh.
   runtime.sync({ revalidateHostLock: true })
   if (!durable) return 'boundary_flush_failed'
+  const modeFailure = runtime.projection.integrityViolations.find(code => code.startsWith('activation_'))
+  if (modeFailure) return modeFailure
   const hostSupported = access.hostSupported && runtime.projection.hostStatus === 'supported'
 
   // A trusted root pause request outranks the old Goal's continuation: the user
@@ -593,6 +600,7 @@ export function createRuntime(
   refreshHostLock?: () => HostLockEvaluation,
   readPrivateRecords?: () => PrivateLedgerSnapshot,
   initializePrivateRecords?: () => boolean,
+  readActivation?: () => SessionActivationRead,
 ): GuardRuntime {
   const projection = createProjection()
   const session = agent.session
@@ -634,9 +642,12 @@ export function createRuntime(
     goalKey: string
     ledgerKey: string
     refreshEpoch: number
+    activationKey: string
   }
   let refreshEpoch = 0
   let lastFullSync: SyncInputs | undefined
+  let activationRead: SessionActivationRead | undefined
+  let originalActivationKey: string | undefined
   const sameSnapshotIdentity = (candidate: readonly unknown[], consumed: readonly unknown[]): boolean => {
     if (candidate.length !== consumed.length) return false
     for (let index = 0; index < candidate.length; index += 1) {
@@ -653,10 +664,11 @@ export function createRuntime(
    * every container in the snapshot is Object.isFrozen, checked recursively
    * under a node budget. A snapshot that fails (or exhausts) the check is
    * "not provable" and always takes the full rebuild — fail-closed, never
-   * cached. Passing results are remembered per array object: freezing is
-   * irreversible, so a previously proven snapshot cannot become mutable.
+   * cached. Passing results are remembered per fully proven container:
+   * freezing is irreversible. Appending an event creates a new snapshot
+   * array, but does not invalidate proofs of its unchanged frozen children.
    */
-  const provenImmutableSnapshots = new WeakSet<readonly unknown[]>()
+  const provenImmutableContainers = new WeakSet<object>()
   const IMMUTABILITY_PROOF_NODE_BUDGET = 400_000
   /**
    * F2 (round 3): freezing a container does NOT freeze its content when a
@@ -669,12 +681,22 @@ export function createRuntime(
    * anything mutable; only the descriptor SHAPE plus frozen containers are.
    */
   const snapshotIsProvablyImmutable = (events: readonly unknown[]): boolean => {
-    if (provenImmutableSnapshots.has(events)) return true
+    if (provenImmutableContainers.has(events)) return true
     let visited = 0
+    const active = new WeakSet<object>()
     const walk = (value: unknown): boolean => {
       if (value === null || typeof value !== 'object') return true
+      if (provenImmutableContainers.has(value)) return true
       if (++visited > IMMUTABILITY_PROOF_NODE_BUDGET) return false
       if (!Object.isFrozen(value)) return false
+      // Object.freeze covers owned descriptors, never inherited accessors or
+      // mutable class state. Official decoded JSON uses only these ordinary
+      // prototypes; exotic/custom prototypes must always rebuild.
+      const prototype = Object.getPrototypeOf(value)
+      if (prototype !== null && prototype !== (Array.isArray(value) ? Array.prototype : Object.prototype)) return false
+      // Cyclic input is outside the host JSON contract; never cache it.
+      if (active.has(value)) return false
+      active.add(value)
       // F2 (round 5): Object.keys enumerates only ENUMERABLE keys, so a
       // non-enumerable accessor would be skipped and its getter — whose
       // return value follows its closure — would silently pass the proof.
@@ -687,11 +709,16 @@ export function createRuntime(
         if (descriptor.get !== undefined || descriptor.set !== undefined) return false
         if (descriptor.value !== undefined && !walk(descriptor.value)) return false
       }
+      active.delete(value)
+      // Publish only after ALL children and descriptor shapes passed. A
+      // budget failure may retain completed subtree proofs, never a proof
+      // of the unfinished parent or of a mutable/accessor-backed child.
+      provenImmutableContainers.add(value)
       return true
     }
-    if (!walk(events)) return false
-    provenImmutableSnapshots.add(events)
-    return true
+    // Deep/exotic synthetic graphs may throw during reflection or recursion.
+    // An incomplete proof is never eligible for reuse.
+    try { return walk(events) } catch { return false }
   }
   interface GoalRead { state: GoalActivationState | undefined; failed: boolean }
   const readGoalOnce = (): GoalRead => {
@@ -720,12 +747,17 @@ export function createRuntime(
     const sessionHeader = sessionHeaderForDigest(session)
     const derived = deriveProjection(
       events as Parameters<typeof deriveProjection>[0],
-      { activation: config.activation, policy: config.policy },
+      { activation: readActivation ? (activationRead?.status === 'bound' ? activationRead.mode : 'opt-in') : config.activation, policy: config.policy },
       { cwd: typeof header?.cwd === 'string' ? header.cwd : '', sessionHeader },
       durabilityConfirmed,
       hostLock,
     )
     Object.assign(projection, derived.projection)
+    if (readActivation && activationRead?.status !== 'bound') {
+      projection.enabled = false
+      projection.integrity = 'unknown'
+      projection.integrityViolations.push(activationRead?.reasonCode ?? 'activation_mode_unknown')
+    }
     if (readPrivateRecords && ledger) {
       let privateSnapshot = ledger
       if (!synchronizedOnce && events.length === 0 && !privateSnapshot.damaged && !privateSnapshot.anchored
@@ -748,6 +780,7 @@ export function createRuntime(
       durability: durabilityConfirmed,
       goalKey: goalKeyOf(goal),
       ledgerKey: ledger ? ledgerSnapshotKey(ledger) : '',
+      activationKey: activationRead?.key ?? 'explicit-runtime',
       refreshEpoch,
     }
     if (!sessionHeader) {
@@ -860,16 +893,29 @@ export function createRuntime(
     }
     // ONE read per input per sync: the same Goal readback and the same
     // private-ledger view feed both the cache key and, on a miss, the rebuild.
+    if (readActivation) {
+      try {
+        activationRead = readActivation()
+        if (activationRead.status === 'bound') {
+          if (originalActivationKey === undefined) originalActivationKey = activationRead.key
+          else if (activationRead.key !== originalActivationKey) activationRead = { status: 'unavailable', reasonCode: 'activation_binding_changed', key: 'changed' }
+        }
+      }
+      catch { activationRead = { status: 'unavailable', reasonCode: 'activation_storage_unavailable', key: 'error' } }
+    }
     const goal = readGoalOnce()
     const ledger = readPrivateRecords ? readPrivateRecords() : undefined
     if (lastFullSync
-      && snapshotIsProvablyImmutable(events)
+      && lastFullSync.activationKey === (activationRead?.key ?? 'explicit-runtime')
       && lastFullSync.refreshEpoch === refreshEpoch
-      && sameSnapshotIdentity(events, lastFullSync.events)
       && Object.is(lastFullSync.headerRef, session.header)
       && lastFullSync.durability === durabilityConfirmed
       && lastFullSync.goalKey === goalKeyOf(goal)
-      && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(ledger!))) {
+      && (!readPrivateRecords || lastFullSync.ledgerKey === ledgerSnapshotKey(ledger!))
+      && sameSnapshotIdentity(events, lastFullSync.events)
+      // Prove the graph only when all cheaper keys permit reuse. A changed
+      // snapshot or a fresh-authority entry must rebuild regardless.
+      && snapshotIsProvablyImmutable(events)) {
       return
     }
     rebuild(events, goal, ledger)
@@ -913,6 +959,7 @@ export function createRuntime(
   return {
     projection,
     session,
+    get initialActivation() { return readActivation ? (activationRead?.status === 'bound' ? activationRead.mode : undefined) : config.activation },
     get lifecycle() { return lifecycle },
     get protocolV4Present() { return protocolV4Present },
     get protocolV5Present() { return protocolV5Present },
@@ -1080,6 +1127,8 @@ export interface RuntimeExecutorSeams {
   hostLock?: HostLockEvaluation
   /** Isolated acceptance override for the provider-invisible durable ledger. */
   privateLedgerRoot?: string
+  /** Isolated storage location only; never bypasses mode resolution. */
+  activationBindingsRoot?: string
   /**
    * Invoked once per full host-lock validation the runtime actually performs —
    * the attach-time validation and every security-sensitive entry's fresh
@@ -1114,6 +1163,9 @@ export function apply(ctx: Context, rawConfig: {
   const runtimes = new Map<Agent, GuardRuntime>()
   const privateLedgerRoot = seams.privateLedgerRoot
     ?? resolvePrivateLedgerRoot(undefined, process.env.DSH_HOME, homedir())
+  const activationBindingsRoot = seams.activationBindingsRoot
+    ?? resolveActivationBindingsRoot(process.env.DSH_HOME, homedir())
+  const startSources = new WeakMap<Agent, string>()
   const hostLocks = new Map<Agent, HostLockEvaluation>()
   const qualifiedGoalService = (agent: Agent) => (hostLocks.get(agent) ?? installedHostLock).goalQualificationFailure
     ? undefined : optionalGoalService(ctx, agent)
@@ -1156,10 +1208,32 @@ export function apply(ctx: Context, rawConfig: {
       // fresh validation. The stale-write-back of the earlier double refresh
       // is gone with the second refresh itself.
       const agentHostLock = refreshAgentHostLock(agent)
+      let birth: ReturnType<typeof sessionBirthIdentity> | undefined
+      let initialization: SessionActivationRead
+      try {
+        birth = sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount)
+        const qualified = agentHostLock.status === 'supported'
+          && ctx.get?.('agents')?.get(agent.id) === agent
+          && ctx.sessions.get?.(agent.session.id) === agent.session
+        initialization = resolveSessionActivation(activationBindingsRoot, birth, config, startSources.get(agent), qualified)
+      } catch { initialization = { status: 'unavailable', reasonCode: 'activation_identity_unavailable', key: 'identity' } }
+      // Only qualified creation/adoption writes. Subsequent reads cannot
+      // recreate a missing record, even if the original source was startup.
+      const readMode = (): SessionActivationRead => {
+        if (!birth) return initialization
+        try {
+          const currentBirth = sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount)
+          const fresh = readActivationBinding(activationBindingsRoot, currentBirth, config.activationSource === 'explicit' ? config.activation : undefined)
+          return fresh.status === 'unavailable' && fresh.reasonCode === 'activation_mode_unknown' && initialization.status === 'unavailable'
+            ? { ...initialization, key: fresh.key } : fresh
+        } catch { return { status: 'unavailable', reasonCode: 'activation_identity_unavailable', key: 'identity' } }
+      }
+
       runtime = createRuntime(agent, config, agentHostLock, goals ? () => goals.get(agent) : undefined,
         () => refreshAgentHostLock(agent),
         privateLedgerRoot ? () => readPrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined,
-        privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined)
+        privateLedgerRoot ? () => initializePrivateLedger(privateLedgerRoot, ledgerContext(agent, agentHostLock)) : undefined,
+        readMode)
       runtimes.set(agent, runtime)
       created = true
     }
@@ -1486,6 +1560,14 @@ export function apply(ctx: Context, rawConfig: {
       () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
     ))
     ownedTools.guard((exec) => {
+      const privateDenial = privateStorageToolDenial(exec.name, exec.arguments, sessionCwd(agent.session) ?? process.cwd(),
+        [activationBindingsRoot, ...(privateLedgerRoot ? [privateLedgerRoot] : [])])
+      if (privateDenial) return privateDenial
+      if (exec.name === 'update_goal' && (exec.arguments as { action?: unknown } | undefined)?.action === 'complete') {
+        runtime.sync()
+        const modeFailure = runtime.projection.integrityViolations.find(code => code.startsWith('activation_'))
+        if (modeFailure) return `[${modeFailure}] Session initial activation is unavailable; inspect/adopt its binding before certification.`
+      }
       // A completion decision is a Goal/Stop authorization. Only the calls the
       // gate judges pay for this entry's own full host validation; every other
       // tool call is judged from the shared projection without rescanning.
@@ -1507,6 +1589,7 @@ export function apply(ctx: Context, rawConfig: {
   }
   ctx.on('agent/created', ({ agent, source, signal }) => {
     signal?.throwIfAborted()
+    startSources.set(agent, source)
     return attach(agent, source)
   })
   // rc.2 does not replay creation when a plugin is enabled on live agents.
@@ -1527,7 +1610,7 @@ export function apply(ctx: Context, rawConfig: {
     const delegated = isDelegatedSession(agent.session)
     let boundaryPending = !runtime.protocolV6Present
     const firstStep = previewFirstStepInjection(
-      { activation: config.activation, enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryV6Present: runtime.protocolV6Present, targetProtocol: 6, boundaryPresent: runtime.protocolV4Present, delegated, policy: runtime.projection.policy },
+      { activation: runtime.initialActivation ?? 'opt-in', enabled: runtime.projection.enabled, boundaryV5Present: runtime.protocolV5Present, boundaryV6Present: runtime.protocolV6Present, targetProtocol: 6, boundaryPresent: runtime.protocolV4Present, delegated, policy: runtime.projection.policy },
       claimedBatchHasRealRootInput(decision.messages),
     )
     if (firstStep) {

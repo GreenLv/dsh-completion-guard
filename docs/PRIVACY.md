@@ -32,3 +32,7 @@ Context Guard stores only bounded, deterministic facts. It does not persist prom
   a conflicting contract/target binding, or an uncertain writer lock refuses
   release/restart reuse. Historical plugin notices are never promoted into the
   stronger private-ledger channel.
+
+Session activation bindings store only immutable birth identity, mode and provenance digests in the private `activation-bindings-v1` directory. Migration receipts contain per-session identity/mode/cohort and relevant non-secret input digests, never raw prompt bodies or credential values. They are operator-owned integrity records, not signatures. Model file/shell protection has the bounded scope and platform gaps described in [activation migration](ACTIVATION_MIGRATION.md); arbitrary same-owner or in-process attackers are not excluded by checksums.
+
+会话模式绑定只保存不可变出生身份、模式与来源摘要。迁移收据只含逐会话身份、模式、来源组及相关非秘密输入摘要，不含原始提示正文或凭据值。它们是操作者完整性记录，不是签名；工具保护及平台缺口见迁移说明，摘要不排除任意同 owner 或同进程攻击。

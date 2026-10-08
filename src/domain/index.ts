@@ -34,3 +34,8 @@ export * from './rc020-rc1-host.js'
 export * from './rc020-rc2-host.js'
 export * from './host-desktop.js'
 export * from './host-trust.js'
+
+export * from './session-activation.js'
+export * from './activation-bindings.js'
+export * from './activation-migration.js'
+export * from './private-storage-guard.js'

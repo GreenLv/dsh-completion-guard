@@ -1,10 +1,11 @@
+import { applyWithFixtureActivation as apply, fixtureActivationReader } from './activation-fixture.js'
 import { describe, expect, it } from 'vitest'
+import { resolveConfig } from '../src/config.js'
 import { SESSION_FORMAT_VERSION, Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { boundContextSummary, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply as applyPinnedGoalTool } from '@deepseek-ai/dsh-tool-goal'
 import {
-  apply,
   authorizeMutationFromProjection,
   createRuntime,
   handleGuardTurnStopping,
@@ -455,6 +456,69 @@ describe('runtime derivation', () => {
     delegated.sync()
     expect(hasCurrentCertificate(delegated.projection)).toBe(false)
 
+    // Adoption preserves the old effective mode, its replay epoch and its
+    // certificate even though the new profile default is always.
+    const adopted = createRuntime(fakeAgent(persistedSession), resolveConfig({}), hostA,
+      undefined, undefined, undefined, undefined, fixtureActivationReader(persistedSession, 'opt-in'))
+    adopted.setDurability(true)
+    adopted.sync()
+    expect(adopted.projection.epoch).toBe(1)
+    expect(adopted.projection.integrity).toBe('valid')
+    expect(hasCurrentCertificate(adopted.projection)).toBe(true)
+    expect(adopted.projection.items.get(binding.itemId)?.status).toBe('passed')
+
+    // A preserved old certificate does not prevent normal new work under
+    // that same adopted mode; new facts certify the added obligation.
+    const continuingSession = Session.fromRestore(session.id, structuredClone(session.snapshotEvents()) as never,
+      structuredClone(session.header) as never, SessionLogOffset(0), 'detached')
+    const continuing = createRuntime(fakeAgent(continuingSession), resolveConfig({}), hostA,
+      undefined, undefined, undefined, undefined, fixtureActivationReader(continuingSession, 'opt-in'))
+    continuing.setDurability(true)
+    userText(continuingSession, 'Run pnpm test in /work/new-project')
+    toolCall(continuingSession, 'continuing-test', 'bash', JSON.stringify({ command: 'pnpm test', workdir: '/work/new-project' }))
+    toolResult(continuingSession, 'continuing-test', '[exit code: 0]')
+    continuing.sync()
+    const addedItem = [...continuing.projection.items.values()].find(row => row.id !== binding.itemId)!
+    const addedFact = [...continuing.projection.evidence.values()].find(row => row.callId === 'continuing-test')!
+    const addedBinding = { ...binding, itemId: addedItem.id, evidenceIds: [addedFact.id],
+      requestedTarget: addedItem.requestedTarget, resolvedTarget: addedFact.resolvedTarget,
+      observedState: addedFact.observedState ?? {}, effectEvidenceId: addedFact.id }
+    expect(continuing.projection.epoch).toBe(1)
+    expect(continuing.projection.integrity).toBe('valid')
+    expect(certifyCheckpoint(continuing.projection, [binding, addedBinding], 'C-old-new-work', true).status).toBe('certified')
+
+    // Explicit opt-in remains supported for new root sessions too.
+    const retained = createRuntime(fakeAgent(persistedSession), resolveConfig({ activation: 'opt-in' }), hostA)
+    retained.setDurability(true)
+    retained.sync()
+    expect(retained.projection.epoch).toBe(1)
+    expect(retained.projection.integrity).toBe('valid')
+    expect(hasCurrentCertificate(retained.projection)).toBe(true)
+    expect(retained.projection.items.get(binding.itemId)?.status).toBe('passed')
+
+    // A fresh always session is a usable continuation route. It imports no
+    // old evidence; new work needs its own local call/result and certificate.
+    const freshSession = Session.create(SessionId('always-post-upgrade-work'), undefined, {
+      version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('always-post-upgrade-work'), createdAt: 2, cwd: '/work',
+    })
+    const fresh = createRuntime(fakeAgent(freshSession), resolveConfig({}), hostA)
+    expect(fresh.projection.evidence.size).toBe(0)
+    expect(fresh.projection.checkpoints).toHaveLength(0)
+    userText(freshSession, 'Run pnpm test in the workspace')
+    toolCall(freshSession, 'new-test', 'bash', JSON.stringify({ command: 'pnpm test', workdir: '/work' }))
+    toolResult(freshSession, 'new-test', '[exit code: 0]')
+    fresh.setDurability(true)
+    fresh.sync()
+    const newItem = [...fresh.projection.items.values()][0]!
+    const newFact = [...fresh.projection.evidence.values()][0]!
+    const newBinding = { ...binding, itemId: newItem.id, evidenceIds: [newFact.id],
+      requestedTarget: newItem.requestedTarget, resolvedTarget: newFact.resolvedTarget,
+      observedState: newFact.observedState ?? {}, effectEvidenceId: newFact.id }
+    expect(fresh.projection.epoch).toBe(0)
+    expect(fresh.projection.integrity).toBe('valid')
+    expect(certifyCheckpoint(fresh.projection, [newBinding], 'C-new-work', true).status).toBe('certified')
+    expect(hasCurrentCertificate(fresh.projection)).toBe(true)
+
     const hostB: HostLockEvaluation = { ...hostA, digest: 'b'.repeat(64), profileKind: 'headless' }
     const changed = createRuntime(fakeAgent(session), OPT_IN, hostB)
     changed.setDurability(true)
@@ -511,6 +575,59 @@ describe('runtime derivation', () => {
     expect(clauses).toContain('ship before.txt')
     expect(clauses).not.toContain('ship ignored.txt')
     expect(clauses).toContain('ship after.txt')
+  })
+
+  it('adopts an old opt-in session without capturing its previously unguarded work', () => {
+    const session = Session.create(SessionId('implicit-always-upgrade'))
+    userText(session, 'Explain the existing implementation.')
+    const upgraded = createRuntime(fakeAgent(session), resolveConfig({}), undefined,
+      undefined, undefined, undefined, undefined, fixtureActivationReader(session, 'opt-in'))
+    expect(upgraded.projection.enabled).toBe(false)
+    expect(upgraded.projection.policy).toBe('standard')
+    expect(upgraded.projection.items.size).toBe(0)
+    expect(upgraded.projection.releaseContracts).toHaveLength(0)
+    expect(hasCurrentCertificate(upgraded.projection)).toBe(false)
+    enableCommand(session)
+    userText(session, 'Explain the new implementation.')
+    upgraded.sync()
+    expect(upgraded.projection.enabled).toBe(true)
+    expect(upgraded.projection.items.size).toBeGreaterThan(0)
+    expect(hasCurrentCertificate(upgraded.projection)).toBe(false)
+  })
+
+  it('preserves persisted off through JSON replay, restart, and later on under the implicit default', () => {
+    const session = Session.create(SessionId('implicit-always-off'))
+    userText(session, 'Run before.txt tests.')
+    enableCommand(session, 'off')
+    userText(session, 'Run ignored.txt tests.')
+    // Model the persistence boundary with newly decoded, immutable objects;
+    // the restarted runtime cannot reuse the original runtime's WeakSet.
+    const decode = () => {
+      const events = JSON.parse(JSON.stringify(session.snapshotEvents()))
+      const freeze = (value: unknown): void => {
+        if (!value || typeof value !== 'object') return
+        for (const child of Object.values(value)) freeze(child)
+        Object.freeze(value)
+      }
+      freeze(events)
+      return events
+    }
+    const resumed = { header: session.header, inheritedEventCount: session.inheritedEventCount,
+      snapshotEvents: decode } as unknown as Session
+    for (const runtime of [createRuntime(fakeAgent(session), resolveConfig({})),
+      createRuntime(fakeAgent(resumed), resolveConfig({}))]) {
+      runtime.sync()
+      expect(runtime.projection.enabled).toBe(false)
+      const clauses = [...runtime.projection.items.values()].map(item => item.normalizedText)
+      expect(clauses.some(text => text.includes('before.txt'))).toBe(true)
+      expect(clauses.some(text => text.includes('ignored.txt'))).toBe(false)
+      expect(hasCurrentCertificate(runtime.projection)).toBe(false)
+    }
+    enableCommand(session, 'on')
+    userText(session, 'ship restored.txt')
+    const restarted = createRuntime(fakeAgent(resumed), resolveConfig({}))
+    expect(restarted.projection.enabled).toBe(true)
+    expect([...restarted.projection.items.values()].map(item => item.normalizedText)).toContain('ship restored.txt')
   })
 
   it('marks recovery needed after a compaction summary', () => {

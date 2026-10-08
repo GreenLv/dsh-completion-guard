@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+## 0.9.0
+
+- **Major default-mode change:** new root sessions default to `always`, with silent empty T0 logs and protection from the first real input. Existing sessions retain their pre-upgrade effective mode via verified write-once bindings. Prepare old-mode inventory before upgrade and use the packaged inspect/adopt/verify migration flow; mixed cohorts need exact mappings. Unknown, damaged or conflicting bindings refuse certification. Explicit configuration selects new root sessions; persisted off/on stays effective. Policy remains `standard`, with no automatic authority or certificate grant.
+- Per-session adoption preserves the old replay epoch and valid certificates without rewriting history or re-signing. Fresh restore reads the binding on every sync; deletion or replacement invalidates cached certification. Forks inherit the verified parent mode and the official host's exact inherited cut. See [migration and rollback](docs/ACTIVATION_MIGRATION.md) for partial recovery and storage capability limits.
+- Repeated session syncs reuse proofs of fully frozen event subtrees, avoiding another recursive walk of unchanged history after an append. Mutable, accessor-backed, cyclic and unfinished graphs stay ineligible for reuse; Goal, private-ledger and host-sensitive decisions retain their fresh checks. Desktop audits share ASAR indexes and verified bytes only within one audit operation. These reduce component work; they do not establish faster history-window opening or UI end-to-end latency.
+- Adds a read-only local-history measurement script that reports anonymous per-session read, decompression, JSON parsing and pure Guard-fold timings. It inventories historical log generations without migrating or certifying them and excludes runtime migration, private-ledger, host audits, IPC and rendering.
+
 ## 0.8.4
 
 - The official Desktop app can now coexist with the official plugin market (`dshmarket`). Earlier versions refused any Desktop profile whose bundle list carried the market — the pre-install check rejected it as a bundle conflict and the installed/runtime check misreported it as an unbound plugin. The market is now treated like any other third-party profile plugin on Desktop. Official profile identity, Guard binding, the Headless bundle conflict, implementation byte and route audits, and host-lock digests are unchanged and keep failing closed.

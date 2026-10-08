@@ -24,7 +24,7 @@ if (mode !== 'host') {
     const patches = boot.loadOverlayPatches('dsh', patchFile)
     const guard = patches.find(row => row.id === 'context-guard')
     if (!guard?.config) throw Error('Injected Desktop Guard config missing')
-    guard.config.activation = 'always'
+    delete guard.config.activation // Exercise the 0.9.0 default with per-session restore bindings.
     patches.push(JSON.parse(readFileSync(output, 'utf8')))
     writeFileSync(patchFile, JSON.stringify(patches))
   }

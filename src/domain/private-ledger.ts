@@ -529,6 +529,14 @@ export function readPrivateLedger(root: string | undefined, input: PrivateLedger
   } catch { return { records: [], damaged: true, anchored: false } }
 }
 
+/** Shared production lock primitive; storage consumers keep independent schemas. */
+export function withPrivateWriterLock<T>(root: string, operation: () => T): T {
+  ensureRoot(root)
+  const lock = acquireWriterLock(root)
+  if (!lock) throw new Error('activation_writer_unavailable')
+  try { return operation() } finally { releaseWriterLock(root, lock) }
+}
+
 /** Establish the provider-invisible anchor when a live runtime observes a new adoption. */
 export function initializePrivateLedger(root: string | undefined, input: PrivateLedgerContext | string): boolean {
   if (!root) return false

@@ -41,6 +41,39 @@ function makeRuntime(session: Session, options?: {
   )
 }
 
+it('reuses completed frozen subtree proofs after append without trusting new mutable data', () => {
+  const session = newSession('Explain the existing requirement.')
+  const original = session.snapshotEvents()[0]!
+  const names = Object.getOwnPropertyNames
+  let oldVisits = 0
+  const inspect = vi.spyOn(Object, 'getOwnPropertyNames').mockImplementation(value => {
+    if (value === original) oldVisits += 1
+    return names(value)
+  })
+  const derive = vi.spyOn(deriveModule, 'deriveProjection')
+  try {
+    const runtime = makeRuntime(session)
+    runtime.sync() // Establish the proof for the first frozen snapshot.
+    expect(oldVisits).toBe(1)
+    session.append('user/message', createUserMessage({ source: { kind: 'user' },
+      content: [{ type: 'text', text: 'Run the tests.' }] }), { surfaceOp: 'append' })
+    runtime.sync()
+    runtime.sync()
+    expect(oldVisits, 'old frozen event is not recursively inspected again').toBe(1)
+    const calls = derive.mock.calls.length
+    const mutable = structuredClone(session.snapshotEvents().at(-1)!)
+    const read = vi.spyOn(session, 'snapshotEvents').mockReturnValue(Object.freeze([original, mutable]))
+    try {
+      runtime.sync()
+      runtime.sync()
+      expect(derive.mock.calls.length).toBe(calls + 2)
+    } finally { read.mockRestore() }
+  } finally {
+    inspect.mockRestore()
+    derive.mockRestore()
+  }
+})
+
 it('rebuilds on append, replace, reorder, gap and snapshot failures; reuses only an identical snapshot', () => {
   const session = newSession('Explain the first requirement.')
   const derive = vi.spyOn(deriveModule, 'deriveProjection')
@@ -333,4 +366,80 @@ it('invalidates on private-ledger change and damage, and rebuilds on fresh host 
   } finally {
     derive.mockRestore()
   }
+})
+
+it('never publishes a cyclic or budget-unfinished parent proof, even after completed children are cached', () => {
+  const derive = vi.spyOn(deriveModule, 'deriveProjection')
+  try {
+    for (const kind of ['cycle', 'budget', 'depth'] as const) {
+      const session = newSession('Run the tests.')
+      const event = structuredClone(session.snapshotEvents()[0]!) as unknown as Record<string, unknown>
+      if (kind === 'cycle') {
+        const cycle: Record<string, unknown> = {}
+        cycle.self = cycle
+        event.extra = Object.freeze(cycle)
+      } else if (kind === 'depth') {
+        let nested: object = Object.freeze({})
+        for (let depth = 0; depth < 20_000; depth += 1) nested = Object.freeze({ child: nested })
+        event.extra = nested
+      } else {
+        // The accessor lies beyond the first proof's node budget. Completed
+        // siblings may be reused, but neither pass may bless the parent.
+        const tail = Object.freeze(Object.defineProperty({}, 'hidden', { get: () => 'changes' }))
+        event.extra = Object.freeze([...Array.from({ length: 400_010 }, () => Object.freeze({})), tail])
+      }
+      const data = event.data as { content: Array<unknown>; source: object }
+      data.content.forEach(Object.freeze)
+      Object.freeze(data.content)
+      Object.freeze(data.source)
+      Object.freeze(data)
+      Object.freeze(event)
+      const reader = vi.spyOn(session, 'snapshotEvents').mockReturnValue(Object.freeze([event]) as never)
+      try {
+        const runtime = makeRuntime(session)
+        const count = derive.mock.calls.length
+        runtime.sync()
+        runtime.sync()
+        expect(derive.mock.calls.length, kind).toBe(count + 2)
+        expect(runtime.projection.items.size).toBeGreaterThan(0)
+      } finally { reader.mockRestore() }
+    }
+  } finally { derive.mockRestore() }
+})
+
+
+it('rejects inherited accessor content and never shares subtree proofs across runtimes', () => {
+  const session = newSession()
+  let text = 'Explain the existing requirement.'
+  const proto = { get content() { return Object.freeze([Object.freeze({ type: 'text', text })]) } }
+  const data = Object.freeze(Object.assign(Object.create(proto), { source: Object.freeze({ kind: 'user' }) }))
+  const event = Object.freeze({ seq: 0, type: 'user/message', data })
+  const reader = vi.spyOn(session, 'snapshotEvents').mockReturnValue(Object.freeze([event]) as never)
+  const derive = vi.spyOn(deriveModule, 'deriveProjection')
+  try {
+    const runtime = makeRuntime(session)
+    runtime.sync()
+    const count = derive.mock.calls.length
+    text = 'Run the tests.'
+    runtime.sync()
+    expect(derive.mock.calls.length).toBe(count + 1)
+    expect([...runtime.projection.items.values()].map(item => item.normalizedText)).toContain(text)
+    const restarted = makeRuntime(session)
+    restarted.sync()
+    expect(derive.mock.calls.length).toBe(count + 3)
+  } finally { reader.mockRestore(); derive.mockRestore() }
+
+  const frozenSession = newSession('Run the tests.')
+  const frozen = frozenSession.snapshotEvents()[0]!
+  const names = Object.getOwnPropertyNames
+  let inspections = 0
+  const inspect = vi.spyOn(Object, 'getOwnPropertyNames').mockImplementation(value => {
+    if (value === frozen) inspections += 1
+    return names(value)
+  })
+  try {
+    makeRuntime(frozenSession).sync()
+    makeRuntime(frozenSession).sync()
+    expect(inspections).toBe(2)
+  } finally { inspect.mockRestore() }
 })
