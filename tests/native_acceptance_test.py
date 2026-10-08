@@ -422,6 +422,8 @@ class HostBoundEntrypointTests(unittest.TestCase):
             assert.throws(() => assertActivationT0(session(policy), 'unknown'));
             assert.throws(() => checkActivationAssertion('birth_t0', () => assertActivationT0(session([]), 'create')),
                           error => error.activationAssertion === 'birth_t0');
+            await assert.rejects(checkActivationAssertion('old_inventory_read', async () => {{ throw Error('private detail'); }}),
+                                 error => error.activationAssertion === 'old_inventory_read');
             assert.throws(() => checkActivationAssertion('private invented label', () => {{}}));
             process.stdout.write('exact_t0_shapes_passed');
         """

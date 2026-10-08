@@ -25,6 +25,9 @@ if (mode !== 'host') {
     const guard = patches.find(row => row.id === 'context-guard')
     if (!guard?.config) throw Error('Injected Desktop Guard config missing')
     delete guard.config.activation // Exercise the 0.9.0 default with per-session restore bindings.
+    // The deterministic probe owns turn/step writes; retain goals services,
+    // but disable the separate automatic round writer in this isolated profile.
+    patches.push({ id: 'goal-round-driver', disabled: true })
     patches.push(JSON.parse(readFileSync(output, 'utf8')))
     writeFileSync(patchFile, JSON.stringify(patches))
   }

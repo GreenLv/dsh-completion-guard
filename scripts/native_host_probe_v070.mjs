@@ -133,10 +133,15 @@ export const ACTIVATION_ASSERTIONS = [
   'restore_binding', 'restore_mode', 'deleted_binding_unknown', 'deleted_binding_absent',
   'old_inventory', 'old_adopt', 'old_noop', 'old_binding',
   'old_source', 'old_t0', 'old_identity', 'old_mode',
+  'old_create', 'old_flush', 'old_close', 'old_inventory_read', 'old_resume', 'corpus_read',
 ]
 export function checkActivationAssertion(label, check) {
   assert.ok(ACTIVATION_ASSERTIONS.includes(label))
-  try { return check() } catch (error) { error.activationAssertion = label; throw error }
+  const annotate = error => { error.activationAssertion = label; throw error }
+  try {
+    const result = check()
+    return result && typeof result.then === 'function' ? Promise.resolve(result).catch(annotate) : result
+  } catch (error) { return annotate(error) }
 }
 
 /** Public rc.2 factory policy events are not Guard T0 messages. These exact
@@ -176,6 +181,7 @@ export function apply(ctx, config) {
     let operation = 'initialize'
     let lastTool = null
     let mode = 'initial'
+    let activationRestart
     try {
       digest = driverDigest()
       progress = createProbeProgress(config, digest)
@@ -269,6 +275,17 @@ export function apply(ctx, config) {
         assert.equal(receipt.nonce, config.nonce)
         assert.equal(receipt.driver_sha256, digest)
         await check('v070_persisted_restart_resume', async () => {
+          const old = await checkActivationAssertion('old_resume', () => open('mode-old', true))
+          checkActivationAssertion('old_identity', () => assert.deepEqual(domain.sessionBirthIdentity(old.session.header, old.session.inheritedEventCount), receipt.activation.identity))
+          checkActivationAssertion('old_binding', () => assert.equal(createHash('sha256').update(readFileSync(domain.activationBindingPath(modeRoot, receipt.activation.identity.id))).digest('hex'), receipt.activation.binding_sha256))
+          checkActivationAssertion('old_mode', () => assert.equal(modeOf(old).mode, 'opt-in'))
+          checkActivationAssertion('restore_prefix', () => {
+            assert.deepEqual(old.session.snapshotEvents().slice(0, receipt.activation.events.length), receipt.activation.events)
+            assert.equal(old.session.seq, receipt.activation.events.length + 1)
+            assert.equal(old.session.snapshotEvents().at(-1).type, 'session/end-seed')
+          })
+          await open('mode-birth', true)
+          checkActivationAssertion('deleted_binding_unknown', () => assert.equal(modeOf(handle.agent).reasonCode, 'activation_mode_unknown'))
           await open('history', true)
           const page = (await tool('context_guard_checkpoint', { bindings: [], evidence_scope: 'history', limit: 1 })).value
           assert.ok(page.pagination)
@@ -301,12 +318,12 @@ export function apply(ctx, config) {
           // Synthetic historical empty Session, persisted through the real
           // official API. This is not a claim about a day-use old config.
           const oldId = sessionFor('mode-old')
-          const stored = await ctx.sessionPersistence.create({ version: SESSION_FORMAT_VERSION,
-            id: oldId, createdAt: 1, cwd: config.workRoot, isSeeded: false })
-          await stored.flush()
+          const stored = await checkActivationAssertion('old_create', () => ctx.sessionPersistence.create({ version: SESSION_FORMAT_VERSION,
+            id: oldId, createdAt: 1, cwd: config.workRoot, isSeeded: false }))
+          await checkActivationAssertion('old_flush', () => stored.flush())
           const oldBirth = domain.sessionBirthIdentity(stored.header, stored.inheritedEventCount)
-          await stored.close()
-          const inventory = await domain.inspectActivationInventory(ctx.sessionPersistence)
+          await checkActivationAssertion('old_close', () => stored.close())
+          const inventory = await checkActivationAssertion('old_inventory_read', () => domain.inspectActivationInventory(ctx.sessionPersistence))
           checkActivationAssertion('old_inventory', () => assert.ok(inventory.some(row => domain.activationDigest(row) === domain.activationDigest(oldBirth))))
           const receipt = domain.createActivationMigrationReceipt([{ identity: oldBirth, mode: 'opt-in', cohort: 'native-synthetic-old' }],
             { fixture: domain.activationDigest(oldBirth) })
@@ -314,11 +331,12 @@ export function apply(ctx, config) {
           const oldPath = domain.activationBindingPath(modeRoot, String(oldId)), adopted = readFileSync(oldPath)
           checkActivationAssertion('old_noop', () => assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).entries[0].created, false))
           checkActivationAssertion('old_binding', () => assert.deepEqual(readFileSync(oldPath), adopted))
-          const old = await open('mode-old', true)
+          const old = await checkActivationAssertion('old_resume', () => open('mode-old', true))
           checkActivationAssertion('old_source', () => assert.equal(observedSources.get(String(old.id)), 'resume'))
           checkActivationAssertion('old_t0', () => assertActivationT0(old.session, 'old_empty_resume'))
           checkActivationAssertion('old_identity', () => assert.deepEqual(domain.sessionBirthIdentity(old.session.header, old.session.inheritedEventCount), oldBirth))
           checkActivationAssertion('old_mode', () => assert.equal(modeOf(old).mode, 'opt-in'))
+          activationRestart = { identity: oldBirth, binding_sha256: createHash('sha256').update(adopted).digest('hex'), events: old.session.snapshotEvents() }
           return { positive: true, negative: true }
         })
         await check('v070_root_v6_delivery', async () => {
@@ -423,6 +441,7 @@ export function apply(ctx, config) {
           await open('migration')
           // Persisted pre-v6 content is a historical fixture. It is deliberately
           // appended before the first real pre-step emits this version's notice.
+          startProbeTurn(handle.agent.session)
           handle.agent.session.append('user/message', createUserMessage({
             content: [{ type: 'text', text: 'Update the demo plugin and wait for approval.' }], source: { kind: 'user' },
           }), { surfaceOp: 'append' })
@@ -440,7 +459,7 @@ export function apply(ctx, config) {
           const goals = handle.agent.ctx.get?.('goals') ?? ctx.get?.('goals')
           assert.ok(goals && typeof goals.create === 'function')
           const goal = goals.create(handle.agent, { objective: 'Run the isolated fixture test' })
-          handle.agent.session.append('command/run', { name: 'context-guard', args: 'on', source: { kind: 'user' } })
+          handle.agent.session.append('command/run', { commandId: `native-goal-${++ordinal}`, name: 'context-guard', args: 'on', source: { kind: 'user' } })
           await flush()
           assertProbePrecondition('goal_protection_adopted', projection().goalCompletionAdopted === true)
           const goalWork = config.workRoot
@@ -490,6 +509,11 @@ export function apply(ctx, config) {
           const resumed = (await tool('context_guard_checkpoint', { bindings: [], evidence_scope: 'history', limit: 1 })).value
           assert.ok(resumed.pagination)
           assert.notEqual(resumed.status, 'certified')
+          // Every synthetic stored session must remain readable by the official
+          // API before another entry consumes the shared isolated inventory.
+          await handle.dispose()
+          handle = undefined
+          await checkActivationAssertion('corpus_read', () => domain.inspectActivationInventory(ctx.sessionPersistence))
           return { positive: true, negative: true }
         })
       }
@@ -506,7 +530,7 @@ export function apply(ctx, config) {
         driver_sha256: digest, status: rows.length === (mode === 'initial' ? INITIAL_CASES.length : 1)
           && rows.every(row => row.status === 'passed') ? 'passed' : 'failed',
         cases: rows, real_model_request: false }
-      if (mode === 'initial' && result.status === 'passed') writeFileSync(`${config.output}.complete`, JSON.stringify({ nonce: config.nonce, driver_sha256: digest }))
+      if (mode === 'initial' && result.status === 'passed') writeFileSync(`${config.output}.complete`, JSON.stringify({ nonce: config.nonce, driver_sha256: digest, activation: activationRestart }))
       writeFileSync(`${config.output}.${process.pid}.json.tmp`, JSON.stringify(result))
       renameSync(`${config.output}.${process.pid}.json.tmp`, `${config.output}.${process.pid}.json`)
     }

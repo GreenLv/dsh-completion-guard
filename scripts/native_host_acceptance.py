@@ -43,6 +43,7 @@ ACTIVATION_ASSERTIONS = frozenset({
     'restore_binding', 'restore_mode', 'deleted_binding_unknown', 'deleted_binding_absent',
     'old_inventory', 'old_adopt', 'old_noop', 'old_binding',
     'old_source', 'old_t0', 'old_identity', 'old_mode',
+    'old_create', 'old_flush', 'old_close', 'old_inventory_read', 'old_resume', 'corpus_read',
 })
 PROBE_V070_DRIVER_FILES = (
     "native_host_probe.mjs", "native_host_probe_v070.mjs", "native_release_fixture_v070.mjs",
@@ -682,7 +683,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             patches = [{"id": "context-guard", "config": {"hostLockPackages": packages, "hostLockPlatform": "windows" if platform.system() == "Windows" else "posix",
                          "hostLockProfile": profile, "hostLockPolicy": "dsh-core/v1",
                          "hostLockRuntimeRoot": str(runtime_root), "hostLockProfileRoot": str(profile_root)}},
-                       native_probe_patch(probe, config)]
+                       native_probe_patch(probe, config), {"id": "goal-round-driver", "disabled": True}]
             if profile == "headless":
                 patches.extend([{"id": "headless-runner", "disabled": True}, {"id": "headless-startup", "disabled": True}])
             overlay.write_text(json.dumps(patches), encoding="utf-8")
