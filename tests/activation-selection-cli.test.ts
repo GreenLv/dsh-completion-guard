@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 const dirs: string[] = []
 afterEach(() => dirs.splice(0).forEach(p => rmSync(p, { recursive: true, force: true })))
@@ -31,7 +32,7 @@ function fixture(all = false) {
   const logs = join(root, 'logs.json'), rows = ['a', 'b', 'old'].map((id, i) => ({ header: { version: 4, id, createdAt: i + 1, isSeeded: false }, revision: 'r0', ...(id === 'old' && !all ? { error: 'unsupported' } : {}) }))
   writeFileSync(logs, JSON.stringify(rows))
   const prior = join(root, 'prior.json'); writeFileSync(prior, JSON.stringify({ schema: 'dsh-activation-prior-modes/v1', previousPackage: { name: 'dsh-completion-guard', version: '0.8.4', sha256: '1'.repeat(64) }, sourceSha256: '2'.repeat(64), cohorts: [{ name: 'verified', mode: 'opt-in' }] }))
-  const run = (operation: string, args: string[] = []) => spawnSync(process.execPath, [entry.pathname, operation,
+  const run = (operation: string, args: string[] = []) => spawnSync(process.execPath, [fileURLToPath(entry), operation,
     ...(operation === 'select' ? [] : ['--runtime-anchor', anchor, '--persistence-root', logs]), ...args], { encoding: 'utf8' })
   return { root, logs, prior, rows, run }
 }
