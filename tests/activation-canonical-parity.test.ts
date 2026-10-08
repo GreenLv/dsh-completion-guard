@@ -17,14 +17,17 @@ it('matches independent Python canonical bytes and SHA-256 for the binding/recei
   // Sort UTF-16 code units independently, matching JSON object-key order for
   // non-BMP names too. This input family has safe integers, not JSON floats.
   const oracle = `import sys,json,hashlib
-values=json.load(sys.stdin)
+values=json.loads(sys.stdin.buffer.read().decode('utf-8'))
 def canonical(value):
  if isinstance(value,dict):
   return '{'+','.join(json.dumps(k,ensure_ascii=False)+':'+canonical(value[k]) for k in sorted(value,key=lambda k:k.encode('utf-16-be','surrogatepass')))+'}'
  if isinstance(value,list): return '['+','.join(canonical(v) for v in value)+']'
  return json.dumps(value,ensure_ascii=False,separators=(',',':'),allow_nan=False)
-print(json.dumps([{'canonical':canonical(v),'sha256':hashlib.sha256(canonical(v).encode('utf-8')).hexdigest()} for v in values],ensure_ascii=False))`
-  const result = spawnSync(python!, ['-c', oracle], { input: JSON.stringify(vectors), encoding: 'utf8' })
+sys.stdout.buffer.write(json.dumps([{'canonical':canonical(v),'sha256':hashlib.sha256(canonical(v).encode('utf-8')).hexdigest()} for v in values],ensure_ascii=False).encode('utf-8'))`
+  // Exercise non-UTF-8 Python text streams too: the oracle transports explicit
+  // UTF-8 bytes in both directions, independent of the host locale.
+  const result = spawnSync(python!, ['-c', oracle], { input: JSON.stringify(vectors), encoding: 'utf8',
+    env: { ...process.env, PYTHONIOENCODING: 'cp1252:surrogateescape' } })
   expect(result.status, result.stderr).toBe(0)
   expect(JSON.parse(result.stdout)).toEqual(vectors.map(value => ({ canonical: activationCanonical(value), sha256: activationDigest(value) })))
 })

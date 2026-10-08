@@ -112,8 +112,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 30,
-      "maxItems": 30,
+      "minItems": 31,
+      "maxItems": 31,
       "items": {
         "type": "object",
         "required": [
@@ -146,6 +146,7 @@
               "desktop_market_v070_future_vs_current_stop",
               "desktop_market_v070_goal_adoption_current_closure",
               "desktop_market_v070_history_compaction_restart",
+              "desktop_market_v090_activation_birth_restore_adoption",
               "desktop_market_v070_legacy_migration",
               "desktop_market_v070_ordinary_file_edit_readback",
               "desktop_market_v070_ordinary_test_and_checkpoint",

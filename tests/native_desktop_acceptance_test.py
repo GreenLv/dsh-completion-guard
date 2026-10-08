@@ -17,15 +17,61 @@ class DesktopEntrypointTests(unittest.TestCase):
 
     def test_schema_accepts_complete_producer_gate_inventory(self):
         root = Path(__file__).resolve().parents[1]
-        spec = importlib.util.spec_from_file_location("desktop_contract", root / "scripts/native_desktop_acceptance.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        gates = json.loads((root / "schemas/native-desktop-bound-v2.schema.json").read_text())["properties"]["gates"]
-        # The producer added a probe gate; a stale 25-item consumer rejected real
-        # successful 26-gate native receipts on both platforms.
-        count = len(module.DESKTOP_GATES)
-        self.assertEqual(gates["minItems"], count)
-        self.assertEqual(gates["maxItems"], count)
+
+        import sys
+
+        def load(name):
+            spec = importlib.util.spec_from_file_location(name, root / "scripts" / (name + ".py"))
+            module = importlib.util.module_from_spec(spec)
+            with mock.patch.object(sys, "path", [str(root / "scripts"), *sys.path]):
+                spec.loader.exec_module(module)
+            return module
+
+        desktop = load("native_desktop_acceptance")
+        market = load("native_desktop_market_acceptance")
+        host = load("native_host_acceptance")
+        consumers = [load(name) for name in (
+            "validate_native_desktop", "validate_native_desktop_market", "validate_native_v070")]
+        import inspect
+        import re
+        portable = inspect.getsource(NATIVE.portable_acceptance)
+        base_gates = set(re.findall(r'gate\("([a-z0-9_]+)", artifact_digest, passed=True', portable))
+        host_source = inspect.getsource(host.host_acceptance)
+        host_gates = base_gates | set(re.findall(r'passed\("([a-z0-9_]+)"\)', host_source))
+        for suffix in re.findall(r'passed\(f"\{profile\}_([a-z0-9_]+)"\)', host_source):
+            host_gates.update(profile + "_" + suffix for profile in ("web", "headless"))
+        host_gates.update(profile + "_" + case for profile in ("web", "headless")
+                          for case in host.PROBE_V070_CASES)
+        inventories = (
+            ("native-desktop-bound-v2", desktop.DESKTOP_GATES, consumers[0].EXPECTED_GATES),
+            ("native-desktop-market-v1", market.MARKET_GATES, consumers[1].EXPECTED_GATES),
+            ("native-host-bound-v4", host_gates, consumers[2].EXPECTED_GATES),
+        )
+        for name, produced, consumed in inventories:
+            with self.subTest(contract=name):
+                self.assertEqual(produced, consumed)
+                gates = json.loads((root / "schemas" / (name + ".schema.json")).read_text())["properties"]["gates"]
+                self.assertEqual(gates["minItems"], len(produced))
+                self.assertEqual(gates["maxItems"], len(produced))
+                identifiers = gates["items"]["properties"]["id"]
+                if "enum" in identifiers:
+                    self.assertEqual(set(identifiers["enum"]), produced)
+                    self.assertEqual(len(identifiers["enum"]), len(produced))
+        # The shared probe is the actual Host producer; its emitted cases feed
+        # both Web and Headless as well as Desktop and Market consumers.
+        driver = (root / "scripts/native_host_probe_v070.mjs").read_text()
+        cases = re.search(r"const INITIAL_CASES = \[(.*?)\]", driver, re.S).group(1)
+        emitted = re.findall(r"'([^']+)'", cases)
+        self.assertEqual(set(emitted), host.PROBE_V070_CASES)
+        self.assertEqual(len(emitted), len(host.PROBE_V070_CASES))
+        for consumer in consumers:
+            self.assertEqual(consumer.PROBE_V070_CASES, host.PROBE_V070_CASES)
+        probe = json.loads((root / "schemas/native-host-probe-v2.schema.json").read_text())
+        pattern = probe["properties"]["cases"]["items"]["properties"]["id"]["pattern"]
+        for identifier in emitted + ["initialize_runtime", "v070_persisted_restart_resume"]:
+            self.assertIsNotNone(re.fullmatch(pattern, identifier), identifier)
+        self.assertIsNone(re.fullmatch(pattern, "v090_unrecognized_probe"))
+        self.assertIsNone(re.fullmatch(pattern, "unrecognized_probe"))
 
     def test_desktop_requires_its_own_declared_cohort(self):
         import tempfile

@@ -19,7 +19,7 @@
         "type": "object", "additionalProperties": false,
         "required": ["id", "status", "positive", "negative"],
         "properties": {
-          "id": { "type": "string", "pattern": "^(?:v070_[a-z0-9_]+|initialize_runtime)$" },
+          "id": { "type": "string", "pattern": "^(?:v070_[a-z0-9_]+|v090_activation_birth_restore_adoption|initialize_runtime)$" },
           "status": { "enum": ["passed", "failed"] },
           "positive": { "type": "boolean" },
           "negative": { "type": "boolean" },

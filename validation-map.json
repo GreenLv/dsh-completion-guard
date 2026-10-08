@@ -429,6 +429,7 @@
         "scripts/generate-rc020-byte-audit.mjs",
         "scripts/measure-host-audit.mjs",
         "scripts/measure-projection-scaling.mjs",
+        "scripts/measure-local-history.mjs",
         "manifests/rc020-rc1-byte-audit.json",
         "manifests/supported-host.v1.json"
       ],

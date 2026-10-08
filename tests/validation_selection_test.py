@@ -69,6 +69,13 @@ class ValidationSelectionTests(unittest.TestCase):
         self.assertIn("contract_tests", replay["gates"])
         self.assertIn("focused_tests", replay["gates"])
 
+    def test_local_history_measurement_selects_host_audit_gates(self) -> None:
+        plan = self.classify("scripts/measure-local-history.mjs")
+        self.assertEqual(plan["unknown_paths"], [])
+        self.assertEqual(plan["gates"], ["artifact_identity", "static_contracts"])
+        self.assertEqual(plan["invalidates"], ["artifact", "native_artifact"])
+        self.assertFalse(plan["full_required"])
+
     def test_host_lock_selects_native_focused_gate(self) -> None:
         plan = self.classify("src/domain/host-lock.ts")
         self.assertIn("host_lock_tests", plan["gates"])

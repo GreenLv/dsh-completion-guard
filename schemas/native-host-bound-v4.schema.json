@@ -25,7 +25,7 @@
     "platform": { "type": "object", "required": ["os", "shell", "toolchain"],
       "properties": { "os": { "enum": ["macos", "windows", "linux"] }, "shell": { "const": "python-subprocess" },
         "toolchain": { "type": "object" } } },
-    "gates": { "type": "array", "minItems": 34, "maxItems": 34,
+    "gates": { "type": "array", "minItems": 36, "maxItems": 36,
       "items": { "type": "object", "required": ["id", "required", "status", "subject", "exit_code", "evidence"],
         "properties": { "id": { "type": "string" }, "required": { "const": true }, "status": { "const": "passed" },
           "exit_code": { "const": 0 }, "subject": { "type": "object" }, "evidence": { "type": "object" } } } },

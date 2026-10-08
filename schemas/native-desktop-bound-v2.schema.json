@@ -110,8 +110,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 27,
-      "maxItems": 27,
+      "minItems": 28,
+      "maxItems": 28,
       "items": {
         "type": "object",
         "required": [
@@ -140,6 +140,7 @@
               "desktop_v070_future_vs_current_stop",
               "desktop_v070_goal_adoption_current_closure",
               "desktop_v070_history_compaction_restart",
+              "desktop_v090_activation_birth_restore_adoption",
               "desktop_v070_legacy_migration",
               "desktop_v070_ordinary_file_edit_readback",
               "desktop_v070_ordinary_test_and_checkpoint",
