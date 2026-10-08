@@ -23,6 +23,7 @@
           "status": { "enum": ["passed", "failed"] },
           "positive": { "type": "boolean" },
           "negative": { "type": "boolean" },
+          "activation_assertion": { "enum": ["birth_source", "birth_t0", "birth_bound", "birth_mode", "restore_source", "restore_t0", "restore_prefix", "restore_identity", "restore_binding", "restore_mode", "deleted_binding_unknown", "deleted_binding_absent", "old_inventory", "old_adopt", "old_noop", "old_binding", "old_source", "old_t0", "old_identity", "old_mode"] },
           "operation": { "type": "string" },
           "error_code": { "type": "string" },
           "last_tool": { "type": ["object", "null"] },

@@ -37,6 +37,13 @@ PROBE_V070_CASES = {
     "v070_goal_adoption_current_closure", "v070_explicit_release_minimum",
     "v070_history_compaction_restart", "v090_activation_birth_restore_adoption",
 }
+ACTIVATION_ASSERTIONS = frozenset({
+    'birth_source', 'birth_t0', 'birth_bound', 'birth_mode',
+    'restore_source', 'restore_t0', 'restore_prefix', 'restore_identity',
+    'restore_binding', 'restore_mode', 'deleted_binding_unknown', 'deleted_binding_absent',
+    'old_inventory', 'old_adopt', 'old_noop', 'old_binding',
+    'old_source', 'old_t0', 'old_identity', 'old_mode',
+})
 PROBE_V070_DRIVER_FILES = (
     "native_host_probe.mjs", "native_host_probe_v070.mjs", "native_release_fixture_v070.mjs",
 )
@@ -282,6 +289,8 @@ class HostProbeFailure(RuntimeError):
             if not isinstance(identifier, str) or identifier not in PROBE_V070_CASES | {"initialize_runtime", "v070_persisted_restart_resume"}:
                 continue
             detail = {"id": identifier}
+            if isinstance(row.get("activation_assertion"), str) and row["activation_assertion"] in ACTIVATION_ASSERTIONS:
+                detail["activation_assertion"] = row["activation_assertion"]
             if row.get("error_code") == "PROBE_PRECONDITION_FAILED" and isinstance(row.get("precondition"), str) and row.get("precondition") in {
                 "guard_tools_registered", "guard_boundary_active", "goal_protection_adopted"
             }:

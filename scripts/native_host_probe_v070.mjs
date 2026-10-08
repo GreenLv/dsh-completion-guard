@@ -127,6 +127,31 @@ export function assertProbePrecondition(name, passed) {
   })
 }
 
+export const ACTIVATION_ASSERTIONS = [
+  'birth_source', 'birth_t0', 'birth_bound', 'birth_mode',
+  'restore_source', 'restore_t0', 'restore_prefix', 'restore_identity',
+  'restore_binding', 'restore_mode', 'deleted_binding_unknown', 'deleted_binding_absent',
+  'old_inventory', 'old_adopt', 'old_noop', 'old_binding',
+  'old_source', 'old_t0', 'old_identity', 'old_mode',
+]
+export function checkActivationAssertion(label, check) {
+  assert.ok(ACTIVATION_ASSERTIONS.includes(label))
+  try { return check() } catch (error) { error.activationAssertion = label; throw error }
+}
+
+/** Public rc.2 factory policy events are not Guard T0 messages. These exact
+ * shapes match the isolated no-Guard control; unknown/extra events fail. */
+export function assertActivationT0(session, entry) {
+  const policy = ['permission/preset', 'sandbox/mode', 'approval/policy']
+  const expected = entry === 'create' ? policy : entry === 'resume'
+    ? [...policy, 'session/end-seed'] : entry === 'old_empty_resume'
+      ? ['session/end-seed', ...policy] : undefined
+  assert.ok(expected)
+  const events = session.snapshotEvents()
+  assert.deepEqual(events.map(row => row.type), expected)
+  assert.equal(session.seq, expected.length)
+}
+
 export function assertProbeActivation(domain, events) {
   // Replay current control state without repeating the expensive host-graph audit.
   const view = domain.deriveProjection(events, { activation: 'always' }, {}, true).projection
@@ -254,23 +279,25 @@ export function apply(ctx, config) {
       } else {
         await check('v090_activation_birth_restore_adoption', async () => {
           const fresh = await open('mode-birth')
-          assert.equal(observedSources.get(String(fresh.id)), 'startup')
-          assert.equal(fresh.session.seq, 0)
-          assert.equal(modeOf(fresh).status, 'bound')
-          assert.equal(modeOf(fresh).mode, 'always')
+          checkActivationAssertion('birth_source', () => assert.equal(observedSources.get(String(fresh.id)), 'startup'))
+          checkActivationAssertion('birth_t0', () => assertActivationT0(fresh.session, 'create'))
+          checkActivationAssertion('birth_bound', () => assert.equal(modeOf(fresh).status, 'bound'))
+          checkActivationAssertion('birth_mode', () => assert.equal(modeOf(fresh).mode, 'always'))
           const identity = domain.sessionBirthIdentity(fresh.session.header, fresh.session.inheritedEventCount)
           const path = domain.activationBindingPath(modeRoot, identity.id)
-          const before = readFileSync(path)
+          const before = readFileSync(path), beforeEvents = fresh.session.snapshotEvents()
           await flush()
           const restored = await open('mode-birth', true)
-          assert.equal(observedSources.get(String(restored.id)), 'resume')
-          assert.equal(restored.session.seq, 0)
-          assert.deepEqual(readFileSync(path), before)
-          assert.equal(modeOf(restored).mode, 'always')
+          checkActivationAssertion('restore_source', () => assert.equal(observedSources.get(String(restored.id)), 'resume'))
+          checkActivationAssertion('restore_t0', () => assertActivationT0(restored.session, 'resume'))
+          checkActivationAssertion('restore_prefix', () => assert.deepEqual(restored.session.snapshotEvents().slice(0, beforeEvents.length), beforeEvents))
+          checkActivationAssertion('restore_identity', () => assert.deepEqual(domain.sessionBirthIdentity(restored.session.header, restored.session.inheritedEventCount), identity))
+          checkActivationAssertion('restore_binding', () => assert.deepEqual(readFileSync(path), before))
+          checkActivationAssertion('restore_mode', () => assert.equal(modeOf(restored).mode, 'always'))
           unlinkSync(path)
           await open('mode-birth', true)
-          assert.equal(modeOf(handle.agent).reasonCode, 'activation_mode_unknown')
-          assert.equal(existsSync(path), false, 'restore cannot recreate a deleted binding')
+          checkActivationAssertion('deleted_binding_unknown', () => assert.equal(modeOf(handle.agent).reasonCode, 'activation_mode_unknown'))
+          checkActivationAssertion('deleted_binding_absent', () => assert.equal(existsSync(path), false, 'restore cannot recreate a deleted binding'))
           // Synthetic historical empty Session, persisted through the real
           // official API. This is not a claim about a day-use old config.
           const oldId = sessionFor('mode-old')
@@ -280,17 +307,18 @@ export function apply(ctx, config) {
           const oldBirth = domain.sessionBirthIdentity(stored.header, stored.inheritedEventCount)
           await stored.close()
           const inventory = await domain.inspectActivationInventory(ctx.sessionPersistence)
-          assert.ok(inventory.some(row => domain.activationDigest(row) === domain.activationDigest(oldBirth)))
+          checkActivationAssertion('old_inventory', () => assert.ok(inventory.some(row => domain.activationDigest(row) === domain.activationDigest(oldBirth))))
           const receipt = domain.createActivationMigrationReceipt([{ identity: oldBirth, mode: 'opt-in', cohort: 'native-synthetic-old' }],
             { fixture: domain.activationDigest(oldBirth) })
-          assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).status, 'complete')
+          checkActivationAssertion('old_adopt', () => assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).status, 'complete'))
           const oldPath = domain.activationBindingPath(modeRoot, String(oldId)), adopted = readFileSync(oldPath)
-          assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).entries[0].created, false)
-          assert.deepEqual(readFileSync(oldPath), adopted)
+          checkActivationAssertion('old_noop', () => assert.equal(domain.adoptActivationReceipt(modeRoot, receipt).entries[0].created, false))
+          checkActivationAssertion('old_binding', () => assert.deepEqual(readFileSync(oldPath), adopted))
           const old = await open('mode-old', true)
-          assert.equal(observedSources.get(String(old.id)), 'resume')
-          assert.equal(old.session.seq, 0)
-          assert.equal(modeOf(old).mode, 'opt-in')
+          checkActivationAssertion('old_source', () => assert.equal(observedSources.get(String(old.id)), 'resume'))
+          checkActivationAssertion('old_t0', () => assertActivationT0(old.session, 'old_empty_resume'))
+          checkActivationAssertion('old_identity', () => assert.deepEqual(domain.sessionBirthIdentity(old.session.header, old.session.inheritedEventCount), oldBirth))
+          checkActivationAssertion('old_mode', () => assert.equal(modeOf(old).mode, 'opt-in'))
           return { positive: true, negative: true }
         })
         await check('v070_root_v6_delivery', async () => {
@@ -468,6 +496,7 @@ export function apply(ctx, config) {
     } catch (error) {
       progress?.record('probe_failure', 'failed')
       rows.push({ id: current, status: 'failed', positive: false, negative: false, operation, last_tool: lastTool,
+        ...(ACTIVATION_ASSERTIONS.includes(error?.activationAssertion) ? { activation_assertion: error.activationAssertion } : {}),
         ...(error?.precondition ? { precondition: error.precondition } : {}),
         ...(error?.terminalAssertion ? { terminal_assertion: error.terminalAssertion } : {}),
         error_code: /^[A-Z_]{1,60}$/.test(error?.code ?? '') ? error.code : 'PROBE_ASSERTION_FAILED' })

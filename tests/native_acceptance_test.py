@@ -402,6 +402,50 @@ class HostBoundEntrypointTests(unittest.TestCase):
         query.assert_not_called()
         self.assertNotIn("private", str(caught.exception))
 
+    def test_activation_t0_requires_exact_host_only_shapes_on_all_entries(self):
+        probe = SCRIPT.with_name("native_host_probe_v070.mjs").resolve().as_uri()
+        code = f"""
+            import {{ assertActivationT0, checkActivationAssertion }} from {json.dumps(probe)};
+            import assert from 'node:assert/strict';
+            const policy = ['permission/preset', 'sandbox/mode', 'approval/policy'];
+            const shapes = {{create: policy, resume: [...policy, 'session/end-seed'],
+                            old_empty_resume: ['session/end-seed', ...policy]}};
+            const session = (types, seq = types.length) => ({{seq, snapshotEvents: () => types.map(type => ({{type}}))}});
+            for (const [entry, types] of Object.entries(shapes)) {{
+                assertActivationT0(session(types), entry);
+                for (const bad of [[], types.slice(1), [...types, 'user/message'],
+                                   [...types, 'permission/preset'], [...types].reverse()]) {{
+                    assert.throws(() => assertActivationT0(session(bad), entry));
+                }}
+                assert.throws(() => assertActivationT0(session(types, 0), entry));
+            }}
+            assert.throws(() => assertActivationT0(session(policy), 'unknown'));
+            assert.throws(() => checkActivationAssertion('birth_t0', () => assertActivationT0(session([]), 'create')),
+                          error => error.activationAssertion === 'birth_t0');
+            assert.throws(() => checkActivationAssertion('private invented label', () => {{}}));
+            process.stdout.write('exact_t0_shapes_passed');
+        """
+        value = subprocess.check_output(["node", "--input-type=module", "-e", code], text=True)
+        self.assertEqual(value, 'exact_t0_shapes_passed')
+
+    def test_activation_assertion_labels_match_schema_and_redact_diagnostics(self):
+        probe = SCRIPT.with_name("native_host_probe_v070.mjs").resolve().as_uri()
+        code = f"import {{ACTIVATION_ASSERTIONS}} from {json.dumps(probe)}; console.log(JSON.stringify(ACTIVATION_ASSERTIONS));"
+        labels = json.loads(subprocess.check_output(["node", "--input-type=module", "-e", code], text=True))
+        schema = json.loads((SCRIPT.parents[1] / "schemas/native-host-probe-v2.schema.json").read_text())
+        enum = schema["properties"]["cases"]["items"]["properties"]["activation_assertion"]["enum"]
+        self.assertEqual(set(labels), set(enum))
+        self.assertEqual(len(labels), len(enum))
+        self.assertEqual(set(labels), self.host.ACTIVATION_ASSERTIONS)
+        for label in labels:
+            failure = self.host.HostProbeFailure({"cases": [{"id": "v090_activation_birth_restore_adoption",
+                "status": "failed", "activation_assertion": label, "actual": "private credential", "stack": "private path"}]})
+            self.assertEqual(failure.details, [{"id": "v090_activation_birth_restore_adoption", "activation_assertion": label}])
+        for invalid in ["private credential", [], {}, None]:
+            failure = self.host.HostProbeFailure({"cases": [{"id": "v090_activation_birth_restore_adoption",
+                "status": "failed", "activation_assertion": invalid}]})
+            self.assertEqual(failure.details, [{"id": "v090_activation_birth_restore_adoption"}])
+
     def test_failed_shell_facts_survive_cleanup_in_external_diagnostic(self):
         expected = {"kind": "foreground", "exit_code": 0, "timed_out": False, "aborted": False}
         actual = {**expected, "exit_code": 7, "stdout": "private credential"}
