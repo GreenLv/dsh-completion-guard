@@ -9,6 +9,8 @@ export interface ActivationInventoryPersistence {
 }
 export async function inspectActivationInventory(persistence: ActivationInventoryPersistence): Promise<SessionBirthIdentity[]> {
   const rows = await persistence.list(), identities: SessionBirthIdentity[] = [], ids = new Set<string>()
+  const beforeMetadata = new Map(rows.map(row => [String((row.header as { id?: unknown })?.id),
+    { headerSha256: activationDigest(row.header), revision: row.revision }]))
   for (const row of rows) {
     const header = row.header as { id?: unknown }
     if (typeof header?.id !== 'string' || ids.has(header.id)) throw new Error('activation_inventory_invalid')
@@ -25,7 +27,11 @@ export async function inspectActivationInventory(persistence: ActivationInventor
     } finally { await handle.close() }
   }
   const after = await persistence.list()
-  if (after.length !== rows.length || after.some(row => !ids.has(String((row.header as { id?: unknown }).id)))) throw new Error('activation_inventory_changed')
+  if (after.length !== rows.length || after.some(row => !ids.has(String((row.header as { id?: unknown }).id)))
+    || after.some(row => {
+      const before = beforeMetadata.get(String((row.header as { id?: unknown }).id))
+      return !before || row.revision !== before.revision || activationDigest(row.header) !== before.headerSha256
+    })) throw new Error('activation_inventory_changed')
   return identities.sort((a, b) => a.id.localeCompare(b.id))
 }
 export interface ActivationPriorModes {
@@ -35,7 +41,7 @@ export interface ActivationPriorModes {
   sourceSha256: string
   cohorts: Array<{ name: string; mode: InitialActivation; sessionIds?: string[] }>
 }
-export function prepareActivationMigration(inventory: SessionBirthIdentity[], prior: ActivationPriorModes): {
+export function prepareActivationMigration(inventory: SessionBirthIdentity[], prior: ActivationPriorModes, universeIds: string[] = inventory.map(i => i.id)): {
   status: 'ready' | 'pending'; missing: string[]; receipt?: ActivationMigrationReceipt
 } {
   if (!prior || prior.schema !== 'dsh-activation-prior-modes/v1' || prior.previousPackage?.name !== 'dsh-completion-guard'
@@ -44,10 +50,12 @@ export function prepareActivationMigration(inventory: SessionBirthIdentity[], pr
     || !Array.isArray(prior.cohorts) || !prior.cohorts.length) throw new Error('activation_prior_modes_invalid')
   const ids = new Set(inventory.map(i => i.id))
   if (ids.size !== inventory.length || !inventory.length) throw new Error('activation_inventory_invalid')
+  const universe = new Set(universeIds)
+  if (universe.size !== universeIds.length || inventory.some(i => !universe.has(i.id))) throw new Error('activation_inventory_invalid')
   for (const cohort of prior.cohorts) {
     if (!cohort || !cohort.name || !['opt-in', 'always'].includes(cohort.mode)
       || (cohort.sessionIds !== undefined && (!Array.isArray(cohort.sessionIds)
-        || cohort.sessionIds.some(id => !ids.has(id)) || new Set(cohort.sessionIds).size !== cohort.sessionIds.length))) throw new Error('activation_prior_modes_invalid')
+        || cohort.sessionIds.some(id => !universe.has(id)) || new Set(cohort.sessionIds).size !== cohort.sessionIds.length))) throw new Error('activation_prior_modes_invalid')
   }
   const uniform = new Set(prior.cohorts.map(c => c.mode)).size === 1
   const missing: string[] = [], entries = inventory.flatMap(identity => {

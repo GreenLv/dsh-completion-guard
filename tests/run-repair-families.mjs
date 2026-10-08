@@ -11,6 +11,7 @@ export const families = Object.freeze({
     'tests/activation-bindings.test.ts', 'tests/activation-runtime.test.ts',
     'tests/activation-publication.test.ts', 'tests/activation-concurrent.test.ts',
     'tests/activation-canonical-parity.test.ts',
+    'tests/activation-selection.test.ts', 'tests/activation-selection-cli.test.ts',
     'tests/loader.test.ts', 'tests/runtime.test.ts', 'tests/lifecycle.test.ts',
   ],
   'desktop-importer': [

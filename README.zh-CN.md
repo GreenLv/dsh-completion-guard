@@ -6,6 +6,8 @@
 
 > **0.9.0 要求 DSH `>=0.2.0-rc.2`，并支持官方 Desktop 应用。** 已有安装须先停止相关写者，在**更换 DSH 或 Guard 前**保存旧安装包、有效模式来源及冻结会话清点，使用[独立准备的候选迁移工具](docs/ACTIVATION_MIGRATION.md)。随后升级安装、重建各 profile 宿主锁，并在**启动宿主前**完成旧会话的 `adopt` 和 `verify`。没有旧 Guard 会话的全新安装只需安装及宿主锁检查，不需旧模式 adoption。Desktop 使用 `--profile desktop`，以应用归档为 runtime root；安装本身不重建锁。已测试的宿主基线是 DSH `0.2.0-rc.2`、Cordis `4.0.4`；较新版本仍须通过身份和适配契约检查。资格及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
 
+官方读取器拒绝旧格式时，保留原日志和旧模式来源，按[显式可读子集方案](docs/ACTIVATION_MIGRATION.md)先 inventory、再由用户选择 ID 并 select，让 --selection 贯穿 inspect/adopt/verify。工具核对全库变化，只迁移用户选中的可读项；selected_complete 保留全部排除项为 pending，不代表整库完成。说明中提供真实命令、恢复步骤和可复制 AI 提示词。
+
 ![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
 
 ## 快速开始
@@ -81,7 +83,7 @@ Desktop 请使用应用附带的 CLI 安装，再以 `--profile desktop`、应�
 
 Context Guard 有两种启用模式：
 
-- `always`（新建根会话默认，推荐）：新建 DSH 根会话从第一条真实消息开始自动保护。全新会话保持完全空白——Guard 不写入任何内容——因此你仍然可以在发送任何内容之前选择 DSH 会话模式（standard、minimal 或自定义 preset）。第一条真实消息进入执行步骤的那一刻，保护在同一步骤内、且位于该消息之前开始：第一个任务连同它的第一次文件修改都在覆盖范围内。首条消息只有图片或附件时同样开始保护，并保留待解释的资产项；纯空白消息不启动任何内容。在某个会话中执行 `/context-guard off` 后，该会话关闭保护，直到再次执行 `on`。
+- `always`（新建根会话默认，推荐）：新建 DSH 根会话从第一条真实消息开始自动保护。首条真实输入前，Guard 不向会话追加事件；DSH 仍可能写入自身的初始化事件。你仍然可以在发送任何内容之前选择 DSH 会话模式（standard、minimal 或自定义 preset）。第一条真实消息进入执行步骤的那一刻，保护在同一步骤内、且位于该消息之前开始：第一个任务连同它的第一次文件修改都在覆盖范围内。首条消息只有图片或附件时同样开始保护，并保留待解释的资产项；纯空白消息不启动任何内容。在某个会话中执行 `/context-guard off` 后，该会话关闭保护，直到再次执行 `on`。
 - `opt-in`（显式选择）：打开会话时不会自动保护。你需要在这个会话中执行 `/context-guard on` 才会启用；执行 `/context-guard off` 可以再次关闭。开关只影响当前会话。
 
 **0.9.0 将新会话的默认模式改为 `always`；旧会话通过核验后的不可覆盖绑定保留升级前有效模式。** 升级前请停止相关会话写者，按[inspect/adopt/verify 迁移说明](docs/ACTIVATION_MIGRATION.md)准备旧模式清点与冻结收据，旧空会话也要包含。共享库存中不同 profile 的旧模式有冲突时，需要精确到会话的映射；Guard 不依据消息数量、时间戳或记录过的 `on` 猜测。

@@ -1426,7 +1426,7 @@ function activationJson(text) {
 			return;
 		}
 		if (text[i$1] === "{" || text[i$1] === "[") {
-			const object = text[i$1++] === "{", end = object ? "}" : "]", keys = /* @__PURE__ */ new Set();
+			const object = text[i$1++] === "{", end = object ? "}" : "]", keys$1 = /* @__PURE__ */ new Set();
 			ws();
 			if (text[i$1] === end) {
 				i$1++;
@@ -1437,8 +1437,8 @@ function activationJson(text) {
 					ws();
 					if (text[i$1] !== "\"") throw new TypeError("activation_json_invalid");
 					const key = string();
-					if (keys.has(key)) throw new TypeError("activation_json_duplicate_key");
-					keys.add(key);
+					if (keys$1.has(key)) throw new TypeError("activation_json_duplicate_key");
+					keys$1.add(key);
 					ws();
 					if (text[i$1++] !== ":") throw new TypeError("activation_json_invalid");
 				}
@@ -2088,10 +2088,10 @@ function interpretScopeRoute(session, scope, request, wanted, selectedLane) {
 	if (rawExports === void 0) return true;
 	if (rawExports === null || typeof rawExports === "string") rootTarget = rawExports;
 	else if (typeof rawExports === "object" && !Array.isArray(rawExports)) {
-		const keys = Object.keys(rawExports);
-		const dotKeys = keys.filter((key) => key === "." || key.startsWith("./"));
-		if (dotKeys.length === 0 && keys.length > 0) rootTarget = rawExports;
-		else if (dotKeys.length === keys.length) subpathMap = rawExports;
+		const keys$1 = Object.keys(rawExports);
+		const dotKeys = keys$1.filter((key) => key === "." || key.startsWith("./"));
+		if (dotKeys.length === 0 && keys$1.length > 0) rootTarget = rawExports;
+		else if (dotKeys.length === keys$1.length) subpathMap = rawExports;
 		else return false;
 	} else return false;
 	let entry;
@@ -2134,9 +2134,9 @@ function runtimeExports(manifest, independentLanes = false) {
 		});
 		return result;
 	}
-	const keys = raw && typeof raw === "object" && !Array.isArray(raw) ? Object.keys(raw) : [];
-	const dot = keys.filter((key) => key === "." || key.startsWith("./"));
-	if (dot.length && dot.length !== keys.length) throw new Error("mixed exports");
+	const keys$1 = raw && typeof raw === "object" && !Array.isArray(raw) ? Object.keys(raw) : [];
+	const dot = keys$1.filter((key) => key === "." || key.startsWith("./"));
+	if (dot.length && dot.length !== keys$1.length) throw new Error("mixed exports");
 	const entries = dot.length ? Object.entries(raw) : [[".", raw]];
 	for (const [key, value] of entries) {
 		if (key.includes("*")) continue;
@@ -3380,17 +3380,17 @@ function byUtf8(a, b) {
 /** Repeat same-name fields sorted by full typed value bytes; reject duplicates. */
 function encodeSet(name, items) {
 	if (new Set(items.map((item) => item.toString("hex"))).size !== items.length) throw new DigestError(`set ${name} contains duplicate members`);
-	const sorted = [...items].sort(Buffer.compare);
-	return Buffer.concat(sorted.map((token) => field(name, token)));
+	const sorted$1 = [...items].sort(Buffer.compare);
+	return Buffer.concat(sorted$1.map((token) => field(name, token)));
 }
 /** Sort by semantic key utf8 bytes (never by encoded bytes); duplicate keys fail closed. */
 function encodeMapRows(entries, prefix = "") {
-	const keys = entries.map(([key]) => key);
-	if (new Set(keys).size !== keys.length) throw new DigestError(`duplicate semantic keys in map: ${keys.sort(byUtf8).join(",")}`);
-	for (const key of keys) if (Buffer.byteLength(key, "utf8") > MAX_SEMANTIC_KEY_BYTES) throw new DigestError(`semantic key exceeds ${MAX_SEMANTIC_KEY_BYTES} bytes: ${key}`);
-	const sorted = [...entries].sort((a, b) => byUtf8(a[0], b[0]));
-	checkFieldCount(sorted.length);
-	return Buffer.concat(sorted.map(([key, token]) => field(prefix + key, token)));
+	const keys$1 = entries.map(([key]) => key);
+	if (new Set(keys$1).size !== keys$1.length) throw new DigestError(`duplicate semantic keys in map: ${keys$1.sort(byUtf8).join(",")}`);
+	for (const key of keys$1) if (Buffer.byteLength(key, "utf8") > MAX_SEMANTIC_KEY_BYTES) throw new DigestError(`semantic key exceeds ${MAX_SEMANTIC_KEY_BYTES} bytes: ${key}`);
+	const sorted$1 = [...entries].sort((a, b) => byUtf8(a[0], b[0]));
+	checkFieldCount(sorted$1.length);
+	return Buffer.concat(sorted$1.map(([key, token]) => field(prefix + key, token)));
 }
 const PRODUCT_KEY_SET = new Set(PRODUCT_KEY_VOCABULARY);
 function tupleEntries(tuple, label, allowlist = PRODUCT_KEY_SET) {
@@ -3617,8 +3617,8 @@ function evidenceFactDigest(fact, allowlist = PRODUCT_KEY_SET) {
 function evidenceSha256Digest(facts, allowlist = PRODUCT_KEY_SET) {
 	const parts = [Buffer.from("ccg.evidenceSha256.v3\n", "utf8")];
 	const seen = /* @__PURE__ */ new Set();
-	const sorted = [...facts].sort((a, b) => byUtf8(a.id, b.id));
-	for (const fact of sorted) {
+	const sorted$1 = [...facts].sort((a, b) => byUtf8(a.id, b.id));
+	for (const fact of sorted$1) {
 		if (seen.has(fact.id)) throw new DigestError(`duplicate evidence id: ${fact.id}`);
 		seen.add(fact.id);
 		parts.push(field("id", typedToken(fact.id)));
@@ -10636,9 +10636,9 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			redirect: "error"
 		});
 		if (!response.ok) return fail("host_trust_registry_unavailable");
-		const metadata = await response.json();
-		if (metadata.name !== row$3.name || metadata.version !== row$3.version || metadata.dist?.integrity !== row$3.integrity) return fail("host_trust_registry_identity_mismatch");
-		const url = new URL(metadata.dist?.tarball ?? "");
+		const metadata$1 = await response.json();
+		if (metadata$1.name !== row$3.name || metadata$1.version !== row$3.version || metadata$1.dist?.integrity !== row$3.integrity) return fail("host_trust_registry_identity_mismatch");
+		const url = new URL(metadata$1.dist?.tarball ?? "");
 		if (url.origin !== "https://registry.npmjs.org" || url.username || url.password) return fail("host_trust_source_untrusted");
 		const archive = await fetcher(url, {
 			signal: AbortSignal.timeout(3e4),
@@ -11034,7 +11034,7 @@ function readDesktopAppRuntime(appAsarPath, session) {
 	const manifestBytes = memoizedAsarFile(session, asarRealpath, index$1, DESKTOP_RUNTIME_MANIFEST_ENTRY);
 	const metadataBytes = memoizedAsarFile(session, asarRealpath, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
 	const manifest = JSON.parse(manifestBytes.toString("utf8"));
-	const metadata = JSON.parse(metadataBytes.toString("utf8"));
+	const metadata$1 = JSON.parse(metadataBytes.toString("utf8"));
 	if (manifest.name !== DESKTOP_RUNTIME_PACKAGE_NAME) throw new HostProfileError("desktop_app_invalid", "the app runtime manifest is not the official desktop runtime");
 	const runtimeVersion = typeof manifest.version === "string" ? manifest.version : "";
 	if (!parseHostVersion(runtimeVersion) || !satisfiesSupportedHostRange(runtimeVersion)) throw new HostProfileError("desktop_host_version_below_minimum", "the app runtime version is not an admitted host version");
@@ -11042,11 +11042,11 @@ function readDesktopAppRuntime(appAsarPath, session) {
 	if (!dependencies) throw new HostProfileError("desktop_app_invalid", "the app runtime manifest declares no dependencies");
 	const dshVersion = dependencies["@deepseek-ai/dsh"];
 	if (typeof dshVersion !== "string" || dshVersion !== runtimeVersion) throw new HostProfileError("desktop_app_invalid", "the app runtime does not pin the audited DSH version");
-	const desktopVersion = isRecord(metadata.release) && typeof metadata.release.version === "string" ? metadata.release.version : "";
-	const nodeVersion = isRecord(metadata.release) && typeof metadata.release.nodeVersion === "string" ? metadata.release.nodeVersion : "";
-	const pnpmVersion = isRecord(metadata.release) && typeof metadata.release.pnpmVersion === "string" ? metadata.release.pnpmVersion : "";
-	const fileTable = Array.isArray(metadata.files) ? metadata.files : [];
-	if (!parseHostVersion(desktopVersion) || !satisfiesSupportedHostRange(desktopVersion) || typeof metadata.platform !== "string" || !metadata.platform || typeof metadata.arch !== "string" || !metadata.arch || !nodeVersion || !pnpmVersion || fileTable.length === 0 || fileTable.length > 2e5 || !fileTable.every((entry) => isRecord(entry) && typeof entry.path === "string" && !!entry.path && !entry.path.startsWith("/") && !entry.path.includes("\\") && !entry.path.includes("..") && /^[a-f0-9]{64}$/.test(String(entry.sha256)))) throw new HostProfileError("desktop_app_invalid", "the desktop runtime metadata block is incomplete");
+	const desktopVersion = isRecord(metadata$1.release) && typeof metadata$1.release.version === "string" ? metadata$1.release.version : "";
+	const nodeVersion = isRecord(metadata$1.release) && typeof metadata$1.release.nodeVersion === "string" ? metadata$1.release.nodeVersion : "";
+	const pnpmVersion = isRecord(metadata$1.release) && typeof metadata$1.release.pnpmVersion === "string" ? metadata$1.release.pnpmVersion : "";
+	const fileTable = Array.isArray(metadata$1.files) ? metadata$1.files : [];
+	if (!parseHostVersion(desktopVersion) || !satisfiesSupportedHostRange(desktopVersion) || typeof metadata$1.platform !== "string" || !metadata$1.platform || typeof metadata$1.arch !== "string" || !metadata$1.arch || !nodeVersion || !pnpmVersion || fileTable.length === 0 || fileTable.length > 2e5 || !fileTable.every((entry) => isRecord(entry) && typeof entry.path === "string" && !!entry.path && !entry.path.startsWith("/") && !entry.path.includes("\\") && !entry.path.includes("..") && /^[a-f0-9]{64}$/.test(String(entry.sha256)))) throw new HostProfileError("desktop_app_invalid", "the desktop runtime metadata block is incomplete");
 	const { CRITICAL_NAME_SET } = criticalNames();
 	const rows = [];
 	for (const [name, version$1] of Object.entries(dependencies).sort(([a], [b]) => a.localeCompare(b))) {
@@ -11066,8 +11066,8 @@ function readDesktopAppRuntime(appAsarPath, session) {
 		runtimeVersion,
 		metadata: {
 			desktopVersion,
-			platform: String(metadata.platform),
-			arch: String(metadata.arch),
+			platform: String(metadata$1.platform),
+			arch: String(metadata$1.arch),
 			node: nodeVersion,
 			pnpm: pnpmVersion,
 			fileTableEntries: fileTable.length
@@ -11161,9 +11161,9 @@ function auditDesktopInstalledImplementation(appAsarPath, expectations, session)
 		scan(index$1.root, [], 0);
 		const fileTable = /* @__PURE__ */ new Map();
 		const metadataBytes = memoizedAsarFile(session, realArchive, index$1, DESKTOP_RUNTIME_METADATA_ENTRY);
-		const metadata = JSON.parse(metadataBytes.toString("utf8"));
-		if (Array.isArray(metadata.files)) {
-			for (const entry of metadata.files) if (entry && typeof entry === "object" && typeof entry.path === "string" && /^[a-f0-9]{64}$/.test(String(entry.sha256))) fileTable.set(`dsh/${entry.path}`, String(entry.sha256));
+		const metadata$1 = JSON.parse(metadataBytes.toString("utf8"));
+		if (Array.isArray(metadata$1.files)) {
+			for (const entry of metadata$1.files) if (entry && typeof entry === "object" && typeof entry.path === "string" && /^[a-f0-9]{64}$/.test(String(entry.sha256))) fileTable.set(`dsh/${entry.path}`, String(entry.sha256));
 		}
 		for (const expected of expectations) {
 			const parts = [...topLevelRoot, ...expected.name.split("/")];
@@ -11287,8 +11287,8 @@ function desktopHoistedProfileGraph(profile, session) {
 	if (session.realpath(metadataPath) !== metadataPath) throw Error("Desktop installation index is linked");
 	const bytes$1 = session.readFile(metadataPath);
 	if (bytes$1.length > 2 * 1024 * 1024) throw Error("Desktop installation index too large");
-	const metadata = JSON.parse(bytes$1.toString("utf8"));
-	if (metadata.nodeLinker !== "hoisted" || metadata.layoutVersion !== 5 || metadata.packageManager !== "pnpm@11.7.0" || !metadata.hoistedLocations || typeof metadata.hoistedLocations !== "object" || Array.isArray(metadata.hoistedLocations)) throw Error("Desktop installation index unsupported");
+	const metadata$1 = JSON.parse(bytes$1.toString("utf8"));
+	if (metadata$1.nodeLinker !== "hoisted" || metadata$1.layoutVersion !== 5 || metadata$1.packageManager !== "pnpm@11.7.0" || !metadata$1.hoistedLocations || typeof metadata$1.hoistedLocations !== "object" || Array.isArray(metadata$1.hoistedLocations)) throw Error("Desktop installation index unsupported");
 	const names = packageNamePattern;
 	const records = Object.create(null);
 	records["."] = {
@@ -11297,7 +11297,7 @@ function desktopHoistedProfileGraph(profile, session) {
 	};
 	const rootIndex = records["."].dependencies;
 	const locations = /* @__PURE__ */ new Set(), roots = /* @__PURE__ */ new Set();
-	for (const [reference, paths] of Object.entries(metadata.hoistedLocations)) {
+	for (const [reference, paths] of Object.entries(metadata$1.hoistedLocations)) {
 		const boundary = reference.indexOf("@", reference.startsWith("@") ? 1 : 0);
 		const name = reference.slice(0, boundary), version$1 = reference.slice(boundary + 1);
 		if (boundary < 1 || !names.test(name) || !version$1 || !Array.isArray(paths) || !paths.length) throw Error("Desktop installation reference invalid");
@@ -12255,9 +12255,9 @@ async function prepareDesktopHostTrust(appAsarPath, profileRoot, fetcher = fetch
 			redirect: "error"
 		});
 		if (!response.ok) throw new HostTrustError("host_trust_registry_unavailable");
-		const metadata = await response.json();
-		const integrity = metadata.dist?.integrity;
-		if (metadata.name !== row$3.name || metadata.version !== row$3.version || typeof integrity !== "string") throw new HostTrustError("host_trust_registry_identity_mismatch");
+		const metadata$1 = await response.json();
+		const integrity = metadata$1.dist?.integrity;
+		if (metadata$1.name !== row$3.name || metadata$1.version !== row$3.version || typeof integrity !== "string") throw new HostTrustError("host_trust_registry_identity_mismatch");
 		qualified.push({
 			name: row$3.name,
 			version: row$3.version,
@@ -12685,8 +12685,8 @@ function validateManifest(manifest = COMMAND_SURFACE_MANIFEST) {
 			path: name,
 			message: "must not be empty"
 		});
-		const sorted = [...values].map((value) => value.toLowerCase()).sort();
-		if (sorted.some((value, index$1) => index$1 > 0 && value === sorted[index$1 - 1])) issues.push({
+		const sorted$1 = [...values].map((value) => value.toLowerCase()).sort();
+		if (sorted$1.some((value, index$1) => index$1 > 0 && value === sorted$1[index$1 - 1])) issues.push({
 			path: name,
 			message: "contains duplicates"
 		});
@@ -17216,9 +17216,9 @@ function certificationGain(item, candidates) {
 	return candidates.some((candidate) => candidate.action !== void 0 && candidate.action !== "generic_run");
 }
 function preservesIdentity(old, clarified) {
-	const keys = Object.entries(old.requestedTarget ?? {}).filter(([key]) => key !== "scope");
+	const keys$1 = Object.entries(old.requestedTarget ?? {}).filter(([key]) => key !== "scope");
 	const unwrap = (value) => JSON.stringify(value && typeof value === "object" && "v" in value ? value.v : value);
-	return keys.every(([key, value]) => unwrap(value) === unwrap(clarified.requestedTarget?.[key])) && (!old.verification.method || old.verification.method === clarified.verification.method) && (old.verification.surface !== "artifact" || old.verification.subject === clarified.verification.subject);
+	return keys$1.every(([key, value]) => unwrap(value) === unwrap(clarified.requestedTarget?.[key])) && (!old.verification.method || old.verification.method === clarified.verification.method) && (old.verification.surface !== "artifact" || old.verification.subject === clarified.verification.subject);
 }
 function validateProposalShape(item, args) {
 	const clauses = args.clauses;
@@ -29300,6 +29300,10 @@ const RC020_RC1_HOST_PACKAGES = packages.map(({ name, version: version$1, integr
 //#region src/domain/activation-migration.ts
 async function inspectActivationInventory(persistence) {
 	const rows = await persistence.list(), identities = [], ids = /* @__PURE__ */ new Set();
+	const beforeMetadata = new Map(rows.map((row$3) => [String(row$3.header?.id), {
+		headerSha256: activationDigest(row$3.header),
+		revision: row$3.revision
+	}]));
 	for (const row$3 of rows) {
 		const header = row$3.header;
 		if (typeof header?.id !== "string" || ids.has(header.id)) throw new Error("activation_inventory_invalid");
@@ -29315,14 +29319,18 @@ async function inspectActivationInventory(persistence) {
 		}
 	}
 	const after = await persistence.list();
-	if (after.length !== rows.length || after.some((row$3) => !ids.has(String(row$3.header.id)))) throw new Error("activation_inventory_changed");
+	if (after.length !== rows.length || after.some((row$3) => !ids.has(String(row$3.header.id))) || after.some((row$3) => {
+		const before = beforeMetadata.get(String(row$3.header.id));
+		return !before || row$3.revision !== before.revision || activationDigest(row$3.header) !== before.headerSha256;
+	})) throw new Error("activation_inventory_changed");
 	return identities.sort((a, b) => a.id.localeCompare(b.id));
 }
-function prepareActivationMigration(inventory, prior) {
+function prepareActivationMigration(inventory, prior, universeIds = inventory.map((i$1) => i$1.id)) {
 	if (!prior || prior.schema !== "dsh-activation-prior-modes/v1" || prior.previousPackage?.name !== "dsh-completion-guard" || !/^0\.[0-8]\.\d+(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version) || !/^[a-f0-9]{64}$/u.test(prior.previousPackage.sha256) || !/^[a-f0-9]{64}$/u.test(prior.sourceSha256) || !Array.isArray(prior.cohorts) || !prior.cohorts.length) throw new Error("activation_prior_modes_invalid");
-	const ids = new Set(inventory.map((i$1) => i$1.id));
-	if (ids.size !== inventory.length || !inventory.length) throw new Error("activation_inventory_invalid");
-	for (const cohort of prior.cohorts) if (!cohort || !cohort.name || !["opt-in", "always"].includes(cohort.mode) || cohort.sessionIds !== void 0 && (!Array.isArray(cohort.sessionIds) || cohort.sessionIds.some((id) => !ids.has(id)) || new Set(cohort.sessionIds).size !== cohort.sessionIds.length)) throw new Error("activation_prior_modes_invalid");
+	if (new Set(inventory.map((i$1) => i$1.id)).size !== inventory.length || !inventory.length) throw new Error("activation_inventory_invalid");
+	const universe = new Set(universeIds);
+	if (universe.size !== universeIds.length || inventory.some((i$1) => !universe.has(i$1.id))) throw new Error("activation_inventory_invalid");
+	for (const cohort of prior.cohorts) if (!cohort || !cohort.name || !["opt-in", "always"].includes(cohort.mode) || cohort.sessionIds !== void 0 && (!Array.isArray(cohort.sessionIds) || cohort.sessionIds.some((id) => !universe.has(id)) || new Set(cohort.sessionIds).size !== cohort.sessionIds.length)) throw new Error("activation_prior_modes_invalid");
 	const uniform = new Set(prior.cohorts.map((c) => c.mode)).size === 1;
 	const missing = [], entries = inventory.flatMap((identity) => {
 		const mapped = prior.cohorts.filter((c) => c.sessionIds?.includes(identity.id));
@@ -29362,4 +29370,148 @@ function verifyMigrationInventory(receipt, inventory) {
 }
 
 //#endregion
-export { parsePwshCommand as $, sessionBirthIdentity as $a, HOST_COHORTS as $i, removalIsComplete as $n, validateManifest as $r, CONTROL_RECORD_PREFIX as $t, projectCoreV2 as A, isStatefulAction as Aa, memoizedAsarFile as Ai, createProjection as An, isExplanationScope as Ar, CLEANUP_CONDITION_RULE_COMPACT as At, rootLocatorFlavor as B, __activationBindingInternals as Ba, hostTrustDigest as Bi, parseConfirmationMessage as Bn, namedActions as Br, openItems as Bt, HOST_WORKDIR_PREFIX as C, SEMANTIC_ACTIONS as Ca, revalidateDesktopCoreLock as Ci, unitDescendantIds as Cn, sanitizeUrl as Co, hasOrderedCoordination as Cr, requiredSubjectsOf as Ct, SESSION_EVENT_ENVELOPE_INVALID as D, SUPPORTED_EVIDENCE_ADAPTERS as Da, DESKTOP_RUNTIME_PACKAGE_NAME as Di, isCurrentAcceptedBoundary as Dn, interpretMessage as Dr, validateProofManifest as Dt, SESSION_API_UNSUPPORTED as E, STOP_PROTOCOL_VERSION_V2 as Ea, DESKTOP_PROFILE_PACKAGE_NAME as Ei, effectuateBoundary as En, interpretClause as Er, sessionQueryV2 as Et, PROTOCOL_V5_NOTICE as F, semanticActionFromText as Fa, readDesktopDependency as Fi, rebindAttemptKey as Fn, itemHoldsExecutionAuthority as Fr, V6_ORDINARY_COMPLETION_RULE_COMPACT as Ft, extractToolSubject as G, readActivationMigrationReceipt as Ga, ACTIVE_HOST_COHORT_ID as Gi, nativeFileTwoRole as Gn, questionHeadsClause as Gr, confirmedV6CoreDiagnostic as Gt, NATIVE_GIT_ROOT_PARENT_OID as H, adoptActivationReceipt as Ha, qualifyHostTrust as Hi, deriveItemDiagnosis as Hn, opensWithDirective as Hr, recoveryTitle as Ht, PROTOCOL_V6_NOTICE as I, validateActionManifest as Ia, readDesktopTargetGraph as Ii, rebindResponse as In, kindOfScope as Ir, V6_ORDINARY_COMPLETION_RULE_SHORT as It, persistedToolResultStatus as J, validateActivationMigrationReceipt as Ja, BASE_HOST_PACKAGES as Ji, actionHasCertificationPath as Jn, semanticActionOfScope as Jr, sourceItemForCoreRequirement as Jt, isDeterministicCheck as K, resolveActivationBindingsRoot as Ka, ACTIVE_HOST_COHORT_IDS as Ki, relevantEvidence as Kn, reportingHeadGoverns as Kr, currentV6Feedback as Kt, applyUpgradeEligibility as L, validateActionTarget as La, writeDesktopRuntimeReceipt as Li, replayRebindResult as Ln, legacyQuestionReadingIsInformational as Lr, carriesCleanupCondition as Lt, DEFAULT_DELEGATION_TOOL_NAMES as M, requestedTargetAuthorizesMutation as Ma, readAsarFile as Mi, proposeRebind as Mn, isOpenObligation as Mr, DEFAULT_RECOVERY_CHAR_BUDGET as Mt, PROTOCOL_V3_NOTICE as N, requestedTargetMatchesResolved as Na, readAsarIndex as Ni, proposeRebindOutcome as Nn, isQuestionScopeNeedingReview as Nr, MIN_RECOVERY_CHAR_BUDGET as Nt, SessionApiError as O, actionCompatible as Oa, auditDesktopInstalledImplementation as Oi, qualifyBoundary as On, introducesActionClause as Or, validateProofManifestV2 as Ot, PROTOCOL_V4_NOTICE as P, semanticActionFromCommand as Pa, readDesktopAppRuntime as Pi, proposeRebindV042 as Pn, isRestatement as Pr, V6_ORDINARY_COMPLETION_RULE as Pt, isRunExecutable as Q, activationJson as Qa, HOST_CAPABILITY_PACKAGE_GROUPS as Qi, partialFailureOf as Qn, COMMAND_SURFACE_MANIFEST as Qr, isVerifyingCapability as Qt, deriveProjection as R, RC020_RC2_HOST_PACKAGES as Ra, HostTrustError as Ri, CONFIRM_LINE_PATTERN as Rn, maskCodeSpans as Rr, cleanupConditionFor as Rt, sessionCoreSnapshot as S, CERTIFICATE_VERSION_V2 as Sa, resolveInstalledHostLock as Si, needsReviewObligations as Sn, sanitizeClauseText as So, governedClauseRestrictsExecution as Sr, proofV2Rejection as St, sourcedNamedTestRoot as T, STOP_PROTOCOL_VERSION as Ta, DESKTOP_IDENTITY_FACTS as Ti, availableBoundaryQualifications as Tn, privateStorageToolDenial as To, hasWorkPredicate as Tr, sessionQuery as Tt, evidenceFromPersistedToolResult as U, createActivationMigrationReceipt as Ua, registryArchiveFiles as Ui, evidenceAvailabilityReason as Un, presentExplanationHead as Ur, renderRecoveryPacket as Ut, supersedeItem as V, activationBindingPath as Va, parseHostTrust as Vi, capabilityRemedyPhrase as Vn, opensConditionLead as Vr, recoveryDigest as Vt, extractTextContent as W, readActivationBinding as Wa, registryArchiveModules as Wi, itemDiagnosis as Wn, qualificationOfClause as Wr, v6CurrentRootBoundaries as Wt, withDurability as X, activationCanonical as Xa, EXPECTED_HOST_PACKAGES as Xi, capabilityConsequence as Xn, statefulActionsOfScope as Xr, evidenceCoverage as Xt, shellReadbackOutcome as Y, writeActivationBinding as Ya, DEFAULT_HOST_LOCK as Yi, admissibleForRemoval as Yn, splitTextFragments as Yr, bindingSatisfies as Yt, canonicalArgvFromCommand as Z, activationDigest as Za, GOAL_HOST_PACKAGES as Zi, capabilityFactOf as Zn, verbIsNegated as Zr, evidenceMatchesItem as Zt, firstStepGuidance as _, satisfiesSupportedHostRange as _a, prepareDesktopHostTrust as _i, goalCompletionDenial as _n, releasePreEffectDecision as _o, clarifiedSpanOf as _r, proofDigest as _t, GIT_COMMAND_MANIFEST_IDS as a, evaluateHostLock as aa, auditedHostImplementation as ai, currentActionBases as an, privateLedgerContractDigest as ao, extractArtifactPaths as ar, PROOF_CAPABILITY_MATRIX as at, previewFirstStepInjection as b, BOUNDED_ARTIFACT_TYPES as ba, resolveActiveProfileHostLock as bi, certifiableOpenItems as bn, digestStrings as bo, clauseIsProtected as br, proofHostSurfacesOf as bt, commitTreeSnapshotDigest as c, selectHostCohort as ca, evaluateConfiguredHostLock as ci, decisionBoundaryKey as cn, resolvePrivateLedgerRoot as co, isInformationalMessage as cr, PROOF_MANIFEST_DOMAIN_V2 as ct, gitCommandMatchesTarget as d, MIN_SUPPORTED_HOST_VERSION as da, injectActiveProfileHostLock as di, latestAssistantText as dn, contractById as do, npmEscapedPackageName as dr, bindProofToProjection as dt, bindExecutableIdentity as ea, HostProfileError as ei, NO_PROGRESS_RECORD_PREFIX as en, validateActivationBinding as eo, removalIsPartiallyKnown as er, parseShellCommand as et, parseGitCommandManifest as f, SUPPORTED_HOST_RANGE as fa, inspectDesktopTargetGraph as fi, latestRootInstruction as fn, inFlightReservation as fo, classifyTaskIntent as fr, bindProofV2ToProjection as ft, claimedBatchHasRealRootInput as g, parseHostVersion as ga, prepareActiveHostTrust as gi, v6TestPredicate as gn, releaseCoverage as go, actionVerbMatches as gr, proofCapabilityReport as gt, FIRST_STEP_GUIDANCE as h, evaluateMinimumHostVersion as ha, packageRowsFromPnpmLock as hi, testOutcomePredicate as hn, releaseContractFor as ho, LEGACY_QUALIFICATION as hr, createProofManifestV2 as ht, RC020_RC1_HOST_PACKAGES as i, evaluateHostCapability as ia, auditedForegroundRenderers as ii, classifyCompletionClaim as in, initializePrivateLedger as io, environmentDefaultRepositoryTarget as ir, certifyCheckpoint as it, CAPTURE_V042_NOTICE as j, requestedIdentityKey as ja, memoizedAsarIndex as ji, confirmRebind as jn, isInformationalFragment as jr, CLEANUP_CONDITION_RULE_SHORT as jt, snapshotSessionEvents as k, boundedArtifactChoiceMatches as ka, hasDesktopImporterState as ki, currentContractDigest as kn, isExecutableItem as kr, CLEANUP_CONDITION_RULE as kt, createGitPrestateEnvelope as l, HOST_VALIDATED_VERSIONS as la, hostLockContextFromComposedDump as li, isRootPauseRequest as ln, RELEASE_OPERATIONS as lo, segmentClauses as lr, PROOF_PROTOCOL_VERSION as lt, verifiedLinearCommitReadback as m, compareHostVersions as ma, packageRowsFromActiveGraph as mi, progressFingerprint as mn, readbackSettlesContract as mo, GRANTED_QUALIFICATION as mr, createProofManifest as mt, prepareActivationMigration as n, evaluateExternalWaitCapability as na, auditedDefaultWorkdirHost as ni, assessmentAction as nn, applyPrivateLedger as no, captureItem as nr, segmentAuthorityBlocks as nt, GIT_COMMAND_TEMPLATES as o, evaluateToolSurfaceCapability as oa, combineHostPolicy as oi, decideTurnBoundary as on, privateLedgerTargetDigest as oo, extractMethod as or, PROOF_KINDS as ot, revalidateGitPrestate as p, SUPPORTED_HOST_VERSIONS as pa, inspectTargetHostGraph as pi, observeAssistantOutcome as pn, normalizeReleaseContract as po, classifyUserInteraction as pr, canonicalProjection as pt, nativeGitParentOidVerified as q, resolveSessionActivation as qa, ACTIVE_HOST_LAUNCHER_VERSION as qi, DEPENDENCY_FREE_ONLY_CONDITION as qn, restatedContentOf as qr, isV6PendingRootWait as qt, verifyMigrationInventory as r, evaluateGraphDerivedHostLock as ra, auditedDefaultWorkdirProvider as ri, assessmentOutcomePredicate as rn, hasPrivateRestartIntent as ro, classifyClause as rr, bindingIndividuallyAccepted as rt, commitIndexSnapshotDigest as s, hostVersionFromPackages as sa, evaluateActiveHostLock as si, decideTurnStopping as sn, readPrivateLedger as so, extractOperation as sr, PROOF_KINDS_V2 as st, inspectActivationInventory as t, bindLiveGoalCapability as ta, activeRendererModule as ti, NO_PROGRESS_TURNS_BEFORE_STOP as tn, appendPrivateLedger as to, captureClause as tr, authorityCaptureCounts as tt, executeRevalidatedGitEffect as u, LATEST_TESTED_HOST_VERSION as ua, hostLockRowsFromComposedDump as ui, isWholeTaskCompletionClaim as un, RELEASE_OPERATION_SURFACES as uo, canonicalRegistryBase as ur, PROOF_PROTOCOL_VERSION_V2 as ut, firstStepGuidanceV6 as v, ACTION_MANIFEST as va, prepareTargetHostTrust as vi, hasCurrentCertificate as vn, reservationFor as vo, clauseAsksOwnQuestion as vr, proofDigestV2 as vt, captureHostWorkdir as w, STATEFUL_ACTIONS as wa, verifyComposedHostLockDump as wi, BOUNDARY_RECORD_PREFIX as wn, sha256 as wo, hasQuestionScope as wr, scopeCoverageDigest as wt, projectSessionCoreV2 as x, CERTIFICATE_VERSION as xa, resolveDesktopProfileHostLock as xi, certificateClosure as xn, normalizeClause as xo, explanationHasActionResidue as xr, proofOperationMatches as xt, lifecyclePhase as y, ACTION_MANIFEST_VERSION as ya, readActiveHostGraph as yi, ancestorConstraintForBinding as yn, canonicalizePath as yo, clauseIsGoverned as yr, proofEvidenceConstraints as yt, legacyRecordsNeedingReview as z, createHostAuditSession as za, acquireHostTrust as zi, isFrozenV042RebindResponse as zn, maskQuotedSpans as zr, closingHint as zt };
+//#region src/domain/activation-selection.ts
+const hex = (v) => typeof v === "string" && /^[a-f0-9]{64}$/u.test(v);
+const keys = (v, expected) => Object.keys(v).sort().join(",") === expected;
+const sorted = (rows) => rows.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const SCOPE = activationDigest("dsh-activation-selected-inventory/v1");
+function metadata(row$3) {
+	const id = row$3.header?.id;
+	if (typeof id !== "string" || !id) throw new Error("activation_inventory_invalid");
+	if (typeof row$3.revision !== "string" || !row$3.revision) throw new Error("activation_inventory_revision_unavailable");
+	return {
+		id,
+		headerSha256: activationDigest(row$3.header),
+		revisionSha256: activationDigest(row$3.revision)
+	};
+}
+/** Only a physical runtime's official error-class predicate may classify open
+* refusals. Unknown errors/list/stat failures abort; they are never exclusions. */
+async function scanActivationInventory(persistence, isFormatUnsupported) {
+	const before = sorted((await persistence.list()).map(metadata)), rows = [];
+	if (new Set(before.map((r) => r.id)).size !== before.length) throw new Error("activation_inventory_invalid");
+	for (const row$3 of before) {
+		let handle;
+		let formatUnsupported = false;
+		try {
+			handle = await persistence.open(row$3.id, "read");
+		} catch (error) {
+			if (!isFormatUnsupported(error)) throw error;
+			formatUnsupported = true;
+		}
+		if (!handle && !formatUnsupported) throw new Error("activation_inventory_invalid");
+		if (handle) try {
+			const identity = sessionBirthIdentity(handle.header, handle.inheritedEventCount);
+			if (identity.id !== row$3.id || activationDigest(handle.header) !== row$3.headerSha256) throw new Error("activation_inventory_changed");
+			rows.push({
+				...row$3,
+				status: "readable",
+				identity
+			});
+		} finally {
+			await handle.close();
+		}
+		else rows.push({
+			...row$3,
+			status: "unsupported",
+			reason: "session_format_unsupported"
+		});
+		const after$1 = await persistence.stat(row$3.id);
+		if (!after$1 || activationCanonical(metadata(after$1)) !== activationCanonical(row$3)) throw new Error("activation_inventory_changed");
+	}
+	const after = sorted((await persistence.list()).map(metadata));
+	if (activationCanonical(before) !== activationCanonical(after)) throw new Error("activation_inventory_changed");
+	const unsigned = {
+		schema: "dsh-activation-inventory/v1",
+		rows
+	};
+	return {
+		...unsigned,
+		sha256: activationDigest(unsigned)
+	};
+}
+function validateActivationInventorySnapshot(value) {
+	const snapshot = value;
+	if (!snapshot || !keys(snapshot, "rows,schema,sha256") || snapshot.schema !== "dsh-activation-inventory/v1" || !Array.isArray(snapshot.rows) || !hex(snapshot.sha256)) throw new Error("activation_inventory_snapshot_invalid");
+	const ids = /* @__PURE__ */ new Set();
+	for (const row$3 of snapshot.rows) {
+		if (!row$3 || typeof row$3.id !== "string" || !row$3.id || ids.has(row$3.id) || !hex(row$3.headerSha256) || !hex(row$3.revisionSha256)) throw new Error("activation_inventory_snapshot_invalid");
+		ids.add(row$3.id);
+		if (row$3.status === "readable") {
+			if (!keys(row$3, "headerSha256,id,identity,revisionSha256,status") || activationCanonical(sessionBirthIdentity({
+				...row$3.identity,
+				version: 4
+			}, row$3.identity?.inheritedEventCount)) !== activationCanonical(row$3.identity) || row$3.identity.id !== row$3.id) throw new Error("activation_inventory_snapshot_invalid");
+		} else if (row$3.status !== "unsupported" || !keys(row$3, "headerSha256,id,reason,revisionSha256,status") || row$3.reason !== "session_format_unsupported") throw new Error("activation_inventory_snapshot_invalid");
+	}
+	const { sha256: sha256$1,...unsigned } = snapshot;
+	if (activationDigest(unsigned) !== sha256$1) throw new Error("activation_inventory_snapshot_invalid");
+	return snapshot;
+}
+function validateActivationSelection(value) {
+	const selection = value;
+	if (!selection || !keys(selection, "include,inventorySha256,schema,sha256") || selection.schema !== "dsh-activation-selection/v1" || !hex(selection.inventorySha256) || !hex(selection.sha256) || !Array.isArray(selection.include) || !selection.include.length || selection.include.some((id) => typeof id !== "string" || !id) || new Set(selection.include).size !== selection.include.length) throw new Error("activation_selection_invalid");
+	const { sha256: sha256$1,...unsigned } = selection;
+	if (activationDigest(unsigned) !== sha256$1) throw new Error("activation_selection_invalid");
+	return selection;
+}
+function selectedActivationInventory(snapshotValue, selectionValue) {
+	const snapshot = validateActivationInventorySnapshot(snapshotValue), selection = validateActivationSelection(selectionValue);
+	if (selection.inventorySha256 !== snapshot.sha256) throw new Error("activation_inventory_changed");
+	const byId = new Map(snapshot.rows.map((row$3) => [row$3.id, row$3]));
+	return selection.include.map((id) => {
+		const row$3 = byId.get(id);
+		if (!row$3 || row$3.status !== "readable") throw new Error("activation_selection_unreadable");
+		return row$3.identity;
+	});
+}
+function createActivationSelection(snapshotValue, include) {
+	const snapshot = validateActivationInventorySnapshot(snapshotValue);
+	if (!Array.isArray(include) || !include.length || include.some((id) => typeof id !== "string" || !id) || new Set(include).size !== include.length) throw new Error("activation_selection_invalid");
+	const unsigned = {
+		schema: "dsh-activation-selection/v1",
+		inventorySha256: snapshot.sha256,
+		include: [...include].sort()
+	};
+	const selection = {
+		...unsigned,
+		sha256: activationDigest(unsigned)
+	};
+	selectedActivationInventory(snapshot, selection);
+	return selection;
+}
+function activationSelectionPending(snapshot, selection) {
+	selectedActivationInventory(snapshot, selection);
+	return snapshot.rows.filter((row$3) => !selection.include.includes(row$3.id)).map((row$3) => ({
+		id: row$3.id,
+		reason: row$3.status === "unsupported" ? "session_format_unsupported" : "not_selected"
+	}));
+}
+function prepareSelectedActivationMigration(snapshot, selection, prior) {
+	const result = prepareActivationMigration(selectedActivationInventory(snapshot, selection), prior, snapshot.rows.map((r) => r.id));
+	if (!result.receipt) return result;
+	return {
+		...result,
+		receipt: createActivationMigrationReceipt(result.receipt.entries, {
+			...result.receipt.inputs,
+			inventory_snapshot: snapshot.sha256,
+			selection: selection.sha256,
+			scope: SCOPE
+		})
+	};
+}
+function isSelectedActivationReceipt(receipt) {
+	return [
+		"inventory_snapshot",
+		"selection",
+		"scope"
+	].some((key) => Object.hasOwn(receipt.inputs, key));
+}
+function verifySelectedMigrationInventory(receipt, snapshot, selection) {
+	const inventory = selectedActivationInventory(snapshot, selection);
+	if (receipt.inputs.inventory_snapshot !== snapshot.sha256 || receipt.inputs.selection !== selection.sha256 || receipt.inputs.scope !== SCOPE || receipt.inputs.inventory !== activationDigest(inventory)) throw new Error("activation_selection_receipt_conflict");
+	verifyMigrationInventory(receipt, inventory);
+}
+
+//#endregion
+export { extractTextContent as $, readActivationBinding as $a, registryArchiveModules as $i, itemDiagnosis as $n, qualificationOfClause as $r, v6CurrentRootBoundaries as $t, projectSessionCoreV2 as A, CERTIFICATE_VERSION as Aa, resolveDesktopProfileHostLock as Ai, certificateClosure as An, normalizeClause as Ao, explanationHasActionResidue as Ar, proofOperationMatches as At, CAPTURE_V042_NOTICE as B, requestedIdentityKey as Ba, memoizedAsarIndex as Bi, confirmRebind as Bn, isInformationalFragment as Br, CLEANUP_CONDITION_RULE_SHORT as Bt, verifiedLinearCommitReadback as C, compareHostVersions as Ca, packageRowsFromActiveGraph as Ci, progressFingerprint as Cn, readbackSettlesContract as Co, GRANTED_QUALIFICATION as Cr, createProofManifest as Ct, firstStepGuidanceV6 as D, ACTION_MANIFEST as Da, prepareTargetHostTrust as Di, hasCurrentCertificate as Dn, reservationFor as Do, clauseAsksOwnQuestion as Dr, proofDigestV2 as Dt, firstStepGuidance as E, satisfiesSupportedHostRange as Ea, prepareDesktopHostTrust as Ei, goalCompletionDenial as En, releasePreEffectDecision as Eo, clarifiedSpanOf as Er, proofDigest as Et, SESSION_API_UNSUPPORTED as F, STOP_PROTOCOL_VERSION_V2 as Fa, DESKTOP_PROFILE_PACKAGE_NAME as Fi, effectuateBoundary as Fn, interpretClause as Fr, sessionQueryV2 as Ft, PROTOCOL_V6_NOTICE as G, validateActionManifest as Ga, readDesktopTargetGraph as Gi, rebindResponse as Gn, kindOfScope as Gr, V6_ORDINARY_COMPLETION_RULE_SHORT as Gt, PROTOCOL_V3_NOTICE as H, requestedTargetMatchesResolved as Ha, readAsarIndex as Hi, proposeRebindOutcome as Hn, isQuestionScopeNeedingReview as Hr, MIN_RECOVERY_CHAR_BUDGET as Ht, SESSION_EVENT_ENVELOPE_INVALID as I, SUPPORTED_EVIDENCE_ADAPTERS as Ia, DESKTOP_RUNTIME_PACKAGE_NAME as Ii, isCurrentAcceptedBoundary as In, interpretMessage as Ir, validateProofManifest as It, legacyRecordsNeedingReview as J, createHostAuditSession as Ja, acquireHostTrust as Ji, isFrozenV042RebindResponse as Jn, maskQuotedSpans as Jr, closingHint as Jt, applyUpgradeEligibility as K, validateActionTarget as Ka, writeDesktopRuntimeReceipt as Ki, replayRebindResult as Kn, legacyQuestionReadingIsInformational as Kr, carriesCleanupCondition as Kt, SessionApiError as L, actionCompatible as La, auditDesktopInstalledImplementation as Li, qualifyBoundary as Ln, introducesActionClause as Lr, validateProofManifestV2 as Lt, HOST_WORKDIR_PREFIX as M, SEMANTIC_ACTIONS as Ma, revalidateDesktopCoreLock as Mi, unitDescendantIds as Mn, sanitizeUrl as Mo, hasOrderedCoordination as Mr, requiredSubjectsOf as Mt, captureHostWorkdir as N, STATEFUL_ACTIONS as Na, verifyComposedHostLockDump as Ni, BOUNDARY_RECORD_PREFIX as Nn, sha256 as No, hasQuestionScope as Nr, scopeCoverageDigest as Nt, lifecyclePhase as O, ACTION_MANIFEST_VERSION as Oa, readActiveHostGraph as Oi, ancestorConstraintForBinding as On, canonicalizePath as Oo, clauseIsGoverned as Or, proofEvidenceConstraints as Ot, sourcedNamedTestRoot as P, STOP_PROTOCOL_VERSION as Pa, DESKTOP_IDENTITY_FACTS as Pi, availableBoundaryQualifications as Pn, privateStorageToolDenial as Po, hasWorkPredicate as Pr, sessionQuery as Pt, evidenceFromPersistedToolResult as Q, createActivationMigrationReceipt as Qa, registryArchiveFiles as Qi, evidenceAvailabilityReason as Qn, presentExplanationHead as Qr, renderRecoveryPacket as Qt, snapshotSessionEvents as R, boundedArtifactChoiceMatches as Ra, hasDesktopImporterState as Ri, currentContractDigest as Rn, isExecutableItem as Rr, CLEANUP_CONDITION_RULE as Rt, revalidateGitPrestate as S, SUPPORTED_HOST_VERSIONS as Sa, inspectTargetHostGraph as Si, observeAssistantOutcome as Sn, normalizeReleaseContract as So, classifyUserInteraction as Sr, canonicalProjection as St, claimedBatchHasRealRootInput as T, parseHostVersion as Ta, prepareActiveHostTrust as Ti, v6TestPredicate as Tn, releaseCoverage as To, actionVerbMatches as Tr, proofCapabilityReport as Tt, PROTOCOL_V4_NOTICE as U, semanticActionFromCommand as Ua, readDesktopAppRuntime as Ui, proposeRebindV042 as Un, isRestatement as Ur, V6_ORDINARY_COMPLETION_RULE as Ut, DEFAULT_DELEGATION_TOOL_NAMES as V, requestedTargetAuthorizesMutation as Va, readAsarFile as Vi, proposeRebind as Vn, isOpenObligation as Vr, DEFAULT_RECOVERY_CHAR_BUDGET as Vt, PROTOCOL_V5_NOTICE as W, semanticActionFromText as Wa, readDesktopDependency as Wi, rebindAttemptKey as Wn, itemHoldsExecutionAuthority as Wr, V6_ORDINARY_COMPLETION_RULE_COMPACT as Wt, supersedeItem as X, activationBindingPath as Xa, parseHostTrust as Xi, capabilityRemedyPhrase as Xn, opensConditionLead as Xr, recoveryDigest as Xt, rootLocatorFlavor as Y, __activationBindingInternals as Ya, hostTrustDigest as Yi, parseConfirmationMessage as Yn, namedActions as Yr, openItems as Yt, NATIVE_GIT_ROOT_PARENT_OID as Z, adoptActivationReceipt as Za, qualifyHostTrust as Zi, deriveItemDiagnosis as Zn, opensWithDirective as Zr, recoveryTitle as Zt, commitTreeSnapshotDigest as _, selectHostCohort as _a, evaluateConfiguredHostLock as _i, decisionBoundaryKey as _n, resolvePrivateLedgerRoot as _o, isInformationalMessage as _r, PROOF_MANIFEST_DOMAIN_V2 as _t, scanActivationInventory as a, EXPECTED_HOST_PACKAGES as aa, statefulActionsOfScope as ai, evidenceCoverage as an, activationCanonical as ao, capabilityConsequence as ar, withDurability as at, gitCommandMatchesTarget as b, MIN_SUPPORTED_HOST_VERSION as ba, injectActiveProfileHostLock as bi, latestAssistantText as bn, contractById as bo, npmEscapedPackageName as br, bindProofToProjection as bt, validateActivationSelection as c, HOST_COHORTS as ca, validateManifest as ci, CONTROL_RECORD_PREFIX as cn, sessionBirthIdentity as co, removalIsComplete as cr, parsePwshCommand as ct, prepareActivationMigration as d, evaluateExternalWaitCapability as da, auditedDefaultWorkdirHost as di, assessmentAction as dn, applyPrivateLedger as do, captureItem as dr, segmentAuthorityBlocks as dt, ACTIVE_HOST_COHORT_ID as ea, questionHeadsClause as ei, confirmedV6CoreDiagnostic as en, readActivationMigrationReceipt as eo, nativeFileTwoRole as er, extractToolSubject as et, verifyMigrationInventory as f, evaluateGraphDerivedHostLock as fa, auditedDefaultWorkdirProvider as fi, assessmentOutcomePredicate as fn, hasPrivateRestartIntent as fo, classifyClause as fr, bindingIndividuallyAccepted as ft, commitIndexSnapshotDigest as g, hostVersionFromPackages as ga, evaluateActiveHostLock as gi, decideTurnStopping as gn, readPrivateLedger as go, extractOperation as gr, PROOF_KINDS_V2 as gt, GIT_COMMAND_TEMPLATES as h, evaluateToolSurfaceCapability as ha, combineHostPolicy as hi, decideTurnBoundary as hn, privateLedgerTargetDigest as ho, extractMethod as hr, PROOF_KINDS as ht, prepareSelectedActivationMigration as i, DEFAULT_HOST_LOCK as ia, splitTextFragments as ii, bindingSatisfies as in, writeActivationBinding as io, admissibleForRemoval as ir, shellReadbackOutcome as it, sessionCoreSnapshot as j, CERTIFICATE_VERSION_V2 as ja, resolveInstalledHostLock as ji, needsReviewObligations as jn, sanitizeClauseText as jo, governedClauseRestrictsExecution as jr, proofV2Rejection as jt, previewFirstStepInjection as k, BOUNDED_ARTIFACT_TYPES as ka, resolveActiveProfileHostLock as ki, certifiableOpenItems as kn, digestStrings as ko, clauseIsProtected as kr, proofHostSurfacesOf as kt, verifySelectedMigrationInventory as l, bindExecutableIdentity as la, HostProfileError as li, NO_PROGRESS_RECORD_PREFIX as ln, validateActivationBinding as lo, removalIsPartiallyKnown as lr, parseShellCommand as lt, GIT_COMMAND_MANIFEST_IDS as m, evaluateHostLock as ma, auditedHostImplementation as mi, currentActionBases as mn, privateLedgerContractDigest as mo, extractArtifactPaths as mr, PROOF_CAPABILITY_MATRIX as mt, createActivationSelection as n, ACTIVE_HOST_LAUNCHER_VERSION as na, restatedContentOf as ni, isV6PendingRootWait as nn, resolveSessionActivation as no, DEPENDENCY_FREE_ONLY_CONDITION as nr, nativeGitParentOidVerified as nt, selectedActivationInventory as o, GOAL_HOST_PACKAGES as oa, verbIsNegated as oi, evidenceMatchesItem as on, activationDigest as oo, capabilityFactOf as or, canonicalArgvFromCommand as ot, RC020_RC1_HOST_PACKAGES as p, evaluateHostCapability as pa, auditedForegroundRenderers as pi, classifyCompletionClaim as pn, initializePrivateLedger as po, environmentDefaultRepositoryTarget as pr, certifyCheckpoint as pt, deriveProjection as q, RC020_RC2_HOST_PACKAGES as qa, HostTrustError as qi, CONFIRM_LINE_PATTERN as qn, maskCodeSpans as qr, cleanupConditionFor as qt, isSelectedActivationReceipt as r, BASE_HOST_PACKAGES as ra, semanticActionOfScope as ri, sourceItemForCoreRequirement as rn, validateActivationMigrationReceipt as ro, actionHasCertificationPath as rr, persistedToolResultStatus as rt, validateActivationInventorySnapshot as s, HOST_CAPABILITY_PACKAGE_GROUPS as sa, COMMAND_SURFACE_MANIFEST as si, isVerifyingCapability as sn, activationJson as so, partialFailureOf as sr, isRunExecutable as st, activationSelectionPending as t, ACTIVE_HOST_COHORT_IDS as ta, reportingHeadGoverns as ti, currentV6Feedback as tn, resolveActivationBindingsRoot as to, relevantEvidence as tr, isDeterministicCheck as tt, inspectActivationInventory as u, bindLiveGoalCapability as ua, activeRendererModule as ui, NO_PROGRESS_TURNS_BEFORE_STOP as un, appendPrivateLedger as uo, captureClause as ur, authorityCaptureCounts as ut, createGitPrestateEnvelope as v, HOST_VALIDATED_VERSIONS as va, hostLockContextFromComposedDump as vi, isRootPauseRequest as vn, RELEASE_OPERATIONS as vo, segmentClauses as vr, PROOF_PROTOCOL_VERSION as vt, FIRST_STEP_GUIDANCE as w, evaluateMinimumHostVersion as wa, packageRowsFromPnpmLock as wi, testOutcomePredicate as wn, releaseContractFor as wo, LEGACY_QUALIFICATION as wr, createProofManifestV2 as wt, parseGitCommandManifest as x, SUPPORTED_HOST_RANGE as xa, inspectDesktopTargetGraph as xi, latestRootInstruction as xn, inFlightReservation as xo, classifyTaskIntent as xr, bindProofV2ToProjection as xt, executeRevalidatedGitEffect as y, LATEST_TESTED_HOST_VERSION as ya, hostLockRowsFromComposedDump as yi, isWholeTaskCompletionClaim as yn, RELEASE_OPERATION_SURFACES as yo, canonicalRegistryBase as yr, PROOF_PROTOCOL_VERSION_V2 as yt, projectCoreV2 as z, isStatefulAction as za, memoizedAsarFile as zi, createProjection as zn, isExplanationScope as zr, CLEANUP_CONDITION_RULE_COMPACT as zt };

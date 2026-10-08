@@ -1,8 +1,9 @@
 import { expect, it } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { activationCanonical, activationDigest, sessionBirthIdentity } from '../src/domain/session-activation.js'
+import { createActivationSelection, prepareSelectedActivationMigration, scanActivationInventory } from '../src/domain/activation-selection.js'
 import { createActivationMigrationReceipt } from '../src/domain/activation-bindings.js'
-it('matches independent Python canonical bytes and SHA-256 for the binding/receipt input family', () => {
+it('matches independent Python canonical bytes and SHA-256 for the binding/receipt input family', async () => {
   const python = [process.env.DSH_TEST_PYTHON, 'python3', 'python'].filter((name): name is string => Boolean(name)).find(name => {
     const result = spawnSync(name, ['-c', 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)'])
     return result.status === 0
@@ -12,7 +13,14 @@ it('matches independent Python canonical bytes and SHA-256 for the binding/recei
     parentSession: 'parent', origin: 'subagent', delegationDepth: 2 }, 17)
   const receipt = createActivationMigrationReceipt([{ identity, mode: 'opt-in', cohort: 'old-中文' }],
     { source: '1'.repeat(64), '\uE000': '2'.repeat(64), '😀': '3'.repeat(64) })
-  const vectors = [identity, receipt, { schema: 'dsh-session-activation/v1', identity, initialMode: 'always',
+  const header = { version: 4, id: 'selected-中文', createdAt: 7, isSeeded: false }
+  const snapshot = await scanActivationInventory({ list: async () => [{ header, revision: 'rev-😀' }],
+    open: async () => ({ header, inheritedEventCount: 0, close: async () => {} }), stat: async () => ({ header, revision: 'rev-😀' }) }, () => false)
+  const selection = createActivationSelection(snapshot, [header.id])
+  const selectedReceipt = prepareSelectedActivationMigration(snapshot, selection, { schema: 'dsh-activation-prior-modes/v1',
+    previousPackage: { name: 'dsh-completion-guard', version: '0.8.4', sha256: '5'.repeat(64) }, sourceSha256: '6'.repeat(64),
+    cohorts: [{ name: '旧来源', mode: 'opt-in', sessionIds: [header.id] }] }).receipt!
+  const vectors = [identity, receipt, snapshot, selection, selectedReceipt, { schema: 'dsh-session-activation/v1', identity, initialMode: 'always',
     source: 'fresh_creation', provenanceSha256: '4'.repeat(64) }]
   // Sort UTF-16 code units independently, matching JSON object-key order for
   // non-BMP names too. This input family has safe integers, not JSON floats.

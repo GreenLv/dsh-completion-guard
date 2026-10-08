@@ -27,7 +27,76 @@ Prepare an operator-owned JSON file in the following format. `previousPackage.sh
 }
 ```
 
-## Inspect, adopt, verify / 清点、采纳、核验
+## Official old-format refusals and an explicit readable subset / 官方旧格式拒绝与显式可读子集
+
+The official persistence reader may reject an older session with `SessionFormatUnsupportedError`. This names a host format-support boundary; it does not by itself prove corruption or a Guard regression. Do not delete, rewrite, rename or repair the raw log to force acceptance. Preserve it, the old package and its verified effective-mode source. `inventory` can record this **specific official open refusal** as pending. Other failures (corruption, permissions, missing files, unknown errors, list/stat failure or drift) abort; they are not automatically skipped. Default `inspect/adopt/verify` still requires the whole inventory to be readable.
+
+官方 persistence 可能以 `SessionFormatUnsupportedError` 拒绝旧格式会话。这说明宿主格式支持的边界，本身不证明日志损坏或 Guard 回归。不要删除、重写、改名或“修复”原日志来绕过拒绝；保留原日志、旧包和已核验的旧有效模式来源。inventory 只将这类**官方 open 拒绝**记为 pending；损坏、权限、丢失、未知异常、list/stat 失败或库存变化均中止，不会被自动跳过。默认 inspect/adopt/verify 仍要求整库可读。
+
+Suppose an inventory contains N sessions, of which M are readable. First freeze the full report, then review the local `rows` and write a JSON array containing only the readable IDs you explicitly choose, for example `["chosen-a", "chosen-b"]`. The example IDs are placeholders; use exact report IDs. No automatic “all readable” selection is made. The report and manifests contain private IDs and metadata hashes, but no event bodies or credentials; keep them local and owner-only. Run this phase before replacing either the host or Guard, with writers stopped. You can copy the preserved logs into a separate, access-controlled workspace for later host-format diagnosis; never change the authoritative originals or share their contents.
+
+假设库存共 N 个会话，其中 M 个可读。先冻结全库报告，查看本地 rows，再将明确选中的可读 ID 写入 JSON 数组，如 `["chosen-a", "chosen-b"]`。示例 ID 是占位符，必须换成报告中的精确 ID；工具不会自动选择“所有可读”。报告与清单含私有 ID 和元数据摘要，不含正文或凭据，应仅在本地以所有者权限保存。替换宿主或 Guard 前、写者停止时完成这一阶段。后续宿主格式诊断可使用另行受控保管的日志副本，不能改动权威原件或外传正文。
+
+```sh
+# POSIX shell; use distinct unused output paths. Match compression to the real config.
+node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inventory \
+  --runtime-anchor /path/to/runtime/package.json \
+  --persistence-root /path/to/active-session-storage \
+  --output /path/to/inventory.json
+
+# chosen-ids.json is an operator-reviewed JSON array of exact readable IDs.
+node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs select \
+  --inventory /path/to/inventory.json \
+  --include-file /path/to/chosen-ids.json \
+  --output /path/to/selection.json
+
+node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inspect \
+  --runtime-anchor /path/to/runtime/package.json \
+  --persistence-root /path/to/active-session-storage \
+  --selection /path/to/selection.json \
+  --prior-modes /path/to/old-mode-source.json \
+  --output /path/to/selected-receipt.json
+
+# After replacement, before upgraded host startup:
+node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs adopt \
+  --runtime-anchor /path/to/runtime/package.json \
+  --persistence-root /path/to/active-session-storage \
+  --selection /path/to/selection.json \
+  --receipt /path/to/selected-receipt.json \
+  --dsh-home /path/to/actual-dsh-home
+
+node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs verify \
+  --runtime-anchor /path/to/runtime/package.json \
+  --persistence-root /path/to/active-session-storage \
+  --selection /path/to/selection.json \
+  --receipt /path/to/selected-receipt.json \
+  --dsh-home /path/to/actual-dsh-home
+```
+
+`inventory_scanned` reports total/readable/unsupported counts and creates the frozen report. `selection_ready` creates the explicit scope manifest; empty, duplicate, unknown or unsupported IDs refuse. Selected `inspect` reports `ready` only when all included identities have verified old sources, then writes a receipt. Mixed-mode sources need exact per-session mappings. Source mappings may cover excluded IDs too, but exclusions never acquire a mode binding. Never infer a mode from format, date, path, event count or a new default.
+
+inventory_scanned 表示已生成全库报告及总数/可读/拒绝数量；selection_ready 表示已冻结显式范围，空选、重复、未知或被拒绝 ID 都会拒绝。子集 inspect 仅在所有包含会话的旧来源均可核验时返回 ready 并创建收据。混合模式需逐会话映射；旧来源映射可以包含排除项，但排除项不会被写入模式绑定。不得按格式、日期、路径、事件数或新默认值猜模式。
+
+Every selected `inspect/adopt/verify` rescans the **whole** inventory and checks all listed header/revision hashes, readable birth identities and refusal statuses against the selection. Added, removed, replaced or changed rows—including excluded ones—or changed readability invalidate the scope before adoption. Supplying the same manifest is mandatory on all three commands; full and selected receipts cannot be substituted. An integrity digest binds the asserted inputs; it is not authority or proof that an old-source assertion is true. A host upgrade that changes the scan requires a fresh report and reviewed scope before proceeding.
+
+每次子集 inspect/adopt/verify 都重扫**全库**，核对全部 list header/revision 摘要、可读出生身份及拒绝状态。新增、删除、替换、变化（包括排除项）或可读性变化，会在 adoption 前使范围失效。三条命令均须携带同一 selection，不能混用全库与子集收据。摘要只绑定断言输入，不提供权限，也不能证明旧来源断言正确。宿主升级若改变清点结果，必须重新生成报告并审核范围后再继续。
+
+`selected_complete` means that **only the receipt-selected rows** completed or verified. `selected_partial` means one or more of those rows refused. Both report `scope: receipt_selected`, `wholeInventoryStatus: not_claimed`, and a pending list for all exclusions (`session_format_unsupported` or `not_selected`). Pending remains visible even if the command exits zero. Repeat adoption for the same unchanged scope: completed rows are byte-identical no-ops; missing rows can continue, conflicts remain refused and intact. `verify` never writes. Preserve all existing reports and receipts; `activation_output_exists` requires a new output name, not deleting the old evidence. Drift requires new inventory/selection/inspect, not editing a digest or reusing a stale scope. The older full-inventory path below remains available without `--selection`.
+
+selected_complete **仅表示收据选中行**完成或核验通过；selected_partial 表示其中至少一行拒绝。两者均输出 scope: receipt_selected、wholeInventoryStatus: not_claimed，以及所有排除项的 pending 清单（session_format_unsupported 或 not_selected）。命令即使零退出，也不能隐藏 pending 或称为整库完成。相同且未变的范围可重复 adopt：完成行字节不变，缺失行可继续，冲突拒绝且原状保留；verify 从不写入。保留旧报告和收据；activation_output_exists 应换一个输出文件名，而不是删除证据。库存变化后重新 inventory/selection/inspect，不能改摘要或复用过期范围。下方不带 --selection 的原整库路径仍可用。
+
+When a later official host supports the pending format, use its **read-only** persistence reader on the preserved log, generate a fresh inventory, compare actual birth identity and re-establish the preserved old-mode source. Confirm that the existing user authorization covers the newly included scope; ask only if it does not. Create a new selection and receipt, then adopt and verify. A previous migration receipt or certificate grants no new migration/publication authority. If the reader still refuses or the source cannot be recovered, retain pending and continue new work in a fresh qualified root session; do not fabricate origin, inherited cut, old mode or receipt. The original history remains available for later support.
+
+以后官方宿主支持这些格式时，用该宿主的**只读** persistence 读取保留日志，生成新库存，核对实际出生身份并重新核验保留的旧模式来源；核对已有用户授权是否覆盖新增范围，仅在未覆盖时补充确认；随后生成新 selection/收据，再 adopt 和 verify。旧收据或证书不授予新迁移或发布权限。仍拒绝或无可恢复来源时保持 pending，可在新的合格根会话继续工作；不能伪造 origin、继承 cut、旧模式或收据。原历史保留以等待后续支持。
+
+### Copyable migration prompts / 可复制迁移提示词
+
+> Help me migrate session activation to DSH Completion Guard 0.9.0. Lifecycle constraint: [fill in which writers may be stopped and whether restart is allowed]. Reuse scope, write and lifecycle authorization already supplied in this conversation; ask only for missing or materially changed decisions. First report the current host/persistence/compression settings, preserved 0.8.x package identity and sanitized pre-upgrade effective-mode sources. If they cannot be verified, keep affected sessions pending. Do not replace packages, stop/restart processes or write bindings before that lifecycle and mutation authority is established. Run the packaged read-only inventory command; show total/readable/official-format-refused counts and a local pending report. Use my existing explicit selection, or ask me to choose the included scope if none was supplied; do not silently expand it or treat readability alone as authorization. Bind that explicit selection through inspect/adopt/verify, detect all inventory changes, preserve raw logs and old sources, and never infer modes/origin/cuts from paths, dates or event counts. No log bodies, credentials or private IDs leave my machine. Once the scope and writes are covered by my authorization, adopt, repeat to check no-op, and verify; report selected completion and remaining pending separately. For unsupported rows, give the future official-reader/re-inventory/source-validation route; without a recoverable source, keep pending or use a new session. Do not treat old certificates as new authority.
+
+> 帮我迁移到 DSH Completion Guard 0.9.0 的会话启用模式。生命周期约束：[填写允许停止的写者及是否允许重启]。沿用本会话已给出的范围、写入及生命周期授权，仅询问缺失或实质变化的决定。先报告现有宿主、持久化目录/压缩配置、保留的 0.8.x 包身份及脱敏的升级前有效模式来源；不能核验就将受影响会话保持 pending。取得明确生命周期和写入权限前，不替换包、不停/重启进程、不写绑定。运行打包工具的只读 inventory，报告总数/可读/官方格式拒绝数量并保存本地 pending 报告；沿用我已明确选择的范围，尚未选择时再请我决定；不静默扩大范围，也不把可读性本身当作授权。让显式 selection 贯穿 inspect/adopt/verify，检测全部库存变化，保留原日志和旧来源，不按路径、日期、事件数猜模式/origin/cut。正文、凭据、私有 ID 不离开本机。范围和写入已有授权覆盖后 adopt、重复检查 no-op，再 verify，分别报告选中行完成及剩余 pending。被拒绝项给出未来官方读取器支持后重盘点、核验身份/旧来源的方案；没有可恢复来源就保留 pending 或改用新会话。旧证书不当作新权限。
+
+
+## Full-inventory inspect, adopt, verify / 整库清点、采纳、核验
 
 The entry `node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs` below uses the independently prepared 0.9.0 toolkit; it does not assume a new command is installed on PATH while the old Guard remains installed. The tool mounts only the official JSONL persistence service, without starting the agent loop, UI or model. `--runtime-anchor` is a file in the physical official runtime; the tool resolves its real path before loading dependencies. `--persistence-root` and optional `--compression none|zstd` must match the active persistence configuration. No storage path or encoding is guessed. Inspection uses public `list`, read-only `open`, exact header/inherited-cut metadata and revision readback; it outputs no event bodies. Keep writers stopped through the sequence.
 
@@ -42,7 +111,7 @@ node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inspect 
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
   --prior-modes /path/to/old-mode-source.json \
-  --output /path/to/unused-frozen-migration.json
+  --output /path/to/frozen-migration.json
 
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs adopt \
   --runtime-anchor /path/to/runtime/package.json \
