@@ -2,125 +2,77 @@
 
 [English](README.md)
 
-面向 DeepSeek Harness（DSH）的任务保护插件。它保存任务要求，并在任务标记完成前逐项核对；会话恢复后仍使用同一份检查表，只有匹配的已保存工具结果才能作为证据。
+DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，并在认证完成前核对已保存的结果。长任务或恢复后的会话中，它帮助助手继续核对文件修改、测试、禁止事项和你后来补充的要求。
 
-> **0.9.0 要求 DSH `>=0.2.0-rc.2`，并支持官方 Desktop 应用。** 已有安装须先停止相关写者，在**更换 DSH 或 Guard 前**保存旧安装包、有效模式来源及冻结会话清点，使用[独立准备的候选迁移工具](docs/ACTIVATION_MIGRATION.md)。随后升级安装、重建各 profile 宿主锁，并在**启动宿主前**完成旧会话的 `adopt` 和 `verify`。没有旧 Guard 会话的全新安装只需安装及宿主锁检查，不需旧模式 adoption。Desktop 使用 `--profile desktop`，以应用归档为 runtime root；安装本身不重建锁。已测试的宿主基线是 DSH `0.2.0-rc.2`、Cordis `4.0.4`；较新版本仍须通过身份和适配契约检查。资格及原生证据范围见[兼容性指南](docs/COMPATIBILITY.md)。
+**首次打开或恢复已有历史的会话，需要等待载入。** DSH 载入历史，Guard 重建会话状态，界面可能显示“载入历史”；请等加载结束再继续。`always` 让新建根会话从首条真实输入开始受到保护，不会让历史载入立即完成；再次打开也不能保证没有等待。
 
-官方读取器拒绝旧格式时，保留原日志和旧模式来源，按[显式可读子集方案](docs/ACTIVATION_MIGRATION.md)先 inventory、再由用户选择 ID 并 select，让 --selection 贯穿 inspect/adopt/verify。工具核对全库变化，只迁移用户选中的可读项；selected_complete 保留全部排除项为 pending，不代表整库完成。说明中提供真实命令、恢复步骤和可复制 AI 提示词。
+![核对任务要求及对应证据后，再认证完成](assets/social/completion-guard-hero.png)
 
-![任务合同条款与有界证据通过 checkpoint 匹配后签发完成证书](assets/social/completion-guard-hero.png)
+## 安装或升级
 
-## 快速开始
+需要 DSH `>=0.2.0-rc.2`、Cordis `>=4.0.4`、Node.js `>=22` 和 pnpm `>=11`。Web、Headless 和官方 Desktop 应用使用各自的配置目录。已审查的宿主基线是 DSH `0.2.0-rc.2` / Cordis `4.0.4`，更新版本仍须通过兼容性核验。
 
-执行安装命令前，先选择对应流程：
+先选好路径，再替换任何包：
 
-- **全新安装，没有旧 Guard 会话：**停止宿主，升级到 DSH `0.2.0-rc.2` 或更高版本，按下方安装 Guard，再重建宿主锁，最后启动。
-- **已有安装：**先停止相关写者，保存旧安装包及有效模式来源，按[迁移说明](docs/ACTIVATION_MIGRATION.md)准备并冻结旧会话清点与收据。这一步必须在更换 DSH 或 Guard 前完成。随后按下方安装、重建宿主锁；保持宿主停止，用冻结旧收据完成 `adopt` 和 `verify`，再启动。未知来源保持 pending，不能用升级后的新缺省替代旧模式。
+1. **首次安装，没有旧 Guard 会话：**停止宿主，在使用的 profile 中安装 Guard，核验并绑定本次安装后再启动。
+2. **已有旧会话，需要升级：**先停止相关写者，保留旧安装包及其有效模式来源。**升级前**冻结会话库存并准备迁移收据。安装后重建宿主锁，保持写者停止，完成旧模式的 `adopt` 和 `verify`；目标范围核验通过前不能启动升级后的宿主。无法核实的旧模式保持待处理。
 
-完成对应准备后，再把 Guard 安装到需要保护的 Profile：
+Web 在完成相应准备后安装：
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.9.0
 ```
 
-**升级和执行下面的安装图检查时，保持宿主停止。** 宿主锁记录 DSH 实际使用的包版本和安装目录；如果升级前就生成锁，新运行时会因包版本不匹配而拒绝它。`inject` 会修改 `<profile>/cordis.patch.yml`，请先备份该文件。
+装好插件还需核验环境。**宿主锁**记录这个 profile 实际加载的包和目录：先用 `inspect` 检查，再用 `inject` 写入，最后以 `verify-dump` 核对组合配置；注入前备份 `cordis.patch.yml`。[安装与首次载入](docs/GETTING_STARTED.md)给出 Web 命令、Windows 和 Desktop 路径及启动前的最后核验。[旧会话迁移指南](docs/ACTIVATION_MIGRATION.md)提供升级准备、完整命令和可复制的 AI 提示词。
 
-查看每条命令 JSON 输出中的 `status`，确认它为 `supported`。失败会报告具体原因并以非零退出码结束。较新兼容宿主需给三条命令都加上 `--rebind-registry`，先验证官方包归档，并在隔离 Node 进程中检查变化程序的兼容契约，再重建锁；步骤见[升级指南](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。
+## 启动后会看到什么
 
-```sh
-DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
-DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
-GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-lock"
-
-"$GUARD_HOST_LOCK" inspect --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
-"$GUARD_HOST_LOCK" inject --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
-dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
-```
-
-Windows 请通过 Web 配置目录下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同的三个子命令，并使用 Windows 绝对路径。各版本的原生验收与发布证据在[验收记录](docs/LOCAL_ACCEPTANCE.md)中按版本绑定其精确制品字节单独记录；任何版本的源码与确定性证据都不能等同于该版本已安装制品的结论。其他宿主版本和制品仍需各自的原生证据。DSH、Guard 或 profile 路径变化后需要重新检查；仅 market 普通升级不需要重新注入。如果当前包集合缺失、重复、不可信或不同于已绑定环境，Guard 会保持不可用。
-
-Desktop 请使用应用附带的 CLI 安装，再以 `--profile desktop`、应用 `app.asar` 和实际 profile 路径建立宿主锁。它的 CLI 不提供 `--dump-config`，请用 Guard 的 `dump-desktop` 生成组合配置再回读；见[Desktop 升级步骤](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile)。官方插件市场（`dshmarket`）现在可以在 Desktop profile 中与 Guard 共存；安装或移除市场后，请按完整四步流程重建 Desktop 锁（`inspect`、`inject`、用 `dump-desktop` 新生成的组合配置、以及对新配置执行的 `verify-dump`）。
-
-已有安装请先按迁移说明，用冻结旧收据完成 `adopt` 和 `verify`，期间保持写者停止；宿主锁核验不执行模式 adoption。两项核验通过后（全新安装则在安装及宿主锁核验通过后），再启动 DSH Web，打开会话并查看 Guard 状态：
+已有会话请先等历史载入和状态重建结束，再查看：
 
 ```text
 /context-guard status
 ```
 
-新建根会话默认采用 `always`，从第一条真实用户消息开始保护。`status` 显示 Guard 是否开启、启动阶段（`armed` 表示已就绪、等待你的第一条消息）以及还有多少检查项。`off` 停止保护当前会话，但不删除历史。`clear` 关闭当前待办，同时保留禁止项。`diagnose` 说明完成检查为什么通过或失败；`migration` 报告当前会话适用哪套规则、升级与回滚分别意味着什么；`release` 报告显式发布契约、其覆盖范围以及仍在执行中的操作。
+**新建的空根会话**默认采用 `always`，显示 `armed`，表示 Guard 已就绪、等待你的首条真实消息。此前 Guard 不追加会话事件，你仍可选择 DSH 会话 preset；DSH 可能记录自身的初始化事件。首条真实输入进入执行步骤时，保护就在同一步骤内开始，覆盖任务的第一次文件修改。图片或附件也能启动保护，纯空白消息不会。
 
-### 普通工作
+**旧会话**保留已核验的升级前模式，旧空会话也一样。新 profile 的 `always` 不会覆盖旧绑定。绑定缺失、损坏或冲突时，Guard 报告原因并拒绝认证，不猜测身份或模式。
 
-照常让 DSH 修改文件或运行测试，助手通过 DSH 宿主工具执行。Guard 保存要求，观察宿主已持久化的调用与结果；要求的结果需要独立核验时，再使用只读回读。例如，宿主修改配置文件后，另一次精确文件回读可证明新内容；具名测试需要自己的真实运行结果。工具返回成功或助手自述，不能证明无关条件，也不能抹去对禁改文件的真实修改。`context_guard_prepare` 说明缺少什么证据，`context_guard_checkpoint` 只核对证据实际证明的谓词。
+照常让 DSH 改文件、跑测试即可。DSH 执行工具，Guard 保存要求，并核对已记录的结果和必要的回读。例如，“修改配置并让测试通过”需要修改后的文件证据和通过的测试结果，助手说“已完成”还不够。`context_guard_prepare` 说明缺什么证据，`context_guard_checkpoint` 检查能否认证完成。
 
-0.6.x 的普通 `context_guard_action` 与 `context_guard_evidence` 不再执行编辑、测试或 Git 效果，而是返回迁移说明。新建文件还需可信的写入前不存在证据。包脚本就绪观察可以选择已有测试或评估输入，不强迫再次编辑，但它不证明脚本已经运行，也不认证任意数值输出。后续观察长期收益的要求，要到其时间或审批条件满足后才成为当前工作；简短“继续”只推进有来源且已就绪的具体动作。
+默认策略仍是 `standard`。自动参与保护不会增加修改、执行或发布权限，也不会自动签发完成证书。
 
-## 它保护什么
+## 模式和常用命令
 
-- 保存需求、验收条件、禁止项和后续修正，不覆盖旧记录。
-- 只使用 DSH 已保存的工具调用和结果，并保存脱敏摘要而不是完整输出。
-- 只有动作和结果对应指定命令、文件或其他目标时，证据才有效。
-- 会话重建或恢复后重新检查完成状态；记录损坏时拒绝签发证书。
-- 当前检查表尚未通过时，阻止 Guard 自己守卫的 Goal 完成路径。DSH 内部仍可能绕过这条路径，因此插件会报告这些情况，不声称能阻止所有写入。
+| 命令或模式 | 作用 |
+| --- | --- |
+| `always` | 新建根会话从首条真实输入开始自动保护。 |
+| `opt-in` | 在会话中执行 `/context-guard on` 后开始保护。 |
+| `/context-guard status` | 查看启用状态、未完成检查及其原因。 |
+| `/context-guard off` / `on` | 关闭或开启当前会话的保护，保留历史。 |
+| `/context-guard diagnose` | 解释完成检查的结论。 |
+| `/context-guard clear` | 关闭当前检查表，保留禁止项。 |
+| `/context-guard migration` | 查看会话适用规则及升级、回退的影响。 |
+| `/context-guard release` | 查看显式采用的发布合同及剩余工作。 |
 
-## 状态与兼容性
+Guard 启用模式与 DSH 的标准、极简或自定义会话 preset 分开。已保存的 `off`、`on` 继续有效。如需修改后续新根会话的初始默认值，按[配置步骤](docs/GETTING_STARTED.md#新会话默认模式)操作，保留已有宿主锁字段和旧会话绑定。
 
-0.9.0 的版本准入范围是 **DSH `>=0.2.0-rc.2`**，没有版本上限，并支持官方 Desktop 应用的独立 profile（`desktop`）：应用自有的 `dsh-profile-desktop` 按名称识别，其内置依赖图从已签名的 `app.asar` 原位读取，安装字节按发布 tarball 逐文件核验。Cordis 使用独立的 `>=4.0.4` peer 范围，仍须通过适配器资格验证。已发布的 `0.2.0-rc.2` 46 包依赖图为已审查基线（rc.1 图保留为历史证据）；较新混合版本图在所消费实现具备资格后，可建立自己的 registry 来源锁。变化的 Session/API 实现须通过有限行为探针，不兼容行为会报告具体资格缺口，旧证书不能转移到新锁。最终制品的 macOS/Windows 原生验收、未来版本原生证据与 Desktop 原生验收仍须分别建立。
+## 历史载入与 0.9.0 缓存
 
-升级后重新检查、注入并验证 host-lock，再按需启动对应 Profile，步骤见[宿主锁升级](docs/HOST_LOCK_UPGRADE.md)。旧会话由 DSH 迁移为 V4；Guard 保留旧 ledger 和证书，但不会重签或把旧身份升级为当前权限。Goal 为可选能力，宿主安装不代表它已启用。
+首次打开或恢复已有会话时，需要载入历史并重建 Guard 状态；再次进入也可能等待。这与新空会话的 `armed` 不同，后者是在等待你输入。
 
-宿主检查核对包身份、实现字节及实际加载它们的依赖路径。原生与模型验收绑定到每个版本的精确制品；请查看对应 Release 的附件和[兼容性说明](docs/COMPATIBILITY.md)。
+0.9.0 只在确认历史未变、检查结果可安全复用时，复用旧历史已经通过的检查。同一次 Desktop 安装检查中，也会复用已读取并核验的应用文件。每次操作仍核对当前模式，并按需要重新核验 Goal 状态、私有记录和宿主环境。**本版没有修改官方宿主的历史视图生命周期或解码缓存，不能保证消除所有界面载入等待。**详见[本版性能边界](CHANGELOG.zh-CN.md#090)和[验收记录](docs/LOCAL_ACCEPTANCE.md)。
 
-重启属于单独能力。当前 DSH 没有提供可独立验证的 market 已加载实例绑定，因此 Guard 的 market 重启适配器返回不可用；已有重启要求仍保持未完成。核心保护和不依赖该接口的操作继续工作。磁盘上的插件安装/应用不等于运行进程或 UI 已生效。
+官方读取器若拒绝旧格式，先保留原日志和旧模式来源。可以用 `inventory`、`select` 明确选择可读会话，并在 `inspect/adopt/verify` 三步使用同一 `--selection`。排除的会话继续待处理：`selected_complete` 只表示选中行完成，不等于整库完成。损坏、权限问题及其他异常不会自动跳过。[迁移指南](docs/ACTIVATION_MIGRATION.md)提供命令、恢复方案及 AI 提示词。
 
-升级到新核心锁时，需要从实际运行时与 profile 重新生成并验证锁；旧证书不会被重新标记为新锁证据。详见[升级说明](docs/HOST_LOCK_UPGRADE.md)和[兼容性](docs/COMPATIBILITY.md)。
+## 限制与隐私
 
-从 [npm](https://www.npmjs.com/package/dsh-completion-guard) 选择已发布版本，并用 [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/latest) 的提交、校验和和原生 annex 核对制品。0.4.2 的历史发布面向 DSH `0.1.2-rc.1` 与 market 1.41；它不包含上述解耦。源码版本号、CI、同包原生验收和公开发布是不同状态，验收范围见[记录](docs/LOCAL_ACCEPTANCE.md)。
+Guard 保存要求、核对相符的已持久化结果，并在恢复时重新检查。证据不足或状态损坏时，它拒绝认证完成。它能守卫自身接入的 Goal 完成路径，不能控制 DSH 所有内部写入，也不替代 DSH 的权限、工具、Goal 或压缩机制。普通调查可以如实回答，并不总能获得机器完成证书。
 
-项目在 2026-08-29 从 `dsh-context-guard` 更名为 `dsh-completion-guard`，内部 bundle id 仍为 `context-guard`。迁移保留会话、激活方式和禁用设置；不要在同一 profile 同时加载新旧包。需要 Node.js `>=22` 和 pnpm `>=11`。
+Guard 保存有界、脱敏的证据摘要，不保存完整提示词、stdout、文件、凭据、图片或原始会话正文，详见[隐私说明](docs/PRIVACY.md)。磁盘安装不证明运行进程或界面已经加载；Guard 的市场重启适配器仍不可用。[兼容性说明](docs/COMPATIBILITY.md)列出可认证命令和平台边界。
 
-## 启用模式
+<details>
+<summary>高级完成检查、恢复行为与上游关系</summary>
 
-Context Guard 有两种启用模式：
-
-- `always`（新建根会话默认，推荐）：新建 DSH 根会话从第一条真实消息开始自动保护。首条真实输入前，Guard 不向会话追加事件；DSH 仍可能写入自身的初始化事件。你仍然可以在发送任何内容之前选择 DSH 会话模式（standard、minimal 或自定义 preset）。第一条真实消息进入执行步骤的那一刻，保护在同一步骤内、且位于该消息之前开始：第一个任务连同它的第一次文件修改都在覆盖范围内。首条消息只有图片或附件时同样开始保护，并保留待解释的资产项；纯空白消息不启动任何内容。在某个会话中执行 `/context-guard off` 后，该会话关闭保护，直到再次执行 `on`。
-- `opt-in`（显式选择）：打开会话时不会自动保护。你需要在这个会话中执行 `/context-guard on` 才会启用；执行 `/context-guard off` 可以再次关闭。开关只影响当前会话。
-
-**0.9.0 将新会话的默认模式改为 `always`；旧会话通过核验后的不可覆盖绑定保留升级前有效模式。** 升级前请停止相关会话写者，按[inspect/adopt/verify 迁移说明](docs/ACTIVATION_MIGRATION.md)准备旧模式清点与冻结收据，旧空会话也要包含。共享库存中不同 profile 的旧模式有冲突时，需要精确到会话的映射；Guard 不依据消息数量、时间戳或记录过的 `on` 猜测。
-
-恢复已有绑定的会话时，profile 缺省变化不改变它的模式。显式 `activation` 与绑定矛盾会报告 `activation_mode_conflict`；缺失或损坏的绑定不能认证，并给出具名诊断。恢复不会自行创建替代绑定；核验过的迁移收据可以受控补建同一旧模式，不修改已保存日志，也不重签证书。持久化的 `/context-guard off` 和 `on` 继续有效，`standard` 策略及执行、发布权限保持原合同。选择另一初始模式请新建根会话；回退时保留绑定和旧收据，按迁移说明操作。
-
-启用模式只控制 Guard 是否保护会话，不是 DSH 的会话模式（例如会话开始时所选的标准模式、极简模式）。Guard 不再在第一条消息之前写入任何内容，因此 DSH 会话模式可以在会话尚为新会话时选择。`/context-guard on` 和 `/context-guard off` 只负责开启或关闭 Guard 保护，不会改变 DSH 会话模式。
-
-省略 `activation` 的 profile 新建根会话时采用 `always`；已有会话绑定仍具有优先权。若现有 profile 显式选择了 `opt-in`，请把实际 profile 的 `cordis.patch.yml` 中已有 `context-guard` 项设为 `activation: always`，保留已注入的宿主锁字段。下面的片段只显示要修改的字段，不用于替换整份配置：
-
-```yaml
-- id: context-guard
-  name: dsh-completion-guard
-  config:
-    activation: always
-```
-
-DSH 的 Web 网页、Headless 终端和 Desktop 桌面应用使用独立配置。请修改实际使用的 profile；多种方式都用时分别修改：
-
-| 系统 | 你怎么使用 DSH | 默认路径 |
-| --- | --- | --- |
-| macOS / Linux | Web | `$HOME/.dsh/profiles/web/cordis.patch.yml` |
-| macOS / Linux | Headless | `$HOME/.dsh/profiles/headless/cordis.patch.yml` |
-| macOS | Desktop | `$HOME/.dsh/profiles/desktop/cordis.patch.yml` |
-| Windows | Desktop | `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml` |
-| Windows | Web | `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` |
-| Windows | Headless | `%USERPROFILE%\.dsh\profiles\headless\cordis.patch.yml` |
-
-如果你设置过自定义 `DSH_HOME`，请用该目录替换路径开头的 `$HOME/.dsh` 或 `%USERPROFILE%\.dsh`。
-
-不想手动改文件，也可以把下面这段话直接发给 DSH：
-
-> 请把 `dsh-completion-guard` 新建根会话的默认模式设为 `always`，保留已有会话绑定。根据我当前使用 DSH 的方式（Web、Headless 或 Desktop），自动找到对应的 `cordis.patch.yml`，先备份该文件，只把 `id: context-guard` 这一项的 `activation` 设为 `always`，不要修改其他配置，也不要替我重启 DSH。完成后告诉我文件的绝对路径，并显示准确的修改内容。
-
-修改完成后，重启 DSH。
-
-## 如何检查完成状态
 
 启用后，Guard 会保存用户直接给出的要求和验收条件。只有已保存的工具结果与指定命令、文件或其他目标一致时，才能作为证据。取得机器完成认证需要通过 Guard 检查；证据缺失、过期或对象不一致时，任务保持未认证。当前证据规则未覆盖的调查或解释仍可如实回答并结束，但不会取得完成证书。
 
@@ -193,6 +145,8 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 两个项目不共享运行时状态、安装器、缓存或发布历史。修复应先进入拥有对应运行时的仓库；只有同一行为确实适用于两侧时，才显式迁移。具体复用与替换边界见 [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) 和 [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md)。
 
+</details>
+
 ## npm 下载量历史
 
 ![dsh-context-guard 与 dsh-completion-guard 的 npm 累计下载增长](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.zh-CN.svg)
@@ -205,6 +159,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 ## 文档
 
+- [安装与首次载入](docs/GETTING_STARTED.md) — 安全安装、首次等待及会话模式。
 - [`CHANGELOG.zh-CN.md`](CHANGELOG.zh-CN.md) — 面向使用者的版本变化。
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 所有权、持久状态和认证管线。
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) — 支持的 DSH 版本和可认证命令子集。

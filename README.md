@@ -2,125 +2,77 @@
 
 [简体中文](README.zh-CN.md)
 
-An add-on for DeepSeek Harness (DSH) that keeps a task's requirements and checks them before the task is marked complete. It restores the same checklist after a resumed session and accepts only matching saved tool results as evidence.
+DSH Completion Guard is a DeepSeek Harness plugin that keeps your task requirements and checks saved results before certifying completion. Use it when a long or resumed task must still account for requested edits, tests, prohibitions and later corrections.
 
-> **0.9.0 requires DSH `>=0.2.0-rc.2` and supports the official Desktop app.** For an existing installation, stop the relevant writers and preserve the old installed package, effective modes and frozen session inventory **before replacing DSH or Guard**; use the [prepared-candidate migration toolkit](docs/ACTIVATION_MIGRATION.md). Then upgrade/install, rebuild each profile's host lock, and complete old-session `adopt` and `verify` **before starting the host**. A fresh installation with no old Guard sessions needs installation and host-lock checks, with no old-mode adoption. Desktop uses `--profile desktop` with the app archive as runtime root. Installing does not rebuild the lock. The tested host baseline is DSH `0.2.0-rc.2` with Cordis `4.0.4`; later versions must pass the same identity and adapter checks. See [compatibility](docs/COMPATIBILITY.md) for qualification and native-evidence limits.
+**Opening or restoring a session with history can take time.** DSH loads the saved history and Guard rebuilds its state; you may see “载入历史” (loading history). Wait for loading to finish before continuing. `always` starts protection with the first real input in a new root session; it does not make history loading instant, and reopening a session can still require a wait.
 
-![Task-contract clauses and bounded evidence pass through a checkpoint before a completion certificate is issued](assets/social/completion-guard-hero.png)
+![Task requirements and matching evidence are checked before completion is certified](assets/social/completion-guard-hero.png)
 
-## Quick start
+## Install or upgrade
 
-Choose the applicable path before running an installation command:
+Requires DSH `>=0.2.0-rc.2`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.0-rc.2` / Cordis `4.0.4`; a later host must pass the same compatibility checks.
 
-- **Fresh installation, no old Guard sessions:** stop the host, upgrade to DSH `0.2.0-rc.2` or later, install Guard below, and rebuild the host lock before starting.
-- **Existing installation:** first stop the relevant writers and preserve the old installed package and effective mode sources; prepare and freeze the old-session inventory/receipt using the [migration guide](docs/ACTIVATION_MIGRATION.md). Do this before replacing DSH or Guard. Then install below and rebuild the host lock. Adopt and verify the frozen old-session receipt while the host is still stopped, before starting it. Unknown sources remain pending; do not substitute the upgraded default for an old mode.
+Choose your path before replacing any package:
 
-Install in the profile you want to protect after completing the applicable preparation:
+1. **First installation, no old Guard sessions:** stop the host, install Guard in the intended profile, then check and bind that installation before starting it.
+2. **Upgrading with old sessions:** stop the relevant writers and preserve the old installed package and its effective mode sources. Prepare a frozen session inventory and migration receipt **before upgrading**. After installation, rebuild the host lock and complete mode `adopt` and `verify` while writers remain stopped. Do not start the upgraded host until those checks pass for the intended scope. Unknown old modes stay pending.
+
+For Web, after the applicable preparation:
 
 ```sh
 dsh plugin --profile web add dsh-completion-guard@0.9.0
 ```
 
-**Keep the host stopped while upgrading and checking the installed graph below.** The lock records the package versions and installation directories DSH actually uses. A lock generated before an upgrade describes the old packages and will fail against the new runtime. `inject` writes to `<profile>/cordis.patch.yml`, so back up that file first.
+Installation alone is not enough. The **host lock** records the actual packages and directories this profile loads; check it with `inspect`, write it with `inject`, then check the composed configuration with `verify-dump`. Back up `cordis.patch.yml` before injection. [Installation and first load](docs/GETTING_STARTED.md) provides the Web commands, Windows and Desktop routes, and the final checks before startup. [Old-session migration](docs/ACTIVATION_MIGRATION.md) provides the preparation, commands and copyable AI prompts for an upgrade.
 
-Check that each command's JSON output says `status: "supported"`. A failure reports a specific reason and exits nonzero. For a later compatible host, add `--rebind-registry` to all three commands; it verifies the official archives and qualifies changed programs in an isolated Node probe before rebuilding the lock. See the [upgrade guide](docs/HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions).
+## What to expect after startup
 
-```sh
-DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
-DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
-GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-lock"
-
-"$GUARD_HOST_LOCK" inspect --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
-"$GUARD_HOST_LOCK" inject --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT"
-dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
-```
-
-On Windows, run the same three subcommands through `dsh-completion-guard-host-lock.cmd` in the Web settings directory's `node_modules\.bin` directory and use Windows absolute paths. Native acceptance and publication evidence is recorded per version, bound to that version's exact bytes, in the [acceptance record](docs/LOCAL_ACCEPTANCE.md); a version's source and deterministic evidence never substitutes for its own installed-artifact claim. Other host versions and artifacts need their own native evidence. Repeat this check after changing DSH, Guard or the profile location; an ordinary market-only update does not require reinjection. The Guard stays unavailable if the active package set is missing, duplicated, untrusted, or different from the bound setup.
-
-For Desktop, install through the app's bundled CLI and bind `--profile desktop` to its `app.asar` and actual profile directory. Its CLI does not offer `--dump-config`; use Guard's `dump-desktop` to compose the configuration before readback. Follow the [Desktop upgrade steps](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile). The official plugin market (`dshmarket`) can be installed alongside Guard in the Desktop profile; after installing or removing it, rebuild the Desktop lock with the full four-step flow (`inspect`, `inject`, a newly generated `dump-desktop` output, and `verify-dump` on that new output).
-
-For an existing installation, complete the migration guide’s `adopt` and `verify` using the frozen old receipt now, while writers remain stopped. Host-lock verification does not perform mode adoption. After both checks pass—or after the installation/lock checks for a fresh installation—start DSH Web, open a session, and check its status:
+For an existing session, let history loading and state reconstruction finish. Then check:
 
 ```text
 /context-guard status
 ```
 
-New root sessions default to `always`: protection starts with the first real user message. `status` shows whether the Guard is on, its startup phase (`armed` means waiting for your first message), the active policy tier, how many checks remain, and a summary of why the rest are open. `off` stops protection for the current session without deleting its history. `clear` closes the current checklist while keeping prohibitions. `diagnose` explains why a completion check passed or failed. `migration` reports which rule set the session is under and what an upgrade or rollback would mean. `release` reports an explicitly adopted release contract, its coverage, and anything in flight.
+A **new empty root session** defaults to `always` and shows `armed`: Guard is ready, waiting for the first real message. It appends no Guard events before that message, so you can still choose the DSH session preset. DSH may write its own initialization events. The first real input starts protection in the same step, before its first file changes; an image or attachment counts too, while a blank message does not.
 
-### Ordinary work
+An **old session** keeps its verified pre-upgrade mode, including an empty old session. `always` in the new profile does not replace an old binding. Missing, damaged or conflicting bindings prevent certification; Guard reports the problem rather than guessing an identity or mode.
 
-Ask DSH to edit a file or run a test as usual. The assistant performs that work with the DSH host tools. Guard records the request, observes the host's persisted call and result, and checks independent readback when the requested outcome needs it. For example, after a host edit changes a configuration file, a separate exact file read can establish the new bytes; a named test needs its own observed result. A successful tool return or the assistant's claim alone does not prove an unrelated condition or a forbidden-file constraint. `context_guard_prepare` explains what evidence is missing, and `context_guard_checkpoint` checks only the predicate that evidence establishes.
+Ask DSH to edit a file or run a test as usual. DSH executes the tools; Guard records the request and checks the saved result and any required readback. For example, “edit the configuration and make the tests pass” needs evidence of the changed file and a passing test, not just the assistant saying it is done. `context_guard_prepare` explains missing evidence; `context_guard_checkpoint` checks completion.
 
-The ordinary `context_guard_action` and `context_guard_evidence` tools from 0.6.x no longer perform edits, tests, or Git effects; they return migration guidance. A new file still needs trustworthy evidence that it was absent before creation. A package-script readiness observation can identify an existing test or assessment input without forcing another edit, but it does not prove the script ran or certify arbitrary numeric output. A later request to observe long-term benefits remains future work until its own time or approval condition is met; a short “continue” advances only a concrete ready action.
+The default policy is still `standard`. Automatic protection grants no extra editing, execution or publication permission, and does not issue a certificate automatically.
 
-## What it protects
+## Mode and everyday commands
 
-- Saves requirements, acceptance checks, prohibitions, and later corrections without overwriting history.
-- Uses only tool calls and results that DSH has saved, and stores a redacted summary rather than full output.
-- Accepts evidence only when the action and result match the requested command, file, or other target.
-- Rechecks completion after a session is rebuilt or resumed, and refuses to certify damaged state.
-- Stops the Guard-owned Goal completion path when the current checklist has not passed. DSH internals can still bypass this path, so the plugin reports those cases rather than claiming to block every possible write.
+| Command or mode | Result |
+| --- | --- |
+| `always` | New root sessions start protection with their first real input. |
+| `opt-in` | Protection starts when you run `/context-guard on` in that session. |
+| `/context-guard status` | Shows activation, remaining checks and reasons they remain open. |
+| `/context-guard off` / `on` | Disables or enables protection for this session; saved history remains. |
+| `/context-guard diagnose` | Explains a completion verdict. |
+| `/context-guard clear` | Closes the current checklist while keeping prohibitions. |
+| `/context-guard migration` | Shows the session's rules and upgrade/rollback implications. |
+| `/context-guard release` | Shows an explicitly adopted release contract and remaining work. |
 
-## Status and compatibility
+Guard activation is separate from DSH's standard/minimal/custom session preset. Saved `off` and `on` continue to apply. To change the initial default for future root sessions, see the [configuration instructions](docs/GETTING_STARTED.md#choose-the-default-for-new-sessions). Keep existing host-lock fields and session bindings.
 
-Version 0.9.0 admits **DSH `>=0.2.0-rc.2`** without an upper version limit, and supports the official Desktop app as an independent profile (`desktop`): the app-owned `dsh-profile-desktop` profile is identified by its own name, its bundled graph is read in place from the signed `app.asar`, and its installed bytes are verified against the published tarballs. Cordis has an independent `>=4.0.4` peer range and must pass its adapter qualification. The published `0.2.0-rc.2` 46-package graph is the reviewed baseline (the rc.1 graph remains historical evidence); a newer mixed-version graph can receive its own registry-backed lock when the consumed implementations qualify. Changed Session/API implementations run a finite contract probe; incompatible behavior reports a qualification failure, and an old certificate cannot transfer to the new lock. Exact-artifact macOS/Windows native acceptance and future-version native evidence remain separate; Desktop backend, graphical-shell and real-model results are recorded separately for each exact artifact.
+## History loading and 0.9.0 caching
 
-After upgrading, inspect, inject and verify the new host lock, then start the profile when needed; follow the [host-lock upgrade guide](docs/HOST_LOCK_UPGRADE.md). DSH migrates old sessions to V4. Guard retains old ledgers and certificates without re-signing them or promoting their old identity to current authority. Goal remains optional; installing the host does not imply it is enabled.
+The first opening or restoration of an existing session loads its history and rebuilds Guard state. A later visit may also wait. This is different from a new empty session's `armed` state, which waits for your input.
 
-Host checks verify package identities, implementation bytes and the dependency paths that load them. Native and model acceptance belong to the exact release artifact; consult its Release attachments and the [compatibility guide](docs/COMPATIBILITY.md).
+0.9.0 reuses completed checks of old history only when it can verify that the history is unchanged and the results are safe to reuse. Within one Desktop installation check, it also reuses application files already read and verified. Each operation still checks the current mode and performs the required fresh checks of Goal state, private records and the host environment. **This release does not change the official host's history-view lifecycle or decode cache, and does not promise to remove all UI loading waits.** See the [performance scope](CHANGELOG.md#090) and [acceptance record](docs/LOCAL_ACCEPTANCE.md).
 
-Restart is a separate capability. Current DSH does not supply independently verified bindings for market's loaded instance, so the Guard market restart adapter is unavailable. A requested restart remains pending; core protection and unrelated operations continue. Installing or applying a package on disk does not prove that a running process or UI has adopted it.
+If the official reader refuses an old format, preserve the original log and old-mode source. You can explicitly migrate selected readable sessions using `inventory`, `select` and the same `--selection` on `inspect/adopt/verify`. Excluded sessions remain pending: `selected_complete` means only the chosen rows completed, not the whole inventory. Corruption, permission errors and other failures are not silently skipped. The [migration guide](docs/ACTIVATION_MIGRATION.md) includes commands, recovery and AI prompts.
 
-Upgrading the core lock requires fresh inspection and injection from the actual runtime and profile. Old certificates are not relabelled as evidence for the new lock. See the [upgrade guide](docs/HOST_LOCK_UPGRADE.md) and [compatibility guide](docs/COMPATIBILITY.md).
+## Limits and privacy
 
-Choose a published version from [npm](https://www.npmjs.com/package/dsh-completion-guard) and verify its commit, checksum and native annexes on the [GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/latest). The historical 0.4.2 release targets DSH `0.1.2-rc.1` with market 1.41 and does not contain this decoupling. A source version, CI, same-byte native acceptance and publication are separate states; see [acceptance scope](docs/LOCAL_ACCEPTANCE.md).
+Guard saves requirements, checks matching persisted results and rechecks them on resume. It refuses to certify damaged or insufficient evidence. It can block the Goal completion path it guards, but does not control every internal DSH write or replace DSH permissions, tools, Goal or compaction. Ordinary investigations can end with an honest answer without a machine completion certificate.
 
-The project was renamed from `dsh-context-guard` on 2026-08-29; its internal bundle id is still `context-guard`. Migration preserves sessions, activation and disabled settings. Do not load both package names in one profile. Node.js `>=22` and pnpm `>=11` are required.
+Guard stores bounded, redacted evidence summaries rather than full prompts, stdout, files, credentials, images or raw transcripts. See [privacy](docs/PRIVACY.md). A package installed on disk does not prove a running process or UI loaded it; Guard's market restart adapter remains unavailable. [Compatibility](docs/COMPATIBILITY.md) documents supported commands and platform limits.
 
-## Activation modes
+<details>
+<summary>Advanced completion, recovery and upstream behavior</summary>
 
-Context Guard has two activation modes:
-
-- `always` (default and recommended for new root sessions): Newly created root DSH sessions are protected automatically from the first real message. Before the first real input, Guard adds no events to the session; DSH may write its own initialization events. You can still pick the DSH session mode (standard, minimal, or a custom preset) before sending anything. The moment your first real message enters a step, protection begins in that same step and ahead of your message: the first task, including its first file changes, is covered. A first message that only carries an image or an attachment starts protection too and leaves an unresolved asset item until its meaning is clarified; a blank message starts nothing. Running `/context-guard off` turns protection off for that session until you run `on` again.
-- `opt-in` (explicit choice): protection is off when a session starts. Run `/context-guard on` in that session to turn it on, and `/context-guard off` to turn it off again. This changes only the current session.
-
-**0.9.0 changes the default for new sessions to `always`. Existing sessions retain their pre-upgrade effective mode through a verified, immutable per-session binding.** Before upgrading, stop the relevant session writers and prepare the old-mode inventory and receipt using the [inspect/adopt/verify migration flow](docs/ACTIVATION_MIGRATION.md). This includes empty old sessions. Shared inventories with conflicting profile modes require an exact per-session mapping; Guard does not guess from message count, timestamps or a recorded `on`.
-
-If the official reader refuses an old format, preserve the raw log and old-mode source. The [explicit readable-subset flow](docs/ACTIVATION_MIGRATION.md) adds `inventory` and `select`, then carries `--selection` through inspect/adopt/verify. It binds the entire inventory while migrating only user-chosen readable IDs; `selected_complete` leaves every exclusion visibly pending and never means whole-inventory completion. The guide includes commands, recovery steps and copyable AI prompts.
-
-Restoring a bound session uses that mode even when a profile's default changes. A contradictory explicit `activation` setting reports `activation_mode_conflict`; missing or damaged bindings prevent certification and provide a named diagnosis. Restore does not create a replacement. A verified migration receipt can adopt a missing old binding without changing the saved log or re-signing certificates. `/context-guard off` and `on` retain their persisted meaning; `standard` policy and execution/publication authority are unchanged. To choose another initial mode, create a new root session; to roll back, preserve the bindings and old receipt and follow the migration guide.
-
-These modes only control Guard protection. They are not the DSH session mode (for example, the standard or minimal mode) that a session starts with. Because the Guard no longer writes into sessions before the first message, a session's DSH mode can be selected while the session is still new. `/context-guard on` and `/context-guard off` turn Guard protection on or off; they never change the DSH session mode.
-
-New root sessions in profiles that omit `activation` use `always`. Existing bindings remain authoritative. To change a profile that explicitly selects `opt-in`, set `activation: always` on the existing `context-guard` entry in your profile’s `cordis.patch.yml`. Preserve its injected host-lock fields; the snippet below shows the field to change, not a replacement for the complete configuration:
-
-```yaml
-- id: context-guard
-  name: dsh-completion-guard
-  config:
-    activation: always
-```
-
-DSH Web in a browser, Headless in a terminal, and the Desktop app use separate settings files. Edit the profile you use; check each one separately when you use more than one:
-
-| System | How you use DSH | Default path |
-| --- | --- | --- |
-| macOS / Linux | Web | `$HOME/.dsh/profiles/web/cordis.patch.yml` |
-| macOS / Linux | Headless | `$HOME/.dsh/profiles/headless/cordis.patch.yml` |
-| macOS | Desktop | `$HOME/.dsh/profiles/desktop/cordis.patch.yml` |
-| Windows | Desktop | `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml` |
-| Windows | Web | `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` |
-| Windows | Headless | `%USERPROFILE%\.dsh\profiles\headless\cordis.patch.yml` |
-
-If you set a custom `DSH_HOME`, use that directory instead of `$HOME/.dsh` or `%USERPROFILE%\.dsh`.
-
-You can also paste this prompt into DSH and let it make the change:
-
-> Set the default for new root sessions in `dsh-completion-guard` to `always` mode. Preserve existing session bindings. Find the `cordis.patch.yml` used by the way I am currently running DSH (Web, Headless or Desktop), back it up first, and only set `activation: always` on the entry with `id: context-guard`. Do not change any other settings or restart DSH. When finished, show me the file path and the exact diff.
-
-After the change, restart DSH.
-
-## How completion is checked
 
 Once enabled, the Guard saves direct user requirements and acceptance checks. A saved tool result counts only when it matches the requested command, file, or other target. A machine-certified completion requires the Guard's checkpoint; missing, stale, or mismatched evidence leaves the task uncertified. Investigations and explanations outside the supported evidence rules can still end with an honest answer, without a completion certificate.
 
@@ -198,6 +150,8 @@ The two repositories serve different runtimes:
 
 They do not share runtime state, installers, caches, or release histories. Fixes are contributed to the repository that owns the affected runtime and are ported deliberately when the same behavior belongs in both products. See [`docs/UPSTREAM_BASE.md`](docs/UPSTREAM_BASE.md) and [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) for the exact reused and replaced boundaries.
 
+</details>
+
 ## npm download history
 
 ![Combined cumulative npm download growth across dsh-context-guard and dsh-completion-guard](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.svg)
@@ -210,6 +164,7 @@ The daily workflow publishes through the last day whose counts are unchanged in 
 
 ## Documentation
 
+- [Installation and first load](docs/GETTING_STARTED.md) — safe setup, first loading wait and session modes.
 - [`CHANGELOG.md`](CHANGELOG.md) — versioned user-visible changes.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — ownership, durable state, and certification pipeline.
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) — supported DSH versions and certifiable command subset.
