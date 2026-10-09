@@ -44,9 +44,9 @@ The reviewed baseline is DSH `0.2.0-rc.2` / Cordis `4.0.4`. A later compatible h
 
 中文对应路径：
 
-- **Windows Web：**通过实际 Web profile 下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同锁子命令，使用 Windows 绝对路径和当前 shell 的变量语法；上方示例是 POSIX shell。
-- **Headless：**全程使用 Headless profile 及其安装的锁工具，DSH 命令选择 `--profile headless`，完整流程见[宿主锁指南](HOST_LOCK_UPGRADE.md)。
-- **Desktop：**使用应用附带 CLI 安装，以 `--profile desktop`、应用归档和实际 Desktop profile 建锁。该 CLI 没有 `--dump-config`，要用 `dump-desktop` 生成新配置，再核验这份输出。[官方 Desktop 步骤](HOST_LOCK_UPGRADE.md#official-desktop-profile)给出完整命令。安装或移除 `dshmarket` 后重新执行 `inspect`、`inject`、`dump-desktop`，并对新输出执行 `verify-dump`。
+- **Windows Web**：通过实际 Web profile 下的 `node_modules\.bin\dsh-completion-guard-host-lock.cmd` 运行相同锁子命令，使用 Windows 绝对路径和当前 shell 的变量语法；上方示例是 POSIX shell。
+- **Headless**：全程使用 Headless profile 及其安装的锁工具，DSH 命令选择 `--profile headless`，完整流程见[宿主锁指南](HOST_LOCK_UPGRADE.md)。
+- **Desktop**：使用应用附带 CLI 安装，以 `--profile desktop`、应用归档和实际 Desktop profile 建锁。该 CLI 没有 `--dump-config`，要用 `dump-desktop` 生成新配置，再核验这份输出。[官方 Desktop 步骤](HOST_LOCK_UPGRADE.md#official-desktop-profile)给出完整命令。安装或移除 `dshmarket` 后重新执行 `inspect`、`inject`、`dump-desktop`，并对新输出执行 `verify-dump`。
 
 ## Finish an upgrade before startup
 

@@ -14,8 +14,8 @@ DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，�
 
 先选好路径，再替换任何包：
 
-1. **首次安装，没有旧 Guard 会话：**停止宿主，在使用的 profile 中安装 Guard，核验并绑定本次安装后再启动。
-2. **已有旧会话，需要升级：**先停止相关写者，保留旧安装包及其有效模式来源。**升级前**冻结会话库存并准备迁移收据。安装后重建宿主锁，保持写者停止，完成旧模式的 `adopt` 和 `verify`；目标范围核验通过前不能启动升级后的宿主。无法核实的旧模式保持待处理。
+1. **首次安装，没有旧 Guard 会话**：停止宿主，在使用的 profile 中安装 Guard，核验并绑定本次安装后再启动。
+2. **已有旧会话，需要升级**：先停止相关写者，保留旧安装包及其有效模式来源。**升级前**冻结会话库存并准备迁移收据。安装后重建宿主锁，保持写者停止，完成旧模式的 `adopt` 和 `verify`；目标范围核验通过前不能启动升级后的宿主。无法核实的旧模式保持待处理。
 
 Web 在完成相应准备后安装：
 
@@ -60,7 +60,7 @@ Guard 启用模式与 DSH 的标准、极简或自定义会话 preset 分开。�
 
 首次打开或恢复已有会话时，需要载入历史并重建 Guard 状态；再次进入也可能等待。这与新空会话的 `armed` 不同，后者是在等待你输入。
 
-0.9.0 只在确认历史未变、检查结果可安全复用时，复用旧历史已经通过的检查。同一次 Desktop 安装检查中，也会复用已读取并核验的应用文件。每次操作仍核对当前模式，并按需要重新核验 Goal 状态、私有记录和宿主环境。**本版没有修改官方宿主的历史视图生命周期或解码缓存，不能保证消除所有界面载入等待。**详见[本版性能边界](CHANGELOG.zh-CN.md#090)和[验收记录](docs/LOCAL_ACCEPTANCE.md)。
+0.9.0 只在确认历史未变、检查结果可安全复用时，复用旧历史已经通过的检查。同一次 Desktop 安装检查中，也会复用已读取并核验的应用文件。每次操作仍核对当前模式，并按需要重新核验 Goal 状态、私有记录和宿主环境。**本版没有修改官方宿主的历史视图生命周期或解码缓存，不能保证消除所有界面载入等待**。详见[本版性能边界](CHANGELOG.zh-CN.md#090)和[验收记录](docs/LOCAL_ACCEPTANCE.md)。
 
 官方读取器若拒绝旧格式，先保留原日志和旧模式来源。可以用 `inventory`、`select` 明确选择可读会话，并在 `inspect/adopt/verify` 三步使用同一 `--selection`。排除的会话继续待处理：`selected_complete` 只表示选中行完成，不等于整库完成。损坏、权限问题及其他异常不会自动跳过。[迁移指南](docs/ACTIVATION_MIGRATION.md)提供命令、恢复方案及 AI 提示词。
 
@@ -151,7 +151,7 @@ Context Guard 负责完成认证；Goal、Todo、Compaction、continuation、权
 
 历史从首次公开发布 npm 的 2026-08-26 开始，保留首日真实下载数，不强行归零；纵轴从零起算。日期标签统一居中，按固定天数间隔显示，图注始终保留精确截止日。
 
-每日工作流仅发布至少相隔 12 小时复查一致、且距离当日已有两个 UTC 日历日的数据，另行标明 API 数据可用日期。这是项目的观测规则，不代表 npm 保证数值永不修订。详见[源数据](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.json)。
+工作流每天计划采集两次，仅发布至少相隔 12 小时复查一致、且距离当日已有两个 UTC 日历日的数据。图中分别显示历史截止日、API 数据可用日期和最近检查时间。npm 数据延迟或数值变化时，保留此前已复查的曲线，并显示等待复查；采集失败时保留上一份图。这是项目的观测规则，不代表 npm 保证数值永不修订。详见[源数据](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.json)和[最近采集状态](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/refresh-status.json)。
 
 ## 文档
 

@@ -156,7 +156,7 @@ The cumulative chart keeps the old and new npm package totals visibly separate, 
 
 History starts on the first public npm release day, 2026-08-26; its real first-day count is retained even when nonzero. The vertical axis starts at zero. Date labels share one fixed day interval and centered anchors; the caption always gives the exact coverage end.
 
-The daily workflow publishes through the last day whose counts are unchanged in checks at least 12 hours apart and at least two UTC calendar days old. The API availability date is shown separately; this observation rule is not an npm guarantee that counts will never change. See the [source data](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.json).
+The workflow is scheduled to collect twice daily. It publishes through the last day whose counts are unchanged in checks at least 12 hours apart and at least two UTC calendar days old. The chart shows the history cutoff, API availability date and latest check time separately. When npm data is delayed or revised, the previously checked curve remains visible with a pending status; a collection failure leaves the last chart intact. This observation rule is not an npm guarantee that counts will never change. See the [source data](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/npm-downloads.json) and [latest collection status](https://raw.githubusercontent.com/GreenLv/dsh-completion-guard/stats/refresh-status.json).
 
 ## Documentation
 

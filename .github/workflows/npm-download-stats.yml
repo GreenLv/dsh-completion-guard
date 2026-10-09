@@ -2,7 +2,7 @@ name: npm download statistics
 
 on:
   schedule:
-    - cron: '37 4 * * *'
+    - cron: '37 4,16 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -52,6 +52,13 @@ jobs:
           fi
       - name: Collect and validate npm data
         run: node scripts/npm-download-stats.mjs --config .github/npm-downloads-config.json --previous-dir "$RUNNER_TEMP/npm-downloads-previous" --output-dir "$RUNNER_TEMP/npm-downloads"
+      - name: Summarize collection freshness
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const status = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/npm-downloads/refresh-status.json`, 'utf8'));
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Checked: ${status.checked_at}\n\nAPI available through: ${status.available_through}\n\nChart through: ${status.chart_through}\n\n${status.waiting_for_stability ? 'New or revised observations are awaiting stable repeat checks; the chart contains only previously checked data.' : 'Published the latest available checked data.'}\n`);
+          NODE
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: npm-download-statistics
@@ -90,7 +97,8 @@ jobs:
           cp "$OUTPUT_DIR/npm-downloads.json" "$STATS_WORKTREE/npm-downloads.json"
           cp "$OUTPUT_DIR/npm-downloads.svg" "$STATS_WORKTREE/npm-downloads.svg"
           cp "$OUTPUT_DIR/npm-downloads.zh-CN.svg" "$STATS_WORKTREE/npm-downloads.zh-CN.svg"
-          git -C "$STATS_WORKTREE" add observations.json npm-downloads.json npm-downloads.svg npm-downloads.zh-CN.svg
+          cp "$OUTPUT_DIR/refresh-status.json" "$STATS_WORKTREE/refresh-status.json"
+          git -C "$STATS_WORKTREE" add observations.json npm-downloads.json npm-downloads.svg npm-downloads.zh-CN.svg refresh-status.json
           if git -C "$STATS_WORKTREE" diff --cached --quiet; then
             exit 0
           fi

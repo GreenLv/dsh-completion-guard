@@ -90,7 +90,7 @@ test("renders a zero-based y axis and aligns every point and marker with its dat
   const chinese = renderSvg(document, "zh-CN");
   for (const svg of [english, chinese]) {
     assert.match(svg, /y1="436"[^>]+class="grid"\/><text[^>]+class="axis">0<\/text>/);
-    assert.match(svg, /data-renderer-version="3"/);
+    assert.match(svg, /data-renderer-version="4"/);
     assert.match(svg, /x="84\.00" y="464" text-anchor="middle" class="axis x-axis-tick" data-day="2026-08-26"/);
     assert.match(svg, /x="900\.00" y="464" text-anchor="middle" class="axis x-axis-tick" data-day="2026-09-02"/);
     assert.match(svg, /class="endpoint-badge" data-position="below">/);
@@ -147,7 +147,7 @@ test("rejects missing collected dates and splits long ranges without gaps", () =
   ]);
 });
 
-test("preserves prior chart bytes while revised observations settle", async () => {
+test("retains checked counts, exposes pending freshness, then advances after separated checks", async () => {
   const root = await mkdtemp(join(tmpdir(), "dsh-cg-npm-stats-"));
   try {
     const previousDir = join(root, "previous");
@@ -159,6 +159,7 @@ test("preserves prior chart bytes while revised observations settle", async () =
     await writeFile(join(previousDir, "npm-downloads.json"), JSON.stringify(previous));
     await writeFile(join(previousDir, "npm-downloads.svg"), "previous-en");
     await writeFile(join(previousDir, "npm-downloads.zh-CN.svg"), "previous-zh");
+    let revisedDay = null;
     const fetchImpl = async (url) => {
       const packageNameFromUrl = decodeURIComponent(url.split("/").at(-1));
       const spec = packageNameFromUrl === oldSpec.package ? oldSpec : newSpec;
@@ -167,7 +168,7 @@ test("preserves prior chart bytes while revised observations settle", async () =
       const match = url.match(/\/(range|point)\/(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})\/([^/]+)$/);
       const [, kind, start, end, encodedPackage] = match;
       const packageName = decodeURIComponent(encodedPackage);
-      const rows = daily(start, end, 2);
+      const rows = daily(start, end, (day) => day === revisedDay ? 3 : 2);
       const payload = kind === "range"
         ? { package: packageName, start, end, downloads: rows }
         : { package: packageName, start, end, downloads: rows.reduce((sum, item) => sum + item.downloads, 0) };
@@ -181,10 +182,46 @@ test("preserves prior chart bytes while revised observations settle", async () =
     ], fetchImpl);
     assert.equal(result.publish_mode, "preserved");
     assert.equal(result.data_through, "2026-08-31");
-    assert.equal(await readFile(join(outputDir, "npm-downloads.svg"), "utf8"), "previous-en");
-    assert.equal(await readFile(join(outputDir, "npm-downloads.zh-CN.svg"), "utf8"), "previous-zh");
+    assert.deepEqual(JSON.parse(await readFile(join(outputDir, "npm-downloads.json"), "utf8")), previous);
+    assert.match(await readFile(join(outputDir, "npm-downloads.svg"), "utf8"), /Checked 2026-09-03 04:37 UTC · Waiting for stable repeat checks/);
+    assert.match(await readFile(join(outputDir, "npm-downloads.zh-CN.svg"), "utf8"), /检查于 2026-09-03 04:37 UTC · 等待数据稳定复查/);
+    assert.deepEqual(JSON.parse(await readFile(join(outputDir, "refresh-status.json"), "utf8")), {
+      schema_version: 1, checked_at: "2026-09-03T04:37:00.000Z", available_through: "2026-09-02",
+      stable_through: null, chart_through: "2026-08-31", publish_mode: "preserved", waiting_for_stability: true,
+    });
     const observation = JSON.parse(await readFile(join(outputDir, "observations.json"), "utf8"));
     assert.equal(observation.candidate_through, "2026-09-02");
+    const advance = await run([
+      "--config", join(root, "config.json"), "--output-dir", outputDir,
+      "--previous-dir", outputDir, "--generated-at", "2026-09-04T04:37:00.000Z",
+    ], fetchImpl);
+    assert.equal(advance.publish_mode, "generated");
+    assert.equal(advance.data_through, "2026-09-02");
+    assert.equal(advance.refresh.waiting_for_stability, false);
+    assert.match(await readFile(join(outputDir, "npm-downloads.svg"), "utf8"), /Published data up to date/);
+    assert.equal(advance.packages[0].downloads[0].downloads, 2);
+
+    // A renderer upgrade cannot allow an unsettled historical revision to
+    // shorten the published curve. Only freshness metadata may advance.
+    const accepted = JSON.parse(await readFile(join(outputDir, "npm-downloads.json"), "utf8"));
+    accepted.renderer_version = 3;
+    await writeFile(join(outputDir, "npm-downloads.json"), JSON.stringify(accepted));
+    revisedDay = "2026-08-29";
+    const regression = await run([
+      "--config", join(root, "config.json"), "--output-dir", outputDir,
+      "--previous-dir", outputDir, "--generated-at", "2026-09-05T04:37:00.000Z",
+    ], fetchImpl);
+    assert.equal(regression.publish_mode, "preserved");
+    assert.equal(regression.refresh.stable_through, "2026-08-28");
+    assert.equal(regression.data_through, "2026-09-02");
+    assert.deepEqual(JSON.parse(await readFile(join(outputDir, "npm-downloads.json"), "utf8")), accepted);
+    const files = ["observations.json", "npm-downloads.json", "npm-downloads.svg", "npm-downloads.zh-CN.svg", "refresh-status.json"];
+    const before = await Promise.all(files.map((file) => readFile(join(outputDir, file), "utf8")));
+    await assert.rejects(run([
+      "--config", join(root, "config.json"), "--output-dir", outputDir,
+      "--previous-dir", outputDir, "--generated-at", "2026-09-06T04:37:00.000Z",
+    ], async () => new Response("unavailable", { status: 503 })), /HTTP 503/);
+    assert.deepEqual(await Promise.all(files.map((file) => readFile(join(outputDir, file), "utf8"))), before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

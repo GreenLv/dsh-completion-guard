@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 365;
-const RENDERER_VERSION = 3;
+const RENDERER_VERSION = 4;
 const MIN_SETTLEMENT_AGE_DAYS = 2;
 const MIN_OBSERVATION_SPAN_MS = 12 * 60 * 60 * 1000;
 
@@ -331,6 +331,7 @@ const COPY = {
     title: (project) => `${project} npm download growth`,
     coverage: (start, end) => `Full daily history · ${start} → ${end}`,
     cutoff: (count, through) => `${count} daily observations · Unchanged on repeat checks · Available data through ${through}`,
+    checked: (time, pending) => `Checked ${time} UTC · ${pending ? "Waiting for stable repeat checks" : "Published data up to date"}`,
     total: "Total downloads",
     axis: "Cumulative downloads",
     source: "Source: npm Downloads API",
@@ -344,6 +345,7 @@ const COPY = {
     title: (project) => `${project} npm 下载增长`,
     coverage: (start, end) => `全量每日历史 · ${start} → ${end}`,
     cutoff: (count, through) => `${count} 个每日数据点 · 间隔复查数值一致 · API 数据可用至 ${through}`,
+    checked: (time, pending) => `检查于 ${time} UTC · ${pending ? "等待数据稳定复查" : "已发布最新复查数据"}`,
     total: "累计下载量",
     axis: "累计下载量",
     source: "来源：npm Downloads API",
@@ -355,7 +357,7 @@ const COPY = {
   },
 };
 
-export function renderSvg(document, locale = "en") {
+export function renderSvg(document, locale = "en", refresh = null) {
   assert(Object.hasOwn(COPY, locale), `unsupported locale: ${locale}`);
   const copy = COPY[locale];
   const width = 960;
@@ -403,9 +405,13 @@ export function renderSvg(document, locale = "en") {
   const title = copy.title(project);
   const coverage = copy.coverage(document.period.start, document.period.end);
   const cutoff = document.settlement?.mode === "observed-stable-days"
-    ? copy.cutoff(allDays.length, document.observation_through)
+    ? copy.cutoff(allDays.length, refresh?.available_through ?? document.observation_through)
     : (locale === "en" ? "Explicit reporting period · See source data for collection status" : "指定统计区间 · 采集状态见源数据");
-  const description = `${title}. ${coverage}. ${copy.note}`;
+  const checkTime = refresh?.checked_at ?? document.generated_at;
+  assert(Number.isFinite(Date.parse(checkTime)), "chart check time must be an ISO timestamp");
+  const checked = copy.checked(new Date(checkTime).toISOString().slice(0, 16).replace("T", " "),
+    Boolean(refresh?.waiting_for_stability));
+  const description = `${title}. ${coverage}. ${checked}. ${copy.note}`;
   const endX = xDay(allDays.length - 1);
   const endY = yCumulative(projectTotal);
   const endpointLabel = formatCount(projectTotal, locale);
@@ -453,6 +459,7 @@ export function renderSvg(document, locale = "en") {
   <text x="${width - right}" y="38" text-anchor="end" class="metric-label">${xml(copy.total)}</text>
   <text x="${width - right}" y="70" text-anchor="end" class="metric-value">${xml(formatCount(projectTotal, locale))}</text>
   ${packageSummary}
+  <text x="${width - right}" y="${plotTop - 16}" text-anchor="end" class="subtitle refresh-status">${xml(checked)}</text>
   <text x="${left}" y="${plotTop - 16}" class="axis-title">${xml(copy.axis)}</text>
   ${grid}
   <polygon points="${areaPoints}" fill="url(#growth-fill)"/>
@@ -533,17 +540,12 @@ export async function run(argv, fetchImpl = fetch) {
   const stableEnd = settledThrough(observation, args.generatedAt);
   const end = args.end ?? stableEnd;
   let document;
-  let svg;
-  let svgZhCn;
   let publishMode = "generated";
   const previousEnd = previous.published?.period?.end;
-  const previousIsCurrent = previous.published?.renderer_version === RENDERER_VERSION;
-  const regression = end && previousEnd && previousIsCurrent && parseDay(end) < parseDay(previousEnd);
+  const regression = end && previousEnd && parseDay(end) < parseDay(previousEnd);
   if (!end || regression) {
     assert(previous.published && previous.svg && previous.svgZhCn, "no settled date and no previous published chart to preserve");
     document = previous.published;
-    svg = previous.svg;
-    svgZhCn = previous.svgZhCn;
     publishMode = "preserved";
   } else {
     document = buildStatsDocument(config, collected, args.generatedAt, end, {
@@ -559,21 +561,31 @@ export async function run(argv, fetchImpl = fetch) {
             minimum_observation_span_hours: MIN_OBSERVATION_SPAN_MS / 3_600_000,
           },
     });
-    svg = renderSvg(document, "en");
-    svgZhCn = renderSvg(document, "zh-CN");
-    assert(!svg.includes("NaN") && !svgZhCn.includes("NaN"), "generated SVG contains NaN");
   }
+  const refresh = {
+    schema_version: 1,
+    checked_at: new Date(args.generatedAt).toISOString(),
+    available_through: candidateEnd,
+    stable_through: stableEnd,
+    chart_through: document.data_through,
+    publish_mode: publishMode,
+    waiting_for_stability: publishMode === "preserved" || candidateEnd > document.data_through,
+  };
+  const svg = renderSvg(document, "en", refresh);
+  const svgZhCn = renderSvg(document, "zh-CN", refresh);
+  assert(!svg.includes("NaN") && !svgZhCn.includes("NaN"), "generated SVG contains NaN");
   await mkdir(args.outputDir, { recursive: true });
   await writeAtomic(path.join(args.outputDir, "observations.json"), `${JSON.stringify(observation, null, 2)}\n`);
   await writeAtomic(path.join(args.outputDir, "npm-downloads.json"), `${JSON.stringify(document, null, 2)}\n`);
   await writeAtomic(path.join(args.outputDir, "npm-downloads.svg"), svg);
   await writeAtomic(path.join(args.outputDir, "npm-downloads.zh-CN.svg"), svgZhCn);
-  return { ...document, publish_mode: publishMode };
+  await writeAtomic(path.join(args.outputDir, "refresh-status.json"), `${JSON.stringify(refresh, null, 2)}\n`);
+  return { ...document, publish_mode: publishMode, refresh };
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   run(process.argv.slice(2)).then((document) => {
-    console.log(`Wrote npm download statistics through ${document.data_through}.`);
+    console.log(`Checked npm data through ${document.refresh.available_through}; chart through ${document.data_through} (${document.publish_mode}).`);
   }).catch((error) => {
     console.error(error.stack ?? error.message);
     process.exitCode = 1;
