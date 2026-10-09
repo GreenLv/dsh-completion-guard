@@ -33,9 +33,9 @@ For an existing session, let history loading and state reconstruction finish. Th
 /context-guard status
 ```
 
-A **new empty root session** defaults to `always` and shows `armed`: Guard is ready, waiting for the first real message. It appends no Guard events before that message, so you can still choose the DSH session preset. DSH may write its own initialization events. The first real input starts protection in the same step, before its first file changes; an image or attachment counts too, while a blank message does not.
+A **new empty root session**, with the default configuration, uses `always` and shows `armed`: Guard is ready, waiting for the first real message. It appends no Guard events before that message, so you can still choose the DSH session preset. DSH may write its own initialization events. The first real input starts protection in the same step, before its first file changes; an image or attachment counts too, while a blank message does not. An explicit `activation: opt-in` remains opt-in: run `/context-guard on` to begin protection.
 
-An **old session** keeps its verified pre-upgrade mode, including an empty old session. `always` in the new profile does not replace an old binding. Missing, damaged or conflicting bindings prevent certification; Guard reports the problem rather than guessing an identity or mode.
+An **old session** keeps its verified pre-upgrade mode, including an empty old session. The new default does not replace an old binding. A contradictory explicit `activation` setting reports `activation_mode_conflict`; follow the [configuration instructions](docs/GETTING_STARTED.md#choose-the-default-for-new-sessions) to use the new default while preserving old modes. Missing, damaged or conflicting bindings prevent certification; Guard reports the problem rather than guessing an identity or mode. Forks inherit their parent's bound initial mode.
 
 Ask DSH to edit a file or run a test as usual. DSH executes the tools; Guard records the request and checks the saved result and any required readback. For example, “edit the configuration and make the tests pass” needs evidence of the changed file and a passing test, not just the assistant saying it is done. `context_guard_prepare` explains missing evidence; `context_guard_checkpoint` checks completion.
 
@@ -50,7 +50,7 @@ The default policy is still `standard`. Automatic protection grants no extra edi
 | `/context-guard status` | Shows activation, remaining checks and reasons they remain open. |
 | `/context-guard off` / `on` | Disables or enables protection for this session; saved history remains. |
 | `/context-guard diagnose` | Explains a completion verdict. |
-| `/context-guard clear` | Closes the current checklist while keeping prohibitions. |
+| `/context-guard clear` | Supersedes the current checklist while keeping prohibitions; it does not prove the work was done. |
 | `/context-guard migration` | Shows the session's rules and upgrade/rollback implications. |
 | `/context-guard release` | Shows an explicitly adopted release contract and remaining work. |
 
@@ -106,14 +106,10 @@ Three tiers change how much proof is required at completion. They are separate f
 | `strict` | On top of standard, a visual or complete-scope verification you explicitly asked for must be discharged by a real readback fact, not by a tool that merely succeeded. |
 | `release` | An explicitly adopted release contract checks the covered publication operation against an exact candidate and one-use reservation. The contract does not supply user authorization or host permission. |
 
-Set the tier in the same `cordis.patch.yml` entry as `activation`:
+To choose `strict`, back up `cordis.patch.yml`, then add or change only `policy` under the existing `context-guard` entry's `config`. Preserve its activation setting, injected host-lock fields and other settings. This field illustration is not a replacement entry:
 
 ```yaml
-- id: context-guard
-  name: dsh-completion-guard
-  config:
-    activation: always
-    policy: strict
+policy: strict
 ```
 
 ### Explicit release contracts

@@ -2,9 +2,18 @@
 
 All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
 
+Each entry describes that version. Historical host ranges, defaults, plans and candidate validation results are not current setup instructions or proof that a later release passed. Use [installation and first load](docs/GETTING_STARTED.md) for the current setup and [acceptance records](docs/LOCAL_ACCEPTANCE.md) for version-specific evidence.
+
+<details>
+<summary>Version index</summary>
+
+[0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
+
+</details>
+
 ## 0.9.0
 
-- **New root sessions now default to `always`.** Protection begins with the first real input; Guard adds no session events before it. Existing sessions, including empty ones, keep their verified pre-upgrade mode. Saved `off`/`on` remains effective. The policy stays `standard`: activation grants no execution or publication authority and does not automatically certify completion.
+- **New root sessions now default to `always` when `activation` is omitted.** Explicit `opt-in` remains supported. Protection begins with the first real input; Guard adds no session events before it. Existing sessions, including empty ones, keep their verified pre-upgrade mode. Saved `off`/`on` remains effective. Explicit settings that contradict a bound mode are refused; [omit the override after migration](docs/GETTING_STARTED.md#choose-the-default-for-new-sessions) to use the new default while preserving old modes. The default policy stays `standard`: activation grants no execution or publication authority and does not automatically certify completion.
 - **Upgrade existing installations before reopening sessions.** Stop the relevant writers, preserve the old package and effective mode sources, and freeze the old-session inventory before replacement. After installation, rebuild the host lock, adopt the preserved modes and verify them before startup. Missing, conflicting or damaged bindings remain uncertified. History and valid old certificates are retained without rewriting or re-signing. See [migration and rollback](docs/ACTIVATION_MIGRATION.md).
 - **Expect a history-loading wait.** First opening or restoring a session with history loads it and rebuilds Guard state; “载入历史” may appear, and later visits can still wait. The cache reuses completed history checks only when it can verify that the history is unchanged and the results are safe to reuse; a single Desktop installation check also reuses application files already read and verified. Each operation still checks the current mode and performs the required fresh checks of Goal state, private records and the host environment. The official host's history-view lifecycle and decode cache are unchanged; this is not a promise to eliminate UI waits. A read-only measurement script separates local read, decompression, JSON parsing and pure Guard replay timings from runtime migration, IPC and rendering.
 - **Migrate an explicitly chosen readable subset when the official host refuses old formats.** `inventory` reports the full scope; `select` freezes chosen IDs. Use the same `--selection` throughout inspect/adopt/verify. Exclusions retain their original logs and mode sources and remain pending; `selected_complete` does not mean the whole inventory completed. Other errors still abort. The [guide](docs/ACTIVATION_MIGRATION.md) includes commands, recovery and copyable AI prompts.
@@ -184,8 +193,7 @@ exact-artifact native annexes attached to the versioned Release.
 
 ### Validation
 
-This is a source release candidate. Local checks and remaining CI,
-native T06, exact-artifact and publication gates are recorded in
+At preparation, this entry recorded a source release candidate. Its local checks and then-pending CI, native T06, exact-artifact and publication gates are recorded in
 [local acceptance](docs/LOCAL_ACCEPTANCE.md) and the
 [release plan](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/RELEASE_PLAN_0_6_2.md).
 
@@ -203,211 +211,11 @@ Repairs attachment handling, conservative request interpretation, discovery pagi
 
 The new interpretation records and reasons are additive. Attachment capture text retains its 0.6.0 bytes; an old log without interpretation records keeps pending attachments. Source checks, CI, frozen-artifact acceptance and native Web/Headless acceptance are separate results recorded in [LOCAL_ACCEPTANCE](docs/LOCAL_ACCEPTANCE.md). The local test-host cleanup now disposes persistence hosts explicitly to prevent FileHandle garbage-collection errors. No platform or publication result is implied by this changelog.
 
-## 0.6.0 third repair round after targeted review (2026-09-14)
-
-Two findings from the targeted review of `fcc3813`, both fixed.
-
-- **A certificate minted after adoption can no longer ratify the adoption.** The
-  closure check compared the certificate's revision with the revision frozen at
-  adoption, which a later log entry could satisfy: adopting a contract that
-  named a certificate that did not exist yet, then producing that certificate
-  afterwards, was granted. The adoption now resolves and freezes the closure
-  certificate's IDENTITY (its certification digest, epoch and revision) at the
-  adoption watermark, and the gate requires exactly that certificate. An
-  unresolvable reference is recorded as unresolved rather than left open for a
-  future entry to satisfy. A later release obligation still does not invalidate
-  the frozen candidate closure. The frozen certificate must also match the
-  candidate revision at adoption; a certificate already stale before adoption
-  is refused.
-- **Invalid adoption input no longer poisons a valid contract.** A root
-  `/context-guard release adopt` with a malformed payload was treated as damaged
-  persisted state, so one typo permanently blocked every later publication. A
-  root command the user typed badly is a usage diagnostic; only an unreadable
-  persisted reservation, settlement or contract record marks the release state
-  damaged. A malformed plugin-notice record still fails closed.
-
-New regression cases: a certificate minted after adoption is refused (with the
-projection still valid), a certificate that existed at adoption is frozen by
-identity and survives a later obligation,
-and invalid/mistyped adopt input leaves a valid contract usable.
-
-## 0.6.0 second repair round after follow-up review (2026-09-14)
-
-A follow-up review of the repair commit found five remaining defects in the new
-wiring. All five reproduced and are fixed. The reviewer's counterexamples are
-kept as permanent regression cases in the suites they belong to.
-
-### Fixed
-
-- **Adding the v5 boundary no longer answers a pre-v5 question.** Deliveries were
-  only gated by the watermark of their own turn; appending the boundary at the
-  end of a v4 log therefore made an old turn's answer retroactively close an
-  obligation the old rules had left open. A delivery now counts only when its
-  turn ended AFTER the boundary, and only obligations captured after the
-  boundary can be closed by one.
-- **The real publish producer now observes everything the contract names.** The
-  trusted reader fills the registry from the canonicalized resolution (it was
-  simply missing, so any contract naming a registry could never be granted), and
-  the ref is resolved by the runtime from the ADOPTED CONTRACT with the audited
-  git executable — a closed, reachable path, instead of a command-manifest field
-  the publish manifest schema rejects. A ref that resolves to a commit different
-  from the artifact's embedded `gitHead` is refused.
-- **A new release instruction no longer invalidates the certificate it needs.**
-  The closure check demanded the CURRENT contract revision, so capturing the
-  publish obligation invalidated the very certificate the release was about to
-  use, and certifying afterwards required the publish to be complete first. The
-  contract now freezes the candidate scope's revision at adoption and requires
-  the closure certificate to be the one that certified exactly that revision.
-  A later obligation does not re-validate a moved candidate, and a certificate
-  minted after adoption is still refused.
-- **Read-only release queries no longer poison the release state.** `release
-  status` (and an omitted verb) is a read-only command; an unknown verb is a
-  usage diagnostic. Only an unreadable persisted record marks the release state
-  damaged, so a plain query can no longer block every future publication
-  irreversibly.
-- **There is now a callable trusted recovery entry.** `context_guard_release`
-  reads the release state and, for `reconcile`, reads the external identity
-  through the same audited registry adapter the publish path uses and settles
-  the reservation only when the readback names the bytes the contract — or the
-  reservation's recorded SRI — froze. It never re-sends a release, and it works
-  after a restart and for a revoked-but-in-flight attempt, because revocation
-  withdraws future authority rather than the duty to reconcile an effect that
-  may already have happened. A contract that froze only the byte SHA-256 stays
-  reconcilable and can still DETECT a mismatched readback.
-- **A presented proof is now part of the persisted contract.** The checkpoint
-  call records its `proof` manifest, and the replay re-binds it at that call's
-  own watermark and requires the recorded proof state to match what the log
-  implies. A tampered or omitted proof — with a result that still claims it was
-  bound — now fails closed with `proof_replay_mismatch` instead of restoring a
-  valid certificate. Signing, persistence and replay use the same call argument,
-  and the Goal gate consumes only a certificate whose proof still binds.
-
-### Verification
-
-- The reviewer's five follow-up counterexamples pass and remain as regression
-  cases: pre-v5 delivery, read-only status, the frozen candidate closure, the
-  observed registry, and persisted proof tampering.
-- New: `tests/tools/v060-release-chain.test.ts` — the acceptance the review asked
-  for. One test drives a real root publish instruction, a real certified
-  preparation closure, a real contract adoption, a real tgz and resolution
-  through the registered evidence tool, and then the registered action tool
-  consulting the RUNTIME's own release gate: it reserves, executes once, leaves
-  the attempt in flight, reconciles it through the registered recovery tool, and
-  refuses the replay as a consumed ticket. Only the npm executor and the
-  registry HTTP client are replaced; the authorization gate, records, producers
-  and replay are production code. Two further cases cover the revoked-but-in-
-  flight restart recovery and a mismatching readback.
-- The proof suite gained the missing-proof, Goal-consumption and
-  accurate-evidence-boundary cases.
-
-### Evidence boundary
-
-The release chain test pins the audited host cohort through an explicit
-`RuntimeExecutorSeams.hostLock` acceptance seam, because the host-lock
-migration revalidation reads real filesystem roots. That replaces ONLY the
-host-lock evaluation; the release gate, the reservation and settlement records,
-the evidence producers and the replay are the production ones, and the host lock
-keeps its own suites and native acceptance.
-
-## 0.6.0 repairs after concentrated review (2026-09-14)
-
-A concentrated review of the `0dce898` candidate produced fifteen targeted
-counterexamples; all fifteen reproduced a real defect. This section records the
-repair. The stable finding numbers (`F01`–`F08`, `R1`–`R15`) are the reviewer's.
-
-### Fixed
-
-- **F01 certificate replay was timing-dependent.** Deliveries were applied after
-  the whole log was replayed, so a checkpoint recorded in a later turn was
-  re-verified while the delivered answer still looked open, and the v5 rule set
-  was applied to the whole log rather than from the boundary onwards. Delivery
-  is now applied at the watermark of the turn that produced it and the rule mode
-  switches at the boundary event, which makes a projection equal to the
-  projection of its own prefix. Certificate comparison is also field-semantic
-  now: identical certificates replay identically regardless of JSON property
-  order, while an extra, missing, or tampered field still fails.
-- **F02 delivery accepted late and non-final answers.** The final answer must
-  appear before the turn's own `turn/end`, must sit in the highest step the host
-  actually entered, and the turn must have exactly one completed end and a
-  recorded start. Late text, an intermediate step, a repeated or abnormal end,
-  and an aborted turn all deliver nothing.
-- **F03 the switch test ignored descendants, and an item reference crashed.**
-  The handover test now uses the same closure as the certificate, so a parent
-  with a pending delegated child is not treated as finished, and the item-ID
-  pattern is a global capture that distinguishes live lineage references from
-  unknown or historical IDs.
-- **F04 release identity was not really bound.** A candidate now has separate,
-  named identities — commit, ref, repository, package, version, artifact
-  SHA-256, npm SRI, registry — and each is compared with its own observed value
-  read from a trusted producer (the exact tgz bytes and the local repository),
-  never with a model-supplied string. Readiness and closure references must
-  resolve to real certified facts, the resolved target must be the artifact the
-  contract names, and a contract that names no artifact digest is refused
-  outright so omitting one cannot be a bypass. A registry readback that names
-  different bytes is not a settlement.
-- **F05 an unknown effect could be re-sent, and a late readback was discarded.**
-  Outcomes are distinguished: `not_effected` is a proven pre-effect refusal and
-  releases the one-shot lock, while `failed`/`unknown`/`unconfirmed` keep it and
-  refuse a re-send. Settlements are reconciled rather than de-duplicated, so a
-  trusted readback settles an earlier unconfirmed attempt, and a settled release
-  is never downgraded. Damaged release state now blocks release operations
-  (`release_state_damaged`) without touching ordinary work.
-- **F06 adoption reported an error and revocation did not exist.** The public
-  command validates and reports exactly what the durable root command adopts,
-  and `/context-guard release revoke <contract_id>` records a durable revocation
-  that keeps the audit trail, denies the next effect, and still shows an
-  in-flight reservation whose readback is owed.
-- **F07 proof could be satisfied about the wrong subject.** Binding now runs the
-  whole chain: the item's own frozen subject and scope, the fact's qualification
-  under the ordinary evidence rules, the declared source, the declared operation
-  for every kind, the order of an input check before the effect, and the real
-  coverage set behind a declared scope digest. A manifest and a fact that agree
-  with each other but not with the user's obligation are rejected.
-- **F08 the proof entry was not reachable from production.** The v2 binder is now
-  wired into `context_guard_checkpoint` (an optional `proof` manifest is bound
-  before any certificate and its state is reported), the v2 fixture evaluates
-  each release probe at its own point in the log, mints real closure
-  certificates, and carries a real read fact for S09, and a dedicated
-  production-chain suite drives producer → persisted log → derive → checkpoint →
-  replay.
-
-### Scope rulings (coordinator, 2026-09-14)
-
-Two scope facts were decided once, and both are recorded as fact rather than as
-a general parity claim:
-
-1. **The v2 shared fixture stays a DSH-authored candidate and cross-language
-   parity stays open.** The upstream repository has not frozen a v2
-   specification, so there is nothing to mirror. The plan's shared gate is
-   therefore recorded as a cross-repository pending item owned by the upstream.
-2. **The release profile's protectable surface is `npm_publish` only.** The
-   `git_tag` and GitHub Release routes are NOT claimed to be blocked by the
-   host: the plugin reports them as `release_operation_unrouted` with
-   `attribution: scope_reduction`, because building the Guard-owned route is the
-   work that would make them protectable. Only a composite runner is reported as
-   an opaque host boundary. The coverage table is machine-readable so this
-   distinction cannot be lost in prose.
-
-The plugin therefore does not claim "C01–C12 core alignment" with Codex Context
-Guard, and it does not claim a complete release coverage surface.
-
-### Verification
-
-The reviewer's fifteen counterexamples are kept as
-`tests/domain/review-counterexamples.test.ts` and now pass; the expectations
-that the repair deliberately changed are marked in place with the reason. New
-coverage: `tests/domain/v060-proof-production-chain.test.ts` (the proof entry
-through real tool registration), the rewritten release/migration suite (26
-cases, including a real certified closure and every identity refusal), and the
-extended v2 fixture (S09 proof binding, per-timeline release probes, and the
-scope-attribution table).
-
 ## 0.6.0 - 2026-09-14
 
-This release makes ordinary DSH work enter, execute, deliver, and resume under
-one set of rules. It also closes the substantive gaps against the shared
-Context Guard semantics. Everything before the new protocol boundary keeps its
-old meaning; nothing is re-read or re-labelled.
+Brings ordinary DSH tasks through entry, execution, delivery and recovery under one rule set, adding selected shared Context Guard behaviors. Cross-language parity and a formal v2 mirror were not yet established in this version. Everything before the new protocol boundary keeps its original meaning; nothing is reinterpreted or relabelled.
+
+The repair rounds below belong to this same version, not additional releases. They retain the original findings, scope decisions and test evidence; read the initial candidate behavior together with these corrections.
 
 ### Added
 
@@ -520,6 +328,212 @@ old meaning; nothing is re-read or re-labelled.
 - Deterministic tests, CI, native macOS/Windows acceptance, publication and
   installation are separate evidence scopes. This release records source and
   deterministic evidence; native acceptance and publication follow separately.
+
+<details>
+<summary>Pre-release review and repair details for 0.6.0</summary>
+
+### 0.6.0 third repair round after targeted review (2026-09-14)
+
+Two findings from the targeted review of `fcc3813`, both fixed.
+
+- **A certificate minted after adoption can no longer ratify the adoption.** The
+  closure check compared the certificate's revision with the revision frozen at
+  adoption, which a later log entry could satisfy: adopting a contract that
+  named a certificate that did not exist yet, then producing that certificate
+  afterwards, was granted. The adoption now resolves and freezes the closure
+  certificate's IDENTITY (its certification digest, epoch and revision) at the
+  adoption watermark, and the gate requires exactly that certificate. An
+  unresolvable reference is recorded as unresolved rather than left open for a
+  future entry to satisfy. A later release obligation still does not invalidate
+  the frozen candidate closure. The frozen certificate must also match the
+  candidate revision at adoption; a certificate already stale before adoption
+  is refused.
+- **Invalid adoption input no longer poisons a valid contract.** A root
+  `/context-guard release adopt` with a malformed payload was treated as damaged
+  persisted state, so one typo permanently blocked every later publication. A
+  root command the user typed badly is a usage diagnostic; only an unreadable
+  persisted reservation, settlement or contract record marks the release state
+  damaged. A malformed plugin-notice record still fails closed.
+
+New regression cases: a certificate minted after adoption is refused (with the
+projection still valid), a certificate that existed at adoption is frozen by
+identity and survives a later obligation,
+and invalid/mistyped adopt input leaves a valid contract usable.
+
+### 0.6.0 second repair round after follow-up review (2026-09-14)
+
+A follow-up review of the repair commit found five remaining defects in the new
+wiring. All five reproduced and are fixed. The reviewer's counterexamples are
+kept as permanent regression cases in the suites they belong to.
+
+The changes below also include a new recovery entrypoint supporting those fixes; the list is not a one-to-one count of the five findings.
+
+#### Fixed
+
+- **Adding the v5 boundary no longer answers a pre-v5 question.** Deliveries were
+  only gated by the watermark of their own turn; appending the boundary at the
+  end of a v4 log therefore made an old turn's answer retroactively close an
+  obligation the old rules had left open. A delivery now counts only when its
+  turn ended AFTER the boundary, and only obligations captured after the
+  boundary can be closed by one.
+- **The real publish producer now observes everything the contract names.** The
+  trusted reader fills the registry from the canonicalized resolution (it was
+  simply missing, so any contract naming a registry could never be granted), and
+  the ref is resolved by the runtime from the ADOPTED CONTRACT with the audited
+  git executable — a closed, reachable path, instead of a command-manifest field
+  the publish manifest schema rejects. A ref that resolves to a commit different
+  from the artifact's embedded `gitHead` is refused.
+- **A new release instruction no longer invalidates the certificate it needs.**
+  The closure check demanded the CURRENT contract revision, so capturing the
+  publish obligation invalidated the very certificate the release was about to
+  use, and certifying afterwards required the publish to be complete first. The
+  contract now freezes the candidate scope's revision at adoption and requires
+  the closure certificate to be the one that certified exactly that revision.
+  A later obligation does not re-validate a moved candidate, and a certificate
+  minted after adoption is still refused.
+- **Read-only release queries no longer poison the release state.** `release
+  status` (and an omitted verb) is a read-only command; an unknown verb is a
+  usage diagnostic. Only an unreadable persisted record marks the release state
+  damaged, so a plain query can no longer block every future publication
+  irreversibly.
+- **There is now a callable trusted recovery entry.** `context_guard_release`
+  reads the release state and, for `reconcile`, reads the external identity
+  through the same audited registry adapter the publish path uses and settles
+  the reservation only when the readback names the bytes the contract — or the
+  reservation's recorded SRI — froze. It never re-sends a release, and it works
+  after a restart and for a revoked-but-in-flight attempt, because revocation
+  withdraws future authority rather than the duty to reconcile an effect that
+  may already have happened. A contract that froze only the byte SHA-256 stays
+  reconcilable and can still DETECT a mismatched readback.
+- **A presented proof is now part of the persisted contract.** The checkpoint
+  call records its `proof` manifest, and the replay re-binds it at that call's
+  own watermark and requires the recorded proof state to match what the log
+  implies. A tampered or omitted proof — with a result that still claims it was
+  bound — now fails closed with `proof_replay_mismatch` instead of restoring a
+  valid certificate. Signing, persistence and replay use the same call argument,
+  and the Goal gate consumes only a certificate whose proof still binds.
+
+#### Verification
+
+- The reviewer's five follow-up counterexamples pass and remain as regression
+  cases: pre-v5 delivery, read-only status, the frozen candidate closure, the
+  observed registry, and persisted proof tampering.
+- New: `tests/tools/v060-release-chain.test.ts` — the acceptance the review asked
+  for. One test drives a real root publish instruction, a real certified
+  preparation closure, a real contract adoption, a real tgz and resolution
+  through the registered evidence tool, and then the registered action tool
+  consulting the RUNTIME's own release gate: it reserves, executes once, leaves
+  the attempt in flight, reconciles it through the registered recovery tool, and
+  refuses the replay as a consumed ticket. Only the npm executor and the
+  registry HTTP client are replaced; the authorization gate, records, producers
+  and replay are production code. Two further cases cover the revoked-but-in-
+  flight restart recovery and a mismatching readback.
+- The proof suite gained the missing-proof, Goal-consumption and
+  accurate-evidence-boundary cases.
+
+#### Evidence boundary
+
+The release chain test pins the audited host cohort through an explicit
+`RuntimeExecutorSeams.hostLock` acceptance seam, because the host-lock
+migration revalidation reads real filesystem roots. That replaces ONLY the
+host-lock evaluation; the release gate, the reservation and settlement records,
+the evidence producers and the replay are the production ones, and the host lock
+keeps its own suites and native acceptance.
+
+### 0.6.0 repairs after concentrated review (2026-09-14)
+
+A concentrated review of the `0dce898` candidate produced fifteen targeted
+counterexamples; all fifteen reproduced a real defect. This section records the
+repair. The stable finding numbers (`F01`–`F08`, `R1`–`R15`) are the reviewer's.
+
+#### Fixed
+
+- **F01 certificate replay was timing-dependent.** Deliveries were applied after
+  the whole log was replayed, so a checkpoint recorded in a later turn was
+  re-verified while the delivered answer still looked open, and the v5 rule set
+  was applied to the whole log rather than from the boundary onwards. Delivery
+  is now applied at the watermark of the turn that produced it and the rule mode
+  switches at the boundary event, which makes a projection equal to the
+  projection of its own prefix. Certificate comparison is also field-semantic
+  now: identical certificates replay identically regardless of JSON property
+  order, while an extra, missing, or tampered field still fails.
+- **F02 delivery accepted late and non-final answers.** The final answer must
+  appear before the turn's own `turn/end`, must sit in the highest step the host
+  actually entered, and the turn must have exactly one completed end and a
+  recorded start. Late text, an intermediate step, a repeated or abnormal end,
+  and an aborted turn all deliver nothing.
+- **F03 the switch test ignored descendants, and an item reference crashed.**
+  The handover test now uses the same closure as the certificate, so a parent
+  with a pending delegated child is not treated as finished, and the item-ID
+  pattern is a global capture that distinguishes live lineage references from
+  unknown or historical IDs.
+- **F04 release identity was not really bound.** A candidate now has separate,
+  named identities — commit, ref, repository, package, version, artifact
+  SHA-256, npm SRI, registry — and each is compared with its own observed value
+  read from a trusted producer (the exact tgz bytes and the local repository),
+  never with a model-supplied string. Readiness and closure references must
+  resolve to real certified facts, the resolved target must be the artifact the
+  contract names, and a contract that names no artifact digest is refused
+  outright so omitting one cannot be a bypass. A registry readback that names
+  different bytes is not a settlement.
+- **F05 an unknown effect could be re-sent, and a late readback was discarded.**
+  Outcomes are distinguished: `not_effected` is a proven pre-effect refusal and
+  releases the one-shot lock, while `failed`/`unknown`/`unconfirmed` keep it and
+  refuse a re-send. Settlements are reconciled rather than de-duplicated, so a
+  trusted readback settles an earlier unconfirmed attempt, and a settled release
+  is never downgraded. Damaged release state now blocks release operations
+  (`release_state_damaged`) without touching ordinary work.
+- **F06 adoption reported an error and revocation did not exist.** The public
+  command validates and reports exactly what the durable root command adopts,
+  and `/context-guard release revoke <contract_id>` records a durable revocation
+  that keeps the audit trail, denies the next effect, and still shows an
+  in-flight reservation whose readback is owed.
+- **F07 proof could be satisfied about the wrong subject.** Binding now runs the
+  whole chain: the item's own frozen subject and scope, the fact's qualification
+  under the ordinary evidence rules, the declared source, the declared operation
+  for every kind, the order of an input check before the effect, and the real
+  coverage set behind a declared scope digest. A manifest and a fact that agree
+  with each other but not with the user's obligation are rejected.
+- **F08 the proof entry was not reachable from production.** The v2 binder is now
+  wired into `context_guard_checkpoint` (an optional `proof` manifest is bound
+  before any certificate and its state is reported), the v2 fixture evaluates
+  each release probe at its own point in the log, mints real closure
+  certificates, and carries a real read fact for S09, and a dedicated
+  production-chain suite drives producer → persisted log → derive → checkpoint →
+  replay.
+
+#### Scope rulings (coordinator, 2026-09-14)
+
+Two scope facts were decided once, and both are recorded as fact rather than as
+a general parity claim:
+
+1. **The v2 shared fixture stays a DSH-authored candidate and cross-language
+   parity stays open.** The upstream repository has not frozen a v2
+   specification, so there is nothing to mirror. The plan's shared gate is
+   therefore recorded as a cross-repository pending item owned by the upstream.
+2. **The release profile's protectable surface is `npm_publish` only.** The
+   `git_tag` and GitHub Release routes are NOT claimed to be blocked by the
+   host: the plugin reports them as `release_operation_unrouted` with
+   `attribution: scope_reduction`, because building the Guard-owned route is the
+   work that would make them protectable. Only a composite runner is reported as
+   an opaque host boundary. The coverage table is machine-readable so this
+   distinction cannot be lost in prose.
+
+The plugin therefore does not claim "C01–C12 core alignment" with Codex Context
+Guard, and it does not claim a complete release coverage surface.
+
+#### Verification
+
+The reviewer's fifteen counterexamples are kept as
+`tests/domain/review-counterexamples.test.ts` and now pass; the expectations
+that the repair deliberately changed are marked in place with the reason. New
+coverage: `tests/domain/v060-proof-production-chain.test.ts` (the proof entry
+through real tool registration), the rewritten release/migration suite (26
+cases, including a real certified closure and every identity refusal), and the
+extended v2 fixture (S09 proof binding, per-timeline release probes, and the
+scope-attribution table).
+
+</details>
 
 ## 0.5.3 - 2026-09-14
 

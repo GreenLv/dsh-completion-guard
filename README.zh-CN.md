@@ -33,9 +33,9 @@ dsh plugin --profile web add dsh-completion-guard@0.9.0
 /context-guard status
 ```
 
-**新建的空根会话**默认采用 `always`，显示 `armed`，表示 Guard 已就绪、等待你的首条真实消息。此前 Guard 不追加会话事件，你仍可选择 DSH 会话 preset；DSH 可能记录自身的初始化事件。首条真实输入进入执行步骤时，保护就在同一步骤内开始，覆盖任务的第一次文件修改。图片或附件也能启动保护，纯空白消息不会。
+**使用默认配置的新建空根会话**采用 `always`，显示 `armed`，表示 Guard 已就绪、等待你的首条真实消息。此前 Guard 不追加会话事件，你仍可选择 DSH 会话 preset；DSH 可能记录自身的初始化事件。首条真实输入进入执行步骤时，保护就在同一步骤内开始，覆盖任务的第一次文件修改。图片或附件也能启动保护，纯空白消息不会。显式配置的 `activation: opt-in` 继续有效，需要执行 `/context-guard on` 才开始保护。
 
-**旧会话**保留已核验的升级前模式，旧空会话也一样。新 profile 的 `always` 不会覆盖旧绑定。绑定缺失、损坏或冲突时，Guard 报告原因并拒绝认证，不猜测身份或模式。
+**旧会话**保留已核验的升级前模式，旧空会话也一样。新默认值不会覆盖旧绑定。显式 `activation` 与绑定矛盾时会报告 `activation_mode_conflict`；要采用新默认值并保留旧模式，请按[配置步骤](docs/GETTING_STARTED.md#新会话默认模式)操作。绑定缺失、损坏或冲突时，Guard 报告原因并拒绝认证，不猜测身份或模式。分叉会话继承父会话绑定的初始模式。
 
 照常让 DSH 改文件、跑测试即可。DSH 执行工具，Guard 保存要求，并核对已记录的结果和必要的回读。例如，“修改配置并让测试通过”需要修改后的文件证据和通过的测试结果，助手说“已完成”还不够。`context_guard_prepare` 说明缺什么证据，`context_guard_checkpoint` 检查能否认证完成。
 
@@ -50,7 +50,7 @@ dsh plugin --profile web add dsh-completion-guard@0.9.0
 | `/context-guard status` | 查看启用状态、未完成检查及其原因。 |
 | `/context-guard off` / `on` | 关闭或开启当前会话的保护，保留历史。 |
 | `/context-guard diagnose` | 解释完成检查的结论。 |
-| `/context-guard clear` | 关闭当前检查表，保留禁止项。 |
+| `/context-guard clear` | 撤下当前检查表，保留禁止项；不表示其中的工作已执行完成。 |
 | `/context-guard migration` | 查看会话适用规则及升级、回退的影响。 |
 | `/context-guard release` | 查看显式采用的发布合同及剩余工作。 |
 
@@ -106,14 +106,10 @@ Guard 按原始范围保留每项要求、禁止项和答复义务。宿主记�
 | `strict` | 在 standard 之上，你明确要求的视觉或完整范围验证必须由真实回读事实兑现，而不是一次"只是成功"的工具调用。 |
 | `release` | 显式采用的发布契约按精确候选和一次性预约核验受覆盖的发布操作。契约本身不提供用户授权或宿主权限。 |
 
-在 `cordis.patch.yml` 的同一项里与 `activation` 一起设置：
+若要使用 `strict`，先备份 `cordis.patch.yml`，再仅修改或添加原 `context-guard` 条目 `config` 下的 `policy`。保留启用模式、注入的宿主锁字段和其他配置。下方只展示要改的字段，不能替换完整条目：
 
 ```yaml
-- id: context-guard
-  name: dsh-completion-guard
-  config:
-    activation: always
-    policy: strict
+policy: strict
 ```
 
 ### 显式发布契约
