@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "renderer_version": 4,
-  "observed_at": "2026-10-09T21:09:55.706Z",
-  "candidate_through": "2026-10-07",
+  "observed_at": "2026-10-10T10:46:13.391Z",
+  "candidate_through": "2026-10-08",
   "packages": [
     {
       "package": "dsh-context-guard",
@@ -11,260 +11,266 @@
         {
           "day": "2026-08-26",
           "downloads": 95,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-27",
           "downloads": 405,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-28",
           "downloads": 205,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-29",
           "downloads": 75,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-30",
           "downloads": 28,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-31",
           "downloads": 42,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-01",
           "downloads": 23,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-02",
           "downloads": 14,
-          "stable_observations": 41,
+          "stable_observations": 42,
           "stable_since": "2026-09-03T12:41:59.849Z"
         },
         {
           "day": "2026-09-03",
           "downloads": 0,
-          "stable_observations": 40,
+          "stable_observations": 41,
           "stable_since": "2026-09-04T09:00:39.217Z"
         },
         {
           "day": "2026-09-04",
           "downloads": 28,
-          "stable_observations": 38,
+          "stable_observations": 39,
           "stable_since": "2026-09-06T08:50:28.848Z"
         },
         {
           "day": "2026-09-05",
           "downloads": 2,
-          "stable_observations": 38,
+          "stable_observations": 39,
           "stable_since": "2026-09-06T08:50:28.848Z"
         },
         {
           "day": "2026-09-06",
           "downloads": 6,
-          "stable_observations": 37,
+          "stable_observations": 38,
           "stable_since": "2026-09-07T09:39:03.786Z"
         },
         {
           "day": "2026-09-07",
           "downloads": 0,
-          "stable_observations": 31,
+          "stable_observations": 32,
           "stable_since": "2026-09-11T09:05:18.736Z"
         },
         {
           "day": "2026-09-08",
           "downloads": 0,
-          "stable_observations": 31,
+          "stable_observations": 32,
           "stable_since": "2026-09-11T09:05:18.736Z"
         },
         {
           "day": "2026-09-09",
           "downloads": 3,
-          "stable_observations": 31,
+          "stable_observations": 32,
           "stable_since": "2026-09-11T09:05:18.736Z"
         },
         {
           "day": "2026-09-10",
           "downloads": 7,
-          "stable_observations": 30,
+          "stable_observations": 31,
           "stable_since": "2026-09-12T08:47:39.974Z"
         },
         {
           "day": "2026-09-11",
           "downloads": 6,
-          "stable_observations": 29,
+          "stable_observations": 30,
           "stable_since": "2026-09-13T09:41:43.652Z"
         },
         {
           "day": "2026-09-12",
           "downloads": 3,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-13",
           "downloads": 9,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-14",
           "downloads": 0,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-15",
           "downloads": 0,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-16",
           "downloads": 3,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-17",
           "downloads": 12,
-          "stable_observations": 12,
+          "stable_observations": 13,
           "stable_since": "2026-09-30T10:41:59.712Z"
         },
         {
           "day": "2026-09-18",
           "downloads": 1,
-          "stable_observations": 22,
+          "stable_observations": 23,
           "stable_since": "2026-09-20T09:25:36.363Z"
         },
         {
           "day": "2026-09-19",
           "downloads": 0,
-          "stable_observations": 22,
+          "stable_observations": 23,
           "stable_since": "2026-09-20T09:25:36.363Z"
         },
         {
           "day": "2026-09-20",
           "downloads": 6,
-          "stable_observations": 21,
+          "stable_observations": 22,
           "stable_since": "2026-09-21T10:10:29.032Z"
         },
         {
           "day": "2026-09-21",
           "downloads": 2,
-          "stable_observations": 19,
+          "stable_observations": 20,
           "stable_since": "2026-09-23T09:29:41.043Z"
         },
         {
           "day": "2026-09-22",
           "downloads": 3,
-          "stable_observations": 15,
+          "stable_observations": 16,
           "stable_since": "2026-09-27T10:10:21.162Z"
         },
         {
           "day": "2026-09-23",
           "downloads": 6,
-          "stable_observations": 16,
+          "stable_observations": 17,
           "stable_since": "2026-09-26T09:29:40.186Z"
         },
         {
           "day": "2026-09-24",
           "downloads": 1,
-          "stable_observations": 16,
+          "stable_observations": 17,
           "stable_since": "2026-09-26T09:29:40.186Z"
         },
         {
           "day": "2026-09-25",
           "downloads": 0,
-          "stable_observations": 15,
+          "stable_observations": 16,
           "stable_since": "2026-09-27T10:10:21.162Z"
         },
         {
           "day": "2026-09-26",
           "downloads": 7,
-          "stable_observations": 14,
+          "stable_observations": 15,
           "stable_since": "2026-09-28T11:11:18.572Z"
         },
         {
           "day": "2026-09-27",
           "downloads": 10,
-          "stable_observations": 14,
+          "stable_observations": 15,
           "stable_since": "2026-09-28T11:11:18.572Z"
         },
         {
           "day": "2026-09-28",
           "downloads": 2,
-          "stable_observations": 12,
+          "stable_observations": 13,
           "stable_since": "2026-09-30T10:41:59.712Z"
         },
         {
           "day": "2026-09-29",
           "downloads": 4,
-          "stable_observations": 11,
+          "stable_observations": 12,
           "stable_since": "2026-10-01T03:33:25.473Z"
         },
         {
           "day": "2026-09-30",
           "downloads": 1,
-          "stable_observations": 9,
+          "stable_observations": 10,
           "stable_since": "2026-10-02T10:42:01.807Z"
         },
         {
           "day": "2026-10-01",
           "downloads": 1,
-          "stable_observations": 8,
+          "stable_observations": 9,
           "stable_since": "2026-10-03T10:01:23.085Z"
         },
         {
           "day": "2026-10-02",
           "downloads": 1,
-          "stable_observations": 5,
+          "stable_observations": 6,
           "stable_since": "2026-10-06T11:28:42.250Z"
         },
         {
           "day": "2026-10-03",
           "downloads": 3,
-          "stable_observations": 6,
+          "stable_observations": 7,
           "stable_since": "2026-10-05T11:47:50.102Z"
         },
         {
           "day": "2026-10-04",
           "downloads": 4,
-          "stable_observations": 6,
+          "stable_observations": 7,
           "stable_since": "2026-10-05T11:47:50.102Z"
         },
         {
           "day": "2026-10-05",
           "downloads": 2,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-10-09T05:32:11.153Z"
         },
         {
           "day": "2026-10-06",
           "downloads": 0,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-10-09T05:32:11.153Z"
         },
         {
           "day": "2026-10-07",
           "downloads": 0,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-10-09T05:32:11.153Z"
+        },
+        {
+          "day": "2026-10-08",
+          "downloads": 5,
+          "stable_observations": 1,
+          "stable_since": "2026-10-10T10:46:13.391Z"
         }
       ]
     },
@@ -275,242 +281,248 @@
         {
           "day": "2026-08-29",
           "downloads": 140,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-30",
           "downloads": 9,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-08-31",
           "downloads": 330,
-          "stable_observations": 13,
+          "stable_observations": 14,
           "stable_since": "2026-09-29T10:52:20.032Z"
         },
         {
           "day": "2026-09-01",
           "downloads": 177,
-          "stable_observations": 42,
+          "stable_observations": 43,
           "stable_since": "2026-09-03T09:09:04.458Z"
         },
         {
           "day": "2026-09-02",
           "downloads": 176,
-          "stable_observations": 13,
+          "stable_observations": 14,
           "stable_since": "2026-09-29T10:52:20.032Z"
         },
         {
           "day": "2026-09-03",
           "downloads": 0,
-          "stable_observations": 40,
+          "stable_observations": 41,
           "stable_since": "2026-09-04T09:00:39.217Z"
         },
         {
           "day": "2026-09-04",
           "downloads": 136,
-          "stable_observations": 38,
+          "stable_observations": 39,
           "stable_since": "2026-09-06T08:50:28.848Z"
         },
         {
           "day": "2026-09-05",
           "downloads": 52,
-          "stable_observations": 38,
+          "stable_observations": 39,
           "stable_since": "2026-09-06T08:50:28.848Z"
         },
         {
           "day": "2026-09-06",
           "downloads": 29,
-          "stable_observations": 37,
+          "stable_observations": 38,
           "stable_since": "2026-09-07T09:39:03.786Z"
         },
         {
           "day": "2026-09-07",
           "downloads": 0,
-          "stable_observations": 31,
+          "stable_observations": 32,
           "stable_since": "2026-09-11T09:05:18.736Z"
         },
         {
           "day": "2026-09-08",
           "downloads": 0,
-          "stable_observations": 31,
+          "stable_observations": 32,
           "stable_since": "2026-09-11T09:05:18.736Z"
         },
         {
           "day": "2026-09-09",
           "downloads": 39,
-          "stable_observations": 31,
+          "stable_observations": 32,
           "stable_since": "2026-09-11T09:05:18.736Z"
         },
         {
           "day": "2026-09-10",
           "downloads": 190,
-          "stable_observations": 30,
+          "stable_observations": 31,
           "stable_since": "2026-09-12T08:47:39.974Z"
         },
         {
           "day": "2026-09-11",
           "downloads": 345,
-          "stable_observations": 29,
+          "stable_observations": 30,
           "stable_since": "2026-09-13T09:41:43.652Z"
         },
         {
           "day": "2026-09-12",
           "downloads": 49,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-13",
           "downloads": 42,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-14",
           "downloads": 333,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-15",
           "downloads": 0,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-16",
           "downloads": 180,
-          "stable_observations": 24,
+          "stable_observations": 25,
           "stable_since": "2026-09-18T09:09:40.378Z"
         },
         {
           "day": "2026-09-17",
           "downloads": 70,
-          "stable_observations": 12,
+          "stable_observations": 13,
           "stable_since": "2026-09-30T10:41:59.712Z"
         },
         {
           "day": "2026-09-18",
           "downloads": 238,
-          "stable_observations": 22,
+          "stable_observations": 23,
           "stable_since": "2026-09-20T09:25:36.363Z"
         },
         {
           "day": "2026-09-19",
           "downloads": 45,
-          "stable_observations": 22,
+          "stable_observations": 23,
           "stable_since": "2026-09-20T09:25:36.363Z"
         },
         {
           "day": "2026-09-20",
           "downloads": 40,
-          "stable_observations": 21,
+          "stable_observations": 22,
           "stable_since": "2026-09-21T10:10:29.032Z"
         },
         {
           "day": "2026-09-21",
           "downloads": 26,
-          "stable_observations": 19,
+          "stable_observations": 20,
           "stable_since": "2026-09-23T09:29:41.043Z"
         },
         {
           "day": "2026-09-22",
           "downloads": 329,
-          "stable_observations": 15,
+          "stable_observations": 16,
           "stable_since": "2026-09-27T10:10:21.162Z"
         },
         {
           "day": "2026-09-23",
           "downloads": 102,
-          "stable_observations": 16,
+          "stable_observations": 17,
           "stable_since": "2026-09-26T09:29:40.186Z"
         },
         {
           "day": "2026-09-24",
           "downloads": 31,
-          "stable_observations": 16,
+          "stable_observations": 17,
           "stable_since": "2026-09-26T09:29:40.186Z"
         },
         {
           "day": "2026-09-25",
           "downloads": 24,
-          "stable_observations": 15,
+          "stable_observations": 16,
           "stable_since": "2026-09-27T10:10:21.162Z"
         },
         {
           "day": "2026-09-26",
           "downloads": 64,
-          "stable_observations": 14,
+          "stable_observations": 15,
           "stable_since": "2026-09-28T11:11:18.572Z"
         },
         {
           "day": "2026-09-27",
           "downloads": 231,
-          "stable_observations": 14,
+          "stable_observations": 15,
           "stable_since": "2026-09-28T11:11:18.572Z"
         },
         {
           "day": "2026-09-28",
           "downloads": 70,
-          "stable_observations": 12,
+          "stable_observations": 13,
           "stable_since": "2026-09-30T10:41:59.712Z"
         },
         {
           "day": "2026-09-29",
           "downloads": 240,
-          "stable_observations": 11,
+          "stable_observations": 12,
           "stable_since": "2026-10-01T03:33:25.473Z"
         },
         {
           "day": "2026-09-30",
           "downloads": 117,
-          "stable_observations": 9,
+          "stable_observations": 10,
           "stable_since": "2026-10-02T10:42:01.807Z"
         },
         {
           "day": "2026-10-01",
           "downloads": 268,
-          "stable_observations": 8,
+          "stable_observations": 9,
           "stable_since": "2026-10-03T10:01:23.085Z"
         },
         {
           "day": "2026-10-02",
           "downloads": 246,
-          "stable_observations": 6,
+          "stable_observations": 7,
           "stable_since": "2026-10-05T11:47:50.102Z"
         },
         {
           "day": "2026-10-03",
           "downloads": 272,
-          "stable_observations": 6,
+          "stable_observations": 7,
           "stable_since": "2026-10-05T11:47:50.102Z"
         },
         {
           "day": "2026-10-04",
           "downloads": 109,
-          "stable_observations": 6,
+          "stable_observations": 7,
           "stable_since": "2026-10-05T11:47:50.102Z"
         },
         {
           "day": "2026-10-05",
           "downloads": 121,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-10-09T05:32:11.153Z"
         },
         {
           "day": "2026-10-06",
           "downloads": 0,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-10-09T05:32:11.153Z"
         },
         {
           "day": "2026-10-07",
           "downloads": 105,
-          "stable_observations": 2,
+          "stable_observations": 3,
           "stable_since": "2026-10-09T05:32:11.153Z"
+        },
+        {
+          "day": "2026-10-08",
+          "downloads": 105,
+          "stable_observations": 1,
+          "stable_since": "2026-10-10T10:46:13.391Z"
         }
       ]
     }
