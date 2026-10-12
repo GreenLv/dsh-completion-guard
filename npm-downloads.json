@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
   "renderer_version": 4,
-  "generated_at": "2026-10-11T20:30:59.592Z",
-  "data_through": "2026-10-08",
+  "generated_at": "2026-10-12T12:21:34.618Z",
+  "data_through": "2026-10-10",
   "period": {
     "start": "2026-08-26",
-    "end": "2026-10-08"
+    "end": "2026-10-10"
   },
   "title": "dsh-completion-guard npm download history",
   "project": "dsh-completion-guard",
@@ -19,7 +19,7 @@
       "label": "dsh-context-guard (previous name)",
       "color": "#f59e0b",
       "start": "2026-08-26",
-      "total": 1025,
+      "total": 1027,
       "downloads": [
         {
           "day": "2026-08-26",
@@ -240,6 +240,16 @@
           "day": "2026-10-08",
           "downloads": 5,
           "cumulative": 1025
+        },
+        {
+          "day": "2026-10-09",
+          "downloads": 1,
+          "cumulative": 1026
+        },
+        {
+          "day": "2026-10-10",
+          "downloads": 1,
+          "cumulative": 1027
         }
       ]
     },
@@ -248,7 +258,7 @@
       "label": "dsh-completion-guard",
       "color": "#2563eb",
       "start": "2026-08-29",
-      "total": 5080,
+      "total": 5476,
       "downloads": [
         {
           "day": "2026-08-29",
@@ -454,6 +464,16 @@
           "day": "2026-10-08",
           "downloads": 105,
           "cumulative": 5080
+        },
+        {
+          "day": "2026-10-09",
+          "downloads": 273,
+          "cumulative": 5353
+        },
+        {
+          "day": "2026-10-10",
+          "downloads": 123,
+          "cumulative": 5476
         }
       ]
     }
@@ -678,25 +698,35 @@
       "day": "2026-10-08",
       "downloads": 110,
       "cumulative": 6105
+    },
+    {
+      "day": "2026-10-09",
+      "downloads": 274,
+      "cumulative": 6379
+    },
+    {
+      "day": "2026-10-10",
+      "downloads": 124,
+      "cumulative": 6503
     }
   ],
   "sources": [
     {
       "package": "dsh-context-guard",
       "start": "2026-08-26",
-      "end": "2026-10-10",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-10-10/dsh-context-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-10-10/dsh-context-guard"
+      "end": "2026-10-11",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-10-11/dsh-context-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-10-11/dsh-context-guard"
     },
     {
       "package": "dsh-completion-guard",
       "start": "2026-08-29",
-      "end": "2026-10-10",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-10-10/dsh-completion-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-10-10/dsh-completion-guard"
+      "end": "2026-10-11",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-10-11/dsh-completion-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-10-11/dsh-completion-guard"
     }
   ],
-  "observation_through": "2026-10-10",
+  "observation_through": "2026-10-11",
   "settlement": {
     "mode": "observed-stable-days",
     "latest_day_status": "stable",
@@ -706,7 +736,7 @@
         "first_version": "0.1.0",
         "first_published_at": "2026-08-26T19:24:20.556Z",
         "first_public_day": "2026-08-26",
-        "available_through": "2026-10-10",
+        "available_through": "2026-10-11",
         "registry": "https://registry.npmjs.org/dsh-context-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-context-guard"
       },
@@ -715,12 +745,12 @@
         "first_version": "0.2.1",
         "first_published_at": "2026-08-29T05:03:21.705Z",
         "first_public_day": "2026-08-29",
-        "available_through": "2026-10-10",
+        "available_through": "2026-10-11",
         "registry": "https://registry.npmjs.org/dsh-completion-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-completion-guard"
       }
     ],
-    "stable_through": "2026-10-08",
+    "stable_through": "2026-10-10",
     "minimum_age_days": 2,
     "minimum_observation_span_hours": 12
   },
