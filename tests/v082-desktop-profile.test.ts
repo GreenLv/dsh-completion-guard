@@ -204,7 +204,8 @@ describe('desktop asar adapter', () => {
     const runtime = readDesktopAppRuntime(asar)
     expect(runtime.hostVersion).toBe(RC2_VERSION)
     expect(runtime.runtimeVersion).toBe(RC2_VERSION)
-    expect(runtime.metadata.fileTableEntries).toBe(92)
+    // The fixture emits exactly package.json and lib/index.js per critical package.
+    expect(runtime.metadata.fileTableEntries).toBe(RC021_RC2_HOST_PACKAGES.length * 2)
     expect(runtime.rows.map((row) => row.name).sort()).toEqual(RC021_RC2_HOST_PACKAGES.map((row) => row.name).sort())
     expect(runtime.rows.every((row) => row.integrity === undefined)).toBe(true)
     // The exact bundle bytes are bound, and a tampered header is a new identity.
