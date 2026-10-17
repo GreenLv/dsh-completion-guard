@@ -34,7 +34,7 @@ describe('F-CG0100-01: call identity across late ordinary and PTC returns', () =
             : env(1, 'tool/call', { callId: 'c1', turn: 1, step: 1, name, arguments: JSON.stringify(args) })
           const result = ptc ? env(6, 'tool/ptc-dispatch', { subCallId: 'c1', rootCallId: 'r1', name, content: [{ type: 'text', text: 'ok' }], isError: false })
             : env(6, 'tool/result', { turn: 1, step: 1, message: createToolResultMessage({ callId: 'c1' as never, content: [{ type: 'text', text: 'ok' }], isError: false }) })
-          const control = [...derive([call, result], '/work/alpha', name === 'pwsh' ? 'windows' : 'posix').evidence.values()][0]!
+          const control = [...derive([env(0, 'working-directory/change', { cwd: '/work/alpha' }), call, result], '/work/prelude', name === 'pwsh' ? 'windows' : 'posix').evidence.values()][0]!
           const late = [...derive([call, env(2, 'working-directory/change', { cwd: '/work/beta' }), env(3, 'working-directory/change', { cwd: '/work/alpha' }), env(4, 'working-directory/change', { cwd: '/work/gamma' }), result], '/work/alpha', name === 'pwsh' ? 'windows' : 'posix').evidence.values()][0]!
           expect(late).toBeDefined()
           expect(late.subjects).toEqual(control.subjects)
@@ -50,17 +50,17 @@ describe('F-CG0100-01: call identity across late ordinary and PTC returns', () =
   for (const name of ['bash', 'pwsh']) {
     for (const cwd of ['C:\\Work\\中文 空格', '\\\\server.example.com\\share\\Case']) {
       it(`${name} resolves relative workdir with the call's Windows path semantics ${cwd}`, () => {
-        const events = [env(1, 'tool/call', { callId: 'win', name, arguments: '{"command":"npm test","workdir":"sub"}' }),
+        const events = [env(0, 'working-directory/change', { cwd }), env(1, 'tool/call', { callId: 'win', name, arguments: '{"command":"npm test","workdir":"sub"}' }),
           env(3, 'tool/result', { message: createToolResultMessage({ callId: 'win' as never, content: [{ type: 'text', text: 'ok' }], isError: false }) })]
-        const fact = [...derive(events, cwd, name === 'pwsh' ? 'windows' : 'posix').evidence.values()][0]!
+        const fact = [...derive(events, 'C:\\original', name === 'pwsh' ? 'windows' : 'posix').evidence.values()][0]!
         expect(fact.subjects).toContain(cwd + '\\sub')
         expect(fact.outcome).toBe('success')
       })
     }
     for (const workdir of ['C:relative', '\\root-relative', '/root-relative', null]) {
       it(`${name} refuses ambiguous Windows explicit workdir ${workdir}`, () => {
-        const fact = [...derive([env(1, 'tool/call', { callId: 'win', name, arguments: JSON.stringify({ command: 'npm test', workdir }) }),
-          env(2, 'tool/result', { message: createToolResultMessage({ callId: 'win' as never, content: [{ type: 'text', text: 'ok' }], isError: false }) })], 'C:\\Work').evidence.values()][0]!
+        const fact = [...derive([env(0, 'working-directory/change', { cwd: 'C:\\Work' }), env(1, 'tool/call', { callId: 'win', name, arguments: JSON.stringify({ command: 'npm test', workdir }) }),
+          env(2, 'tool/result', { message: createToolResultMessage({ callId: 'win' as never, content: [{ type: 'text', text: 'ok' }], isError: false }) })], 'C:\\original').evidence.values()][0]!
         expect(fact.outcome).toBe('unknown')
       })
     }

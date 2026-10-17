@@ -22772,8 +22772,9 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 			const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent);
 			const windowsCwd = !!defaultCwd && (/^[A-Za-z]:/.test(defaultCwd) || defaultCwd.startsWith("\\\\"));
 			const nativePath = windowsCwd ? win32 : posix;
-			const invalidWorkdir = Object.hasOwn(args, "workdir") && (typeof args.workdir !== "string" || !args.workdir || args.workdir.includes("\0") || windowsCwd && !isAbsoluteWorkingDirectory(args.workdir, defaultCwd) && (/^[A-Za-z]:/.test(args.workdir) || /^[\\/]/.test(args.workdir)));
-			const commandCwd = invalidWorkdir ? void 0 : typeof args.workdir === "string" ? isAbsoluteWorkingDirectory(args.workdir, defaultCwd) ? args.workdir : defaultCwd ? nativePath.resolve(defaultCwd, args.workdir) : void 0 : defaultCwd;
+			const epochRead = call.cwdReadVersion === "epoch/v1";
+			const invalidWorkdir = epochRead && Object.hasOwn(args, "workdir") && (typeof args.workdir !== "string" || !args.workdir || args.workdir.includes("\0") || windowsCwd && !isAbsoluteWorkingDirectory(args.workdir, defaultCwd) && (/^[A-Za-z]:/.test(args.workdir) || /^[\\/]/.test(args.workdir)));
+			const commandCwd = !epochRead ? typeof args.workdir === "string" ? args.workdir : defaultCwd : invalidWorkdir ? void 0 : typeof args.workdir === "string" ? isAbsoluteWorkingDirectory(args.workdir, defaultCwd) ? args.workdir : defaultCwd ? nativePath.resolve(defaultCwd, args.workdir) : void 0 : defaultCwd;
 			const commandDetails = analyzeCommand(command, commandCwd, call.name);
 			const action = structured?.semanticAction ?? semanticActionFromCommand(command);
 			const deterministic = commandDetails.status === "supported" && !backgrounded && !outputIncomplete && isDeterministicCheck(command);
@@ -25357,7 +25358,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					callId,
 					name: call.name,
 					arguments: call.arguments,
-					rootCallId: call.rootCallId
+					rootCallId: call.rootCallId,
+					...cwdEpochs.length ? { cwdReadVersion: "epoch/v1" } : {}
 				}, {
 					seq: event.seq,
 					error: hostResultStatus === "failure" ? asRecord(data$1?.error) ?? {

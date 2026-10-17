@@ -2524,6 +2524,9 @@ export function deriveProjection(
             name: call.name,
             arguments: call.arguments,
             rootCallId: call.rootCallId,
+            // This scan has seen only the prefix through THIS result. A later
+            // change cannot upgrade or rewrite an already-frozen legacy fact.
+            ...(cwdEpochs.length ? { cwdReadVersion: 'epoch/v1' as const } : {}),
           },
           { seq: event.seq,
             error: hostResultStatus === 'failure'

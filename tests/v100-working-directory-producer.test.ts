@@ -21,8 +21,10 @@ const workingDirectory = await import(pathToFileURL(producerRequire.resolve('@de
 
 describe('F-CG0100-01 official cwd producer recovery', () => {
   it('refuses a pre-execute receipt when real ensure recovers after tool/call', async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'cg-cwd-origin-')))
-    const other = realpathSync(mkdtempSync(join(tmpdir(), 'cg-cwd-other-')))
+    // Native realpath expands Windows 8.3 TEMP aliases before binding the
+    // immutable header and assertions; production path equality stays exact.
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'cg-cwd-origin-')))
+    const other = realpathSync.native(mkdtempSync(join(tmpdir(), 'cg-cwd-other-')))
     const ctx = new Context()
     new SessionProjectionRegistry(ctx); new SystemPrompt(ctx, {})
     new LocalFileSystem(ctx, { cwd: root, diffBasisMaxBytes: 10485760 })

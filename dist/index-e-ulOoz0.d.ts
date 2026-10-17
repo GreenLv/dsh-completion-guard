@@ -2214,6 +2214,9 @@ interface ToolCallInput {
   arguments: string;
   /** Code-mode dispatch root; falls back to `callId` when the harness does not carry one. */
   rootCallId?: string;
+  /** Internal replay version: selected only from a committed effective cwd epoch.
+  * Never inferred from tool arguments or a future event. Absent preserves legacy bytes. */
+  cwdReadVersion?: "epoch/v1";
 }
 interface ToolResultInput {
   seq: number;

@@ -13,6 +13,9 @@ export interface ToolCallInput {
   arguments: string
   /** Code-mode dispatch root; falls back to `callId` when the harness does not carry one. */
   rootCallId?: string
+  /** Internal replay version: selected only from a committed effective cwd epoch.
+   * Never inferred from tool arguments or a future event. Absent preserves legacy bytes. */
+  cwdReadVersion?: 'epoch/v1'
 }
 
 export interface ToolResultInput {
@@ -872,10 +875,12 @@ export function extractToolSubject(
       const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent)
       const windowsCwd = !!defaultCwd && (/^[A-Za-z]:/.test(defaultCwd) || defaultCwd.startsWith('\\\\'))
       const nativePath = windowsCwd ? win32 : posix
-      const invalidWorkdir = Object.hasOwn(args, 'workdir') && (typeof args.workdir !== 'string' || !args.workdir
+      const epochRead = call.cwdReadVersion === 'epoch/v1'
+      const invalidWorkdir = epochRead && Object.hasOwn(args, 'workdir') && (typeof args.workdir !== 'string' || !args.workdir
         || args.workdir.includes('\0') || windowsCwd && !isAbsoluteWorkingDirectory(args.workdir, defaultCwd)
           && (/^[A-Za-z]:/.test(args.workdir) || /^[\\/]/.test(args.workdir)))
-      const commandCwd = invalidWorkdir ? undefined : typeof args.workdir === 'string'
+      const commandCwd = !epochRead ? (typeof args.workdir === 'string' ? args.workdir : defaultCwd)
+        : invalidWorkdir ? undefined : typeof args.workdir === 'string'
         ? isAbsoluteWorkingDirectory(args.workdir, defaultCwd) ? args.workdir
           : defaultCwd ? nativePath.resolve(defaultCwd, args.workdir) : undefined
         : defaultCwd

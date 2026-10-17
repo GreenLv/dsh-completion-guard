@@ -29,7 +29,7 @@ Bash and PowerShell obtain their default from the host's asynchronous
 disagrees or the directory history changes while the call is in flight. The
 ordinary call still proceeds; its cwd-dependent result stays unconfirmed and
 retains the call-epoch target. An explicit absolute workdir or file target is
-bound independently; a relative shell workdir resolves against the call epoch.
+bound independently; a relative shell workdir resolves against the call epoch only under the epoch reader. Historical logs with no cwd-change events retain the exact 0.9.0 projection under the same host binding and its frozen evidence/digests, including relative workdir spelling. The reader version is chosen from effective epochs committed through the result, so a future change cannot rewrite a completed legacy fact.
 
 A receipt binds call ID, sequence, turn, arguments digest, root source, Session
 and host-lock digests, physical directory and policy root. Replay accepts v1

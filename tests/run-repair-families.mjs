@@ -9,6 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const families = Object.freeze({
   'rc021-review': [
     'tests/v100-review-repairs.test.ts',
+    'tests/v100-legacy-path-oracle.test.ts',
     'tests/v100-workdir-replay.test.ts',
     'tests/v100-working-directory-producer.test.ts',
     'tests/v100-rc021-host-events.test.ts',
