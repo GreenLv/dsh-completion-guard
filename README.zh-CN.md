@@ -20,7 +20,7 @@ DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，�
 Web 在完成相应准备后安装：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.9.0
+dsh plugin --profile web add dsh-completion-guard@0.10.0
 ```
 
 装好插件还需核验环境。**宿主锁**记录这个 profile 实际加载的包和目录：先用 `inspect` 检查，再用 `inject` 写入，最后以 `verify-dump` 核对组合配置；注入前备份 `cordis.patch.yml`。[安装与首次载入](docs/GETTING_STARTED.md)给出 Web 命令、Windows 和 Desktop 路径及启动前的最后核验。[旧会话迁移指南](docs/ACTIVATION_MIGRATION.md)提供升级准备、完整命令和可复制的 AI 提示词。

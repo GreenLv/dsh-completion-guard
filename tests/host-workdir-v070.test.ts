@@ -66,7 +66,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     expect(auditedDefaultWorkdirHost('/no-such-runtime', '/no-such-profile', 'bash')).toBe(false)
     const provider = async (name: string, exported: string) => {
       const store = join(runtimeRoot, 'node_modules', '.pnpm')
-      const entry = readdirSync(store).find((value) => value.startsWith(`@deepseek-ai+${name}@0.1.7-rc.2_`))!
+      const entry = readdirSync(store).find((value) => value.startsWith(`@deepseek-ai+${name}@0.2.1-rc.2_`))!
       const path = join(store, entry, 'node_modules', '@deepseek-ai', name, 'lib', 'index.js')
       const module = await import(pathToFileURL(path).href) as Record<string, { prototype: object }>
       return Object.create(module[exported]!.prototype) as object
@@ -74,13 +74,20 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     const bash = await provider('dsh-bash-sandbox', 'SandboxBashExecutor')
     const pwsh = await provider('dsh-pwsh-local', 'PwshLocalExecutor')
     const policyProvider = await provider('dsh-sandbox-policy', 'SandboxPolicyService')
-    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash', bash, policyProvider)).toBe(true)
-    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'pwsh', pwsh)).toBe(true)
+    const directoryProvider = await provider('dsh-working-directory', 'WorkingDirectoryService')
+    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash', bash, policyProvider, undefined, directoryProvider)).toBe(true)
+    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'pwsh', pwsh, undefined, undefined, directoryProvider)).toBe(true)
+    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash', bash, policyProvider)).toBe(false)
+    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash', bash, policyProvider, undefined,
+      { get: () => '/forged', ensure: () => '/forged' })).toBe(false)
+    const replaced = Object.create(Object.getPrototypeOf(directoryProvider)) as Record<string, unknown>
+    replaced.ensure = () => '/forged'
+    expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash', bash, policyProvider, undefined, replaced)).toBe(false)
     const scoped = new Context()
     scoped.provide('shell', bash as never)
     scoped.provide('sandboxPolicy', policyProvider as never)
     expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash',
-      scoped.get('shell'), scoped.get('sandboxPolicy'))).toBe(true)
+      scoped.get('shell'), scoped.get('sandboxPolicy'), undefined, directoryProvider)).toBe(true)
     expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash', bash,
       { resolve: () => ({ workspaceRoot: '/same-path' }), constructor: { name: 'SandboxPolicyService' } })).toBe(false)
     expect(await auditedDefaultWorkdirProvider(runtimeRoot, runtimeRoot, 'bash',
@@ -91,28 +98,28 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     const other = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-second-graph-')))
     try {
       const names = ['dsh-tool-bash', 'dsh-shell', 'dsh-sandbox-policy', 'dsh-sandbox',
-        'dsh-bash-local', 'dsh-bash-sandbox']
+        'dsh-bash-local', 'dsh-bash-sandbox', 'dsh-working-directory']
       const dependencies: Record<string, string> = {}
       const packages: Record<string, { url: string; dependencies: Record<string, string> }> = {
         '.': { url: '..', dependencies },
       }
       const sourceStore = join(runtimeRoot, 'node_modules', '.pnpm')
       for (const name of names) {
-        const slug = readdirSync(sourceStore).find((value) => value.startsWith(`@deepseek-ai+${name}@0.1.7-rc.2_`))!
+        const slug = readdirSync(sourceStore).find((value) => value.startsWith(`@deepseek-ai+${name}@0.2.1-rc.2_`))!
         const source = join(sourceStore, slug, 'node_modules', '@deepseek-ai', name)
         const destination = join(other, 'node_modules', '.pnpm', slug, 'node_modules', '@deepseek-ai', name)
         mkdirSync(join(destination, 'lib'), { recursive: true })
         copyFileSync(join(source, 'package.json'), join(destination, 'package.json'))
         copyFileSync(join(source, 'lib', 'index.js'), join(destination, 'lib', 'index.js'))
-        const id = `@deepseek-ai/${name}@0.1.7-rc.2(test)`
+        const id = `@deepseek-ai/${name}@0.2.1-rc.2(test)`
         dependencies[`@deepseek-ai/${name}`] = id
         packages[id] = { url: `./.pnpm/${slug}/node_modules/@deepseek-ai/${name}`, dependencies: {} }
       }
       writeFileSync(join(other, 'node_modules', '.package-map.json'), JSON.stringify({ packages }))
       expect(auditedDefaultWorkdirHost(runtimeRoot, other, 'bash')).toBe(true)
-      expect(await auditedDefaultWorkdirProvider(runtimeRoot, other, 'bash', bash, policyProvider)).toBe(false)
+      expect(await auditedDefaultWorkdirProvider(runtimeRoot, other, 'bash', bash, policyProvider, undefined, directoryProvider)).toBe(false)
       const policy = join(other, 'node_modules', '.pnpm',
-        readdirSync(sourceStore).find((value) => value.startsWith('@deepseek-ai+dsh-sandbox-policy@0.1.7-rc.2_'))!,
+        readdirSync(sourceStore).find((value) => value.startsWith('@deepseek-ai+dsh-sandbox-policy@0.2.1-rc.2_'))!,
         'node_modules', '@deepseek-ai', 'dsh-sandbox-policy', 'lib', 'index.js')
       writeFileSync(policy, `${readFileSync(policy, 'utf8')}\n// changed installed policy bytes`)
       expect(auditedDefaultWorkdirHost(runtimeRoot, other, 'bash')).toBe(false)
@@ -304,6 +311,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       const runtime = new ToolRuntime(ctx)
       ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: Session }) =>
         ({ sessionId: session.id, workspaceRoot: s.physical }) } as never)
+      ctx.provide('workingDirectory', { get: () => s.physical } as never)
       const agent = { session: s.session, ctx } as never
       registerPassiveHostWorkdirObserver(agent, () => host, () => true, () => 2)
       runtime.register(defineTool({
@@ -347,6 +355,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     try {
       const ctx = new Context(); new SystemPrompt(ctx, {}); const runtime = new ToolRuntime(ctx)
       ctx.provide('sandboxPolicy', { resolve: () => ({ sessionId: id, workspaceRoot: physical }) } as never)
+      ctx.provide('workingDirectory', { get: () => physical } as never)
       const agent = { session, ctx } as never
       registerPassiveHostWorkdirObserver(agent, () => host, () => true, () => root.seq)
       let failA!: () => void

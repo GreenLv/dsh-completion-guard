@@ -388,7 +388,7 @@ describe('core lock policy identity', () => {
     expect(CORE_HOST_COHORTS[0].id).toBe(ACTIVE_COHORT_ID)
     for (const core of CORE_HOST_COHORTS) {
       expect(core.manifestVersion).toBe(2)
-      expect(core.packages).toHaveLength(46)
+      expect(core.packages).toHaveLength(47)
       expect(core.packages.some((row) => row.name === 'dshmarket')).toBe(false)
       expect(core.capabilities).toContainEqual({ name: 'host_lock_policy', value: { k: 's', v: 'dsh-core/v1' } })
     }

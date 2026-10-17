@@ -46,6 +46,20 @@ describe('rc.2 (0.2.1) published identity and executable-byte audit', () => {
       writeFileSync(join(clone,'package.json'),JSON.stringify({dependencies:Object.fromEntries(Object.keys(dependencies).map(name=>[name,'*']))}))
       writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:copied}))
       expect(auditedHostImplementation(clone,clone)).toBe(true)
+      // The 0.2.1 cwd provider participates in the full importer route audit,
+      // including a byte-identical nearer copy invisible to the package map.
+      const cwdShadow = join(clone, 'node_modules/@deepseek-ai/dsh-tool-bash/node_modules/@deepseek-ai/dsh-working-directory')
+      cpSync(join(clone, 'node_modules/@deepseek-ai/dsh-working-directory'), cwdShadow, { recursive: true })
+      expect(execFileSync(process.execPath, ['-e', `console.log(require('node:module').createRequire(${JSON.stringify(join(clone, 'node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js'))}).resolve('@deepseek-ai/dsh-working-directory'))`], { encoding: 'utf8' }).trim()).toBe(join(cwdShadow, 'lib/index.js'))
+      expect(auditedHostImplementation(clone, clone)).toBe(false)
+      rmSync(cwdShadow, { recursive: true })
+      expect(auditedHostImplementation(clone, clone)).toBe(true)
+      const cwdModule = join(clone, 'node_modules/@deepseek-ai/dsh-working-directory/lib/index.js')
+      const cwdBytes = readFileSync(cwdModule)
+      writeFileSync(cwdModule, 'export class WorkingDirectoryService { get() { return "/forged" } }\n')
+      expect(auditedHostImplementation(clone, clone)).toBe(false)
+      writeFileSync(cwdModule, cwdBytes)
+      expect(auditedHostImplementation(clone, clone)).toBe(true)
       // The official standard hoisted generator records self edges, not a
       // declared dependency closure. Exercise the complete production gate
       // with unchanged published module bytes and fresh independent lanes.

@@ -523,10 +523,14 @@ export interface JobLifecycleRecord {
   owner: string
   kind: string
   label: string
-  registeredAtSeq: number
+  startedAt: number
+  /** Absent for a healthy best-effort orphan settlement; audit only. */
+  registeredAtSeq?: number
   toolCall?: { callId: string; rootCallId: string }
   settled?: {
     settledAtSeq: number
+    finishedAt: number
+    detail?: string
     status: 'completed' | 'killed' | 'failed'
     cause: 'producer' | 'kill' | 'teardown'
     producerReported: boolean
@@ -571,6 +575,8 @@ export interface GuardProjection {
    * governed the whole log, which keeps pre-0.2.1 derivations byte-stable.
    */
   cwdEpochs?: CwdEpoch[]
+  /** Immutable scope header cwd for epoch receipt replay; absent in unchanged legacy logs. */
+  cwdOrigin?: string
   /**
    * 0.6.0 work units keyed by unit id, and the id of the unit currently
    * receiving captured work. Derived; present only after a v5 boundary.

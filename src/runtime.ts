@@ -1,3 +1,5 @@
+import type { DerivedEnvelope } from './domain/types.js'
+import { ownedJobLifecycle } from './domain/job-lifecycle.js'
 import './message-source.js'
 import { privateStorageToolDenial } from './domain/private-storage-guard.js'
 import { resolveActivationBindingsRoot, resolveSessionActivation, readActivationBinding } from './domain/activation-bindings.js'
@@ -1082,7 +1084,8 @@ export function registerPassiveHostWorkdirObserver(agent: Agent,
           const audit = createHostAuditSession()
           const receipt = captureHostWorkdir(agent.session, exec, hostLockAtCall(audit), policy,
             await attestedRouteAtCall(exec.name, agent.ctx.get('shell'), policy, audit), sourcedRootAtCall?.(exec) ?? null, SUPPORTED_SESSION_FORMAT_VERSION)
-          if (receipt) pending.set(exec, receipt)
+          const directory = agent.ctx.get('workingDirectory') as { get(session: Session): unknown } | undefined
+          if (receipt && directory?.get(agent.session) === receipt.effectiveCwd) pending.set(exec, receipt)
         } catch { /* Observation failure cannot deny an ordinary Host tool. */ }
       }
     }
@@ -1093,6 +1096,14 @@ export function registerPassiveHostWorkdirObserver(agent: Agent,
     const receipt = pending.get(exec)
     pending.delete(exec)
     if (!receipt || exec.agent !== agent) return decision
+    // ensure() may have recovered a missing directory after pre-execute.
+    // Even a round trip invalidates the pre-execute execution assumption.
+    try {
+      const events = snapshotSessionEvents(agent.session) as DerivedEnvelope[]
+      const directory = agent.ctx.get('workingDirectory') as { get(session: Session): unknown } | undefined
+      if (!directory || directory.get(agent.session) !== receipt.effectiveCwd
+        || events.some((event) => event.seq > receipt.callSeq && event.type === 'working-directory/change')) return decision
+    } catch { return decision }
     const context = createUserMessage({
       content: [{ type: 'text', text: `${HOST_WORKDIR_PREFIX}${JSON.stringify(receipt)}` }],
       source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'read-only Host workdir observation' },
@@ -1298,7 +1309,7 @@ export function apply(ctx: Context, rawConfig: {
         return evaluated
       },
       (tool, provider, policy, audit) => config.hostLockRuntimeRoot && config.hostLockProfileRoot
-        ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy, audit)
+        ? auditedDefaultWorkdirProvider(config.hostLockRuntimeRoot, config.hostLockProfileRoot, tool, provider, policy, audit, agent.ctx.get('workingDirectory'))
         : false,
       (exec) => {
         runtime.sync()
@@ -1683,7 +1694,7 @@ export function apply(ctx: Context, rawConfig: {
 }
 
 export function readExternalOperation(ctx: Context, agent: Agent | undefined, id: string,
-  projection?: { jobLifecycle?: Map<string, { settled?: { status: 'completed' | 'killed' | 'failed'; cause: 'producer' | 'kill' | 'teardown'; producerReported: boolean } }> }): ExternalOperationSnapshot | undefined {
+  projection?: Pick<GuardProjection, 'jobLifecycle' | 'integrity'>): ExternalOperationSnapshot | undefined {
   if (!agent || !id) return undefined
   if (!agent.session || agent.id !== agent.session.id) return undefined
   let status: ExternalOperationSnapshot['status'] | undefined
@@ -1691,7 +1702,8 @@ export function readExternalOperation(ctx: Context, agent: Agent | undefined, id
     const service = agent.ctx.get('jobs') ?? ctx.get('jobs')
     if (service) {
       const row = service.get(JobId(id), agent.id)
-      if (row && row.id === id) {
+      // Official unowned jobs are public; a present owner must match exactly.
+      if (row && row.id === id && (row.owner === undefined || row.owner === agent.id)) {
         status = row.status === 'running' ? 'running'
           : row.status === 'stopping' ? 'pending'
             : row.status === 'completed' ? 'completed'
@@ -1708,8 +1720,11 @@ export function readExternalOperation(ctx: Context, agent: Agent | undefined, id
   // are explicit failures and an unreported completion is unconfirmed. A
   // settlement NEVER substitutes for resource cleanup, file readback, or
   // external side-effect acceptance — it only ends the wait.
-  const settled = projection?.jobLifecycle?.get(id)?.settled
-  if (settled) {
+  const job = projection?.jobLifecycle?.get(id)
+  const settled = job?.settled
+  let owned = false
+  try { owned = ownedJobLifecycle(job, agent.id, snapshotSessionEvents(agent.session) as DerivedEnvelope[]) } catch { /* unavailable history grants no control */ }
+  if (settled && owned && projection?.integrity === 'valid') {
     status = settled.status === 'completed'
       ? (settled.cause === 'producer' && settled.producerReported ? 'completed' : 'unknown')
       : 'failed'

@@ -488,9 +488,10 @@ const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
 // The default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
-// All five bytes are unchanged from the 0.2.0 line (re-verified against the
+// The original five bytes are unchanged from the 0.2.0 line (re-verified against the
 // published 0.2.1-rc.2 tarballs).
 const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
+  '@deepseek-ai/dsh-working-directory': 'af5bb7f33c52efe018da19c39c54e07b5a3ac804fff83f8a68e341f411ecf703',
   '@deepseek-ai/dsh-sandbox-policy': '772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924',
   '@deepseek-ai/dsh-sandbox': 'b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743',
   '@deepseek-ai/dsh-bash-sandbox': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
@@ -575,7 +576,7 @@ export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: stri
     ? ['@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-sandbox',
       '@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-bash-local']
     : ['@deepseek-ai/dsh-pwsh-local']
-  for (const name of names) {
+  for (const name of [...names, '@deepseek-ai/dsh-working-directory']) {
     const found: string[] = []
     for (const root of [runtimeRoot, profileRoot]) {
       try {
@@ -595,7 +596,7 @@ export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: stri
  */
 export async function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string,
   tool: 'bash' | 'pwsh', provider: unknown, policyProvider?: unknown,
-  providedSession?: HostAuditSession): Promise<boolean> {
+  providedSession?: HostAuditSession, workingDirectoryProvider?: unknown): Promise<boolean> {
   const session = providedSession ?? createHostAuditSession()
   if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, session)
     || !provider || typeof provider !== 'object') return false
@@ -616,14 +617,18 @@ export async function auditedDefaultWorkdirProvider(runtimeRoot: string, profile
       // original symbol yields the active provider fiber's underlying value.
       const original = (value as Record<symbol, unknown>)[Symbol.for('cordis.original')]
       const active = original && typeof original === 'object' ? original : value
-      return typeof module[exportName] === 'function'
-        && (active as { constructor?: unknown }).constructor === module[exportName]
+      const constructor = module[exportName] as (Function & { prototype: Record<string, unknown> }) | undefined
+      if (typeof constructor !== 'function' || (active as { constructor?: unknown }).constructor !== constructor) return false
+      // Exact module identity cannot bless instance-level method substitution.
+      return exportName !== 'WorkingDirectoryService' || ['get', 'ensure', 'serialize'].every((method) =>
+        (active as Record<string, unknown>)[method] === constructor.prototype?.[method])
     } catch { return false }
   }
   const shell = tool === 'bash'
     ? await matchesActiveClass('@deepseek-ai/dsh-bash-sandbox', 'SandboxBashExecutor', provider)
     : await matchesActiveClass('@deepseek-ai/dsh-pwsh-local', 'PwshLocalExecutor', provider)
-  return shell && (tool === 'pwsh'
+  return shell && await matchesActiveClass('@deepseek-ai/dsh-working-directory', 'WorkingDirectoryService', workingDirectoryProvider)
+    && (tool === 'pwsh'
     || await matchesActiveClass('@deepseek-ai/dsh-sandbox-policy', 'SandboxPolicyService', policyProvider))
 }
 

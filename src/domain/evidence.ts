@@ -1,3 +1,5 @@
+import { posix, win32 } from 'node:path'
+import { isAbsoluteWorkingDirectory } from './cwd-timeline.js'
 import { sanitizeUrl, sha256 } from './canonicalize.js'
 import { evaluateToolSurfaceCapability, type HostLockEvaluation, type HostToolSurface } from './host-lock.js'
 import { parsePwshCommand, parseShellCommand, isRunExecutable } from './shell-parse.js'
@@ -868,8 +870,16 @@ export function extractToolSubject(
         || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent)
         || /^started background job \S+\s*$/.test(result.textContent)
       const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent)
-      const commandDetails = analyzeCommand(command, typeof args.workdir === 'string' ? args.workdir : defaultCwd, call.name)
-      const commandCwd = typeof args.workdir === 'string' ? args.workdir : defaultCwd
+      const windowsCwd = !!defaultCwd && (/^[A-Za-z]:/.test(defaultCwd) || defaultCwd.startsWith('\\\\'))
+      const nativePath = windowsCwd ? win32 : posix
+      const invalidWorkdir = Object.hasOwn(args, 'workdir') && (typeof args.workdir !== 'string' || !args.workdir
+        || args.workdir.includes('\0') || windowsCwd && !isAbsoluteWorkingDirectory(args.workdir, defaultCwd)
+          && (/^[A-Za-z]:/.test(args.workdir) || /^[\\/]/.test(args.workdir)))
+      const commandCwd = invalidWorkdir ? undefined : typeof args.workdir === 'string'
+        ? isAbsoluteWorkingDirectory(args.workdir, defaultCwd) ? args.workdir
+          : defaultCwd ? nativePath.resolve(defaultCwd, args.workdir) : undefined
+        : defaultCwd
+      const commandDetails = analyzeCommand(command, commandCwd, call.name)
       const action = structured?.semanticAction ?? semanticActionFromCommand(command)
       const deterministic = commandDetails.status === 'supported' && !backgrounded && !outputIncomplete && isDeterministicCheck(command)
       // The bundled DSH session shell renderers (`dsh-tool-bash` / `dsh-tool-pwsh`)
@@ -888,7 +898,7 @@ export function extractToolSubject(
       const terminal = legacyTerminalFacts(result.meta, result.textContent)
       const surface = call.name as 'bash' | 'pwsh' | 'shell'
       const terminalOutcome = shellOutcome(surface, terminal, result.error, backgrounded)
-      const outcome = outputIncomplete && terminalOutcome !== 'failure' ? 'unknown' : terminalOutcome
+      const outcome = (invalidWorkdir || outputIncomplete) && terminalOutcome !== 'failure' ? 'unknown' : terminalOutcome
       const processFacts = shellProcessFacts(
         result.meta, result.textContent, outcome, result.error, surface,
         backgrounded, parseStatus(commandDetails).parseStatus,

@@ -16,27 +16,30 @@ Context Guard does not own Goal, Todo, Compaction, or continuation. It intervene
 ## Call-time Host working-directory evidence
 
 For an ordinary named `npm test` or `pnpm test` Host call that omits `workdir`,
-the Guard captures a read-only working-directory receipt before execution and
-defers its provider-visible plugin context until the host has persisted the
-complete tool-result batch. This is a call-time derivation from the original Session header, the scoped sandbox
-policy, the active shell service, and exact audited DSH `0.1.5-rc.2` producer
-bytes. It is **not** a working directory returned by the Host process. The
-notice binds the original call ID, sequence, turn, arguments digest, root
-source, Session digest, Host-lock digest, physical directory, and policy root.
-On replay it is accepted only after the matching result and before the next
-assistant step, with the same source and Host identity. A legacy notice between
-a call and result is not upgraded. The observer always lets the Host tool proceed;
-it grants no ordinary mutation or execution qualification.
+Guard observes the proposed default directory before execution. The observation
+binds the original Session header, committed cwd epoch, scoped policy and
+`WorkingDirectoryService`, active shell service, and audited DSH `0.2.1-rc.2`
+implementation bytes and dependency routes. Its provider-visible context is
+deferred until the host has persisted the complete tool-result batch. It is
+not a directory returned by the executed process.
 
-The Bash producer chooses the scoped policy workspace root, or the Session
-header cwd when no policy is mounted; this candidate only certifies the
-audited policy route when its physical root equals the immutable header cwd.
-PowerShell uses the immutable header cwd under its separately audited local
-executor. An explicit `workdir` is checked on its own merits. Missing or
-ambiguous provider identity, a lexical filesystem alias, absent physical
-directory, changed policy or graph bytes, background execution, or missing
-call-time notice leaves target attribution insufficient. Historical logs
-without such a notice cannot be upgraded by reading today's Host config.
+Bash and PowerShell obtain their default from the host's asynchronous
+`workingDirectory.ensure()`. That service can recover a missing directory after
+`tool/call`. Guard therefore withholds the receipt if the current service readback
+disagrees or the directory history changes while the call is in flight. The
+ordinary call still proceeds; its cwd-dependent result stays unconfirmed and
+retains the call-epoch target. An explicit absolute workdir or file target is
+bound independently; a relative shell workdir resolves against the call epoch.
+
+A receipt binds call ID, sequence, turn, arguments digest, root source, Session
+and host-lock digests, physical directory and policy root. Replay accepts v1
+only in unchanged header history. V2 additionally binds the governing epoch
+and the original cwd supplied by the actual Session header, and refuses
+in-flight directory changes and transplanted histories. Neither version
+creates permission to execute or proves resource cleanup. Missing or ambiguous
+provider identity, a lexical filesystem alias, background execution or an absent
+receipt leaves the omitted-workdir completion shortcut unavailable. Historical
+logs cannot acquire a missing receipt from today's configuration.
 
 ## Durable state model
 

@@ -52,7 +52,8 @@ describe('v0.3 versioned manifests', () => {
       '@deepseek-ai/dsh-tool-pwsh',
       '@deepseek-ai/dsh-tools',
       '@deepseek-ai/dsh-user-approval',
-      '@deepseek-ai/dsh-util-values'
+      '@deepseek-ai/dsh-util-values',
+      '@deepseek-ai/dsh-working-directory'
     ])
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     // CG-DSH-001: the dev lockfile is not the complete audited host graph, so

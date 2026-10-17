@@ -34,6 +34,18 @@ class DocumentationAuditTests(unittest.TestCase):
             self.assertEqual(result["errors"], 2)
             self.assertEqual(codes, {"missing-link-target", "missing-anchor"})
 
+    def test_current_install_versions_match_package_but_historical_records_are_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"version":"0.10.0"}', encoding="utf-8")
+            (root / "README.md").write_text("dsh plugin add dsh-completion-guard@0.9.0\n", encoding="utf-8")
+            (root / "CHANGELOG.md").write_text("## 0.9.0\nHistorical dsh-completion-guard@0.9.0\n", encoding="utf-8")
+            result = MODULE.audit(root)
+            self.assertEqual(result["errors"], 1)
+            self.assertEqual([x["code"] for x in result["findings"] if x["level"] == "error"], ["current-install-version"])
+            (root / "README.md").write_text("dsh plugin add dsh-completion-guard@0.10.0\n", encoding="utf-8")
+            self.assertEqual(MODULE.audit(root)["errors"], 0)
+
     def test_flags_unreleased_changelog_without_failing(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

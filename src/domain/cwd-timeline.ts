@@ -3,6 +3,20 @@ import type { CwdEpoch, DerivedEnvelope } from './types.js'
 /** The 0.2.1 durable working-directory transition event type. */
 export const WORKING_DIRECTORY_CHANGE_EVENT = 'working-directory/change'
 
+/** Absolute directory identities; preserve spelling and case, never normalize a bound path. */
+export function isAbsoluteWorkingDirectory(value: unknown, base?: string): value is string {
+  if (typeof value !== 'string' || !value || value.includes('\0')) return false
+  if (/^[A-Za-z]:[\\/]/.test(value)) return true
+  // Windows UNC needs both a server and share. Device namespaces are not UNC.
+  if (value.startsWith('//') && base?.startsWith('/') && !base.startsWith('//')) return true
+  if (value.startsWith('\\\\') || value.startsWith('//')) {
+    const unc = /^(?:\\\\|\/\/)([^\\/]+)[\\/]([^\\/]+)(?:[\\/].*)?$/.exec(value)
+    return !!unc && [unc[1]!, unc[2]!].every((part) => !['.', '..', '?'].includes(part) && !/[<>:"|?*]/.test(part))
+  }
+  const windowsBase = !!base && (/^[A-Za-z]:/.test(base) || base.startsWith('\\\\') || base.startsWith('//'))
+  return !windowsBase && value.startsWith('/')
+}
+
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 
@@ -26,7 +40,7 @@ export function cwdEpochsFromEvents(events: readonly DerivedEnvelope[], headerCw
   for (const event of events) {
     if (event.type !== WORKING_DIRECTORY_CHANGE_EVENT) continue
     const cwd = asRecord(event.data)?.cwd
-    if (typeof cwd !== 'string' || cwd.length === 0 || !(cwd.startsWith('/') || /^[A-Za-z]:[\\/]/.test(cwd))) return undefined
+    if (!isAbsoluteWorkingDirectory(cwd, headerCwd)) return undefined
     if (cwd === current) continue
     epochs.push({ seq: event.seq, cwd })
     current = cwd

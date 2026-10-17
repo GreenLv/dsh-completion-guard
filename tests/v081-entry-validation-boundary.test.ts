@@ -413,9 +413,9 @@ describe('one audit physically reads each path at most once', () => {
     // route audit converge on one memo key.
     const duplicated = [...physicalReads.entries()].filter(([, count]) => count > 1)
     expect(duplicated, `duplicate physical reads: ${JSON.stringify(duplicated)}`).toEqual([])
-    // 46 manifests + 46 audited modules (+ the profile's session copy) + 2
+    // All critical manifests and audited modules (+ the profile's session copy) + 2
     // package maps + 2 lockfiles at minimum.
-    expect(physicalReads.size).toBeGreaterThanOrEqual(92)
+    expect(physicalReads.size).toBeGreaterThanOrEqual(EXPECTED_HOST_PACKAGES.length * 2)
   })
 })
 

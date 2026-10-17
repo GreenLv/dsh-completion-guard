@@ -27,8 +27,8 @@ export interface HostWorkdirReceipt {
   hostLockDigest: string
   argumentsSha256: string
   /** v2 only: the immutable Session header cwd (the original project root),
-   * recorded when a `working-directory/change` moved the effective directory
-   * the call actually ran in. Absent in v1 receipts, where the two coincide. */
+   * recorded when a `working-directory/change` moved the proposed default
+   * before the call. Execution may still trigger recovery. Absent in v1 receipts, where the two coincide. */
   originCwd?: string
   /** v2 only: sequence of the governing `working-directory/change`, or -1
    * when none precedes the call (then effectiveCwd equals originCwd and a v1
@@ -82,7 +82,7 @@ function physicalDirectory(value: unknown): string | undefined {
 }
 
 /**
- * Observe the actual audited Host call, without deciding whether it may run.
+ * Observe the audited Host call's proposed default, without deciding whether it may run.
  * The sandbox-policy service is the same scoped service used by tool-bash;
  * absence or an unproved physical path simply emits no receipt.
  */
@@ -171,10 +171,12 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
 
 /** Validate the persisted observer record against the original call/result. */
 export function hostWorkdirForCall(events: DerivedEnvelope[], call: DerivedEnvelope, result: DerivedEnvelope,
-  rootSeq: number, sessionDigest: string, hostDigest: string, headerCwd: string): string | undefined {
+  rootSeq: number, sessionDigest: string, hostDigest: string, headerCwd: string, trustedOriginCwd?: string): string | undefined {
   const callData = row(call.data)
   const callId = callData.callId
   if (typeof callId !== 'string' || typeof callData.arguments !== 'string') return undefined
+  // A pre-execute receipt cannot attest ensure() recovery or a concurrent cd.
+  if (events.some((event) => event.type === 'working-directory/change' && event.seq > call.seq && event.seq < result.seq)) return undefined
   const nextAssistant = events.find((event) => event.seq > result.seq
     && (event.type === 'assistant/message' || event.type === 'turn/end'))
   const upperBound = nextAssistant?.seq ?? Number.POSITIVE_INFINITY
@@ -205,7 +207,8 @@ export function hostWorkdirForCall(events: DerivedEnvelope[], call: DerivedEnvel
     // directory history cannot validate. The bound cwd still has to equal
     // the root locator base the caller holds — a test run in a DIFFERENT
     // epoch than the obligation's scope never certifies that scope.
-    const originCwd = typeof receipt.originCwd === 'string' ? receipt.originCwd : ''
+    const originCwd = trustedOriginCwd
+    if (typeof originCwd !== 'string' || receipt.originCwd !== originCwd) return undefined
     const cwdEpochSeq = typeof receipt.cwdEpochSeq === 'number' && Number.isSafeInteger(receipt.cwdEpochSeq) ? receipt.cwdEpochSeq : undefined
     if (!originCwd || cwdEpochSeq === undefined) return undefined
     const epochs = cwdEpochsFromEvents(events, originCwd)
@@ -219,6 +222,10 @@ export function hostWorkdirForCall(events: DerivedEnvelope[], call: DerivedEnvel
     return headerCwd
   }
   if (receipt.version !== 1) return undefined
+  // v1 was issued only in the immutable header epoch. Even a round trip
+  // before the call cannot turn an epoch receipt back into a legacy one.
+  if (events.some((event) => event.type === 'working-directory/change' && event.seq <= call.seq)) return undefined
+  if (trustedOriginCwd !== undefined && trustedOriginCwd !== headerCwd) return undefined
   if (receipt.toolName === 'bash') {
     if (receipt.policySource !== 'bash-policy' || receipt.policyRoot !== headerCwd) return undefined
   } else if (receipt.toolName !== 'pwsh' || receipt.policySource !== 'pwsh-header' || receipt.policyRoot !== null) return undefined

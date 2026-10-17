@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import * as nodeFs from "node:fs";
 import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import * as path from "node:path";
-import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from "node:path";
 import { homedir, hostname, tmpdir } from "node:os";
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,6 +10,20 @@ import { gunzipSync } from "node:zlib";
 import { execFileSync, spawnSync } from "node:child_process";
 import { isDeepStrictEqual } from "node:util";
 
+//#region src/domain/job-lifecycle.ts
+/** Audit history alone never transfers control of a job to a fork or orphan. */
+function ownedJobLifecycle(job, owner, events) {
+	if (!job || !owner || job.owner !== owner || job.registeredAtSeq === void 0) return false;
+	if (!job.toolCall) return true;
+	const { callId, rootCallId } = job.toolCall;
+	return events.some((event) => {
+		if (event.seq >= job.registeredAtSeq) return false;
+		const call = event.data && typeof event.data === "object" ? event.data : {};
+		return event.type === "tool/call" && call.callId === callId && (call.rootCallId ?? call.callId) === rootCallId || event.type === "tool/ptc-dispatch-start" && call.subCallId === callId && call.rootCallId === rootCallId;
+	});
+}
+
+//#endregion
 //#region src/domain/private-storage-guard.ts
 function physical(path$1) {
 	let ancestor = resolve(path$1);
@@ -3206,6 +3220,19 @@ var packages$2 = [
 			"lib/startup.js": "d99475172ed37413f843d0e975c9a034f8b1a2be064c35db216df16494784afb"
 		},
 		"loadingDigest": "e12e1be5a95134352247dbad227ac6f7031ff1e355fa72d9422cd52ff5d42e33"
+	},
+	{
+		"name": "@deepseek-ai/dsh-working-directory",
+		"version": "0.2.1-rc.2",
+		"integrity": "sha512-zhPtvAaCxa9U0WUN9OEG37zVBq7GOXXXwnDx2Jds4DFksGY5Lmpl3ZK1QMGz+F/Aye4VHt9zoISI7m4wDA8DEg==",
+		"tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-working-directory/-/dsh-working-directory-0.2.1-rc.2.tgz",
+		"sha256": "1c370fb10791e111bb45789f5c7fa09021b94476d3e9391e447809f7acdf592d",
+		"modules": {
+			"lib/index.js": "af5bb7f33c52efe018da19c39c54e07b5a3ac804fff83f8a68e341f411ecf703",
+			"package.json": "5be831b1fadee0ffb8c7e6f8b49ed06ae77cc28a17d3e263fda226702212b5b5"
+		},
+		"programs": { "lib/index.js": "79e1eb30d8590b951d0986ca25c930b9dd9dcb2a0a11ba7b9b2d4d904131b071" },
+		"loadingDigest": "045ded5702c81b581b794d59f6741ee7c441175b8e26052219991f743002ba7f"
 	}
 ];
 
@@ -11824,6 +11851,7 @@ const AUDITED_FOREGROUND_BYTES = {
 	"@deepseek-ai/dsh-shell": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1"
 };
 const AUDITED_DEFAULT_WORKDIR_BYTES = {
+	"@deepseek-ai/dsh-working-directory": "af5bb7f33c52efe018da19c39c54e07b5a3ac804fff83f8a68e341f411ecf703",
 	"@deepseek-ai/dsh-sandbox-policy": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
 	"@deepseek-ai/dsh-sandbox": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
 	"@deepseek-ai/dsh-bash-sandbox": "0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d",
@@ -11900,7 +11928,7 @@ function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, providedSessi
 		"@deepseek-ai/dsh-bash-sandbox",
 		"@deepseek-ai/dsh-bash-local"
 	] : ["@deepseek-ai/dsh-pwsh-local"];
-	for (const name of names) {
+	for (const name of [...names, "@deepseek-ai/dsh-working-directory"]) {
 		const found = [];
 		for (const root of [runtimeRoot, profileRoot]) try {
 			const digest$1 = root === runtimeRoot ? selectedRuntimeRenderer(runtimeRoot, name, session)?.bytes : activeRendererBytes(join(root, "node_modules"), name, session);
@@ -11915,7 +11943,7 @@ function auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, providedSessi
 * Match the scoped service's exact constructor to the audited active module,
 * rejecting another provider with the same public service interface/name.
 */
-async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, provider, policyProvider, providedSession) {
+async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, provider, policyProvider, providedSession, workingDirectoryProvider) {
 	const session = providedSession ?? createHostAuditSession();
 	if (!auditedDefaultWorkdirHost(runtimeRoot, profileRoot, tool, session) || !provider || typeof provider !== "object") return false;
 	const matchesActiveClass = async (name, exportName, value) => {
@@ -11930,12 +11958,18 @@ async function auditedDefaultWorkdirProvider(runtimeRoot, profileRoot, tool, pro
 			const module = await import(pathToFileURL([...paths][0]).href);
 			const original = value[Symbol.for("cordis.original")];
 			const active = original && typeof original === "object" ? original : value;
-			return typeof module[exportName] === "function" && active.constructor === module[exportName];
+			const constructor = module[exportName];
+			if (typeof constructor !== "function" || active.constructor !== constructor) return false;
+			return exportName !== "WorkingDirectoryService" || [
+				"get",
+				"ensure",
+				"serialize"
+			].every((method) => active[method] === constructor.prototype?.[method]);
 		} catch {
 			return false;
 		}
 	};
-	return (tool === "bash" ? await matchesActiveClass("@deepseek-ai/dsh-bash-sandbox", "SandboxBashExecutor", provider) : await matchesActiveClass("@deepseek-ai/dsh-pwsh-local", "PwshLocalExecutor", provider)) && (tool === "pwsh" || await matchesActiveClass("@deepseek-ai/dsh-sandbox-policy", "SandboxPolicyService", policyProvider));
+	return (tool === "bash" ? await matchesActiveClass("@deepseek-ai/dsh-bash-sandbox", "SandboxBashExecutor", provider) : await matchesActiveClass("@deepseek-ai/dsh-pwsh-local", "PwshLocalExecutor", provider)) && await matchesActiveClass("@deepseek-ai/dsh-working-directory", "WorkingDirectoryService", workingDirectoryProvider) && (tool === "pwsh" || await matchesActiveClass("@deepseek-ai/dsh-sandbox-policy", "SandboxPolicyService", policyProvider));
 }
 function pathPresent(path$1) {
 	try {
@@ -21312,6 +21346,67 @@ function authorityCaptureCounts(blocks) {
 }
 
 //#endregion
+//#region src/domain/cwd-timeline.ts
+/** The 0.2.1 durable working-directory transition event type. */
+const WORKING_DIRECTORY_CHANGE_EVENT = "working-directory/change";
+/** Absolute directory identities; preserve spelling and case, never normalize a bound path. */
+function isAbsoluteWorkingDirectory(value, base) {
+	if (typeof value !== "string" || !value || value.includes("\0")) return false;
+	if (/^[A-Za-z]:[\\/]/.test(value)) return true;
+	if (value.startsWith("//") && base?.startsWith("/") && !base.startsWith("//")) return true;
+	if (value.startsWith("\\\\") || value.startsWith("//")) {
+		const unc = /^(?:\\\\|\/\/)([^\\/]+)[\\/]([^\\/]+)(?:[\\/].*)?$/.exec(value);
+		return !!unc && [unc[1], unc[2]].every((part) => ![
+			".",
+			"..",
+			"?"
+		].includes(part) && !/[<>:"|?*]/.test(part));
+	}
+	return !(!!base && (/^[A-Za-z]:/.test(base) || base.startsWith("\\\\") || base.startsWith("//"))) && value.startsWith("/");
+}
+const asRecord$2 = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+/**
+* Build the cwd epoch timeline of one log. The header cwd governs from the
+* start; every VALID `working-directory/change` replaces the effective
+* directory from its sequence on. Returns `undefined` when any change event
+* carries a shape this reader cannot interpret (non-string, empty, or
+* non-absolute cwd): callers must fail closed on that marker instead of
+* guessing an epoch boundary — derive records the corruption, the workdir
+* observer emits no receipt under it.
+*
+* Duplicates are collapsed exactly like the host service commits them: a
+* change to the directory that is already effective adds no epoch, because a
+* re-derivation of the same log must not manufacture boundary identity.
+*/
+function cwdEpochsFromEvents(events, headerCwd) {
+	if (typeof headerCwd !== "string" || headerCwd.length === 0) return void 0;
+	const epochs = [];
+	let current = headerCwd;
+	for (const event of events) {
+		if (event.type !== WORKING_DIRECTORY_CHANGE_EVENT) continue;
+		const cwd = asRecord$2(event.data)?.cwd;
+		if (!isAbsoluteWorkingDirectory(cwd, headerCwd)) return void 0;
+		if (cwd === current) continue;
+		epochs.push({
+			seq: event.seq,
+			cwd
+		});
+		current = cwd;
+	}
+	return epochs;
+}
+/** The effective cwd at one sequence of the timeline's own log. */
+function effectiveCwdAt(epochs, headerCwd, seq) {
+	if (typeof headerCwd !== "string" || headerCwd.length === 0) return void 0;
+	let cwd = headerCwd;
+	for (const epoch of epochs ?? []) {
+		if (epoch.seq > seq) break;
+		cwd = epoch.cwd;
+	}
+	return cwd;
+}
+
+//#endregion
 //#region src/domain/shell-parse.ts
 const TWO_CHAR_OPS = new Set([
 	"&&",
@@ -21897,7 +21992,7 @@ function parseArguments$1(raw) {
 		return {};
 	}
 }
-function asRecord$2(value) {
+function asRecord$1(value) {
 	return typeof value === "object" && value !== null ? value : void 0;
 }
 /**
@@ -21914,7 +22009,7 @@ function nativeGitParentOidVerified(parentOid) {
 function extractTextContent(content) {
 	const parts = [];
 	for (const block$1 of content) {
-		const record = asRecord$2(block$1);
+		const record = asRecord$1(block$1);
 		if (!record) continue;
 		if (record.type === "text" && typeof record.text === "string") parts.push(record.text);
 		if (record.type === "tool-result" && Array.isArray(record.content)) parts.push(extractTextContent(record.content));
@@ -21926,21 +22021,21 @@ function extractTextContent(content) {
 * Historical nested return records are not current rc.2 execution evidence.
 */
 function persistedToolResultStatus(data$1, callId, kind = "tool/result", matchedStart = false) {
-	const result = asRecord$2(data$1);
+	const result = asRecord$1(data$1);
 	if (!result) return "unknown";
 	if (result.error !== void 0 || result.isError === true) return "failure";
 	if (kind === "tool/ptc-dispatch") return matchedStart && result.subCallId === callId && result.isError === false ? "clean" : "unknown";
-	const message = asRecord$2(result.message);
-	const source = asRecord$2(message?.source);
+	const message = asRecord$1(result.message);
+	const source = asRecord$1(message?.source);
 	if (message?.isError === true) return "failure";
-	if (message?.role !== "tool" || source?.kind !== "tool" || source.callId !== callId || message.toolCallId !== callId || message.isError !== false || !Array.isArray(message.content) || message.content.some((block$1) => asRecord$2(block$1)?.type === "tool-result")) return "unknown";
+	if (message?.role !== "tool" || source?.kind !== "tool" || source.callId !== callId || message.toolCallId !== callId || message.isError !== false || !Array.isArray(message.content) || message.content.some((block$1) => asRecord$1(block$1)?.type === "tool-result")) return "unknown";
 	return "clean";
 }
 function metaPaths(meta) {
-	const record = asRecord$2(meta);
+	const record = asRecord$1(meta);
 	if (!record) return [];
 	if (typeof record.path === "string") return [record.path];
-	if (Array.isArray(record.diffs)) return record.diffs.map((diff) => asRecord$2(diff)?.path).filter((path$1) => typeof path$1 === "string");
+	if (Array.isArray(record.diffs)) return record.diffs.map((diff) => asRecord$1(diff)?.path).filter((path$1) => typeof path$1 === "string");
 	return [];
 }
 function argsPaths(args) {
@@ -21961,15 +22056,15 @@ function stable(value) {
 }
 function structuredGuardMeta(meta, toolName) {
 	if (toolName !== "context_guard_evidence") return void 0;
-	const outer = asRecord$2(meta);
-	const value = asRecord$2(outer?.contextGuard ?? outer?.context_guard);
+	const outer = asRecord$1(meta);
+	const value = asRecord$1(outer?.contextGuard ?? outer?.context_guard);
 	if (!value) return void 0;
 	const action = value.semanticAction ?? value.semantic_action;
 	const role = value.evidenceRole ?? value.evidence_role;
-	const resolved = asRecord$2(value.resolvedTarget ?? value.resolved_target);
-	const observed = asRecord$2(value.observedState ?? value.observed_state);
-	const rawExpected = asRecord$2(value.expectedTransition);
-	const expectedParameters = asRecord$2(rawExpected?.parameters);
+	const resolved = asRecord$1(value.resolvedTarget ?? value.resolved_target);
+	const observed = asRecord$1(value.observedState ?? value.observed_state);
+	const rawExpected = asRecord$1(value.expectedTransition);
+	const expectedParameters = asRecord$1(rawExpected?.parameters);
 	const expectedDigest = value.expectedTransitionDigest;
 	const expectedTransition = rawExpected && typeof rawExpected.predicateId === "string" && rawExpected.version === 1 && rawExpected.predParamsKind === "inline" && expectedParameters && typeof expectedDigest === "string" && expectedDigest === sha256(stable(rawExpected)) ? rawExpected : void 0;
 	if (typeof value.adapterId !== "string" || typeof value.adapterVersion !== "string") return void 0;
@@ -22068,7 +22163,7 @@ const PERSISTENT_TIMEOUT_INTRO = /^Your command timed out after \d+ seconds or e
 * the fallback.
 */
 function structuredTerminalFacts(meta) {
-	const record = asRecord$2(meta);
+	const record = asRecord$1(meta);
 	if (!record) return void 0;
 	const rawExit = record.exitCode ?? record.exit_code;
 	const rawSignal = record.signal;
@@ -22126,11 +22221,11 @@ function extractTerminalFacts(textContent) {
 * per-operation producer exists and the attribution stays `unknown`.
 */
 function declaredOperationResults(meta) {
-	const declared = asRecord$2(asRecord$2(meta)?.contextGuardProcess)?.operationResults;
+	const declared = asRecord$1(asRecord$1(meta)?.contextGuardProcess)?.operationResults;
 	if (!Array.isArray(declared) || declared.length === 0 || declared.length > 64) return void 0;
 	const rows = [];
 	for (const raw of declared) {
-		const row$3 = asRecord$2(raw);
+		const row$3 = asRecord$1(raw);
 		const action = typeof row$3?.action === "string" ? row$3.action : void 0;
 		const outcome = row$3?.outcome;
 		if (!action || outcome !== "success" && outcome !== "failure" && outcome !== "unknown") return void 0;
@@ -22147,7 +22242,7 @@ function declaredOperationResults(meta) {
 * an explicit `exitCode` here outranks the generic `meta.exitCode`.
 */
 function declaredStructuredTerminal(meta) {
-	const record = asRecord$2(asRecord$2(meta)?.contextGuardProcess);
+	const record = asRecord$1(asRecord$1(meta)?.contextGuardProcess);
 	if (!record) return void 0;
 	const rawExit = record.exitCode ?? record.exit_code;
 	const signal = record.signal;
@@ -22295,10 +22390,10 @@ function shellProcessFacts(meta, textContent, frozenOutcome, resultError, surfac
 	};
 }
 function metaUrls(meta) {
-	const record = asRecord$2(meta);
+	const record = asRecord$1(meta);
 	if (!record) return [];
 	if (typeof record.url === "string") return [sanitizeUrl(record.url)];
-	if (Array.isArray(record.sources)) return record.sources.map((source) => asRecord$2(source)?.url).filter((url) => typeof url === "string").map((url) => sanitizeUrl(url));
+	if (Array.isArray(record.sources)) return record.sources.map((source) => asRecord$1(source)?.url).filter((url) => typeof url === "string").map((url) => sanitizeUrl(url));
 	return [];
 }
 const DETERMINISTIC_CHECK_PATTERNS = [
@@ -22369,7 +22464,7 @@ function nativeFileSubjects(args, meta, cwd) {
 function extractToolSubject(call, result, defaultCwd, hostLock) {
 	const args = parseArguments$1(call.arguments);
 	if (call.name === "context_guard_observe_file") {
-		const native = asRecord$2(asRecord$2(result.meta)?.contextGuardNativeFile);
+		const native = asRecord$1(asRecord$1(result.meta)?.contextGuardNativeFile);
 		const effectCallId = native?.effectCallId;
 		const path$1 = native?.path;
 		const digest$1 = native?.sha256;
@@ -22404,7 +22499,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		};
 	}
 	if (call.name === "context_guard_observe_git") {
-		const native = asRecord$2(asRecord$2(result.meta)?.contextGuardNativeGit);
+		const native = asRecord$1(asRecord$1(result.meta)?.contextGuardNativeGit);
 		const action = native?.action;
 		const repository = native?.repository;
 		const postOid = native?.postOid;
@@ -22471,7 +22566,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		};
 	}
 	if (call.name === "context_guard_observe_test_readiness") {
-		const ready = asRecord$2(asRecord$2(result.meta)?.contextGuardTestReadiness);
+		const ready = asRecord$1(asRecord$1(result.meta)?.contextGuardTestReadiness);
 		const assessment = ready?.predicate === "verification_passed";
 		if (typeof ready?.itemId === "string" && typeof ready.scope === "string" && (ready.predicate === "test_passed" || assessment) && typeof ready.manifestSha256 === "string" && /^[0-9a-f]{64}$/.test(ready.manifestSha256)) {
 			if (assessment && (typeof ready.effectCallId !== "string" || typeof ready.selectedPath !== "string" || !ready.selectedPath || !["test", "benchmark"].includes(String(ready.scriptName)) || typeof ready.inputSha256 !== "string" || !/^[0-9a-f]{64}$/.test(ready.inputSha256) || ready.effectCallId === "" && ready.inputSha256 !== ready.manifestSha256)) return {
@@ -22513,7 +22608,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 		};
 	}
 	if (call.name === "context_guard_external_operation") {
-		const external = asRecord$2(asRecord$2(result.meta)?.contextGuardExternalOperation);
+		const external = asRecord$1(asRecord$1(result.meta)?.contextGuardExternalOperation);
 		const status = external?.status;
 		if (typeof external?.id === "string" && typeof external.adapterId === "string" && (status === "running" || status === "pending" || status === "completed" || status === "failed" || status === "unknown")) return {
 			capabilities: ["external-operation-readback"],
@@ -22544,7 +22639,7 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 	}
 	const structured = structuredGuardMeta(result.meta, call.name);
 	if (call.name === "context_guard_evidence" && !structured) {
-		const disposition = asRecord$2(asRecord$2(result.meta)?.contextGuardDisposition);
+		const disposition = asRecord$1(asRecord$1(result.meta)?.contextGuardDisposition);
 		return {
 			capabilities: ["guard-state-readback"],
 			subjects: [],
@@ -22675,14 +22770,17 @@ function extractToolSubject(call, result, defaultCwd, hostLock) {
 			const command = typeof args.command === "string" ? args.command : "";
 			const backgrounded = args.run_in_background === true || /^\[still running after \d+ms; moved to background job [^\]\r\n]+\]$/m.test(result.textContent) || /^started background job \S+\s*$/.test(result.textContent);
 			const outputIncomplete = /\[(?:output truncated;|some output was dropped from memory;)[^\]]*\]/i.test(result.textContent);
-			const commandDetails = analyzeCommand(command, typeof args.workdir === "string" ? args.workdir : defaultCwd, call.name);
-			const commandCwd = typeof args.workdir === "string" ? args.workdir : defaultCwd;
+			const windowsCwd = !!defaultCwd && (/^[A-Za-z]:/.test(defaultCwd) || defaultCwd.startsWith("\\\\"));
+			const nativePath = windowsCwd ? win32 : posix;
+			const invalidWorkdir = Object.hasOwn(args, "workdir") && (typeof args.workdir !== "string" || !args.workdir || args.workdir.includes("\0") || windowsCwd && !isAbsoluteWorkingDirectory(args.workdir, defaultCwd) && (/^[A-Za-z]:/.test(args.workdir) || /^[\\/]/.test(args.workdir)));
+			const commandCwd = invalidWorkdir ? void 0 : typeof args.workdir === "string" ? isAbsoluteWorkingDirectory(args.workdir, defaultCwd) ? args.workdir : defaultCwd ? nativePath.resolve(defaultCwd, args.workdir) : void 0 : defaultCwd;
+			const commandDetails = analyzeCommand(command, commandCwd, call.name);
 			const action = structured?.semanticAction ?? semanticActionFromCommand(command);
 			const deterministic = commandDetails.status === "supported" && !backgrounded && !outputIncomplete && isDeterministicCheck(command);
 			const terminal = legacyTerminalFacts(result.meta, result.textContent);
 			const surface = call.name;
 			const terminalOutcome = shellOutcome(surface, terminal, result.error, backgrounded);
-			const outcome = outputIncomplete && terminalOutcome !== "failure" ? "unknown" : terminalOutcome;
+			const outcome = (invalidWorkdir || outputIncomplete) && terminalOutcome !== "failure" ? "unknown" : terminalOutcome;
 			const processFacts = shellProcessFacts(result.meta, result.textContent, outcome, result.error, surface, backgrounded, parseStatus(commandDetails).parseStatus);
 			if (outputIncomplete && terminalOutcome !== "failure") {
 				processFacts.outcome = "unknown";
@@ -22937,52 +23035,6 @@ function informationItemIdsForDelivery(items, delivery, turnRootInputSeqs, eligi
 		}
 	}
 	return closed;
-}
-
-//#endregion
-//#region src/domain/cwd-timeline.ts
-/** The 0.2.1 durable working-directory transition event type. */
-const WORKING_DIRECTORY_CHANGE_EVENT = "working-directory/change";
-const asRecord$1 = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-/**
-* Build the cwd epoch timeline of one log. The header cwd governs from the
-* start; every VALID `working-directory/change` replaces the effective
-* directory from its sequence on. Returns `undefined` when any change event
-* carries a shape this reader cannot interpret (non-string, empty, or
-* non-absolute cwd): callers must fail closed on that marker instead of
-* guessing an epoch boundary — derive records the corruption, the workdir
-* observer emits no receipt under it.
-*
-* Duplicates are collapsed exactly like the host service commits them: a
-* change to the directory that is already effective adds no epoch, because a
-* re-derivation of the same log must not manufacture boundary identity.
-*/
-function cwdEpochsFromEvents(events, headerCwd) {
-	if (typeof headerCwd !== "string" || headerCwd.length === 0) return void 0;
-	const epochs = [];
-	let current = headerCwd;
-	for (const event of events) {
-		if (event.type !== WORKING_DIRECTORY_CHANGE_EVENT) continue;
-		const cwd = asRecord$1(event.data)?.cwd;
-		if (typeof cwd !== "string" || cwd.length === 0 || !(cwd.startsWith("/") || /^[A-Za-z]:[\\/]/.test(cwd))) return void 0;
-		if (cwd === current) continue;
-		epochs.push({
-			seq: event.seq,
-			cwd
-		});
-		current = cwd;
-	}
-	return epochs;
-}
-/** The effective cwd at one sequence of the timeline's own log. */
-function effectiveCwdAt(epochs, headerCwd, seq) {
-	if (typeof headerCwd !== "string" || headerCwd.length === 0) return void 0;
-	let cwd = headerCwd;
-	for (const epoch of epochs ?? []) {
-		if (epoch.seq > seq) break;
-		cwd = epoch.cwd;
-	}
-	return cwd;
 }
 
 //#endregion
@@ -24977,19 +25029,24 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 			case "job/registered":
 			case "job/settled": {
 				const data$1 = asRecord(event.data);
-				const jobId = typeof data$1?.jobId === "string" ? data$1.jobId : "";
-				const owner = typeof data$1?.owner === "string" ? data$1.owner : "";
-				const kind = typeof data$1?.kind === "string" ? data$1.kind : "";
-				const label = typeof data$1?.label === "string" ? data$1.label : "";
+				const jobId = data$1?.jobId;
+				const owner = data$1?.owner;
+				const kind = data$1?.kind;
+				const label = data$1?.label;
 				const startedAt = data$1?.startedAt;
+				const nonempty = (value) => typeof value === "string" && value.length > 0;
+				const time = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 				const toolCallRow = asRecord(data$1?.toolCall);
-				const toolCall = toolCallRow && typeof toolCallRow.callId === "string" && typeof toolCallRow.rootCallId === "string" ? {
+				const toolCall = toolCallRow && nonempty(toolCallRow.callId) && nonempty(toolCallRow.rootCallId) ? {
 					callId: toolCallRow.callId,
 					rootCallId: toolCallRow.rootCallId
 				} : void 0;
-				if (!(jobId !== "" && owner !== "" && typeof kind === "string" && typeof label === "string" && typeof startedAt === "number" && Number.isSafeInteger(startedAt) && (data$1?.toolCall === void 0 || toolCall !== void 0))) {
+				const invalid = () => {
 					projection.integrity = "corrupt";
 					projection.integrityViolations.push("job_lifecycle_invalid");
+				};
+				if (!nonempty(jobId) || !nonempty(owner) || !nonempty(kind) || !nonempty(label) || !time(startedAt) || data$1?.toolCall !== void 0 && !toolCall || data$1?.detail !== void 0 && typeof data$1.detail !== "string") {
+					invalid();
 					break;
 				}
 				if (!projection.jobLifecycle) projection.jobLifecycle = /* @__PURE__ */ new Map();
@@ -24999,39 +25056,52 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 					owner,
 					kind,
 					label,
-					registeredAtSeq: event.seq,
+					startedAt,
+					...event.type === "job/registered" ? { registeredAtSeq: event.seq } : {},
 					...toolCall ? { toolCall } : {}
 				};
-				if (existing && (existing.owner !== owner || existing.kind !== kind || existing.label !== label || existing.toolCall === void 0 !== (toolCall === void 0) || existing.toolCall && toolCall && (existing.toolCall.callId !== toolCall.callId || existing.toolCall.rootCallId !== toolCall.rootCallId))) {
+				if (existing && (existing.owner !== owner || existing.kind !== kind || existing.label !== label || existing.startedAt !== startedAt || existing.toolCall === void 0 !== (toolCall === void 0) || existing.toolCall && toolCall && (existing.toolCall.callId !== toolCall.callId || existing.toolCall.rootCallId !== toolCall.rootCallId))) {
 					projection.integrity = "corrupt";
 					projection.integrityViolations.push("job_registered_conflict");
 					break;
 				}
-				if (event.type === "job/settled") {
-					if (!existing) {
-						projection.integrity = "corrupt";
-						projection.integrityViolations.push("job_settled_unregistered");
+				if (event.type === "job/registered") {
+					if ([
+						"finishedAt",
+						"status",
+						"cause",
+						"producerReported",
+						"detail"
+					].some((key) => data$1?.[key] !== void 0)) {
+						invalid();
 						break;
 					}
+					if (existing?.settled) {
+						projection.integrity = "corrupt";
+						projection.integrityViolations.push("job_registered_conflict");
+						break;
+					}
+				} else {
 					const finishedAt = data$1?.finishedAt;
 					const status = data$1?.status;
 					const cause = data$1?.cause;
 					const producerReported = data$1?.producerReported;
-					if (!(typeof finishedAt === "number" && Number.isSafeInteger(finishedAt) && (status === "completed" || status === "killed" || status === "failed") && (cause === "producer" || cause === "kill" || cause === "teardown") && typeof producerReported === "boolean")) {
-						projection.integrity = "corrupt";
-						projection.integrityViolations.push("job_lifecycle_invalid");
+					if (!time(finishedAt) || finishedAt < startedAt || status !== "completed" && status !== "killed" && status !== "failed" || cause !== "producer" && cause !== "kill" && cause !== "teardown" || typeof producerReported !== "boolean") {
+						invalid();
 						break;
 					}
-					if (existing.settled && (existing.settled.status !== status || existing.settled.cause !== cause || existing.settled.producerReported !== producerReported)) {
+					if (existing?.settled && (existing.settled.status !== status || existing.settled.cause !== cause || existing.settled.producerReported !== producerReported || existing.settled.finishedAt !== finishedAt || existing.settled.detail !== data$1?.detail)) {
 						projection.integrity = "corrupt";
 						projection.integrityViolations.push("job_settled_conflict");
 						break;
 					}
-					facts.settled = {
+					facts.settled ??= {
 						settledAtSeq: event.seq,
+						finishedAt,
 						status,
 						cause,
-						producerReported
+						producerReported,
+						...typeof data$1?.detail === "string" ? { detail: data$1.detail } : {}
 					};
 				}
 				projection.jobLifecycle.set(jobId, facts);
@@ -25039,7 +25109,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 			}
 			case "working-directory/change": {
 				const cwd = asRecord(event.data)?.cwd;
-				if (typeof cwd !== "string" || cwd.length === 0 || !(cwd.startsWith("/") || /^[A-Za-z]:[\\/]/.test(cwd))) {
+				if (!isAbsoluteWorkingDirectory(cwd, scope.cwd)) {
 					projection.integrity = "corrupt";
 					projection.integrityViolations.push("working_directory_change_invalid");
 					break;
@@ -25051,6 +25121,7 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				});
 				currentCwd = cwd;
 				projection.cwdEpochs = cwdEpochs;
+				projection.cwdOrigin = scope.cwd;
 				break;
 			}
 			case "tool/call": {
@@ -25058,6 +25129,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				const data$1 = asRecord(event.data);
 				const callId = String(data$1?.callId ?? "");
 				const call = {
+					cwdAtCall: currentCwd,
+					seqAtCall: event.seq,
 					origin: "tool/call",
 					name: String(data$1?.name ?? ""),
 					arguments: String(data$1?.arguments ?? ""),
@@ -25118,6 +25191,8 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				const subCallId = String(data$1?.subCallId ?? "");
 				const rawArguments = data$1?.arguments;
 				pendingCalls.set(subCallId, {
+					cwdAtCall: currentCwd,
+					seqAtCall: event.seq,
 					origin: "tool/ptc-dispatch-start",
 					name: String(data$1?.name ?? ""),
 					arguments: typeof rawArguments === "string" ? rawArguments : JSON.stringify(rawArguments ?? ""),
@@ -25212,14 +25287,14 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				}
 				if (call.name === "context_guard_interpret") {
 					if (!call.rootCallId && hostResultStatus === "clean") {
-						const callArgs = parseArguments(call.arguments);
-						const requested = typeof callArgs.item_id === "string" ? callArgs.item_id.trim() : "";
+						const callArgs$1 = parseArguments(call.arguments);
+						const requested = typeof callArgs$1.item_id === "string" ? callArgs$1.item_id.trim() : "";
 						const recorded = parseArguments(textContent);
 						if (recorded.status === "recorded") {
 							const item = requested ? projection.items.get(requested) : void 0;
 							const resultTurn = typeof data$1?.turn === "number" && Number.isSafeInteger(data$1.turn) ? data$1.turn : void 0;
-							const callInformation = readPartitionSpans(callArgs.information_spans);
-							const callUnknown = readPartitionSpans(callArgs.unknown_spans);
+							const callInformation = readPartitionSpans(callArgs$1.information_spans);
+							const callUnknown = readPartitionSpans(callArgs$1.unknown_spans);
 							if (!(requested !== "" && item !== void 0 && item.status === "pending" && recorded.item_id === requested && recorded.item_revision === item.revision && (item.asset !== void 0 ? recorded.kind === "asset" && !Object.hasOwn(recorded, "information_spans") && !Object.hasOwn(recorded, "unknown_spans") && assetReceiptMatches(recorded.asset, item.asset) : recorded.kind === "clause" && clauseCallReceiptMatches(callInformation, callUnknown, recorded, item)))) {
 								projection.integrity = "corrupt";
 								projection.integrityViolations.push("interpretation_receipt_mismatch");
@@ -25272,6 +25347,12 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 				}
 				evidenceCounter += 1;
 				const delegated = DEFAULT_DELEGATION_TOOL_NAMES.includes(call.name);
+				const callArgs = parseArguments(call.arguments);
+				const cwdRaced = !([
+					"bash",
+					"pwsh",
+					"shell"
+				].includes(call.name) ? isAbsoluteWorkingDirectory(callArgs.workdir, call.cwdAtCall) : isAbsoluteWorkingDirectory(callArgs.file_path, call.cwdAtCall)) && cwdEpochs.some((entry) => entry.seq > call.seqAtCall && entry.seq < event.seq);
 				const baseEvidence = withDurability(evidenceFromPersistedToolResult({
 					callId,
 					name: call.name,
@@ -25283,10 +25364,10 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 						name: "HostResultError",
 						code: "HOST_RESULT_ERROR"
 					} : void 0,
-					untrusted: hostResultStatus === "unknown",
+					untrusted: hostResultStatus === "unknown" || cwdRaced,
 					meta: data$1?.meta,
 					textContent
-				}, epoch, `E${String(evidenceCounter).padStart(4, "0")}`, currentCwd, hostLock), durableConfirmed);
+				}, epoch, `E${String(evidenceCounter).padStart(4, "0")}`, call.cwdAtCall, hostLock), durableConfirmed);
 				const evidence = delegated ? {
 					...baseEvidence,
 					delegatedSubtask: true
@@ -25312,8 +25393,9 @@ function deriveProjection(sourceEvents, config, scope, durableConfirmed, hostLoc
 	}
 	refreshRootLocatorContext(projection, eventsBySeq, scope, sourceEvents.at(-1)?.seq ?? 0, cwdEpochs);
 	if (projection.jobLifecycle) for (const [id, row$3] of projection.externalOperations) {
-		const settled = projection.jobLifecycle.get(id)?.settled;
-		if (!settled) continue;
+		const job = projection.jobLifecycle.get(id);
+		const settled = job?.settled;
+		if (!settled || !ownedJobLifecycle(job, scope.sessionHeader?.id, sourceEvents)) continue;
 		projection.externalOperations.set(id, {
 			...row$3,
 			status: settled.status === "completed" ? settled.cause === "producer" && settled.producerReported ? "completed" : "unknown" : "failed"
@@ -27089,7 +27171,7 @@ function physicalDirectory(value) {
 	}
 }
 /**
-* Observe the actual audited Host call, without deciding whether it may run.
+* Observe the audited Host call's proposed default, without deciding whether it may run.
 * The sandbox-policy service is the same scoped service used by tool-bash;
 * absence or an unproved physical path simply emits no receipt.
 */
@@ -27184,10 +27266,11 @@ function captureHostWorkdir(session, exec, hostLock, sandboxPolicy, attestedDefa
 	};
 }
 /** Validate the persisted observer record against the original call/result. */
-function hostWorkdirForCall(events, call, result, rootSeq, sessionDigest$1, hostDigest, headerCwd) {
+function hostWorkdirForCall(events, call, result, rootSeq, sessionDigest$1, hostDigest, headerCwd, trustedOriginCwd) {
 	const callData = row$1(call.data);
 	const callId = callData.callId;
 	if (typeof callId !== "string" || typeof callData.arguments !== "string") return void 0;
+	if (events.some((event) => event.type === "working-directory/change" && event.seq > call.seq && event.seq < result.seq)) return void 0;
 	const upperBound = events.find((event) => event.seq > result.seq && (event.type === "assistant/message" || event.type === "turn/end"))?.seq ?? Number.POSITIVE_INFINITY;
 	const candidates = events.filter((event) => event.seq > result.seq && event.seq < upperBound && event.type === "user/message" && ["plugin", "context-guard"].includes(String(row$1(row$1(event.data).source).kind)) && row$1(row$1(event.data).source).plugin === "context-guard" && row$1(row$1(event.data).source).form === "notice" && Array.isArray(row$1(event.data).content) && String(row$1(row$1(event.data).content[0]).text ?? "").startsWith(HOST_WORKDIR_PREFIX)).filter((event) => {
 		try {
@@ -27207,7 +27290,8 @@ function hostWorkdirForCall(events, call, result, rootSeq, sessionDigest$1, host
 	}
 	if (receipt.callId !== callId || receipt.callSeq !== call.seq || receipt.rootSeq !== rootSeq || receipt.turn !== callData.turn || receipt.toolName !== callData.name || receipt.sessionRefDigest !== sessionDigest$1 || receipt.hostLockDigest !== hostDigest || receipt.headerCwd !== headerCwd || receipt.effectiveCwd !== headerCwd || receipt.argumentsSha256 !== hash$1(callData.arguments)) return void 0;
 	if (receipt.version === 2) {
-		const originCwd = typeof receipt.originCwd === "string" ? receipt.originCwd : "";
+		const originCwd = trustedOriginCwd;
+		if (typeof originCwd !== "string" || receipt.originCwd !== originCwd) return void 0;
 		const cwdEpochSeq = typeof receipt.cwdEpochSeq === "number" && Number.isSafeInteger(receipt.cwdEpochSeq) ? receipt.cwdEpochSeq : void 0;
 		if (!originCwd || cwdEpochSeq === void 0) return void 0;
 		const epochs = cwdEpochsFromEvents(events, originCwd);
@@ -27221,6 +27305,8 @@ function hostWorkdirForCall(events, call, result, rootSeq, sessionDigest$1, host
 		return headerCwd;
 	}
 	if (receipt.version !== 1) return void 0;
+	if (events.some((event) => event.type === "working-directory/change" && event.seq <= call.seq)) return void 0;
+	if (trustedOriginCwd !== void 0 && trustedOriginCwd !== headerCwd) return void 0;
 	if (receipt.toolName === "bash") {
 		if (receipt.policySource !== "bash-policy" || receipt.policyRoot !== headerCwd) return void 0;
 	} else if (receipt.toolName !== "pwsh" || receipt.policySource !== "pwsh-header" || receipt.policyRoot !== null) return void 0;
@@ -27874,7 +27960,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				return false;
 			}
 			const expected = `${namedTest[1].toLowerCase()} test`;
-			const workdir = typeof args.workdir === "string" ? args.workdir : !Object.hasOwn(args, "workdir") && typeof item.requestedTarget?.scope === "string" ? hostWorkdirForCall(events, pair.call, pair.result, root.seq, projection.sessionRefDigest, projection.hostLockDigest, projection.rootLocatorContexts.get(root.seq)?.base ?? "") : void 0;
+			const workdir = typeof args.workdir === "string" ? args.workdir : !Object.hasOwn(args, "workdir") && typeof item.requestedTarget?.scope === "string" ? hostWorkdirForCall(events, pair.call, pair.result, root.seq, projection.sessionRefDigest, projection.hostLockDigest, projection.rootLocatorContexts.get(root.seq)?.base ?? "", projection.cwdOrigin) : void 0;
 			return String(args.command ?? "").trim() === expected && args.run_in_background !== true && typeof workdir === "string" && fact.subjects.length === 1 && fact.subjects[0] === workdir && fact.subjects[0] === item.requestedTarget?.scope;
 		};
 		const selectedDirectTest = namedTest && !guarded ? [...projection.evidence.values()].filter(isDirectTestFact).sort((a, b) => b.toolResultSeq - a.toolResultSeq)[0] : void 0;
@@ -30639,4 +30725,4 @@ function verifySelectedMigrationInventory(receipt, snapshot, selection) {
 }
 
 //#endregion
-export { evidenceFromPersistedToolResult as $, createActivationMigrationReceipt as $a, registryArchiveFiles as $i, evidenceAvailabilityReason as $n, presentExplanationHead as $r, renderRecoveryPacket as $t, previewFirstStepInjection as A, BOUNDED_ARTIFACT_TYPES as Aa, resolveActiveProfileHostLock as Ai, certifiableOpenItems as An, digestStrings as Ao, clauseIsProtected as Ar, proofHostSurfacesOf as At, projectCoreV2 as B, isStatefulAction as Ba, memoizedAsarFile as Bi, createProjection as Bn, isExplanationScope as Br, CLEANUP_CONDITION_RULE_COMPACT as Bt, revalidateGitPrestate as C, SUPPORTED_HOST_VERSIONS as Ca, inspectTargetHostGraph as Ci, observeAssistantOutcome as Cn, normalizeReleaseContract as Co, classifyUserInteraction as Cr, canonicalProjection as Ct, firstStepGuidance as D, satisfiesSupportedHostRange as Da, prepareDesktopHostTrust as Di, goalCompletionDenial as Dn, releasePreEffectDecision as Do, clarifiedSpanOf as Dr, proofDigest as Dt, claimedBatchHasRealRootInput as E, parseHostVersion as Ea, prepareActiveHostTrust as Ei, v6TestPredicate as En, releaseCoverage as Eo, actionVerbMatches as Er, proofCapabilityReport as Et, sourcedNamedTestRoot as F, STOP_PROTOCOL_VERSION as Fa, DESKTOP_IDENTITY_FACTS as Fi, availableBoundaryQualifications as Fn, privateStorageToolDenial as Fo, hasWorkPredicate as Fr, sessionQuery as Ft, PROTOCOL_V5_NOTICE as G, semanticActionFromText as Ga, readDesktopDependency as Gi, rebindAttemptKey as Gn, itemHoldsExecutionAuthority as Gr, V6_ORDINARY_COMPLETION_RULE_COMPACT as Gt, DEFAULT_DELEGATION_TOOL_NAMES as H, requestedTargetAuthorizesMutation as Ha, readAsarFile as Hi, proposeRebind as Hn, isOpenObligation as Hr, DEFAULT_RECOVERY_CHAR_BUDGET as Ht, SESSION_API_UNSUPPORTED as I, STOP_PROTOCOL_VERSION_V2 as Ia, DESKTOP_PROFILE_PACKAGE_NAME as Ii, effectuateBoundary as In, interpretClause as Ir, sessionQueryV2 as It, deriveProjection as J, RC021_RC2_HOST_PACKAGES as Ja, HostTrustError as Ji, CONFIRM_LINE_PATTERN as Jn, maskCodeSpans as Jr, cleanupConditionFor as Jt, PROTOCOL_V6_NOTICE as K, validateActionManifest as Ka, readDesktopTargetGraph as Ki, rebindResponse as Kn, kindOfScope as Kr, V6_ORDINARY_COMPLETION_RULE_SHORT as Kt, SESSION_EVENT_ENVELOPE_INVALID as L, SUPPORTED_EVIDENCE_ADAPTERS as La, DESKTOP_RUNTIME_PACKAGE_NAME as Li, isCurrentAcceptedBoundary as Ln, interpretMessage as Lr, validateProofManifest as Lt, sessionCoreSnapshot as M, CERTIFICATE_VERSION_V2 as Ma, resolveInstalledHostLock as Mi, needsReviewObligations as Mn, sanitizeClauseText as Mo, governedClauseRestrictsExecution as Mr, proofV2Rejection as Mt, HOST_WORKDIR_PREFIX as N, SEMANTIC_ACTIONS as Na, revalidateDesktopCoreLock as Ni, unitDescendantIds as Nn, sanitizeUrl as No, hasOrderedCoordination as Nr, requiredSubjectsOf as Nt, firstStepGuidanceV6 as O, ACTION_MANIFEST as Oa, prepareTargetHostTrust as Oi, hasCurrentCertificate as On, reservationFor as Oo, clauseAsksOwnQuestion as Or, proofDigestV2 as Ot, captureHostWorkdir as P, STATEFUL_ACTIONS as Pa, verifyComposedHostLockDump as Pi, BOUNDARY_RECORD_PREFIX as Pn, sha256 as Po, hasQuestionScope as Pr, scopeCoverageDigest as Pt, NATIVE_GIT_ROOT_PARENT_OID as Q, adoptActivationReceipt as Qa, qualifyHostTrust as Qi, deriveItemDiagnosis as Qn, opensWithDirective as Qr, recoveryTitle as Qt, SessionApiError as R, actionCompatible as Ra, auditDesktopInstalledImplementation as Ri, qualifyBoundary as Rn, introducesActionClause as Rr, validateProofManifestV2 as Rt, parseGitCommandManifest as S, SUPPORTED_HOST_RANGE as Sa, inspectDesktopTargetGraph as Si, latestRootInstruction as Sn, inFlightReservation as So, classifyTaskIntent as Sr, bindProofV2ToProjection as St, FIRST_STEP_GUIDANCE as T, evaluateMinimumHostVersion as Ta, packageRowsFromPnpmLock as Ti, testOutcomePredicate as Tn, releaseContractFor as To, LEGACY_QUALIFICATION as Tr, createProofManifestV2 as Tt, PROTOCOL_V3_NOTICE as U, requestedTargetMatchesResolved as Ua, readAsarIndex as Ui, proposeRebindOutcome as Un, isQuestionScopeNeedingReview as Ur, MIN_RECOVERY_CHAR_BUDGET as Ut, CAPTURE_V042_NOTICE as V, requestedIdentityKey as Va, memoizedAsarIndex as Vi, confirmRebind as Vn, isInformationalFragment as Vr, CLEANUP_CONDITION_RULE_SHORT as Vt, PROTOCOL_V4_NOTICE as W, semanticActionFromCommand as Wa, readDesktopAppRuntime as Wi, proposeRebindV042 as Wn, isRestatement as Wr, V6_ORDINARY_COMPLETION_RULE as Wt, rootLocatorFlavor as X, __activationBindingInternals as Xa, hostTrustDigest as Xi, parseConfirmationMessage as Xn, namedActions as Xr, openItems as Xt, legacyRecordsNeedingReview as Y, createHostAuditSession as Ya, acquireHostTrust as Yi, isFrozenV042RebindResponse as Yn, maskQuotedSpans as Yr, closingHint as Yt, supersedeItem as Z, activationBindingPath as Za, parseHostTrust as Zi, capabilityRemedyPhrase as Zn, opensConditionLead as Zr, recoveryDigest as Zt, commitIndexSnapshotDigest as _, hostVersionFromPackages as _a, evaluateActiveHostLock as _i, decideTurnStopping as _n, readPrivateLedger as _o, extractOperation as _r, PROOF_KINDS_V2 as _t, scanActivationInventory as a, DEFAULT_HOST_LOCK as aa, splitTextFragments as ai, bindingSatisfies as an, writeActivationBinding as ao, admissibleForRemoval as ar, shellReadbackOutcome as at, executeRevalidatedGitEffect as b, LATEST_TESTED_HOST_VERSION as ba, hostLockRowsFromComposedDump as bi, isWholeTaskCompletionClaim as bn, RELEASE_OPERATION_SURFACES as bo, canonicalRegistryBase as br, PROOF_PROTOCOL_VERSION_V2 as bt, validateActivationSelection as c, HOST_CAPABILITY_PACKAGE_GROUPS as ca, COMMAND_SURFACE_MANIFEST as ci, isVerifyingCapability as cn, activationJson as co, partialFailureOf as cr, isRunExecutable as ct, prepareActivationMigration as d, bindLiveGoalCapability as da, activeRendererModule as di, NO_PROGRESS_TURNS_BEFORE_STOP as dn, appendPrivateLedger as do, captureClause as dr, authorityCaptureCounts as dt, registryArchiveModules as ea, qualificationOfClause as ei, v6CurrentRootBoundaries as en, readActivationBinding as eo, itemDiagnosis as er, extractTextContent as et, verifyMigrationInventory as f, evaluateExternalWaitCapability as fa, auditedDefaultWorkdirHost as fi, assessmentAction as fn, applyPrivateLedger as fo, captureItem as fr, segmentAuthorityBlocks as ft, GIT_COMMAND_TEMPLATES as g, evaluateToolSurfaceCapability as ga, combineHostPolicy as gi, decideTurnBoundary as gn, privateLedgerTargetDigest as go, extractMethod as gr, PROOF_KINDS as gt, GIT_COMMAND_MANIFEST_IDS as h, evaluateHostLock as ha, auditedHostImplementation as hi, currentActionBases as hn, privateLedgerContractDigest as ho, extractArtifactPaths as hr, PROOF_CAPABILITY_MATRIX as ht, prepareSelectedActivationMigration as i, BASE_HOST_PACKAGES as ia, semanticActionOfScope as ii, sourceItemForCoreRequirement as in, validateActivationMigrationReceipt as io, actionHasCertificationPath as ir, persistedToolResultStatus as it, projectSessionCoreV2 as j, CERTIFICATE_VERSION as ja, resolveDesktopProfileHostLock as ji, certificateClosure as jn, normalizeClause as jo, explanationHasActionResidue as jr, proofOperationMatches as jt, lifecyclePhase as k, ACTION_MANIFEST_VERSION as ka, readActiveHostGraph as ki, ancestorConstraintForBinding as kn, canonicalizePath as ko, clauseIsGoverned as kr, proofEvidenceConstraints as kt, verifySelectedMigrationInventory as l, HOST_COHORTS as la, validateManifest as li, CONTROL_RECORD_PREFIX as ln, sessionBirthIdentity as lo, removalIsComplete as lr, parsePwshCommand as lt, RC020_RC1_HOST_PACKAGES as m, evaluateHostCapability as ma, auditedForegroundRenderers as mi, classifyCompletionClaim as mn, initializePrivateLedger as mo, environmentDefaultRepositoryTarget as mr, certifyCheckpoint as mt, createActivationSelection as n, ACTIVE_HOST_COHORT_IDS as na, reportingHeadGoverns as ni, currentV6Feedback as nn, resolveActivationBindingsRoot as no, relevantEvidence as nr, isDeterministicCheck as nt, selectedActivationInventory as o, EXPECTED_HOST_PACKAGES as oa, statefulActionsOfScope as oi, evidenceCoverage as on, activationCanonical as oo, capabilityConsequence as or, withDurability as ot, RC020_RC2_HOST_PACKAGES as p, evaluateGraphDerivedHostLock as pa, auditedDefaultWorkdirProvider as pi, assessmentOutcomePredicate as pn, hasPrivateRestartIntent as po, classifyClause as pr, bindingIndividuallyAccepted as pt, applyUpgradeEligibility as q, validateActionTarget as qa, writeDesktopRuntimeReceipt as qi, replayRebindResult as qn, legacyQuestionReadingIsInformational as qr, carriesCleanupCondition as qt, isSelectedActivationReceipt as r, ACTIVE_HOST_LAUNCHER_VERSION as ra, restatedContentOf as ri, isV6PendingRootWait as rn, resolveSessionActivation as ro, DEPENDENCY_FREE_ONLY_CONDITION as rr, nativeGitParentOidVerified as rt, validateActivationInventorySnapshot as s, GOAL_HOST_PACKAGES as sa, verbIsNegated as si, evidenceMatchesItem as sn, activationDigest as so, capabilityFactOf as sr, canonicalArgvFromCommand as st, activationSelectionPending as t, ACTIVE_HOST_COHORT_ID as ta, questionHeadsClause as ti, confirmedV6CoreDiagnostic as tn, readActivationMigrationReceipt as to, nativeFileTwoRole as tr, extractToolSubject as tt, inspectActivationInventory as u, bindExecutableIdentity as ua, HostProfileError as ui, NO_PROGRESS_RECORD_PREFIX as un, validateActivationBinding as uo, removalIsPartiallyKnown as ur, parseShellCommand as ut, commitTreeSnapshotDigest as v, selectHostCohort as va, evaluateConfiguredHostLock as vi, decisionBoundaryKey as vn, resolvePrivateLedgerRoot as vo, isInformationalMessage as vr, PROOF_MANIFEST_DOMAIN_V2 as vt, verifiedLinearCommitReadback as w, compareHostVersions as wa, packageRowsFromActiveGraph as wi, progressFingerprint as wn, readbackSettlesContract as wo, GRANTED_QUALIFICATION as wr, createProofManifest as wt, gitCommandMatchesTarget as x, MIN_SUPPORTED_HOST_VERSION as xa, injectActiveProfileHostLock as xi, latestAssistantText as xn, contractById as xo, npmEscapedPackageName as xr, bindProofToProjection as xt, createGitPrestateEnvelope as y, HOST_VALIDATED_VERSIONS as ya, hostLockContextFromComposedDump as yi, isRootPauseRequest as yn, RELEASE_OPERATIONS as yo, segmentClauses as yr, PROOF_PROTOCOL_VERSION as yt, snapshotSessionEvents as z, boundedArtifactChoiceMatches as za, hasDesktopImporterState as zi, currentContractDigest as zn, isExecutableItem as zr, CLEANUP_CONDITION_RULE as zt };
+export { evidenceFromPersistedToolResult as $, createActivationMigrationReceipt as $a, registryArchiveFiles as $i, evidenceAvailabilityReason as $n, presentExplanationHead as $r, renderRecoveryPacket as $t, previewFirstStepInjection as A, BOUNDED_ARTIFACT_TYPES as Aa, resolveActiveProfileHostLock as Ai, certifiableOpenItems as An, digestStrings as Ao, clauseIsProtected as Ar, proofHostSurfacesOf as At, projectCoreV2 as B, isStatefulAction as Ba, memoizedAsarFile as Bi, createProjection as Bn, isExplanationScope as Br, CLEANUP_CONDITION_RULE_COMPACT as Bt, revalidateGitPrestate as C, SUPPORTED_HOST_VERSIONS as Ca, inspectTargetHostGraph as Ci, observeAssistantOutcome as Cn, normalizeReleaseContract as Co, classifyUserInteraction as Cr, canonicalProjection as Ct, firstStepGuidance as D, satisfiesSupportedHostRange as Da, prepareDesktopHostTrust as Di, goalCompletionDenial as Dn, releasePreEffectDecision as Do, clarifiedSpanOf as Dr, proofDigest as Dt, claimedBatchHasRealRootInput as E, parseHostVersion as Ea, prepareActiveHostTrust as Ei, v6TestPredicate as En, releaseCoverage as Eo, actionVerbMatches as Er, proofCapabilityReport as Et, sourcedNamedTestRoot as F, STOP_PROTOCOL_VERSION as Fa, DESKTOP_IDENTITY_FACTS as Fi, availableBoundaryQualifications as Fn, privateStorageToolDenial as Fo, hasWorkPredicate as Fr, sessionQuery as Ft, PROTOCOL_V5_NOTICE as G, semanticActionFromText as Ga, readDesktopDependency as Gi, rebindAttemptKey as Gn, itemHoldsExecutionAuthority as Gr, V6_ORDINARY_COMPLETION_RULE_COMPACT as Gt, DEFAULT_DELEGATION_TOOL_NAMES as H, requestedTargetAuthorizesMutation as Ha, readAsarFile as Hi, proposeRebind as Hn, isOpenObligation as Hr, DEFAULT_RECOVERY_CHAR_BUDGET as Ht, SESSION_API_UNSUPPORTED as I, STOP_PROTOCOL_VERSION_V2 as Ia, DESKTOP_PROFILE_PACKAGE_NAME as Ii, effectuateBoundary as In, ownedJobLifecycle as Io, interpretClause as Ir, sessionQueryV2 as It, deriveProjection as J, RC021_RC2_HOST_PACKAGES as Ja, HostTrustError as Ji, CONFIRM_LINE_PATTERN as Jn, maskCodeSpans as Jr, cleanupConditionFor as Jt, PROTOCOL_V6_NOTICE as K, validateActionManifest as Ka, readDesktopTargetGraph as Ki, rebindResponse as Kn, kindOfScope as Kr, V6_ORDINARY_COMPLETION_RULE_SHORT as Kt, SESSION_EVENT_ENVELOPE_INVALID as L, SUPPORTED_EVIDENCE_ADAPTERS as La, DESKTOP_RUNTIME_PACKAGE_NAME as Li, isCurrentAcceptedBoundary as Ln, interpretMessage as Lr, validateProofManifest as Lt, sessionCoreSnapshot as M, CERTIFICATE_VERSION_V2 as Ma, resolveInstalledHostLock as Mi, needsReviewObligations as Mn, sanitizeClauseText as Mo, governedClauseRestrictsExecution as Mr, proofV2Rejection as Mt, HOST_WORKDIR_PREFIX as N, SEMANTIC_ACTIONS as Na, revalidateDesktopCoreLock as Ni, unitDescendantIds as Nn, sanitizeUrl as No, hasOrderedCoordination as Nr, requiredSubjectsOf as Nt, firstStepGuidanceV6 as O, ACTION_MANIFEST as Oa, prepareTargetHostTrust as Oi, hasCurrentCertificate as On, reservationFor as Oo, clauseAsksOwnQuestion as Or, proofDigestV2 as Ot, captureHostWorkdir as P, STATEFUL_ACTIONS as Pa, verifyComposedHostLockDump as Pi, BOUNDARY_RECORD_PREFIX as Pn, sha256 as Po, hasQuestionScope as Pr, scopeCoverageDigest as Pt, NATIVE_GIT_ROOT_PARENT_OID as Q, adoptActivationReceipt as Qa, qualifyHostTrust as Qi, deriveItemDiagnosis as Qn, opensWithDirective as Qr, recoveryTitle as Qt, SessionApiError as R, actionCompatible as Ra, auditDesktopInstalledImplementation as Ri, qualifyBoundary as Rn, introducesActionClause as Rr, validateProofManifestV2 as Rt, parseGitCommandManifest as S, SUPPORTED_HOST_RANGE as Sa, inspectDesktopTargetGraph as Si, latestRootInstruction as Sn, inFlightReservation as So, classifyTaskIntent as Sr, bindProofV2ToProjection as St, FIRST_STEP_GUIDANCE as T, evaluateMinimumHostVersion as Ta, packageRowsFromPnpmLock as Ti, testOutcomePredicate as Tn, releaseContractFor as To, LEGACY_QUALIFICATION as Tr, createProofManifestV2 as Tt, PROTOCOL_V3_NOTICE as U, requestedTargetMatchesResolved as Ua, readAsarIndex as Ui, proposeRebindOutcome as Un, isQuestionScopeNeedingReview as Ur, MIN_RECOVERY_CHAR_BUDGET as Ut, CAPTURE_V042_NOTICE as V, requestedIdentityKey as Va, memoizedAsarIndex as Vi, confirmRebind as Vn, isInformationalFragment as Vr, CLEANUP_CONDITION_RULE_SHORT as Vt, PROTOCOL_V4_NOTICE as W, semanticActionFromCommand as Wa, readDesktopAppRuntime as Wi, proposeRebindV042 as Wn, isRestatement as Wr, V6_ORDINARY_COMPLETION_RULE as Wt, rootLocatorFlavor as X, __activationBindingInternals as Xa, hostTrustDigest as Xi, parseConfirmationMessage as Xn, namedActions as Xr, openItems as Xt, legacyRecordsNeedingReview as Y, createHostAuditSession as Ya, acquireHostTrust as Yi, isFrozenV042RebindResponse as Yn, maskQuotedSpans as Yr, closingHint as Yt, supersedeItem as Z, activationBindingPath as Za, parseHostTrust as Zi, capabilityRemedyPhrase as Zn, opensConditionLead as Zr, recoveryDigest as Zt, commitIndexSnapshotDigest as _, hostVersionFromPackages as _a, evaluateActiveHostLock as _i, decideTurnStopping as _n, readPrivateLedger as _o, extractOperation as _r, PROOF_KINDS_V2 as _t, scanActivationInventory as a, DEFAULT_HOST_LOCK as aa, splitTextFragments as ai, bindingSatisfies as an, writeActivationBinding as ao, admissibleForRemoval as ar, shellReadbackOutcome as at, executeRevalidatedGitEffect as b, LATEST_TESTED_HOST_VERSION as ba, hostLockRowsFromComposedDump as bi, isWholeTaskCompletionClaim as bn, RELEASE_OPERATION_SURFACES as bo, canonicalRegistryBase as br, PROOF_PROTOCOL_VERSION_V2 as bt, validateActivationSelection as c, HOST_CAPABILITY_PACKAGE_GROUPS as ca, COMMAND_SURFACE_MANIFEST as ci, isVerifyingCapability as cn, activationJson as co, partialFailureOf as cr, isRunExecutable as ct, prepareActivationMigration as d, bindLiveGoalCapability as da, activeRendererModule as di, NO_PROGRESS_TURNS_BEFORE_STOP as dn, appendPrivateLedger as do, captureClause as dr, authorityCaptureCounts as dt, registryArchiveModules as ea, qualificationOfClause as ei, v6CurrentRootBoundaries as en, readActivationBinding as eo, itemDiagnosis as er, extractTextContent as et, verifyMigrationInventory as f, evaluateExternalWaitCapability as fa, auditedDefaultWorkdirHost as fi, assessmentAction as fn, applyPrivateLedger as fo, captureItem as fr, segmentAuthorityBlocks as ft, GIT_COMMAND_TEMPLATES as g, evaluateToolSurfaceCapability as ga, combineHostPolicy as gi, decideTurnBoundary as gn, privateLedgerTargetDigest as go, extractMethod as gr, PROOF_KINDS as gt, GIT_COMMAND_MANIFEST_IDS as h, evaluateHostLock as ha, auditedHostImplementation as hi, currentActionBases as hn, privateLedgerContractDigest as ho, extractArtifactPaths as hr, PROOF_CAPABILITY_MATRIX as ht, prepareSelectedActivationMigration as i, BASE_HOST_PACKAGES as ia, semanticActionOfScope as ii, sourceItemForCoreRequirement as in, validateActivationMigrationReceipt as io, actionHasCertificationPath as ir, persistedToolResultStatus as it, projectSessionCoreV2 as j, CERTIFICATE_VERSION as ja, resolveDesktopProfileHostLock as ji, certificateClosure as jn, normalizeClause as jo, explanationHasActionResidue as jr, proofOperationMatches as jt, lifecyclePhase as k, ACTION_MANIFEST_VERSION as ka, readActiveHostGraph as ki, ancestorConstraintForBinding as kn, canonicalizePath as ko, clauseIsGoverned as kr, proofEvidenceConstraints as kt, verifySelectedMigrationInventory as l, HOST_COHORTS as la, validateManifest as li, CONTROL_RECORD_PREFIX as ln, sessionBirthIdentity as lo, removalIsComplete as lr, parsePwshCommand as lt, RC020_RC1_HOST_PACKAGES as m, evaluateHostCapability as ma, auditedForegroundRenderers as mi, classifyCompletionClaim as mn, initializePrivateLedger as mo, environmentDefaultRepositoryTarget as mr, certifyCheckpoint as mt, createActivationSelection as n, ACTIVE_HOST_COHORT_IDS as na, reportingHeadGoverns as ni, currentV6Feedback as nn, resolveActivationBindingsRoot as no, relevantEvidence as nr, isDeterministicCheck as nt, selectedActivationInventory as o, EXPECTED_HOST_PACKAGES as oa, statefulActionsOfScope as oi, evidenceCoverage as on, activationCanonical as oo, capabilityConsequence as or, withDurability as ot, RC020_RC2_HOST_PACKAGES as p, evaluateGraphDerivedHostLock as pa, auditedDefaultWorkdirProvider as pi, assessmentOutcomePredicate as pn, hasPrivateRestartIntent as po, classifyClause as pr, bindingIndividuallyAccepted as pt, applyUpgradeEligibility as q, validateActionTarget as qa, writeDesktopRuntimeReceipt as qi, replayRebindResult as qn, legacyQuestionReadingIsInformational as qr, carriesCleanupCondition as qt, isSelectedActivationReceipt as r, ACTIVE_HOST_LAUNCHER_VERSION as ra, restatedContentOf as ri, isV6PendingRootWait as rn, resolveSessionActivation as ro, DEPENDENCY_FREE_ONLY_CONDITION as rr, nativeGitParentOidVerified as rt, validateActivationInventorySnapshot as s, GOAL_HOST_PACKAGES as sa, verbIsNegated as si, evidenceMatchesItem as sn, activationDigest as so, capabilityFactOf as sr, canonicalArgvFromCommand as st, activationSelectionPending as t, ACTIVE_HOST_COHORT_ID as ta, questionHeadsClause as ti, confirmedV6CoreDiagnostic as tn, readActivationMigrationReceipt as to, nativeFileTwoRole as tr, extractToolSubject as tt, inspectActivationInventory as u, bindExecutableIdentity as ua, HostProfileError as ui, NO_PROGRESS_RECORD_PREFIX as un, validateActivationBinding as uo, removalIsPartiallyKnown as ur, parseShellCommand as ut, commitTreeSnapshotDigest as v, selectHostCohort as va, evaluateConfiguredHostLock as vi, decisionBoundaryKey as vn, resolvePrivateLedgerRoot as vo, isInformationalMessage as vr, PROOF_MANIFEST_DOMAIN_V2 as vt, verifiedLinearCommitReadback as w, compareHostVersions as wa, packageRowsFromActiveGraph as wi, progressFingerprint as wn, readbackSettlesContract as wo, GRANTED_QUALIFICATION as wr, createProofManifest as wt, gitCommandMatchesTarget as x, MIN_SUPPORTED_HOST_VERSION as xa, injectActiveProfileHostLock as xi, latestAssistantText as xn, contractById as xo, npmEscapedPackageName as xr, bindProofToProjection as xt, createGitPrestateEnvelope as y, HOST_VALIDATED_VERSIONS as ya, hostLockContextFromComposedDump as yi, isRootPauseRequest as yn, RELEASE_OPERATIONS as yo, segmentClauses as yr, PROOF_PROTOCOL_VERSION as yt, snapshotSessionEvents as z, boundedArtifactChoiceMatches as za, hasDesktopImporterState as zi, currentContractDigest as zn, isExecutableItem as zr, CLEANUP_CONDITION_RULE as zt };

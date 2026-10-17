@@ -54,7 +54,7 @@ describe('0.10.0 floor-admission host version policy', () => {
   })
 
   it('the pure evaluator binds a verified future graph rebinds to a graph-derived cohort', () => {
-    // Future manifests: same 46 names, version 0.2.2-rc.1, real byte
+    // Future manifests: same audited package names, version 0.2.2-rc.1, real byte
     // digests in the lockfile (install-time evidence).
     const rows = RC021_RC2_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.2-rc.1' }))
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, verifyFromLock)

@@ -1,3 +1,4 @@
+import { ownedJobLifecycle } from './job-lifecycle.js'
 import { sha256 } from './canonicalize.js'
 import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from './rebind.js'
 import { captureItem, extractMethod, extractOperation, isInformationalMessage, segmentClauses, type ClauseSegment } from './capture.js'
@@ -28,7 +29,7 @@ import {
   opensNewUnit, currentUnitHasOpenWork, recordDelegation, unitDescendantIds,
 } from './work-unit.js'
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
-import { effectiveCwdAt, WORKING_DIRECTORY_CHANGE_EVENT } from './cwd-timeline.js'
+import { effectiveCwdAt, isAbsoluteWorkingDirectory, WORKING_DIRECTORY_CHANGE_EVENT } from './cwd-timeline.js'
 import type { CwdEpoch, JobLifecycleRecord } from './types.js'
 import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
@@ -40,6 +41,8 @@ import {
 } from './release.js'
 
 interface PendingCall {
+  cwdAtCall?: string
+  seqAtCall: number
   origin: 'tool/call' | 'tool/ptc-dispatch-start'
   name: string
   arguments: string
@@ -2110,67 +2113,76 @@ export function deriveProjection(
       }
       case 'job/registered':
       case 'job/settled': {
-        // 0.2.1 durable job lifecycle facts. Audit-only records: they refine
-        // external-wait status and are NEVER user authorization, obligation
-        // completion, or evidence of resource release. Every shape this
-        // reader cannot interpret fails closed as corruption — the host
-        // registry only writes well-formed pairs, so anything else is a
-        // forged or damaged log.
+        // Both records use the same identity validator, before coercion.
+        // Host writes are best effort, so a valid orphan is audit-only.
         const data = asRecord(event.data)
-        const jobId = typeof data?.jobId === 'string' ? data.jobId : ''
-        const owner = typeof data?.owner === 'string' ? data.owner : ''
-        const kind = typeof data?.kind === 'string' ? data.kind : ''
-        const label = typeof data?.label === 'string' ? data.label : ''
+        const jobId = data?.jobId
+        const owner = data?.owner
+        const kind = data?.kind
+        const label = data?.label
         const startedAt = data?.startedAt
+        const nonempty = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+        const time = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
         const toolCallRow = asRecord(data?.toolCall)
-        const toolCall = toolCallRow && typeof toolCallRow.callId === 'string' && typeof toolCallRow.rootCallId === 'string'
+        const toolCall = toolCallRow && nonempty(toolCallRow.callId) && nonempty(toolCallRow.rootCallId)
           ? { callId: toolCallRow.callId, rootCallId: toolCallRow.rootCallId } : undefined
-        const registeredFacts = jobId !== '' && owner !== '' && typeof kind === 'string' && typeof label === 'string'
-          && typeof startedAt === 'number' && Number.isSafeInteger(startedAt)
-          && (data?.toolCall === undefined || toolCall !== undefined)
-        if (!registeredFacts) {
+        const invalid = (): void => {
           projection.integrity = 'corrupt'
           projection.integrityViolations.push('job_lifecycle_invalid')
+        }
+        if (!nonempty(jobId) || !nonempty(owner) || !nonempty(kind) || !nonempty(label) || !time(startedAt)
+          || (data?.toolCall !== undefined && !toolCall)
+          || (data?.detail !== undefined && typeof data.detail !== 'string')) {
+          invalid()
           break
         }
         if (!projection.jobLifecycle) projection.jobLifecycle = new Map()
         const existing = projection.jobLifecycle.get(jobId)
         const facts: JobLifecycleRecord = existing ?? {
-          jobId, owner, kind, label, registeredAtSeq: event.seq, ...(toolCall ? { toolCall } : {}),
+          jobId, owner, kind, label, startedAt,
+          ...(event.type === 'job/registered' ? { registeredAtSeq: event.seq } : {}),
+          ...(toolCall ? { toolCall } : {}),
         }
         if (existing && (existing.owner !== owner || existing.kind !== kind || existing.label !== label
+          || existing.startedAt !== startedAt
           || (existing.toolCall === undefined) !== (toolCall === undefined)
           || (existing.toolCall && toolCall && (existing.toolCall.callId !== toolCall.callId || existing.toolCall.rootCallId !== toolCall.rootCallId)))) {
           projection.integrity = 'corrupt'
           projection.integrityViolations.push('job_registered_conflict')
           break
         }
-        if (event.type === 'job/settled') {
-          if (!existing) {
-            projection.integrity = 'corrupt'
-            projection.integrityViolations.push('job_settled_unregistered')
+        if (event.type === 'job/registered') {
+          if (['finishedAt', 'status', 'cause', 'producerReported', 'detail'].some((key) => data?.[key] !== undefined)) {
+            invalid()
             break
           }
+          if (existing?.settled) {
+            projection.integrity = 'corrupt'
+            projection.integrityViolations.push('job_registered_conflict')
+            break
+          }
+        } else {
           const finishedAt = data?.finishedAt
           const status = data?.status
           const cause = data?.cause
           const producerReported = data?.producerReported
-          const settledFacts = typeof finishedAt === 'number' && Number.isSafeInteger(finishedAt)
-            && (status === 'completed' || status === 'killed' || status === 'failed')
-            && (cause === 'producer' || cause === 'kill' || cause === 'teardown')
-            && typeof producerReported === 'boolean'
-          if (!settledFacts) {
-            projection.integrity = 'corrupt'
-            projection.integrityViolations.push('job_lifecycle_invalid')
+          if (!time(finishedAt) || finishedAt < startedAt
+            || (status !== 'completed' && status !== 'killed' && status !== 'failed')
+            || (cause !== 'producer' && cause !== 'kill' && cause !== 'teardown')
+            || typeof producerReported !== 'boolean') {
+            invalid()
             break
           }
-          if (existing.settled && (existing.settled.status !== status || existing.settled.cause !== cause
-            || existing.settled.producerReported !== producerReported)) {
+          if (existing?.settled && (existing.settled.status !== status || existing.settled.cause !== cause
+            || existing.settled.producerReported !== producerReported || existing.settled.finishedAt !== finishedAt
+            || existing.settled.detail !== data?.detail)) {
             projection.integrity = 'corrupt'
             projection.integrityViolations.push('job_settled_conflict')
             break
           }
-          facts.settled = { settledAtSeq: event.seq, status, cause, producerReported }
+          // Identical duplicate facts keep their original sequence identity.
+          facts.settled ??= { settledAtSeq: event.seq, finishedAt, status, cause, producerReported,
+            ...(typeof data?.detail === 'string' ? { detail: data.detail } : {}) }
         }
         projection.jobLifecycle.set(jobId, facts)
         break
@@ -2180,7 +2192,7 @@ export function deriveProjection(
         // re-bases directory-dependent capture from its sequence on. Targets,
         // paths and receipts already captured keep their epoch's meaning.
         const cwd = asRecord(event.data)?.cwd
-        if (typeof cwd !== 'string' || cwd.length === 0 || !(cwd.startsWith('/') || /^[A-Za-z]:[\\/]/.test(cwd))) {
+        if (!isAbsoluteWorkingDirectory(cwd, scope.cwd)) {
           projection.integrity = 'corrupt'
           projection.integrityViolations.push('working_directory_change_invalid')
           break
@@ -2189,6 +2201,7 @@ export function deriveProjection(
         cwdEpochs.push({ seq: event.seq, cwd })
         currentCwd = cwd
         projection.cwdEpochs = cwdEpochs
+        projection.cwdOrigin = scope.cwd
         break
       }
       case 'tool/call': {
@@ -2196,6 +2209,7 @@ export function deriveProjection(
         const data = asRecord(event.data)
         const callId = String(data?.callId ?? '')
         const call: PendingCall = {
+          cwdAtCall: currentCwd, seqAtCall: event.seq,
           origin: 'tool/call',
           name: String(data?.name ?? ''),
           arguments: String(data?.arguments ?? ''),
@@ -2260,6 +2274,7 @@ export function deriveProjection(
         const subCallId = String(data?.subCallId ?? '')
         const rawArguments = data?.arguments
         pendingCalls.set(subCallId, {
+          cwdAtCall: currentCwd, seqAtCall: event.seq,
           origin: 'tool/ptc-dispatch-start',
           name: String(data?.name ?? ''),
           arguments: typeof rawArguments === 'string' ? rawArguments : JSON.stringify(rawArguments ?? ''),
@@ -2495,6 +2510,14 @@ export function deriveProjection(
         }
         evidenceCounter += 1
         const delegated = DEFAULT_DELEGATION_TOOL_NAMES.includes(call.name)
+        // A directory transition while a cwd-dependent invocation is in flight
+        // can race the host's asynchronous ensure(). Keep call-epoch identity,
+        // but refuse to infer successful execution in either directory.
+        const callArgs = parseArguments(call.arguments)
+        const absoluteExecution = ['bash', 'pwsh', 'shell'].includes(call.name)
+          ? isAbsoluteWorkingDirectory(callArgs.workdir, call.cwdAtCall)
+          : isAbsoluteWorkingDirectory(callArgs.file_path, call.cwdAtCall)
+        const cwdRaced = !absoluteExecution && cwdEpochs.some((entry) => entry.seq > call.seqAtCall && entry.seq < event.seq)
         const baseEvidence = withDurability(evidenceFromPersistedToolResult(
           {
             callId,
@@ -2505,11 +2528,11 @@ export function deriveProjection(
           { seq: event.seq,
             error: hostResultStatus === 'failure'
               ? (asRecord(data?.error) ?? { name: 'HostResultError', code: 'HOST_RESULT_ERROR' }) : undefined,
-            untrusted: hostResultStatus === 'unknown',
+            untrusted: hostResultStatus === 'unknown' || cwdRaced,
             meta: data?.meta, textContent },
           epoch,
           `E${String(evidenceCounter).padStart(4, '0')}`,
-          currentCwd,
+          call.cwdAtCall,
           hostLock,
         ), durableConfirmed)
         // A delegated subagent's answer is BOUNDED evidence for the unit that
@@ -2556,8 +2579,9 @@ export function deriveProjection(
   // wait itself ends either way; the model still owes the verification.
   if (projection.jobLifecycle) {
     for (const [id, row] of projection.externalOperations) {
-      const settled = projection.jobLifecycle.get(id)?.settled
-      if (!settled) continue
+      const job = projection.jobLifecycle.get(id)
+      const settled = job?.settled
+      if (!settled || !ownedJobLifecycle(job, scope.sessionHeader?.id, sourceEvents)) continue
       projection.externalOperations.set(id, {
         ...row,
         status: settled.status === 'completed'

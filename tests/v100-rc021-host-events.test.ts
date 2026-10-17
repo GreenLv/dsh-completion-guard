@@ -28,18 +28,17 @@ describe('CG021-03: durable job lifecycle records are bounded, non-completing fa
     reset()
     const jobBase = { jobId: 'bash-1', owner: 'rc021', kind: 'bash', label: 'bounded integration job', startedAt: 100 }
     const events = [
-      env('job/registered', { ...jobBase, toolCall: { callId: 'c1', rootCallId: 'c1' } }),
+      env('job/registered', jobBase),
       userRoot('部署完成后告诉我。'),
       env('tool/call', { turn: 1, step: 1, callId: 'op1', name: 'context_guard_external_operation', arguments: JSON.stringify({ operation_id: 'bash-1' }) }),
       env('tool/result', { turn: 1, step: 1,
         message: createToolResultMessage({ callId: 'op1' as never, content: [{ type: 'text', text: 'running' }], isError: false }),
         meta: { contextGuardExternalOperation: { id: 'bash-1', adapterId: 'dsh.jobs.v1', status: 'running' } } }),
-      env('job/settled', { ...jobBase, toolCall: { callId: 'c1', rootCallId: 'c1' }, finishedAt: 200, status: 'completed', cause: 'producer', producerReported: true }),
+      env('job/settled', { ...jobBase, finishedAt: 200, status: 'completed', cause: 'producer', producerReported: true }),
     ]
     const { projection } = derive(events)
     const job = projection.jobLifecycle?.get('bash-1')
     expect(job).toMatchObject({ owner: 'rc021', kind: 'bash', registeredAtSeq: 1,
-      toolCall: { callId: 'c1', rootCallId: 'c1' },
       settled: { settledAtSeq: 5, status: 'completed', cause: 'producer', producerReported: true } })
     // The live poll said "running"; the durable settlement ends the wait.
     expect(projection.externalOperations.get('bash-1')?.status).toBe('completed')
@@ -86,17 +85,17 @@ describe('CG021-03: durable job lifecycle records are bounded, non-completing fa
       env('job/settled', { ...jobBase, jobId: 'bash-4', finishedAt: 3, status: 'failed', cause: 'producer', producerReported: false }),
     ]
     const { projection } = derive(events)
-    expect(projection.externalOperations.get('bash-3')?.status).toBe('failed')
-    expect(projection.externalOperations.get('bash-4')?.status).toBe('failed')
+    expect(projection.externalOperations.get('bash-3')?.status).toBe('running')
+    expect(projection.externalOperations.get('bash-4')?.status).toBe('running')
     expect(projection.jobLifecycle?.get('bash-3')?.owner).toBe('original-session')
   })
 
-  it('fails closed on a settled-without-registered log, malformed rows, and conflicting facts', () => {
+  it('retains healthy orphan audits and fails closed on malformed rows and conflicting facts', () => {
     reset()
     const base = { jobId: 'bash-5', owner: 'rc021', kind: 'bash', label: 'x', startedAt: 1 }
     const orphan = derive([env('job/settled', { ...base, finishedAt: 2, status: 'completed', cause: 'producer', producerReported: true })])
-    expect(orphan.projection.integrity).toBe('corrupt')
-    expect(orphan.projection.integrityViolations).toContain('job_settled_unregistered')
+    expect(orphan.projection.integrity).toBe('valid')
+    expect(orphan.projection.jobLifecycle?.get('bash-5')?.registeredAtSeq).toBeUndefined()
     const malformed = derive([env('job/registered', { ...base, jobId: '' })])
     expect(malformed.projection.integrity).toBe('corrupt')
     expect(malformed.projection.integrityViolations).toContain('job_lifecycle_invalid')
@@ -323,13 +322,13 @@ describe('CG021-06: cwd epochs bind evidence identity to the committed timeline'
       const root2Seq = Math.max(...(snapshot as DerivedEnvelope[]).filter((event) => event.type === 'user/message'
         && ((event.data as Record<string, unknown>).source as Record<string, unknown>)?.kind === 'user').map((event) => event.seq))
       const replayed = hostWorkdirForCall(snapshot, call2, result2,
-        root2Seq, (v2Receipt as { sessionRefDigest: string }).sessionRefDigest, HOST_WITH_RENDERER.digest, changedDir)
+        root2Seq, (v2Receipt as { sessionRefDigest: string }).sessionRefDigest, HOST_WITH_RENDERER.digest, changedDir, headerDir)
       expect(replayed).toBe(changedDir)
       // ...and a v2 notice copied next to DIFFERENT directory history cannot.
       const tampered = hostWorkdirForCall([{ seq: 1, type: 'user/message', data: {} } as never],
         { seq: 2, type: 'tool/call', data: { callId: 'w2', name: 'bash', arguments: args2 } } as never,
         { seq: 3, type: 'tool/result', data: {} } as never,
-        1, (v2Receipt as { sessionRefDigest: string }).sessionRefDigest, HOST.digest, changedDir)
+        1, (v2Receipt as { sessionRefDigest: string }).sessionRefDigest, HOST.digest, changedDir, headerDir)
       expect(tampered).toBeUndefined()
     } finally {
       rmSync(headerDir, { recursive: true, force: true })

@@ -53,12 +53,21 @@ def audit(root: Path) -> dict[str, object]:
     if (root / "README.md").is_file() and (root / "README.zh-CN.md").is_file():
         findings.append(Finding("info", "localized-readme", "README.zh-CN.md", None, "English and Chinese README editions are present"))
 
+    package_path = root / "package.json"
+    package = json.loads(package_path.read_text(encoding="utf-8")) if package_path.is_file() else {}
+    current_guides = {"README.md", "README.zh-CN.md", "docs/GETTING_STARTED.md", "docs/HOST_LOCK_UPGRADE.md"}
+
     for path in docs:
         relative = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
         headings = {anchor(match.group(1)) for match in map(HEADING_RE.match, text.splitlines()) if match}
         headings.update(match.group(1).lower() for match in map(ANCHOR_RE.match, text.splitlines()) if match)
         for number, line in enumerate(text.splitlines(), 1):
+            if relative in current_guides and package.get("version"):
+                for version in re.findall(r"\bdsh-completion-guard@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)", line):
+                    if version != package["version"]:
+                        findings.append(Finding("error", "current-install-version", relative, number,
+                                                f"current install recipe uses {version}; package version is {package['version']}"))
             for raw_target in LINK_RE.findall(line):
                 target = raw_target.strip().split(" ", 1)[0].strip("<>")
                 if not target or target.startswith(("#", "mailto:", "http://", "https://")):

@@ -1321,13 +1321,17 @@ interface JobLifecycleRecord {
   owner: string;
   kind: string;
   label: string;
-  registeredAtSeq: number;
+  startedAt: number;
+  /** Absent for a healthy best-effort orphan settlement; audit only. */
+  registeredAtSeq?: number;
   toolCall?: {
     callId: string;
     rootCallId: string;
   };
   settled?: {
     settledAtSeq: number;
+    finishedAt: number;
+    detail?: string;
     status: "completed" | "killed" | "failed";
     cause: "producer" | "kill" | "teardown";
     producerReported: boolean;
@@ -1370,6 +1374,8 @@ interface GuardProjection {
   * governed the whole log, which keeps pre-0.2.1 derivations byte-stable.
   */
   cwdEpochs?: CwdEpoch[];
+  /** Immutable scope header cwd for epoch receipt replay; absent in unchanged legacy logs. */
+  cwdOrigin?: string;
   /**
   * 0.6.0 work units keyed by unit id, and the id of the unit currently
   * receiving captured work. Derived; present only after a v5 boundary.
@@ -2825,7 +2831,7 @@ declare function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: str
 * Match the scoped service's exact constructor to the audited active module,
 * rejecting another provider with the same public service interface/name.
 */
-declare function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string, tool: "bash" | "pwsh", provider: unknown, policyProvider?: unknown, providedSession?: HostAuditSession): Promise<boolean>;
+declare function auditedDefaultWorkdirProvider(runtimeRoot: string, profileRoot: string, tool: "bash" | "pwsh", provider: unknown, policyProvider?: unknown, providedSession?: HostAuditSession, workingDirectoryProvider?: unknown): Promise<boolean>;
 interface TargetHostGraph {
   packages: PackageRow[];
   profileGraph: {

@@ -8,7 +8,7 @@ Version 0.10.0 requires DSH `>=0.2.1-rc.2` and qualified Cordis `>=4.0.4`. Fresh
 4. For an **existing installation**, run mode `adopt` and `verify` with its frozen old receipt while writers remain stopped, **before starting any host**. Host-lock rebuilding does not perform adoption. For a fresh installation there is no old receipt to adopt.
 5. Start each Web/Headless/Desktop profile only after the applicable mode and host-lock checks pass. These checks do not require a running host.
 
-0.9.0 的全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再升级 DSH、安装 Guard、重建宿主锁；保持写者停止，在启动任何宿主前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
+0.10.0 的全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再升级 DSH、安装 Guard、重建宿主锁；保持写者停止，在启动任何宿主前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
 
 Failure readbacks distinguish these cases:
 
@@ -76,7 +76,7 @@ The result labels `inspection_scope: pre_install_target` and `profile_graph.stat
 ## What changes in the lock
 
 The generator writes `hostLockPolicy: dsh-core/v1`, the actual runtime/profile
-source roots, platform/profile kind and the actual core package graph (46 rows in the reviewed baseline). The
+source roots, platform/profile kind and the actual core package graph (47 rows in the reviewed baseline). The
 core manifest is version 2. Each session mount validates those graph sources
 exactly once; ordinary replay (resume, compaction, step and command refresh)
 consumes that result without rescanning, and every entry that grants
@@ -103,14 +103,14 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.9.0.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.10.0.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 ## Official Desktop profile
 
 Stop the Desktop app before installing or rebuilding its lock. Use the CLI carrier shipped with that app: `Contents/Resources/runtime/cli/bin/dsh` on macOS, or `resources\runtime\cli\bin\dsh.cmd` in the Windows installation. A separately installed `dsh` CLI cannot manage the reserved Desktop profile.
 
-For an existing installation, first preserve the old package/effective modes and freeze the inventory/receipt before replacing the carrier or Guard; after replacement, complete adoption/verification before Desktop startup. For a fresh installation there is no old-mode adoption. Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.9.0`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
+For an existing installation, first preserve the old package/effective modes and freeze the inventory/receipt before replacing the carrier or Guard; after replacement, complete adoption/verification before Desktop startup. For a fresh installation there is no old-mode adoption. Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.10.0`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
 
 ```sh
 DSH_DESKTOP_ASAR=/absolute/path/to/DeepSeek-Harness.app/Contents/Resources/app.asar
@@ -159,7 +159,7 @@ exact artifact and platform; publication is recorded on its GitHub Release.
 
 ## Historical 0.5.1 evidence
 
-Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.9.0.
+Version 0.5.1 registered DSH `0.1.5-rc.1` and `0.1.5-rc.2` with 33 critical packages. Its macOS and Windows results belong only to that artifact and those hosts; see the [0.5.1 release annexes](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.1). These are historical records, not installation targets for 0.10.0.
 
 ## Rebinding compatible package versions
 
@@ -179,9 +179,9 @@ Rebinding writes only its qualification receipt and, for `inject`, the managed l
 
 ## 0.9.0 session modes / 会话模式
 
-This is a major default-mode change for new root sessions only. Preserve old effective modes before replacing Guard, then use [activation inspect/adopt/verify](ACTIVATION_MIGRATION.md). Host-lock rebinding does not migrate modes or re-sign certificates. Existing bindings override defaults; explicit conflicts refuse. `standard` and persisted off/on retain their contracts. Missing modes remain unknown. Rollback and the current Windows storage capability gap are described in that guide.
+The default-mode change introduced in 0.9.0 applies only to new root sessions and remains in 0.10.0. Preserve old effective modes before replacing Guard, then use [activation inspect/adopt/verify](ACTIVATION_MIGRATION.md). Host-lock rebinding does not migrate modes or re-sign certificates. Existing bindings override defaults; explicit conflicts refuse. `standard` and persisted off/on retain their contracts. Missing modes remain unknown. Rollback and the current Windows storage capability gap are described in that guide.
 
-本次只改变新建根会话的默认模式。更换 Guard 前保存旧有效模式，再按迁移说明清点、采纳及核验。重绑宿主锁不迁移模式、不重签证书；已有绑定覆盖缺省，显式冲突拒绝。standard 及持久化 off/on 合同不变，缺失模式保持 unknown，回退及 Windows 存储能力缺口见该说明。
+0.9.0 引入的默认模式变化只适用于新建根会话，0.10.0 继续保留该规则。更换 Guard 前保存旧有效模式，再按迁移说明清点、采纳及核验。重绑宿主锁不迁移模式、不重签证书；已有绑定覆盖缺省，显式冲突拒绝。standard 及持久化 off/on 合同不变，缺失模式保持 unknown，回退及 Windows 存储能力缺口见该说明。
 
 ## Old-format migration refusals / 旧格式迁移拒绝
 

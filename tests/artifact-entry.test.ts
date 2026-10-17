@@ -1,3 +1,4 @@
+import { createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, relative, resolve, sep } from 'node:path'
@@ -34,6 +35,28 @@ interface PackageManifest {
 const manifest = JSON.parse(readFileSync(packageJson, 'utf8')) as PackageManifest
 
 describe('shipped artifact entries', () => {
+  it('replays the rc021 review counterexamples through the generated production domain', async () => {
+    const domain = await import(distDomain.href) as typeof import('../src/domain/index.js')
+    const host = domain.evaluateHostLock(domain.EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const scope = { cwd: '/work/alpha', sessionHeader: { version: 4, id: 'review', createdAt: 1, seedLength: 0, delegationDepth: 0 } }
+    const derive = (events: Parameters<typeof domain.deriveProjection>[0]) => domain.deriveProjection(events, { activation: 'always' }, scope, true, host).projection
+    const p = derive([
+      { seq: 1, type: 'tool/call', data: { callId: 'late', name: 'read', arguments: '{"file_path":"src/a.ts"}' } },
+      { seq: 2, type: 'working-directory/change', data: { cwd: '/work/beta' } },
+      { seq: 3, type: 'tool/result', data: { message: createToolResultMessage({ callId: 'late' as never, content: [{ type: 'text', text: 'ok' }], isError: false }) } },
+    ])
+    expect([...p.evidence.values()][0]).toMatchObject({ subjects: ['/work/alpha/src/a.ts'], outcome: 'unknown' })
+    const job = { jobId: 'j1', owner: 'review', kind: 'bash', label: 'bounded', startedAt: 1 }
+    expect(derive([{ seq: 1, type: 'job/registered', data: { ...job, kind: 7 } }]).integrity).toBe('corrupt')
+    expect(derive([
+      { seq: 1, type: 'job/registered', data: job },
+      { seq: 2, type: 'job/settled', data: { ...job, startedAt: 99, finishedAt: 2, status: 'completed', cause: 'producer', producerReported: true } },
+    ]).integrity).toBe('corrupt')
+    const orphan = derive([{ seq: 1, type: 'job/settled', data: { ...job, finishedAt: 2, status: 'completed', cause: 'producer', producerReported: true } }])
+    expect(orphan.integrity).toBe('valid'); expect(orphan.jobLifecycle?.get('j1')?.registeredAtSeq).toBeUndefined()
+    expect(derive([{ seq: 1, type: 'working-directory/change', data: { cwd: String.raw`\\server\share\中文 空格` } }]).integrity).toBe('valid')
+  })
+
   it('loads the plugin entry with the loader contract intact', async () => {
     const plugin = await import(distIndex.href) as Record<string, unknown>
     expect(typeof plugin.apply).toBe('function')
@@ -48,7 +71,7 @@ describe('shipped artifact entries', () => {
     const domain = await import(distDomain.href) as Record<string, unknown>
     expect('default' in domain).toBe(false)
     const rows = domain.RC021_RC2_HOST_PACKAGES as Array<{ name: string; version?: string; integrity?: string }>
-    expect(rows).toHaveLength(46)
+    expect(rows).toHaveLength(47)
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.1-rc.2')
     expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.2')

@@ -593,7 +593,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         : !Object.hasOwn(args, 'workdir') && typeof item.requestedTarget?.scope === 'string'
           ? hostWorkdirForCall(events, pair.call, pair.result, root.seq,
             projection.sessionRefDigest, projection.hostLockDigest,
-            projection.rootLocatorContexts.get(root.seq)?.base ?? '') : undefined
+            projection.rootLocatorContexts.get(root.seq)?.base ?? '', projection.cwdOrigin) : undefined
       return String(args.command ?? '').trim() === expected && args.run_in_background !== true
         && typeof workdir === 'string' && fact.subjects.length === 1
         && fact.subjects[0] === workdir && fact.subjects[0] === item.requestedTarget?.scope

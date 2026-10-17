@@ -969,6 +969,21 @@
         "lib/startup.js": "d99475172ed37413f843d0e975c9a034f8b1a2be064c35db216df16494784afb"
       },
       "loadingDigest": "e12e1be5a95134352247dbad227ac6f7031ff1e355fa72d9422cd52ff5d42e33"
+    },
+    {
+      "name": "@deepseek-ai/dsh-working-directory",
+      "version": "0.2.1-rc.2",
+      "integrity": "sha512-zhPtvAaCxa9U0WUN9OEG37zVBq7GOXXXwnDx2Jds4DFksGY5Lmpl3ZK1QMGz+F/Aye4VHt9zoISI7m4wDA8DEg==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-working-directory/-/dsh-working-directory-0.2.1-rc.2.tgz",
+      "sha256": "1c370fb10791e111bb45789f5c7fa09021b94476d3e9391e447809f7acdf592d",
+      "modules": {
+        "lib/index.js": "af5bb7f33c52efe018da19c39c54e07b5a3ac804fff83f8a68e341f411ecf703",
+        "package.json": "5be831b1fadee0ffb8c7e6f8b49ed06ae77cc28a17d3e263fda226702212b5b5"
+      },
+      "programs": {
+        "lib/index.js": "79e1eb30d8590b951d0986ca25c930b9dd9dcb2a0a11ba7b9b2d4d904131b071"
+      },
+      "loadingDigest": "045ded5702c81b581b794d59f6741ee7c441175b8e26052219991f743002ba7f"
     }
   ]
 }
