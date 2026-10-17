@@ -3,12 +3,19 @@ import { spawnSync } from 'node:child_process'
 import { activationCanonical, activationDigest, sessionBirthIdentity } from '../src/domain/session-activation.js'
 import { createActivationSelection, prepareSelectedActivationMigration, scanActivationInventory } from '../src/domain/activation-selection.js'
 import { createActivationMigrationReceipt } from '../src/domain/activation-bindings.js'
+// At most three interpreter probes (5s each) plus one oracle (10s), with
+// 5s for the in-process checks under a loaded portability-test worker.
+const PROBE_TIMEOUT_MS = 5_000
+const ORACLE_TIMEOUT_MS = 10_000
+const TEST_TIMEOUT_MS = 30_000
 it('matches independent Python canonical bytes and SHA-256 for the binding/receipt input family', async () => {
+  const probes: string[] = []
   const python = [process.env.DSH_TEST_PYTHON, 'python3', 'python'].filter((name): name is string => Boolean(name)).find(name => {
-    const result = spawnSync(name, ['-c', 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)'])
+    const result = spawnSync(name, ['-c', 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)'], { timeout: PROBE_TIMEOUT_MS })
+    probes.push(`${name}: ${result.error?.message ?? `exit=${result.status} signal=${result.signal}`}`)
     return result.status === 0
   })
-  expect(python, 'Python 3.11+ is required for cross-language conformance').toBeTruthy()
+  expect(python, `Python 3.11+ is required for cross-language conformance; ${probes.join('; ')}`).toBeTruthy()
   const identity = sessionBirthIdentity({ version: 4, id: '会话-Ω', createdAt: Number.MAX_SAFE_INTEGER, isSeeded: true,
     parentSession: 'parent', origin: 'subagent', delegationDepth: 2 }, 17)
   const receipt = createActivationMigrationReceipt([{ identity, mode: 'opt-in', cohort: 'old-中文' }],
@@ -35,7 +42,8 @@ sys.stdout.buffer.write(json.dumps([{'canonical':canonical(v),'sha256':hashlib.s
   // Exercise non-UTF-8 Python text streams too: the oracle transports explicit
   // UTF-8 bytes in both directions, independent of the host locale.
   const result = spawnSync(python!, ['-c', oracle], { input: JSON.stringify(vectors), encoding: 'utf8',
-    env: { ...process.env, PYTHONIOENCODING: 'cp1252:surrogateescape' } })
+    timeout: ORACLE_TIMEOUT_MS, env: { ...process.env, PYTHONIOENCODING: 'cp1252:surrogateescape' } })
+  expect(result.error, `Python oracle failed: ${result.error?.message ?? result.signal}`).toBeUndefined()
   expect(result.status, result.stderr).toBe(0)
   expect(JSON.parse(result.stdout)).toEqual(vectors.map(value => ({ canonical: activationCanonical(value), sha256: activationDigest(value) })))
-})
+}, TEST_TIMEOUT_MS)
