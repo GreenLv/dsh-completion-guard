@@ -87,7 +87,7 @@ class DesktopEntrypointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root, output, args = self.fixture(directory)
             args += ["--gate-profile", "desktop_bound", "--runtime-root", str(root / "app.asar"),
-                     "--desktop-cohort", "0.2.0-rc.2", "--preflight"]
+                     "--desktop-cohort", "0.2.1-rc.2", "--preflight"]
             helper = SimpleNamespace(preflight_desktop_inputs=mock.Mock())
             spec = SimpleNamespace(loader=SimpleNamespace(exec_module=mock.Mock()))
             with mock.patch.object(NATIVE, "verify_exact_source"), \
@@ -98,7 +98,7 @@ class DesktopEntrypointTests(unittest.TestCase):
                     mock.patch.object(NATIVE, "portable_acceptance") as install, \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(NATIVE.main(args), 0)
-            helper.preflight_desktop_inputs.assert_called_once_with(root.resolve(), (root / "app.asar").resolve(), "0.2.0-rc.2")
+            helper.preflight_desktop_inputs.assert_called_once_with(root.resolve(), (root / "app.asar").resolve(), "0.2.1-rc.2")
             install.assert_not_called()
             self.assertFalse(output.exists())
 

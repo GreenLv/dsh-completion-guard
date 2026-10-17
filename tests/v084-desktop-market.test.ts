@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 
-import { RC020_RC2_HOST_PACKAGES } from '../src/domain/rc020-rc2-host.js'
+import { RC021_RC2_HOST_PACKAGES } from '../src/domain/rc021-rc2-host.js'
 import {
   readDesktopTargetGraph,
   DESKTOP_PROFILE_PACKAGE_NAME,
@@ -73,7 +73,7 @@ function buildAsar(files: readonly AsarFileSpec[]): Buffer {
   return Buffer.concat([prefix, json, padding, Buffer.concat(files.map((file) => file.content))])
 }
 
-const RC2_VERSION = '0.2.0-rc.2'
+const RC2_VERSION = '0.2.1-rc.2'
 const PLUGIN_VERSION = '0.8.4'
 const OFFICIAL_DESKTOP_BUNDLES = [
   '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
@@ -87,7 +87,7 @@ function makeDesktopMetadata(): Record<string, unknown> {
     platform: 'darwin',
     arch: 'arm64',
     sharedPackages: [],
-    files: RC020_RC2_HOST_PACKAGES.flatMap((row) => [
+    files: RC021_RC2_HOST_PACKAGES.flatMap((row) => [
       { path: `node_modules/${row.name}/package.json`, bytes: 10, sha256: createHash('sha256').update(syntheticManifestBytes(row.name, row.version as string)).digest('hex'), executable: false },
       { path: `node_modules/${row.name}/lib/index.js`, bytes: 30, sha256: SYNTHETIC_MODULES['lib/index.js'], executable: false },
     ]),
@@ -102,14 +102,14 @@ function bundleFileSpecs(options?: { hostVersion?: string; metadata?: Record<str
     private: true,
     version: hostVersion,
     type: 'module',
-    dependencies: Object.fromEntries(RC020_RC2_HOST_PACKAGES.map((row) => [row.name, row.version])),
+    dependencies: Object.fromEntries(RC021_RC2_HOST_PACKAGES.map((row) => [row.name, row.version])),
   }
   const files: AsarFileSpec[] = [
     { path: 'dsh/package.json', content: Buffer.from(JSON.stringify(manifest), 'utf8') },
     { path: 'dsh/desktop-runtime.json', content: Buffer.from(JSON.stringify(metadata), 'utf8') },
     { path: 'dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js', content: Buffer.from('export {}\n', 'utf8') },
   ]
-  for (const row of RC020_RC2_HOST_PACKAGES) {
+  for (const row of RC021_RC2_HOST_PACKAGES) {
     files.push({ path: `dsh/node_modules/${row.name}/package.json`, content: syntheticManifestBytes(row.name, row.version as string) })
     files.push({ path: `dsh/node_modules/${row.name}/lib/index.js`, content: Buffer.from(SYNTHETIC_LIB_BYTES, 'utf8') })
   }
@@ -122,7 +122,7 @@ function writeAsar(files: readonly AsarFileSpec[], directory: string): string {
   return path
 }
 
-vi.mock('../manifests/rc020-rc2-byte-audit.json', async (original) => {
+vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
   const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
@@ -471,7 +471,7 @@ describe('DM07–DM11 fail-closed identity and implementation gates', () => {
     const profile = writeDesktopProfile(root, {
       dirName: 'local-drift', withModules: true, dependencies: { 'dsh-completion-guard': PLUGIN_VERSION },
     })
-    const row = RC020_RC2_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-session')!
+    const row = RC021_RC2_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-session')!
     const packageRoot = join(profile, 'node_modules', row.name)
     mkdirSync(join(packageRoot, 'lib'), { recursive: true })
     writeFileSync(join(packageRoot, 'package.json'), syntheticManifestBytes(row.name, row.version!))

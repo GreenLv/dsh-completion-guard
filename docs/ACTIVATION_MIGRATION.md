@@ -27,6 +27,10 @@ Prepare an operator-owned JSON file in the following format. `previousPackage.sh
 }
 ```
 
+`version` accepts any released predecessor `0.0.x`–`0.9.x` (for example `0.8.4` upgrading to 0.9.0, or `0.9.0` upgrading to 0.10.0); the currently shipping version itself is refused.
+
+`version` 接受任意已发布前驱 `0.0.x`–`0.9.x`（例如升级到 0.9.0 时填 `0.8.4`，升级到 0.10.0 时填 `0.9.0`）；当前在售版本本身会被拒绝。
+
 ## Official old-format refusals and an explicit readable subset / 官方旧格式拒绝与显式可读子集
 
 The official persistence reader may reject an older session with `SessionFormatUnsupportedError`. This names a host format-support boundary; it does not by itself prove corruption or a Guard regression. Do not delete, rewrite, rename or repair the raw log to force acceptance. Preserve it, the old package and its verified effective-mode source. `inventory` can record this **specific official open refusal** as pending. Other failures (corruption, permissions, missing files, unknown errors, list/stat failure or drift) abort; they are not automatically skipped. Default `inspect/adopt/verify` still requires the whole inventory to be readable.

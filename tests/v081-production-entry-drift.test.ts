@@ -38,7 +38,7 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
     name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../manifests/rc020-rc2-byte-audit.json', async (original) => {
+vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
@@ -247,7 +247,7 @@ async function makeFutureHost(options: { unknownGoal?: boolean; benignBytes?: bo
   const host = makeHost()
   const archives = new Map<string, { bytes: Buffer; name: string; version: string; integrity: string }>()
   const rows = EXPECTED_HOST_PACKAGES.map((p, index) => {
-    const version = p.name === '@deepseek-ai/cordis' ? p.version! : index % 2 ? '0.3.0-rc.1' : '0.2.1-rc.1'
+    const version = p.name === '@deepseek-ai/cordis' ? p.version! : index % 2 ? '0.3.0-rc.1' : '0.2.2-rc.1'
     const manifest = Buffer.from(canonicalManifest(p.name, version))
     const module = Buffer.from(options.unknownGoal && ['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(p.name) ? 'export const changedGoal = true\n' : AUDITED_MODULE_TEXT + (options.benignBytes ? '// release-only comment; no behavior change\n' : ''))
     const extra = options.benignBytes ? Buffer.from('export const unused = 42\n') : undefined

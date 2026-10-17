@@ -2,9 +2,37 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
+## 0.10.0: DSH >=0.2.1-rc.2
+
+0.10.0 raises the host floor to `0.2.1-rc.2` (upstream release `dsh-v0.2.1-rc.2`, commit `687f282e8625c6b8d11ff58211a90524be2e4317`, cumulative over `0.2.1-rc.1`). There is no upper bound: later RCs on any tuple, stable and future releases pass VERSION ADMISSION and must still pass the graph, byte, route and contract audits. `0.2.0-rc.2`, `0.2.0` and `0.2.1-rc.1` keep their recorded-evidence rows but are refused as below the floor. Cordis keeps a separate `>=4.0.4` peer range and qualification (the reviewed baseline moved to Cordis `4.0.5` with the same range).
+
+The reviewed host baseline is DSH `0.2.1-rc.2` / Cordis `4.0.5`, with 46 package identities and published implementation digests in `manifests/rc021-rc2-byte-audit.json`, regenerated from the published `0.2.1-rc.2` tarballs (the audited cohort id is `dsh-0.2.1-rc.2-core-v1`). Native acceptance of the final Guard artifact on each platform remains a separate gate; no native validation of a future host is claimed.
+
+### Host-surface changes Guard 0.10.0 actually handles
+
+- **Session V4 catalog adds `job/registered`, `job/settled`, `working-directory/change`.** Job registrations and settlements are durable lifecycle facts, not completion evidence: a `job/settled` record with `status: "completed"` refines the external-wait view only when the producer itself reported fulfilment (`cause: "producer"`, `producerReported: true`); killed and failed settlements are explicit failures, and an unreported completion is unconfirmed. A settlement never certifies resource cleanup, file readback or the completion of a user obligation. The original job `owner` never transfers to a forked or resumed copy of the history.
+- **Working directory is switchable inside a session.** The immutable Session header keeps the original project; each committed `working-directory/change` opens a new cwd epoch. Captured targets, paths and receipts keep the meaning of the epoch they were bound in — a later change never re-interprets an older relative path. Host default-workdir receipts gained a v2 shape that binds the governing epoch and the original project; receipts replayed next to different directory history are refused. Root-locator digests bind the epoch each root was captured in; logs without change events derive exactly as before (byte-stable with 0.9.0).
+- **Plugin records exist (`appendPluginRecord`/`pluginRecordOf`, `plugin:` namespace).** They are ignorable, never model-visible, and retained on a best-effort basis across format migrations; the upstream gate restricts production callers to its own experimental packages, so this API is not a stable third-party persistence interface. Guard does NOT migrate its private hash-chained ledger onto plugin records; the ledger keeps its own storage, writer lock and loss model. Foreign plugin records are retained-and-skipped: they never trigger capture, never authorize anything, and never break seq-driven call/result pairing.
+- **Session append gained a publication-reentrancy check and per-listener exception isolation.** Guard's synchronous `snapshotEvents()` reads remain valid on the pinned local Session implementation; the existing flush-before-control and boundary durability flows are unchanged.
+- **The invariant companion plugin and the `./invariant` exports were removed upstream.** Guard never imported them; recorded as not applicable, no substitute was added.
+- **Subagents and Teams.** The subagent tool name `subagent` stays in Guard's delegation allowlist: a subagent result remains bounded evidence and never closes a parent obligation. Team delivery moved to direct inbox acceptance (the old outbox retry/dedupe path is gone upstream); `team/message/delivered` records reception only — reception is not execution, and neither is completion. Waiting for a subtask, a plan-review end turn, or a Goal pause does not consume or fabricate a completion.
+- **Search/Fetch APIs and new models** are ordinary host tools: their success is non-authoritative evidence, never proof that a user task is complete.
+
+### 升级、临时禁用与恢复（0.10.0 中文说明）
+
+最低宿主为 DSH `>=0.2.1-rc.2`，没有隐式上限。升级顺序不变：先停写者、保留旧模式来源，升级宿主到 `0.2.1-rc.2` 或更高，安装 Guard，重新注入宿主锁并回读（见[宿主锁升级](HOST_LOCK_UPGRADE.md)）。已审查基线为 DSH `0.2.1-rc.2` / Cordis `4.0.5`（cohort `dsh-0.2.1-rc.2-core-v1`，46 包，见 `manifests/rc021-rc2-byte-audit.json`，上游提交 `687f282e8625c6b8d11ff58211a90524be2e4317`）。
+
+新宿主事件语义：`job/settled` completed 不证明资源释放，只有 producer 自己报告完成（`cause: "producer"` 且 `producerReported: true`）才把外部等待标记为完成；killed/failed 是显式失败，未报告的 completed 保持未确认。`working-directory/change` 开启新的 cwd 纪元：此前捕获的目标与证据保留原含义，不会随当前目录重新解释；无该事件的旧日志派生结果与 0.9.0 逐字节一致。`plugin:` 记录一律忽略且不触发捕获；Guard 私有账本不迁移到 plugin records。子代理结果仍是有界证据；Team 直投 Inbox 的接收成功不等于执行完成；Goal 等待与计划审阅的结束等待不算完成。
+
+临时禁用与恢复：升级窗口内可在 profile 配置中把 Guard 从 bundles 移除或保持不加载（临时禁用是独立状态，不影响 `activation=always` 与完整原有 config 的保留）。禁用期间会话事件不被捕获；重新启用时按既有规则恢复——新建无继承根会话回到默认模式，旧会话沿用 write-once 私有绑定的原模式。宿主锁在禁用期间不变质；重新启用后若宿主或 profile 图未变，原锁继续有效，若变化则按 `--rebind-registry` 流程重建。市场兼容卡片显示"兼容"不等于 Guard admission 已通过；插件加载成功也不等于审计通过。
+
+### Consumer prerelease semantics
+
+The plain npm/node-semver expression `>=0.2.1-rc.2` excludes later-tuple prereleases by default. The installed DSH plugin compatibility check (`dsh-app-boot`'s `evaluatePluginCompatibility`) reads the TOP-LEVEL `engines.dsh` first and ignores the DSH peers entirely when it exists; it uses `semver.satisfies(..., { includePrerelease: true })`, so the declaration admits `0.2.1-rc.3` and later RCs on any tuple, and refuses below-floor values. Both shipped layers (`engines.dsh` and `dsh.engines.dsh`) carry the same range so consumers reading either layer agree; peers keep the same range for peers-only consumers. `benchmarks/incidents/acceptance/semver-matrix.json` records the verified matrix for the new floor, and `tests/v100-app-boot-admission.test.ts` pins the real consumer's decisions. Package installation is not a version-admission proof — Guard's own floor check rejects a below-floor host independently.
+
 ## 0.8.2–0.9.0: DSH >=0.2.0-rc.2 and official Desktop
 
-0.9.0 retains the host admission and Desktop support introduced in 0.8.2. Each release still requires its own artifact acceptance.
+0.9.0 retained the host admission introduced in 0.8.2 with the floor `0.2.0-rc.2`; 0.10.0 supersedes it. Historical description:
 
 Version admission uses strict SemVer precedence, including later-tuple RCs and ignoring build metadata. The floor is `0.2.0-rc.2`, with no upper limit. `0.2.0-rc.1` keeps its recorded-evidence row but is refused as below the floor. Below-floor and malformed versions are refused. Cordis has a separate `>=4.0.4` peer range and qualification; a DSH version does not establish arbitrary Cordis compatibility.
 

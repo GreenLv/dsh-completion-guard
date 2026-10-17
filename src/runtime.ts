@@ -1677,27 +1677,45 @@ export function apply(ctx: Context, rawConfig: {
         get: async () => normalizeGoalState(await goals.get(agent)),
         disarm: async () => normalizeGoalState(await goals.disarm(agent)),
       } } : {}),
-      readExternalOperation: (id) => readExternalOperation(ctx, agent, id),
+      readExternalOperation: (id) => readExternalOperation(ctx, agent, id, runtime.projection),
     })
   })
 }
 
-export function readExternalOperation(ctx: Context, agent: Agent | undefined, id: string): ExternalOperationSnapshot | undefined {
+export function readExternalOperation(ctx: Context, agent: Agent | undefined, id: string,
+  projection?: { jobLifecycle?: Map<string, { settled?: { status: 'completed' | 'killed' | 'failed'; cause: 'producer' | 'kill' | 'teardown'; producerReported: boolean } }> }): ExternalOperationSnapshot | undefined {
   if (!agent || !id) return undefined
   if (!agent.session || agent.id !== agent.session.id) return undefined
+  let status: ExternalOperationSnapshot['status'] | undefined
   try {
     const service = agent.ctx.get('jobs') ?? ctx.get('jobs')
-    if (!service) return undefined
-    const row = service.get(JobId(id), agent.id)
-    if (!row || row.id !== id) return undefined
-    const status: ExternalOperationSnapshot['status'] = row.status === 'running' ? 'running'
-      : row.status === 'stopping' ? 'pending'
-        : row.status === 'completed' ? 'completed'
-          : row.status === 'killed' || row.status === 'failed' ? 'failed' : 'unknown'
-    return { id, status, adapterId: 'dsh.jobs.v1' }
+    if (service) {
+      const row = service.get(JobId(id), agent.id)
+      if (row && row.id === id) {
+        status = row.status === 'running' ? 'running'
+          : row.status === 'stopping' ? 'pending'
+            : row.status === 'completed' ? 'completed'
+              : row.status === 'killed' || row.status === 'failed' ? 'failed' : 'unknown'
+      }
+    }
   } catch {
-    return undefined
+    // fall through to the durable settlement record below
   }
+  // 0.2.1: the durable `job/settled` record outranks the process-local live
+  // row for terminal outcomes — the registry does not survive a restart, the
+  // persisted settlement does. A `completed` settlement only counts as
+  // completed when the producer itself reported fulfilment; killed/failed
+  // are explicit failures and an unreported completion is unconfirmed. A
+  // settlement NEVER substitutes for resource cleanup, file readback, or
+  // external side-effect acceptance — it only ends the wait.
+  const settled = projection?.jobLifecycle?.get(id)?.settled
+  if (settled) {
+    status = settled.status === 'completed'
+      ? (settled.cause === 'producer' && settled.producerReported ? 'completed' : 'unknown')
+      : 'failed'
+  }
+  if (!status) return undefined
+  return { id, status, adapterId: 'dsh.jobs.v1' }
 }
 
 function optionalMarketOrigin(ctx: Context, agent: Agent): string | undefined {

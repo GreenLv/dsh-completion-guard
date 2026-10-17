@@ -12,10 +12,10 @@ import { fileURLToPath } from 'node:url'
 
 const argv = process.argv.slice(2)
 // CG-083-VAL02: the measurement baseline is the CURRENT cohort manifest
-// (rc020-rc2-byte-audit.json). `rc020-rc1-byte-audit.json` is retained as
+// (rc021-rc2-byte-audit.json). Earlier cohort manifests stay as
 // history for replaying older reports; selecting it is an explicit
 // `--manifest` decision, never the default.
-const defaultManifest = new URL('../manifests/rc020-rc2-byte-audit.json', import.meta.url)
+const defaultManifest = new URL('../manifests/rc021-rc2-byte-audit.json', import.meta.url)
 const manifestFlag = argv.indexOf('--manifest')
 const manifestPath = manifestFlag > 0 ? argv[manifestFlag + 1] : undefined
 const manifest = JSON.parse(readFileSync(manifestPath ?? defaultManifest, 'utf8'))
@@ -139,7 +139,7 @@ function measure(runtimeRoot, profileRoot, profile) {
     return [entry, { samples, median_ms: sorted[2], p95_nearest_rank_ms: sorted.at(-1) }]
   }))
   console.log(JSON.stringify({ schema: 'dsh-host-entry-measurement/v1', profile, graph_kind: graphKind,
-    manifest: { path: manifestPath ? String(manifestPath) : 'manifests/rc020-rc2-byte-audit.json',
+    manifest: { path: manifestPath ? String(manifestPath) : 'manifests/rc021-rc2-byte-audit.json',
       sha256: createHash('sha256').update(readFileSync(manifestPath ?? defaultManifest)).digest('hex') },
     note: 'Five fresh Vitest worker processes; cold is first production attach in each. OS cache is not dropped. Wall clock includes actual entry awaits and final veto. Audits observed through onHostLockValidation. External publish effects are mocked; no DSH host is launched.',
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),

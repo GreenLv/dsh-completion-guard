@@ -15,10 +15,10 @@ vi.setConfig({ testTimeout: 60_000 })
 const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
   AUDITED_MODULE_TEXT: 'export const auditedModule = true\n',
   canonicalManifest: (name: string, version: string) => JSON.stringify({
-    name, version, ...(name === '@deepseek-ai/dsh' ? { dependencies: { '@deepseek-ai/cordis': '4.0.4' } } : {}), exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
+    name, version, ...(name === '@deepseek-ai/dsh' ? { dependencies: { '@deepseek-ai/cordis': '4.0.5' } } : {}), exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../manifests/rc020-rc2-byte-audit.json', async (original) => {
+vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
@@ -57,7 +57,7 @@ function makeHost(hoisted = true, profileHoisted = false) {
     const relative = hoisted ? `./${row.name}` : `./active/package-${index}`
     packages['.'].dependencies[row.name] = id
     packages[id] = { url: relative, dependencies: hoisted ? { [row.name]: id } : {} }
-    if (!hoisted && row.name === '@deepseek-ai/dsh') packages[id].dependencies['@deepseek-ai/cordis'] = '@deepseek-ai/cordis@4.0.4'
+    if (!hoisted && row.name === '@deepseek-ai/dsh') packages[id].dependencies['@deepseek-ai/cordis'] = '@deepseek-ai/cordis@4.0.5'
     const packageRoot = join(modulesRoot, relative)
     mkdirSync(packageRoot, { recursive: true })
     writeFileSync(join(packageRoot, 'package.json'), canonicalManifest(row.name, row.version!))
@@ -192,7 +192,7 @@ describe('full host admission for standard hoisted package maps', () => {
   it('preserves a complete isolated map and rejects its missing declared edge', () => {
     const h = makeHost(false)
     expect(audit(h)).toBe('supported')
-    delete h.packages[`${app}@0.2.0-rc.2`].dependencies[dep]
+    delete h.packages[`${app}@0.2.1-rc.2`].dependencies[dep]
     saveMap(h)
     expect(['unsupported', 'unavailable']).toContain(audit(h))
   })
@@ -220,7 +220,7 @@ describe('full host admission for standard hoisted package maps', () => {
     if (mode === 'nearer-shadow') {
       const shadow = join(modules, app, 'lib/node_modules', dep)
       mkdirSync(shadow, { recursive: true })
-      writeFileSync(join(shadow, 'package.json'), canonicalManifest(dep, '4.0.4'))
+      writeFileSync(join(shadow, 'package.json'), canonicalManifest(dep, '4.0.5'))
       mkdirSync(join(shadow, 'lib')); writeFileSync(join(shadow, 'lib/index.js'), AUDITED_MODULE_TEXT)
       mutations.push(join(modules, app, 'lib/node_modules'))
       const result = native(h)

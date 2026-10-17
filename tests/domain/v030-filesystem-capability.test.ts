@@ -55,7 +55,10 @@ describe('v0.3 pinned filesystem tool capability', () => {
         ? { resolve: () => ({ mode: 'workspace-write', workspaceRoot: '/bounded-workspace' }) }
         : undefined,
     } as unknown as Context
+    // The pinned 0.2.1-rc.2 composition receives the host's fully resolved
+    // config (defaults included); it no longer re-parses a partial object.
     applyFilesystemTools(context, {
+      read: true, readImage: true, write: true, edit: true,
       readLimit: 2_000,
       readMaxLineLength: 2_000,
       readMaxBytes: 50 * 1_024,
@@ -83,10 +86,10 @@ describe('v0.3 pinned filesystem tool capability', () => {
     })).toMatchObject({ path: '/bounded-workspace/a.txt', lines: [{ number: 1, text: 'a' }] })
     expect(write.output.presentationMeta?.({ file_path: 'a.txt' }, {
       path: '/bounded-workspace/a.txt', operation: 'create', before: null, after: 'a',
-    })).toEqual({ operation: 'create', diffs: [] })
+    })).toEqual({ operation: 'create', path: '/bounded-workspace/a.txt', diffs: [] })
     expect(edit.output.presentationMeta?.({ file_path: 'a.txt' }, {
       path: '/bounded-workspace/a.txt', before: 'old', after: 'new',
-    })).toEqual({ diffs: [{ path: 'a.txt', oldText: 'old', newText: 'new' }] })
+    })).toEqual({ path: '/bounded-workspace/a.txt', diffs: [{ path: '/bounded-workspace/a.txt', oldText: 'old', newText: 'new' }] })
   })
 
   it('fails ordinary filesystem replay closed under a base-only lock and opens only with the full filesystem group', () => {

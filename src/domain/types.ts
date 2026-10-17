@@ -510,6 +510,43 @@ export interface ExternalOperation {
   status: 'running' | 'pending' | 'completed' | 'failed' | 'unknown'
 }
 
+/**
+ * One durable job lifecycle fact from the 0.2.1 host event pair
+ * (`job/registered` + `job/settled`). Audit-only: a settlement records the
+ * registry's terminal outcome for the execution, never resource release, a
+ * file readback, or the completion of any user obligation. The `owner` is the
+ * ORIGINAL owning session; a forked or resumed copy of the history never
+ * transfers execution ownership.
+ */
+export interface JobLifecycleRecord {
+  jobId: string
+  owner: string
+  kind: string
+  label: string
+  registeredAtSeq: number
+  toolCall?: { callId: string; rootCallId: string }
+  settled?: {
+    settledAtSeq: number
+    status: 'completed' | 'killed' | 'failed'
+    cause: 'producer' | 'kill' | 'teardown'
+    producerReported: boolean
+  }
+}
+
+/**
+ * One committed `working-directory/change` epoch. The immutable Session
+ * header keeps the original project directory; each event replaces the
+ * EFFECTIVE directory for directory-based operations from its sequence on.
+ * Captured targets, paths and receipts keep the meaning of the epoch they
+ * were bound in — a later change never re-interprets an older relative path.
+ */
+export interface CwdEpoch {
+  /** Sequence of the committing `working-directory/change` event. */
+  seq: number
+  /** Absolute effective directory from this sequence on. */
+  cwd: string
+}
+
 export interface GuardProjection {
   enabled: boolean
   /** Explicit root /context-guard on adoption, never inferred from installation or always observation. */
@@ -522,6 +559,18 @@ export interface GuardProjection {
   checkpoints: GuardCheckpoint[]
   boundaries: GuardBoundary[]
   externalOperations: Map<string, ExternalOperation>
+  /**
+   * Durable job lifecycle facts keyed by jobId, present only in logs that
+   * carry 0.2.1 `job/registered`/`job/settled` events. Audit-only; they
+   * refine external-wait status and are never completion evidence.
+   */
+  jobLifecycle?: Map<string, JobLifecycleRecord>
+  /**
+   * Committed `working-directory/change` epochs, present only in logs that
+   * carry at least one valid change. Absent means the immutable header cwd
+   * governed the whole log, which keeps pre-0.2.1 derivations byte-stable.
+   */
+  cwdEpochs?: CwdEpoch[]
   /**
    * 0.6.0 work units keyed by unit id, and the id of the unit currently
    * receiving captured work. Derived; present only after a v5 boundary.

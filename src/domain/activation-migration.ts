@@ -45,7 +45,7 @@ export function prepareActivationMigration(inventory: SessionBirthIdentity[], pr
   status: 'ready' | 'pending'; missing: string[]; receipt?: ActivationMigrationReceipt
 } {
   if (!prior || prior.schema !== 'dsh-activation-prior-modes/v1' || prior.previousPackage?.name !== 'dsh-completion-guard'
-    || !/^0\.[0-8]\.\d+(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version)
+    || !/^0\.[0-9]\.\d+(?:[-+][\w.-]+)?$/u.test(prior.previousPackage.version)
     || !/^[a-f0-9]{64}$/u.test(prior.previousPackage.sha256) || !/^[a-f0-9]{64}$/u.test(prior.sourceSha256)
     || !Array.isArray(prior.cohorts) || !prior.cohorts.length) throw new Error('activation_prior_modes_invalid')
   const ids = new Set(inventory.map(i => i.id))

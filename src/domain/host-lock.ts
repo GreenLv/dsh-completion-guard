@@ -1,4 +1,4 @@
-import { RC020_RC2_HOST_PACKAGES } from './rc020-rc2-host.js'
+import { RC021_RC2_HOST_PACKAGES } from './rc021-rc2-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -21,17 +21,21 @@ export type HostProfileKind = 'headless' | 'web' | 'desktop'
  * Capability expectations shared by every registered cohort.
  *
  * Every row is a host contract Guard actually consumes, re-checked against the
- * 0.2.0-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
+ * 0.2.1-rc.2 package surfaces: `ctx.sessions.flush()` still returns whether a
  * durability listener participated; `tools.guard()` is still a monotonic
  * post-policy denial; the Goal service still exposes `get`/`disarm` with a
  * disarming `pause`; the `update_goal` tool is still the pinned pre-commit gate;
- * `ctx.jobs.get()` still yields the `dsh.jobs.v1` status vocabulary; and
- * `dsh-tool-fs` still registers `read`/`write`/`edit` with the same parameter
- * and result contract (`dsh.fs-tools.v1`).
+ * `ctx.jobs.get()` still yields the `dsh.jobs.v1` status vocabulary (the new
+ * durable `job/registered`/`job/settled` records are log-only facts beside it);
+ * and `dsh-tool-fs` still registers `read`/`write`/`edit` with the same
+ * parameter and result contract (`dsh.fs-tools.v1`).
  *
  * Session V4 is bound by the exact package set and header version, not by a
  * permissive capability alias. Existing snapshotEvents() reads remain valid
- * only for this pinned local Session implementation.
+ * only for this pinned local Session implementation; the 0.2.1-rc.2 catalog's
+ * three new event types (`job/registered`, `job/settled`,
+ * `working-directory/change`) are handled by the derivation layer, not by a
+ * capability alias here.
  */
 const AUDITED_CAPABILITY_ROWS: readonly CapabilityRow[] = [
   { name: 'goal_complete_precommit_guard', value: { k: 's', v: 'required' } },
@@ -104,7 +108,7 @@ function defineCohort(
 }
 
 /** Baseline cohort retained for callers that need a default fixture. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.0-rc.2'
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.1-rc.2'
 export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
 /** Core-lock/v1 separates optional market identity from the rc.2 critical
@@ -113,7 +117,7 @@ export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
  * acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.0-rc.2'], [], RC020_RC2_HOST_PACKAGES,
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.1-rc.2'], [], RC021_RC2_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))
@@ -131,7 +135,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   }))
 
 /**
- * Baseline fixture package identities (DSH 0.2.0-rc.2). The cohort
+ * Baseline fixture package identities (DSH 0.2.1-rc.2). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially

@@ -40,18 +40,21 @@ describe('typed boundary production sources', () => {
     const agent = { id: 'owner-1', session: { id: 'owner-1' }, ctx: { get: (name: string) => name === 'jobs' ? jobs : undefined } } as unknown as Agent
 
     const pinnedSnapshot = jobs.get(id)
+    // The pinned 0.2.1-rc.2 registry issues `<kind>-<short-uuid>` ids, so the
+    // assertion reads the id back from the registry instead of assuming a
+    // synthetic sequence — the snapshot itself is still the real pinned shape.
     expect(pinnedSnapshot).toMatchObject({
-      id: 'bash-1', kind: 'bash', label: 'bounded integration job', status: 'running',
+      id: String(id), kind: 'bash', label: 'bounded integration job', status: 'running',
     })
     expect(readExternalOperation({} as never, agent, String(id))).toEqual({
-      id: 'bash-1', status: 'running', adapterId: 'dsh.jobs.v1',
+      id: String(id), status: 'running', adapterId: 'dsh.jobs.v1',
     })
 
     settle({ status: 'completed' })
     await done
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(readExternalOperation({} as never, agent, String(id))).toEqual({
-      id: 'bash-1', status: 'completed', adapterId: 'dsh.jobs.v1',
+      id: String(id), status: 'completed', adapterId: 'dsh.jobs.v1',
     })
     detachController()
   })

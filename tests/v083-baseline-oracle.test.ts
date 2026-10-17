@@ -6,7 +6,7 @@ import { projectSessionCoreV2 as candidateCore } from '../src/core-v2/session.js
 import { deriveProjection as baselineDerive } from './helpers/baseline-oracle/derive.js'
 import { projectSessionCoreV2 as baselineCore } from './helpers/baseline-oracle/session.js'
 import { snapshotSessionEvents } from '../src/domain/session-events.js'
-import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
+import { evaluateHostLock, EXPECTED_HOST_PACKAGES, HOST_COHORTS } from '../src/domain/host-lock.js'
 
 // CG-083-V1 INDEPENDENT ORACLE: the candidate fold and core/v2 adapter are
 // compared against the FROZEN 0.8.2 implementation (tests/fixtures/baseline-
@@ -17,7 +17,15 @@ import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-loc
 // readiness and readback evidence, boundaries, duplicates, prohibitions and
 // failure/unknown results — and every event prefix.
 
-const HOST = evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+// The fold input is the exact active audited cohort lock, with the cohort
+// bound explicitly (`derivedCohort`): the frozen 0.8.2 copy resolves an
+// unknown `cohortId` through its own vendored (0.2.0-rc.2) registry, so the
+// shared lock must carry the cohort itself for both implementations to
+// interpret the identical input identically.
+const HOST = {
+  ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
+  derivedCohort: HOST_COHORTS[0],
+}
 const HEADER = { version: SESSION_FORMAT_VERSION, id: 'oracle', createdAt: 1, seedLength: 0, delegationDepth: 0 } as const
 
 function canonical(value: unknown): string {

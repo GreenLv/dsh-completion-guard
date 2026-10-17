@@ -10,7 +10,7 @@ DSH Completion Guard is a DeepSeek Harness plugin that keeps your task requireme
 
 ## Install or upgrade
 
-Requires DSH `>=0.2.0-rc.2`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.0-rc.2` / Cordis `4.0.4`; a later host must pass the same compatibility checks.
+Requires DSH `>=0.2.1-rc.2`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.1-rc.2` / Cordis `4.0.5`; a later host must pass the same compatibility checks.
 
 Choose your path before replacing any package:
 

@@ -1,5 +1,5 @@
 {
-  "range": ">=0.2.0-rc.2",
+  "range": ">=0.2.1-rc.2",
   "semver_version": "7.8.5",
   "note": "consumer-side matrix: plain satisfies() does NOT admit later-tuple RCs; includePrerelease:true reproduces the declared floor semantics",
   "cases": [
@@ -10,21 +10,46 @@
     },
     {
       "version": "0.2.0-rc.2",
-      "plain_satisfies": true,
-      "includePrerelease_true": true
+      "plain_satisfies": false,
+      "includePrerelease_true": false
     },
     {
       "version": "0.2.0",
-      "plain_satisfies": true,
-      "includePrerelease_true": true
+      "plain_satisfies": false,
+      "includePrerelease_true": false
     },
     {
       "version": "0.2.1-rc.1",
       "plain_satisfies": false,
+      "includePrerelease_true": false
+    },
+    {
+      "version": "0.2.1-rc.2",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.1-rc.3",
+      "plain_satisfies": true,
       "includePrerelease_true": true
     },
     {
       "version": "0.2.1",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.2-rc.1",
+      "plain_satisfies": false,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.2.2",
+      "plain_satisfies": true,
+      "includePrerelease_true": true
+    },
+    {
+      "version": "0.3.0",
       "plain_satisfies": true,
       "includePrerelease_true": true
     },
@@ -39,7 +64,7 @@
       "includePrerelease_true": true
     },
     {
-      "version": "0.2.0-rc.0",
+      "version": "0.2.1-rc.0",
       "plain_satisfies": false,
       "includePrerelease_true": false
     },
@@ -49,7 +74,7 @@
       "includePrerelease_true": false
     },
     {
-      "version": "1.0.0+build.7",
+      "version": "0.2.1-rc.2+build.7",
       "plain_satisfies": true,
       "includePrerelease_true": true
     }

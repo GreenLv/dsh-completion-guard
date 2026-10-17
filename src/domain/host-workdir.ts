@@ -5,6 +5,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { sessionRefDigest } from './digest.js'
 import { snapshotSessionEvents } from './session-events.js'
+import { cwdEpochsFromEvents, effectiveCwdAt } from './cwd-timeline.js'
 import type { HostLockEvaluation } from './host-lock.js'
 import type { DerivedEnvelope, GuardProjection } from './types.js'
 
@@ -12,7 +13,7 @@ import type { DerivedEnvelope, GuardProjection } from './types.js'
 export const HOST_WORKDIR_PREFIX = 'context_guard_host_workdir_v1:'
 
 export interface HostWorkdirReceipt {
-  version: 1
+  version: 1 | 2
   callId: string
   callSeq: number
   rootSeq: number
@@ -25,6 +26,14 @@ export interface HostWorkdirReceipt {
   policyRoot: string | null
   hostLockDigest: string
   argumentsSha256: string
+  /** v2 only: the immutable Session header cwd (the original project root),
+   * recorded when a `working-directory/change` moved the effective directory
+   * the call actually ran in. Absent in v1 receipts, where the two coincide. */
+  originCwd?: string
+  /** v2 only: sequence of the governing `working-directory/change`, or -1
+   * when none precedes the call (then effectiveCwd equals originCwd and a v1
+   * receipt is written instead). */
+  cwdEpochSeq?: number
 }
 
 const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex')
@@ -37,18 +46,29 @@ export function sourcedNamedTestRoot(projection: GuardProjection, session: Sessi
   if (!/^(?:npm|pnpm) test$/u.test(command) || !projection.currentUnitId) return undefined
   const unit = projection.units.get(projection.currentUnitId)
   if (!unit) return undefined
+  // The obligation's scope was captured in the cwd epoch of its own root;
+  // only a root captured in the SAME effective directory can source this
+  // test run. The session header cwd governs pre-0.2.1 logs unchanged.
+  const epochs = cwdEpochsFromEvents(snapshotSessionEvents(session) as DerivedEnvelope[], headerCwdOf(session))
   const refs = new Set(unit.rootInputRefs.map((ref) => ref.seq))
   const candidates = [...projection.items.values()].flatMap((item) => {
     const source = /^m(\d+)(?::|$)/u.exec(item.sourceMessageId)
     const named = /\b(?:npm|pnpm)\s+test\b/iu.exec(item.normalizedText)
+    const rootSeq = source ? Number(source[1]) : undefined
+    const scopeCwd = rootSeq !== undefined ? effectiveCwdAt(epochs, headerCwdOf(session), rootSeq) : undefined
     if (item.unitId !== projection.currentUnitId || item.status !== 'pending'
       || item.semanticAction !== 'test' || item.authorityDisposition !== 'executable_now'
       || item.needsReview || item.condition || item.waitAuthorization
-      || item.requestedTarget?.scope !== session.header.cwd
+      || !scopeCwd || item.requestedTarget?.scope !== scopeCwd
       || !source || !refs.has(Number(source[1])) || named?.[0].toLowerCase().replace(/\s+/gu, ' ') !== command) return []
     return [Number(source[1])]
   })
   return candidates.length === 1 ? candidates[0] : undefined
+}
+
+function headerCwdOf(session: Session): string | undefined {
+  const header = row(session.header)
+  return typeof header.cwd === 'string' && header.cwd.length > 0 ? header.cwd : undefined
 }
 
 function physicalDirectory(value: unknown): string | undefined {
@@ -78,8 +98,15 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
   const args = row(exec.arguments)
   if (Object.hasOwn(args, 'workdir') || args.run_in_background === true) return undefined
   const header = row(session.header)
-  const cwd = physicalDirectory(header.cwd)
-  if (!cwd || typeof header.id !== 'string') return undefined
+  const originCwd = typeof header.cwd === 'string' && header.cwd.length > 0 ? header.cwd : undefined
+  if (!originCwd || typeof header.id !== 'string') return undefined
+  const events = snapshotSessionEvents(session) as DerivedEnvelope[]
+  // The 0.2.1 effective directory travels in `working-directory/change`
+  // events while the sandbox policy keeps resolving the immutable header
+  // project. An unreadable timeline (or an unphysical effective directory)
+  // emits no receipt — the epoch boundary is never guessed.
+  const epochs = cwdEpochsFromEvents(events, originCwd)
+  if (!epochs) return undefined
   let policyRoot: string | null = null
   let policySource: HostWorkdirReceipt['policySource'] = exec.name === 'pwsh' ? 'pwsh-header' : 'bash-policy'
   if (exec.name === 'bash') {
@@ -88,11 +115,10 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
     try { resolved = row(sandboxPolicy.resolve({ session })) } catch { return undefined }
     if (resolved.sessionId !== header.id) return undefined
     const physical = physicalDirectory(resolved.workspaceRoot)
-    if (!physical || physical !== cwd) return undefined
+    if (!physical || physical !== originCwd) return undefined
     policyRoot = physical
     policySource = 'bash-policy'
   }
-  const events = snapshotSessionEvents(session) as DerivedEnvelope[]
   const callId = String(exec.callId)
   const calls = events.filter((event) => event.type === 'tool/call' && row(event.data).callId === callId)
   if (calls.length !== 1) return undefined
@@ -101,6 +127,10 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
   let loggedArgs: unknown
   try { loggedArgs = JSON.parse(String(row(call.data).arguments)) } catch { return undefined }
   if (!isDeepStrictEqual(loggedArgs, exec.arguments)) return undefined
+  // The effective cwd that governs THIS call, from the epoch timeline rather
+  // than the current end-of-log directory.
+  const effective = physicalDirectory(effectiveCwdAt(epochs, originCwd, call.seq))
+  if (!effective) return undefined
   const roots = events.filter((event) => event.type === 'user/message' && row(row(event.data).source).kind === 'user'
     && event.seq < call.seq)
   const root = sourcedRootSeq === undefined ? roots.at(-1) : roots.find((event) => event.seq === sourcedRootSeq)
@@ -118,9 +148,22 @@ export function captureHostWorkdir(session: Session, exec: Readonly<ToolExecutio
     ...(typeof header.origin === 'string' ? { origin: header.origin } : {}),
     delegationDepth: typeof header.delegationDepth === 'number' ? header.delegationDepth : 0,
   })
+  // A call still inside the header epoch keeps the historical v1 receipt,
+  // byte-identical to pre-0.2.1 reads. Only a call under a committed
+  // working-directory change writes the epoch-bound v2 shape.
+  const governingEpoch = [...epochs].reverse().find((epoch) => epoch.seq <= call.seq)
+  if (!governingEpoch) {
+    return {
+      version: 1, callId, callSeq: call.seq, rootSeq: root.seq, turn: Number(row(call.data).turn),
+      toolName: exec.name, sessionRefDigest: sessionDigest, headerCwd: effective, effectiveCwd: effective,
+      policySource, policyRoot, hostLockDigest: hostLock.digest,
+      argumentsSha256: hash(String(row(call.data).arguments)),
+    }
+  }
   return {
-    version: 1, callId, callSeq: call.seq, rootSeq: root.seq, turn: Number(row(call.data).turn),
-    toolName: exec.name, sessionRefDigest: sessionDigest, headerCwd: cwd, effectiveCwd: cwd,
+    version: 2, callId, callSeq: call.seq, rootSeq: root.seq, turn: Number(row(call.data).turn),
+    toolName: exec.name, sessionRefDigest: sessionDigest, headerCwd: effective, effectiveCwd: effective,
+    originCwd, cwdEpochSeq: governingEpoch.seq,
     policySource, policyRoot, hostLockDigest: hostLock.digest,
     argumentsSha256: hash(String(row(call.data).arguments)),
   }
@@ -151,11 +194,31 @@ export function hostWorkdirForCall(events: DerivedEnvelope[], call: DerivedEnvel
   const content = row((row(candidates[0]!.data).content as unknown[])[0]).text
   let receipt: Record<string, unknown>
   try { receipt = row(JSON.parse(String(content).slice(HOST_WORKDIR_PREFIX.length))) } catch { return undefined }
-  if (receipt.version !== 1 || receipt.callId !== callId || receipt.callSeq !== call.seq
+  if (receipt.callId !== callId || receipt.callSeq !== call.seq
     || receipt.rootSeq !== rootSeq || receipt.turn !== callData.turn
     || receipt.toolName !== callData.name || receipt.sessionRefDigest !== sessionDigest
     || receipt.hostLockDigest !== hostDigest || receipt.headerCwd !== headerCwd
     || receipt.effectiveCwd !== headerCwd || receipt.argumentsSha256 !== hash(callData.arguments)) return undefined
+  if (receipt.version === 2) {
+    // Epoch-bound receipt: the governing change and the original project are
+    // replayed from the SAME log, so a notice copied next to different
+    // directory history cannot validate. The bound cwd still has to equal
+    // the root locator base the caller holds — a test run in a DIFFERENT
+    // epoch than the obligation's scope never certifies that scope.
+    const originCwd = typeof receipt.originCwd === 'string' ? receipt.originCwd : ''
+    const cwdEpochSeq = typeof receipt.cwdEpochSeq === 'number' && Number.isSafeInteger(receipt.cwdEpochSeq) ? receipt.cwdEpochSeq : undefined
+    if (!originCwd || cwdEpochSeq === undefined) return undefined
+    const epochs = cwdEpochsFromEvents(events, originCwd)
+    if (!epochs) return undefined
+    if (effectiveCwdAt(epochs, originCwd, call.seq) !== headerCwd) return undefined
+    const governing = [...epochs].reverse().find((epoch) => epoch.seq <= call.seq)
+    if (!governing || governing.seq !== cwdEpochSeq || governing.cwd !== headerCwd) return undefined
+    if (receipt.toolName === 'bash') {
+      if (receipt.policySource !== 'bash-policy' || receipt.policyRoot !== originCwd) return undefined
+    } else if (receipt.toolName !== 'pwsh' || receipt.policySource !== 'pwsh-header' || receipt.policyRoot !== null) return undefined
+    return headerCwd
+  }
+  if (receipt.version !== 1) return undefined
   if (receipt.toolName === 'bash') {
     if (receipt.policySource !== 'bash-policy' || receipt.policyRoot !== headerCwd) return undefined
   } else if (receipt.toolName !== 'pwsh' || receipt.policySource !== 'pwsh-header' || receipt.policyRoot !== null) return undefined

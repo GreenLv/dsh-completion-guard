@@ -2,7 +2,7 @@
 
 ## 0.8.3 RC.2 and Desktop acceptance
 
-The candidate keeps the 0.8.x task, certificate and data protocols. Its host floor remains DSH `0.2.0-rc.2`; use the [upgrade guide](HOST_LOCK_UPGRADE.md) before establishing a new lock. The historical [RC.2/Desktop development plan](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md) records the original adaptation scope; the current source, portability, exact-package, native, model and reader gates are defined below and in the repository instructions.
+The candidate keeps the 0.8.x task, certificate and data protocols. Its host floor is DSH `0.2.1-rc.2`; use the [upgrade guide](HOST_LOCK_UPGRADE.md) before establishing a new lock. The historical [RC.2/Desktop development plan](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md) records the original adaptation scope; the current source, portability, exact-package, native, model and reader gates are defined below and in the repository instructions.
 
 Run the repository entrypoint twice for each native platform, always with the same frozen tgz and source commit. `host_bound_v070` covers Web/Headless. `desktop_bound` takes the physical app archive as `--runtime-root` and the exact DSH version as `--desktop-cohort`; it creates an isolated profile and uses the signed app's bundled CLI and actual Electron Node backend. Pass `--preflight` to each intended command before execution, with distinct unused external output and transfer-receipt paths.
 
@@ -12,7 +12,7 @@ pnpm 11.7.0 builds hoisted-location mappings asynchronously and writes their ins
 
 The backend annex also covers carrier/graph authentication, installation parity, injection and real composed readback, loaded Guard behavior, graceful stop, uninstall and cleanup. It expressly skips `graphical_shell` and `real_model_request`. Those skips require separate GUI/model evidence before the complete Desktop release gate closes. Portable tests, source composition against a real archive and a backend annex cannot substitute for those observations.
 
-每个平台分别运行 Web/Headless 与 Desktop 原生入口，绑定同一份最终 tgz、源码提交及摘要。Desktop 使用 `--gate-profile desktop_bound --runtime-root <app.asar> --desktop-cohort 0.2.0-rc.2`，先加 `--preflight` 做同一次调用环境的能力预检，再去掉该参数执行。该入口在隔离 profile 中验证官方载体、安装字节、单包严格字节 no-op、多包 JSON 值等价、组合配置、实际加载与卸载，并输出独立 annex；它不启动图形界面、不请求真实模型，二者须单独补齐。具体结果留在对应制品的外部回执和 Release 附件，避免文档自引用造成制品身份变化。
+每个平台分别运行 Web/Headless 与 Desktop 原生入口，绑定同一份最终 tgz、源码提交及摘要。Desktop 使用 `--gate-profile desktop_bound --runtime-root <app.asar> --desktop-cohort 0.2.1-rc.2`，先加 `--preflight` 做同一次调用环境的能力预检，再去掉该参数执行。该入口在隔离 profile 中验证官方载体、安装字节、单包严格字节 no-op、多包 JSON 值等价、组合配置、实际加载与卸载，并输出独立 annex；它不启动图形界面、不请求真实模型，二者须单独补齐。具体结果留在对应制品的外部回执和 Release 附件，避免文档自引用造成制品身份变化。
 
 ## 0.8.0 rc.2 source-stage snapshot
 

@@ -68,7 +68,7 @@ class DesktopV2AnnexTests(unittest.TestCase):
                      "host_driver_sha256": driver, "host_lock_digests": locks,
                      "desktop_noop_contract": copy.deepcopy(VALIDATOR.NOOP_CONTRACT),
                      "desktop_runtime": {"manifest_sha256": "f" * 64, "header_sha256": "a" * 64, "metadata_sha256": "b" * 64,
-                                         "host_version": "0.2.0-rc.2", "desktop_version": "0.2.0", "payload_file_count": 1}}
+                                         "host_version": "0.2.1-rc.2", "desktop_version": "0.2.0", "payload_file_count": 1}}
             check = lambda value, *, tar=artifact, rev=commit, driver_sha=driver, os_name="macos", expected_locks=locks: VALIDATOR.valid_desktop_v2_annex(
                 value, tar, rev, driver_sha, os_name, expected_locks)
             self.assertTrue(check(valid))

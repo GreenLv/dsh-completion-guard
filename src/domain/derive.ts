@@ -28,6 +28,8 @@ import {
   opensNewUnit, currentUnitHasOpenWork, recordDelegation, unitDescendantIds,
 } from './work-unit.js'
 import { spanClassOf, utf8ByteLength, utf8ByteOffset } from './spans.js'
+import { effectiveCwdAt, WORKING_DIRECTORY_CHANGE_EVENT } from './cwd-timeline.js'
+import type { CwdEpoch, JobLifecycleRecord } from './types.js'
 import { bindProofV2ToProjection, validateProofManifestV2, type ProofManifestV2 } from './proof.js'
 import { DEFAULT_QUESTION_TOOL_NAMES, deriveTrustedSelections } from './host-selection.js'
 import { observerMethodEvidence } from './observer-method.js'
@@ -1572,23 +1574,31 @@ function buildEventsBySeq(sourceEvents: readonly DerivedEnvelope[]): Map<number,
 
 function refreshRootLocatorContext(
   projection: GuardProjection, bySeq: Map<number, DerivedEnvelope>, scope: DeriveScope, asOf: number,
+  cwdEpochs: readonly CwdEpoch[] | undefined,
 ): void {
   projection.rootLocatorContexts.clear()
   projection.rootLocatorIdentity = undefined
   if (projection.boundaryProtocol !== 6 || !scope.sessionHeader || typeof scope.cwd !== 'string') return
-  const flavor = rootLocatorFlavor(scope.cwd)
-  if (!flavor) return
   const refs = projection.currentUnitId ? projection.units.get(projection.currentUnitId)?.rootInputRefs ?? [] : []
   for (const ref of refs) {
     if (ref.seq > asOf) continue
     const source = bySeq.get(ref.seq)
     if (!source || source.type !== 'user/message'
       || asRecord(asRecord(source.data)?.source)?.kind !== 'user') continue
+    // Each root binds the cwd epoch it was captured in. A later
+    // working-directory change never re-interprets an older root's relative
+    // locators, so the locator base is the effective cwd at the root's own
+    // sequence — which equals the immutable header cwd in every pre-0.2.1
+    // log and keeps those root-locator digests byte-stable.
+    const base = effectiveCwdAt(cwdEpochs, scope.cwd, ref.seq)
+    if (!base) continue
+    const flavor = rootLocatorFlavor(base)
+    if (!flavor) continue
     const content = asRecord(source.data)?.content
     const raw = Array.isArray(content) ? content.filter((part) => asRecord(part)?.type === 'text')
       .map((part) => String(asRecord(part)?.text ?? '')).join('') : ''
-    projection.rootLocatorContexts.set(ref.seq, { base: scope.cwd, flavor,
-      sha256: sha256(`dsh.root-locator.v1\0${JSON.stringify([projection.sessionRefDigest, ref.seq, sha256(raw), scope.cwd])}`) })
+    projection.rootLocatorContexts.set(ref.seq, { base, flavor,
+      sha256: sha256(`dsh.root-locator.v1\0${JSON.stringify([projection.sessionRefDigest, ref.seq, sha256(raw), base])}`) })
   }
   if (projection.rootLocatorContexts.size) projection.rootLocatorIdentity = sha256(`dsh.root-locator-set.v1\0${JSON.stringify(
     [...projection.rootLocatorContexts].sort((a, b) => a[0] - b[0]).map(([seq, context]) => [seq, context.sha256]))}`)
@@ -1615,6 +1625,14 @@ export function deriveProjection(
   let compacted = false
   let enablementTransitioned = false
   let lastCompactionSeq = -1
+  // The effective working directory at the point currently being folded. It
+  // starts as the immutable header cwd and is advanced only by valid
+  // `working-directory/change` events, so every capture below binds the epoch
+  // it actually happened in — and a log without such events derives exactly
+  // as it did before the event type existed.
+  let currentCwd: string | undefined = scope.cwd
+  const cwdEpochs: CwdEpoch[] = []
+  const epochScope = (): DeriveScope => ({ ...scope, cwd: currentCwd })
   const pendingCalls = new Map<string, PendingCall>()
   const v5BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V5_NOTICE) || isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq
   const v6BoundarySeq = sourceEvents.find(event => isProtocolBoundaryNotice(event, PROTOCOL_V6_NOTICE))?.seq
@@ -1985,7 +2003,7 @@ export function deriveProjection(
                   qualification: { status: 'restricted', reason: 'governed_scope', governedBy: 'attachment' },
                   fingerprint: `asset:${identity.slice(0, 16)}`,
                 },
-              }, `m${event.seq}:asset:${index}`, scope.cwd || 'scope', 'scope', unitId)
+              }, `m${event.seq}:asset:${index}`, currentCwd || 'scope', 'scope', unitId)
               assetItem.taskKind = 'inquiry'
               assetItem.asset = { messageSeq: event.seq, partIndex: index, mediaSha256: identity }
             })
@@ -2011,7 +2029,7 @@ export function deriveProjection(
             if (consumed) {
               const unitId = unitSemantics ? foldUnitId() : undefined
               captureAssets(unitId)
-              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId, unitSemantics)
+              if (parsed.remainder) captureRootText(projection, parsed.remainder, event.seq, epochScope(), legacyMessage, priorRootMessages, `m${event.seq}:r`, coordinationSplit, unitId, unitSemantics)
               break
             }
           } else if (parsed.kind !== 'none') {
@@ -2022,7 +2040,7 @@ export function deriveProjection(
             projection.lastConfirmationRejection = { eventSeq: event.seq, kind: parsed.kind, reason: parsed.reason }
             const stripped = text.split(/\r?\n/).filter((line) => !CONFIRM_LINE_PATTERN.test(line.trim())).join('\n')
             if (!stripped.trim()) break
-            captureRootText(projection, stripped, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId, unitSemantics)
+            captureRootText(projection, stripped, event.seq, epochScope(), legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, unitId, unitSemantics)
             break
           }
         }
@@ -2060,7 +2078,7 @@ export function deriveProjection(
         // Session-layer talk (progression phrases, meta questions, meta
         // comments) is not a task requirement either (v0.2.1).
         if (classifyUserInteraction(text) === 'conversational') break
-        captureRootText(projection, text, event.seq, scope, legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId, unitSemantics)
+        captureRootText(projection, text, event.seq, epochScope(), legacyMessage, priorRootMessages, `m${event.seq}`, coordinationSplit, captureUnitId, unitSemantics)
         break
       }
       case 'goal/change': {
@@ -2088,6 +2106,89 @@ export function deriveProjection(
         // Goal cache is disarmed; the runtime overwrites this field only from
         // a live GoalService readback.
         projection.currentGoalActivation = 'disarmed'
+        break
+      }
+      case 'job/registered':
+      case 'job/settled': {
+        // 0.2.1 durable job lifecycle facts. Audit-only records: they refine
+        // external-wait status and are NEVER user authorization, obligation
+        // completion, or evidence of resource release. Every shape this
+        // reader cannot interpret fails closed as corruption — the host
+        // registry only writes well-formed pairs, so anything else is a
+        // forged or damaged log.
+        const data = asRecord(event.data)
+        const jobId = typeof data?.jobId === 'string' ? data.jobId : ''
+        const owner = typeof data?.owner === 'string' ? data.owner : ''
+        const kind = typeof data?.kind === 'string' ? data.kind : ''
+        const label = typeof data?.label === 'string' ? data.label : ''
+        const startedAt = data?.startedAt
+        const toolCallRow = asRecord(data?.toolCall)
+        const toolCall = toolCallRow && typeof toolCallRow.callId === 'string' && typeof toolCallRow.rootCallId === 'string'
+          ? { callId: toolCallRow.callId, rootCallId: toolCallRow.rootCallId } : undefined
+        const registeredFacts = jobId !== '' && owner !== '' && typeof kind === 'string' && typeof label === 'string'
+          && typeof startedAt === 'number' && Number.isSafeInteger(startedAt)
+          && (data?.toolCall === undefined || toolCall !== undefined)
+        if (!registeredFacts) {
+          projection.integrity = 'corrupt'
+          projection.integrityViolations.push('job_lifecycle_invalid')
+          break
+        }
+        if (!projection.jobLifecycle) projection.jobLifecycle = new Map()
+        const existing = projection.jobLifecycle.get(jobId)
+        const facts: JobLifecycleRecord = existing ?? {
+          jobId, owner, kind, label, registeredAtSeq: event.seq, ...(toolCall ? { toolCall } : {}),
+        }
+        if (existing && (existing.owner !== owner || existing.kind !== kind || existing.label !== label
+          || (existing.toolCall === undefined) !== (toolCall === undefined)
+          || (existing.toolCall && toolCall && (existing.toolCall.callId !== toolCall.callId || existing.toolCall.rootCallId !== toolCall.rootCallId)))) {
+          projection.integrity = 'corrupt'
+          projection.integrityViolations.push('job_registered_conflict')
+          break
+        }
+        if (event.type === 'job/settled') {
+          if (!existing) {
+            projection.integrity = 'corrupt'
+            projection.integrityViolations.push('job_settled_unregistered')
+            break
+          }
+          const finishedAt = data?.finishedAt
+          const status = data?.status
+          const cause = data?.cause
+          const producerReported = data?.producerReported
+          const settledFacts = typeof finishedAt === 'number' && Number.isSafeInteger(finishedAt)
+            && (status === 'completed' || status === 'killed' || status === 'failed')
+            && (cause === 'producer' || cause === 'kill' || cause === 'teardown')
+            && typeof producerReported === 'boolean'
+          if (!settledFacts) {
+            projection.integrity = 'corrupt'
+            projection.integrityViolations.push('job_lifecycle_invalid')
+            break
+          }
+          if (existing.settled && (existing.settled.status !== status || existing.settled.cause !== cause
+            || existing.settled.producerReported !== producerReported)) {
+            projection.integrity = 'corrupt'
+            projection.integrityViolations.push('job_settled_conflict')
+            break
+          }
+          facts.settled = { settledAtSeq: event.seq, status, cause, producerReported }
+        }
+        projection.jobLifecycle.set(jobId, facts)
+        break
+      }
+      case 'working-directory/change': {
+        // The header keeps the original project; one committed change
+        // re-bases directory-dependent capture from its sequence on. Targets,
+        // paths and receipts already captured keep their epoch's meaning.
+        const cwd = asRecord(event.data)?.cwd
+        if (typeof cwd !== 'string' || cwd.length === 0 || !(cwd.startsWith('/') || /^[A-Za-z]:[\\/]/.test(cwd))) {
+          projection.integrity = 'corrupt'
+          projection.integrityViolations.push('working_directory_change_invalid')
+          break
+        }
+        if (cwd === currentCwd) break
+        cwdEpochs.push({ seq: event.seq, cwd })
+        currentCwd = cwd
+        projection.cwdEpochs = cwdEpochs
         break
       }
       case 'tool/call': {
@@ -2275,7 +2376,7 @@ export function deriveProjection(
           // A v6 certificate binds the root locator as it stood when this
           // result was persisted. Compute it before replay, not only after the
           // entire log has been folded (which would reject a valid v4 record).
-          refreshRootLocatorContext(projection, eventsBySeq, scope, event.seq)
+          refreshRootLocatorContext(projection, eventsBySeq, scope, event.seq, cwdEpochs)
           const result = certifyCheckpoint(projection, call.bindings ?? [], id, false)
           if (result.status !== 'certified' || !result.checkpoint || !recordedCertificateMatches(recorded.certificate, result.checkpoint)) {
             projection.integrity = 'corrupt'
@@ -2408,7 +2509,7 @@ export function deriveProjection(
             meta: data?.meta, textContent },
           epoch,
           `E${String(evidenceCounter).padStart(4, '0')}`,
-          scope.cwd || undefined,
+          currentCwd,
           hostLock,
         ), durableConfirmed)
         // A delegated subagent's answer is BOUNDED evidence for the unit that
@@ -2445,7 +2546,26 @@ export function deriveProjection(
       item.status = 'passed'
     }
   }
-  refreshRootLocatorContext(projection, eventsBySeq, scope, sourceEvents.at(-1)?.seq ?? 0)
+  refreshRootLocatorContext(projection, eventsBySeq, scope, sourceEvents.at(-1)?.seq ?? 0, cwdEpochs)
+  // 0.2.1: refine external-wait rows from the durable job settlements. The
+  // registry's terminal record outranks the tool's earlier live poll, and a
+  // settlement NEVER completes an obligation: `completed` only confirms the
+  // producer reported fulfilment (cause producer, producerReported true) —
+  // killed/failed are explicit failures, and a completed settlement without
+  // the producer's own report is an UNCONFIRMED outcome, not a success. The
+  // wait itself ends either way; the model still owes the verification.
+  if (projection.jobLifecycle) {
+    for (const [id, row] of projection.externalOperations) {
+      const settled = projection.jobLifecycle.get(id)?.settled
+      if (!settled) continue
+      projection.externalOperations.set(id, {
+        ...row,
+        status: settled.status === 'completed'
+          ? (settled.cause === 'producer' && settled.producerReported ? 'completed' : 'unknown')
+          : 'failed',
+      })
+    }
+  }
   // 0.6.3 K4: the upgrade eligibility check runs BEFORE any terminal filtering,
   // so a record 0.6.2 closed as `answered` is still re-read and, when its own
   // text orders work, marked `needs_review` for the CURRENT layer.

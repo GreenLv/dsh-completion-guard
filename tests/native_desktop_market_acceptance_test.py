@@ -105,7 +105,7 @@ class MarketEntrypointTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             root, output, args = self.fixture(directory)
-            args += ["--runtime-root", str(root / "app.asar"), "--desktop-cohort", "0.2.0-rc.2",
+            args += ["--runtime-root", str(root / "app.asar"), "--desktop-cohort", "0.2.1-rc.2",
                      "--market-cohort", "1.66.6", "--preflight"]
             with mock.patch.object(MARKET, "preflight_source_and_artifact") as source, \
                     mock.patch.object(MARKET, "preflight_market_inputs") as market, \
@@ -113,7 +113,7 @@ class MarketEntrypointTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()) as stdout:
                 self.assertEqual(MARKET.main(args), 0)
             source.assert_called_once()
-            market.assert_called_once_with(root.resolve(), (root / "app.asar").resolve(), "0.2.0-rc.2", "1.66.6")
+            market.assert_called_once_with(root.resolve(), (root / "app.asar").resolve(), "0.2.1-rc.2", "1.66.6")
             install.assert_not_called()
             self.assertFalse(output.exists())
             self.assertIn("acceptance_not_run", stdout.getvalue())
@@ -122,7 +122,7 @@ class MarketEntrypointTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             root, output, args = self.fixture(directory)
-            args += ["--runtime-root", str(root / "app.asar"), "--desktop-cohort", "0.2.0-rc.2",
+            args += ["--runtime-root", str(root / "app.asar"), "--desktop-cohort", "0.2.1-rc.2",
                      "--market-cohort", "1.66.6", "--transfer-receipt", str(output),
                      "--transport-url", "https://example.invalid/tgz"]
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -182,7 +182,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
         desktop_runtime = {key: value for key, value in
                            schema_shape and {
                                "manifest_sha256": "f" * 64, "header_sha256": "a" * 64,
-                               "metadata_sha256": "b" * 64, "host_version": "0.2.0-rc.2",
+                               "metadata_sha256": "b" * 64, "host_version": "0.2.1-rc.2",
                                "desktop_version": "0.2.0", "payload_file_count": 1}.items()}
         state = {"market": False, "inject_count": 0, "guard_installed": False}
 
@@ -204,7 +204,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
                 write_manifest()
                 return ""
             if "inspect-graph" in args:
-                return json.dumps({"status": "supported", "host_version": {"version": "0.2.0-rc.2"},
+                return json.dumps({"status": "supported", "host_version": {"version": "0.2.1-rc.2"},
                                    "packages": [], "desktop_runtime": desktop_runtime})
             if "plugin" in args and "add" in args:
                 if "dshmarket@1.66.6" in args:
@@ -329,7 +329,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
                 mock.patch.object(MARKET.subprocess, "run", side_effect=fake_run), \
                 mock.patch.object(MARKET.subprocess, "Popen", side_effect=popen):
             out = MARKET.market_acceptance(api, ROOT, artifact, artifact_sha, archive,
-                                           result, "0.2.0-rc.2", "1.66.6", temp / "diagnostics.json")
+                                           result, "0.2.1-rc.2", "1.66.6", temp / "diagnostics.json")
         return {"result": out, "artifact": artifact, "driver": digest_seed["value"], "temp": temp}
 
     def consumer_check(self, out, artifact, locks=None):
@@ -362,7 +362,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
                                 out["host_lock_digests"]["desktop_coexistence"])
             self.assertEqual(set(out["market"]), {"package", "version", "registry_integrity"})
             self.assertEqual(out["market_observation"]["status"], "observed")
-            self.assertEqual(out["desktop_runtime"]["host_version"], "0.2.0-rc.2")
+            self.assertEqual(out["desktop_runtime"]["host_version"], "0.2.1-rc.2")
 
     def test_field_mutations_break_the_produced_receipt(self):
         import tempfile
@@ -476,7 +476,7 @@ class ProducerConsumerClosureTests(unittest.TestCase):
         healthy = {
             "host_lock_digests": {slot: FIXED_DIGESTS[slot] for slot in MARKET.LOCK_SLOTS},
             "desktop_runtime": {"manifest_sha256": "f" * 64, "header_sha256": "a" * 64,
-                                "metadata_sha256": "b" * 64, "host_version": "0.2.0-rc.2",
+                                "metadata_sha256": "b" * 64, "host_version": "0.2.1-rc.2",
                                 "desktop_version": "0.2.0", "payload_file_count": 1},
             "market": {"package": "dshmarket", "version": "1.66.6", "registry_integrity": INTEGRITY},
             "market_observation": {"schema": "dsh-desktop-market-observation/v1", "status": "observed",

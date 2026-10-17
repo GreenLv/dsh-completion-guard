@@ -99,7 +99,7 @@ describe('legacy migration inventory and receipt', () => {
     expect(prepareActivationMigration(inventory, prior)).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, cohorts: [prior.cohorts[0]] })).toMatchObject({ status: 'ready', receipt: { entries: [{ mode: 'opt-in' }, { mode: 'opt-in' }] } })
     expect(prepareActivationMigration(inventory, { ...prior, cohorts: prior.cohorts.map((c, i) => ({ ...c, sessionIds: [inventory[i].id] })) }).status).toBe('ready')
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.9.0' } })).toThrow('activation_prior_modes_invalid')
+    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.10.0' } })).toThrow('activation_prior_modes_invalid')
   })
   it('uses read handles for exact inherited cut, emits no bodies and detects identity/revision changes', async () => {
     const header = { version: 4, id: 'a', createdAt: 1, isSeeded: true, parentSession: 'p' }, revision = Symbol('rev')

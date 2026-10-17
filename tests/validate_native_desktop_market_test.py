@@ -62,7 +62,7 @@ class DesktopMarketAnnexTests(unittest.TestCase):
                                         "api_schema": "dsh-market/update-api/v1", "api_version": 1,
                                         "market_version": "1.66.6", "boot_id": "4242-1699000000000", "port": 45123},
                  "desktop_runtime": {"manifest_sha256": "f" * 64, "header_sha256": "a" * 64, "metadata_sha256": "b" * 64,
-                                     "host_version": "0.2.0-rc.2", "desktop_version": "0.2.0", "payload_file_count": 1}}
+                                     "host_version": "0.2.1-rc.2", "desktop_version": "0.2.0", "payload_file_count": 1}}
         return artifact, commit, driver, slots, valid
 
     def check(self, value, *, tar, commit, driver, os_name, locks):

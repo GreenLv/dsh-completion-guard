@@ -1,6 +1,6 @@
 import { auditHostDependencyRoutes, reachableIdsByName, type DependencyAuditGraph } from './host-dependency-audit.js'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
-import hostByteAudit from '../../manifests/rc020-rc2-byte-audit.json' with { type: 'json' }
+import hostByteAudit from '../../manifests/rc021-rc2-byte-audit.json' with { type: 'json' }
 import { physicalFs } from './host-physical-fs.js'
 const { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } = physicalFs
 import { createHash } from 'node:crypto'
@@ -472,23 +472,24 @@ function walkLibFiles(session: HostAuditSession, root: string): string[] {
   return found
 }
 
-// The reviewed 0.2.0-rc.2 foreground tools have these exact published bytes
-// (the shell renderer bytes are unchanged from rc.1 — that package is not in
-// the rc.2 JS-change set, re-verified against the published 0.2.0-rc.2
-// tarballs; the bash/pwsh tool descriptions changed, so their bytes moved).
-// This is a separate check from npm SRI: a modified installed lib/index.js
-// must not inherit the graph's markerless-terminal interpretation.
+// The reviewed 0.2.1-rc.2 foreground tools have these exact published bytes
+// (the shell renderer bytes are unchanged from the 0.2.0 line — that package
+// is not in the 0.2.1-rc.2 JS-change set, re-verified against the published
+// 0.2.1-rc.2 tarballs; the bash/pwsh tool descriptions changed, so their
+// bytes moved). This is a separate check from npm SRI: a modified installed
+// lib/index.js must not inherit the graph's markerless-terminal
+// interpretation.
 const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-tool-bash': '0c63a09e4b80ec22db256eac4ecab6f7de3a342e16ec590348a40c5f356eff1a',
-  '@deepseek-ai/dsh-tool-pwsh': '1a49cd8de831423a4ae0a2c57a4674a64cec538f64ae603aaa2c388d78aec790',
+  '@deepseek-ai/dsh-tool-bash': 'a1215d7bcaf82c0755be48321ef6bb45075f1cb33296d6263009e9d10fd596f6',
+  '@deepseek-ai/dsh-tool-pwsh': '94c7f68c425e62c8006907b3f4fea771935321581fd2327b7ee1f0ba8d15eec1',
   '@deepseek-ai/dsh-shell': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
 }
 
 // The default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
-// All five bytes are unchanged from rc.1 (re-verified against the published
-// 0.2.0-rc.2 tarballs).
+// All five bytes are unchanged from the 0.2.0 line (re-verified against the
+// published 0.2.1-rc.2 tarballs).
 const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
   '@deepseek-ai/dsh-sandbox-policy': '772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924',
   '@deepseek-ai/dsh-sandbox': 'b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743',
