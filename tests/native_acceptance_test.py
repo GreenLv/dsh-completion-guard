@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -319,11 +320,12 @@ class HostBoundEntrypointTests(unittest.TestCase):
                 mock.patch.object(self.host.tempfile, "gettempdir", return_value=directory), \
                 mock.patch.object(self.host.tempfile, "mkdtemp") as posix_temp, \
                 mock.patch.object(self.host.secrets, "token_hex", return_value="unique"):
-            with mock.patch.object(Path, "mkdir", autospec=True) as mkdir:
+            with mock.patch.object(Path, "mkdir", autospec=True, side_effect=Path.mkdir) as mkdir:
                 root = self.host.host_temporary_root()
-            self.assertEqual(root, Path(directory) / "dsh-guard-host-unique")
+            allocated = Path(directory) / "dsh-guard-host-unique"
+            self.assertEqual(root, allocated.resolve(strict=True))
             # No explicit 0o700 (Windows OWNER RIGHTS DACL), chmod or ACL edits.
-            mkdir.assert_called_once_with(root)
+            mkdir.assert_called_once_with(allocated)
             posix_temp.assert_not_called()
 
     def test_windows_temp_collision_does_not_reuse_existing_directory(self):
@@ -348,10 +350,59 @@ class HostBoundEntrypointTests(unittest.TestCase):
             self.assertEqual(mkdir.call_count, 1)
 
     def test_posix_temp_root_retains_private_mkdtemp(self):
-        with mock.patch.object(self.host.platform, "system", return_value="Linux"), \
-                mock.patch.object(self.host.tempfile, "mkdtemp", return_value="private-root") as allocate:
-            self.assertEqual(self.host.host_temporary_root(), Path("private-root"))
-            allocate.assert_called_once_with(prefix="dsh-guard-host-")
+        with tempfile.TemporaryDirectory() as directory:
+            allocated = Path(directory) / "private-root"
+            allocated.mkdir(mode=0o700)
+            with mock.patch.object(self.host.platform, "system", return_value="Linux"), \
+                    mock.patch.object(self.host.tempfile, "mkdtemp", return_value=str(allocated)) as allocate:
+                self.assertEqual(self.host.host_temporary_root(), allocated.resolve(strict=True))
+                allocate.assert_called_once_with(prefix="dsh-guard-host-")
+
+    @unittest.skipIf(os.name == "nt", "POSIX private mode and symlink alias; Windows ACL allocation covered separately")
+    def test_owned_alias_root_binds_cwd_environment_and_target_to_native_physical_path(self):
+        allocate = tempfile.mkdtemp
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve(strict=True)
+            physical, alias = parent / "physical", parent / "alias"
+            physical.mkdir()
+            alias.symlink_to(physical, target_is_directory=True)
+            sentinel = physical / "unrelated"
+            sentinel.write_bytes(b"preserve")
+            for base in (alias, physical):
+                with mock.patch.object(self.host.tempfile, "mkdtemp", side_effect=lambda **kw: allocate(dir=base, **kw)):
+                    root = self.host.host_temporary_root()
+                native = subprocess.check_output(["node", "-e", "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))", str(root)], text=True)
+                self.assertEqual(str(root), native)
+                self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+                environment = self.host.isolated_environment(root)
+                self.assertEqual(Path(environment["HOME"]), root / "home")
+                self.assertEqual(Path(environment["DSH_HOME"]), root / "dsh")
+                work = root / "work"
+                work.mkdir()
+                target = work / "target.txt"
+                target.write_bytes(b"fixture")
+                observed = subprocess.check_output(["node", "-e", "process.stdout.write(JSON.stringify([process.cwd(),require('node:fs').realpathSync.native(process.argv[1])]))", str(target)], cwd=work, env=environment, text=True)
+                self.assertEqual(json.loads(observed), [str(work), str(target)])
+                # The assertion still distinguishes a returned alias spelling;
+                # no equivalence normalization is applied to observed evidence.
+                self.assertNotEqual(str(alias / root.name / "work" / "target.txt"), str(target))
+            self.assertTrue(alias.is_symlink())
+            self.assertEqual(sentinel.read_bytes(), b"preserve")
+
+    def test_physical_resolution_failure_preserves_error_cleans_owned_root_and_does_not_reallocate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "owned"
+            root.mkdir()
+            error = OSError("physical identity unavailable")
+            with mock.patch.object(self.host.platform, "system", return_value="Linux"), \
+                    mock.patch.object(self.host.tempfile, "mkdtemp", return_value=str(root)) as allocate, \
+                    mock.patch.object(Path, "resolve", side_effect=error):
+                with self.assertRaises(OSError) as caught:
+                    self.host.host_temporary_root()
+                self.assertIs(caught.exception, error)
+                allocate.assert_called_once()
+            self.assertFalse(root.exists())
+            self.assertTrue(Path(directory).exists())
 
     def test_execution_preflight_checks_current_process_on_both_platforms(self):
         for system in ("Darwin", "Windows"):

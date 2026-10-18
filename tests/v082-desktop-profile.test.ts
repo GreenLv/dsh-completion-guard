@@ -23,6 +23,14 @@ import { evaluateConfiguredHostLock, injectActiveProfileHostLock, inspectDesktop
 import { evaluateHostCapability, evaluateHostLock, type HostProfileKind } from '../src/domain/host-lock.js'
 import { resolveConfig } from '../src/config.js'
 import { revalidateCoreLock } from '../src/runtime.js'
+import distributionPins from '../manifests/desktop-distribution.v1.json' with { type: 'json' }
+
+// Portable supplement fixtures use an explicitly mocked qualification, never
+// production admission of synthetic headers or ASAR self-attested programs.
+vi.mock('../manifests/desktop-distribution.v1.json', async original => {
+  const source = await original<{ default: typeof distributionPins }>()
+  return { default: structuredClone(source.default) }
+})
 
 // ---------------------------------------------------------------------------
 // Synthetic official app bundle. The asar container is fully specified: a
@@ -237,6 +245,94 @@ describe('desktop asar adapter', () => {
   })
 })
 
+describe('independently qualified Desktop-only supplements', () => {
+  const original = structuredClone(distributionPins)
+  afterEach(() => Object.assign(distributionPins, structuredClone(original)))
+  function reattest(files: AsarFileSpec[], target: string): AsarFileSpec[] {
+    const digest = createHash('sha256').update(files.find(file => file.path === target)!.content).digest('hex')
+    return files.map(file => {
+      if (file.path !== 'dsh/desktop-runtime.json') return file
+      const metadata = JSON.parse(file.content.toString())
+      metadata.files.find((row: { path: string }) => row.path === target.slice('dsh/'.length)).sha256 = digest
+      return { ...file, content: Buffer.from(JSON.stringify(metadata)) }
+    })
+  }
+  function fixture() {
+    const root = temporaryRoot(), metadata = makeDesktopMetadata()
+    metadata.platform = process.platform
+    metadata.arch = 'synthetic'
+    ;(metadata.release as Record<string, unknown>).pnpmVersion = '11.28.5'
+    const desktop = Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-desktop', version: RC2_VERSION,
+      dshBuildCommit: original.distributions[0]!.buildCommit, dshBuildDirty: false }))
+    const extras = original.files.map(row => {
+      const content = Buffer.from(`export const retired = '${row.package}'\n`)
+      return { row: { ...row, bytes: content.length, sha256: createHash('sha256').update(content).digest('hex') }, content }
+    })
+    distributionPins.files = extras.map(x => x.row)
+    ;(metadata.files as unknown[]).push(...extras.map(({ row }) => ({ path: `node_modules/${row.package}/${row.path}`, sha256: row.sha256 })))
+    const files = [...bundleFileSpecs({ metadata }), { path: 'package.json', content: desktop },
+      ...extras.map(({ row, content }) => ({ path: `dsh/node_modules/${row.package}/${row.path}`, content }))]
+    const asar = writeAsar(files, root)
+    distributionPins.distributions = [{ ...original.distributions[0]!, platform: process.platform, arch: 'synthetic',
+      asarHeaderSha256: readAsarIndex(asar).headerSha256, desktopManifestSha256: createHash('sha256').update(desktop).digest('hex') }]
+    const expectations = RC021_RC2_HOST_PACKAGES.map(row => ({ name: row.name, version: row.version!, modules: {
+      'package.json': createHash('sha256').update(syntheticManifestBytes(row.name, row.version!)).digest('hex'),
+      'lib/index.js': SYNTHETIC_MODULES['lib/index.js']!,
+    } }))
+    return { root, files, asar, expectations }
+  }
+  it('admits all eight exact supplemental tuples without adding them to registry expectations', () => {
+    const f = fixture()
+    expect(f.expectations.every(row => !Object.hasOwn(row.modules, 'lib/types/invariant.js'))).toBe(true)
+    expect(auditDesktopInstalledImplementation(f.asar, f.expectations)).toBe(true)
+    expect(readDesktopAppRuntime(f.asar).distributionQualificationSha256).toMatch(/^[a-f0-9]{64}$/)
+    distributionPins.distributions = []
+    expect(auditDesktopInstalledImplementation(f.asar, f.expectations)).toBe(false)
+    expect(readDesktopAppRuntime(f.asar).distributionQualificationSha256).toBeUndefined()
+  })
+  it('still rejects nested critical-package ambiguity beside qualified supplements', () => {
+    const f = fixture()
+    f.files.push({ path: 'dsh/node_modules/other/node_modules/@deepseek-ai/dsh-session/package.json', content: Buffer.from('{}') })
+    const asar = writeAsar(f.files, f.root)
+    distributionPins.distributions[0]!.asarHeaderSha256 = readAsarIndex(asar).headerSha256
+    expect(readDesktopAppRuntime(asar).distributionQualificationSha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(() => auditDesktopInstalledImplementation(asar, f.expectations)).toThrowError(/nested/)
+  })
+  it.each(original.files.map(row => row.package))('rejects a changed supplemental byte for %s even with the same synthetic header', name => {
+    const f = fixture(), target = `dsh/node_modules/${name}/lib/types/invariant.js`
+    const files = reattest(f.files.map(file => file.path === target ? { ...file, content: Buffer.from(file.content.toString().replace('retired', 'altered')) } : file), target)
+    const next = writeAsar(files, f.root)
+    expect(readAsarIndex(next).headerSha256).toBe(distributionPins.distributions[0]!.asarHeaderSha256)
+    expect(auditDesktopInstalledImplementation(next, f.expectations)).toBe(false)
+  })
+  it.each(['unknown-extra', 'missing-extra', 'wrong-version', 'active-route', 'active-module', 'missing-attestation', 'unsigned-metadata-claim', 'wrong-platform', 'wrong-build'])
+  ('rejects unqualified supplement input: %s', change => {
+    const f = fixture(), packagePath = 'dsh/node_modules/@deepseek-ai/dsh-session/', extra = packagePath + 'lib/types/invariant.js'
+    let files = f.files
+    if (change === 'unknown-extra') files = [...files, { path: packagePath + 'lib/unknown.js', content: Buffer.from('export {}\n') }]
+    if (change === 'missing-extra') files = files.filter(file => file.path !== extra)
+    if (change === 'wrong-version') files = files.map(file => file.path === packagePath + 'package.json'
+      ? { ...file, content: Buffer.from(file.content.toString().replace(RC2_VERSION, '0.2.1-rc.1')) } : file)
+    if (change === 'active-route') files = files.map(file => file.path === packagePath + 'package.json'
+      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-session', version: RC2_VERSION, main: 'lib/types/invariant.js' })) } : file)
+    if (change === 'active-module') files = files.map(file => file.path === packagePath + 'lib/index.js'
+      ? { ...file, content: Buffer.from(file.content.toString().replace('true', 'null')) } : file)
+    if (change === 'active-module') files = reattest(files, packagePath + 'lib/index.js')
+    if (change === 'missing-attestation') files = files.map(file => {
+      if (file.path !== 'dsh/desktop-runtime.json') return file
+      const metadata = JSON.parse(file.content.toString())
+      metadata.files = metadata.files.filter((row: { path: string }) => row.path !== extra.slice('dsh/'.length))
+      return { ...file, content: Buffer.from(JSON.stringify(metadata)) }
+    })
+    if (change === 'unsigned-metadata-claim') distributionPins.distributions[0]!.asarHeaderSha256 = 'a'.repeat(64)
+    if (change === 'wrong-platform') distributionPins.distributions[0]!.platform = 'unsupported-platform'
+    if (change === 'wrong-build') distributionPins.distributions[0]!.buildCommit = '0'.repeat(40)
+    const next = writeAsar(files, f.root)
+    if (change === 'active-module') expect(readDesktopAppRuntime(next).distributionQualificationSha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(auditDesktopInstalledImplementation(next, f.expectations)).toBe(false)
+  })
+})
+
 describe('desktop installed-byte audit', () => {
   it('refuses an extra executable even when a replacement table self-attests it', () => {
     const root = temporaryRoot()
@@ -384,15 +480,32 @@ describe('desktop runtime attach (revalidation)', () => {
     return profile
   }
 
-  it('accepts the bundled pnpm 11.7 physical importer and freshly binds its index', () => {
-    const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
+  it.each(['11.7.0', '11.28.5'])('accepts qualified pnpm %s and freshly binds its index', pnpm => {
+    const root = temporaryRoot(), metadata = makeDesktopMetadata()
+    ;(metadata.release as Record<string, unknown>).pnpmVersion = pnpm
+    const asar = writeAsar(bundleFileSpecs({ metadata }), root)
     const profile = physicalImporterProfile(root)
+    const path = join(profile, 'node_modules', '.modules.yaml')
+    const index = JSON.parse(readFileSync(path, 'utf8'))
+    writeFileSync(path, JSON.stringify({ ...index, packageManager: `pnpm@${pnpm}` }, null, 2))
     const active = resolveActiveProfileHostLock(asar, profile, '0.8.2')
     expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).digest).toBe(active.evaluation.digest)
-    const path = join(profile, 'node_modules', '.modules.yaml')
-    const metadata = JSON.parse(readFileSync(path, 'utf8'))
-    writeFileSync(path, JSON.stringify({ ...metadata, prunedAt: 'different index bytes' }))
+    const installed = JSON.parse(readFileSync(path, 'utf8'))
+    writeFileSync(path, JSON.stringify({ ...installed, prunedAt: 'different index bytes' }))
     expect(revalidateDesktopCoreLock(asar, profile, active.evaluation).digest).not.toBe(active.evaluation.digest)
+  })
+
+  it.each(['manager-disagrees', 'duplicate-key', 'escaped-duplicate-key', 'yaml', 'unsupported-carrier'])
+  ('refuses unqualified physical index format or carrier disagreement: %s', change => {
+    const root = temporaryRoot(), metadata = makeDesktopMetadata(), profile = physicalImporterProfile(root)
+    if (change === 'unsupported-carrier') (metadata.release as Record<string, unknown>).pnpmVersion = '11.29.0'
+    const asar = writeAsar(bundleFileSpecs({ metadata }), root), path = join(profile, 'node_modules', '.modules.yaml')
+    const text = readFileSync(path, 'utf8')
+    if (change === 'manager-disagrees') writeFileSync(path, text.replace('11.7.0', '11.28.5'))
+    if (change === 'duplicate-key') writeFileSync(path, text.replace('{', '{"nodeLinker":"isolated",'))
+    if (change === 'escaped-duplicate-key') writeFileSync(path, text.replace('{', '{"node\\u004cinker":"isolated",'))
+    if (change === 'yaml') writeFileSync(path, 'nodeLinker: hoisted\nlayoutVersion: 5\n')
+    expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrowError(expect.objectContaining({ code: 'active_graph_invalid' }))
   })
 
   it.skipIf(process.platform !== 'win32')('audits the official Windows backslash importer through the active resolver', () => {

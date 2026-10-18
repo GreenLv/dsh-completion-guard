@@ -865,22 +865,22 @@ function asarRowsWithIntegrity(runtime: DesktopAppRuntime, source: readonly { na
   })
 }
 
-function desktopProfileRows(profileRoot: string, session?: HostAuditSession): PackageRow[] {
+function desktopProfileRows(profileRoot: string, carrierPnpm: string, session?: HostAuditSession): PackageRow[] {
   // When the app's plugin manager has installed plugins, the profile half of
   // the graph is a real importer; read it with the strict standard reader.
   // A dependency-free desktop profile contributes no rows of its own.
   const auditSession = session ?? createHostAuditSession()
   const lockPath = join(profileRoot, 'pnpm-lock.yaml')
-  const layout = desktopProfileLayout(profileRoot, auditSession)
+  const layout = desktopProfileLayout(profileRoot, auditSession, carrierPnpm)
   if (!layout && !existsSync(lockPath)) return []
   if (!layout || !existsSync(lockPath)) throw new HostProfileError('active_graph_missing', 'partial desktop profile importer')
   const graph = layout.graph
   return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString('utf8'), join(profileRoot, 'node_modules'), auditSession)
 }
 
-function desktopProfileLayout(profile: string, session: HostAuditSession):
+function desktopProfileLayout(profile: string, session: HostAuditSession, carrierPnpm: string):
   { graph: DependencyAuditGraph; identityPath: string; kind: string } | undefined {
-  return session.memo(`desktop-profile-layout:${profile}`, () => {
+  return session.memo(`desktop-profile-layout:${profile}\0${carrierPnpm}`, () => {
     const modules = join(profile, 'node_modules'), mapPath = join(modules, '.package-map.json')
     if (session.exists(mapPath)) {
       const parsed = activeGraphRecords(session.readFile(mapPath).toString('utf8'))
@@ -889,7 +889,7 @@ function desktopProfileLayout(profile: string, session: HostAuditSession):
     const metadataPath = join(modules, '.modules.yaml')
     if (!session.exists(metadataPath)) return undefined
     try {
-      return { graph: desktopHoistedProfileGraph(profile, session), identityPath: metadataPath, kind: 'pnpm-11.7-hoisted' }
+      return { graph: desktopHoistedProfileGraph(profile, session, carrierPnpm), identityPath: metadataPath, kind: `pnpm-${carrierPnpm}-hoisted` }
     } catch {
       throw new HostProfileError('active_graph_invalid', 'Desktop physical importer index does not match its installed tree')
     }
@@ -965,7 +965,7 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
   const pluginManifestPath = join(profile, 'node_modules', 'dsh-completion-guard', 'package.json')
   const installedPlugin = session.readJson(pluginManifestPath)
   verifyDesktopPluginIdentity(profile, String(installedPlugin.version))
-  const profileRows = desktopProfileRows(profile, session)
+  const profileRows = desktopProfileRows(profile, runtime.metadata.pnpm, session)
   const runtimeRows = asarRowsWithIntegrity(runtime, trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : cohortIntegrityRows(runtime))
   const runtimeKeys = new Set(runtimeRows.map((row) => `${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`))
   const rows = [...runtimeRows, ...profileRows.filter((row) => !runtimeKeys.has(`${row.name}\u0000${row.version ?? ''}\u0000${row.integrity ?? ''}`))]
@@ -977,7 +977,7 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
   const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session)
-  const layout = desktopProfileLayout(profile, session)!
+  const layout = desktopProfileLayout(profile, session, runtime.metadata.pnpm)!
   if (!auditedHostImplementation(join(runtime.asarRealpath, 'dsh'), profile, archiveGraph.session, expectations, archiveGraph.graph, layout.graph)) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
@@ -988,6 +988,7 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
     .update(evaluation.digest).update('\0').update(runtime.asarRealpath).update('\0')
     .update(runtime.headerSha256).update('\0').update(runtime.manifestSha256).update('\0')
     .update(runtime.metadataSha256).update('\0').update(executable).update('\0').update(session.fileDigest(executable)).update('\0')
+    .update(runtime.distributionQualificationSha256 ? `dsh.desktop-distribution/v1\0${runtime.distributionQualificationSha256}\0` : '')
     .update(profile).update('\0').update(profileManifest).update('\0')
     .update(session.fileDigest(pluginManifestPath)).update('\0')
     .update(layout.kind).update('\0').update(session.fileDigest(layout.identityPath)).update('\0')

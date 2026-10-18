@@ -28,6 +28,7 @@ export const families = Object.freeze({
     'tests/loader.test.ts', 'tests/runtime.test.ts', 'tests/lifecycle.test.ts',
   ],
   'desktop-importer': [
+    'tests/v100-desktop-distribution.test.ts',
     'tests/v082-desktop-locations.test.ts',
     'tests/v082-desktop-cli.test.ts',
     'tests/v082-desktop-profile.test.ts',

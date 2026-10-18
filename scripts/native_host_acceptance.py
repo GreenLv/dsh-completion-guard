@@ -154,10 +154,12 @@ def host_temporary_root() -> Path:
     that root: even its own private temp and workspace become inaccessible.
     On Windows inherit the existing temp parent's ACL, as native directory
     creation does. Do not edit an ACL or change the sandbox's grants/mode.
-    POSIX retains mkdtemp's owner-only mode.
+    POSIX retains mkdtemp's owner-only mode. Bind the newly owned root to its
+    physical spelling before deriving cwd, HOME, profiles or evidence targets.
     """
     if platform.system() != "Windows":
-        return Path(tempfile.mkdtemp(prefix="dsh-guard-host-"))
+        path = Path(tempfile.mkdtemp(prefix="dsh-guard-host-"))
+        return physical_temporary_root(path)
     parent = Path(tempfile.gettempdir())
     for _ in range(10):
         path = parent / f"dsh-guard-host-{secrets.token_hex(12)}"
@@ -165,8 +167,19 @@ def host_temporary_root() -> Path:
             path.mkdir()
         except FileExistsError:
             continue
-        return path
+        return physical_temporary_root(path)
     raise RuntimeError("cannot allocate a unique host temporary root")
+
+
+def physical_temporary_root(path: Path) -> Path:
+    """Resolve only a freshly allocated root; never normalize observed evidence."""
+    try:
+        return path.resolve(strict=True)
+    except OSError:
+        # Only this allocation is owned. Preserve the original resolution error
+        # and never retry allocation because physical identity was unavailable.
+        shutil.rmtree(path, ignore_errors=True)
+        raise
 
 
 def isolated_environment(root: Path) -> dict[str, str]:

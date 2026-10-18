@@ -7,6 +7,7 @@ import { HostProfileError } from './host-resolver.js'
 import { parseHostVersion, satisfiesSupportedHostRange } from './host-version.js'
 import type { HostAuditSession } from './host-audit-session.js'
 import type { AuditedPackageExpectation } from './host-resolver.js'
+import { desktopDistributionSupplement, hasDesktopDistributionHeader, type DesktopDistributionSupplement } from './host-desktop-distribution.js'
 
 /**
  * Official Desktop adapter (CG-RC2-002).
@@ -180,6 +181,8 @@ export function readAsarFile(archivePath: string, index: AsarIndex, entryPath: s
 }
 
 export interface DesktopAppRuntime {
+  /** Independent Desktop distribution supplement, never registry authority. */
+  distributionQualificationSha256?: string
   /** Absolute path of the app bundle archive the rows were read from. */
   asarRealpath: string
   headerSha256: string
@@ -274,7 +277,9 @@ export function readDesktopAppRuntime(appAsarPath: string, session?: HostAuditSe
     }
     rows.push({ name, version })
   }
+  const distribution = distributionSupplement(asarRealpath, index, session)
   return {
+    ...(distribution ? { distributionQualificationSha256: distribution.digest } : {}),
     asarRealpath,
     headerSha256: index.headerSha256,
     manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
@@ -291,6 +296,20 @@ export function readDesktopAppRuntime(appAsarPath: string, session?: HostAuditSe
     },
     rows,
   }
+}
+
+function distributionSupplement(archive: string, index: AsarIndex, session?: HostAuditSession): DesktopDistributionSupplement | undefined {
+  if (!hasDesktopDistributionHeader(index.headerSha256, process.platform)) return undefined
+  const json = (path: string): Record<string, unknown> => JSON.parse(memoizedAsarFile(session, archive, index, path).toString('utf8')) as Record<string, unknown>
+  const manifestBytes = memoizedAsarFile(session, archive, index, 'package.json')
+  const manifest = JSON.parse(manifestBytes.toString('utf8')) as Record<string, unknown>
+  const runtime = json(DESKTOP_RUNTIME_MANIFEST_ENTRY), metadata = json(DESKTOP_RUNTIME_METADATA_ENTRY)
+  const release = isRecord(metadata.release) ? metadata.release : {}
+  if (metadata.platform !== process.platform || runtime.name !== DESKTOP_RUNTIME_PACKAGE_NAME || !isRecord(runtime.dependencies)) return undefined
+  return desktopDistributionSupplement({ headerSha256: index.headerSha256, platform: String(metadata.platform),
+    arch: String(metadata.arch), hostVersion: String(runtime.dependencies['@deepseek-ai/dsh']), runtimeVersion: String(runtime.version),
+    desktopVersion: String(release.version), pnpmVersion: String(release.pnpmVersion),
+    desktopManifestSha256: createHash('sha256').update(manifestBytes).digest('hex'), manifest })
 }
 
 // Imported late to keep this module independent of the cohort definition at
@@ -383,6 +402,7 @@ export function auditDesktopInstalledImplementation(appAsarPath: string,
   try {
     const realArchive = realpathSync(appAsarPath)
     const index = memoizedAsarIndex(session, realArchive)
+    const distribution = distributionSupplement(realArchive, index, session)
     const { CRITICAL_NAME_SET } = criticalNames()
     // Ambiguity scan over the header only: any second (nested) occurrence of
     // a critical package name inside the app graph makes resolution
@@ -443,9 +463,15 @@ export function auditDesktopInstalledImplementation(appAsarPath: string,
       }
       walk(node, [], 0)
       // An archive cannot authorize additional programs with its own table.
-      // Close the executable inventory against the acquired registry modules.
+      // Close against registry modules plus the independent exact distribution
+      // pins, when this physical archive belongs to that qualified release.
       const registryFiles = Object.keys(expected.modules ?? {})
-      if (inventory.some((file) => !registryFiles.includes(file))) return false
+      for (const file of inventory.filter(file => !registryFiles.includes(file))) {
+        const supplement = distribution?.files.find(row => row.package === expected.name && row.version === expected.version && row.path === file)
+        if (!supplement) return false
+        const bytes = memoizedAsarFile(session, realArchive, index, [...parts, ...file.split('/')].join('/'))
+        if (bytes.length !== supplement.bytes || createHash('sha256').update(bytes).digest('hex') !== supplement.sha256) return false
+      }
       // Closed world: the bundle's OWN official digest table must attest
       // every single file under the package root; an unattested file (or a
       // table digest disagreement) fails the whole audit.
@@ -483,6 +509,7 @@ export function writeDesktopRuntimeReceipt(profileRoot: string, runtime: Desktop
     headerSha256: runtime.headerSha256,
     manifestSha256: runtime.manifestSha256,
     metadataSha256: runtime.metadataSha256,
+    ...(runtime.distributionQualificationSha256 ? { distributionQualificationSha256: runtime.distributionQualificationSha256 } : {}),
     hostVersion: runtime.hostVersion,
     runtimeVersion: runtime.runtimeVersion,
     metadata: runtime.metadata,

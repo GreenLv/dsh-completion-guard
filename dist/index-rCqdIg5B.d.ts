@@ -2677,6 +2677,8 @@ declare function readAsarIndex(archivePath: string): AsarIndex;
 */
 declare function readAsarFile(archivePath: string, index: AsarIndex, entryPath: string): Buffer;
 interface DesktopAppRuntime {
+  /** Independent Desktop distribution supplement, never registry authority. */
+  distributionQualificationSha256?: string;
   /** Absolute path of the app bundle archive the rows were read from. */
   asarRealpath: string;
   headerSha256: string;

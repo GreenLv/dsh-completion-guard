@@ -6,6 +6,7 @@ import { createHostAuditSession, type HostAuditSession } from './host-audit-sess
 import type { DependencyAuditGraph } from './host-dependency-audit.js'
 import { memoizedAsarFile, memoizedAsarIndex } from './host-desktop.js'
 import type { AuditedPackageExpectation } from './host-resolver.js'
+import { activationJson } from './session-activation.js'
 
 const packageNamePattern = /^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/
 
@@ -24,20 +25,23 @@ export function desktopInstallationLocation(value: unknown, name: string,
   return id
 }
 
-/** Desktop's bundled pnpm 11.7 emits a physical hoisted tree and JSON
+/** Desktop's qualified pnpm 11.7.0/11.28.5 emit a physical hoisted tree and JSON
  * .modules.yaml, without a package map. Read that actual installation index;
  * never write a substitute map or infer registry trust from local metadata.
  * The ordinary byte/route auditor still authenticates every selected peer.
  */
-export function desktopHoistedProfileGraph(profile: string, session: HostAuditSession): DependencyAuditGraph {
+export function desktopHoistedProfileGraph(profile: string, session: HostAuditSession, carrierPnpm: string): DependencyAuditGraph {
   const modules = session.realpath(join(profile, 'node_modules'))
   if (!modules.startsWith(session.realpath(profile) + sep)) throw Error('Desktop profile modules escape')
   const metadataPath = join(modules, '.modules.yaml')
   if (session.realpath(metadataPath) !== metadataPath) throw Error('Desktop installation index is linked')
   const bytes = session.readFile(metadataPath)
   if (bytes.length > 2 * 1024 * 1024) throw Error('Desktop installation index too large')
-  const metadata = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
-  if (metadata.nodeLinker !== 'hoisted' || metadata.layoutVersion !== 5 || metadata.packageManager !== 'pnpm@11.7.0'
+  // Reuse the bounded duplicate-key-rejecting JSON parser. This does not
+  // normalize installed metadata or relax the separate v2 no-op contract.
+  const metadata = activationJson(bytes.toString('utf8')) as Record<string, unknown>
+  if (!['11.7.0', '11.28.5'].includes(carrierPnpm) || !metadata || typeof metadata !== 'object' || Array.isArray(metadata)
+    || metadata.nodeLinker !== 'hoisted' || metadata.layoutVersion !== 5 || metadata.packageManager !== `pnpm@${carrierPnpm}`
     || !metadata.hoistedLocations || typeof metadata.hoistedLocations !== 'object' || Array.isArray(metadata.hoistedLocations)) {
     throw Error('Desktop installation index unsupported')
   }

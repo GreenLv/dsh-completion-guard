@@ -10650,7 +10650,7 @@ function hostTrustDigest(trust) {
 function registryArchiveFiles(bytes$1, row$3) {
 	if (bytes$1.length === 0 || bytes$1.length > 64 * 1024 * 1024 || `sha512-${createHash("sha512").update(bytes$1).digest("base64")}` !== row$3.integrity) return fail("host_trust_archive_integrity_mismatch");
 	const tar = gunzipSync(bytes$1, { maxOutputLength: 128 * 1024 * 1024 });
-	const seen = /* @__PURE__ */ new Set(), files = {};
+	const seen = /* @__PURE__ */ new Set(), files$1 = {};
 	let manifest;
 	for (let offset = 0; offset + 512 <= tar.length;) {
 		const header = tar.subarray(offset, offset + 512);
@@ -10670,12 +10670,12 @@ function registryArchiveFiles(bytes$1, row$3) {
 		if (type$1 === 0 || type$1 === 48) {
 			const file = name.slice(8), content = tar.subarray(start, end);
 			if (file === "package.json") manifest = JSON.parse(content.toString("utf8"));
-			if (/\.(?:[cm]?js|json)$/.test(file)) files[file] = Buffer.from(content);
+			if (/\.(?:[cm]?js|json)$/.test(file)) files$1[file] = Buffer.from(content);
 		}
 		offset = start + Math.ceil(size / 512) * 512;
 	}
 	if (manifest?.name !== row$3.name || manifest.version !== row$3.version) return fail("host_trust_archive_identity_mismatch");
-	return files;
+	return files$1;
 }
 function registryArchiveModules(bytes$1, row$3) {
 	return Object.fromEntries(Object.entries(registryArchiveFiles(bytes$1, row$3)).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]));
@@ -10698,30 +10698,30 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 			redirect: "error"
 		});
 		if (!archive.ok) return fail("host_trust_registry_unavailable");
-		const files = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row$3);
+		const files$1 = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row$3);
 		archives.push({
 			name: row$3.name,
-			files
+			files: files$1
 		});
 		return {
 			name: row$3.name,
 			version: row$3.version,
 			integrity: row$3.integrity,
-			modules: Object.fromEntries(Object.entries(files).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]))
+			modules: Object.fromEntries(Object.entries(files$1).map(([file, content]) => [file, createHash("sha256").update(content).digest("hex")]))
 		};
 	};
 	for (const row$3 of rows) packages$3.push(await acquire(row$3));
 	if (!options?.profileRoot) return fail("host_trust_receipt_root_missing");
 	const targets = [], checks = [], equivalent = /* @__PURE__ */ new Set();
-	const reviewedEquivalent = (row$3, files) => {
+	const reviewedEquivalent = (row$3, files$1) => {
 		const reference = packages$2.find((p) => p.name === row$3.name);
 		if (!reference) return false;
-		return hostManifestLoadingDigest(files["package.json"].toString()) === reference.loadingDigest && Object.entries(reference.modules).filter(([file]) => file !== "package.json").every(([file, digest$1]) => {
-			if (!files[file]) return false;
+		return hostManifestLoadingDigest(files$1["package.json"].toString()) === reference.loadingDigest && Object.entries(reference.modules).filter(([file]) => file !== "package.json").every(([file, digest$1]) => {
+			if (!files$1[file]) return false;
 			if (row$3.modules[file] === digest$1) return true;
 			const programs = reference.programs;
 			try {
-				return !!programs?.[file] && hostProgramDigest(files[file].toString("utf8")) === programs[file];
+				return !!programs?.[file] && hostProgramDigest(files$1[file].toString("utf8")) === programs[file];
 			} catch {
 				return false;
 			}
@@ -10729,8 +10729,8 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 	};
 	for (const row$3 of packages$3) {
 		if (!packages$2.find((p) => p.name === row$3.name)) return fail("host_trust_identity_invalid");
-		const files = archives.find((a) => a.name === row$3.name).files;
-		if (reviewedEquivalent(row$3, files)) equivalent.add(row$3.name);
+		const files$1 = archives.find((a) => a.name === row$3.name).files;
+		if (reviewedEquivalent(row$3, files$1)) equivalent.add(row$3.name);
 		else targets.push(row$3.name);
 	}
 	const visited = /* @__PURE__ */ new Set(), queue = [...new Set([...targets, ...packages$3.filter((p) => HOST_CONTRACT_CONSUMERS.includes(p.name)).map((p) => p.name)])];
@@ -10927,6 +10927,150 @@ ${DESKTOP_HEADER_RESOURCE_CHECK}
 }
 
 //#endregion
+//#region manifests/desktop-distribution.v1.json
+var provenance = {
+	"repository": "https://github.com/deepseek-ai/deepseek-harness",
+	"sourceCommit": "3dce1c93d04494376118d574b862d51a7d2ec2f1",
+	"removalCommit": "f028f25667dbf378c83da80fbb29685b197d00e3",
+	"compiler": "TypeScript 5.9.3",
+	"compilerOptions": {
+		"target": "ES2024",
+		"module": "ESNext",
+		"sourceMap": true,
+		"rewriteRelativeImportExtensions": true,
+		"verbatimModuleSyntax": false
+	},
+	"scope": "Exact Desktop distribution supplements only; these are not registry package inventories. The declared Desktop build commit is an opaque signed identity, not a claim that it equals the public source pin."
+};
+var files = [
+	{
+		"package": "@deepseek-ai/dsh-agent",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 1058,
+		"sha256": "ff96b77450ecd0b7b75d94e7aa07f073e7d378924f2484866a6a04ffe4542bc3",
+		"sourcePath": "packages/core/agent/src/invariant.ts",
+		"sourceSha256": "9ddb2ac93ba30f723d3d80d5ec0c9d5d645c879e6b6c051ec5408e656dd5fec6"
+	},
+	{
+		"package": "@deepseek-ai/dsh-session",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 8982,
+		"sha256": "975e1640ad5dba930b6031315ee7d98dd01151155d2db7e993021de1feef4f32",
+		"sourcePath": "packages/core/session/src/invariant.ts",
+		"sourceSha256": "f1dda850ed2abad99f773d13dc21aca335a81bbfef86a63a0aa407248eeab000"
+	},
+	{
+		"package": "@deepseek-ai/dsh-tools",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 5628,
+		"sha256": "955311912d27f945c9298bc2add074b04fd04414312ef4f9dec92635639dd121",
+		"sourcePath": "packages/core/tools/src/invariant.ts",
+		"sourceSha256": "919744eaa6c1e6489a68a4ea3be9831e1e6c576a4a2fce96801d0a3a33ac2a79"
+	},
+	{
+		"package": "@deepseek-ai/dsh-goal",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 3206,
+		"sha256": "2eda87df2fffc21e2f761b138d54c9be523627e3b41bd1508906be5cf69a410d",
+		"sourcePath": "packages/goal/goal/src/invariant.ts",
+		"sourceSha256": "92b2156e0ca89f98af1cf904bad892bd68efc986951c7697880132e9780155d1"
+	},
+	{
+		"package": "@deepseek-ai/dsh-commands",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 3034,
+		"sha256": "e4bdb34890eb5b917fb26e5d8987929ef61be4e0587f8975c6cb7692e22be996",
+		"sourcePath": "packages/interaction/commands/src/invariant.ts",
+		"sourceSha256": "bebedf4440f99d6a9f275557edf10081d3ef9e1e22e82e0f3c603313a05c7d8c"
+	},
+	{
+		"package": "@deepseek-ai/dsh-user-approval",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 4858,
+		"sha256": "0ee679ea1449b99266df9dc3c53606a61573caa432cfca3d44badfdac71a0ef8",
+		"sourcePath": "packages/interaction/user-approval/src/invariant.ts",
+		"sourceSha256": "0d91ae6637974853dbb43088d65495840e96e21667b2ffd8237b7889aa4771c4"
+	},
+	{
+		"package": "@deepseek-ai/dsh-jobs",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 5474,
+		"sha256": "8d7b9de3a4928849ef504ea379642e4c60826ec0032ff92ff6fe89839f7fb490",
+		"sourcePath": "packages/jobs/jobs/src/invariant.ts",
+		"sourceSha256": "86633d18b1e73ec1667abb39a1a364f1db46cdb6db732ef8f828964db9d42b47"
+	},
+	{
+		"package": "@deepseek-ai/dsh-llm",
+		"version": "0.2.1-rc.2",
+		"path": "lib/types/invariant.js",
+		"bytes": 4401,
+		"sha256": "31e6ab4e29731d461b2bd49fd285666ea1a1fb96fa71ecd5c449c6c27e95d889",
+		"sourcePath": "packages/llm/llm/src/invariant.ts",
+		"sourceSha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd"
+	}
+];
+var distributions = [{
+	"id": "desktop-0.2.1-rc.2-darwin-arm64",
+	"platform": "darwin",
+	"arch": "arm64",
+	"version": "0.2.1-rc.2",
+	"runtimeVersion": "0.2.1-rc.2",
+	"pnpmVersion": "11.28.5",
+	"asarHeaderSha256": "4ab76d0724d8124801413e8e939a75c254c8625f9007267bd1531eb3b993e8f8",
+	"desktopManifestSha256": "53ee01d3b1accfbd037d245fb4752fb5fa5f8e2a76b7de634a4223558ee54bb9",
+	"buildCommit": "332895e0f7c9d4dbfb29729f5eb367fa263ff986",
+	"buildDirty": false,
+	"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.2-mac-arm64.zip",
+	"releaseSha512": "vgGV720lZGEd2MnjVFOvhLVafwQH3iUDindQwwSjQ7AJaeZuu6UvjR2Msae2dkGS1SeMxxYCBu5Ks13n+K9Ydw==",
+	"vendorTeam": "NAN929V4UM",
+	"vendorIdentifier": "com.deepseek.dsh"
+}, {
+	"id": "desktop-0.2.1-rc.2-win32-x64",
+	"platform": "win32",
+	"arch": "x64",
+	"version": "0.2.1-rc.2",
+	"runtimeVersion": "0.2.1-rc.2",
+	"pnpmVersion": "11.28.5",
+	"asarHeaderSha256": "487721b329cacfe1a15d206ebc72a096f9ff5b94ba0400c8763c73535429daf2",
+	"desktopManifestSha256": "53ee01d3b1accfbd037d245fb4752fb5fa5f8e2a76b7de634a4223558ee54bb9",
+	"buildCommit": "332895e0f7c9d4dbfb29729f5eb367fa263ff986",
+	"buildDirty": false,
+	"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.2-win-x64.exe",
+	"releaseSha512": "39POl5osl9PKMqrPXQA52dh/bCV0Z02vOV9cTjOJDHE6gsJwp5bv7lfgB3mVWAKspX7a/w1iTi+8Listdhq45g==",
+	"vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
+}];
+
+//#endregion
+//#region src/domain/host-desktop-distribution.ts
+/** A local ASAR table cannot authorize executable bytes. These independently
+* acquired release/header and historical-source pins are the only supplement
+* to the registry inventory, and only inside the signed Desktop adapter.
+* OS carrier verification remains mandatory at every public resolver entry.
+*/
+function hasDesktopDistributionHeader(header, platform) {
+	return distributions.some((row$3) => row$3.asarHeaderSha256 === header && row$3.platform === platform);
+}
+function desktopDistributionSupplement(identity) {
+	const row$3 = distributions.find((row$4) => row$4.asarHeaderSha256 === identity.headerSha256 && row$4.platform === identity.platform && row$4.arch === identity.arch && row$4.version === identity.hostVersion && row$4.version === identity.desktopVersion && row$4.runtimeVersion === identity.runtimeVersion && row$4.pnpmVersion === identity.pnpmVersion && row$4.desktopManifestSha256 === identity.desktopManifestSha256 && identity.manifest.name === "@deepseek-ai/dsh-desktop" && identity.manifest.version === row$4.version && identity.manifest.dshBuildCommit === row$4.buildCommit && identity.manifest.dshBuildDirty === row$4.buildDirty);
+	if (!row$3) return void 0;
+	return {
+		digest: createHash("sha256").update("dsh.desktop-distribution/v1\0").update(JSON.stringify({
+			provenance,
+			files,
+			distribution: row$3
+		})).digest("hex"),
+		files
+	};
+}
+
+//#endregion
 //#region src/domain/host-desktop.ts
 const { closeSync: closeSync$1, existsSync: existsSync$2, fstatSync: fstatSync$1, lstatSync: lstatSync$2, mkdirSync: mkdirSync$1, openSync: openSync$1, readFileSync: readFileSync$2, readSync, realpathSync: realpathSync$2, writeFileSync: writeFileSync$2 } = physicalFs;
 /**
@@ -11110,7 +11254,9 @@ function readDesktopAppRuntime(appAsarPath, session) {
 			version: version$1
 		});
 	}
+	const distribution = distributionSupplement(asarRealpath, index$1, session);
 	return {
+		...distribution ? { distributionQualificationSha256: distribution.digest } : {},
 		asarRealpath,
 		headerSha256: index$1.headerSha256,
 		manifestSha256: createHash("sha256").update(manifestBytes).digest("hex"),
@@ -11127,6 +11273,26 @@ function readDesktopAppRuntime(appAsarPath, session) {
 		},
 		rows
 	};
+}
+function distributionSupplement(archive, index$1, session) {
+	if (!hasDesktopDistributionHeader(index$1.headerSha256, process.platform)) return void 0;
+	const json = (path$1) => JSON.parse(memoizedAsarFile(session, archive, index$1, path$1).toString("utf8"));
+	const manifestBytes = memoizedAsarFile(session, archive, index$1, "package.json");
+	const manifest = JSON.parse(manifestBytes.toString("utf8"));
+	const runtime = json(DESKTOP_RUNTIME_MANIFEST_ENTRY), metadata$1 = json(DESKTOP_RUNTIME_METADATA_ENTRY);
+	const release = isRecord(metadata$1.release) ? metadata$1.release : {};
+	if (metadata$1.platform !== process.platform || runtime.name !== DESKTOP_RUNTIME_PACKAGE_NAME || !isRecord(runtime.dependencies)) return void 0;
+	return desktopDistributionSupplement({
+		headerSha256: index$1.headerSha256,
+		platform: String(metadata$1.platform),
+		arch: String(metadata$1.arch),
+		hostVersion: String(runtime.dependencies["@deepseek-ai/dsh"]),
+		runtimeVersion: String(runtime.version),
+		desktopVersion: String(release.version),
+		pnpmVersion: String(release.pnpmVersion),
+		desktopManifestSha256: createHash("sha256").update(manifestBytes).digest("hex"),
+		manifest
+	});
 }
 function criticalNames() {
 	return { CRITICAL_NAME_SET: new Set(HOST_COHORTS.flatMap((cohort) => cohort.packages.map((row$3) => row$3.name))) };
@@ -11196,6 +11362,7 @@ function auditDesktopInstalledImplementation(appAsarPath, expectations, session)
 	try {
 		const realArchive = realpathSync$2(appAsarPath);
 		const index$1 = memoizedAsarIndex(session, realArchive);
+		const distribution = distributionSupplement(realArchive, index$1, session);
 		const { CRITICAL_NAME_SET } = criticalNames();
 		const topLevelRoot = DESKTOP_GRAPH_ROOT.split("/");
 		const scan = (node, parts, depth) => {
@@ -11240,7 +11407,12 @@ function auditDesktopInstalledImplementation(appAsarPath, expectations, session)
 			};
 			walk(node, [], 0);
 			const registryFiles = Object.keys(expected.modules ?? {});
-			if (inventory.some((file) => !registryFiles.includes(file))) return false;
+			for (const file of inventory.filter((file$1) => !registryFiles.includes(file$1))) {
+				const supplement = distribution?.files.find((row$3) => row$3.package === expected.name && row$3.version === expected.version && row$3.path === file);
+				if (!supplement) return false;
+				const bytes$1 = memoizedAsarFile(session, realArchive, index$1, [...parts, ...file.split("/")].join("/"));
+				if (bytes$1.length !== supplement.bytes || createHash("sha256").update(bytes$1).digest("hex") !== supplement.sha256) return false;
+			}
 			for (const file of inventory) {
 				const tableEntry = fileTable.get(`${DESKTOP_GRAPH_ROOT}/${expected.name}/${file}`);
 				if (tableEntry === void 0) return false;
@@ -11268,6 +11440,7 @@ function writeDesktopRuntimeReceipt(profileRoot, runtime) {
 		headerSha256: runtime.headerSha256,
 		manifestSha256: runtime.manifestSha256,
 		metadataSha256: runtime.metadataSha256,
+		...runtime.distributionQualificationSha256 ? { distributionQualificationSha256: runtime.distributionQualificationSha256 } : {},
 		hostVersion: runtime.hostVersion,
 		runtimeVersion: runtime.runtimeVersion,
 		metadata: runtime.metadata,
@@ -11328,20 +11501,20 @@ function desktopInstallationLocation(value, name, platform = process.platform) {
 	if (!parts.every((part) => packageNamePattern.test(part)) || parts.at(-1) !== name) throw Error("Desktop installation location invalid");
 	return id;
 }
-/** Desktop's bundled pnpm 11.7 emits a physical hoisted tree and JSON
+/** Desktop's qualified pnpm 11.7.0/11.28.5 emit a physical hoisted tree and JSON
 * .modules.yaml, without a package map. Read that actual installation index;
 * never write a substitute map or infer registry trust from local metadata.
 * The ordinary byte/route auditor still authenticates every selected peer.
 */
-function desktopHoistedProfileGraph(profile, session) {
+function desktopHoistedProfileGraph(profile, session, carrierPnpm) {
 	const modules = session.realpath(join(profile, "node_modules"));
 	if (!modules.startsWith(session.realpath(profile) + sep)) throw Error("Desktop profile modules escape");
 	const metadataPath = join(modules, ".modules.yaml");
 	if (session.realpath(metadataPath) !== metadataPath) throw Error("Desktop installation index is linked");
 	const bytes$1 = session.readFile(metadataPath);
 	if (bytes$1.length > 2 * 1024 * 1024) throw Error("Desktop installation index too large");
-	const metadata$1 = JSON.parse(bytes$1.toString("utf8"));
-	if (metadata$1.nodeLinker !== "hoisted" || metadata$1.layoutVersion !== 5 || metadata$1.packageManager !== "pnpm@11.7.0" || !metadata$1.hoistedLocations || typeof metadata$1.hoistedLocations !== "object" || Array.isArray(metadata$1.hoistedLocations)) throw Error("Desktop installation index unsupported");
+	const metadata$1 = activationJson(bytes$1.toString("utf8"));
+	if (!["11.7.0", "11.28.5"].includes(carrierPnpm) || !metadata$1 || typeof metadata$1 !== "object" || Array.isArray(metadata$1) || metadata$1.nodeLinker !== "hoisted" || metadata$1.layoutVersion !== 5 || metadata$1.packageManager !== `pnpm@${carrierPnpm}` || !metadata$1.hoistedLocations || typeof metadata$1.hoistedLocations !== "object" || Array.isArray(metadata$1.hoistedLocations)) throw Error("Desktop installation index unsupported");
 	const names = packageNamePattern;
 	const records = Object.create(null);
 	records["."] = {
@@ -11813,7 +11986,7 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, ex
 }
 function qualifiedModuleFiles(session, root) {
 	if (!session.listDir) throw new Error("qualified inventory reader unavailable");
-	const files = [];
+	const files$1 = [];
 	const walk = (directory, prefix, depth) => {
 		if (depth > 32) throw new Error("qualified inventory too deep");
 		for (const entry of session.listDir(directory)) {
@@ -11821,12 +11994,12 @@ function qualifiedModuleFiles(session, root) {
 			const file = prefix + entry.name, path$1 = join(directory, entry.name);
 			if (!entry.isFile && !entry.isDirectory) throw new Error("qualified inventory special file");
 			if (entry.isDirectory) walk(path$1, file + "/", depth + 1);
-			else if (/\.(?:[cm]?js|json)$/.test(file)) files.push(file);
-			if (files.length > 1e4) throw new Error("qualified inventory too large");
+			else if (/\.(?:[cm]?js|json)$/.test(file)) files$1.push(file);
+			if (files$1.length > 1e4) throw new Error("qualified inventory too large");
 		}
 	};
 	walk(root, "", 0);
-	return files;
+	return files$1;
 }
 /** Every lib JS file below a package root, discovered through the same
 * session reads (realpath/exists/stat) as the rest of the audit. */
@@ -12147,17 +12320,17 @@ function asarRowsWithIntegrity(runtime, source) {
 		};
 	});
 }
-function desktopProfileRows(profileRoot, session) {
+function desktopProfileRows(profileRoot, carrierPnpm, session) {
 	const auditSession = session ?? createHostAuditSession();
 	const lockPath = join(profileRoot, "pnpm-lock.yaml");
-	const layout = desktopProfileLayout(profileRoot, auditSession);
+	const layout = desktopProfileLayout(profileRoot, auditSession, carrierPnpm);
 	if (!layout && !existsSync$1(lockPath)) return [];
 	if (!layout || !existsSync$1(lockPath)) throw new HostProfileError("active_graph_missing", "partial desktop profile importer");
 	const graph = layout.graph;
 	return packageRowsFromGraph(graph.records, graph.reachable, auditSession.readFile(lockPath).toString("utf8"), join(profileRoot, "node_modules"), auditSession);
 }
-function desktopProfileLayout(profile, session) {
-	return session.memo(`desktop-profile-layout:${profile}`, () => {
+function desktopProfileLayout(profile, session, carrierPnpm) {
+	return session.memo(`desktop-profile-layout:${profile}\0${carrierPnpm}`, () => {
 		const modules = join(profile, "node_modules"), mapPath = join(modules, ".package-map.json");
 		if (session.exists(mapPath)) return {
 			graph: {
@@ -12172,9 +12345,9 @@ function desktopProfileLayout(profile, session) {
 		if (!session.exists(metadataPath)) return void 0;
 		try {
 			return {
-				graph: desktopHoistedProfileGraph(profile, session),
+				graph: desktopHoistedProfileGraph(profile, session, carrierPnpm),
 				identityPath: metadataPath,
-				kind: "pnpm-11.7-hoisted"
+				kind: `pnpm-${carrierPnpm}-hoisted`
 			};
 		} catch {
 			throw new HostProfileError("active_graph_invalid", "Desktop physical importer index does not match its installed tree");
@@ -12229,7 +12402,7 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 	const pluginManifestPath = join(profile, "node_modules", "dsh-completion-guard", "package.json");
 	const installedPlugin = session.readJson(pluginManifestPath);
 	verifyDesktopPluginIdentity(profile, String(installedPlugin.version));
-	const profileRows = desktopProfileRows(profile, session);
+	const profileRows = desktopProfileRows(profile, runtime.metadata.pnpm, session);
 	const runtimeRows = asarRowsWithIntegrity(runtime, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : cohortIntegrityRows(runtime));
 	const runtimeKeys = new Set(runtimeRows.map((row$3) => `${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`));
 	const evaluation = evaluateConfiguredHostLock([...runtimeRows, ...profileRows.filter((row$3) => !runtimeKeys.has(`${row$3.name}\u0000${row$3.version ?? ""}\u0000${row$3.integrity ?? ""}`))], {
@@ -12245,7 +12418,7 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 		reasonCode: "host_lock_installed_graph_drift"
 	};
 	const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session);
-	const layout = desktopProfileLayout(profile, session);
+	const layout = desktopProfileLayout(profile, session, runtime.metadata.pnpm);
 	if (!auditedHostImplementation(join(runtime.asarRealpath, "dsh"), profile, archiveGraph.session, expectations, archiveGraph.graph, layout.graph)) return {
 		...evaluation,
 		status: "unsupported",
@@ -12253,7 +12426,7 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 		reasonCode: "host_lock_installed_graph_drift"
 	};
 	const profileManifest = session.fileDigest(join(profile, "package.json"));
-	const digest$1 = createHash("sha256").update("dsh.desktop-core-host/v1\0").update(evaluation.digest).update("\0").update(runtime.asarRealpath).update("\0").update(runtime.headerSha256).update("\0").update(runtime.manifestSha256).update("\0").update(runtime.metadataSha256).update("\0").update(executable).update("\0").update(session.fileDigest(executable)).update("\0").update(profile).update("\0").update(profileManifest).update("\0").update(session.fileDigest(pluginManifestPath)).update("\0").update(layout.kind).update("\0").update(session.fileDigest(layout.identityPath)).update("\0").update(session.fileDigest(join(profile, "pnpm-lock.yaml"))).digest("hex");
+	const digest$1 = createHash("sha256").update("dsh.desktop-core-host/v1\0").update(evaluation.digest).update("\0").update(runtime.asarRealpath).update("\0").update(runtime.headerSha256).update("\0").update(runtime.manifestSha256).update("\0").update(runtime.metadataSha256).update("\0").update(executable).update("\0").update(session.fileDigest(executable)).update("\0").update(runtime.distributionQualificationSha256 ? `dsh.desktop-distribution/v1\0${runtime.distributionQualificationSha256}\0` : "").update(profile).update("\0").update(profileManifest).update("\0").update(session.fileDigest(pluginManifestPath)).update("\0").update(layout.kind).update("\0").update(session.fileDigest(layout.identityPath)).update("\0").update(session.fileDigest(join(profile, "pnpm-lock.yaml"))).digest("hex");
 	const audited = auditedForegroundRenderers(runtime.asarRealpath, profile, session);
 	return audited.length ? {
 		...evaluation,
@@ -23615,7 +23788,7 @@ function resolveArtifact(path$1, scope) {
 */
 function captureRootText(projection, text, seq, scope, legacy, priorRootMessages, prefix = `m${seq}`, coordinationSplit = true, unitId, clarification = false) {
 	const blocks = segmentAuthorityBlocks(text, priorRootMessages);
-	const provenance = legacy ? void 0 : {
+	const provenance$1 = legacy ? void 0 : {
 		rawTextSha256: sha256(text),
 		rawText: text
 	};
@@ -23624,25 +23797,25 @@ function captureRootText(projection, text, seq, scope, legacy, priorRootMessages
 	for (const block$1 of blocks) {
 		if (!block$1.capture) continue;
 		let blockOffset;
-		if (provenance) {
-			const at = provenance.rawText.indexOf(block$1.text, blockCursor);
+		if (provenance$1) {
+			const at = provenance$1.rawText.indexOf(block$1.text, blockCursor);
 			if (at >= 0) {
 				blockCursor = at + 1;
-				blockOffset = utf8ByteOffset(provenance.rawText, at);
+				blockOffset = utf8ByteOffset(provenance$1.rawText, at);
 			}
 		}
-		coveredSpans += insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", legacy, block$1.kind === "instruction" || block$1.authority === "root_adoption", coordinationSplit, unitId, provenance ? {
-			...provenance,
+		coveredSpans += insertItems(projection, block$1.text, `${prefix}:${block$1.blockId}`, scope, block$1.authority === "root_adoption" ? "root_adoption" : "root_instruction", legacy, block$1.kind === "instruction" || block$1.authority === "root_adoption", coordinationSplit, unitId, provenance$1 ? {
+			...provenance$1,
 			blockOffset,
 			blockText: block$1.text,
 			blockAuthority: block$1.authority
 		} : void 0, clarification ? text : void 0);
 	}
-	if (provenance) {
+	if (provenance$1) {
 		projection.coverage.push({
 			seq,
-			rawTextSha256: provenance.rawTextSha256,
-			byteLength: utf8ByteLength(provenance.rawText),
+			rawTextSha256: provenance$1.rawTextSha256,
+			byteLength: utf8ByteLength(provenance$1.rawText),
 			coveredSpans
 		});
 		if (projection.coverage.length > 16) projection.coverage.shift();
@@ -24103,7 +24276,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 * item, so evidence for one file cannot close a message that also covers other
 * files or embeds prohibitions.
 */
-function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId, provenance, clarificationText) {
+function insertItems(projection, text, sourceMessageId, scope, authority = "root_instruction", legacy = false, legacyAuthorityProven = false, coordinationSplit = true, unitId, provenance$1, clarificationText) {
 	const freshItems = [];
 	const isFresh = /* @__PURE__ */ new Set();
 	let coveredSpans = 0;
@@ -24112,17 +24285,17 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 		if (classifyUserInteraction(segment.body) === "conversational") continue;
 		if (segment.kind === "requirement" && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue;
 		let span;
-		if (provenance) {
-			let at = provenance.blockText.indexOf(segment.text);
-			while (at >= 0 && usedOccurrences.has(at)) at = provenance.blockText.indexOf(segment.text, at + 1);
+		if (provenance$1) {
+			let at = provenance$1.blockText.indexOf(segment.text);
+			while (at >= 0 && usedOccurrences.has(at)) at = provenance$1.blockText.indexOf(segment.text, at + 1);
 			if (at >= 0) {
 				usedOccurrences.add(at);
-				const start = (provenance.blockOffset ?? 0) + utf8ByteOffset(provenance.blockText, at);
+				const start = (provenance$1.blockOffset ?? 0) + utf8ByteOffset(provenance$1.blockText, at);
 				span = {
 					partIndex: 0,
 					start,
 					end: start + utf8ByteLength(segment.text),
-					class: spanClassOf(segment.kind, segment.interpretation.directive, provenance.blockAuthority)
+					class: spanClassOf(segment.kind, segment.interpretation.directive, provenance$1.blockAuthority)
 				};
 			}
 		}
@@ -24134,8 +24307,8 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 				const raw = locationText;
 				const target = /^(["'`])([^"'`]+)\1$/u.exec(raw)?.[2] ?? (/^[^\s"'`]+$/u.test(raw) ? raw : void 0);
 				const resolved = target && rootLocatorFlavor(target) && !/(?:^|[\\/])package\.json$/iu.test(target);
-				const item = insert(projection, segment, sourceMessageId, resolved ? target : "scope", "scope", unitId, provenance ? {
-					rawTextSha256: provenance.rawTextSha256,
+				const item = insert(projection, segment, sourceMessageId, resolved ? target : "scope", "scope", unitId, provenance$1 ? {
+					rawTextSha256: provenance$1.rawTextSha256,
 					span
 				} : void 0, freshItems);
 				if (resolved) item.targetSource = { kind: "explicit_path" };
@@ -24151,14 +24324,14 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			if (/\b(?:in|within)\s+["'`]/iu.test(segment.body)) {
 				const target = /\b(?:in|within)\s+(["'`])([^"'`]+)\1(?:\s*[.!?])?\s*$/iu.exec(segment.body)?.[2];
 				if (target && rootLocatorFlavor(target)) {
-					const item = insert(projection, segment, sourceMessageId, target, "scope", unitId, provenance ? {
-						rawTextSha256: provenance.rawTextSha256,
+					const item = insert(projection, segment, sourceMessageId, target, "scope", unitId, provenance$1 ? {
+						rawTextSha256: provenance$1.rawTextSha256,
 						span
 					} : void 0, freshItems);
 					item.targetSource = { kind: "explicit_path" };
 				} else {
-					const item = insert(projection, segment, sourceMessageId, "scope", "scope", unitId, provenance ? {
-						rawTextSha256: provenance.rawTextSha256,
+					const item = insert(projection, segment, sourceMessageId, "scope", "scope", unitId, provenance$1 ? {
+						rawTextSha256: provenance$1.rawTextSha256,
 						span
 					} : void 0, freshItems);
 					delete item.requestedTarget?.scope;
@@ -24170,28 +24343,28 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			const manifests = segment.paths.filter((path$1) => /(?:^|[\\/])package\.json$/iu.test(path$1));
 			if (manifests.length === 1) {
 				const resolved = resolveArtifact(manifests[0], scope);
-				insert(projection, segment, sourceMessageId, resolved.replace(/[\\/]package\.json$/iu, "") || resolved, "scope", unitId, provenance ? {
-					rawTextSha256: provenance.rawTextSha256,
+				insert(projection, segment, sourceMessageId, resolved.replace(/[\\/]package\.json$/iu, "") || resolved, "scope", unitId, provenance$1 ? {
+					rawTextSha256: provenance$1.rawTextSha256,
 					span
 				} : void 0, freshItems);
 				continue;
 			}
 		}
 		if (segment.paths.length === 0) {
-			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance ? {
-				rawTextSha256: provenance.rawTextSha256,
+			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance$1 ? {
+				rawTextSha256: provenance$1.rawTextSha256,
 				span
 			} : void 0, freshItems);
 			continue;
 		}
-		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId, provenance ? {
-			rawTextSha256: provenance.rawTextSha256,
+		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId, provenance$1 ? {
+			rawTextSha256: provenance$1.rawTextSha256,
 			span
 		} : void 0, freshItems);
 	}
 	for (const added of freshItems) isFresh.add(added.id);
-	if (projection.boundaryProtocol === 6 && !legacy && provenance) {
-		const fresh = freshItems.filter((item) => item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance.rawTextSha256 && item.spans?.[0]?.partIndex === 0).sort((a, b) => a.spans[0].start - b.spans[0].start);
+	if (projection.boundaryProtocol === 6 && !legacy && provenance$1) {
+		const fresh = freshItems.filter((item) => item.sourceMessageId === sourceMessageId && item.rawTextSha256 === provenance$1.rawTextSha256 && item.spans?.[0]?.partIndex === 0).sort((a, b) => a.spans[0].start - b.spans[0].start);
 		for (const method of fresh) {
 			const text$1 = maskQuotedSpans(method.normalizedText).trim();
 			if (!/^(?:(?:for\s+[^,，]{1,100}[,，]\s*)?(?:use|consult|invoke|call)\b|(?:为|针对|对)[^,，。]{1,80}(?:调用|使用))/iu.test(text$1) || method.kind !== "requirement" || [
@@ -24217,7 +24390,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			};
 		}
 		let parent;
-		const raw = Buffer.from(provenance.rawText, "utf8");
+		const raw = Buffer.from(provenance$1.rawText, "utf8");
 		for (const item of fresh) {
 			const own = item.spans[0];
 			const clause = raw.subarray(own.start, own.end).toString("utf8");
@@ -24242,7 +24415,7 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 			}
 			item.rootDependency = {
 				parentItemId: parent.id,
-				rawTextSha256: provenance.rawTextSha256,
+				rawTextSha256: provenance$1.rawTextSha256,
 				sourceSpan: {
 					...own,
 					end: own.start + utf8ByteLength(connector[0])
@@ -24533,7 +24706,7 @@ function resolveInheritedGitTarget(projection, item) {
 	item.targetCaptureStatus = "clarification_required";
 	item.targetCaptureReasonCode = repositories.size > 1 ? "requested_target_repository_ambiguous" : "requested_target_repository_missing";
 }
-function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance, freshOut) {
+function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance$1, freshOut) {
 	const revision = projection.contractRevision + 1;
 	const id = nextId(projection.items, segment.kind);
 	const method = extractMethod(segment.body);
@@ -24611,9 +24784,9 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 	}
 	if (unitId !== void 0) item.unitId = unitId;
 	resolveInheritedGitTarget(projection, item);
-	if (provenance) {
-		item.rawTextSha256 = provenance.rawTextSha256;
-		if (provenance.span) item.spans = [provenance.span];
+	if (provenance$1) {
+		item.rawTextSha256 = provenance$1.rawTextSha256;
+		if (provenance$1.span) item.spans = [provenance$1.span];
 	}
 	const duplicate = indexesEnabled() ? findPendingDuplicateFromIndex(projection.items, segment.kind, item.textSha256, subject) : [...projection.items.values()].find((existing) => existing.kind === segment.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
 	if (duplicate) supersedeItem(projection.items, duplicate.id, item);
