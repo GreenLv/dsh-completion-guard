@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "renderer_version": 4,
-  "generated_at": "2026-10-17T18:44:58.238Z",
+  "generated_at": "2026-10-18T09:00:37.029Z",
   "data_through": "2026-10-12",
   "period": {
     "start": "2026-08-26",
@@ -744,19 +744,19 @@
     {
       "package": "dsh-context-guard",
       "start": "2026-08-26",
-      "end": "2026-10-12",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-10-12/dsh-context-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-10-12/dsh-context-guard"
+      "end": "2026-10-16",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-26:2026-10-16/dsh-context-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-26:2026-10-16/dsh-context-guard"
     },
     {
       "package": "dsh-completion-guard",
       "start": "2026-08-29",
-      "end": "2026-10-12",
-      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-10-12/dsh-completion-guard",
-      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-10-12/dsh-completion-guard"
+      "end": "2026-10-16",
+      "range": "https://api.npmjs.org/downloads/range/2026-08-29:2026-10-16/dsh-completion-guard",
+      "point": "https://api.npmjs.org/downloads/point/2026-08-29:2026-10-16/dsh-completion-guard"
     }
   ],
-  "observation_through": "2026-10-12",
+  "observation_through": "2026-10-16",
   "settlement": {
     "mode": "observed-stable-days",
     "latest_day_status": "stable",
@@ -766,7 +766,7 @@
         "first_version": "0.1.0",
         "first_published_at": "2026-08-26T19:24:20.556Z",
         "first_public_day": "2026-08-26",
-        "available_through": "2026-10-12",
+        "available_through": "2026-10-16",
         "registry": "https://registry.npmjs.org/dsh-context-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-context-guard"
       },
@@ -775,7 +775,7 @@
         "first_version": "0.2.1",
         "first_published_at": "2026-08-29T05:03:21.705Z",
         "first_public_day": "2026-08-29",
-        "available_through": "2026-10-12",
+        "available_through": "2026-10-16",
         "registry": "https://registry.npmjs.org/dsh-completion-guard",
         "availability": "https://api.npmjs.org/downloads/point/last-day/dsh-completion-guard"
       }
