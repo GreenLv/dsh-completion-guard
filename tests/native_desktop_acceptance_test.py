@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import stat
 import subprocess
 import unittest
 from pathlib import Path
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from tests import native_acceptance_test as base
+from tests.native_fixture_links import directory_link, file_symlink_or_skip
 NATIVE = base.NATIVE
 
 
@@ -238,6 +240,25 @@ class StrictNoopDiagnosticTests(unittest.TestCase):
             path.write_bytes(b"layoutVersion: 5\n")
             self.assertEqual(self.module.noop_snapshot([path], profile), {".modules.yaml": b"layoutVersion: 5\n"})
 
+    def test_windows_311_lstat_reparse_metadata_refuses_redirects_and_unknowns(self):
+        # A 3.11-shaped no-follow stat object: no is_junction() method exists.
+        cases = [
+            ({"st_mode": stat.S_IFREG, "st_file_attributes": 32, "st_reparse_tag": 0}, False),
+            ({"st_mode": stat.S_IFDIR, "st_file_attributes": 16, "st_reparse_tag": 0}, False),
+            ({"st_mode": stat.S_IFDIR, "st_file_attributes": 0x410, "st_reparse_tag": 0xA0000003}, True),
+            ({"st_mode": stat.S_IFREG, "st_file_attributes": 0x400, "st_reparse_tag": 0xA000000C}, True),
+            ({"st_mode": stat.S_IFDIR, "st_file_attributes": 0, "st_reparse_tag": 123}, True),
+            ({"st_mode": stat.S_IFDIR, "st_file_attributes": 0x400, "st_reparse_tag": 0}, True),
+            ({"st_mode": stat.S_IFREG, "st_file_attributes": 32}, True),
+            ({"st_mode": stat.S_IFDIR, "st_reparse_tag": 0}, True),
+            ({"st_mode": stat.S_IFREG, "st_file_attributes": False, "st_reparse_tag": 0}, True),
+            ({"st_mode": stat.S_IFLNK}, True),
+        ]
+        for fields, redirected in cases:
+            with self.subTest(fields=fields), mock.patch.object(self.module.os, "name", "nt"):
+                path = SimpleNamespace(lstat=lambda: SimpleNamespace(**fields))
+                self.assertIs(self.module.snapshot_path_redirected(path), redirected)
+
     def test_selected_root_alias_is_allowed_but_descendant_redirects_are_refused(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
@@ -248,24 +269,24 @@ class StrictNoopDiagnosticTests(unittest.TestCase):
             normal = profile / "normal"
             normal.write_bytes(b"normal")
             alias = root / "system-root-alias"
-            alias.symlink_to(real, target_is_directory=True)
+            directory_link(real, alias)
             selected = alias / "profile"
             # Reproduce macOS /var -> /private/var without depending on OS.
             self.assertEqual(self.module.noop_snapshot([selected / "normal"], selected), {"normal": b"normal"})
             internal = profile / "internal"
             internal.mkdir()
             (internal / "file").write_bytes(b"internal")
-            (profile / "redirected-parent").symlink_to(internal, target_is_directory=True)
+            directory_link(internal, profile / "redirected-parent")
             outside = root / "outside"
             outside.mkdir()
             (outside / "file").write_bytes(b"outside")
-            (profile / "escaped-parent").symlink_to(outside, target_is_directory=True)
+            directory_link(outside, profile / "escaped-parent")
             redirected = selected / "redirected-parent" / "file"
             escaped = selected / "escaped-parent" / "file"
             self.assertEqual(self.module.noop_snapshot([redirected, escaped], selected), {
                 "redirected-parent/file": None, "escaped-parent/file": None})
 
-    def test_capture_refuses_redirected_and_oversized_files(self):
+    def test_capture_refuses_redirected_file(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -274,11 +295,18 @@ class StrictNoopDiagnosticTests(unittest.TestCase):
             external = root / "external"
             external.write_bytes(b"private")
             redirected = profile / "redirected"
-            redirected.symlink_to(external)
+            file_symlink_or_skip(self, external, redirected)
+            self.assertEqual(self.module.noop_snapshot([redirected], profile), {"redirected": None})
+
+    def test_capture_refuses_oversized_regular_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory) / "profile"
+            profile.mkdir()
             large = profile / "large"
             large.write_bytes(b"12345")
             with mock.patch.object(self.module, "NOOP_CAPTURE_LIMIT", 4):
-                self.assertEqual(self.module.noop_snapshot([redirected, large], profile), {"redirected": None, "large": None})
+                self.assertEqual(self.module.noop_snapshot([large], profile), {"large": None})
 
 
 if __name__ == "__main__":

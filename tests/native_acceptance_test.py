@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
+from tests.native_fixture_links import directory_link, file_symlink_or_skip
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "native_acceptance.py"
 SPEC = importlib.util.spec_from_file_location("native_acceptance", SCRIPT)
@@ -25,9 +26,11 @@ SPEC.loader.exec_module(NATIVE)
 class NativeAcceptanceEntrypointTests(unittest.TestCase):
     def test_relative_result_sidecar_survives_child_workdir_change(self):
         from types import SimpleNamespace
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, contextlib.chdir(directory):
             root, output, args = self.fixture(directory)
-            args[args.index("--output") + 1] = os.path.relpath(output)
+            # A relative path belongs to its invocation directory. Keep that
+            # directory on the fixture drive even when checkout and TEMP differ.
+            args[args.index("--output") + 1] = os.path.relpath(output, start=Path.cwd())
             args += ["--gate-profile", "host_bound_v070", "--runtime-root", str(root),
                      "--web-cohort", "web", "--headless-cohort", "headless", "--web-market-version", "none"]
             def host(*positional, diagnostics_output):
@@ -211,16 +214,17 @@ class NativeAcceptanceEntrypointTests(unittest.TestCase):
         with self.assertRaises(NATIVE.NativeRunError):
             NATIVE.safe_tar_entries("package/a\npackage/a\n")
 
-    def test_tree_digest_is_stable_and_rejects_symlinks(self) -> None:
+    def test_tree_digest_is_stable_for_regular_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "a.txt").write_text("a", encoding="utf-8")
             first = NATIVE.tree_digest(root)
             self.assertEqual(first, NATIVE.tree_digest(root))
-            try:
-                (root / "link").symlink_to(root / "a.txt")
-            except OSError:
-                self.skipTest("symlinks unavailable")
+    def test_tree_digest_rejects_file_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.txt").write_text("a", encoding="utf-8")
+            file_symlink_or_skip(self, root / "a.txt", root / "link")
             with self.assertRaises(NATIVE.NativeRunError):
                 NATIVE.tree_digest(root)
 
@@ -754,10 +758,7 @@ class HostBoundEntrypointTests(unittest.TestCase):
             (dependency / "index.js").write_text('module.exports = 42')
             link = root / "runtime" / "node_modules" / "@deepseek-ai" / "dsh"
             link.parent.mkdir(parents=True)
-            try:
-                link.symlink_to(package, target_is_directory=True)
-            except OSError:
-                self.skipTest("directory symlink creation unavailable on this host")
+            directory_link(package, link)
             probe = SCRIPT.with_name("native_host_probe.mjs").resolve().as_uri()
             code = f"import {{ runtimeRequire }} from {json.dumps(probe)}; process.stdout.write(String(runtimeRequire(process.argv[1])('fixture-dependency')))"
             value = subprocess.check_output(["node", "--input-type=module", "-e", code, str(root / "runtime")], text=True)

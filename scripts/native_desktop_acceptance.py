@@ -12,6 +12,7 @@ import secrets
 import signal
 import shutil
 import socket
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,26 @@ class SemanticNoopFailure(StrictNoopFailure):
         self.args = ("Desktop multi-package install was not a semantic no-op",)
 
 
+def snapshot_path_redirected(path: Path) -> bool:
+    """No-follow metadata, including Windows 3.11 junction/reparse points.
+
+    is_symlink() excludes junctions. Windows lstat exposes both attributes and
+    the reparse tag on supported Python versions; missing metadata cannot
+    establish a regular descendant. No Path.is_junction() dependency.
+    """
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    if os.name == "nt":
+        attributes = getattr(info, "st_file_attributes", None)
+        tag = getattr(info, "st_reparse_tag", None)
+        if type(attributes) is not int or type(tag) is not int:
+            return True
+        # FILE_ATTRIBUTE_REPARSE_POINT is 0x400 in the Windows file API.
+        return bool(attributes & 0x400) or tag != 0
+    return False
+
+
 def noop_snapshot(paths: list[Path], profile: Path) -> dict[str, bytes | None]:
     captured = {}
     for path in paths:
@@ -66,7 +87,7 @@ def noop_snapshot(paths: list[Path], profile: Path) -> dict[str, bytes | None]:
             # inside the fixture. Refuse every redirected descendant and escape.
             descendants = (profile.joinpath(*relative.parts[:i]) for i in range(1, len(relative.parts) + 1))
             safe = path.resolve().is_relative_to(profile.resolve()) and not any(
-                descendant.is_symlink() for descendant in descendants)
+                snapshot_path_redirected(descendant) for descendant in descendants)
             data = path.read_bytes() if safe and path.is_file() and path.stat().st_size <= NOOP_CAPTURE_LIMIT else None
         except (OSError, RuntimeError):
             data = None

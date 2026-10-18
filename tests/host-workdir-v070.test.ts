@@ -288,7 +288,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     const s = scenario()
     const alias = `${s.physical}-alias`
     try {
-      symlinkSync(s.physical, alias)
+      symlinkSync(s.physical, alias, process.platform === 'win32' ? 'junction' : 'dir')
       const aliased = scenario({ headerCwd: alias })
       try { expect(aliased.receipt).toBeUndefined() } finally { aliased.cleanup() }
       const exec = { agent: { session: s.session }, callId: 'test-1', rootCallId: 'test-1', name: 'bash',

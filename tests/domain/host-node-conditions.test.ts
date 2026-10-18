@@ -23,7 +23,10 @@ function oracle(profile: boolean, conditions: Record<string, string>, args: stri
   file(join(parentRoot, 'package.json'), JSON.stringify({ name: parent, dependencies: { [dep]: '1.0.0' } }))
   file(join(parentRoot, 'lib/index.js'), 'module.exports = {}')
   file(join(parentRoot, 'lib/package.json'), JSON.stringify({ name: dep, exports: { '.': conditions } }))
-  symlinkSync(join(depRoot, 'lib/index.js'), join(parentRoot, 'lib/ok.js'), 'file')
+  // A directory junction reaches the same authenticated file without the
+  // Windows file-symlink privilege. Keep real require/import resolution.
+  symlinkSync(join(depRoot, 'lib'), join(parentRoot, 'lib/ok'), process.platform === 'win32' ? 'junction' : 'dir')
+  expect(realpathSync(join(parentRoot, 'lib/ok/index.js'))).toBe(realpathSync(join(depRoot, 'lib/index.js')))
   file(join(parentRoot, 'lib/wrong.js'), 'module.exports = { ok: false }')
   const definitions = [{ root: runtime, own: !profile }, ...(profile ? [{ root: owner, own: true }] : [])]
   const setup = definitions.map(({ root: home, own }) => ({ modules: join(home, 'node_modules'), records: { '.': { url: '..', dependencies: {} }, ...(own ? { [dep]: { url: './' + dep, dependencies: {} }, [parent]: { url: './' + parent, dependencies: { [dep]: dep } } } : {}) }, reachable: own ? ['.', dep, parent] : ['.'], packages: own ? [[dep, { root: depRoot, manifest: { name: dep, exports: { '.': './lib/index.js' } }, files: ['package.json', 'lib/index.js'] }], [parent, { root: parentRoot, manifest: { name: parent }, files: ['package.json', 'lib/index.js'] }]] : [] }))
@@ -36,19 +39,19 @@ function oracle(profile: boolean, conditions: Record<string, string>, args: stri
 }
 describe('fresh actual Node startup condition oracle', () => {
   it.each([false, true])('preserves the default positive (profile=%s)', profile => {
-    expect(oracle(profile, { 'node-addons': './ok.js', default: './wrong.js' }, [])).toMatchObject({ audit: true, require: true, import: true })
+    expect(oracle(profile, { 'node-addons': './ok/index.js', default: './wrong.js' }, [])).toMatchObject({ audit: true, require: true, import: true })
   })
   it.each([false, true].flatMap(profile => [
-    { profile, label: 'no addons', conditions: { 'node-addons': './ok.js', default: './wrong.js' }, args: ['--no-addons'] },
-    { profile, label: 'no addons underscore', conditions: { 'node-addons': './ok.js', default: './wrong.js' }, args: ['--no_addons'] },
-    { profile, label: 'custom equals', conditions: { 'fixture-active-review': './wrong.js', default: './ok.js' }, args: ['--conditions=fixture-active-review'] },
-    { profile, label: 'custom separate', conditions: { 'fixture-active-review': './wrong.js', default: './ok.js' }, args: ['-C', 'fixture-active-review'] },
-    { profile, label: 'require module disabled', conditions: { 'module-sync': './ok.js', default: './wrong.js' }, args: ['--no-experimental-require-module'] },
+    { profile, label: 'no addons', conditions: { 'node-addons': './ok/index.js', default: './wrong.js' }, args: ['--no-addons'] },
+    { profile, label: 'no addons underscore', conditions: { 'node-addons': './ok/index.js', default: './wrong.js' }, args: ['--no_addons'] },
+    { profile, label: 'custom equals', conditions: { 'fixture-active-review': './wrong.js', default: './ok/index.js' }, args: ['--conditions=fixture-active-review'] },
+    { profile, label: 'custom separate', conditions: { 'fixture-active-review': './wrong.js', default: './ok/index.js' }, args: ['-C', 'fixture-active-review'] },
+    { profile, label: 'require module disabled', conditions: { 'module-sync': './ok/index.js', default: './wrong.js' }, args: ['--no-experimental-require-module'] },
   ]))('rejects actual divergence $label (profile=$profile)', ({ profile, conditions, args }) => {
     expect(oracle(profile, conditions, args)).toMatchObject({ audit: false, require: false, import: false })
   })
   it.each(['--conditions fixture-active-review', '--conditions=fixture-active-review', '-C fixture-active-review'])('reads NODE_OPTIONS %s', options => {
-    expect(oracle(false, { 'fixture-active-review': './wrong.js', default: './ok.js' }, [], options)).toMatchObject({ audit: false, require: false, import: false })
+    expect(oracle(false, { 'fixture-active-review': './wrong.js', default: './ok/index.js' }, [], options)).toMatchObject({ audit: false, require: false, import: false })
   })
   it('changes the qualification binding and refuses unmodellable loading configuration', () => {
     expect(resolveHostNodeConditions([], '', true).digest).not.toBe(resolveHostNodeConditions(['--no-addons'], '', true).digest)
@@ -61,5 +64,5 @@ describe('fresh actual Node startup condition oracle', () => {
 })
 
 it.each([false, true])('reads the actual NODE_OPTIONS no_addons alias (profile=%s)', profile => {
-  expect(oracle(profile, { 'node-addons': './ok.js', default: './wrong.js' }, [], '--no_addons')).toMatchObject({ audit: false, require: false, import: false })
+  expect(oracle(profile, { 'node-addons': './ok/index.js', default: './wrong.js' }, [], '--no_addons')).toMatchObject({ audit: false, require: false, import: false })
 })

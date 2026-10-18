@@ -24,6 +24,7 @@ import { evaluateHostCapability, evaluateHostLock, type HostProfileKind } from '
 import { resolveConfig } from '../src/config.js'
 import { revalidateCoreLock } from '../src/runtime.js'
 import distributionPins from '../manifests/desktop-distribution.v1.json' with { type: 'json' }
+import { fileSymlinkOrSkip } from './helpers/file-symlink.js'
 
 // Portable supplement fixtures use an explicitly mocked qualification, never
 // production admission of synthetic headers or ASAR self-attested programs.
@@ -584,13 +585,13 @@ describe('desktop runtime attach (revalidation)', () => {
     expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
   })
 
-  it('rejects a physical importer index redirected outside its profile', () => {
+  it('rejects a physical importer index redirected outside its profile', context => {
     const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
     const profile = physicalImporterProfile(root), path = join(profile, 'node_modules/.modules.yaml')
     const outside = join(root, 'external-index.json')
     writeFileSync(outside, readFileSync(path))
     rmSync(path)
-    symlinkSync(outside, path)
+    fileSymlinkOrSkip(outside, path, context)
     expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
   })
 
