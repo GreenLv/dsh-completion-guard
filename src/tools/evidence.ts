@@ -6,7 +6,6 @@ import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:pa
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { gunzip } from 'node:zlib'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { actionPreparation } from './action-preparation.js'
@@ -27,6 +26,7 @@ import {
   type GitTargetIdentity,
 } from '../domain/git-adapter.js'
 import { bindExecutableIdentity, type AuditedExecutable, type ExecutableIdentity } from '../domain/host-lock.js'
+import { readTgzIdentity, type TgzIdentity } from '../domain/tgz-archive.js'
 import { snapshotSessionEvents } from '../domain/session-events.js'
 import type { ReleaseGateDecision, ReleaseObservedIdentity, ReleaseOperation, ReleaseSettlement } from '../domain/release.js'
 
@@ -498,57 +498,15 @@ async function readJson(path: string): Promise<RecordValue | undefined> {
   try { return record(JSON.parse(await readFile(path, 'utf8'))) } catch { return undefined }
 }
 
-interface TgzIdentity {
-  name: string
-  version: string
-  /** npm integrity (SHA-512 SRI) of the exact bytes. */
-  integrity: string
-  /** SHA-256 of the exact bytes — a DIFFERENT identity from the SRI. */
-  sha256: string
-  /** The commit the packer embedded in the artifact, when it recorded one. */
-  gitHead?: string
-  /** The repository declared by the packed manifest, when present. */
-  repository?: string
-}
-
-async function tgzIdentity(path: string): Promise<TgzIdentity | undefined> {
-  if (!isAbsolute(path) || !path.endsWith('.tgz')) return undefined
-  const bytes = await readFile(path)
-  if (bytes.length === 0 || bytes.length > 128 * 1024 * 1024) return undefined
-  const tar = await promisify(gunzip)(bytes)
-  let manifest: RecordValue | undefined
-  for (let offset = 0; offset + 512 <= tar.length;) {
-    const header = tar.subarray(offset, offset + 512)
-    if (header.every((byte) => byte === 0)) break
-    const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '')
-    const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
-    if (!/^[0-7]+$/.test(sizeText)) return undefined
-    const size = Number.parseInt(sizeText, 8)
-    const bodyStart = offset + 512
-    const bodyEnd = bodyStart + size
-    if (!Number.isSafeInteger(size) || size < 0 || bodyEnd > tar.length) return undefined
-    if (name === 'package/package.json') {
-      if (manifest || size > 1024 * 1024) return undefined
-      try { manifest = record(JSON.parse(tar.subarray(bodyStart, bodyEnd).toString('utf8'))) } catch { return undefined }
-    }
-    offset = bodyStart + Math.ceil(size / 512) * 512
-  }
-  if (typeof manifest?.name !== 'string' || typeof manifest.version !== 'string') return undefined
-  const gitHead = typeof manifest.gitHead === 'string' && /^[0-9a-f]{40}$/.test(manifest.gitHead) ? manifest.gitHead : undefined
-  const repositoryField = manifest.repository
-  const repository = typeof repositoryField === 'string'
-    ? repositoryField
-    : record(repositoryField) && typeof record(repositoryField)?.url === 'string'
-      ? String(record(repositoryField)!.url)
-      : undefined
-  return {
-    name: manifest.name,
-    version: manifest.version,
-    integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
-    sha256: createHash('sha256').update(bytes).digest('hex'),
-    ...(gitHead ? { gitHead } : {}),
-    ...(repository ? { repository } : {}),
-  }
+/**
+ * Identity of a release tgz under the auditable tar subset (F01/F08): every
+ * producer that needs the artifact's identity — resolution, pre-effect
+ * revalidation and post-publish observation — consumes this one result, so no
+ * stage can disagree with another about which manifest the bytes encode.
+ */
+async function tgzIdentity(path: string, signal?: AbortSignal): Promise<TgzIdentity | undefined> {
+  const result = await readTgzIdentity(path, signal ? { signal } : undefined)
+  return result.status === 'ok' ? result.identity : undefined
 }
 
 /**
@@ -567,7 +525,7 @@ async function observePublishCandidate(
 ): Promise<ReleaseObservedIdentity | undefined> {
   const tgzPath = requireString(resolution.commandManifest, 'tgz_path')
   if (!tgzPath) return undefined
-  const identity = await tgzIdentity(tgzPath)
+  const identity = await tgzIdentity(tgzPath, signal)
   if (!identity) return undefined
   // The registry is the one the trusted resolution itself canonicalized, so a
   // contract that names a registry can be checked against a real producer.
@@ -818,7 +776,7 @@ async function executeGuardAction(
   const target = resolution.target
   if (action === 'install' || action === 'apply') {
     const tgzPath = requireString(resolution.commandManifest, 'tgz_path')
-    const identity = tgzPath ? await tgzIdentity(tgzPath) : undefined
+    const identity = tgzPath ? await tgzIdentity(tgzPath, signal) : undefined
     if (!executableIdentity || !tgzPath || !identity || identity.name !== target.package_id || identity.version !== target.version
       || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return { status: 'unavailable' }
     if (roots.preEffectVeto?.() === false) return { status: 'unavailable', reasonCode: 'pre_effect_host_veto_refused' }
@@ -827,7 +785,7 @@ async function executeGuardAction(
   }
   if (action === 'publish') {
     const tgzPath = requireString(resolution.commandManifest, 'tgz_path')
-    const identity = tgzPath ? await tgzIdentity(tgzPath) : undefined
+    const identity = tgzPath ? await tgzIdentity(tgzPath, signal) : undefined
     const registry = typeof target.registry === 'string'
       ? canonicalRegistryBase(target.registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry })
       : undefined
@@ -1079,7 +1037,7 @@ async function resolveTarget(
       || commandManifest.manifest_id !== manifestId
       || !ACTION_MANIFEST.actions[action].commandManifestIds.includes(manifestId)
       || !tgzPath) return undefined
-    const identity = await tgzIdentity(tgzPath)
+    const identity = await tgzIdentity(tgzPath, signal)
     if (!identity || identity.name !== packageId || (selector.version !== undefined && selector.version !== identity.version)) return undefined
     const installed = await profilePackage(trustedProfile.path, packageId)
     if (action === 'install' && installed) return undefined
@@ -1105,7 +1063,7 @@ async function resolveTarget(
     if (!hasExactKeys(commandManifest, ['manifest_id', 'tgz_path'])
       || !registry || commandManifest.manifest_id !== 'npm.publish_tgz.v1'
       || !ACTION_MANIFEST.actions.publish.commandManifestIds.includes('npm.publish_tgz.v1') || !tgzPath) return undefined
-    const identity = await tgzIdentity(tgzPath)
+    const identity = await tgzIdentity(tgzPath, signal)
     if (!identity || identity.name !== selector.artifact_id || identity.version !== selector.version) return undefined
     return { target: { artifact_id: identity.name, version: identity.version, registry, integrity_digest: identity.integrity } }
   }

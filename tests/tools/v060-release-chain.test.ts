@@ -488,4 +488,67 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       expect(projectionOf(session).releaseStateDamaged).toBe(true)
     } finally { await rm(root, { recursive: true, force: true }) }
   })
+
+  it('refuses an ambiguous tgz at resolution and never reaches the publish effect (F01)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-ambiguous-'))
+    try {
+      // The review's counterexample bytes: a ustar-prefixed member the old
+      // reader matched (ignoring the prefix) plus a ./-aliased member npm
+      // actually installs. Guard must refuse the archive instead of binding
+      // the release authorization to a name npm would not publish.
+      const headerWithPrefix = (name: string, size: number, prefix: string): Buffer => {
+        const header = Buffer.alloc(512)
+        header.write(name, 0, 100, 'utf8')
+        header.write('000644 \0', 100, 8, 'ascii')
+        header.write('000000 \0', 108, 8, 'ascii')
+        header.write('000000 \0', 116, 8, 'ascii')
+        header.write(`${size.toString(8).padStart(11, '0')} `, 124, 12, 'ascii')
+        header.write('        ', 148, 8, 'ascii')
+        header.write('0', 156, 1, 'ascii')
+        header.write('ustar\0', 257, 6, 'ascii')
+        header.write('00', 263, 2, 'ascii')
+        header.write(prefix, 345, 155, 'utf8')
+        let sum = 0
+        for (const byte of header) sum += byte
+        header.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii')
+        return header
+      }
+      const intended = Buffer.from(JSON.stringify({ name: 'review-intended-package', version: '1.0.0' }))
+      const actual = Buffer.from(JSON.stringify({ name: 'review-other-package', version: '9.0.0' }))
+      const pad = (body: Buffer) => Buffer.alloc((512 - (body.length % 512)) % 512)
+      const tar = Buffer.concat([
+        headerWithPrefix('package/package.json', intended.length, 'shadow'), intended, pad(intended),
+        tarHeader('package/./package.json', actual.length), actual, pad(actual),
+        Buffer.alloc(1024),
+      ])
+      const tgz = join(root, 'ambiguous.tgz')
+      await writeFile(tgz, gzipSync(tar, { level: 9 }))
+
+      const effects: string[] = []
+      const session = Session.create(SessionId('release-chain-ambiguous'), undefined, {
+        version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('release-chain-ambiguous'), createdAt: 1, cwd: root,
+      })
+      const { tools } = startRuntime(session, {
+        commandRunner: async () => { effects.push('publish') },
+        fetcher: (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch,
+        privateLedgerRoot: join(root, 'private-ledger'),
+      })
+      const resolution = await runTool(session, tools, 'context_guard_evidence', 'ambiguous-resolution', {
+        semantic_action: 'publish', evidence_role: 'resolution',
+        selector: { artifact_id: 'review-intended-package', version: '1.0.0', registry: REGISTRY },
+        command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
+      })
+      expect(resolution.status, JSON.stringify(resolution)).toBe('unavailable')
+      expect(resolution.reason_code).toBe('resolution_unavailable')
+
+      // No resolution exists, so the action tool cannot reach the effect
+      // runner either: the ambiguous bytes never produce a publish side effect.
+      const action = await runTool(session, tools, 'context_guard_action', 'ambiguous-action', {
+        semantic_action: 'publish', resolution_call_id: 'ambiguous-resolution',
+        target_digest: '0'.repeat(64), contract_item_id: 'none', contract_item_revision: 1,
+      })
+      expect(action.status).toBe('unavailable')
+      expect(effects).toEqual([])
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
 }, 30_000)
