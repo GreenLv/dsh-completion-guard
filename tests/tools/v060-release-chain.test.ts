@@ -188,10 +188,10 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       const fetcher = (async (input: string | URL) => {
         const url = String(input)
         if (!url.startsWith(REGISTRY)) return new Response('{}', { status: 404 })
-        const name = decodeURIComponent(url.slice(REGISTRY.length).replace(/\/+$/, ''))
+        // F09: the readback reads the exact-version document.
+        const name = decodeURIComponent(url.slice(REGISTRY.length).split('/')[0]!)
         return new Response(JSON.stringify({
-          name,
-          versions: { [VERSION]: { name, version: VERSION, dist: { integrity: registryState.integrity } } },
+          name, version: VERSION, dist: { integrity: registryState.integrity },
         }), { status: 200, headers: { 'content-type': 'application/json' } })
       }) as unknown as typeof fetch
       const session = Session.create(SessionId('release-chain'), undefined, {
@@ -324,7 +324,7 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       const fetcher = (async () => (integrity === undefined
         ? new Response('{}', { status: 404 })
         : new Response(JSON.stringify({
-            name: PACKAGE, versions: { [VERSION]: { name: PACKAGE, version: VERSION, dist: { integrity } } },
+            name: PACKAGE, version: VERSION, dist: { integrity },
           }), { status: 200, headers: { 'content-type': 'application/json' } }))) as unknown as typeof fetch
       const session = Session.create(SessionId('release-chain-revoked'), undefined, {
         version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('release-chain-revoked'), createdAt: 1, cwd: root,
@@ -409,7 +409,7 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       const fetcher = (async () => {
         if (answer === undefined) return new Response('{}', { status: 404 })
         return new Response(JSON.stringify({
-          name: PACKAGE, versions: { [VERSION]: { name: PACKAGE, version: VERSION, dist: { integrity: answer } } },
+          name: PACKAGE, version: VERSION, dist: { integrity: answer },
         }), { status: 200, headers: { 'content-type': 'application/json' } })
       }) as unknown as typeof fetch
       const session = Session.create(SessionId('release-chain-recovery'), undefined, {

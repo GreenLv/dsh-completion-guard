@@ -100,6 +100,20 @@ export interface EvidenceToolRoots {
   preEffectVeto?: () => boolean
   /** C10 settlement record, written after the effect from a trusted readback. */
   releaseSettle?: (request: ReleaseSettlementToolRequest) => Promise<void>
+  /** F09: total deadline and response-body budget for registry readback. */
+  registryReadBudget?: RegistryReadBudget
+}
+
+export interface RegistryReadBudget {
+  /** Plugin-owned total deadline for one registry readback, combined with the caller's cancellation. */
+  totalDeadlineMs: number
+  /** Hard cap on response body bytes actually read (post-decompression). */
+  maxBodyBytes: number
+}
+
+export const DEFAULT_REGISTRY_READ_BUDGET: RegistryReadBudget = {
+  totalDeadlineMs: 30_000,
+  maxBodyBytes: 8 * 1024 * 1024,
 }
 
 export interface ReleaseGateToolRequest {
@@ -636,19 +650,69 @@ async function profilePackage(profilePath: string, packageId: string): Promise<{
   } catch { return undefined }
 }
 
+/**
+ * One bounded registry read (F09): the caller's cancellation combined with the
+ * plugin's own total deadline, and a streamed hard byte budget over the
+ * DECODED body — chunked or compressed transports cannot smuggle a larger
+ * document past the counter. Every exit path releases the reader; the timeout
+ * signal does not keep the event loop alive.
+ */
+async function boundedRegistryJson(
+  url: URL,
+  init: RequestInit,
+  fetcher: typeof fetch,
+  budget: RegistryReadBudget,
+  signal: AbortSignal,
+): Promise<RecordValue | undefined> {
+  const deadline = AbortSignal.timeout(budget.totalDeadlineMs)
+  const combined = typeof AbortSignal.any === 'function' ? AbortSignal.any([signal, deadline]) : deadline
+  let response: Response
+  try {
+    response = await fetcher(url, { ...init, signal: combined })
+  } catch {
+    return undefined
+  }
+  if (!response.ok || !response.body) return undefined
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += value.byteLength
+      if (received > budget.maxBodyBytes) return undefined
+      chunks.push(value)
+    }
+  } catch {
+    return undefined
+  } finally {
+    try { await reader.cancel() } catch { /* already released */ }
+  }
+  try {
+    return record(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+  } catch {
+    return undefined
+  }
+}
+
 export async function registryIntegrity(registry: string, packageId: string, version: string, roots: EvidenceToolRoots, signal: AbortSignal): Promise<string | undefined> {
   const canonical = canonicalRegistryBase(registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry })
   if (!canonical || canonical !== registry) return undefined
-  const response = await (roots.fetcher ?? fetch)(new URL(npmEscapedPackageName(packageId), canonical), {
-    signal, headers: { accept: 'application/json' }, redirect: 'error',
-  })
-  if (!response.ok) return undefined
-  const value = record(await response.json())
-  const versions = record(value?.versions)
-  const release = record(versions?.[version])
+  // Exact-version document — the same endpoint host-trust qualification reads.
+  // The body is bounded by construction, while name/version/dist integrity are
+  // still checked against the exact requested identity, never trusted from
+  // the URL. Redirects stay refused; a canonical registry never redirects.
+  const release = await boundedRegistryJson(
+    new URL(`${npmEscapedPackageName(packageId)}/${encodeURIComponent(version)}`, canonical),
+    { headers: { accept: 'application/json' }, redirect: 'error' },
+    roots.fetcher ?? fetch,
+    roots.registryReadBudget ?? DEFAULT_REGISTRY_READ_BUDGET,
+    signal,
+  )
   const dist = record(release?.dist)
-  return value?.name === packageId && release?.name === packageId && release.version === version
-    && typeof dist?.integrity === 'string' ? dist.integrity : undefined
+  return release?.name === packageId && release?.version === version && typeof dist?.integrity === 'string'
+    ? dist.integrity : undefined
 }
 
 export function windowsBatchCommand(file: string, args: string[]): string | undefined {
@@ -1215,6 +1279,7 @@ function normalizedRoots(options: EvidenceToolRoots): EvidenceToolRoots {
     // C10 release seams: the runtime's ticket gate and settlement recorder.
     ...(options.releaseGate ? { releaseGate: options.releaseGate } : {}),
     ...(options.releaseSettle ? { releaseSettle: options.releaseSettle } : {}),
+    ...(options.registryReadBudget ? { registryReadBudget: options.registryReadBudget } : {}),
     // The final pre-effect host judgment: dropping it here would let the
     // effect run on whatever audit preceded the last await.
     ...(options.preEffectVeto ? { preEffectVeto: options.preEffectVeto } : {}),
