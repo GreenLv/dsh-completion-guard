@@ -3,9 +3,9 @@ import { Context } from '@deepseek-ai/cordis'
 import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { execFile } from 'node:child_process'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, stat as statFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, sep } from 'node:path'
+import { join, resolve as pathResolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -28,6 +28,9 @@ const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', 
 const gitExec = promisify(execFile)
 function appendCall(session: Session, id: string, name: string, args: object): void {
   session.append('tool/call', { turn: 1, step: 1, callId: id as never, name, arguments: JSON.stringify(args) })
+}
+function appendRaw(session: Session, type: string, data: unknown): void {
+  ;(session as unknown as { append(type: string, data: unknown): void }).append(type, data)
 }
 function appendResult(session: Session, id: string, text: string, meta?: JsonValue): void {
   session.append('tool/result', {
@@ -108,6 +111,64 @@ describe('native host file result and independent readback', () => {
     expect(certifyCheckpoint(projection, [binding], 'C-tampered', false)).toMatchObject({ status: 'incomplete' })
     projection.evidence.set(state.id, { ...state, observedState: { post_digest: 'f'.repeat(64) } })
     expect(certifyCheckpoint(projection, [binding], 'C-changed-fact', false)).toMatchObject({ status: 'incomplete' })
+  })
+  it('binds the readback to the call-time cwd epoch, not the header or a later directory (F07)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cwd-epoch-'))
+    try {
+      const oldDir = join(root, 'old'), newDir = join(root, 'new')
+      await mkdir(oldDir), await mkdir(newDir)
+      await writeFile(join(oldDir, 'result.txt'), 'old directory content\n')
+      await writeFile(join(newDir, 'result.txt'), 'new directory content\n')
+      const session = Session.create(SessionId('native-cwd-epoch'), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('native-cwd-epoch'), createdAt: 1, cwd: oldDir })
+      // The committed change moves the host directory BEFORE the edit.
+      appendRaw(session, 'working-directory/change', { cwd: newDir })
+      appendCall(session, 'edit-rel', 'edit', { file_path: 'result.txt', old_string: 'x', new_string: 'y' })
+      appendResult(session, 'edit-rel', 'edited')
+      const realFs = {
+        resolve: async (path: string, options?: { cwd?: string }) => ({ displayPath: pathResolve(options?.cwd ?? process.cwd(), path) }),
+        stat: async (target: { displayPath: string }) => {
+          const info = await statFile(target.displayPath)
+          return { type: 'file', version: `${info.mtimeMs}:${info.size}`, size: info.size }
+        },
+        readText: async (target: { displayPath: string }) => readFile(target.displayPath, 'utf8'),
+      }
+      const observer = createNativeFileObserver({ flush: async () => true, fs: realFs })
+      const exec = { agent: { session }, signal: new AbortController().signal } as never
+      // The readback must target the file the call's own epoch governed: the
+      // NEW directory, while the immutable header cwd still names the old one.
+      const observed = await observer.execute({ effect_call_id: 'edit-rel' }, exec) as { status: string; path: string; sha256: string }
+      expect(observed.status).toBe('observed')
+      expect(observed.path).toBe(join(newDir, 'result.txt'))
+      expect(observed.sha256).toBe(createHash('sha256').update('new directory content\n').digest('hex'))
+      // A LATER directory change must not rebind the completed effect.
+      appendRaw(session, 'working-directory/change', { cwd: oldDir })
+      const again = await observer.execute({ effect_call_id: 'edit-rel' }, exec) as { status: string; path: string }
+      expect(again.status).toBe('observed')
+      expect(again.path).toBe(join(newDir, 'result.txt'))
+      // A relative target under an unreadable timeline is refused rather than
+      // read from a guessed directory; an absolute target stays observable.
+      const broken = Session.create(SessionId('native-cwd-broken'), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('native-cwd-broken'), createdAt: 1, cwd: oldDir })
+      appendRaw(broken, 'working-directory/change', { cwd: 'relative-dir' })
+      appendCall(broken, 'edit-broken', 'edit', { file_path: 'result.txt', old_string: 'x', new_string: 'y' })
+      appendResult(broken, 'edit-broken', 'edited')
+      appendCall(broken, 'edit-abs', 'edit', { file_path: join(newDir, 'result.txt'), old_string: 'x', new_string: 'y' })
+      appendResult(broken, 'edit-abs', 'edited')
+      const brokenExec = { agent: { session: broken }, signal: new AbortController().signal } as never
+      expect(await observer.execute({ effect_call_id: 'edit-broken' }, brokenExec)).toMatchObject({ status: 'unavailable', reason_code: 'native_effect_cwd_unresolvable' })
+      const absolute = await observer.execute({ effect_call_id: 'edit-abs' }, brokenExec) as { status: string; path: string }
+      expect(absolute.status).toBe('observed')
+      expect(absolute.path).toBe(join(newDir, 'result.txt'))
+      // Logs without change events keep the header-cwd semantics byte-for-byte.
+      const legacy = Session.create(SessionId('native-cwd-legacy'), undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('native-cwd-legacy'), createdAt: 1, cwd: newDir })
+      appendCall(legacy, 'edit-legacy', 'edit', { file_path: 'result.txt', old_string: 'x', new_string: 'y' })
+      appendResult(legacy, 'edit-legacy', 'edited')
+      const legacyObserved = await observer.execute({ effect_call_id: 'edit-legacy' }, { agent: { session: legacy }, signal: new AbortController().signal } as never) as { status: string; path: string }
+      expect(legacyObserved.status).toBe('observed')
+      expect(legacyObserved.path).toBe(join(newDir, 'result.txt'))
+    } finally {
+      const { rm } = await import('node:fs/promises')
+      await rm(root, { recursive: true, force: true })
+    }
   })
   it('certifies one foreground host test and rejects a partial compound result', () => {
     const make = (id: string, command: string, text: string) => {

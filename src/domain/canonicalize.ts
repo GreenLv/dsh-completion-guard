@@ -49,6 +49,17 @@ const UNCLOSED_SINGLE = new RegExp(`${SENSITIVE_KEYS}\\s*[:=]\\s*'(?:\\\\.|[^'\\
 const BARE_VALUE = new RegExp(`${SENSITIVE_KEYS}\\s*[:=]\\s*[^\\s,;'"\`)\\]}]+`, 'gi')
 const BEARER_TOKEN = /\bbearer\s+[A-Za-z0-9._~+/=-]+/gi
 const PLAIN_KEY = /\b(?:sk|pk|ak)-[a-zA-Z0-9_-]{16,}\b/g
+// Bounded well-known token FAMILIES (GitHub app/user PAT spellings). Shape
+// recognition only: this is not a claim about arbitrary secret formats.
+const NAMED_TOKEN = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{22,})\b/g
+// URL userinfo: everything in the authority up to the first '/', '?' or '#'
+// before an '@' is `user[:password]`. Removing it keeps every other byte.
+const URL_USERINFO = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/?#]*@/
+
+/** Structurally remove `user:password@` from a URL; other bytes unchanged. */
+export function stripUrlCredentials(value: string): string {
+  return URL_USERINFO.test(value) ? value.replace(URL_USERINFO, (match) => match.slice(0, match.indexOf('//') + 2)) : value
+}
 
 export function sanitizeClauseText(text: string): string {
   let value = text
@@ -63,16 +74,19 @@ export function sanitizeClauseText(text: string): string {
   value = value.replace(UNCLOSED_DOUBLE, (_match, key: string) => label(key))
   value = value.replace(UNCLOSED_SINGLE, (_match, key: string) => label(key))
   value = value.replace(BARE_VALUE, (_match, key: string) => label(key))
-  value = value.replace(PLAIN_KEY, (_match) => `${_match.slice(0, 3)}-<redacted>`)
-  // Strip URL query strings and fragments: both routinely carry credentials.
-  value = value.replace(/https?:\/\/[^\s'"`，。)]+[?#][^\s'"`，。)]*/g, (match) => {
+  value = value.replace(PLAIN_KEY, (match) => `${match.slice(0, 3)}-<redacted>`)
+  value = value.replace(NAMED_TOKEN, (match) => `${match.slice(0, match.indexOf('_') + 1)}<redacted>`)
+  // URL credentials and query/fragment are structural, not label-shaped:
+  // strip userinfo and cut `?…`/`#…`, both of which routinely carry secrets.
+  value = value.replace(/https?:\/\/[^\s'"`，。)]+/g, (match) => {
     const cut = Math.min(
       ...['?', '#'].map((marker) => {
         const index = match.indexOf(marker)
         return index === -1 ? Infinity : index
       }),
     )
-    return cut === Infinity ? match : `${match.slice(0, cut)}\u2026`
+    const withoutQuery = cut === Infinity ? match : match.slice(0, cut)
+    return `${stripUrlCredentials(withoutQuery)}${cut === Infinity ? '' : '\u2026'}`
   })
   return value
 }
@@ -84,5 +98,5 @@ export function sanitizeUrl(value: string): string {
       return index === -1 ? Infinity : index
     }),
   )
-  return cut === Infinity ? value : value.slice(0, cut)
+  return stripUrlCredentials(cut === Infinity ? value : value.slice(0, cut))
 }

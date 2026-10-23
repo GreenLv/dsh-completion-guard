@@ -78,6 +78,7 @@ import { resolveConfig, type ResolvedConfig } from './config.js'
 import { auditedDefaultWorkdirProvider, auditedForegroundRenderers, revalidateDesktopCoreLock } from './domain/host-resolver.js'
 import { createHostAuditSession, type HostAuditSession } from './domain/host-audit-session.js'
 import { SessionApiError, snapshotSessionEvents } from './domain/session-events.js'
+import { cwdEpochsFromEvents, effectiveCwdAt } from './domain/cwd-timeline.js'
 import { captureHostWorkdir, HOST_WORKDIR_PREFIX, sourcedNamedTestRoot } from './domain/host-workdir.js'
 import { resolveAuditedRef } from './tools/evidence.js'
 import { SESSION_FORMAT_VERSION as SUPPORTED_SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -982,6 +983,19 @@ function sessionCwd(session: Session): string | undefined {
   return typeof header?.cwd === 'string' && header.cwd.length > 0 ? header.cwd : undefined
 }
 
+/**
+ * The directory the host's working-directory service resolves relative paths
+ * against RIGHT NOW: the last committed epoch, not the immutable header
+ * project. `undefined` when the timeline cannot be proven, so the private
+ * storage guard fails closed on relative targets instead of guessing.
+ */
+function effectiveSessionCwd(session: Session): string | undefined {
+  const header = sessionCwd(session)
+  if (header === undefined) return undefined
+  const epochs = cwdEpochsFromEvents(snapshotSessionEvents(session) as DerivedEnvelope[], header)
+  return epochs ? effectiveCwdAt(epochs, header, Number.POSITIVE_INFINITY) : undefined
+}
+
 /** A bounded signal for a short trusted readback performed by the gate. */
 function requestSignal(): AbortSignal {
   return AbortSignal.timeout(5_000)
@@ -1571,7 +1585,7 @@ export function apply(ctx: Context, rawConfig: {
       () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock),
     ))
     ownedTools.guard((exec) => {
-      const privateDenial = privateStorageToolDenial(exec.name, exec.arguments, sessionCwd(agent.session) ?? process.cwd(),
+      const privateDenial = privateStorageToolDenial(exec.name, exec.arguments, effectiveSessionCwd(agent.session),
         [activationBindingsRoot, ...(privateLedgerRoot ? [privateLedgerRoot] : [])])
       if (privateDenial) return privateDenial
       if (exec.name === 'update_goal' && (exec.arguments as { action?: unknown } | undefined)?.action === 'complete') {

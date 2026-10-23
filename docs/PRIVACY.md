@@ -17,11 +17,25 @@ Context Guard stores only bounded, deterministic facts. It does not persist prom
 ## Never stored
 
 - Complete prompts, stdout, stderr, or file contents.
-- Authorization headers, URL query values, credentials, or API keys.
+- Authorization headers, URL query and fragment values, URL `user:password`
+  userinfo, credentials, or API keys.
 - Image bytes or binary contents.
 - Authenticated session state or raw transcripts.
 - Raw Session IDs, local paths, prompts, command output, or credential values in
   the private ledger; those bindings are stored only as SHA-256 values.
+
+## Redaction scope
+
+Before normalized text or URL evidence subjects are stored, the sanitizer
+removes, by structure: `Authorization`-style header values, quoted and bare
+`key=value` secret fields (including unclosed quotes), bearer tokens, the
+`sk-`/`pk-`/`ak-` key family, the GitHub token spellings (`ghp_`/`gho_`/`ghu_`/
+`ghs_`/`ghr_`/`github_pat_`), and URL userinfo plus query/fragment. This is a
+bounded, documented pattern set, NOT a guarantee that every secret format is
+recognized: credentials embedded in ordinary prose, non-listed token families,
+or URL path segments are outside what structural redaction can see. The
+sanitization is deterministic and idempotent; evidence recorded by older
+versions keeps its recorded digests and is not silently recomputed.
 
 ## Failure behavior
 

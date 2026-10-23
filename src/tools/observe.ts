@@ -6,6 +6,8 @@ import { promisify } from 'node:util'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { snapshotSessionEvents } from '../domain/session-events.js'
+import { cwdEpochsFromEvents, effectiveCwdAt } from '../domain/cwd-timeline.js'
+import type { DerivedEnvelope } from '../domain/types.js'
 import { canonicalArgvFromCommand } from '../domain/shell-parse.js'
 import { extractTextContent, persistedToolResultStatus, shellReadbackOutcome, NATIVE_GIT_ROOT_PARENT_OID } from '../domain/evidence.js'
 import type { GuardProjection } from '../domain/types.js'
@@ -52,12 +54,13 @@ export function createNativeFileObserver(host: {
       const agent = exec.agent
       if (!agent || !host.fs || !host.flush) return missing('host_fs_unavailable')
       if (!await host.flush(agent.session)) return missing('native_effect_not_durable')
+      const events = snapshotSessionEvents(agent.session)
       let call: RecordValue | undefined
       let result: RecordValue | undefined
       let callSeq = -1
       let resultSeq = -1
       let duplicate = false
-      for (const raw of snapshotSessionEvents(agent.session)) {
+      for (const raw of events) {
         const event = record(raw)
         const data = record(event?.data)
         if (event?.type === 'tool/call' && data?.callId === args.effect_call_id) {
@@ -81,7 +84,19 @@ export function createNativeFileObserver(host: {
       const filePath = effectArgs?.file_path
       if (typeof filePath !== 'string' || !filePath) return missing('native_effect_target_missing')
       const action = String(call.name).startsWith('write') ? 'create' as const : 'modify' as const
-      const cwd = record((agent.session as { header?: unknown }).header)?.cwd
+      // Bind the readback to the directory that governed THIS call: the cwd
+      // epoch at the call's own sequence, not the immutable header cwd (which
+      // a committed `working-directory/change` has since replaced) and not the
+      // CURRENT end-of-log directory (a later change must not rebind a
+      // completed effect to a different same-named file). A timeline that
+      // cannot be proven resolves relative targets to nothing — the identity
+      // of the readback object is then not determinable.
+      const headerCwdRaw = record((agent.session as { header?: unknown }).header)?.cwd
+      const headerCwd = typeof headerCwdRaw === 'string' ? headerCwdRaw : undefined
+      const epochs = cwdEpochsFromEvents(events as DerivedEnvelope[], headerCwd)
+      const cwd = epochs ? effectiveCwdAt(epochs, headerCwd, callSeq) : undefined
+      const relativeTarget = !posix.isAbsolute(filePath) && !win32.isAbsolute(filePath)
+      if (relativeTarget && typeof cwd !== 'string') return missing('native_effect_cwd_unresolvable')
       try {
         const target = await host.fs.resolve(filePath, { ...(typeof cwd === 'string' ? { cwd } : {}), signal: exec.signal })
         const before = await host.fs.stat(target, exec.signal)

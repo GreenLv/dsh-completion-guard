@@ -620,6 +620,47 @@ describe('domain core', () => {
     expect(sanitizeClauseText('Cookie: session=abc123; preference=private456')).not.toMatch(/abc123|private456/)
   })
 
+  it('strips URL userinfo and known bare token shapes without touching ordinary text (F03)', () => {
+    // The review's counterexample values, all fictional.
+    const url = 'https://demo:DEMO_ONLY_PASSWORD@example.invalid/path'
+    expect(sanitizeUrl(url)).toBe('https://example.invalid/path')
+    expect(sanitizeUrl('https://demo:DEMO_ONLY_PASSWORD@example.invalid/path?token=x')).toBe('https://example.invalid/path')
+    expect(sanitizeUrl('https://reader@example.invalid/feed')).toBe('https://example.invalid/feed')
+    expect(sanitizeUrl('https://example.invalid/path')).toBe('https://example.invalid/path')
+    // An '@' in the path is not userinfo and must not be removed.
+    expect(sanitizeUrl('https://example.invalid/a/b@example.com')).toBe('https://example.invalid/a/b@example.com')
+    expect(sanitizeClauseText(`fetch ${url} now`)).toBe('fetch https://example.invalid/path now')
+    expect(sanitizeClauseText('fetch https://demo:DEMO_ONLY_PASSWORD@example.invalid/path?token=sekrit')).not.toMatch(/demo|DEMO_ONLY_PASSWORD|sekrit/)
+    expect(sanitizeClauseText('clone https://ghp_DEMOONLYTOKEN1234567890@example.invalid/org/repo.git')).not.toContain('ghp_DEMOONLYTOKEN')
+    expect(sanitizeClauseText('token ghp_DEMOONLYTOKEN1234567890 in env')).not.toContain('DEMOONLYTOKEN')
+    expect(sanitizeClauseText('github_pat_DEMO_ONLY_11ABCDE_1234567890abcdefghij')).not.toContain('DEMO_ONLY_11ABCDE')
+    expect(sanitizeClauseText('use ghs_DEMOONLYTOKEN1234567890 here')).not.toContain('DEMOONLYTOKEN')
+    // Ordinary content keeps its identity, and the functions are idempotent.
+    expect(sanitizeClauseText('deploy https://example.invalid/path with pnpm')).toBe('deploy https://example.invalid/path with pnpm')
+    const once = sanitizeClauseText(`${url} ghp_DEMO_ONLY_TOKEN_1234567890`)
+    expect(sanitizeClauseText(once)).toBe(once)
+    expect(sanitizeUrl(sanitizeUrl(url))).toBe(sanitizeUrl(url))
+  })
+
+  it('keeps URL credentials out of the capture→replay chain with stable digests (F03)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: 'Deploy using https://demo:DEMO_ONLY_PASSWORD@example.invalid/path with token ghp_DEMOONLYTOKEN1234567890 ready.' }], source: { kind: 'user' } } },
+    ]
+    const first = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const second = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    // No persisted projection field carries the credential bytes, and
+    // re-derivation is byte-stable (deterministic, idempotent sanitization).
+    expect(JSON.stringify(second.projection)).not.toMatch(/DEMO_ONLY_PASSWORD|DEMOONLYTOKEN|demo:/)
+    expect([...second.projection.items.values()].map((item) => item.textSha256))
+      .toEqual([...first.projection.items.values()].map((item) => item.textSha256))
+    // The recorded digest is the SANITIZED text's digest, never the raw bytes'.
+    for (const item of second.projection.items.values()) {
+      expect(item.normalizedText).not.toMatch(/DEMO_ONLY_PASSWORD|DEMOONLYTOKEN/)
+      expect(sha256(item.normalizedText)).toBe(item.textSha256)
+    }
+  })
+
   it('segments no-space Chinese compound messages', () => {
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },

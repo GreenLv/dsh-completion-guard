@@ -17,24 +17,47 @@ function contained(root: string, path: string): boolean {
 }
 /** Bounded protection for the official file/shell tool surface. This is not
  * a sandbox for arbitrary executables or hostile same-owner plugins. */
-export function privateStorageToolDenial(name: string, args: unknown, cwd: string,
+export function privateStorageToolDenial(name: string, args: unknown, cwd: string | undefined,
   roots: readonly string[]): string | undefined {
   if (!args || typeof args !== 'object') return undefined
   const a = args as Record<string, unknown>
   const protectedRoots = roots.map(root => { try { return physical(root) } catch { return resolve(root) } })
-  const privatePath = (path: string): boolean => {
-    try { return protectedRoots.some(root => contained(root, physical(resolve(cwd, path)))) }
-    catch { return roots.some(root => contained(resolve(root), resolve(cwd, path))) }
+  // A relative target is only decidable against a TRUSTED working directory:
+  // the caller-supplied cwd the host would actually use. Without one, the
+  // target's identity cannot be proven either way, so it fails closed.
+  const privatePath = (path: string, base: string | undefined): boolean | 'unresolved' => {
+    if (isAbsolute(path)) {
+      try { return protectedRoots.some(root => contained(root, physical(resolve(path)))) }
+      catch { return roots.some(root => contained(resolve(root), resolve(path))) }
+    }
+    if (base === undefined) return 'unresolved'
+    try { return protectedRoots.some(root => contained(root, physical(resolve(base, path)))) }
+    catch { return roots.some(root => contained(resolve(root), resolve(base, path))) }
   }
-  if (['write', 'edit', 'read', 'read_image'].includes(name) && typeof a.file_path === 'string' && privatePath(a.file_path)) {
-    return '[activation_private_storage_protected] Guard private storage is operator-owned; use the independent inspect/adopt/verify entrypoint.'
+  const denial = (detail: string) => `[activation_private_storage_protected] ${detail}`
+  if (['write', 'edit', 'read', 'read_image'].includes(name) && typeof a.file_path === 'string') {
+    // The official file tools carry no directory argument: a relative path is
+    // resolved by the host against its current working directory, which is the
+    // caller-provided effective cwd.
+    const verdict = privatePath(a.file_path, cwd)
+    if (verdict === true) return denial('Guard private storage is operator-owned; use the independent inspect/adopt/verify entrypoint.')
+    if (verdict === 'unresolved') return denial('A relative file target cannot be proven outside Guard private storage without a trusted working directory.')
   }
   if (['bash', 'pwsh'].includes(name)) {
     const command = typeof a.command === 'string' ? a.command : ''
-    const working = typeof a.cwd === 'string' ? a.cwd : cwd
-    if (privatePath(working) || roots.some(root => command.includes(root) || command.includes(root.replaceAll('\\', '/')))
+    // The official Bash/Pwsh tools take `workdir` (absolute or relative,
+    // resolved against the current working directory); a legacy `cwd` field is
+    // still honored if a host ever sends one. Omitting both means the host's
+    // current working directory itself.
+    const declared = typeof a.workdir === 'string' && a.workdir.length > 0 ? a.workdir
+      : typeof a.cwd === 'string' && a.cwd.length > 0 ? a.cwd : undefined
+    const working = declared ?? cwd
+    const workingVerdict = working === undefined || working.length === 0 ? false as const : privatePath(working, cwd)
+    if (workingVerdict === true) return denial('Shell access to Guard private storage requires the independent operator entrypoint.')
+    if (workingVerdict === 'unresolved') return denial('A relative shell workdir cannot be proven outside Guard private storage without a trusted working directory.')
+    if (roots.some(root => command.includes(root) || command.includes(root.replaceAll('\\', '/')))
       || /(?:completion-guard[/\\]|activation-bindings-v1|dsh-completion-guard-activation)/u.test(command)) {
-      return '[activation_private_storage_protected] Shell access to Guard private storage requires the independent operator entrypoint.'
+      return denial('Shell access to Guard private storage requires the independent operator entrypoint.')
     }
   }
   return undefined

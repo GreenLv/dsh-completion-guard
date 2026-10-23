@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -101,5 +101,32 @@ describe('fresh mode read invalidates the projection cache', () => {
     expect(privateStorageToolDenial('edit', { file_path: join(path, 'one.json') }, cwd, [path])).toContain('activation_private_storage_protected')
     expect(privateStorageToolDenial('bash', { command: 'rm -rf ~/.dsh/completion-guard/activation-bindings-v1' }, cwd, [path])).toContain('activation_private_storage_protected')
     expect(privateStorageToolDenial('write', { file_path: 'app.ts' }, cwd, [path])).toBeUndefined()
+  })
+  it('protects the official workdir parameter and fails closed without a trusted cwd (F02)', async () => {
+    const work = root(), priv = join(work, 'private')
+    mkdirSync(priv)
+    symlinkSync(priv, join(work, 'alias'))
+    // The official rc.2 Bash/Pwsh parameter is `workdir`; absolute, relative,
+    // and symlink-aliased spellings must all resolve to the protected root.
+    expect(privateStorageToolDenial('bash', { command: 'cat one.json', workdir: join(work, 'private') }, work, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('pwsh', { command: 'Get-Content one.json', workdir: 'private' }, work, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('bash', { command: 'cat one.json', workdir: 'alias' }, work, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('bash', { command: 'cat one.json', workdir: join(work, 'elsewhere') }, work, [priv])).toBeUndefined()
+    // A relative target without a trusted base cannot be proven either way.
+    expect(privateStorageToolDenial('bash', { command: 'cat one.json', workdir: 'private' }, undefined, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('write', { file_path: 'one.json' }, undefined, [priv])).toContain('activation_private_storage_protected')
+    // Omitting workdir runs in the host's current directory; that directory
+    // itself landing inside private storage stays denied.
+    expect(privateStorageToolDenial('bash', { command: 'ls' }, priv, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('bash', { command: 'ls' }, work, [priv])).toBeUndefined()
+    expect(privateStorageToolDenial('write', { file_path: join(work, 'one.json') }, undefined, [priv])).toBeUndefined()
+    // The same matrix through the REGISTERED production guard, not the helper.
+    const h = harness(), session = Session.create(SessionId('guard-workdir'))
+    await h.attach(session, 'startup')
+    const registered = h.guards[0]!
+    expect(registered({ name: 'bash', arguments: { command: 'cat one.json', workdir: join(h.path, 'activation-bindings-v1') } })).toContain('activation_private_storage_protected')
+    expect(registered({ name: 'pwsh', arguments: { command: 'Get-Content one.json', workdir: h.path } })).toContain('activation_private_storage_protected')
+    expect(registered({ name: 'bash', arguments: { command: 'ls', workdir: work } })).toBeUndefined()
+    expect(registered({ name: 'read', arguments: { file_path: join(work, 'app.ts') } })).toBeUndefined()
   })
 })
