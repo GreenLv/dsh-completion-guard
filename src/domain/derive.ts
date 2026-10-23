@@ -1706,8 +1706,11 @@ export function deriveProjection(
   let activeTurn: number | undefined
   // Units and delivery derive only after the v5 boundary and only for
   // non-delegated sessions; the flag is computed once.
+  // F06: `parentSession` is fork lineage, not delegation — a plain fork is a
+  // root conversation with its own work units. Only the host's explicit
+  // subagent markers (origin=subagent, delegationDepth > 0) disable unit
+  // semantics.
   const unitSemanticsActive = () => v5BoundarySeq !== undefined
-    && !scope.sessionHeader?.parentSession
     && !scope.sessionHeader?.delegationDepth
     && scope.sessionHeader?.origin !== 'subagent'
 
@@ -2013,7 +2016,9 @@ export function deriveProjection(
           }
         }
         if (!text.trim()) { captureAssets(unitSemantics ? foldUnitId() : undefined); break }
-        if (!scope.sessionHeader?.parentSession && !scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== 'subagent') {
+        // F06: fork lineage (parentSession) is not delegation; only the
+        // explicit subagent markers skip root confirmation semantics.
+        if (!scope.sessionHeader?.delegationDepth && scope.sessionHeader?.origin !== 'subagent') {
           // One durable root message is one atomic transaction: the
           // confirmation validates against the state BEFORE this message,
           // then the remaining text is processed with its own semantics. The

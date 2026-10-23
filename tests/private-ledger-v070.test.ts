@@ -120,3 +120,69 @@ describe('v0.7 provider-invisible private ledger', () => {
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
 })
+
+describe('F04: an interrupted anchor append is isolated to the uncommitted session', () => {
+  it('keeps every committed session readable through a torn anchor tail, then repairs it on the next append', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-private-ledger-f04-'))
+    try {
+      expect(appendPrivateLedger(root, 'session-a', 'release_reservation', reservation)).toBe(true)
+      expect(appendPrivateLedger(root, 'session-b', 'restart_intent', {
+        resolution_call_id: 'resolve', service_id: 'market', pre_generation: 'boot',
+      })).toBe(true)
+      expect(readPrivateLedger(root, 'session-a').damaged).toBe(false)
+      expect(readPrivateLedger(root, 'session-b').damaged).toBe(false)
+      // Simulate the review's interrupted append: a third anchor line whose
+      // single write never finished (no trailing newline, torn JSON).
+      const anchors = join(root, 'session-anchors.v1.jsonl')
+      const before = readFileSync(anchors, 'utf8')
+      writeFileSync(anchors, `${before}{"version":1,"session_sha256":"torn`)
+      // The two committed sessions stay readable with their exact records.
+      const a = readPrivateLedger(root, 'session-a')
+      const b = readPrivateLedger(root, 'session-b')
+      expect(a).toMatchObject({ damaged: false, records: [{ position: 1, kind: 'release_reservation' }] })
+      expect(b).toMatchObject({ damaged: false, records: [{ position: 1, kind: 'restart_intent' }] })
+      expect(readPrivateLedger(root, 'session-torn')).toMatchObject({ damaged: false, anchored: false })
+      // The next writer repairs the uncommitted tail and appends cleanly.
+      expect(appendPrivateLedger(root, 'session-c', 'release_reservation', { ...reservation, callId: 'call-c' })).toBe(true)
+      const after = readFileSync(anchors, 'utf8')
+      expect(after.endsWith('\n')).toBe(true)
+      expect(after).not.toContain('torn')
+      for (const session of ['session-a', 'session-b', 'session-c']) {
+        expect(readPrivateLedger(root, session).damaged, session).toBe(false)
+      }
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('still refuses a corrupted middle anchor line for every session', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-private-ledger-f04-mid-'))
+    try {
+      expect(appendPrivateLedger(root, 'session-a', 'release_reservation', reservation)).toBe(true)
+      expect(appendPrivateLedger(root, 'session-b', 'restart_intent', {
+        resolution_call_id: 'resolve', service_id: 'market', pre_generation: 'boot',
+      })).toBe(true)
+      const anchors = join(root, 'session-anchors.v1.jsonl')
+      const lines = readFileSync(anchors, 'utf8').split('\n').filter(Boolean)
+      // An invalid line FOLLOWED by complete lines cannot come from an
+      // interrupted append: it is external rewriting and stays a refusal.
+      writeFileSync(anchors, `${lines[0]}\n{"tampered":true}\n${lines[1]}\n`)
+      expect(readPrivateLedger(root, 'session-a').damaged).toBe(true)
+      expect(readPrivateLedger(root, 'session-b').damaged).toBe(true)
+      expect(appendPrivateLedger(root, 'session-c', 'release_reservation', reservation)).toBe(false)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('still refuses conflicting anchors for one session', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-private-ledger-f04-conflict-'))
+    try {
+      expect(appendPrivateLedger(root, 'session-a', 'release_reservation', reservation)).toBe(true)
+      const anchors = join(root, 'session-anchors.v1.jsonl')
+      const lines = readFileSync(anchors, 'utf8').split('\n').filter(Boolean)
+      // A second, differently-bound anchor for the SAME session digest can
+      // only be manufactured externally; it must not double-authorize.
+      const first = JSON.parse(lines[0]!) as { session_sha256: string }
+      const forged = JSON.stringify({ ...first, context_sha256: 'f'.repeat(64) })
+      writeFileSync(anchors, `${lines[0]}\n${forged}\n`)
+      expect(readPrivateLedger(root, 'session-a').damaged).toBe(true)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})

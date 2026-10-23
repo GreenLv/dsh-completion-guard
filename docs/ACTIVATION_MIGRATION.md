@@ -144,7 +144,11 @@ Missing/corrupt/changed records invalidate cached projections and certification.
 
 缺失、损坏或变化的记录使缓存投影和认证失效。根据具名原因诊断，再使用保留且已核验的收据采纳同一缺失旧身份与模式。损坏或冲突的 final 拒绝自动修复，请保留诊断；无可信旧来源时保持 unknown，在新合格会话中建立新工作。不删除历史，也不触发无穷纠正。fork 需核验父绑定并继承父模式；精确 cut 由官方 Session/persistence 合同提供及验证，不由前缀长度推断模式。
 
+A qualified fresh creation that lost a brief writer-lock race now retries itself: the runtime re-attempts the SAME creation, while the startup intent is still provable, for a bounded budget (at most 8 attempts within 60 seconds of attach), and then reports the explicit `activation_writer_unavailable` status. The retry is idempotent (same-value) and never applies to a session that was ever successfully created, to resume/late attach, or to a deleted binding — those keep the unknown/diagnosis rules below. This automatic retry is not a recovery command and does not need one.
+
 A fresh creation that leaves `.pending`, including a fresh 0.10.0 session, has no general recovery command in this toolkit. `inspect` accepts verified pre-upgrade predecessor sources (`0.0.x`–`0.9.x`, including `0.9.0`), but `adopt` still requires a verified migration receipt for the same old session identity and mode. Predecessor support does not authorize treating a failed fresh creation as a legacy migration or inventing a receipt to repair it. Without an existing trusted legacy receipt, keep the mode unknown, diagnose the retained state, or continue new work in another qualified fresh session. The exported same-value writer is a programmatic controlled recovery primitive, not an operator CLI. Do not delete `.pending` merely to make the final readable.
+
+合格新会话因短暂写锁竞争而失败的首次创建会自行重试：运行时在首创意图仍可证明时，按有界预算（attach 后 60 秒内至多 8 次）重试同一创建，随后返回明确的 `activation_writer_unavailable` 状态。重试是同值幂等的，绝不适用于曾成功创建的会话、resume/迟挂载或被删除的绑定——那些仍按下面的 unknown/诊断规则处理。该自动重试不是恢复命令，也不需要恢复命令。
 
 新建会话（包括 0.10.0 新会话）留下 .pending 时，本工具仍没有通用恢复命令。inspect 可使用已核验的旧版本模式来源（`0.0.x`–`0.9.x`，包括 `0.9.0`），但 adopt 仍需针对同一旧会话身份与模式的已核验迁移收据。支持这些前驱版本不意味着可以把失败的新建会话当作旧会话迁移，或编造收据来修复它。没有既有可信旧收据时，保持模式 unknown、诊断保留状态，或在另一合格新会话中继续新工作。导出的同值 writer 是程序受控恢复原语，不是操作者 CLI；不能为了让 final 可读而删除 .pending。
 

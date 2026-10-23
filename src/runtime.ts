@@ -1001,12 +1001,18 @@ function requestSignal(): AbortSignal {
   return AbortSignal.timeout(5_000)
 }
 
-/** Delegated/subagent sessions never receive root-conversation injections. */
+/**
+ * Delegated/subagent sessions never receive root-conversation injections.
+ * `parentSession` is FORK LINEAGE, not delegation: a plain user fork is a
+ * root conversation (the host's roots registry admits resumed forks). Only
+ * the host's explicit subagent markers — `origin=subagent` or a positive
+ * `delegationDepth` — delegate, so contradictory or unknown fields stay
+ * delegated and never gain root privileges.
+ */
 function isDelegatedSession(session: Session): boolean {
-  const header = session.header as { parentSession?: unknown; delegationDepth?: unknown; origin?: unknown } | undefined
+  const header = session.header as { delegationDepth?: unknown; origin?: unknown } | undefined
   return header?.origin === 'subagent'
     || (typeof header?.delegationDepth === 'number' && header.delegationDepth > 0)
-    || typeof header?.parentSession === 'string'
 }
 
 /** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
@@ -1242,15 +1248,36 @@ export function apply(ctx: Context, rawConfig: {
           && ctx.sessions.get?.(agent.session.id) === agent.session
         initialization = resolveSessionActivation(activationBindingsRoot, birth, config, startSources.get(agent), qualified)
       } catch { initialization = { status: 'unavailable', reasonCode: 'activation_identity_unavailable', key: 'identity' } }
+      // F05: a qualified FIRST creation that lost a brief writer-lock race is
+      // not terminal. The same creation is retried while its intent is still
+      // provable — source still `startup`, identity still qualified, and no
+      // binding written yet — bounded by attempts and a deadline. A session
+      // that was ever successfully created never enters this path, so a
+      // deleted binding is never recreated; a different mode written by
+      // another host surfaces as a conflict, not a guess.
+      const creationRetry = initialization.status === 'unavailable' && initialization.reasonCode === 'activation_writer_unavailable'
+        ? { source: startSources.get(agent), attempts: 0, deadline: Date.now() + 60_000 } : undefined
       // Only qualified creation/adoption writes. Subsequent reads cannot
-      // recreate a missing record, even if the original source was startup.
+      // recreate a missing record, even if the original source was startup —
+      // except the bounded first-creation retry above.
       const readMode = (): SessionActivationRead => {
         if (!birth) return initialization
         try {
           const currentBirth = sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount)
           const fresh = readActivationBinding(activationBindingsRoot, currentBirth, config.activationSource === 'explicit' ? config.activation : undefined)
-          return fresh.status === 'unavailable' && fresh.reasonCode === 'activation_mode_unknown' && initialization.status === 'unavailable'
-            ? { ...initialization, key: fresh.key } : fresh
+          if (fresh.status === 'unavailable' && fresh.reasonCode === 'activation_mode_unknown' && initialization.status === 'unavailable') {
+            if (creationRetry !== undefined && creationRetry.source === 'startup' && creationRetry.attempts < 8 && Date.now() <= creationRetry.deadline
+              && agentHostLock.status === 'supported'
+              && ctx.get?.('agents')?.get(agent.id) === agent
+              && ctx.sessions.get?.(agent.session.id) === agent.session) {
+              creationRetry.attempts += 1
+              const retried = resolveSessionActivation(activationBindingsRoot, currentBirth, config, creationRetry.source, true)
+              if (retried.status === 'bound' || retried.reasonCode !== 'activation_writer_unavailable') initialization = retried
+              return retried
+            }
+            return { ...initialization, key: fresh.key }
+          }
+          return fresh
         } catch { return { status: 'unavailable', reasonCode: 'activation_identity_unavailable', key: 'identity' } }
       }
 

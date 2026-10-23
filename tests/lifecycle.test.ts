@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId, type SessionHeader } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { applyWithFixtureActivation as apply } from './activation-fixture.js'
@@ -377,4 +377,84 @@ it('explicit opt-in records the v5 boundary ahead of its first protected input',
   const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
   expect(derived.boundaryV5).toBe(true)
   expect(derived.projection.items.size).toBeGreaterThan(0)
+})
+
+describe('F06: fork lineage is not delegation', () => {
+  const header = (id: string, extra: Partial<SessionHeader>): SessionHeader => ({
+    version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId(id), createdAt: 1, cwd: '/work', ...extra,
+  })
+  const FORK: Partial<SessionHeader> = { parentSession: SessionId('f06-parent'), delegationDepth: 0 }
+  const SUBAGENT: Partial<SessionHeader> = { parentSession: SessionId('f06-parent'), origin: 'subagent', delegationDepth: 2 }
+  const CONTRADICTORY: Partial<SessionHeader> = { parentSession: SessionId('f06-parent'), origin: 'subagent', delegationDepth: 0 }
+  const claim = () => createUserMessage({ content: [{ type: 'text', text: '修改 fork-demo.txt 并汇报结果。' }], source: { kind: 'user' } })
+
+  it('a plain fork receives boundary and guidance like a root session and forms a work unit', async () => {
+    const session = Session.create(SessionId('f06-fork'), undefined, header('f06-fork', FORK))
+    const ctx = fakeCtx()
+    guardApply(ctx)
+    const { agent } = guardedAgent(session)
+    startGuard(ctx, agent, 'new')
+    const decision = await runPreStep(ctx, agent, [claim()])
+    expect(decision.kind).toBe('enter')
+    const texts = decision.messages.map((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text)
+    expect(texts[0]).toBe(PROTOCOL_V6_NOTICE)
+    expect(texts[1]).toBe(firstStepGuidanceV6())
+    persistStep(session, decision.messages)
+    const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
+    expect(derived.projection.units.size, 'a fork opens its own work unit').toBeGreaterThan(0)
+    expect([...derived.projection.items.values()].some((item) => item.normalizedText.includes('fork-demo.txt'))).toBe(true)
+  })
+
+  it('a seeded fork inheriting the boundary is not injected a second boundary', async () => {
+    // Build the parent's durable log through the real loop: its first step
+    // carried the boundary and guidance, and the fork inherits those events.
+    const parent = Session.create(SessionId('f06-seed-parent'))
+    const parentCtx = fakeCtx()
+    guardApply(parentCtx)
+    const { agent: parentAgent } = guardedAgent(parent)
+    startGuard(parentCtx, parentAgent, 'new')
+    const parentStep = await runPreStep(parentCtx, parentAgent, [claim()])
+    persistStep(parent, parentStep.messages)
+    const seed = parent.snapshotEvents()
+    const session = Session.create(SessionId('f06-seeded-fork'), seed, header('f06-seeded-fork', { ...FORK, isSeeded: true }), seed.length as never)
+    const ctx = fakeCtx()
+    guardApply(ctx)
+    const { agent } = guardedAgent(session)
+    startGuard(ctx, agent, 'new')
+    const decision = await runPreStep(ctx, agent, [claim()])
+    const texts = decision.messages.map((message) => ((message as { content?: Array<{ text?: string }> }).content ?? [])[0]?.text)
+    expect(texts.filter((text) => text === PROTOCOL_V6_NOTICE)).toHaveLength(0)
+    const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
+    expect(derived.boundaryV6).toBe(true)
+    expect(derived.projection.units.size).toBeGreaterThan(0)
+  })
+
+  it.each([
+    ['a real subagent', SUBAGENT],
+    ['contradictory origin=subagent with depth 0', CONTRADICTORY],
+  ])('%s receives no root injections and no work units', async (_label, extra) => {
+    const session = Session.create(SessionId('f06-sub'), undefined, header('f06-sub', extra as Record<string, unknown>))
+    const ctx = fakeCtx()
+    guardApply(ctx)
+    const { agent } = guardedAgent(session)
+    startGuard(ctx, agent, 'new')
+    const decision = await runPreStep(ctx, agent, [claim()])
+    expect(decision.messages).toHaveLength(1)
+    persistStep(session, [claim()])
+    const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'always' }, { cwd: '/work' }, true, TEST_HOST_LOCK)
+    expect(derived.projection.units.size).toBe(0)
+  })
+
+  it('a fork processes the root confirmation grammar that subagents skip', () => {
+    const fork = deriveProjection([
+      { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '修改 confirm-fork.txt。' }] } },
+    ] as never, { activation: 'always' }, { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: SessionId('f06-confirm'), createdAt: 1, seedLength: 0, parentSession: SessionId('f06-parent'), delegationDepth: 0 } } as never, true, TEST_HOST_LOCK)
+    expect(fork.projection.units.size).toBeGreaterThan(0)
+    const subagent = deriveProjection([
+      { seq: 0, type: 'user/message', data: { source: { kind: 'plugin', plugin: 'context-guard', form: 'notice' }, content: [{ type: 'text', text: PROTOCOL_V6_NOTICE }] } },
+      { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '修改 confirm-sub.txt。' }] } },
+    ] as never, { activation: 'always' }, { cwd: '/work', sessionHeader: { version: SESSION_FORMAT_VERSION, id: SessionId('f06-confirm-sub'), createdAt: 1, seedLength: 0, parentSession: SessionId('f06-parent'), origin: 'subagent', delegationDepth: 2 } } as never, true, TEST_HOST_LOCK)
+    expect(subagent.projection.units.size).toBe(0)
+  })
 })

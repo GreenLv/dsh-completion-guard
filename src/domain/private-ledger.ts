@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
@@ -89,9 +89,14 @@ function readAnchors(root: string): Map<string, string> {
   if (!existsSync(path)) return new Map()
   const fd = openRegular(path, constants.O_RDONLY); let raw: string
   try { raw = readFileSync(fd, 'utf8') } finally { closeSync(fd) }
-  if (raw && !raw.endsWith('\n')) throw new Error('private_ledger_anchor_truncated')
+  // F04: a final line without its trailing newline is an UNCOMMITTED append —
+  // the writer's single write never finished, so no reader could have
+  // depended on it. Skip exactly that line; every complete line stays
+  // authoritative, and an invalid line anywhere else (proof of external
+  // rewriting) still refuses for every session.
+  const lines = raw.split('\n').slice(0, -1).filter((line) => line !== '')
   const anchors = new Map<string, string>()
-  for (const line of raw.split('\n').filter(Boolean)) {
+  for (const line of lines) {
     const value = JSON.parse(line) as Record<string, unknown>
     const unsigned = { version: 1, session_sha256: value.session_sha256, context_sha256: value.context_sha256 }
     if (value.version !== 1 || typeof value.session_sha256 !== 'string' || typeof value.context_sha256 !== 'string' || value.anchor_sha256 !== sha256(canonical(unsigned))) throw new Error('private_ledger_anchor_invalid')
@@ -100,6 +105,31 @@ function readAnchors(root: string): Map<string, string> {
     anchors.set(value.session_sha256, value.context_sha256)
   }
   return anchors
+}
+
+/**
+ * Append one anchor line while holding the writer lock, repairing an
+ * uncommitted torn tail first: the bytes past the last newline never took
+ * effect, so truncating them revokes nothing, while leaving them would bury
+ * the next append mid-file as a permanent "invalid middle line". Complete
+ * lines are never rewritten.
+ */
+function appendAnchorLine(root: string, session: string, expectedContext: string): void {
+  const unsignedAnchor = { version: 1, session_sha256: session, context_sha256: expectedContext }
+  const line = `${canonical({ ...unsignedAnchor, anchor_sha256: sha256(canonical(unsignedAnchor)) })}\n`
+  const path = anchorPath(root)
+  if (existsSync(path)) {
+    const fd = openRegular(path, constants.O_RDWR)
+    try {
+      const raw = readFileSync(fd, 'utf8')
+      if (raw.length > 0 && !raw.endsWith('\n')) {
+        ftruncateSync(fd, raw.lastIndexOf('\n') + 1)
+        fsyncSync(fd)
+      }
+    } finally { closeSync(fd) }
+  }
+  const fd = openRegular(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
+  try { writeAll(fd, line); fsyncSync(fd) } finally { closeSync(fd) }
 }
 
 /**
@@ -548,9 +578,7 @@ export function initializePrivateLedger(root: string | undefined, input: Private
     const session = sessionDigest(context.sessionId); const expectedContext = contextDigest(context, root)
     const anchors = readAnchors(root); const anchored = anchors.get(session)
     if (anchored !== undefined) return anchored === expectedContext
-    const unsignedAnchor = { version: 1, session_sha256: session, context_sha256: expectedContext }
-    const fd = openRegular(anchorPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
-    try { writeAll(fd, `${canonical({ ...unsignedAnchor, anchor_sha256: sha256(canonical(unsignedAnchor)) })}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+    appendAnchorLine(root, session, expectedContext)
     const ledgerFd = openRegular(ledgerPath(root, context), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
     try { fsyncSync(ledgerFd) } finally { closeSync(ledgerFd) }
     syncDirectory(root); return true
@@ -579,9 +607,7 @@ export function appendPrivateLedger(root: string | undefined, input: PrivateLedg
       if (verified === undefined) return false
       records = verified
     } else {
-      const unsignedAnchor = { version: 1, session_sha256: session, context_sha256: expectedContext }
-      const fd = openRegular(anchorPath(root), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND)
-      try { writeAll(fd, `${canonical({ ...unsignedAnchor, anchor_sha256: sha256(canonical(unsignedAnchor)) })}\n`); fsyncSync(fd) } finally { closeSync(fd) }
+      appendAnchorLine(root, session, expectedContext)
       syncDirectory(root)
     }
     if (kind === 'release_settlement') {

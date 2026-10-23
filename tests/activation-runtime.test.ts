@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -10,6 +10,7 @@ import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-loc
 import { activationBindingPath, readActivationBinding, writeActivationBinding } from '../src/domain/activation-bindings.js'
 import { sessionBirthIdentity } from '../src/domain/session-activation.js'
 import { privateStorageToolDenial } from '../src/domain/private-storage-guard.js'
+import { __writerLockInternals as lockInternals } from '../src/domain/private-ledger.js'
 const directories: string[] = []
 function root() { const path = mkdtempSync(join(tmpdir(), 'mode-runtime-')); directories.push(path); return path }
 afterEach(() => { for (const path of directories.splice(0)) rmSync(path, { force: true, recursive: true }) })
@@ -128,5 +129,55 @@ describe('fresh mode read invalidates the projection cache', () => {
     expect(registered({ name: 'pwsh', arguments: { command: 'Get-Content one.json', workdir: h.path } })).toContain('activation_private_storage_protected')
     expect(registered({ name: 'bash', arguments: { command: 'ls', workdir: work } })).toBeUndefined()
     expect(registered({ name: 'read', arguments: { file_path: join(work, 'app.ts') } })).toBeUndefined()
+  })
+})
+
+describe('F05: a qualified first creation survives a brief writer-lock race', () => {
+  it('retries the same creation after the lock is released and binds exactly once', async () => {
+    const h = harness(), session = Session.create(SessionId('f05-recovery'))
+    const held = lockInternals.acquire(h.path)
+    expect(held).toBeDefined()
+    const agent = await h.attach(session, 'startup')
+    const identity = sessionBirthIdentity(session.header, session.inheritedEventCount)
+    // The creation lost the race and nothing was written.
+    expect(h.guards[0]({ name: 'update_goal', arguments: { action: 'complete' } })).toContain('activation_writer_unavailable')
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+    // The lock frees; the next sync retries the SAME qualified creation.
+    lockInternals.release(h.path, held)
+    const message = claim()
+    const entered = await h.handlers.get('agent/pre-step')![0]({ agent, messages: [message] }, async () => ({ kind: 'enter', messages: [message] }))
+    expect(entered.messages[0].content[0].text).toContain('protocol boundary: v6')
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ status: 'bound', mode: 'always' })
+    // Exactly one binding file: the retry is idempotent, never a second record.
+    expect(readdirSync(h.path).filter((name) => name.endsWith('.json') && !name.startsWith('pending.'))).toHaveLength(1)
+    expect(h.guards[0]({ name: 'update_goal', arguments: { action: 'complete' } })).not.toContain('activation_writer_unavailable')
+  })
+
+  it('stops retrying after the bounded budget and keeps the clear writer status', async () => {
+    const h = harness(), session = Session.create(SessionId('f05-budget'))
+    const held = lockInternals.acquire(h.path)
+    const agent = await h.attach(session, 'startup')
+    expect(h.guards[0]({ name: 'update_goal', arguments: { action: 'complete' } })).toContain('activation_writer_unavailable')
+    for (let index = 0; index < 10; index += 1) {
+      await h.handlers.get('agent/pre-step')![0]({ agent, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
+    }
+    // Budget exhausted: releasing the lock afterwards does not resurrect the
+    // creation — the session keeps its explicit bounded status.
+    lockInternals.release(h.path, held)
+    await h.handlers.get('agent/pre-step')![0]({ agent, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
+    expect(h.guards[0]({ name: 'update_goal', arguments: { action: 'complete' } })).toContain('activation_writer_unavailable')
+    expect(readActivationBinding(h.path, sessionBirthIdentity(session.header, session.inheritedEventCount))).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+  })
+
+  it('never recreates a binding that was created and then deleted', async () => {
+    const h = harness(), session = Session.create(SessionId('f05-deleted'))
+    const agent = await h.attach(session, 'startup')
+    const identity = sessionBirthIdentity(session.header, session.inheritedEventCount)
+    expect(readActivationBinding(h.path, identity).status).toBe('bound')
+    unlinkSync(activationBindingPath(h.path, identity.id))
+    const message = claim()
+    await h.handlers.get('agent/pre-step')![0]({ agent, messages: [message] }, async () => ({ kind: 'enter', messages: [message] }))
+    expect(h.guards[0]({ name: 'update_goal', arguments: { action: 'complete' } })).toContain('activation_mode_unknown')
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
   })
 })
