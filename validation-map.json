@@ -61,7 +61,8 @@
     {
       "id": "tests",
       "paths": [
-        "tests/**"
+        "tests/**",
+        "vitest.config.ts"
       ],
       "gates": [
         "focused_tests"
@@ -233,7 +234,8 @@
         "pnpm-workspace.yaml",
         "scripts/release-pack.mjs",
         "tsconfig.json",
-        "tsdown.config.ts"
+        "tsdown.config.ts",
+        "scripts/dependency-scan-exceptions.json"
       ],
       "gates": [
         "artifact_identity",
@@ -376,6 +378,8 @@
         "tests/selected_validation_test.py",
         "tests/validation_selection_test.py",
         "tests/workflow_contract_test.py",
+        "scripts/audit_dependencies.py",
+        "tests/audit_dependencies_test.py",
         "validation-map.json"
       ],
       "gates": [
