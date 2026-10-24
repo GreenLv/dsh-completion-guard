@@ -642,6 +642,34 @@ describe('domain core', () => {
     expect(sanitizeUrl(sanitizeUrl(url))).toBe(sanitizeUrl(url))
   })
 
+  it('applies URL authority semantics uniformly across clause and URL paths (RF03)', () => {
+    // Uppercase scheme is the same scheme; a legal quote inside the authority
+    // does not end the URL. Both must lose the password in the CLAUSE path,
+    // and clause and sanitizeUrl must agree on the same input.
+    for (const input of [
+      'HTTPS://operator:fixturepass@example.invalid/path',
+      "https://oper'ator:fixturepass@example.invalid/path",
+      'https://operator%2F:fixturepass@example.invalid/path',
+      'https://Operator:FixturePass@Example.Invalid/p',
+    ]) {
+      const clause = sanitizeClauseText(input)
+      const target = sanitizeUrl(input)
+      expect(clause, input).not.toMatch(/fixturepass|FixturePass/i)
+      expect(clause, input).not.toContain('operator:')
+      expect(target, input).not.toMatch(/fixturepass|FixturePass/i)
+    }
+    // Prose-embedded URLs are the clause path's job.
+    expect(sanitizeClauseText('pull https://Operator:FixturePass@Example.Invalid/p in CI')).not.toMatch(/fixturepass/i)
+    // Structural, not http-only: any RFC scheme's authority is stripped.
+    expect(sanitizeClauseText('connect to postgres://dbuser:dbpass@db.example.invalid/store')).not.toContain('dbpass')
+    // A quoted URL keeps its surrounding quote; the URL inside is still clean.
+    expect(sanitizeClauseText("see 'https://u:p@example.invalid/x' now")).not.toContain(':p@')
+    // Path '@' stays, plain URLs unchanged, idempotent.
+    expect(sanitizeClauseText('visit https://example.invalid/a/b@example.com')).toBe('visit https://example.invalid/a/b@example.com')
+    const once2 = sanitizeClauseText("HTTPS://oper'ator:fixturepass@example.invalid/p")
+    expect(sanitizeClauseText(once2)).toBe(once2)
+  })
+
   it('keeps URL credentials out of the capture→replay chain with stable digests (F03)', () => {
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },

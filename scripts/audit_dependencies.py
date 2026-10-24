@@ -74,10 +74,12 @@ def load_exceptions(path: Path) -> dict[tuple[str, str, str], dict[str, str]]:
     return table
 
 
-def evaluate_audit(report: Any) -> dict[str, list[dict[str, str]]]:
+def evaluate_audit(report: Any) -> dict[str, list[dict[str, Any]]]:
     """Classify one parsed `pnpm audit --json` report.
 
-    Returns per-severity rows. Raises AuditUnavailable for any shape this
+    Returns per-severity rows carrying EVERY finding (version + chain class),
+    not just the first: an advisory installed at several versions must match
+    an exception for each one. Raises AuditUnavailable for any shape this
     reader cannot interpret — unknown shapes fail closed like scan errors.
     """
     if not isinstance(report, dict):
@@ -85,21 +87,31 @@ def evaluate_audit(report: Any) -> dict[str, list[dict[str, str]]]:
     advisories = report.get("advisories")
     if not isinstance(advisories, dict):
         raise AuditUnavailable("audit report has no advisories object")
-    rows: dict[str, list[dict[str, str]]] = {severity: [] for severity in (*BLOCKING_SEVERITIES, *REPORTED_SEVERITIES)}
+    rows: dict[str, list[dict[str, Any]]] = {severity: [] for severity in (*BLOCKING_SEVERITIES, *REPORTED_SEVERITIES)}
     for advisory in advisories.values():
         if not isinstance(advisory, dict):
             raise AuditUnavailable("advisory entry is not an object")
         severity = str(advisory.get("severity", "")).lower()
+        module = str(advisory.get("module_name", "?"))
         findings = advisory.get("findings")
-        installed = findings[0].get("version") if isinstance(findings, list) and findings and isinstance(findings[0], dict) else None
-        if not isinstance(installed, str) or not installed:
-            raise AuditUnavailable(f"advisory for {advisory.get('module_name', '?')} has no installed version")
+        if not isinstance(findings, list) or not findings:
+            raise AuditUnavailable(f"advisory for {module} has no findings")
+        installs: list[dict[str, str]] = []
+        for finding in findings:
+            if not isinstance(finding, dict) or not isinstance(finding.get("version"), str) or not finding["version"]:
+                raise AuditUnavailable(f"advisory for {module} has a finding without an installed version")
+            # pnpm 11 reports the chain class per finding; when a future
+            # scanner omits it, say UNKNOWN instead of inventing prod.
+            installs.append({
+                "version": finding["version"],
+                "dev": "dev" if finding.get("dev") is True else "prod" if finding.get("dev") is False else "unknown",
+            })
         row = {
-            "module": str(advisory.get("module_name", "?")),
-            "version": installed,
+            "module": module,
+            "installs": installs,
             "title": str(advisory.get("title", "?"))[:120],
             "id": str(advisory.get("id", advisory.get("url", "?"))),
-            "dev": "dev" if advisory.get("dev") else "prod",
+            "url": str(advisory.get("url", "")),
         }
         if severity in rows:
             rows[severity].append(row)
@@ -119,6 +131,16 @@ def run_audit(repo_root: Path) -> Any:
         timeout=300,
         check=False,
     )
+    # RF06: honor the scanner's exit protocol. For the pinned pnpm line a
+    # COMPLETED audit exits 0 (clean) or 1 (vulnerabilities found); any other
+    # exit code is a failed scan even when stdout happens to look like a
+    # valid, empty report — a partially written document must never read as
+    # "zero vulnerabilities".
+    if completed.returncode not in (0, 1):
+        raise AuditUnavailable(
+            f"pnpm audit exited {completed.returncode} (stderr={completed.stderr.strip()[:200]!r}); "
+            "treat the scan as incomplete, not as a clean result"
+        )
     raw = completed.stdout.strip()
     if not raw:
         raise AuditUnavailable(
@@ -153,23 +175,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (AuditUnavailable, OSError, json.JSONDecodeError) as exc:
         print(f"dependency-scan: FAILED CLOSED — the scan did not complete: {exc}", file=sys.stderr)
         return 2
-    blocking: list[tuple[str, dict[str, str]]] = []
-    accepted: list[tuple[str, dict[str, str]]] = []
+    blocking: list[tuple[str, dict[str, Any], str]] = []
+    accepted: list[tuple[str, dict[str, Any], str]] = []
     for severity in BLOCKING_SEVERITIES:
         for row in rows[severity]:
-            entry = exceptions.get((row["id"], row["module"], row["version"]))
-            if entry is not None and entry["severity"] == severity:
-                accepted.append((severity, row))
-            else:
-                blocking.append((severity, row))
+            # EVERY installed version of a blocking advisory needs its own
+            # current, matching exception; one accepted version never vouches
+            # for another.
+            for install in row["installs"]:
+                entry = exceptions.get((row["id"], row["module"], install["version"]))
+                if entry is not None and entry["severity"] == severity:
+                    accepted.append((severity, row, install["version"]))
+                else:
+                    blocking.append((severity, row, install["version"]))
     for severity in REPORTED_SEVERITIES:
         for row in rows[severity]:
-            print(f"dependency-scan: reported {severity} ({row['dev']}): {row['module']} — {row['title']} [{row['id']}]")
-    for severity, row in accepted:
-        print(f"dependency-scan: ACCEPTED {severity} ({row['dev']}): {row['module']}@{row['version']} — {row['title']} [{row['id']}] (documented exception)")
+            versions = ",".join(f"{i['version']}({i['dev']})" for i in row["installs"])
+            print(f"dependency-scan: reported {severity}: {row['module']}@{versions} — {row['title']} [{row['id']}]")
+    for severity, row, version in accepted:
+        print(f"dependency-scan: ACCEPTED {severity}: {row['module']}@{version} — {row['title']} [{row['id']}] (documented exception)")
     if blocking:
-        for severity, row in blocking:
-            print(f"dependency-scan: BLOCKING {severity} ({row['dev']}): {row['module']}@{row['version']} — {row['title']} [{row['id']}]")
+        for severity, row, version in blocking:
+            print(f"dependency-scan: BLOCKING {severity}: {row['module']}@{version} — {row['title']} [{row['id']}]")
         print(
             "dependency-scan: FAILED — unaccepted high/critical advisories block the candidate. "
             "Upgrade the affected chain, or record an exception (advisory, reachability, owner, expiry) in "

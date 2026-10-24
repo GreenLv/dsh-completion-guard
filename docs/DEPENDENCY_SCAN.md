@@ -69,10 +69,14 @@ upgraded.
 响模块与版本、前置条件在本仓库不可达的原因、责任方、到期日；到期后必须重新论证或
 完成升级。
 
-| Advisory | Module@version | Severity | Rationale (summary) | Owner | Expires |
-| --- | --- | --- | --- | --- | --- |
-| GHSA-1243066 | zod@4.4.3 | high | Dev-chain only: exact-pinned transitive dep of the pinned `@deepseek-ai` 0.2.1-rc.2 host devDependencies (test replica). Nothing ships in the npm package; the advisory needs attacker-controlled oversized schema input, which offline deterministic tests never provide. Re-evaluate at the next host cohort bump (expected zod ≥4.6.6). | GreenLv | 2027-01-31 |
-| GHSA-1243112 | undici@8.11.2 | high | Dev-chain only: exact-pinned transitive dep of `@deepseek-ai/dsh-http-proxy@0.2.1-rc.2` under the pinned host devDependencies. Nothing ships in the npm package; the advisory needs an attacker-controlled server sending crafted Content-Encoding stacks, which offline tests never contact. Re-evaluate at the next host cohort bump (expected undici ≥8.12.2). | GreenLv | 2027-01-31 |
+The advisory id in the exception table is the scanner's numeric id; the GitHub
+advisory it resolves to is recorded alongside it. Earlier drafts of this page
+mistakenly wrote the numeric id as a GHSA code — the real identifiers are:
+
+| Advisory (GitHub) | Scanner id | Module@version | Severity | Rationale (summary) | Owner | Expires |
+| --- | --- | --- | --- | --- | --- | --- |
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | 1243066 | zod@4.4.3 | high | Dev-chain only: exact-pinned transitive dep of the pinned `@deepseek-ai` host devDependencies (test replica of the audited cohort). Nothing ships in the npm package; the advisory needs attacker-controlled oversized schema input, which offline deterministic tests never provide. The verified rc.3 host manifests still exact-pin zod 4.4.3, so upgrading the host does not lift this. Re-evaluate at the next host cohort bump that carries zod ≥4.6.6. | GreenLv | 2027-01-31 |
+| [GHSA-xjj6-f33q-929c](https://github.com/advisories/GHSA-xjj6-f33q-929c) | 1243112 | undici@8.11.2 | high | Dev-chain only: exact-pinned transitive dep of `@deepseek-ai/dsh-http-proxy` under the pinned host devDependencies. Nothing ships in the npm package; the advisory needs an attacker-controlled server sending crafted Content-Encoding stacks, which offline tests never contact. The verified rc.3 host manifests still exact-pin undici 8.11.2, so upgrading the host does not lift this. Re-evaluate at the next host cohort bump that carries undici ≥8.12.2. | GreenLv | 2027-01-31 |
 
 ## Recorded upgrades / 已记录的升级
 

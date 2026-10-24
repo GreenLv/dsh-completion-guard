@@ -51,8 +51,14 @@ export function privateStorageToolDenial(name: string, args: unknown, cwd: strin
     // current working directory itself.
     const declared = typeof a.workdir === 'string' && a.workdir.length > 0 ? a.workdir
       : typeof a.cwd === 'string' && a.cwd.length > 0 ? a.cwd : undefined
-    const working = declared ?? cwd
-    const workingVerdict = working === undefined || working.length === 0 ? false as const : privatePath(working, cwd)
+    // RF02: with no declared workdir the call runs in the host's current
+    // working directory. When that directory cannot be established from a
+    // trusted source (no usable cwd, corrupt timeline), the target of the
+    // command is UNPROVABLE — refusing is the only closed answer; treating
+    // it as "outside private storage" would let an unknown default directory
+    // through. An empty-string workdir is ambiguous the same way.
+    const working = declared ?? (cwd !== undefined && cwd.length > 0 ? cwd : undefined)
+    const workingVerdict = working === undefined ? 'unresolved' as const : privatePath(working, cwd)
     if (workingVerdict === true) return denial('Shell access to Guard private storage requires the independent operator entrypoint.')
     if (workingVerdict === 'unresolved') return denial('A relative shell workdir cannot be proven outside Guard private storage without a trusted working directory.')
     if (roots.some(root => command.includes(root) || command.includes(root.replaceAll('\\', '/')))

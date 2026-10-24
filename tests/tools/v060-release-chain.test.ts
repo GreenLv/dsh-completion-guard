@@ -551,4 +551,42 @@ describe('0.6.0 C10: the release chain runs on the production wiring', () => {
       expect(effects).toEqual([])
     } finally { await rm(root, { recursive: true, force: true }) }
   })
+
+  it('refuses a release artifact whose bytes grew past the identity it reports (RF01)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-cg-grown-'))
+    try {
+      const tgz = await packFixture(root, PACKAGE, VERSION)
+      // Same bytes-on-disk state as the review's fstat→read race: the artifact
+      // grew before the reader picked it up. Whatever the reader decides, the
+      // resolution must not succeed on a prefix identity.
+      const { readFile, appendFile } = await import('node:fs/promises')
+      await appendFile(tgz, Buffer.alloc(64, 0x5a))
+      const grown = await readFile(tgz)
+      const session = Session.create(SessionId('release-chain-grown'), undefined, {
+        version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('release-chain-grown'), createdAt: 1, cwd: root,
+      })
+      const effects: string[] = []
+      const { tools } = startRuntime(session, {
+        commandRunner: async () => { effects.push('publish') },
+        fetcher: (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch,
+        privateLedgerRoot: join(root, 'private-ledger'),
+      })
+      const resolution = await runTool(session, tools, 'context_guard_evidence', 'grown-resolution', {
+        semantic_action: 'publish', evidence_role: 'resolution',
+        selector: { artifact_id: PACKAGE, version: VERSION, registry: REGISTRY },
+        command_manifest: { manifest_id: 'npm.publish_tgz.v1', tgz_path: tgz },
+      })
+      const grownResolution = resolution as unknown as { status: string; reason_code?: string; resolved_target?: Record<string, string> }
+      // Either the reader refused the corrupted archive outright, or it bound
+      // the FULL grown bytes — never the old 136-file prefix digest.
+      const { createHash } = await import('node:crypto')
+      expect(grownResolution.status === 'supported'
+        ? grownResolution.resolved_target!.integrity_digest === `sha512-${createHash('sha512').update(grown).digest('base64')}`
+        : grownResolution.reason_code !== 'resolution_input_missing').toBe(true)
+      if (grownResolution.status === 'supported') {
+        expect(grownResolution.resolved_target!.artifact_id).toBe(PACKAGE)
+      }
+      expect(effects).toEqual([])
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
 }, 30_000)

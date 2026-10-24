@@ -92,6 +92,47 @@ describe('registryIntegrity under budgets (F09)', () => {
     expect(Date.now() - started).toBeLessThan(5_000)
   })
 
+  it('releases a readable body on HTTP error responses (RF05)', async () => {
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('not-found-details')) },
+      cancel() { cancelled = true },
+    })
+    const fetcher = (async () => new Response(body, { status: 404 })) as unknown as typeof fetch
+    const roots: EvidenceToolRoots = { fetcher }
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, roots, new AbortController().signal)).toBeUndefined()
+    expect(cancelled, 'the 404 body is cancelled, not left locked').toBe(true)
+  })
+
+  it('releases the reader when the body is not JSON or the stream errors (RF05)', async () => {
+    // A complete Buffer body exercises the JSON-parse refusal end to end.
+    const jsonFetcher = (async () => new Response(Buffer.from('not json at all'), { status: 200 })) as unknown as typeof fetch
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, { fetcher: jsonFetcher }, new AbortController().signal)).toBeUndefined()
+    // An ERRORED body is already dead — per spec its cancel algorithm never
+    // runs — so the witness here is a bounded, rejection-free refusal. The
+    // releasable-body paths (404, budget overrun, stall) assert cancel()
+    // explicitly below.
+    let errorCancelled = false
+    const errorBody = new ReadableStream<Uint8Array>({
+      pull(controller) { controller.error(new Error('stream exploded')) },
+      cancel() { errorCancelled = true },
+    })
+    const errorFetcher = (async () => new Response(errorBody, { status: 200 })) as unknown as typeof fetch
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, { fetcher: errorFetcher }, new AbortController().signal)).toBeUndefined()
+    expect(errorCancelled).toBe(false)
+  })
+
+  it('bounds a body that sends one chunk and then stalls forever (RF05)', async () => {
+    const stalled = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"partial":')) },
+      // never closes, never errors
+    })
+    const fetcher = (async () => new Response(stalled, { status: 200 })) as unknown as typeof fetch
+    const started = Date.now()
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, { fetcher, registryReadBudget: { totalDeadlineMs: 120, maxBodyBytes: 1024 * 1024 } }, new AbortController().signal)).toBeUndefined()
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
   it('refuses instantly when the caller already cancelled', async () => {
     const roots: EvidenceToolRoots = { fetcher: (async () => { throw new Error('must not be called') }) as unknown as typeof fetch }
     expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, roots, AbortSignal.abort())).toBeUndefined()

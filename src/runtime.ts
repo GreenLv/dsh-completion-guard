@@ -1255,7 +1255,7 @@ export function apply(ctx: Context, rawConfig: {
       // that was ever successfully created never enters this path, so a
       // deleted binding is never recreated; a different mode written by
       // another host surfaces as a conflict, not a guess.
-      const creationRetry = initialization.status === 'unavailable' && initialization.reasonCode === 'activation_writer_unavailable'
+      let creationRetry = initialization.status === 'unavailable' && initialization.reasonCode === 'activation_writer_unavailable'
         ? { source: startSources.get(agent), attempts: 0, deadline: Date.now() + 60_000 } : undefined
       // Only qualified creation/adoption writes. Subsequent reads cannot
       // recreate a missing record, even if the original source was startup —
@@ -1265,6 +1265,16 @@ export function apply(ctx: Context, rawConfig: {
         try {
           const currentBirth = sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount)
           const fresh = readActivationBinding(activationBindingsRoot, currentBirth, config.activationSource === 'explicit' ? config.activation : undefined)
+          // RF04: once a binding EXISTS — written by this retry or by any
+          // other writer — the first-creation intent is consumed for good.
+          // Clearing the retry here is what keeps a later deletion,
+          // replacement or conflict from ever recreating the file: the retry
+          // is only for "no binding was ever written", not for restoring a
+          // lost one.
+          if (fresh.status === 'bound') {
+            creationRetry = undefined
+            return fresh
+          }
           if (fresh.status === 'unavailable' && fresh.reasonCode === 'activation_mode_unknown' && initialization.status === 'unavailable') {
             if (creationRetry !== undefined && creationRetry.source === 'startup' && creationRetry.attempts < 8 && Date.now() <= creationRetry.deadline
               && agentHostLock.status === 'supported'

@@ -672,13 +672,33 @@ async function boundedRegistryJson(
   } catch {
     return undefined
   }
-  if (!response.ok || !response.body) return undefined
+  if (!response.ok || !response.body) {
+    // RF05: an error response can still carry a readable streaming body —
+    // release it on the only exit that never reaches the reader's finally.
+    try { await response.body?.cancel() } catch { /* already unusable */ }
+    return undefined
+  }
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
   let received = 0
+  // RF05 hardening: each read races the combined caller/deadline signal. A
+  // compliant transport already rejects pending body reads on abort, but a
+  // body that simply stalls (neither data nor end) must still exit within
+  // the recorded budget instead of hanging the reconciliation forever.
+  const readBounded = (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    if (combined.aborted) return Promise.reject(new Error('registry_read_budget_exhausted'))
+    let onAbort: () => void
+    return Promise.race([
+      reader.read(),
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(new Error('registry_read_budget_exhausted'))
+        combined.addEventListener('abort', onAbort, { once: true })
+      }),
+    ]).finally(() => combined.removeEventListener('abort', onAbort!))
+  }
   try {
     while (true) {
-      const { done, value } = await reader.read()
+      const { done, value } = await readBounded()
       if (done) break
       received += value.byteLength
       if (received > budget.maxBodyBytes) return undefined

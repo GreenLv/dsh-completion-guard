@@ -6,6 +6,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "audit_dependencies.py"
@@ -15,16 +16,18 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(GATE)
 
 
-def advisory(severity: str, module: str = "fixture-pkg", dev: bool = True, key: str | None = None) -> dict:
+def advisory(severity: str, module: str = "fixture-pkg", dev: bool | None = True,
+             versions: tuple[str, ...] = ("1.0.0",)) -> dict:
+    # pnpm 11 shape: the chain class lives on each finding, not the advisory.
+    findings = [{"version": version, **({} if dev is None else {"dev": dev})} for version in versions]
     return {
         "id": 1,
         "url": "https://github.com/advisories/GHSA-fixture",
         "title": f"Fixture {severity} advisory",
         "severity": severity,
         "module_name": module,
-        "dev": dev,
-        "findings": [{"version": "1.0.0"}],
-    } | ({"key": key} if key else {})
+        "findings": findings,
+    }
 
 
 class AuditDependenciesGate(unittest.TestCase):
@@ -114,10 +117,69 @@ class AuditDependenciesGate(unittest.TestCase):
     def test_missing_report_file_fails_closed(self) -> None:
         self.assertEqual(GATE.main(["--report", "/nonexistent/audit.json"]), 2)
 
-    def test_evaluate_audit_rows_carry_classification(self) -> None:
-        rows = GATE.evaluate_audit({"advisories": {"a": advisory("critical", dev=False)}})
-        self.assertEqual(rows["critical"][0]["dev"], "prod")
+    def test_evaluate_audit_rows_carry_every_finding(self) -> None:
+        rows = GATE.evaluate_audit({"advisories": {"a": advisory("critical", dev=False, versions=("1.0.0", "1.0.1"))}})
         self.assertEqual(rows["critical"][0]["module"], "fixture-pkg")
+        self.assertEqual([i["version"] for i in rows["critical"][0]["installs"]], ["1.0.0", "1.0.1"])
+        self.assertEqual([i["dev"] for i in rows["critical"][0]["installs"]], ["prod", "prod"])
+
+    def test_missing_dev_field_is_unknown_not_prod(self) -> None:
+        rows = GATE.evaluate_audit({"advisories": {"a": advisory("high", dev=None)}})
+        self.assertEqual([i["dev"] for i in rows["high"][0]["installs"]], ["unknown"])
+
+    def test_second_unregistered_version_blocks_despite_first_exception(self) -> None:
+        report = {"advisories": {"a": advisory("high", versions=("4.4.3", "4.4.4"))}}
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(report, handle)
+            path = handle.name
+        with tempfile.TemporaryDirectory() as tmp:
+            exceptions = Path(tmp) / "exceptions.json"
+            exceptions.write_text(json.dumps({
+                "schema": "dsh-dependency-scan-exceptions/v1",
+                "exceptions": [{"id": "1", "module": "fixture-pkg", "version": "4.4.3",
+                                "severity": "high", "rationale": "only first version accepted",
+                                "owner": "t", "expires": "2999-01-01"}],
+            }), encoding="utf-8")
+            self.assertEqual(GATE.main(["--report", path, "--exceptions", str(exceptions)]), 1)
+            # Findings order must not matter: both versions covered -> pass.
+            exceptions.write_text(json.dumps({
+                "schema": "dsh-dependency-scan-exceptions/v1",
+                "exceptions": [{"id": "1", "module": "fixture-pkg", "version": "4.4.4",
+                                "severity": "high", "rationale": "second", "owner": "t", "expires": "2999-01-01"},
+                               {"id": "1", "module": "fixture-pkg", "version": "4.4.3",
+                                "severity": "high", "rationale": "first", "owner": "t", "expires": "2999-01-01"}],
+            }), encoding="utf-8")
+            self.assertEqual(GATE.main(["--report", path, "--exceptions", str(exceptions)]), 0)
+
+    def test_failed_scan_process_exit_never_reads_as_clean(self) -> None:
+        # A scanner that exits outside the completion protocol (0 clean /
+        # 1 vulnerabilities-found) is a failed scan, even with plausible JSON.
+        report = json.dumps({"advisories": {}})
+        for returncode in (2, 42, 127):
+            with self.subTest(returncode=returncode):
+                with tempfile.TemporaryDirectory() as tmp:
+                    fake = unittest.mock.Mock()
+                    fake.returncode = returncode
+                    fake.stdout = report
+                    fake.stderr = "boom"
+                    with unittest.mock.patch.object(GATE.subprocess, "run", return_value=fake):
+                        self.assertEqual(GATE.main(["--repo-root", tmp]), 2)
+        # Completion-protocol exits with valid JSON are evaluated normally.
+        with tempfile.TemporaryDirectory() as tmp:
+            exceptions = Path(tmp) / "exceptions.json"
+            exceptions.write_text(json.dumps({"schema": "dsh-dependency-scan-exceptions/v1", "exceptions": []}), encoding="utf-8")
+            fake = unittest.mock.Mock()
+            fake.returncode = 1
+            fake.stdout = report
+            fake.stderr = ""
+            with unittest.mock.patch.object(GATE.subprocess, "run", return_value=fake):
+                self.assertEqual(GATE.main(["--repo-root", tmp, "--exceptions", str(exceptions)]), 0)
+
+    def test_advisory_without_findings_fails_closed(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump({"advisories": {"a": {"severity": "high", "module_name": "m"}}}, handle)
+            path = handle.name
+        self.assertEqual(GATE.main(["--report", path]), 2)
 
 
 if __name__ == "__main__":

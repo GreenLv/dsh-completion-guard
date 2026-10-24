@@ -121,6 +121,13 @@ describe('fresh mode read invalidates the projection cache', () => {
     expect(privateStorageToolDenial('bash', { command: 'ls' }, priv, [priv])).toContain('activation_private_storage_protected')
     expect(privateStorageToolDenial('bash', { command: 'ls' }, work, [priv])).toBeUndefined()
     expect(privateStorageToolDenial('write', { file_path: join(work, 'one.json') }, undefined, [priv])).toBeUndefined()
+    // RF02: no declared workdir AND no trusted cwd means the default directory
+    // is unprovable — the call is refused, never silently allowed.
+    expect(privateStorageToolDenial('bash', { command: 'cat one.json' }, undefined, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('pwsh', { command: 'Get-Content one.json' }, undefined, [priv])).toContain('activation_private_storage_protected')
+    expect(privateStorageToolDenial('bash', { command: 'cat one.json', workdir: '' }, undefined, [priv])).toContain('activation_private_storage_protected')
+    // Absolute file targets stay decidable without a cwd.
+    expect(privateStorageToolDenial('read', { file_path: join(priv, 'one.json') }, undefined, [priv])).toContain('activation_private_storage_protected')
     // The same matrix through the REGISTERED production guard, not the helper.
     const h = harness(), session = Session.create(SessionId('guard-workdir'))
     await h.attach(session, 'startup')
@@ -129,6 +136,16 @@ describe('fresh mode read invalidates the projection cache', () => {
     expect(registered({ name: 'pwsh', arguments: { command: 'Get-Content one.json', workdir: h.path } })).toContain('activation_private_storage_protected')
     expect(registered({ name: 'bash', arguments: { command: 'ls', workdir: work } })).toBeUndefined()
     expect(registered({ name: 'read', arguments: { file_path: join(work, 'app.ts') } })).toBeUndefined()
+    // RF02 through the REGISTERED guard: a session whose header carries no cwd
+    // has no trusted default directory, so an omitted workdir is refused.
+    const noCwd = Session.create(SessionId('guard-no-cwd'))
+    const h2 = harness()
+    await h2.attach(noCwd, 'startup')
+    expect(String((noCwd as unknown as { header: { cwd?: unknown } }).header.cwd ?? '')).toBe('')
+    expect(h2.guards[0]({ name: 'bash', arguments: { command: 'cat one.json' } })).toContain('activation_private_storage_protected')
+    expect(h2.guards[0]({ name: 'pwsh', arguments: { command: 'Get-Content one.json' } })).toContain('activation_private_storage_protected')
+    expect(h2.guards[0]({ name: 'bash', arguments: { command: 'ls', workdir: work } })).toBeUndefined()
+    expect(h2.guards[0]({ name: 'read', arguments: { file_path: join(work, 'app.ts') } })).toBeUndefined()
   })
 })
 
@@ -167,6 +184,42 @@ describe('F05: a qualified first creation survives a brief writer-lock race', ()
     await h.handlers.get('agent/pre-step')![0]({ agent, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
     expect(h.guards[0]({ name: 'update_goal', arguments: { action: 'complete' } })).toContain('activation_writer_unavailable')
     expect(readActivationBinding(h.path, sessionBirthIdentity(session.header, session.inheritedEventCount))).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+  })
+
+  it('permanently retires the first-creation retry once ANY binding was observed (RF04)', async () => {
+    // Review probe reproduction: this instance lost the creation race, another
+    // writer legally created the SAME-mode binding, the instance observed it
+    // bound, and the binding was then deleted. The retry must be dead by then.
+    const h = harness(), session = Session.create(SessionId('rf04-external'))
+    const held = lockInternals.acquire(h.path)
+    const agent = await h.attach(session, 'startup')
+    const identity = sessionBirthIdentity(session.header, session.inheritedEventCount)
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+    lockInternals.release(h.path, held)
+    // Another writer creates the binding first.
+    expect(writeActivationBinding(h.path, identity, 'always', 'fresh_creation', '2'.repeat(64)).status).toBe('bound')
+    const message = claim()
+    await h.handlers.get('agent/pre-step')![0]({ agent, messages: [message] }, async () => ({ kind: 'enter', messages: [message] }))
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ status: 'bound' })
+    // Deletion after observation: the file stays gone; the completion gate
+    // refuses with mode_unknown — no recreation, and (per the review's own
+    // probe) no claim of a wrong certificate either.
+    unlinkSync(activationBindingPath(h.path, identity.id))
+    await h.handlers.get('agent/pre-step')![0]({ agent, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+    await h.handlers.get('agent/pre-step')![0]({ agent, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
+    expect(readActivationBinding(h.path, identity)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+    // A DIFFERENT-mode external binding terminates the retry just as dead.
+    const h3 = harness(), session3 = Session.create(SessionId('rf04-external-optin'))
+    const held3 = lockInternals.acquire(h3.path)
+    const agent3 = await h3.attach(session3, 'startup')
+    const identity3 = sessionBirthIdentity(session3.header, session3.inheritedEventCount)
+    lockInternals.release(h3.path, held3)
+    expect(writeActivationBinding(h3.path, identity3, 'opt-in', 'fresh_creation', '3'.repeat(64)).status).toBe('bound')
+    await h3.handlers.get('agent/pre-step')![0]({ agent: agent3, messages: [claim()] }, async () => ({ kind: 'enter', messages: [claim()] }))
+    unlinkSync(activationBindingPath(h3.path, identity3.id))
+    await h3.handlers.get('agent/pre-step')![0]({ agent: agent3, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
+    expect(readActivationBinding(h3.path, identity3)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
   })
 
   it('never recreates a binding that was created and then deleted', async () => {

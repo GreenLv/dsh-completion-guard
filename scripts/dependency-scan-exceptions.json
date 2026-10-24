@@ -1,24 +1,28 @@
 {
   "schema": "dsh-dependency-scan-exceptions/v1",
-  "note": "Machine-readable accepted exceptions for the fail-closed dependency advisory gate. Each entry must carry advisory id, module, vulnerable version, reachability rationale, owner and expiry. An expired, mismatched or missing entry leaves the advisory BLOCKING. Human-readable policy: docs/DEPENDENCY_SCAN.md.",
+  "note": "Machine-readable accepted exceptions for the fail-closed dependency advisory gate. Each entry must carry advisory id, module, vulnerable version, reachability rationale, owner and expiry. An expired, mismatched or missing entry leaves the advisory BLOCKING. Human-readable policy: docs/DEPENDENCY_SCAN.md. The id/url pair records the pnpm numeric advisory id and the real GitHub advisory it resolves to.",
   "exceptions": [
     {
       "id": "1243066",
       "module": "zod",
       "version": "4.4.3",
       "severity": "high",
-      "rationale": "Dev-chain only: zod is an EXACT-pinned transitive dependency of the @deepseek-ai/dsh-commands@0.2.1-rc.2 host devDependency (test replica of the audited host cohort). This package ships no runtime dependency on zod, and the advisory (memory exhaustion validating oversized constrained collections) requires attacker-controlled oversized schema input, which the deterministic local test fixtures never provide. Re-evaluate at the next host cohort bump, which is expected to carry zod >=4.6.6.",
+      "rationale": "Dev-chain only: zod is an EXACT-pinned transitive dependency of the @deepseek-ai/dsh-commands@0.2.1-rc.2 host devDependency (test replica of the audited host cohort). This package ships no runtime dependency on zod, and the advisory (memory exhaustion validating oversized constrained collections) requires attacker-controlled oversized schema input, which the deterministic local test fixtures never provide. Re-evaluate at the next host cohort bump, which is expected to carry zod >=4.6.6. The pinned @deepseek-ai 0.2.1-rc.3 host cohort (verified registry manifests) still exact-pins this same version, so upgrading the host does not lift the exception.",
       "owner": "GreenLv (repository maintainer)",
-      "expires": "2027-01-31"
+      "expires": "2027-01-31",
+      "github_advisory_id": "GHSA-mrhx-c7xc-m3w5",
+      "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5"
     },
     {
       "id": "1243112",
       "module": "undici",
       "version": "8.11.2",
       "severity": "high",
-      "rationale": "Dev-chain only: undici is an EXACT-pinned transitive dependency of @deepseek-ai/dsh-http-proxy@0.2.1-rc.2 under the pinned host devDependencies (test replica of the audited host cohort). This package ships no runtime dependency on undici, and the advisory (unhandled error on excessive content-encodings) requires an attacker-controlled server sending crafted Content-Encoding stacks, which the offline deterministic tests never contact. Re-evaluate at the next host cohort bump, which is expected to carry undici >=8.12.2.",
+      "rationale": "Dev-chain only: undici is an EXACT-pinned transitive dependency of @deepseek-ai/dsh-http-proxy@0.2.1-rc.2 under the pinned host devDependencies (test replica of the audited host cohort). This package ships no runtime dependency on undici, and the advisory (unhandled error on excessive content-encodings) requires an attacker-controlled server sending crafted Content-Encoding stacks, which the offline deterministic tests never contact. Re-evaluate at the next host cohort bump, which is expected to carry undici >=8.12.2. The pinned @deepseek-ai 0.2.1-rc.3 host cohort (verified registry manifests) still exact-pins this same version, so upgrading the host does not lift the exception.",
       "owner": "GreenLv (repository maintainer)",
-      "expires": "2027-01-31"
+      "expires": "2027-01-31",
+      "github_advisory_id": "GHSA-xjj6-f33q-929c",
+      "url": "https://github.com/advisories/GHSA-xjj6-f33q-929c"
     }
   ]
 }

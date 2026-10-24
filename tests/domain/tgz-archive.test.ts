@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync, realpathSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -229,9 +229,54 @@ describe('tgz identity: resource budgets (F08)', () => {
       expect(await rejected(path, { maxCompressedBytes: exact })).not.toBe('tgz_compressed_budget_exceeded')
       expect(await rejected(path, { maxCompressedBytes: exact - 1 })).toBe('tgz_compressed_budget_exceeded')
       // A file that grew past the budget after stat is still caught by the
-      // bounded read: the budget+1 probe byte is actually read.
+      // bounded read: the reader keeps reading to the new EOF.
       await writeFile(path, Buffer.concat([compressed, Buffer.alloc(64)]))
       expect(await rejected(path, { maxCompressedBytes: exact })).toBe('tgz_compressed_budget_exceeded')
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it('binds the identity to the COMPLETE file bytes across stat/read growth (RF01)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-tgz-'))
+    try {
+      const tar = canonicalTar('growth-fixture', '1.0.0')
+      const compressed = gzipSync(tar, { level: 9 })
+      const path = join(dir, 'growth.tgz')
+      await writeFile(path, compressed)
+      const baseline = await readTgzIdentity(path)
+      expect(baseline.status).toBe('ok')
+      if (baseline.status !== 'ok') return
+      // The review's race, exercised from the reader's side: the file grew
+      // before the first read picked it up (equivalent bytes-on-disk state as
+      // "append after fstat, before read"). The reader must either bind the
+      // full grown content or refuse — never return the old prefix identity.
+      const grown = Buffer.concat([compressed, Buffer.alloc(64, 0x41)])
+      await writeFile(path, grown)
+      const result = await readTgzIdentity(path)
+      if (result.status === 'ok') {
+        expect(result.identity.sha256).toBe(createHash('sha256').update(grown).digest('hex'))
+      } else {
+        expect(result.reasonCode).toBe('tgz_gzip_corrupt')
+      }
+      expect(result.status === 'ok' && result.identity.sha256 === baseline.identity.sha256).toBe(false)
+      // Multi-chunk files (>256KiB compressed) bind every chunk: the digest
+      // equals the digest of the entire file on disk.
+      const big = randomBytes(400 * 1024)
+      const bigTar = Buffer.concat([
+        entry({ name: 'package/package.json', body: manifestBody('big-growth', '1.0.0') }),
+        entry({ name: 'package/payload.bin', body: big }),
+        Buffer.alloc(1024),
+      ])
+      const bigPath = join(dir, 'big.tgz')
+      await writeFile(bigPath, gzipSync(bigTar, { level: 0 }))
+      const bigIdentity = await readTgzIdentity(bigPath)
+      expect(bigIdentity.status).toBe('ok')
+      if (bigIdentity.status !== 'ok') return
+      const onDisk = await readFile(bigPath)
+      expect(onDisk.length).toBeGreaterThan(256 * 1024)
+      expect(bigIdentity.identity.sha256).toBe(createHash('sha256').update(onDisk).digest('hex'))
+      // A truncated (shrunk) multi-chunk archive is refused, not prefix-accepted.
+      await writeFile(bigPath, (await readFile(bigPath)).subarray(0, 100 * 1024))
+      expect(await rejected(bigPath)).toBe('tgz_gzip_corrupt')
     } finally { await rm(dir, { recursive: true, force: true }) }
   })
 

@@ -184,14 +184,34 @@ export async function readTgzIdentity(path: string, options?: { signal?: AbortSi
   try {
     const stat = await handle.stat()
     if (!stat.isFile()) return { status: 'rejected', reasonCode: 'tgz_not_regular_file' }
-    // The stat size is advisory only: bound the actual read and detect a file
-    // that grew past the budget (or was swapped for a larger one) afterwards.
-    const readLength = Math.min(stat.size, budget.maxCompressedBytes + 1)
-    const buffer = Buffer.alloc(readLength)
-    const { bytesRead } = await handle.read(buffer, 0, readLength, 0)
-    if (bytesRead === 0) return { status: 'rejected', reasonCode: 'tgz_empty' }
-    if (bytesRead > budget.maxCompressedBytes) return { status: 'rejected', reasonCode: 'tgz_compressed_budget_exceeded' }
-    const bytes = buffer.subarray(0, bytesRead)
+    // RF01: the stat size is advisory only. Read to end-of-file in bounded
+    // chunks and keep reading while the file keeps growing; the identity binds
+    // the COMPLETE bytes actually read, never a fstat-sized prefix. A file
+    // that grows past the budget is refused, and cancellation is honored
+    // between chunks.
+    const chunks: Buffer[] = []
+    let received = 0
+    let position = 0
+    let eofStable = false
+    while (!eofStable) {
+      if (options?.signal?.aborted) return { status: 'rejected', reasonCode: 'tgz_cancelled' }
+      const chunk = Buffer.alloc(256 * 1024)
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, position)
+      if (bytesRead > 0) {
+        position += bytesRead
+        received += bytesRead
+        if (received > budget.maxCompressedBytes) return { status: 'rejected', reasonCode: 'tgz_compressed_budget_exceeded' }
+        chunks.push(chunk.subarray(0, bytesRead))
+      }
+      if (bytesRead < chunk.length) {
+        // Short read or EOF: only treat the stream as settled when a fresh
+        // stat confirms no bytes were appended past what we have read.
+        const current = await handle.stat()
+        eofStable = current.size <= position
+      }
+    }
+    if (received === 0) return { status: 'rejected', reasonCode: 'tgz_empty' }
+    const bytes = Buffer.concat(chunks)
     let tar: Buffer
     try {
       tar = await gunzipAsync(bytes, { maxOutputLength: budget.maxDecompressedBytes })

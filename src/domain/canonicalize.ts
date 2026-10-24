@@ -76,9 +76,13 @@ export function sanitizeClauseText(text: string): string {
   value = value.replace(BARE_VALUE, (_match, key: string) => label(key))
   value = value.replace(PLAIN_KEY, (match) => `${match.slice(0, 3)}-<redacted>`)
   value = value.replace(NAMED_TOKEN, (match) => `${match.slice(0, match.indexOf('_') + 1)}<redacted>`)
-  // URL credentials and query/fragment are structural, not label-shaped:
-  // strip userinfo and cut `?…`/`#…`, both of which routinely carry secrets.
-  value = value.replace(/https?:\/\/[^\s'"`，。)]+/g, (match) => {
+  // URL credentials and query/fragment are structural, not label-shaped.
+  // RF03: the clause matcher follows URL authority semantics like sanitizeUrl
+  // does — the scheme is case-insensitive (HTTPS:// is the same scheme), the
+  // scheme grammar covers every RFC 3986 scheme (userinfo is not http-only),
+  // and a `'` is a legal authority character, not a terminator. Only text
+  // boundaries (whitespace, quotes, CJK punctuation) end the URL span.
+  value = value.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"`，。)]+/g, (match) => {
     const cut = Math.min(
       ...['?', '#'].map((marker) => {
         const index = match.indexOf(marker)
