@@ -20,7 +20,7 @@ Choose your path before replacing any package:
 For Web, after the applicable preparation:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.10.0
+dsh plugin --profile web add dsh-completion-guard@0.11.0
 ```
 
 Installation alone is not enough. The **host lock** records the actual packages and directories this profile loads; check it with `inspect`, write it with `inject`, then check the composed configuration with `verify-dump`. Back up `cordis.patch.yml` before injection. [Installation and first load](docs/GETTING_STARTED.md) provides the Web commands, Windows and Desktop routes, and the final checks before startup. [Old-session migration](docs/ACTIVATION_MIGRATION.md) provides the preparation, commands and copyable AI prompts for an upgrade.

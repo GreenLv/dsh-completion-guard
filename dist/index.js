@@ -1,4 +1,4 @@
-import { $ as evidenceFromPersistedToolResult, $a as createActivationMigrationReceipt, $i as registryArchiveFiles, $n as evidenceAvailabilityReason, $r as presentExplanationHead, $t as renderRecoveryPacket, A as previewFirstStepInjection, Aa as BOUNDED_ARTIFACT_TYPES, Ai as resolveActiveProfileHostLock, An as certifiableOpenItems, Ao as digestStrings, Ar as clauseIsProtected, At as proofHostSurfacesOf, B as projectCoreV2, Ba as isStatefulAction, Bi as memoizedAsarFile, Bn as createProjection, Br as isExplanationScope, Bt as CLEANUP_CONDITION_RULE_COMPACT, C as revalidateGitPrestate, Ca as SUPPORTED_HOST_VERSIONS, Ci as inspectTargetHostGraph, Cn as observeAssistantOutcome, Co as normalizeReleaseContract, Cr as classifyUserInteraction, Ct as canonicalProjection, D as firstStepGuidance, Da as satisfiesSupportedHostRange, Di as prepareDesktopHostTrust, Dn as goalCompletionDenial, Do as releasePreEffectDecision, Dr as clarifiedSpanOf, Dt as proofDigest, E as claimedBatchHasRealRootInput, Ea as parseHostVersion, Ei as prepareActiveHostTrust, En as v6TestPredicate, Eo as releaseCoverage, Er as actionVerbMatches, Et as proofCapabilityReport, F as sourcedNamedTestRoot, Fa as STOP_PROTOCOL_VERSION, Fi as DESKTOP_IDENTITY_FACTS, Fn as availableBoundaryQualifications, Fo as privateStorageToolDenial, Fr as hasWorkPredicate, Ft as sessionQuery, G as PROTOCOL_V5_NOTICE, Ga as semanticActionFromText, Gi as readDesktopDependency, Gn as rebindAttemptKey, Gr as itemHoldsExecutionAuthority, Gt as V6_ORDINARY_COMPLETION_RULE_COMPACT, H as DEFAULT_DELEGATION_TOOL_NAMES, Ha as requestedTargetAuthorizesMutation, Hi as readAsarFile, Hn as proposeRebind, Hr as isOpenObligation, Ht as DEFAULT_RECOVERY_CHAR_BUDGET, I as SESSION_API_UNSUPPORTED, Ia as STOP_PROTOCOL_VERSION_V2, Ii as DESKTOP_PROFILE_PACKAGE_NAME, In as effectuateBoundary, Io as ownedJobLifecycle, Ir as interpretClause, It as sessionQueryV2, J as deriveProjection, Ja as RC021_RC2_HOST_PACKAGES, Ji as HostTrustError, Jn as CONFIRM_LINE_PATTERN, Jr as maskCodeSpans, Jt as cleanupConditionFor, K as PROTOCOL_V6_NOTICE, Ka as validateActionManifest, Ki as readDesktopTargetGraph, Kn as rebindResponse, Kr as kindOfScope, Kt as V6_ORDINARY_COMPLETION_RULE_SHORT, L as SESSION_EVENT_ENVELOPE_INVALID, La as SUPPORTED_EVIDENCE_ADAPTERS, Li as DESKTOP_RUNTIME_PACKAGE_NAME, Ln as isCurrentAcceptedBoundary, Lr as interpretMessage, Lt as validateProofManifest, M as sessionCoreSnapshot, Ma as CERTIFICATE_VERSION_V2, Mi as resolveInstalledHostLock, Mn as needsReviewObligations, Mo as sanitizeClauseText, Mr as governedClauseRestrictsExecution, Mt as proofV2Rejection, N as HOST_WORKDIR_PREFIX, Na as SEMANTIC_ACTIONS, Ni as revalidateDesktopCoreLock, Nn as unitDescendantIds, No as sanitizeUrl, Nr as hasOrderedCoordination, Nt as requiredSubjectsOf, O as firstStepGuidanceV6, Oa as ACTION_MANIFEST, Oi as prepareTargetHostTrust, On as hasCurrentCertificate, Oo as reservationFor, Or as clauseAsksOwnQuestion, Ot as proofDigestV2, P as captureHostWorkdir, Pa as STATEFUL_ACTIONS, Pi as verifyComposedHostLockDump, Pn as BOUNDARY_RECORD_PREFIX, Po as sha256, Pr as hasQuestionScope, Pt as scopeCoverageDigest, Q as NATIVE_GIT_ROOT_PARENT_OID, Qa as adoptActivationReceipt, Qi as qualifyHostTrust, Qn as deriveItemDiagnosis, Qr as opensWithDirective, Qt as recoveryTitle, R as SessionApiError, Ra as actionCompatible, Ri as auditDesktopInstalledImplementation, Rn as qualifyBoundary, Rr as introducesActionClause, Rt as validateProofManifestV2, S as parseGitCommandManifest, Sa as SUPPORTED_HOST_RANGE, Si as inspectDesktopTargetGraph, Sn as latestRootInstruction, So as inFlightReservation, Sr as classifyTaskIntent, St as bindProofV2ToProjection, T as FIRST_STEP_GUIDANCE, Ta as evaluateMinimumHostVersion, Ti as packageRowsFromPnpmLock, Tn as testOutcomePredicate, To as releaseContractFor, Tr as LEGACY_QUALIFICATION, Tt as createProofManifestV2, U as PROTOCOL_V3_NOTICE, Ua as requestedTargetMatchesResolved, Ui as readAsarIndex, Un as proposeRebindOutcome, Ur as isQuestionScopeNeedingReview, Ut as MIN_RECOVERY_CHAR_BUDGET, V as CAPTURE_V042_NOTICE, Va as requestedIdentityKey, Vi as memoizedAsarIndex, Vn as confirmRebind, Vr as isInformationalFragment, Vt as CLEANUP_CONDITION_RULE_SHORT, W as PROTOCOL_V4_NOTICE, Wa as semanticActionFromCommand, Wi as readDesktopAppRuntime, Wn as proposeRebindV042, Wr as isRestatement, Wt as V6_ORDINARY_COMPLETION_RULE, X as rootLocatorFlavor, Xa as __activationBindingInternals, Xi as hostTrustDigest, Xn as parseConfirmationMessage, Xr as namedActions, Xt as openItems, Y as legacyRecordsNeedingReview, Ya as createHostAuditSession, Yi as acquireHostTrust, Yn as isFrozenV042RebindResponse, Yr as maskQuotedSpans, Yt as closingHint, Z as supersedeItem, Za as activationBindingPath, Zi as parseHostTrust, Zn as capabilityRemedyPhrase, Zr as opensConditionLead, Zt as recoveryDigest, _ as commitIndexSnapshotDigest, _a as hostVersionFromPackages, _i as evaluateActiveHostLock, _n as decideTurnStopping, _o as readPrivateLedger, _r as extractOperation, _t as PROOF_KINDS_V2, a as scanActivationInventory, aa as DEFAULT_HOST_LOCK, ai as splitTextFragments, an as bindingSatisfies, ao as writeActivationBinding, ar as admissibleForRemoval, at as shellReadbackOutcome, b as executeRevalidatedGitEffect, ba as LATEST_TESTED_HOST_VERSION, bi as hostLockRowsFromComposedDump, bn as isWholeTaskCompletionClaim, bo as RELEASE_OPERATION_SURFACES, br as canonicalRegistryBase, bt as PROOF_PROTOCOL_VERSION_V2, c as validateActivationSelection, ca as HOST_CAPABILITY_PACKAGE_GROUPS, ci as COMMAND_SURFACE_MANIFEST, cn as isVerifyingCapability, co as activationJson, cr as partialFailureOf, ct as isRunExecutable, d as prepareActivationMigration, da as bindLiveGoalCapability, di as activeRendererModule, dn as NO_PROGRESS_TURNS_BEFORE_STOP, do as appendPrivateLedger, dr as captureClause, dt as authorityCaptureCounts, ea as registryArchiveModules, ei as qualificationOfClause, en as v6CurrentRootBoundaries, eo as readActivationBinding, er as itemDiagnosis, et as extractTextContent, f as verifyMigrationInventory, fa as evaluateExternalWaitCapability, fi as auditedDefaultWorkdirHost, fn as assessmentAction, fo as applyPrivateLedger, fr as captureItem, ft as segmentAuthorityBlocks, g as GIT_COMMAND_TEMPLATES, ga as evaluateToolSurfaceCapability, gi as combineHostPolicy, gn as decideTurnBoundary, go as privateLedgerTargetDigest, gr as extractMethod, gt as PROOF_KINDS, h as GIT_COMMAND_MANIFEST_IDS, ha as evaluateHostLock, hi as auditedHostImplementation, hn as currentActionBases, ho as privateLedgerContractDigest, hr as extractArtifactPaths, ht as PROOF_CAPABILITY_MATRIX, i as prepareSelectedActivationMigration, ia as BASE_HOST_PACKAGES, ii as semanticActionOfScope, in as sourceItemForCoreRequirement, io as validateActivationMigrationReceipt, ir as actionHasCertificationPath, it as persistedToolResultStatus, j as projectSessionCoreV2, ja as CERTIFICATE_VERSION, ji as resolveDesktopProfileHostLock, jn as certificateClosure, jo as normalizeClause, jr as explanationHasActionResidue, jt as proofOperationMatches, k as lifecyclePhase, ka as ACTION_MANIFEST_VERSION, ki as readActiveHostGraph, kn as ancestorConstraintForBinding, ko as canonicalizePath, kr as clauseIsGoverned, kt as proofEvidenceConstraints, l as verifySelectedMigrationInventory, la as HOST_COHORTS, li as validateManifest, ln as CONTROL_RECORD_PREFIX, lo as sessionBirthIdentity, lr as removalIsComplete, lt as parsePwshCommand, m as RC020_RC1_HOST_PACKAGES, ma as evaluateHostCapability, mi as auditedForegroundRenderers, mn as classifyCompletionClaim, mo as initializePrivateLedger, mr as environmentDefaultRepositoryTarget, mt as certifyCheckpoint, n as createActivationSelection, na as ACTIVE_HOST_COHORT_IDS, ni as reportingHeadGoverns, nn as currentV6Feedback, no as resolveActivationBindingsRoot, nr as relevantEvidence, nt as isDeterministicCheck, o as selectedActivationInventory, oa as EXPECTED_HOST_PACKAGES, oi as statefulActionsOfScope, on as evidenceCoverage, oo as activationCanonical, or as capabilityConsequence, ot as withDurability, p as RC020_RC2_HOST_PACKAGES, pa as evaluateGraphDerivedHostLock, pi as auditedDefaultWorkdirProvider, pn as assessmentOutcomePredicate, po as hasPrivateRestartIntent, pr as classifyClause, pt as bindingIndividuallyAccepted, q as applyUpgradeEligibility, qa as validateActionTarget, qi as writeDesktopRuntimeReceipt, qn as replayRebindResult, qr as legacyQuestionReadingIsInformational, qt as carriesCleanupCondition, r as isSelectedActivationReceipt, ra as ACTIVE_HOST_LAUNCHER_VERSION, ri as restatedContentOf, rn as isV6PendingRootWait, ro as resolveSessionActivation, rr as DEPENDENCY_FREE_ONLY_CONDITION, rt as nativeGitParentOidVerified, s as validateActivationInventorySnapshot, sa as GOAL_HOST_PACKAGES, si as verbIsNegated, sn as evidenceMatchesItem, so as activationDigest, sr as capabilityFactOf, st as canonicalArgvFromCommand, t as activationSelectionPending, ta as ACTIVE_HOST_COHORT_ID, ti as questionHeadsClause, tn as confirmedV6CoreDiagnostic, to as readActivationMigrationReceipt, tr as nativeFileTwoRole, tt as extractToolSubject, u as inspectActivationInventory, ua as bindExecutableIdentity, ui as HostProfileError, un as NO_PROGRESS_RECORD_PREFIX, uo as validateActivationBinding, ur as removalIsPartiallyKnown, ut as parseShellCommand, v as commitTreeSnapshotDigest, va as selectHostCohort, vi as evaluateConfiguredHostLock, vn as decisionBoundaryKey, vo as resolvePrivateLedgerRoot, vr as isInformationalMessage, vt as PROOF_MANIFEST_DOMAIN_V2, w as verifiedLinearCommitReadback, wa as compareHostVersions, wi as packageRowsFromActiveGraph, wn as progressFingerprint, wo as readbackSettlesContract, wr as GRANTED_QUALIFICATION, wt as createProofManifest, x as gitCommandMatchesTarget, xa as MIN_SUPPORTED_HOST_VERSION, xi as injectActiveProfileHostLock, xn as latestAssistantText, xo as contractById, xr as npmEscapedPackageName, xt as bindProofToProjection, y as createGitPrestateEnvelope, ya as HOST_VALIDATED_VERSIONS, yi as hostLockContextFromComposedDump, yn as isRootPauseRequest, yo as RELEASE_OPERATIONS, yr as segmentClauses, yt as PROOF_PROTOCOL_VERSION, z as snapshotSessionEvents, za as boundedArtifactChoiceMatches, zi as hasDesktopImporterState, zn as currentContractDigest, zr as isExecutableItem, zt as CLEANUP_CONDITION_RULE } from "./domain-Dqw5NrT-.js";
+import { $ as evidenceFromPersistedToolResult, $a as activationBindingPath, $i as parseHostTrust, $n as capabilityRemedyPhrase, $r as opensConditionLead, $t as recoveryDigest, A as previewFirstStepInjection, Aa as ACTION_MANIFEST, Ai as prepareTargetHostTrust, An as hasCurrentCertificate, Ao as reservationFor, Ar as clauseAsksOwnQuestion, At as proofDigestV2, B as projectCoreV2, Ba as actionCompatible, Bi as auditDesktopInstalledImplementation, Bn as qualifyBoundary, Br as introducesActionClause, Bt as validateProofManifestV2, C as revalidateGitPrestate, Ca as MIN_SUPPORTED_HOST_VERSION, Ci as injectActiveProfileHostLock, Cn as latestAssistantText, Co as contractById, Cr as npmEscapedPackageName, Ct as bindProofToProjection, D as firstStepGuidance, Da as evaluateMinimumHostVersion, Di as packageRowsFromPnpmLock, Dn as testOutcomePredicate, Do as releaseContractFor, Dr as LEGACY_QUALIFICATION, Dt as createProofManifestV2, E as claimedBatchHasRealRootInput, Ea as compareHostVersions, Ei as packageRowsFromActiveGraph, En as progressFingerprint, Eo as readbackSettlesContract, Er as GRANTED_QUALIFICATION, Et as createProofManifest, F as sourcedNamedTestRoot, Fa as SEMANTIC_ACTIONS, Fi as revalidateDesktopCoreLock, Fn as unitDescendantIds, Fo as sanitizeUrl, Fr as hasOrderedCoordination, Ft as requiredSubjectsOf, G as PROTOCOL_V5_NOTICE, Ga as requestedTargetMatchesResolved, Gi as readAsarIndex, Gn as proposeRebindOutcome, Gr as isQuestionScopeNeedingReview, Gt as MIN_RECOVERY_CHAR_BUDGET, H as DEFAULT_DELEGATION_TOOL_NAMES, Ha as isStatefulAction, Hi as memoizedAsarFile, Hn as createProjection, Hr as isExplanationScope, Ht as CLEANUP_CONDITION_RULE_COMPACT, I as SESSION_API_UNSUPPORTED, Ia as STATEFUL_ACTIONS, Ii as verifyComposedHostLockDump, In as BOUNDARY_RECORD_PREFIX, Io as sha256, Ir as hasQuestionScope, It as scopeCoverageDigest, J as deriveProjection, Ja as validateActionManifest, Ji as readDesktopTargetGraph, Jn as rebindResponse, Jr as kindOfScope, Jt as V6_ORDINARY_COMPLETION_RULE_SHORT, K as PROTOCOL_V6_NOTICE, Ka as semanticActionFromCommand, Ki as readDesktopAppRuntime, Kn as proposeRebindV042, Kr as isRestatement, Kt as V6_ORDINARY_COMPLETION_RULE, L as SESSION_EVENT_ENVELOPE_INVALID, La as STOP_PROTOCOL_VERSION, Li as DESKTOP_IDENTITY_FACTS, Ln as availableBoundaryQualifications, Lo as stripUrlCredentials, Lr as hasWorkPredicate, Lt as sessionQuery, M as sessionCoreSnapshot, Ma as BOUNDED_ARTIFACT_TYPES, Mi as resolveActiveProfileHostLock, Mn as certifiableOpenItems, Mo as digestStrings, Mr as clauseIsProtected, Mt as proofHostSurfacesOf, N as HOST_WORKDIR_PREFIX, Na as CERTIFICATE_VERSION, Ni as resolveDesktopProfileHostLock, Nn as certificateClosure, No as normalizeClause, Nr as explanationHasActionResidue, Nt as proofOperationMatches, O as firstStepGuidanceV6, Oa as parseHostVersion, Oi as prepareActiveHostTrust, On as v6TestPredicate, Oo as releaseCoverage, Or as actionVerbMatches, Ot as proofCapabilityReport, P as captureHostWorkdir, Pa as CERTIFICATE_VERSION_V2, Pi as resolveInstalledHostLock, Pn as needsReviewObligations, Po as sanitizeClauseText, Pr as governedClauseRestrictsExecution, Pt as proofV2Rejection, Q as NATIVE_GIT_ROOT_PARENT_OID, Qa as __activationBindingInternals, Qi as hostTrustDigest, Qn as parseConfirmationMessage, Qr as namedActions, Qt as openItems, R as SessionApiError, Ra as STOP_PROTOCOL_VERSION_V2, Ri as DESKTOP_PROFILE_PACKAGE_NAME, Rn as effectuateBoundary, Ro as privateStorageToolDenial, Rr as interpretClause, Rt as sessionQueryV2, S as parseGitCommandManifest, Sa as LATEST_TESTED_HOST_VERSION, Si as hostLockRowsFromComposedDump, Sn as isWholeTaskCompletionClaim, So as RELEASE_OPERATION_SURFACES, Sr as canonicalRegistryBase, St as PROOF_PROTOCOL_VERSION_V2, T as FIRST_STEP_GUIDANCE, Ta as SUPPORTED_HOST_VERSIONS, Ti as inspectTargetHostGraph, Tn as observeAssistantOutcome, To as normalizeReleaseContract, Tr as classifyUserInteraction, Tt as canonicalProjection, U as PROTOCOL_V3_NOTICE, Ua as requestedIdentityKey, Ui as memoizedAsarIndex, Un as confirmRebind, Ur as isInformationalFragment, Ut as CLEANUP_CONDITION_RULE_SHORT, V as CAPTURE_V042_NOTICE, Va as boundedArtifactChoiceMatches, Vi as hasDesktopImporterState, Vn as currentContractDigest, Vr as isExecutableItem, Vt as CLEANUP_CONDITION_RULE, W as PROTOCOL_V4_NOTICE, Wa as requestedTargetAuthorizesMutation, Wi as readAsarFile, Wn as proposeRebind, Wr as isOpenObligation, Wt as DEFAULT_RECOVERY_CHAR_BUDGET, X as rootLocatorFlavor, Xa as RC021_RC2_HOST_PACKAGES, Xi as HostTrustError, Xn as CONFIRM_LINE_PATTERN, Xr as maskCodeSpans, Xt as cleanupConditionFor, Y as legacyRecordsNeedingReview, Ya as validateActionTarget, Yi as writeDesktopRuntimeReceipt, Yn as replayRebindResult, Yr as legacyQuestionReadingIsInformational, Yt as carriesCleanupCondition, Z as supersedeItem, Za as createHostAuditSession, Zi as acquireHostTrust, Zn as isFrozenV042RebindResponse, Zr as maskQuotedSpans, Zt as closingHint, _ as commitIndexSnapshotDigest, _a as evaluateHostLock, _i as auditedHostImplementation, _n as currentActionBases, _o as privateLedgerContractDigest, _r as extractArtifactPaths, _t as PROOF_CAPABILITY_MATRIX, a as scanActivationInventory, aa as ACTIVE_HOST_LAUNCHER_VERSION, ai as restatedContentOf, an as isV6PendingRootWait, ao as resolveSessionActivation, ar as DEPENDENCY_FREE_ONLY_CONDITION, at as shellReadbackOutcome, b as executeRevalidatedGitEffect, ba as selectHostCohort, bi as evaluateConfiguredHostLock, bn as decisionBoundaryKey, bo as resolvePrivateLedgerRoot, br as isInformationalMessage, bt as PROOF_MANIFEST_DOMAIN_V2, c as validateActivationSelection, ca as EXPECTED_HOST_PACKAGES, ci as statefulActionsOfScope, cn as evidenceCoverage, co as activationCanonical, cr as capabilityConsequence, ct as isRunExecutable, d as prepareActivationMigration, da as HOST_COHORTS, di as validateManifest, dn as CONTROL_RECORD_PREFIX, do as sessionBirthIdentity, dr as removalIsComplete, dt as cwdEpochsFromEvents, ea as qualifyHostTrust, ei as opensWithDirective, en as recoveryTitle, eo as adoptActivationReceipt, er as deriveItemDiagnosis, et as extractTextContent, f as verifyMigrationInventory, fa as bindExecutableIdentity, fi as HostProfileError, fn as NO_PROGRESS_RECORD_PREFIX, fo as validateActivationBinding, fr as removalIsPartiallyKnown, ft as effectiveCwdAt, g as GIT_COMMAND_TEMPLATES, ga as evaluateHostCapability, gi as auditedForegroundRenderers, gn as classifyCompletionClaim, go as initializePrivateLedger, gr as environmentDefaultRepositoryTarget, gt as certifyCheckpoint, h as GIT_COMMAND_MANIFEST_IDS, ha as evaluateGraphDerivedHostLock, hi as auditedDefaultWorkdirProvider, hn as assessmentOutcomePredicate, ho as hasPrivateRestartIntent, hr as classifyClause, ht as bindingIndividuallyAccepted, i as prepareSelectedActivationMigration, ia as ACTIVE_HOST_COHORT_IDS, ii as reportingHeadGoverns, in as currentV6Feedback, io as resolveActivationBindingsRoot, ir as relevantEvidence, it as persistedToolResultStatus, j as projectSessionCoreV2, ja as ACTION_MANIFEST_VERSION, ji as readActiveHostGraph, jn as ancestorConstraintForBinding, jo as canonicalizePath, jr as clauseIsGoverned, jt as proofEvidenceConstraints, k as lifecyclePhase, ka as satisfiesSupportedHostRange, ki as prepareDesktopHostTrust, kn as goalCompletionDenial, ko as releasePreEffectDecision, kr as clarifiedSpanOf, kt as proofDigest, l as verifySelectedMigrationInventory, la as GOAL_HOST_PACKAGES, li as verbIsNegated, ln as evidenceMatchesItem, lo as activationDigest, lr as capabilityFactOf, lt as parsePwshCommand, m as RC020_RC1_HOST_PACKAGES, ma as evaluateExternalWaitCapability, mi as auditedDefaultWorkdirHost, mn as assessmentAction, mo as applyPrivateLedger, mr as captureItem, mt as segmentAuthorityBlocks, n as createActivationSelection, na as registryArchiveModules, ni as qualificationOfClause, nn as v6CurrentRootBoundaries, no as readActivationBinding, nr as itemDiagnosis, nt as isDeterministicCheck, o as selectedActivationInventory, oa as BASE_HOST_PACKAGES, oi as semanticActionOfScope, on as sourceItemForCoreRequirement, oo as validateActivationMigrationReceipt, or as actionHasCertificationPath, ot as withDurability, p as RC020_RC2_HOST_PACKAGES, pa as bindLiveGoalCapability, pi as activeRendererModule, pn as NO_PROGRESS_TURNS_BEFORE_STOP, po as appendPrivateLedger, pr as captureClause, pt as authorityCaptureCounts, q as applyUpgradeEligibility, qa as semanticActionFromText, qi as readDesktopDependency, qn as rebindAttemptKey, qr as itemHoldsExecutionAuthority, qt as V6_ORDINARY_COMPLETION_RULE_COMPACT, r as isSelectedActivationReceipt, ra as ACTIVE_HOST_COHORT_ID, ri as questionHeadsClause, rn as confirmedV6CoreDiagnostic, ro as readActivationMigrationReceipt, rr as nativeFileTwoRole, rt as nativeGitParentOidVerified, s as validateActivationInventorySnapshot, sa as DEFAULT_HOST_LOCK, si as splitTextFragments, sn as bindingSatisfies, so as writeActivationBinding, sr as admissibleForRemoval, st as canonicalArgvFromCommand, t as activationSelectionPending, ta as registryArchiveFiles, ti as presentExplanationHead, tn as renderRecoveryPacket, to as createActivationMigrationReceipt, tr as evidenceAvailabilityReason, tt as extractToolSubject, u as inspectActivationInventory, ua as HOST_CAPABILITY_PACKAGE_GROUPS, ui as COMMAND_SURFACE_MANIFEST, un as isVerifyingCapability, uo as activationJson, ur as partialFailureOf, ut as parseShellCommand, v as commitTreeSnapshotDigest, va as evaluateToolSurfaceCapability, vi as combineHostPolicy, vn as decideTurnBoundary, vo as privateLedgerTargetDigest, vr as extractMethod, vt as PROOF_KINDS, w as verifiedLinearCommitReadback, wa as SUPPORTED_HOST_RANGE, wi as inspectDesktopTargetGraph, wn as latestRootInstruction, wo as inFlightReservation, wr as classifyTaskIntent, wt as bindProofV2ToProjection, x as gitCommandMatchesTarget, xa as HOST_VALIDATED_VERSIONS, xi as hostLockContextFromComposedDump, xn as isRootPauseRequest, xo as RELEASE_OPERATIONS, xr as segmentClauses, xt as PROOF_PROTOCOL_VERSION, y as createGitPrestateEnvelope, ya as hostVersionFromPackages, yi as evaluateActiveHostLock, yn as decideTurnStopping, yo as readPrivateLedger, yr as extractOperation, yt as PROOF_KINDS_V2, z as snapshotSessionEvents, za as SUPPORTED_EVIDENCE_ADAPTERS, zi as DESKTOP_RUNTIME_PACKAGE_NAME, zn as isCurrentAcceptedBoundary, zo as ownedJobLifecycle, zr as interpretMessage, zt as validateProofManifest } from "./domain-BfQcdGe_.js";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import { constants, existsSync, readFileSync } from "node:fs";
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
@@ -11,7 +11,7 @@ import { JobId } from "@deepseek-ai/dsh-jobs";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { promisify } from "node:util";
-import { access, readFile, realpath } from "node:fs/promises";
+import { access, open, readFile, realpath } from "node:fs/promises";
 import { SESSION_FORMAT_VERSION, Session, SessionId } from "@deepseek-ai/dsh-session";
 
 //#region src/tools/rebind.ts
@@ -1993,6 +1993,241 @@ function createInterpretTool(options) {
 }
 
 //#endregion
+//#region src/domain/tgz-archive.ts
+const gunzipAsync = promisify(gunzip);
+const DEFAULT_TGZ_BUDGET = {
+	maxCompressedBytes: 128 * 1024 * 1024,
+	maxDecompressedBytes: 256 * 1024 * 1024,
+	maxMemberBytes: 256 * 1024 * 1024,
+	maxMemberCount: 65536,
+	maxManifestBytes: 1024 * 1024
+};
+const BLOCK = 512;
+const OCTAL_SIZE = /^[0-7]+$/;
+const POSIX_MAGIC = Buffer.from("ustar\0", "ascii");
+const POSIX_VERSION = Buffer.from("00", "ascii");
+/** NUL-terminated string field; bytes after the first NUL must be NUL. */
+function tarStringField(block, start, end) {
+	const raw = block.subarray(start, end);
+	const terminator = raw.indexOf(0);
+	if (terminator >= 0 && raw.subarray(terminator + 1).some((byte) => byte !== 0)) return void 0;
+	return (terminator < 0 ? raw : raw.subarray(0, terminator)).toString("utf8");
+}
+/** Unsigned header checksum: the checksum field counts as eight spaces. */
+function tarChecksumValid(block) {
+	const field = block.subarray(148, 156);
+	let digitsEnd = field.findIndex((byte) => byte === 0 || byte === 32);
+	if (digitsEnd < 0) digitsEnd = field.length;
+	const stored = field.subarray(0, digitsEnd).toString("ascii");
+	if (!stored.length || !OCTAL_SIZE.test(stored)) return false;
+	let sum = 0;
+	for (let index = 0; index < block.length; index += 1) sum += index >= 148 && index < 156 ? 32 : block[index];
+	return Number.parseInt(stored, 8) === sum;
+}
+/**
+* npm-compatible path projection for one member: POSIX ustar prefix joins the
+* name, `.` and empty components collapse, `..`/backslash/absolute/Windows
+* drive components and anything outside `package/<nonempty...>` are refused.
+*/
+function normalizeMemberPath(prefix, name$1) {
+	if (name$1.includes("\\") || prefix.includes("\\")) return void 0;
+	const full = prefix ? `${prefix}/${name$1}` : name$1;
+	if (full.startsWith("/")) return void 0;
+	const parts = [];
+	for (const part of full.split("/")) {
+		if (part === "" || part === ".") continue;
+		if (part === ".." || /^[A-Za-z]:$/.test(part)) return void 0;
+		parts.push(part);
+	}
+	if (parts.length < 2 || parts[0] !== "package") return void 0;
+	return parts.join("/");
+}
+function parseTar(tar, budget) {
+	const seen = /* @__PURE__ */ new Set();
+	let manifest;
+	let members = 0;
+	let terminated = false;
+	for (let offset = 0; offset + BLOCK <= tar.length;) {
+		const header = tar.subarray(offset, offset + BLOCK);
+		if (header.every((byte) => byte === 0)) {
+			if (!tar.subarray(offset).every((byte) => byte === 0)) return {
+				status: "rejected",
+				reasonCode: "tgz_trailing_bytes"
+			};
+			terminated = true;
+			break;
+		}
+		members += 1;
+		if (members > budget.maxMemberCount) return {
+			status: "rejected",
+			reasonCode: "tgz_member_count_exceeded"
+		};
+		if (!tarChecksumValid(header)) return {
+			status: "rejected",
+			reasonCode: "tgz_tar_checksum_invalid"
+		};
+		const posix$1 = header.subarray(257, 263).equals(POSIX_MAGIC) && header.subarray(263, 265).equals(POSIX_VERSION);
+		const noMagic = header.subarray(257, 265).every((byte) => byte === 0);
+		if (!posix$1 && !noMagic) return {
+			status: "rejected",
+			reasonCode: "tgz_format_unsupported"
+		};
+		const typeflag = header[156];
+		if (typeflag !== 0 && typeflag !== 48 && typeflag !== 53) return {
+			status: "rejected",
+			reasonCode: "tgz_member_type_unsupported"
+		};
+		const name$1 = tarStringField(header, 0, 100);
+		const prefix = posix$1 ? tarStringField(header, 345, 500) : header.subarray(345, 500).every((byte) => byte === 0) ? "" : void 0;
+		if (name$1 === void 0 || prefix === void 0) return {
+			status: "rejected",
+			reasonCode: "tgz_tar_corrupt"
+		};
+		const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim();
+		if (!OCTAL_SIZE.test(sizeText)) return {
+			status: "rejected",
+			reasonCode: "tgz_tar_corrupt"
+		};
+		const size$1 = Number.parseInt(sizeText, 8);
+		const bodyStart = offset + BLOCK;
+		const bodyEnd = bodyStart + size$1;
+		if (!Number.isSafeInteger(size$1) || size$1 < 0 || bodyEnd > tar.length) return {
+			status: "rejected",
+			reasonCode: "tgz_tar_corrupt"
+		};
+		if (size$1 > budget.maxMemberBytes) return {
+			status: "rejected",
+			reasonCode: "tgz_member_budget_exceeded"
+		};
+		const path = normalizeMemberPath(prefix, name$1);
+		if (path === void 0) return {
+			status: "rejected",
+			reasonCode: "tgz_member_path_unsupported"
+		};
+		if (seen.has(path)) return {
+			status: "rejected",
+			reasonCode: "tgz_duplicate_member"
+		};
+		seen.add(path);
+		if (path === "package/package.json" && typeflag !== 53) {
+			if (size$1 > budget.maxManifestBytes) return {
+				status: "rejected",
+				reasonCode: "tgz_manifest_budget_exceeded"
+			};
+			manifest = tar.subarray(bodyStart, bodyEnd);
+		}
+		offset = bodyStart + Math.ceil(size$1 / BLOCK) * BLOCK;
+	}
+	if (!terminated) return {
+		status: "rejected",
+		reasonCode: "tgz_tar_corrupt"
+	};
+	if (manifest === void 0) return {
+		status: "rejected",
+		reasonCode: "tgz_manifest_missing"
+	};
+	return {
+		status: "ok",
+		manifest
+	};
+}
+/** Read the release identity of a local tgz under explicit resource budgets. */
+async function readTgzIdentity(path, options) {
+	const budget = options?.budget ?? DEFAULT_TGZ_BUDGET;
+	if (typeof path !== "string" || !isAbsolute(path) || !path.endsWith(".tgz")) return {
+		status: "rejected",
+		reasonCode: "tgz_path_invalid"
+	};
+	if (options?.signal?.aborted) return {
+		status: "rejected",
+		reasonCode: "tgz_cancelled"
+	};
+	let handle;
+	try {
+		handle = await open(path, "r");
+	} catch {
+		return {
+			status: "rejected",
+			reasonCode: "tgz_missing"
+		};
+	}
+	try {
+		const stat = await handle.stat();
+		if (!stat.isFile()) return {
+			status: "rejected",
+			reasonCode: "tgz_not_regular_file"
+		};
+		const readLength = Math.min(stat.size, budget.maxCompressedBytes + 1);
+		const buffer = Buffer.alloc(readLength);
+		const { bytesRead } = await handle.read(buffer, 0, readLength, 0);
+		if (bytesRead === 0) return {
+			status: "rejected",
+			reasonCode: "tgz_empty"
+		};
+		if (bytesRead > budget.maxCompressedBytes) return {
+			status: "rejected",
+			reasonCode: "tgz_compressed_budget_exceeded"
+		};
+		const bytes = buffer.subarray(0, bytesRead);
+		let tar;
+		try {
+			tar = await gunzipAsync(bytes, { maxOutputLength: budget.maxDecompressedBytes });
+		} catch (error) {
+			if (error.code === "ERR_BUFFER_TOO_LARGE") return {
+				status: "rejected",
+				reasonCode: "tgz_decompressed_budget_exceeded"
+			};
+			return {
+				status: "rejected",
+				reasonCode: "tgz_gzip_corrupt"
+			};
+		}
+		if (options?.signal?.aborted) return {
+			status: "rejected",
+			reasonCode: "tgz_cancelled"
+		};
+		const parsed = parseTar(tar, budget);
+		if (parsed.status !== "ok") return parsed;
+		let manifestJson;
+		try {
+			manifestJson = JSON.parse(parsed.manifest.toString("utf8"));
+		} catch {
+			return {
+				status: "rejected",
+				reasonCode: "tgz_manifest_invalid"
+			};
+		}
+		const manifest = manifestJson && typeof manifestJson === "object" && !Array.isArray(manifestJson) ? manifestJson : void 0;
+		if (!manifest) return {
+			status: "rejected",
+			reasonCode: "tgz_manifest_invalid"
+		};
+		const name$1 = typeof manifest.name === "string" ? manifest.name : void 0;
+		const version = typeof manifest.version === "string" ? manifest.version : void 0;
+		if (!name$1 || !version) return {
+			status: "rejected",
+			reasonCode: "tgz_manifest_invalid"
+		};
+		const gitHead = typeof manifest.gitHead === "string" && /^[0-9a-f]{40}$/.test(manifest.gitHead) ? manifest.gitHead : void 0;
+		const repositoryField = manifest.repository;
+		const repository = typeof repositoryField === "string" ? repositoryField : repositoryField && typeof repositoryField === "object" && !Array.isArray(repositoryField) && typeof repositoryField.url === "string" ? repositoryField.url : void 0;
+		return {
+			status: "ok",
+			identity: {
+				name: name$1,
+				version,
+				integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
+				sha256: createHash("sha256").update(bytes).digest("hex"),
+				...gitHead ? { gitHead } : {},
+				...repository ? { repository } : {}
+			}
+		};
+	} finally {
+		await handle.close();
+	}
+}
+
+//#endregion
 //#region src/tools/evidence.ts
 const execFileAsync$1 = promisify(execFile);
 const PRODUCER_VERSION = "1.0.0";
@@ -2010,6 +2245,10 @@ const SUPPORTED = [
 	"pull",
 	"fetch"
 ];
+const DEFAULT_REGISTRY_READ_BUDGET = {
+	totalDeadlineMs: 3e4,
+	maxBodyBytes: 8 * 1024 * 1024
+};
 const RESTART_INTENT_PREFIX = "Context Guard restart intent v1: ";
 function restartIntent(events, resolutionCallId, target) {
 	for (const raw of events) {
@@ -2307,44 +2546,15 @@ async function readJson(path) {
 		return;
 	}
 }
-async function tgzIdentity(path) {
-	if (!isAbsolute(path) || !path.endsWith(".tgz")) return void 0;
-	const bytes = await readFile(path);
-	if (bytes.length === 0 || bytes.length > 128 * 1024 * 1024) return void 0;
-	const tar = await promisify(gunzip)(bytes);
-	let manifest;
-	for (let offset = 0; offset + 512 <= tar.length;) {
-		const header = tar.subarray(offset, offset + 512);
-		if (header.every((byte) => byte === 0)) break;
-		const name$1 = header.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
-		const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim();
-		if (!/^[0-7]+$/.test(sizeText)) return void 0;
-		const size$1 = Number.parseInt(sizeText, 8);
-		const bodyStart = offset + 512;
-		const bodyEnd = bodyStart + size$1;
-		if (!Number.isSafeInteger(size$1) || size$1 < 0 || bodyEnd > tar.length) return void 0;
-		if (name$1 === "package/package.json") {
-			if (manifest || size$1 > 1024 * 1024) return void 0;
-			try {
-				manifest = record$1(JSON.parse(tar.subarray(bodyStart, bodyEnd).toString("utf8")));
-			} catch {
-				return;
-			}
-		}
-		offset = bodyStart + Math.ceil(size$1 / 512) * 512;
-	}
-	if (typeof manifest?.name !== "string" || typeof manifest.version !== "string") return void 0;
-	const gitHead = typeof manifest.gitHead === "string" && /^[0-9a-f]{40}$/.test(manifest.gitHead) ? manifest.gitHead : void 0;
-	const repositoryField = manifest.repository;
-	const repository = typeof repositoryField === "string" ? repositoryField : record$1(repositoryField) && typeof record$1(repositoryField)?.url === "string" ? String(record$1(repositoryField).url) : void 0;
-	return {
-		name: manifest.name,
-		version: manifest.version,
-		integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
-		sha256: createHash("sha256").update(bytes).digest("hex"),
-		...gitHead ? { gitHead } : {},
-		...repository ? { repository } : {}
-	};
+/**
+* Identity of a release tgz under the auditable tar subset (F01/F08): every
+* producer that needs the artifact's identity — resolution, pre-effect
+* revalidation and post-publish observation — consumes this one result, so no
+* stage can disagree with another about which manifest the bytes encode.
+*/
+async function tgzIdentity(path, signal) {
+	const result = await readTgzIdentity(path, signal ? { signal } : void 0);
+	return result.status === "ok" ? result.identity : void 0;
 }
 /**
 * Read the candidate identity of a publish from TRUSTED PRODUCERS only: the
@@ -2357,7 +2567,7 @@ async function tgzIdentity(path) {
 async function observePublishCandidate(resolution, roots, signal, cwd) {
 	const tgzPath = requireString(resolution.commandManifest, "tgz_path");
 	if (!tgzPath) return void 0;
-	const identity = await tgzIdentity(tgzPath);
+	const identity = await tgzIdentity(tgzPath, signal);
 	if (!identity) return void 0;
 	const registry = typeof resolution.target.registry === "string" ? resolution.target.registry : void 0;
 	return {
@@ -2470,19 +2680,59 @@ async function profilePackage(profilePath, packageId) {
 		return;
 	}
 }
+/**
+* One bounded registry read (F09): the caller's cancellation combined with the
+* plugin's own total deadline, and a streamed hard byte budget over the
+* DECODED body — chunked or compressed transports cannot smuggle a larger
+* document past the counter. Every exit path releases the reader; the timeout
+* signal does not keep the event loop alive.
+*/
+async function boundedRegistryJson(url, init, fetcher, budget, signal) {
+	const deadline = AbortSignal.timeout(budget.totalDeadlineMs);
+	const combined = typeof AbortSignal.any === "function" ? AbortSignal.any([signal, deadline]) : deadline;
+	let response;
+	try {
+		response = await fetcher(url, {
+			...init,
+			signal: combined
+		});
+	} catch {
+		return;
+	}
+	if (!response.ok || !response.body) return void 0;
+	const reader = response.body.getReader();
+	const chunks = [];
+	let received = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			received += value.byteLength;
+			if (received > budget.maxBodyBytes) return void 0;
+			chunks.push(value);
+		}
+	} catch {
+		return;
+	} finally {
+		try {
+			await reader.cancel();
+		} catch {}
+	}
+	try {
+		return record$1(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+	} catch {
+		return;
+	}
+}
 async function registryIntegrity(registry, packageId, version, roots, signal) {
 	const canonical = canonicalRegistryBase(registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry });
 	if (!canonical || canonical !== registry) return void 0;
-	const response = await (roots.fetcher ?? fetch)(new URL(npmEscapedPackageName(packageId), canonical), {
-		signal,
+	const release = await boundedRegistryJson(new URL(`${npmEscapedPackageName(packageId)}/${encodeURIComponent(version)}`, canonical), {
 		headers: { accept: "application/json" },
 		redirect: "error"
-	});
-	if (!response.ok) return void 0;
-	const value = record$1(await response.json());
-	const release = record$1(record$1(value?.versions)?.[version]);
+	}, roots.fetcher ?? fetch, roots.registryReadBudget ?? DEFAULT_REGISTRY_READ_BUDGET, signal);
 	const dist = record$1(release?.dist);
-	return value?.name === packageId && release?.name === packageId && release.version === version && typeof dist?.integrity === "string" ? dist.integrity : void 0;
+	return release?.name === packageId && release?.version === version && typeof dist?.integrity === "string" ? dist.integrity : void 0;
 }
 function windowsBatchCommand(file, args) {
 	const values = [file, ...args];
@@ -2587,7 +2837,7 @@ async function executeGuardAction(action, resolution, roots, signal, executableI
 	const target = resolution.target;
 	if (action === "install" || action === "apply") {
 		const tgzPath = requireString(resolution.commandManifest, "tgz_path");
-		const identity = tgzPath ? await tgzIdentity(tgzPath) : void 0;
+		const identity = tgzPath ? await tgzIdentity(tgzPath, signal) : void 0;
 		if (!executableIdentity$1 || !tgzPath || !identity || identity.name !== target.package_id || identity.version !== target.version || identity.integrity !== target.integrity_digest || roots.profile?.name !== target.profile) return { status: "unavailable" };
 		if (roots.preEffectVeto?.() === false) return {
 			status: "unavailable",
@@ -2604,7 +2854,7 @@ async function executeGuardAction(action, resolution, roots, signal, executableI
 	}
 	if (action === "publish") {
 		const tgzPath = requireString(resolution.commandManifest, "tgz_path");
-		const identity = tgzPath ? await tgzIdentity(tgzPath) : void 0;
+		const identity = tgzPath ? await tgzIdentity(tgzPath, signal) : void 0;
 		const registry = typeof target.registry === "string" ? canonicalRegistryBase(target.registry, { allowLoopbackHttp: roots.allowLoopbackHttpRegistry }) : void 0;
 		if (!executableIdentity$1 || !tgzPath || !identity || identity.name !== target.artifact_id || identity.version !== target.version || identity.integrity !== target.integrity_digest || !registry || registry !== target.registry) return { status: "unavailable" };
 		if (roots.preEffectVeto?.() === false) return {
@@ -2882,7 +3132,7 @@ async function resolveTarget(action, selector, commandManifest, cwd, roots, sign
 		const tgzPath = requireString(commandManifest, "tgz_path");
 		const manifestId = action === "install" ? "dsh.plugin_add_tgz.install.v1" : "dsh.plugin_add_tgz.apply.v1";
 		if (!hasExactKeys(commandManifest, ["manifest_id", "tgz_path"]) || !packageId || !profile || profile !== trustedProfile?.name || commandManifest.manifest_id !== manifestId || !ACTION_MANIFEST.actions[action].commandManifestIds.includes(manifestId) || !tgzPath) return void 0;
-		const identity = await tgzIdentity(tgzPath);
+		const identity = await tgzIdentity(tgzPath, signal);
 		if (!identity || identity.name !== packageId || selector.version !== void 0 && selector.version !== identity.version) return void 0;
 		const installed = await profilePackage(trustedProfile.path, packageId);
 		if (action === "install" && installed) return void 0;
@@ -2910,7 +3160,7 @@ async function resolveTarget(action, selector, commandManifest, cwd, roots, sign
 		const registry = canonicalRegistryBase(requireString(selector, "registry") ?? "", { allowLoopbackHttp: roots.allowLoopbackHttpRegistry });
 		const tgzPath = requireString(commandManifest, "tgz_path");
 		if (!hasExactKeys(commandManifest, ["manifest_id", "tgz_path"]) || !registry || commandManifest.manifest_id !== "npm.publish_tgz.v1" || !ACTION_MANIFEST.actions.publish.commandManifestIds.includes("npm.publish_tgz.v1") || !tgzPath) return void 0;
-		const identity = await tgzIdentity(tgzPath);
+		const identity = await tgzIdentity(tgzPath, signal);
 		if (!identity || identity.name !== selector.artifact_id || identity.version !== selector.version) return void 0;
 		return { target: {
 			artifact_id: identity.name,
@@ -3136,6 +3386,7 @@ function normalizedRoots(options) {
 		...options.allowLoopbackHttpRegistry ? { allowLoopbackHttpRegistry: true } : {},
 		...options.releaseGate ? { releaseGate: options.releaseGate } : {},
 		...options.releaseSettle ? { releaseSettle: options.releaseSettle } : {},
+		...options.registryReadBudget ? { registryReadBudget: options.registryReadBudget } : {},
 		...options.preEffectVeto ? { preEffectVeto: options.preEffectVeto } : {}
 	};
 }
@@ -3913,12 +4164,13 @@ function createNativeFileObserver(host) {
 			const agent = exec.agent;
 			if (!agent || !host.fs || !host.flush) return missing("host_fs_unavailable");
 			if (!await host.flush(agent.session)) return missing("native_effect_not_durable");
+			const events = snapshotSessionEvents(agent.session);
 			let call;
 			let result;
 			let callSeq = -1;
 			let resultSeq = -1;
 			let duplicate = false;
-			for (const raw of snapshotSessionEvents(agent.session)) {
+			for (const raw of events) {
 				const event = record(raw);
 				const data = record(event?.data);
 				if (event?.type === "tool/call" && data?.callId === args.effect_call_id) {
@@ -3951,7 +4203,11 @@ function createNativeFileObserver(host) {
 			const filePath = effectArgs?.file_path;
 			if (typeof filePath !== "string" || !filePath) return missing("native_effect_target_missing");
 			const action = String(call.name).startsWith("write") ? "create" : "modify";
-			const cwd = record(agent.session.header)?.cwd;
+			const headerCwdRaw = record(agent.session.header)?.cwd;
+			const headerCwd = typeof headerCwdRaw === "string" ? headerCwdRaw : void 0;
+			const epochs = cwdEpochsFromEvents(events, headerCwd);
+			const cwd = epochs ? effectiveCwdAt(epochs, headerCwd, callSeq) : void 0;
+			if (!posix.isAbsolute(filePath) && !win32.isAbsolute(filePath) && typeof cwd !== "string") return missing("native_effect_cwd_unresolvable");
 			try {
 				const target = await host.fs.resolve(filePath, {
 					...typeof cwd === "string" ? { cwd } : {},
@@ -4714,7 +4970,7 @@ function createContextGuardCommand(projectionFor, setEnabled, clearContract, lif
 }
 
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+cosmokit@1.8.5/node_modules/@deepseek-ai/cosmokit/lib/index.js
+//#region node_modules/.pnpm/@deepseek-ai+cosmokit@1.8.6/node_modules/@deepseek-ai/cosmokit/lib/index.js
 /** Return true when a value is `null` or `undefined`. */
 function isNullable(value) {
 	return value === null || value === void 0;
@@ -4973,7 +5229,7 @@ var Time;
 })(Time || (Time = {}));
 
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+schemastery@3.18.4/node_modules/@deepseek-ai/schemastery/lib/index.mjs
+//#region node_modules/.pnpm/@deepseek-ai+schemastery@3.18.5/node_modules/@deepseek-ai/schemastery/lib/index.mjs
 const kSchema = Symbol.for("schemastery");
 const kValidationError = Symbol.for("ValidationError");
 globalThis.__schemastery_index__ ??= 0;
@@ -6336,14 +6592,33 @@ function sessionCwd(session) {
 	const header = session.header;
 	return typeof header?.cwd === "string" && header.cwd.length > 0 ? header.cwd : void 0;
 }
+/**
+* The directory the host's working-directory service resolves relative paths
+* against RIGHT NOW: the last committed epoch, not the immutable header
+* project. `undefined` when the timeline cannot be proven, so the private
+* storage guard fails closed on relative targets instead of guessing.
+*/
+function effectiveSessionCwd(session) {
+	const header = sessionCwd(session);
+	if (header === void 0) return void 0;
+	const epochs = cwdEpochsFromEvents(snapshotSessionEvents(session), header);
+	return epochs ? effectiveCwdAt(epochs, header, Number.POSITIVE_INFINITY) : void 0;
+}
 /** A bounded signal for a short trusted readback performed by the gate. */
 function requestSignal() {
 	return AbortSignal.timeout(5e3);
 }
-/** Delegated/subagent sessions never receive root-conversation injections. */
+/**
+* Delegated/subagent sessions never receive root-conversation injections.
+* `parentSession` is FORK LINEAGE, not delegation: a plain user fork is a
+* root conversation (the host's roots registry admits resumed forks). Only
+* the host's explicit subagent markers — `origin=subagent` or a positive
+* `delegationDepth` — delegate, so contradictory or unknown fields stay
+* delegated and never gain root privileges.
+*/
 function isDelegatedSession(session) {
 	const header = session.header;
-	return header?.origin === "subagent" || typeof header?.delegationDepth === "number" && header.delegationDepth > 0 || typeof header?.parentSession === "string";
+	return header?.origin === "subagent" || typeof header?.delegationDepth === "number" && header.delegationDepth > 0;
 }
 /** Never reinterpret a legacy injected snapshot as freshly accepted core/v1. */
 function revalidateCoreLock(config, expected, providedSession) {
@@ -6537,14 +6812,29 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 					key: "identity"
 				};
 			}
+			const creationRetry = initialization.status === "unavailable" && initialization.reasonCode === "activation_writer_unavailable" ? {
+				source: startSources.get(agent),
+				attempts: 0,
+				deadline: Date.now() + 6e4
+			} : void 0;
 			const readMode = () => {
 				if (!birth) return initialization;
 				try {
-					const fresh = readActivationBinding(activationBindingsRoot, sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount), config.activationSource === "explicit" ? config.activation : void 0);
-					return fresh.status === "unavailable" && fresh.reasonCode === "activation_mode_unknown" && initialization.status === "unavailable" ? {
-						...initialization,
-						key: fresh.key
-					} : fresh;
+					const currentBirth = sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount);
+					const fresh = readActivationBinding(activationBindingsRoot, currentBirth, config.activationSource === "explicit" ? config.activation : void 0);
+					if (fresh.status === "unavailable" && fresh.reasonCode === "activation_mode_unknown" && initialization.status === "unavailable") {
+						if (creationRetry !== void 0 && creationRetry.source === "startup" && creationRetry.attempts < 8 && Date.now() <= creationRetry.deadline && agentHostLock.status === "supported" && ctx.get?.("agents")?.get(agent.id) === agent && ctx.sessions.get?.(agent.session.id) === agent.session) {
+							creationRetry.attempts += 1;
+							const retried = resolveSessionActivation(activationBindingsRoot, currentBirth, config, creationRetry.source, true);
+							if (retried.status === "bound" || retried.reasonCode !== "activation_writer_unavailable") initialization = retried;
+							return retried;
+						}
+						return {
+							...initialization,
+							key: fresh.key
+						};
+					}
+					return fresh;
 				} catch {
 					return {
 						status: "unavailable",
@@ -6795,7 +7085,7 @@ function apply(ctx, rawConfig = {}, seams = {}) {
 			}));
 			ownedTools.register(createExternalOperationTool((id, toolAgent) => readExternalOperation(ctx, toolAgent, id), () => evaluateExternalWaitCapability(hostLocks.get(agent) ?? installedHostLock)));
 			ownedTools.guard((exec) => {
-				const privateDenial = privateStorageToolDenial(exec.name, exec.arguments, sessionCwd(agent.session) ?? process.cwd(), [activationBindingsRoot, ...privateLedgerRoot ? [privateLedgerRoot] : []]);
+				const privateDenial = privateStorageToolDenial(exec.name, exec.arguments, effectiveSessionCwd(agent.session), [activationBindingsRoot, ...privateLedgerRoot ? [privateLedgerRoot] : []]);
 				if (privateDenial) return privateDenial;
 				if (exec.name === "update_goal" && exec.arguments?.action === "complete") {
 					runtime.sync();
@@ -7114,4 +7404,4 @@ async function replayRawV2(input) {
 }
 
 //#endregion
-export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ACTIVE_HOST_COHORT_ID, ACTIVE_HOST_COHORT_IDS, ACTIVE_HOST_LAUNCHER_VERSION, BASE_HOST_PACKAGES, BOUNDARY_RECORD_PREFIX, BOUNDED_ARTIFACT_TYPES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, CLEANUP_CONDITION_RULE, CLEANUP_CONDITION_RULE_COMPACT, CLEANUP_CONDITION_RULE_SHORT, COMMAND_SURFACE_MANIFEST, CONFIRM_LINE_PATTERN, CONTROL_RECORD_PREFIX, Config, DEFAULT_DELEGATION_TOOL_NAMES, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, DEPENDENCY_FREE_ONLY_CONDITION, DESKTOP_IDENTITY_FACTS, DESKTOP_PROFILE_PACKAGE_NAME, DESKTOP_RUNTIME_PACKAGE_NAME, EXPECTED_HOST_PACKAGES, FIRST_STEP_GUIDANCE, GIT_COMMAND_MANIFEST_IDS, GIT_COMMAND_TEMPLATES, GOAL_HOST_PACKAGES, GRANTED_QUALIFICATION, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HOST_VALIDATED_VERSIONS, HostProfileError, HostTrustError, LATEST_TESTED_HOST_VERSION, LEGACY_QUALIFICATION, MIN_RECOVERY_CHAR_BUDGET, MIN_SUPPORTED_HOST_VERSION, NATIVE_GIT_ROOT_PARENT_OID, NO_PROGRESS_RECORD_PREFIX, NO_PROGRESS_TURNS_BEFORE_STOP, PROOF_CAPABILITY_MATRIX, PROOF_KINDS, PROOF_KINDS_V2, PROOF_MANIFEST_DOMAIN_V2, PROOF_PROTOCOL_VERSION, PROOF_PROTOCOL_VERSION_V2, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE, PROTOCOL_V6_NOTICE, RC020_RC1_HOST_PACKAGES, RC020_RC2_HOST_PACKAGES, RC021_RC2_HOST_PACKAGES, SEMANTIC_ACTIONS, SESSION_API_UNSUPPORTED, SESSION_EVENT_ENVELOPE_INVALID, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2, SUPPORTED_EVIDENCE_ADAPTERS, SUPPORTED_HOST_RANGE, SUPPORTED_HOST_VERSIONS, SessionApiError, V6_ORDINARY_COMPLETION_RULE, V6_ORDINARY_COMPLETION_RULE_COMPACT, V6_ORDINARY_COMPLETION_RULE_SHORT, __activationBindingInternals, acquireHostTrust, actionCompatible, actionHasCertificationPath, actionVerbMatches, activationBindingPath, activationCanonical, activationDigest, activationJson, activationSelectionPending, activeRendererModule, admissibleForRemoval, adoptActivationReceipt, apply, applyUpgradeEligibility, assessmentAction, assessmentOutcomePredicate, auditDesktopInstalledImplementation, auditedDefaultWorkdirHost, auditedDefaultWorkdirProvider, auditedForegroundRenderers, auditedHostImplementation, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindProofV2ToProjection, bindingIndividuallyAccepted, bindingSatisfies, boundedArtifactChoiceMatches, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, capabilityConsequence, capabilityFactOf, capabilityRemedyPhrase, captureClause, captureItem, carriesCleanupCondition, certifyCheckpoint, claimedBatchHasRealRootInput, clarifiedSpanOf, classifyClause, classifyCompletionClaim, classifyTaskIntent, classifyUserInteraction, clauseAsksOwnQuestion, clauseIsGoverned, clauseIsProtected, cleanupConditionFor, closingHint, combineHostPolicy, commitIndexSnapshotDigest, commitTreeSnapshotDigest, compareHostVersions, confirmRebind, createActivationMigrationReceipt, createActivationSelection, createGitPrestateEnvelope, createProjection, createProofManifest, createProofManifestV2, currentActionBases, currentContractDigest, decideTurnBoundary, decideTurnStopping, decisionBoundaryKey, deriveItemDiagnosis, deriveProjection, digestStrings, effectuateBoundary, environmentDefaultRepositoryTarget, evaluateActiveHostLock, evaluateConfiguredHostLock, evaluateExternalWaitCapability, evaluateGraphDerivedHostLock, evaluateHostCapability, evaluateHostLock, evaluateMinimumHostVersion, evaluateToolSurfaceCapability, evidenceAvailabilityReason, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, explanationHasActionResidue, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, firstStepGuidance, firstStepGuidanceV6, gitCommandMatchesTarget, goalCompletionDenial, governedClauseRestrictsExecution, hasCurrentCertificate, hasDesktopImporterState, hasOrderedCoordination, hasQuestionScope, hasWorkPredicate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, hostTrustDigest, hostVersionFromPackages, inject, injectActiveProfileHostLock, inspectActivationInventory, inspectDesktopTargetGraph, inspectTargetHostGraph, interpretClause, interpretMessage, introducesActionClause, isCurrentAcceptedBoundary, isDeterministicCheck, isExecutableItem, isExplanationScope, isFrozenV042RebindResponse, isInformationalFragment, isInformationalMessage, isOpenObligation, isQuestionScopeNeedingReview, isRestatement, isRootPauseRequest, isRunExecutable, isSelectedActivationReceipt, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, itemDiagnosis, itemHoldsExecutionAuthority, kindOfScope, latestAssistantText, latestRootInstruction, legacyQuestionReadingIsInformational, legacyRecordsNeedingReview, lifecyclePhase, maskCodeSpans, maskQuotedSpans, memoizedAsarFile, memoizedAsarIndex, name, namedActions, nativeFileTwoRole, nativeGitParentOidVerified, normalizeClause, observeAssistantOutcome, openItems, opensConditionLead, opensWithDirective, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseConfirmationMessage, parseGitCommandManifest, parseHostTrust, parseHostVersion, parsePwshCommand, parseShellCommand, partialFailureOf, persistedToolResultStatus, prepareActivationMigration, prepareActiveHostTrust, prepareDesktopHostTrust, prepareSelectedActivationMigration, prepareTargetHostTrust, presentExplanationHead, previewFirstStepInjection, privateStorageToolDenial, progressFingerprint, projectCoreV2, projectSessionCoreV2, proofCapabilityReport, proofDigest, proofDigestV2, proofEvidenceConstraints, proofHostSurfacesOf, proofOperationMatches, proofV2Rejection, proposeRebind, proposeRebindOutcome, proposeRebindV042, qualificationOfClause, qualifyBoundary, qualifyHostTrust, questionHeadsClause, readActivationBinding, readActivationMigrationReceipt, readActiveHostGraph, readAsarFile, readAsarIndex, readDesktopAppRuntime, readDesktopDependency, readDesktopTargetGraph, rebindAttemptKey, rebindResponse, recoveryDigest, recoveryTitle, registryArchiveFiles, registryArchiveModules, relevantEvidence, removalIsComplete, removalIsPartiallyKnown, renderRecoveryPacket, replayRawV2, replayRebindResult, reportingHeadGoverns, requestedIdentityKey, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, requiredSubjectsOf, resolveActivationBindingsRoot, resolveActiveProfileHostLock, resolveDesktopProfileHostLock, resolveInstalledHostLock, resolveSessionActivation, restatedContentOf, revalidateDesktopCoreLock, revalidateGitPrestate, rootLocatorFlavor, sanitizeClauseText, sanitizeUrl, satisfiesSupportedHostRange, scanActivationInventory, scopeCoverageDigest, segmentAuthorityBlocks, segmentClauses, selectHostCohort, selectedActivationInventory, semanticActionFromCommand, semanticActionFromText, semanticActionOfScope, sessionBirthIdentity, sessionQuery, sessionQueryV2, sha256, shellReadbackOutcome, snapshotSessionEvents, splitTextFragments, statefulActionsOfScope, supersedeItem, testOutcomePredicate, v6CurrentRootBoundaries, v6TestPredicate, validateActionManifest, validateActionTarget, validateActivationBinding, validateActivationInventorySnapshot, validateActivationMigrationReceipt, validateActivationSelection, validateManifest, validateProofManifest, validateProofManifestV2, verbIsNegated, verifiedLinearCommitReadback, verifyComposedHostLockDump, verifyMigrationInventory, verifySelectedMigrationInventory, withDurability, writeActivationBinding, writeDesktopRuntimeReceipt };
+export { ACTION_MANIFEST, ACTION_MANIFEST_VERSION, ACTIVE_HOST_COHORT_ID, ACTIVE_HOST_COHORT_IDS, ACTIVE_HOST_LAUNCHER_VERSION, BASE_HOST_PACKAGES, BOUNDARY_RECORD_PREFIX, BOUNDED_ARTIFACT_TYPES, CAPTURE_V042_NOTICE, CERTIFICATE_VERSION, CERTIFICATE_VERSION_V2, CLEANUP_CONDITION_RULE, CLEANUP_CONDITION_RULE_COMPACT, CLEANUP_CONDITION_RULE_SHORT, COMMAND_SURFACE_MANIFEST, CONFIRM_LINE_PATTERN, CONTROL_RECORD_PREFIX, Config, DEFAULT_DELEGATION_TOOL_NAMES, DEFAULT_HOST_LOCK, DEFAULT_RECOVERY_CHAR_BUDGET, DEPENDENCY_FREE_ONLY_CONDITION, DESKTOP_IDENTITY_FACTS, DESKTOP_PROFILE_PACKAGE_NAME, DESKTOP_RUNTIME_PACKAGE_NAME, EXPECTED_HOST_PACKAGES, FIRST_STEP_GUIDANCE, GIT_COMMAND_MANIFEST_IDS, GIT_COMMAND_TEMPLATES, GOAL_HOST_PACKAGES, GRANTED_QUALIFICATION, HOST_CAPABILITY_PACKAGE_GROUPS, HOST_COHORTS, HOST_VALIDATED_VERSIONS, HostProfileError, HostTrustError, LATEST_TESTED_HOST_VERSION, LEGACY_QUALIFICATION, MIN_RECOVERY_CHAR_BUDGET, MIN_SUPPORTED_HOST_VERSION, NATIVE_GIT_ROOT_PARENT_OID, NO_PROGRESS_RECORD_PREFIX, NO_PROGRESS_TURNS_BEFORE_STOP, PROOF_CAPABILITY_MATRIX, PROOF_KINDS, PROOF_KINDS_V2, PROOF_MANIFEST_DOMAIN_V2, PROOF_PROTOCOL_VERSION, PROOF_PROTOCOL_VERSION_V2, PROTOCOL_V3_NOTICE, PROTOCOL_V4_NOTICE, PROTOCOL_V5_NOTICE, PROTOCOL_V6_NOTICE, RC020_RC1_HOST_PACKAGES, RC020_RC2_HOST_PACKAGES, RC021_RC2_HOST_PACKAGES, SEMANTIC_ACTIONS, SESSION_API_UNSUPPORTED, SESSION_EVENT_ENVELOPE_INVALID, STATEFUL_ACTIONS, STOP_PROTOCOL_VERSION, STOP_PROTOCOL_VERSION_V2, SUPPORTED_EVIDENCE_ADAPTERS, SUPPORTED_HOST_RANGE, SUPPORTED_HOST_VERSIONS, SessionApiError, V6_ORDINARY_COMPLETION_RULE, V6_ORDINARY_COMPLETION_RULE_COMPACT, V6_ORDINARY_COMPLETION_RULE_SHORT, __activationBindingInternals, acquireHostTrust, actionCompatible, actionHasCertificationPath, actionVerbMatches, activationBindingPath, activationCanonical, activationDigest, activationJson, activationSelectionPending, activeRendererModule, admissibleForRemoval, adoptActivationReceipt, apply, applyUpgradeEligibility, assessmentAction, assessmentOutcomePredicate, auditDesktopInstalledImplementation, auditedDefaultWorkdirHost, auditedDefaultWorkdirProvider, auditedForegroundRenderers, auditedHostImplementation, authorityCaptureCounts, availableBoundaryQualifications, bindExecutableIdentity, bindLiveGoalCapability, bindProofToProjection, bindProofV2ToProjection, bindingIndividuallyAccepted, bindingSatisfies, boundedArtifactChoiceMatches, canonicalArgvFromCommand, canonicalProjection, canonicalizePath, capabilityConsequence, capabilityFactOf, capabilityRemedyPhrase, captureClause, captureItem, carriesCleanupCondition, certifyCheckpoint, claimedBatchHasRealRootInput, clarifiedSpanOf, classifyClause, classifyCompletionClaim, classifyTaskIntent, classifyUserInteraction, clauseAsksOwnQuestion, clauseIsGoverned, clauseIsProtected, cleanupConditionFor, closingHint, combineHostPolicy, commitIndexSnapshotDigest, commitTreeSnapshotDigest, compareHostVersions, confirmRebind, createActivationMigrationReceipt, createActivationSelection, createGitPrestateEnvelope, createProjection, createProofManifest, createProofManifestV2, currentActionBases, currentContractDigest, decideTurnBoundary, decideTurnStopping, decisionBoundaryKey, deriveItemDiagnosis, deriveProjection, digestStrings, effectuateBoundary, environmentDefaultRepositoryTarget, evaluateActiveHostLock, evaluateConfiguredHostLock, evaluateExternalWaitCapability, evaluateGraphDerivedHostLock, evaluateHostCapability, evaluateHostLock, evaluateMinimumHostVersion, evaluateToolSurfaceCapability, evidenceAvailabilityReason, evidenceCoverage, evidenceFromPersistedToolResult, evidenceMatchesItem, executeRevalidatedGitEffect, explanationHasActionResidue, extractArtifactPaths, extractMethod, extractOperation, extractTextContent, extractToolSubject, firstStepGuidance, firstStepGuidanceV6, gitCommandMatchesTarget, goalCompletionDenial, governedClauseRestrictsExecution, hasCurrentCertificate, hasDesktopImporterState, hasOrderedCoordination, hasQuestionScope, hasWorkPredicate, hostLockContextFromComposedDump, hostLockRowsFromComposedDump, hostTrustDigest, hostVersionFromPackages, inject, injectActiveProfileHostLock, inspectActivationInventory, inspectDesktopTargetGraph, inspectTargetHostGraph, interpretClause, interpretMessage, introducesActionClause, isCurrentAcceptedBoundary, isDeterministicCheck, isExecutableItem, isExplanationScope, isFrozenV042RebindResponse, isInformationalFragment, isInformationalMessage, isOpenObligation, isQuestionScopeNeedingReview, isRestatement, isRootPauseRequest, isRunExecutable, isSelectedActivationReceipt, isStatefulAction, isVerifyingCapability, isWholeTaskCompletionClaim, itemDiagnosis, itemHoldsExecutionAuthority, kindOfScope, latestAssistantText, latestRootInstruction, legacyQuestionReadingIsInformational, legacyRecordsNeedingReview, lifecyclePhase, maskCodeSpans, maskQuotedSpans, memoizedAsarFile, memoizedAsarIndex, name, namedActions, nativeFileTwoRole, nativeGitParentOidVerified, normalizeClause, observeAssistantOutcome, openItems, opensConditionLead, opensWithDirective, packageRowsFromActiveGraph, packageRowsFromPnpmLock, parseConfirmationMessage, parseGitCommandManifest, parseHostTrust, parseHostVersion, parsePwshCommand, parseShellCommand, partialFailureOf, persistedToolResultStatus, prepareActivationMigration, prepareActiveHostTrust, prepareDesktopHostTrust, prepareSelectedActivationMigration, prepareTargetHostTrust, presentExplanationHead, previewFirstStepInjection, privateStorageToolDenial, progressFingerprint, projectCoreV2, projectSessionCoreV2, proofCapabilityReport, proofDigest, proofDigestV2, proofEvidenceConstraints, proofHostSurfacesOf, proofOperationMatches, proofV2Rejection, proposeRebind, proposeRebindOutcome, proposeRebindV042, qualificationOfClause, qualifyBoundary, qualifyHostTrust, questionHeadsClause, readActivationBinding, readActivationMigrationReceipt, readActiveHostGraph, readAsarFile, readAsarIndex, readDesktopAppRuntime, readDesktopDependency, readDesktopTargetGraph, rebindAttemptKey, rebindResponse, recoveryDigest, recoveryTitle, registryArchiveFiles, registryArchiveModules, relevantEvidence, removalIsComplete, removalIsPartiallyKnown, renderRecoveryPacket, replayRawV2, replayRebindResult, reportingHeadGoverns, requestedIdentityKey, requestedTargetAuthorizesMutation, requestedTargetMatchesResolved, requiredSubjectsOf, resolveActivationBindingsRoot, resolveActiveProfileHostLock, resolveDesktopProfileHostLock, resolveInstalledHostLock, resolveSessionActivation, restatedContentOf, revalidateDesktopCoreLock, revalidateGitPrestate, rootLocatorFlavor, sanitizeClauseText, sanitizeUrl, satisfiesSupportedHostRange, scanActivationInventory, scopeCoverageDigest, segmentAuthorityBlocks, segmentClauses, selectHostCohort, selectedActivationInventory, semanticActionFromCommand, semanticActionFromText, semanticActionOfScope, sessionBirthIdentity, sessionQuery, sessionQueryV2, sha256, shellReadbackOutcome, snapshotSessionEvents, splitTextFragments, statefulActionsOfScope, stripUrlCredentials, supersedeItem, testOutcomePredicate, v6CurrentRootBoundaries, v6TestPredicate, validateActionManifest, validateActionTarget, validateActivationBinding, validateActivationInventorySnapshot, validateActivationMigrationReceipt, validateActivationSelection, validateManifest, validateProofManifest, validateProofManifestV2, verbIsNegated, verifiedLinearCommitReadback, verifyComposedHostLockDump, verifyMigrationInventory, verifySelectedMigrationInventory, withDurability, writeActivationBinding, writeDesktopRuntimeReceipt };

@@ -110,7 +110,7 @@ The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 Stop the Desktop app before installing or rebuilding its lock. Use the CLI carrier shipped with that app: `Contents/Resources/runtime/cli/bin/dsh` on macOS, or `resources\runtime\cli\bin\dsh.cmd` in the Windows installation. A separately installed `dsh` CLI cannot manage the reserved Desktop profile.
 
-For an existing installation, first preserve the old package/effective modes and freeze the inventory/receipt before replacing the carrier or Guard; after replacement, complete adoption/verification before Desktop startup. For a fresh installation there is no old-mode adoption. Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.10.0`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
+For an existing installation, first preserve the old package/effective modes and freeze the inventory/receipt before replacing the carrier or Guard; after replacement, complete adoption/verification before Desktop startup. For a fresh installation there is no old-mode adoption. Install Guard through that carrier with `plugin --profile desktop add dsh-completion-guard@0.11.0`. Use the profile's own host-lock tool and the app's physical `app.asar` as `--runtime-root`. The default profile is `$DSH_HOME/profiles/desktop`, or `.dsh/profiles/desktop` under the user's home when `DSH_HOME` is unset. This POSIX example starts after installation:
 
 ```sh
 DSH_DESKTOP_ASAR=/absolute/path/to/DeepSeek-Harness.app/Contents/Resources/app.asar

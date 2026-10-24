@@ -74,20 +74,21 @@ upgraded.
 | GHSA-1243066 | zod@4.4.3 | high | Dev-chain only: exact-pinned transitive dep of the pinned `@deepseek-ai` 0.2.1-rc.2 host devDependencies (test replica). Nothing ships in the npm package; the advisory needs attacker-controlled oversized schema input, which offline deterministic tests never provide. Re-evaluate at the next host cohort bump (expected zod ≥4.6.6). | GreenLv | 2027-01-31 |
 | GHSA-1243112 | undici@8.11.2 | high | Dev-chain only: exact-pinned transitive dep of `@deepseek-ai/dsh-http-proxy@0.2.1-rc.2` under the pinned host devDependencies. Nothing ships in the npm package; the advisory needs an attacker-controlled server sending crafted Content-Encoding stacks, which offline tests never contact. Re-evaluate at the next host cohort bump (expected undici ≥8.12.2). | GreenLv | 2027-01-31 |
 
-## Current state / 当前状态
+## Recorded upgrades / 已记录的升级
 
-The 2026-10 development-chain advisories (vitest 3.2.7 mocker path traversal,
-tinypool 1.1.1 prototype-pollution/RCE, vite ≤7.3.6 launch-editor family, and
-source-map-js 1.2.1 event-loop DoS) were closed by upgrading to vitest 4.1.12 with
-`vite >=7.3.7 <8` and `source-map-js ^1.2.2` floors inside the dependents' declared
-ranges; `pnpm audit` reports zero advisories. The vitest 4 migration notes for this
-repository (manifest wrapper modules for mock propagation, the clean-startup test setup
-file, and mock placement) live in the 0.11.0 change log.
+The advisory state is whatever the gate prints for the lockfile under review; the
+exception table above is the only durable record of accepted findings. Upgrades this
+gate has already carried: the vitest 3.2.7 mocker path-traversal and tinypool 1.1.1
+prototype-pollution/RCE chains were closed by moving to vitest 4.1.12 (which drops the
+vulnerable tinypool 1.x pool) with `vite >=7.3.7 <8` and `source-map-js ^1.2.2` floors
+inside the dependents' declared ranges. The vitest 4 migration seams for this repository
+(manifest wrapper modules, the clean-startup test setup file, mock placement) are
+described in the 0.11.0 change log.
 
-2026-10 的开发链公告（vitest 3.2.7 mocker 路径穿越、tinypool 1.1.1 原型污染/RCE、
-vite ≤7.3.6 launch-editor 系列、source-map-js 1.2.1 事件循环 DoS）已通过升级到
-vitest 4.1.12 并在依赖方声明范围内设定 `vite >=7.3.7 <8`、`source-map-js ^1.2.2`
-下限关闭。2026-10-24 新公告 zod@4.4.3 与 undici@8.11.2（high，宿主队列精确钉版的
-传递依赖）按上表登记为例外；其余 moderate/low（undici EventSource/SRI、fast-uri
-URI 处理族）为非阻断报告项。本仓库的 vitest 4 迁移注意事项（manifest 包装
+门禁打印的告警状态始终针对被检查的 lockfile；上表是已接受发现的唯一持久记录。该
+门禁已承载的升级：vitest 3.2.7 mocker 路径穿越与 tinypool 1.1.1 原型污染/RCE 链
+通过迁移到 vitest 4.1.12（随之移除带漏洞的 tinypool 1.x pool）并设定
+`vite >=7.3.7 <8`、`source-map-js ^1.2.2` 范围内下限关闭。本仓库 vitest 4 迁移的
+接缝（manifest 包装模块、清空启动参数的测试 setup 文件、mock 摆放位置）见
+0.11.0 变更日志。本仓库的 vitest 4 迁移注意事项（manifest 包装
 模块、清空启动参数的测试 setup 文件、mock 摆放位置）见 0.11.0 变更日志。
