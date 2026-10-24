@@ -50,7 +50,7 @@ describe('0.10.0 floor-admission host version policy', () => {
     // …and the ledger name/shape states evidence, not admission. The 0.2.0
     // rows keep their historical standing below the current floor.
     expect(HOST_VALIDATED_VERSIONS).toContain('0.2.0-rc.2')
-    expect(HOST_VALIDATED_VERSIONS.length).toBeLessThan(4)
+    expect(HOST_VALIDATED_VERSIONS.length).toBeLessThan(5)
   })
 
   it('the pure evaluator binds a verified future graph rebinds to a graph-derived cohort', () => {
@@ -100,7 +100,7 @@ describe('0.10.0 floor-admission host version policy', () => {
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, () => true)
     expect(rebound.status).toBe('unsupported')
     expect(rebound.reasonCode).toBe('host_lock_version_below_minimum')
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.2-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.2-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
   })
 
   it('the floor SemVer matrix matches the recorded consumer evidence', () => {

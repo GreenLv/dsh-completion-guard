@@ -89,7 +89,7 @@ describe('v0.3 versioned manifests', () => {
       expect(entry.auditProvenance).toBe(cohort.auditProvenance)
       expect(entry.packages).toEqual(cohort.packages)
     }
-    expect(HOST_COHORTS).toHaveLength(1)
+    expect(HOST_COHORTS).toHaveLength(2)
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
       name: 'host_cohort', value: { k: 's', v: 'dsh-0.2.1-rc.2-core-v1' },
     })

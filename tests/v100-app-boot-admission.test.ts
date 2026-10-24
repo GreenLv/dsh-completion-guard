@@ -16,9 +16,13 @@ function loadAppBoot(): { evaluatePluginCompatibility: (manifest: unknown, exemp
   const shellEnv = createRequire(producer.resolve('@deepseek-ai/dsh-shell-env'))
   const entry = shellEnv.resolve('@deepseek-ai/dsh-app-boot')
   const actual = JSON.parse(readFileSync(shellEnv.resolve('@deepseek-ai/dsh-app-boot/package.json'), 'utf8'))
-  const audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc2-byte-audit.json', import.meta.url), 'utf8')) as {
+  // The installed build baseline moved to rc.3; both audited cohorts are
+  // legitimate, so pin against the manifest matching the resolved version.
+  const rc2Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc2-byte-audit.json', import.meta.url), 'utf8')) as {
     packages: Array<{ name: string; version: string; modules: Record<string, string> }>
   }
+  const rc3Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc3-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
+  const audit = actual.version === '0.2.1-rc.3' ? rc3Audit : rc2Audit
   const pinned = audit.packages.find(row => row.name === '@deepseek-ai/dsh-app-boot')
   if (!pinned || actual.name !== pinned.name || actual.version !== pinned.version
     || !readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8').includes(`'${pinned.name}@${pinned.version}':`)

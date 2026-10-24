@@ -1,4 +1,5 @@
 import { RC021_RC2_HOST_PACKAGES } from './rc021-rc2-host.js'
+import { RC021_RC3_HOST_PACKAGES } from './rc021-rc3-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -109,7 +110,12 @@ function defineCohort(
 
 /** Baseline cohort retained for callers that need a default fixture. */
 export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.1-rc.2'
-export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
+/** rc.3 joins rc.2 as an admitted whole-graph contract: same 47-name core
+ * cohort (Cordis shared at 4.0.5), per-package tarball/SRI verified against
+ * the registry and lib bytes proven byte-identical by the rc.2→rc.3 study.
+ * rc.2 stays FIRST so existing fixtures and EXPECTED_HOST_PACKAGES keep
+ * their identity. */
+export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID, 'dsh-0.2.1-rc.3']
 
 /** Core-lock/v1 separates optional market identity from the rc.2 critical
  * graph. Historical cohorts live only in test data. Version ordering cannot
@@ -118,6 +124,8 @@ export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
   defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.1-rc.2'], [], RC021_RC2_HOST_PACKAGES,
+    'registry-derived-pending-native-audit', ['posix', 'windows']),
+  defineCohort('dsh-0.2.1-rc.3', ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))

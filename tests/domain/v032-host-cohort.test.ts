@@ -303,9 +303,12 @@ describe('audited host cohort registry', () => {
     }
     expect(Object.values(peers)).not.toContain('*')
     expect(Object.values(peers).some((range) => /0\.1\.1|alpha/.test(range))).toBe(false)
-    // Development dependencies retain the verified minimum as the build baseline.
+    // Development dependencies run on an admitted host version at or above
+    // the verified floor (rc.3 since the 0.11.0 candidate); the floor itself
+    // is unchanged.
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tools']) {
-      expect(manifest.devDependencies[name]).toBe(MIN_SUPPORTED_HOST_VERSION)
+      expect(manifest.devDependencies[name]).toBe('0.2.1-rc.3')
+      expect(satisfiesSupportedHostRange(manifest.devDependencies[name]!)).toBe(true)
     }
   })
 })
@@ -384,8 +387,11 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
 
 describe('core lock policy identity', () => {
   it('exports only the active exact DSH core with an explicit new manifest policy', () => {
-    expect(CORE_HOST_COHORTS).toHaveLength(1)
+    // rc.2 (baseline default) and rc.3 (byte-identical lib graph) are both
+    // active whole-graph contracts; the rc.2 baseline stays first.
+    expect(CORE_HOST_COHORTS).toHaveLength(2)
     expect(CORE_HOST_COHORTS[0].id).toBe(ACTIVE_COHORT_ID)
+    expect(CORE_HOST_COHORTS[1].id).toBe('dsh-0.2.1-rc.3-core-v1')
     for (const core of CORE_HOST_COHORTS) {
       expect(core.manifestVersion).toBe(2)
       expect(core.packages).toHaveLength(47)

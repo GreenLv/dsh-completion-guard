@@ -33,6 +33,7 @@ export { projectSessionCoreV2 } from '../core-v2/session.js'
 export * from './rc020-rc1-host.js'
 export * from './rc020-rc2-host.js'
 export * from './rc021-rc2-host.js'
+export * from './rc021-rc3-host.js'
 export * from './host-desktop.js'
 export * from './host-trust.js'
 

@@ -28,6 +28,6 @@ describe('sole rc.2 (0.2.1-rc.2) cohort', () => {
   it('rejects rc.1, rc.0, stable, future RC and forged integrity', () => {
     for (const version of ['0.2.1-rc.0', '0.2.1-rc.1', '0.2.1', '0.2.1-rc.3']) expect(evaluateHostLock(RC021_RC2_HOST_PACKAGES.map(r => r.version === '0.2.1-rc.2' ? {...r, version} : r)).status).toBe('unsupported')
     expect(evaluateHostLock(RC021_RC2_HOST_PACKAGES.map(r => ({...r, integrity: 'sha512-forged'}))).status).toBe('unsupported')
-    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.1-rc.2-core-v1'])
+    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.1-rc.2-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
   })
 })

@@ -14,7 +14,7 @@ export const SUPPORTED_HOST_RANGE: string = `>=${MIN_SUPPORTED_HOST_VERSION}`
  * version-above-floor host. The 0.2.0 rows keep their historical standing
  * after the floor moved to 0.2.1-rc.2; each row records past evidence, not
  * current admission. */
-export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2']
+export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3']
 /** Historical alias retained for evidence-list readers; the admission rule is
  * the floor above, never this list. */
 export const SUPPORTED_HOST_VERSIONS: readonly string[] = HOST_VALIDATED_VERSIONS

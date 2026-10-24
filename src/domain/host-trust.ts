@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import baseline from './byte-audit-manifest.js'
+import rc2Baseline from './byte-audit-manifest.js'
+import rc3Baseline from './rc3-byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
@@ -65,6 +66,17 @@ function readReceipt(profileRoot: string | undefined, trust: HostRebindTrust): C
     return receipt
   } catch (error) { if (error instanceof HostTrustError) throw error; return fail('host_trust_contract_receipt_missing') }
 }
+/** The reviewed executable-byte baseline for one acquired graph. The rc.3
+ * cohort's lib bytes are byte-identical to rc.2 but its package manifests
+ * carry rewritten version/dependency fields, so the baseline must match the
+ * ACQUIRED versions or every loading digest would spuriously drift. Both
+ * baselines come from the same audited-manifest schema. */
+function baselineFor(rows: readonly { name?: string; version?: string }[]): typeof rc2Baseline {
+  // Whole-graph cohorts never mix host versions, so ANY rc.3 row selects the
+  // rc.3 baseline; the rc.2 manifest stays the default for legacy callers.
+  return rows.some((row) => row.version === '0.2.1-rc.3') ? rc3Baseline : rc2Baseline
+}
+
 /** Validate generator-issued operator-owned authority. The descriptor cannot
  * assert compatibility: changed bytes require the independently issued cache
  * receipt, whose complete byte graph and startup conditions are bound. */
@@ -72,7 +84,7 @@ export function qualifyHostTrust(value: unknown, profileRoot?: string): HostRebi
   const trust = value as HostRebindTrust | undefined
   if (trust?.schema !== 'dsh-host-registry-trust/v1' || trust.source !== 'https://registry.npmjs.org/'
     || trust.qualification !== HOST_CONTRACT_SCHEMA || !Array.isArray(trust.packages)) return fail('host_trust_source_untrusted')
-  const known = new Set(baseline.packages.map((p) => p.name)), names = new Set<string>()
+  const known = new Set(baselineFor(trust.packages).packages.map((p) => p.name)), names = new Set<string>()
   for (const row of [...trust.packages, ...(trust.probeDependencies ?? [])]) {
     if (!row || names.has(row.name) || !parseHostVersion(row.version) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(row.integrity)
       || !row.modules || Array.isArray(row.modules) || !/^[a-f0-9]{64}$/.test(row.modules['package.json'])) return fail('host_trust_identity_invalid')
@@ -141,6 +153,9 @@ export interface HostTrustAcquisitionOptions {
 export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typeof fetch = fetch,
   options?: HostTrustAcquisitionOptions): Promise<HostRebindTrust> {
   const packages: HostTrustedPackage[] = [], dependencies: HostTrustedPackage[] = [], archives: ProbeArchive[] = []
+  // The equivalence baseline follows the acquired launcher version (rc.3 vs
+  // rc.2); qualifiedHostTrust re-derives it the same way for validation.
+  const baseline = baselineFor(rows)
   const acquire = async (row: PackageRow): Promise<HostTrustedPackage> => {
     if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(row.name) || row.name.length > 214
       || !row.version || !parseHostVersion(row.version) || !row.integrity) return fail('host_trust_identity_invalid')
@@ -162,15 +177,23 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
   if (!options?.profileRoot) return fail('host_trust_receipt_root_missing')
   const targets: string[] = [], checks: string[] = [], equivalent = new Set<string>()
   const reviewedEquivalent = (row: HostTrustedPackage, files: Record<string, Buffer>): boolean => {
-    const reference = baseline.packages.find(p => p.name === row.name)
-    if (!reference) return false
-    return hostManifestLoadingDigest(files['package.json'].toString()) === (reference as unknown as { loadingDigest?: string }).loadingDigest
-      && Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {
-      if (!files[file]) return false
-      if (row.modules[file] === digest) return true
-      const programs = (reference as unknown as { programs?: Record<string, string> }).programs
-      try { return !!programs?.[file] && hostProgramDigest(files[file].toString('utf8')) === programs[file] } catch { return false }
-    })
+    // The acquired bytes must match ONE reviewed published state. The rc.3
+    // manifests carry rewritten version/dependency fields over identical lib
+    // bytes, so a graph can legitimately equal the rc.3 loading digest while
+    // its lib bytes equal BOTH baselines; require loading AND modules from
+    // the SAME reference row.
+    for (const reference of [baseline.packages.find(p => p.name === row.name), rc3Baseline.packages.find(p => p.name === row.name)]) {
+      if (!reference) continue
+      if (hostManifestLoadingDigest(files['package.json'].toString()) !== (reference as unknown as { loadingDigest?: string }).loadingDigest) continue
+      const modulesOk = Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {
+        if (!files[file]) return false
+        if (row.modules[file] === digest) return true
+        const programs = (reference as unknown as { programs?: Record<string, string> }).programs
+        try { return !!programs?.[file] && hostProgramDigest(files[file].toString('utf8')) === programs[file] } catch { return false }
+      })
+      if (modulesOk) return true
+    }
+    return false
   }
   for (const row of packages) {
     const reference = baseline.packages.find((p) => p.name === row.name)
