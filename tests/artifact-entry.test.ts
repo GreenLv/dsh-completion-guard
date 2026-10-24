@@ -78,8 +78,8 @@ describe('shipped artifact entries', () => {
     // The floor-based admission model: the public range is >=, and the
     // validated-versions list is evidence, not an admission whitelist.
     expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.2')
-    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2'])
-    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.1-rc.2')
+    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3'])
+    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.1-rc.3')
   })
 
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {
