@@ -30,6 +30,19 @@ jobs:
           fi
           python scripts/select_validation.py --repo-root . --base "$base_sha" --head "$EVENT_HEAD_SHA" --github-output "$GITHUB_OUTPUT"
 
+  dependency-scan:
+    name: Dependency advisory gate
+    needs: classify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10
+      # Fail-closed advisory gate (F10): network/parse failures and any
+      # unaccepted high/critical advisory fail this required job.
+      - run: python scripts/audit_dependencies.py --repo-root .
+
   static:
     name: Static, package, and repository contracts
     needs: classify
@@ -60,7 +73,7 @@ jobs:
         run: git diff --exit-code -- dist
       - run: pnpm run pack:check
       - run: python scripts/audit_repository_documentation.py .
-      - run: python -m unittest tests/audit_repository_documentation_test.py tests/validation_selection_test.py tests/required_jobs_test.py tests/selected_validation_test.py tests/native_acceptance_test.py tests/native_desktop_acceptance_test.py tests/validate_native_v070_test.py tests/validate_native_desktop_test.py tests/workflow_contract_test.py tests/record_cross_end_oracle_test.py tests/native_cleanup_probe_test.py
+      - run: python -m unittest tests/audit_repository_documentation_test.py tests/audit_dependencies_test.py tests/validation_selection_test.py tests/required_jobs_test.py tests/selected_validation_test.py tests/native_acceptance_test.py tests/native_desktop_acceptance_test.py tests/validate_native_v070_test.py tests/validate_native_desktop_test.py tests/workflow_contract_test.py tests/record_cross_end_oracle_test.py tests/native_cleanup_probe_test.py
       - name: Check candidate commit whitespace
         run: git diff-tree --check --root -r HEAD
       - name: Freeze one canonical candidate artifact
@@ -176,6 +189,7 @@ jobs:
     if: always()
     needs:
       - static
+      - dependency-scan
       - classify
       - ubuntu_node22
       - ubuntu_node24
@@ -190,6 +204,7 @@ jobs:
       - name: Fail closed over every required lane
         env:
           STATIC_RESULT: ${{ needs.static.result }}
+          DEPENDENCY_SCAN_RESULT: ${{ needs.dependency-scan.result }}
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           UBUNTU_22_RESULT: ${{ needs.ubuntu_node22.result }}
           UBUNTU_24_RESULT: ${{ needs.ubuntu_node24.result }}
@@ -202,10 +217,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$PORTABLE_REQUIRED" == "true" ]]; then
-            printf '%s\n' '["classify","static","ubuntu_node22","ubuntu_node24","macos_node22","macos_node24","windows_node22","windows_node24","portable_windows"]' > "$RUNNER_TEMP/required.json"
+            printf '%s\n' '["classify","static","dependency-scan","ubuntu_node22","ubuntu_node24","macos_node22","macos_node24","windows_node22","windows_node24","portable_windows"]' > "$RUNNER_TEMP/required.json"
           else
-            printf '%s\n' '["classify","static","ubuntu_node22","ubuntu_node24","macos_node22","macos_node24","windows_node22","windows_node24"]' > "$RUNNER_TEMP/required.json"
+            printf '%s\n' '["classify","static","dependency-scan","ubuntu_node22","ubuntu_node24","macos_node22","macos_node24","windows_node22","windows_node24"]' > "$RUNNER_TEMP/required.json"
           fi
-          printf '{"classify":"%s","static":"%s","ubuntu_node22":"%s","ubuntu_node24":"%s","macos_node22":"%s","macos_node24":"%s","windows_node22":"%s","windows_node24":"%s","portable_windows":"%s"}\n' \
-            "$CLASSIFY_RESULT" "$STATIC_RESULT" "$UBUNTU_22_RESULT" "$UBUNTU_24_RESULT" "$MACOS_22_RESULT" "$MACOS_24_RESULT" "$WINDOWS_22_RESULT" "$WINDOWS_24_RESULT" "$PORTABLE_RESULT" > "$RUNNER_TEMP/observed.json"
+          printf '{"classify":"%s","static":"%s","dependency-scan":"%s","ubuntu_node22":"%s","ubuntu_node24":"%s","macos_node22":"%s","macos_node24":"%s","windows_node22":"%s","windows_node24":"%s","portable_windows":"%s"}\n' \
+            "$CLASSIFY_RESULT" "$STATIC_RESULT" "$DEPENDENCY_SCAN_RESULT" "$UBUNTU_22_RESULT" "$UBUNTU_24_RESULT" "$MACOS_22_RESULT" "$MACOS_24_RESULT" "$WINDOWS_22_RESULT" "$WINDOWS_24_RESULT" "$PORTABLE_RESULT" > "$RUNNER_TEMP/observed.json"
           python scripts/verify_required_jobs.py --required "$RUNNER_TEMP/required.json" --observed "$RUNNER_TEMP/observed.json"

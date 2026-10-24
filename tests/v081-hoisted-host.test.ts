@@ -1,24 +1,15 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, cpSync, rmSync, renameSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { execFileSync } from 'node:child_process'
-import { EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
-import { evaluateActiveHostLock, readActiveHostGraph, inspectTargetHostGraph } from '../src/domain/host-resolver.js'
-vi.setConfig({ testTimeout: 60_000 })
-// Synthetic DSH 0.2.0-rc.1 identities exercise complete production admission.
-// Each critical package has one real hashed module and its manifest. Published
-// module bytes are checked separately in v080-rc017-host.test.ts with an
-// explicit DSH_RUNTIME_ROOT; neither lane starts a host or uses a model.
+
+// vitest 4 registers mocks in source order relative to imports: keep every
+// vi.hoisted/vi.mock above the first import that (transitively) loads the
+// mocked module.
 const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
   AUDITED_MODULE_TEXT: 'export const auditedModule = true\n',
   canonicalManifest: (name: string, version: string) => JSON.stringify({
     name, version, ...(name === '@deepseek-ai/dsh' ? { dependencies: { '@deepseek-ai/cordis': '4.0.5' } } : {}), exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
+vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
@@ -35,6 +26,19 @@ vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
     },
   })) } }
 })
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, cpSync, rmSync, renameSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
+import { EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
+import { evaluateActiveHostLock, readActiveHostGraph, inspectTargetHostGraph } from '../src/domain/host-resolver.js'
+vi.setConfig({ testTimeout: 60_000 })
+// Synthetic DSH 0.2.0-rc.1 identities exercise complete production admission.
+// Each critical package has one real hashed module and its manifest. Published
+// module bytes are checked separately in v080-rc017-host.test.ts with an
+// explicit DSH_RUNTIME_ROOT; neither lane starts a host or uses a model.
 
 
 const temporaryRoots: string[] = []

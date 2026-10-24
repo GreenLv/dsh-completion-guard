@@ -5,15 +5,11 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RC021_RC2_HOST_PACKAGES } from '../../src/domain/rc021-rc2-host.js'
-import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
-import { evaluateHostLock } from '../../src/domain/host-lock.js'
-import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
-import { revalidateCoreLock } from '../../src/runtime.js'
 
-// Structural fixtures carry an explicit synthetic published-byte oracle. The
-// shipped CLI has its real baseline and must refuse these synthetic bytes.
-vi.mock('../../manifests/rc021-rc2-byte-audit.json', async (original) => {
+// vitest 4 registers mocks in source order relative to imports: keep every
+// vi.hoisted/vi.mock above the first import that (transitively) loads the
+// mocked module.
+vi.mock('../../src/domain/byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
   return { default: { ...source.default, packages: source.default.packages.map(row => ({ ...row, modules: {
@@ -23,6 +19,14 @@ vi.mock('../../manifests/rc021-rc2-byte-audit.json', async (original) => {
     'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
   } })) } }
 })
+import { RC021_RC2_HOST_PACKAGES } from '../../src/domain/rc021-rc2-host.js'
+import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
+import { evaluateHostLock } from '../../src/domain/host-lock.js'
+import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
+import { revalidateCoreLock } from '../../src/runtime.js'
+
+// Structural fixtures carry an explicit synthetic published-byte oracle. The
+// shipped CLI has its real baseline and must refuse these synthetic bytes.
 
 const roots: string[] = []
 const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']

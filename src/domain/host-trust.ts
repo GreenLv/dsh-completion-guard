@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import baseline from '../../manifests/rc021-rc2-byte-audit.json' with { type: 'json' }
+import baseline from './byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
 import { join, sep } from 'node:path'

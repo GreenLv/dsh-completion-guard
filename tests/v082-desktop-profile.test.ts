@@ -1,4 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// vitest 4 registers mocks in source order relative to imports: keep every
+// vi.hoisted/vi.mock above the first import that (transitively) loads the
+// mocked module.
+vi.mock('../src/domain/desktop-distribution-manifest.js', async original => {
+  const source = await original<{ default: typeof distributionPins }>()
+  return { default: structuredClone(source.default) }
+})
+vi.mock('../src/domain/host-desktop-identity.js', () => ({
+  verifyDesktopCarrier: (archive: string) => archive,
+}))
+vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
+  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
+  const packages = source.default.packages.map((row) => ({
+    ...row,
+    modules: {
+      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
+      'lib/index.js': libDigest,
+    },
+  }))
+  return { default: { ...source.default, packages } }
+})
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,15 +47,13 @@ import { evaluateConfiguredHostLock, injectActiveProfileHostLock, inspectDesktop
 import { evaluateHostCapability, evaluateHostLock, type HostProfileKind } from '../src/domain/host-lock.js'
 import { resolveConfig } from '../src/config.js'
 import { revalidateCoreLock } from '../src/runtime.js'
-import distributionPins from '../manifests/desktop-distribution.v1.json' with { type: 'json' }
+// F10/vitest-4: import the wrapper (the mocked instance src shares), not the
+// raw JSON, so fixture mutations of the pins are visible to src audits.
+import distributionPins from '../src/domain/desktop-distribution-manifest.js'
 import { fileSymlinkOrSkip } from './helpers/file-symlink.js'
 
 // Portable supplement fixtures use an explicitly mocked qualification, never
 // production admission of synthetic headers or ASAR self-attested programs.
-vi.mock('../manifests/desktop-distribution.v1.json', async original => {
-  const source = await original<{ default: typeof distributionPins }>()
-  return { default: structuredClone(source.default) }
-})
 
 // ---------------------------------------------------------------------------
 // Synthetic official app bundle. The asar container is fully specified: a
@@ -41,9 +63,6 @@ vi.mock('../manifests/desktop-distribution.v1.json', async original => {
 
 const SYNTHETIC_LIB_BYTES = 'export const synthetic = true\n'
 // These portable fixtures exercise graph/audit logic, not OS signature trust.
-vi.mock('../src/domain/host-desktop-identity.js', () => ({
-  verifyDesktopCarrier: (archive: string) => archive,
-}))
 const SYNTHETIC_MODULES: Record<string, string> = {
   'package.json': 'SYNTHETIC_PACKAGE_JSON_PLACEHOLDER',
   'lib/index.js': createHash('sha256').update(SYNTHETIC_LIB_BYTES).digest('hex'),
@@ -127,19 +146,6 @@ function writeAsar(files: readonly AsarFileSpec[], directory: string): string {
 
 // The synthetic bundle's module digests are bound into the mocked audit, so
 // the byte audit below verifies the exact files the test wrote.
-vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
-  const { createHash } = await import('node:crypto')
-  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
-  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
-  const packages = source.default.packages.map((row) => ({
-    ...row,
-    modules: {
-      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
-      'lib/index.js': libDigest,
-    },
-  }))
-  return { default: { ...source.default, packages } }
-})
 
 const temporaryRoots: string[] = []
 function temporaryRoot(): string {

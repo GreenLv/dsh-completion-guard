@@ -1,4 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// vitest 4 registers mocks in source order relative to imports: keep every
+// vi.hoisted/vi.mock above the first import that (transitively) loads the
+// mocked module.
+vi.mock('../src/domain/host-desktop-identity.js', () => ({
+  verifyDesktopCarrier: (archive: string) => archive,
+}))
+vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
+  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
+  const packages = source.default.packages.map((row) => ({
+    ...row,
+    modules: {
+      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
+      'lib/index.js': libDigest,
+    },
+  }))
+  return { default: { ...source.default, packages } }
+})
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -36,9 +56,6 @@ import { revalidateCoreLock } from '../src/runtime.js'
 // through the production runtime entry `revalidateCoreLock`, which is the
 // only place an injected digest is compared against a fresh validation.
 
-vi.mock('../src/domain/host-desktop-identity.js', () => ({
-  verifyDesktopCarrier: (archive: string) => archive,
-}))
 
 const SYNTHETIC_LIB_BYTES = 'export const synthetic = true\n'
 const SYNTHETIC_MODULES: Record<string, string> = {
@@ -122,19 +139,6 @@ function writeAsar(files: readonly AsarFileSpec[], directory: string): string {
   return path
 }
 
-vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
-  const { createHash } = await import('node:crypto')
-  const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
-  const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
-  const packages = source.default.packages.map((row) => ({
-    ...row,
-    modules: {
-      'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, type: 'module', main: 'lib/index.js' }) + '\n', 'utf8').digest('hex'),
-      'lib/index.js': libDigest,
-    },
-  }))
-  return { default: { ...source.default, packages } }
-})
 
 const temporaryRoots: string[] = []
 function temporaryRoot(): string {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import qualification from '../../manifests/desktop-distribution.v1.json' with { type: 'json' }
+import qualification from './desktop-distribution-manifest.js'
 
 export interface DesktopDistributionIdentity {
   headerSha256: string

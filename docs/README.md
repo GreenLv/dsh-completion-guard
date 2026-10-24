@@ -2,7 +2,7 @@
 
 For installation and upgrades, start with [host-lock upgrades](HOST_LOCK_UPGRADE.md) and [compatibility](COMPATIBILITY.md). [Distribution](distribution.md) lists package channels. [Local acceptance](LOCAL_ACCEPTANCE.md) distinguishes source checks, installed-artifact results and their limits.
 
-For maintenance, use [architecture](ARCHITECTURE.md), [privacy](PRIVACY.md), the [writer-lock protocol](WRITER_LOCK_PROTOCOL.md), and [historical incident coverage](HISTORICAL_INCIDENT_COVERAGE.md). The [core alignment contract](CORE_ALIGNMENT_CONTRACT_V2.md), [semantic compatibility](SEMANTIC_COMPATIBILITY.md), [upstream base](UPSTREAM_BASE.md), and [porting notes](PORTING_NOTES.md) explain shared semantics and product boundaries. [Third-party licenses](THIRD_PARTY_LICENSES.md) records attribution.
+For maintenance, use [architecture](ARCHITECTURE.md), [privacy](PRIVACY.md), the [writer-lock protocol](WRITER_LOCK_PROTOCOL.md), [historical incident coverage](HISTORICAL_INCIDENT_COVERAGE.md), and the [dependency advisory gate](DEPENDENCY_SCAN.md). The [core alignment contract](CORE_ALIGNMENT_CONTRACT_V2.md), [semantic compatibility](SEMANTIC_COMPATIBILITY.md), [upstream base](UPSTREAM_BASE.md), and [porting notes](PORTING_NOTES.md) explain shared semantics and product boundaries. [Third-party licenses](THIRD_PARTY_LICENSES.md) records attribution.
 
 ## Historical development material
 

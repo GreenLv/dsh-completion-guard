@@ -1,4 +1,31 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
+
+// vitest 4 registers mocks in source order relative to imports: keep every
+// vi.hoisted/vi.mock above the first import that (transitively) loads the
+// mocked module.
+const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
+  AUDITED_MODULE_TEXT: 'export const auditedModule = true\n',
+  canonicalManifest: (name: string, version: string) => JSON.stringify({
+    name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
+  }),
+}))
+vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
+  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // The published audit hashes package.json too: the manifest the JSON
+    // parsers read and the bytes the digest check reads are the same file.
+    loadingDigest: hostManifestLoadingDigest(canonicalManifest(p.name as string, p.version as string)),
+    programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
+  })) } }
+})
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { readFileSync, statSync, utimesSync, realpathSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, cpSync } from 'node:fs'
@@ -32,29 +59,6 @@ vi.setConfig({ testTimeout: 60_000 })
 // observer seam and refusing a host mutated between two consecutive entries.
 // The synthetic byte-audit manifest gives the audits one real hashed module
 // per package; published-tarball identity stays with v080-rc017-host.test.ts.
-const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
-  AUDITED_MODULE_TEXT: 'export const auditedModule = true\n',
-  canonicalManifest: (name: string, version: string) => JSON.stringify({
-    name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
-  }),
-}))
-vi.mock('../manifests/rc021-rc2-byte-audit.json', async (original) => {
-  const { createHash } = await import('node:crypto')
-  const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
-  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
-  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
-  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
-    ...p, sha256: '0'.repeat(64), tarball: '',
-    // The published audit hashes package.json too: the manifest the JSON
-    // parsers read and the bytes the digest check reads are the same file.
-    loadingDigest: hostManifestLoadingDigest(canonicalManifest(p.name as string, p.version as string)),
-    programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
-    modules: {
-      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
-      'lib/index.js': auditedModuleDigest,
-    },
-  })) } }
-})
 
 const SHA = 'f'.repeat(40)
 const PACKAGE = 'fixture-entry'

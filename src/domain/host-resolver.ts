@@ -1,6 +1,6 @@
 import { auditHostDependencyRoutes, reachableIdsByName, type DependencyAuditGraph } from './host-dependency-audit.js'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
-import hostByteAudit from '../../manifests/rc021-rc2-byte-audit.json' with { type: 'json' }
+import hostByteAudit from './byte-audit-manifest.js'
 import { physicalFs } from './host-physical-fs.js'
 const { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } = physicalFs
 import { createHash } from 'node:crypto'

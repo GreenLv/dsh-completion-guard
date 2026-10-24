@@ -3,6 +3,18 @@ import { symlinkSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// vitest 4 registers mocks in source order relative to imports: keep every
+// vi.hoisted/vi.mock above the first import that (transitively) loads the
+// mocked module.
+vi.mock('../../src/domain/byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: p.name, version: p.version, exports: { '.': './lib/index.js' } })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
+  } })) } }
+})
 import {
   bindExecutableIdentity,
   bindLiveGoalCapability,
@@ -28,14 +40,6 @@ import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
 // This family isolates graph/config mutation with synthetic package manifests.
 // Published-byte integrity is exercised without mocks in v080-rc017-host.test.ts.
-vi.mock('../../manifests/rc021-rc2-byte-audit.json', async (original) => {
-  const { createHash } = await import('node:crypto')
-  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
-  return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {
-    'package.json': createHash('sha256').update(JSON.stringify({ name: p.name, version: p.version, exports: { '.': './lib/index.js' } })).digest('hex'),
-    'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
-  } })) } }
-})
 
 const temporaryRoots: string[] = []
 

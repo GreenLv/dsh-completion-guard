@@ -50,6 +50,18 @@ class WorkflowContractTests(unittest.TestCase):
                     failures.append(f"{path.name}: {action}@{ref}")
         self.assertEqual(failures, [])
 
+    def test_dependency_advisory_gate_is_a_required_fail_closed_job(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("  dependency-scan:", text)
+        self.assertIn("python scripts/audit_dependencies.py --repo-root .", text)
+        # The gate is wired into BOTH required lists and the observed summary,
+        # so a failed or missing scan fails the required job.
+        for required_list in ('["classify","static","dependency-scan"',):
+            self.assertIn(required_list, text)
+        self.assertIn('"dependency-scan":"%s"', text)
+        self.assertIn("DEPENDENCY_SCAN_RESULT: ${{ needs.dependency-scan.result }}", text)
+        self.assertIn("tests/audit_dependencies_test.py", text)
+
     def test_portable_entrypoint_does_not_repeat_source_matrix(self) -> None:
         source = (ROOT / "scripts" / "native_acceptance.py").read_text(encoding="utf-8")
         for fragment in ("pnpm test", "pnpm run typecheck", "pnpm run lint", "vitest"):

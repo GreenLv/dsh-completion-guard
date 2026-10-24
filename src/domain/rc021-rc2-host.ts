@@ -1,4 +1,4 @@
-import audit from '../../manifests/rc021-rc2-byte-audit.json' with { type: 'json' }
+import audit from './byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 
 /** One source for verified registry identities and published executable bytes.

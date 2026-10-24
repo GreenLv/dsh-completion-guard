@@ -333,7 +333,7 @@ describe('0.6.0 C10: the release ticket gate runs before any publish effect', ()
         // The registry answers with a DIFFERENT integrity than the bytes we
         // released: that is not this contract's artifact.
         fetcher: async () => new Response(JSON.stringify({
-          name: 'fixture-release-readback', versions: { '1.0.0': { name: 'fixture-release-readback', version: '1.0.0', dist: { integrity: `sha512-${Buffer.alloc(64, 2).toString('base64')}` } } },
+          name: 'fixture-release-readback', version: '1.0.0', dist: { integrity: `sha512-${Buffer.alloc(64, 2).toString('base64')}` },
         }), { status: 200, headers: { 'content-type': 'application/json' } }),
         releaseGate: async () => ({ status: 'granted', reasonCode: 'release_contract_granted', contractId: 'rel-1' }),
         releaseSettle: async (request) => { settlements.push({ ...request }) },
