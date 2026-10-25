@@ -672,11 +672,16 @@ async function boundedRegistryJson(
   // transport settles cancel() promptly; a stalled or rejecting one must not
   // extend the call past its budget. The deadline always fires eventually, so
   // the race's timer side never leaks.
+  // RF05 round-3: EVERY created cancellation promise must be consumed on
+  // every branch. When the deadline already fired, the release promise may
+  // still reject later (e.g. a transport that errors its body on abort) —
+  // attaching a no-op rejection handler here prevents an unhandled rejection
+  // from escaping after this function has returned.
   const releaseBounded = (releasing: Promise<unknown>): Promise<void> => {
+    releasing.catch(() => {})
     if (combined.aborted) return Promise.resolve()
     return new Promise<void>((resolve) => {
-      const onAbort = () => { releasing.catch(() => {}); resolve() }
-      if (combined.aborted) { onAbort(); return }
+      const onAbort = () => resolve()
       combined.addEventListener('abort', onAbort, { once: true })
       releasing.then(() => { combined.removeEventListener('abort', onAbort); resolve() },
         () => { combined.removeEventListener('abort', onAbort); resolve() })
