@@ -1,6 +1,7 @@
 
 import { describe, expect, it } from 'vitest'
-import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { deriveProjection } from '../src/domain/derive.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
@@ -16,7 +17,7 @@ describe('historical invariants: positive default authority (CGI-20260915-dsh-po
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '以下是背景资料，供参考：评测显示构建耗时增加。' }], source: { kind: 'user' } } },
-    ]
+    ] as unknown as Parameters<typeof deriveProjection>[0]
     const derived = deriveProjection(events as never, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST)
     const items = [...derived.projection.items.values()]
     // Background-only input must not mint an executable_now obligation.
@@ -32,7 +33,7 @@ describe('historical invariants: positive default authority (CGI-20260915-dsh-po
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
       { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: '修改 authority-demo.txt。' }], source: { kind: 'user' } } },
-    ]
+    ] as unknown as Parameters<typeof deriveProjection>[0]
     const derived = deriveProjection(events as never, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST)
     const items = [...derived.projection.items.values()]
     expect(items.some((item) => item.authorityDisposition === 'executable_now' && item.normalizedText.includes('authority-demo.txt'))).toBe(true)
@@ -47,12 +48,12 @@ describe('historical invariants: ordinary git diagnosis facets (CGI-20260915-dsh
       version: SESSION_FORMAT_VERSION, isSeeded: false, id: SessionId('git-diagnosis-facets'), createdAt: 1, cwd: '/work',
     })
     session.append('command/run', { commandId: 'on' as never, name: 'context-guard', args: 'on', source: { kind: 'user' } })
-    session.append('user/message', { content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }, { surfaceOp: 'append' })
-    session.append('user/message', { content: [{ type: 'text', text: '提交并推送 demo 仓库的修改。' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Context Guard protocol boundary: v6.0.0' }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'v6' } }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: '提交并推送 demo 仓库的修改。' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     session.append('tool/call', { turn: 1, step: 1, callId: 'git-1' as never, name: 'bash', arguments: JSON.stringify({ command: 'git commit -m demo', workdir: '/work' }) })
     session.append('tool/result', {
       turn: 1, step: 1,
-      message: { source: { callId: 'git-1' as never, kind: 'tool' }, content: [{ type: 'text', text: 'hook rejected the commit' }], isError: true },
+      message: createToolResultMessage({ callId: 'git-1' as never, content: [{ type: 'text', text: 'hook rejected the commit' }], isError: true }),
     }, { surfaceOp: 'append' })
     const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST)
     // The failed result is captured as FAILED evidence, not success.
