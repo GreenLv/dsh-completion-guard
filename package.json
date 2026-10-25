@@ -90,6 +90,8 @@
     "@deepseek-ai/dsh-jobs": "0.2.1-rc.3",
     "@deepseek-ai/dsh-jobs-local": "0.2.1-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm-deepseek": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm-deepseek-api-key": "0.2.1-rc.3",
     "@deepseek-ai/dsh-sandbox": "0.2.1-rc.3",
     "@deepseek-ai/dsh-sandbox-policy": "0.2.1-rc.3",
     "@deepseek-ai/dsh-scope": "0.2.1-rc.3",
