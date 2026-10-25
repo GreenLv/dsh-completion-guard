@@ -380,7 +380,8 @@
         "tests/workflow_contract_test.py",
         "scripts/audit_dependencies.py",
         "tests/audit_dependencies_test.py",
-        "validation-map.json"
+        "validation-map.json",
+        "scripts/measure-session-switch.mjs"
       ],
       "gates": [
         "full_candidate"
