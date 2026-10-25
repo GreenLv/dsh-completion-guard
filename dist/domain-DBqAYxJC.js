@@ -125,6 +125,23 @@ const BEARER_TOKEN = /\bbearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const PLAIN_KEY = /\b(?:sk|pk|ak)-[a-zA-Z0-9_-]{16,}\b/g;
 const NAMED_TOKEN = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{22,})\b/g;
 const URL_USERINFO = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/?#]*@/;
+/**
+* Structurally trim one prose span down to the URL it actually contains
+* (RF03, round 2): RFC 3986 sub-delims — including `(` and `)` — are legal
+* INSIDE the authority and path, so a parenthesis may end the span only when
+* it is prose punctuation, not part of the URL. Markdown's balance rule
+* decides that deterministically: strip trailing `)` while the span has more
+* closing than opening parentheses. A `)` in the middle of the span (e.g.
+* inside the userinfo `oper)ator:`) never sees this rule; only the tail is
+* examined. `(see https://x)` keeps the outer paren outside; a URL that
+* really ends in a balanced `(…)` keeps it.
+*/
+function trimSpanToUrl(match) {
+	const openCount = (match.match(/\(/g) ?? []).length;
+	let span = match;
+	while (span.endsWith(")") && (span.match(/\)/g) ?? []).length > openCount) span = span.slice(0, -1);
+	return span;
+}
 /** Structurally remove `user:password@` from a URL; other bytes unchanged. */
 function stripUrlCredentials(value) {
 	return URL_USERINFO.test(value) ? value.replace(URL_USERINFO, (match) => match.slice(0, match.indexOf("//") + 2)) : value;
@@ -141,12 +158,14 @@ function sanitizeClauseText(text) {
 	value = value.replace(BARE_VALUE, (_match, key) => label(key));
 	value = value.replace(PLAIN_KEY, (match) => `${match.slice(0, 3)}-<redacted>`);
 	value = value.replace(NAMED_TOKEN, (match) => `${match.slice(0, match.indexOf("_") + 1)}<redacted>`);
-	value = value.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"`，。)]+/g, (match) => {
+	value = value.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"`，。]+/g, (match) => {
+		const span = trimSpanToUrl(match);
+		const restoredParens = ")".repeat(match.length - span.length);
 		const cut = Math.min(...["?", "#"].map((marker) => {
-			const index$1 = match.indexOf(marker);
+			const index$1 = span.indexOf(marker);
 			return index$1 === -1 ? Infinity : index$1;
 		}));
-		return `${stripUrlCredentials(cut === Infinity ? match : match.slice(0, cut))}${cut === Infinity ? "" : "…"}`;
+		return `${stripUrlCredentials(cut === Infinity ? span : span.slice(0, cut))}${cut === Infinity ? "" : "…"}${restoredParens}`;
 	});
 	return value;
 }
@@ -3285,20 +3304,6 @@ var rc021_rc2_byte_audit_default = {
 var byte_audit_manifest_default = rc021_rc2_byte_audit_default;
 
 //#endregion
-//#region src/domain/rc021-rc2-host.ts
-/** One source for verified registry identities and published executable bytes.
-* Bound to the published dsh-v0.2.1-rc.2 tarballs (upstream
-* 687f282e8625c6b8d11ff58211a90524be2e4317; Cordis moved to 4.0.5 in the same
-* graph). Native platform acceptance remains a separate, currently pending
-* fact. The 0.2.0-rc.2 rows remain available in `rc020-rc2-host.ts` as
-* historical evidence. */
-const RC021_RC2_HOST_PACKAGES = byte_audit_manifest_default.packages.map(({ name, version: version$1, integrity }) => ({
-	name,
-	version: version$1,
-	integrity
-}));
-
-//#endregion
 //#region manifests/rc021-rc3-byte-audit.json
 var rc021_rc3_byte_audit_default = {
 	schema: "dsh-host-byte-audit/v1",
@@ -4244,6 +4249,45 @@ var rc021_rc3_byte_audit_default = {
 * cohort.
 */
 var rc3_byte_audit_manifest_default = rc021_rc3_byte_audit_default;
+
+//#endregion
+//#region src/domain/audited-cohort-selection.ts
+/**
+* Version-selected audited cohort manifest (RC3-D01): every registry-derived
+* expectation source — desktop cohort integrity rows, default audit
+* expectations, renderer identity regexes — must follow the ACTUAL acquired
+* runtime version instead of being pinned to the rc.2 manifest. Both
+* manifests share one audited schema; the rc.3 lib bytes are byte-identical
+* to rc.2 (verified per file by the rc.2→rc.3 study), so only the version
+* string differs between the two expectation sets.
+*/
+const AUDITED_HOST_MANIFESTS = [byte_audit_manifest_default, rc3_byte_audit_manifest_default];
+/** The audited manifest whose hostVersion matches, defaulting to the rc.2
+* baseline for callers whose graph version is not one of the audited
+* releases (those fail closed downstream on the version mismatch). */
+function auditedManifestFor(version$1) {
+	return AUDITED_HOST_MANIFESTS.find((manifest) => manifest.hostVersion === version$1) ?? byte_audit_manifest_default;
+}
+/** True when the version has a registered audited manifest. */
+function hasAuditedManifest(version$1) {
+	return AUDITED_HOST_MANIFESTS.some((manifest) => manifest.hostVersion === version$1);
+}
+/** Alternation regex covering every audited host version, for id matchers. */
+const AUDITED_HOST_VERSIONS_REGEX = AUDITED_HOST_MANIFESTS.map((manifest) => manifest.hostVersion.replaceAll(".", "\\.")).join("|");
+
+//#endregion
+//#region src/domain/rc021-rc2-host.ts
+/** One source for verified registry identities and published executable bytes.
+* Bound to the published dsh-v0.2.1-rc.2 tarballs (upstream
+* 687f282e8625c6b8d11ff58211a90524be2e4317; Cordis moved to 4.0.5 in the same
+* graph). Native platform acceptance remains a separate, currently pending
+* fact. The 0.2.0-rc.2 rows remain available in `rc020-rc2-host.ts` as
+* historical evidence. */
+const RC021_RC2_HOST_PACKAGES = byte_audit_manifest_default.packages.map(({ name, version: version$1, integrity }) => ({
+	name,
+	version: version$1,
+	integrity
+}));
 
 //#endregion
 //#region src/domain/rc021-rc3-host.ts
@@ -11972,7 +12016,15 @@ var desktop_distribution_v1_default = {
 			"rewriteRelativeImportExtensions": true,
 			"verbatimModuleSyntax": false
 		},
-		"scope": "Exact Desktop distribution supplements only; these are not registry package inventories. The declared Desktop build commit is an opaque signed identity, not a claim that it equals the public source pin."
+		"scope": "Exact Desktop distribution supplements only; these are not registry package inventories. The declared Desktop build commit is an opaque signed identity, not a claim that it equals the public source pin.",
+		"rc3Acquisition": {
+			"observedDate": "2026-10-25",
+			"method": "official CDN zip downloaded, SHA-512 recorded, codesign --verify --deep --strict passed (TeamIdentifier NAN929V4UM, identifier com.deepseek.dsh), ASAR header recomputed and matched the independently verified local install header, desktop manifest and desktop-runtime.json extracted from the archive",
+			"zipSha256": "599a3ceef4d58f2b82bfd61ca4ef9d55c0f8e055dde60550c92f00d78d0cad2f",
+			"asarHeaderSha256": "84140c5d09050010753077cde3c8e35fc2e050054f1ed69f761fae8b6fdd4b95",
+			"invariantCompanions": "none present in the rc.3 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
+			"windows": "pending: win-x64 exe acquisition and Authenticode verification require a Windows-side step; the row is NOT registered on unverified bytes"
+		}
 	},
 	files: [
 		{
@@ -12048,36 +12100,55 @@ var desktop_distribution_v1_default = {
 			"sourceSha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd"
 		}
 	],
-	distributions: [{
-		"id": "desktop-0.2.1-rc.2-darwin-arm64",
-		"platform": "darwin",
-		"arch": "arm64",
-		"version": "0.2.1-rc.2",
-		"runtimeVersion": "0.2.1-rc.2",
-		"pnpmVersion": "11.28.5",
-		"asarHeaderSha256": "4ab76d0724d8124801413e8e939a75c254c8625f9007267bd1531eb3b993e8f8",
-		"desktopManifestSha256": "53ee01d3b1accfbd037d245fb4752fb5fa5f8e2a76b7de634a4223558ee54bb9",
-		"buildCommit": "332895e0f7c9d4dbfb29729f5eb367fa263ff986",
-		"buildDirty": false,
-		"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.2-mac-arm64.zip",
-		"releaseSha512": "vgGV720lZGEd2MnjVFOvhLVafwQH3iUDindQwwSjQ7AJaeZuu6UvjR2Msae2dkGS1SeMxxYCBu5Ks13n+K9Ydw==",
-		"vendorTeam": "NAN929V4UM",
-		"vendorIdentifier": "com.deepseek.dsh"
-	}, {
-		"id": "desktop-0.2.1-rc.2-win32-x64",
-		"platform": "win32",
-		"arch": "x64",
-		"version": "0.2.1-rc.2",
-		"runtimeVersion": "0.2.1-rc.2",
-		"pnpmVersion": "11.28.5",
-		"asarHeaderSha256": "487721b329cacfe1a15d206ebc72a096f9ff5b94ba0400c8763c73535429daf2",
-		"desktopManifestSha256": "53ee01d3b1accfbd037d245fb4752fb5fa5f8e2a76b7de634a4223558ee54bb9",
-		"buildCommit": "332895e0f7c9d4dbfb29729f5eb367fa263ff986",
-		"buildDirty": false,
-		"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.2-win-x64.exe",
-		"releaseSha512": "39POl5osl9PKMqrPXQA52dh/bCV0Z02vOV9cTjOJDHE6gsJwp5bv7lfgB3mVWAKspX7a/w1iTi+8Listdhq45g==",
-		"vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
-	}]
+	distributions: [
+		{
+			"id": "desktop-0.2.1-rc.2-darwin-arm64",
+			"platform": "darwin",
+			"arch": "arm64",
+			"version": "0.2.1-rc.2",
+			"runtimeVersion": "0.2.1-rc.2",
+			"pnpmVersion": "11.28.5",
+			"asarHeaderSha256": "4ab76d0724d8124801413e8e939a75c254c8625f9007267bd1531eb3b993e8f8",
+			"desktopManifestSha256": "53ee01d3b1accfbd037d245fb4752fb5fa5f8e2a76b7de634a4223558ee54bb9",
+			"buildCommit": "332895e0f7c9d4dbfb29729f5eb367fa263ff986",
+			"buildDirty": false,
+			"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.2-mac-arm64.zip",
+			"releaseSha512": "vgGV720lZGEd2MnjVFOvhLVafwQH3iUDindQwwSjQ7AJaeZuu6UvjR2Msae2dkGS1SeMxxYCBu5Ks13n+K9Ydw==",
+			"vendorTeam": "NAN929V4UM",
+			"vendorIdentifier": "com.deepseek.dsh"
+		},
+		{
+			"id": "desktop-0.2.1-rc.2-win32-x64",
+			"platform": "win32",
+			"arch": "x64",
+			"version": "0.2.1-rc.2",
+			"runtimeVersion": "0.2.1-rc.2",
+			"pnpmVersion": "11.28.5",
+			"asarHeaderSha256": "487721b329cacfe1a15d206ebc72a096f9ff5b94ba0400c8763c73535429daf2",
+			"desktopManifestSha256": "53ee01d3b1accfbd037d245fb4752fb5fa5f8e2a76b7de634a4223558ee54bb9",
+			"buildCommit": "332895e0f7c9d4dbfb29729f5eb367fa263ff986",
+			"buildDirty": false,
+			"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.2-win-x64.exe",
+			"releaseSha512": "39POl5osl9PKMqrPXQA52dh/bCV0Z02vOV9cTjOJDHE6gsJwp5bv7lfgB3mVWAKspX7a/w1iTi+8Listdhq45g==",
+			"vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
+		},
+		{
+			"id": "desktop-0.2.1-rc.3-darwin-arm64",
+			"platform": "darwin",
+			"arch": "arm64",
+			"version": "0.2.1-rc.3",
+			"runtimeVersion": "0.2.1-rc.3",
+			"pnpmVersion": "11.28.5",
+			"asarHeaderSha256": "84140c5d09050010753077cde3c8e35fc2e050054f1ed69f761fae8b6fdd4b95",
+			"desktopManifestSha256": "ac5d5922a061519322befb742e8b8285197d6ca975a2a38e8049ef37c67e63d2",
+			"buildCommit": "be72761ee1a6736ebcdf4f3739363b083ae53c98",
+			"buildDirty": false,
+			"releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.3-mac-arm64.zip",
+			"releaseSha512": "0tCeP/zLGLtsH+S4BD4TIyRJ8TwRhh7xaJprTMOUoEfj7hYJFC3G5l6nl/2zCTS41MeE9k+KRN19RE9sqX6goQ==",
+			"vendorTeam": "NAN929V4UM",
+			"vendorIdentifier": "com.deepseek.dsh"
+		}
+	]
 };
 
 //#endregion
@@ -12917,10 +12988,12 @@ function evaluateConfiguredHostLock(rows, context, trustText, profileRoot) {
 }
 /** Complete production composition; no graph-only result grants authority. */
 function evaluateActiveHostLock(runtime, profile, context, session = createHostAuditSession(), trustText) {
-	const evaluation = evaluateConfiguredHostLock(readActiveHostGraph(runtime, profile, session), context, trustText, profile);
+	const rows = readActiveHostGraph(runtime, profile, session);
+	const evaluation = evaluateConfiguredHostLock(rows, context, trustText, profile);
 	if (evaluation.status !== "supported") return evaluation;
 	const trust = trustText ? parseHostTrust(trustText, profile) : void 0;
-	if (!auditedHostImplementation(runtime, profile, session, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : void 0)) return {
+	const launcherVersion = rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version;
+	if (!auditedHostImplementation(runtime, profile, session, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : auditedManifestFor(launcherVersion).packages)) return {
 		...evaluation,
 		status: "unsupported",
 		goalAvailable: false,
@@ -12964,7 +13037,8 @@ function probeDependencyIdentity(runtime, profile, name, importer) {
 function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations, installationGraph, profileInstallationGraph) {
 	const session = providedSession ?? createHostAuditSession();
 	try {
-		const expectedPackages = expectations ?? byte_audit_manifest_default.packages;
+		if (!expectations) throw new HostProfileError("audit_expectations_unbound", "auditedHostImplementation requires version-selected expectations");
+		const expectedPackages = expectations;
 		const seen = new Set(installationGraph?.packages.keys());
 		const graphs = installationGraph ? [installationGraph] : [];
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
@@ -13073,7 +13147,7 @@ const AUDITED_DEFAULT_WORKDIR_BYTES = {
 	"@deepseek-ai/dsh-bash-local": "6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb",
 	"@deepseek-ai/dsh-pwsh-local": "8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e"
 };
-const AUDITED_HOST_VERSION_REGEX = byte_audit_manifest_default.hostVersion.replaceAll(".", "\\.");
+const AUDITED_HOST_VERSION_REGEX = AUDITED_HOST_VERSIONS_REGEX;
 function activeRendererModule(nodeModulesRoot, name, providedSession) {
 	const session = providedSession ?? createHostAuditSession();
 	const modules = session.realpath(nodeModulesRoot);
@@ -13291,7 +13365,8 @@ function inspectTargetHostGraph(runtime, profile, trust) {
 		platform: process.platform === "win32" ? "windows" : "posix",
 		...target.profileGraph.state === "dependency_free_headless" ? { profileKind: "headless" } : {}
 	}, trust ? JSON.stringify(trust) : void 0, profile);
-	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : void 0;
+	const launcherVersion = target.packages.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version;
+	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : auditedManifestFor(launcherVersion).packages;
 	if (evaluation.status !== "supported" || !auditedHostImplementation(runtime, profile, void 0, expectations)) throw new HostProfileError("target_runtime_unsupported", "pre-install target fails host qualification or byte/route audit");
 	return target;
 }
@@ -13452,7 +13527,7 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 		profileKind: "desktop"
 	}, trust ? JSON.stringify(trust) : void 0, profile);
 	if (evaluation.status !== "supported") return evaluation;
-	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : byte_audit_manifest_default.packages;
+	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : auditedManifestFor(runtime.runtimeVersion).packages;
 	if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations, session)) return {
 		...evaluation,
 		status: "unsupported",
@@ -13483,7 +13558,9 @@ function reevaluateDesktopCoreLock(appAsarPath, profileRoot, trust) {
 * when no operator trust is supplied. A runtime row whose version the audited
 * cohort never registered cannot be attested this way and fails closed. */
 function cohortIntegrityRows(runtime) {
-	const auditRows = new Map(byte_audit_manifest_default.packages.map((row$3) => [row$3.name, row$3]));
+	if (!hasAuditedManifest(runtime.runtimeVersion)) throw new HostProfileError("desktop_runtime_unqualified", `the app runtime version ${runtime.runtimeVersion} has no audited cohort manifest; acquire registry trust to qualify it`);
+	const manifest = auditedManifestFor(runtime.runtimeVersion);
+	const auditRows = new Map(manifest.packages.map((row$3) => [row$3.name, row$3]));
 	return runtime.rows.map((row$3) => {
 		const audited = auditRows.get(row$3.name);
 		if (!audited || audited.version !== row$3.version) throw new HostProfileError("desktop_runtime_unqualified", `the app runtime row ${row$3.name}@${row$3.version} is not the audited cohort identity; acquire registry trust to qualify it`);
@@ -13500,7 +13577,7 @@ function inspectDesktopTargetGraph(appAsarPath, profileRoot, trust) {
 		platform: process.platform === "win32" ? "windows" : "posix",
 		profileKind: "desktop"
 	}, trust ? JSON.stringify(trust) : void 0, profileRoot);
-	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : byte_audit_manifest_default.packages;
+	const expectations = trust ? [...trust.packages, ...trust.probeDependencies ?? []] : auditedManifestFor(target.runtime.runtimeVersion).packages;
 	if (evaluation.status !== "supported" || !auditDesktopInstalledImplementation(target.runtime.asarRealpath, expectations)) throw new HostProfileError("target_runtime_unsupported", "desktop pre-install target fails host qualification or byte audit");
 	const archiveGraph = desktopDependencyGraph(target.runtime.asarRealpath, expectations);
 	if (!auditedHostImplementation(join(target.runtime.asarRealpath, "dsh"), resolve(profileRoot), archiveGraph.session, expectations, archiveGraph.graph)) throw new HostProfileError("target_runtime_unsupported", "desktop pre-install target fails dependency route audit");
