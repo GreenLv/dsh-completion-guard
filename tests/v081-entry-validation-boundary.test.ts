@@ -408,8 +408,13 @@ describe('one audit physically reads each path at most once', () => {
       resolvePaths: (importer, name) => inner.resolvePaths(importer, name),
       requireResolve: (importer, request) => inner.requireResolve(importer, request),
       memo: <T,>(key: string, compute: () => T) => inner.memo(key, compute),
+      // The closed-world inventory pass reads directories through the same
+      // audited session; the counting wrapper forwards it so physical reads
+      // stay counted (RC3-D01 wiring made the expectations explicit).
+      listDir: (path) => inner.listDir!(path),
     }
-    const verdict = revalidateCoreLock(host.config, expectedLockFor(host), counting)
+    const expectedDigest = expectedLockFor(host)
+    const verdict = revalidateCoreLock(host.config, expectedDigest, counting)
     if (verdict.status !== 'supported') console.log('PROBE verdict:', verdict.status, verdict.reasonCode)
     expect(verdict.status).toBe('supported')
     // One physical read per path per validation: JSON parsers and digest
