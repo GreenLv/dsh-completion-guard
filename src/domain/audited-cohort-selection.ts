@@ -24,9 +24,11 @@ export function hasAuditedManifest(version: string | undefined | null): boolean 
   return AUDITED_HOST_MANIFESTS.some((manifest) => manifest.hostVersion === version)
 }
 
-/** Alternation regex covering every audited host version, for id matchers. */
-export const AUDITED_HOST_VERSIONS_REGEX: string = AUDITED_HOST_MANIFESTS
+/** Alternation regex covering every audited host version, for id matchers.
+ * Wrapped in a non-capturing group: callers splice it into larger anchored
+ * patterns, and a bare alternation would break their `^` anchoring. */
+export const AUDITED_HOST_VERSIONS_REGEX: string = `(?:${AUDITED_HOST_MANIFESTS
   .map((manifest) => manifest.hostVersion.replaceAll('.', '\\.'))
-  .join('|')
+  .join('|')})`
 
 export default auditedManifestFor

@@ -308,10 +308,13 @@ export function evaluateActiveHostLock(runtime: string, profile: string, context
   const trust = trustText ? parseHostTrust(trustText, profile) : undefined
   // RC3-D01: the CLI lane's default expectations follow the graph's own
   // launcher version — an rc.3 installed graph is audited against the rc.3
-  // audited manifest, never silently against rc.2 rows.
+  // audited manifest, never silently against rc.2 rows. The audited manifest
+  // must actually cover the graph's launcher version: synthetic pre-release
+  // fixtures (0.2.0-rc.1 etc.) have no audited manifest, and pinning them to
+  // rc.2 rows would silently audit foreign graphs, so they refuse.
   const launcherVersion = rows.find((row) => row.name === '@deepseek-ai/dsh')?.version
   const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : auditedManifestFor(launcherVersion).packages as unknown as readonly AuditedPackageExpectation[]
-  if (!auditedHostImplementation(runtime, profile, session, expectations)) {
+  if (!auditedHostImplementation(runtime, profile, session, expectations, undefined, undefined, Boolean(trust))) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
   return evaluation
@@ -373,7 +376,8 @@ export interface AuditedPackageExpectation {
  * digests. A missing digest set never authenticates unknown implementation. */
 export function auditedHostImplementation(runtimeRoot: string, profileRoot: string,
   providedSession?: HostAuditSession, expectations?: readonly AuditedPackageExpectation[],
-  installationGraph?: DependencyAuditGraph, profileInstallationGraph?: DependencyAuditGraph): boolean {
+  installationGraph?: DependencyAuditGraph, profileInstallationGraph?: DependencyAuditGraph,
+  expectationsProvided = false): boolean {
   const session = providedSession ?? createHostAuditSession()
   try {
     // No default manifest here: a caller that cannot name the audited
@@ -382,6 +386,11 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
     // auditedManifestFor; the fallback refuses.
     if (!expectations) throw new HostProfileError('audit_expectations_unbound', 'auditedHostImplementation requires version-selected expectations')
     const expectedPackages: readonly AuditedPackageExpectation[] = expectations
+    // The closed-world file-list equality is a QUALIFIED-archive contract
+    // (operator-acquired trust). The default registry-derived path audits the
+    // declared module digests and routes; it must not refuse an installed
+    // package because an unrelated probe or tool dropped a file beside them.
+    const closedWorldExpectations = expectationsProvided
     const seen = new Set<string>(installationGraph?.packages.keys())
     const graphs: DependencyAuditGraph[] = installationGraph ? [installationGraph] : []
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
@@ -423,7 +432,7 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
           // A qualified archive is a closed executable/JSON inventory. New
           // installed files cannot silently inherit an earlier receipt.
           const actual = qualifiedModuleFiles(session, root).sort()
-          if (JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false
+          if (closedWorldExpectations && JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false
         }
         const computedDigests: Record<string, string> = {}
         for (const file of declared) {

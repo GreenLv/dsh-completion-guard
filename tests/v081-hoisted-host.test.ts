@@ -147,11 +147,16 @@ function audit(h: ReturnType<typeof makeHost>) {
   return evaluateActiveHostLock(h.runtimeRoot, h.profileRoot, { platform: 'posix', profileKind: 'headless' }).status
 }
 function native(h: ReturnType<typeof makeHost>) {
-  return nativeFrom(join(h.runtimeRoot, 'node_modules', app, 'lib/index.js'), dep)
+  // The ESM probe lives OUTSIDE every audited package root (.dsh-oracle-probes
+  // sits under the runtime root but inside no package): the closed-world
+  // inventory treats a file inside a package root as an installed file, and a
+  // leftover probe must not fail the admission audit.
+  return nativeFrom(join(h.runtimeRoot, 'node_modules', app, 'lib/index.js'), dep, join(h.runtimeRoot, 'node_modules', '.dsh-oracle-probes'))
 }
-function nativeFrom(importer: string, name: string) {
+function nativeFrom(importer: string, name: string, oracleDir?: string) {
   const cjs = execFileSync(process.execPath, ['-e', `console.log(require('node:module').createRequire(${JSON.stringify(importer)}).resolve(${JSON.stringify(name)}))`], { encoding: 'utf8' }).trim()
-  const oracle = join(dirname(importer), 'oracle.mjs')
+  const oracle = join(oracleDir ?? dirname(importer), 'oracle.mjs')
+  mkdirSync(dirname(oracle), { recursive: true })
   writeFileSync(oracle, `console.log(import.meta.resolve(${JSON.stringify(name)}))`)
   const esm = fileURLToPath(execFileSync(process.execPath, [oracle], { encoding: 'utf8' }).trim())
   return { cjs: realpathSync(cjs), esm: realpathSync(esm) }
@@ -227,7 +232,10 @@ describe('full host admission for standard hoisted package maps', () => {
       writeFileSync(join(shadow, 'package.json'), canonicalManifest(dep, '4.0.5'))
       mkdirSync(join(shadow, 'lib')); writeFileSync(join(shadow, 'lib/index.js'), AUDITED_MODULE_TEXT)
       mutations.push(join(modules, app, 'lib/node_modules'))
-      const result = native(h)
+      // The shadow must win from a probe INSIDE the launcher package (the
+      // nearer node_modules ancestry is the point of this mutation); the
+      // relocated .dsh-oracle-probes dir would resolve the unshadowed copy.
+      const result = nativeFrom(join(h.runtimeRoot, 'node_modules', app, 'lib/index.js'), dep)
       expect(result.cjs).toBe(join(shadow, 'lib/index.js'))
       expect(result.esm).toBe(join(shadow, 'lib/index.js'))
     }
@@ -241,6 +249,7 @@ describe('full host admission for standard hoisted package maps', () => {
     expect(['unsupported', 'unavailable']).toContain(audit(h))
     expect(() => inspectTargetHostGraph(h.runtimeRoot, h.profileRoot)).toThrow()
     for (const path of mutations) rmSync(path, { force: true, recursive: true })
+    if (mode === 'nearer-shadow') rmSync(join(modules, app, 'lib/oracle.mjs'), { force: true })
     if (mode === 'outside-symlink') renameSync(stash, join(modules, dep))
     h.packages = JSON.parse(original)
     saveMap(h)
