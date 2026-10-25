@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="chart-title chart-desc" data-renderer-version="4" data-tick-step-days="7">
   <title id="chart-title">dsh-completion-guard npm download growth</title>
-  <desc id="chart-desc">dsh-completion-guard npm download growth. Full daily history · 2026-08-26 → 2026-10-22. Checked 2026-10-25 09:20 UTC · Published data up to date. Download counts measure registry requests, not unique users or confirmed installations.</desc>
+  <desc id="chart-desc">dsh-completion-guard npm download growth. Full daily history · 2026-08-26 → 2026-10-22. Checked 2026-10-25 19:12 UTC · Published data up to date. Download counts measure registry requests, not unique users or confirmed installations.</desc>
   <defs>
     <linearGradient id="growth-fill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#14b8a6" stop-opacity="0.24"/>
@@ -36,7 +36,7 @@
   <text x="900" y="38" text-anchor="end" class="metric-label">Total downloads</text>
   <text x="900" y="70" text-anchor="end" class="metric-value">7,240</text>
   <g transform="translate(84,102)"><circle cx="5" cy="-4" r="5" fill="#f59e0b"/><text x="18" y="0" class="package-role">Previous package</text><text x="18" y="23" class="package-name">dsh-context-guard</text><text x="244" y="23" text-anchor="end" class="package-total">1,067</text></g><g transform="translate(356,102)"><circle cx="5" cy="-4" r="5" fill="#2563eb"/><text x="18" y="0" class="package-role">Current package</text><text x="18" y="23" class="package-name">dsh-completion-guard</text><text x="244" y="23" text-anchor="end" class="package-total">6,173</text></g>
-  <text x="900" y="160" text-anchor="end" class="subtitle refresh-status">Checked 2026-10-25 09:20 UTC · Published data up to date</text>
+  <text x="900" y="160" text-anchor="end" class="subtitle refresh-status">Checked 2026-10-25 19:12 UTC · Published data up to date</text>
   <text x="84" y="160" class="axis-title">Cumulative downloads</text>
   <line x1="84" y1="436" x2="900" y2="436" class="grid"/><text x="70" y="440" text-anchor="end" class="axis">0</text><line x1="84" y1="371" x2="900" y2="371" class="grid"/><text x="70" y="375" text-anchor="end" class="axis">2,000</text><line x1="84" y1="306" x2="900" y2="306" class="grid"/><text x="70" y="310" text-anchor="end" class="axis">4,000</text><line x1="84" y1="241" x2="900" y2="241" class="grid"/><text x="70" y="245" text-anchor="end" class="axis">6,000</text><line x1="84" y1="176" x2="900" y2="176" class="grid"/><text x="70" y="180" text-anchor="end" class="axis">8,000</text>
   <polygon points="84.00,436 84.00,432.91 98.32,419.75 112.63,413.09 126.95,406.10 141.26,404.90 155.58,392.81 169.89,386.31 184.21,380.13 198.53,380.13 212.84,374.80 227.16,373.05 241.47,371.91 255.79,371.91 270.11,371.91 284.42,370.55 298.74,364.14 313.05,352.74 327.37,351.05 341.68,349.39 356.00,338.56 370.32,338.56 384.63,332.62 398.95,329.95 413.26,322.19 427.58,320.72 441.89,319.23 456.21,318.32 470.53,307.53 484.84,304.02 499.16,302.98 513.47,302.20 527.79,299.89 542.11,292.06 556.42,289.72 570.74,281.79 585.05,277.95 599.37,269.21 613.68,261.18 628.00,252.25 642.32,248.57 656.63,244.58 670.95,244.58 685.26,241.16 699.58,237.59 713.89,228.68 728.21,224.65 742.53,221.40 756.84,217.93 771.16,217.93 785.47,217.93 799.79,217.93 814.11,215.88 828.42,213.34 842.74,204.53 857.05,204.53 871.37,204.53 885.68,204.53 900.00,200.70 900.00,436" fill="url(#growth-fill)"/>
