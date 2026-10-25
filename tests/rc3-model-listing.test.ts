@@ -171,5 +171,5 @@ describe('rc.3 update modes: Guard notices survive tool/system prompt rewrites',
 })
 
 function createUserNotice(text: string) {
-  return { content: [{ type: 'text', text }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'guard' } }
+  return createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'context-guard', plugin: 'context-guard', form: 'notice', summary: 'guard' } })
 }
