@@ -1,6 +1,7 @@
 import { auditHostDependencyRoutes, reachableIdsByName, type DependencyAuditGraph } from './host-dependency-audit.js'
 import { createHostAuditSession, type HostAuditSession } from './host-audit-session.js'
 import hostByteAudit from './byte-audit-manifest.js'
+import { auditedManifestFor, AUDITED_HOST_VERSIONS_REGEX, hasAuditedManifest } from './audited-cohort-selection.js'
 import { physicalFs } from './host-physical-fs.js'
 const { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } = physicalFs
 import { createHash } from 'node:crypto'
@@ -305,7 +306,11 @@ export function evaluateActiveHostLock(runtime: string, profile: string, context
   const evaluation = evaluateConfiguredHostLock(rows, context, trustText, profile)
   if (evaluation.status !== 'supported') return evaluation
   const trust = trustText ? parseHostTrust(trustText, profile) : undefined
-  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : undefined
+  // RC3-D01: the CLI lane's default expectations follow the graph's own
+  // launcher version — an rc.3 installed graph is audited against the rc.3
+  // audited manifest, never silently against rc.2 rows.
+  const launcherVersion = rows.find((row) => row.name === '@deepseek-ai/dsh')?.version
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : auditedManifestFor(launcherVersion).packages as unknown as readonly AuditedPackageExpectation[]
   if (!auditedHostImplementation(runtime, profile, session, expectations)) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
@@ -371,7 +376,12 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
   installationGraph?: DependencyAuditGraph, profileInstallationGraph?: DependencyAuditGraph): boolean {
   const session = providedSession ?? createHostAuditSession()
   try {
-    const expectedPackages: readonly AuditedPackageExpectation[] = expectations ?? (hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[])
+    // No default manifest here: a caller that cannot name the audited
+    // expectations for its graph must not silently audit an rc.3 graph
+    // against rc.2 rows (RC3-D01). Version-aware callers pass the rows from
+    // auditedManifestFor; the fallback refuses.
+    if (!expectations) throw new HostProfileError('audit_expectations_unbound', 'auditedHostImplementation requires version-selected expectations')
+    const expectedPackages: readonly AuditedPackageExpectation[] = expectations
     const seen = new Set<string>(installationGraph?.packages.keys())
     const graphs: DependencyAuditGraph[] = installationGraph ? [installationGraph] : []
     for (const rootPath of new Set([runtimeRoot, profileRoot])) {
@@ -433,7 +443,9 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
     }
     return expectedPackages.every((entry) => seen.has(entry.name))
       && auditHostDependencyRoutes(graphs, profileRoot, session)
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
 
 function qualifiedModuleFiles(session: HostAuditSession, root: string): string[] {
@@ -502,7 +514,9 @@ const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
 // The audited byte maps bind to the audited cohort's exact host version, so
 // the renderer identity regex tracks the manifest instead of a hardcoded
 // literal that a cohort bump could strand.
-const AUDITED_HOST_VERSION_REGEX: string = hostByteAudit.hostVersion.replaceAll('.', '\\.')
+// RC3-D01: the renderer id regex covers every audited host version, so an
+// rc.3 runtime's renderer rows keep matching after the cohort bump.
+const AUDITED_HOST_VERSION_REGEX: string = AUDITED_HOST_VERSIONS_REGEX
 export function activeRendererModule(nodeModulesRoot: string, name: string,
   providedSession?: HostAuditSession): { bytes: string; path: string } | undefined {
   const session = providedSession ?? createHostAuditSession()
@@ -773,7 +787,9 @@ export function inspectTargetHostGraph(runtime: string, profile: string, trust?:
     platform: process.platform === 'win32' ? 'windows' : 'posix',
     ...(target.profileGraph.state === 'dependency_free_headless' ? { profileKind: 'headless' as const } : {}),
   }, trust ? JSON.stringify(trust) : undefined, profile)
-  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : undefined
+  // RC3-D01: version-selected default expectations for the pre-install lane.
+  const launcherVersion = target.packages.find((row) => row.name === '@deepseek-ai/dsh')?.version
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : auditedManifestFor(launcherVersion).packages as unknown as readonly AuditedPackageExpectation[]
   if (evaluation.status !== 'supported' || !auditedHostImplementation(runtime, profile, undefined, expectations)) {
     throw new HostProfileError('target_runtime_unsupported', 'pre-install target fails host qualification or byte/route audit')
   }
@@ -972,7 +988,10 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
   const platform: HostPlatform = process.platform === 'win32' ? 'windows' : 'posix'
   const evaluation = evaluateConfiguredHostLock(rows, { platform, profileKind: 'desktop' }, trust ? JSON.stringify(trust) : undefined, profile)
   if (evaluation.status !== 'supported') return evaluation
-  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[]
+  // RC3-D01: the default expectations follow the ACTUAL runtime version, so
+  // an rc.3 app is audited against the rc.3 audited manifest instead of
+  // failing desktop_runtime_unqualified on the rc.2 pin.
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : auditedManifestFor(runtime.runtimeVersion).packages as unknown as readonly AuditedPackageExpectation[]
   if (!auditDesktopInstalledImplementation(runtime.asarRealpath, expectations, session)) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
@@ -1002,7 +1021,14 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
  * when no operator trust is supplied. A runtime row whose version the audited
  * cohort never registered cannot be attested this way and fails closed. */
 function cohortIntegrityRows(runtime: DesktopAppRuntime): Array<{ name: string; version: string; integrity: string }> {
-  const auditRows = new Map(hostByteAudit.packages.map((row) => [row.name as string, row as unknown as { name: string; version: string; integrity: string }]))
+  // RC3-D01: select the audited manifest by the runtime's own version. An
+  // rc.3 app matches the rc.3 audited rows; an unaudited version keeps the
+  // fail-closed refusal (no manifest registered for it).
+  if (!hasAuditedManifest(runtime.runtimeVersion)) {
+    throw new HostProfileError('desktop_runtime_unqualified', `the app runtime version ${runtime.runtimeVersion} has no audited cohort manifest; acquire registry trust to qualify it`)
+  }
+  const manifest = auditedManifestFor(runtime.runtimeVersion)
+  const auditRows = new Map(manifest.packages.map((row) => [row.name as string, row as unknown as { name: string; version: string; integrity: string }]))
   return runtime.rows.map((row) => {
     const audited = auditRows.get(row.name)
     if (!audited || audited.version !== row.version) {
@@ -1022,7 +1048,9 @@ export function inspectDesktopTargetGraph(appAsarPath: string, profileRoot: stri
     platform: process.platform === 'win32' ? 'windows' : 'posix',
     profileKind: 'desktop',
   }, trust ? JSON.stringify(trust) : undefined, profileRoot)
-  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : hostByteAudit.packages as unknown as readonly AuditedPackageExpectation[]
+  // RC3-D01: preflight's default expectations follow the target runtime's
+  // version; an rc.3 app is audited against the rc.3 audited manifest.
+  const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : auditedManifestFor(target.runtime.runtimeVersion).packages as unknown as readonly AuditedPackageExpectation[]
   if (evaluation.status !== 'supported' || !auditDesktopInstalledImplementation(target.runtime.asarRealpath, expectations)) {
     throw new HostProfileError('target_runtime_unsupported', 'desktop pre-install target fails host qualification or byte audit')
   }

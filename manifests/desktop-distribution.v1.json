@@ -12,7 +12,15 @@
       "rewriteRelativeImportExtensions": true,
       "verbatimModuleSyntax": false
     },
-    "scope": "Exact Desktop distribution supplements only; these are not registry package inventories. The declared Desktop build commit is an opaque signed identity, not a claim that it equals the public source pin."
+    "scope": "Exact Desktop distribution supplements only; these are not registry package inventories. The declared Desktop build commit is an opaque signed identity, not a claim that it equals the public source pin.",
+    "rc3Acquisition": {
+      "observedDate": "2026-10-25",
+      "method": "official CDN zip downloaded, SHA-512 recorded, codesign --verify --deep --strict passed (TeamIdentifier NAN929V4UM, identifier com.deepseek.dsh), ASAR header recomputed and matched the independently verified local install header, desktop manifest and desktop-runtime.json extracted from the archive",
+      "zipSha256": "599a3ceef4d58f2b82bfd61ca4ef9d55c0f8e055dde60550c92f00d78d0cad2f",
+      "asarHeaderSha256": "84140c5d09050010753077cde3c8e35fc2e050054f1ed69f761fae8b6fdd4b95",
+      "invariantCompanions": "none present in the rc.3 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
+      "windows": "pending: win-x64 exe acquisition and Authenticode verification require a Windows-side step; the row is NOT registered on unverified bytes"
+    }
   },
   "files": [
     {
@@ -119,6 +127,22 @@
       "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.2-win-x64.exe",
       "releaseSha512": "39POl5osl9PKMqrPXQA52dh/bCV0Z02vOV9cTjOJDHE6gsJwp5bv7lfgB3mVWAKspX7a/w1iTi+8Listdhq45g==",
       "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
+    },
+    {
+      "id": "desktop-0.2.1-rc.3-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "version": "0.2.1-rc.3",
+      "runtimeVersion": "0.2.1-rc.3",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "84140c5d09050010753077cde3c8e35fc2e050054f1ed69f761fae8b6fdd4b95",
+      "desktopManifestSha256": "ac5d5922a061519322befb742e8b8285197d6ca975a2a38e8049ef37c67e63d2",
+      "buildCommit": "be72761ee1a6736ebcdf4f3739363b083ae53c98",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.3-mac-arm64.zip",
+      "releaseSha512": "0tCeP/zLGLtsH+S4BD4TIyRJ8TwRhh7xaJprTMOUoEfj7hYJFC3G5l6nl/2zCTS41MeE9k+KRN19RE9sqX6goQ==",
+      "vendorTeam": "NAN929V4UM",
+      "vendorIdentifier": "com.deepseek.dsh"
     }
   ]
 }

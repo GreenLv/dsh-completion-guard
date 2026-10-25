@@ -24,7 +24,7 @@ describe('rc.2 (0.2.1) published identity and executable-byte audit', () => {
     const mapText=readFileSync(join(modules,'.package-map.json'),'utf8')
     const rows=packageRowsFromActiveGraph(mapText,readFileSync(join(runtime,'pnpm-lock.yaml'),'utf8'),modules)
     expect(evaluateHostLock(rows,{platform:'posix',profileKind:'web'}).status).toBe('supported')
-    expect(auditedHostImplementation(runtime,runtime)).toBe(true)
+    expect(auditedHostImplementation(runtime,runtime,undefined,audit.packages as never)).toBe(true)
     expect(auditedForegroundRenderers(runtime,runtime)).toEqual(['bash','pwsh'])
     const clone=realpathSync(mkdtempSync(join(tmpdir(),'rc2-byte-audit-')))
     try {
@@ -45,7 +45,7 @@ describe('rc.2 (0.2.1) published identity and executable-byte audit', () => {
       copied['.']={url:'..',dependencies}
       writeFileSync(join(clone,'package.json'),JSON.stringify({dependencies:Object.fromEntries(Object.keys(dependencies).map(name=>[name,'*']))}))
       writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:copied}))
-      expect(auditedHostImplementation(clone,clone)).toBe(true)
+      expect(auditedHostImplementation(clone,clone,undefined,audit.packages as never)).toBe(true)
       // The 0.2.1 cwd provider participates in the full importer route audit,
       // including a byte-identical nearer copy invisible to the package map.
       const cwdShadow = join(clone, 'node_modules/@deepseek-ai/dsh-tool-bash/node_modules/@deepseek-ai/dsh-working-directory')
@@ -82,24 +82,24 @@ describe('rc.2 (0.2.1) published identity and executable-byte audit', () => {
       const shadow=join(clone,'node_modules/@deepseek-ai/dsh-agent-loop/node_modules/@deepseek-ai/dsh-session')
       cpSync(join(clone,'node_modules/@deepseek-ai/dsh-session'),shadow,{recursive:true})
       expect(execFileSync(process.execPath,['--input-type=module','-e',`import {createRequire} from 'node:module'; console.log(createRequire(${JSON.stringify(join(clone,'node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js'))}).resolve('@deepseek-ai/dsh-session'))`],{encoding:'utf8'}).trim()).toBe(join(shadow,'lib/index.js'))
-      expect(auditedHostImplementation(clone,clone)).toBe(false)
+      expect(auditedHostImplementation(clone,clone,undefined,audit.packages as never)).toBe(false)
       rmSync(shadow,{recursive:true})
       // A normal dependency symlink to the mapped instance is accepted.
       const normal=join(clone,'node_modules/@deepseek-ai/dsh-tool-jobs/node_modules/@deepseek-ai/dsh-session')
       mkdirSync(dirname(normal),{recursive:true})
       symlinkSync(join(clone,'node_modules/@deepseek-ai/dsh-session'),normal,'junction')
-      expect(auditedHostImplementation(clone,clone)).toBe(true)
+      expect(auditedHostImplementation(clone,clone,undefined,audit.packages as never)).toBe(true)
       rmSync(normal,{recursive:true})
       const duplicate='@deepseek-ai/dsh-session@0.1.7-rc.2(duplicate)'
       copied[duplicate]=copied['@deepseek-ai/dsh-session']
       dependencies.duplicate=duplicate
       writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:copied}))
-      expect(auditedHostImplementation(clone,clone)).toBe(false)
+      expect(auditedHostImplementation(clone,clone,undefined,audit.packages as never)).toBe(false)
       delete copied[duplicate];delete dependencies.duplicate
       writeFileSync(join(clone,'node_modules','.package-map.json'),JSON.stringify({packages:copied}))
       const entry=join(clone,'node_modules','@deepseek-ai/dsh-session/lib/index.js')
       writeFileSync(entry,readFileSync(entry,'utf8')+'\n// modified\n')
-      expect(auditedHostImplementation(clone,clone)).toBe(false)
+      expect(auditedHostImplementation(clone,clone,undefined,audit.packages as never)).toBe(false)
     } finally {rmSync(clone,{recursive:true,force:true})}
   }, 20_000)
   it.runIf(Boolean(process.env.DSH_RUNTIME_ROOT))('matches the official rc.2 profile loader for ESM and CJS without a local peer', () => {
