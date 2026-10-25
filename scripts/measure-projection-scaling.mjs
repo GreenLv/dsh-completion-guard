@@ -87,7 +87,7 @@ for (const size of sizes) {
       child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`worker exited ${code}: ${err.slice(-2000)}`)))
     })
     clearInterval(poll)
-    const match = out.match(/^DSH_PROJECTION_MEASUREMENT=(\{.*)$/m)
+    const match = out.replace(/\u001b\[[0-9;]*m/g, '').match(/DSH_PROJECTION_MEASUREMENT=(\{.*\})/s)
     if (!match) throw new Error('projection measurement did not emit its observed result')
     const parsed = JSON.parse(match[1])
     results.push(...parsed.measurements)
