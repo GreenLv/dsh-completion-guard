@@ -4272,8 +4272,10 @@ function auditedManifestFor(version$1) {
 function hasAuditedManifest(version$1) {
 	return AUDITED_HOST_MANIFESTS.some((manifest) => manifest.hostVersion === version$1);
 }
-/** Alternation regex covering every audited host version, for id matchers. */
-const AUDITED_HOST_VERSIONS_REGEX = AUDITED_HOST_MANIFESTS.map((manifest) => manifest.hostVersion.replaceAll(".", "\\.")).join("|");
+/** Alternation regex covering every audited host version, for id matchers.
+* Wrapped in a non-capturing group: callers splice it into larger anchored
+* patterns, and a bare alternation would break their `^` anchoring. */
+const AUDITED_HOST_VERSIONS_REGEX = `(?:${AUDITED_HOST_MANIFESTS.map((manifest) => manifest.hostVersion.replaceAll(".", "\\.")).join("|")})`;
 
 //#endregion
 //#region src/domain/rc021-rc2-host.ts
@@ -12993,7 +12995,7 @@ function evaluateActiveHostLock(runtime, profile, context, session = createHostA
 	if (evaluation.status !== "supported") return evaluation;
 	const trust = trustText ? parseHostTrust(trustText, profile) : void 0;
 	const launcherVersion = rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version;
-	if (!auditedHostImplementation(runtime, profile, session, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : auditedManifestFor(launcherVersion).packages)) return {
+	if (!auditedHostImplementation(runtime, profile, session, trust ? [...trust.packages, ...trust.probeDependencies ?? []] : auditedManifestFor(launcherVersion).packages, void 0, void 0, Boolean(trust))) return {
 		...evaluation,
 		status: "unsupported",
 		goalAvailable: false,
@@ -13034,11 +13036,12 @@ function probeDependencyIdentity(runtime, profile, name, importer) {
 /** Byte and dual-lane route audit over both graphs. Expectations are either
 * the published baseline or operator-owned, registry-acquired qualified module
 * digests. A missing digest set never authenticates unknown implementation. */
-function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations, installationGraph, profileInstallationGraph) {
+function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, expectations, installationGraph, profileInstallationGraph, expectationsProvided = false) {
 	const session = providedSession ?? createHostAuditSession();
 	try {
 		if (!expectations) throw new HostProfileError("audit_expectations_unbound", "auditedHostImplementation requires version-selected expectations");
 		const expectedPackages = expectations;
+		const closedWorldExpectations = expectationsProvided;
 		const seen = new Set(installationGraph?.packages.keys());
 		const graphs = installationGraph ? [installationGraph] : [];
 		for (const rootPath of new Set([runtimeRoot, profileRoot])) {
@@ -13075,7 +13078,7 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, ex
 				const declared = expected.modules ? Object.keys(expected.modules) : [join(root, "package.json"), ...walkLibFiles(session, root)];
 				if (expectations) {
 					const actual = qualifiedModuleFiles(session, root).sort();
-					if (JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false;
+					if (closedWorldExpectations && JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false;
 				}
 				const computedDigests = {};
 				for (const file of declared) {
