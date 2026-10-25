@@ -670,6 +670,51 @@ describe('domain core', () => {
     expect(sanitizeClauseText(once2)).toBe(once2)
   })
 
+  it('keeps every RFC 3986 sub-delim inside the URL while prose parens end the span (RF03 round 2)', () => {
+    // The review's full punctuation matrix: every sub-delim must lose the
+    // userinfo in BOTH clause and URL paths, `)` included.
+    for (const punctuation of [`!`, `$`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `;`, `=`]) {
+      const input = `https://oper${punctuation === ';' || punctuation === '=' ? encodeURIComponent(punctuation) : punctuation}ator:fixturepass@example.invalid/path`
+      const clause = sanitizeClauseText(input)
+      expect(clause, punctuation).toBe('https://example.invalid/path')
+      expect(sanitizeUrl(input), punctuation).toBe('https://example.invalid/path')
+    }
+    // Prose parens still terminate the URL: the balance rule strips a tail
+    // `)` the URL never opened.
+    expect(sanitizeClauseText('(see https://operator:fixturepass@example.invalid/x)')).toBe('(see https://example.invalid/x)')
+    expect(sanitizeClauseText('read (https://example.invalid/a) first')).toBe('read (https://example.invalid/a) first')
+    // A URL with its own balanced parens keeps them (wikipedia shape).
+    expect(sanitizeClauseText('read https://en.wikipedia.org/wiki/A_(b) now')).toBe('read https://en.wikipedia.org/wiki/A_(b) now')
+    expect(sanitizeClauseText('read https://en.example.invalid/A_(b)?q=1 now')).toBe('read https://en.example.invalid/A_(b)… now')
+    // A mid-URL `)` in the AUTHORITY is never treated as prose punctuation.
+    expect(sanitizeClauseText('deploy https://oper)ator:fixturepass@example.invalid/path and report.')).toBe('deploy https://example.invalid/path and report.')
+    // Encoded right paren in userinfo strips too.
+    expect(sanitizeClauseText('deploy https://oper%29ator:fixturepass@example.invalid/p and report.')).toBe('deploy https://example.invalid/p and report.')
+    // Uppercase scheme with a mid-URL paren (scheme case is preserved
+    // verbatim — only the userinfo is removed).
+    expect(sanitizeClauseText('HTTPS://oper)ator:fixturepass@example.invalid/p')).toBe('HTTPS://example.invalid/p')
+    // Idempotent on the round-2 shapes.
+    const once3 = sanitizeClauseText('deploy https://oper)ator:fixturepass@example.invalid/path and report.')
+    expect(sanitizeClauseText(once3)).toBe(once3)
+  })
+
+  it('keeps the parenthesis userinfo out of the captured production projection (RF03 round 2)', () => {
+    const events = [
+      { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 1, type: 'user/message', data: { content: [{ type: 'text', text: 'Deploy using https://oper)ator:fixturepass@example.invalid/path and report.' }], source: { kind: 'user' } } },
+    ]
+    const derived = deriveProjection(events, OPT_IN, { cwd: '/work' }, true)
+    const items = [...derived.projection.items.values()]
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) {
+      expect(item.normalizedText, item.id).not.toContain('fixturepass')
+      expect(item.normalizedText, item.id).not.toContain('oper)ator')
+      expect(item.normalizedText, item.id).toContain('https://example.invalid/path')
+      expect(sha256(item.normalizedText)).toBe(item.textSha256)
+    }
+    expect(JSON.stringify(derived.projection)).not.toContain('fixturepass')
+  })
+
   it('keeps URL credentials out of the capture→replay chain with stable digests (F03)', () => {
     const events = [
       { seq: 0, type: 'command/run', data: { commandId: 'cmd-0', name: 'context-guard', args: 'on', source: { kind: 'user' } } },

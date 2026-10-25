@@ -12,6 +12,10 @@ const state = vi.hoisted(() => ({
   failFsync: false,
   failTruncate: false,
   failCount: 1,
+  /** When set, a targeted write FIRST performs a REAL partial write of this
+   * many bytes via the actual fs, THEN fails — reproducing a genuine torn
+   * tail on disk rather than a zero-byte failure. */
+  partialBytes: 0,
 }))
 vi.mock('node:fs', async (original) => {
   const actual = await original<typeof import('node:fs')>()
@@ -35,7 +39,21 @@ vi.mock('node:fs', async (original) => {
       return actual.closeSync(fd)
     },
     writeSync: (fd: number, ...rest: unknown[]) => {
-      if (isTarget(fd) && consume('failWrite')) throw Object.assign(new Error('injected EIO'), { code: 'EIO' })
+      if (isTarget(fd) && consume('failWrite')) {
+        // Reproduce a REAL torn tail: perform the actual partial write of the
+        // leading bytes through the unmodified fs, THEN fail, so the bytes
+        // really land on disk before the error.
+        const [buffer, offset, length] = rest as [Buffer, number | undefined, number | undefined]
+        // writeAll retries short writes, so a genuine torn tail needs the
+        // bytes to LAND and the write call to then fail — the in-process
+        // image of "the process died after writing N bytes".
+        const realWrite = actual.writeSync as (fd: number, buffer: Buffer, offset?: number, length?: number) => number
+        const start = offset ?? 0
+        const total = length ?? buffer.length - start
+        const take = Math.min(state.partialBytes, total)
+        if (take > 0) realWrite(fd, buffer, start, take)
+        throw Object.assign(new Error('injected EIO'), { code: 'EIO' })
+      }
       return (actual.writeSync as (fd: number, ...rest: unknown[]) => number)(fd, ...rest)
     },
     fsyncSync: (fd: number) => {
@@ -49,7 +67,7 @@ vi.mock('node:fs', async (original) => {
   }
 })
 
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { appendPrivateLedger, readPrivateLedger } from '../src/domain/private-ledger.js'
@@ -68,25 +86,66 @@ function committedPeer(root: string): void {
 }
 
 describe('F04: production write boundaries fail without losing committed anchors', () => {
-  it('a partial write leaves an uncommitted tail; peers stay readable; the next writer repairs', () => {
+  it('a REAL partial write lands torn bytes, keeps the committed prefix byte-identical, and the next writer repairs', () => {
     const root = freshRoot()
     try {
       committedPeer(root)
+      const anchorsPath = join(root, 'session-anchors.v1.jsonl')
+      const committedBytes = readFileSync(anchorsPath, 'utf8')
+      // The fault writes all but the last byte of the new anchor line through
+      // the REAL fs before failing: a genuine torn tail exists on disk.
       state.failWrite = true
+      state.partialBytes = 40
       expect(appendPrivateLedger(root, 'torn-session', 'release_reservation', reservation)).toBe(false)
       state.failWrite = false
-      // The torn tail is not a committed anchor: the target session is
-      // unanchored, the peer is untouched.
+      state.partialBytes = 0
+      const tornBytes = readFileSync(anchorsPath, 'utf8')
+      // The COMMITTED prefix is byte-identical to before the fault...
+      expect(tornBytes.startsWith(committedBytes)).toBe(true)
+      // ...the torn bytes really exist past it (not a zero-byte failure)...
+      expect(tornBytes.length).toBeGreaterThan(committedBytes.length)
+      expect(tornBytes.endsWith('\n')).toBe(false)
+      // ...and the torn line is anchored data, not prose (hash filenames
+      // carry no session text; assert the FILE CONTENT instead).
+      expect(tornBytes).toContain('"session_sha256"')
+      // The torn session holds NO authoritative record: unanchored and clean.
       expect(readPrivateLedger(root, 'peer-session')).toMatchObject({ damaged: false, anchored: true })
       expect(readPrivateLedger(root, 'torn-session')).toMatchObject({ damaged: false, anchored: false })
-      // A LATER writer (any session) repairs the tail as part of its append.
+      // A LATER production writer repairs the tail as part of its append.
       expect(appendPrivateLedger(root, 'next-session', 'release_reservation', { ...reservation, callId: 'call-2' })).toBe(true)
-      const anchors = readFileSync(join(root, 'session-anchors.v1.jsonl'), 'utf8')
-      expect(anchors.endsWith('\n')).toBe(true)
-      expect(anchors).not.toContain('torn')
+      const repaired = readFileSync(anchorsPath, 'utf8')
+      expect(repaired.startsWith(committedBytes)).toBe(true)
+      expect(repaired.endsWith('\n')).toBe(true)
+      expect(repaired).not.toContain('"torn')
       expect(readPrivateLedger(root, 'peer-session').damaged).toBe(false)
-      expect(readPrivateLedger(root, 'next-session').damaged).toBe(false)
+      expect(readPrivateLedger(root, 'next-session')).toMatchObject({ damaged: false, anchored: true, records: [{ position: 1 }] })
       expect(readPrivateLedger(root, 'torn-session')).toMatchObject({ damaged: false, anchored: false })
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('a torn tail that was repaired but whose append then fails leaves all-complete lines', () => {
+    const root = freshRoot()
+    try {
+      committedPeer(root)
+      const anchorsPath = join(root, 'session-anchors.v1.jsonl')
+      // Plant a torn tail (crashed-writer state).
+      const before = readFileSync(anchorsPath, 'utf8')
+      writeFileSync(anchorsPath, `${before}{"version":1,"session_sha256":"torn`)
+      // The writer truncates the torn tail successfully, then its append fails.
+      state.failTruncate = false
+      state.failWrite = true
+      expect(appendPrivateLedger(root, 'truncate-ok-session', 'release_reservation', reservation)).toBe(false)
+      state.failWrite = false
+      const after = readFileSync(anchorsPath, 'utf8')
+      // Truncation removed the torn tail; the failed append added nothing.
+      expect(after).toBe(before)
+      expect(after.endsWith('\n')).toBe(true)
+      // Every line on disk is complete: readers see the healthy peer only.
+      expect(readPrivateLedger(root, 'peer-session')).toMatchObject({ damaged: false, anchored: true })
+      expect(readPrivateLedger(root, 'truncate-ok-session')).toMatchObject({ damaged: false, anchored: false })
+      // The next writer proceeds cleanly from the all-complete state.
+      expect(appendPrivateLedger(root, 'after-session', 'release_reservation', { ...reservation, callId: 'call-5' })).toBe(true)
+      expect(readPrivateLedger(root, 'after-session')).toMatchObject({ damaged: false, anchored: true })
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
 

@@ -154,26 +154,30 @@ class AuditDependenciesGate(unittest.TestCase):
     def test_failed_scan_process_exit_never_reads_as_clean(self) -> None:
         # A scanner that exits outside the completion protocol (0 clean /
         # 1 vulnerabilities-found) is a failed scan, even with plausible JSON.
+        # Every branch supplies a VALID exception table so the gate actually
+        # reaches the mocked scanner (no vacuous pass), and the test asserts
+        # the scanner really ran.
         report = json.dumps({"advisories": {}})
-        for returncode in (2, 42, 127):
-            with self.subTest(returncode=returncode):
-                with tempfile.TemporaryDirectory() as tmp:
-                    fake = unittest.mock.Mock()
-                    fake.returncode = returncode
-                    fake.stdout = report
-                    fake.stderr = "boom"
-                    with unittest.mock.patch.object(GATE.subprocess, "run", return_value=fake):
-                        self.assertEqual(GATE.main(["--repo-root", tmp]), 2)
-        # Completion-protocol exits with valid JSON are evaluated normally.
         with tempfile.TemporaryDirectory() as tmp:
             exceptions = Path(tmp) / "exceptions.json"
             exceptions.write_text(json.dumps({"schema": "dsh-dependency-scan-exceptions/v1", "exceptions": []}), encoding="utf-8")
+            for returncode in (2, 42, 127):
+                fake = unittest.mock.Mock()
+                fake.returncode = returncode
+                fake.stdout = report
+                fake.stderr = "boom"
+                with self.subTest(returncode=returncode):
+                    with unittest.mock.patch.object(GATE.subprocess, "run", return_value=fake) as run:
+                        self.assertEqual(GATE.main(["--repo-root", tmp, "--exceptions", str(exceptions)]), 2)
+                    run.assert_called_once()
+            # Completion-protocol exits with valid JSON are evaluated normally.
             fake = unittest.mock.Mock()
             fake.returncode = 1
             fake.stdout = report
             fake.stderr = ""
-            with unittest.mock.patch.object(GATE.subprocess, "run", return_value=fake):
+            with unittest.mock.patch.object(GATE.subprocess, "run", return_value=fake) as run:
                 self.assertEqual(GATE.main(["--repo-root", tmp, "--exceptions", str(exceptions)]), 0)
+            run.assert_called_once()
 
     def test_advisory_without_findings_fails_closed(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:

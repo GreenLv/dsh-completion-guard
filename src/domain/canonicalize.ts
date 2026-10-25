@@ -56,6 +56,24 @@ const NAMED_TOKEN = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{22,
 // before an '@' is `user[:password]`. Removing it keeps every other byte.
 const URL_USERINFO = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/?#]*@/
 
+/**
+ * Structurally trim one prose span down to the URL it actually contains
+ * (RF03, round 2): RFC 3986 sub-delims — including `(` and `)` — are legal
+ * INSIDE the authority and path, so a parenthesis may end the span only when
+ * it is prose punctuation, not part of the URL. Markdown's balance rule
+ * decides that deterministically: strip trailing `)` while the span has more
+ * closing than opening parentheses. A `)` in the middle of the span (e.g.
+ * inside the userinfo `oper)ator:`) never sees this rule; only the tail is
+ * examined. `(see https://x)` keeps the outer paren outside; a URL that
+ * really ends in a balanced `(…)` keeps it.
+ */
+function trimSpanToUrl(match: string): string {
+  const openCount = (match.match(/\(/g) ?? []).length
+  let span = match
+  while (span.endsWith(')') && (span.match(/\)/g) ?? []).length > openCount) span = span.slice(0, -1)
+  return span
+}
+
 /** Structurally remove `user:password@` from a URL; other bytes unchanged. */
 export function stripUrlCredentials(value: string): string {
   return URL_USERINFO.test(value) ? value.replace(URL_USERINFO, (match) => match.slice(0, match.indexOf('//') + 2)) : value
@@ -80,17 +98,24 @@ export function sanitizeClauseText(text: string): string {
   // RF03: the clause matcher follows URL authority semantics like sanitizeUrl
   // does — the scheme is case-insensitive (HTTPS:// is the same scheme), the
   // scheme grammar covers every RFC 3986 scheme (userinfo is not http-only),
-  // and a `'` is a legal authority character, not a terminator. Only text
-  // boundaries (whitespace, quotes, CJK punctuation) end the URL span.
-  value = value.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"`，。)]+/g, (match) => {
+  // RFC 3986 sub-delims (`!$&'()*+,;=`) are legal authority/path characters,
+  // and only the tail parenthesis is prose punctuation, decided by the
+  // balance rule in trimSpanToUrl. Remaining text boundaries (whitespace,
+  // quotes, CJK punctuation) end the raw span before that rule runs.
+  value = value.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"`，。]+/g, (match) => {
+    const span = trimSpanToUrl(match)
+    // Parentheses stripped by the balance rule belong to the surrounding
+    // prose: they are appended back to the replacement verbatim so the
+    // sentence keeps its own brackets while the URL loses its credentials.
+    const restoredParens = ')'.repeat(match.length - span.length)
     const cut = Math.min(
       ...['?', '#'].map((marker) => {
-        const index = match.indexOf(marker)
+        const index = span.indexOf(marker)
         return index === -1 ? Infinity : index
       }),
     )
-    const withoutQuery = cut === Infinity ? match : match.slice(0, cut)
-    return `${stripUrlCredentials(withoutQuery)}${cut === Infinity ? '' : '\u2026'}`
+    const withoutQuery = cut === Infinity ? span : span.slice(0, cut)
+    return `${stripUrlCredentials(withoutQuery)}${cut === Infinity ? '' : '\u2026'}${restoredParens}`
   })
   return value
 }

@@ -651,11 +651,13 @@ async function profilePackage(profilePath: string, packageId: string): Promise<{
 }
 
 /**
- * One bounded registry read (F09): the caller's cancellation combined with the
- * plugin's own total deadline, and a streamed hard byte budget over the
- * DECODED body — chunked or compressed transports cannot smuggle a larger
- * document past the counter. Every exit path releases the reader; the timeout
- * signal does not keep the event loop alive.
+ * One bounded registry read (F09/RF05): the caller's cancellation combined
+ * with the plugin's own total deadline governs the WHOLE call — reads AND the
+ * cleanup that releases the body — and a streamed hard byte budget covers the
+ * DECODED bytes, so chunked or compressed transports cannot smuggle a larger
+ * document past the counter. A cleanup cancel that itself hangs or rejects is
+ * abandoned at the deadline instead of turning the release phase into an
+ * unbounded wait; the timeout signal does not keep the event loop alive.
  */
 async function boundedRegistryJson(
   url: URL,
@@ -666,6 +668,20 @@ async function boundedRegistryJson(
 ): Promise<RecordValue | undefined> {
   const deadline = AbortSignal.timeout(budget.totalDeadlineMs)
   const combined = typeof AbortSignal.any === 'function' ? AbortSignal.any([signal, deadline]) : deadline
+  // Bounded release: race the cleanup against the deadline. A compliant
+  // transport settles cancel() promptly; a stalled or rejecting one must not
+  // extend the call past its budget. The deadline always fires eventually, so
+  // the race's timer side never leaks.
+  const releaseBounded = (releasing: Promise<unknown>): Promise<void> => {
+    if (combined.aborted) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const onAbort = () => { releasing.catch(() => {}); resolve() }
+      if (combined.aborted) { onAbort(); return }
+      combined.addEventListener('abort', onAbort, { once: true })
+      releasing.then(() => { combined.removeEventListener('abort', onAbort); resolve() },
+        () => { combined.removeEventListener('abort', onAbort); resolve() })
+    })
+  }
   let response: Response
   try {
     response = await fetcher(url, { ...init, signal: combined })
@@ -674,8 +690,9 @@ async function boundedRegistryJson(
   }
   if (!response.ok || !response.body) {
     // RF05: an error response can still carry a readable streaming body —
-    // release it on the only exit that never reaches the reader's finally.
-    try { await response.body?.cancel() } catch { /* already unusable */ }
+    // release it on the only exit that never reaches the reader's finally,
+    // and give that release the same bounded exit as the reads.
+    await releaseBounded(response.body?.cancel() ?? Promise.resolve())
     return undefined
   }
   const reader = response.body.getReader()
@@ -707,7 +724,9 @@ async function boundedRegistryJson(
   } catch {
     return undefined
   } finally {
-    try { await reader.cancel() } catch { /* already released */ }
+    // The reader release shares the deadline: a hang here no longer extends
+    // the call, and a rejected cancel never masks the read's own outcome.
+    await releaseBounded(reader.cancel().catch(() => {}))
   }
   try {
     return record(JSON.parse(Buffer.concat(chunks).toString('utf8')))

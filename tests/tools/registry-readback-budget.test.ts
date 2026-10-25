@@ -122,6 +122,33 @@ describe('registryIntegrity under budgets (F09)', () => {
     expect(errorCancelled).toBe(false)
   })
 
+  it('bounds the CLEANUP phase when cancel itself never settles (RF05 round 2)', async () => {
+    // The review's probe: a controllable stream whose cancel() never resolves.
+    // Both the 404 path (body.cancel) and the reader finally (reader.cancel)
+    // must exit within the budget instead of awaiting the cleanup forever.
+    const neverSettling = (): ReadableStream<Uint8Array> => new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"partial":')) },
+      cancel() { return new Promise<void>(() => {}) },
+    })
+    const started = Date.now()
+    const errorFetcher = (async () => new Response(neverSettling(), { status: 404 })) as unknown as typeof fetch
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, { fetcher: errorFetcher, registryReadBudget: { totalDeadlineMs: 60, maxBodyBytes: 1024 * 1024 } }, new AbortController().signal)).toBeUndefined()
+    expect(Date.now() - started).toBeLessThan(2_000)
+    const started2 = Date.now()
+    const overrunFetcher = (async () => new Response(neverSettling(), { status: 200 })) as unknown as typeof fetch
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, { fetcher: overrunFetcher, registryReadBudget: { totalDeadlineMs: 60, maxBodyBytes: 8 } }, new AbortController().signal)).toBeUndefined()
+    expect(Date.now() - started2).toBeLessThan(2_000)
+    // A REJECTING cancel must not extend the call either.
+    const rejecting = (): ReadableStream<Uint8Array> => new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"partial":')) },
+      cancel() { return Promise.reject(new Error('cancel exploded')) },
+    })
+    const started3 = Date.now()
+    const rejectingFetcher = (async () => new Response(rejecting(), { status: 404 })) as unknown as typeof fetch
+    expect(await registryIntegrity(REGISTRY, PACKAGE, VERSION, { fetcher: rejectingFetcher, registryReadBudget: { totalDeadlineMs: 60, maxBodyBytes: 1024 * 1024 } }, new AbortController().signal)).toBeUndefined()
+    expect(Date.now() - started3).toBeLessThan(2_000)
+  }, 15_000)
+
   it('bounds a body that sends one chunk and then stalls forever (RF05)', async () => {
     const stalled = new ReadableStream<Uint8Array>({
       start(controller) { controller.enqueue(new TextEncoder().encode('{"partial":')) },
