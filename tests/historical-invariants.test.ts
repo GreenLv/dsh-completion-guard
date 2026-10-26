@@ -1,12 +1,14 @@
 
 import { describe, expect, it } from 'vitest'
-import { SESSION_FORMAT_VERSION, Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { currentActionBases, decideTurnBoundary } from '../src/domain/stop-policy.js'
+import { createTestReadinessObserver } from '../src/tools/observe.js'
 import { deriveProjection } from '../src/domain/derive.js'
 import { renderRecoveryPacket } from '../src/domain/recovery.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
-const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }), goalAvailable: false }
+const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }), goalAvailable: false, auditedForegroundRenderers: ['bash' as const] }
 
 /**
  * Historical-invariant readbacks (EV02 round 2): each test drives one
@@ -59,6 +61,7 @@ describe('historical invariants: ordinary git diagnosis facets (CGI-20260915-dsh
     const derived = deriveProjection(session.snapshotEvents() as never, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST)
     // The failed result is captured as FAILED evidence, not success.
     const facts = [...derived.projection.evidence.values()].filter((fact) => fact.callId === 'git-1')
+    expect(facts.length).toBeGreaterThan(0)
     for (const fact of facts) expect(fact.outcome).toBe('failure')
     // The failed git result does not close the commit obligation.
     const openItems = [...derived.projection.items.values()].filter((item) => item.status === 'pending')
@@ -82,5 +85,36 @@ describe('historical invariants: ordinary git diagnosis facets (CGI-20260915-dsh
     expect(packet).not.toContain('git commit -m demo')
     const openText = JSON.stringify(openItems.map((item) => item.normalizedText))
     expect(openText).not.toContain('git commit -m demo')
+  })
+})
+
+
+describe('historical invariants: path names do not cancel sourced ready work (CGI-20260923-codex-path-action-continuation)', () => {
+  it.each(['alpha', 'test-results', 'weekly_notes.md', '项目文档'])('preserves test action and continuation for %s after a side question', async name => {
+    const events: Array<{seq: number; type: string; data: unknown}> = [
+      { seq: 1, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
+      { seq: 2, type: 'turn/start', data: { turn: 1 } },
+      { seq: 3, type: 'user/message', data: createUserMessage({ content: [{ type: 'text', text: `Run pnpm test now in "/work/${name}".` }], source: { kind: 'user' } }) },
+      { seq: 4, type: 'user/message', data: createUserMessage({ content: [{ type: 'text', text: '持续推进，直到本轮测试完成为止。' }], source: { kind: 'user' } }) },
+    ]
+    const derive = () => deriveProjection(events as never, { activation: 'opt-in' }, { cwd: '/work' }, true, HOST).projection
+    const before = derive(), item = [...before.items.values()].find(i => i.semanticAction === 'test')!
+    expect(item).toBeDefined()
+    const manifest = '{"scripts":{"test":"vitest run"}}'
+    const tool = createTestReadinessObserver({ getProjection: () => before, flush: async () => true, fs: {
+      resolve: async path => ({ displayPath: path }), stat: async () => ({ type: 'file', version: 'v1', size: manifest.length }), readText: async () => manifest,
+    } })
+    const ready = await tool.execute({ item_id: item.id }, { agent: { session: {} }, signal: new AbortController().signal } as never) as {status: string; scope: string; manifest_sha256: string}
+    expect(ready.status).toBe('ready')
+    // This legacy fixture binds readiness to its trusted /work context;
+    // the varying name is lexical input, not a claimed parsed target.
+    expect(ready.scope).toBe('/work')
+    events.push({ seq: 5, type: 'tool/call', data: { turn: 1, step: 1, callId: 'ready-path', name: 'context_guard_observe_test_readiness', arguments: JSON.stringify({ item_id: item.id }) } })
+    events.push({ seq: 6, type: 'tool/result', data: { turn: 1, step: 1, message: createToolResultMessage({ callId: 'ready-path' as never, isError: false, content: [{ type: 'text', text: JSON.stringify(ready) }] }), meta: { contextGuardTestReadiness: { itemId: item.id, scope: ready.scope, manifestSha256: ready.manifest_sha256, predicate: 'test_passed' } } } })
+    events.push({ seq: 7, type: 'user/message', data: createUserMessage({ content: [{ type: 'text', text: '这些测试有什么作用？' }], source: { kind: 'user' } }) })
+    const projection = derive()
+    expect(projection.items.get(item.id)?.status).toBe('pending')
+    expect(currentActionBases(projection)).toEqual(expect.arrayContaining([expect.objectContaining({ itemId: item.id, action: 'test', owner: 'assistant', unmetPredicate: 'test_passed' })]))
+    expect(decideTurnBoundary(projection)).toMatchObject({ action: 'continue', reason: 'explicit_user_persistence' })
   })
 })

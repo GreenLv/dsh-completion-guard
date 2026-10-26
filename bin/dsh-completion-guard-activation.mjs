@@ -49,7 +49,9 @@ async function main() {
   const require = createRequire(anchor)
   const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href)
   const backendPath = require.resolve('@deepseek-ai/dsh-session-persistence-jsonl')
-  const { default: Jsonl } = await import(pathToFileURL(backendPath).href)
+  const jsonlModule = await import(pathToFileURL(backendPath).href)
+  const Jsonl = jsonlModule.default ?? jsonlModule
+  if (typeof Jsonl !== 'function' && (!Jsonl || typeof Jsonl !== 'object' || typeof Jsonl.apply !== 'function')) throw new Error('activation_backend_module_invalid')
   // Resolve the same dependency instance used by this physical JSONL backend.
   const { SessionFormatUnsupportedError } = await import(pathToFileURL(createRequire(backendPath).resolve('@deepseek-ai/dsh-session-persistence')).href)
   const ctx = new Context()

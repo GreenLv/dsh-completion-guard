@@ -133,7 +133,9 @@ describe('A14/A15: prepare reports capability, target gaps, and supported shapes
     const events = [user(1, '更新插件')]
     const p = replay(events)
     const tool = prepare(p)
-    await expect(tool.execute({ item_id: 'R999' } as never, undefined as never)).resolves.toMatchObject({ status: 'rejected', reason_code: 'item_not_found' })
+    const missing = await tool.execute({ item_id: 'R999' } as never, undefined as never)
+    expect(missing).toMatchObject({ status: 'rejected', reason_code: 'item_not_found' })
+    expect(isJsonValue(missing)).toBe(true)
     await expect(tool.execute({ item_id: [...p.items.values()][0].id, semantic_action: 'deploy_to_production' } as never, undefined as never))
       .resolves.toMatchObject({ status: 'rejected', reason_code: 'unsupported_action' })
   })

@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 const dirs: string[] = []
 afterEach(() => dirs.splice(0).forEach(p => rmSync(p, { recursive: true, force: true })))
 const entry = new URL('../bin/dsh-completion-guard-activation.mjs', import.meta.url)
-function fixture(all = false) {
+function fixture(all = false, shape: 'default' | 'namespace' | 'invalid' = 'default') {
   const root = mkdtempSync(join(tmpdir(), 'guard-selection-cli-')); dirs.push(root)
   const anchor = join(root, 'runtime', 'package.json')
   mkdirSync(join(root, 'runtime'), { recursive: true }); writeFileSync(anchor, '{}')
@@ -27,8 +27,12 @@ function fixture(all = false) {
           if(r.error==='unsupported') throw new SessionFormatUnsupportedError('private body/path');
           if(r.error==='unknown') throw Object.assign(new Error('private credential'),{name:'SessionFormatUnsupportedError'});
           return {header:r.header,inheritedEventCount:0,close:async()=>{}};}};}`)
+  if (shape !== 'default') {
+    const backend = join(root, 'runtime', 'node_modules', '@deepseek-ai', 'dsh-session-persistence-jsonl', 'index.js')
+    writeFileSync(backend, shape === 'invalid' ? 'export const name="invalid-backend"' : readFileSync(backend, 'utf8').replace('export default config =>', 'const make = config =>') + '\nexport const name="namespace-backend"; export const apply=(ctx,config)=>{ctx.sessionPersistence=make(config)};')
+  }
   module('cordis', `export class Context {constructor(){this.fiber={dispose:async()=>{}}}
-    plugin(backend,config){this.sessionPersistence=backend(config);return {await:async()=>{}}}}`)
+    plugin(backend,config){if(typeof backend==='function')this.sessionPersistence=backend(config);else backend.apply(this,config);return {await:async()=>{}}}}`)
   const logs = join(root, 'logs.json'), rows = ['a', 'b', 'old'].map((id, i) => ({ header: { version: 4, id, createdAt: i + 1, isSeeded: false }, revision: 'r0', ...(id === 'old' && !all ? { error: 'unsupported' } : {}) }))
   writeFileSync(logs, JSON.stringify(rows))
   const prior = join(root, 'prior.json'); writeFileSync(prior, JSON.stringify({ schema: 'dsh-activation-prior-modes/v1', previousPackage: { name: 'dsh-completion-guard', version: '0.8.4', sha256: '1'.repeat(64) }, sourceSha256: '2'.repeat(64), cohorts: [{ name: 'verified', mode: 'opt-in' }] }))
@@ -74,4 +78,21 @@ it('packaged CLI keeps all-readable full workflow, rejects full receipt in selec
   expect(refused.status).toBe(1); expect(refused.stderr).toContain('activation_cli_failed'); expect(refused.stderr).not.toContain('private')
   expect(existsSync(output)).toBe(false)
   expect(f.run('inspect', ['--selection', selection, '--selection', selection]).stderr).toContain('activation_cli_options_invalid')
+})
+
+
+it.each(['default', 'namespace'] as const)('RC3-CLI01 accepts the valid %s backend export without writing the source inventory', shape => {
+  const f = fixture(true, shape), before = readFileSync(f.logs), output = join(f.root, 'export-inventory.json')
+  const result = f.run('inventory', ['--output', output])
+  expect(result.status, result.stderr).toBe(0)
+  expect(JSON.parse(result.stdout)).toMatchObject({ status: 'inventory_scanned', readableCount: 3 })
+  expect(readFileSync(f.logs)).toEqual(before)
+})
+it('RC3-CLI01 refuses a module without a callable backend before writing inventory or mode state', () => {
+  const f = fixture(true, 'invalid'), before = readFileSync(f.logs), output = join(f.root, 'invalid-inventory.json')
+  const result = f.run('inventory', ['--output', output])
+  expect(result.status).toBe(1)
+  expect(result.stderr).toContain('activation_backend_module_invalid')
+  expect(existsSync(output)).toBe(false)
+  expect(readFileSync(f.logs)).toEqual(before)
 })

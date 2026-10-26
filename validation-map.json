@@ -381,7 +381,10 @@
         "scripts/audit_dependencies.py",
         "tests/audit_dependencies_test.py",
         "validation-map.json",
-        "scripts/measure-session-switch.mjs"
+        "scripts/measure-session-switch.mjs",
+        "scripts/create-ui-session-fixture.mjs",
+        "scripts/prepare-ui-session-fixture.mjs",
+        "scripts/ui-session-host-fixture.mjs"
       ],
       "gates": [
         "full_candidate"

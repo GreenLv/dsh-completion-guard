@@ -19,7 +19,7 @@
       "zipSha256": "599a3ceef4d58f2b82bfd61ca4ef9d55c0f8e055dde60550c92f00d78d0cad2f",
       "asarHeaderSha256": "84140c5d09050010753077cde3c8e35fc2e050054f1ed69f761fae8b6fdd4b95",
       "invariantCompanions": "none present in the rc.3 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
-      "windows": "pending: win-x64 exe acquisition and Authenticode verification require a Windows-side step; the row is NOT registered on unverified bytes"
+      "windows": "Windows installed carrier and retained official installer Authenticode Valid; signed ElectronAsar/Integrity equals measured header; root/runtime manifests and metadata match signed header integrity; retained installer size and SHA-512 equal official win-x64 nightly updater metadata (2026-10-26). Native Guard install/no-op/lifecycle acceptance is separate."
     }
   },
   "files": [
@@ -143,6 +143,21 @@
       "releaseSha512": "0tCeP/zLGLtsH+S4BD4TIyRJ8TwRhh7xaJprTMOUoEfj7hYJFC3G5l6nl/2zCTS41MeE9k+KRN19RE9sqX6goQ==",
       "vendorTeam": "NAN929V4UM",
       "vendorIdentifier": "com.deepseek.dsh"
+    },
+    {
+      "id": "desktop-0.2.1-rc.3-win32-x64",
+      "platform": "win32",
+      "arch": "x64",
+      "version": "0.2.1-rc.3",
+      "runtimeVersion": "0.2.1-rc.3",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "c30a30589e62c5c571f73c27ca22b94bb0d931815f2a2e122ae1c7dc904ab594",
+      "desktopManifestSha256": "ac5d5922a061519322befb742e8b8285197d6ca975a2a38e8049ef37c67e63d2",
+      "buildCommit": "be72761ee1a6736ebcdf4f3739363b083ae53c98",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.3-win-x64.exe",
+      "releaseSha512": "q5IGr2Bf+TvvCpagHj49Ypn/ZrqR7kqrYpLjqXP7VfDINmddlqZQmG+YfsdL3q3EdTRMRlKz/a3jDAEzdNdDOw==",
+      "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
     }
   ]
 }
