@@ -79,6 +79,7 @@ describe('registryIntegrity under budgets (F09)', () => {
   it.each([
     ['404', (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch],
     ['bad JSON', okFetcher('not json at all')],
+    ['old packument instead of exact-version document', okFetcher(JSON.stringify({ name: PACKAGE, versions: { [VERSION]: { name: PACKAGE, version: VERSION, dist: { integrity: SRI } } } }))],
     ['wrong package name', okFetcher(JSON.stringify({ name: 'other-package', version: VERSION, dist: { integrity: SRI } }))],
     ['wrong version', okFetcher(JSON.stringify({ name: PACKAGE, version: '9.9.9', dist: { integrity: SRI } }))],
     ['missing integrity', okFetcher(JSON.stringify({ name: PACKAGE, version: VERSION }))],

@@ -688,6 +688,40 @@ class HostBoundEntrypointTests(unittest.TestCase):
             self.assertEqual(Path(actual).resolve(), Path(expected).resolve())
             self.assertTrue(Path(actual).is_dir())
 
+    def test_isolated_environment_keeps_only_anonymous_managed_loopback_transport(self):
+        self.assertEqual(self.host.anonymous_loopback_proxy_environment({"NO_PROXY": "private.example", "PROXY_AUTHORIZATION": "synthetic-secret"}), {})
+        supplied = {"HTTPS_PROXY": "http://LOCALHOST:45999/", "https_proxy": "http://localhost:45999",
+                    "HTTP_PROXY": "http://127.0.0.1:45999", "ALL_PROXY": "https://[::1]:45998",
+                    "NO_PROXY": "private.example", "OPENAI_API_KEY": "synthetic-secret", "DEEPSEEK_API_KEY": "synthetic-secret",
+                    "NODE_OPTIONS": "--require unwanted", "DEEPSEEK_BASE_URL": "https://private.example",
+                    "PROXY_AUTHORIZATION": "synthetic-secret"}
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(self.host.os.environ, supplied, clear=True):
+            env = self.host.isolated_environment(Path(directory))
+            self.assertEqual(env["HTTPS_PROXY"], "http://localhost:45999")
+            self.assertEqual(env["https_proxy"], env["HTTPS_PROXY"])
+            self.assertEqual(env["ALL_PROXY"], "https://[::1]:45998")
+            self.assertEqual(env["NO_PROXY"], "localhost,127.0.0.1,::1")
+            self.assertEqual(env["no_proxy"], env["NO_PROXY"])
+            for key in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "NODE_OPTIONS", "DEEPSEEK_BASE_URL", "PROXY_AUTHORIZATION"):
+                self.assertNotIn(key, env)
+
+    def test_proxy_credentials_unsupported_routes_and_conflicts_fail_before_environment_creation(self):
+        values = ["http://user:synthetic-secret@127.0.0.1:45999", "http://@localhost:45999",
+                  "http://proxy.example:45999", "socks5://localhost:45999", "http://localhost",
+                  "http://localhost:70000", "http://localhost:45999/path", "http://localhost:45999/?secret=x",
+                  "http://localhost:45999/#secret", "\nhttp://localhost:45999"]
+        for value in values:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.dict(self.host.os.environ, {"HTTPS_PROXY": value}, clear=True):
+                root = Path(directory)
+                with self.assertRaisesRegex(RuntimeError, "^install_proxy_unsupported$"):
+                    self.host.isolated_environment(root)
+                self.assertFalse((root / "home").exists())
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(self.host.os.environ, {
+            "HTTPS_PROXY": "http://localhost:45999", "https_proxy": "http://localhost:45998",
+        }, clear=True), self.assertRaisesRegex(RuntimeError, "^install_proxy_ambiguous$"):
+            self.host.isolated_environment(Path(directory))
+
     def test_probe_requires_all_nonempty_real_host_cases_and_driver_identity(self):
         receipt = {"schema": "dsh-native-host-probe/v1", "nonce": "nonce", "driver_sha256": "a" * 64,
                    "status": "passed", "pid": 100, "real_model_request": False,

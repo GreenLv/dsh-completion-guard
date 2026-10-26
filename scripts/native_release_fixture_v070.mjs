@@ -63,10 +63,9 @@ export async function runNativeReleaseFixture(config) {
   const fetcher = async input => {
     const url = String(input)
     assert.ok(url.startsWith(REGISTRY), 'release fixture must not contact a public registry')
-    const name = decodeURIComponent(url.slice(REGISTRY.length).replace(/\/+$/, ''))
-    return new Response(JSON.stringify({ name, versions: { [VERSION]: {
-      name, version: VERSION, dist: { integrity: registryIntegrity },
-    } } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    // The production readback requests an exact-version manifest, not a packument.
+    assert.equal(url, `${REGISTRY}${encodeURIComponent(PACKAGE)}/${encodeURIComponent(VERSION)}`)
+    return new Response(JSON.stringify({ name: PACKAGE, version: VERSION, dist: { integrity: registryIntegrity } }), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   const sessionId = SessionId(`guard-native-release-${config.nonce}`)
   const session = Session.create(sessionId, undefined, {
@@ -173,6 +172,13 @@ export async function runNativeReleaseFixture(config) {
   })
   const allowed = await action()
   assert.equal(allowed.value.status, 'completed', JSON.stringify({ status: allowed.value.status, reason_code: allowed.value.reason_code }))
+  assert.equal(publishCount, 1)
+  const inFlight = await runTool('context_guard_release', { operation: 'status' })
+  assert.equal(inFlight.value.state_damaged, false)
+  assert.equal(inFlight.value.reservations.find(row => row.resolution_call_id === resolution.callId)?.in_flight, true)
+  const locked = await action()
+  assert.equal(locked.value.status, 'unavailable')
+  assert.equal(locked.value.reason_code, 'release_operation_in_flight')
   assert.equal(publishCount, 1)
   registryIntegrity = sri
   const reconciled = await runTool('context_guard_release', {

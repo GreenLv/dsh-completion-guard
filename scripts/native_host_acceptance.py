@@ -25,6 +25,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 PROBE_CASES = {
     "nonempty_test_certificate", "package_update_rebind_certificate", "generic_pending_and_rebind_no_gain_refusal",
@@ -182,11 +183,50 @@ def physical_temporary_root(path: Path) -> Path:
         raise
 
 
+def anonymous_loopback_proxy_environment(environment: dict[str, str]) -> dict[str, str]:
+    """Retain transport from the caller's managed proxy, never proxy credentials.
+
+    Availability is exercised by the real registry/install operation. This does
+    not discover a port, read user config, or promise that a proxy is reachable.
+    """
+    selected: dict[str, str] = {}
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        candidates = []
+        for spelling in (key, key.lower()):
+            value = environment.get(spelling)
+            if not value:
+                continue
+            try:
+                if any(ord(character) <= 32 for character in value):
+                    raise ValueError("unsupported proxy")
+                parsed = urlsplit(value)
+                if (parsed.scheme not in {"http", "https"}
+                        or parsed.hostname not in {"localhost", "127.0.0.1", "::1"}
+                        or parsed.username is not None or parsed.password is not None
+                        or parsed.path not in {"", "/"} or parsed.query or parsed.fragment
+                        or parsed.port is None or not 1 <= parsed.port <= 65535):
+                    raise ValueError("unsupported proxy")
+                hostname = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+                candidates.append(f"{parsed.scheme}://{hostname}:{parsed.port}")
+            except (ValueError, TypeError):
+                # A stable label only: never echo a credential-bearing value.
+                raise RuntimeError("install_proxy_unsupported") from None
+        if len(set(candidates)) > 1:
+            raise RuntimeError("install_proxy_ambiguous")
+        if candidates:
+            selected[key] = selected[key.lower()] = candidates[0]
+    if selected:
+        selected["NO_PROXY"] = selected["no_proxy"] = "localhost,127.0.0.1,::1"
+    return selected
+
+
 def isolated_environment(root: Path) -> dict[str, str]:
     # Deliberate allowlist: inherited API tokens, NODE_OPTIONS and provider
     # overrides never enter this credential-free acceptance driver.
+    proxies = anonymous_loopback_proxy_environment(dict(os.environ))
     names = {"PATH", "SystemRoot", "SYSTEMROOT", "COMSPEC", "PATHEXT", "WINDIR", "LANG", "LC_ALL"}
     env = {key: value for key, value in os.environ.items() if key in names}
+    env.update(proxies)
     home = root / "home"
     home.mkdir(parents=True, exist_ok=True)
     env.update({"HOME": str(home), "USERPROFILE": str(home),
