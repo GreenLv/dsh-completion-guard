@@ -394,6 +394,7 @@ describe('one audit physically reads each path at most once', () => {
   it('counts physical byte reads across manifests, maps and hashed modules', () => {
     const host = makeHost()
     const physicalReads = new Map<string, number>()
+    let directoryReads = 0
     const inner = createHostAuditSession((path) => {
       physicalReads.set(path, (physicalReads.get(path) ?? 0) + 1)
     })
@@ -408,15 +409,15 @@ describe('one audit physically reads each path at most once', () => {
       resolvePaths: (importer, name) => inner.resolvePaths(importer, name),
       requireResolve: (importer, request) => inner.requireResolve(importer, request),
       memo: <T,>(key: string, compute: () => T) => inner.memo(key, compute),
-      // The closed-world inventory pass reads directories through the same
-      // audited session; the counting wrapper forwards it so physical reads
-      // stay counted (RC3-D01 wiring made the expectations explicit).
-      listDir: (path) => inner.listDir!(path),
+      // PERF-DEFAULT-INVENTORY-01: the real default entry has explicit
+      // version-selected expectations but must never enumerate an inventory.
+      listDir: (path) => { directoryReads++; return inner.listDir!(path) },
     }
     const expectedDigest = expectedLockFor(host)
     const verdict = revalidateCoreLock(host.config, expectedDigest, counting)
     if (verdict.status !== 'supported') console.log('PROBE verdict:', verdict.status, verdict.reasonCode)
     expect(verdict.status).toBe('supported')
+    expect(directoryReads).toBe(0)
     // One physical read per path per validation: JSON parsers and digest
     // checks share the same bytes, and the graph readback, byte audit and
     // route audit converge on one memo key.

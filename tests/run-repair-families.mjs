@@ -7,6 +7,13 @@ import { spawnSync } from 'node:child_process'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const families = Object.freeze({
+  'default-host-inventory': [
+    'tests/rc3-q01-closed-world.test.ts',
+    'tests/v081-entry-validation-boundary.test.ts',
+    'tests/v081-production-entry-drift.test.ts',
+    'tests/domain/host-target-preflight.test.ts',
+    'tests/domain/host-node-conditions.test.ts',
+  ],
   'rc3-release-closeout': [
     'tests/native-release-fixture.test.ts',
     'tests/tools/registry-readback-budget.test.ts',

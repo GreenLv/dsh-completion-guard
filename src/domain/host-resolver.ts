@@ -428,11 +428,13 @@ export function auditedHostImplementation(runtimeRoot: string, profileRoot: stri
         const declared = expected.modules
           ? Object.keys(expected.modules)
           : [join(root, 'package.json'), ...walkLibFiles(session, root)]
-        if (expectations) {
+        if (closedWorldExpectations) {
           // A qualified archive is a closed executable/JSON inventory. New
           // installed files cannot silently inherit an earlier receipt.
+          // Default version-selected expectations audit declared bytes/routes
+          // without enumerating unrelated installed files.
           const actual = qualifiedModuleFiles(session, root).sort()
-          if (closedWorldExpectations && JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false
+          if (JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false
         }
         const computedDigests: Record<string, string> = {}
         for (const file of declared) {

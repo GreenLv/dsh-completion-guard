@@ -13091,9 +13091,9 @@ function auditedHostImplementation(runtimeRoot, profileRoot, providedSession, ex
 				if (expected.version !== void 0 && manifest.version !== expected.version) return false;
 				if (!expected.modules) return false;
 				const declared = expected.modules ? Object.keys(expected.modules) : [join(root, "package.json"), ...walkLibFiles(session, root)];
-				if (expectations) {
+				if (closedWorldExpectations) {
 					const actual = qualifiedModuleFiles(session, root).sort();
-					if (closedWorldExpectations && JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false;
+					if (JSON.stringify(actual) !== JSON.stringify(Object.keys(expected.modules).sort())) return false;
 				}
 				const computedDigests = {};
 				for (const file of declared) {

@@ -7,11 +7,12 @@ import { describe, expect, it } from 'vitest'
 // qualified flag is passed (the missing-parameter shape returned true).
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { join, dirname, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { acquireHostTrust, type HostRebindTrust } from '../src/domain/host-trust.js'
 import { auditedHostImplementation } from '../src/domain/host-resolver.js'
+import { createHostAuditSession, type HostAuditSession } from '../src/domain/host-audit-session.js'
 
 interface ProbeArchive { name: string; files: Record<string, Buffer> }
 
@@ -107,9 +108,72 @@ describe('RC3-Q01: qualified closed-world inventory at every entry', () => {
       writeFileSync(join(root, 'package.json'), '{}')
       writeFileSync(join(root, 'node_modules', '.package-map.json'), JSON.stringify({ packages: records }))
       const expectations = [...trust.packages, ...(trust.probeDependencies ?? [])]
-      expect(auditedHostImplementation(root, root, undefined, expectations, undefined, undefined, true)).toBe(true)
-      writeFileSync(join(root, 'node_modules', '@deepseek-ai/dsh-tools', 'unregistered.js'), 'export const smuggled = true\n')
-      expect(auditedHostImplementation(root, root, undefined, expectations, undefined, undefined, true)).toBe(false)
+      const toolsRoot = join(root, 'node_modules', '@deepseek-ai/dsh-tools')
+      const audit = (qualified: boolean, overrides: Partial<HostAuditSession> = {}) => {
+        const session = createHostAuditSession()
+        return auditedHostImplementation(root, root, { ...session, ...overrides }, expectations, undefined, undefined, qualified)
+      }
+      // PERF-DEFAULT-INVENTORY-01: explicit version-selected expectations do
+      // not make the registry/default lane a qualified closed-world scan.
+      let directoryReads = 0
+      const noEnumeration = () => { directoryReads++; throw new Error('default lane must not enumerate') }
+      expect(audit(false, { listDir: noEnumeration })).toBe(true)
+      expect(directoryReads).toBe(0)
+      const session = createHostAuditSession()
+      expect(audit(true, { listDir: path => { directoryReads++; return session.listDir!(path) } })).toBe(true)
+      expect(directoryReads).toBeGreaterThan(0)
+      writeFileSync(join(toolsRoot, 'unregistered.js'), 'export const smuggled = true\n')
+      directoryReads = 0
+      expect(audit(false, { listDir: noEnumeration })).toBe(true)
+      expect(directoryReads).toBe(0)
+      expect(audit(true)).toBe(false)
+      rmSync(join(toolsRoot, 'unregistered.js'))
+      expect(audit(true)).toBe(true)
+
+      const declared = Object.keys(expectations.find(row => row.name === '@deepseek-ai/dsh-tools')!.modules!).find(file => file.endsWith('.js'))!
+      expect(declared).toBeTruthy()
+      const declaredPath = join(toolsRoot, declared), originalBytes = readFileSync(declaredPath)
+      for (const qualified of [false, true]) {
+        writeFileSync(declaredPath, Buffer.concat([originalBytes, Buffer.from('\n// drift\n')]))
+        expect(audit(qualified)).toBe(false)
+        writeFileSync(declaredPath, originalBytes)
+        expect(audit(qualified)).toBe(true)
+        const physical = createHostAuditSession()
+        let escapes = 0, nonfiles = 0
+        expect(audit(qualified, { realpath: path => {
+          if (path === declaredPath) { escapes++; return join(root, 'outside.js') }
+          return physical.realpath(path)
+        } })).toBe(false)
+        expect(escapes).toBeGreaterThan(0)
+        expect(audit(qualified, { stat: path => {
+          const stat = physical.stat(path)
+          if (path === declaredPath) { nonfiles++; return Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { isFile: () => false }) }
+          return stat
+        } })).toBe(false)
+        expect(nonfiles).toBeGreaterThan(0)
+        // Real Node self-reference scope redirects the importer's bare route,
+        // without changing any authenticated package bytes or graph records.
+        writeFileSync(join(root, 'shadow.js'), originalBytes)
+        writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-tools', exports: { '.': './shadow.js' } }))
+        expect(audit(qualified)).toBe(false)
+        writeFileSync(join(root, 'package.json'), '{}')
+        expect(audit(qualified)).toBe(true)
+      }
+      for (const invalid of ['special', 'depth', 'budget'] as const) {
+        let visited = 0
+        const inner = createHostAuditSession()
+        expect(audit(true, { listDir: path => {
+          if (path === toolsRoot || path.startsWith(toolsRoot + sep)) {
+            visited++
+            if (invalid === 'special') return [{ name: 'unsupported', isFile: false, isDirectory: false }]
+            if (invalid === 'depth') return [{ name: 'deep', isFile: false, isDirectory: true }]
+            return Array.from({ length: 10001 }, (_, i) => ({ name: `${i}.js`, isFile: true, isDirectory: false }))
+          }
+          return inner.listDir!(path)
+        } })).toBe(false)
+        expect(visited).toBe(invalid === 'depth' ? 33 : 1)
+        expect(audit(true)).toBe(true)
+      }
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
 })
