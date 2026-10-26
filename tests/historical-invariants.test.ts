@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { deriveProjection } from '../src/domain/derive.js'
+import { renderRecoveryPacket } from '../src/domain/recovery.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
 const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }), goalAvailable: false }
@@ -62,5 +63,24 @@ describe('historical invariants: ordinary git diagnosis facets (CGI-20260915-dsh
     // The failed git result does not close the commit obligation.
     const openItems = [...derived.projection.items.values()].filter((item) => item.status === 'pending')
     expect(openItems.length).toBeGreaterThan(0)
+    // Facet oracle (the case's full expected): the diagnosis separates the
+    // OBSERVED post-condition (the failed result is a real, bound fact with a
+    // concrete reason code) from UNATTRIBUTABLE or MISSING-HISTORY gaps —
+    // those carry a different reason shape and never inherit the observed
+    // fact's identity.
+    for (const fact of facts) {
+      expect(fact.outcome, 'observed post-condition facet').toBe('failure')
+      expect(fact.callId).toBe('git-1')
+      expect(fact.parseStatus).toBe('supported')
+    }
+    // Complementary facts from OTHER calls must not exist (nothing borrowed).
+    expect(facts.every((fact) => fact.callId === 'git-1')).toBe(true)
+    // The recovery feedback must NOT advise repeating the already-attempted
+    // mutation: render the same projection's packet and assert the failed
+    // command text is not presented as a to-do.
+    const packet = renderRecoveryPacket(derived.projection)
+    expect(packet).not.toContain('git commit -m demo')
+    const openText = JSON.stringify(openItems.map((item) => item.normalizedText))
+    expect(openText).not.toContain('git commit -m demo')
   })
 })
