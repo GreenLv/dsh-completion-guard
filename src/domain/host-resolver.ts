@@ -799,7 +799,7 @@ export function inspectTargetHostGraph(runtime: string, profile: string, trust?:
   // RC3-D01: version-selected default expectations for the pre-install lane.
   const launcherVersion = target.packages.find((row) => row.name === '@deepseek-ai/dsh')?.version
   const expectations = trust ? [...trust.packages, ...(trust.probeDependencies ?? [])] : auditedManifestFor(launcherVersion).packages as unknown as readonly AuditedPackageExpectation[]
-  if (evaluation.status !== 'supported' || !auditedHostImplementation(runtime, profile, undefined, expectations)) {
+  if (evaluation.status !== 'supported' || !auditedHostImplementation(runtime, profile, undefined, expectations, undefined, undefined, Boolean(trust))) {
     throw new HostProfileError('target_runtime_unsupported', 'pre-install target fails host qualification or byte/route audit')
   }
   return target
@@ -1006,7 +1006,7 @@ function reevaluateDesktopCoreLock(appAsarPath: string, profileRoot: string,
   }
   const archiveGraph = desktopDependencyGraph(runtime.asarRealpath, expectations, session)
   const layout = desktopProfileLayout(profile, session, runtime.metadata.pnpm)!
-  if (!auditedHostImplementation(join(runtime.asarRealpath, 'dsh'), profile, archiveGraph.session, expectations, archiveGraph.graph, layout.graph)) {
+  if (!auditedHostImplementation(join(runtime.asarRealpath, 'dsh'), profile, archiveGraph.session, expectations, archiveGraph.graph, layout.graph, Boolean(trust))) {
     return { ...evaluation, status: 'unsupported', goalAvailable: false, reasonCode: 'host_lock_installed_graph_drift' }
   }
   // Runtime and profile identity must survive fresh validation: a changed app
@@ -1064,7 +1064,7 @@ export function inspectDesktopTargetGraph(appAsarPath: string, profileRoot: stri
     throw new HostProfileError('target_runtime_unsupported', 'desktop pre-install target fails host qualification or byte audit')
   }
   const archiveGraph = desktopDependencyGraph(target.runtime.asarRealpath, expectations)
-  if (!auditedHostImplementation(join(target.runtime.asarRealpath, 'dsh'), resolve(profileRoot), archiveGraph.session, expectations, archiveGraph.graph)) {
+  if (!auditedHostImplementation(join(target.runtime.asarRealpath, 'dsh'), resolve(profileRoot), archiveGraph.session, expectations, archiveGraph.graph, undefined, Boolean(trust))) {
     throw new HostProfileError('target_runtime_unsupported', 'desktop pre-install target fails dependency route audit')
   }
   return { packages: runtimeRows, runtime: target.runtime, profileGraph: target.profileGraph }
