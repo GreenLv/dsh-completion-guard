@@ -55,6 +55,47 @@ export function anonymousLoopbackProxyEnvironment(environment) {
   return selected
 }
 
+const exitedChild = child => child.exitCode !== null || child.signalCode !== null
+async function waitChildExit(child, deadline) {
+  if (exitedChild(child)) return true
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) return false
+  return new Promise((resolveWait, reject) => {
+    let timer
+    const finish = (value, error) => {
+      clearTimeout(timer); child.removeListener('exit', onExit); child.removeListener('error', onError)
+      if (error) reject(error); else resolveWait(value)
+    }
+    const onExit = () => finish(true), onError = error => finish(false, error)
+    child.once('exit', onExit); child.once('error', onError)
+    timer = setTimeout(() => finish(false), remaining)
+    if (exitedChild(child)) finish(true)
+  })
+}
+/** Reap the known leader before probing its group; EPERM always refuses.
+ * A reaped leader alone is insufficient: every successful exit also proves
+ * the owned process group absent. Budgets include waiting and group checks.
+ */
+export async function stopOwnedPosixChild(child, { termBudgetMs = 5000, killBudgetMs = 2000, kill = process.kill.bind(process) } = {}) {
+  if (!Number.isSafeInteger(child?.pid) || child.pid <= 0) throw new DriverError(5, 'owned child identity unavailable')
+  const alive = () => { try { kill(-child.pid, 0); return true } catch (error) { if (error.code === 'ESRCH') return false; throw error } }
+  const signalGroup = signal => { try { kill(-child.pid, signal) } catch (error) { if (error.code !== 'ESRCH') throw error } }
+  const waitGroupGone = async deadline => {
+    while (alive()) {
+      if (Date.now() >= deadline) return false
+      await new Promise(resolveWait => setTimeout(resolveWait, Math.min(50, Math.max(1, deadline - Date.now()))))
+    }
+    return true
+  }
+  const termDeadline = Date.now() + termBudgetMs
+  if (alive()) signalGroup('SIGTERM')
+  if (await waitChildExit(child, termDeadline) && await waitGroupGone(termDeadline)) return
+  const killDeadline = Date.now() + killBudgetMs
+  signalGroup('SIGKILL')
+  if (await waitChildExit(child, killDeadline) && await waitGroupGone(killDeadline)) return
+  throw new DriverError(5, 'owned child exit or process group cleanup not established within budget')
+}
+
 export function preparationInputs({ fixturePath, runtimeRoot, artifact, artifactRecord, output }) {
   const fixture = validateFixture(readJsonFile(fixturePath))
   const release = readJsonFile(artifactRecord)
@@ -190,14 +231,7 @@ export async function prepare(options, { preflight = false, serve = false, mode 
           execFileSync(join(process.env.SystemRoot, 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], { timeout: 10000, stdio: 'ignore' })
           await Promise.race([child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : once(child, 'exit'), new Promise((_, reject) => { const timer = setTimeout(() => reject(new DriverError(5, 'owned host stop timed out')), 5000); timer.unref() })])
         } else {
-          const alive = () => { try { process.kill(-child.pid, 0); return true } catch (error) { if (error.code === 'ESRCH') return false; throw error } }
-          if (alive()) process.kill(-child.pid, 'SIGTERM')
-          const deadline = Date.now() + 5000
-          while (alive() && Date.now() < deadline) await new Promise(resolveWait => setTimeout(resolveWait, 50))
-          if (alive()) process.kill(-child.pid, 'SIGKILL')
-          const forcedDeadline = Date.now() + 2000
-          while (alive() && Date.now() < forcedDeadline) await new Promise(resolveWait => setTimeout(resolveWait, 50))
-          if (alive()) throw new DriverError(5, 'owned process group remains after bounded cleanup')
+          await stopOwnedPosixChild(child)
         }
         result.ownedHostStopped = true
       } catch (error) { result.status = 'failed'; result.cleanupError = error.message; process.exitCode = 5 }
