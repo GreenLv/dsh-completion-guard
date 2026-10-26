@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const families = Object.freeze({
   'rc3-release-closeout': [
+    'tests/module-eol.test.ts',
     'tests/rc3-official-listing.test.ts', 'tests/rc3-windows-distribution.test.ts',
     'tests/session-switch-driver.test.ts', 'tests/ui-session-fixture.test.ts',
     'tests/activation-selection-cli.test.ts', 'tests/historical-invariants.test.ts',

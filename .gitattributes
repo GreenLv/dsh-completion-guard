@@ -3,3 +3,5 @@ tests/fixtures/legacy090-path-evidence.json text eol=lf
 tests/helpers/baseline-oracle/** text eol=lf
 src/core-v2/*.json text eol=lf
 dist/** text eol=lf
+# Keep executable ES modules importable by the Vite SSR runner on every checkout.
+*.mjs text eol=lf

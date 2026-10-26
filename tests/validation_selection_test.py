@@ -48,6 +48,14 @@ class ValidationSelectionTests(unittest.TestCase):
         plan = self.classify("package.json")
         self.assertEqual(plan["invalidates"], ["artifact", "native_artifact", "publication_identity"])
 
+    def test_module_checkout_policy_requires_new_artifact_and_native_portable(self) -> None:
+        plan = self.classify(".gitattributes")
+        self.assertTrue(plan["full_required"])
+        self.assertIn("full_candidate", plan["gates"])
+        self.assertIn("artifact", plan["invalidates"])
+        self.assertIn("native_artifact", plan["invalidates"])
+        self.assertEqual(plan["unknown_paths"], [])
+
     def test_shared_contract_selects_peer_gate(self) -> None:
         plan = self.classify("tests/fixtures/conformance/digest_v3/cases.json")
         self.assertEqual(plan["contracts"], ["context_guard_semantics_v1", "digest_v3"])
