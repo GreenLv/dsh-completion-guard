@@ -6,13 +6,17 @@
  * dsh-client-ui-conversation ComposerContentEditable data-composer-input.
  * See docs/UI_PERFORMANCE.md for fixture preparation and evidence boundaries.
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { writeUtf8Atomic, readJsonFile, readUtf8File, parseJsonBytes } from './ui-fixture-io.mjs'
+import { readFileSync, existsSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 
 export class DriverError extends Error {
   constructor(code, reason, details = {}) { super(reason); this.code = code; this.details = details }
+}
+export function errorExitCode(error, fallback = 3) {
+  return Number.isInteger(error?.code) && error.code > 0 && error.code <= 255 ? error.code : fallback
 }
 const refuse = (ok, code, reason, details) => { if (!ok) throw new DriverError(code, reason, details) }
 export const DOM = Object.freeze({ row: '[data-row-key][role="treeitem"]', flow: '[data-chat-flow]', input: '[data-composer-input][role="textbox"]', loading: '.EvIC1a_hint', error: '.EvIC1a_openError' })
@@ -21,7 +25,7 @@ export function validateFixture(fixture, requireProtection = false) {
   refuse(['0.2.1-rc.2', '0.2.1-rc.3'].includes(fixture.hostVersion), 3, 'unreviewed frontend version')
   refuse(typeof fixture.profileRoot === 'string' && existsSync(fixture.profileRoot), 2, 'fixture profile missing')
   refuse(typeof fixture.home === 'string' && /^[a-f0-9-]{36}$/.test(fixture.nonce ?? '') && /^[a-f0-9]{40}$/.test(fixture.sourceCommit ?? ''), 2, 'fixture ownership/subject unbound')
-  const owner = JSON.parse(readFileSync(join(fixture.home, '.guard-ui-fixture-owner.json'), 'utf8'))
+  const owner = readJsonFile(join(fixture.home, '.guard-ui-fixture-owner.json'))
   refuse(owner.nonce === fixture.nonce && owner.sourceCommit === fixture.sourceCommit && resolve(fixture.profileRoot) === join(resolve(fixture.home), 'profiles', fixture.surface === 'desktop' ? 'desktop' : 'web'), 2, 'fixture ownership/profile mismatch')
   refuse(Number.isSafeInteger(fixture.preludeTurns) && fixture.preludeTurns >= 0 && fixture.preludeTurns <= 10000, 2, 'invalid fixture history scale')
   const url = new URL(fixture.frontendUrl)
@@ -38,6 +42,88 @@ export function validateDesktopOwnership(receipt, fixture, endpoint) {
   refuse(receipt.home === resolve(fixture.home) && receipt.userDataDir === join(resolve(fixture.home), 'desktop-user-data') && existsSync(receipt.userDataDir), 2, 'Desktop owner isolation paths mismatch')
   refuse(receipt.cdpUrl === endpoint && receipt.rendererUrl === 'dsh-app://app/' && typeof receipt.targetId === 'string' && receipt.targetId.length > 0 && Number.isSafeInteger(receipt.processId) && receipt.processId > 0 && /^[a-f0-9]{64}$/.test(receipt.carrierSha256 ?? ''), 2, 'Desktop owner target/process/carrier unbound')
   return receipt
+}
+export function startupWebUrl(logBytes, frontendUrl) {
+  // A log is a stream, unlike atomic metadata. Only complete lines may carry
+  // the official startup URL; never consume a partially written token.
+  const end = logBytes.lastIndexOf(10)
+  const text = end < 0 ? '' : new TextDecoder('utf-8', { fatal: true }).decode(logBytes.subarray(0, end + 1))
+  const clean = text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+  const urls = new Set()
+  for (const match of clean.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
+    let url
+    try { url = new URL(match[0]) } catch { continue }
+    if (!url.searchParams.has('token')) continue
+    refuse(url.origin === new URL(frontendUrl).origin && url.pathname === '/' && !url.username && !url.password && !url.hash && [...url.searchParams.keys()].every(key => key === 'token') && url.searchParams.getAll('token').length === 1 && url.searchParams.get('token'), 3, 'startup auth URL identity refused')
+    urls.add(url.href)
+  }
+  refuse(urls.size === 1, 3, urls.size ? 'ambiguous startup auth URLs' : 'startup auth URL unavailable')
+  return [...urls][0]
+}
+export function webPreparationEntry(readyPath, fixture) {
+  refuse(typeof readyPath === 'string' && readyPath.endsWith('.ready.json'), 2, 'current Web preparation ready receipt required')
+  const bytes = readFileSync(readyPath), ready = parseJsonBytes(bytes)
+  refuse(ready.sourceCommit === fixture.sourceCommit && ready.artifactSha256 === fixture.artifactSha256 && ready.profileRoot === fixture.profileRoot && ready.hostStarted === true && Number.isSafeInteger(ready.ownedPid) && ready.ownedPid > 0 && ready.frontendAuthReady === true && ready.protection?.statusPath === fixture.protection.statusPath && ready.protection?.guardGitHead === fixture.sourceCommit, 3, 'Web preparation identity mismatch')
+  const plan = readJsonFile(ready.fixturePath)
+  refuse(plan.nonce === fixture.nonce && plan.home === fixture.home && plan.sourceCommit === fixture.sourceCommit && plan.artifactSha256 === fixture.artifactSha256, 3, 'Web preparation plan mismatch')
+  try { process.kill(ready.ownedPid, 0) } catch { throw new DriverError(3, 'owned Web host is not live') }
+  const log = readFileSync(readyPath.slice(0, -'.ready.json'.length) + '.host.log')
+  refuse(log.length <= 16 * 1024 * 1024, 3, 'startup log budget exceeded')
+  const entryUrl = startupWebUrl(log, fixture.frontendUrl)
+  return { entryUrl, token: new URL(entryUrl).searchParams.get('token'), readySha256: createHash('sha256').update(bytes).digest('hex'), ownedPid: ready.ownedPid }
+}
+const redactLaunch = (value, launch) => {
+  if (!launch) return value
+  const string = text => text.replaceAll(launch.entryUrl, '[private startup URL]').replaceAll(launch.token, '[private startup token]')
+  if (typeof value === 'string') return string(value)
+  if (Array.isArray(value)) return value.map(row => redactLaunch(row, launch))
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, row]) => [string(key), redactLaunch(row, launch)]))
+  return value
+}
+/** Reviewed rc.2/rc.3 public onboarding and ungrouped navigation only. */
+export function readFrontendState(document, action) {
+  const visible = e => Boolean(e && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden')
+  const dialogs = [...document.querySelectorAll('[role="dialog"]')].filter(visible)
+  const title = e => e.querySelector('h2')?.textContent?.trim()
+  const buttons = e => [...e.querySelectorAll('button')].filter(visible)
+  const opens = [...document.querySelectorAll('button[aria-label]')].filter(e => visible(e) && ['打开侧边栏', 'Open sidebar'].includes(e.getAttribute('aria-label')))
+  const groups = [...document.querySelectorAll('[data-row-key="workspace:"][role="treeitem"]')].filter(visible)
+  if (action) {
+    let candidates = []
+    if (action === 'acknowledge-preview' && dialogs.length === 1 && ['预览版说明', 'Preview Notice'].includes(title(dialogs[0]))) candidates = buttons(dialogs[0]).filter(e => ['继续', 'Continue'].includes(e.textContent.trim()) && !e.disabled)
+    if (action === 'open-sidebar' && dialogs.length === 0) candidates = opens
+    if (action === 'expand-ungrouped' && dialogs.length === 0) candidates = groups.filter(e => e.getAttribute('aria-expanded') === 'false')
+    if (candidates.length !== 1) return null
+    const e = candidates[0], r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2
+    return r.width > 0 && r.height > 0 && e.contains(document.elementFromPoint(x, y)) ? { x, y } : null
+  }
+  return { url: document.location.href, viewport: { width: document.defaultView.innerWidth, height: document.defaultView.innerHeight, devicePixelRatio: document.defaultView.devicePixelRatio },
+    dialogs: dialogs.map(e => ({ title: title(e), continueCount: buttons(e).filter(b => ['继续', 'Continue'].includes(b.textContent.trim())).length, continueEnabled: buttons(e).some(b => ['继续', 'Continue'].includes(b.textContent.trim()) && !b.disabled), alerts: [...e.querySelectorAll('[role="alert"]')].filter(visible).length })),
+    openSidebarCount: opens.length, groups: groups.map(e => ({ expanded: e.getAttribute('aria-expanded') })),
+    rows: [...document.querySelectorAll('[data-row-key][role="treeitem"]')].filter(visible).map(e => e.getAttribute('data-row-key')) }
+}
+export async function prepareFrontend(page, fixture, { timeoutMs = 15000, pollMs = 50, signal } = {}) {
+  const startedEpochMs = Date.now(), deadline = performance.now() + timeoutMs, actions = [], done = new Set()
+  let last
+  while (performance.now() < deadline) {
+    signal?.throwIfAborted()
+    const state = await page.readFrontend(); last = state
+    refuse(state.dialogs.length <= 1 && state.openSidebarCount <= 1 && state.groups.length <= 1, 3, 'ambiguous frontend readiness controls')
+    let action
+    if (state.dialogs.length) {
+      const dialog = state.dialogs[0]
+      refuse(['预览版说明', 'Preview Notice'].includes(dialog.title) && dialog.continueCount === 1 && dialog.alerts === 0, 3, 'unreviewed or failed frontend dialog')
+      if (!done.has('acknowledge-preview') && dialog.continueEnabled !== false) action = 'acknowledge-preview'
+    } else if (state.openSidebarCount === 1 && !done.has('open-sidebar')) action = 'open-sidebar'
+    else if (state.groups.length === 1 && state.groups[0].expanded === 'false' && !done.has('expand-ungrouped')) action = 'expand-ungrouped'
+    else if (state.url === fixture.frontendUrl && fixture.sessions.every(row => state.rows.includes('session:' + row.id))) {
+      refuse(state.groups.length === 1 && state.groups[0].expanded === 'true', 3, 'fixture ungrouped navigation contract mismatch')
+      return { startedEpochMs, completedEpochMs: Date.now(), viewport: state.viewport, actions }
+    }
+    if (action) { const epochMs = Date.now(); await page.clickFrontend(action); done.add(action); actions.push({ action, epochMs }) }
+    await pause(pollMs)
+  }
+  throw new DriverError(5, 'frontend readiness timed out', { actions, viewport: last?.viewport })
 }
 /** Runs in the real browser, reading only rendered DOM; no payload echo. */
 export function readDom(document, selectors) {
@@ -187,7 +273,15 @@ export async function connectPage(endpoint, frontendUrl, { surface = 'web', desk
       refuse(!value.exceptionDetails, 3, 'frontend evaluation failed', value.exceptionDetails)
       return value.result?.value
     }
+    if (surface === 'web') await cdp.call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false }, sessionId)
     return {
+      readFrontend: () => evaluate(`(${readFrontendState.toString()})(document)`),
+      clickFrontend: async action => {
+        const point = await evaluate(`(${readFrontendState.toString()})(document,${JSON.stringify(action)})`)
+        refuse(point, 3, 'frontend readiness control unavailable', { action })
+        await cdp.call('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point }, sessionId)
+        await cdp.call('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point }, sessionId)
+      },
       read: () => evaluate(`(${readDom.toString()})(document,${JSON.stringify(DOM)})`),
       readProtection: path => evaluate(`(async()=>{const r=await fetch(new URL(${JSON.stringify(path)},location.href),{redirect:'error'});if(!r.ok)throw Error('live Guard observer refused');return await r.json()})()`),
       select: async id => {
@@ -212,29 +306,28 @@ export async function main(args = process.argv.slice(2)) {
   const option = key => { const i = args.indexOf(key); return i < 0 ? undefined : args[i + 1] }
   const output = option('--output'), fixturePath = option('--fixture'), endpoint = option('--cdp-url')
   refuse(output && fixturePath && endpoint && !existsSync(output), 2, 'usage: --fixture <manifest> --cdp-url <loopback> --output <new.json> [--switches N]; existing output is preserved')
-  const bytes = readFileSync(fixturePath), fixture = validateFixture(JSON.parse(bytes), true)
+  const bytes = readFileSync(fixturePath), fixture = validateFixture(parseJsonBytes(bytes), true)
   const controller = new AbortController(), interrupt = () => controller.abort(new DriverError(130, 'interrupted'))
   process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt)
-  let page, report, code = 0
+  let page, report, code = 0, webLaunch, frontendReadiness
   let desktopOwner, desktopOwnerSha256
   try {
     if (fixture.surface === 'desktop') {
       refuse(option('--desktop-ownership'), 2, 'Desktop owner receipt required')
       const ownerBytes = readFileSync(option('--desktop-ownership'))
-      desktopOwner = validateDesktopOwnership(JSON.parse(ownerBytes), fixture, endpoint)
+      desktopOwner = validateDesktopOwnership(parseJsonBytes(ownerBytes), fixture, endpoint)
       desktopOwnerSha256 = createHash('sha256').update(ownerBytes).digest('hex')
     }
-    page = await connectPage(endpoint, fixture.frontendUrl, { surface: fixture.surface ?? 'web', desktopTargetId: desktopOwner?.targetId })
-    // Wait for this newly-created tab to load the exact supplied fixture URL.
-    const deadline = performance.now() + 15000
-    while (performance.now() < deadline) { controller.signal.throwIfAborted(); const state = await page.read(); if (state.rows?.includes('session:' + fixture.sessions[0].id) && state.rows?.includes('session:' + fixture.sessions[1].id)) break; await pause(50) }
-    report = { status: 'passed', ...await measureSwitches(page, fixture, { switches: Number(option('--switches') ?? 3), signal: controller.signal }) }
-  } catch (error) { code = error.code ?? 3; report = { status: 'failed', reason: error.message, details: error.details ?? {} } }
+    if (fixture.surface !== 'desktop') webLaunch = webPreparationEntry(option('--web-preparation'), fixture)
+    page = await connectPage(endpoint, webLaunch?.entryUrl ?? fixture.frontendUrl, { surface: fixture.surface ?? 'web', desktopTargetId: desktopOwner?.targetId })
+    frontendReadiness = await prepareFrontend(page, fixture, { signal: controller.signal })
+    report = { status: 'passed', frontendReadiness, ...await measureSwitches(page, fixture, { switches: Number(option('--switches') ?? 3), signal: controller.signal }) }
+  } catch (error) { code = errorExitCode(error); report = { status: 'failed', ...(frontendReadiness ? { frontendReadiness } : {}), reason: error.message, details: error.details ?? {} } }
   finally {
     try { await page?.close() } catch (error) { code ||= 3; report = { ...report, status: 'failed', cleanupError: error.message } }
     process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt)
   }
-  writeFileSync(output, JSON.stringify({ schema: 'dsh-ui-session-switch/v3', fixtureSha256: createHash('sha256').update(bytes).digest('hex'), hostVersion: fixture.hostVersion, surface: fixture.surface ?? 'web', desktopTargetId: desktopOwner?.targetId, desktopOwnerSha256, profileRoot: fixture.profileRoot, frontendUrl: fixture.frontendUrl, ...report }, null, 2) + '\n', { flag: 'wx' })
+  writeUtf8Atomic(output, JSON.stringify({ schema: 'dsh-ui-session-switch/v3', fixtureSha256: createHash('sha256').update(bytes).digest('hex'), hostVersion: fixture.hostVersion, surface: fixture.surface ?? 'web', desktopTargetId: desktopOwner?.targetId, desktopOwnerSha256, profileRoot: fixture.profileRoot, frontendUrl: fixture.frontendUrl, ...redactLaunch(report, webLaunch), ...(webLaunch ? { webPreparationSha256: webLaunch.readySha256, webAuthExchangeAttempted: true } : {}) }, null, 2) + '\n', { flag: 'wx' })
   return code
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().then(code => { process.exitCode = code }, error => { console.error(JSON.stringify({ status: 'failed', reason: error.message })); process.exitCode = error.code ?? 3 })
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().then(code => { process.exitCode = code }, error => { console.error(JSON.stringify({ status: 'failed', reason: error.message })); process.exitCode = errorExitCode(error) })

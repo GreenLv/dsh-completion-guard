@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /** Versioned zero-model fixture producer. Uses the official rc.3 persistence
  * handles; never submits an Agent inbox message or starts a host/model. */
+import { writeUtf8Atomic, readJsonFile, readUtf8File, parseJsonBytes } from './ui-fixture-io.mjs'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createUserMessage, createToolResultMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import { apply as applyPersistence } from '@deepseek-ai/dsh-session-persistence-jsonl'
-import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { DriverError, validateFixture } from './measure-session-switch.mjs'
+import { DriverError, validateFixture, errorExitCode } from './measure-session-switch.mjs'
 
 export function appendFixtureHistory(session, { marker, preludeTurns = 0, distribution = 'roots', outputBytes = 4096 }, constructors = { createUserMessage, createToolResultMessage, createAssistantMessage }) {
   if (!['roots', 'tool'].includes(distribution) || !Number.isSafeInteger(outputBytes) || outputBytes < 0 || outputBytes > 1048576) throw new DriverError(2, 'invalid history distribution/output byte budget')
@@ -60,7 +61,7 @@ export async function createFixture({ home, frontendUrl, sourceCommit, artifactS
   if (existsSync(home) || existsSync(output)) throw new DriverError(2, 'fixture HOME and output must be unused; existing state preserved')
   const nonce = randomUUID(), profileRoot = join(home, 'profiles', surface), cwd = join(home, 'ui-fixture-work')
   mkdirSync(profileRoot, { recursive: true }); mkdirSync(cwd)
-  writeFileSync(join(home, '.guard-ui-fixture-owner.json'), JSON.stringify({ schema: 'dsh-ui-fixture-owner/v1', nonce, sourceCommit, output: resolve(output) }) + '\n', { flag: 'wx' })
+  writeUtf8Atomic(join(home, '.guard-ui-fixture-owner.json'), JSON.stringify({ schema: 'dsh-ui-fixture-owner/v1', nonce, sourceCommit, output: resolve(output) }) + '\n', { flag: 'wx' })
   const ctx = new Context()
   try {
     let sessions
@@ -68,7 +69,7 @@ export async function createFixture({ home, frontendUrl, sourceCommit, artifactS
     else { await applyPersistence(ctx, { root: join(home, 'sessions') }); sessions = await seedSessions(ctx.sessionPersistence, { nonce, cwd, preludeTurns, distribution, outputBytes }) }
     const manifest = { schema: 'dsh-ui-fixture/v1', ownership: 'task-owned', surface, nonce, hostVersion, sourceCommit, ...(artifactSha256 ? { artifactSha256 } : {}), home, profileRoot, frontendUrl, cwd, preludeTurns, distribution, outputBytes, sessions, producerSha256: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'), protocol: 'official-rc2-rc3-dom/v1', realModelRequests: 0 }
     validateFixture(manifest)
-    writeFileSync(output, JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' })
+    writeUtf8Atomic(output, JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' })
     return manifest
   } finally { await ctx.fiber.dispose() }
 }
@@ -76,5 +77,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2), option = key => { const i = args.indexOf(key); return i < 0 ? undefined : args[i + 1] }
   if (!option('--home') || !option('--frontend-url') || !option('--source-commit') || !option('--output')) {
     console.error('usage: --home <UNUSED task HOME> --frontend-url <explicit loopback URL> --source-commit <40hex> --output <new.json> [--artifact-sha256 <64hex>] [--prelude-turns 0..10000]'); process.exitCode = 2
-  } else createFixture({ home: option('--home'), frontendUrl: option('--frontend-url'), sourceCommit: option('--source-commit'), artifactSha256: option('--artifact-sha256'), output: option('--output'), preludeTurns: Number(option('--prelude-turns') ?? 0), deferHostSeeding: true, hostVersion: option('--host-version') ?? '0.2.1-rc.3', distribution: option('--distribution') ?? 'roots', outputBytes: Number(option('--output-bytes') ?? 4096), surface: option('--surface') ?? 'web' }).then(manifest => console.log(JSON.stringify({ written: option('--output'), sessions: manifest.sessions.map(s => ({ id: s.id, eventCount: s.eventCount })), persistedReadbackVerified: manifest.sessions.every(s => s.persistedReadbackVerified), protectedHostSeedingRequired: true, realModelRequests: 0 })), error => { console.error(JSON.stringify({ status: 'failed', reason: error.message, fixturePreserved: true })); process.exitCode = error.code ?? 3 })
+  } else createFixture({ home: option('--home'), frontendUrl: option('--frontend-url'), sourceCommit: option('--source-commit'), artifactSha256: option('--artifact-sha256'), output: option('--output'), preludeTurns: Number(option('--prelude-turns') ?? 0), deferHostSeeding: true, hostVersion: option('--host-version') ?? '0.2.1-rc.3', distribution: option('--distribution') ?? 'roots', outputBytes: Number(option('--output-bytes') ?? 4096), surface: option('--surface') ?? 'web' }).then(manifest => console.log(JSON.stringify({ written: option('--output'), sessions: manifest.sessions.map(s => ({ id: s.id, eventCount: s.eventCount })), persistedReadbackVerified: manifest.sessions.every(s => s.persistedReadbackVerified), protectedHostSeedingRequired: true, realModelRequests: 0 })), error => { console.error(JSON.stringify({ status: 'failed', reason: error.message, fixturePreserved: true })); process.exitCode = errorExitCode(error) })
 }

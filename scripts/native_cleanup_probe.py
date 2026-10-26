@@ -43,19 +43,19 @@ def run_probe() -> dict:
         repo.mkdir()
         def git(*args: str, checked: bool = True):
             result = subprocess.run(["git", "-c", "user.name=T06", "-c", "user.email=t06@example.invalid", *args],
-                                    cwd=repo, capture_output=True, text=True, check=False)
+                                    cwd=repo, capture_output=True, text=True, check=False, encoding="utf-8")
             if checked and result.returncode:
                 raise RuntimeError("isolated Git fixture command failed")
             return result
         git("init", "--quiet")
-        (repo / "held.txt").write_text("owned fixture\n")
-        (repo / "removed.txt").write_text("owned fixture\n")
+        (repo / "held.txt").write_text("owned fixture\n", encoding="utf-8")
+        (repo / "removed.txt").write_text("owned fixture\n", encoding="utf-8")
         git("add", ".")
         git("commit", "--quiet", "-m", "synthetic fixture")
         git("worktree", "add", "--quiet", "--detach", str(worktree))
         unknown = root / "unknown-candidate"
         unknown.mkdir()
-        (unknown / "preserved.txt").write_text("unknown dependency: retain\n")
+        (unknown / "preserved.txt").write_text("unknown dependency: retain\n", encoding="utf-8")
         with held_file(worktree / "held.txt"):
             # Controlled partial content removal precedes the one directory
             # removal attempt. This is an OS fixture, never a guarded workflow.
@@ -66,7 +66,7 @@ def run_probe() -> dict:
             result = {
                 "removalAttempts": 1,
                 "dependencyStatus": "in_use",
-                "unknownCandidateRetained": (unknown / "preserved.txt").read_text() == "unknown dependency: retain\n",
+                "unknownCandidateRetained": (unknown / "preserved.txt").read_text(encoding="utf-8") == "unknown dependency: retain\n",
                 "metadataRemoved": "no" if str(worktree) in listed else "yes",
                 "contentRemoved": "partial" if held_exists else "yes",
                 "directoryRemoved": "no" if worktree.exists() else "yes",

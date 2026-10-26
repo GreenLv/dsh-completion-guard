@@ -379,7 +379,7 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         # the actual ASAR-contained dsh namespace. Bind both explicitly.
         config["desktopArchive"] = str(archive)
         probe_patch = temporary / "probe-patch.json"
-        probe_patch.write_text(json.dumps(host.native_probe_patch(root / "scripts" / "native_host_probe_v070.mjs", config)))
+        probe_patch.write_text(json.dumps(host.native_probe_patch(root / "scripts" / "native_host_probe_v070.mjs", config)), encoding="utf-8")
         command(*electron_command(archive, helper, "probe", str(archive), str(profile), str(probe_patch)))
         stage = "desktop_probe_composition"
         composed.write_text(command("node", str(locker), "dump-desktop", *lock_args), encoding="utf-8")
@@ -393,10 +393,10 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         receipt_paths = list(temporary.glob("desktop.probe.*.json"))
         if process.returncode or len(receipt_paths) != 1:
             raise RuntimeError("Desktop owned backend did not complete its probe")
-        probe = json.loads(receipt_paths[0].read_text())
+        probe = json.loads(receipt_paths[0].read_text(encoding="utf-8"))
         if not host.validate_probe(probe, nonce, host.probe_driver_digest(root, "v070"), protocol="v070"):
             raise host.HostProbeFailure(probe)
-        driver = json.loads(Path(str(output) + ".driver.json").read_text())
+        driver = json.loads(Path(str(output) + ".driver.json").read_text(encoding="utf-8"))
         if not driver["ready"] or not driver["shutdown_acknowledged"] or driver["exit_code"] != 0:
             raise RuntimeError("Desktop backend did not stop gracefully")
         passed("desktop_loaded_backend")
@@ -406,7 +406,7 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         assert_slot_available()
         stage = "desktop_uninstall"
         command(*electron_command(archive, cli, "plugin", "--profile", "desktop", "remove", "dsh-completion-guard", "guard-acceptance-fixture"))
-        manifest = json.loads((profile / "package.json").read_text())
+        manifest = json.loads((profile / "package.json").read_text(encoding="utf-8"))
         if installed.exists() or "dsh-completion-guard" in manifest.get("dependencies", {}):
             raise RuntimeError("Desktop uninstall retained the plugin")
         passed("desktop_uninstall")

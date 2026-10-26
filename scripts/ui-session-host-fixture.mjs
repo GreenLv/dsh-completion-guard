@@ -1,5 +1,6 @@
 /** Loaded only by the versioned task-owned UI preparation overlay. */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeUtf8Atomic, readJsonFile, readUtf8File, parseJsonBytes } from './ui-fixture-io.mjs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { homedir } from 'node:os'
@@ -10,7 +11,7 @@ import { runtimeRequire, createProbeAgent } from './native_host_probe.mjs'
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 export function verifyObservationInput({ plan, priorBytes, seedReceiptSha256, packageManifest, producerSha256, probeSha256, agents, domain }) {
   if (!/^[a-f0-9]{64}$/.test(seedReceiptSha256 ?? '') || hash(priorBytes) !== seedReceiptSha256) throw new Error('observe seed receipt bytes mismatch')
-  const prior = validateFixture(JSON.parse(priorBytes), true)
+  const prior = validateFixture(parseJsonBytes(priorBytes), true)
   for (const key of ['schema', 'ownership', 'surface', 'nonce', 'hostVersion', 'sourceCommit', 'artifactSha256', 'home', 'profileRoot', 'frontendUrl', 'cwd', 'preludeTurns', 'distribution', 'outputBytes', 'protocol', 'producerSha256']) if (JSON.stringify(prior[key]) !== JSON.stringify(plan[key])) throw new Error(`observe fixture identity mismatch: ${key}`)
   if (!/^[a-f0-9]{64}$/.test(plan.artifactSha256 ?? '') || plan.sourceCommit !== packageManifest.gitHead || prior.protection.guardGitHead !== packageManifest.gitHead || prior.protection.guardVersion !== packageManifest.version || prior.producerSha256 !== producerSha256 || prior.protection.probeSha256 !== probeSha256) throw new Error('observe producer/probe/package identity mismatch')
   for (let i = 0; i < prior.sessions.length; i++) {
@@ -39,9 +40,9 @@ export function apply(ctx, config) {
   ctx.effect(() => ctx.appReady.onReady(async () => {
     const sessions = []
     try {
-      const fixture = validateFixture(JSON.parse(readFileSync(config.fixturePath, 'utf8')))
+      const fixture = validateFixture(readJsonFile(config.fixturePath))
       const installed = join(fixture.profileRoot, 'node_modules', 'dsh-completion-guard')
-      const packageManifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'))
+      const packageManifest = readJsonFile(join(installed, 'package.json'))
       const domain = await import(pathToFileURL(join(installed, 'dist', 'domain', 'index.js')).href)
       const require = runtimeRequire(config.runtimeRoot)
       const { createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
@@ -85,11 +86,11 @@ export function apply(ctx, config) {
         sessions: readLiveProtectionSessions(ctx, sessions, domain, fixture.home),
       }) }), 'read-only live UI fixture protection')
       const result = { ...fixture, sessions, protection: { schema: 'dsh-ui-protected-fixture/v1', status: 'verified', guardVersion: packageManifest.version, guardGitHead: packageManifest.gitHead, mode: 'always', hostLockStatus: host.status, hostLockDigest: host.digest, statusPath, probeSha256 } }
-      if (config.mode === 'observe') writeFileSync(config.runOutput, JSON.stringify({ schema: 'dsh-ui-observer-run/v1', status: 'observer_ready', sourceCommit: fixture.sourceCommit, artifactSha256: fixture.artifactSha256, seedReceiptSha256: config.seedReceiptSha256, nonce: fixture.nonce, processId: process.pid, noSessionCreateAppendReadOrPromote: true, probeSha256 }) + '\n', { flag: 'wx' })
-      else writeFileSync(config.output, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' })
+      if (config.mode === 'observe') writeUtf8Atomic(config.runOutput, JSON.stringify({ schema: 'dsh-ui-observer-run/v1', status: 'observer_ready', sourceCommit: fixture.sourceCommit, artifactSha256: fixture.artifactSha256, seedReceiptSha256: config.seedReceiptSha256, nonce: fixture.nonce, processId: process.pid, noSessionCreateAppendReadOrPromote: true, probeSha256 }) + '\n', { flag: 'wx' })
+      else writeUtf8Atomic(config.output, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' })
     } catch (error) {
       const failureBase = config.mode === 'observe' ? config.runOutput : config.output
-      if (typeof failureBase === 'string') writeFileSync(failureBase + '.failed.json', JSON.stringify({ status: 'failed', reason: error.message, sessions, realModelRequests: 0 }) + '\n', { flag: 'wx' })
+      if (typeof failureBase === 'string') writeUtf8Atomic(failureBase + '.failed.json', JSON.stringify({ status: 'failed', reason: error.message, sessions, realModelRequests: 0 }) + '\n', { flag: 'wx' })
       throw error
     }
   }), 'protected UI fixture creation')

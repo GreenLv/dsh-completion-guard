@@ -10,9 +10,9 @@ export const families = Object.freeze({
   'rc3-release-closeout': [
     'tests/native-release-fixture.test.ts',
     'tests/tools/registry-readback-budget.test.ts',
-    'tests/module-eol.test.ts',
+    'tests/module-eol.test.ts', 'tests/host-lock-cli-stdout.test.ts',
     'tests/rc3-official-listing.test.ts', 'tests/rc3-windows-distribution.test.ts',
-    'tests/session-switch-driver.test.ts', 'tests/ui-session-fixture.test.ts',
+    'tests/session-switch-driver.test.ts', 'tests/ui-session-fixture.test.ts', 'tests/ui-preparation-module.test.ts',
     'tests/activation-selection-cli.test.ts', 'tests/historical-invariants.test.ts',
     'tests/domain/v050-diagnosis.test.ts',
   ],

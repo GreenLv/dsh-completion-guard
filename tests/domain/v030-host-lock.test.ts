@@ -388,6 +388,10 @@ describe('active profile graph injection and composed readback', () => {
     )
     expect(hostLockRowsFromComposedDump(dshDump)).toEqual(active.evaluation.packages)
     expect(verifyComposedHostLockDump(dshDump, active.evaluation).digest).toBe(active.evaluation.digest)
+    // CLI-STDOUT-01: the production readback checks only Guard lock fields.
+    // A later truncated entry is not full-YAML acceptance; official parsing
+    // and host loading are separate mandatory composition checks.
+    expect(verifyComposedHostLockDump(dshDump + "\n- id: unrelated\n  name: 'truncated", active.evaluation).digest).toBe(active.evaluation.digest)
   })
 
   it('rejects a duplicate reachable critical package and package drift before injection', () => {

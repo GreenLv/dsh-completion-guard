@@ -13,6 +13,8 @@ Each entry describes that version. Historical host ranges, defaults, plans and c
 
 ## 0.11.0
 
+- **Long host-lock configuration exports now reach pipes in full.** `verify-dump` explicitly reports that it checks only Guard lock fields; complete configuration parsing and host loading remain separate checks.
+
 - **The activation CLI supports official rc.3 persistence exports.** Inventory and explicit mode adoption accept both the default-plugin and namespace-plugin module shapes, and reject invalid modules before persistence access.
 
 - **Release tgz identity is now read through one auditable tar subset.** Guard, npm and every release stage agree on which `package.json` the bytes encode: resolution, the final pre-effect check and post-publish readback all use one strict reader that validates header checksums, models ustar prefixes and npm's path normalization, and refuses links, PAX/GNU extensions, duplicate normalized names and paths outside `package/`. A crafted archive whose two manifests disagree (prefix shadowing plus `./` aliasing) is rejected before any authorization, so a publish can no longer be bound to one package name while npm installs another. Reading is bounded on every axis — compressed bytes actually read, decompressed output, member size, member count and manifest size — so a high-ratio archive can no longer stall the host before authorization completes.

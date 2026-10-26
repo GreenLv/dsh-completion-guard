@@ -108,7 +108,7 @@ def redacted_host_stderr(data: bytes) -> str:
     parts = [known_error_code(data[-8192:]) or "unrecognized_host_error"]
     audit = Path(__file__).resolve().parents[1] / "manifests" / "rc017-rc2-byte-audit.json"
     try:
-        names = {row["name"] for row in json.loads(audit.read_text())["packages"]}
+        names = {row["name"] for row in json.loads(audit.read_text(encoding="utf-8"))["packages"]}
     except (OSError, ValueError, KeyError, TypeError):
         names = set()
     match = re.search(r"Cannot find package ['\"]([^'\"]+)['\"]", text)
@@ -489,7 +489,7 @@ def discover_owned_hosts(cli: Path, overlays: list[Path]) -> dict[int, Path]:
         rows = value if isinstance(value, list) else [value]
         pairs = [(row.get("ProcessId"), row.get("CommandLine") or "") for row in rows]
     else:
-        result = subprocess.run(["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=10, check=True)
+        result = subprocess.run(["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=10, check=True, encoding="utf-8")
         pairs = []
         for line in result.stdout.splitlines():
             fields = line.strip().split(None, 1)
@@ -863,7 +863,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                         continue
                     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=10, check=True)
                 else:
-                    inspect = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=10, check=False)
+                    inspect = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=10, check=False, encoding="utf-8")
                     if inspect.returncode:
                         continue
                     if not owns_host_command(inspect.stdout.strip(), cli, overlay, platform.system() == "Windows"):

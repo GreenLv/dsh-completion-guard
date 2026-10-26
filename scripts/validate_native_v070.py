@@ -128,8 +128,8 @@ def main() -> int:
     parser.add_argument("--headless-host-lock-digest", required=True)
     args = parser.parse_args()
     try:
-        commit = subprocess.check_output(["git", "-C", str(args.repo_root), "rev-parse", "HEAD"], text=True).strip()
-        dirty = subprocess.check_output(["git", "-C", str(args.repo_root), "status", "--porcelain", "--untracked-files=all"], text=True)
+        commit = subprocess.check_output(["git", "-C", str(args.repo_root), "rev-parse", "HEAD"], text=True, encoding="utf-8").strip()
+        dirty = subprocess.check_output(["git", "-C", str(args.repo_root), "status", "--porcelain", "--untracked-files=all"], text=True, encoding="utf-8")
         driver = probe_driver_digest(args.repo_root, "v070")
         value = json.loads(args.annex.read_text(encoding="utf-8"))
         valid = not dirty and valid_v070_annex(value, args.artifact, commit, driver,

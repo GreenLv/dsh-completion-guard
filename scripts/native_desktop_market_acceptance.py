@@ -229,7 +229,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
 
         def run_bounded(*args: str) -> subprocess.CompletedProcess:
             return subprocess.run(["node", *args], cwd=work, env=node_env, text=True,
-                                  capture_output=True, timeout=DRIFT_TIMEOUT_SECONDS, check=False)
+                                  capture_output=True, timeout=DRIFT_TIMEOUT_SECONDS, check=False, encoding="utf-8")
 
         result["platform"]["toolchain"]["dsh"] = version
         result["platform"]["toolchain"]["desktop_node"] = command(desktop.carrier(archive), "--version").strip()
@@ -282,8 +282,8 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         command(*plugin_command(archive, "plugin", "--profile", "desktop", "add",
                                 "--ignore-scripts", "--config.auto-install-peers=false",
                                 f"{MARKET_PACKAGE}@{market_version}"))
-        manifest = json.loads((profile / "package.json").read_text())
-        market_manifest = json.loads((profile / "node_modules" / MARKET_PACKAGE / "package.json").read_text())
+        manifest = json.loads((profile / "package.json").read_text(encoding="utf-8"))
+        market_manifest = json.loads((profile / "node_modules" / MARKET_PACKAGE / "package.json").read_text(encoding="utf-8"))
         if manifest.get("dependencies", {}).get(MARKET_PACKAGE) != market_version \
                 or MARKET_PACKAGE not in ((manifest.get("dsh") or {}).get("profile") or {}).get("bundles", []) \
                 or market_manifest.get("name") != MARKET_PACKAGE or market_manifest.get("version") != market_version:
@@ -320,7 +320,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         # pnpm may legitimately rewrite installer metadata serialization.
         stage = "desktop_market_remove_restore"
         command(*plugin_command(archive, "plugin", "--profile", "desktop", "remove", MARKET_PACKAGE))
-        manifest = json.loads((profile / "package.json").read_text())
+        manifest = json.loads((profile / "package.json").read_text(encoding="utf-8"))
         if MARKET_PACKAGE in manifest.get("dependencies", {}) \
                 or (profile / "node_modules" / MARKET_PACKAGE).exists() \
                 or api.tree_digest(installed) != guard_tree:
@@ -352,7 +352,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         composed_final = temporary / "desktop-final.yml"
         composed_final.write_text(command("node", str(locker), "dump-desktop", *lock_args), encoding="utf-8")
         command("node", str(locker), "verify-dump", *lock_args, "--dump-config", str(composed_final))
-        if MARKET_PACKAGE not in composed_final.read_text():
+        if MARKET_PACKAGE not in composed_final.read_text(encoding="utf-8"):
             raise RuntimeError("the final composed config does not carry the market layer")
         passed("desktop_market_final_coexistence")
         # Loaded-backend probe in the final coexistence state; the driver also
@@ -366,7 +366,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
                   "sourceCommit": result["repository"]["commit"], "artifactSha256": digest,
                   "desktopArchive": str(archive)}
         probe_patch = temporary / "probe-patch.json"
-        probe_patch.write_text(json.dumps(host.native_probe_patch(root / "scripts" / "native_host_probe_v070.mjs", config)))
+        probe_patch.write_text(json.dumps(host.native_probe_patch(root / "scripts" / "native_host_probe_v070.mjs", config)), encoding="utf-8")
         command(*desktop.electron_command(archive, helper, "probe", str(archive), str(profile), str(probe_patch)))
         stage = "desktop_market_probe_composition"
         composed_final.write_text(command("node", str(locker), "dump-desktop", *lock_args), encoding="utf-8")
@@ -382,11 +382,11 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         market_receipt_path = temporary / "desktop.market.json"
         if process.returncode or len(receipt_paths) != 1:
             raise RuntimeError("coexistence Desktop backend did not complete its probe")
-        driver = json.loads(Path(str(output) + ".driver.json").read_text())
+        driver = json.loads(Path(str(output) + ".driver.json").read_text(encoding="utf-8"))
         if not driver["ready"] or not driver["shutdown_acknowledged"] or driver["exit_code"] != 0:
             raise RuntimeError("coexistence backend did not stop gracefully")
         passed("desktop_market_loaded_backend")
-        probe = json.loads(receipt_paths[0].read_text())
+        probe = json.loads(receipt_paths[0].read_text(encoding="utf-8"))
         if not host.validate_probe(probe, nonce, host.probe_driver_digest(root, "v070"), protocol="v070"):
             raise host.HostProbeFailure(probe)
         for row in probe["cases"]:
@@ -397,7 +397,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         stage = "desktop_market_api"
         if not market_receipt_path.is_file():
             raise RuntimeError("the backend driver wrote no market observation receipt")
-        observation = json.loads(market_receipt_path.read_text())
+        observation = json.loads(market_receipt_path.read_text(encoding="utf-8"))
         if observation.get("status") != "observed":
             raise RuntimeError(f"the market instance or API was not observed on this backend: "
                                f"{observation.get('status')} {str(observation.get('error'))[:200]}")
@@ -419,7 +419,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         stage = "desktop_market_uninstall"
         command(*plugin_command(archive, "plugin", "--profile", "desktop", "remove",
                                 "dsh-completion-guard", MARKET_PACKAGE))
-        manifest = json.loads((profile / "package.json").read_text())
+        manifest = json.loads((profile / "package.json").read_text(encoding="utf-8"))
         if installed.exists() or (profile / "node_modules" / MARKET_PACKAGE).exists() \
                 or "dsh-completion-guard" in manifest.get("dependencies", {}) \
                 or MARKET_PACKAGE in manifest.get("dependencies", {}):

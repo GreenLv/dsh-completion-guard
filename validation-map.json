@@ -384,7 +384,8 @@
         "scripts/measure-session-switch.mjs",
         "scripts/create-ui-session-fixture.mjs",
         "scripts/prepare-ui-session-fixture.mjs",
-        "scripts/ui-session-host-fixture.mjs"
+        "scripts/ui-session-host-fixture.mjs",
+        "scripts/ui-fixture-io.mjs"
       ],
       "gates": [
         "full_candidate"

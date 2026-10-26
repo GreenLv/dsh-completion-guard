@@ -497,6 +497,51 @@ class ProducerConsumerClosureTests(unittest.TestCase):
         broken["gates"].pop()
         self.assertTrue(MARKET.receipt_contract_closure(broken))
 
+class NativeUtf8ContractTests(unittest.TestCase):
+    def test_real_manifest_read_sites_ignore_non_utf8_default_and_reject_invalid_utf8(self):
+        import ast
+        import tempfile
+        source = ROOT / 'scripts' / 'native_desktop_market_acceptance.py'
+        tree = ast.parse(source.read_text(encoding='utf-8'))
+        assignments = {node.targets[0].id: node.value for node in ast.walk(tree)
+                       if isinstance(node, ast.Assign) and len(node.targets) == 1
+                       and isinstance(node.targets[0], ast.Name)
+                       and node.targets[0].id in {'manifest', 'market_manifest'}
+                       and isinstance(node.value, ast.Call)
+                       and isinstance(node.value.func, ast.Attribute) and node.value.func.attr == 'loads'}
+        # Execute the actual production manifest-read expressions. Simulate a
+        # cp936 platform default at the filesystem boundary, not stdout only.
+        original_open = Path.open
+        def cp936_default(path, mode='r', buffering=-1, encoding=None, errors=None, newline=None):
+            return original_open(path, mode, buffering, ('cp936' if encoding in {None, 'locale'} and 'b' not in mode else encoding), errors, newline)
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary)
+            market = profile / 'node_modules' / MARKET.MARKET_PACKAGE / 'package.json'
+            market.parent.mkdir(parents=True)
+            payload = json.dumps({'name': 'dshmarket', 'description': '中文市场🚀'}, ensure_ascii=False).encode('utf-8')
+            for path in [profile / 'package.json', market]:
+                path.write_bytes(payload)
+            with mock.patch.object(Path, 'open', cp936_default):
+                with self.assertRaises(UnicodeDecodeError):
+                    market.read_text()
+                for name, expression in assignments.items():
+                    self.assertEqual(eval(compile(ast.Expression(expression), str(source), 'eval'), {'json': json, 'profile': profile, 'MARKET_PACKAGE': MARKET.MARKET_PACKAGE})['description'], '中文市场🚀', name)
+                market.write_bytes(b'{"name":"invalid-\xff"}')
+                with self.assertRaises(UnicodeDecodeError):
+                    eval(compile(ast.Expression(assignments['market_manifest']), str(source), 'eval'), {'json': json, 'profile': profile, 'MARKET_PACKAGE': MARKET.MARKET_PACKAGE})
+
+    def test_versioned_native_text_boundaries_declare_utf8(self):
+        import ast
+        files = sorted(set((ROOT / 'scripts').glob('native*.py')) | set((ROOT / 'scripts').glob('validate_native*.py')))
+        for path in files:
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+                if not isinstance(node, ast.Call):
+                    continue
+                text = any(key.arg == 'text' and isinstance(key.value, ast.Constant) and key.value.value is True for key in node.keywords)
+                if getattr(node.func, 'attr', None) in {'read_text', 'write_text'} or text:
+                    encodings = [key.value.value for key in node.keywords if key.arg == 'encoding' and isinstance(key.value, ast.Constant)]
+                    self.assertEqual(encodings, ['utf-8'], f'{path.name}:{node.lineno}')
+
 
 if __name__ == "__main__":
     unittest.main()

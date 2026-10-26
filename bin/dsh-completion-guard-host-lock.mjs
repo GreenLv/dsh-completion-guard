@@ -71,6 +71,21 @@ function summary(evaluation) {
   }
 }
 
+async function writeOutput(stream, text) {
+  await new Promise((resolve, reject) => {
+    const onError = error => reject(error)
+    stream.once('error', onError)
+    try {
+      stream.write(text, error => {
+        if (error) { reject(error); return } // The error event is consumed by onError.
+        stream.removeListener('error', onError)
+        resolve()
+      })
+    } catch (error) { stream.removeListener('error', onError); reject(error) }
+  })
+}
+
+async function main() {
 try {
   const command = process.argv[2]
   if (!['inspect', 'inspect-graph', 'inject', 'verify-dump', 'dump-desktop'].includes(command)) {
@@ -89,7 +104,7 @@ try {
       platform: process.platform === 'win32' ? 'windows' : 'posix',
       profileKind: 'desktop',
     }, trust ? JSON.stringify(trust) : undefined, profileRoot)
-    process.stdout.write(`${JSON.stringify({
+    await writeOutput(process.stdout, `${JSON.stringify({
       ...summary(evaluation),
       inspection_scope: 'pre_install_target',
       profile_graph: target.profileGraph,
@@ -104,7 +119,8 @@ try {
       },
       packages: target.packages,
     })}\n`)
-    process.exit(evaluation.status === 'supported' ? 0 : 1)
+    process.exitCode = evaluation.status === 'supported' ? 0 : 1
+    return
   }
   if (command === 'inspect-graph') {
     const trust = hasFlag('--rebind-registry')
@@ -115,8 +131,9 @@ try {
       platform: process.platform === 'win32' ? 'windows' : 'posix',
       ...(target.profileGraph.state === 'dependency_free_headless' ? { profileKind: 'headless' } : {}),
     }, trust ? JSON.stringify(trust) : undefined, option('--profile-root'))
-    process.stdout.write(`${JSON.stringify({ ...summary(evaluation), inspection_scope: 'pre_install_target', profile_graph: target.profileGraph, packages: rows })}\n`)
-    process.exit(evaluation.status === 'supported' ? 0 : 1)
+    await writeOutput(process.stdout, `${JSON.stringify({ ...summary(evaluation), inspection_scope: 'pre_install_target', profile_graph: target.profileGraph, packages: rows })}\n`)
+    process.exitCode = evaluation.status === 'supported' ? 0 : 1
+    return
   }
   // Explicit registry rebind. Existing baseline inspection stays offline.
   const trust = hasFlag('--rebind-registry')
@@ -160,18 +177,22 @@ try {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', DSH_HOME: dirname(dirname(profileRoot)) },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
-    process.stdout.write(output)
-    process.exit(0)
+    await writeOutput(process.stdout, output)
+    return
   }
   if (command === 'inject') injectActiveProfileHostLock(active)
   if (command === 'verify-dump') {
     verifyComposedHostLockDump(readFileSync(option('--dump-config') === '-' ? 0 : option('--dump-config'), 'utf8'), active.evaluation, active)
   }
-  process.stdout.write(`${JSON.stringify({ ...summary(active.evaluation),
+  await writeOutput(process.stdout, `${JSON.stringify({ ...summary(active.evaluation),
     ...(command === 'inspect' ? { inspection_scope: 'active_profile' } : {}),
+    ...(command === 'verify-dump' ? { verification_scope: 'guard_host_lock_fields', configuration_syntax: 'not_checked' } : {}),
   })}\n`)
 } catch (error) {
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'host_lock_command_failed'
-  process.stderr.write(`${JSON.stringify({ status: 'unavailable', reason_code: code })}\n`)
   process.exitCode = 1
+  try { await writeOutput(process.stderr, `${JSON.stringify({ status: 'unavailable', reason_code: code })}\n`) } catch { /* A closed diagnostic pipe still fails. */ }
 }
+
+}
+await main()

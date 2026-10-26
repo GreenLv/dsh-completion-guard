@@ -152,3 +152,53 @@ describe('structural empty editor DOM controls', () => {
     try { expect(readDom(document, DOM).draft).toBe(expected) } finally { vi.unstubAllGlobals() }
   })
 })
+
+describe('reviewed frontend readiness controls', () => {
+  it('acknowledges the official notice, opens sidebar and expands only ungrouped through real page actions', async () => {
+    // @ts-expect-error Native operator entrypoint has no declaration build.
+    const { prepareFrontend } = await import('../scripts/measure-session-switch.mjs')
+    const actions: string[] = []
+    const states = [
+      { dialogs: [{ title: '预览版说明', continueCount: 1, alerts: 0 }], openSidebarCount: 1, groups: [], rows: [] },
+      { dialogs: [], openSidebarCount: 1, groups: [], rows: [] },
+      { dialogs: [], openSidebarCount: 0, groups: [{ expanded: 'false' }], rows: ['workspace:'] },
+      { dialogs: [], openSidebarCount: 0, groups: [{ expanded: 'true' }], rows: ['workspace:', 'session:fixture-a', 'session:fixture-b'] },
+    ]
+    const page = { readFrontend: async () => ({ ...states[Math.min(actions.length, states.length - 1)], viewport: { width: 1440, height: 1000 }, url: 'http://127.0.0.1:34567/' }), clickFrontend: async (action: string) => { actions.push(action) } }
+    const result = await prepareFrontend(page, { ...fixture, frontendUrl: 'http://127.0.0.1:34567/' }, { pollMs: 0 })
+    expect(actions).toEqual(['acknowledge-preview', 'open-sidebar', 'expand-ungrouped'])
+    expect(result.viewport).toEqual({ width: 1440, height: 1000 })
+    expect(result.actions.map((row: { epochMs: number }) => row.epochMs).every((value: number) => value >= result.startedEpochMs && value <= result.completedEpochMs)).toBe(true)
+  })
+  it.each([
+    { dialogs: [{ title: 'Unexpected sign in', continueCount: 1, alerts: 0 }] },
+    { dialogs: [{ title: 'Preview Notice', continueCount: 2, alerts: 0 }] },
+    { dialogs: [{ title: 'Preview Notice', continueCount: 1, alerts: 1 }] },
+    { groups: [{ expanded: 'true' }, { expanded: 'false' }] },
+    { openSidebarCount: 2 },
+  ])('refuses unknown or ambiguous controls without clicking: %o', async patch => {
+    // @ts-expect-error Native operator entrypoint has no declaration build.
+    const { prepareFrontend } = await import('../scripts/measure-session-switch.mjs')
+    const clickFrontend = vi.fn()
+    const page = { readFrontend: async () => ({ dialogs: [], groups: [], openSidebarCount: 0, rows: [], ...patch }), clickFrontend }
+    await expect(prepareFrontend(page, fixture, { pollMs: 0 })).rejects.toMatchObject({ code: 3 })
+    expect(clickFrontend).not.toHaveBeenCalled()
+  })
+  it('times out when a clicked official control does not complete its transition', async () => {
+    // @ts-expect-error Native operator entrypoint has no declaration build.
+    const { prepareFrontend } = await import('../scripts/measure-session-switch.mjs')
+    const clickFrontend = vi.fn(), page = { readFrontend: async () => ({ dialogs: [], openSidebarCount: 0, groups: [{ expanded: 'false' }], rows: ['workspace:'] }), clickFrontend }
+    await expect(prepareFrontend(page, fixture, { timeoutMs: 8, pollMs: 0 })).rejects.toMatchObject({ code: 5 })
+    expect(clickFrontend).toHaveBeenCalledTimes(1)
+  })
+})
+
+it('waits through the official disabled saving phase without repeating acknowledgement', async () => {
+  // @ts-expect-error Native operator entrypoint has no declaration build.
+  const { prepareFrontend } = await import('../scripts/measure-session-switch.mjs')
+  let reads = 0
+  const clickFrontend = vi.fn()
+  const page = { readFrontend: async () => { reads++; return reads <= 2 ? { dialogs: [{ title: 'Preview Notice', continueCount: 1, continueEnabled: reads === 1, alerts: 0 }], groups: [], rows: [], openSidebarCount: 0 } : { dialogs: [], groups: [{ expanded: 'true' }], rows: ['session:fixture-a', 'session:fixture-b'], openSidebarCount: 0, url: 'http://127.0.0.1:34567/', viewport: { width: 1440, height: 1000 } } }, clickFrontend }
+  await prepareFrontend(page, { ...fixture, frontendUrl: 'http://127.0.0.1:34567/' }, { pollMs: 0 })
+  expect(clickFrontend).toHaveBeenCalledTimes(1)
+})

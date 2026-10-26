@@ -32,7 +32,8 @@ class NativeRunError(RuntimeError):
 
 def run(root: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        list(args), cwd=root, env=env, text=True, capture_output=True, check=False
+        list(args), cwd=root, env=env, text=True, capture_output=True, check=False,
+        encoding="utf-8",
     )
     if result.returncode:
         detail = (result.stdout + result.stderr).strip()
