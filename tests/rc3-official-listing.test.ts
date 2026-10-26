@@ -15,6 +15,8 @@ import { ModelListingCache, requestModelListing, parseModelListing } from '@deep
 import type { ModelListing } from '@deepseek-ai/dsh-llm-deepseek'
 import { applyWithFixtureActivation as apply } from './activation-fixture.js'
 import { PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
+// @ts-expect-error Native fixture probe has no declaration build.
+const { hasLoadedGuardTool } = await import('../scripts/ui-session-host-fixture.mjs')
 import { EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
 /**
@@ -216,6 +218,9 @@ describe('RC3-M01: official adapter and Guard share one real Cordis request pipe
       const agent = raw as unknown as Agent
       await registry.register(agent)
       expect(registry.get(session.id)).toBe(agent)
+      // RC3-UI-LOOKUP01: the native observer must query this exact scope.
+      expect(agent.ctx.tools.get('context_guard_checkpoint')).toBeUndefined()
+      expect(hasLoadedGuardTool(agent)).toBe(true)
       expect(session.seq).toBe(0)
       const discovered = await llm.listModels('deepseek-official')
       expect(discovered.map(model => model.id)).toContain('deepseek-flash')

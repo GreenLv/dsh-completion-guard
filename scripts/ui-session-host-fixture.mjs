@@ -23,6 +23,7 @@ export function verifyObservationInput({ plan, priorBytes, seedReceiptSha256, pa
   }
   return prior
 }
+export const hasLoadedGuardTool = agent => Boolean(agent.ctx.tools.get('context_guard_checkpoint', agent))
 export const name = 'guard-ui-session-fixture'
 export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady', 'connection']
 export function apply(ctx, config) {
@@ -56,7 +57,7 @@ export function apply(ctx, config) {
           const agent = handle.agent, session = agent.session
           const binding = domain.readActivationBinding(domain.resolveActivationBindingsRoot(fixture.home, homedir()), domain.sessionBirthIdentity(session.header, session.inheritedEventCount))
           if (binding.status !== 'bound' || binding.mode !== 'always' || binding.binding.source !== 'fresh_creation') throw new Error('UI fixture is not protected by qualified fresh creation')
-          if (!agent.ctx.tools.get('context_guard_checkpoint')) throw new Error('UI fixture Guard tool not loaded')
+          if (!hasLoadedGuardTool(agent)) throw new Error('UI fixture Guard tool not loaded')
           appendFixtureHistory(session, { ...fixture, marker: planned.marker }, { createUserMessage, createToolResultMessage, createAssistantMessage })
           if (!await ctx.sessions.flush(session)) throw new Error('UI fixture durability unavailable')
           sessions.push({ ...planned, eventCount: session.seq, protection: { mode: binding.mode, bindingSource: binding.binding.source, bindingSha256: binding.binding.sha256, birthIdentity: binding.binding.identity, registeredGuardTool: true } })
@@ -76,7 +77,7 @@ export function apply(ctx, config) {
           const agent = ctx.agents.get(row.id)
           if (!agent) return { id: row.id, live: false }
           const binding = domain.readActivationBinding(domain.resolveActivationBindingsRoot(fixture.home, homedir()), domain.sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount))
-          return { id: row.id, live: true, mode: binding.status === 'bound' ? binding.mode : null, registeredGuardTool: Boolean(agent.ctx.tools.get('context_guard_checkpoint')) }
+          return { id: row.id, live: true, mode: binding.status === 'bound' ? binding.mode : null, registeredGuardTool: hasLoadedGuardTool(agent) }
         }),
       }) }), 'read-only live UI fixture protection')
       const result = { ...fixture, sessions, protection: { schema: 'dsh-ui-protected-fixture/v1', status: 'verified', guardVersion: packageManifest.version, guardGitHead: packageManifest.gitHead, mode: 'always', hostLockStatus: host.status, hostLockDigest: host.digest, statusPath, probeSha256 } }

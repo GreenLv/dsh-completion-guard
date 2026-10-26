@@ -155,7 +155,7 @@ fresh authority、post-await fresh pre-effect gate、并发 entry 隔离、durab
 
 升级说明：0.8.3 无数据/协议格式变更；升级路径与 0.8.2 相同（双语 changelog 0.8.3 条目已更新）。锁的 v2 记录对 v1 匿名锁保持拒绝并可诊断，不支持自动清理未知锁（安全方向）。
 
-## 8. 历史错误库全量核查（context-guard-effectiveness @ d31504d）
+## 8. 历史错误库全量核查（私有历史案例库 @ d31504d）
 
 按用户 2026-10-01 补充要求执行。库=该私有研究仓库（其 AGENTS.md 与 docs/INCIDENT_WORKFLOW.md 为入口）；未以旧归档条数或产品测试子集代替全库清单，未修改库内任何既有案例/谱系/expected。
 
