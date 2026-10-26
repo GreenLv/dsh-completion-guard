@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { segmentClauses } from '../src/domain/capture.js'
-import { interpretMessage } from '../src/domain/semantics.js'
+import { interpretMessage, itemHoldsExecutionAuthority } from '../src/domain/semantics.js'
 
 function items(text: string) {
   const events = [
@@ -66,4 +66,35 @@ it('does not invent a ban from the original two-command root', () => {
   expect(actual.some(row => row.kind === 'prohibition')).toBe(false)
   expect(actual.some(row => row.normalizedText.includes('依次分别调用 bash'))).toBe(true)
   expect(actual.some(row => row.normalizedText === '依次分')).toBe(false)
+})
+
+it.each([
+  '这部分别运行测试。', '这个模特别推送。', '这些常识别修改。', '这个分区别运行测试。',
+  '变量鉴别修改。', '变量辨别修改。', '老甄别运行测试。', '这类别运行。',
+  '这级别运行测试。', '这个别推送。', '出差别推送。', '这个属性别修改。',
+  '这几个别推送。', '后一个别推送。', '请这个别推送。', '请这部分别运行测试。',
+])('keeps a noun/classifier boundary negative instead of granting positive authority: %s', text => {
+  expect(interpretMessage(text).some(row => row.directive === 'prohibition')).toBe(true)
+  expect(segmentClauses(text).some(row => row.kind === 'prohibition')).toBe(true)
+  const actual = items(text)
+  expect(actual.some(row => row.kind === 'prohibition')).toBe(true)
+  expect(actual.some(row => row.semanticAction === 'push' && itemHoldsExecutionAuthority(row))).toBe(false)
+})
+
+it.each(['分别开始运行测试。', '先分别运行测试。', '请依次分别执行命令。'])('recognizes the complete positive instruction lead: %s', text => {
+  expect(interpretMessage(text).some(row => row.directive === 'prohibition')).toBe(false)
+  const actual = items(text)
+  expect(actual.some(row => row.kind === 'prohibition')).toBe(false)
+  expect(actual.some(row => row.normalizedText.includes('分别'))).toBe(true)
+})
+
+const reviewedLeads = ['需要你', '请你', '帮我', '麻烦', '务必', '千万', '依次', '优先', '同时', '然后', '请', '先', '再', '并', '也']
+it.each(reviewedLeads)('uses the whole reviewed lead rather than any matching prefix: %s', lead => {
+  expect(items(`${lead}分别执行命令。`).some(row => row.kind === 'prohibition')).toBe(false)
+  const actual = items(`${lead}这个别推送。`)
+  expect(actual.some(row => row.kind === 'prohibition' && row.normalizedText.includes('推送'))).toBe(true)
+  expect(actual.some(row => row.semanticAction === 'push' && itemHoldsExecutionAuthority(row))).toBe(false)
+})
+it.each(['xnever个别推送。', 'whenever个别推送。'])('does not invent an outer English negator inside a longer word: %s', text => {
+  expect(items(text).some(row => row.kind === 'prohibition')).toBe(true)
 })

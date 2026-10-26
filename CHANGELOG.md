@@ -13,7 +13,7 @@ Each entry describes that version. Historical host ranges, defaults, plans and c
 
 ## 0.11.0
 
-- **Chinese words containing 别 no longer create false prohibitions.** Instructions using 分别, 特别, 识别 and the reviewed lexical compounds stay intact; actual bans such as 请别 and 完成前别 remain in force.
+- **Reviewed Chinese instruction forms such as 请分别执行 no longer create false bans.** Words such as 分别 stay intact in those forms; genuine bans such as 这个别推送 and 完成前别 remain in force.
 
 - **Long host-lock configuration exports now reach pipes in full.** `verify-dump` explicitly reports that it checks only Guard lock fields; complete configuration parsing and host loading remain separate checks.
 

@@ -1845,18 +1845,42 @@ function firstNegation(text: string, from = 0): { index: number; token: string }
   return undefined
 }
 
+// A lexical exception needs the entire local lead, not just the preceding
+// character: 这个 + 别推送 and 这部分 + 别运行 are real bans. Unknown
+// noun/classifier prefixes stay negative; this is not general Han segmentation.
+const LEXICAL_BIE_DELIMITERS = new Set(['"', "'", '`', '“', '‘', '「', '『'])
+const LEXICAL_BIE_LEADS = ['需要你', '请你', '帮我', '麻烦', '务必', '千万', '依次', '优先', '同时', '然后', '请', '先', '再', '并', '也']
+function lexicalBieAt(text: string, index: number, inspectOuter: boolean): boolean {
+  if (!/[分特识区鉴辨甄类级个差性]/u.test(text[index - 1] ?? '')) return false
+  const wordStart = index - 1
+  let start = wordStart
+  while (start > 0 && !SEPARATORS.has(text[start - 1]!) && !LEXICAL_BIE_DELIMITERS.has(text[start - 1]!) && !/\s/u.test(text[start - 1]!)) start -= 1
+  const prefix = text.slice(start, wordStart)
+  // An outer ban still owns the whole lexical body, e.g. 别分别执行.
+  // Reuse the actual negator boundary rules (including English word edges),
+  // with nested look-behind disabled so repeated words cannot recurse deeply.
+  if (inspectOuter && NEGATORS.some(([token]) => {
+    const at = wordStart - token.length
+    return at >= 0 && text.startsWith(token, at) && negatorAt(text, at, false) === token
+  })) return true
+  let cursor = 0
+  while (cursor < prefix.length) {
+    const lead = LEXICAL_BIE_LEADS.find((token) => prefix.startsWith(token, cursor))
+    if (!lead) return false
+    cursor += lead.length
+  }
+  return true
+}
+
 /** Match a negator at exactly `index`, the longest alternative winning. */
 
-function negatorAt(text: string, index: number): string | undefined {
+function negatorAt(text: string, index: number, inspectOuterLexical = true): string | undefined {
   const lower = text.toLowerCase()
   const candidates = NEGATORS
     .filter(([token]) => lower.startsWith(token, index))
     .sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]))
   for (const [token] of candidates) {
-    // In these lexical compounds, 别 belongs to the word rather than opening
-    // a negative scope. A general Han-boundary check would also erase real
-    // bans such as 请别 / 千万别 / 完成前别; later standalone 别 still applies.
-    if (token === '别' && /[分特识区鉴辨甄类级个差性]/u.test(text[index - 1] ?? '')) continue
+    if (token === '别' && lexicalBieAt(text, index, inspectOuterLexical)) continue
     // A bare Chinese negator needs a contiguous run, so "在不" / "不足" are not bans.
     // A lone 不 inside a longer word is not a ban. 是不是/不是 after a topic and
     // before a verb ("主题是不是需要更新呢？") is a question marker, while a ban

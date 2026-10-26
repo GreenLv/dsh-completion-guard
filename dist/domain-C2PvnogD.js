@@ -15541,12 +15541,56 @@ function firstNegation(text, from = 0) {
 		};
 	}
 }
+const LEXICAL_BIE_DELIMITERS = new Set([
+	"\"",
+	"'",
+	"`",
+	"“",
+	"‘",
+	"「",
+	"『"
+]);
+const LEXICAL_BIE_LEADS = [
+	"需要你",
+	"请你",
+	"帮我",
+	"麻烦",
+	"务必",
+	"千万",
+	"依次",
+	"优先",
+	"同时",
+	"然后",
+	"请",
+	"先",
+	"再",
+	"并",
+	"也"
+];
+function lexicalBieAt(text, index$1, inspectOuter) {
+	if (!/[分特识区鉴辨甄类级个差性]/u.test(text[index$1 - 1] ?? "")) return false;
+	const wordStart = index$1 - 1;
+	let start = wordStart;
+	while (start > 0 && !SEPARATORS.has(text[start - 1]) && !LEXICAL_BIE_DELIMITERS.has(text[start - 1]) && !/\s/u.test(text[start - 1])) start -= 1;
+	const prefix = text.slice(start, wordStart);
+	if (inspectOuter && NEGATORS.some(([token]) => {
+		const at = wordStart - token.length;
+		return at >= 0 && text.startsWith(token, at) && negatorAt(text, at, false) === token;
+	})) return true;
+	let cursor = 0;
+	while (cursor < prefix.length) {
+		const lead = LEXICAL_BIE_LEADS.find((token) => prefix.startsWith(token, cursor));
+		if (!lead) return false;
+		cursor += lead.length;
+	}
+	return true;
+}
 /** Match a negator at exactly `index`, the longest alternative winning. */
-function negatorAt(text, index$1) {
+function negatorAt(text, index$1, inspectOuterLexical = true) {
 	const lower = text.toLowerCase();
 	const candidates = NEGATORS.filter(([token]) => lower.startsWith(token, index$1)).sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]));
 	for (const [token] of candidates) {
-		if (token === "别" && /[分特识区鉴辨甄类级个差性]/u.test(text[index$1 - 1] ?? "")) continue;
+		if (token === "别" && lexicalBieAt(text, index$1, inspectOuterLexical)) continue;
 		const bu = token.indexOf("不");
 		if (bu >= 0) {
 			const at = index$1 + bu;
