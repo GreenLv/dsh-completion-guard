@@ -1853,6 +1853,10 @@ function negatorAt(text: string, index: number): string | undefined {
     .filter(([token]) => lower.startsWith(token, index))
     .sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]))
   for (const [token] of candidates) {
+    // In these lexical compounds, 别 belongs to the word rather than opening
+    // a negative scope. A general Han-boundary check would also erase real
+    // bans such as 请别 / 千万别 / 完成前别; later standalone 别 still applies.
+    if (token === '别' && /[分特识区鉴辨甄类级个差性]/u.test(text[index - 1] ?? '')) continue
     // A bare Chinese negator needs a contiguous run, so "在不" / "不足" are not bans.
     // A lone 不 inside a longer word is not a ban. 是不是/不是 after a topic and
     // before a verb ("主题是不是需要更新呢？") is a question marker, while a ban

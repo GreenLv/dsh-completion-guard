@@ -66,6 +66,12 @@ export const families = Object.freeze({
     'tests/v081-production-entry-drift.test.ts',
     'tests/v081-host-version-floor.test.ts',
   ],
+  'language-negator': [
+    'tests/lang-negator-boundaries.test.ts',
+    'tests/domain/v051-clause-partition.test.ts',
+    'tests/domain/v051-instruction-semantics.test.ts',
+    'tests/domain/portable-semantics.test.ts',
+  ],
   qualification: [
     'tests/domain/v063-narrowed-contract.test.ts',
     'tests/domain/v063-holdout-round34.test.ts',

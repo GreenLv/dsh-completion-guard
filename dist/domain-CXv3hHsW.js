@@ -15546,6 +15546,7 @@ function negatorAt(text, index$1) {
 	const lower = text.toLowerCase();
 	const candidates = NEGATORS.filter(([token]) => lower.startsWith(token, index$1)).sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]));
 	for (const [token] of candidates) {
+		if (token === "别" && /[分特识区鉴辨甄类级个差性]/u.test(text[index$1 - 1] ?? "")) continue;
 		const bu = token.indexOf("不");
 		if (bu >= 0) {
 			const at = index$1 + bu;
