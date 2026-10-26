@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 import { Config as ApiKeyConfig, apply as applyApiKey } from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import { AgentRegistry, type Agent } from '@deepseek-ai/dsh-agent'
@@ -16,7 +16,8 @@ import type { ModelListing } from '@deepseek-ai/dsh-llm-deepseek'
 import { applyWithFixtureActivation as apply } from './activation-fixture.js'
 import { PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 // @ts-expect-error Native fixture probe has no declaration build.
-const { hasLoadedGuardTool } = await import('../scripts/ui-session-host-fixture.mjs')
+const { hasLoadedGuardTool, readLiveProtectionSessions } = await import('../scripts/ui-session-host-fixture.mjs')
+import * as observerDomain from '../src/domain/index.js'
 import { EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 
 /**
@@ -216,11 +217,21 @@ describe('RC3-M01: official adapter and Guard share one real Cordis request pipe
       const raw = { id: session.id, session, ctx, status: 'idle', steer: () => {} }
       raw.ctx = createScope(ctx, raw).ctx
       const agent = raw as unknown as Agent
-      await registry.register(agent)
+      const observedRows = [{ id: session.id }, { id: 'foreign-agent' }]
+      expect(readLiveProtectionSessions(ctx, observedRows, observerDomain, root)).toEqual(observedRows.map(row => ({ ...row, live: false })))
+      const observerBindings = observerDomain.resolveActivationBindingsRoot(root, homedir())
+      expect(observerDomain.writeActivationBinding(observerBindings, observerDomain.sessionBirthIdentity(session.header, session.inheritedEventCount), 'always', 'legacy_adoption', '0'.repeat(64)).status).toBe('bound')
+      const detach = await registry.register(agent)
       expect(registry.get(session.id)).toBe(agent)
       // RC3-UI-LOOKUP01: the native observer must query this exact scope.
       expect(agent.ctx.tools.get('context_guard_checkpoint')).toBeUndefined()
       expect(hasLoadedGuardTool(agent)).toBe(true)
+      expect(readLiveProtectionSessions(ctx, observedRows, observerDomain, root)).toEqual([{ id: session.id, live: true, mode: 'always', registeredGuardTool: true }, { id: 'foreign-agent', live: false }])
+      const foreign = { ...raw, id: SessionId('foreign-agent'), session: Session.create(SessionId('foreign-agent')) }
+      foreign.ctx = createScope(ctx, foreign).ctx
+      expect(hasLoadedGuardTool(foreign)).toBe(false)
+      expect(hasLoadedGuardTool({ ...foreign, ctx: agent.ctx })).toBe(false)
+      expect(() => readLiveProtectionSessions({ agents: { get: () => agent } }, [{ id: foreign.id }], observerDomain, root)).toThrow('agent identity mismatch')
       expect(session.seq).toBe(0)
       const discovered = await llm.listModels('deepseek-official')
       expect(discovered.map(model => model.id)).toContain('deepseek-flash')
@@ -271,6 +282,8 @@ describe('RC3-M01: official adapter and Guard share one real Cordis request pipe
       expect((await ctx.systemPrompt.assemble({ scope: agent })).tools.map(tool => tool.name)).toContain('context_guard_checkpoint')
       expect(wire).toHaveLength(1)
       expect(JSON.stringify(session.snapshotEvents())).not.toContain('DeepSeek Chat')
+      await detach()
+      expect(readLiveProtectionSessions(ctx, observedRows, observerDomain, root)).toEqual(observedRows.map(row => ({ ...row, live: false })))
     } finally {
       await ctx.fiber.dispose()
       globalThis.fetch = originalFetch

@@ -24,6 +24,15 @@ export function verifyObservationInput({ plan, priorBytes, seedReceiptSha256, pa
   return prior
 }
 export const hasLoadedGuardTool = agent => Boolean(agent.ctx.tools.get('context_guard_checkpoint', agent))
+export function readLiveProtectionSessions(ctx, sessions, domain, home) {
+  return sessions.map(row => {
+    const agent = ctx.agents.get(row.id)
+    if (!agent) return { id: row.id, live: false }
+    if (agent.id !== row.id || String(agent.session.id) !== row.id) throw new Error('live fixture agent identity mismatch')
+    const binding = domain.readActivationBinding(domain.resolveActivationBindingsRoot(home, homedir()), domain.sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount))
+    return { id: row.id, live: true, mode: binding.status === 'bound' ? binding.mode : null, registeredGuardTool: hasLoadedGuardTool(agent) }
+  })
+}
 export const name = 'guard-ui-session-fixture'
 export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady', 'connection']
 export function apply(ctx, config) {
@@ -73,12 +82,7 @@ export function apply(ctx, config) {
       const statusPath = `/api/guard-ui-fixture/${fixture.nonce}`
       ctx.effect(() => ctx.connection.fetch.register({ path: statusPath, methods: ['GET'], requestBody: 'buffered', fetch: () => Response.json({
         schema: 'dsh-ui-live-protection/v1', nonce: fixture.nonce, guardVersion: packageManifest.version, guardGitHead: packageManifest.gitHead,
-        sessions: sessions.map(row => {
-          const agent = ctx.agents.get(row.id)
-          if (!agent) return { id: row.id, live: false }
-          const binding = domain.readActivationBinding(domain.resolveActivationBindingsRoot(fixture.home, homedir()), domain.sessionBirthIdentity(agent.session.header, agent.session.inheritedEventCount))
-          return { id: row.id, live: true, mode: binding.status === 'bound' ? binding.mode : null, registeredGuardTool: hasLoadedGuardTool(agent) }
-        }),
+        sessions: readLiveProtectionSessions(ctx, sessions, domain, fixture.home),
       }) }), 'read-only live UI fixture protection')
       const result = { ...fixture, sessions, protection: { schema: 'dsh-ui-protected-fixture/v1', status: 'verified', guardVersion: packageManifest.version, guardGitHead: packageManifest.gitHead, mode: 'always', hostLockStatus: host.status, hostLockDigest: host.digest, statusPath, probeSha256 } }
       if (config.mode === 'observe') writeFileSync(config.runOutput, JSON.stringify({ schema: 'dsh-ui-observer-run/v1', status: 'observer_ready', sourceCommit: fixture.sourceCommit, artifactSha256: fixture.artifactSha256, seedReceiptSha256: config.seedReceiptSha256, nonce: fixture.nonce, processId: process.pid, noSessionCreateAppendReadOrPromote: true, probeSha256 }) + '\n', { flag: 'wx' })
