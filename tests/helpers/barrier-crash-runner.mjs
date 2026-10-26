@@ -11,7 +11,12 @@ const originalLink = fs.linkSync
 const paths = new Map()
 let firstPendingWrite = true
 function pause() {
-  fs.writeFileSync(join(root, 'paused'), JSON.stringify({ stage, pid: process.pid }))
+  // Publish readiness only after every JSON byte is visible. The parent
+  // observes existence from another process, between open and write syscalls.
+  const marker = join(root, 'paused')
+  const temporary = join(root, 'paused.tmp')
+  fs.writeFileSync(temporary, JSON.stringify({ stage, pid: process.pid }), { flag: 'wx' })
+  fs.renameSync(temporary, marker)
   for (;;) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)
 }
 fs.openSync = function (...args) {
