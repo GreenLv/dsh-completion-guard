@@ -157,6 +157,6 @@ describe('rc.3 Guard tool surface survives host updates', () => {
 
 describe('rc.3 cohort advertisement', () => {
   it('the runtime advertises both active cohorts with the rc.2 baseline first', () => {
-    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.1-rc.2', 'dsh-0.2.1-rc.3'])
+    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.1-rc.3'])
   })
 })

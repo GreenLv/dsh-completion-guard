@@ -1,23 +1,23 @@
 # Upgrading the core host lock
 
-Version 0.10.0 requires DSH `>=0.2.1-rc.2` and qualified Cordis `>=4.0.4`. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
+Version 0.11.0 requires DSH `>=0.2.1-rc.3` and qualified Cordis `>=4.0.4`. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
 
 1. Stop the relevant host/session writers. For an **existing installation**, preserve the old installed package and sanitized effective-mode sources, then prepare the public persistence inventory and frozen receipt with the [prepared-candidate migration toolkit](ACTIVATION_MIGRATION.md), **before replacing DSH or Guard**. Unresolved old provenance stays pending. A **fresh installation with no old Guard sessions** skips this old-mode preparation.
-2. Upgrade DSH to `0.2.1-rc.2` or a later version, then install this Guard version, keeping writers stopped.
+2. Upgrade DSH to `0.2.1-rc.3` or a later version, then install this Guard version, keeping writers stopped.
 3. Rebuild the host lock for each profile with `inspect`, `inject` and `verify-dump` from the accepted package or matching prepared source. For a POSIX shell, the entry is `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs`; pass the actual runtime/profile roots. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
 4. For an **existing installation**, run mode `adopt` and `verify` with its frozen old receipt while writers remain stopped, **before starting any host**. Host-lock rebuilding does not perform adoption. For a fresh installation there is no old receipt to adopt.
 5. Start each Web/Headless/Desktop profile only after the applicable mode and host-lock checks pass. These checks do not require a running host.
 
-0.10.0 的全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再升级 DSH、安装 Guard、重建宿主锁；保持写者停止，在启动任何宿主前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
+0.11.0 的全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再升级 DSH、安装 Guard、重建宿主锁；保持写者停止，在启动任何宿主前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
 
 Failure readbacks distinguish these cases:
 
 - `host_lock_migration_required`: the configuration lacks the policy or source roots. Supply `--runtime-root` and `--profile-root` when rebuilding the lock.
-- `host_lock_version_below_minimum`: DSH is older than `0.2.1-rc.2`. Upgrade DSH first.
+- `host_lock_version_below_minimum`: DSH is older than `0.2.1-rc.3`. Upgrade DSH first.
 - `host_lock_version_mismatch`: the installed graph differs from the reviewed baseline in version or integrity. For a later compatible version, use `--rebind-registry` to acquire and qualify the published graph. For the baseline, restore the recorded identities.
 - `host_lock_installed_graph_drift`: installed bytes or routes changed after the audit. Inspect the change before rebuilding the lock.
 
-The floor is `>=0.2.1-rc.2` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
+The floor is `>=0.2.1-rc.3` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 
@@ -84,7 +84,7 @@ certificate authority — completion certificates, mutation authorization,
 release pre-effect decisions and Goal/Stop boundaries — validates the lock
 freshly at the moment of its own decision.
 
-Version 0.10.0 registers `dsh-0.2.1-rc.2-core-v1` as the audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
+Version 0.11.0 uses `dsh-0.2.1-rc.3-core-v1` as the current audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
 The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
@@ -103,7 +103,7 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Historical host cohorts are test data only and are not accepted by 0.10.0.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Earlier host identities, including rc.2, remain historical evidence and are not accepted below the 0.11.0 floor.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 ## Official Desktop profile

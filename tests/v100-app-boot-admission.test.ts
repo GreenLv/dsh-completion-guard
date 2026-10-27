@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 
 // CG021-07: the version-admission VECTOR is judged by the OFFICIAL production
-// consumer (`evaluatePluginCompatibility` from the pinned 0.2.1-rc.2
+// consumer (`evaluatePluginCompatibility` from the pinned 0.2.1-rc.3
 // dsh-app-boot in this repository's own dependency closure), not only by
 // Guard's own floor helper. This is the same function the market/plugin
 // carrier runs; the native market card remains a separate Codex acceptance.
@@ -39,28 +39,28 @@ const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.
   peerDependencies: Record<string, string>
 }
 
-describe('CG021-07: official app-boot admission over the 0.2.1-rc.2 floor', () => {
+describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () => {
   const { evaluatePluginCompatibility } = loadAppBoot()
 
   it('keeps the shipped dual-layer declaration consistent', () => {
-    expect(manifest.engines.dsh).toBe('>=0.2.1-rc.2')
-    expect(manifest.dsh.engines.dsh).toBe('>=0.2.1-rc.2')
+    expect(manifest.engines.dsh).toBe('>=0.2.1-rc.3')
+    expect(manifest.dsh.engines.dsh).toBe('>=0.2.1-rc.3')
     for (const [name, range] of Object.entries(manifest.peerDependencies)) {
       if (name === '@deepseek-ai/cordis') continue
-      expect(range, name).toBe('>=0.2.1-rc.2')
+      expect(range, name).toBe('>=0.2.1-rc.3')
     }
   })
 
   it('admits the floor, later RCs, stable and future versions through the REAL consumer', () => {
-    for (const version of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.2+build.7']) {
+    for (const version of ['0.2.1-rc.3', '0.2.1', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.3+build.7']) {
       expect(evaluatePluginCompatibility(manifest, {}, version), version).toBeUndefined()
     }
   })
 
   it('refuses 0.2.0-rc.2 and 0.2.1-rc.1 with the declared engines range', () => {
-    for (const version of ['0.2.0-rc.2', '0.2.1-rc.1']) {
+    for (const version of ['0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.2+build.7']) {
       const issue = evaluatePluginCompatibility(manifest, {}, version)
-      expect(issue, version).toMatchObject({ requirements: { 'engines.dsh': '>=0.2.1-rc.2' }, exempted: false })
+      expect(issue, version).toMatchObject({ requirements: { 'engines.dsh': '>=0.2.1-rc.3' }, exempted: false })
     }
   })
 
@@ -71,9 +71,9 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.2 floor', () =
 
   it('without top-level engines the dsh peers decide; workspace peer ranges refer to the running runtime', () => {
     const { engines: _engines, ...peersOnly } = manifest
-    expect(evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.2')).toBeUndefined()
+    expect(evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.3')).toBeUndefined()
     const below = evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.1')
-    expect(below?.requirements).toMatchObject({ '@deepseek-ai/dsh-session': '>=0.2.1-rc.2' })
+    expect(below?.requirements).toMatchObject({ '@deepseek-ai/dsh-session': '>=0.2.1-rc.3' })
     // The peers-only surface accepts workspace ranges the way production
     // carriers emit them: they resolve against the CURRENT runtime — i.e. a
     // workspace peer always satisfies whatever runtime is running, which is
@@ -83,7 +83,7 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.2 floor', () =
       peerDependencies: Object.fromEntries(Object.entries(peersOnly.peerDependencies)
         .map(([name, range]) => [name, name === '@deepseek-ai/cordis' ? range : 'workspace:^'])),
     }
-    expect(evaluatePluginCompatibility(workspacePeers, {}, '0.2.1-rc.2')).toBeUndefined()
+    expect(evaluatePluginCompatibility(workspacePeers, {}, '0.2.1-rc.3')).toBeUndefined()
     expect(evaluatePluginCompatibility(workspacePeers, {}, '0.2.0-rc.2')).toBeUndefined()
   })
 
@@ -92,16 +92,16 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.2 floor', () =
     // manifest: a consumer that only reads the top-level field must not be
     // silently stricter or looser than one reading the nested one.
     const strictNested = { ...manifest, dsh: { ...manifest.dsh, engines: { dsh: '>=9.9.9' } } }
-    expect(evaluatePluginCompatibility(strictNested, {}, '0.2.1-rc.2')).toBeUndefined()
+    expect(evaluatePluginCompatibility(strictNested, {}, '0.2.1-rc.3')).toBeUndefined()
     const strictTop = { ...manifest, engines: { ...manifest.engines, dsh: '>=9.9.9' } }
-    expect(evaluatePluginCompatibility(strictTop, {}, '0.2.1-rc.2')?.requirements['engines.dsh']).toBe('>=9.9.9')
+    expect(evaluatePluginCompatibility(strictTop, {}, '0.2.1-rc.3')?.requirements['engines.dsh']).toBe('>=9.9.9')
   })
 
   it('a nested-only declaration still admits through the peers at the floor', () => {
     const nestedOnly = { ...manifest, engines: { node: manifest.engines.node } }
     delete (nestedOnly as Record<string, unknown>).engines
     ;(nestedOnly as Record<string, unknown>).dsh = manifest.dsh
-    expect(evaluatePluginCompatibility(nestedOnly, {}, '0.2.1-rc.2')).toBeUndefined()
+    expect(evaluatePluginCompatibility(nestedOnly, {}, '0.2.1-rc.3')).toBeUndefined()
     expect(evaluatePluginCompatibility(nestedOnly, {}, '0.2.1-rc.1')).toBeDefined()
   })
 })

@@ -17,13 +17,9 @@ import rc3Manifest from '../../src/domain/rc3-byte-audit-manifest.js'
  */
 
 describe('rc.3 cohort qualification', () => {
-  it('registers an rc.3 whole-graph cohort without displacing the rc.2 baseline', () => {
-    const ids = HOST_COHORTS.map((cohort) => cohort.id)
-    expect(ids).toEqual(['dsh-0.2.1-rc.2-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
-    // EXPECTED_HOST_PACKAGES is HOST_COHORTS[0]: the rc.2 baseline stays the
-    // default fixture for existing suites.
-    expect(HOST_COHORTS[0]!.packages).toEqual(RC021_RC2_HOST_PACKAGES)
-    expect(HOST_COHORTS[1]!.packages).toEqual(RC021_RC3_HOST_PACKAGES)
+  it('uses rc.3 as the sole current cohort and default fixture', () => {
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.3-core-v1'])
+    expect(HOST_COHORTS[0]!.packages).toEqual(RC021_RC3_HOST_PACKAGES)
   })
 
   it('binds 46 rc.3 rows plus the shared cordis 4.0.5 release', () => {
@@ -66,8 +62,8 @@ describe('rc.3 cohort qualification', () => {
     expect(rc3Lock.status, JSON.stringify(rc3Lock.reasonCode)).toBe('supported')
     expect(rc3Lock.cohortId).toBe('dsh-0.2.1-rc.3-core-v1')
     const rc2Lock = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc2Lock.status).toBe('supported')
-    expect(rc2Lock.cohortId).toBe('dsh-0.2.1-rc.2-core-v1')
+    expect(rc2Lock.status).toBe('unsupported')
+    expect(rc2Lock.hostVersion).toMatchObject({ status: 'below_minimum', minimum: '0.2.1-rc.3' })
     // Graph identity is per cohort: an rc.3 row swapped into the rc.2 set is
     // not the rc.2 lock.
     const mixed = [...RC021_RC2_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session' ? { ...row, version: '0.2.1-rc.3' } : row)]
@@ -75,10 +71,10 @@ describe('rc.3 cohort qualification', () => {
     expect(mixedLock.status !== 'supported' || mixedLock.cohortId !== 'dsh-0.2.1-rc.2-core-v1').toBe(true)
   })
 
-  it('admits rc.3 through the version floor without moving the floor', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.2')
+  it('enforces the rc.3 floor while preserving historical identities', () => {
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
     expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(true)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.1')).toBe(false)
     expect(compareHostVersions('0.2.1-rc.3', '0.2.1-rc.2')).toBeGreaterThan(0)
   })

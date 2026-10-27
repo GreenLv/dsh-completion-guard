@@ -72,9 +72,9 @@ function readReceipt(profileRoot: string | undefined, trust: HostRebindTrust): C
  * ACQUIRED versions or every loading digest would spuriously drift. Both
  * baselines come from the same audited-manifest schema. */
 function baselineFor(rows: readonly { name?: string; version?: string }[]): typeof rc2Baseline {
-  // Whole-graph cohorts never mix host versions, so ANY rc.3 row selects the
-  // rc.3 baseline; the rc.2 manifest stays the default for legacy callers.
-  return rows.some((row) => row.version === '0.2.1-rc.3') ? rc3Baseline : rc2Baseline
+  // Current and future graphs start from rc.3. Explicit rc.2 history keeps
+  // its own reference; no receipt can bypass the separate current floor.
+  return rows.find((row) => row.name === '@deepseek-ai/dsh')?.version === '0.2.1-rc.2' ? rc2Baseline : rc3Baseline
 }
 
 /** Validate generator-issued operator-owned authority. The descriptor cannot
@@ -182,7 +182,8 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
     // bytes, so a graph can legitimately equal the rc.3 loading digest while
     // its lib bytes equal BOTH baselines; require loading AND modules from
     // the SAME reference row.
-    for (const reference of [baseline.packages.find(p => p.name === row.name), rc3Baseline.packages.find(p => p.name === row.name)]) {
+    const alternate = baseline === rc3Baseline ? rc2Baseline : rc3Baseline
+    for (const reference of [baseline.packages.find(p => p.name === row.name), alternate.packages.find(p => p.name === row.name)]) {
       if (!reference) continue
       if (hostManifestLoadingDigest(files['package.json'].toString()) !== (reference as unknown as { loadingDigest?: string }).loadingDigest) continue
       const modulesOk = Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {

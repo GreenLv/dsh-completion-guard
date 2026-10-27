@@ -10,7 +10,7 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
     name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+vi.mock('../src/domain/rc3-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
@@ -54,7 +54,7 @@ afterEach(() => {
 })
 
 /**
- * A synthetic but fully exercised rc.2-shaped host: the complete audited
+ * A synthetic but fully exercised rc.3-shaped host: the complete audited
  * cohort reachable from the runtime importer, junction symlinks for the native
  * bare route, real hashed module bytes, and a profile half with its own
  * importer. Returns the rows the graph produces so callers pin the expected

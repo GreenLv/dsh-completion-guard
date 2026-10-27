@@ -9,7 +9,7 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
     name, version, ...(name === '@deepseek-ai/dsh' ? { dependencies: { '@deepseek-ai/cordis': '4.0.5' } } : {}), exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+vi.mock('../src/domain/rc3-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
@@ -201,7 +201,7 @@ describe('full host admission for standard hoisted package maps', () => {
   it('preserves a complete isolated map and rejects its missing declared edge', () => {
     const h = makeHost(false)
     expect(audit(h)).toBe('supported')
-    delete h.packages[`${app}@0.2.1-rc.2`].dependencies[dep]
+    delete h.packages[`${app}@0.2.1-rc.3`].dependencies[dep]
     saveMap(h)
     expect(['unsupported', 'unavailable']).toContain(audit(h))
   })

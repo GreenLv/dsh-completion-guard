@@ -10,7 +10,7 @@ DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，�
 
 ## 安装或升级
 
-需要 DSH `>=0.2.1-rc.2`、Cordis `>=4.0.4`、Node.js `>=22` 和 pnpm `>=11`。Web、Headless 和官方 Desktop 应用使用各自的配置目录。已审查的宿主基线是 DSH `0.2.1-rc.2` 和 `0.2.1-rc.3`，均搭配 Cordis `4.0.5`，更新版本仍须通过兼容性核验。
+需要 DSH `>=0.2.1-rc.3`、Cordis `>=4.0.4`、Node.js `>=22` 和 pnpm `>=11`。安装 Guard 0.11.0 前请先升级 DSH。Web、Headless 和官方 Desktop 应用使用各自的配置目录。当前已审查基线为 DSH `0.2.1-rc.3`，搭配 Cordis `4.0.5`；更新宿主仍须通过兼容性核验。
 
 先选好路径，再替换任何包：
 

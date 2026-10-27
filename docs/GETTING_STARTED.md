@@ -6,13 +6,13 @@
 
 Use the profile you actually run: Web, Headless or Desktop. Stop the relevant host/session writers first. If this installation has old Guard sessions, preserve the old package and effective mode sources, then prepare a frozen inventory and migration receipt using [the migration guide](ACTIVATION_MIGRATION.md) **before replacing DSH or Guard**. Empty old sessions count too. The 0.11.0 migration toolkit can run from a separately prepared package directory while the old package stays installed.
 
-With no old Guard sessions, there is no old-mode adoption step. Upgrade the host to DSH `>=0.2.1-rc.2` if necessary, install Guard, and complete the installation checks before startup. Requires Node.js `>=22`, pnpm `>=11` and a qualified Cordis `>=4.0.4` installation. Do not load both `dsh-context-guard` and `dsh-completion-guard` in one profile; the internal entry ID remains `context-guard`.
+With no old Guard sessions, there is no old-mode adoption step. Upgrade the host to DSH `>=0.2.1-rc.3` if necessary, install Guard, and complete the installation checks before startup. Requires Node.js `>=22`, pnpm `>=11` and a qualified Cordis `>=4.0.4` installation. Do not load both `dsh-context-guard` and `dsh-completion-guard` in one profile; the internal entry ID remains `context-guard`.
 
 ## 安装前
 
 先确认实际使用的 Web、Headless 或 Desktop profile，并停止相应宿主与会话写者。如果已有旧 Guard 会话，替换 DSH 或 Guard **之前**，按[迁移指南](ACTIVATION_MIGRATION.md)保留旧包、核验有效模式来源，冻结会话库存并准备迁移收据。旧空会话也需要清点。0.11.0 迁移工具可以从另行准备的包目录运行，旧包此时仍留在原安装位置。
 
-没有旧 Guard 会话时，不需要旧模式 adoption。先按需将 DSH 升级到 `>=0.2.1-rc.2`，再安装 Guard，完成安装核验后启动。需要 Node.js `>=22`、pnpm `>=11` 及通过资格验证的 Cordis `>=4.0.4`。同一 profile 不要同时加载 `dsh-context-guard` 和 `dsh-completion-guard`，内部条目 ID 仍是 `context-guard`。
+没有旧 Guard 会话时，不需要旧模式 adoption。先按需将 DSH 升级到 `>=0.2.1-rc.3`，再安装 Guard，完成安装核验后启动。需要 Node.js `>=22`、pnpm `>=11` 及通过资格验证的 Cordis `>=4.0.4`。同一 profile 不要同时加载 `dsh-context-guard` 和 `dsh-completion-guard`，内部条目 ID 仍是 `context-guard`。
 
 ## Web installation / Web 安装
 
@@ -32,7 +32,7 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-The reviewed baseline is DSH `0.2.1-rc.2` / Cordis `4.0.5`. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
+The reviewed baseline is DSH `0.2.1-rc.3` / Cordis `4.0.5`. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
 
 已审查基线为 DSH `0.2.1-rc.2` / Cordis `4.0.5`。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
 

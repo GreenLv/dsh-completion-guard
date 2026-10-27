@@ -10,7 +10,7 @@ vi.mock('../src/domain/desktop-distribution-manifest.js', async original => {
 vi.mock('../src/domain/host-desktop-identity.js', () => ({
   verifyDesktopCarrier: (archive: string) => archive,
 }))
-vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+vi.mock('../src/domain/rc3-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<Record<string, unknown>> }; [key: string]: unknown }>()
   const libDigest = createHash('sha256').update('export const synthetic = true\n').digest('hex')
@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
-import { RC021_RC2_HOST_PACKAGES } from '../src/domain/rc021-rc2-host.js'
+import { RC021_RC3_HOST_PACKAGES } from '../src/domain/rc021-rc3-host.js'
 import {
   auditDesktopInstalledImplementation,
   readAsarIndex,
@@ -97,17 +97,17 @@ function buildAsar(files: readonly AsarFileSpec[]): Buffer {
   return Buffer.concat([prefix, json, padding, body])
 }
 
-const RC2_VERSION = '0.2.1-rc.2'
+const RC3_VERSION = '0.2.1-rc.3'
 // The official per-file digest table attests every installed byte; the
 // synthetic table covers exactly the synthetic bundle's files.
 function makeDesktopMetadata(): Record<string, unknown> {
   return {
     schemaVersion: 1,
-    release: { schemaVersion: 1, version: RC2_VERSION, hostProtocolVersion: 4, nodeVersion: '24.21.0', pnpmVersion: '11.7.0' },
+    release: { schemaVersion: 1, version: RC3_VERSION, hostProtocolVersion: 4, nodeVersion: '24.21.0', pnpmVersion: '11.7.0' },
     platform: 'darwin',
     arch: 'arm64',
     sharedPackages: [],
-    files: RC021_RC2_HOST_PACKAGES.flatMap((row) => [
+    files: RC021_RC3_HOST_PACKAGES.flatMap((row) => [
       { path: `node_modules/${row.name}/package.json`, bytes: 10, sha256: createHash('sha256').update(syntheticManifestBytes(row.name, row.version as string)).digest('hex'), executable: false },
       { path: `node_modules/${row.name}/lib/index.js`, bytes: 30, sha256: SYNTHETIC_MODULES['lib/index.js'], executable: false },
     ]),
@@ -115,14 +115,14 @@ function makeDesktopMetadata(): Record<string, unknown> {
 }
 
 function bundleFileSpecs(options?: { hostVersion?: string; metadata?: Record<string, unknown>; carrier?: boolean }): AsarFileSpec[] {
-  const hostVersion = options?.hostVersion ?? RC2_VERSION
+  const hostVersion = options?.hostVersion ?? RC3_VERSION
   const metadata = options?.metadata ?? makeDesktopMetadata()
   const manifest = {
     name: '@deepseek-ai/dsh-desktop-runtime',
     private: true,
     version: hostVersion,
     type: 'module',
-    dependencies: Object.fromEntries(RC021_RC2_HOST_PACKAGES.map((row) => [row.name, row.version])),
+    dependencies: Object.fromEntries(RC021_RC3_HOST_PACKAGES.map((row) => [row.name, row.version])),
   }
   const files: AsarFileSpec[] = [
     { path: 'dsh/package.json', content: Buffer.from(JSON.stringify(manifest), 'utf8') },
@@ -131,7 +131,7 @@ function bundleFileSpecs(options?: { hostVersion?: string; metadata?: Record<str
   if (options?.carrier !== false) {
     files.push({ path: 'dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js', content: Buffer.from('export {}\n', 'utf8') })
   }
-  for (const row of RC021_RC2_HOST_PACKAGES) {
+  for (const row of RC021_RC3_HOST_PACKAGES) {
     files.push({ path: `dsh/node_modules/${row.name}/package.json`, content: syntheticManifestBytes(row.name, row.version as string) })
     files.push({ path: `dsh/node_modules/${row.name}/lib/index.js`, content: Buffer.from(SYNTHETIC_LIB_BYTES, 'utf8') })
   }
@@ -217,11 +217,11 @@ describe('desktop asar adapter', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)
     const runtime = readDesktopAppRuntime(asar)
-    expect(runtime.hostVersion).toBe(RC2_VERSION)
-    expect(runtime.runtimeVersion).toBe(RC2_VERSION)
+    expect(runtime.hostVersion).toBe(RC3_VERSION)
+    expect(runtime.runtimeVersion).toBe(RC3_VERSION)
     // The fixture emits exactly package.json and lib/index.js per critical package.
-    expect(runtime.metadata.fileTableEntries).toBe(RC021_RC2_HOST_PACKAGES.length * 2)
-    expect(runtime.rows.map((row) => row.name).sort()).toEqual(RC021_RC2_HOST_PACKAGES.map((row) => row.name).sort())
+    expect(runtime.metadata.fileTableEntries).toBe(RC021_RC3_HOST_PACKAGES.length * 2)
+    expect(runtime.rows.map((row) => row.name).sort()).toEqual(RC021_RC3_HOST_PACKAGES.map((row) => row.name).sort())
     expect(runtime.rows.every((row) => row.integrity === undefined)).toBe(true)
     // The exact bundle bytes are bound, and a tampered header is a new identity.
     expect(runtime.headerSha256).toBe(readAsarIndex(asar).headerSha256)
@@ -230,7 +230,7 @@ describe('desktop asar adapter', () => {
   it('reads a dependency manifest entry through the bounded asar reader', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)
-    expect(readDesktopDependency(asar, '@deepseek-ai/dsh-session')).toEqual({ name: '@deepseek-ai/dsh-session', version: RC2_VERSION })
+    expect(readDesktopDependency(asar, '@deepseek-ai/dsh-session')).toEqual({ name: '@deepseek-ai/dsh-session', version: RC3_VERSION })
     expect(() => readDesktopDependency(asar, '@deepseek-ai/dsh-nonexistent')).toThrow()
   })
 
@@ -239,7 +239,7 @@ describe('desktop asar adapter', () => {
     const withoutCarrier = writeAsar(bundleFileSpecs({ carrier: false }), root)
     expect(() => readDesktopAppRuntime(withoutCarrier)).toThrowError(/carrier/)
     const foreign = writeAsar(bundleFileSpecs().map((file) => file.path === 'dsh/package.json'
-      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@evil/desktop-runtime', version: RC2_VERSION, dependencies: {} }), 'utf8') }
+      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@evil/desktop-runtime', version: RC3_VERSION, dependencies: {} }), 'utf8') }
       : file), root)
     expect(() => readDesktopAppRuntime(foreign)).toThrowError(/official desktop runtime/)
     const stale = writeAsar(bundleFileSpecs({ hostVersion: '0.2.0-rc.1' }), root)
@@ -269,20 +269,20 @@ describe('independently qualified Desktop-only supplements', () => {
     metadata.platform = process.platform
     metadata.arch = 'synthetic'
     ;(metadata.release as Record<string, unknown>).pnpmVersion = '11.28.5'
-    const desktop = Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-desktop', version: RC2_VERSION,
-      dshBuildCommit: original.distributions[0]!.buildCommit, dshBuildDirty: false }))
+    const desktop = Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-desktop', version: RC3_VERSION,
+      dshBuildCommit: original.distributions.find(row => row.version === RC3_VERSION)!.buildCommit, dshBuildDirty: false }))
     const extras = original.files.map(row => {
       const content = Buffer.from(`export const retired = '${row.package}'\n`)
-      return { row: { ...row, bytes: content.length, sha256: createHash('sha256').update(content).digest('hex') }, content }
+      return { row: { ...row, version: RC3_VERSION, bytes: content.length, sha256: createHash('sha256').update(content).digest('hex') }, content }
     })
     distributionPins.files = extras.map(x => x.row)
     ;(metadata.files as unknown[]).push(...extras.map(({ row }) => ({ path: `node_modules/${row.package}/${row.path}`, sha256: row.sha256 })))
     const files = [...bundleFileSpecs({ metadata }), { path: 'package.json', content: desktop },
       ...extras.map(({ row, content }) => ({ path: `dsh/node_modules/${row.package}/${row.path}`, content }))]
     const asar = writeAsar(files, root)
-    distributionPins.distributions = [{ ...original.distributions[0]!, platform: process.platform, arch: 'synthetic',
+    distributionPins.distributions = [{ ...original.distributions.find(row => row.version === RC3_VERSION)!, platform: process.platform, arch: 'synthetic',
       asarHeaderSha256: readAsarIndex(asar).headerSha256, desktopManifestSha256: createHash('sha256').update(desktop).digest('hex') }]
-    const expectations = RC021_RC2_HOST_PACKAGES.map(row => ({ name: row.name, version: row.version!, modules: {
+    const expectations = RC021_RC3_HOST_PACKAGES.map(row => ({ name: row.name, version: row.version!, modules: {
       'package.json': createHash('sha256').update(syntheticManifestBytes(row.name, row.version!)).digest('hex'),
       'lib/index.js': SYNTHETIC_MODULES['lib/index.js']!,
     } }))
@@ -319,9 +319,9 @@ describe('independently qualified Desktop-only supplements', () => {
     if (change === 'unknown-extra') files = [...files, { path: packagePath + 'lib/unknown.js', content: Buffer.from('export {}\n') }]
     if (change === 'missing-extra') files = files.filter(file => file.path !== extra)
     if (change === 'wrong-version') files = files.map(file => file.path === packagePath + 'package.json'
-      ? { ...file, content: Buffer.from(file.content.toString().replace(RC2_VERSION, '0.2.1-rc.1')) } : file)
+      ? { ...file, content: Buffer.from(file.content.toString().replace(RC3_VERSION, '0.2.1-rc.1')) } : file)
     if (change === 'active-route') files = files.map(file => file.path === packagePath + 'package.json'
-      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-session', version: RC2_VERSION, main: 'lib/types/invariant.js' })) } : file)
+      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-session', version: RC3_VERSION, main: 'lib/types/invariant.js' })) } : file)
     if (change === 'active-module') files = files.map(file => file.path === packagePath + 'lib/index.js'
       ? { ...file, content: Buffer.from(file.content.toString().replace('true', 'null')) } : file)
     if (change === 'active-module') files = reattest(files, packagePath + 'lib/index.js')
@@ -349,7 +349,7 @@ describe('desktop installed-byte audit', () => {
     ;(metadata.files as Array<unknown>).push({ path, sha256: createHash('sha256').update(content).digest('hex') })
     const files = bundleFileSpecs({ metadata })
     files.push({ path: `dsh/${path}`, content })
-    const expectations = RC021_RC2_HOST_PACKAGES.map((row) => ({
+    const expectations = RC021_RC3_HOST_PACKAGES.map((row) => ({
       name: row.name, version: row.version, modules: {
         'package.json': createHash('sha256').update(syntheticManifestBytes(row.name, row.version as string)).digest('hex'),
         'lib/index.js': SYNTHETIC_MODULES['lib/index.js'],
@@ -360,7 +360,7 @@ describe('desktop installed-byte audit', () => {
   it('verifies the closed module inventory of every critical package', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)
-    const expectations = RC021_RC2_HOST_PACKAGES.map((row) => ({
+    const expectations = RC021_RC3_HOST_PACKAGES.map((row) => ({
       name: row.name, version: row.version, modules: {
         'package.json': createHash('sha256').update(syntheticManifestBytes(row.name, row.version as string)).digest('hex'),
         'lib/index.js': SYNTHETIC_MODULES['lib/index.js'],
@@ -383,7 +383,7 @@ describe('desktop installed-byte audit', () => {
     files.push({ path: 'dsh/node_modules/@deepseek-ai/dsh-tool-jobs/node_modules/@deepseek-ai/dsh-session/package.json', content: Buffer.from('{}\n', 'utf8') })
     files.push({ path: 'dsh/node_modules/@deepseek-ai/dsh-tool-jobs/node_modules/@deepseek-ai/dsh-session/lib/index.js', content: Buffer.from('shadow\n', 'utf8') })
     const asar = writeAsar(files, root)
-    const expectations = RC021_RC2_HOST_PACKAGES.map((row) => ({
+    const expectations = RC021_RC3_HOST_PACKAGES.map((row) => ({
       name: row.name, version: row.version, modules: {
         'package.json': createHash('sha256').update(syntheticManifestBytes(row.name, row.version as string)).digest('hex'),
         'lib/index.js': SYNTHETIC_MODULES['lib/index.js'],
@@ -411,7 +411,7 @@ describe('desktop profile identity and preflight', () => {
     const profile = writeDesktopProfile(root)
     const target = inspectDesktopTargetGraph(asar, profile)
     expect(target.profileGraph.state).toBe('dependency_free_desktop')
-    expect(target.packages.map((row) => row.name).sort()).toEqual(RC021_RC2_HOST_PACKAGES.map((row) => row.name).sort())
+    expect(target.packages.map((row) => row.name).sort()).toEqual(RC021_RC3_HOST_PACKAGES.map((row) => row.name).sort())
   })
 
   it('fails closed on a foreign profile name, conflicting bundles, or declared dependencies', () => {
@@ -432,7 +432,7 @@ describe('desktop profile identity and preflight', () => {
     const market = inspectDesktopTargetGraph(asar, writeDesktopProfile(root, { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] }))
     expect(market.profileGraph.state).toBe('dependency_free_desktop')
     expect(market.profileGraph.bundles).toContain('dshmarket')
-    expect(market.packages.map((row) => row.name).sort()).toEqual(RC021_RC2_HOST_PACKAGES.map((row) => row.name).sort())
+    expect(market.packages.map((row) => row.name).sort()).toEqual(RC021_RC3_HOST_PACKAGES.map((row) => row.name).sort())
   })
 })
 
@@ -555,7 +555,7 @@ describe('desktop runtime attach (revalidation)', () => {
   it('audits local critical bytes and rejects nested duplicates in a physical importer', () => {
     const root = temporaryRoot(), asar = writeAsar(bundleFileSpecs(), root)
     const profile = physicalImporterProfile(root)
-    const row = RC021_RC2_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh-session')!
+    const row = RC021_RC3_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh-session')!
     const local = join(profile, 'node_modules', row.name)
     mkdirSync(join(local, 'lib'), { recursive: true })
     writeFileSync(join(local, 'package.json'), syntheticManifestBytes(row.name, row.version!))
@@ -586,7 +586,7 @@ describe('desktop runtime attach (revalidation)', () => {
     const profile = physicalImporterProfile(root)
     const shadow = join(profile, 'node_modules/dsh-completion-guard/dist/node_modules/@deepseek-ai/dsh-session')
     mkdirSync(join(shadow, 'lib'), { recursive: true })
-    writeFileSync(join(shadow, 'package.json'), syntheticManifestBytes('@deepseek-ai/dsh-session', RC2_VERSION))
+    writeFileSync(join(shadow, 'package.json'), syntheticManifestBytes('@deepseek-ai/dsh-session', RC3_VERSION))
     writeFileSync(join(shadow, 'lib', 'index.js'), SYNTHETIC_LIB_BYTES)
     expect(() => resolveActiveProfileHostLock(asar, profile, '0.8.2')).toThrow()
   })
@@ -610,7 +610,7 @@ describe('desktop runtime attach (revalidation)', () => {
   it('rejects a changed package entry route despite matching package version and module bytes', () => {
     const root = temporaryRoot()
     const files = bundleFileSpecs().map((file) => file.path === 'dsh/node_modules/@deepseek-ai/dsh-session/package.json'
-      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-session', version: RC2_VERSION, type: 'module', main: 'lib/missing.js' }) + '\n') }
+      ? { ...file, content: Buffer.from(JSON.stringify({ name: '@deepseek-ai/dsh-session', version: RC3_VERSION, type: 'module', main: 'lib/missing.js' }) + '\n') }
       : file)
     const metadata = makeDesktopMetadata()
     const table = metadata.files as Array<{ path: string; sha256: string }>
@@ -624,7 +624,7 @@ describe('desktop runtime attach (revalidation)', () => {
     const root = temporaryRoot()
     const asar = writeAsar(bundleFileSpecs(), root)
     const profile = importerProfile(root)
-    const row = RC021_RC2_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh-session')!
+    const row = RC021_RC3_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh-session')!
     const packageRoot = join(profile, 'node_modules', row.name)
     mkdirSync(join(packageRoot, 'lib'), { recursive: true })
     writeFileSync(join(packageRoot, 'package.json'), syntheticManifestBytes(row.name, row.version!))
@@ -695,21 +695,21 @@ describe('desktop runtime attach (revalidation)', () => {
 describe('desktop host-lock identity', () => {
   it('desktop is an accepted injected profile kind and is bound into the digest', () => {
     const resolved = resolveConfig({
-      hostLockPackages: RC021_RC2_HOST_PACKAGES,
+      hostLockPackages: RC021_RC3_HOST_PACKAGES,
       hostLockPlatform: 'posix',
       hostLockProfile: 'desktop',
     })
     expect(resolved.hostLockProfile).toBe('desktop')
-    const desktop = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'desktop' })
-    const web = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
-    const headless = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
+    const desktop = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'desktop' })
+    const web = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const headless = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
     expect(new Set([desktop.digest, web.digest, headless.digest]).size).toBe(3)
     expect(desktop.status).toBe('supported')
   })
 
   it('a desktop profile never receives the web restart capability', () => {
-    const desktop = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'desktop' })
-    const web = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    const desktop = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'desktop' })
+    const web = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluateHostCapability(web, { action: 'restart', platform: 'posix', profileKind: 'web' }).status).toBe('supported')
     const restart = evaluateHostCapability(desktop, { action: 'restart', platform: 'posix', profileKind: 'desktop' })
     expect(restart.status).toBe('unavailable')
@@ -718,7 +718,7 @@ describe('desktop host-lock identity', () => {
 
   it('an unknown injected profile kind is still rejected by the config schema', () => {
     expect(() => resolveConfig({
-      hostLockPackages: RC021_RC2_HOST_PACKAGES, hostLockPlatform: 'posix',
+      hostLockPackages: RC021_RC3_HOST_PACKAGES, hostLockPlatform: 'posix',
       hostLockProfile: 'electron' as unknown as HostProfileKind,
     })).toThrow(/hostLockProfile/)
   })

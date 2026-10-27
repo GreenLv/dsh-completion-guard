@@ -2,6 +2,18 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
+## 0.11.0: DSH >=0.2.1-rc.3
+
+Upgrade DSH to `0.2.1-rc.3` or later before installing Guard 0.11.0. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.
+
+The current reviewed baseline and default cohort are DSH `0.2.1-rc.3` / Cordis `4.0.5` (`dsh-0.2.1-rc.3-core-v1`). The rc.2 audit files, distribution pins and prior acceptance records remain historical evidence; they do not admit an rc.2 runtime into this release. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v110.json`](../benchmarks/incidents/acceptance/semver-matrix-v110.json) bind the new floor; the older matrix remains unchanged for 0.10.0.
+
+The rc.3 registry and Desktop implementation records below describe their own source qualification. A new Guard package still needs its own CI, exact-artifact native, model and UI/performance evidence; raising this floor does not transfer an earlier package's acceptance.
+
+安装 Guard 0.11.0 前，请先将 DSH 升级到 `0.2.1-rc.3` 或更高版本。包顶层、嵌套 DSH 声明和 DSH peer 范围使用同一下限，Guard 运行时也独立核对；没有版本上限，后续宿主仍须逐项核验包身份、实现字节、依赖路由和接口。Cordis 继续单独要求 `>=4.0.4`。
+
+当前已审查基线及默认 cohort 为 DSH `0.2.1-rc.3` / Cordis `4.0.5`。rc.2 的审计文件、分发行身份与旧验收记录原样保留，但不再作为本版运行准入。旧会话及 Guard 数据协议保持兼容，宿主锁变化后仍须重新核验；新包的 CI、精确制品原生验收、模型及 UI/性能结果分别记录，不从旧包继承。
+
 ## 0.10.0: DSH >=0.2.1-rc.2
 
 0.10.0 raises the host floor to `0.2.1-rc.2` (upstream release `dsh-v0.2.1-rc.2`, commit `687f282e8625c6b8d11ff58211a90524be2e4317`, cumulative over `0.2.1-rc.1`). There is no upper bound: later RCs on any tuple, stable and future releases pass VERSION ADMISSION and must still pass the graph, byte, route and contract audits. `0.2.0-rc.2`, `0.2.0` and `0.2.1-rc.1` keep their recorded-evidence rows but are refused as below the floor. Cordis keeps a separate `>=4.0.4` peer range and qualification (the reviewed baseline moved to Cordis `4.0.5` with the same range).

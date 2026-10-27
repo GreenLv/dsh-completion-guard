@@ -87,6 +87,14 @@ class ValidationSelectionTests(unittest.TestCase):
     def test_host_lock_selects_native_focused_gate(self) -> None:
         plan = self.classify("src/domain/host-lock.ts")
         self.assertIn("host_lock_tests", plan["gates"])
+
+    def test_host_version_contract_requires_full_candidate(self) -> None:
+        plan = self.classify("src/domain/host-version.ts")
+        self.assertTrue(plan["full_required"])
+        self.assertIn("full_candidate", plan["gates"])
+        self.assertIn("native_runtime", plan["invalidates"])
+        self.assertIn("publication_identity", plan["invalidates"])
+        self.assertEqual(plan["unknown_paths"], [])
         self.assertIn("native_runtime", plan["invalidates"])
 
     def test_host_lock_test_does_not_invalidate_native_evidence(self) -> None:

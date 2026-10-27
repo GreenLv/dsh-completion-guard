@@ -9,7 +9,7 @@ const { AUDITED_MODULE_TEXT, canonicalManifest } = vi.hoisted(() => ({
     name, version, exports: { '.': { types: './index.d.ts', default: './lib/index.js' } },
   }),
 }))
-vi.mock('../src/domain/byte-audit-manifest.js', async (original) => {
+vi.mock('../src/domain/rc3-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
   const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
@@ -52,7 +52,7 @@ import { createHostAuditSession } from '../src/domain/host-audit-session.js'
 // bounded child probes. Budget the functional chain, not one Node startup.
 vi.setConfig({ testTimeout: 60_000 })
 
-// Real production ENTRIES over a real rc.2-shaped host: the same session
+// Real production ENTRIES over a real current-host-shaped fixture: the same session
 // drives the registered checkpoint tool, the registered action tool (whose
 // publish decision crosses three host-lock gates) and the registered
 // completion guard, counting FULL validations through the runtime's own

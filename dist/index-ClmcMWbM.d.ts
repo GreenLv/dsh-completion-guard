@@ -1795,8 +1795,8 @@ declare function authorityCaptureCounts(blocks: readonly AuthorityBlock[]): Reco
 declare function currentContractDigest(projection: GuardProjection): string;
 //#endregion
 //#region src/domain/host-version.d.ts
-/** Version admission floor. Since 0.10.0 the public DSH support range is
-* `>=0.2.1-rc.2` with NO implied upper bound: every host version at or above
+/** Version admission floor. Since 0.11.0 the public DSH support range is
+* `>=0.2.1-rc.3` with NO implied upper bound: every host version at or above
 * this floor (including later RCs on any tuple, stable and future releases)
 * passes VERSION ADMISSION. The floor only rises when a future Guard release
 * actively adopts a newer DSH; the runtime never raises it from a remote
@@ -1804,12 +1804,12 @@ declare function currentContractDigest(projection: GuardProjection): string;
 * metadata ignored. Version admission is one gate of several — it never
 * claims native validation of a not-yet-tested host, and the graph/byte/
 * contract audits below still run on every admission. */
-declare const MIN_SUPPORTED_HOST_VERSION = "0.2.1-rc.2";
+declare const MIN_SUPPORTED_HOST_VERSION = "0.2.1-rc.3";
 declare const SUPPORTED_HOST_RANGE: string;
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
 * ledger, NOT an admission whitelist: a missing row never refuses a
 * version-above-floor host. The 0.2.0 rows keep their historical standing
-* after the floor moved to 0.2.1-rc.2; each row records past evidence, not
+* after the floor moved to 0.2.1-rc.3; each row records past evidence, not
 * current admission. */
 declare const HOST_VALIDATED_VERSIONS: readonly string[];
 /** Historical alias retained for evidence-list readers; the admission rule is
@@ -1840,8 +1840,8 @@ interface HostVersionDecision {
 /** Decide the version-policy half of host support. Never a substitute for the graph lock. */
 declare function evaluateMinimumHostVersion(version: string, minimum?: string): HostVersionDecision;
 /** Version admission: at or above the floor by strict SemVer precedence
-* (prerelease-aware; build metadata ignored). `0.2.0-rc.2` and `0.2.1-rc.1`
-* stay below the floor; `0.2.1-rc.2`, `0.2.1`, later patch/minor RCs and
+* (prerelease-aware; build metadata ignored). `0.2.1-rc.2` and earlier
+* stay below the floor; `0.2.1-rc.3`, `0.2.1`, later patch/minor RCs and
 * releases all admit. */
 declare function satisfiesSupportedHostRange(version: string): boolean;
 //#endregion
@@ -1887,22 +1887,19 @@ interface HostCohort {
   packages: PackageRow[];
   capabilities: CapabilityRow[];
 }
-/** Baseline cohort retained for callers that need a default fixture. */
-declare const ACTIVE_HOST_COHORT_ID = "dsh-0.2.1-rc.2";
-/** rc.3 joins rc.2 as an admitted whole-graph contract: same 47-name core
-* cohort (Cordis shared at 4.0.5), per-package tarball/SRI verified against
-* the registry and lib bytes proven byte-identical by the rc.2→rc.3 study.
-* rc.2 stays FIRST so existing fixtures and EXPECTED_HOST_PACKAGES keep
-* their identity. */
+/** Current baseline for new installations and default fixtures. */
+declare const ACTIVE_HOST_COHORT_ID = "dsh-0.2.1-rc.3";
+/** The release floor is rc.3. Older package identities remain historical
+* evidence; retaining their audit files does not admit a below-floor host. */
 declare const ACTIVE_HOST_COHORT_IDS: readonly string[];
-/** Core-lock/v1 separates optional market identity from the rc.2 critical
+/** Core-lock/v1 separates optional market identity from the rc.3 critical
 * graph. Historical cohorts live only in test data. Version ordering cannot
 * authorize an unregistered graph, and graph identity is separate from native
 * acceptance of a Guard artifact.
 */
 declare const HOST_COHORTS: readonly HostCohort[];
 /**
-* Baseline fixture package identities (DSH 0.2.1-rc.2). The cohort
+* Baseline fixture package identities (DSH 0.2.1-rc.3). The cohort
 * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
 * unknown-version, unbound, OR MISSING row fails the whole lock closed
 * (`host_lock_missing`); no capability inherits independence from a partially

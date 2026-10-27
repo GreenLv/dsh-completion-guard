@@ -208,6 +208,24 @@
       "peer_gates": {}
     },
     {
+      "id": "host_version_contract",
+      "paths": [
+        "src/domain/host-version.ts"
+      ],
+      "gates": [
+        "full_candidate"
+      ],
+      "invalidates": [
+        "artifact",
+        "candidate_matrix",
+        "native_artifact",
+        "native_runtime",
+        "publication_identity"
+      ],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
       "id": "host_lock_tests",
       "paths": [
         "tests/domain/v030-host-lock.test.ts",

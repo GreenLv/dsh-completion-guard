@@ -1,5 +1,5 @@
-/** Version admission floor. Since 0.10.0 the public DSH support range is
- * `>=0.2.1-rc.2` with NO implied upper bound: every host version at or above
+/** Version admission floor. Since 0.11.0 the public DSH support range is
+ * `>=0.2.1-rc.3` with NO implied upper bound: every host version at or above
  * this floor (including later RCs on any tuple, stable and future releases)
  * passes VERSION ADMISSION. The floor only rises when a future Guard release
  * actively adopts a newer DSH; the runtime never raises it from a remote
@@ -7,12 +7,12 @@
  * metadata ignored. Version admission is one gate of several — it never
  * claims native validation of a not-yet-tested host, and the graph/byte/
  * contract audits below still run on every admission. */
-export const MIN_SUPPORTED_HOST_VERSION = '0.2.1-rc.2'
+export const MIN_SUPPORTED_HOST_VERSION = '0.2.1-rc.3'
 export const SUPPORTED_HOST_RANGE: string = `>=${MIN_SUPPORTED_HOST_VERSION}`
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
  * ledger, NOT an admission whitelist: a missing row never refuses a
  * version-above-floor host. The 0.2.0 rows keep their historical standing
- * after the floor moved to 0.2.1-rc.2; each row records past evidence, not
+ * after the floor moved to 0.2.1-rc.3; each row records past evidence, not
  * current admission. */
 export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3']
 /** Historical alias retained for evidence-list readers; the admission rule is
@@ -108,8 +108,8 @@ export function evaluateMinimumHostVersion(
 }
 
 /** Version admission: at or above the floor by strict SemVer precedence
- * (prerelease-aware; build metadata ignored). `0.2.0-rc.2` and `0.2.1-rc.1`
- * stay below the floor; `0.2.1-rc.2`, `0.2.1`, later patch/minor RCs and
+ * (prerelease-aware; build metadata ignored). `0.2.1-rc.2` and earlier
+ * stay below the floor; `0.2.1-rc.3`, `0.2.1`, later patch/minor RCs and
  * releases all admit. */
 export function satisfiesSupportedHostRange(version: string): boolean {
   const normalized = version.trim()

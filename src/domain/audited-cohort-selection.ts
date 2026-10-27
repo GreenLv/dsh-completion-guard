@@ -12,11 +12,11 @@ import rc3 from './rc3-byte-audit-manifest.js'
  */
 export const AUDITED_HOST_MANIFESTS: readonly (typeof rc2)[] = [rc2, rc3]
 
-/** The audited manifest whose hostVersion matches, defaulting to the rc.2
+/** The audited manifest whose hostVersion matches, defaulting to the rc.3
  * baseline for callers whose graph version is not one of the audited
  * releases (those fail closed downstream on the version mismatch). */
 export function auditedManifestFor(version: string | undefined | null): typeof rc2 {
-  return AUDITED_HOST_MANIFESTS.find((manifest) => manifest.hostVersion === version) ?? rc2
+  return AUDITED_HOST_MANIFESTS.find((manifest) => manifest.hostVersion === version) ?? rc3
 }
 
 /** True when the version has a registered audited manifest. */
