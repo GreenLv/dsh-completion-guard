@@ -83,10 +83,10 @@ describe('DSH host version policy (T09)', () => {
   })
 
   it('decides the six documented prerelease categories', () => {
-    for (const version of ['0.2.1-rc.2']) {
+    for (const version of ['0.2.1-rc.3']) {
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'supported', reasonCode: 'host_version_supported' })
     }
-    for (const version of ['0.1.4', '0.1.4-rc.9', '0.1.7-alpha.9', '0.1.7-rc.2', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1']) {
+    for (const version of ['0.1.4', '0.1.4-rc.9', '0.1.7-alpha.9', '0.1.7-rc.2', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2']) {
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'below_minimum', reasonCode: 'host_version_below_minimum' })
     }
     expect(evaluateMinimumHostVersion('nonsense')).toMatchObject({ status: 'unparseable', reasonCode: 'host_version_unparseable' })
@@ -94,10 +94,10 @@ describe('DSH host version policy (T09)', () => {
   })
 
   it('admits every version at or above the floor; the floor itself refuses older lines', () => {
-    for (const version of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0']) {
+    for (const version of ['0.2.1-rc.3', '0.2.1', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
-    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1']) {
+    for (const version of ['0.1.4', '0.1.7-alpha.9', '0.1.7', '0.1.8', '0.1.8-rc.1', '0.2.0-alpha.9', '0.2.0-rc.0', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.1', '0.2.1-rc.2']) {
       expect(satisfiesSupportedHostRange(version)).toBe(false)
     }
     // Version admission above the floor is unconditional at this gate; a

@@ -12,9 +12,10 @@ import { evaluateHostLock } from '../src/domain/host-lock.js'
 
 describe('rc.2 (0.2.1) published identity and executable-byte audit', () => {
   it('keeps the public registry exactly equal to its single audited input source', () => {
-    expect(manifest.cohorts).toHaveLength(2)
-    expect(manifest.cohorts[0].packages).toEqual(RC021_RC2_HOST_PACKAGES)
-    expect(manifest.cohorts[0].auditedPlatforms).toEqual([])
+    expect(manifest.cohorts).toHaveLength(1)
+    expect(manifest.historicalCohorts).toHaveLength(1)
+    expect(manifest.historicalCohorts[0].packages).toEqual(RC021_RC2_HOST_PACKAGES)
+    expect(manifest.historicalCohorts[0].auditedPlatforms).toEqual([])
     expect(audit.packages.every(p=>Object.keys(p.modules).length>0)).toBe(true)
     expect(audit.packages.every(p=>/^[a-f0-9]{64}$/.test(p.sha256))).toBe(true)
   })
