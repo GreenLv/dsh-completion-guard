@@ -17,6 +17,8 @@ Each entry describes that version. Historical host ranges, defaults, plans and c
 
 - **Host-lock injection preserves JSON-shaped patch sequences.** The managed entry stays inside the sequence, with user entries retained. Existing block YAML, inline flow values, activation and disabled-only overrides remain supported. Invalid syntax, duplicate keys, ambiguous Guard fields and malformed managed markers refuse before profile mutation; the bundled YAML reader does not evaluate `!!js` expressions. Full composition and native loading remain separate checks.
 
+- **Known upstream risk:** for this 0.11.0 release, the maintainer explicitly accepted three Undici 8.11.2 high-risk findings through **2026-11-05 inclusive**. The signed host remains unfixed; see the [risk scope and expiry](docs/DEPENDENCY_SCAN.md). We will update after the upstream fixed chain is verified.
+
 - Default host audits check declared files and dependency routes without scanning unrelated directories. Audits backed by a qualification receipt continue to check the complete file inventory.
 
 - **Reviewed Chinese instruction forms such as 请分别执行 no longer create false bans.** Words such as 分别 stay intact in those forms; genuine bans such as 这个别推送 and 完成前别 remain in force.

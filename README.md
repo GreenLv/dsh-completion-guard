@@ -12,6 +12,8 @@ DSH Completion Guard is a DeepSeek Harness plugin that keeps your task requireme
 
 Requires DSH `>=0.2.1-rc.3`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Upgrade DSH before installing Guard 0.11.0. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.1-rc.3` with Cordis `4.0.5`; later hosts still require compatibility checks.
 
+**Known upstream risk for 0.11.0:** the official rc.3 host still contains affected dependencies. The maintainer explicitly accepted three Undici 8.11.2 high-risk findings through **2026-11-05 inclusive**; the signed host is not repaired. See the [temporary risk acceptance](docs/DEPENDENCY_SCAN.md). We will update after an upstream fixed chain is available and verified.
+
 Choose your path before replacing any package:
 
 1. **First installation, no old Guard sessions:** stop the host, install Guard in the intended profile, then check and bind that installation before starting it.
