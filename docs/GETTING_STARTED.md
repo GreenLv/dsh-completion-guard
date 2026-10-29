@@ -34,7 +34,7 @@ dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root 
 
 The reviewed baseline is DSH `0.2.1-rc.3` / Cordis `4.0.5`. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
 
-已审查基线为 DSH `0.2.1-rc.2` / Cordis `4.0.5`。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
+已审查基线为 DSH `0.2.1-rc.3` / Cordis `4.0.5`。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
 
 ### Windows, Headless and Desktop / 其他入口
 
