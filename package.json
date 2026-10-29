@@ -109,6 +109,7 @@
     "@deepseek-ai/schemastery": "^3.18.4",
     "@types/node": "^22.0.0",
     "acorn": "8.15.0",
+    "js-yaml": "4.3.2",
     "oxlint": "^1.20.0",
     "tsdown": "^0.15.0",
     "typescript": "^5.8.0",

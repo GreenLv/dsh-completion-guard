@@ -7,5 +7,5 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   treeshake: true,
-  noExternal: ['acorn'],
+  noExternal: ['acorn', 'js-yaml'],
 })

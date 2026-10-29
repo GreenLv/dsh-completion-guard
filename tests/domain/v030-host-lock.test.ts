@@ -1,6 +1,7 @@
 import { revalidateCoreLock } from '../../src/runtime.js'
-import { symlinkSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { symlinkSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -355,6 +356,12 @@ function makeActiveRoots() {
   return { runtimeRoot, profileRoot, packages }
 }
 
+// Use the already locked official include dependency's YAML reader as an
+// independent syntax oracle; this adds no production parser/dependency.
+const testRequire = createRequire(import.meta.url)
+const includeRequire = createRequire(createRequire(testRequire.resolve('@deepseek-ai/cordis')).resolve('@deepseek-ai/cordis-plugin-include'))
+const yamlReader = includeRequire('js-yaml') as { load(text: string): unknown }
+
 describe('active profile graph injection and composed readback', () => {
   it('derives reachable rows, injects idempotently, and verifies composed config', () => {
     const fixture = makeActiveRoots()
@@ -392,6 +399,104 @@ describe('active profile graph injection and composed readback', () => {
     // A later truncated entry is not full-YAML acceptance; official parsing
     // and host loading are separate mandatory composition checks.
     expect(verifyComposedHostLockDump(dshDump + "\n- id: unrelated\n  name: 'truncated", active.evaluation).digest).toBe(active.evaluation.digest)
+  })
+
+  it('preserves a nonempty JSON patch and its Guard activation across parsed repeated injection', () => {
+    const fixture = makeActiveRoots(), patch = join(fixture.profileRoot, 'cordis.patch.yml')
+    const rows = [{ id: 'desktop-product-telemetry', disabled: true },
+      { id: 'context-guard', name: 'dsh-completion-guard', config: { activation: 'always', userSetting: [1, 'two'] } },
+      { id: 'context-guard', disabled: true }]
+    const original = JSON.stringify(rows, null, 2) + '\n'
+    writeFileSync(patch, original)
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    injectActiveProfileHostLock(active)
+    const once = readFileSync(patch, 'utf8'), parsed = yamlReader.load(once) as Array<{ config?: { activation?: string } }>
+    expect(parsed.slice(0, rows.length)).toEqual(rows)
+    expect(parsed.at(-1)?.config?.activation).toBe('always')
+    expect(once).toContain(original.trimEnd().slice(0, -1).trimEnd())
+    injectActiveProfileHostLock(active)
+    expect(readFileSync(patch, 'utf8')).toBe(once)
+    expect(yamlReader.load(once)).toEqual(parsed)
+  })
+
+  it.each([
+    JSON.stringify([{ id: 'desktop-product-telemetry', disabled: true }]),
+    JSON.stringify([{ id: 'context-guard', disabled: false }]),
+    '[{id: unrelated}]\n',
+    '# heading\n[{id: unrelated}] # closing comment ]\n',
+    '[] # empty sequence\n',
+    '- id: unrelated\n  config: { enabled: true }\n',
+    '- name: dsh-completion-guard\n  config: { activation: opt-in }\n  id: context-guard\n',
+    '- "id": context-guard\n  name: dsh-completion-guard\n  config:\n    activation: always\n',
+    '- id: unrelated\n  config:\n    values: [one, two]\n',
+    '---\n- id: unrelated\n  config:\n    text: |2\n      preserved text\n',
+    '- id: "context-guard" # user header\n  name: \'dsh-completion-guard\' # package\n  config:\n    activation: "always" # mode\n- id: context-guard\n  disabled: true # user override\n',
+  ])('keeps supported JSON/block values and managed semantics on repeat: %s', (original) => {
+    const fixture = makeActiveRoots(), patch = join(fixture.profileRoot, 'cordis.patch.yml')
+    writeFileSync(patch, original)
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    injectActiveProfileHostLock(active)
+    const once = readFileSync(patch, 'utf8'), parsed = yamlReader.load(once) as Array<{ config?: { activation?: string } }>
+    expect(parsed.slice(0, -1)).toEqual(yamlReader.load(original))
+    if (original.includes('always')) expect(parsed.at(-1)?.config?.activation).toBe('always')
+    if (original.includes('opt-in')) expect(parsed.at(-1)?.config?.activation).toBe('opt-in')
+    injectActiveProfileHostLock(active)
+    expect(readFileSync(patch, 'utf8')).toBe(once)
+  })
+
+  it('preserves official !!js expression data without evaluating it during inject', () => {
+    const fixture = makeActiveRoots(), patch = join(fixture.profileRoot, 'cordis.patch.yml')
+    const original = '- id: context-guard\n  config:\n    activation: !!js \'(globalThis.__hostInjectEvaluated = true, "always")\'\n'
+    const globals = globalThis as unknown as Record<string, unknown>
+    delete globals.__hostInjectEvaluated
+    writeFileSync(patch, original)
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    injectActiveProfileHostLock(active)
+    const once = readFileSync(patch, 'utf8')
+    expect(once).toContain(original.trimEnd())
+    expect(once).toContain('activation: !!js ' + JSON.stringify('(globalThis.__hostInjectEvaluated = true, "always")'))
+    expect(globals.__hostInjectEvaluated).toBeUndefined()
+    injectActiveProfileHostLock(active)
+    expect(readFileSync(patch, 'utf8')).toBe(once)
+    expect(globals.__hostInjectEvaluated).toBeUndefined()
+  })
+
+  it.each([
+    ['mapping', 'enabled: true\n'], ['scalar', 'true\n'],
+    ['invalid flow YAML', '[{id: unrelated}\n'],
+    ['invalid block flow', '- id: unrelated\n  config: {\n'],
+    ['invalid block quote', '- id: unrelated\n  name: "unfinished\n'],
+    ['document end', '- id: unrelated\n...\n'],
+    ['scalar sequence row', '- unrelated\n'],
+    ['invalid JSON row', '[null]\n'],
+    ['duplicate JSON key', '[{"id":"first","id":"second"}]\n'],
+    ['duplicate nested JSON key', '[{"id":"first","config":{"x":1,"x":2}}]\n'],
+    ['duplicate block key', '- id: unrelated\n  name: one\n  name: two\n'],
+    ['JSON wrong name', '[{"id":"context-guard","name":"other"}]\n'],
+    ['JSON duplicate config', '[{"id":"context-guard","config":{}},{"id":"context-guard","config":{}}]\n'],
+    ['inline marker', '- id: unrelated # >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>\n# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<\n'],
+    ['missing end marker', '# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>\n- id: unrelated\n'],
+    ['duplicate begin marker', '# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>\n# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>\n- id: unrelated\n# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<\n'],
+    ['reverse markers', '# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<\n- id: unrelated\n# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>\n'],
+    ['block wrong name', '- id: context-guard\n  name: other\n'],
+    ['unmanaged block lock', '- id: context-guard\n  config: { hostLockPackages: [] }\n'],
+    ['unmanaged JSON lock', '[{"id":"context-guard","config":{"hostLockPackages":[]}}]\n'],
+    ['wrong managed body', '# >>> BEGIN DSH COMPLETION GUARD HOST LOCK (managed) >>>\n- id: unrelated\n# <<< END DSH COMPLETION GUARD HOST LOCK (managed) <<<\n'],
+  ])('refuses %s before changing profile or an existing temporary file', (_name, original) => {
+    const fixture = makeActiveRoots(), patch = join(fixture.profileRoot, 'cordis.patch.yml')
+    writeFileSync(patch, original)
+    const beforeWithoutTemporary = readdirSync(fixture.profileRoot)
+    const active = resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0')
+    expect(() => injectActiveProfileHostLock(active)).toThrow(HostProfileError)
+    expect(readFileSync(patch, 'utf8')).toBe(original)
+    expect(readdirSync(fixture.profileRoot)).toEqual(beforeWithoutTemporary)
+    const temporary = `${patch}.context-guard-${process.pid}.tmp`
+    writeFileSync(temporary, 'preexisting temporary evidence')
+    const before = readdirSync(fixture.profileRoot)
+    expect(() => injectActiveProfileHostLock(active)).toThrow(HostProfileError)
+    expect(readFileSync(patch, 'utf8')).toBe(original)
+    expect(readFileSync(temporary, 'utf8')).toBe('preexisting temporary evidence')
+    expect(readdirSync(fixture.profileRoot)).toEqual(before)
   })
 
   it('rejects a duplicate reachable critical package and package drift before injection', () => {

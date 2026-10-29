@@ -58,6 +58,14 @@ protected entry. Order: stop the host, upgrade DSH and install Guard, inspect/in
 managed block in that file. Back the file up first. The same file is the one
 `docs/LOCAL_ACCEPTANCE.md` tells you to preserve.
 
+The patch must be one YAML array of mapping entries. `inject` preserves user entries in ordinary block YAML (including inline flow values) and JSON-shaped flow sequences. For a JSON sequence, the managed entry is inserted inside the closing bracket with YAML comment markers; the result remains a `.yml` flow sequence, not a strict JSON document. User entries are not reserialized. The reserved begin/end markers must each occupy their own line and occur only once.
+
+Before writing a temporary file, `inject` parses the original, unmanaged base and proposed output, then checks that the output preserves the base entries and adds exactly its managed entry. Invalid syntax, duplicate mapping keys, ambiguous Guard configurations, mismatched names, malformed markers and boundaries that prevent safe insertion are refused without changing the profile or an existing temporary file. Parsing uses the SDK's non-executing YAML dialect: `!!js` scalars remain expression data and are never evaluated by `inject`. This is syntax and injection-safety validation; plugin configuration, full composition and actual host loading still require the later checks below.
+
+配置文件须为由 mapping 条目组成的单个 YAML 数组。`inject` 保留普通 block YAML（包括字段内的 flow 对象和数组）及 JSON 形式的 flow 序列。输入为 JSON 序列时，受管条目连同 YAML 注释标记插入右方括号内；输出仍是 `.yml` flow 序列，不再是严格 JSON 文档。用户条目不会重新序列化。保留的起止标记须独占一行，且各出现一次。
+
+`inject` 在创建临时文件前解析原文件、移除受管区后的内容和拟写入结果，并核对结果只在原有条目后加入受管条目。语法错误、重复 mapping key、歧义 Guard 配置、包名不符、标记损坏或无法安全插入的文档边界都会在写入前拒绝；profile 和已有临时文件均保持不变。解析沿用 SDK 的非执行 YAML 方言，`!!js` 标量只保留为表达式数据，`inject` 不执行它。该步骤只核验语法与注入安全，插件配置、完整组合配置和真实宿主载入仍须经过下述检查。
+
 **Check both the JSON verdict and the exit status.** Accepted commands print `status: "supported"`. A missing graph, drift, incompatible implementation or untrusted registry description reports a specific `reason_code` on stderr and exits 1. `inspect-graph` is a pre-install graph check; it does not grant runtime authority.
 
 For Headless, use its profile path for the host-lock commands and `dsh --profile headless --dump-config` for the dump. On Windows, use the

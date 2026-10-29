@@ -15,6 +15,8 @@ Each entry describes that version. Historical host ranges, defaults, plans and c
 
 - **Upgrade DSH to `0.2.1-rc.3` or later before installing Guard 0.11.0.** Package declarations, runtime admission and the default audited cohort now use rc.3 as the minimum. Existing session and Guard data protocols remain compatible; rc.2 identities are retained as historical evidence.
 
+- **Host-lock injection preserves JSON-shaped patch sequences.** The managed entry stays inside the sequence, with user entries retained. Existing block YAML, inline flow values, activation and disabled-only overrides remain supported. Invalid syntax, duplicate keys, ambiguous Guard fields and malformed managed markers refuse before profile mutation; the bundled YAML reader does not evaluate `!!js` expressions. Full composition and native loading remain separate checks.
+
 - Default host audits check declared files and dependency routes without scanning unrelated directories. Audits backed by a qualification receipt continue to check the complete file inventory.
 
 - **Reviewed Chinese instruction forms such as 请分别执行 no longer create false bans.** Words such as 分别 stay intact in those forms; genuine bans such as 这个别推送 and 完成前别 remain in force.

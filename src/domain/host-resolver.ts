@@ -5,6 +5,8 @@ import { auditedManifestFor, AUDITED_HOST_VERSIONS_REGEX, hasAuditedManifest } f
 import { physicalFs } from './host-physical-fs.js'
 const { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } = physicalFs
 import { createHash } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
+import { JSON_SCHEMA, Type, load as loadYaml } from 'js-yaml'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -1129,7 +1131,7 @@ function renderManagedPatch(
   rows: readonly PackageRow[],
   platform: HostPlatform,
   profileKind: HostProfileKind,
-  activation?: string,
+  activation?: PatchActivation,
   runtimeRoot?: string,
   profileRoot?: string,
   trust?: HostRebindTrust,
@@ -1139,7 +1141,7 @@ function renderManagedPatch(
   lines.push('    hostLockPolicy: "dsh-core/v1"')
   if (runtimeRoot) lines.push(`    hostLockRuntimeRoot: ${yamlQuote(runtimeRoot)}`)
   if (profileRoot) lines.push(`    hostLockProfileRoot: ${yamlQuote(profileRoot)}`)
-  if (activation) lines.push(`    activation: ${yamlQuote(activation)}`)
+  if (activation !== undefined) lines.push(`    activation: ${typeof activation === 'string' ? yamlQuote(activation) : `!!js ${yamlQuote(activation.__jsExpr)}`}`)
   lines.push(`    hostLockPlatform: ${yamlQuote(platform)}`)
   lines.push(`    hostLockProfile: ${yamlQuote(profileKind)}`)
   if (trust) lines.push(`    hostLockTrust: ${yamlQuote(JSON.stringify(trust))}`)
@@ -1161,41 +1163,13 @@ function stripManagedPatch(text: string): { base: string; prior?: string } {
   if (begin < 0 || end < begin || text.indexOf(HOST_LOCK_MARKER_BEGIN, begin + 1) >= 0 || text.indexOf(HOST_LOCK_MARKER_END, end + 1) >= 0) {
     throw new HostProfileError('profile_patch_marker_invalid', 'managed host-lock marker is missing or duplicated')
   }
+  const markerLines = text.split(/\r?\n/).filter((line) => line.includes(HOST_LOCK_MARKER_BEGIN) || line.includes(HOST_LOCK_MARKER_END))
+  if (markerLines.length !== 2 || markerLines[0] !== HOST_LOCK_MARKER_BEGIN || markerLines[1] !== HOST_LOCK_MARKER_END) {
+    throw new HostProfileError('profile_patch_marker_invalid', 'managed host-lock markers must be standalone lines')
+  }
   const after = end + HOST_LOCK_MARKER_END.length
   const prior = text.slice(begin, after)
   return { base: `${text.slice(0, begin).trimEnd()}\n${text.slice(after).trimStart()}`, prior }
-}
-
-function activationFromPatch(text: string): string | undefined {
-  const lines = text.split(/\r?\n/)
-  const starts = lines.flatMap((line, index) => /^- id:\s*["']?context-guard["']?\s*$/.test(line) ? [index] : [])
-  const entries = starts.map((start) => {
-    let end = lines.length
-    for (let index = start + 1; index < lines.length; index += 1) {
-      if (lines[index].startsWith('- ')) { end = index; break }
-    }
-    return lines.slice(start + 1, end).join('\n')
-  }).filter((entry) => {
-    // A separate disabled-only override cannot change activation or host-lock
-    // identity. Preserve it byte-for-byte in the base patch, including order.
-    const fields = entry.split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith('#'))
-    return !(fields.length === 1 && /^ {2}disabled:\s*(?:true|false)\s*(?:#.*)?$/.test(fields[0]))
-  })
-  if (entries.length > 1) throw new HostProfileError('profile_patch_duplicate_target', 'multiple unmanaged context-guard configurations are ambiguous')
-  if (entries.length === 0) return undefined
-  const entry = entries[0]
-  const name = entry.match(/^\s{2}name:\s*(.+?)\s*$/m)?.[1]?.replace(/^['"]|['"]$/g, '')
-  if (name && name !== 'dsh-completion-guard') throw new HostProfileError('profile_patch_name_mismatch', 'context-guard patch targets a different package')
-  if (/^\s{4}hostLockPackages:\s*$/m.test(entry)) {
-    throw new HostProfileError('profile_patch_unmanaged_host_lock', 'unmanaged hostLockPackages must be removed before managed injection')
-  }
-  const value = entry.match(/^\s{4}activation:\s*(.+?)\s*$/m)?.[1]
-  return value?.replace(/^['"]|['"]$/g, '')
-}
-
-function activationFromManagedPatch(text: string): string | undefined {
-  const value = text.match(/^\s{4}activation:\s*(.+?)\s*$/m)?.[1]
-  return value ? parseYamlScalar(value) : undefined
 }
 
 /** Preserve template comments while replacing a sole top-level `[]` sentinel. */
@@ -1209,27 +1183,106 @@ function normalizeEmptyPatchBase(text: string): string {
   return lines.filter((_line, index) => index !== meaningful[0]).join('\n')
 }
 
+type PatchEntry = Record<string, unknown>
+type PatchExpression = { __jsExpr: string }
+type PatchActivation = string | PatchExpression
+
+// Match the official include's entryListSchema: !!js is data here, never code.
+// Build this extension only for the explicit inject operation.
+function parseProfilePatch(text: string): PatchEntry[] {
+  if (text.split(/\r?\n/).every((line) => !line.trim() || line.trimStart().startsWith('#'))) return []
+  let parsed: unknown
+  try {
+    const schema = JSON_SCHEMA.extend(new Type('tag:yaml.org,2002:js', {
+      kind: 'scalar', resolve: (data) => typeof data === 'string',
+      construct: (data) => ({ __jsExpr: data }),
+    }))
+    parsed = loadYaml(text, { schema })
+  } catch {
+    throw new HostProfileError('profile_patch_syntax_invalid', 'profile patch syntax is invalid; profile left unchanged')
+  }
+  // Missing/empty/comment-only patch files are the existing fresh-profile case.
+  if (parsed === undefined) return []
+  if (!Array.isArray(parsed) || parsed.some((row) => !row || typeof row !== 'object' || Array.isArray(row))) {
+    throw new HostProfileError('profile_patch_shape_invalid', 'profile patch must be an array of mappings; profile left unchanged')
+  }
+  return parsed as PatchEntry[]
+}
+
+function patchFormatError(): never {
+  throw new HostProfileError('profile_patch_format_unsupported', 'profile patch cannot be injected without changing user entries; profile left unchanged')
+}
+
+function activationFromEntries(rows: readonly PatchEntry[], managed = false): PatchActivation | undefined {
+  const targets = rows.filter((row) => row.id === 'context-guard' &&
+    !(Object.keys(row).length === 2 && typeof row.disabled === 'boolean'))
+  if (targets.length > 1) throw new HostProfileError('profile_patch_duplicate_target', 'multiple unmanaged context-guard configurations are ambiguous')
+  const target = targets[0]
+  if (!target) return undefined
+  if (target.name !== undefined && target.name !== 'dsh-completion-guard') throw new HostProfileError('profile_patch_name_mismatch', 'context-guard patch targets a different package')
+  if (target.config === undefined) return undefined
+  if (!target.config || typeof target.config !== 'object' || Array.isArray(target.config)) return patchFormatError()
+  const config = target.config as Record<string, unknown>
+  if (!managed && 'hostLockPackages' in config) throw new HostProfileError('profile_patch_unmanaged_host_lock', 'unmanaged hostLockPackages must be removed before managed injection')
+  const activation = config.activation
+  if (activation === undefined || typeof activation === 'string') return activation
+  if (activation && typeof activation === 'object' && Object.keys(activation).length === 1 &&
+    typeof (activation as PatchExpression).__jsExpr === 'string') return activation as PatchExpression
+  return patchFormatError()
+}
+
+function managedPatchEntry(input: ActiveProfileHostLock, activation?: PatchActivation): PatchEntry {
+  return { id: 'context-guard', name: 'dsh-completion-guard', config: {
+    hostLockPolicy: 'dsh-core/v1', hostLockRuntimeRoot: input.runtimeRoot, hostLockProfileRoot: input.profileRoot,
+    ...(activation !== undefined ? { activation } : {}), hostLockPlatform: input.platform, hostLockProfile: input.profileKind,
+    ...(input.trust ? { hostLockTrust: JSON.stringify(input.trust) } : {}),
+    ...(input.profileKind === 'desktop' ? { hostLockDesktopDigest: input.evaluation.digest } : {}),
+    hostLockPackages: input.evaluation.packages.filter((row) => row.version && row.integrity).map((row) => ({ name: row.name, version: row.version, integrity: row.integrity })),
+  } }
+}
+
 /** Atomically inject a repeatable managed patch into the selected profile only. */
 export function injectActiveProfileHostLock(input: ActiveProfileHostLock): string {
   if (input.evaluation.status !== 'supported') throw new HostProfileError('profile_host_lock_unsupported',
     'an unsupported host cannot replace the managed lock')
   const patchPath = join(input.profileRoot, 'cordis.patch.yml')
   const original = existsSync(patchPath) ? readFileSync(patchPath, 'utf8') : ''
+  parseProfilePatch(original)
   const stripped = stripManagedPatch(original)
   const base = normalizeEmptyPatchBase(stripped.base)
-  const activation = activationFromPatch(base)
-    ?? (stripped.prior ? activationFromManagedPatch(stripped.prior) : undefined)
-  const managed = renderManagedPatch(
-    input.evaluation.packages.filter((row) => row.version && row.integrity),
-    input.platform,
-    input.profileKind,
-    activation,
-    input.runtimeRoot,
-    input.profileRoot,
-    input.trust,
-    input.profileKind === 'desktop' ? input.evaluation.digest : undefined,
-  )
-  const next = `${base.trimEnd()}${base.trim() ? '\n\n' : ''}${managed}`
+  const rows = parseProfilePatch(base)
+  const flow = base.split(/\r?\n/).find((line) => line.trim() && !line.trimStart().startsWith('#'))?.trimStart().startsWith('[') === true
+  let priorActivation: PatchActivation | undefined
+  if (stripped.prior) {
+    const body = stripped.prior.split(/\r?\n/).slice(1, -1).join('\n').trim()
+    const prior = flow ? parseProfilePatch(`[${body.replace(/^,/, '')}]`) : parseProfilePatch(body)
+    const config = prior[0]?.config as Record<string, unknown> | undefined
+    if (prior.length !== 1 || prior[0].id !== 'context-guard' || prior[0].name !== 'dsh-completion-guard' ||
+      !config || config.hostLockPolicy !== 'dsh-core/v1' || !Array.isArray(config.hostLockPackages)) patchFormatError()
+    priorActivation = activationFromEntries(prior, true)
+  }
+  const activation = activationFromEntries(rows) ?? priorActivation
+  const entry = managedPatchEntry(input, activation)
+  let next: string
+  if (flow) {
+    // Keep the user sequence text. The comma belongs to the managed section,
+    // so removing that section restores the original sequence for reinjection.
+    const closing = /\](?:\s|#[^\r\n]*(?:\r?\n|$))*$/.exec(base)
+    if (!closing || closing.index === undefined) patchFormatError()
+    const prefix = base.slice(0, closing.index).trimEnd()
+    const suffix = base.slice(closing.index + 1)
+    next = `${prefix}\n${HOST_LOCK_MARKER_BEGIN}\n${rows.length ? ',' : ''}${JSON.stringify(entry, null, 2)}\n${HOST_LOCK_MARKER_END}\n]${suffix.endsWith('\n') ? suffix : `${suffix}\n`}`
+  } else {
+    const managed = renderManagedPatch(
+      input.evaluation.packages.filter((row) => row.version && row.integrity),
+      input.platform, input.profileKind, activation, input.runtimeRoot, input.profileRoot,
+      input.trust, input.profileKind === 'desktop' ? input.evaluation.digest : undefined,
+    )
+    next = `${base.trimEnd()}${base.trim() ? '\n\n' : ''}${managed}`
+  }
+  // The same non-executing dialect checks the complete proposed output. This
+  // rejects document boundaries or marker placement that would change entries.
+  if (!isDeepStrictEqual(parseProfilePatch(next), [...rows, entry])) patchFormatError()
   const temporary = `${patchPath}.context-guard-${process.pid}.tmp`
   writeFileSync(temporary, next, { encoding: 'utf8', flag: 'wx' })
   renameSync(temporary, patchPath)

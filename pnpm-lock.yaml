@@ -108,6 +108,9 @@ importers:
       acorn:
         specifier: 8.15.0
         version: 8.15.0
+      js-yaml:
+        specifier: 4.3.2
+        version: 4.3.2
       oxlint:
         specifier: ^1.20.0
         version: 1.80.0
