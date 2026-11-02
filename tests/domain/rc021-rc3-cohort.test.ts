@@ -7,18 +7,15 @@ import { satisfiesSupportedHostRange, compareHostVersions, MIN_SUPPORTED_HOST_VE
 import rc3Manifest from '../../src/domain/rc3-byte-audit-manifest.js'
 
 /**
- * rc.3 historical cohort (below the 0.12.0 floor): the cohort keeps its
- * exact published rc.3 identities — bound by the rc.2→rc.3 study (SRI +
- * SHA-256, lib bytes byte-identical to rc.2) — but since the 0.12.0 floor
- * moved to 0.2.1-rc.5 the graph is no longer an admitted lock. These tests
- * keep the audit file bound to its verified identities while pinning the
- * below-floor refusal.
+ * The rc.3 cohort retains its exact published identities, bound by the
+ * rc.2→rc.3 SRI and SHA-256 study. It is admitted at the release floor
+ * under its own graph while rc.5 remains the default baseline.
  */
 
-describe('rc.3 cohort qualification (historical, below the current floor)', () => {
-  it('keeps rc.3 rows as published history while rc.5 is the sole current cohort', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1'])
-    expect(HOST_COHORTS[0]!.packages).not.toEqual(RC021_RC3_HOST_PACKAGES)
+describe('rc.3 cohort qualification at the current floor', () => {
+  it('admits rc.3 rows while rc.5 remains the default cohort', () => {
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
+    expect(HOST_COHORTS[1]!.packages).toEqual(RC021_RC3_HOST_PACKAGES)
   })
 
   it('binds 46 rc.3 rows plus the shared cordis 4.0.5 release', () => {
@@ -56,16 +53,17 @@ describe('rc.3 cohort qualification (historical, below the current floor)', () =
     expect(rc3Manifest.hostVersion).toBe('0.2.1-rc.3')
   })
 
-  it('refuses the exact rc.3 graph at the raised floor while identity stays exact', () => {
+  it('accepts the exact rc.3 graph under its own cohort', () => {
     const rc3Lock = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc3Lock.status, JSON.stringify(rc3Lock.reasonCode)).toBe('unsupported')
-    expect(rc3Lock.hostVersion).toMatchObject({ status: 'below_minimum', minimum: '0.2.1-rc.5' })
+    expect(rc3Lock.status, JSON.stringify(rc3Lock.reasonCode)).toBe('supported')
+    expect(rc3Lock.cohortId).toBe('dsh-0.2.1-rc.3-core-v1')
+    expect(rc3Lock.hostVersion).toMatchObject({ status: 'supported', minimum: '0.2.1-rc.3' })
   })
 
-  it('enforces the rc.5 floor; rc.3 and rc.2 are historical identities below it', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.5')
+  it('enforces the rc.3 floor and rejects rc.2', () => {
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
     expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(true)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(true)
     expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
     expect(compareHostVersions('0.2.1-rc.5', '0.2.1-rc.3')).toBeGreaterThan(0)
     expect(compareHostVersions('0.2.1-rc.3', '0.2.1-rc.2')).toBeGreaterThan(0)

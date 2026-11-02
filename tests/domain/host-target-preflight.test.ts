@@ -30,7 +30,6 @@ vi.mock('../../src/domain/rc5-byte-audit-manifest.js', async (original) => {
   } })) } }
 })
 import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
-import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
 import { revalidateCoreLock } from '../../src/runtime.js'
@@ -40,7 +39,7 @@ import { revalidateCoreLock } from '../../src/runtime.js'
 
 const roots: string[] = []
 const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
-const version = MIN_SUPPORTED_HOST_VERSION
+const version = RC021_RC5_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh')!.version!
 // The active core cohort already excludes dshmarket (market identity is not a
 // core lock input), so the fixture is the exact active graph plus the two
 // installation-owned Headless bundles.

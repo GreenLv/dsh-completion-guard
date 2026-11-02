@@ -93,7 +93,11 @@ mistakenly wrote the numeric id as a GHSA code — the real identifiers are:
 
 ### Status for the 0.12.0 candidate / 0.12.0 候选的现状
 
+The reviewed rc.3 host also pins the same Undici and zod versions, so retaining rc.3 admission does not close the disclosed gaps.
+
 The rc.5 cohort bump does not change this picture. The verified `0.2.1-rc.5` registry manifests and the regenerated 0.12.0 lockfile still exact-pin `undici` 8.11.2 (via `@deepseek-ai/dsh-http-proxy`) and `zod` 4.4.3 (via `@deepseek-ai/dsh-commands`), and the upstream default branch still pins the same Undici, so no gap is closed by adopting rc.5. On 2026-11-02 the maintainer explicitly and separately accepted the same three exact Undici 8.11.2 findings for 0.12.0 validation, including the disclosed residual risk and ordinary-unreachability eligibility waiver, and extended their expiry to **2026-11-30 inclusive**. Only scanner IDs 1243472, 1243474 and 1243477 with their recorded GHSA identities are covered. From **2026-12-01** the gate blocks them again unless re-justified. The signed host remains unfixed; whole-host unreachability is not established and the TLS 1.2 process-crash risk cannot be excluded. The table above preserves the first 0.11.0 authorization; the current table below and machine-readable rationales record the separately authorized 0.12.0 scope. Other findings, versions and release gates are not waived. Expiry affects later qualification; it does not automatically disable an installed instance or withdraw a published package. The two older exceptions remain within their original scope and expiry, with their rationale updated to reference the rc.5 cohort.
+
+已审查的 rc.3 宿主也锁定相同版本的 Undici 和 zod，因此保留 rc.3 准入不会关闭已披露缺口。
 
 rc.5 队列升级不改变上述结论：已核验的 `0.2.1-rc.5` registry manifest 与再生的 0.12.0 lockfile 仍精确锁定 `undici` 8.11.2（经 `@deepseek-ai/dsh-http-proxy`）与 `zod` 4.4.3（经 `@deepseek-ai/dsh-commands`），上游默认分支同样保留旧 Undici，因此本版没有关闭任何缺口。维护者于 2026-11-02 明确、单独接受本次 0.12.0 验收中相同三条 Undici 8.11.2 发现的已披露剩余风险，并特批通常要求前置条件不可达的例外资格，期限延至 **2026-11-30（含）**。仅覆盖 scanner ID 1243472、1243474、1243477 及其已登记 GHSA 身份。自 **2026-12-01** 起，未经重新论证的例外恢复阻断。签名宿主未修复，不能证明整个宿主不可达，也不能排除 TLS 1.2 进程崩溃风险。上表保留首次 0.11.0 授权历史，下表及机器可读 rationale 记录单独授权的当前 0.12.0 范围；其他发现、版本和发布核验不在豁免范围内。到期影响后续资格核验，不会自动禁用已安装实例或撤回已发布的包。原有两条例外保持原范围与到期日，仅将依据更新为 rc.5 队列口径。
 

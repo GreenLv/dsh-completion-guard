@@ -10,9 +10,9 @@ DSH Completion Guard is a DeepSeek Harness plugin that keeps your task requireme
 
 ## Install or upgrade
 
-Requires DSH `>=0.2.1-rc.5`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Upgrade DSH before installing Guard 0.12.0. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.1-rc.5` with Cordis `4.0.5`; later hosts still require compatibility checks.
+Requires DSH `>=0.2.1-rc.3`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Upgrade DSH if it is below the minimum before installing Guard 0.12.0. Web, Headless and the official Desktop app have separate profiles. DSH `0.2.1-rc.5` with Cordis `4.0.5` is the recommended default reviewed baseline; rc.3 uses its own reviewed cohort, and all hosts require compatibility checks.
 
-**Known upstream risk:** the official rc.5 host still contains affected dependencies — `@deepseek-ai/dsh-http-proxy` exact-pins `undici` 8.11.2 and `@deepseek-ai/dsh-commands` exact-pins `zod` 4.4.3, so the previously disclosed high-risk findings remain present in the signed host. On 2026-11-02 the maintainer separately accepted the three disclosed high-risk Undici findings for 0.12.0 through **2026-11-30 inclusive**. The signed host remains unfixed; whole-host unreachability is not established and the process-crash risk cannot be excluded. See the [dependency advisory policy](docs/DEPENDENCY_SCAN.md) for the recorded findings, their scope and the standing publication gate.
+**Known upstream risk:** the official rc.3 and rc.5 hosts still contain affected dependencies — `@deepseek-ai/dsh-http-proxy` exact-pins `undici` 8.11.2 and `@deepseek-ai/dsh-commands` exact-pins `zod` 4.4.3, so the previously disclosed high-risk findings remain present in the signed host. On 2026-11-02 the maintainer separately accepted the three disclosed high-risk Undici findings for 0.12.0 through **2026-11-30 inclusive**. The signed host remains unfixed; whole-host unreachability is not established and the process-crash risk cannot be excluded. See the [dependency advisory policy](docs/DEPENDENCY_SCAN.md) for the recorded findings, their scope and the standing publication gate.
 
 Choose your path before replacing any package:
 

@@ -74,10 +74,10 @@ describe('shipped artifact entries', () => {
     expect(rows).toHaveLength(47)
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.1-rc.5')
-    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.5')
+    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
     // The floor-based admission model: the public range is >=, and the
     // validated-versions list is evidence, not an admission whitelist.
-    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.5')
+    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.3')
     expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'])
     expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.1-rc.5')
   })
@@ -85,6 +85,8 @@ describe('shipped artifact entries', () => {
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {
     const domain = await import(distDomain.href) as {
       RC021_RC5_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
+      RC021_RC3_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
+      RC021_RC2_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
       evaluateHostLock: (rows: unknown[], context: unknown) => { status: string; cohortId?: string; auditProvenance?: string }
       selectHostCohort: (rows: unknown[], platform?: string) => { consistent: boolean }
     }
@@ -94,6 +96,9 @@ describe('shipped artifact entries', () => {
       cohortId: 'dsh-0.2.1-rc.5-core-v1',
       auditProvenance: 'registry-derived-pending-native-audit',
     })
+    expect(domain.evaluateHostLock(domain.RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' }))
+      .toMatchObject({ status: 'supported', cohortId: 'dsh-0.2.1-rc.3-core-v1' })
+    expect(domain.evaluateHostLock(domain.RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' }).status).toBe('unsupported')
     // Drift fails closed in the shipped path too, not only in source.
     const drifted = domain.RC021_RC5_HOST_PACKAGES.map((row) =>
       row.name === '@deepseek-ai/dsh-session' ? { ...row, integrity: 'sha512-drift' } : row)

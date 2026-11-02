@@ -1,5 +1,9 @@
 # Session activation migration / 会话启用模式迁移
 
+A host already at DSH `0.2.1-rc.3` may follow this migration without first upgrading to rc.5, provided its own host graph passes qualification.
+
+已使用 DSH `0.2.1-rc.3` 的宿主无需先升级到 rc.5，即可按本流程迁移；其宿主图仍须通过相应资格核验。
+
 This guide covers upgrades to **0.12.0**, including upgrades from **0.11.0**, 0.10.0 and earlier supported lines. Since 0.9.0, `always` has been the default for **new unseeded root sessions**. A write-once private binding preserves each old session's pre-upgrade effective mode. Mode is independent of `standard` policy, execution/publication authority and completion certificates. Empty old sessions belong in the inventory too. Recorded off/on continues to control enablement; neither configuration nor adoption re-signs history.
 
 本指南用于升级到 **0.12.0**，包括从 **0.11.0**、0.10.0 及更早支持线升级。自 0.9.0 起，**新建无继承根会话**的默认模式为 `always`，旧会话通过不可覆盖私有绑定保留升级前有效模式。模式独立于 `standard` 策略、执行与发布权限及完成证书。旧空会话也必须清点，已记录的 off/on 继续控制启用状态；配置及 adoption 都不重签历史。

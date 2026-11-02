@@ -8863,8 +8863,8 @@ function validateActionManifest() {
 
 //#endregion
 //#region src/domain/host-version.ts
-/** Version admission floor. Since 0.12.0 the public DSH support range is
-* `>=0.2.1-rc.5` with NO implied upper bound: every host version at or above
+/** Version admission floor. The public DSH support range is
+* `>=0.2.1-rc.3` with NO implied upper bound: every host version at or above
 * this floor (including later RCs on any tuple, stable and future releases)
 * passes VERSION ADMISSION. The floor only rises when a future Guard release
 * actively adopts a newer DSH; the runtime never raises it from a remote
@@ -8872,13 +8872,12 @@ function validateActionManifest() {
 * metadata ignored. Version admission is one gate of several — it never
 * claims native validation of a not-yet-tested host, and the graph/byte/
 * contract audits below still run on every admission. */
-const MIN_SUPPORTED_HOST_VERSION = "0.2.1-rc.5";
+const MIN_SUPPORTED_HOST_VERSION = "0.2.1-rc.3";
 const SUPPORTED_HOST_RANGE = `>=${MIN_SUPPORTED_HOST_VERSION}`;
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
 * ledger, NOT an admission whitelist: a missing row never refuses a
-* version-above-floor host. The pre-rc.5 rows keep their historical standing
-* after the floor moved to 0.2.1-rc.5; each row records past evidence, not
-* current admission. */
+* version-above-floor host. Each row records past evidence, not current
+* artifact acceptance. */
 const HOST_VALIDATED_VERSIONS = [
 	"0.2.0-rc.1",
 	"0.2.0-rc.2",
@@ -8967,8 +8966,8 @@ function evaluateMinimumHostVersion(version$1, minimum = MIN_SUPPORTED_HOST_VERS
 	};
 }
 /** Version admission: at or above the floor by strict SemVer precedence
-* (prerelease-aware; build metadata ignored). `0.2.1-rc.4` and earlier
-* stay below the floor; `0.2.1-rc.5`, `0.2.1`, later patch/minor RCs and
+* (prerelease-aware; build metadata ignored). `0.2.1-rc.2` and earlier
+* stay below the floor; `0.2.1-rc.3`, `0.2.1`, later patch/minor RCs and
 * releases all admit. */
 function satisfiesSupportedHostRange(version$1) {
 	const parsed = parseHostVersion(version$1.trim());
@@ -9102,15 +9101,14 @@ function defineCohort(id, supportedGoalVersions, auditedPlatforms$3, packages$5,
 }
 /** Current baseline for new installations and default fixtures. */
 const ACTIVE_HOST_COHORT_ID = "dsh-0.2.1-rc.5";
-/** The release floor is rc.5. Older package identities remain historical
-* evidence; retaining their audit files does not admit a below-floor host. */
-const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID];
+/** rc.5 remains the default; rc.3 is also an admitted exact audited cohort. */
+const ACTIVE_HOST_COHORT_IDS = [ACTIVE_HOST_COHORT_ID, "dsh-0.2.1-rc.3"];
 /** Core-lock/v1 separates optional market identity from the rc.5 critical
-* graph. Historical cohorts live only in test data. Version ordering cannot
+* graph. The rc.3 core is also admitted under its own audited identity. Version ordering cannot
 * authorize an unregistered graph, and graph identity is separate from native
 * acceptance of a Guard artifact.
 */
-const HOST_COHORTS = [defineCohort("dsh-0.2.1-rc.3", ["0.2.1-rc.3"], [], RC021_RC3_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]), defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.1-rc.5"], [], RC021_RC5_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
+const HOST_COHORTS = [defineCohort(ACTIVE_HOST_COHORT_ID, ["0.2.1-rc.5"], [], RC021_RC5_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"]), defineCohort("dsh-0.2.1-rc.3", ["0.2.1-rc.3"], [], RC021_RC3_HOST_PACKAGES, "registry-derived-pending-native-audit", ["posix", "windows"])].filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id)).map((cohort) => ({
 	...cohort,
 	id: `${cohort.id}-core-v1`,
 	manifestVersion: 2,

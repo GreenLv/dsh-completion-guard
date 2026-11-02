@@ -155,8 +155,8 @@ describe('rc.3 Guard tool surface survives host updates', () => {
   })
 })
 
-describe('rc.3 cohort advertisement (historical)', () => {
-  it('the runtime advertises only the rc.5 active cohort; rc.3 stays below the raised floor', () => {
-    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.1-rc.5'])
+describe('rc.3 cohort advertisement', () => {
+  it('the runtime advertises rc.5 as default and rc.3 as an admitted cohort', () => {
+    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.1-rc.5', 'dsh-0.2.1-rc.3'])
   })
 })

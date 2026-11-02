@@ -29,12 +29,12 @@ describe('0.12.0 floor-admission host version policy', () => {
     row.integrity !== undefined && lockYaml.includes(`'${row.name}@${row.version}':`)
     && lockYaml.includes(row.integrity!)
   it('version admission: floor, later same-tuple RC, stable, patch/minor RC and higher major admit; below-floor refuses', () => {
-    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.5')
-    for (const version of ['0.2.1-rc.5', '0.2.1', '0.2.1-rc.6', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.5+build.7']) {
+    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.3')
+    for (const version of ['0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.3+build.7', '0.2.1-rc.5', '0.2.1', '0.2.1-rc.6', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.5+build.7']) {
       expect(satisfiesSupportedHostRange(version), version).toBe(true)
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'supported', reasonCode: 'host_version_supported' })
     }
-    for (const version of ['0.1.7-rc.2', '0.1.8', '0.2.0-alpha.9', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.3+build.7']) {
+    for (const version of ['0.1.7-rc.2', '0.1.8', '0.2.0-alpha.9', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2']) {
       expect(satisfiesSupportedHostRange(version), version).toBe(false)
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'below_minimum', reasonCode: 'host_version_below_minimum' })
     }
@@ -100,12 +100,12 @@ describe('0.12.0 floor-admission host version policy', () => {
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, () => true)
     expect(rebound.status).toBe('unsupported')
     expect(rebound.reasonCode).toBe('host_lock_version_below_minimum')
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
   })
 
   it('the floor SemVer matrix matches the recorded consumer evidence', () => {
     const matrix = JSON.parse(readFileSync(new URL('../benchmarks/incidents/acceptance/semver-matrix-v120.json', import.meta.url), 'utf8'))
-    expect(matrix.range).toBe('>=0.2.1-rc.5')
+    expect(matrix.range).toBe('>=0.2.1-rc.3')
     // includePrerelease:true reproduces the declared floor; the PLAIN npm
     // range does NOT admit later-tuple RCs (0.2.2-rc.1, 0.3.0-rc.1) — the
     // recorded consumer limitation.

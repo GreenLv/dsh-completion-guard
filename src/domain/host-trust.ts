@@ -73,8 +73,8 @@ function readReceipt(profileRoot: string | undefined, trust: HostRebindTrust): C
  * match the ACQUIRED versions or every loading digest would spuriously
  * drift. All baselines come from the same audited-manifest schema. */
 function baselineFor(rows: readonly { name?: string; version?: string }[]): typeof rc2Baseline {
-  // Current and future graphs start from rc.5. Explicit rc.2/rc.3 history
-  // keeps its own reference; no receipt can bypass the separate current floor.
+  // Default future graphs start from rc.5. Exact rc.2 and rc.3 retain their
+  // own references; no receipt can bypass the separate current floor.
   switch (rows.find((row) => row.name === '@deepseek-ai/dsh')?.version) {
     case '0.2.1-rc.2': return rc2Baseline
     case '0.2.1-rc.3': return rc3Baseline

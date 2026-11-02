@@ -15,7 +15,7 @@ describe('current rc.5 cohort with historical-host refusal', () => {
     // version floor and the graph audit are independent facts; a graph that
     // already failed keeps its own verdict rather than being re-reported as a
     // version fail).
-    expect(evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform })).toMatchObject({status: 'unsupported', reasonCode: 'host_lock_version_mismatch'})
+    expect(evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform })).toMatchObject({status: 'supported', cohortId: 'dsh-0.2.1-rc.3-core-v1'})
     expect(evaluateHostLock(RC020_RC2_HOST_PACKAGES, { platform })).toMatchObject({status: 'unsupported', reasonCode: 'host_lock_version_mismatch'})
     expect(evaluateHostLock(RC020_RC1_HOST_PACKAGES, { platform })).toMatchObject({status: 'unsupported', reasonCode: 'host_lock_version_mismatch'})
     for (const old of [RC015_HOST_PACKAGES, RC015_RC2_HOST_PACKAGES]) {
@@ -27,9 +27,9 @@ describe('current rc.5 cohort with historical-host refusal', () => {
     }
     for (const row of RC021_RC5_HOST_PACKAGES) expect(evaluateHostLock(RC021_RC5_HOST_PACKAGES.filter(r => r !== row), { platform }).status).not.toBe('supported')
   })
-  it('rejects rc.1 through rc.4, stable, future RC and forged integrity', () => {
+  it('rejects rewritten rc.5 identities and forged integrity', () => {
     for (const version of ['0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1', '0.2.1-rc.6']) expect(evaluateHostLock(RC021_RC5_HOST_PACKAGES.map(r => r.version === '0.2.1-rc.5' ? {...r, version} : r)).status).toBe('unsupported')
     expect(evaluateHostLock(RC021_RC5_HOST_PACKAGES.map(r => ({...r, integrity: 'sha512-forged'}))).status).toBe('unsupported')
-    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.1-rc.5-core-v1'])
+    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
   })
 })

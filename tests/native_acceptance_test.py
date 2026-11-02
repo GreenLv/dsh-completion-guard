@@ -521,13 +521,13 @@ class HostBoundEntrypointTests(unittest.TestCase):
         manifest = json.loads(
             (Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
         cohorts = manifest["cohorts"]
-        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.1-rc.5-core-v1"])
-        for cohort, version in zip(cohorts, ["0.2.1-rc.5"]):
+        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.1-rc.5-core-v1", "dsh-0.2.1-rc.3-core-v1"])
+        for cohort, version in zip(cohorts, ["0.2.1-rc.5", "0.2.1-rc.3"]):
             targets = {"web": cohort["id"], "headless": cohort["id"]}
             chosen = self.host.select_target_cohorts(cohorts, version, targets)
             self.assertEqual(chosen["web"]["id"], cohort["id"])
             self.assertEqual(chosen["headless"]["id"], cohort["id"])
-            other = "0.2.1-rc.3" if version == "0.2.1-rc.2" else "0.2.1-rc.2"
+            other = "0.2.1-rc.3" if version == "0.2.1-rc.5" else "0.2.1-rc.5"
             with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
                 self.host.select_target_cohorts(cohorts, other, targets)
         active = cohorts[0]
@@ -550,7 +550,12 @@ class HostBoundEntrypointTests(unittest.TestCase):
         manifest = json.loads((Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
         targets = {"web": "dsh-0.2.1-rc.2-core-v1", "headless": "dsh-0.2.1-rc.2-core-v1"}
         self.assertEqual([row["id"] for row in manifest["historicalCohorts"]],
-                         ["dsh-0.2.1-rc.3-core-v1", targets["web"]])
+                         [targets["web"]])
+        rc3 = {"web": "dsh-0.2.1-rc.3-core-v1", "headless": "dsh-0.2.1-rc.3-core-v1"}
+        chosen = self.host.select_target_cohorts(manifest["cohorts"], "0.2.1-rc.3", rc3)
+        self.assertEqual(chosen["web"]["id"], rc3["web"])
+        with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
+            self.host.select_target_cohorts(manifest["cohorts"], "0.2.1-rc.5", rc3)
         for version in ["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.4"]:
             with self.assertRaisesRegex(RuntimeError, "unknown or ambiguous"):
                 self.host.select_target_cohorts(manifest["cohorts"], version, targets)

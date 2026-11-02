@@ -1,23 +1,23 @@
 # Upgrading the core host lock
 
-Version 0.12.0 requires DSH `>=0.2.1-rc.5` and qualified Cordis `>=4.0.4`. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
+Version 0.12.0 requires DSH `>=0.2.1-rc.3` and qualified Cordis `>=4.0.4`. Fresh installations have no old-mode inventory to adopt; existing installations must preserve their old mode sources before any replacement. Follow this order:
 
 1. Stop the relevant host/session writers. For an **existing installation**, preserve the old installed package and sanitized effective-mode sources, then prepare the public persistence inventory and frozen receipt with the [prepared-candidate migration toolkit](ACTIVATION_MIGRATION.md), **before replacing DSH or Guard**. Unresolved old provenance stays pending. A **fresh installation with no old Guard sessions** skips this old-mode preparation.
-2. Upgrade DSH to `0.2.1-rc.5` or a later version, then install this Guard version, keeping writers stopped.
+2. Upgrade DSH to at least `0.2.1-rc.3` if necessary, then install this Guard version, keeping writers stopped.
 3. Rebuild the host lock for each profile with `inspect`, `inject` and `verify-dump` from the accepted package or matching prepared source. For a POSIX shell, the entry is `node /absolute/prepared-package/bin/dsh-completion-guard-host-lock.mjs`; pass the actual runtime/profile roots. A successful rebuild reads back `supported` with `audit_provenance` stating how the graph was established.
 4. For an **existing installation**, run mode `adopt` and `verify` with its frozen old receipt while writers remain stopped, **before starting any host**. Host-lock rebuilding does not perform adoption. For a fresh installation there is no old receipt to adopt.
 5. Start each Web/Headless/Desktop profile only after the applicable mode and host-lock checks pass. These checks do not require a running host.
 
-0.12.0 的全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再升级 DSH、安装 Guard、重建宿主锁；保持写者停止，在启动任何宿主前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
+0.12.0 的全新安装没有旧模式需要采纳；已有安装必须在替换前保留旧来源。顺序为：先停相关写者，保存旧安装包和脱敏有效模式来源，以独立准备的候选工具冻结公开库存及旧收据；再按需升级低于下限的 DSH、安装 Guard、重建宿主锁；保持写者停止，在启动任何宿主前完成旧收据 `adopt` 和 `verify`；最后按需启动。全新安装跳过旧模式准备与 adoption，未知旧来源仍保持 pending，宿主锁不替代模式核验。
 
 Failure readbacks distinguish these cases:
 
 - `host_lock_migration_required`: the configuration lacks the policy or source roots. Supply `--runtime-root` and `--profile-root` when rebuilding the lock.
-- `host_lock_version_below_minimum`: DSH is older than `0.2.1-rc.5`. Upgrade DSH first.
-- `host_lock_version_mismatch`: the installed graph differs from the reviewed baseline in version or integrity. For a later compatible version, use `--rebind-registry` to acquire and qualify the published graph. For the baseline, restore the recorded identities.
+- `host_lock_version_below_minimum`: DSH is older than `0.2.1-rc.3`. Upgrade DSH first.
+- `host_lock_version_mismatch`: the installed graph differs from the reviewed baseline in version or integrity. For a compatible version outside the reviewed cohorts, use `--rebind-registry` to acquire and qualify the published graph. For rc.3 or rc.5, check the recorded identities for the actual launcher.
 - `host_lock_installed_graph_drift`: installed bytes or routes changed after the audit. Inspect the change before rebuilding the lock.
 
-The floor is `>=0.2.1-rc.5` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
+The floor is `>=0.2.1-rc.3` with no upper bound. Passing the version check does not establish native validation; validated versions are recorded separately. Guard's exact DSH core is separate from optional market versions.
 A normal market update no longer changes the core digest. A plugin that changes
 which core packages actually resolve still invalidates the lock.
 
@@ -52,7 +52,7 @@ graph it finds there, and each session mount validates those same roots once,
 with every security-sensitive entry validating them again at its own decision.
 Injecting against the old runtime therefore writes a lock that describes a graph
 the new runtime no longer has, and it will fail at the next mount or the next
-protected entry. Order: stop the host, upgrade DSH and install Guard, inspect/inject/verify each profile, then start it when needed.
+protected entry. Order: stop the host, upgrade DSH if below the floor and install Guard, inspect/inject/verify each profile, then start it when needed.
 
 `inject` **writes to `<profile>/cordis.patch.yml`** — it replaces or adds Guard's
 managed block in that file. Back the file up first. The same file is the one
@@ -92,7 +92,7 @@ certificate authority — completion certificates, mutation authorization,
 release pre-effect decisions and Goal/Stop boundaries — validates the lock
 freshly at the moment of its own decision.
 
-Version 0.12.0 uses `dsh-0.2.1-rc.5-core-v1` as the current audited baseline cohort and derives graph cohorts for compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
+Version 0.12.0 uses `dsh-0.2.1-rc.5-core-v1` as the default audited baseline and selects the rc.3 cohort for the rc.3 launcher; it derives graph cohorts for other compatible hosts above the version floor (see the compatibility guide). Runtime checks authenticate the mapped files and verify that each critical dependency resolves to the mapped instance. Installation imports use native Node resolution; Profile imports use the host's local-first routing and installation fallback only when no local package is selected. A nearer shadow, missing edge, wrong export target or escaped path is rejected even when the recorded versions match.
 
 The manifest's `registry-derived-pending-native-audit` provenance and empty `auditedPlatforms` list describe its immutable source audit, which is part of the lock digest. Native acceptance belongs to each exact artifact's separate Release annexes; it does not rewrite that digest. Inspection, injection and dump verification report `audit_provenance` alongside the cohort and digest.
 
@@ -111,7 +111,7 @@ that matters for deciding whether you are migrating or just drifting:
   a DSH upgrade, and both are cured by re-running inspect, inject and verify against
   the new runtime rather than by editing the lock.
 
-Historical requirements and session records are retained; old certificates do not become certificates for the new lock. Earlier host identities, including rc.2 and rc.3, remain historical evidence and are not accepted below the 0.12.0 floor.
+Historical requirements and session records are retained; old certificates do not become certificates for the new lock. The rc.3 graph is admitted under its own reviewed cohort; rc.2 remains below the 0.12.0 floor. Prior artifact acceptance remains bound to its original subject.
 The shared digest-v3 encoder and its upstream fixtures are unchanged.
 
 ## Official Desktop profile
@@ -138,7 +138,7 @@ Check `supported` on inspect, inject and verify-dump. Keep Desktop stopped until
 
 The official plugin market (`dshmarket`) can be installed into the same Desktop profile through the official management entry; its package name neither conflicts with the Desktop bundle tuple nor grants any trust. Installing or removing the market changes the profile's importer, so the previous Desktop lock stops matching (`host_lock_installed_graph_drift`) and must be rebuilt with the full four-step flow: `inspect`, then `inject`, then generate a NEW composed dump with `dump-desktop`, then verify that new dump with `verify-dump --dump-config <new file>`. `dump-desktop` only composes a configuration for readback; it never substitutes for `verify-dump`. Verify the dump generated after this rebuild — a dump captured before the market change no longer matches and must be discarded. Rebuild the lock on this machine; a lock or digest copied from another profile or machine is not valid evidence. Desktop restart stays unsupported regardless of coexistence.
 
-Desktop 升级顺序相同：先停止应用并升级宿主，再用应用附带的 CLI 安装 Guard。普通外部 CLI 无法管理保留的 Desktop profile。以应用的 `app.asar` 和实际 Desktop profile 路径执行 `inspect`、`inject`、`dump-desktop`、`verify-dump`，确认三项 JSON 回读均为 `supported` 后再打开应用。`dump-desktop` 不启动宿主；配置输出可能包含私人信息，请留在本机。Guard 不修改应用归档，也不负责应用重启。官方插件市场（`dshmarket`）可以通过官方管理入口安装到同一 Desktop profile；其包名既不与 Desktop bundle 元组冲突，也不授予任何信任。安装或移除市场会改变 profile 的 importer，旧 Desktop 锁因此不再匹配（`host_lock_installed_graph_drift`），需要用完整四步流程重建：先 `inspect`，再 `inject`，然后用 `dump-desktop` 生成新的组合配置，最后用 `verify-dump --dump-config <新文件>` 校验这份新配置。`dump-desktop` 只负责生成配置供回读，不能替代 `verify-dump`。请校验本次重建后新生成的 dump——市场变化前捕获的旧 dump 已不匹配，应当丢弃。请在本机重建锁；从其他 profile 或其他机器复制的锁或摘要不构成有效证据。无论是否共存，Desktop 重启仍不受支持。
+Desktop 升级顺序相同：先停止应用，必要时将宿主升级至最低要求，再用应用附带的 CLI 安装 Guard。普通外部 CLI 无法管理保留的 Desktop profile。以应用的 `app.asar` 和实际 Desktop profile 路径执行 `inspect`、`inject`、`dump-desktop`、`verify-dump`，确认三项 JSON 回读均为 `supported` 后再打开应用。`dump-desktop` 不启动宿主；配置输出可能包含私人信息，请留在本机。Guard 不修改应用归档，也不负责应用重启。官方插件市场（`dshmarket`）可以通过官方管理入口安装到同一 Desktop profile；其包名既不与 Desktop bundle 元组冲突，也不授予任何信任。安装或移除市场会改变 profile 的 importer，旧 Desktop 锁因此不再匹配（`host_lock_installed_graph_drift`），需要用完整四步流程重建：先 `inspect`，再 `inject`，然后用 `dump-desktop` 生成新的组合配置，最后用 `verify-dump --dump-config <新文件>` 校验这份新配置。`dump-desktop` 只负责生成配置供回读，不能替代 `verify-dump`。请校验本次重建后新生成的 dump——市场变化前捕获的旧 dump 已不匹配，应当丢弃。请在本机重建锁；从其他 profile 或其他机器复制的锁或摘要不构成有效证据。无论是否共存，Desktop 重启仍不受支持。
 
 ## Market and restart
 

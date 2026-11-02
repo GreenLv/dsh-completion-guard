@@ -23,7 +23,7 @@ function loadAppBoot(): { evaluatePluginCompatibility: (manifest: unknown, exemp
   }
   const rc3Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc3-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
   const rc5Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc5-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
-  const audit = actual.version === '0.2.1-rc.5' ? rc5Audit : actual.version === '0.2.1-rc.5' ? rc3Audit : rc2Audit
+  const audit = actual.version === '0.2.1-rc.5' ? rc5Audit : actual.version === '0.2.1-rc.3' ? rc3Audit : rc2Audit
   const pinned = audit.packages.find(row => row.name === '@deepseek-ai/dsh-app-boot')
   if (!pinned || actual.name !== pinned.name || actual.version !== pinned.version
     || !readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8').includes(`'${pinned.name}@${pinned.version}':`)
@@ -40,28 +40,47 @@ const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.
   peerDependencies: Record<string, string>
 }
 
-describe('CG021-07: official app-boot admission over the 0.2.1-rc.5 floor', () => {
+describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () => {
   const { evaluatePluginCompatibility } = loadAppBoot()
 
   it('keeps the shipped dual-layer declaration consistent', () => {
-    expect(manifest.engines.dsh).toBe('>=0.2.1-rc.5')
-    expect(manifest.dsh.engines.dsh).toBe('>=0.2.1-rc.5')
+    expect(manifest.engines.dsh).toBe('>=0.2.1-rc.3')
+    expect(manifest.dsh.engines.dsh).toBe('>=0.2.1-rc.3')
     for (const [name, range] of Object.entries(manifest.peerDependencies)) {
       if (name === '@deepseek-ai/cordis') continue
-      expect(range, name).toBe('>=0.2.1-rc.5')
+      expect(range, name).toBe('>=0.2.1-rc.3')
     }
   })
 
   it('admits the floor, later RCs, stable and future versions through the REAL consumer', () => {
-    for (const version of ['0.2.1-rc.5', '0.2.1', '0.2.1-rc.6', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.5+build.7']) {
+    for (const version of ['0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.1', '0.2.1-rc.6', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.5+build.7']) {
       expect(evaluatePluginCompatibility(manifest, {}, version), version).toBeUndefined()
     }
   })
 
-  it('refuses 0.2.0-rc.2, 0.2.1-rc.1 and the retired rc.3/rc.4 lines with the declared engines range', () => {
-    for (const version of ['0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.2+build.7', '0.2.1-rc.3', '0.2.1-rc.4']) {
+  it('refuses 0.2.0-rc.2 and 0.2.1-rc.1/rc.2 with the declared engines range', () => {
+    for (const version of ['0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.2+build.7']) {
       const issue = evaluatePluginCompatibility(manifest, {}, version)
-      expect(issue, version).toMatchObject({ requirements: { 'engines.dsh': '>=0.2.1-rc.5' }, exempted: false })
+      expect(issue, version).toMatchObject({ requirements: { 'engines.dsh': '>=0.2.1-rc.3' }, exempted: false })
+    }
+  })
+
+  it('reproduces every recorded SemVer row with the pinned semver and official consumer', () => {
+    const root = createRequire(import.meta.url)
+    const producer = createRequire(root.resolve('@deepseek-ai/dsh-tool-bash'))
+    const shellEnv = createRequire(producer.resolve('@deepseek-ai/dsh-shell-env'))
+    const boot = createRequire(shellEnv.resolve('@deepseek-ai/dsh-app-boot'))
+    const semver = boot('semver') as { satisfies: (version: string, range: string, options?: { includePrerelease: boolean }) => boolean }
+    const semverPackage = boot('semver/package.json') as { version: string }
+    const matrix = JSON.parse(readFileSync(new URL('../benchmarks/incidents/acceptance/semver-matrix-v120.json', import.meta.url), 'utf8')) as {
+      range: string; semver_version: string; cases: Array<{ version: string; plain_satisfies: boolean; includePrerelease_true: boolean }>
+    }
+    expect(matrix.range).toBe(manifest.engines.dsh)
+    expect(semverPackage.version).toBe(matrix.semver_version)
+    for (const row of matrix.cases) {
+      expect(semver.satisfies(row.version, matrix.range), row.version).toBe(row.plain_satisfies)
+      expect(semver.satisfies(row.version, matrix.range, { includePrerelease: true }), row.version).toBe(row.includePrerelease_true)
+      expect(evaluatePluginCompatibility(manifest, {}, row.version) === undefined, row.version).toBe(row.includePrerelease_true)
     }
   })
 
@@ -74,7 +93,7 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.5 floor', () =
     const { engines: _engines, ...peersOnly } = manifest
     expect(evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.5')).toBeUndefined()
     const below = evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.1')
-    expect(below?.requirements).toMatchObject({ '@deepseek-ai/dsh-session': '>=0.2.1-rc.5' })
+    expect(below?.requirements).toMatchObject({ '@deepseek-ai/dsh-session': '>=0.2.1-rc.3' })
     // The peers-only surface accepts workspace ranges the way production
     // carriers emit them: they resolve against the CURRENT runtime — i.e. a
     // workspace peer always satisfies whatever runtime is running, which is

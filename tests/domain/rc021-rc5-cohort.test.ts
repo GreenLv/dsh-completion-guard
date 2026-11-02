@@ -15,8 +15,8 @@ import rc5Manifest from '../../src/domain/rc5-byte-audit-manifest.js'
  */
 
 describe('rc.5 cohort qualification', () => {
-  it('uses rc.5 as the sole current cohort and default fixture', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1'])
+  it('uses rc.5 as the default with rc.3 also admitted', () => {
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
     expect(HOST_COHORTS[0]!.packages).toEqual(RC021_RC5_HOST_PACKAGES)
     expect(EXPECTED_HOST_PACKAGES).toEqual(RC021_RC5_HOST_PACKAGES)
   })
@@ -56,13 +56,14 @@ describe('rc.5 cohort qualification', () => {
     expect(rc5Manifest.hostVersion).toBe('0.2.1-rc.5')
   })
 
-  it('evaluates the rc.5 rows to a supported rc.5 lock and refuses below-floor graphs', () => {
+  it('evaluates rc.5 and rc.3 under their distinct locks', () => {
     const rc5Lock = evaluateHostLock(RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
     expect(rc5Lock.status, JSON.stringify(rc5Lock.reasonCode)).toBe('supported')
     expect(rc5Lock.cohortId).toBe('dsh-0.2.1-rc.5-core-v1')
     const rc3Lock = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc3Lock.status).toBe('unsupported')
-    expect(rc3Lock.hostVersion).toMatchObject({ status: 'below_minimum', minimum: '0.2.1-rc.5' })
+    expect(rc3Lock.status).toBe('supported')
+    expect(rc3Lock.cohortId).toBe('dsh-0.2.1-rc.3-core-v1')
+    expect(rc3Lock.hostVersion).toMatchObject({ status: 'supported', minimum: '0.2.1-rc.3' })
     // Graph identity is per cohort: an rc.5 row swapped into the rc.3 set is
     // not the rc.3 lock.
     const mixed = [...RC021_RC3_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session' ? { ...row, version: '0.2.1-rc.5' } : row)]
@@ -70,11 +71,12 @@ describe('rc.5 cohort qualification', () => {
     expect(mixedLock.status !== 'supported' || mixedLock.cohortId !== 'dsh-0.2.1-rc.3-core-v1').toBe(true)
   })
 
-  it('enforces the rc.5 floor while preserving historical identities', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.5')
+  it('enforces the rc.3 floor while preserving rc.5 as default', () => {
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
     expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(true)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.4')).toBe(false)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.4')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
     expect(compareHostVersions('0.2.1-rc.5', '0.2.1-rc.3')).toBeGreaterThan(0)
   })
 

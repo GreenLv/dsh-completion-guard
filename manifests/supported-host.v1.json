@@ -1,6 +1,6 @@
 {
   "registryVersion": 2,
-  "description": "Current reviewed baseline: DSH 0.2.1-rc.5 with Cordis 4.0.5. Admission is DSH >=0.2.1-rc.5; compatible newer graphs require registry-acquired qualification. The rc.2/rc.3 cohorts and earlier audit files are historical evidence, not current admission.",
+  "description": "Default reviewed baseline: DSH 0.2.1-rc.5 with Cordis 4.0.5. Admission is DSH >=0.2.1-rc.3; rc.3 uses its own reviewed cohort, and compatible newer graphs require registry-acquired qualification. The rc.2 cohort and earlier audit files remain historical evidence, not current admission.",
   "packageGroups": {
     "base": [
       "@deepseek-ai/cordis",
@@ -315,20 +315,7 @@
           "integrity": "sha512-1iHEkg+VApcpiynxjjWPjdl4COGMG/VRvRtB8aESe3CWQW1HN0tjzEw0VSizsvn3XDaZ8VjiA+g1Svufobc0yw=="
         }
       ]
-    }
-  ],
-  "runtimeIdentity": {
-    "source": "active-profile-package-graph",
-    "injectionConfigKeys": [
-      "hostLockPackages",
-      "hostLockPlatform",
-      "hostLockProfile"
-    ],
-    "missingBehavior": "fail-closed",
-    "cohortDigestBinding": "host_cohort capability row in hostLockDigest v3"
-  },
-  "lockPolicy": "dsh-core/v1",
-  "historicalCohorts": [
+    },
     {
       "id": "dsh-0.2.1-rc.3-core-v1",
       "manifestVersion": 2,
@@ -581,7 +568,20 @@
           "integrity": "sha512-Ec/MG+j4jWu/4+ym9UieB2zHt22mwSFfS2s2xZfnoCQIrxkIH5ayVcY1SNttrmHFYDwsyZEG4YY2dzYRtcuIfw=="
         }
       ]
-    },
+    }
+  ],
+  "runtimeIdentity": {
+    "source": "active-profile-package-graph",
+    "injectionConfigKeys": [
+      "hostLockPackages",
+      "hostLockPlatform",
+      "hostLockProfile"
+    ],
+    "missingBehavior": "fail-closed",
+    "cohortDigestBinding": "host_cohort capability row in hostLockDigest v3"
+  },
+  "lockPolicy": "dsh-core/v1",
+  "historicalCohorts": [
     {
       "id": "dsh-0.2.1-rc.2-core-v1",
       "manifestVersion": 2,

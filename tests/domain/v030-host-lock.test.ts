@@ -48,7 +48,6 @@ import {
 } from '../../src/domain/host-resolver.js'
 import { RC021_RC3_HOST_PACKAGES } from '../../src/domain/rc021-rc3-host.js'
 import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
-import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
 // This family isolates graph/config mutation with synthetic package manifests.
 // Published-byte integrity is exercised without mocks in v080-rc017-host.test.ts.
@@ -76,7 +75,7 @@ describe('v0.3 host graph and live capability binding', () => {
       RC021_RC5_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
     )
     expect(EXPECTED_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal')?.version)
-      .toBe(MIN_SUPPORTED_HOST_VERSION)
+      .toBe('0.2.1-rc.5')
     // CG-DSH-001: a graph missing the whole Goal pair fails closed as an
     // incomplete audited graph; a partial Goal pair still names its own gap.
     const withoutGoalLock = evaluateHostLock(withoutGoal())
@@ -395,7 +394,7 @@ describe('active profile graph injection and composed readback', () => {
     expect(hostLockRowsFromComposedDump(managed)).toEqual(active.evaluation.packages)
     expect(hostLockContextFromComposedDump(managed)).toEqual({ platform: expectedPlatform, profileKind: 'web' })
     expect(verifyComposedHostLockDump(managed, active.evaluation).digest).toBe(active.evaluation.digest)
-    expect(() => verifyComposedHostLockDump(managed.replace(MIN_SUPPORTED_HOST_VERSION, '0.1.5-rc.2'), active.evaluation))
+    expect(() => verifyComposedHostLockDump(managed.replace('0.2.1-rc.5', '0.1.5-rc.2'), active.evaluation))
       .toThrowError(new HostProfileError('host_lock_readback_mismatch', 'composed config host lock does not match the active graph'))
     expect(() => verifyComposedHostLockDump(managed.replace('hostLockProfile: "web"', 'hostLockProfile: "headless"'), active.evaluation))
       .toThrowError(/does not match the active graph/)
@@ -610,7 +609,7 @@ describe('managed core lock migration and live graph revalidation', () => {
     const shadow = join(fixture.runtimeRoot, 'node_modules', '@deepseek-ai/dsh-session')
     rmSync(shadow, { recursive: true })
     mkdirSync(shadow)
-    writeFileSync(join(shadow, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-session', version: MIN_SUPPORTED_HOST_VERSION, exports: {} }))
+    writeFileSync(join(shadow, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-session', version: '0.2.1-rc.5', exports: {} }))
     expect(() => resolveActiveProfileHostLock(fixture.runtimeRoot, fixture.profileRoot, '0.3.0'))
       .toThrow(/reachable host modules differ/)
     expect(revalidateCoreLock(config, active.evaluation)).toMatchObject({ status: 'unsupported', reasonCode: 'host_lock_installed_graph_drift' })

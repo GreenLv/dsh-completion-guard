@@ -295,7 +295,7 @@ describe('audited host cohort registry', () => {
     for (const name of ['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tool-goal', '@deepseek-ai/dsh-tools']) {
       expect(peers[name]).toBe(SUPPORTED_HOST_RANGE)
     }
-    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.5')
+    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.3')
     for (const version of ['0.2.1-rc.5', '0.2.1', '0.2.2-rc.1', '0.3.0', '1.0.0']) {
       expect(satisfiesSupportedHostRange(version)).toBe(true)
     }
@@ -387,8 +387,8 @@ describe('v0.4.0 dshmarket web_control compatibility projection (W1)', () => {
 
 describe('core lock policy identity', () => {
   it('exports only the active exact DSH core with an explicit new manifest policy', () => {
-    // rc.3 is the current default; older published identities are history.
-    expect(CORE_HOST_COHORTS).toHaveLength(1)
+    // rc.5 remains the default; rc.3 has its own admitted core.
+    expect(CORE_HOST_COHORTS).toHaveLength(2)
     expect(CORE_HOST_COHORTS[0].id).toBe(ACTIVE_COHORT_ID)
     for (const core of CORE_HOST_COHORTS) {
       expect(core.manifestVersion).toBe(2)

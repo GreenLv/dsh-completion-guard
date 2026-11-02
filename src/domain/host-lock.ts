@@ -110,19 +110,18 @@ function defineCohort(
 
 /** Current baseline for new installations and default fixtures. */
 export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.1-rc.5'
-/** The release floor is rc.5. Older package identities remain historical
- * evidence; retaining their audit files does not admit a below-floor host. */
-export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
+/** rc.5 remains the default; rc.3 is also an admitted exact audited cohort. */
+export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID, 'dsh-0.2.1-rc.3']
 
 /** Core-lock/v1 separates optional market identity from the rc.5 critical
- * graph. Historical cohorts live only in test data. Version ordering cannot
+ * graph. The rc.3 core is also admitted under its own audited identity. Version ordering cannot
  * authorize an unregistered graph, and graph identity is separate from native
  * acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort('dsh-0.2.1-rc.3', ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,
-    'registry-derived-pending-native-audit', ['posix', 'windows']),
   defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.1-rc.5'], [], RC021_RC5_HOST_PACKAGES,
+    'registry-derived-pending-native-audit', ['posix', 'windows']),
+  defineCohort('dsh-0.2.1-rc.3', ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))

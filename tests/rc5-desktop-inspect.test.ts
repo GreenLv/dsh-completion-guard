@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 // RC5-D01 end-to-end (successor of the 0.11.0 RC3-D01 case): the desktop
 // preflight entry (inspectDesktopTargetGraph, the function behind
 // `inspect-graph` and native preflight) must qualify an rc.5 app bundle
-// through the rc.5 audited manifest, while the retired rc.3 runtime —
-// qualified in the 0.11.0 round — now refuses at the raised version floor.
+// through the rc.5 audited manifest, while rc.2 refuses below the floor.
 // The bundle is built from the rc.5 audited manifest (vi.mock narrows the
 // modules exactly like the rc.2/rc.3 suites do); the profile is a
 // dependency-free legal Desktop shape.
@@ -47,7 +46,7 @@ import rc5Manifest from '../src/domain/rc5-byte-audit-manifest.js'
 import distributionPins from '../src/domain/desktop-distribution-manifest.js'
 
 const RC5 = '0.2.1-rc.5'
-const RC3 = '0.2.1-rc.3'
+const RC2 = '0.2.1-rc.2'
 const LIB_BYTES = 'export const synthetic = true\n'
 
 function syntheticManifestBytes(name: string, version: string): Buffer {
@@ -180,14 +179,14 @@ describe('RC5-D01: desktop preflight qualifies an rc.5 app through the rc.5 coho
     }
   })
 
-  it('refuses a retired rc.3-shaped bundle at the raised floor without any cohort registration', () => {
-    const root = mkdtempSync(join(tmpdir(), 'rc3-desktop-refused-'))
+  it('refuses a retired rc.2-shaped bundle below the floor without any cohort registration', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rc2-desktop-refused-'))
     try {
-      const { asarPath, desktopManifest } = buildBundle(root, RC3)
+      const { asarPath, desktopManifest } = buildBundle(root, RC2)
       const headerSha = readAsarIndex(asarPath).headerSha256
       distributionPins.distributions = [{
-        id: `desktop-${RC3}-synthetic`, platform: process.platform, arch: 'synthetic',
-        version: RC3, runtimeVersion: RC3, pnpmVersion: '11.28.5',
+        id: `desktop-${RC2}-synthetic`, platform: process.platform, arch: 'synthetic',
+        version: RC2, runtimeVersion: RC2, pnpmVersion: '11.28.5',
         asarHeaderSha256: headerSha,
         desktopManifestSha256: createHash('sha256').update(desktopManifest).digest('hex'),
         buildCommit: 'c'.repeat(40), buildDirty: false,
@@ -197,14 +196,14 @@ describe('RC5-D01: desktop preflight qualifies an rc.5 app through the rc.5 coho
       const profileRoot = join(root, 'profile')
       mkdirSync(profileRoot, { recursive: true })
       writeFileSync(join(profileRoot, 'package.json'), JSON.stringify({
-        name: DESKTOP_PROFILE_PACKAGE_NAME, version: RC3,
+        name: DESKTOP_PROFILE_PACKAGE_NAME, version: RC2,
         dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } },
       }))
-      // The 0.11.0-qualified rc.3 runtime is below the 0.12.0 floor: the
+      // The rc.2 runtime is below the 0.12.0 floor: the
       // version gate refuses before any cohort or byte audit runs.
       try {
         inspectDesktopTargetGraph(asarPath, profileRoot)
-        expect.unreachable('the rc.3 bundle must be refused')
+        expect.unreachable('the rc.2 bundle must be refused')
       } catch (error) {
         expect((error as { code?: string }).code).toBe('desktop_host_version_below_minimum')
       }
