@@ -69,15 +69,15 @@ upgraded.
 响模块与版本、前置条件在本仓库不可达的原因、责任方、到期日；到期后必须重新论证或
 完成升级。
 
-### Explicit temporary risk acceptance for 0.11.0 / 0.11.0 明确的临时风险接受
+### Historical temporary risk acceptance for 0.11.0 / 0.11.0 历史临时风险接受
 
 For the three Undici 8.11.2 findings added below, the maintainer explicitly accepted the disclosed residual risk and waived the ordinary unreachability eligibility requirement for this 0.11.0 validation. This is a specific exception to eligibility, not a finding that the whole host is unreachable or safe. The signed host remains unfixed, and a TLS 1.2 process-crash denial of service cannot be excluded. The cache and TLS-callback inspections narrow particular paths only; they do not establish whole-host isolation. Changing a development override would not repair signed-host bytes.
 
 这次 0.11.0 验收新增的三条 Undici 8.11.2 例外，由维护者明确接受已披露的剩余风险，并对通常要求“前置条件不可达”的例外准入作一次特批。这不是“整个宿主不可达”或“已经安全”的结论。签名宿主仍未修复，TLS 1.2 导致进程崩溃的拒绝服务风险不能排除；cache 和 TLS callback 的静态检查只缩小部分路径，不能证明整个宿主隔离。修改开发依赖 override 也不会修复签名宿主中的代码。
 
-Acceptance covers only scanner IDs 1243472, 1243474 and 1243477 with the exact advisory IDs and Undici version below. It expires on **2026-11-05 inclusive**, according to the runner's existing date semantics; from **2026-11-06**, the unchanged gate rejects the expired table and blocks again. Other findings, versions and release checks are not waived. The two older exceptions retain their original scope and expiry. Expiry blocks CI qualification and subsequent acceptance checks; it does not fix upstream code, disable an installed 0.11.0 instance, or withdraw a published package.
+The original 0.11.0 acceptance covered only scanner IDs 1243472, 1243474 and 1243477 with the exact advisory IDs and Undici version below. Its expiry was **2026-11-05 inclusive**: the exception table shipped in that release would block from **2026-11-06** if left unchanged. The separate current 0.12.0 acceptance and expiry are recorded below. Other findings, versions and release checks are not waived. The two older exceptions retain their original scope and expiry. Expiry blocks CI qualification and subsequent acceptance checks; it does not fix upstream code, disable an installed 0.11.0 instance, or withdraw a published package.
 
-接受范围仅限 scanner ID 1243472、1243474、1243477 与下列精确公告 ID、Undici 版本的组合。有效期**包含 2026-11-05 当日**，沿用 runner 现有日期语义；自 **2026-11-06** 起，未改动的门禁会拒绝过期表并恢复阻断。其他发现、版本及发布检查不在豁免范围内；原有两条例外的范围和到期日保持不变。到期阻断的是 CI 资格和后续验收，不会自动修复上游、禁用已安装的 0.11.0 实例或撤回已发布的包。
+原 0.11.0 接受范围仅限 scanner ID 1243472、1243474、1243477 与下列精确公告 ID、Undici 版本的组合。原有效期**包含 2026-11-05 当日**；该发布所带的例外表若保持不变，将从 **2026-11-06** 起恢复阻断。下节单独登记本次 0.12.0 的新授权和期限。其他发现、版本及发布检查不在豁免范围内；原有两条例外的范围和到期日保持不变。到期阻断的是 CI 资格和后续验收，不会自动修复上游、禁用已安装的 0.11.0 实例或撤回已发布的包。
 
 The advisory id in the exception table is the scanner's numeric id; the GitHub
 advisory it resolves to is recorded alongside it. Earlier drafts of this page
@@ -93,9 +93,15 @@ mistakenly wrote the numeric id as a GHSA code — the real identifiers are:
 
 ### Status for the 0.12.0 candidate / 0.12.0 候选的现状
 
-The rc.5 cohort bump does not change this picture. The verified `0.2.1-rc.5` registry manifests and the regenerated 0.12.0 lockfile still exact-pin `undici` 8.11.2 (via `@deepseek-ai/dsh-http-proxy`) and `zod` 4.4.3 (via `@deepseek-ai/dsh-commands`), and the upstream default branch still pins the same Undici, so no gap is closed by adopting rc.5. The three 0.11.0 short-term accepts are scoped to that validation and expire on 2026-11-05 inclusive; from 2026-11-06 the unchanged gate blocks these findings again, including for this candidate. They are NOT extended, re-scoped or carried into 0.12.0 by this bump — a publication after expiry needs a separate, explicit maintainer acceptance recorded in the table, or the gate stays blocking. The two older exceptions remain within their original scope and expiry, with their rationale updated to reference the rc.5 cohort.
+The rc.5 cohort bump does not change this picture. The verified `0.2.1-rc.5` registry manifests and the regenerated 0.12.0 lockfile still exact-pin `undici` 8.11.2 (via `@deepseek-ai/dsh-http-proxy`) and `zod` 4.4.3 (via `@deepseek-ai/dsh-commands`), and the upstream default branch still pins the same Undici, so no gap is closed by adopting rc.5. On 2026-11-02 the maintainer explicitly and separately accepted the same three exact Undici 8.11.2 findings for 0.12.0 validation, including the disclosed residual risk and ordinary-unreachability eligibility waiver, and extended their expiry to **2026-11-30 inclusive**. Only scanner IDs 1243472, 1243474 and 1243477 with their recorded GHSA identities are covered. From **2026-12-01** the gate blocks them again unless re-justified. The signed host remains unfixed; whole-host unreachability is not established and the TLS 1.2 process-crash risk cannot be excluded. The table above preserves the first 0.11.0 authorization; the current table below and machine-readable rationales record the separately authorized 0.12.0 scope. Other findings, versions and release gates are not waived. Expiry affects later qualification; it does not automatically disable an installed instance or withdraw a published package. The two older exceptions remain within their original scope and expiry, with their rationale updated to reference the rc.5 cohort.
 
-rc.5 队列升级不改变上述结论：已核验的 `0.2.1-rc.5` registry manifest 与再生的 0.12.0 lockfile 仍精确锁定 `undici` 8.11.2（经 `@deepseek-ai/dsh-http-proxy`）与 `zod` 4.4.3（经 `@deepseek-ai/dsh-commands`），上游默认分支同样保留旧 Undici，因此本版没有关闭任何缺口。0.11.0 的三条短期接受仅限该版验收，2026-11-05（含）到期；自 2026-11-06 起未改动的门禁对本候选同样恢复阻断。本次升级不延期、不改范围、不自动延续——到期后发布需要维护者在例外表中另行明确登记，否则门禁保持阻断。原有两条例外保持原范围与到期日，仅将依据更新为 rc.5 队列口径。
+rc.5 队列升级不改变上述结论：已核验的 `0.2.1-rc.5` registry manifest 与再生的 0.12.0 lockfile 仍精确锁定 `undici` 8.11.2（经 `@deepseek-ai/dsh-http-proxy`）与 `zod` 4.4.3（经 `@deepseek-ai/dsh-commands`），上游默认分支同样保留旧 Undici，因此本版没有关闭任何缺口。维护者于 2026-11-02 明确、单独接受本次 0.12.0 验收中相同三条 Undici 8.11.2 发现的已披露剩余风险，并特批通常要求前置条件不可达的例外资格，期限延至 **2026-11-30（含）**。仅覆盖 scanner ID 1243472、1243474、1243477 及其已登记 GHSA 身份。自 **2026-12-01** 起，未经重新论证的例外恢复阻断。签名宿主未修复，不能证明整个宿主不可达，也不能排除 TLS 1.2 进程崩溃风险。上表保留首次 0.11.0 授权历史，下表及机器可读 rationale 记录单独授权的当前 0.12.0 范围；其他发现、版本和发布核验不在豁免范围内。到期影响后续资格核验，不会自动禁用已安装实例或撤回已发布的包。原有两条例外保持原范围与到期日，仅将依据更新为 rc.5 队列口径。
+
+| Current accepted advisory / 当前接受公告 | Scanner id | Module@version | Owner | Expires (inclusive) |
+| --- | --- | --- | --- | --- |
+| GHSA-4w7w-5xrc-9h26 | 1243472 | undici@8.11.2 | GreenLv | 2026-11-30 |
+| GHSA-2m5v-pch6-74hx | 1243474 | undici@8.11.2 | GreenLv | 2026-11-30 |
+| GHSA-qrxm-fqhp-jwvm | 1243477 | undici@8.11.2 | GreenLv | 2026-11-30 |
 
 `pnpm audit` on the 0.12.0 lockfile additionally reports four moderate Undici findings (scanner IDs 1243077, 1243080, 1243480, 1243483 — EventSource unbounded memory, SRI token case bypass, WebSocket PONG buffering, decompress-interceptor exception) and four `fast-uri` moderate/low findings (1243098, 1243104, 1243101, 1243107) in the development chain. Per the policy above these are printed, non-blocking, and recorded here; they are additional signals on the same unfixed host pin, not evidence that the risk shrank.
 

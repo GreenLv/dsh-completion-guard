@@ -12,7 +12,7 @@ DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，�
 
 需要 DSH `>=0.2.1-rc.5`、Cordis `>=4.0.4`、Node.js `>=22` 和 pnpm `>=11`。安装 Guard 0.12.0 前请先升级 DSH。Web、Headless 和官方 Desktop 应用使用各自的配置目录。当前已审查基线为 DSH `0.2.1-rc.5`，搭配 Cordis `4.0.5`；更新宿主仍须通过兼容性核验。
 
-**上游已知风险：**官方 rc.5 宿主仍包含受影响依赖——`@deepseek-ai/dsh-http-proxy` 精确锁定 `undici` 8.11.2，`@deepseek-ai/dsh-commands` 精确锁定 `zod` 4.4.3，此前披露的高危发现仍在签名宿主内。0.11.0 的短期风险接受已于 2026-11-05 到期，不延续到本版。已记录的发现、范围与常设发布门槛见[依赖通告策略](docs/DEPENDENCY_SCAN.md)。
+**上游已知风险：**官方 rc.5 宿主仍包含受影响依赖——`@deepseek-ai/dsh-http-proxy` 精确锁定 `undici` 8.11.2，`@deepseek-ai/dsh-commands` 精确锁定 `zod` 4.4.3，此前披露的高危发现仍在签名宿主内。维护者于 2026-11-02 单独接受本次 0.12.0 的三条已披露 Undici 高危剩余风险，并将期限延至 **2026-11-30（含）**。签名宿主未修复，不能证明整个宿主不可达，也不能排除进程崩溃风险。已记录的发现、范围与常设发布门槛见[依赖通告策略](docs/DEPENDENCY_SCAN.md)。
 
 先选好路径，再替换任何包：
 

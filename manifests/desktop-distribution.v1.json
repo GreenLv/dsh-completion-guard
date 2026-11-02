@@ -27,7 +27,7 @@
       "zipSha512Base64": "SPXR+TMC5+7v9R544aKgA2CkDrLr2XyNL/35/NuxGBbP5nrSTEGMurNRAi+R1RSlcWZm3KNdySAt0RS8Qizv9g==",
       "asarHeaderSha256": "77ad6299a3dcf5adc320ca215e1ee604eabd76e8d71bfc88fe264fc88bb17f65",
       "invariantCompanions": "none present in the rc.5 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
-      "windows": "pending: the official win-x64 rc.5 installer (289408544 bytes, SHA-512 hex 82ed9d1fe693afaefc7343fc0c6007fe1e01d466967d0223a6c3eb2e397fba42eb40887a0cb56afcc857e0566f27ca3518232870e862c7a5db2dae8a9ad8d75e) requires Windows-side Authenticode verification, installed-carrier ASAR header readback and manifest extraction; the row is NOT registered on unverified bytes"
+      "windows": "Windows installed carrier and retained official installer Authenticode Valid; signed ElectronAsar/Integrity equals measured header; root/runtime manifests and metadata match signed header integrity; retained installer size 289408544 and SHA-512 equal the independently retained official win-x64 download (2026-11-02). Runtime win32/x64, Node 24.21.0, pnpm 11.28.5; no invariant companions observed in actual ASAR/runtime index scans. Native Guard install/no-op/lifecycle acceptance remains separate."
     }
   },
   "files": [
@@ -182,6 +182,21 @@
       "releaseSha512": "SPXR+TMC5+7v9R544aKgA2CkDrLr2XyNL/35/NuxGBbP5nrSTEGMurNRAi+R1RSlcWZm3KNdySAt0RS8Qizv9g==",
       "vendorTeam": "NAN929V4UM",
       "vendorIdentifier": "com.deepseek.dsh"
+    },
+    {
+      "id": "desktop-0.2.1-rc.5-win32-x64",
+      "platform": "win32",
+      "arch": "x64",
+      "version": "0.2.1-rc.5",
+      "runtimeVersion": "0.2.1-rc.5",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "69828bdcbb189485291e3901a027d46d2f665a36fc8441034052da328b173ba9",
+      "desktopManifestSha256": "ee6ab2f7c6ac6a052cb2944ec5c95d9beb0145070acf58127efe40367d12dc7a",
+      "buildCommit": "d4db512a969fccf0c5cc7ec8fe38e9c1d27af916",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.5-win-x64.exe",
+      "releaseSha512": "gu2dH+aTr678c0P8DGAH/h4B1GaWfQIjpsPrLjl/ukLrQIh6DLVq/MhX4FZvJ8o1GCMocOhix6XbLa6KmtjXXg==",
+      "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
     }
   ]
 }
