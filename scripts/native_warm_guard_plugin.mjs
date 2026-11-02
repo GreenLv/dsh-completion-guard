@@ -1,4 +1,4 @@
-/** Candidate real-host plugin wrapper, not yet connected to a native runner.
+/** Real-host plugin wrapper used by the native warm-scope runner.
  * Imports Guard from the isolated installed package.  Its only seams are a
  * local-only registry and inert publish counter; hostLock is never overridden. */
 import assert from 'node:assert/strict'

@@ -1,4 +1,4 @@
-/** Strict consumer for a future native warm-scope/v1 runner.
+/** Strict consumer for the native warm-scope/v1 runner.
  * It never turns a failed/partial result into a passing result. */
 const HEX40=/^[0-9a-f]{40}$/, HEX64=/^[0-9a-f]{64}$/
 const stages=['warm','baseline','redirect_prepared','redirect_oracle','redirect','redirect_restored','deny_prepared','deny_oracle','deny','deny_restored']

@@ -1,4 +1,4 @@
-"""Read-only preflight producer for a future warm-scope native runner.
+"""Read-only preflight producer for the warm-scope native runner.
 
 This is not an execution entrypoint or acceptance result.  It preserves a
 redacted failure record even when a same-invocation capability check fails.
@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 import native_acceptance as native
@@ -18,6 +19,7 @@ import native_host_acceptance as host
 FILES = ("native_acceptance.py", "native_host_acceptance.py", "native_host_probe.mjs",
          "native_warm_acceptance.py", "native_warm_guard_adapter.mjs", "native_warm_guard_plugin.mjs",
          "native_warm_host_probe.mjs", "native_warm_runtime_copy.py", "native_warm_scope_consumer.mjs",
+         "native_warm_scope_core.mjs",
          "native_warm_scope_preflight.py", "native_warm_scope_validate.py", "../schemas/native-warm-scope-v1.schema.json")
 
 def driver_digest(scripts: Path) -> str:
@@ -43,6 +45,10 @@ def check(args: argparse.Namespace) -> dict:
         artifact = args.artifact.resolve(strict=True)
         if not runtime.is_dir() or not artifact.is_file():
             raise ValueError("required inputs missing")
+        result["stage"] = "platform"
+        if sys.platform not in ("darwin", "win32"):
+            raise ValueError("native warm acceptance requires macOS or Windows")
+        result["stage"] = "identity"
         result["driver_sha256"] = driver_digest(Path(__file__).resolve().parent)
         native.verify_exact_source(root, args.source_commit)
         if native.sha256(artifact) != args.artifact_sha256:

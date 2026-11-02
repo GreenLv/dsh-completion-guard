@@ -54,3 +54,7 @@ jobs:
         run: python -m unittest tests.native_cleanup_probe_test
       - name: Test repair-family runner portability
         run: node --test tests/repair-families.node.mjs
+      - name: Test warm native tooling portability
+        run: node --test tests/native_warm_guard_adapter.node.mjs tests/native_warm_guard_plugin.node.mjs tests/native_warm_scope_consumer.node.mjs tests/native_warm_scope_core.node.mjs
+      - name: Test warm native runner and result binding
+        run: python -m unittest tests.test_native_warm_acceptance tests.test_native_warm_runtime_copy tests.test_native_warm_schema tests.test_native_warm_scope_preflight tests.test_native_warm_scope_validate

@@ -7,12 +7,18 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 SCRIPTS=Path(__file__).resolve().parents[1]/"scripts";sys.path.insert(0,str(SCRIPTS))
 spec=importlib.util.spec_from_file_location("warm_runner",SCRIPTS/"native_warm_acceptance.py")
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+@contextmanager
+def patches(*contexts):
+    # Keep Python 3.11/3.12 block depth bounded for the real-runner controls.
+    with ExitStack() as stack:
+        for context in contexts:stack.enter_context(context)
+        yield
 @contextmanager
 def directory():
     root=Path(tempfile.gettempdir())/("dcg-runner-test-"+secrets.token_hex(12));root.mkdir()
@@ -63,7 +69,7 @@ class RunnerTests(unittest.TestCase):
                 if "inject" in args:return json.dumps({"status":"supported","cohort_id":"x","host_lock_digest":"d"*64})
                 return ""
             process=MagicMock();process.pid=123;process.poll.return_value=None
-            with patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.1-rc.5"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",return_value=process),patch.object(module.host,"wait_until",side_effect=module.host.HostProbeDeadline("timeout")),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={}):
+            with patches(patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.1-rc.5"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",return_value=process),patch.object(module.host,"wait_until",side_effect=module.host.HostProbeDeadline("timeout")),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={})):
                 result=module.execute(args,"c"*64,root/"progress")
             self.assertEqual(result["status"],"failed");self.assertIn("child_state_unknown",result["cleanup"]["remaining_ids"])
             self.assertTrue(fixture.exists());self.assertTrue(Path(str(args.output)+".recovery.json").exists())
@@ -91,7 +97,7 @@ class RunnerTests(unittest.TestCase):
                     c=current['config'];pid=current['pid'];row=evidence_profile(pid);steps=row['steps']
                     if corrupt and c['profile']=='headless':steps.pop()
                     return {'schema':'dsh-native-warm-probe/v1','status':'passed','cleanup':'passed','nonce':c['nonce'],'profile':c['profile'],'pid':pid,'source_commit':c['sourceCommit'],'artifact_sha256':c['artifactSha256'],'driver_sha256':c['driverSha256'],'host_lock_digest':c['hostLockDigest'],'steps':steps}
-                with patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.1-rc.5"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",side_effect=popen),patch.object(module.host,"wait_until",side_effect=wait),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={}):
+                with patches(patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=copy),patch.object(module.host,"isolated_environment",return_value={}),patch.object(module.native,"resolve_executable",return_value=shutil.which("node")),patch.object(module.host,"preflight_host_inputs",return_value=({"version":"0.2.1-rc.5"},selected)),patch.object(module,"unpack_frozen",side_effect=unpack),patch.object(module.native,"tree_digest",return_value="same"),patch.object(module.host,"run_host_command",side_effect=cmd),patch.object(module.host,"verify_target_graph"),patch.object(module,"validate_composition",return_value="view"),patch.object(module.host,"free_loopback_port",return_value=65534),patch.object(module.subprocess,"Popen",side_effect=popen),patch.object(module.host,"wait_until",side_effect=wait),patch.object(module.host,"cleanup_owned_processes",return_value=[]),patch.object(module.host,"discover_owned_hosts",return_value={})):
                     # Isolate runner branching; the real consumer is tested separately.
                     with patch.object(module,"validate_result",side_effect=lambda result,expected: not corrupt):
                         result=module.execute(args,"c"*64,root/"progress")

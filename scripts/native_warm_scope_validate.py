@@ -25,9 +25,11 @@ def main(argv=None):
     p.add_argument("result",type=Path);p.add_argument("--repo-root",type=Path,required=True)
     p.add_argument("--artifact",type=Path,required=True);p.add_argument("--source-commit",required=True)
     p.add_argument("--artifact-sha256",required=True);p.add_argument("--driver-sha256",required=True)
+    p.add_argument("--expected-platform",choices=("macos","windows"),required=True)
     args=p.parse_args(argv)
     try:
         result=load_result(args.result)
+        if result.get("platform") != args.expected_platform:raise ValueError("platform mismatch")
         native.verify_exact_source(args.repo_root.resolve(strict=True),args.source_commit)
         if native.sha256(args.artifact.resolve(strict=True))!=args.artifact_sha256:raise ValueError("artifact mismatch")
         if preflight.driver_digest(Path(__file__).resolve().parent)!=args.driver_sha256:raise ValueError("driver mismatch")

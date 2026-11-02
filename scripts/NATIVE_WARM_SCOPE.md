@@ -18,7 +18,7 @@ The host's patch format cannot replace an entry's `name`. The runner therefore d
 
 Each profile warms an actual dependency resolution, performs a legitimate mock publish, and prepares a fresh unconsumed resolution for each redirect and deny vector. A separate child confirms the disk route. The registered Guard action must refuse without increasing the mock effect count, perform a fresh host-lock validation, and agree with an independent same-process production-graph drift readback. Once the scope is removed, the same resolution must succeed. These are synthetic release sessions and do not replay a private historical session.
 
-A passing `dsh-native-warm-scope/v1` result requires both profiles, bound source/artifact/driver identities, positive and negative observations, and clean owned-process cleanup. The schema checks structure; the consumer checks ticket continuity, counts, audit progression, drift reasons, and subject identities. Validate a saved result with `scripts/native_warm_scope_validate.py`, the same source checkout, artifact, and expected digests. Its success does not replace the separate host-bound, Desktop, market, UI, credential, or real-model gates.
+A passing `dsh-native-warm-scope/v1` result requires both profiles, bound source/artifact/driver identities, positive and negative observations, and clean owned-process cleanup. The schema checks structure; the consumer checks ticket continuity, counts, audit progression, drift reasons, and subject identities. Validate a saved result with `scripts/native_warm_scope_validate.py`, the same source checkout, artifact, expected digests and `--expected-platform macos` or `--expected-platform windows`. Preflight refuses other native platforms. Its success does not replace the separate host-bound, Desktop, market, UI, credential, or real-model gates.
 
 The runner writes redacted results and a stage sidecar outside the source checkout. A failed run or unknown child/process state retains its fixture and writes a local recovery sidecar; diagnose ownership and quiescence before disposal or another attempt. The recovery sidecar contains a local path and must remain private. A timeout or missing result is not a passing observation.
 
@@ -28,4 +28,4 @@ The runner writes redacted results and a stage sidecar outside the source checko
 
 工具复制官方 runtime 程序树，不写入原 runtime 或日常 profile。它禁用原 Guard 条目、插入唯一启用的 wrapper，再核验实际组合和 wrapper 的 host-lock 配置。发布效果由本地计数器模拟；registry 回复也由本地夹具提供。每个 profile 在同一暖进程中执行正控、redirect 与 deny 拒绝和相同 resolution 的恢复正控。执行记录使用合成会话，不代表历史私有会话重放。
 
-完成后使用 `native_warm_scope_validate.py` 和相同源码、制品及摘要验证结果。失败或进程状态未知时保留 fixture，并在本地 recovery 文件中记录路径；确认进程归属和静止状态后再处理。该结果不能代替其他原生、Desktop、市场、界面、凭证或真实模型门禁。
+完成后使用 `native_warm_scope_validate.py` 和相同源码、制品及摘要验证结果，并通过 `--expected-platform macos` 或 `--expected-platform windows` 明确接收平台；预检拒绝其他原生平台。失败或进程状态未知时保留 fixture，并在本地 recovery 文件中记录路径；确认进程归属和静止状态后再处理。该结果不能代替其他原生、Desktop、市场、界面、凭证或真实模型门禁。

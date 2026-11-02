@@ -23,7 +23,14 @@ class ValidateTests(unittest.TestCase):
     def test_subject_checks_precede_consumer(self):
         with directory() as root:
             artifact=root/"a";artifact.write_bytes(b"x");result=root/"r";result.write_text('{}',encoding='utf8')
-            argv=[str(result),'--repo-root',str(root),'--artifact',str(artifact),'--source-commit','a'*40,'--artifact-sha256','b'*64,'--driver-sha256','c'*64]
+            argv=[str(result),'--repo-root',str(root),'--artifact',str(artifact),'--source-commit','a'*40,'--artifact-sha256','b'*64,'--driver-sha256','c'*64,'--expected-platform','windows']
+            result.write_text('{"platform":"windows"}',encoding='utf8')
             with patch.object(module.native,'verify_exact_source'),patch.object(module.native,'sha256',return_value='d'*64),patch.object(module.runner,'validate_result') as validate:
                 self.assertEqual(module.main(argv),1);validate.assert_not_called()
+    def test_platform_cannot_be_reused_as_another_native_host(self):
+        with directory() as root:
+            result=root/'r';result.write_text('{"platform":"windows"}',encoding='utf8')
+            argv=[str(result),'--repo-root',str(root),'--artifact',str(root/'absent'),'--source-commit','a'*40,'--artifact-sha256','b'*64,'--driver-sha256','c'*64,'--expected-platform','macos']
+            with patch.object(module.native,'verify_exact_source') as source,patch.object(module.runner,'validate_result') as validate:
+                self.assertEqual(module.main(argv),1);source.assert_not_called();validate.assert_not_called()
 if __name__=="__main__":unittest.main()

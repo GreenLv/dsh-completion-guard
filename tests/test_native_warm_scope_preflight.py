@@ -5,6 +5,7 @@ import sys
 import tempfile
 import secrets
 import shutil
+import re
 from contextlib import contextmanager
 import unittest
 from pathlib import Path
@@ -27,6 +28,28 @@ def test_directory():
         shutil.rmtree(root)
 
 class PreflightTests(unittest.TestCase):
+    def setUp(self):
+        platform = patch.object(module.sys, "platform", "darwin")
+        platform.start(); self.addCleanup(platform.stop)
+
+    def test_driver_covers_local_probe_imports(self):
+        bound=set(module.FILES)
+        for name in module.FILES:
+            if not name.endswith(".mjs"):continue
+            text=(SCRIPTS/name).read_text(encoding="utf-8")
+            for target in re.findall(r"(?:from\s+|import\s*\()?['\"](\./[^'\"]+\.mjs)['\"]",text):
+                self.assertIn(target[2:],bound,(name,target))
+
+    def test_unsupported_platform_fails_before_host_or_install(self):
+        with test_directory() as root:
+            repo=root/'repo'; runtime=root/'runtime';repo.mkdir();runtime.mkdir()
+            artifact=root/'input.tgz';artifact.write_bytes(b'fixture')
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit='a'*40,artifact_sha256='b'*64)
+            with patch.object(module.sys,'platform','linux'),patch.object(module.host,'preflight_host_inputs') as host_inputs:
+                result=module.check(args)
+            self.assertEqual((result['status'],result['stage']),('failed','platform'))
+            host_inputs.assert_not_called()
+
     def test_failure_is_preserved_and_no_overwrite(self):
         with test_directory() as tmp:
             root=Path(tmp); repo=root / "repo"; runtime=root / "runtime"; repo.mkdir(); runtime.mkdir()
