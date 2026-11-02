@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, readdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // @ts-expect-error The native Node fixture producer is intentionally an .mjs entrypoint.
@@ -82,13 +82,21 @@ it('preparation preflight binds canonical identity and a child capability withou
 
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+// Four owned CLI processes have a 20-second bound each; allow another 30
+// seconds for fixture setup and assertions under loaded cross-platform CI.
+const ACTIVATION_CLI_CHILD_TIMEOUT_MS = 20_000
+const ACTIVATION_CLI_CASE_TIMEOUT_MS = 110_000
 it('RC3-CLI01 inventory and an explicitly sourced fixture-mode adoption use the real rc.3 namespace backend', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'guard-rc3-cli-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'guard-rc3-cli-')))
   try {
     const home = join(root, 'home'), fixture = await createFixture({ home, output: join(root, 'fixture.json'), frontendUrl: 'http://127.0.0.1:43123/', sourceCommit: 'c'.repeat(40) })
     const entry = fileURLToPath(new URL('../bin/dsh-completion-guard-activation.mjs', import.meta.url))
     const common = ['--runtime-anchor', fileURLToPath(new URL('../package.json', import.meta.url)), '--persistence-root', join(home, 'sessions')]
-    const run = (operation: string, args: string[]) => spawnSync(process.execPath, [entry, operation, ...common, ...args], { encoding: 'utf8' })
+    const run = (operation: string, args: string[]) => {
+      const child = spawnSync(process.execPath, [entry, operation, ...common, ...args], { encoding: 'utf8', timeout: ACTIVATION_CLI_CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' })
+      if (child.error) throw child.error
+      return child
+    }
     const inventory = join(root, 'inventory.json'), scan = run('inventory', ['--output', inventory])
     expect(scan.status, scan.stderr).toBe(0)
     expect(JSON.parse(scan.stdout)).toMatchObject({ totalCount: 2, readableCount: 2 })
@@ -103,7 +111,7 @@ it('RC3-CLI01 inventory and an explicitly sourced fixture-mode adoption use the 
     expect(JSON.parse(adopted.stdout).status).toBe('complete')
     expect(run('verify', ['--receipt', receipt, '--dsh-home', home]).status).toBe(0)
   } finally { rmSync(root, { recursive: true, force: true }) }
-})
+}, ACTIVATION_CLI_CASE_TIMEOUT_MS)
 
 // @ts-expect-error Native observer module has no declaration build.
 const { verifyObservationInput } = await import('../scripts/ui-session-host-fixture.mjs')
