@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       invalidates: ${{ steps.select.outputs.invalidates }}
+      full_matrix: ${{ steps.select.outputs.full_matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -97,45 +98,57 @@ jobs:
 
   ubuntu_node22:
     name: Ubuntu / Node 22
+    needs: classify
     uses: ./.github/workflows/ci-lane.yml
     with:
       runner: ubuntu-latest
       node-version: "22"
+      full_suite: true
 
   ubuntu_node24:
     name: Ubuntu / Node 24
+    needs: classify
     uses: ./.github/workflows/ci-lane.yml
     with:
       runner: ubuntu-latest
       node-version: "24"
+      full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   macos_node22:
     name: macOS / Node 22
+    needs: classify
     uses: ./.github/workflows/ci-lane.yml
     with:
       runner: macos-latest
       node-version: "22"
+      full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   macos_node24:
     name: macOS / Node 24
+    needs: classify
     uses: ./.github/workflows/ci-lane.yml
     with:
       runner: macos-latest
       node-version: "24"
+      full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   windows_node22:
     name: Windows / Node 22
+    needs: classify
     uses: ./.github/workflows/ci-lane.yml
     with:
       runner: windows-latest
       node-version: "22"
+      full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   windows_node24:
     name: Windows / Node 24
+    needs: classify
     uses: ./.github/workflows/ci-lane.yml
     with:
       runner: windows-latest
       node-version: "24"
+      full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}
 
   portable_windows:
     name: Windows portable exact-artifact acceptance

@@ -18,6 +18,25 @@ PLAN_SCHEMA = "change-scoped-validation-plan/v1"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
+# The short matrix is deliberately an explicit, reviewed subset. Expanding it
+# requires checking platform, loader, protocol and fixture consumers. Unknown
+# source or test changes keep the full matrix, even when the gate map knows the
+# path. Committed build output is eligible only alongside its reviewed source.
+PORTABLE_SOURCE = {"src/domain/parse-cache.ts"}
+PORTABLE_TESTS = {"tests/v083-parse-cache.test.ts"}
+DOCUMENT_NAMES = {"AGENTS.md", "README.md", "README.zh-CN.md", "CHANGELOG.md",
+                  "CHANGELOG.zh-CN.md", "LICENSE"}
+MATRIX_HIGH_RISK_RULES = {
+    "shared_conformance", "core_v2_conformance", "conformance_tests", "host_lock",
+    "host_version_contract", "host_lock_tests", "packaging", "repository_identity",
+    "native_acceptance_infrastructure", "validation_infrastructure", "cross_end_oracle",
+    "legacy_upgrade_recording", "host_audit_tooling",
+}
+PLATFORM_REFERENCE = re.compile(
+    r"\b(?:import|require|process|globalThis|Buffer|eval|Function|WebAssembly|fetch|"
+    r"XMLHttpRequest|WebSocket|Worker|Deno|Bun|module|__dirname|__filename)\b|node:|node_modules|\.node\b"
+)
+
 
 class SelectionError(ValueError):
     """Raised when a map or requested diff is unsafe."""
@@ -132,8 +151,64 @@ def classify(mapping: dict[str, Any], paths: list[str], *, map_sha256: str, base
     return {"schema": PLAN_SCHEMA, "map_sha256": map_sha256, "base_sha": base, "head_sha": head, "changed_paths": normalized, "matched_rules": sorted(matched), "gates": sorted(gates), "invalidates": sorted(invalidates), "contracts": sorted(contracts), "peer_gates": {peer: sorted(values) for peer, values in sorted(peer_gates.items())}, "unknown_paths": unknown, "full_required": mapping["full_gate"] in gates or bool(unknown)}
 
 
-def write_github_outputs(path: Path, plan: dict[str, Any]) -> None:
-    values = {"plan": json.dumps(plan, separators=(",", ":"), sort_keys=True), "gates": json.dumps(plan["gates"], separators=(",", ":")), "invalidates": json.dumps(plan["invalidates"], separators=(",", ":")), "full_required": str(plan["full_required"]).lower(), "unknown_paths": json.dumps(plan["unknown_paths"], separators=(",", ":"))}
+def portable_changes_are_safe(root: Path | None, plan: dict[str, Any], paths: set[str]) -> bool:
+    """Reject new platform references and unreadable base/head objects.
+
+    This conservative lexical screen complements the explicit file allowlist;
+    it does not replace review of the actual code and test changes.
+    """
+    base, head = plan.get("base_sha"), plan.get("head_sha")
+    if root is None or not isinstance(base, str) or not isinstance(head, str):
+        return False
+    if not HEX40.fullmatch(base) or not HEX40.fullmatch(head):
+        return False
+    try:
+        for path in paths.intersection(PORTABLE_SOURCE):
+            for revision in (base, head):
+                source = subprocess.run(["git", "-C", str(root), "show", f"{revision}:{path}"],
+                                        capture_output=True, check=True, text=True, encoding="utf-8")
+                if PLATFORM_REFERENCE.search(source.stdout):
+                    return False
+        for path in paths.intersection(PORTABLE_TESTS):
+            for revision in (base, head):
+                subprocess.run(["git", "-C", str(root), "cat-file", "-e", f"{revision}:{path}"],
+                               capture_output=True, check=True)
+            diff = subprocess.run(["git", "-C", str(root), "diff", "--no-ext-diff", "--no-textconv",
+                                   "--unified=0", base, head, "--", path],
+                                  capture_output=True, check=True, text=True, encoding="utf-8")
+            if any(line.startswith("-") and not line.startswith("---") for line in diff.stdout.splitlines()):
+                return False
+            added = "\n".join(line[1:] for line in diff.stdout.splitlines()
+                              if line.startswith("+") and not line.startswith("+++"))
+            if PLATFORM_REFERENCE.search(added):
+                return False
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def full_portability_matrix(plan: dict[str, Any], root: Path | None = None) -> bool:
+    """Escalate unless every changed input is in a reviewed short-matrix class."""
+    if plan["full_required"] or plan["unknown_paths"] or plan["contracts"]:
+        return True
+    if MATRIX_HIGH_RISK_RULES.intersection(plan["matched_rules"]):
+        return True
+    paths = set(plan["changed_paths"])
+    if paths.intersection(PORTABLE_SOURCE | PORTABLE_TESTS) and not portable_changes_are_safe(root, plan, paths):
+        return True
+    for path in paths:
+        if path in PORTABLE_SOURCE or path in PORTABLE_TESTS or path in DOCUMENT_NAMES:
+            continue
+        if path.startswith("docs/") or path.startswith("assets/"):
+            continue
+        if path.startswith("dist/") and paths.intersection(PORTABLE_SOURCE):
+            continue
+        return True
+    return False
+
+
+def write_github_outputs(path: Path, plan: dict[str, Any], root: Path) -> None:
+    values = {"plan": json.dumps(plan, separators=(",", ":"), sort_keys=True), "gates": json.dumps(plan["gates"], separators=(",", ":")), "invalidates": json.dumps(plan["invalidates"], separators=(",", ":")), "full_required": str(plan["full_required"]).lower(), "full_matrix": str(full_portability_matrix(plan, root)).lower(), "unknown_paths": json.dumps(plan["unknown_paths"], separators=(",", ":"))}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         for key, value in values.items():
             handle.write(f"{key}={value}\n")
@@ -158,7 +233,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             paths = changed_paths(root, args.base, args.head)
         plan = classify(mapping, paths, map_sha256=map_sha256, base=args.base, head=args.head)
         if args.github_output:
-            write_github_outputs(args.github_output, plan)
+            write_github_outputs(args.github_output, plan, root)
         print(json.dumps(plan, indent=2, sort_keys=True))
     except SelectionError as exc:
         print(f"validation_selection=invalid: {exc}", file=sys.stderr)

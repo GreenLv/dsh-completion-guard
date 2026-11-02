@@ -26,21 +26,23 @@ change the installed plugin runtime or grant release authority.
   smallest reproducer and owning Vitest file first. For schema, digest, or
   mirror changes, close the affected input family with portable conformance and
   cross-language parity before running the full matrix.
-- Run the complete local deterministic matrix when freezing a candidate, after
-  a cross-cutting contract change, while diagnosing CI, or when focused tests
-  cannot establish the affected surface. Do not rerun it merely because commit,
-  push, or another phase follows.
-- The full candidate matrix is `pnpm run typecheck`, `pnpm run lint`,
+- The full deterministic candidate checks are `pnpm run typecheck`, `pnpm run lint`,
   `pnpm test`, `pnpm run test:release-pack`, `pnpm run test:stats`,
   `pnpm run build`, `pnpm run pack:check`, the repository documentation audit,
   its unit test, and `git diff --check`. Require `git diff --exit-code -- dist`
   after build when generated runtime bytes are expected to be current.
+- At freeze, run these checks once on a representative platform. Passing exact
+  candidate CI may supply equivalent checks rather than repeating them locally;
+  preserve required exact-commit CI and rerun any check whose relevant inputs
+  or execution environment differ. Cross-cutting changes and unknown coverage
+  retain the broader checks; use focused reproductions during repair.
 - Use the required PR validation summary for mapped fast checks. Candidate CI
-  runs the Ubuntu/macOS/Windows and Node.js 22/24 portability screen once on
-  exact `main` candidates or manual dispatch; a tag does not rerun that matrix.
-  Static, package, build, and documentation contracts run once outside the six
-  independent test lanes so a failed lane can be rerun without recreating a
-  matrix group.
+  runs the full suite on Ubuntu/Node 22 and the platform smoke group on all
+  remaining Ubuntu/macOS/Windows and Node 22/24 combinations. The selector
+  expands all six lanes to the full suite for sensitive or unknown inputs;
+  manual dispatch always requests the full matrix. Static, package, build and
+  documentation contracts run once outside those lanes. Each selected lane is
+  required; a tag does not rerun the matrix.
 - Use GitHub candidate CI as the portability screen before spending a
   native-platform slot. CI never substitutes for native Web,
   Headless, shell-shim, restart, credential, or application acceptance.
@@ -76,6 +78,12 @@ change the installed plugin runtime or grant release authority.
   unchanged accepted work.
 - Pause related monitoring for missing authorization, login or manual handback;
   an unavailable channel needs a concrete resume event, not repeated polling.
+- Ordinary releases do not automatically require a 32-cell performance study or
+  real-model workload. Select these when the changed risk or a task contract
+  requires them. Before formal performance measurement, bind representative
+  scenarios and subjects, practical absolute and relative tolerance, sample and
+  noise handling, and the decision for incomplete observations. Prior failures,
+  limitations and explicitly adopted task contracts retain their meaning.
 - Review important README, install/upgrade and release prose for human
   readability before publication. Explain useful actions and results before
   internal terms, preserve necessary technical precision in references, and
@@ -132,6 +140,17 @@ node scripts/release-pack.mjs --source . --output-dir <outside-repository-dir>
   unused paths outside the source checkout and disposable fixtures. Missing
   parents are created; existing results are preserved. Remove `--preflight`
   to run acceptance. Recover a missing transfer from those files before rerunning.
+  With `--transfer-receipt`, a private `*.transfer-intent.json` binds the
+  original subject and transport before execution. `--recover-transfer` reads
+  that intent, the existing `--output`, exact source and tgz, and writes only
+  the missing receipt; it never reruns acceptance or turns a failed native
+  result into a passing one. Old runs without an intent cannot use this recovery.
+  A timed-out child or uncertain
+  process cleanup leaves the owned fixture and an explicit failed cleanup state;
+  diagnose ownership and quiescence before any retry or disposal. For any
+  repeated failed native run, first retain and diagnose the original failure;
+  record the changed input or demonstrated corrected external condition before
+  starting a new run. A fresh output path alone is not a correction.
 
 ## Release identity and authorization
 

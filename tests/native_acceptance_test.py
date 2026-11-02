@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tarfile
@@ -24,6 +25,69 @@ SPEC.loader.exec_module(NATIVE)
 
 
 class NativeAcceptanceEntrypointTests(unittest.TestCase):
+    def test_portable_success_exercises_two_installs_and_cleans_owned_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _, args = self.fixture(directory)
+            artifact = Path(args[args.index("--artifact") + 1])
+            installs = []
+            def command(cwd, *parts, **_kwargs):
+                if parts[:2] == ("tar", "-tf"):
+                    out = "package/package.json\n"
+                elif parts[:2] == ("tar", "-xf"):
+                    target = Path(parts[parts.index("-C") + 1]) / "package"
+                    target.mkdir()
+                    with tarfile.open(artifact) as archive:
+                        (target / "package.json").write_bytes(archive.extractfile("package/package.json").read())
+                    out = ""
+                elif parts[0] == "npm":
+                    installs.append(parts)
+                    installed = Path(cwd) / "node_modules/dsh-completion-guard"
+                    if not installed.exists():
+                        shutil.copytree(Path(cwd).parent / "extract/package", installed)
+                    out = ""
+                elif parts[:2] == ("node", "--version"):
+                    out = "v22.0.0"
+                elif parts[:3] == ("git", "remote", "get-url"):
+                    out = "https://github.com/example/repo.git"
+                else:
+                    out = ""
+                return subprocess.CompletedProcess(parts, 0, out, "")
+            with mock.patch.object(NATIVE, "verify_exact_source"), \
+                    mock.patch.object(NATIVE, "resolve_executable", return_value="npm"), \
+                    mock.patch.object(NATIVE, "run", side_effect=command):
+                result = NATIVE.portable_acceptance(root, artifact, NATIVE.sha256(artifact), "a" * 40, None)
+            self.assertEqual(result["status"], "passed")
+            self.assertEqual(result["cleanup"], {"status": "passed", "remaining_ids": []})
+            self.assertEqual(len(installs), 2)
+            self.assertEqual(len(result["gates"]), 6)
+
+    def test_command_timeout_is_bounded_and_classified(self):
+        with mock.patch.object(NATIVE.subprocess, "run", side_effect=subprocess.TimeoutExpired("npm", 300)) as call:
+            with self.assertRaises(NATIVE.NativeTimeout):
+                NATIVE.run(Path("."), "npm", "install")
+        self.assertEqual(call.call_args.kwargs["timeout"], 300)
+
+    def test_timeout_or_interrupt_retains_fixture_and_never_passes(self):
+        for error in (NATIVE.NativeTimeout("timeout"), KeyboardInterrupt()):
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory:
+                root, _, args = self.fixture(directory)
+                artifact = Path(args[args.index("--artifact") + 1])
+                temporary = Path(directory) / "owned"
+                temporary.mkdir()
+                def command(_root, *command_args, **_kwargs):
+                    if command_args[0] == "tar":
+                        raise error
+                    output = "v22.0.0" if command_args[0] == "node" else "https://github.com/example/repo.git"
+                    return subprocess.CompletedProcess(command_args, 0, output, "")
+                with mock.patch.object(NATIVE.tempfile, "mkdtemp", return_value=str(temporary)), \
+                        mock.patch.object(NATIVE, "verify_exact_source"), mock.patch.object(NATIVE, "run", side_effect=command), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    result = NATIVE.portable_acceptance(root, artifact, NATIVE.sha256(artifact), "a" * 40, None)
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(result["cleanup"]["status"], "failed")
+                self.assertIn("portable_child_state_unknown", result["cleanup"]["remaining_ids"])
+                self.assertTrue(temporary.is_dir())
+
     def test_relative_result_sidecar_survives_child_workdir_change(self):
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as directory, contextlib.chdir(directory):
@@ -57,6 +121,17 @@ class NativeAcceptanceEntrypointTests(unittest.TestCase):
                 NATIVE.main(args)
             execute.assert_not_called()
             self.assertFalse(output.exists())
+
+    def test_failed_portable_stage_does_not_start_t06(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            with mock.patch.object(NATIVE, "preflight_inputs"), \
+                    mock.patch.object(NATIVE, "portable_acceptance", return_value={"status": "failed"}), \
+                    mock.patch.object(NATIVE.importlib.util, "spec_from_file_location") as t06, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(NATIVE.main(args + ["--t06"]), 1)
+            t06.assert_not_called()
+            self.assertEqual(json.loads(output.read_text())["status"], "failed")
 
     def fixture(self, directory, *, manifest_head="a" * 40):
         root = Path(directory) / "repo"
@@ -139,6 +214,85 @@ class NativeAcceptanceEntrypointTests(unittest.TestCase):
                 NATIVE.main(args + ["--transfer-receipt", str(output),
                                    "--transport-url", "https://example.invalid/result"])
             execute.assert_not_called()
+
+    def test_recover_transfer_reuses_saved_result_without_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, output, args = self.fixture(directory)
+            artifact = Path(args[args.index("--artifact") + 1])
+            output.parent.mkdir()
+            result = {"schema": "native-acceptance/v2", "status": "failed", "product": "dsh_completion_guard",
+                      "repository": {"url": "https://github.com/example/repo.git", "commit": "a" * 40},
+                      "artifact": {"filename": artifact.name, "sha256": NATIVE.sha256(artifact),
+                                   "git_head": "a" * 40, "size_bytes": artifact.stat().st_size, "file_count": 1},
+                      "platform": {"os": {"Darwin": "macos", "Windows": "windows"}.get(NATIVE.platform.system(), "linux")},
+                      "run": {"started_at": "2026-01-01T00:00:00Z"}}
+            output.write_text(json.dumps(result), encoding="utf-8")
+            intent = {"schema": "dsh-native-transfer-intent/v1", "artifact_sha256": NATIVE.sha256(artifact),
+                      "source_commit": "a" * 40, "filename": artifact.name,
+                      "transport_url": "https://example.invalid/artifact", "platform": result["platform"]["os"]}
+            Path(str(output) + ".transfer-intent.json").write_text(json.dumps(intent), encoding="utf-8")
+            original = output.read_bytes()
+            receipt = output.parent / "transfer.json"
+            recovery = args + ["--recover-transfer", "--transfer-receipt", str(receipt),
+                               "--transport-url", "https://example.invalid/artifact"]
+            with mock.patch.object(NATIVE, "verify_exact_source"), \
+                    mock.patch.object(NATIVE, "run", return_value=subprocess.CompletedProcess([], 0, "https://github.com/example/repo.git", "")), \
+                    mock.patch.object(NATIVE, "portable_acceptance") as install, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(NATIVE.main(recovery), 0)
+            install.assert_not_called()
+            self.assertEqual(output.read_bytes(), original)
+            self.assertEqual(json.loads(receipt.read_text())["artifact"]["sha256"], NATIVE.sha256(artifact))
+            with mock.patch.object(NATIVE, "verify_exact_source"), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                NATIVE.main(recovery)  # never overwrite a recovered receipt
+
+    def test_recover_transfer_rejects_mismatched_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, output, args = self.fixture(directory)
+            output.parent.mkdir()
+            output.write_text('{"schema":"native-acceptance/v2","status":"passed"}', encoding="utf-8")
+            receipt = output.parent / "transfer.json"
+            with mock.patch.object(NATIVE, "verify_exact_source"), \
+                    mock.patch.object(NATIVE, "run", return_value=subprocess.CompletedProcess([], 0, "https://github.com/example/repo.git", "")), \
+                    mock.patch.object(NATIVE, "portable_acceptance") as install, \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                NATIVE.main(args + ["--recover-transfer", "--transfer-receipt", str(receipt),
+                                    "--transport-url", "https://example.invalid/artifact"])
+            install.assert_not_called()
+            self.assertFalse(receipt.exists())
+
+    def test_recover_transfer_refuses_absent_or_different_original_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            output.parent.mkdir()
+            output.write_text('{}', encoding="utf-8")
+            receipt = output.parent / "transfer.json"
+            recovery = args + ["--recover-transfer", "--transfer-receipt", str(receipt),
+                               "--transport-url", "https://example.invalid/artifact"]
+            for value in (None, {"schema": "wrong"}):
+                intent = Path(str(output) + ".transfer-intent.json")
+                if value is not None:
+                    intent.write_text(json.dumps(value), encoding="utf-8")
+                with mock.patch.object(NATIVE, "portable_acceptance") as install, \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    NATIVE.main(recovery)
+                install.assert_not_called()
+                self.assertFalse(receipt.exists())
+
+    def test_transfer_intent_is_written_before_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, output, args = self.fixture(directory)
+            intent = Path(str(output) + ".transfer-intent.json")
+            receipt = output.parent / "transfer.json"
+            def accept(*_args):
+                self.assertTrue(intent.is_file())
+                self.assertEqual(json.loads(intent.read_text())["transport_url"], "https://example.invalid/original")
+                return {"status": "failed", "artifact": {"sha256": "other"}}
+            with mock.patch.object(NATIVE, "preflight_inputs"), mock.patch.object(NATIVE, "portable_acceptance", side_effect=accept), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                NATIVE.main(args + ["--transfer-receipt", str(receipt), "--transport-url", "https://example.invalid/original"])
+            self.assertTrue(intent.is_file())
+            self.assertFalse(receipt.exists())
 
     def test_preflight_reads_real_artifact_without_installing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -258,6 +412,93 @@ class HostBoundEntrypointTests(unittest.TestCase):
         assert spec and spec.loader
         cls.host = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.host)
+
+    def test_failed_initialization_cleans_owned_root_and_returns_failed_result(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory) / "owned"
+            temporary.mkdir()
+            result = {"status": "passed", "gates": [], "repository": {"commit": "a" * 40},
+                      "run": {}, "cleanup": {"status": "passed", "remaining_ids": []}}
+            api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+            with mock.patch.object(self.host, "host_temporary_root", return_value=temporary), \
+                    mock.patch.object(self.host, "isolated_environment", side_effect=OSError("init failed")), \
+                    mock.patch.object(self.host, "discover_owned_hosts", return_value={}):
+                actual = self.host.host_acceptance(api, Path(directory), Path("artifact.tgz"),
+                                                   "b" * 64, Path("runtime"), result)
+            self.assertEqual(actual["status"], "failed")
+            self.assertEqual(actual["cleanup"]["status"], "passed")
+            self.assertEqual(actual["gates"][-1]["id"], "host_bound_acceptance")
+            self.assertFalse(temporary.exists())
+
+    def test_cancel_and_diagnostic_export_failure_do_not_skip_cleanup(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory) / "owned"
+            temporary.mkdir()
+            result = {"status": "passed", "gates": [], "repository": {"commit": "a" * 40},
+                      "run": {}, "cleanup": {"status": "passed", "remaining_ids": []}}
+            api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+            with mock.patch.object(self.host, "host_temporary_root", return_value=temporary), \
+                    mock.patch.object(self.host, "isolated_environment", side_effect=KeyboardInterrupt()), \
+                    mock.patch.object(self.host, "write_host_diagnostic", side_effect=OSError("unwritable")):
+                actual = self.host.host_acceptance(api, Path(directory), Path("artifact.tgz"), "b" * 64,
+                                                   Path("runtime"), result, diagnostics_output=Path(directory) / "diag")
+            self.assertEqual(actual["status"], "failed")
+            self.assertEqual(actual["cleanup"]["status"], "failed")
+            self.assertIn("host_child_state_unknown", actual["cleanup"]["remaining_ids"])
+            self.assertEqual([row["id"] for row in actual["gates"]],
+                             ["host_diagnostic_export", "host_bound_acceptance"])
+            self.assertTrue(temporary.exists())
+
+    def test_host_command_timeout_preserves_the_owned_fixture(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory) / "owned"
+            temporary.mkdir()
+            result = {"status": "passed", "gates": [], "repository": {"commit": "a" * 40},
+                      "platform": {"toolchain": {}}, "run": {},
+                      "cleanup": {"status": "passed", "remaining_ids": []}}
+            api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+            with mock.patch.object(self.host, "host_temporary_root", return_value=temporary), \
+                    mock.patch.object(self.host, "isolated_environment", return_value={}), \
+                    mock.patch.object(self.host, "write_test_fixture"), \
+                    mock.patch.object(self.host, "package_fixture", return_value=Path("fixture")), \
+                    mock.patch.object(self.host, "probe_driver_digest", return_value="c" * 64), \
+                    mock.patch.object(self.host, "preflight_host_inputs", return_value=({"version": "fixture"}, {})), \
+                    mock.patch.object(self.host, "run_host_command", side_effect=subprocess.TimeoutExpired("tar", 120)):
+                actual = self.host.host_acceptance(api, Path(directory), Path("artifact.tgz"), "b" * 64,
+                                                   Path("runtime"), result)
+            self.assertEqual(actual["status"], "failed")
+            self.assertIn("host_child_state_unknown", actual["cleanup"]["remaining_ids"])
+            self.assertIn("host_temporary_root", actual["cleanup"]["remaining_ids"])
+            self.assertTrue(temporary.is_dir())
+
+    def test_two_failed_owned_processes_are_reported_once(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory) / "owned"
+            temporary.mkdir()
+            processes = [mock.Mock(pid=101), mock.Mock(pid=102)]
+            for process in processes:
+                process.poll.return_value = None
+            cleanup = self.host.cleanup_owned_processes
+            result = {"status": "passed", "gates": [], "repository": {"commit": "a" * 40},
+                      "run": {}, "cleanup": {"status": "passed", "remaining_ids": []}}
+            api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+            with mock.patch.object(self.host, "host_temporary_root", return_value=temporary), \
+                    mock.patch.object(self.host, "isolated_environment", side_effect=OSError("init failed")), \
+                    mock.patch.object(self.host, "cleanup_owned_processes", side_effect=lambda _: cleanup(processes)), \
+                    mock.patch.object(self.host.platform, "system", return_value="Darwin"), \
+                    mock.patch.object(self.host.os, "killpg", side_effect=PermissionError("blocked")) as stop:
+                actual = self.host.host_acceptance(api, Path(directory), Path("artifact"), "b" * 64,
+                                                   Path("runtime"), result)
+            self.assertEqual(stop.call_count, 2)
+            remaining = actual["cleanup"]["remaining_ids"]
+            self.assertEqual(remaining.count("owned_process_cleanup_failed"), 1)
+            self.assertEqual(len(remaining), len(set(remaining)))
+            self.assertIn("host_temporary_root", remaining)
+            self.assertTrue(temporary.is_dir())
 
     def test_explicit_targets_cannot_silently_select_first_runtime_cohort(self):
         cohorts = [{"id": name, "packages": [{"name": "@deepseek-ai/dsh", "version": "0.1.2-rc.1"}]} for name in ["first", "second"]]

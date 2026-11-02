@@ -611,6 +611,34 @@ def preflight_link_access() -> None:
         shutil.rmtree(temporary)
 
 
+def unknown_child_state(error: BaseException) -> bool:
+    return isinstance(error, (subprocess.TimeoutExpired, KeyboardInterrupt)) or getattr(error, "child_state_unknown", False) is True
+
+
+def cleanup_owned_processes(processes: list[subprocess.Popen]) -> list[str]:
+    """Try each owned process even when another cannot be stopped."""
+    remaining = []
+    for process in processes:
+        try:
+            if process.poll() is None:
+                if platform.system() != "Windows":
+                    os.killpg(process.pid, signal.SIGTERM)
+                else:
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                   capture_output=True, timeout=10, check=True)
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    if platform.system() != "Windows":
+                        os.killpg(process.pid, signal.SIGKILL)
+                    else:
+                        process.kill()
+                    process.wait(timeout=10)
+        except (OSError, subprocess.SubprocessError, RuntimeError):
+            remaining.append("owned_process_cleanup_failed")
+    return remaining
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any], targets: dict[str, str] | None = None,
                     target_profiles: dict[str, Path] | None = None,
@@ -625,15 +653,9 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     if result["status"] != "passed":
         return result
     temporary = host_temporary_root()
-    environment = isolated_environment(temporary)
-    work = temporary / "work"
-    work.mkdir()
-    write_test_fixture(work)
-    fixture_old = package_fixture(temporary, "1.0.0")
-    fixture_new = package_fixture(temporary, "2.0.0")
     cli = runtime_root / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
     probe = root / "scripts" / ("native_host_probe_v070.mjs" if protocol == "v070" else "native_host_probe.mjs")
-    driver_digest = probe_driver_digest(root, protocol)
+    driver_digest = ""
     progress_path = None
     nonce = ""
     processes: list[subprocess.Popen] = []
@@ -643,6 +665,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
     extra_pids: dict[int, Path] = {}
     overlays: list[Path] = []
     stage = "host_inputs"
+    child_state_unknown = False
 
     def command(*args: str) -> str:
         return run_host_command(work, environment, *args)
@@ -651,6 +674,13 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
         gates.append(api.gate(id, digest, passed=True))
 
     try:
+        environment = isolated_environment(temporary)
+        work = temporary / "work"
+        work.mkdir()
+        write_test_fixture(work)
+        fixture_old = package_fixture(temporary, "1.0.0")
+        fixture_new = package_fixture(temporary, "2.0.0")
+        driver_digest = probe_driver_digest(root, protocol)
         if protocol == "v070" and diagnostics_output is not None:
             progress_path = Path(str(diagnostics_output) + ".stages.jsonl")
             progress_path.parent.mkdir(parents=True, exist_ok=True)
@@ -826,28 +856,24 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             if runtime_manifest["version"] not in command(str(shim), "--version"):
                 raise RuntimeError("shell shim identity mismatch")
             passed(f"{profile}_shell_shim")
-    except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError, RuntimeError) as error:
+    except (Exception, KeyboardInterrupt) as error:
+        child_state_unknown = unknown_child_state(error)
         if diagnostics_output is not None:
-            write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"],
-                                  safe_probe_progress(progress_path, digest, result["repository"]["commit"], nonce, driver_digest)
-                                  if progress_path else None)
+            try:
+                write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"],
+                                      safe_probe_progress(progress_path, digest, result["repository"]["commit"], nonce, driver_digest)
+                                      if progress_path else None)
+            except (OSError, ValueError, RuntimeError):
+                gates.append(api.gate("host_diagnostic_export", digest, passed=False,
+                                      note="diagnostic export failed"))
         gates.append(api.gate("host_bound_acceptance", digest, passed=False,
                               note=failure_note(stage, error)))
     finally:
-        remaining = []
-        for process in processes:
-            if process.poll() is None:
-                if platform.system() != "Windows":
-                    os.killpg(process.pid, signal.SIGTERM)
-                else:
-                    process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=10)
+        remaining = ["host_child_state_unknown"] if child_state_unknown else []
+        remaining.extend(cleanup_owned_processes(processes))
         try:
-            extra_pids.update(discover_owned_hosts(cli, overlays))
+            if overlays:
+                extra_pids.update(discover_owned_hosts(cli, overlays))
         except (OSError, ValueError, subprocess.SubprocessError, RuntimeError):
             remaining.append("restart_process_discovery_failed")
         # Restarted hosts may have detached from the original parent. Verify
@@ -875,7 +901,10 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             except (OSError, subprocess.SubprocessError, RuntimeError):
                 remaining.append("restart_process_cleanup_failed")
         for log in log_handles:
-            log.close()
+            try:
+                log.close()
+            except OSError:
+                remaining.append("owned_log_close_failed")
         for port in owned_ports:
             def listener_closed():
                 with socket.socket() as connection:
@@ -885,10 +914,17 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                 wait_until(listener_closed, timeout=10)
             except RuntimeError:
                 remaining.append("owned_listener_still_open")
-        shutil.rmtree(temporary, ignore_errors=True)
+        # A possibly live owned process can still use the fixture. Preserve it
+        # until its owner and state are known instead of deleting underneath it.
+        unsafe_to_remove = any(item in remaining for item in (
+            "host_child_state_unknown", "owned_process_cleanup_failed", "restart_process_discovery_failed",
+            "restart_process_identity_unavailable", "restart_process_cleanup_failed",
+            "owned_listener_still_open"))
+        if not unsafe_to_remove:
+            shutil.rmtree(temporary, ignore_errors=True)
         if temporary.exists():
             remaining.append("host_temporary_root")
-        result["cleanup"] = {"status": "failed" if remaining else "passed", "remaining_ids": remaining}
+        result["cleanup"] = {"status": "failed" if remaining else "passed", "remaining_ids": list(dict.fromkeys(remaining))}
     result["status"] = "passed" if all(row["status"] == "passed" for row in gates) and result["cleanup"]["status"] == "passed" else "failed"
     result["run"]["finished_at"] = api.timestamp()
     return result

@@ -294,6 +294,7 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
     temporary = host.host_temporary_root()
     process = None
     stage = "desktop_prepare"
+    child_state_unknown = False
     passed = lambda name: result["gates"].append(api.gate(name, digest, passed=True))
     try:
         assert_slot_available()
@@ -410,33 +411,47 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         if installed.exists() or "dsh-completion-guard" in manifest.get("dependencies", {}):
             raise RuntimeError("Desktop uninstall retained the plugin")
         passed("desktop_uninstall")
-    except (OSError, ValueError, KeyError, StopIteration, RuntimeError, subprocess.SubprocessError) as error:
+    except (Exception, KeyboardInterrupt) as error:
+        child_state_unknown = host.unknown_child_state(error)
         result["gates"].append(api.gate("desktop_acceptance", digest, passed=False,
                                       note=host.failure_note(stage, error)))
-        host.write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"],
-                                   progress={"strict_second_noop": error.receipt} if isinstance(error, StrictNoopFailure) else None)
+        try:
+            host.write_host_diagnostic(diagnostics_output, stage, error, digest, result["repository"]["commit"],
+                                       progress={"strict_second_noop": error.receipt} if isinstance(error, StrictNoopFailure) else None)
+        except (OSError, ValueError, RuntimeError):
+            result["gates"].append(api.gate("desktop_diagnostic_export", digest, passed=False,
+                                            note="diagnostic export failed"))
     finally:
-        if process is not None and process.poll() is None:
-            if platform.system() == "Windows":
-                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=15, check=False)
-            else:
-                os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                if platform.system() != "Windows":
-                    os.killpg(process.pid, signal.SIGKILL)
+        remaining = list(result["cleanup"]["remaining_ids"])
+        if child_state_unknown:
+            remaining.append("desktop_child_state_unknown")
+        try:
+            if process is not None and process.poll() is None:
+                if platform.system() == "Windows":
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=15, check=True)
                 else:
-                    process.kill()
-                process.wait(timeout=10)
+                    os.killpg(process.pid, signal.SIGTERM)
+                try:
+                    process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    if platform.system() != "Windows":
+                        os.killpg(process.pid, signal.SIGKILL)
+                    else:
+                        process.kill()
+                    process.wait(timeout=10)
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            remaining.append("desktop_process_cleanup_failed")
         try:
             assert_slot_available()
         except OSError:
-            result["cleanup"] = {"status": "failed", "remaining_ids": ["desktop_listener"]}
-        shutil.rmtree(temporary, ignore_errors=True)
+            remaining.append("desktop_listener")
+        # An unconfirmed process or listener may still depend on this root.
+        if not any(item in remaining for item in ("desktop_child_state_unknown", "desktop_process_cleanup_failed", "desktop_listener")):
+            shutil.rmtree(temporary, ignore_errors=True)
         if temporary.exists():
-            result["cleanup"] = {"status": "failed", "remaining_ids": ["desktop_temporary_root"]}
-        elif result["cleanup"]["status"] == "passed":
+            remaining.append("desktop_temporary_root")
+        result["cleanup"] = {"status": "failed" if remaining else "passed", "remaining_ids": list(dict.fromkeys(remaining))}
+        if not remaining:
             passed("desktop_cleanup")
     complete = len(result["gates"]) == len(DESKTOP_GATES) and {row["id"] for row in result["gates"]} == DESKTOP_GATES
     result["status"] = "passed" if complete and all(row["status"] == "passed" for row in result["gates"]) and result["cleanup"]["status"] == "passed" else "failed"

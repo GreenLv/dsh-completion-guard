@@ -113,6 +113,50 @@ class StrictNoopDiagnosticTests(unittest.TestCase):
         cls.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.module)
 
+    def test_cancel_and_diagnostic_failure_still_cleanup_and_return_failure(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory) / "owned"
+            temporary.mkdir()
+            result = {"status": "passed", "gates": [], "repository": {"commit": "a" * 40},
+                      "run": {}, "cleanup": {"status": "passed", "remaining_ids": []}}
+            api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+            with mock.patch.object(self.module, "desktop_driver_digest", return_value="c" * 64), \
+                    mock.patch.object(self.module.host, "host_temporary_root", return_value=temporary), \
+                    mock.patch.object(self.module, "assert_slot_available", side_effect=[KeyboardInterrupt(), None]), \
+                    mock.patch.object(self.module.host, "write_host_diagnostic", side_effect=OSError("unwritable")):
+                actual = self.module.desktop_acceptance(api, Path(directory), Path("artifact"), "b" * 64,
+                                                        Path("archive"), result, "rc", Path(directory) / "diag")
+            self.assertEqual(actual["status"], "failed")
+            self.assertEqual(actual["cleanup"]["status"], "failed")
+            self.assertIn("desktop_child_state_unknown", actual["cleanup"]["remaining_ids"])
+            self.assertEqual([row["id"] for row in actual["gates"]],
+                             ["desktop_acceptance", "desktop_diagnostic_export"])
+            self.assertTrue(temporary.exists())
+
+    def test_desktop_command_timeout_retains_fixture_for_unknown_children(self):
+        import tempfile
+        for error in (subprocess.TimeoutExpired("node", 120), NATIVE.NativeTimeout("unknown child")):
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory:
+                temporary = Path(directory) / "owned"
+                temporary.mkdir()
+                result = {"status": "passed", "gates": [], "repository": {"commit": "a" * 40},
+                          "platform": {"toolchain": {}}, "run": {},
+                          "cleanup": {"status": "passed", "remaining_ids": []}}
+                api = SimpleNamespace(gate=NATIVE.gate, timestamp=NATIVE.timestamp)
+                with mock.patch.object(self.module, "desktop_driver_digest", return_value="c" * 64), \
+                        mock.patch.object(self.module.host, "host_temporary_root", return_value=temporary), \
+                        mock.patch.object(self.module.host, "isolated_environment", return_value={}), \
+                        mock.patch.object(self.module, "assert_slot_available"), \
+                        mock.patch.object(self.module, "carrier", return_value=Path("carrier")), \
+                        mock.patch.object(self.module.host, "run_host_command", side_effect=error):
+                    actual = self.module.desktop_acceptance(api, Path(directory), Path("artifact"), "b" * 64,
+                                                            Path("archive"), result, "rc", Path(directory) / "diag")
+                self.assertEqual(actual["status"], "failed")
+                self.assertIn("desktop_child_state_unknown", actual["cleanup"]["remaining_ids"])
+                self.assertIn("desktop_temporary_root", actual["cleanup"]["remaining_ids"])
+                self.assertTrue(temporary.is_dir())
+
     def test_field_receipt_contains_names_and_offsets_only(self):
         before = b"prunedAt: old-secret\nstoreDir: private-home\nunknownCredential: token-one\n"
         after = b"prunedAt: new-secret\nstoreDir: other-home\nunknownCredential: token-two\n"

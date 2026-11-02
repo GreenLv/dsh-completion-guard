@@ -15,15 +15,26 @@ class WorkflowContractTests(unittest.TestCase):
     def test_candidate_matrix_is_independent_and_not_tag_or_pr_triggered(self) -> None:
         text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertNotIn("strategy:", text)
-        self.assertNotIn("matrix:", text)
+        self.assertNotRegex(text, r"(?m)^\s*matrix:\s*$")
         self.assertNotIn("pull_request:", text)
         self.assertNotIn("tags:", text)
         self.assertEqual(text.count("uses: ./.github/workflows/ci-lane.yml"), 6)
+        self.assertEqual(text.count("full_suite: true"), 1)
+        self.assertEqual(text.count("full_suite: ${{ github.event_name == 'workflow_dispatch' || needs.classify.outputs.full_matrix != 'false' }}"), 5)
+        self.assertIn("full_matrix: ${{ steps.select.outputs.full_matrix }}", text)
         self.assertEqual(text.count("pnpm run typecheck"), 1)
         self.assertEqual(text.count("pnpm run lint"), 1)
         self.assertEqual(text.count("pnpm run build"), 1)
         self.assertIn("if: always()", text)
         self.assertIn("python scripts/verify_required_jobs.py", text)
+
+    def test_short_lanes_keep_real_portability_checks(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "ci-lane.yml").read_text(encoding="utf-8")
+        self.assertIn("if: ${{ !inputs.full_suite }}", text)
+        for name in ("host-node-conditions.test.ts", "v030-host-lock.test.ts", "host-workdir-v070.test.ts",
+                     "v081-windows-shape-certification.test.ts", "v083-parse-cache.test.ts",
+                     "tests.native_cleanup_probe_test"):
+            self.assertIn(name, text)
 
     def test_pr_gate_is_blocking_and_cancels_only_stale_prs(self) -> None:
         text = (ROOT / ".github" / "workflows" / "validation-shadow.yml").read_text(encoding="utf-8")

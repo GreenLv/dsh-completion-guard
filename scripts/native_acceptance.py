@@ -30,11 +30,19 @@ class NativeRunError(RuntimeError):
     """Raised when an exact portable acceptance input is unsafe."""
 
 
+class NativeTimeout(NativeRunError):
+    """A child timed out; descendants and their writes may still be active."""
+    child_state_unknown = True
+
+
 def run(root: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        list(args), cwd=root, env=env, text=True, capture_output=True, check=False,
-        encoding="utf-8",
-    )
+    try:
+        result = subprocess.run(
+            list(args), cwd=root, env=env, text=True, capture_output=True, check=False,
+            encoding="utf-8", timeout=300,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise NativeTimeout(f"command timed out ({Path(args[0]).name}); descendant state unknown") from exc
     if result.returncode:
         detail = (result.stdout + result.stderr).strip()
         raise NativeRunError(f"command failed ({args[0]}): {detail[-1000:]}")
@@ -171,10 +179,16 @@ def portable_acceptance(
 ) -> dict[str, Any]:
     started = timestamp()
     gates: list[dict[str, Any]] = []
+    artifact_digest = sha256(artifact)
+    # Collect non-mutating metadata before allocating a fixture. A later
+    # command failure must not prevent the failed terminal result from being
+    # returned after owned-resource cleanup.
+    version_output = run(root, "node", "--version").stdout.strip()
+    repository_url = normalize_repository_url(run(root, "git", "remote", "get-url", "origin").stdout)
     temporary = Path(tempfile.mkdtemp(prefix="dsh-completion-guard-native-"))
     cleanup_status = "passed"
     remaining: list[str] = []
-    artifact_digest = sha256(artifact)
+    child_state_unknown = False
     file_count = 0
     try:
         if artifact_digest != expected_sha256:
@@ -217,20 +231,23 @@ def portable_acceptance(
             if script.is_file() and script.suffix in {".js", ".mjs", ".cjs"}:
                 run(app, "node", "--check", str(script))
         gates.append(gate("installed_syntax", artifact_digest, passed=True))
-    except (OSError, UnicodeError, json.JSONDecodeError, NativeRunError) as exc:
-        print(f"[FAIL] {exc}", file=sys.stderr)
+    except (Exception, KeyboardInterrupt) as exc:
+        child_state_unknown = isinstance(exc, (NativeTimeout, KeyboardInterrupt))
+        print(f"[FAIL] portable_acceptance: {type(exc).__name__}", file=sys.stderr)
         gates.append(gate(
             "portable_acceptance", artifact_digest, passed=False,
             note="portable gate failed; inspect the platform-local log",
         ))
     finally:
-        shutil.rmtree(temporary, ignore_errors=True)
+        if child_state_unknown:
+            cleanup_status = "failed"
+            remaining.append("portable_child_state_unknown")
+        else:
+            shutil.rmtree(temporary, ignore_errors=True)
         if temporary.exists():
             cleanup_status = "failed"
             remaining.append("portable_temporary_root")
 
-    version_output = run(root, "node", "--version").stdout.strip()
-    repository_url = normalize_repository_url(run(root, "git", "remote", "get-url", "origin").stdout)
     passed = all(item["status"] == "passed" for item in gates) and cleanup_status == "passed"
     return {
         "schema": "native-acceptance/v2",
@@ -320,6 +337,74 @@ def preflight_inputs(args: argparse.Namespace) -> Any:
     return module
 
 
+def recover_transfer(args: argparse.Namespace) -> None:
+    """Recreate only a missing transfer receipt from a bound saved result.
+
+    This readback never installs or starts anything. A result for another
+    artifact, checkout, or repository cannot authorize a transfer claim.
+    """
+    if args.preflight or not args.transfer_receipt or not args.transport_url:
+        raise NativeRunError("transfer recovery requires a saved result, new receipt path, and transport URL")
+    url = urlsplit(args.transport_url)
+    if url.scheme != "https" or not url.hostname or url.username or url.password:
+        raise NativeRunError("a transfer receipt requires a credential-free HTTPS transport URL")
+    root = args.repo_root.resolve()
+    result_path = args.output
+    if (result_path.is_symlink() or not result_path.is_file() or result_path.stat().st_size > 4 * 1024 * 1024
+            or result_path.resolve().is_relative_to(root)):
+        raise NativeRunError("saved result must be a bounded regular file outside the source repository")
+    if result_path.resolve() == args.transfer_receipt.resolve():
+        raise NativeRunError("acceptance and transfer receipt need different output paths")
+    intent_path = result_path.with_name(result_path.name + ".transfer-intent.json")
+    if (intent_path.is_symlink() or not intent_path.is_file() or intent_path.stat().st_size > 16 * 1024
+            or intent_path.resolve().is_relative_to(root)):
+        raise NativeRunError("the original bound transfer intent is unavailable")
+    intent = json.loads(intent_path.read_text(encoding="utf-8"))
+    expected_intent = {"schema": "dsh-native-transfer-intent/v1", "artifact_sha256": args.artifact_sha256,
+                       "source_commit": args.source_commit, "filename": args.artifact.name,
+                       "transport_url": args.transport_url,
+                       "platform": {"Darwin": "macos", "Windows": "windows"}.get(platform.system(), "linux")}
+    if intent != expected_intent:
+        raise NativeRunError("the original transfer intent does not match this recovery")
+    check_output_path(args.transfer_receipt, root)
+    verify_exact_source(root, args.source_commit)
+    origin = normalize_repository_url(run(root, "git", "remote", "get-url", "origin").stdout)
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    artifact = result.get("artifact", {}) if isinstance(result, dict) else {}
+    repository = result.get("repository", {}) if isinstance(result, dict) else {}
+    platform_record = result.get("platform", {}) if isinstance(result, dict) else {}
+    run_record = result.get("run", {}) if isinstance(result, dict) else {}
+    if (not isinstance(artifact, dict) or not isinstance(repository, dict)
+            or not isinstance(platform_record, dict) or not isinstance(run_record, dict)
+            or result.get("schema") != "native-acceptance/v2" or result.get("product") != "dsh_completion_guard"
+            or result.get("status") not in {"passed", "failed"}
+            or set(repository) != {"url", "commit"} or repository.get("commit") != args.source_commit or repository.get("url") != origin
+            or artifact.get("git_head") != args.source_commit or artifact.get("sha256") != args.artifact_sha256
+            or artifact.get("filename") != args.artifact.name or artifact.get("size_bytes") != args.artifact.stat().st_size
+            or sha256(args.artifact) != args.artifact_sha256
+            or platform_record.get("os") != {"Darwin": "macos", "Windows": "windows"}.get(platform.system(), "linux")
+            or not isinstance(run_record.get("started_at"), str)):
+        raise NativeRunError("saved result does not match the exact source and artifact")
+    try:
+        started = datetime.fromisoformat(run_record["started_at"].replace("Z", "+00:00"))
+        if started.tzinfo is None or started > datetime.now(timezone.utc):
+            raise ValueError("missing timezone or future start")
+    except (TypeError, ValueError):
+        raise NativeRunError("saved result has an invalid start time") from None
+    with tarfile.open(args.artifact, "r:gz") as archive:
+        members = archive.getmembers()
+        safe_tar_entries("\n".join(member.name for member in members))
+        manifest = archive.getmember("package/package.json")
+        if not manifest.isfile() or manifest.size > 1024 * 1024:
+            raise NativeRunError("artifact package manifest must be a bounded regular file")
+        with archive.extractfile(manifest) as stream:
+            metadata = json.load(stream)
+        if (metadata.get("name") != "dsh-completion-guard" or metadata.get("gitHead") != args.source_commit
+                or artifact.get("file_count") != len([member for member in members if member.isfile()])):
+            raise NativeRunError("artifact inventory or embedded identity differs from saved result")
+    write_result(args.transfer_receipt, transfer_receipt(result, args.transport_url))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", type=Path, required=True)
@@ -341,6 +426,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--target-headless-profile", type=Path)
     parser.add_argument("--transfer-receipt", type=Path)
     parser.add_argument("--transport-url")
+    parser.add_argument("--recover-transfer", action="store_true",
+                        help="write a missing transfer receipt from the existing --output; never rerun acceptance")
     args = parser.parse_args(argv)
     # Child hosts run inside disposable work directories. Bind result paths to
     # the invoking cwd before deriving sidecars or crossing that cwd boundary.
@@ -350,6 +437,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.transfer_receipt = args.transfer_receipt.absolute()
     if not HEX64.fullmatch(args.artifact_sha256) or not HEX40.fullmatch(args.source_commit):
         parser.error("artifact SHA-256 and source commit must be full lowercase digests")
+    if args.recover_transfer:
+        try:
+            recover_transfer(args)
+        except (OSError, ValueError, KeyError, AttributeError, tarfile.TarError, RuntimeError) as exc:
+            parser.error(str(exc))
+        print("native_transfer_recovered=passed; acceptance_not_run")
+        return 0
     if args.gate_profile != "portable_artifact" and args.runtime_root is None:
         parser.error("host_bound requires --runtime-root pointing to the audited DSH installation")
     if args.gate_profile in ("host_bound", "host_bound_v070") and not (args.web_cohort and args.headless_cohort):
@@ -371,6 +465,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.output.resolve() == args.transfer_receipt.resolve():
                 raise NativeRunError("acceptance and transfer receipt need different output paths")
             check_output_path(args.transfer_receipt, args.repo_root)
+        transfer_intent = args.output.with_name(args.output.name + ".transfer-intent.json")
+        if args.transfer_receipt:
+            if transfer_intent.resolve() == args.transfer_receipt.resolve():
+                raise NativeRunError("transfer intent and receipt need different output paths")
+            check_output_path(transfer_intent, args.repo_root)
         diagnostics_output = args.output.with_name(args.output.name + ".diagnostics.json")
         if args.transfer_receipt and diagnostics_output.resolve() == args.transfer_receipt.resolve():
             raise NativeRunError("diagnostics and transfer receipt need different output paths")
@@ -386,6 +485,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.preflight:
         print("native_preflight=passed; input_checks_only; acceptance_not_run")
         return 0
+    if args.transfer_receipt:
+        intent = {"schema": "dsh-native-transfer-intent/v1", "artifact_sha256": args.artifact_sha256,
+                  "source_commit": args.source_commit, "filename": args.artifact.name,
+                  "transport_url": args.transport_url,
+                  "platform": {"Darwin": "macos", "Windows": "windows"}.get(platform.system(), "linux")}
+        try:
+            write_result(transfer_intent, intent)
+        except OSError as exc:
+            parser.error(f"cannot write transfer intent: {type(exc).__name__}")
     result = portable_acceptance(
         args.repo_root.resolve(), args.artifact.resolve(), args.artifact_sha256,
         args.source_commit, args.run_url,
@@ -410,7 +518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                         None if args.web_market_version == "none" else args.web_market_version,
                                         "v070" if args.gate_profile == "host_bound_v070" else "legacy",
                                         diagnostics_output=diagnostics_output)
-    if args.t06:
+    if args.t06 and result["status"] == "passed":
         probe_path = Path(__file__).with_name("native_cleanup_probe.py")
         spec = importlib.util.spec_from_file_location("dsh_native_cleanup_probe", probe_path)
         probe = importlib.util.module_from_spec(spec)

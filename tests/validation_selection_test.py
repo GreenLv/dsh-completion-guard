@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).parents[1]
 SPEC = importlib.util.spec_from_file_location("select_validation", ROOT / "scripts" / "select_validation.py")
@@ -21,6 +23,78 @@ class ValidationSelectionTests(unittest.TestCase):
 
     def classify(self, *paths: str) -> dict[str, object]:
         return SELECTOR.classify(self.mapping, list(paths), map_sha256=self.map_sha256, base="a" * 40, head="b" * 40)
+
+    def test_portability_matrix_reduces_only_reviewed_inputs(self) -> None:
+        for paths in (("README.md",), ("src/domain/parse-cache.ts", "tests/v083-parse-cache.test.ts", "dist/index.js"),
+                      ("tests/v083-parse-cache.test.ts",)):
+            with self.subTest(paths=paths):
+                with mock.patch.object(SELECTOR, "portable_changes_are_safe", return_value=True):
+                    self.assertFalse(SELECTOR.full_portability_matrix(self.classify(*paths), ROOT))
+        for paths in (("dist/index.js",), ("src/runtime.ts",), ("package.json",),
+                      ("src/domain/host-lock.ts",), ("docs/SEMANTIC_COMPATIBILITY.md",),
+                      ("tests/fixtures/conformance/digest_v3/cases.json",),
+                      ("scripts/native_acceptance.py",), ("validation-map.json",),
+                      ("unexpected/new-format.bin",), ("src/domain/parse-cache.ts", "package.json"),
+                      ("src/domain/parse-cache.ts", "tests/new-validator.test.ts")):
+            with self.subTest(paths=paths):
+                self.assertTrue(SELECTOR.full_portability_matrix(self.classify(*paths)))
+
+    def test_short_matrix_source_screen_fails_closed_on_platform_and_unreadable_inputs(self) -> None:
+        plan = self.classify("src/domain/parse-cache.ts", "tests/v083-parse-cache.test.ts", "dist/index.js")
+        def response(cmd, **kwargs):
+            if "show" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "export class ParseCache {}", "")
+            if "diff" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "+expect(cache.get('a')).toBe(1)\n", "")
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        with mock.patch.object(SELECTOR.subprocess, "run", side_effect=response):
+            self.assertFalse(SELECTOR.full_portability_matrix(plan, ROOT))
+        def unsafe(cmd, **kwargs):
+            if "show" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "import { spawn } from 'node:child_process'", "")
+            return response(cmd, **kwargs)
+        with mock.patch.object(SELECTOR.subprocess, "run", side_effect=unsafe):
+            self.assertTrue(SELECTOR.full_portability_matrix(plan, ROOT))
+        with mock.patch.object(SELECTOR.subprocess, "run", side_effect=OSError("missing Git")):
+            self.assertTrue(SELECTOR.full_portability_matrix(plan, ROOT))
+        def deleted_test(cmd, **kwargs):
+            if "diff" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "-expect(true).toBe(true)\n", "")
+            return response(cmd, **kwargs)
+        with mock.patch.object(SELECTOR.subprocess, "run", side_effect=deleted_test):
+            self.assertTrue(SELECTOR.full_portability_matrix(plan, ROOT))
+
+    def test_real_git_base_head_selects_short_then_full_for_platform_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.run(["git", "-C", str(root), "-c", "user.name=Test", "-c",
+                                       "user.email=test@example.invalid", *args], check=True,
+                                      capture_output=True, text=True).stdout.strip()
+            git("init", "-q")
+            source = root / "src/domain/parse-cache.ts"
+            source.parent.mkdir(parents=True)
+            source.write_text("export class ParseCache {}\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "base")
+            base = git("rev-parse", "HEAD")
+            source.write_text("export class ParseCache { readonly size = 1 }\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "portable")
+            head = git("rev-parse", "HEAD")
+            plan = SELECTOR.classify(self.mapping, SELECTOR.changed_paths(root, base, head),
+                                     map_sha256=self.map_sha256, base=base, head=head)
+            output = root / "output"
+            SELECTOR.write_github_outputs(output, plan, root)
+            self.assertIn("full_matrix=false\n", output.read_text())
+            output.unlink()
+            source.write_text("import { spawn } from 'node:child_process'\nexport class ParseCache {}\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "platform")
+            new_head = git("rev-parse", "HEAD")
+            plan = SELECTOR.classify(self.mapping, SELECTOR.changed_paths(root, head, new_head),
+                                     map_sha256=self.map_sha256, base=head, head=new_head)
+            self.assertTrue(SELECTOR.full_portability_matrix(plan, root))
 
     def test_packaged_docs_invalidate_artifact(self) -> None:
         plan = self.classify("docs/ARCHITECTURE.md")
