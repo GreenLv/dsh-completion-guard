@@ -199,10 +199,14 @@ class ValidationSelectionTests(unittest.TestCase):
     def test_new_native_profile_paths_are_mapped(self) -> None:
         for path in ("scripts/native_host_probe_v070.mjs", "scripts/native_release_fixture_v070.mjs",
                      "schemas/native-host-probe-v2.schema.json", "schemas/native-host-bound-v4.schema.json",
-                     "scripts/validate_native_v070.py", "tests/validate_native_v070_test.py"):
+                     "scripts/validate_native_v070.py", "tests/validate_native_v070_test.py",
+                     "scripts/native_warm_acceptance.py", "scripts/native_warm_scope_core.mjs",
+                     "scripts/native_warm_scope_preflight.py", "scripts/native_warm_scope_consumer.mjs",
+                     "schemas/native-warm-scope-v1.schema.json"):
             plan = self.classify(path)
             self.assertEqual(plan["unknown_paths"], [])
             self.assertIn("native_artifact", plan["invalidates"])
+            self.assertTrue(plan["full_required"])
 
     def test_overlapping_rules_are_additive(self) -> None:
         plan = self.classify("cordis.patch.yml")
