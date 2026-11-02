@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 import rc2Baseline from './byte-audit-manifest.js'
 import rc3Baseline from './rc3-byte-audit-manifest.js'
+import rc5Baseline from './rc5-byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
@@ -67,15 +68,24 @@ function readReceipt(profileRoot: string | undefined, trust: HostRebindTrust): C
   } catch (error) { if (error instanceof HostTrustError) throw error; return fail('host_trust_contract_receipt_missing') }
 }
 /** The reviewed executable-byte baseline for one acquired graph. The rc.3
- * cohort's lib bytes are byte-identical to rc.2 but its package manifests
- * carry rewritten version/dependency fields, so the baseline must match the
- * ACQUIRED versions or every loading digest would spuriously drift. Both
- * baselines come from the same audited-manifest schema. */
+ * and rc.5 cohorts' lib bytes are byte-identical to rc.2 but their package
+ * manifests carry rewritten version/dependency fields, so the baseline must
+ * match the ACQUIRED versions or every loading digest would spuriously
+ * drift. All baselines come from the same audited-manifest schema. */
 function baselineFor(rows: readonly { name?: string; version?: string }[]): typeof rc2Baseline {
-  // Current and future graphs start from rc.3. Explicit rc.2 history keeps
-  // its own reference; no receipt can bypass the separate current floor.
-  return rows.find((row) => row.name === '@deepseek-ai/dsh')?.version === '0.2.1-rc.2' ? rc2Baseline : rc3Baseline
+  // Current and future graphs start from rc.5. Explicit rc.2/rc.3 history
+  // keeps its own reference; no receipt can bypass the separate current floor.
+  switch (rows.find((row) => row.name === '@deepseek-ai/dsh')?.version) {
+    case '0.2.1-rc.2': return rc2Baseline
+    case '0.2.1-rc.3': return rc3Baseline
+    default: return rc5Baseline
+  }
 }
+/** Every reviewed published state, for equivalence checks: a graph whose lib
+ * bytes match ANY audited baseline while carrying another baseline's loading
+ * digest is still one reviewed published state, so equivalence is accepted
+ * only when loading AND modules come from the SAME reference row. */
+const AUDITED_BASELINES: readonly (typeof rc2Baseline)[] = [rc2Baseline, rc3Baseline, rc5Baseline]
 
 /** Validate generator-issued operator-owned authority. The descriptor cannot
  * assert compatibility: changed bytes require the independently issued cache
@@ -177,13 +187,13 @@ export async function acquireHostTrust(rows: readonly PackageRow[], fetcher: typ
   if (!options?.profileRoot) return fail('host_trust_receipt_root_missing')
   const targets: string[] = [], checks: string[] = [], equivalent = new Set<string>()
   const reviewedEquivalent = (row: HostTrustedPackage, files: Record<string, Buffer>): boolean => {
-    // The acquired bytes must match ONE reviewed published state. The rc.3
+    // The acquired bytes must match ONE reviewed published state. The rc.3/rc.5
     // manifests carry rewritten version/dependency fields over identical lib
-    // bytes, so a graph can legitimately equal the rc.3 loading digest while
-    // its lib bytes equal BOTH baselines; require loading AND modules from
-    // the SAME reference row.
-    const alternate = baseline === rc3Baseline ? rc2Baseline : rc3Baseline
-    for (const reference of [baseline.packages.find(p => p.name === row.name), alternate.packages.find(p => p.name === row.name)]) {
+    // bytes, so a graph can legitimately equal a newer baseline's loading
+    // digest while its lib bytes equal the OLDER baselines too; require
+    // loading AND modules from the SAME reference row.
+    for (const manifest of AUDITED_BASELINES) {
+      const reference = manifest.packages.find(p => p.name === row.name)
       if (!reference) continue
       if (hostManifestLoadingDigest(files['package.json'].toString()) !== (reference as unknown as { loadingDigest?: string }).loadingDigest) continue
       const modulesOk = Object.entries(reference.modules).filter(([file]) => file !== 'package.json').every(([file, digest]) => {

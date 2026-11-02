@@ -26,6 +26,23 @@ vi.mock('../src/domain/rc3-byte-audit-manifest.js', async (original) => {
     },
   })) } }
 })
+vi.mock('../src/domain/rc5-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
+  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // The published audit hashes package.json too: the manifest the JSON
+    // parsers read and the bytes the digest check reads are the same file.
+    loadingDigest: hostManifestLoadingDigest(canonicalManifest(p.name as string, p.version as string)),
+    programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
+  })) } }
+})
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { readFileSync, statSync, utimesSync, realpathSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, cpSync } from 'node:fs'

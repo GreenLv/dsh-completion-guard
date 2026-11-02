@@ -20,6 +20,14 @@
       "asarHeaderSha256": "84140c5d09050010753077cde3c8e35fc2e050054f1ed69f761fae8b6fdd4b95",
       "invariantCompanions": "none present in the rc.3 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
       "windows": "Windows installed carrier and retained official installer Authenticode Valid; signed ElectronAsar/Integrity equals measured header; root/runtime manifests and metadata match signed header integrity; retained installer size and SHA-512 equal official win-x64 nightly updater metadata (2026-10-26). Native Guard install/no-op/lifecycle acceptance is separate."
+    },
+    "rc5Acquisition": {
+      "observedDate": "2026-11-02",
+      "method": "official CDN zip downloaded, SHA-512 recorded, codesign --verify --deep --strict passed (TeamIdentifier NAN929V4UM, identifier com.deepseek.dsh), ASAR header recomputed and matched the independently verified local install header, desktop manifest and desktop-runtime.json extracted from the archive",
+      "zipSha512Base64": "SPXR+TMC5+7v9R544aKgA2CkDrLr2XyNL/35/NuxGBbP5nrSTEGMurNRAi+R1RSlcWZm3KNdySAt0RS8Qizv9g==",
+      "asarHeaderSha256": "77ad6299a3dcf5adc320ca215e1ee604eabd76e8d71bfc88fe264fc88bb17f65",
+      "invariantCompanions": "none present in the rc.5 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
+      "windows": "pending: the official win-x64 rc.5 installer (289408544 bytes, SHA-512 hex 82ed9d1fe693afaefc7343fc0c6007fe1e01d466967d0223a6c3eb2e397fba42eb40887a0cb56afcc857e0566f27ca3518232870e862c7a5db2dae8a9ad8d75e) requires Windows-side Authenticode verification, installed-carrier ASAR header readback and manifest extraction; the row is NOT registered on unverified bytes"
     }
   },
   "files": [
@@ -158,6 +166,22 @@
       "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.3-win-x64.exe",
       "releaseSha512": "q5IGr2Bf+TvvCpagHj49Ypn/ZrqR7kqrYpLjqXP7VfDINmddlqZQmG+YfsdL3q3EdTRMRlKz/a3jDAEzdNdDOw==",
       "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
+    },
+    {
+      "id": "desktop-0.2.1-rc.5-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "version": "0.2.1-rc.5",
+      "runtimeVersion": "0.2.1-rc.5",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "77ad6299a3dcf5adc320ca215e1ee604eabd76e8d71bfc88fe264fc88bb17f65",
+      "desktopManifestSha256": "ee6ab2f7c6ac6a052cb2944ec5c95d9beb0145070acf58127efe40367d12dc7a",
+      "buildCommit": "d4db512a969fccf0c5cc7ec8fe38e9c1d27af916",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.5-mac-arm64.zip",
+      "releaseSha512": "SPXR+TMC5+7v9R544aKgA2CkDrLr2XyNL/35/NuxGBbP5nrSTEGMurNRAi+R1RSlcWZm3KNdySAt0RS8Qizv9g==",
+      "vendorTeam": "NAN929V4UM",
+      "vendorIdentifier": "com.deepseek.dsh"
     }
   ]
 }

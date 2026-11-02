@@ -16,6 +16,16 @@ vi.mock('../../src/domain/rc3-byte-audit-manifest.js', async (original) => {
     'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
   } })) } }
 })
+// The active cohort is the rc.5 manifest: narrow it to the same synthetic
+// module shapes so this family keeps isolating graph/config mutation.
+vi.mock('../../src/domain/rc5-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(p => ({ ...p, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: p.name, version: p.version, exports: { '.': './lib/index.js' } })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('export const synthetic = true\n').digest('hex'),
+  } })) } }
+})
 import {
   bindExecutableIdentity,
   bindLiveGoalCapability,
@@ -37,6 +47,7 @@ import {
   verifyComposedHostLockDump,
 } from '../../src/domain/host-resolver.js'
 import { RC021_RC3_HOST_PACKAGES } from '../../src/domain/rc021-rc3-host.js'
+import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
 import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 
 // This family isolates graph/config mutation with synthetic package manifests.
@@ -59,10 +70,10 @@ function auditedRows(...names: string[]) {
 
 describe('v0.3 host graph and live capability binding', () => {
   it('locks the real update_goal provider and treats the Goal graph as a pair', () => {
-    // The active cohort row is asserted against the published 0.2.1-rc.3
+    // The active cohort row is asserted against the published 0.2.1-rc.5
     // identity module, so a cohort swap cannot leave the Goal pair unlocked.
     expect(EXPECTED_HOST_PACKAGES).toContainEqual(
-      RC021_RC3_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
+      RC021_RC5_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal'),
     )
     expect(EXPECTED_HOST_PACKAGES.find((row) => row.name === '@deepseek-ai/dsh-tool-goal')?.version)
       .toBe(MIN_SUPPORTED_HOST_VERSION)

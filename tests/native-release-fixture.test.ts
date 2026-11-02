@@ -23,7 +23,7 @@ it('runs the actual release fixture with exact-version registry responses, in-fl
     mkdirSync(join(profileRoot, 'node_modules'), { recursive: true })
     link(repository, join(profileRoot, 'node_modules', 'dsh-completion-guard'))
     const manifest = JSON.parse(readFileSync(join(repository, 'manifests', 'supported-host.v1.json'), 'utf8'))
-    const hostPackages = manifest.cohorts.find((row: { id: string }) => row.id === 'dsh-0.2.1-rc.3-core-v1').packages
+    const hostPackages = manifest.cohorts.find((row: { id: string }) => row.id === 'dsh-0.2.1-rc.5-core-v1').packages
     const result = await runNativeReleaseFixture({ runtimeRoot, profileRoot, workRoot: join(root, 'work'), nonce: 'owning-release', profile: 'web', hostPackages })
     expect(result).toEqual({ positive: true, negative: true, mock_only: true })
   } finally { vi.unstubAllEnvs(); rmSync(root, { recursive: true, force: true }) }

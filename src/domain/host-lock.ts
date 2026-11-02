@@ -1,4 +1,5 @@
 import { RC021_RC3_HOST_PACKAGES } from './rc021-rc3-host.js'
+import { RC021_RC5_HOST_PACKAGES } from './rc021-rc5-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -108,18 +109,20 @@ function defineCohort(
 }
 
 /** Current baseline for new installations and default fixtures. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.1-rc.3'
-/** The release floor is rc.3. Older package identities remain historical
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.1-rc.5'
+/** The release floor is rc.5. Older package identities remain historical
  * evidence; retaining their audit files does not admit a below-floor host. */
 export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
-/** Core-lock/v1 separates optional market identity from the rc.3 critical
+/** Core-lock/v1 separates optional market identity from the rc.5 critical
  * graph. Historical cohorts live only in test data. Version ordering cannot
  * authorize an unregistered graph, and graph identity is separate from native
  * acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,
+  defineCohort('dsh-0.2.1-rc.3', ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,
+    'registry-derived-pending-native-audit', ['posix', 'windows']),
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.1-rc.5'], [], RC021_RC5_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
 ]
   .filter((cohort) => ACTIVE_HOST_COHORT_IDS.includes(cohort.id))
@@ -137,7 +140,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   }))
 
 /**
- * Baseline fixture package identities (DSH 0.2.1-rc.3). The cohort
+ * Baseline fixture package identities (DSH 0.2.1-rc.5). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially

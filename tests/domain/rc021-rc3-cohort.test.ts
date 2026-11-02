@@ -1,25 +1,24 @@
 import { createHash } from 'node:crypto'
-import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { HOST_COHORTS, evaluateHostLock } from '../../src/domain/host-lock.js'
 import { RC021_RC3_HOST_PACKAGES } from '../../src/domain/rc021-rc3-host.js'
-import { RC021_RC2_HOST_PACKAGES } from '../../src/domain/rc021-rc2-host.js'
 import { satisfiesSupportedHostRange, compareHostVersions, MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import rc3Manifest from '../../src/domain/rc3-byte-audit-manifest.js'
 
 /**
- * rc.3 cohort qualification (supplement plan §2): the cohort binds the exact
- * published rc.3 tarballs, whose bytes the rc.2→rc.3 study verified against
- * the registry (SRI + SHA-256) and against the rc.2 tarballs (lib bytes
- * byte-identical). These tests keep the manifest, the cohort and the version
- * gate bound to those verified identities.
+ * rc.3 historical cohort (below the 0.12.0 floor): the cohort keeps its
+ * exact published rc.3 identities — bound by the rc.2→rc.3 study (SRI +
+ * SHA-256, lib bytes byte-identical to rc.2) — but since the 0.12.0 floor
+ * moved to 0.2.1-rc.5 the graph is no longer an admitted lock. These tests
+ * keep the audit file bound to its verified identities while pinning the
+ * below-floor refusal.
  */
 
-describe('rc.3 cohort qualification', () => {
-  it('uses rc.3 as the sole current cohort and default fixture', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.3-core-v1'])
-    expect(HOST_COHORTS[0]!.packages).toEqual(RC021_RC3_HOST_PACKAGES)
+describe('rc.3 cohort qualification (historical, below the current floor)', () => {
+  it('keeps rc.3 rows as published history while rc.5 is the sole current cohort', () => {
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1'])
+    expect(HOST_COHORTS[0]!.packages).not.toEqual(RC021_RC3_HOST_PACKAGES)
   })
 
   it('binds 46 rc.3 rows plus the shared cordis 4.0.5 release', () => {
@@ -57,25 +56,18 @@ describe('rc.3 cohort qualification', () => {
     expect(rc3Manifest.hostVersion).toBe('0.2.1-rc.3')
   })
 
-  it('evaluates the rc.3 rows to a supported rc.3 lock and refuses cross-cohort drift', () => {
+  it('refuses the exact rc.3 graph at the raised floor while identity stays exact', () => {
     const rc3Lock = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc3Lock.status, JSON.stringify(rc3Lock.reasonCode)).toBe('supported')
-    expect(rc3Lock.cohortId).toBe('dsh-0.2.1-rc.3-core-v1')
-    const rc2Lock = evaluateHostLock(RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc2Lock.status).toBe('unsupported')
-    expect(rc2Lock.hostVersion).toMatchObject({ status: 'below_minimum', minimum: '0.2.1-rc.3' })
-    // Graph identity is per cohort: an rc.3 row swapped into the rc.2 set is
-    // not the rc.2 lock.
-    const mixed = [...RC021_RC2_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session' ? { ...row, version: '0.2.1-rc.3' } : row)]
-    const mixedLock = evaluateHostLock(mixed, { platform: 'posix', profileKind: 'headless' })
-    expect(mixedLock.status !== 'supported' || mixedLock.cohortId !== 'dsh-0.2.1-rc.2-core-v1').toBe(true)
+    expect(rc3Lock.status, JSON.stringify(rc3Lock.reasonCode)).toBe('unsupported')
+    expect(rc3Lock.hostVersion).toMatchObject({ status: 'below_minimum', minimum: '0.2.1-rc.5' })
   })
 
-  it('enforces the rc.3 floor while preserving historical identities', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
-    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(true)
+  it('enforces the rc.5 floor; rc.3 and rc.2 are historical identities below it', () => {
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.5')
+    expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.1')).toBe(false)
+    expect(compareHostVersions('0.2.1-rc.5', '0.2.1-rc.3')).toBeGreaterThan(0)
     expect(compareHostVersions('0.2.1-rc.3', '0.2.1-rc.2')).toBeGreaterThan(0)
   })
 
