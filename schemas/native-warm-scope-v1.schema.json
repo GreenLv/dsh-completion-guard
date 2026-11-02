@@ -1,0 +1,603 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GreenLv/dsh-completion-guard/schemas/native-warm-scope-v1.schema.json",
+  "title": "Warm scope native exact-artifact acceptance",
+  "type": "object",
+  "required": [
+    "schema",
+    "status",
+    "source_commit",
+    "artifact_sha256",
+    "driver_sha256",
+    "platform",
+    "host",
+    "profiles",
+    "cleanup"
+  ],
+  "properties": {
+    "schema": {
+      "const": "dsh-native-warm-scope/v1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed"
+      ]
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "driver_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "platform": {
+      "enum": [
+        "windows",
+        "macos"
+      ]
+    },
+    "host": {
+      "type": "object"
+    },
+    "profiles": {
+      "type": "object"
+    },
+    "cleanup": {
+      "type": "object",
+      "required": [
+        "status",
+        "remaining_ids"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "remaining_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object"
+    },
+    "probe_failure": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "passed"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "failure"
+              ]
+            },
+            {
+              "required": [
+                "probe_failure"
+              ]
+            }
+          ]
+        },
+        "properties": {
+          "host": {
+            "type": "object",
+            "required": [
+              "version",
+              "node_version",
+              "runtime_sha256",
+              "node_sha256"
+            ],
+            "properties": {
+              "version": {
+                "const": "0.2.1-rc.5"
+              },
+              "node_version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "runtime_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "node_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "profiles": {
+            "type": "object",
+            "required": [
+              "web",
+              "headless"
+            ],
+            "properties": {
+              "web": {
+                "$ref": "#/$defs/profile"
+              },
+              "headless": {
+                "$ref": "#/$defs/profile"
+              }
+            },
+            "additionalProperties": false
+          },
+          "cleanup": {
+            "type": "object",
+            "required": [
+              "status",
+              "remaining_ids"
+            ],
+            "properties": {
+              "status": {
+                "const": "passed"
+              },
+              "remaining_ids": {
+                "type": "array",
+                "maxItems": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "failure"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "required": [
+        "pid",
+        "host_lock_digest",
+        "steps"
+      ],
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "host_lock_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "steps": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "resident_pid",
+                "oracle_pid"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "warm"
+                },
+                "status": {
+                  "const": "passed"
+                },
+                "resident_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "oracle_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "effect_count",
+                "audit_before",
+                "audit_after",
+                "lock_status",
+                "lock_reason",
+                "reason_code"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "baseline"
+                },
+                "status": {
+                  "const": "completed"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "audit_before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "audit_after": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "lock_status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "unsupported"
+                  ]
+                },
+                "lock_reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reason_code": {
+                  "const": "action_completed"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "ticket_id",
+                "effect_count"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "redirect_prepared"
+                },
+                "status": {
+                  "const": "passed"
+                },
+                "ticket_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "oracle_pid",
+                "kind"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "redirect_oracle"
+                },
+                "status": {
+                  "const": "passed"
+                },
+                "oracle_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "const": "redirect"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "effect_count",
+                "ticket_id",
+                "reason_code",
+                "audit_before",
+                "audit_after",
+                "lock_status",
+                "lock_reason"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "redirect"
+                },
+                "status": {
+                  "const": "unavailable"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "ticket_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                "reason_code": {
+                  "type": "string"
+                },
+                "audit_before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "audit_after": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "lock_status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "unsupported"
+                  ]
+                },
+                "lock_reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "effect_count",
+                "ticket_id",
+                "reason_code",
+                "audit_before",
+                "audit_after",
+                "lock_status",
+                "lock_reason"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "redirect_restored"
+                },
+                "status": {
+                  "const": "completed"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "ticket_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                "reason_code": {
+                  "const": "action_completed"
+                },
+                "audit_before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "audit_after": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "lock_status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "unsupported"
+                  ]
+                },
+                "lock_reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "ticket_id",
+                "effect_count"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "deny_prepared"
+                },
+                "status": {
+                  "const": "passed"
+                },
+                "ticket_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "oracle_pid",
+                "kind"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "deny_oracle"
+                },
+                "status": {
+                  "const": "passed"
+                },
+                "oracle_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "const": "deny"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "effect_count",
+                "ticket_id",
+                "reason_code",
+                "audit_before",
+                "audit_after",
+                "lock_status",
+                "lock_reason"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "deny"
+                },
+                "status": {
+                  "const": "unavailable"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "ticket_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                "reason_code": {
+                  "type": "string"
+                },
+                "audit_before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "audit_after": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "lock_status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "unsupported"
+                  ]
+                },
+                "lock_reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "stage",
+                "status",
+                "effect_count",
+                "ticket_id",
+                "reason_code",
+                "audit_before",
+                "audit_after",
+                "lock_status",
+                "lock_reason"
+              ],
+              "properties": {
+                "stage": {
+                  "const": "deny_restored"
+                },
+                "status": {
+                  "const": "completed"
+                },
+                "effect_count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "ticket_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                "reason_code": {
+                  "const": "action_completed"
+                },
+                "audit_before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "audit_after": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "lock_status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "unsupported"
+                  ]
+                },
+                "lock_reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          ],
+          "items": false,
+          "minItems": 10,
+          "maxItems": 10
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
