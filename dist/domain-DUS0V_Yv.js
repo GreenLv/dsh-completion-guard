@@ -17429,6 +17429,43 @@ var ParseCache = class {
 };
 
 //#endregion
+//#region src/domain/locator-classification.ts
+const ASCII_SUFFIX = "[A-Za-z0-9]+";
+const SUFFIX_AT_END = new RegExp(`\\.${ASCII_SUFFIX}$`, "u");
+const SUFFIX_BEFORE_CJK = new RegExp(`^(.*?\\.${ASCII_SUFFIX})([\\u3400-\\u9fff].*)$`, "u");
+const FILENAME = new RegExp(`(?<![\\p{L}\\p{N}_.])[\\p{L}\\p{N}_@+~.\\-]+\\.${ASCII_SUFFIX}(?![A-Za-z0-9_.])`, "gu");
+/**
+* Classification-only view of complete locator objects. It preserves UTF-16
+* offsets and newlines; callers retain the original source for authority
+* lexing, stored text, hashes and byte spans. Ambiguous prose stays visible.
+*/
+function maskLocatorObjects(text) {
+	let view = text;
+	const blank = (value) => value.replace(/[^\n]/g, " ");
+	const locator = /^(?:https?:\/\/|codex:\/\/|[A-Za-z]:[\\/]|\\\\|\/|\.{1,2}[\\/]|~\/)/i;
+	const bare = (value) => {
+		if (/[\s[\]()<>]/u.test(value)) return false;
+		const parts = value.split(/[\\/]/u);
+		return SUFFIX_AT_END.test(parts.at(-1) ?? "");
+	};
+	const relativeObject = (value, before, after) => {
+		if (/[\s[\]()<>\u3400-\u9fff]/u.test(value) || !/[\\/]/u.test(value)) return false;
+		return /(?:\b(?:read|open|load|view|inspect|browse|access|use|check|verify|in|from|at|under|within)\s+(?:(?:the|this|a)\s+)?|(?:读取|打开|查看|浏览|访问|路径|目录|位于)\s*|\]\(\s*)$/iu.test(before) || /^\s*中\s*(?:读取|查看|打开|浏览|访问)/u.test(after);
+	};
+	view = view.replace(/"[^"\n]*"|'[^'\n]*'|`[^`\n]*`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』/gu, (value, offset) => {
+		const inner = value.slice(1, -1);
+		if (/\s/u.test(inner)) return value;
+		return locator.test(inner) || bare(inner) || relativeObject(inner, view.slice(0, offset), view.slice(offset + value.length)) ? blank(value) : value;
+	});
+	view = view.replace(/(?<![\p{L}\p{N}_:/\\])(?:https?:\/\/|codex:\/\/|[A-Za-z]:[\\/]|\\\\|\/|\.{1,2}[\\/]|~\/)[^\s,;，；。!?！？'"`<>()[\]]+|(?<![\p{L}\p{N}_:/\\])(?:[\p{L}\p{N}_@.+~-]+[\\/])+[\p{L}\p{N}_@.+~\\/-]+/giu, (value, offset) => {
+		const adjacent = SUFFIX_BEFORE_CJK.exec(value);
+		if (adjacent && (locator.test(adjacent[1]) || bare(adjacent[1]))) return blank(adjacent[1]) + adjacent[2];
+		return locator.test(value) || bare(value) || relativeObject(value, view.slice(0, offset), view.slice(offset + value.length)) ? blank(value) : value;
+	});
+	return view.replace(FILENAME, blank);
+}
+
+//#endregion
 //#region src/domain/manifest.ts
 const COMMAND_SURFACE_MANIFEST = {
 	fileTools: [
@@ -17611,7 +17648,7 @@ const ACCEPTANCE_LEAD = /^(?:验收|验证|确认|确保|核对|检查|verify|co
 */
 function kindOfScope(directive, body = "") {
 	if (directive === "prohibition") return "prohibition";
-	if (directive === "directive" && ACCEPTANCE_LEAD.test(body.trim())) return "acceptance";
+	if (directive === "directive" && ACCEPTANCE_LEAD.test(maskLocatorObjects(body).trim())) return "acceptance";
 	return "requirement";
 }
 /**
@@ -19684,7 +19721,7 @@ function mainClauseTailReport(masked) {
 	return false;
 }
 function classifyPositive(text, preMasked) {
-	const masked = preMasked ?? maskCodeSpans(text);
+	const masked = maskLocatorObjects(preMasked ?? maskCodeSpans(text));
 	if (governedClauseRestrictsExecution(masked)) return "unresolved";
 	if (clauseIsGoverned(masked) && governedReadingOf(masked)?.marker !== void 0) return "informational";
 	if (clauseAsksOwnQuestion(masked)) return "unresolved";
@@ -19733,7 +19770,9 @@ function interpret(scope) {
 		...scope,
 		condition: resumption
 	} : scope;
-	const qualification = qualificationOfClause(scope.text);
+	const originalQualification = qualificationOfClause(scope.text);
+	const locatorQualification = qualificationOfClause(maskLocatorObjects(scope.text));
+	const qualification = originalQualification.status === "granted" && locatorQualification.status === "restricted" ? locatorQualification : originalQualification;
 	const rawDisposition = dispositionOf(conditioned, executee);
 	const authorityDisposition = qualification.status === "restricted" && rawDisposition === "executable_now" ? "unresolved" : rawDisposition;
 	const resumeEvent = scope.directive === "directive" ? resumeEventOf(conditioned) : void 0;
@@ -19847,7 +19886,7 @@ function isOpenObligation(item) {
 * recorded against the action it forbids.
 */
 function semanticActionOfScope(body, source = body, isProhibition = false) {
-	const masked = maskCodeSpans(source);
+	const masked = maskLocatorObjects(maskCodeSpans(source));
 	const negation = isProhibition ? {
 		index: 0,
 		token: ""
@@ -19859,7 +19898,7 @@ function semanticActionOfScope(body, source = body, isProhibition = false) {
 			if (action !== "generic_run") return action;
 		}
 	}
-	return semanticActionFromText(body);
+	return semanticActionFromText(maskLocatorObjects(body));
 }
 /**
 * Split a scope whose action is stated after a resumption clause: "请先测试，
@@ -19896,7 +19935,7 @@ function splitTrailingResumption(scope) {
 * even though the clause stays one top-level item.
 */
 function statefulActionsOfScope(body) {
-	const masked = maskCodeSpans(body);
+	const masked = maskLocatorObjects(maskCodeSpans(body));
 	const found = [];
 	const consider = (at, word) => {
 		const action = semanticActionFromText(word);
@@ -28561,7 +28600,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 		const visible = maskQuotedSpans(clause.body);
 		const place = frontedPlace.exec(visible);
 		const matrix = place ? visible.slice(place[0].length) : visible;
-		if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(matrix)) return void 0;
+		if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(maskLocatorObjects(matrix))) return void 0;
 		return {
 			...clause,
 			interpretation: {
@@ -28610,7 +28649,7 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			"conditional_wait"
 		].includes(clause.interpretation.authorityDisposition)) return void 0;
 		const visible = maskQuotedSpans(clause.body);
-		const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(visible);
+		const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(maskLocatorObjects(visible));
 		const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible) && (clause.paths.length === 1 || /\bread\s+(?:it|the\s+file)\s+back\b/iu.test(visible));
 		if (!fileCheck && !fileRead) return void 0;
 		return {
@@ -29437,7 +29476,7 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 	const approval = /^(?:等|待|收到)[^，,。.!?？]{0,24}(?:确认|审批|批准|许可)[^，,。.!?？]{0,8}(?:后|再)[\s,，]*|^after\s+(?:the\s+)?(?:approval|confirmation|permission)[\s,，]*/iu.exec(visibleSpeech);
 	const preface = approval ?? temporal;
 	const mainSpeech = preface ? visibleSpeech.slice(preface[0].length) : visibleSpeech;
-	const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(mainSpeech);
+	const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(maskLocatorObjects(mainSpeech));
 	if (projection.boundaryProtocol === 6 && segment.kind === "requirement" && segment.interpretation.authorityDisposition !== "informational" && assessmentHead && !segment.interpretation.fingerprint.startsWith("v6-file-readback:")) {
 		item.semanticAction = "verify";
 		item.requestedTarget = { scope: subject };

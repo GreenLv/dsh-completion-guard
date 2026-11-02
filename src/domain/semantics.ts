@@ -1,4 +1,5 @@
 import { ParseCache } from './parse-cache.js'
+import { maskLocatorObjects } from './locator-classification.js'
 import { normalizeClause } from './canonicalize.js'
 import { COMMAND_SURFACE_MANIFEST } from './manifest.js'
 import { isStatefulAction, semanticActionFromText, type StatefulAction } from './protocol-manifest.js'
@@ -129,7 +130,7 @@ const ACCEPTANCE_LEAD = /^(?:验收|验证|确认|确保|核对|检查|verify|co
  */
 export function kindOfScope(directive: DirectiveClass, body = ''): GuardItemKind {
   if (directive === 'prohibition') return 'prohibition'
-  if (directive === 'directive' && ACCEPTANCE_LEAD.test(body.trim())) return 'acceptance'
+  if (directive === 'directive' && ACCEPTANCE_LEAD.test(maskLocatorObjects(body).trim())) return 'acceptance'
   // An unresolved reading keeps its recorded obligation lane: the clause stays
   // visible as a requirement that no rule may execute or auto-close.
   return 'requirement'
@@ -2794,7 +2795,7 @@ function mainClauseTailReport(masked: string): boolean {
 }
 
 function classifyPositive(text: string, preMasked?: string): DirectiveClass {
-  const masked = preMasked ?? maskCodeSpans(text)
+  const masked = maskLocatorObjects(preMasked ?? maskCodeSpans(text))
   // A question head GOVERNS its clause, so the clause is decided HERE, once, from
   // the head that produced it — not re-guessed per fragment after a split. When
   // the clause also carries an action of its own, the reading is UNDECIDED: the
@@ -2924,7 +2925,12 @@ function interpret(scope: SplitScope): ScopeInterpretation {
     ? resumptionConditionOf(scope)
     : undefined
   const conditioned: SplitScope = resumption ? { ...scope, condition: resumption } : scope
-  const qualification = qualificationOfClause(scope.text)
+  const originalQualification = qualificationOfClause(scope.text)
+  const locatorQualification = qualificationOfClause(maskLocatorObjects(scope.text))
+  // The classification view may only restrict an existing grant; it must not
+  // turn an ambiguous or prohibited original reading into new authority.
+  const qualification = originalQualification.status === 'granted' && locatorQualification.status === 'restricted'
+    ? locatorQualification : originalQualification
   const rawDisposition = dispositionOf(conditioned, executee)
   // The STORED qualification and the disposition may never disagree: a scope with
   // no positive evidence for an execution reading is undecided, not executable.
@@ -3059,7 +3065,7 @@ export function isOpenObligation(item: GuardItem): boolean {
  * recorded against the action it forbids.
  */
 export function semanticActionOfScope(body: string, source: string = body, isProhibition = false): ReturnType<typeof semanticActionFromText> {
-  const masked = maskCodeSpans(source)
+  const masked = maskLocatorObjects(maskCodeSpans(source))
   // A prohibition's polarity is already settled by the interpretation, so its
   // verb is read directly even when the ban statement carries no negator (a
   // coordinated split such as "、不发布").
@@ -3080,7 +3086,7 @@ export function semanticActionOfScope(body: string, source: string = body, isPro
   // exactly as it was before 0.5.1. The CJK word scan only covers a verb the
   // command surface does not name (a bare verb left by stripping a negator, or
   // "…才推送" where the verb is the object of the adverb).
-  return semanticActionFromText(body)
+  return semanticActionFromText(maskLocatorObjects(body))
 }
 
 /**
@@ -3113,7 +3119,7 @@ function splitTrailingResumption(scope: SplitScope): SplitScope[] {
  * even though the clause stays one top-level item.
  */
 export function statefulActionsOfScope(body: string): StatefulAction[] {
-  const masked = maskCodeSpans(body)
+  const masked = maskLocatorObjects(maskCodeSpans(body))
   const found: Array<{ at: number; action: StatefulAction }> = []
   const consider = (at: number, word: string) => {
     const action = semanticActionFromText(word)

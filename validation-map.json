@@ -173,6 +173,30 @@
       "peer_gates": {}
     },
     {
+      "id": "locator_classification",
+      "paths": [
+        "src/domain/locator-classification.ts",
+        "src/domain/semantics.ts",
+        "src/domain/derive.ts",
+        "tests/locator-classification.test.ts"
+      ],
+      "gates": [
+        "build",
+        "contract_tests",
+        "focused_tests",
+        "lint",
+        "typecheck"
+      ],
+      "invalidates": [
+        "artifact",
+        "candidate_matrix",
+        "native_artifact",
+        "native_runtime"
+      ],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
       "id": "runtime",
       "paths": [
         "src/**"

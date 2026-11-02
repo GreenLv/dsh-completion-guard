@@ -1,3 +1,4 @@
+import { maskLocatorObjects } from './locator-classification.js'
 import { ownedJobLifecycle } from './job-lifecycle.js'
 import { sha256 } from './canonicalize.js'
 import { confirmRebind, rebindAttemptKey, replayRebindResult, type RebindArgs } from './rebind.js'
@@ -615,7 +616,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
     // a future date or a reported third-party actor cannot become a directive.
     const place = frontedPlace.exec(visible)
     const matrix = place ? visible.slice(place[0].length) : visible
-    if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(matrix)) return undefined
+    if (!/^(?:\s*)(?:(?:再|then|请|本轮)\s*)*(?:(?:在\s+[^，,。.!?？]{1,80}\s+范围内)\s*)?(?:修正|修复|修好|改正|更正|纠正|修改|编辑|更新|完成\s*(?:修复|补丁)|fix\b|correct\b|repair\b|modify\b|edit\b|update\b)/iu.test(maskLocatorObjects(matrix))) return undefined
     return { ...clause, interpretation: { ...clause.interpretation, directive: 'directive',
       executee: 'agent', authorityDisposition: 'executable_now', immediatelyExecutable: true,
       qualification: { status: 'granted', reason: 'plain_instruction' }, fingerprint: `${clause.paths.length ? 'v6-artifact-edit' : 'v6-work-unit-edit'}:${sha256(clause.text)}` } }
@@ -632,7 +633,7 @@ function segmentsForBoundary(text: string, coordinationSplit: boolean, v6: boole
   const asFileReadback = (clause: ClauseSegment): ClauseSegment | undefined => {
     if (['informational', 'prohibition', 'conditional_wait'].includes(clause.interpretation.authorityDisposition)) return undefined
     const visible = maskQuotedSpans(clause.body)
-    const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(visible)
+    const fileCheck = /^(?:\s*)(?:检查|核对|校验|check\b|verify\b)\s*(?:改动后的?|修改后的?|changed\s+)?(?:文件|file\b)/iu.test(maskLocatorObjects(visible))
     const fileRead = /^\s*(?:(?:and|then)\s+)?read\s+[^,，。!?？]+?\s+back\b/iu.test(visible)
       && (clause.paths.length === 1 || /\bread\s+(?:it|the\s+file)\s+back\b/iu.test(visible))
     if (!fileCheck && !fileRead) return undefined
@@ -1504,7 +1505,7 @@ function insert(
   const approval = /^(?:等|待|收到)[^，,。.!?？]{0,24}(?:确认|审批|批准|许可)[^，,。.!?？]{0,8}(?:后|再)[\s,，]*|^after\s+(?:the\s+)?(?:approval|confirmation|permission)[\s,，]*/iu.exec(visibleSpeech)
   const preface = approval ?? temporal
   const mainSpeech = preface ? visibleSpeech.slice(preface[0].length) : visibleSpeech
-  const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(mainSpeech)
+  const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(maskLocatorObjects(mainSpeech))
   if (projection.boundaryProtocol === 6 && segment.kind === 'requirement'
     && segment.interpretation.authorityDisposition !== 'informational'
     && assessmentHead && !segment.interpretation.fingerprint.startsWith('v6-file-readback:')) {

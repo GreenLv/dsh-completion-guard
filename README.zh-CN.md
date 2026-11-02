@@ -41,6 +41,8 @@ dsh plugin --profile web add dsh-completion-guard@0.12.0
 
 照常让 DSH 改文件、跑测试即可。DSH 执行工具，Guard 保存要求，并核对已记录的结果和必要的回读。例如，“修改配置并让测试通过”需要修改后的文件证据和通过的测试结果，助手说“已完成”还不够。`context_guard_prepare` 说明缺什么证据，`context_guard_checkpoint` 检查能否认证完成。
 
+相比 0.11，Guard 还会区分完整且无歧义的文件名、路径与验证要求：例如 `verify.pdf` 本身不会生成验证项；文件名旁的真实指令仍会保留。
+
 默认策略仍是 `standard`。自动参与保护不会增加修改、执行或发布权限，也不会自动签发完成证书。
 
 ## 模式和常用命令

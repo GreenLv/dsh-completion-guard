@@ -41,6 +41,8 @@ An **old session** keeps its verified pre-upgrade mode, including an empty old s
 
 Ask DSH to edit a file or run a test as usual. DSH executes the tools; Guard records the request and checks the saved result and any required readback. For example, “edit the configuration and make the tests pass” needs evidence of the changed file and a passing test, not just the assistant saying it is done. `context_guard_prepare` explains missing evidence; `context_guard_checkpoint` checks completion.
 
+Compared with 0.11, Guard also distinguishes complete, unambiguous file names and paths from verification requests: a name such as `verify.pdf` does not by itself create a verification check. Actual instructions beside the name still count.
+
 The default policy is still `standard`. Automatic protection grants no extra editing, execution or publication permission, and does not issue a certificate automatically.
 
 ## Mode and everyday commands
