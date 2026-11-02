@@ -368,43 +368,56 @@ function resolveNpmCli(): string {
 }
 
 describe('tgz identity: offline npm/pacote oracle', () => {
-  it('agrees with pacote on every accepted sample', async () => {
+  const samples: Array<[string, Buffer]> = [
+    ['canonical.tgz', canonicalTar('oracle-canonical', '3.1.4', { gitHead: 'b'.repeat(40) })],
+    ['alias.tgz', Buffer.concat([
+      entry({ name: 'package/./package.json', body: manifestBody('oracle-alias', '2.0.0') }),
+      entry({ name: './package/dist//main.js', body: Buffer.from('m\n') }),
+      Buffer.alloc(1024),
+    ])],
+    ['prefixed.tgz', Buffer.concat([
+      entry({ name: 'package.json', prefix: 'package', body: manifestBody('oracle-prefixed', '5.0.1') }),
+      entry({ name: 'deep/main.js', prefix: 'package', body: Buffer.from('p\n') }),
+      Buffer.alloc(1024),
+    ])],
+    ['long-name.tgz', Buffer.concat([
+      entry({ name: 'package/package.json', body: manifestBody('oracle-long', '1.2.3') }),
+      entry({ name: 'a'.repeat(60), prefix: 'package/' + 'd'.repeat(30), body: Buffer.from('l\n') }),
+      Buffer.alloc(1024),
+    ])],
+  ]
+  function oracle() {
+    const npmRequire = createRequire(resolveNpmCli())
+    return {
+      pacote: npmRequire('pacote') as {
+        manifest: (spec: string, options: Record<string, unknown>) => Promise<{ name?: string; version?: string }>
+      },
+      version: (npmRequire('pacote/package.json') as { version: string }).version,
+    }
+  }
+
+  // Each filesystem-heavy oracle vector owns the normal test deadline. Do not
+  // aggregate several npm cache extractions into one Windows wall-clock budget.
+  it.each(samples)('agrees with pacote on accepted sample %s', async (file, tar) => {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-tgz-oracle-'))
     try {
-      const npmCli = resolveNpmCli()
-      const npmRequire = createRequire(npmCli)
-      const pacote = npmRequire('pacote') as {
-        manifest: (spec: string, options: Record<string, unknown>) => Promise<{ name?: string; version?: string }>
-      }
-      const pacoteVersion = npmRequire('pacote/package.json') as { version: string }
+      const { pacote, version } = oracle()
       const cache = join(dir, 'npm-cache')
-      const samples: Array<[string, Buffer]> = [
-        ['canonical.tgz', canonicalTar('oracle-canonical', '3.1.4', { gitHead: 'b'.repeat(40) })],
-        ['alias.tgz', Buffer.concat([
-          entry({ name: 'package/./package.json', body: manifestBody('oracle-alias', '2.0.0') }),
-          entry({ name: './package/dist//main.js', body: Buffer.from('m\n') }),
-          Buffer.alloc(1024),
-        ])],
-        ['prefixed.tgz', Buffer.concat([
-          entry({ name: 'package.json', prefix: 'package', body: manifestBody('oracle-prefixed', '5.0.1') }),
-          entry({ name: 'deep/main.js', prefix: 'package', body: Buffer.from('p\n') }),
-          Buffer.alloc(1024),
-        ])],
-        ['long-name.tgz', Buffer.concat([
-          entry({ name: 'package/package.json', body: manifestBody('oracle-long', '1.2.3') }),
-          entry({ name: 'a'.repeat(60), prefix: 'package/' + 'd'.repeat(30), body: Buffer.from('l\n') }),
-          Buffer.alloc(1024),
-        ])],
-      ]
-      for (const [file, tar] of samples) {
-        const path = await writeTgz(dir, file, tar)
-        const result = await readTgzIdentity(path)
-        expect(result.status, `${file}: Guard rejected a canonical-shaped sample`).toBe('ok')
-        if (result.status !== 'ok') continue
-        const npmManifest = await pacote.manifest(path, { cache, offline: true, ignoreScripts: true, fullMetadata: false })
-        expect(`${result.identity.name}@${result.identity.version}`, `${file} vs pacote ${pacoteVersion.version}`)
-          .toBe(`${npmManifest.name}@${npmManifest.version}`)
-      }
+      const path = await writeTgz(dir, file, tar)
+      const result = await readTgzIdentity(path)
+      expect(result.status, `${file}: Guard rejected a canonical-shaped sample`).toBe('ok')
+      if (result.status !== 'ok') return
+      const npmManifest = await pacote.manifest(path, { cache, offline: true, ignoreScripts: true, fullMetadata: false })
+      expect(`${result.identity.name}@${result.identity.version}`, `${file} vs pacote ${version}`)
+        .toBe(`${npmManifest.name}@${npmManifest.version}`)
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it('refuses the ambiguous archive even though npm accepts its other identity', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-tgz-oracle-'))
+    try {
+      const { pacote } = oracle()
+      const cache = join(dir, 'npm-cache')
       // The review counterexample stays rejected even though npm reads it:
       // that divergence is exactly why the archive must be refused.
       const counterexample = await writeTgz(dir, 'ambiguous.tgz', ambiguousCounterexampleTar())
