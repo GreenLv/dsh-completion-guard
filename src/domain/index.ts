@@ -44,3 +44,5 @@ export * from './activation-migration.js'
 export * from './private-storage-guard.js'
 
 export * from './activation-selection.js'
+
+export * from './activation-physical-inventory.js'

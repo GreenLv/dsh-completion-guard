@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import * as nodeFs from "node:fs";
-import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import * as path from "node:path";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from "node:path";
 import { homedir, hostname, tmpdir } from "node:os";
@@ -15643,7 +15643,7 @@ function desktopDistributionSupplement(identity) {
 
 //#endregion
 //#region src/domain/host-desktop.ts
-const { closeSync: closeSync$1, existsSync: existsSync$2, fstatSync: fstatSync$1, lstatSync: lstatSync$2, mkdirSync: mkdirSync$1, openSync: openSync$1, readFileSync: readFileSync$2, readSync, realpathSync: realpathSync$2, writeFileSync: writeFileSync$2 } = physicalFs;
+const { closeSync: closeSync$1, existsSync: existsSync$2, fstatSync: fstatSync$1, lstatSync: lstatSync$2, mkdirSync: mkdirSync$1, openSync: openSync$1, readFileSync: readFileSync$2, readSync: readSync$1, realpathSync: realpathSync$2, writeFileSync: writeFileSync$2 } = physicalFs;
 /**
 * Official Desktop adapter (CG-RC2-002).
 *
@@ -15695,14 +15695,14 @@ function readAsarIndex(archivePath) {
 	try {
 		const stat = fstatSync$1(fd);
 		if (!stat.isFile() || stat.size < 16) throw new HostProfileError("desktop_app_invalid", "asar archive is too small");
-		if (readSync(fd, header, 0, 16, 0) !== 16) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
+		if (readSync$1(fd, header, 0, 16, 0) !== 16) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
 		const magic = header.readUInt32LE(0);
 		const headerSize = header.readUInt32LE(4);
 		const innerPayloadSize = header.readUInt32LE(8);
 		const jsonSize = header.readUInt32LE(12);
 		if (magic !== 4 || headerSize < jsonSize + 8 || innerPayloadSize !== headerSize - 4 || jsonSize <= 0 || jsonSize > MAX_ASAR_HEADER_BYTES) throw new HostProfileError("desktop_app_invalid", "asar header is malformed");
 		const json$1 = Buffer.alloc(jsonSize);
-		if (readSync(fd, json$1, 0, jsonSize, 16) !== jsonSize) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
+		if (readSync$1(fd, json$1, 0, jsonSize, 16) !== jsonSize) throw new HostProfileError("desktop_app_invalid", "asar header is truncated");
 		let root;
 		try {
 			root = JSON.parse(json$1.toString("utf8"));
@@ -15765,7 +15765,7 @@ function readAsarFile(archivePath, index$1, entryPath) {
 		try {
 			if (fstatSync$1(fd$1).size !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file size mismatch");
 			const bytes$1 = Buffer.alloc(size);
-			if (size && readSync(fd$1, bytes$1, 0, size, 0) !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file truncated");
+			if (size && readSync$1(fd$1, bytes$1, 0, size, 0) !== size) throw new HostProfileError("desktop_app_invalid", "unpacked file truncated");
 			return verify(bytes$1);
 		} finally {
 			closeSync$1(fd$1);
@@ -15776,7 +15776,7 @@ function readAsarFile(archivePath, index$1, entryPath) {
 	const fd = openSync$1(archivePath, "r");
 	try {
 		if (!Number.isSafeInteger(start) || start < index$1.dataOffset || start + size > fstatSync$1(fd).size) throw new HostProfileError("desktop_app_invalid", "asar file offset escapes the archive");
-		if (size > 0 && readSync(fd, buffer, 0, size, start) !== size) throw new HostProfileError("desktop_app_invalid", `asar entry is truncated: ${entryPath}`);
+		if (size > 0 && readSync$1(fd, buffer, 0, size, start) !== size) throw new HostProfileError("desktop_app_invalid", `asar entry is truncated: ${entryPath}`);
 	} finally {
 		closeSync$1(fd);
 	}
@@ -35510,7 +35510,7 @@ async function scanActivationInventory(persistence, isFormatUnsupported) {
 }
 function validateActivationInventorySnapshot(value) {
 	const snapshot = value;
-	if (!snapshot || !keys(snapshot, "rows,schema,sha256") || snapshot.schema !== "dsh-activation-inventory/v1" || !Array.isArray(snapshot.rows) || !hex(snapshot.sha256)) throw new Error("activation_inventory_snapshot_invalid");
+	if (!snapshot || !(keys(snapshot, "rows,schema,sha256") || keys(snapshot, "physicalSha256,rows,schema,sha256")) || snapshot.physicalSha256 !== void 0 && !hex(snapshot.physicalSha256) || snapshot.schema !== "dsh-activation-inventory/v1" || !Array.isArray(snapshot.rows) || !hex(snapshot.sha256)) throw new Error("activation_inventory_snapshot_invalid");
 	const ids = /* @__PURE__ */ new Set();
 	for (const row$3 of snapshot.rows) {
 		if (!row$3 || typeof row$3.id !== "string" || !row$3.id || ids.has(row$3.id) || !hex(row$3.headerSha256) || !hex(row$3.revisionSha256)) throw new Error("activation_inventory_snapshot_invalid");
@@ -35525,6 +35525,20 @@ function validateActivationInventorySnapshot(value) {
 	const { sha256: sha256$1,...unsigned } = snapshot;
 	if (activationDigest(unsigned) !== sha256$1) throw new Error("activation_inventory_snapshot_invalid");
 	return snapshot;
+}
+/** Bind an SDK snapshot to an independently established physical census. */
+function bindActivationInventoryPhysical(snapshotValue, physicalSha256) {
+	const snapshot = validateActivationInventorySnapshot(snapshotValue);
+	if (snapshot.physicalSha256 !== void 0 || !hex(physicalSha256)) throw new Error("activation_inventory_snapshot_invalid");
+	const unsigned = {
+		schema: snapshot.schema,
+		rows: snapshot.rows,
+		physicalSha256
+	};
+	return {
+		...unsigned,
+		sha256: activationDigest(unsigned)
+	};
 }
 function validateActivationSelection(value) {
 	const selection = value;
@@ -35592,4 +35606,165 @@ function verifySelectedMigrationInventory(receipt, snapshot, selection) {
 }
 
 //#endregion
-export { NATIVE_GIT_ROOT_PARENT_OID as $, createHostAuditSession as $a, hostTrustDigest as $i, parseConfirmationMessage as $n, namedActions as $r, openItems as $t, lifecyclePhase as A, satisfiesSupportedHostRange as Aa, prepareDesktopHostTrust as Ai, goalCompletionDenial as An, releaseCoverage as Ao, clarifiedSpanOf as Ar, proofDigest as At, snapshotSessionEvents as B, SUPPORTED_EVIDENCE_ADAPTERS as Ba, DESKTOP_RUNTIME_PACKAGE_NAME as Bi, isCurrentAcceptedBoundary as Bn, privateStorageToolDenial as Bo, interpretMessage as Br, validateProofManifest as Bt, parseGitCommandManifest as C, LATEST_TESTED_HOST_VERSION as Ca, hostLockRowsFromComposedDump as Ci, isWholeTaskCompletionClaim as Cn, RELEASE_OPERATIONS as Co, canonicalRegistryBase as Cr, PROOF_PROTOCOL_VERSION_V2 as Ct, claimedBatchHasRealRootInput as D, compareHostVersions as Da, packageRowsFromActiveGraph as Di, progressFingerprint as Dn, normalizeReleaseContract as Do, GRANTED_QUALIFICATION as Dr, createProofManifest as Dt, FIRST_STEP_GUIDANCE as E, SUPPORTED_HOST_VERSIONS as Ea, inspectTargetHostGraph as Ei, observeAssistantOutcome as En, inFlightReservation as Eo, classifyUserInteraction as Er, canonicalProjection as Et, captureHostWorkdir as F, CERTIFICATE_VERSION_V2 as Fa, resolveInstalledHostLock as Fi, needsReviewObligations as Fn, normalizeClause as Fo, governedClauseRestrictsExecution as Fr, proofV2Rejection as Ft, PROTOCOL_V4_NOTICE as G, requestedTargetAuthorizesMutation as Ga, readAsarFile as Gi, proposeRebind as Gn, isOpenObligation as Gr, DEFAULT_RECOVERY_CHAR_BUDGET as Gt, CAPTURE_V042_NOTICE as H, boundedArtifactChoiceMatches as Ha, hasDesktopImporterState as Hi, currentContractDigest as Hn, isExecutableItem as Hr, CLEANUP_CONDITION_RULE as Ht, sourcedNamedTestRoot as I, SEMANTIC_ACTIONS as Ia, revalidateDesktopCoreLock as Ii, unitDescendantIds as In, sanitizeClauseText as Io, hasOrderedCoordination as Ir, requiredSubjectsOf as It, applyUpgradeEligibility as J, semanticActionFromText as Ja, readDesktopDependency as Ji, rebindAttemptKey as Jn, itemHoldsExecutionAuthority as Jr, V6_ORDINARY_COMPLETION_RULE_COMPACT as Jt, PROTOCOL_V5_NOTICE as K, requestedTargetMatchesResolved as Ka, readAsarIndex as Ki, proposeRebindOutcome as Kn, isQuestionScopeNeedingReview as Kr, MIN_RECOVERY_CHAR_BUDGET as Kt, SESSION_API_UNSUPPORTED as L, STATEFUL_ACTIONS as La, verifyComposedHostLockDump as Li, BOUNDARY_RECORD_PREFIX as Ln, sanitizeUrl as Lo, hasQuestionScope as Lr, scopeCoverageDigest as Lt, projectSessionCoreV2 as M, ACTION_MANIFEST_VERSION as Ma, readActiveHostGraph as Mi, ancestorConstraintForBinding as Mn, reservationFor as Mo, clauseIsGoverned as Mr, proofEvidenceConstraints as Mt, sessionCoreSnapshot as N, BOUNDED_ARTIFACT_TYPES as Na, resolveActiveProfileHostLock as Ni, certifiableOpenItems as Nn, canonicalizePath as No, clauseIsProtected as Nr, proofHostSurfacesOf as Nt, firstStepGuidance as O, evaluateMinimumHostVersion as Oa, packageRowsFromPnpmLock as Oi, testOutcomePredicate as On, readbackSettlesContract as Oo, LEGACY_QUALIFICATION as Or, createProofManifestV2 as Ot, HOST_WORKDIR_PREFIX as P, CERTIFICATE_VERSION as Pa, resolveDesktopProfileHostLock as Pi, certificateClosure as Pn, digestStrings as Po, explanationHasActionResidue as Pr, proofOperationMatches as Pt, supersedeItem as Q, RC021_RC3_HOST_PACKAGES as Qa, acquireHostTrust as Qi, isFrozenV042RebindResponse as Qn, maskQuotedSpans as Qr, closingHint as Qt, SESSION_EVENT_ENVELOPE_INVALID as R, STOP_PROTOCOL_VERSION as Ra, DESKTOP_IDENTITY_FACTS as Ri, availableBoundaryQualifications as Rn, sha256 as Ro, hasWorkPredicate as Rr, sessionQuery as Rt, gitCommandMatchesTarget as S, HOST_VALIDATED_VERSIONS as Sa, hostLockContextFromComposedDump as Si, isRootPauseRequest as Sn, resolvePrivateLedgerRoot as So, segmentClauses as Sr, PROOF_PROTOCOL_VERSION as St, verifiedLinearCommitReadback as T, SUPPORTED_HOST_RANGE as Ta, inspectDesktopTargetGraph as Ti, latestRootInstruction as Tn, contractById as To, classifyTaskIntent as Tr, bindProofV2ToProjection as Tt, DEFAULT_DELEGATION_TOOL_NAMES as U, isStatefulAction as Ua, memoizedAsarFile as Ui, createProjection as Un, isExplanationScope as Ur, CLEANUP_CONDITION_RULE_COMPACT as Ut, projectCoreV2 as V, actionCompatible as Va, auditDesktopInstalledImplementation as Vi, qualifyBoundary as Vn, ownedJobLifecycle as Vo, introducesActionClause as Vr, validateProofManifestV2 as Vt, PROTOCOL_V3_NOTICE as W, requestedIdentityKey as Wa, memoizedAsarIndex as Wi, confirmRebind as Wn, isInformationalFragment as Wr, CLEANUP_CONDITION_RULE_SHORT as Wt, legacyRecordsNeedingReview as X, validateActionTarget as Xa, writeDesktopRuntimeReceipt as Xi, replayRebindResult as Xn, legacyQuestionReadingIsInformational as Xr, carriesCleanupCondition as Xt, deriveProjection as Y, validateActionManifest as Ya, readDesktopTargetGraph as Yi, rebindResponse as Yn, kindOfScope as Yr, V6_ORDINARY_COMPLETION_RULE_SHORT as Yt, rootLocatorFlavor as Z, RC021_RC5_HOST_PACKAGES as Za, HostTrustError as Zi, CONFIRM_LINE_PATTERN as Zn, maskCodeSpans as Zr, cleanupConditionFor as Zt, GIT_COMMAND_TEMPLATES as _, evaluateHostCapability as _a, auditedForegroundRenderers as _i, classifyCompletionClaim as _n, hasPrivateRestartIntent as _o, environmentDefaultRepositoryTarget as _r, certifyCheckpoint as _t, scanActivationInventory as a, ACTIVE_HOST_COHORT_IDS as aa, reportingHeadGoverns as ai, currentV6Feedback as an, readActivationMigrationReceipt as ao, relevantEvidence as ar, persistedToolResultStatus as at, createGitPrestateEnvelope as b, hostVersionFromPackages as ba, evaluateActiveHostLock as bi, decideTurnStopping as bn, privateLedgerTargetDigest as bo, extractOperation as br, PROOF_KINDS_V2 as bt, validateActivationSelection as c, DEFAULT_HOST_LOCK as ca, splitTextFragments as ci, bindingSatisfies as cn, validateActivationMigrationReceipt as co, admissibleForRemoval as cr, canonicalArgvFromCommand as ct, prepareActivationMigration as d, HOST_CAPABILITY_PACKAGE_GROUPS as da, COMMAND_SURFACE_MANIFEST as di, isVerifyingCapability as dn, activationDigest as do, partialFailureOf as dr, parseShellCommand as dt, parseHostTrust as ea, opensConditionLead as ei, recoveryDigest as en, __activationBindingInternals as eo, capabilityRemedyPhrase as er, evidenceFromPersistedToolResult as et, verifyMigrationInventory as f, HOST_COHORTS as fa, validateManifest as fi, CONTROL_RECORD_PREFIX as fn, activationJson as fo, removalIsComplete as fr, cwdEpochsFromEvents as ft, GIT_COMMAND_MANIFEST_IDS as g, evaluateGraphDerivedHostLock as ga, auditedDefaultWorkdirProvider as gi, assessmentOutcomePredicate as gn, applyPrivateLedger as go, classifyClause as gr, bindingIndividuallyAccepted as gt, RC020_RC1_HOST_PACKAGES as h, evaluateExternalWaitCapability as ha, auditedDefaultWorkdirHost as hi, assessmentAction as hn, appendPrivateLedger as ho, captureItem as hr, segmentAuthorityBlocks as ht, prepareSelectedActivationMigration as i, ACTIVE_HOST_COHORT_ID as ia, questionHeadsClause as ii, confirmedV6CoreDiagnostic as in, readActivationBinding as io, nativeFileTwoRole as ir, nativeGitParentOidVerified as it, previewFirstStepInjection as j, ACTION_MANIFEST as ja, prepareTargetHostTrust as ji, hasCurrentCertificate as jn, releasePreEffectDecision as jo, clauseAsksOwnQuestion as jr, proofDigestV2 as jt, firstStepGuidanceV6 as k, parseHostVersion as ka, prepareActiveHostTrust as ki, v6TestPredicate as kn, releaseContractFor as ko, actionVerbMatches as kr, proofCapabilityReport as kt, verifySelectedMigrationInventory as l, EXPECTED_HOST_PACKAGES as la, statefulActionsOfScope as li, evidenceCoverage as ln, writeActivationBinding as lo, capabilityConsequence as lr, isRunExecutable as lt, RC020_RC2_HOST_PACKAGES as m, bindLiveGoalCapability as ma, activeRendererModule as mi, NO_PROGRESS_TURNS_BEFORE_STOP as mn, validateActivationBinding as mo, captureClause as mr, authorityCaptureCounts as mt, createActivationSelection as n, registryArchiveFiles as na, presentExplanationHead as ni, renderRecoveryPacket as nn, adoptActivationReceipt as no, evidenceAvailabilityReason as nr, extractToolSubject as nt, selectedActivationInventory as o, ACTIVE_HOST_LAUNCHER_VERSION as oa, restatedContentOf as oi, isV6PendingRootWait as on, resolveActivationBindingsRoot as oo, DEPENDENCY_FREE_ONLY_CONDITION as or, shellReadbackOutcome as ot, RC021_RC2_HOST_PACKAGES as p, bindExecutableIdentity as pa, HostProfileError as pi, NO_PROGRESS_RECORD_PREFIX as pn, sessionBirthIdentity as po, removalIsPartiallyKnown as pr, effectiveCwdAt as pt, PROTOCOL_V6_NOTICE as q, semanticActionFromCommand as qa, readDesktopAppRuntime as qi, proposeRebindV042 as qn, isRestatement as qr, V6_ORDINARY_COMPLETION_RULE as qt, isSelectedActivationReceipt as r, registryArchiveModules as ra, qualificationOfClause as ri, v6CurrentRootBoundaries as rn, createActivationMigrationReceipt as ro, itemDiagnosis as rr, isDeterministicCheck as rt, validateActivationInventorySnapshot as s, BASE_HOST_PACKAGES as sa, semanticActionOfScope as si, sourceItemForCoreRequirement as sn, resolveSessionActivation as so, actionHasCertificationPath as sr, withDurability as st, activationSelectionPending as t, qualifyHostTrust as ta, opensWithDirective as ti, recoveryTitle as tn, activationBindingPath as to, deriveItemDiagnosis as tr, extractTextContent as tt, inspectActivationInventory as u, GOAL_HOST_PACKAGES as ua, verbIsNegated as ui, evidenceMatchesItem as un, activationCanonical as uo, capabilityFactOf as ur, parsePwshCommand as ut, commitIndexSnapshotDigest as v, evaluateHostLock as va, auditedHostImplementation as vi, currentActionBases as vn, initializePrivateLedger as vo, extractArtifactPaths as vr, PROOF_CAPABILITY_MATRIX as vt, revalidateGitPrestate as w, MIN_SUPPORTED_HOST_VERSION as wa, injectActiveProfileHostLock as wi, latestAssistantText as wn, RELEASE_OPERATION_SURFACES as wo, npmEscapedPackageName as wr, bindProofToProjection as wt, executeRevalidatedGitEffect as x, selectHostCohort as xa, evaluateConfiguredHostLock as xi, decisionBoundaryKey as xn, readPrivateLedger as xo, isInformationalMessage as xr, PROOF_MANIFEST_DOMAIN_V2 as xt, commitTreeSnapshotDigest as y, evaluateToolSurfaceCapability as ya, combineHostPolicy as yi, decideTurnBoundary as yn, privateLedgerContractDigest as yo, extractMethod as yr, PROOF_KINDS as yt, SessionApiError as z, STOP_PROTOCOL_VERSION_V2 as za, DESKTOP_PROFILE_PACKAGE_NAME as zi, effectuateBoundary as zn, stripUrlCredentials as zo, interpretClause as zr, sessionQueryV2 as zt };
+//#region src/domain/activation-physical-inventory.ts
+function stamp(path$1, kind, requireIdentity = true) {
+	const stat = lstatSync(path$1, { bigint: true });
+	if (requireIdentity && stat.ino === 0n) throw new Error("activation_inventory_identity_unavailable");
+	if (stat.isSymbolicLink() || (kind === "directory" ? !stat.isDirectory() : !stat.isFile()) || kind === "file" && stat.nlink !== 1n) throw new Error("activation_inventory_unsupported");
+	return {
+		dev: String(stat.dev),
+		ino: String(stat.ino),
+		size: String(stat.size),
+		mtimeNs: String(stat.mtimeNs),
+		ctimeNs: String(stat.ctimeNs),
+		mode: String(stat.mode),
+		nlink: String(stat.nlink)
+	};
+}
+function fileDigest(path$1, expected) {
+	const fd = openSync(path$1, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW));
+	try {
+		const stat = fstatSync(fd, { bigint: true });
+		if (!stat.isFile() || String(stat.dev) !== expected.dev || String(stat.ino) !== expected.ino || stat.nlink !== 1n) throw new Error("activation_inventory_changed");
+		const hash$4 = createHash("sha256"), buffer = Buffer.allocUnsafe(1024 * 1024);
+		for (;;) {
+			const length = readSync(fd, buffer, 0, buffer.length, null);
+			if (length === 0) break;
+			hash$4.update(buffer.subarray(0, length));
+		}
+		if (activationDigest(stamp(path$1, "file")) !== activationDigest(expected)) throw new Error("activation_inventory_changed");
+		return hash$4.digest("hex");
+	} finally {
+		closeSync(fd);
+	}
+}
+function pathSegment(id) {
+	if (!id) throw new Error("activation_inventory_invalid");
+	if (id === "." || id === "..") return [...id].map(() => "~002E").join("");
+	let out = "";
+	for (let i$1 = 0; i$1 < id.length; i$1++) {
+		const c = id[i$1];
+		out += /^[A-Za-z0-9._-]$/u.test(c) ? c : `~${id.charCodeAt(i$1).toString(16).toUpperCase().padStart(4, "0")}`;
+	}
+	return out;
+}
+/** Bound to the actual root, encoding and independently identified backend.
+* Unknown layouts and links fail closed; all generations are fingerprinted. */
+function captureActivationPhysicalInventory(root, compression, backendSha256) {
+	if (!["none", "zstd"].includes(compression) || !/^[a-f0-9]{64}$/u.test(backendSha256)) throw new Error("activation_inventory_unsupported");
+	const absolute = resolve(root);
+	let parent = absolute;
+	while (true) {
+		stamp(parent, "directory", parent === absolute);
+		const next = dirname(parent);
+		if (next === parent) break;
+		parent = next;
+	}
+	if (realpathSync(absolute) !== absolute) throw new Error("activation_inventory_unsupported");
+	const records = [];
+	const sessionSegments = [];
+	function directory(path$1, relative$1) {
+		const before = stamp(path$1, "directory");
+		const entries = readdirSync(path$1).sort();
+		if (entries.length > 1e5 || records.length > 2e5) throw new Error("activation_inventory_unsupported");
+		records.push({
+			path: relative$1,
+			kind: "directory",
+			stamp: before
+		});
+		const after = stamp(path$1, "directory");
+		if (activationDigest(before) !== activationDigest(after)) throw new Error("activation_inventory_changed");
+		return entries;
+	}
+	const projects = directory(absolute, ".");
+	for (const project of projects) {
+		const projectPath = join(absolute, project);
+		for (const session of directory(projectPath, project)) {
+			const sessionPath = join(projectPath, session);
+			const entries = directory(sessionPath, `${project}/${session}`);
+			let generations = 0;
+			for (const name of entries) {
+				const path$1 = join(sessionPath, name);
+				const metadata$1 = stamp(path$1, "file");
+				if (name === "session.lock") {
+					records.push({
+						path: `${project}/${session}/${name}`,
+						kind: "lock",
+						stamp: metadata$1
+					});
+					continue;
+				}
+				const match = /^session(?:\.v([1-9][0-9]*))?\.jsonl(\.zstd)?$/u.exec(name);
+				if (!match || (match[2] ? "zstd" : "none") !== compression || match[1] && (!Number.isSafeInteger(Number(match[1])) || Number(match[1]) > 4)) throw new Error("activation_inventory_unsupported");
+				generations++;
+				records.push({
+					path: `${project}/${session}/${name}`,
+					kind: "generation",
+					stamp: metadata$1,
+					contentSha256: fileDigest(path$1, metadata$1)
+				});
+			}
+			if (!generations) throw new Error("activation_inventory_incomplete");
+			if (generations !== 1) throw new Error("activation_inventory_unsupported");
+			sessionSegments.push(session);
+		}
+	}
+	if (new Set(sessionSegments).size !== sessionSegments.length) throw new Error("activation_inventory_incomplete");
+	for (const row$3 of records) if (activationDigest(stamp(row$3.path === "." ? absolute : join(absolute, row$3.path), row$3.kind === "directory" ? "directory" : "file")) !== activationDigest(row$3.stamp)) throw new Error("activation_inventory_changed");
+	return {
+		sha256: activationDigest({
+			schema: "dsh-activation-physical-inventory/v1",
+			root: absolute,
+			compression,
+			backendSha256,
+			records
+		}),
+		sessionSegments: sessionSegments.sort()
+	};
+}
+function assertActivationPhysicalRows(physical$1, rows) {
+	const expected = rows.map((row$3) => {
+		const id = row$3.header?.id;
+		if (typeof id !== "string") throw new Error("activation_inventory_invalid");
+		return pathSegment(id);
+	}).sort();
+	if (expected.length !== physical$1.sessionSegments.length || new Set(expected).size !== expected.length || expected.some((value, index$1) => value !== physical$1.sessionSegments[index$1])) throw new Error("activation_inventory_incomplete");
+}
+/** Wrap the SDK seam without treating the seam itself as a physical census. */
+function guardActivationInventory(persistence, capture) {
+	const initial = capture();
+	const check = () => {
+		const current = capture();
+		if (current.sha256 !== initial.sha256) throw new Error("activation_inventory_changed");
+		return current;
+	};
+	const list$1 = async () => {
+		const before = check(), rows = await persistence.list(), after = check();
+		if (before.sha256 !== after.sha256) throw new Error("activation_inventory_changed");
+		assertActivationPhysicalRows(after, rows);
+		return rows;
+	};
+	return {
+		initial,
+		check,
+		list: list$1
+	};
+}
+/** Resolve the two official plugin export forms without trusting their shape. */
+function resolveActivationPersistencePlugin(module) {
+	const plugin = module.default ?? module;
+	if (typeof plugin !== "function" && (!plugin || typeof plugin !== "object" || typeof plugin.apply !== "function")) throw new Error("activation_backend_module_invalid");
+	return plugin;
+}
+/** Qualify the JSONL implementation by its reviewed module bytes and loader
+* shape; the release version itself is recorded, not an allowlist. */
+function assertActivationBackendIdentity(manifestValue, actualModules, reviewedModules) {
+	const manifest = manifestValue;
+	const entry = manifest?.exports?.["."];
+	if (manifest?.name !== "@deepseek-ai/dsh-session-persistence-jsonl" || typeof manifest.version !== "string" || !satisfiesSupportedHostRange(manifest.version) || manifest.type !== "module" || manifest.main !== "lib/index.js" || manifest.imports !== void 0 || !entry || typeof entry !== "object" || Array.isArray(entry) || entry.default !== "./lib/index.js" || Object.keys(entry).some((key) => key !== "types" && key !== "default") || entry.types !== void 0 && entry.types !== "./lib/types/index.d.ts") throw new Error("activation_backend_unreviewed");
+	const reviewed = Object.fromEntries(Object.entries(reviewedModules).filter(([name]) => name !== "package.json"));
+	if (activationDigest(actualModules) !== activationDigest(reviewed)) throw new Error("activation_backend_unreviewed");
+}
+
+//#endregion
+export { PROTOCOL_V6_NOTICE as $, semanticActionFromCommand as $a, readDesktopAppRuntime as $i, proposeRebindV042 as $n, isRestatement as $r, V6_ORDINARY_COMPLETION_RULE as $t, revalidateGitPrestate as A, MIN_SUPPORTED_HOST_VERSION as Aa, injectActiveProfileHostLock as Ai, latestAssistantText as An, RELEASE_OPERATION_SURFACES as Ao, npmEscapedPackageName as Ar, bindProofToProjection as At, HOST_WORKDIR_PREFIX as B, CERTIFICATE_VERSION as Ba, resolveDesktopProfileHostLock as Bi, certificateClosure as Bn, digestStrings as Bo, explanationHasActionResidue as Br, proofOperationMatches as Bt, GIT_COMMAND_TEMPLATES as C, evaluateHostCapability as Ca, auditedForegroundRenderers as Ci, classifyCompletionClaim as Cn, hasPrivateRestartIntent as Co, environmentDefaultRepositoryTarget as Cr, certifyCheckpoint as Ct, executeRevalidatedGitEffect as D, selectHostCohort as Da, evaluateConfiguredHostLock as Di, decisionBoundaryKey as Dn, readPrivateLedger as Do, isInformationalMessage as Dr, PROOF_MANIFEST_DOMAIN_V2 as Dt, createGitPrestateEnvelope as E, hostVersionFromPackages as Ea, evaluateActiveHostLock as Ei, decideTurnStopping as En, privateLedgerTargetDigest as Eo, extractOperation as Er, PROOF_KINDS_V2 as Et, firstStepGuidanceV6 as F, parseHostVersion as Fa, prepareActiveHostTrust as Fi, v6TestPredicate as Fn, releaseContractFor as Fo, actionVerbMatches as Fr, proofCapabilityReport as Ft, SessionApiError as G, STOP_PROTOCOL_VERSION_V2 as Ga, DESKTOP_PROFILE_PACKAGE_NAME as Gi, effectuateBoundary as Gn, stripUrlCredentials as Go, interpretClause as Gr, sessionQueryV2 as Gt, sourcedNamedTestRoot as H, SEMANTIC_ACTIONS as Ha, revalidateDesktopCoreLock as Hi, unitDescendantIds as Hn, sanitizeClauseText as Ho, hasOrderedCoordination as Hr, requiredSubjectsOf as Ht, lifecyclePhase as I, satisfiesSupportedHostRange as Ia, prepareDesktopHostTrust as Ii, goalCompletionDenial as In, releaseCoverage as Io, clarifiedSpanOf as Ir, proofDigest as It, CAPTURE_V042_NOTICE as J, boundedArtifactChoiceMatches as Ja, hasDesktopImporterState as Ji, currentContractDigest as Jn, isExecutableItem as Jr, CLEANUP_CONDITION_RULE as Jt, snapshotSessionEvents as K, SUPPORTED_EVIDENCE_ADAPTERS as Ka, DESKTOP_RUNTIME_PACKAGE_NAME as Ki, isCurrentAcceptedBoundary as Kn, privateStorageToolDenial as Ko, interpretMessage as Kr, validateProofManifest as Kt, previewFirstStepInjection as L, ACTION_MANIFEST as La, prepareTargetHostTrust as Li, hasCurrentCertificate as Ln, releasePreEffectDecision as Lo, clauseAsksOwnQuestion as Lr, proofDigestV2 as Lt, FIRST_STEP_GUIDANCE as M, SUPPORTED_HOST_VERSIONS as Ma, inspectTargetHostGraph as Mi, observeAssistantOutcome as Mn, inFlightReservation as Mo, classifyUserInteraction as Mr, canonicalProjection as Mt, claimedBatchHasRealRootInput as N, compareHostVersions as Na, packageRowsFromActiveGraph as Ni, progressFingerprint as Nn, normalizeReleaseContract as No, GRANTED_QUALIFICATION as Nr, createProofManifest as Nt, gitCommandMatchesTarget as O, HOST_VALIDATED_VERSIONS as Oa, hostLockContextFromComposedDump as Oi, isRootPauseRequest as On, resolvePrivateLedgerRoot as Oo, segmentClauses as Or, PROOF_PROTOCOL_VERSION as Ot, firstStepGuidance as P, evaluateMinimumHostVersion as Pa, packageRowsFromPnpmLock as Pi, testOutcomePredicate as Pn, readbackSettlesContract as Po, LEGACY_QUALIFICATION as Pr, createProofManifestV2 as Pt, PROTOCOL_V5_NOTICE as Q, requestedTargetMatchesResolved as Qa, readAsarIndex as Qi, proposeRebindOutcome as Qn, isQuestionScopeNeedingReview as Qr, MIN_RECOVERY_CHAR_BUDGET as Qt, projectSessionCoreV2 as R, ACTION_MANIFEST_VERSION as Ra, readActiveHostGraph as Ri, ancestorConstraintForBinding as Rn, reservationFor as Ro, clauseIsGoverned as Rr, proofEvidenceConstraints as Rt, GIT_COMMAND_MANIFEST_IDS as S, evaluateGraphDerivedHostLock as Sa, auditedDefaultWorkdirProvider as Si, assessmentOutcomePredicate as Sn, applyPrivateLedger as So, classifyClause as Sr, bindingIndividuallyAccepted as St, commitTreeSnapshotDigest as T, evaluateToolSurfaceCapability as Ta, combineHostPolicy as Ti, decideTurnBoundary as Tn, privateLedgerContractDigest as To, extractMethod as Tr, PROOF_KINDS as Tt, SESSION_API_UNSUPPORTED as U, STATEFUL_ACTIONS as Ua, verifyComposedHostLockDump as Ui, BOUNDARY_RECORD_PREFIX as Un, sanitizeUrl as Uo, hasQuestionScope as Ur, scopeCoverageDigest as Ut, captureHostWorkdir as V, CERTIFICATE_VERSION_V2 as Va, resolveInstalledHostLock as Vi, needsReviewObligations as Vn, normalizeClause as Vo, governedClauseRestrictsExecution as Vr, proofV2Rejection as Vt, SESSION_EVENT_ENVELOPE_INVALID as W, STOP_PROTOCOL_VERSION as Wa, DESKTOP_IDENTITY_FACTS as Wi, availableBoundaryQualifications as Wn, sha256 as Wo, hasWorkPredicate as Wr, sessionQuery as Wt, PROTOCOL_V3_NOTICE as X, requestedIdentityKey as Xa, memoizedAsarIndex as Xi, confirmRebind as Xn, isInformationalFragment as Xr, CLEANUP_CONDITION_RULE_SHORT as Xt, DEFAULT_DELEGATION_TOOL_NAMES as Y, isStatefulAction as Ya, memoizedAsarFile as Yi, createProjection as Yn, isExplanationScope as Yr, CLEANUP_CONDITION_RULE_COMPACT as Yt, PROTOCOL_V4_NOTICE as Z, requestedTargetAuthorizesMutation as Za, readAsarFile as Zi, proposeRebind as Zn, isOpenObligation as Zr, DEFAULT_RECOVERY_CHAR_BUDGET as Zt, prepareActivationMigration as _, HOST_CAPABILITY_PACKAGE_GROUPS as _a, COMMAND_SURFACE_MANIFEST as _i, isVerifyingCapability as _n, activationDigest as _o, partialFailureOf as _r, parseShellCommand as _t, resolveActivationPersistencePlugin as a, hostTrustDigest as aa, namedActions as ai, openItems as an, createHostAuditSession as ao, parseConfirmationMessage as ar, NATIVE_GIT_ROOT_PARENT_OID as at, RC020_RC2_HOST_PACKAGES as b, bindLiveGoalCapability as ba, activeRendererModule as bi, NO_PROGRESS_TURNS_BEFORE_STOP as bn, validateActivationBinding as bo, captureClause as br, authorityCaptureCounts as bt, createActivationSelection as c, registryArchiveFiles as ca, presentExplanationHead as ci, renderRecoveryPacket as cn, adoptActivationReceipt as co, evidenceAvailabilityReason as cr, extractToolSubject as ct, scanActivationInventory as d, ACTIVE_HOST_COHORT_IDS as da, reportingHeadGoverns as di, currentV6Feedback as dn, readActivationMigrationReceipt as do, relevantEvidence as dr, persistedToolResultStatus as dt, readDesktopDependency as ea, itemHoldsExecutionAuthority as ei, V6_ORDINARY_COMPLETION_RULE_COMPACT as en, semanticActionFromText as eo, rebindAttemptKey as er, applyUpgradeEligibility as et, selectedActivationInventory as f, ACTIVE_HOST_LAUNCHER_VERSION as fa, restatedContentOf as fi, isV6PendingRootWait as fn, resolveActivationBindingsRoot as fo, DEPENDENCY_FREE_ONLY_CONDITION as fr, shellReadbackOutcome as ft, inspectActivationInventory as g, GOAL_HOST_PACKAGES as ga, verbIsNegated as gi, evidenceMatchesItem as gn, activationCanonical as go, capabilityFactOf as gr, parsePwshCommand as gt, verifySelectedMigrationInventory as h, EXPECTED_HOST_PACKAGES as ha, statefulActionsOfScope as hi, evidenceCoverage as hn, writeActivationBinding as ho, capabilityConsequence as hr, isRunExecutable as ht, guardActivationInventory as i, acquireHostTrust as ia, maskQuotedSpans as ii, closingHint as in, RC021_RC3_HOST_PACKAGES as io, isFrozenV042RebindResponse as ir, supersedeItem as it, verifiedLinearCommitReadback as j, SUPPORTED_HOST_RANGE as ja, inspectDesktopTargetGraph as ji, latestRootInstruction as jn, contractById as jo, classifyTaskIntent as jr, bindProofV2ToProjection as jt, parseGitCommandManifest as k, LATEST_TESTED_HOST_VERSION as ka, hostLockRowsFromComposedDump as ki, isWholeTaskCompletionClaim as kn, RELEASE_OPERATIONS as ko, canonicalRegistryBase as kr, PROOF_PROTOCOL_VERSION_V2 as kt, isSelectedActivationReceipt as l, registryArchiveModules as la, qualificationOfClause as li, v6CurrentRootBoundaries as ln, createActivationMigrationReceipt as lo, itemDiagnosis as lr, isDeterministicCheck as lt, validateActivationSelection as m, DEFAULT_HOST_LOCK as ma, splitTextFragments as mi, bindingSatisfies as mn, validateActivationMigrationReceipt as mo, admissibleForRemoval as mr, canonicalArgvFromCommand as mt, assertActivationPhysicalRows as n, writeDesktopRuntimeReceipt as na, legacyQuestionReadingIsInformational as ni, carriesCleanupCondition as nn, validateActionTarget as no, replayRebindResult as nr, legacyRecordsNeedingReview as nt, activationSelectionPending as o, parseHostTrust as oa, opensConditionLead as oi, recoveryDigest as on, __activationBindingInternals as oo, capabilityRemedyPhrase as or, evidenceFromPersistedToolResult as ot, validateActivationInventorySnapshot as p, BASE_HOST_PACKAGES as pa, semanticActionOfScope as pi, sourceItemForCoreRequirement as pn, resolveSessionActivation as po, actionHasCertificationPath as pr, withDurability as pt, projectCoreV2 as q, actionCompatible as qa, auditDesktopInstalledImplementation as qi, qualifyBoundary as qn, ownedJobLifecycle as qo, introducesActionClause as qr, validateProofManifestV2 as qt, captureActivationPhysicalInventory as r, HostTrustError as ra, maskCodeSpans as ri, cleanupConditionFor as rn, RC021_RC5_HOST_PACKAGES as ro, CONFIRM_LINE_PATTERN as rr, rootLocatorFlavor as rt, bindActivationInventoryPhysical as s, qualifyHostTrust as sa, opensWithDirective as si, recoveryTitle as sn, activationBindingPath as so, deriveItemDiagnosis as sr, extractTextContent as st, assertActivationBackendIdentity as t, readDesktopTargetGraph as ta, kindOfScope as ti, V6_ORDINARY_COMPLETION_RULE_SHORT as tn, validateActionManifest as to, rebindResponse as tr, deriveProjection as tt, prepareSelectedActivationMigration as u, ACTIVE_HOST_COHORT_ID as ua, questionHeadsClause as ui, confirmedV6CoreDiagnostic as un, readActivationBinding as uo, nativeFileTwoRole as ur, nativeGitParentOidVerified as ut, verifyMigrationInventory as v, HOST_COHORTS as va, validateManifest as vi, CONTROL_RECORD_PREFIX as vn, activationJson as vo, removalIsComplete as vr, cwdEpochsFromEvents as vt, commitIndexSnapshotDigest as w, evaluateHostLock as wa, auditedHostImplementation as wi, currentActionBases as wn, initializePrivateLedger as wo, extractArtifactPaths as wr, PROOF_CAPABILITY_MATRIX as wt, RC020_RC1_HOST_PACKAGES as x, evaluateExternalWaitCapability as xa, auditedDefaultWorkdirHost as xi, assessmentAction as xn, appendPrivateLedger as xo, captureItem as xr, segmentAuthorityBlocks as xt, RC021_RC2_HOST_PACKAGES as y, bindExecutableIdentity as ya, HostProfileError as yi, NO_PROGRESS_RECORD_PREFIX as yn, sessionBirthIdentity as yo, removalIsPartiallyKnown as yr, effectiveCwdAt as yt, sessionCoreSnapshot as z, BOUNDED_ARTIFACT_TYPES as za, resolveActiveProfileHostLock as zi, certifiableOpenItems as zn, canonicalizePath as zo, clauseIsProtected as zr, proofHostSurfacesOf as zt };

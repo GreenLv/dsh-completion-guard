@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, realpathSync } from 'node:fs'
+import { readFileSync, writeFileSync, realpathSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { dirname, join, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { activationJson, activationCanonical, inspectActivationInventory, prepareActivationMigration,
   readActivationMigrationReceipt, verifyMigrationInventory, adoptActivationReceipt, resolveActivationBindingsRoot,
   scanActivationInventory, createActivationSelection, validateActivationSelection, activationSelectionPending,
-  prepareSelectedActivationMigration, verifySelectedMigrationInventory, isSelectedActivationReceipt } from '../dist/domain/index.js'
+  prepareSelectedActivationMigration, verifySelectedMigrationInventory, isSelectedActivationReceipt,
+  validateActivationInventorySnapshot, bindActivationInventoryPhysical, createActivationMigrationReceipt, activationDigest,
+  captureActivationPhysicalInventory, guardActivationInventory, resolveActivationPersistencePlugin, assertActivationBackendIdentity } from '../dist/domain/index.js'
 
 const operation = process.argv[2]
 const common = ['--runtime-anchor', '--persistence-root', '--compression']
@@ -37,31 +40,87 @@ async function main() {
     options.set(key, value)
   }
   if (operation === 'select') {
-    const selection = createActivationSelection(readJson(option('--inventory')), readJson(option('--include-file')))
+    const source = validateActivationInventorySnapshot(readJson(option('--inventory')))
+    if (!source.physicalSha256) throw new Error('activation_inventory_proof_required')
+    const selection = createActivationSelection(source, readJson(option('--include-file')))
     save(option('--output'), selection)
     print({ status: 'selection_ready', includedCount: selection.include.length, selectionSha256: selection.sha256 })
     return
   }
   const selection = option('--selection', true) ? validateActivationSelection(readJson(option('--selection'))) : undefined
   const receipt = ['adopt', 'verify'].includes(operation) ? readActivationMigrationReceipt(resolve(option('--receipt'))) : undefined
+  if (receipt && !receipt.inputs.physical_inventory) throw new Error('activation_inventory_proof_required')
   if (receipt && !selection && isSelectedActivationReceipt(receipt)) throw new Error('activation_selection_required')
   const anchor = realpathSync(option('--runtime-anchor'))
   const require = createRequire(anchor)
-  const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href)
   const backendPath = require.resolve('@deepseek-ai/dsh-session-persistence-jsonl')
-  const jsonlModule = await import(pathToFileURL(backendPath).href)
-  const Jsonl = jsonlModule.default ?? jsonlModule
-  if (typeof Jsonl !== 'function' && (!Jsonl || typeof Jsonl !== 'object' || typeof Jsonl.apply !== 'function')) throw new Error('activation_backend_module_invalid')
+  // The physical layout is qualified by reviewed module bytes and loader
+  // shape; a version relabel alone does not change that capability.
+  const backendFile = realpathSync(backendPath)
+  const backendRoot = dirname(dirname(backendFile))
+  const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex')
+  const checkedBackend = () => {
+    const packageBytes = readFileSync(join(backendRoot, 'package.json'))
+    const manifest = JSON.parse(packageBytes.toString('utf8'))
+    const audit = JSON.parse(readFileSync(join(packageRoot, 'manifests', 'rc021-rc5-byte-audit.json'), 'utf8'))
+    const row = audit.packages.find(row => row.name === '@deepseek-ai/dsh-session-persistence-jsonl')
+    if (!row || backendFile !== realpathSync(join(backendRoot, 'lib/index.js'))) throw new Error('activation_backend_unreviewed')
+    const moduleTree = root => {
+      const files = {}
+      const walk = (directory, prefix = '') => {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          if (entry.name === 'node_modules') continue
+          const name = prefix + entry.name, path = join(directory, entry.name)
+          if (entry.isSymbolicLink()) throw new Error('activation_backend_unreviewed')
+          if (entry.isDirectory()) walk(path, `${name}/`)
+          else if (entry.isFile() && /\.(?:[cm]?js|json|node)$/u.test(name) && name !== 'package.json') files[name] = digest(readFileSync(path))
+          else if (!entry.isFile()) throw new Error('activation_backend_unreviewed')
+        }
+      }
+      walk(root)
+      return files
+    }
+    const modules = moduleTree(backendRoot)
+    assertActivationBackendIdentity(manifest, modules, row.modules)
+    const backendRequire = createRequire(backendFile)
+    const dependencies = ['@deepseek-ai/dsh-session-format', '@deepseek-ai/dsh-session-format-catalog',
+      '@deepseek-ai/dsh-session-format-catalog/message-projections', '@deepseek-ai/dsh-session-format-v3-to-v4',
+      '@deepseek-ai/dsh-session-persistence', '@deepseek-ai/dsh-session', '@deepseek-ai/cordis',
+      '@deepseek-ai/node-addon-system/flock'].map(specifier => {
+      const file = realpathSync(backendRequire.resolve(specifier))
+      const name = specifier.split('/').slice(0, 2).join('/')
+      const metadata = realpathSync(backendRequire.resolve(`${name}/package.json`))
+      return { specifier, file, sha256: digest(readFileSync(file)), metadata, metadataSha256: digest(readFileSync(metadata)), modules: moduleTree(dirname(metadata)) }
+    })
+    return activationDigest({ name: manifest.name, version: manifest.version, backendFile, packageSha256: digest(packageBytes), modules,
+      dependencies, node: process.versions.node, zstd: process.versions.zstd ?? null })
+  }
+  const backendSha256 = checkedBackend()
+  const jsonlModule = await import(pathToFileURL(backendFile).href)
+  const Jsonl = resolveActivationPersistencePlugin(jsonlModule)
+  const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href)
   // Resolve the same dependency instance used by this physical JSONL backend.
   const { SessionFormatUnsupportedError } = await import(pathToFileURL(createRequire(backendPath).resolve('@deepseek-ai/dsh-session-persistence')).href)
   const ctx = new Context()
   const compression = option('--compression', true)
   if (compression && !['none', 'zstd'].includes(compression)) throw new Error('invalid compression')
-  const backend = ctx.plugin(Jsonl, { root: resolve(option('--persistence-root')), ...(compression ? { compression } : {}) })
+  const persistenceRoot = resolve(option('--persistence-root'))
+  const physical = () => {
+    if (checkedBackend() !== backendSha256) throw new Error('activation_inventory_changed')
+    return captureActivationPhysicalInventory(persistenceRoot, compression ?? 'zstd', backendSha256)
+  }
+  const backend = ctx.plugin(Jsonl, { root: persistenceRoot, ...(compression ? { compression } : {}) })
   try {
     await backend.await()
+    const persistence = ctx.sessionPersistence
+    if (!persistence || ['list', 'open', 'stat'].some(name => typeof persistence[name] !== 'function')) throw new Error('activation_backend_unreviewed')
+    const fence = guardActivationInventory(persistence, physical)
+    const initial = fence.initial, checkPhysical = fence.check
+    const guarded = { list: fence.list,
+      open: (...args) => persistence.open(...args), stat: (...args) => persistence.stat(...args) }
     const snapshot = operation === 'inventory' || selection
-      ? await scanActivationInventory(ctx.sessionPersistence, error => error instanceof SessionFormatUnsupportedError) : undefined
+      ? bindActivationInventoryPhysical(await scanActivationInventory(guarded, error => error instanceof SessionFormatUnsupportedError), checkPhysical().sha256) : undefined
     if (operation === 'inventory') {
       save(option('--output'), snapshot)
       print({ status: 'inventory_scanned', totalCount: snapshot.rows.length,
@@ -69,14 +128,19 @@ async function main() {
         unsupportedCount: snapshot.rows.filter(row => row.status === 'unsupported').length, inventorySha256: snapshot.sha256 })
       return
     }
-    const inventory = selection ? undefined : await inspectActivationInventory(ctx.sessionPersistence)
+    const inventory = selection ? undefined : await inspectActivationInventory(guarded)
+    checkPhysical()
+    if (receipt && receipt.inputs.physical_inventory !== initial.sha256) throw new Error('activation_inventory_changed')
     const scope = selection ? { scope: 'receipt_selected', wholeInventoryStatus: 'not_claimed',
       includedCount: selection.include.length, inventoryCount: snapshot.rows.length,
       pending: activationSelectionPending(snapshot, selection) } : {}
     if (operation === 'inspect') {
       const prior = readJson(option('--prior-modes'))
       const result = selection ? prepareSelectedActivationMigration(snapshot, selection, prior) : prepareActivationMigration(inventory, prior)
-      if (result.receipt) save(option('--output'), result.receipt)
+      if (result.receipt) {
+        result.receipt = createActivationMigrationReceipt(result.receipt.entries, { ...result.receipt.inputs, physical_inventory: checkPhysical().sha256 })
+        save(option('--output'), result.receipt)
+      }
       print({ ...result, receipt: undefined, ...scope, count: selection ? selection.include.length : inventory.length,
         ...(result.receipt ? { receiptSha256: result.receipt.sha256 } : {}) })
       if (result.status !== 'ready') process.exitCode = 2
@@ -84,7 +148,9 @@ async function main() {
       if (selection) verifySelectedMigrationInventory(receipt, snapshot, selection)
       else verifyMigrationInventory(receipt, inventory)
       const root = resolveActivationBindingsRoot(option('--dsh-home', true) ?? process.env.DSH_HOME, homedir())
+      checkPhysical()
       const result = adoptActivationReceipt(root, receipt, operation === 'verify')
+      checkPhysical()
       print({ ...result, ...scope, status: selection ? (result.status === 'complete' ? 'selected_complete' : 'selected_partial') : result.status })
       if (result.status !== 'complete') process.exitCode = 2
     }

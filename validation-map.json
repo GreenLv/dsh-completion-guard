@@ -147,6 +147,32 @@
       "peer_gates": {}
     },
     {
+      "id": "activation_inventory_integrity",
+      "paths": [
+        "src/domain/activation-physical-inventory.ts",
+        "src/domain/activation-selection.ts",
+        "src/domain/activation-migration.ts",
+        "bin/dsh-completion-guard-activation.mjs",
+        "tests/activation-physical-inventory.test.ts",
+        "tests/activation-selection-cli.test.ts",
+        "tests/activation-canonical-parity.test.ts"
+      ],
+      "gates": [
+        "build",
+        "contract_tests",
+        "focused_tests",
+        "typecheck"
+      ],
+      "invalidates": [
+        "artifact",
+        "candidate_matrix",
+        "native_artifact",
+        "native_runtime"
+      ],
+      "contracts": [],
+      "peer_gates": {}
+    },
+    {
       "id": "runtime",
       "paths": [
         "src/**"

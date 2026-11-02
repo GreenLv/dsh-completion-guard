@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { activationCanonical, activationDigest, sessionBirthIdentity } from '../src/domain/session-activation.js'
-import { createActivationSelection, prepareSelectedActivationMigration, scanActivationInventory } from '../src/domain/activation-selection.js'
+import { bindActivationInventoryPhysical, createActivationSelection, prepareSelectedActivationMigration, scanActivationInventory } from '../src/domain/activation-selection.js'
 import { createActivationMigrationReceipt } from '../src/domain/activation-bindings.js'
 // At most three interpreter probes (5s each) plus one oracle (10s), with
 // 5s for the in-process checks under a loaded portability-test worker.
@@ -23,11 +23,13 @@ it('matches independent Python canonical bytes and SHA-256 for the binding/recei
   const header = { version: 4, id: 'selected-中文', createdAt: 7, isSeeded: false }
   const snapshot = await scanActivationInventory({ list: async () => [{ header, revision: 'rev-😀' }],
     open: async () => ({ header, inheritedEventCount: 0, close: async () => {} }), stat: async () => ({ header, revision: 'rev-😀' }) }, () => false)
-  const selection = createActivationSelection(snapshot, [header.id])
-  const selectedReceipt = prepareSelectedActivationMigration(snapshot, selection, { schema: 'dsh-activation-prior-modes/v1',
+  const physicalSnapshot = bindActivationInventoryPhysical(snapshot, 'a'.repeat(64))
+  const selection = createActivationSelection(physicalSnapshot, [header.id])
+  const selectedReceipt = prepareSelectedActivationMigration(physicalSnapshot, selection, { schema: 'dsh-activation-prior-modes/v1',
     previousPackage: { name: 'dsh-completion-guard', version: '0.8.4', sha256: '5'.repeat(64) }, sourceSha256: '6'.repeat(64),
     cohorts: [{ name: '旧来源', mode: 'opt-in', sessionIds: [header.id] }] }).receipt!
-  const vectors = [identity, receipt, snapshot, selection, selectedReceipt, { schema: 'dsh-session-activation/v1', identity, initialMode: 'always',
+  const physicalReceipt = createActivationMigrationReceipt(selectedReceipt.entries, { ...selectedReceipt.inputs, physical_inventory: 'a'.repeat(64) })
+  const vectors = [identity, receipt, snapshot, physicalSnapshot, selection, selectedReceipt, physicalReceipt, { schema: 'dsh-session-activation/v1', identity, initialMode: 'always',
     source: 'fresh_creation', provenanceSha256: '4'.repeat(64) }]
   // Sort UTF-16 code units independently, matching JSON object-key order for
   // non-BMP names too. This input family has safe integers, not JSON floats.

@@ -17,7 +17,7 @@ Requires DSH `>=0.2.1-rc.3`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. U
 Choose your path before replacing any package:
 
 1. **First installation, no old Guard sessions:** stop the host, install Guard in the intended profile, then check and bind that installation before starting it.
-2. **Upgrading with old sessions:** stop the relevant writers and preserve the old installed package and its effective mode sources. Prepare a frozen session inventory and migration receipt **before upgrading**. After installation, rebuild the host lock and complete mode `adopt` and `verify` while writers remain stopped. Do not start the upgraded host until those checks pass for the intended scope. Unknown old modes stay pending.
+2. **Upgrading with old sessions:** stop the relevant writers and preserve the old installed package and its effective mode sources. First independently verify the persistence root and compression against the active configuration; the inventory proof covers only the supplied root ([migration guide](docs/ACTIVATION_MIGRATION.md)). Prepare a frozen session inventory and migration receipt **before upgrading**. After installation, rebuild the host lock and complete mode `adopt` and `verify` while writers remain stopped. Do not start the upgraded host until those checks pass for the intended scope. Unknown old modes stay pending. Receipts created without the physical inventory proof must be regenerated with `inventory` and `inspect`.
 
 For Web, after the applicable preparation:
 

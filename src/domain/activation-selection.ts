@@ -7,6 +7,7 @@ type InventoryRow = { id: string; headerSha256: string; revisionSha256: string }
 export interface ActivationInventorySnapshot {
   schema: 'dsh-activation-inventory/v1'
   rows: InventoryRow[]
+  physicalSha256?: string
   sha256: string
 }
 export interface ActivationMigrationSelection {
@@ -58,7 +59,8 @@ export async function scanActivationInventory(persistence: ActivationInventoryPe
 }
 export function validateActivationInventorySnapshot(value: unknown): ActivationInventorySnapshot {
   const snapshot = value as ActivationInventorySnapshot
-  if (!snapshot || !keys(snapshot, 'rows,schema,sha256') || snapshot.schema !== 'dsh-activation-inventory/v1'
+  if (!snapshot || !(keys(snapshot, 'rows,schema,sha256') || keys(snapshot, 'physicalSha256,rows,schema,sha256'))
+    || (snapshot.physicalSha256 !== undefined && !hex(snapshot.physicalSha256)) || snapshot.schema !== 'dsh-activation-inventory/v1'
     || !Array.isArray(snapshot.rows) || !hex(snapshot.sha256)) throw new Error('activation_inventory_snapshot_invalid')
   const ids = new Set<string>()
   for (const row of snapshot.rows) {
@@ -74,6 +76,13 @@ export function validateActivationInventorySnapshot(value: unknown): ActivationI
   const { sha256, ...unsigned } = snapshot
   if (activationDigest(unsigned) !== sha256) throw new Error('activation_inventory_snapshot_invalid')
   return snapshot
+}
+/** Bind an SDK snapshot to an independently established physical census. */
+export function bindActivationInventoryPhysical(snapshotValue: unknown, physicalSha256: string): ActivationInventorySnapshot {
+  const snapshot = validateActivationInventorySnapshot(snapshotValue)
+  if (snapshot.physicalSha256 !== undefined || !hex(physicalSha256)) throw new Error('activation_inventory_snapshot_invalid')
+  const unsigned = { schema: snapshot.schema, rows: snapshot.rows, physicalSha256 }
+  return { ...unsigned, sha256: activationDigest(unsigned) }
 }
 export function validateActivationSelection(value: unknown): ActivationMigrationSelection {
   const selection = value as ActivationMigrationSelection
