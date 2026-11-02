@@ -2,7 +2,33 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
-## 0.11.0: DSH >=0.2.1-rc.3
+## 0.12.0: DSH >=0.2.1-rc.5
+
+Upgrade DSH to `0.2.1-rc.5` or later before installing Guard 0.12.0. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.
+
+The current reviewed baseline and default cohort are DSH `0.2.1-rc.5` / Cordis `4.0.5` (`dsh-0.2.1-rc.5-core-v1`). The rc.3 and rc.2 audit files, distribution pins and prior acceptance records remain historical evidence; they do not admit an rc.3 or rc.2 runtime into this release. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v120.json`](../benchmarks/incidents/acceptance/semver-matrix-v120.json) bind the new floor; the 0.11.0 matrix remains unchanged for that release.
+
+The rc.5 registry and Desktop implementation records below describe their own source qualification. A new Guard package still needs its own CI, exact-artifact native, model and UI/performance evidence; raising this floor does not transfer an earlier package's acceptance.
+
+安装 Guard 0.12.0 前，请先将 DSH 升级到 `0.2.1-rc.5` 或更高版本。包顶层、嵌套 DSH 声明和 DSH peer 范围使用同一下限，Guard 运行时也独立核对；没有版本上限，后续宿主仍须逐项核验包身份、实现字节、依赖路由和接口。Cordis 继续单独要求 `>=4.0.4`。
+
+当前已审查基线及默认 cohort 为 DSH `0.2.1-rc.5` / Cordis `4.0.5`。rc.3/rc.2 的审计文件、分发行身份与旧验收记录原样保留，但不再作为本版运行准入。旧会话及 Guard 数据协议保持兼容，宿主锁变化后仍须重新核验；新包的 CI、精确制品原生验收、模型及 UI/性能结果分别记录，不从旧包继承。
+
+### The rc.3→rc.5 cumulative study
+
+The rc.5 manifest was regenerated from the published `0.2.1-rc.5` tarballs (upstream `dsh-v0.2.1-rc.5`, commit `b830ec950faba0a46dda564be3e2d854afed94f1`). The cumulative `dsh-v0.2.1-rc.3..dsh-v0.2.1-rc.5` study covered all 13 upstream commits and 388 changed files: the only non-manifest changes are client-UI thinking-block rendering (`ui-chat`, `ui-conversation`, `client-ui-cot-translation`, the `cordis-client-runner` slot-catalog source lines) and two ACP stdout diagnostics reroutes (`dsh-mcp-client` resource gating, `dsh-llm-deepseek-account` info logging to stderr) — none of them Guard-consumed interfaces. Per-file digest comparison found ZERO executable-byte changes across the 47-name core cohort (only rewritten `package.json` manifests), and the registry manifests' dependency routing is structurally unchanged between rc.3 and rc.5; Cordis remains the shared 4.0.5 release. Host trust acquisition selects the equivalence baseline by the acquired graph's version (rc.2, rc.3 or rc.5) and accepts a loading/modules match only from ONE reviewed published state. Native acceptance of the final Guard artifact on each platform remains a separate gate; no native validation of rc.5 is claimed by this study.
+
+rc.3→rc.5 累计研究覆盖全部 13 个上游提交与 388 个变更文件：非 manifest 变更只有客户端 UI 思考块渲染与两处 ACP stdout 诊断改道，均不属于 Guard 消费接口。47 包核心闭包可执行字节逐文件比对为零变化，依赖路由结构不变，Cordis 仍为共享的 4.0.5。宿主信任获取按已获取图的版本（rc.2/rc.3/rc.5）选择等价基线，且 loading 与 modules 必须来自同一已审查发布状态。最终制品的各平台原生验收仍是独立门槛。
+
+### Official rc.5 Desktop distribution bytes
+
+The official `0.2.1-rc.5` Desktop `darwin-arm64` distribution has a registered identity: the official CDN package was downloaded, SHA-512 recorded, `codesign --verify --deep --strict` passed (TeamIdentifier `NAN929V4UM`, identifier `com.deepseek.dsh`), the recomputed ASAR header matches the independently verified local installation, and the desktop manifest and runtime metadata were extracted from the archive. The rc.3/rc.2 pins are not reused. Distribution registration does not establish Guard installation, lifecycle, real-model or UI performance acceptance; those remain separate gates. An unregistered distribution still fails closed.
+
+The Windows x64 rc.5 row follows the standing rule: it is registered only after Windows-side Authenticode verification of the installed carrier and the retained official installer, with the signed ASAR-header readback and manifest extraction completed there; unverified bytes are never registered.
+
+`0.2.1-rc.5` 的官方 macOS arm64 分发行已登记完整身份：官方 CDN 包下载并记录 SHA-512，`codesign --verify --deep --strict` 通过（TeamIdentifier `NAN929V4UM`），重算的 ASAR 头与本机独立核验的安装一致，并从归档提取 desktop manifest 与运行时元数据。rc.3/rc.2 pin 不复用。分发行登记不代表 Guard 安装、生命周期、真实模型或 UI 性能已验收；这些仍是独立门槛。未登记分发行继续按失败关闭拒绝。Windows x64 的 rc.5 行仍遵循既定规则：须先在 Windows 侧完成载体 Authenticode 核验、保留安装包核验、签名 ASAR 头读回与 manifest 提取后才登记；未核验字节一律不登记。
+
+## 0.11.0: DSH >=0.2.1-rc.3 (historical for this release)
 
 Upgrade DSH to `0.2.1-rc.3` or later before installing Guard 0.11.0. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.
 

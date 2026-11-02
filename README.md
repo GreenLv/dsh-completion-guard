@@ -10,9 +10,9 @@ DSH Completion Guard is a DeepSeek Harness plugin that keeps your task requireme
 
 ## Install or upgrade
 
-Requires DSH `>=0.2.1-rc.3`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Upgrade DSH before installing Guard 0.11.0. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.1-rc.3` with Cordis `4.0.5`; later hosts still require compatibility checks.
+Requires DSH `>=0.2.1-rc.5`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Upgrade DSH before installing Guard 0.12.0. Web, Headless and the official Desktop app have separate profiles. The reviewed host baseline is DSH `0.2.1-rc.5` with Cordis `4.0.5`; later hosts still require compatibility checks.
 
-**Known upstream risk for 0.11.0:** the official rc.3 host still contains affected dependencies. The maintainer explicitly accepted three Undici 8.11.2 high-risk findings through **2026-11-05 inclusive**; the signed host is not repaired. See the [temporary risk acceptance](docs/DEPENDENCY_SCAN.md). We will update after an upstream fixed chain is available and verified.
+**Known upstream risk:** the official rc.5 host still contains affected dependencies — `@deepseek-ai/dsh-http-proxy` exact-pins `undici` 8.11.2 and `@deepseek-ai/dsh-commands` exact-pins `zod` 4.4.3, so the previously disclosed high-risk findings remain present in the signed host. The short-term 0.11.0 risk acceptance expired on 2026-11-05 and does not carry to this release. See the [dependency advisory policy](docs/DEPENDENCY_SCAN.md) for the recorded findings, their scope and the standing publication gate.
 
 Choose your path before replacing any package:
 
@@ -22,7 +22,7 @@ Choose your path before replacing any package:
 For Web, after the applicable preparation:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.11.0
+dsh plugin --profile web add dsh-completion-guard@0.12.0
 ```
 
 Installation alone is not enough. The **host lock** records the actual packages and directories this profile loads; check it with `inspect`, write it with `inject`, then check the composed configuration with `verify-dump`. Back up `cordis.patch.yml` before injection. [Installation and first load](docs/GETTING_STARTED.md) provides the Web commands, Windows and Desktop routes, and the final checks before startup. [Old-session migration](docs/ACTIVATION_MIGRATION.md) provides the preparation, commands and copyable AI prompts for an upgrade.

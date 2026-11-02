@@ -1,5 +1,12 @@
 # Historical incident coverage
 
+> Scope note (0.12.0): this document is the frozen historical record of the
+> PUBLIC fixture subset as of its own date — it is not the current release's
+> historical-library gate. Current candidates derive their complete inventory
+> from the private maintained library's case registry and run the full
+> case-by-case gate before publication; the sanitized outcome summaries live
+> in the matching release acceptance materials, not in this file.
+
 Verification date: 2026-09-28 (two evidence rounds). The adjudication round
 ran its working tree on the `1e88176` lineage and the four adaptation cases it
 introduced were first committed in `f4a9497`; the review-repair round added the

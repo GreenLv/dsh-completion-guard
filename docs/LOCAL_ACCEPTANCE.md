@@ -1,12 +1,12 @@
 # Local Acceptance
 
-## 0.11.0 / DSH 0.2.1-rc.3 candidate contract
+## 0.12.0 / DSH 0.2.1-rc.5 candidate contract
 
-The current source requires DSH `>=0.2.1-rc.3`, with rc.3 as its default audited host graph. The task, certificate and data protocols and the existing Web/Headless and Desktop gate sets remain in force. Use `--desktop-cohort 0.2.1-rc.3` for this candidate's Desktop entry. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [old-session migration](ACTIVATION_MIGRATION.md) instructions before replacing an installation.
+The current source requires DSH `>=0.2.1-rc.5`, with rc.5 as its default audited host graph. The task, certificate and data protocols and the existing Web/Headless and Desktop gate sets remain in force. Use `--desktop-cohort 0.2.1-rc.5` for this candidate's Desktop entry. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [old-session migration](ACTIVATION_MIGRATION.md) instructions before replacing an installation.
 
 The floor change creates new package bytes. Source, CI, exact tgz identity, each platform's native installation/lifecycle, real-model and GUI/performance results must name that new subject; earlier rc.2 observations remain attached to their original source and artifact. This section states the contract, not a passing execution or publication. The versioned sections below retain their historical scope, including 0.10.0's rc.2 floor and original command examples.
 
-当前源码的 DSH 下限与默认审查基线为 `0.2.1-rc.3`。旧会话及数据协议保持兼容，Web/Headless 与 Desktop 原有门禁不变；本候选的 Desktop 入口使用 `--desktop-cohort 0.2.1-rc.3`。下限变更产生新的包字节，源码、CI、制品、双平台原生、模型及 UI/性能证据必须分别绑定新身份。下文旧版本记录保留原范围，不改标为本候选通过。
+当前源码的 DSH 下限与默认审查基线为 `0.2.1-rc.5`。旧会话及数据协议保持兼容，Web/Headless 与 Desktop 原有门禁不变；本候选的 Desktop 入口使用 `--desktop-cohort 0.2.1-rc.5`。下限变更产生新的包字节，源码、CI、制品、双平台原生、模型及 UI/性能证据必须分别绑定新身份。下文旧版本记录保留原范围，不改标为本候选通过。
 
 ## 0.10.0 / DSH 0.2.1-rc.2 acceptance contract
 
