@@ -150,10 +150,15 @@
       "id": "activation_inventory_integrity",
       "paths": [
         "src/domain/activation-physical-inventory.ts",
+        "src/domain/activation-generation-verification.ts",
+        "src/domain/activation-catalog-qualification.ts",
+        "manifests/activation-catalog-cohort.v1.json",
         "src/domain/activation-selection.ts",
         "src/domain/activation-migration.ts",
         "bin/dsh-completion-guard-activation.mjs",
         "tests/activation-physical-inventory.test.ts",
+        "tests/activation-generation-verification.test.ts",
+        "tests/activation-catalog-qualification.test.ts",
         "tests/activation-selection-cli.test.ts",
         "tests/activation-canonical-parity.test.ts"
       ],

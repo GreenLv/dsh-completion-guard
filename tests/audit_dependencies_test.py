@@ -92,6 +92,26 @@ class AuditDependenciesGate(unittest.TestCase):
             }), encoding="utf-8")
             self.assertEqual(GATE.main(["--report", path, "--exceptions", str(exceptions)]), 0)
 
+    def test_release_scoped_exception_does_not_cover_a_later_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "audit.json"
+            report.write_text(json.dumps({"advisories": {"a": advisory("high")}}), encoding="utf-8")
+            exceptions = root / "exceptions.json"
+            exceptions.write_text(json.dumps({
+                "schema": "dsh-dependency-scan-exceptions/v1",
+                "exceptions": [{"id": "1", "module": "fixture-pkg", "version": "1.0.0",
+                                "severity": "high", "rationale": "release-specific",
+                                "owner": "t", "expires": "2999-01-01", "guard_versions": ["0.12.1"]}],
+            }), encoding="utf-8")
+            args = ["--repo-root", str(root), "--report", str(report), "--exceptions", str(exceptions)]
+            manifest = root / "package.json"
+            self.assertEqual(GATE.main(args), 2)
+            for version, expected in (("0.12.1", 0), ("0.12.2", 1), ("0.12.1-rc.1", 1)):
+                with self.subTest(version=version):
+                    manifest.write_text(json.dumps({"name": "dsh-completion-guard", "version": version}), encoding="utf-8")
+                    self.assertEqual(GATE.main(args), expected)
+
     def test_malformed_exception_table_fails_closed(self) -> None:
         report = {"advisories": {}}
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:

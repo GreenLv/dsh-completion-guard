@@ -46,3 +46,5 @@ export * from './private-storage-guard.js'
 export * from './activation-selection.js'
 
 export * from './activation-physical-inventory.js'
+export * from './activation-generation-verification.js'
+export * from './activation-catalog-qualification.js'

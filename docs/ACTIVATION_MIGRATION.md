@@ -4,15 +4,19 @@ A host already at DSH `0.2.1-rc.3` may follow this migration without first upgra
 
 已使用 DSH `0.2.1-rc.3` 的宿主无需先升级到 rc.5，即可按本流程迁移；其宿主图仍须通过相应资格核验。
 
-This guide covers upgrades to **0.12.0**, including upgrades from **0.11.0**, 0.10.0 and earlier supported lines. Since 0.9.0, `always` has been the default for **new unseeded root sessions**. A write-once private binding preserves each old session's pre-upgrade effective mode. Mode is independent of `standard` policy, execution/publication authority and completion certificates. Empty old sessions belong in the inventory too. Recorded off/on continues to control enablement; neither configuration nor adoption re-signs history.
+This guide covers upgrades to **0.12.1**, including upgrades from **0.11.0**, 0.10.0 and earlier supported lines. Since 0.9.0, `always` has been the default for **new unseeded root sessions**. A write-once private binding preserves each old session's pre-upgrade effective mode. Mode is independent of `standard` policy, execution/publication authority and completion certificates. Empty old sessions belong in the inventory too. Recorded off/on continues to control enablement; neither configuration nor adoption re-signs history.
 
-本指南用于升级到 **0.12.0**，包括从 **0.11.0**、0.10.0 及更早支持线升级。自 0.9.0 起，**新建无继承根会话**的默认模式为 `always`，旧会话通过不可覆盖私有绑定保留升级前有效模式。模式独立于 `standard` 策略、执行与发布权限及完成证书。旧空会话也必须清点，已记录的 off/on 继续控制启用状态；配置及 adoption 都不重签历史。
+本指南用于升级到 **0.12.1**，包括从 **0.11.0**、0.10.0 及更早支持线升级。自 0.9.0 起，**新建无继承根会话**的默认模式为 `always`，旧会话通过不可覆盖私有绑定保留升级前有效模式。模式独立于 `standard` 策略、执行与发布权限及完成证书。旧空会话也必须清点，已记录的 off/on 继续控制启用状态；配置及 adoption 都不重签历史。
 
-The CLI checks the physical JSONL inventory against the official reader before `inventory`, `inspect`, `adopt` and `verify`. It supports JSONL backends whose executable modules and loader shape match the reviewed rc.3/rc.5 implementation, including byte-equivalent version relabels, with `none` or `zstd` encoding. Changed or unreviewed implementations are refused. The proof binds the actual backend, resolved serialization inputs and Node compression version; it is not independent authentication of every dependency. The physical census streams complete session files to hash their bytes without parsing or emitting their bodies; the official read-only open may parse session data to verify it; runtime and I/O cost grow with total stored bytes. Keep writers stopped. Hidden or corrupt logs, future generations, links, unknown layouts and directories with multiple generations fail closed. A listed older format that the official `open` explicitly rejects can still be left pending in a selected scope; an item hidden by `list` cannot be assigned a fabricated identity.
+Before `inventory`, `inspect`, `adopt` or `verify`, the CLI hashes the full physical inventory and checks it against the official JSONL reader. Reviewed rc.3 and rc.5 backends support `none` and `zstd` compression. For a directory with multiple generations, the tool makes a private temporary copy of the log corpus so the SDK can resolve forks and inherited cuts. It checks every physical generation in that directory and matches the SDK's chosen file to its physical identity. It leaves all source logs in place. Keep all session writers stopped and place reports, selections and receipts outside the session root.
+
+Hidden or corrupt logs, future generations, links and unknown layouts stop the operation. A single-generation session that the official reader lists but explicitly refuses to open can still be reported as pending. Multi-generation verification requires free temporary space for the corpus, up to 1 GiB. Each copied file and each decoded multi-generation log is limited to 256 MiB. On Windows the scratch path must be on a fixed local drive, with a private ACL and no reparse points. The tool removes its temporary copy on normal completion or a handled failure. After abrupt termination, any retained copy is private session data.
 
 The proof binds the supplied physical root, compression, reviewed backend and file identities and contents. It does **not** establish that the supplied root is the active configuration: the operator or manager must verify that independently. An existing ordinary empty root can produce a zero-row inventory, but cannot produce a migration receipt. Missing roots fail. Backend, root, encoding or file changes require a fresh inventory and inspection. Receipts created before physical proofs existed are refused with `activation_inventory_proof_required`; preserve them and regenerate `inventory`, any selection, and `inspect` under the matching configuration.
 
-CLI 在 `inventory`、`inspect`、`adopt`、`verify` 前将物理 JSONL 库存与官方读取器逐项核对。目前支持可执行模块和加载结构与已审查 rc.3/rc.5 实现一致的 JSONL 后端（包括字节相同的版本重标）以及 `none`、`zstd` 编码；变化或未经审查的实现会被拒绝。证明绑定实际后端、解析到的序列化输入及 Node 压缩版本，不独立认证所有依赖。物理盘点流式读取完整会话文件计算摘要，不解析或输出正文；官方只读 open 可能解析会话数据以进行核验。耗时和 I/O 随库存总字节数增长。全程停止写者。隐藏或损坏日志、未来代际、链接、未知布局和同一目录多代并存均拒绝；官方 `list` 已列出且 `open` 明确拒绝的旧格式仍可在选择范围中保持 pending，不能为被 `list` 隐藏的项目伪造身份。
+CLI 在 `inventory`、`inspect`、`adopt`、`verify` 前计算全库日志的摘要，并与官方 JSONL 读取器核对。已审查的 rc.3 和 rc.5 后端支持 `none` 与 `zstd`。遇到同目录保留多代日志时，工具在私有临时目录复制日志库，供 SDK 解析分支和继承切点。工具逐代核验该目录内的日志，并核对 SDK 实际选中的物理文件。所有源日志均保留在原路径。全程停止会话写者，将报告、选择清单和收据写到会话根目录之外。
+
+隐藏或损坏的日志、未来代际、链接和未知布局会中止操作。官方读取器列出但明确拒绝打开的单代会话仍可记录为待处理。多代核验需要可容纳日志库的临时空间，上限为 1 GiB。单个复制文件与单个解码后的多代日志上限均为 256 MiB。Windows 临时目录须位于固定本地磁盘、权限私有且路径没有重解析点。正常结束或处理失败后会清理临时副本。进程意外终止时，如有残留副本，应按私有会话数据处理。
 
 证明绑定所传物理根、压缩方式、已审查后端以及文件身份和内容，**不证明所传目录就是当前配置**；操作者或管理器须独立核对。已存在的普通空根可产生零行库存，但不能生成迁移收据；缺失根拒绝。后端、根、编码或文件变化后须重新 inventory 和 inspect。没有物理证明的旧收据会以 `activation_inventory_proof_required` 拒绝；保留原记录，并在匹配配置下重新 inventory、按需选择和 inspect。
 
@@ -39,9 +43,13 @@ Prepare an operator-owned JSON file in the following format. `previousPackage.sh
 }
 ```
 
-The 0.12.0 toolkit accepts verified prior-mode records for predecessor versions `0.0.x`–`0.11.x`, including `0.11.0`. It refuses the current version and anything newer as a prior package.
+The 0.12.1 toolkit accepts verified prior-mode records for predecessor versions `0.0.x`–`0.11.x`, including `0.11.0`. Versions 0.12.0 and later are outside the prior-mode source format. Existing valid single-generation receipts may still be verified against the same physical inventory.
 
-0.12.0 工具接受前驱版本 `0.0.x`–`0.11.x` 的已核验旧模式来源，包括 `0.11.0`；当前版本及更新的版本不能冒充旧包。
+0.12.1 工具接受前驱版本 `0.0.x`–`0.11.x` 的已核验旧模式来源，包括 `0.11.0`。此前有效的单代收据仍可用于同一物理库存的核验。
+
+If Guard 0.12.0 is already installed and you could not prepare a receipt for a multi-generation library, you can run the new read-only inventory. To prepare a migration receipt, you still need a verified source from before the earlier upgrade that covers each included session. Keep the current installation and logs until that evidence is available.
+
+如果已安装 Guard 0.12.0，此前又无法为多代会话库生成收据，可以先用新工具只读清点。准备迁移收据仍需找到上次升级前已核验的旧模式来源，并覆盖每个要迁移的会话。找不到完整来源时，保留当前安装和原日志。
 
 ## Official old-format refusals and an explicit readable subset / 官方旧格式拒绝与显式可读子集
 
@@ -54,10 +62,11 @@ Suppose an inventory contains N sessions, of which M are readable. First freeze 
 假设库存共 N 个会话，其中 M 个可读。先冻结全库报告，查看本地 rows，再将明确选中的可读 ID 写入 JSON 数组，如 `["chosen-a", "chosen-b"]`。示例 ID 是占位符，必须换成报告中的精确 ID；工具不会自动选择“所有可读”。报告与清单含私有 ID 和元数据摘要，不含正文或凭据，应仅在本地以所有者权限保存。替换宿主或 Guard 前、写者停止时完成这一阶段。后续宿主格式诊断可使用另行受控保管的日志副本，不能改动权威原件或外传正文。
 
 ```sh
-# POSIX shell; use distinct unused output paths. Match compression to the real config.
+# POSIX shell; use distinct unused output paths. Replace zstd with none if the active configuration uses plain JSONL.
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inventory \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --output /path/to/inventory.json
 
 # chosen-ids.json is an operator-reviewed JSON array of exact readable IDs.
@@ -69,6 +78,7 @@ node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs select \
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inspect \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --selection /path/to/selection.json \
   --prior-modes /path/to/old-mode-source.json \
   --output /path/to/selected-receipt.json
@@ -77,6 +87,7 @@ node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inspect 
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs adopt \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --selection /path/to/selection.json \
   --receipt /path/to/selected-receipt.json \
   --dsh-home /path/to/actual-dsh-home
@@ -84,22 +95,23 @@ node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs adopt \
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs verify \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --selection /path/to/selection.json \
   --receipt /path/to/selected-receipt.json \
   --dsh-home /path/to/actual-dsh-home
 ```
 
-`inventory_scanned` reports total/readable/unsupported counts and creates the frozen report. `selection_ready` creates the explicit scope manifest; empty, duplicate, unknown or unsupported IDs refuse. Selected `inspect` reports `ready` only when all included identities have verified old sources, then writes a receipt. Mixed-mode sources need exact per-session mappings. Source mappings may cover excluded IDs too, but exclusions never acquire a mode binding. Never infer a mode from format, date, path, event count or a new default.
+`inventory_scanned` reports session, generation, multi-generation session, readable and unsupported counts and creates the frozen report. `selection_ready` creates the explicit scope manifest; empty, duplicate, unknown or unsupported IDs refuse. Selected `inspect` reports `ready` only when all included identities have verified old sources, then writes a receipt. Mixed-mode sources need exact per-session mappings. Source mappings may cover excluded IDs too, but exclusions never acquire a mode binding. Never infer a mode from format, date, path, event count or a new default.
 
-inventory_scanned 表示已生成全库报告及总数/可读/拒绝数量；selection_ready 表示已冻结显式范围，空选、重复、未知或被拒绝 ID 都会拒绝。子集 inspect 仅在所有包含会话的旧来源均可核验时返回 ready 并创建收据。混合模式需逐会话映射；旧来源映射可以包含排除项，但排除项不会被写入模式绑定。不得按格式、日期、路径、事件数或新默认值猜模式。
+inventory_scanned 表示已生成全库报告及会话总数、日志代数、多代会话数、可读及拒绝数量；selection_ready 表示已冻结显式范围，空选、重复、未知或被拒绝 ID 都会拒绝。子集 inspect 仅在所有包含会话的旧来源均可核验时返回 ready 并创建收据。混合模式需逐会话映射；旧来源映射可以包含排除项，但排除项不会被写入模式绑定。不得按格式、日期、路径、事件数或新默认值猜模式。
 
 Every selected `inspect/adopt/verify` rescans the **whole** inventory and checks all listed header/revision hashes, readable birth identities and refusal statuses against the selection. Added, removed, replaced or changed rows—including excluded ones—or changed readability invalidate the scope before adoption. Supplying the same manifest is mandatory on all three commands; full and selected receipts cannot be substituted. An integrity digest binds the asserted inputs; it is not authority or proof that an old-source assertion is true. A host upgrade that changes the scan requires a fresh report and reviewed scope before proceeding.
 
 每次子集 inspect/adopt/verify 都重扫**全库**，核对全部 list header/revision 摘要、可读出生身份及拒绝状态。新增、删除、替换、变化（包括排除项）或可读性变化，会在 adoption 前使范围失效。三条命令均须携带同一 selection，不能混用全库与子集收据。摘要只绑定断言输入，不提供权限，也不能证明旧来源断言正确。宿主升级若改变清点结果，必须重新生成报告并审核范围后再继续。
 
-`selected_complete` means that **only the receipt-selected rows** completed or verified. `selected_partial` means one or more of those rows refused. Both report `scope: receipt_selected`, `wholeInventoryStatus: not_claimed`, and a pending list for all exclusions (`session_format_unsupported` or `not_selected`). Pending remains visible even if the command exits zero. Repeat adoption for the same unchanged scope: completed rows are byte-identical no-ops; missing rows can continue, conflicts remain refused and intact. `verify` never writes. Preserve all existing reports and receipts; `activation_output_exists` requires a new output name, not deleting the old evidence. Drift requires new inventory/selection/inspect, not editing a digest or reusing a stale scope. The older full-inventory path below remains available without `--selection`.
+`selected_complete` means that **only the receipt-selected rows** completed or verified. `selected_partial` means one or more of those rows refused. Both report `scope: receipt_selected`, `wholeInventoryStatus: not_claimed`, and a pending list for all exclusions (`session_format_unsupported` or `not_selected`). Pending remains visible even if the command exits zero. Repeat adoption for the same unchanged scope: completed rows are byte-identical no-ops; missing rows can continue, conflicts remain refused and intact. `verify` leaves source logs and mode bindings untouched. It uses a private temporary copy for multi-generation verification. Preserve all existing reports and receipts; `activation_output_exists` requires a new output name, not deleting the old evidence. Drift requires new inventory/selection/inspect, not editing a digest or reusing a stale scope. The older full-inventory path below remains available without `--selection`.
 
-selected_complete **仅表示收据选中行**完成或核验通过；selected_partial 表示其中至少一行拒绝。两者均输出 scope: receipt_selected、wholeInventoryStatus: not_claimed，以及所有排除项的 pending 清单（session_format_unsupported 或 not_selected）。命令即使零退出，也不能隐藏 pending 或称为整库完成。相同且未变的范围可重复 adopt：完成行字节不变，缺失行可继续，冲突拒绝且原状保留；verify 从不写入。保留旧报告和收据；activation_output_exists 应换一个输出文件名，而不是删除证据。库存变化后重新 inventory/selection/inspect，不能改摘要或复用过期范围。下方不带 --selection 的原整库路径仍可用。
+selected_complete **仅表示收据选中行**完成或核验通过；selected_partial 表示其中至少一行拒绝。两者均输出 scope: receipt_selected、wholeInventoryStatus: not_claimed，以及所有排除项的 pending 清单（session_format_unsupported 或 not_selected）。命令即使零退出，也不能隐藏 pending 或称为整库完成。相同且未变的范围可重复 adopt：完成行字节不变，缺失行可继续，冲突拒绝且原状保留；verify 保留源日志和模式绑定原状，多代核验使用私有临时副本。保留旧报告和收据；activation_output_exists 应换一个输出文件名，而不是删除证据。库存变化后重新 inventory/selection/inspect，不能改摘要或复用过期范围。下方不带 --selection 的原整库路径仍可用。
 
 When a later official host supports the pending format, use its **read-only** persistence reader on the preserved log, generate a fresh inventory, compare actual birth identity and re-establish the preserved old-mode source. Confirm that the existing user authorization covers the newly included scope; ask only if it does not. Create a new selection and receipt, then adopt and verify. A previous migration receipt or certificate grants no new migration/publication authority. If the reader still refuses or the source cannot be recovered, retain pending and continue new work in a fresh qualified root session; do not fabricate origin, inherited cut, old mode or receipt. The original history remains available for later support.
 
@@ -107,42 +119,45 @@ When a later official host supports the pending format, use its **read-only** pe
 
 ### Copyable migration prompts / 可复制迁移提示词
 
-> Help me migrate session activation to DSH Completion Guard 0.12.0. Lifecycle constraint: [fill in which writers may be stopped and whether restart is allowed]. Reuse scope, write and lifecycle authorization already supplied in this conversation; ask only for missing or materially changed decisions. First report the current host/persistence/compression settings, preserved predecessor package identity (for example 0.9.0) and sanitized pre-upgrade effective-mode sources. If they cannot be verified, keep affected sessions pending. Do not replace packages, stop/restart processes or write bindings before that lifecycle and mutation authority is established. Run the packaged read-only inventory command; show total/readable/official-format-refused counts and a local pending report. Use my existing explicit selection, or ask me to choose the included scope if none was supplied; do not silently expand it or treat readability alone as authorization. Bind that explicit selection through inspect/adopt/verify, detect all inventory changes, preserve raw logs and old sources, and never infer modes/origin/cuts from paths, dates or event counts. No log bodies, credentials or private IDs leave my machine. Once the scope and writes are covered by my authorization, adopt, repeat to check no-op, and verify; report selected completion and remaining pending separately. For unsupported rows, give the future official-reader/re-inventory/source-validation route; without a recoverable source, keep pending or use a new session. Do not treat old certificates as new authority.
+> Help me migrate session activation to DSH Completion Guard 0.12.1. Lifecycle constraint: [fill in which writers may be stopped and whether restart is allowed]. Reuse scope, write and lifecycle authorization already supplied in this conversation; ask only for missing or materially changed decisions. First report the current host/persistence/compression settings, preserved predecessor package identity (for example 0.9.0) and sanitized pre-upgrade effective-mode sources. If they cannot be verified, keep affected sessions pending. Do not replace packages, stop/restart processes or write bindings before that lifecycle and mutation authority is established. Run the packaged read-only inventory command; show total/readable/official-format-refused counts and a local pending report. Use my existing explicit selection, or ask me to choose the included scope if none was supplied; do not silently expand it or treat readability alone as authorization. Bind that explicit selection through inspect/adopt/verify, detect all inventory changes, preserve raw logs and old sources, and never infer modes/origin/cuts from paths, dates or event counts. No log bodies, credentials or private IDs leave my machine. Once the scope and writes are covered by my authorization, adopt, repeat to check no-op, and verify; report selected completion and remaining pending separately. For unsupported rows, give the future official-reader/re-inventory/source-validation route; without a recoverable source, keep pending or use a new session. Do not treat old certificates as new authority.
 
-> 帮我迁移到 DSH Completion Guard 0.12.0 的会话启用模式。生命周期约束：[填写允许停止的写者及是否允许重启]。沿用本会话已给出的范围、写入及生命周期授权，仅询问缺失或实质变化的决定。先报告现有宿主、持久化目录/压缩配置、保留的前驱包（如 0.9.0）身份及脱敏的升级前有效模式来源；不能核验就将受影响会话保持 pending。取得明确生命周期和写入权限前，不替换包、不停/重启进程、不写绑定。运行打包工具的只读 inventory，报告总数/可读/官方格式拒绝数量并保存本地 pending 报告；沿用我已明确选择的范围，尚未选择时再请我决定；不静默扩大范围，也不把可读性本身当作授权。让显式 selection 贯穿 inspect/adopt/verify，检测全部库存变化，保留原日志和旧来源，不按路径、日期、事件数猜模式/origin/cut。正文、凭据、私有 ID 不离开本机。范围和写入已有授权覆盖后 adopt、重复检查 no-op，再 verify，分别报告选中行完成及剩余 pending。被拒绝项给出未来官方读取器支持后重盘点、核验身份/旧来源的方案；没有可恢复来源就保留 pending 或改用新会话。旧证书不当作新权限。
+> 帮我迁移到 DSH Completion Guard 0.12.1 的会话启用模式。生命周期约束：[填写允许停止的写者及是否允许重启]。沿用本会话已给出的范围、写入及生命周期授权，仅询问缺失或实质变化的决定。先报告现有宿主、持久化目录/压缩配置、保留的前驱包（如 0.9.0）身份及脱敏的升级前有效模式来源；不能核验就将受影响会话保持 pending。取得明确生命周期和写入权限前，不替换包、不停/重启进程、不写绑定。运行打包工具的只读 inventory，报告总数/可读/官方格式拒绝数量并保存本地 pending 报告；沿用我已明确选择的范围，尚未选择时再请我决定；不静默扩大范围，也不把可读性本身当作授权。让显式 selection 贯穿 inspect/adopt/verify，检测全部库存变化，保留原日志和旧来源，不按路径、日期、事件数猜模式/origin/cut。正文、凭据、私有 ID 不离开本机。范围和写入已有授权覆盖后 adopt、重复检查 no-op，再 verify，分别报告选中行完成及剩余 pending。被拒绝项给出未来官方读取器支持后重盘点、核验身份/旧来源的方案；没有可恢复来源就保留 pending 或改用新会话。旧证书不当作新权限。
 
 
 ## Full-inventory inspect, adopt, verify / 整库清点、采纳、核验
 
-The entry `node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs` below uses the independently prepared 0.12.0 toolkit; it does not assume a new command is installed on PATH while the old Guard remains installed. The tool mounts only the official JSONL persistence service, without starting the agent loop, UI or model. `--runtime-anchor` is a file in the physical official runtime; the tool resolves its real path before loading dependencies. `--persistence-root` and optional `--compression none|zstd` must match the active persistence configuration. No storage path or encoding is guessed. Inspection uses public `list`, read-only `open`, exact header/inherited-cut metadata and revision readback; it outputs no event bodies. Keep writers stopped through the sequence.
+The entry `node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs` below uses the independently prepared 0.12.1 toolkit; it does not assume a new command is installed on PATH while the old Guard remains installed. The tool mounts only the official JSONL persistence service, without starting the agent loop, UI or model. `--runtime-anchor` is a file in the physical official runtime; the tool resolves its real path before loading dependencies. `--persistence-root` and optional `--compression none|zstd` must match the active persistence configuration. The default compression is `zstd`; pass `--compression none` for a plain JSONL store. Inspection uses public `list`, read-only `open`, exact header/inherited-cut metadata and revision readback; it outputs no event bodies. Keep writers stopped through the sequence.
 
-下方使用独立准备的 0.12.0 工具入口 `node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs`，不假定旧 Guard 仍安装时新命令已在 PATH。工具只挂载官方 JSONL persistence 服务，不启动 agent loop、界面或模型。runtime anchor 必须是官方 runtime 中的文件，加载依赖前先解析物理路径。持久目录及可选压缩格式必须匹配实际配置，不推测目录或编码。清点使用公开 list、只读 open、精确 header/cut 元数据及 revision 回读，不输出事件正文。整个操作期间保持写者停止。
+下方使用独立准备的 0.12.1 工具入口 `node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs`，不假定旧 Guard 仍安装时新命令已在 PATH。工具只挂载官方 JSONL persistence 服务，不启动 agent loop、界面或模型。runtime anchor 必须是官方 runtime 中的文件，加载依赖前先解析物理路径。持久目录和压缩格式须匹配实际配置。默认使用 `zstd`，普通 JSONL 库须传 `--compression none`。清点使用公开 list、只读 open、精确 header/cut 元数据及 revision 回读，不输出事件正文。整个操作期间保持写者停止。
 
-The following example is for a POSIX shell. Run `inspect` before replacement; run `adopt` and `verify` before starting the upgraded host. Keep the prepared toolkit path explicit throughout.
+The following example is for a POSIX shell. Replace `zstd` with `none` for a plain JSONL store. Run `inspect` before replacement; run `adopt` and `verify` before starting the upgraded host. Keep the prepared toolkit path explicit throughout.
 
-以下示例使用 POSIX shell：替换前执行 inspect，升级后的宿主启动前执行 adopt 和 verify，全程使用明确的候选工具路径。
+以下示例使用 POSIX shell。普通 JSONL 库须将 `zstd` 换成 `none`。替换前执行 inspect，升级后的宿主启动前执行 adopt 和 verify，全程使用明确的候选工具路径。
 
 ```sh
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs inspect \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --prior-modes /path/to/old-mode-source.json \
   --output /path/to/frozen-migration.json
 
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs adopt \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --receipt /path/to/frozen-migration.json \
   --dsh-home /path/to/actual-dsh-home
 
 node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs verify \
   --runtime-anchor /path/to/runtime/package.json \
   --persistence-root /path/to/active-session-storage \
+  --compression zstd \
   --receipt /path/to/frozen-migration.json \
   --dsh-home /path/to/actual-dsh-home
 ```
 
-`inspect` creates a new owner-only receipt with exclusive creation, or reports exact unresolved session IDs and exits nonzero without creating an adoptable receipt. `adopt` first checks receipt identities against the current public inventory, then writes each binding separately; `verify` never writes. A conflict leaves the other completed rows intact and reports `partial`. Repeating adoption is a byte-identical no-op for completed rows and continues missing rows. Claim completion only after all receipt rows verify. A newly appearing session is not silently included in an old receipt.
+`inspect` creates a new owner-only receipt with exclusive creation, or reports exact unresolved session IDs and exits nonzero without creating an adoptable receipt. `adopt` first checks receipt identities against the current public inventory, then writes each binding separately; `verify` leaves source logs and mode bindings untouched. It uses a private temporary copy for multi-generation verification. A conflict leaves the other completed rows intact and reports `partial`. Repeating adoption is a byte-identical no-op for completed rows and continues missing rows. Claim completion only after all receipt rows verify. A newly appearing session is not silently included in an old receipt.
 
 inspect 排他创建仅所有者可访问的新收据，或报告未解决会话 ID 并非零退出，不生成可采纳收据。adopt 先用当前公开库存核对身份，再逐会话写绑定；verify 不写入。冲突保留其他已完成行并报告 partial，重复采纳对已完成行字节不变，继续缺失行。所有收据行核验通过后才可报告该收据迁移完成；新出现的会话不会被静默加入旧收据。
 

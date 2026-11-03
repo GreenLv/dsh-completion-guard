@@ -7,9 +7,14 @@ Each entry describes that version. Historical host ranges, defaults, plans and c
 <details>
 <summary>Version index</summary>
 
-[0.12.0](#0120) · [0.11.0](#0110) · [0.10.0](#0100) · [0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
+[0.12.1](#0121) · [0.12.0](#0120) · [0.11.0](#0110) · [0.10.0](#0100) · [0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
 
 </details>
+
+## 0.12.1
+
+- **Verify every retained generation during session migration.** The activation toolkit checks the physical logs in each multi-generation JSONL session before preparing or using a migration receipt. It checks the session identity and inherited cut through the official read-only SDK, and preserves the original files and their paths. Both plain JSONL and zstd are supported on reviewed backends. Hidden corruption, inconsistent identity and changes during inspection stop migration.
+- **Host compatibility stays at DSH `>=0.2.1-rc.3`.** DSH rc.5 and Cordis 4.0.5 remain the default reviewed baseline. The three disclosed Undici findings remain present in the signed host. The maintainer accepted their residual risk for this release through **2026-11-30 inclusive**. See the [migration guide](docs/ACTIVATION_MIGRATION.md) and [dependency advisory policy](docs/DEPENDENCY_SCAN.md).
 
 ## 0.12.0
 

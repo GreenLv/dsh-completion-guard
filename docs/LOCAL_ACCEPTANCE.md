@@ -1,5 +1,15 @@
 # Local Acceptance
 
+## 0.12.1 session migration acceptance
+
+Run the historical incident gate and both native migration workflows against the same frozen package. On each platform, use the reviewed rc.5 runtime to verify plain JSONL and zstd fixtures with more than one generation. Exercise inventory, inspection, adoption, repeated adoption and verification. Compare the paths, identities and bytes of all original fixture logs before and after the workflow. Check that a corrupt or inconsistent older generation blocks migration even if the newest generation is readable. The historical and native receipts belong to the release artifact.
+
+Before adopting the release in daily Web and Headless, revalidate each platform's original library under its actual persistence configuration, with writers stopped and the original logs retained. Verify that every old effective mode is established for its exact session birth identity. Both original libraries must pass before either platform's daily profiles change.
+
+用同一份冻结包跑历史错误库和双平台原生迁移验收。两端均用已审查的 rc.5 宿主，验证普通 JSONL 与 zstd 多代夹具，覆盖清点、检查、采纳、重复采纳和复验。核对每份原日志在操作前后的路径、文件身份和字节。即使最新一代可读，较早一代损坏或身份不一致也须阻止迁移。历史库与原生验收记录均绑定本次制品。
+
+升级日常 Web 和 Headless 之前，在停止写者并保留原日志的条件下，按两端各自的实际持久化配置复验原库。逐会话核对旧有效模式及出生身份。两端原库均通过后才升级日常 profile。
+
 ## 0.12.0 / DSH 0.2.1-rc.5 candidate contract
 
 The current source requires DSH `>=0.2.1-rc.3`, with rc.5 as its default audited host graph; rc.3 uses its own reviewed cohort. The task, certificate and data protocols and the existing Web/Headless and Desktop gate sets remain in force. Use `--desktop-cohort 0.2.1-rc.5` for this candidate's Desktop entry. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [old-session migration](ACTIVATION_MIGRATION.md) instructions before replacing an installation.

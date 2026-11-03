@@ -2,6 +2,12 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
+## 0.12.1 and the 0.12.0 host cohort
+
+Guard 0.12.1 retains the same DSH and Cordis admission ranges and the reviewed host cohorts below. The patch changes the activation migration toolkit to verify retained generations of a session before adopting its previous mode. New acceptance records must identify the 0.12.1 artifact.
+
+Guard 0.12.1 沿用下文的 DSH、Cordis 准入范围和宿主审查队列。本次修复在采纳旧启用模式前逐代核验保留的会话日志。新验收记录须绑定 0.12.1 制品。
+
 ## 0.12.0: DSH >=0.2.1-rc.3
 
 Before installing Guard 0.12.0, upgrade DSH if it is older than `0.2.1-rc.3`. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.

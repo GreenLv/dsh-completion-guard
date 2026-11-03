@@ -38,7 +38,7 @@ EXCEPTIONS_SCHEMA = "dsh-dependency-scan-exceptions/v1"
 DATE = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 
 
-def load_exceptions(path: Path) -> dict[tuple[str, str, str], dict[str, str]]:
+def load_exceptions(path: Path, package_path: Path) -> dict[tuple[str, str, str], dict[str, Any]]:
     """Load the accepted-exception table keyed by (id, module, version).
 
     Malformed, unparseable or expired entries raise AuditUnavailable — the
@@ -55,13 +55,28 @@ def load_exceptions(path: Path) -> dict[tuple[str, str, str], dict[str, str]]:
     import re as _re
 
     today = _dt.date.today()
-    table: dict[tuple[str, str, str], dict[str, str]] = {}
+    table: dict[tuple[str, str, str], dict[str, Any]] = {}
+    package_version = None
     for entry in raw["exceptions"]:
         if not isinstance(entry, dict):
             raise AuditUnavailable("exception entry is not an object")
         required = ("id", "module", "version", "severity", "rationale", "owner", "expires")
         if any(not isinstance(entry.get(field), str) or not entry[field] for field in required):
             raise AuditUnavailable("exception entry is missing a required field")
+        if "guard_versions" in entry:
+            versions = entry["guard_versions"]
+            if (not isinstance(versions, list) or not versions
+                    or any(not isinstance(version, str) or not _re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) for version in versions)
+                    or len(set(versions)) != len(versions)):
+                raise AuditUnavailable(f"exception {entry['id']} has invalid Guard release scope")
+            if package_version is None:
+                manifest = json.loads(package_path.read_text(encoding="utf-8"))
+                if (not isinstance(manifest, dict) or manifest.get("name") != "dsh-completion-guard"
+                        or not isinstance(manifest.get("version"), str) or not manifest["version"]):
+                    raise AuditUnavailable("Guard release identity is unavailable")
+                package_version = manifest["version"]
+            if package_version not in versions:
+                continue
         if not _re.match(DATE, entry["expires"]):
             raise AuditUnavailable(f"exception {entry['id']} expiry is not a YYYY-MM-DD date")
         try:
@@ -166,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.exceptions is None:
         args.exceptions = args.repo_root / "scripts" / "dependency-scan-exceptions.json"
     try:
-        exceptions = load_exceptions(args.exceptions)
+        exceptions = load_exceptions(args.exceptions, args.repo_root / "package.json")
         if args.report is not None:
             report = json.loads(args.report.read_text(encoding="utf-8"))
         else:

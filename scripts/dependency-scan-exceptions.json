@@ -1,6 +1,6 @@
 {
   "schema": "dsh-dependency-scan-exceptions/v1",
-  "note": "Machine-readable accepted exceptions for the fail-closed dependency advisory gate. Each entry must carry advisory id, module, vulnerable version, reachability rationale, owner and expiry. An expired, mismatched or missing entry leaves the advisory BLOCKING. Human-readable policy: docs/DEPENDENCY_SCAN.md. The id/url pair records the pnpm numeric advisory id and the real GitHub advisory it resolves to.",
+  "note": "Machine-readable accepted exceptions for the fail-closed dependency advisory gate. Each entry must carry advisory id, module, vulnerable version, reachability rationale, owner and expiry. An expired, mismatched or missing entry leaves the advisory BLOCKING. Human-readable policy: docs/DEPENDENCY_SCAN.md. The id/url pair records the pnpm numeric advisory id and the real GitHub advisory it resolves to. Optional guard_versions limits an entry to exact Guard package versions.",
   "exceptions": [
     {
       "id": "1243066",
@@ -29,33 +29,45 @@
       "module": "undici",
       "version": "8.11.2",
       "severity": "high",
-      "rationale": "Explicit maintainer-authorized temporary residual-risk and exception-eligibility waiver for the historical 0.11.0 validation and the separately maintainer-authorized 0.12.0 validation on 2026-11-02, not an unreachability finding. Cache/redirect poisoning and cross-user disclosure: the inspected dsh-http-proxy factory does not construct cache stores or cache/redirect composition. This only narrows that inspected path; arbitrary host/plugin dispatchers were not proven absent. The development SDK and signed official rc.3/rc.5 hosts retain the affected exact pin. Signed-host bytes remain unfixed; a development override does not repair them. Acceptance is limited to this advisory/version pair through 2026-11-30 inclusive, explicitly extended by the maintainer on 2026-11-02; the existing gate blocks again from 2026-12-01 unless re-justified. Other findings, versions and release checks are not waived.",
+      "rationale": "Explicit maintainer-authorized temporary residual-risk and exception-eligibility waiver for the historical 0.11.0 validation and the separately maintainer-authorized 0.12.0 validation on 2026-11-02 and 0.12.1 validation on 2026-11-03, not an unreachability finding. Cache/redirect poisoning and cross-user disclosure: the inspected dsh-http-proxy factory does not construct cache stores or cache/redirect composition. This only narrows that inspected path; arbitrary host/plugin dispatchers were not proven absent. The development SDK and signed official rc.3/rc.5 hosts retain the affected exact pin. Signed-host bytes remain unfixed; a development override does not repair them. Acceptance is limited to this advisory/version pair and Guard 0.12.0 and 0.12.1 through 2026-11-30 inclusive, explicitly extended by the maintainer on 2026-11-02; the existing gate blocks again from 2026-12-01 unless re-justified. Other findings, versions and release checks are not waived.",
       "owner": "GreenLv (repository maintainer)",
       "expires": "2026-11-30",
       "github_advisory_id": "GHSA-4w7w-5xrc-9h26",
-      "url": "https://github.com/nodejs/undici/security/advisories/GHSA-4w7w-5xrc-9h26"
+      "url": "https://github.com/nodejs/undici/security/advisories/GHSA-4w7w-5xrc-9h26",
+      "guard_versions": [
+        "0.12.0",
+        "0.12.1"
+      ]
     },
     {
       "id": "1243474",
       "module": "undici",
       "version": "8.11.2",
       "severity": "high",
-      "rationale": "Explicit maintainer-authorized temporary residual-risk and exception-eligibility waiver for the historical 0.11.0 validation and the separately maintainer-authorized 0.12.0 validation on 2026-11-02, not an unreachability finding. Dropped Agent TLS callbacks can bypass application-specific certificate checks. The inspected host factory supplies no custom tls callback, but other host/plugin configurations remain unknown. The development SDK and signed official rc.3/rc.5 hosts retain the affected exact pin. Signed-host bytes remain unfixed; a development override does not repair them. Acceptance is limited to this advisory/version pair through 2026-11-30 inclusive, explicitly extended by the maintainer on 2026-11-02; the existing gate blocks again from 2026-12-01 unless re-justified. Other findings, versions and release checks are not waived.",
+      "rationale": "Explicit maintainer-authorized temporary residual-risk and exception-eligibility waiver for the historical 0.11.0 validation and the separately maintainer-authorized 0.12.0 validation on 2026-11-02 and 0.12.1 validation on 2026-11-03, not an unreachability finding. Dropped Agent TLS callbacks can bypass application-specific certificate checks. The inspected host factory supplies no custom tls callback, but other host/plugin configurations remain unknown. The development SDK and signed official rc.3/rc.5 hosts retain the affected exact pin. Signed-host bytes remain unfixed; a development override does not repair them. Acceptance is limited to this advisory/version pair and Guard 0.12.0 and 0.12.1 through 2026-11-30 inclusive, explicitly extended by the maintainer on 2026-11-02; the existing gate blocks again from 2026-12-01 unless re-justified. Other findings, versions and release checks are not waived.",
       "owner": "GreenLv (repository maintainer)",
       "expires": "2026-11-30",
       "github_advisory_id": "GHSA-2m5v-pch6-74hx",
-      "url": "https://github.com/nodejs/undici/security/advisories/GHSA-2m5v-pch6-74hx"
+      "url": "https://github.com/nodejs/undici/security/advisories/GHSA-2m5v-pch6-74hx",
+      "guard_versions": [
+        "0.12.0",
+        "0.12.1"
+      ]
     },
     {
       "id": "1243477",
       "module": "undici",
       "version": "8.11.2",
       "severity": "high",
-      "rationale": "Explicit maintainer-authorized temporary residual-risk and exception-eligibility waiver for the historical 0.11.0 validation and the separately maintainer-authorized 0.12.0 validation on 2026-11-02, not an unreachability finding. TLS 1.2 certificate-changing renegotiation can crash the client process. The inspected host dispatcher has no TLS-1.3-only restriction; reachability of this denial of service cannot be excluded. The development SDK and signed official rc.3/rc.5 hosts retain the affected exact pin. Signed-host bytes remain unfixed; a development override does not repair them. Acceptance is limited to this advisory/version pair through 2026-11-30 inclusive, explicitly extended by the maintainer on 2026-11-02; the existing gate blocks again from 2026-12-01 unless re-justified. Other findings, versions and release checks are not waived.",
+      "rationale": "Explicit maintainer-authorized temporary residual-risk and exception-eligibility waiver for the historical 0.11.0 validation and the separately maintainer-authorized 0.12.0 validation on 2026-11-02 and 0.12.1 validation on 2026-11-03, not an unreachability finding. TLS 1.2 certificate-changing renegotiation can crash the client process. The inspected host dispatcher has no TLS-1.3-only restriction; reachability of this denial of service cannot be excluded. The development SDK and signed official rc.3/rc.5 hosts retain the affected exact pin. Signed-host bytes remain unfixed; a development override does not repair them. Acceptance is limited to this advisory/version pair and Guard 0.12.0 and 0.12.1 through 2026-11-30 inclusive, explicitly extended by the maintainer on 2026-11-02; the existing gate blocks again from 2026-12-01 unless re-justified. Other findings, versions and release checks are not waived.",
       "owner": "GreenLv (repository maintainer)",
       "expires": "2026-11-30",
       "github_advisory_id": "GHSA-qrxm-fqhp-jwvm",
-      "url": "https://github.com/nodejs/undici/security/advisories/GHSA-qrxm-fqhp-jwvm"
+      "url": "https://github.com/nodejs/undici/security/advisories/GHSA-qrxm-fqhp-jwvm",
+      "guard_versions": [
+        "0.12.0",
+        "0.12.1"
+      ]
     }
   ]
 }

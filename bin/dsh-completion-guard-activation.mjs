@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, realpathSync, readdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, realpathSync, readdirSync, lstatSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { activationJson, activationCanonical, inspectActivationInventory, prepareActivationMigration,
@@ -10,7 +10,9 @@ import { activationJson, activationCanonical, inspectActivationInventory, prepar
   scanActivationInventory, createActivationSelection, validateActivationSelection, activationSelectionPending,
   prepareSelectedActivationMigration, verifySelectedMigrationInventory, isSelectedActivationReceipt,
   validateActivationInventorySnapshot, bindActivationInventoryPhysical, createActivationMigrationReceipt, activationDigest,
-  captureActivationPhysicalInventory, guardActivationInventory, resolveActivationPersistencePlugin, assertActivationBackendIdentity } from '../dist/domain/index.js'
+  captureActivationPhysicalInventory, verifyActivationPhysicalInventory, verifyActivationGenerations,
+  guardActivationInventory, resolveActivationPersistencePlugin, assertActivationBackendIdentity,
+  assertActivationCatalogQualification } from '../dist/domain/index.js'
 
 const operation = process.argv[2]
 const common = ['--runtime-anchor', '--persistence-root', '--compression']
@@ -32,6 +34,24 @@ function save(path, value) {
   catch (error) { if (error?.code === 'EEXIST') throw new Error('activation_output_exists'); throw error }
 }
 const print = value => process.stdout.write(JSON.stringify(value) + '\n')
+function assertOutsideInventory(root, path) {
+  let candidate = resolve(path)
+  const tail = []
+  for (;;) {
+    try { lstatSync(candidate); break }
+    catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+      const parent = dirname(candidate)
+      if (parent === candidate) throw error
+      tail.unshift(relative(parent, candidate))
+      candidate = parent
+    }
+  }
+  const offset = relative(root, join(realpathSync(candidate), ...tail))
+  if (offset === '' || (!isAbsolute(offset) && offset !== '..' && !offset.startsWith('..' + sep))) {
+    throw new Error('activation_inventory_output_overlap')
+  }
+}
 async function main() {
   if (!Object.hasOwn(allowed, operation)) throw new Error('activation_cli_usage')
   for (let i = 3; i < process.argv.length; i += 2) {
@@ -96,34 +116,73 @@ async function main() {
     return activationDigest({ name: manifest.name, version: manifest.version, backendFile, packageSha256: digest(packageBytes), modules,
       dependencies, node: process.versions.node, zstd: process.versions.zstd ?? null })
   }
+  const compression = option('--compression', true) ?? 'zstd'
+  if (!['none', 'zstd'].includes(compression)) throw new Error('invalid compression')
+  const persistenceRoot = resolve(option('--persistence-root'))
+  const output = option('--output', true)
+  const bindingsRoot = receipt ? resolveActivationBindingsRoot(option('--dsh-home', true) ?? process.env.DSH_HOME, homedir()) : undefined
+  if (output) assertOutsideInventory(persistenceRoot, output)
+  if (bindingsRoot) assertOutsideInventory(persistenceRoot, bindingsRoot)
   const backendSha256 = checkedBackend()
+  const backendRequire = createRequire(backendFile)
+  const cordisFile = realpathSync(backendRequire.resolve('@deepseek-ai/cordis'))
+  if (realpathSync(require.resolve('@deepseek-ai/cordis')) !== cordisFile) throw new Error('activation_backend_unreviewed')
+  const rawCensus = captureActivationPhysicalInventory(persistenceRoot, compression, backendSha256)
+  const catalogReview = rawCensus.multiGenerationSessionCount
+    ? readJson(join(packageRoot, 'manifests', 'activation-catalog-cohort.v1.json')) : undefined
+  const qualifyCatalog = () => assertActivationCatalogQualification(backendFile, catalogReview)
+  const catalog = catalogReview ? qualifyCatalog() : undefined
+  if (catalog && realpathSync(backendRequire.resolve('@deepseek-ai/dsh-session-format-catalog')) !== catalog.catalogFile) {
+    throw new Error('activation_catalog_unreviewed')
+  }
+  const inventoryBackendSha256 = catalog ? activationDigest({ backendSha256, catalogSha256: catalog.qualificationSha256 }) : backendSha256
+  const physical = () => {
+    if (checkedBackend() !== backendSha256 || (catalog && qualifyCatalog().qualificationSha256 !== catalog.qualificationSha256)) {
+      throw new Error('activation_inventory_changed')
+    }
+    return captureActivationPhysicalInventory(persistenceRoot, compression, inventoryBackendSha256)
+  }
+  const census = catalog ? physical() : rawCensus
   const jsonlModule = await import(pathToFileURL(backendFile).href)
   const Jsonl = resolveActivationPersistencePlugin(jsonlModule)
-  const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href)
-  // Resolve the same dependency instance used by this physical JSONL backend.
-  const { SessionFormatUnsupportedError } = await import(pathToFileURL(createRequire(backendPath).resolve('@deepseek-ai/dsh-session-persistence')).href)
-  const ctx = new Context()
-  const compression = option('--compression', true)
-  if (compression && !['none', 'zstd'].includes(compression)) throw new Error('invalid compression')
-  const persistenceRoot = resolve(option('--persistence-root'))
-  const physical = () => {
-    if (checkedBackend() !== backendSha256) throw new Error('activation_inventory_changed')
-    return captureActivationPhysicalInventory(persistenceRoot, compression ?? 'zstd', backendSha256)
+  const { Context } = await import(pathToFileURL(cordisFile).href)
+  const { SessionFormatUnsupportedError } = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session-persistence')).href)
+  async function openPersistence(root, compression) {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(Jsonl, { root, compression }).await()
+      const persistence = ctx.sessionPersistence
+      if (!persistence || ['list', 'open', 'stat'].some(name => typeof persistence[name] !== 'function')) throw new Error('activation_backend_unreviewed')
+      return { persistence, close: async () => { await ctx.fiber.dispose() } }
+    } catch (error) {
+      await ctx.fiber.dispose()
+      throw error
+    }
   }
-  const backend = ctx.plugin(Jsonl, { root: persistenceRoot, ...(compression ? { compression } : {}) })
+  const proof = await verifyActivationPhysicalInventory(census, async candidate => {
+    if (!catalog) throw new Error('activation_catalog_unreviewed')
+    const { historicalSessionFormatCatalog, sessionFormatCatalog } = await import(
+      pathToFileURL(catalog.catalogFile).href)
+    return verifyActivationGenerations({
+      root: candidate.root, compression: candidate.compression, censusSha256: candidate.censusSha256, generations: candidate.generations,
+      capture: () => physical().censusSha256, openSnapshot: openPersistence,
+      catalogs: { historical: historicalSessionFormatCatalog, current: sessionFormatCatalog },
+    })
+  }, physical)
+  const mounted = await openPersistence(persistenceRoot, compression)
   try {
-    await backend.await()
-    const persistence = ctx.sessionPersistence
-    if (!persistence || ['list', 'open', 'stat'].some(name => typeof persistence[name] !== 'function')) throw new Error('activation_backend_unreviewed')
-    const fence = guardActivationInventory(persistence, physical)
+    const { persistence } = mounted
+    const fence = guardActivationInventory(persistence, proof, physical)
     const initial = fence.initial, checkPhysical = fence.check
     const guarded = { list: fence.list,
       open: (...args) => persistence.open(...args), stat: (...args) => persistence.stat(...args) }
     const snapshot = operation === 'inventory' || selection
       ? bindActivationInventoryPhysical(await scanActivationInventory(guarded, error => error instanceof SessionFormatUnsupportedError), checkPhysical().sha256) : undefined
     if (operation === 'inventory') {
+      assertOutsideInventory(persistenceRoot, option('--output'))
       save(option('--output'), snapshot)
       print({ status: 'inventory_scanned', totalCount: snapshot.rows.length,
+        generationCount: census.generations.length, multiGenerationSessionCount: census.multiGenerationSessionCount,
         readableCount: snapshot.rows.filter(row => row.status === 'readable').length,
         unsupportedCount: snapshot.rows.filter(row => row.status === 'unsupported').length, inventorySha256: snapshot.sha256 })
       return
@@ -139,6 +198,7 @@ async function main() {
       const result = selection ? prepareSelectedActivationMigration(snapshot, selection, prior) : prepareActivationMigration(inventory, prior)
       if (result.receipt) {
         result.receipt = createActivationMigrationReceipt(result.receipt.entries, { ...result.receipt.inputs, physical_inventory: checkPhysical().sha256 })
+        assertOutsideInventory(persistenceRoot, option('--output'))
         save(option('--output'), result.receipt)
       }
       print({ ...result, receipt: undefined, ...scope, count: selection ? selection.include.length : inventory.length,
@@ -147,14 +207,14 @@ async function main() {
     } else {
       if (selection) verifySelectedMigrationInventory(receipt, snapshot, selection)
       else verifyMigrationInventory(receipt, inventory)
-      const root = resolveActivationBindingsRoot(option('--dsh-home', true) ?? process.env.DSH_HOME, homedir())
+      assertOutsideInventory(persistenceRoot, bindingsRoot)
       checkPhysical()
-      const result = adoptActivationReceipt(root, receipt, operation === 'verify')
+      const result = adoptActivationReceipt(bindingsRoot, receipt, operation === 'verify')
       checkPhysical()
       print({ ...result, ...scope, status: selection ? (result.status === 'complete' ? 'selected_complete' : 'selected_partial') : result.status })
       if (result.status !== 'complete') process.exitCode = 2
     }
-  } finally { await ctx.fiber.dispose() }
+  } finally { await mounted.close() }
 }
 main().catch(error => {
   const message = error instanceof Error && /^(?:activation_[a-z_]+|missing --[a-z-]+|invalid compression)$/u.test(error.message)

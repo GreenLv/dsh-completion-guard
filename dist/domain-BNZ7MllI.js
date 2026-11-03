@@ -7,6 +7,7 @@ import { homedir, hostname, tmpdir } from "node:os";
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import * as zlib from "node:zlib";
 import { gunzipSync } from "node:zlib";
 import { execFileSync, spawnSync } from "node:child_process";
 
@@ -2037,7 +2038,7 @@ function hostNodeConditions() {
 
 //#endregion
 //#region src/domain/host-dependency-audit.ts
-const within$1 = (root, path$1) => path$1.startsWith(root + sep);
+const within$2 = (root, path$1) => path$1.startsWith(root + sep);
 /** pnpm's standard hoisted generator uses physical path IDs, self edges and
 * the importer index, rather than the isolated generator's dependency closure.
 * Recognize that bounded shape before allowing a declared sibling lookup. A
@@ -2130,11 +2131,11 @@ function rawTargetAllowed(target) {
 	if (!target.startsWith("./") || target.includes("\\") || ENCODED_SEPARATOR.test(target)) return false;
 	const rest = target.slice(2);
 	if (rest === "") return false;
-	for (const segment of rest.split("/")) {
-		if (segment === "" || segment === "." || segment === "..") return false;
-		let decoded = segment;
+	for (const segment$1 of rest.split("/")) {
+		if (segment$1 === "" || segment$1 === "." || segment$1 === "..") return false;
+		let decoded = segment$1;
 		try {
-			decoded = decodeURIComponent(segment);
+			decoded = decodeURIComponent(segment$1);
 		} catch {
 			return false;
 		}
@@ -2279,7 +2280,7 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 				const configuredRoot = resolve(graph.modules, String(record.url));
 				if (id !== "." && !session.exists(configuredRoot) && !Object.keys(record.dependencies).some((name) => graph.packages.has(name) || installation.packages.has(name))) continue;
 				const root = id === "." ? dirname(graph.modules) : session.realpath(resolve(graph.modules, String(record.url)));
-				if (id !== "." && !within$1(graph.modules, root)) return false;
+				if (id !== "." && !within$2(graph.modules, root)) return false;
 				const manifestPath = join(root, "package.json");
 				const manifest = session.readJson(manifestPath);
 				const mapped = record.dependencies;
@@ -2316,7 +2317,7 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 					const mainFile = resolveMain(root, manifest.main, 0);
 					if (!mainFile) return false;
 					const main = session.realpath(mainFile);
-					if (!within$1(root, main)) return false;
+					if (!within$2(root, main)) return false;
 					importers.add(main);
 				}
 				for (const name of names) {
@@ -2333,13 +2334,13 @@ function auditHostDependencyRoutes(graphs, profileRoot, providedSession) {
 					const directories = new Map([...importers].map((path$1) => [dirname(path$1), path$1]));
 					for (const importer of directories.values()) {
 						const paths = session.resolvePaths(importer, name);
-						const selected = (isProfile ? paths.filter((path$1) => within$1(profile, path$1)) : paths).map((path$1) => join(path$1, name)).find((path$1) => session.exists(path$1));
+						const selected = (isProfile ? paths.filter((path$1) => within$2(profile, path$1)) : paths).map((path$1) => join(path$1, name)).find((path$1) => session.exists(path$1));
 						if (selected) {
 							if (!session.stat(selected).isDirectory() || session.realpath(selected) !== expected.root) return false;
 						} else if (!isProfile || local || !installed) return false;
 						for (const { subpath, target, lane } of exports) {
 							const wanted = session.memo(`wanted:${expected.root}\u0000${subpath}\u0000${lane ?? "both"}`, () => session.realpath(resolve(expected.root, target)));
-							if (!within$1(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
+							if (!within$2(expected.root, wanted) || !expected.files.includes(target.slice(2))) return false;
 							if (selected) {
 								const request = name + (subpath === "." ? "" : subpath.slice(1));
 								const scope = nearestPackageScope(session, dirname(importer));
@@ -15030,7 +15031,7 @@ var HostTrustError = class extends Error {
 		this.name = "HostTrustError";
 	}
 };
-const fail = (code) => {
+const fail$2 = (code) => {
 	throw new HostTrustError(code);
 };
 function canonical$1(value) {
@@ -15044,18 +15045,18 @@ function receiptPath(profileRoot, digest$1) {
 	return join(profileRoot, ".dsh-completion-guard", "host-contracts", digest$1 + ".json");
 }
 function readReceipt(profileRoot, trust) {
-	if (!profileRoot || trust.contract?.schema !== HOST_CONTRACT_SCHEMA || !/^[a-f0-9]{64}$/.test(trust.contract.receiptDigest)) return fail("host_trust_contract_receipt_missing");
+	if (!profileRoot || trust.contract?.schema !== HOST_CONTRACT_SCHEMA || !/^[a-f0-9]{64}$/.test(trust.contract.receiptDigest)) return fail$2("host_trust_contract_receipt_missing");
 	const root = realpathSync(profileRoot), path$1 = receiptPath(root, trust.contract.receiptDigest);
 	try {
-		if (!lstatSync(path$1).isFile() || lstatSync(path$1).isSymbolicLink() || realpathSync(path$1) !== path$1 || !path$1.startsWith(root + sep)) return fail("host_trust_contract_receipt_invalid");
+		if (!lstatSync(path$1).isFile() || lstatSync(path$1).isSymbolicLink() || realpathSync(path$1) !== path$1 || !path$1.startsWith(root + sep)) return fail$2("host_trust_contract_receipt_invalid");
 		const bytes$1 = readFileSync(path$1);
-		if (bytes$1.length > 256 * 1024) return fail("host_trust_contract_receipt_invalid");
+		if (bytes$1.length > 256 * 1024) return fail$2("host_trust_contract_receipt_invalid");
 		const receipt = JSON.parse(bytes$1.toString());
-		if (receipt.schema !== HOST_CONTRACT_SCHEMA || hash$3(receipt) !== trust.contract.receiptDigest || receipt.bindingDigest !== bindingDigest$1(trust.packages, trust.probeDependencies) || receipt.bindingDigest !== trust.contract.bindingDigest || receipt.conditionsDigest !== hostNodeConditions().digest || receipt.conditionsDigest !== trust.contract.conditionsDigest || !Array.isArray(receipt.checks) || !receipt.checks.length || !Array.isArray(receipt.unqualifiedOptionalPackages)) return fail("host_trust_contract_binding_mismatch");
+		if (receipt.schema !== HOST_CONTRACT_SCHEMA || hash$3(receipt) !== trust.contract.receiptDigest || receipt.bindingDigest !== bindingDigest$1(trust.packages, trust.probeDependencies) || receipt.bindingDigest !== trust.contract.bindingDigest || receipt.conditionsDigest !== hostNodeConditions().digest || receipt.conditionsDigest !== trust.contract.conditionsDigest || !Array.isArray(receipt.checks) || !receipt.checks.length || !Array.isArray(receipt.unqualifiedOptionalPackages)) return fail$2("host_trust_contract_binding_mismatch");
 		return receipt;
 	} catch (error) {
 		if (error instanceof HostTrustError) throw error;
-		return fail("host_trust_contract_receipt_missing");
+		return fail$2("host_trust_contract_receipt_missing");
 	}
 }
 /** The reviewed executable-byte baseline for one acquired graph. The rc.3
@@ -15084,14 +15085,14 @@ const AUDITED_BASELINES = [
 * receipt, whose complete byte graph and startup conditions are bound. */
 function qualifyHostTrust(value, profileRoot) {
 	const trust = value;
-	if (trust?.schema !== "dsh-host-registry-trust/v1" || trust.source !== "https://registry.npmjs.org/" || trust.qualification !== HOST_CONTRACT_SCHEMA || !Array.isArray(trust.packages)) return fail("host_trust_source_untrusted");
+	if (trust?.schema !== "dsh-host-registry-trust/v1" || trust.source !== "https://registry.npmjs.org/" || trust.qualification !== HOST_CONTRACT_SCHEMA || !Array.isArray(trust.packages)) return fail$2("host_trust_source_untrusted");
 	const known = new Set(baselineFor(trust.packages).packages.map((p) => p.name)), names = /* @__PURE__ */ new Set();
 	for (const row$3 of [...trust.packages, ...trust.probeDependencies ?? []]) {
-		if (!row$3 || names.has(row$3.name) || !parseHostVersion(row$3.version) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(row$3.integrity) || !row$3.modules || Array.isArray(row$3.modules) || !/^[a-f0-9]{64}$/.test(row$3.modules["package.json"])) return fail("host_trust_identity_invalid");
-		for (const [file, digest$1] of Object.entries(row$3.modules)) if (!/^[a-f0-9]{64}$/.test(digest$1) || file.startsWith("/") || file.includes("\\") || file.split("/").some((part) => !part || part === "." || part === "..")) return fail("host_trust_identity_invalid");
+		if (!row$3 || names.has(row$3.name) || !parseHostVersion(row$3.version) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(row$3.integrity) || !row$3.modules || Array.isArray(row$3.modules) || !/^[a-f0-9]{64}$/.test(row$3.modules["package.json"])) return fail$2("host_trust_identity_invalid");
+		for (const [file, digest$1] of Object.entries(row$3.modules)) if (!/^[a-f0-9]{64}$/.test(digest$1) || file.startsWith("/") || file.includes("\\") || file.split("/").some((part) => !part || part === "." || part === "..")) return fail$2("host_trust_identity_invalid");
 		names.add(row$3.name);
 	}
-	if (trust.packages.some((row$3) => !known.has(row$3.name))) return fail("host_trust_identity_invalid");
+	if (trust.packages.some((row$3) => !known.has(row$3.name))) return fail$2("host_trust_identity_invalid");
 	const receipt = readReceipt(profileRoot, trust);
 	return JSON.parse(JSON.stringify({
 		...trust,
@@ -15099,12 +15100,12 @@ function qualifyHostTrust(value, profileRoot) {
 	}));
 }
 function parseHostTrust(text, profileRoot) {
-	if (text.length > 4 * 1024 * 1024) return fail("host_trust_identity_invalid");
+	if (text.length > 4 * 1024 * 1024) return fail$2("host_trust_identity_invalid");
 	try {
 		return qualifyHostTrust(JSON.parse(text), profileRoot);
 	} catch (error) {
 		if (error instanceof HostTrustError) throw error;
-		return fail("host_trust_identity_invalid");
+		return fail$2("host_trust_identity_invalid");
 	}
 }
 function hostTrustDigest(trust) {
@@ -15121,7 +15122,7 @@ function hostTrustDigest(trust) {
 }
 /** Closed-world regular-file tar projection. Never extract or execute archives. */
 function registryArchiveFiles(bytes$1, row$3) {
-	if (bytes$1.length === 0 || bytes$1.length > 64 * 1024 * 1024 || `sha512-${createHash("sha512").update(bytes$1).digest("base64")}` !== row$3.integrity) return fail("host_trust_archive_integrity_mismatch");
+	if (bytes$1.length === 0 || bytes$1.length > 64 * 1024 * 1024 || `sha512-${createHash("sha512").update(bytes$1).digest("base64")}` !== row$3.integrity) return fail$2("host_trust_archive_integrity_mismatch");
 	const tar = gunzipSync(bytes$1, { maxOutputLength: 128 * 1024 * 1024 });
 	const seen = /* @__PURE__ */ new Set(), files$1 = {};
 	let manifest;
@@ -15132,14 +15133,14 @@ function registryArchiveFiles(bytes$1, row$3) {
 		const prefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/, "");
 		const type$2 = header[156];
 		const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim();
-		if (!/^[0-7]+$/.test(sizeText) || prefix || !name.startsWith("package/") || name.includes("\\") || name.includes("\0") || name.slice(8).split("/").some((part, index$1, parts) => part === ".." || part === "." || !part && index$1 !== parts.length - 1) || seen.has(name)) return fail("host_trust_archive_invalid");
+		if (!/^[0-7]+$/.test(sizeText) || prefix || !name.startsWith("package/") || name.includes("\\") || name.includes("\0") || name.slice(8).split("/").some((part, index$1, parts) => part === ".." || part === "." || !part && index$1 !== parts.length - 1) || seen.has(name)) return fail$2("host_trust_archive_invalid");
 		seen.add(name);
 		const size = Number.parseInt(sizeText, 8), start = offset + 512, end = start + size;
 		if (!Number.isSafeInteger(size) || end > tar.length || ![
 			0,
 			48,
 			53
-		].includes(type$2)) return fail("host_trust_archive_invalid");
+		].includes(type$2)) return fail$2("host_trust_archive_invalid");
 		if (type$2 === 0 || type$2 === 48) {
 			const file = name.slice(8), content = tar.subarray(start, end);
 			if (file === "package.json") manifest = JSON.parse(content.toString("utf8"));
@@ -15147,7 +15148,7 @@ function registryArchiveFiles(bytes$1, row$3) {
 		}
 		offset = start + Math.ceil(size / 512) * 512;
 	}
-	if (manifest?.name !== row$3.name || manifest.version !== row$3.version) return fail("host_trust_archive_identity_mismatch");
+	if (manifest?.name !== row$3.name || manifest.version !== row$3.version) return fail$2("host_trust_archive_identity_mismatch");
 	return files$1;
 }
 function registryArchiveModules(bytes$1, row$3) {
@@ -15157,21 +15158,21 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 	const packages$5 = [], dependencies = [], archives = [];
 	const baseline = baselineFor(rows);
 	const acquire = async (row$3) => {
-		if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(row$3.name) || row$3.name.length > 214 || !row$3.version || !parseHostVersion(row$3.version) || !row$3.integrity) return fail("host_trust_identity_invalid");
+		if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(row$3.name) || row$3.name.length > 214 || !row$3.version || !parseHostVersion(row$3.version) || !row$3.integrity) return fail$2("host_trust_identity_invalid");
 		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(row$3.name)}/${encodeURIComponent(row$3.version)}`, {
 			signal: AbortSignal.timeout(3e4),
 			redirect: "error"
 		});
-		if (!response.ok) return fail("host_trust_registry_unavailable");
+		if (!response.ok) return fail$2("host_trust_registry_unavailable");
 		const metadata$1 = await response.json();
-		if (metadata$1.name !== row$3.name || metadata$1.version !== row$3.version || metadata$1.dist?.integrity !== row$3.integrity) return fail("host_trust_registry_identity_mismatch");
+		if (metadata$1.name !== row$3.name || metadata$1.version !== row$3.version || metadata$1.dist?.integrity !== row$3.integrity) return fail$2("host_trust_registry_identity_mismatch");
 		const url = new URL(metadata$1.dist?.tarball ?? "");
-		if (url.origin !== "https://registry.npmjs.org" || url.username || url.password) return fail("host_trust_source_untrusted");
+		if (url.origin !== "https://registry.npmjs.org" || url.username || url.password) return fail$2("host_trust_source_untrusted");
 		const archive = await fetcher(url, {
 			signal: AbortSignal.timeout(3e4),
 			redirect: "error"
 		});
-		if (!archive.ok) return fail("host_trust_registry_unavailable");
+		if (!archive.ok) return fail$2("host_trust_registry_unavailable");
 		const files$1 = registryArchiveFiles(Buffer.from(await archive.arrayBuffer()), row$3);
 		archives.push({
 			name: row$3.name,
@@ -15185,7 +15186,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		};
 	};
 	for (const row$3 of rows) packages$5.push(await acquire(row$3));
-	if (!options?.profileRoot) return fail("host_trust_receipt_root_missing");
+	if (!options?.profileRoot) return fail$2("host_trust_receipt_root_missing");
 	const targets = [], checks = [], equivalent = /* @__PURE__ */ new Set();
 	const reviewedEquivalent = (row$3, files$1) => {
 		for (const manifest of AUDITED_BASELINES) {
@@ -15206,7 +15207,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		return false;
 	};
 	for (const row$3 of packages$5) {
-		if (!baseline.packages.find((p) => p.name === row$3.name)) return fail("host_trust_identity_invalid");
+		if (!baseline.packages.find((p) => p.name === row$3.name)) return fail$2("host_trust_identity_invalid");
 		const files$1 = archives.find((a) => a.name === row$3.name).files;
 		if (reviewedEquivalent(row$3, files$1)) equivalent.add(row$3.name);
 		else targets.push(row$3.name);
@@ -15216,7 +15217,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		const name = queue.shift();
 		if (visited.has(name)) continue;
 		visited.add(name);
-		if (visited.size > 160) return fail("host_contract_probe_graph_too_large");
+		if (visited.size > 160) return fail$2("host_contract_probe_graph_too_large");
 		const archive = archives.find((a) => a.name === name);
 		const manifest = JSON.parse(archive.files["package.json"].toString());
 		for (const dependency of Object.keys({
@@ -15225,7 +15226,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		}).filter((dependency$1) => !manifest.peerDependenciesMeta?.[dependency$1]?.optional || dependency$1 in (manifest.dependencies ?? {}))) {
 			if (!archives.some((a) => a.name === dependency)) {
 				const identity = options.dependencyIdentity?.(dependency, name);
-				if (!identity) return fail("host_contract_probe_dependency_unbound");
+				if (!identity) return fail$2("host_contract_probe_dependency_unbound");
 				dependencies.push(await acquire(identity));
 			}
 			queue.push(dependency);
@@ -15254,7 +15255,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 		failures: []
 	};
 	const coreFailure = result.failures.find((code) => code !== "host_contract_goal_qualification_required");
-	if (coreFailure) return fail(coreFailure);
+	if (coreFailure) return fail$2(coreFailure);
 	const optional = result.failures.length ? targets.filter((name) => ["@deepseek-ai/dsh-goal", "@deepseek-ai/dsh-tool-goal"].includes(name)) : [];
 	const receipt = {
 		schema: HOST_CONTRACT_SCHEMA,
@@ -15266,7 +15267,7 @@ async function acquireHostTrust(rows, fetcher = fetch, options) {
 	const receiptDigest = hash$3(receipt), path$1 = receiptPath(realpathSync(options.profileRoot), receiptDigest);
 	const profile = realpathSync(options.profileRoot);
 	for (const parent of [join(profile, ".dsh-completion-guard"), join(profile, ".dsh-completion-guard", "host-contracts")]) if (existsSync(parent)) {
-		if (lstatSync(parent).isSymbolicLink() || !lstatSync(parent).isDirectory() || realpathSync(parent) !== parent) return fail("host_trust_contract_receipt_invalid");
+		if (lstatSync(parent).isSymbolicLink() || !lstatSync(parent).isDirectory() || realpathSync(parent) !== parent) return fail$2("host_trust_contract_receipt_invalid");
 	} else mkdirSync(parent, { mode: 448 });
 	if (!existsSync(path$1)) writeFileSync(path$1, canonical$1(receipt), {
 		flag: "wx",
@@ -16481,7 +16482,7 @@ function probeDependencyIdentity(runtime, profile, name, importer) {
 			const graph = activeGraphRecords(readFileSync$1(join(graphModules, ".package-map.json"), "utf8"));
 			const ids = [...graph.reachable].filter((key) => key === name || key.startsWith(name + "@"));
 			if (ids.length !== 1 || typeof graph.records[ids[0]]?.url !== "string" || realpathSync$1(resolve(graphModules, graph.records[ids[0]].url)) !== packageRoot) continue;
-			if (!within(graphModules, packageRoot)) continue;
+			if (!within$1(graphModules, packageRoot)) continue;
 			const manifest = readJsonObject(join(packageRoot, "package.json"), "host_contract_probe_dependency_unbound");
 			const matches = packageRowsFromPnpmLock(readFileSync$1(join(graphRoot, "pnpm-lock.yaml"), "utf8"), [name]).filter((row$3) => row$3.version === manifest.version && row$3.integrity);
 			if (manifest.name === name && matches.length === 1) return matches[0];
@@ -16728,7 +16729,7 @@ function pathPresent(path$1) {
 		throw error;
 	}
 }
-function within(root, path$1) {
+function within$1(root, path$1) {
 	return path$1.startsWith(`${root}${sep}`);
 }
 /** Same static lookup order as DSH; do not load/normalize/heal a daily profile. */
@@ -16788,24 +16789,24 @@ function readTargetHostGraph(runtimeRoot, profileRoot) {
 	const anchor = join(launcher, "package.json");
 	const host = readJsonObject(anchor, "target_runtime_unsupported");
 	const launcherId = [...reachable].filter((id) => id === "@deepseek-ai/dsh" || id.startsWith("@deepseek-ai/dsh@"));
-	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync$1(resolve(modules, records[launcherId[0]].url)) !== launcher || !within(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
+	if (launcherId.length !== 1 || host.name !== "@deepseek-ai/dsh" || host.version !== rows.find((row$3) => row$3.name === "@deepseek-ai/dsh")?.version || typeof records[launcherId[0]].url !== "string" || realpathSync$1(resolve(modules, records[launcherId[0]].url)) !== launcher || !within$1(modules, launcher)) throw new HostProfileError("target_runtime_unsupported", "launcher differs from the active runtime importer");
 	const bundleRows = names.map((name) => {
 		const packageRoot = packageFromAnchor(anchor, name);
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
-		if (!packageRoot || !within(modules, packageRoot) || ids.length !== 1) throw new HostProfileError("target_bundle_unresolved", "bundle is not uniquely installation-owned");
+		if (!packageRoot || !within$1(modules, packageRoot) || ids.length !== 1) throw new HostProfileError("target_bundle_unresolved", "bundle is not uniquely installation-owned");
 		const record = records[ids[0]];
 		if (typeof record.url !== "string" || realpathSync$1(resolve(modules, record.url)) !== packageRoot) throw new HostProfileError("target_bundle_origin_mismatch", "bundle differs from active runtime mapping");
 		const installed = readJsonObject(join(packageRoot, "package.json"), "target_bundle_invalid");
 		const patch = installed.dsh?.bundle?.patch;
 		const locked = packageRowsFromPnpmLock(lockText, [name]).filter((row$3) => row$3.version === host.version && row$3.integrity);
-		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within(packageRoot, realpathSync$1(resolve(packageRoot, patch))) || !statSync$1(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
+		if (installed.name !== name || installed.version !== host.version || locked.length !== 1 || ids[0] !== name && ids[0].split("(", 1)[0] !== `${name}@${host.version}` || typeof patch !== "string" || isAbsolute(patch) || !within$1(packageRoot, realpathSync$1(resolve(packageRoot, patch))) || !statSync$1(resolve(packageRoot, patch)).isFile()) throw new HostProfileError("target_bundle_invalid", "bundle identity or patch is not installation-owned");
 		return locked[0];
 	});
 	for (const name of [...CRITICAL_NAMES, ...names]) {
 		const visible = packageFromAnchor(manifestPath, name);
 		if (!visible) continue;
 		const ids = [...reachable].filter((id) => id === name || id.startsWith(`${name}@`));
-		if (ids.length !== 1 || typeof records[ids[0]].url !== "string" || !within(modules, visible) || realpathSync$1(resolve(modules, records[ids[0]].url)) !== visible) throw new HostProfileError("target_profile_module_shadow", "profile lookup differs from the audited installation");
+		if (ids.length !== 1 || typeof records[ids[0]].url !== "string" || !within$1(modules, visible) || realpathSync$1(resolve(modules, records[ids[0]].url)) !== visible) throw new HostProfileError("target_profile_module_shadow", "profile lookup differs from the audited installation");
 	}
 	return {
 		packages: rows,
@@ -17405,13 +17406,13 @@ var ParseCache = class {
 			this.protected.delete(key);
 		}
 		while (this.bytes + bytes$1 > this.byteBudget || this.probation.size + this.protected.size >= this.entryBudget) {
-			const segment = this.probation.size ? this.probation : this.protected;
-			const oldest = segment.keys().next().value;
+			const segment$1 = this.probation.size ? this.probation : this.protected;
+			const oldest = segment$1.keys().next().value;
 			if (oldest === void 0) break;
-			const row$3 = segment.get(oldest);
+			const row$3 = segment$1.get(oldest);
 			this.bytes -= row$3.bytes;
-			if (segment === this.protected) this.protectedBytes -= row$3.bytes;
-			segment.delete(oldest);
+			if (segment$1 === this.protected) this.protectedBytes -= row$3.bytes;
+			segment$1.delete(oldest);
 		}
 		this.probation.set(key, {
 			value,
@@ -20215,7 +20216,7 @@ function hasControlOrBackslash(value) {
 function safePath(path$1) {
 	if (!path$1 || path$1 === "/") return true;
 	if (path$1.includes("//") || ENCODED_SEPARATOR_OR_CONTROL.test(path$1) || ENCODED_DOT.test(path$1)) return false;
-	return (path$1.endsWith("/") ? path$1.slice(0, -1) : path$1).split("/").slice(1).every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+	return (path$1.endsWith("/") ? path$1.slice(0, -1) : path$1).split("/").slice(1).every((segment$1) => segment$1.length > 0 && segment$1 !== "." && segment$1 !== "..");
 }
 /**
 * Canonical npm registry base. The canonical value is the only value persisted
@@ -21062,12 +21063,12 @@ function extractArtifactPaths(text) {
 }
 const clauseSegmentCache = new ParseCache(8 * 1024 * 1024);
 function copySegments(segments) {
-	return segments.map((segment) => ({
-		...segment,
-		paths: [...segment.paths],
+	return segments.map((segment$1) => ({
+		...segment$1,
+		paths: [...segment$1.paths],
 		interpretation: {
-			...segment.interpretation,
-			qualification: { ...segment.interpretation.qualification }
+			...segment$1.interpretation,
+			qualification: { ...segment$1.interpretation.qualification }
 		}
 	}));
 }
@@ -28753,18 +28754,18 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 		const visible = maskQuotedSpans(clause.body).trim();
 		return /^(?:use|consult|invoke|call)\b\s+(?:(?:the|read-only)\s+)*`?(?:context_guard_observe_[a-z_]+|[a-z][a-z0-9_]*_observer)\b/iu.test(visible);
 	};
-	const splitIndependent = (segment) => {
-		if (segment.kind !== "requirement" || [
+	const splitIndependent = (segment$1) => {
+		if (segment$1.kind !== "requirement" || [
 			"informational",
 			"prohibition",
 			"conditional_wait"
-		].includes(segment.interpretation.authorityDisposition)) return [segment];
-		const visible = maskQuotedSpans(segment.text);
+		].includes(segment$1.interpretation.authorityDisposition)) return [segment$1];
+		const visible = maskQuotedSpans(segment$1.text);
 		for (const delimiter$1 of visible.matchAll(/[,，]\s*|\s+\band\b\s+/giu)) {
 			const at = delimiter$1.index ?? -1;
 			if (at === 0 || at >= 0 && frontedPlace.exec(visible)?.[0].length === at + delimiter$1[0].length) continue;
-			const leftText = segment.text.slice(0, at + delimiter$1[0].length);
-			const rightText = segment.text.slice(at + delimiter$1[0].length);
+			const leftText = segment$1.text.slice(0, at + delimiter$1[0].length);
+			const rightText = segment$1.text.slice(at + delimiter$1[0].length);
 			if (!leftText || !rightText) continue;
 			const left = segmentClauses(leftText)[0], right = segmentClauses(rightText)[0];
 			if (!left || !right || ![left].every((part) => part.kind === "requirement")) continue;
@@ -28778,29 +28779,29 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 				text: rightText
 			})];
 		}
-		return [segment];
+		return [segment$1];
 	};
 	const joined = [];
 	let sourceCursor = 0;
 	for (let index$1 = 0; index$1 < ordinary.length; index$1 += 1) {
-		const segment = ordinary[index$1];
+		const segment$1 = ordinary[index$1];
 		const next = ordinary[index$1 + 1];
-		const start = text.indexOf(segment.text, sourceCursor);
-		if (start >= 0) sourceCursor = start + segment.text.length;
-		if (next && opensConditionLead(segment.text) && presentExplanationHead(next.text)) {
+		const start = text.indexOf(segment$1.text, sourceCursor);
+		if (start >= 0) sourceCursor = start + segment$1.text.length;
+		if (next && opensConditionLead(segment$1.text) && presentExplanationHead(next.text)) {
 			const following = text.indexOf(next.text, sourceCursor);
-			const gap = following < 0 ? "" : text.slice(start + segment.text.length, following);
+			const gap = following < 0 ? "" : text.slice(start + segment$1.text.length, following);
 			if (start >= 0 && /^\s*[,，]\s*$/u.test(gap)) {
 				const combined = text.slice(start, following + next.text.length);
 				sourceCursor = following + next.text.length;
 				joined.push({
-					...segment,
+					...segment$1,
 					kind: "requirement",
 					text: combined,
 					body: combined,
-					paths: [...new Set([...segment.paths, ...next.paths])],
+					paths: [...new Set([...segment$1.paths, ...next.paths])],
 					interpretation: {
-						...segment.interpretation,
+						...segment$1.interpretation,
 						text: combined,
 						body: combined,
 						directive: "unresolved",
@@ -28813,14 +28814,14 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 				continue;
 			}
 		}
-		if (next && /,\s*$/u.test(segment.text) && /^\s*and\s+[^,，。.!?？]+[.!?]?\s*$/iu.test(next.text) && next.interpretation.authorityDisposition !== "executable_now" && /^\s*use\s+.*\bhost\s+tools?\s+for\s+/iu.test(segment.text)) {
-			const combined = `${segment.text} ${next.text}`;
+		if (next && /,\s*$/u.test(segment$1.text) && /^\s*and\s+[^,，。.!?？]+[.!?]?\s*$/iu.test(next.text) && next.interpretation.authorityDisposition !== "executable_now" && /^\s*use\s+.*\bhost\s+tools?\s+for\s+/iu.test(segment$1.text)) {
+			const combined = `${segment$1.text} ${next.text}`;
 			joined.push({
-				...segment,
+				...segment$1,
 				text: combined,
 				body: combined,
 				interpretation: {
-					...segment.interpretation,
+					...segment$1.interpretation,
 					text: combined,
 					body: combined
 				}
@@ -28830,13 +28831,13 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			index$1 += 1;
 			continue;
 		}
-		joined.push(segment);
+		joined.push(segment$1);
 	}
-	for (const segment of joined.flatMap(splitIndependent)) {
-		const coordinated = /(?:并|和|\band\b)\s*(?=(?:运行|执行|跑完|跑|完成|检查|核对|报告|汇报|run|perform|check|verify|report|(?:现有|对应的?)?回归测试|(?:its\s+)?focused\s+test))/iu.exec(maskQuotedSpans(segment.text));
-		if (coordinated && segment.kind === "requirement") {
-			const leftText = segment.text.slice(0, coordinated.index);
-			const rightText = segment.text.slice(coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length);
+	for (const segment$1 of joined.flatMap(splitIndependent)) {
+		const coordinated = /(?:并|和|\band\b)\s*(?=(?:运行|执行|跑完|跑|完成|检查|核对|报告|汇报|run|perform|check|verify|report|(?:现有|对应的?)?回归测试|(?:its\s+)?focused\s+test))/iu.exec(maskQuotedSpans(segment$1.text));
+		if (coordinated && segment$1.kind === "requirement") {
+			const leftText = segment$1.text.slice(0, coordinated.index);
+			const rightText = segment$1.text.slice(coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length);
 			const left = segmentClauses(leftText)[0];
 			const right = segmentClauses(rightText)[0];
 			const promotedLeft = left ? asArtifactEdit(left) ?? asTest(left, true) ?? left : void 0;
@@ -28844,57 +28845,57 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 			if (promotedLeft && promotedRight && promotedLeft.interpretation.authorityDisposition === "executable_now") {
 				refined.push({
 					...promotedLeft,
-					text: segment.text.slice(0, coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length)
+					text: segment$1.text.slice(0, coordinated.index + coordinated[0].match(/^(?:并|和|and)\s*/iu)[0].length)
 				}, promotedRight);
 				continue;
 			}
 		}
-		const standaloneBan = asProhibition(segment);
+		const standaloneBan = asProhibition(segment$1);
 		if (standaloneBan) {
 			refined.push(standaloneBan);
 			continue;
 		}
-		const standaloneLocative = asFrontedLocative(segment);
+		const standaloneLocative = asFrontedLocative(segment$1);
 		if (standaloneLocative) {
 			refined.push(standaloneLocative);
 			continue;
 		}
-		const standaloneTest = asTest(segment);
+		const standaloneTest = asTest(segment$1);
 		if (standaloneTest) {
 			refined.push(standaloneTest);
 			continue;
 		}
-		const standaloneEdit = asArtifactEdit(segment);
+		const standaloneEdit = asArtifactEdit(segment$1);
 		if (standaloneEdit) {
 			refined.push(standaloneEdit);
 			continue;
 		}
-		const standaloneReadback = asFileReadback(segment);
+		const standaloneReadback = asFileReadback(segment$1);
 		if (standaloneReadback) {
 			refined.push(standaloneReadback);
 			continue;
 		}
-		const standalonePackageScript = asPackageScript(segment);
+		const standalonePackageScript = asPackageScript(segment$1);
 		if (standalonePackageScript) {
 			refined.push(standalonePackageScript);
 			continue;
 		}
-		const standaloneReport = asReport(segment);
+		const standaloneReport = asReport(segment$1);
 		if (standaloneReport) {
 			refined.push(standaloneReport);
 			continue;
 		}
-		const standaloneContext = asContext(segment, refined.filter((part) => part.interpretation.authorityDisposition === "executable_now"));
+		const standaloneContext = asContext(segment$1, refined.filter((part) => part.interpretation.authorityDisposition === "executable_now"));
 		if (standaloneContext) {
 			refined.push(standaloneContext);
 			continue;
 		}
-		const visible = maskQuotedSpans(segment.text);
+		const visible = maskQuotedSpans(segment$1.text);
 		const coordinatedTest = /(?:并且|并|和|及|\band\b|\bthen\b)\s*((?:(?:运行|执行|开展|run|perform)\s*(?:the\s+)?(?:focused\s+)?)?(?:tests?|测试))[。.!！?？\s]*$/iu.exec(visible);
-		if (coordinatedTest && segment.kind === "requirement" && !/^(?:\s*)(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)/iu.test(visible)) {
+		if (coordinatedTest && segment$1.kind === "requirement" && !/^(?:\s*)(?:解释|说明|讲解|介绍|阐述|描述|explain|describe|clarify)/iu.test(visible)) {
 			const tailStart = coordinatedTest.index + coordinatedTest[0].indexOf(coordinatedTest[1]);
-			const prefix = segment.text.slice(0, tailStart);
-			const tail = segment.text.slice(tailStart);
+			const prefix = segment$1.text.slice(0, tailStart);
+			const tail = segment$1.text.slice(tailStart);
 			const head$1 = segmentClauses(prefix)[0];
 			const test = segmentClauses(tail)[0];
 			const promoted = test ? asTest(test, true) : void 0;
@@ -28917,39 +28918,39 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 				continue;
 			}
 		}
-		if (segment.kind !== "requirement" || segment.interpretation.directive !== "unresolved") {
-			refined.push(segment);
+		if (segment$1.kind !== "requirement" || segment$1.interpretation.directive !== "unresolved") {
+			refined.push(segment$1);
 			continue;
 		}
-		const head = presentExplanationHead(segment.text);
+		const head = presentExplanationHead(segment$1.text);
 		if (!head) {
-			refined.push(segment);
+			refined.push(segment$1);
 			continue;
 		}
 		const complement = visible.slice(head.end);
 		const governedComplement = /^(?:如何|怎么|为什么|为何|是否|how\b|why\b|whether\b|what\b|if\b)/iu.test(complement.trim());
-		const parts = splitTextFragments(segment.text);
+		const parts = splitTextFragments(segment$1.text);
 		const firstIndex = parts.findIndex((part) => part.offset + part.text.length > head.end);
 		const first = parts[firstIndex];
 		if (!first) {
-			refined.push(segment);
+			refined.push(segment$1);
 			continue;
 		}
 		const materialReading = segmentClauses(first.text)[0]?.interpretation.directive;
 		if (governedComplement && hasWorkPredicate(complement) && (materialReading !== "informational" || parts.length > firstIndex + 1)) {
-			refined.push(segment);
+			refined.push(segment$1);
 			continue;
 		}
-		const firstEnd = parts[firstIndex + 1]?.offset ?? segment.text.length;
+		const firstEnd = parts[firstIndex + 1]?.offset ?? segment$1.text.length;
 		const firstComplement = visible.slice(head.end, firstEnd).replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
 		if (!firstComplement || /[`“”"']/.test(first.text)) {
-			refined.push(segment);
+			refined.push(segment$1);
 			continue;
 		}
 		const nominal = /(?:流程|方案|步骤|过程|方法|方式|作用|原因|架构|设计|结果|概念|原理|process|plan|steps?|procedure|method|approach|effect|reason|design|architecture|result|concept|principle)[，,。.!！?？\s]*$/iu.test(firstComplement);
-		const pureNoRecognizedAction = segment.interpretation.directive === "unresolved" && ["unresolved", "informational"].includes(materialReading ?? "") && (!/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement) || governedComplement && materialReading === "informational");
+		const pureNoRecognizedAction = segment$1.interpretation.directive === "unresolved" && ["unresolved", "informational"].includes(materialReading ?? "") && (!/(?:安装|执行|修改|创建|删除|发布|推送|提交|重启|install|run|modify|create|delete|publish|push|commit|restart)/iu.test(firstComplement) || governedComplement && materialReading === "informational");
 		if (!nominal && !pureNoRecognizedAction) {
-			refined.push(segment);
+			refined.push(segment$1);
 			continue;
 		}
 		const independent = parts.slice(firstIndex + 1).map((part) => {
@@ -28961,19 +28962,19 @@ function segmentsForBoundary(text, coordinationSplit, v6) {
 		});
 		if (independent.some(({ clause }) => !clause || !["executable_now", "prohibition"].includes(clause.interpretation.authorityDisposition))) {
 			if (parts.length > 1) {
-				refined.push(segment);
+				refined.push(segment$1);
 				continue;
 			}
 		}
-		const informationText = segment.text.slice(0, firstEnd);
+		const informationText = segment$1.text.slice(0, firstEnd);
 		const informationBody = informationText.replace(/[，,;；]\s*(?:再|then)?\s*$/iu, "").trim();
 		refined.push({
-			...segment,
+			...segment$1,
 			text: informationText,
 			body: informationBody,
 			paths: [],
 			interpretation: {
-				...segment.interpretation,
+				...segment$1.interpretation,
 				text: informationText,
 				body: informationBody,
 				directive: "informational",
@@ -28998,33 +28999,33 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 	const isFresh = /* @__PURE__ */ new Set();
 	let coveredSpans = 0;
 	const usedOccurrences = /* @__PURE__ */ new Set();
-	for (const segment of segmentsForBoundary(text, coordinationSplit, projection.boundaryProtocol === 6 && !legacy)) {
-		if (classifyUserInteraction(segment.body) === "conversational") continue;
-		if (segment.kind === "requirement" && segment.paths.length === 0 && isInstructionFraming(segment.body)) continue;
+	for (const segment$1 of segmentsForBoundary(text, coordinationSplit, projection.boundaryProtocol === 6 && !legacy)) {
+		if (classifyUserInteraction(segment$1.body) === "conversational") continue;
+		if (segment$1.kind === "requirement" && segment$1.paths.length === 0 && isInstructionFraming(segment$1.body)) continue;
 		let span;
 		if (provenance$1) {
-			let at = provenance$1.blockText.indexOf(segment.text);
-			while (at >= 0 && usedOccurrences.has(at)) at = provenance$1.blockText.indexOf(segment.text, at + 1);
+			let at = provenance$1.blockText.indexOf(segment$1.text);
+			while (at >= 0 && usedOccurrences.has(at)) at = provenance$1.blockText.indexOf(segment$1.text, at + 1);
 			if (at >= 0) {
 				usedOccurrences.add(at);
 				const start = (provenance$1.blockOffset ?? 0) + utf8ByteOffset(provenance$1.blockText, at);
 				span = {
 					partIndex: 0,
 					start,
-					end: start + utf8ByteLength(segment.text),
-					class: spanClassOf(segment.kind, segment.interpretation.directive, provenance$1.blockAuthority)
+					end: start + utf8ByteLength(segment$1.text),
+					class: spanClassOf(segment$1.kind, segment$1.interpretation.directive, provenance$1.blockAuthority)
 				};
 			}
 		}
 		if (span) coveredSpans += 1;
-		const frontedTest = segment.interpretation.fingerprint.startsWith("v6-locative:") && /^\s*(?:in|within)\s+.+?[,，]\s*(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?:\s|[.!?]|$)/iu.test(segment.body);
-		if (segment.interpretation.fingerprint.startsWith("v6-test:") || frontedTest) {
-			const locationText = (frontedTest ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment.body) : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment.body))?.[1]?.replace(/[.!?。！？]$/, "").trim().replace(/\s+before\s+finishing$/iu, "").trim();
+		const frontedTest = segment$1.interpretation.fingerprint.startsWith("v6-locative:") && /^\s*(?:in|within)\s+.+?[,，]\s*(?:run|execute)\s+(?:npm|pnpm|yarn|bun)\s+test(?:\s|[.!?]|$)/iu.test(segment$1.body);
+		if (segment$1.interpretation.fingerprint.startsWith("v6-test:") || frontedTest) {
+			const locationText = (frontedTest ? /^\s*(?:in|within)\s+(.+?)[,，]\s*(?:run|execute)\b/iu.exec(segment$1.body) : /(?:\b(?:in|within)\s+|(?:^|[，,\s])在\s*)(.+?)\s*$/iu.exec(segment$1.body))?.[1]?.replace(/[.!?。！？]$/, "").trim().replace(/\s+before\s+finishing$/iu, "").trim();
 			if (locationText && !/^(?:(?:the|this)\s+)?(?:current\s+)?workspace$/iu.test(locationText)) {
 				const raw = locationText;
 				const target = /^(["'`])([^"'`]+)\1$/u.exec(raw)?.[2] ?? (/^[^\s"'`]+$/u.test(raw) ? raw : void 0);
 				const resolved = target && rootLocatorFlavor(target) && !/(?:^|[\\/])package\.json$/iu.test(target);
-				const item = insert(projection, segment, sourceMessageId, resolved ? target : "scope", "scope", unitId, provenance$1 ? {
+				const item = insert(projection, segment$1, sourceMessageId, resolved ? target : "scope", "scope", unitId, provenance$1 ? {
 					rawTextSha256: provenance$1.rawTextSha256,
 					span
 				} : void 0, freshItems);
@@ -29037,17 +29038,17 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 				continue;
 			}
 		}
-		if (segment.interpretation.fingerprint.startsWith("v6-package-script:")) {
-			if (/\b(?:in|within)\s+["'`]/iu.test(segment.body)) {
-				const target = /\b(?:in|within)\s+(["'`])([^"'`]+)\1(?:\s*[.!?])?\s*$/iu.exec(segment.body)?.[2];
+		if (segment$1.interpretation.fingerprint.startsWith("v6-package-script:")) {
+			if (/\b(?:in|within)\s+["'`]/iu.test(segment$1.body)) {
+				const target = /\b(?:in|within)\s+(["'`])([^"'`]+)\1(?:\s*[.!?])?\s*$/iu.exec(segment$1.body)?.[2];
 				if (target && rootLocatorFlavor(target)) {
-					const item = insert(projection, segment, sourceMessageId, target, "scope", unitId, provenance$1 ? {
+					const item = insert(projection, segment$1, sourceMessageId, target, "scope", unitId, provenance$1 ? {
 						rawTextSha256: provenance$1.rawTextSha256,
 						span
 					} : void 0, freshItems);
 					item.targetSource = { kind: "explicit_path" };
 				} else {
-					const item = insert(projection, segment, sourceMessageId, "scope", "scope", unitId, provenance$1 ? {
+					const item = insert(projection, segment$1, sourceMessageId, "scope", "scope", unitId, provenance$1 ? {
 						rawTextSha256: provenance$1.rawTextSha256,
 						span
 					} : void 0, freshItems);
@@ -29057,24 +29058,24 @@ function insertItems(projection, text, sourceMessageId, scope, authority = "root
 				}
 				continue;
 			}
-			const manifests = segment.paths.filter((path$1) => /(?:^|[\\/])package\.json$/iu.test(path$1));
+			const manifests = segment$1.paths.filter((path$1) => /(?:^|[\\/])package\.json$/iu.test(path$1));
 			if (manifests.length === 1) {
 				const resolved = resolveArtifact(manifests[0], scope);
-				insert(projection, segment, sourceMessageId, resolved.replace(/[\\/]package\.json$/iu, "") || resolved, "scope", unitId, provenance$1 ? {
+				insert(projection, segment$1, sourceMessageId, resolved.replace(/[\\/]package\.json$/iu, "") || resolved, "scope", unitId, provenance$1 ? {
 					rawTextSha256: provenance$1.rawTextSha256,
 					span
 				} : void 0, freshItems);
 				continue;
 			}
 		}
-		if (segment.paths.length === 0) {
-			insert(projection, segment, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance$1 ? {
+		if (segment$1.paths.length === 0) {
+			insert(projection, segment$1, sourceMessageId, scope.cwd || "scope", "scope", unitId, provenance$1 ? {
 				rawTextSha256: provenance$1.rawTextSha256,
 				span
 			} : void 0, freshItems);
 			continue;
 		}
-		for (const path$1 of segment.paths) insert(projection, segment, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId, provenance$1 ? {
+		for (const path$1 of segment$1.paths) insert(projection, segment$1, sourceMessageId, resolveArtifact(path$1, scope), "artifact", unitId, provenance$1 ? {
 			rawTextSha256: provenance$1.rawTextSha256,
 			span
 		} : void 0, freshItems);
@@ -29423,61 +29424,61 @@ function resolveInheritedGitTarget(projection, item) {
 	item.targetCaptureStatus = "clarification_required";
 	item.targetCaptureReasonCode = repositories.size > 1 ? "requested_target_repository_ambiguous" : "requested_target_repository_missing";
 }
-function insert(projection, segment, sourceMessageId, subject, surface, unitId, provenance$1, freshOut) {
+function insert(projection, segment$1, sourceMessageId, subject, surface, unitId, provenance$1, freshOut) {
 	const revision = projection.contractRevision + 1;
-	const id = nextId(projection.items, segment.kind);
-	const method = extractMethod(segment.body);
-	const operation = extractOperation(segment.body);
-	const item = captureItem(segment.kind, segment.body, sourceMessageId, id, revision, subject, surface, method, operation, segment.interpretation);
-	if (projection.boundaryProtocol === 6 && segment.interpretation.directive === "informational") item.taskKind = "inquiry";
-	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-test:")) {
+	const id = nextId(projection.items, segment$1.kind);
+	const method = extractMethod(segment$1.body);
+	const operation = extractOperation(segment$1.body);
+	const item = captureItem(segment$1.kind, segment$1.body, sourceMessageId, id, revision, subject, surface, method, operation, segment$1.interpretation);
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.directive === "informational") item.taskKind = "inquiry";
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.fingerprint.startsWith("v6-test:")) {
 		item.semanticAction = "test";
 		item.requestedTarget = { scope: subject };
 		item.targetCaptureStatus = "resolved";
 		item.taskKind = "action";
 	}
-	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-artifact-edit:") && surface === "artifact") {
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.fingerprint.startsWith("v6-artifact-edit:") && surface === "artifact") {
 		item.semanticAction = "modify";
 		item.requestedTarget = { artifact_id: subject };
 		item.targetCaptureStatus = "resolved";
 		item.taskKind = "action";
 	}
-	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-work-unit-edit:") && surface === "scope") {
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.fingerprint.startsWith("v6-work-unit-edit:") && surface === "scope") {
 		item.semanticAction = "modify";
 		item.requestedTarget = { scope: subject };
 		item.targetCaptureStatus = "resolved";
 		item.taskKind = "action";
 	}
-	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-file-readback:")) {
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.fingerprint.startsWith("v6-file-readback:")) {
 		item.semanticAction = "verify";
 		item.requestedTarget = { scope: subject };
 		item.targetCaptureStatus = "resolved";
 		item.taskKind = "action";
 	}
-	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-package-script:")) {
-		const encoded = /^v6-package-script:([^:]+):/.exec(segment.interpretation.fingerprint)?.[1];
-		if (encoded) {
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.fingerprint.startsWith("v6-package-script:")) {
+		const encoded$1 = /^v6-package-script:([^:]+):/.exec(segment$1.interpretation.fingerprint)?.[1];
+		if (encoded$1) {
 			item.semanticAction = "verify";
 			item.requestedTarget = {
 				scope: subject,
-				script_name: decodeURIComponent(encoded)
+				script_name: decodeURIComponent(encoded$1)
 			};
 			item.targetCaptureStatus = "resolved";
 			item.taskKind = "action";
 		}
 	}
-	if (projection.boundaryProtocol === 6 && segment.interpretation.fingerprint.startsWith("v6-context:")) {
+	if (projection.boundaryProtocol === 6 && segment$1.interpretation.fingerprint.startsWith("v6-context:")) {
 		item.taskKind = "context";
 		item.status = "passed";
 		delete item.semanticAction;
 	}
-	const visibleSpeech = maskQuotedSpans(segment.body).trim();
+	const visibleSpeech = maskQuotedSpans(segment$1.body).trim();
 	const temporal = /^(?:明天|未来|将来|下周|下个月|稍后|tomorrow\b|later\b|next\s+(?:week|month)\b)[\s,，]*(?:再)?/iu.exec(visibleSpeech);
 	const approval = /^(?:等|待|收到)[^，,。.!?？]{0,24}(?:确认|审批|批准|许可)[^，,。.!?？]{0,8}(?:后|再)[\s,，]*|^after\s+(?:the\s+)?(?:approval|confirmation|permission)[\s,，]*/iu.exec(visibleSpeech);
 	const preface = approval ?? temporal;
 	const mainSpeech = preface ? visibleSpeech.slice(preface[0].length) : visibleSpeech;
 	const assessmentHead = /^(?:(?:本轮|现在|立刻|立即|请|please\b|now\b|再)\s*)*(?:评估|测量|测出|衡量|验证|evaluate\b|assess\b|measure\b|verify\b)/iu.test(maskLocatorObjects(mainSpeech));
-	if (projection.boundaryProtocol === 6 && segment.kind === "requirement" && segment.interpretation.authorityDisposition !== "informational" && assessmentHead && !segment.interpretation.fingerprint.startsWith("v6-file-readback:")) {
+	if (projection.boundaryProtocol === 6 && segment$1.kind === "requirement" && segment$1.interpretation.authorityDisposition !== "informational" && assessmentHead && !segment$1.interpretation.fingerprint.startsWith("v6-file-readback:")) {
 		item.semanticAction = "verify";
 		item.requestedTarget = { scope: subject };
 		item.targetCaptureStatus = "resolved";
@@ -29490,7 +29491,7 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 			};
 		}
 	}
-	if (projection.boundaryProtocol === 6 && preface && assessmentHead && segment.kind === "requirement") {
+	if (projection.boundaryProtocol === 6 && preface && assessmentHead && segment$1.kind === "requirement") {
 		item.condition = preface[0].trim();
 		item.authorityDisposition = "conditional_wait";
 		item.executionQualification = {
@@ -29505,7 +29506,7 @@ function insert(projection, segment, sourceMessageId, subject, surface, unitId, 
 		item.rawTextSha256 = provenance$1.rawTextSha256;
 		if (provenance$1.span) item.spans = [provenance$1.span];
 	}
-	const duplicate = indexesEnabled() ? findPendingDuplicateFromIndex(projection.items, segment.kind, item.textSha256, subject) : [...projection.items.values()].find((existing) => existing.kind === segment.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
+	const duplicate = indexesEnabled() ? findPendingDuplicateFromIndex(projection.items, segment$1.kind, item.textSha256, subject) : [...projection.items.values()].find((existing) => existing.kind === segment$1.kind && existing.status === "pending" && existing.textSha256 === item.textSha256 && existing.verification.subject === subject);
 	if (duplicate) supersedeItem(projection.items, duplicate.id, item);
 	else {
 		projection.items.set(id, item);
@@ -35646,6 +35647,9 @@ function verifySelectedMigrationInventory(receipt, snapshot, selection) {
 
 //#endregion
 //#region src/domain/activation-physical-inventory.ts
+const validatedInventory = Symbol("validated physical inventory");
+const issuedProofs = /* @__PURE__ */ new WeakSet();
+const issuedCensuses = /* @__PURE__ */ new WeakSet();
 function stamp(path$1, kind, requireIdentity = true) {
 	const stat = lstatSync(path$1, { bigint: true });
 	if (requireIdentity && stat.ino === 0n) throw new Error("activation_inventory_identity_unavailable");
@@ -35671,7 +35675,8 @@ function fileDigest(path$1, expected) {
 			if (length === 0) break;
 			hash$4.update(buffer.subarray(0, length));
 		}
-		if (activationDigest(stamp(path$1, "file")) !== activationDigest(expected)) throw new Error("activation_inventory_changed");
+		const final = fstatSync(fd, { bigint: true });
+		if (!final.isFile() || String(final.dev) !== expected.dev || String(final.ino) !== expected.ino || String(final.size) !== expected.size || String(final.mtimeNs) !== expected.mtimeNs || String(final.ctimeNs) !== expected.ctimeNs || String(final.mode) !== expected.mode || String(final.nlink) !== expected.nlink || activationDigest(stamp(path$1, "file")) !== activationDigest(expected)) throw new Error("activation_inventory_changed");
 		return hash$4.digest("hex");
 	} finally {
 		closeSync(fd);
@@ -35693,8 +35698,12 @@ function captureActivationPhysicalInventory(root, compression, backendSha256) {
 	if (!["none", "zstd"].includes(compression) || !/^[a-f0-9]{64}$/u.test(backendSha256)) throw new Error("activation_inventory_unsupported");
 	const absolute = resolve(root);
 	let parent = absolute;
+	const ancestors = [];
 	while (true) {
-		stamp(parent, "directory", parent === absolute);
+		ancestors.push({
+			path: parent,
+			stamp: stamp(parent, "directory", parent === absolute)
+		});
 		const next = dirname(parent);
 		if (next === parent) break;
 		parent = next;
@@ -35702,6 +35711,7 @@ function captureActivationPhysicalInventory(root, compression, backendSha256) {
 	if (realpathSync(absolute) !== absolute) throw new Error("activation_inventory_unsupported");
 	const records = [];
 	const sessionSegments = [];
+	const generations = [];
 	function directory(path$1, relative$1) {
 		const before = stamp(path$1, "directory");
 		const entries = readdirSync(path$1).sort();
@@ -35721,7 +35731,8 @@ function captureActivationPhysicalInventory(root, compression, backendSha256) {
 		for (const session of directory(projectPath, project)) {
 			const sessionPath = join(projectPath, session);
 			const entries = directory(sessionPath, `${project}/${session}`);
-			let generations = 0;
+			let generationCount = 0;
+			const versions = /* @__PURE__ */ new Set();
 			for (const name of entries) {
 				const path$1 = join(sessionPath, name);
 				const metadata$1 = stamp(path$1, "file");
@@ -35735,31 +35746,61 @@ function captureActivationPhysicalInventory(root, compression, backendSha256) {
 				}
 				const match = /^session(?:\.v([1-9][0-9]*))?\.jsonl(\.zstd)?$/u.exec(name);
 				if (!match || (match[2] ? "zstd" : "none") !== compression || match[1] && (!Number.isSafeInteger(Number(match[1])) || Number(match[1]) > 4)) throw new Error("activation_inventory_unsupported");
-				generations++;
+				const version$1 = match[1] ? Number(match[1]) : 0;
+				if (versions.has(version$1)) throw new Error("activation_inventory_unsupported");
+				versions.add(version$1);
+				generationCount++;
+				const relativePath = `${project}/${session}/${name}`, contentSha256 = fileDigest(path$1, metadata$1);
 				records.push({
-					path: `${project}/${session}/${name}`,
+					path: relativePath,
 					kind: "generation",
 					stamp: metadata$1,
-					contentSha256: fileDigest(path$1, metadata$1)
+					contentSha256
 				});
+				generations.push(Object.freeze({
+					relativePath,
+					projectSegment: project,
+					sessionSegment: session,
+					version: version$1,
+					format: "jsonl",
+					compression,
+					contentSha256,
+					identity: Object.freeze({ ...metadata$1 })
+				}));
 			}
-			if (!generations) throw new Error("activation_inventory_incomplete");
-			if (generations !== 1) throw new Error("activation_inventory_unsupported");
+			if (!generationCount) throw new Error("activation_inventory_incomplete");
 			sessionSegments.push(session);
 		}
 	}
 	if (new Set(sessionSegments).size !== sessionSegments.length) throw new Error("activation_inventory_incomplete");
 	for (const row$3 of records) if (activationDigest(stamp(row$3.path === "." ? absolute : join(absolute, row$3.path), row$3.kind === "directory" ? "directory" : "file")) !== activationDigest(row$3.stamp)) throw new Error("activation_inventory_changed");
-	return {
-		sha256: activationDigest({
+	for (const row$3 of ancestors) {
+		const current = stamp(row$3.path, "directory", row$3.path === absolute);
+		if (current.dev !== row$3.stamp.dev || current.ino !== row$3.stamp.ino || current.mode !== row$3.stamp.mode) throw new Error("activation_inventory_changed");
+	}
+	const counts = /* @__PURE__ */ new Map();
+	for (const g of generations) {
+		const key = `${g.projectSegment}/${g.sessionSegment}`;
+		counts.set(key, (counts.get(key) ?? 0) + 1);
+	}
+	const multiGenerationSessionCount = [...counts.values()].filter((count) => count > 1).length;
+	const census = Object.freeze({
+		kind: "unverified",
+		root: absolute,
+		compression,
+		backendSha256,
+		multiGenerationSessionCount,
+		censusSha256: activationDigest({
 			schema: "dsh-activation-physical-inventory/v1",
 			root: absolute,
 			compression,
 			backendSha256,
 			records
 		}),
-		sessionSegments: sessionSegments.sort()
-	};
+		generations: Object.freeze(generations)
+	});
+	issuedCensuses.add(census);
+	return census;
 }
 function assertActivationPhysicalRows(physical$1, rows) {
 	const expected = rows.map((row$3) => {
@@ -35769,13 +35810,83 @@ function assertActivationPhysicalRows(physical$1, rows) {
 	}).sort();
 	if (expected.length !== physical$1.sessionSegments.length || new Set(expected).size !== expected.length || expected.some((value, index$1) => value !== physical$1.sessionSegments[index$1])) throw new Error("activation_inventory_incomplete");
 }
-/** Wrap the SDK seam without treating the seam itself as a physical census. */
-function guardActivationInventory(persistence, capture) {
-	const initial = capture();
+/** Certify only after the supplied qualified verifier has strictly checked each
+* generation and independently observed the SDK's selected generation. The
+* adapter owns decoder qualification; a census alone has no proof digest. */
+async function verifyActivationPhysicalInventory(census, verifier, recapture) {
+	if (!census || !issuedCensuses.has(census) || census.kind !== "unverified" || typeof verifier !== "function") throw new Error("activation_inventory_invalid");
+	const before = recapture();
+	if (!issuedCensuses.has(before) || before.censusSha256 !== census.censusSha256) throw new Error("activation_inventory_changed");
+	const sessions = /* @__PURE__ */ new Map();
+	for (const generation of census.generations) {
+		const key = `${generation.projectSegment}/${generation.sessionSegment}`;
+		const rows = sessions.get(key) ?? [];
+		rows.push(generation);
+		sessions.set(key, rows);
+	}
+	const multi = new Map([...sessions].filter(([, rows]) => rows.length > 1));
+	let result = {
+		generations: [],
+		selections: []
+	};
+	let verifierFailed = false, verifierError;
+	try {
+		if (multi.size) result = await verifier(census);
+	} catch (error) {
+		verifierFailed = true;
+		verifierError = error;
+	}
+	const after = recapture();
+	if (!issuedCensuses.has(after) || after.censusSha256 !== census.censusSha256) throw new Error("activation_inventory_changed");
+	if (verifierFailed) throw verifierError;
+	const expectedCount = [...multi.values()].reduce((sum, rows) => sum + rows.length, 0);
+	if (!result || !Array.isArray(result.generations) || !Array.isArray(result.selections) || result.generations.length !== expectedCount) throw new Error("activation_inventory_incomplete");
+	const observations = /* @__PURE__ */ new Map();
+	for (const row$3 of result.generations) {
+		if (!row$3 || typeof row$3.relativePath !== "string" || observations.has(row$3.relativePath) || typeof row$3.contentSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(row$3.contentSha256) || typeof row$3.birthIdentitySha256 !== "string" || !/^[a-f0-9]{64}$/u.test(row$3.birthIdentitySha256) || typeof row$3.sessionId !== "string") throw new Error("activation_inventory_invalid");
+		observations.set(row$3.relativePath, row$3);
+	}
+	const birth = /* @__PURE__ */ new Map();
+	for (const [key, generations] of multi) for (const generation of generations) {
+		const observation = observations.get(generation.relativePath);
+		if (!observation || observation.version !== generation.version || observation.contentSha256 !== generation.contentSha256 || pathSegment(observation.sessionId) !== generation.sessionSegment) throw new Error("activation_inventory_incomplete");
+		if (birth.has(key) && birth.get(key) !== observation.birthIdentitySha256) throw new Error("activation_inventory_incomplete");
+		birth.set(key, observation.birthIdentitySha256);
+	}
+	if (result.selections.length !== multi.size) throw new Error("activation_inventory_incomplete");
+	const selections = /* @__PURE__ */ new Map();
+	for (const selection of result.selections) {
+		if (!selection || typeof selection.projectSegment !== "string" || typeof selection.sessionSegment !== "string") throw new Error("activation_inventory_invalid");
+		const key = `${selection.projectSegment}/${selection.sessionSegment}`;
+		if (selections.has(key)) throw new Error("activation_inventory_invalid");
+		const latest = multi.get(key)?.reduce((a, b) => a.version > b.version ? a : b);
+		if (!latest || latest.version !== selection.selectedVersion || latest.relativePath !== selection.selectedRelativePath) throw new Error("activation_inventory_incomplete");
+		selections.set(key, selection);
+	}
+	const sha256$1 = multi.size > 0 ? activationDigest({
+		schema: "dsh-activation-physical-inventory/v2",
+		censusSha256: census.censusSha256,
+		generations: [...result.generations].sort((a, b) => a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0),
+		selections: [...result.selections].sort((a, b) => a.selectedRelativePath < b.selectedRelativePath ? -1 : a.selectedRelativePath > b.selectedRelativePath ? 1 : 0)
+	}) : census.censusSha256;
+	const proof = Object.freeze({
+		kind: "validated",
+		sha256: sha256$1,
+		censusSha256: census.censusSha256,
+		sessionSegments: Object.freeze([...sessions.values()].map((rows) => rows[0].sessionSegment).sort()),
+		[validatedInventory]: true
+	});
+	issuedProofs.add(proof);
+	return proof;
+}
+/** Wrap the SDK seam; lightweight recensus surrounds every SDK list without
+* repeatedly mounting or decoding already verified generations. */
+function guardActivationInventory(persistence, initial, recapture) {
+	if (!initial || !issuedProofs.has(initial)) throw new Error("activation_inventory_proof_required");
 	const check = () => {
-		const current = capture();
-		if (current.sha256 !== initial.sha256) throw new Error("activation_inventory_changed");
-		return current;
+		const current = recapture();
+		if (!current || !issuedCensuses.has(current) || current.censusSha256 !== initial.censusSha256) throw new Error("activation_inventory_changed");
+		return initial;
 	};
 	const list$1 = async () => {
 		const before = check(), rows = await persistence.list(), after = check();
@@ -35806,4 +35917,487 @@ function assertActivationBackendIdentity(manifestValue, actualModules, reviewedM
 }
 
 //#endregion
-export { PROTOCOL_V6_NOTICE as $, semanticActionFromCommand as $a, readDesktopAppRuntime as $i, proposeRebindV042 as $n, isRestatement as $r, V6_ORDINARY_COMPLETION_RULE as $t, revalidateGitPrestate as A, MIN_SUPPORTED_HOST_VERSION as Aa, injectActiveProfileHostLock as Ai, latestAssistantText as An, RELEASE_OPERATION_SURFACES as Ao, npmEscapedPackageName as Ar, bindProofToProjection as At, HOST_WORKDIR_PREFIX as B, CERTIFICATE_VERSION as Ba, resolveDesktopProfileHostLock as Bi, certificateClosure as Bn, digestStrings as Bo, explanationHasActionResidue as Br, proofOperationMatches as Bt, GIT_COMMAND_TEMPLATES as C, evaluateHostCapability as Ca, auditedForegroundRenderers as Ci, classifyCompletionClaim as Cn, hasPrivateRestartIntent as Co, environmentDefaultRepositoryTarget as Cr, certifyCheckpoint as Ct, executeRevalidatedGitEffect as D, selectHostCohort as Da, evaluateConfiguredHostLock as Di, decisionBoundaryKey as Dn, readPrivateLedger as Do, isInformationalMessage as Dr, PROOF_MANIFEST_DOMAIN_V2 as Dt, createGitPrestateEnvelope as E, hostVersionFromPackages as Ea, evaluateActiveHostLock as Ei, decideTurnStopping as En, privateLedgerTargetDigest as Eo, extractOperation as Er, PROOF_KINDS_V2 as Et, firstStepGuidanceV6 as F, parseHostVersion as Fa, prepareActiveHostTrust as Fi, v6TestPredicate as Fn, releaseContractFor as Fo, actionVerbMatches as Fr, proofCapabilityReport as Ft, SessionApiError as G, STOP_PROTOCOL_VERSION_V2 as Ga, DESKTOP_PROFILE_PACKAGE_NAME as Gi, effectuateBoundary as Gn, stripUrlCredentials as Go, interpretClause as Gr, sessionQueryV2 as Gt, sourcedNamedTestRoot as H, SEMANTIC_ACTIONS as Ha, revalidateDesktopCoreLock as Hi, unitDescendantIds as Hn, sanitizeClauseText as Ho, hasOrderedCoordination as Hr, requiredSubjectsOf as Ht, lifecyclePhase as I, satisfiesSupportedHostRange as Ia, prepareDesktopHostTrust as Ii, goalCompletionDenial as In, releaseCoverage as Io, clarifiedSpanOf as Ir, proofDigest as It, CAPTURE_V042_NOTICE as J, boundedArtifactChoiceMatches as Ja, hasDesktopImporterState as Ji, currentContractDigest as Jn, isExecutableItem as Jr, CLEANUP_CONDITION_RULE as Jt, snapshotSessionEvents as K, SUPPORTED_EVIDENCE_ADAPTERS as Ka, DESKTOP_RUNTIME_PACKAGE_NAME as Ki, isCurrentAcceptedBoundary as Kn, privateStorageToolDenial as Ko, interpretMessage as Kr, validateProofManifest as Kt, previewFirstStepInjection as L, ACTION_MANIFEST as La, prepareTargetHostTrust as Li, hasCurrentCertificate as Ln, releasePreEffectDecision as Lo, clauseAsksOwnQuestion as Lr, proofDigestV2 as Lt, FIRST_STEP_GUIDANCE as M, SUPPORTED_HOST_VERSIONS as Ma, inspectTargetHostGraph as Mi, observeAssistantOutcome as Mn, inFlightReservation as Mo, classifyUserInteraction as Mr, canonicalProjection as Mt, claimedBatchHasRealRootInput as N, compareHostVersions as Na, packageRowsFromActiveGraph as Ni, progressFingerprint as Nn, normalizeReleaseContract as No, GRANTED_QUALIFICATION as Nr, createProofManifest as Nt, gitCommandMatchesTarget as O, HOST_VALIDATED_VERSIONS as Oa, hostLockContextFromComposedDump as Oi, isRootPauseRequest as On, resolvePrivateLedgerRoot as Oo, segmentClauses as Or, PROOF_PROTOCOL_VERSION as Ot, firstStepGuidance as P, evaluateMinimumHostVersion as Pa, packageRowsFromPnpmLock as Pi, testOutcomePredicate as Pn, readbackSettlesContract as Po, LEGACY_QUALIFICATION as Pr, createProofManifestV2 as Pt, PROTOCOL_V5_NOTICE as Q, requestedTargetMatchesResolved as Qa, readAsarIndex as Qi, proposeRebindOutcome as Qn, isQuestionScopeNeedingReview as Qr, MIN_RECOVERY_CHAR_BUDGET as Qt, projectSessionCoreV2 as R, ACTION_MANIFEST_VERSION as Ra, readActiveHostGraph as Ri, ancestorConstraintForBinding as Rn, reservationFor as Ro, clauseIsGoverned as Rr, proofEvidenceConstraints as Rt, GIT_COMMAND_MANIFEST_IDS as S, evaluateGraphDerivedHostLock as Sa, auditedDefaultWorkdirProvider as Si, assessmentOutcomePredicate as Sn, applyPrivateLedger as So, classifyClause as Sr, bindingIndividuallyAccepted as St, commitTreeSnapshotDigest as T, evaluateToolSurfaceCapability as Ta, combineHostPolicy as Ti, decideTurnBoundary as Tn, privateLedgerContractDigest as To, extractMethod as Tr, PROOF_KINDS as Tt, SESSION_API_UNSUPPORTED as U, STATEFUL_ACTIONS as Ua, verifyComposedHostLockDump as Ui, BOUNDARY_RECORD_PREFIX as Un, sanitizeUrl as Uo, hasQuestionScope as Ur, scopeCoverageDigest as Ut, captureHostWorkdir as V, CERTIFICATE_VERSION_V2 as Va, resolveInstalledHostLock as Vi, needsReviewObligations as Vn, normalizeClause as Vo, governedClauseRestrictsExecution as Vr, proofV2Rejection as Vt, SESSION_EVENT_ENVELOPE_INVALID as W, STOP_PROTOCOL_VERSION as Wa, DESKTOP_IDENTITY_FACTS as Wi, availableBoundaryQualifications as Wn, sha256 as Wo, hasWorkPredicate as Wr, sessionQuery as Wt, PROTOCOL_V3_NOTICE as X, requestedIdentityKey as Xa, memoizedAsarIndex as Xi, confirmRebind as Xn, isInformationalFragment as Xr, CLEANUP_CONDITION_RULE_SHORT as Xt, DEFAULT_DELEGATION_TOOL_NAMES as Y, isStatefulAction as Ya, memoizedAsarFile as Yi, createProjection as Yn, isExplanationScope as Yr, CLEANUP_CONDITION_RULE_COMPACT as Yt, PROTOCOL_V4_NOTICE as Z, requestedTargetAuthorizesMutation as Za, readAsarFile as Zi, proposeRebind as Zn, isOpenObligation as Zr, DEFAULT_RECOVERY_CHAR_BUDGET as Zt, prepareActivationMigration as _, HOST_CAPABILITY_PACKAGE_GROUPS as _a, COMMAND_SURFACE_MANIFEST as _i, isVerifyingCapability as _n, activationDigest as _o, partialFailureOf as _r, parseShellCommand as _t, resolveActivationPersistencePlugin as a, hostTrustDigest as aa, namedActions as ai, openItems as an, createHostAuditSession as ao, parseConfirmationMessage as ar, NATIVE_GIT_ROOT_PARENT_OID as at, RC020_RC2_HOST_PACKAGES as b, bindLiveGoalCapability as ba, activeRendererModule as bi, NO_PROGRESS_TURNS_BEFORE_STOP as bn, validateActivationBinding as bo, captureClause as br, authorityCaptureCounts as bt, createActivationSelection as c, registryArchiveFiles as ca, presentExplanationHead as ci, renderRecoveryPacket as cn, adoptActivationReceipt as co, evidenceAvailabilityReason as cr, extractToolSubject as ct, scanActivationInventory as d, ACTIVE_HOST_COHORT_IDS as da, reportingHeadGoverns as di, currentV6Feedback as dn, readActivationMigrationReceipt as do, relevantEvidence as dr, persistedToolResultStatus as dt, readDesktopDependency as ea, itemHoldsExecutionAuthority as ei, V6_ORDINARY_COMPLETION_RULE_COMPACT as en, semanticActionFromText as eo, rebindAttemptKey as er, applyUpgradeEligibility as et, selectedActivationInventory as f, ACTIVE_HOST_LAUNCHER_VERSION as fa, restatedContentOf as fi, isV6PendingRootWait as fn, resolveActivationBindingsRoot as fo, DEPENDENCY_FREE_ONLY_CONDITION as fr, shellReadbackOutcome as ft, inspectActivationInventory as g, GOAL_HOST_PACKAGES as ga, verbIsNegated as gi, evidenceMatchesItem as gn, activationCanonical as go, capabilityFactOf as gr, parsePwshCommand as gt, verifySelectedMigrationInventory as h, EXPECTED_HOST_PACKAGES as ha, statefulActionsOfScope as hi, evidenceCoverage as hn, writeActivationBinding as ho, capabilityConsequence as hr, isRunExecutable as ht, guardActivationInventory as i, acquireHostTrust as ia, maskQuotedSpans as ii, closingHint as in, RC021_RC3_HOST_PACKAGES as io, isFrozenV042RebindResponse as ir, supersedeItem as it, verifiedLinearCommitReadback as j, SUPPORTED_HOST_RANGE as ja, inspectDesktopTargetGraph as ji, latestRootInstruction as jn, contractById as jo, classifyTaskIntent as jr, bindProofV2ToProjection as jt, parseGitCommandManifest as k, LATEST_TESTED_HOST_VERSION as ka, hostLockRowsFromComposedDump as ki, isWholeTaskCompletionClaim as kn, RELEASE_OPERATIONS as ko, canonicalRegistryBase as kr, PROOF_PROTOCOL_VERSION_V2 as kt, isSelectedActivationReceipt as l, registryArchiveModules as la, qualificationOfClause as li, v6CurrentRootBoundaries as ln, createActivationMigrationReceipt as lo, itemDiagnosis as lr, isDeterministicCheck as lt, validateActivationSelection as m, DEFAULT_HOST_LOCK as ma, splitTextFragments as mi, bindingSatisfies as mn, validateActivationMigrationReceipt as mo, admissibleForRemoval as mr, canonicalArgvFromCommand as mt, assertActivationPhysicalRows as n, writeDesktopRuntimeReceipt as na, legacyQuestionReadingIsInformational as ni, carriesCleanupCondition as nn, validateActionTarget as no, replayRebindResult as nr, legacyRecordsNeedingReview as nt, activationSelectionPending as o, parseHostTrust as oa, opensConditionLead as oi, recoveryDigest as on, __activationBindingInternals as oo, capabilityRemedyPhrase as or, evidenceFromPersistedToolResult as ot, validateActivationInventorySnapshot as p, BASE_HOST_PACKAGES as pa, semanticActionOfScope as pi, sourceItemForCoreRequirement as pn, resolveSessionActivation as po, actionHasCertificationPath as pr, withDurability as pt, projectCoreV2 as q, actionCompatible as qa, auditDesktopInstalledImplementation as qi, qualifyBoundary as qn, ownedJobLifecycle as qo, introducesActionClause as qr, validateProofManifestV2 as qt, captureActivationPhysicalInventory as r, HostTrustError as ra, maskCodeSpans as ri, cleanupConditionFor as rn, RC021_RC5_HOST_PACKAGES as ro, CONFIRM_LINE_PATTERN as rr, rootLocatorFlavor as rt, bindActivationInventoryPhysical as s, qualifyHostTrust as sa, opensWithDirective as si, recoveryTitle as sn, activationBindingPath as so, deriveItemDiagnosis as sr, extractTextContent as st, assertActivationBackendIdentity as t, readDesktopTargetGraph as ta, kindOfScope as ti, V6_ORDINARY_COMPLETION_RULE_SHORT as tn, validateActionManifest as to, rebindResponse as tr, deriveProjection as tt, prepareSelectedActivationMigration as u, ACTIVE_HOST_COHORT_ID as ua, questionHeadsClause as ui, confirmedV6CoreDiagnostic as un, readActivationBinding as uo, nativeFileTwoRole as ur, nativeGitParentOidVerified as ut, verifyMigrationInventory as v, HOST_COHORTS as va, validateManifest as vi, CONTROL_RECORD_PREFIX as vn, activationJson as vo, removalIsComplete as vr, cwdEpochsFromEvents as vt, commitIndexSnapshotDigest as w, evaluateHostLock as wa, auditedHostImplementation as wi, currentActionBases as wn, initializePrivateLedger as wo, extractArtifactPaths as wr, PROOF_CAPABILITY_MATRIX as wt, RC020_RC1_HOST_PACKAGES as x, evaluateExternalWaitCapability as xa, auditedDefaultWorkdirHost as xi, assessmentAction as xn, appendPrivateLedger as xo, captureItem as xr, segmentAuthorityBlocks as xt, RC021_RC2_HOST_PACKAGES as y, bindExecutableIdentity as ya, HostProfileError as yi, NO_PROGRESS_RECORD_PREFIX as yn, sessionBirthIdentity as yo, removalIsPartiallyKnown as yr, effectiveCwdAt as yt, sessionCoreSnapshot as z, BOUNDED_ARTIFACT_TYPES as za, resolveActiveProfileHostLock as zi, certifiableOpenItems as zn, canonicalizePath as zo, clauseIsProtected as zr, proofHostSurfacesOf as zt };
+//#region src/domain/activation-generation-verification.ts
+function fail$1() {
+	throw new Error("activation_generation_unverified");
+}
+function segment(value) {
+	return !!value && value !== "." && value !== ".." && !/[\\/\0]/u.test(value);
+}
+function encoded(id) {
+	if (id === "." || id === "..") return [...id].map(() => "~002E").join("");
+	let result = "";
+	for (let i$1 = 0; i$1 < id.length; i$1++) result += /^[A-Za-z0-9._-]$/u.test(id[i$1]) ? id[i$1] : `~${id.charCodeAt(i$1).toString(16).toUpperCase().padStart(4, "0")}`;
+	return result;
+}
+function sourceBytes(path$1, expected, digest$1) {
+	const expectedString = activationCanonical(expected);
+	if (!/^\d+$/u.test(expected.size) || BigInt(expected.size) > 256n * 1024n * 1024n) fail$1();
+	const identity = (s) => {
+		const x = s;
+		if (!x.isFile() || x.isSymbolicLink() || x.nlink !== 1n || x.ino === 0n) fail$1();
+		return {
+			dev: String(x.dev),
+			ino: String(x.ino),
+			size: String(x.size),
+			mtimeNs: String(x.mtimeNs),
+			ctimeNs: String(x.ctimeNs),
+			mode: String(x.mode),
+			nlink: String(x.nlink)
+		};
+	};
+	if (activationCanonical(identity(lstatSync(path$1, { bigint: true }))) !== expectedString) fail$1();
+	const fd = openSync(path$1, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW));
+	try {
+		if (activationCanonical(identity(fstatSync(fd, { bigint: true }))) !== expectedString) fail$1();
+		const bytes$1 = readFileSync(fd);
+		if (createHash("sha256").update(bytes$1).digest("hex") !== digest$1 || activationCanonical(identity(fstatSync(fd, { bigint: true }))) !== expectedString || activationCanonical(identity(lstatSync(path$1, { bigint: true }))) !== expectedString) fail$1();
+		return bytes$1;
+	} finally {
+		closeSync(fd);
+	}
+}
+/** Walk a Zstandard frame's physical blocks before giving exactly one whole frame to Node's decoder. */
+function zstdFrames(input) {
+	const decompress = zlib.zstdDecompressSync;
+	if (!decompress) fail$1();
+	let at = 0;
+	const decoded = [];
+	let total = 0;
+	const need = (n) => {
+		if (n < 0 || at + n > input.length) fail$1();
+	};
+	while (at < input.length) {
+		const start = at;
+		need(5);
+		if (input.readUInt32LE(at) !== 4247762216) fail$1();
+		at += 4;
+		const desc = input[at++];
+		if ((desc & 24) !== 0) fail$1();
+		const single = !!(desc & 32), sizeFlag = desc >>> 6, dict = desc & 3;
+		const contentSizeBytes = sizeFlag === 0 ? single ? 1 : 0 : 1 << sizeFlag;
+		const header = (single ? 0 : 1) + (dict === 3 ? 4 : dict) + contentSizeBytes;
+		need(header);
+		at += header;
+		let last = false;
+		while (!last) {
+			need(3);
+			const h = input.readUIntLE(at, 3);
+			at += 3;
+			last = !!(h & 1);
+			const kind = h >>> 1 & 3, length = h >>> 3;
+			if (kind === 3) fail$1();
+			const body = kind === 1 ? 1 : length;
+			need(body);
+			at += body;
+		}
+		if (desc & 4) {
+			need(4);
+			at += 4;
+		}
+		const plain = decompress(input.subarray(start, at), { maxOutputLength: 256 * 1024 * 1024 });
+		total += plain.length;
+		if (total > 256 * 1024 * 1024) fail$1();
+		decoded.push(plain);
+	}
+	if (!decoded.length) fail$1();
+	return decoded;
+}
+function strictPhysical(bytes$1, version$1, compression, catalogs) {
+	const frames = compression === "none" ? [bytes$1] : zstdFrames(bytes$1);
+	if (frames.some((frame) => !frame.length || frame[frame.length - 1] !== 10)) fail$1();
+	const decoder = new TextDecoder("utf-8", { fatal: true });
+	const lines = [];
+	for (const frame of frames) for (const line of decoder.decode(frame).slice(0, -1).split("\n")) lines.push(line);
+	if (compression === "zstd" && frames[0].indexOf(10) !== frames[0].length - 1) fail$1();
+	if (!lines.length || lines.some((line) => !line)) fail$1();
+	const header = JSON.parse(lines[0]);
+	if (header?.version !== version$1) fail$1();
+	const parser = (version$1 <= 3 ? catalogs.historical : catalogs.current).createRestore(header, {
+		recovery: "strict",
+		validation: "current"
+	});
+	for (const line of lines.slice(1)) parser.decodeRow(JSON.parse(line));
+	const result = parser.finish();
+	if (typeof result?.header?.id !== "string" || !result.header.id) fail$1();
+	return result.header.id;
+}
+/** Reject shared or redirected Windows scratch paths before any private data is copied. */
+function assertWindowsScratch(path$1, requireCurrentOwner) {
+	if (process.platform !== "win32") return;
+	const systemRoot = process.env.SystemRoot;
+	if (!systemRoot || !isAbsolute(systemRoot)) fail$1();
+	const executable = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+	const source = String.raw`
+$ErrorActionPreference = 'Stop'
+$path = [Environment]::GetEnvironmentVariable('DSH_GENERATION_SCRATCH_PATH', 'Process')
+$own = [Environment]::GetEnvironmentVariable('DSH_GENERATION_REQUIRE_OWNER', 'Process') -eq '1'
+if (-not $path -or -not [IO.Path]::IsPathRooted($path) -or $path.StartsWith('\\')) { throw 'invalid scratch path' }
+$root = [IO.Path]::GetPathRoot($path)
+if (([IO.DriveInfo]::new($root)).DriveType -ne [IO.DriveType]::Fixed) { throw 'scratch drive not fixed' }
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$trusted = @($me, 'S-1-5-18', 'S-1-5-32-544')
+try { $installer = ([Security.Principal.NTAccount]::new('NT SERVICE', 'TrustedInstaller')).Translate([Security.Principal.SecurityIdentifier]).Value; $trusted += $installer } catch { }
+$ancestorDanger = [int64]([Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership) -bor 0x10000000
+$parentDanger = $ancestorDanger -bor [int64][Security.AccessControl.FileSystemRights]::Write -bor 0x40000000
+$dir = [IO.DirectoryInfo]::new($path)
+$depth = 0
+while ($null -ne $dir) {
+  if (-not $dir.Exists -or (($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'redirected scratch' }
+  $acl = $dir.GetAccessControl(([Security.AccessControl.AccessControlSections]::Access -bor [Security.AccessControl.AccessControlSections]::Owner))
+  $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+  if ($trusted -notcontains $owner -or ($depth -eq 0 -and $own -and $owner -ne $me)) { throw 'untrusted owner' }
+  foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    if ($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
+    $sid = $ace.IdentityReference.Value
+    if ($trusted -contains $sid -or $sid -eq 'S-1-3-0' -or $sid -eq 'S-1-3-4') { continue }
+    if ($depth -gt 0 -and (($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)) { continue }
+    $effective = [int64]$ace.FileSystemRights
+    if ($own -and $depth -eq 0) {
+      if (($effective -band (-bnot [int64][Security.AccessControl.FileSystemRights]::Synchronize)) -ne 0) { throw 'scratch data accessible' }
+    } elseif (($depth -eq 0 -and -not $own) -or ($depth -eq 1 -and $own)) {
+      if (($effective -band $parentDanger) -ne 0) { throw 'shared scratch parent' }
+    } elseif (($effective -band $ancestorDanger) -ne 0) { throw 'replaceable scratch ancestor' }
+  }
+  $depth += 1
+  $dir = $dir.Parent
+}
+`;
+	const encoded$1 = Buffer.from(source, "utf16le").toString("base64");
+	try {
+		execFileSync(executable, [
+			"-NoLogo",
+			"-NoProfile",
+			"-NonInteractive",
+			"-EncodedCommand",
+			encoded$1
+		], {
+			env: {
+				...process.env,
+				DSH_GENERATION_SCRATCH_PATH: path$1,
+				DSH_GENERATION_REQUIRE_OWNER: requireCurrentOwner ? "1" : "0"
+			},
+			stdio: "ignore",
+			timeout: 15e3,
+			windowsHide: true
+		});
+	} catch {
+		fail$1();
+	}
+}
+async function verifyActivationGenerations(input) {
+	if (!["none", "zstd"].includes(input.compression) || !/^[a-f0-9]{64}$/u.test(input.censusSha256) || input.capture() !== input.censusSha256) fail$1();
+	const sizes = /* @__PURE__ */ new Map();
+	let totalBytes = 0n;
+	for (const row$3 of input.generations) {
+		if (!/^\d+$/u.test(row$3.identity.size)) fail$1();
+		totalBytes += BigInt(row$3.identity.size);
+		const key = `${row$3.projectSegment}/${row$3.sessionSegment}`;
+		sizes.set(key, (sizes.get(key) ?? 0) + 1);
+	}
+	if (![...sizes.values()].some((size) => size > 1)) return {
+		generations: [],
+		selections: []
+	};
+	if (totalBytes > 1024n * 1024n * 1024n) fail$1();
+	const rawScratchBase = resolve(tmpdir());
+	assertWindowsScratch(rawScratchBase, false);
+	const sourceRoot = realpathSync(input.root), scratchBase = realpathSync(rawScratchBase);
+	if (sourceRoot !== resolve(input.root)) fail$1();
+	const isInside = (path$1, parent) => {
+		const r = relative(parent, path$1);
+		return r === "" || !isAbsolute(r) && r !== ".." && !r.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`);
+	};
+	if (isInside(scratchBase, sourceRoot)) fail$1();
+	const temp = mkdtempSync(join(scratchBase, "dsh-generation-check-"));
+	try {
+		const physicalTemp = realpathSync(temp), snapshot = join(physicalTemp, "snapshot"), held = join(physicalTemp, "held");
+		if (isInside(physicalTemp, sourceRoot) || isInside(sourceRoot, physicalTemp)) fail$1();
+		const tempStat = lstatSync(physicalTemp);
+		if (!tempStat.isDirectory() || tempStat.isSymbolicLink() || process.platform !== "win32" && ((tempStat.mode & 63) !== 0 || typeof process.getuid === "function" && tempStat.uid !== process.getuid())) fail$1();
+		assertWindowsScratch(physicalTemp, true);
+		mkdirSync(snapshot, { mode: 448 });
+		mkdirSync(held, { mode: 448 });
+		assertWindowsScratch(snapshot, true);
+		assertWindowsScratch(held, true);
+		const groups = /* @__PURE__ */ new Map(), seen = /* @__PURE__ */ new Set();
+		for (const row$3 of input.generations) {
+			if (!segment(row$3.projectSegment) || !segment(row$3.sessionSegment) || !Number.isInteger(row$3.version) || row$3.version < 0 || row$3.version > 4 || row$3.compression !== input.compression || !/^[a-f0-9]{64}$/u.test(row$3.contentSha256)) fail$1();
+			const filename = `session${row$3.version ? `.v${row$3.version}` : ""}.jsonl${row$3.compression === "zstd" ? ".zstd" : ""}`;
+			if (row$3.relativePath !== `${row$3.projectSegment}/${row$3.sessionSegment}/${filename}` || seen.has(row$3.relativePath)) fail$1();
+			seen.add(row$3.relativePath);
+			const bytes$1 = sourceBytes(join(input.root, row$3.relativePath), row$3.identity, row$3.contentSha256);
+			mkdirSync(join(snapshot, row$3.projectSegment, row$3.sessionSegment), {
+				recursive: true,
+				mode: 448
+			});
+			writeFileSync(join(snapshot, row$3.relativePath), bytes$1, {
+				mode: 384,
+				flag: "wx"
+			});
+			const key = `${row$3.projectSegment}/${row$3.sessionSegment}`;
+			const group = groups.get(key) ?? [];
+			group.push(row$3);
+			groups.set(key, group);
+		}
+		if (input.capture() !== input.censusSha256) fail$1();
+		assertWindowsScratch(physicalTemp, true);
+		assertWindowsScratch(snapshot, true);
+		assertWindowsScratch(held, true);
+		const output = {
+			generations: [],
+			selections: []
+		};
+		for (const group of groups.values()) {
+			if (group.length < 2) continue;
+			group.sort((a, b) => b.version - a.version);
+			const selected = group[0];
+			let birthCanonical;
+			const ids = /* @__PURE__ */ new Map();
+			for (const row$3 of group) {
+				const id = strictPhysical(readFileSync(join(snapshot, row$3.relativePath)), row$3.version, row$3.compression, input.catalogs);
+				if (encoded(id) !== row$3.sessionSegment) fail$1();
+				ids.set(row$3.relativePath, id);
+			}
+			for (const target of group) {
+				const moved = [];
+				try {
+					for (const other of group) if (target !== selected && other !== target) {
+						const from = join(snapshot, other.relativePath), to = join(held, String(moved.length));
+						renameSync(from, to);
+						moved.push({
+							from,
+							to
+						});
+					}
+					const s = await input.openSnapshot(snapshot, input.compression);
+					try {
+						const id = ids.get(target.relativePath);
+						if (!id) fail$1();
+						const targetPath = join(snapshot, target.relativePath);
+						const before = lstatSync(targetPath, { bigint: true });
+						if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n) fail$1();
+						const revision = [
+							before.dev,
+							before.ino,
+							before.size,
+							before.mtimeNs,
+							before.ctimeNs
+						].join(":");
+						const matches = (row$4) => {
+							if (!row$4 || row$4.sizeBytes !== Number(before.size) || typeof row$4.revision !== "string") return false;
+							if (target.version === 4 ? row$4.revision !== revision : !new RegExp(`^${revision}:[a-f0-9]{64}$`, "u").test(row$4.revision)) return false;
+							return row$4.formatStatus === (target.version === 4 ? "current" : "migration-required");
+						};
+						const row$3 = await s.persistence.stat(id);
+						if (!matches(row$3)) fail$1();
+						const handle = await s.persistence.open(id, "read");
+						try {
+							await handle.read();
+							const birth = sessionBirthIdentity(handle.header, handle.inheritedEventCount);
+							if (birth.id !== id || encoded(id) !== target.sessionSegment || activationCanonical(row$3.header) !== activationCanonical(handle.header)) fail$1();
+							const after = await s.persistence.stat(id);
+							const current = lstatSync(targetPath, { bigint: true });
+							const currentRevision = [
+								current.dev,
+								current.ino,
+								current.size,
+								current.mtimeNs,
+								current.ctimeNs
+							].join(":");
+							if (!matches(after) || after.revision !== row$3.revision || activationCanonical(after.header) !== activationCanonical(row$3.header) || currentRevision !== revision || !current.isFile() || current.nlink !== 1n || createHash("sha256").update(readFileSync(targetPath)).digest("hex") !== target.contentSha256) fail$1();
+							const canonical$3 = activationCanonical(birth);
+							if (birthCanonical !== void 0 && canonical$3 !== birthCanonical) fail$1();
+							birthCanonical = canonical$3;
+							output.generations.push({
+								relativePath: target.relativePath,
+								contentSha256: target.contentSha256,
+								version: target.version,
+								sessionId: id,
+								birthIdentitySha256: activationDigest(birth)
+							});
+						} finally {
+							await handle.close();
+						}
+					} finally {
+						await s.close();
+					}
+				} finally {
+					for (const item of moved.reverse()) renameSync(item.to, item.from);
+				}
+			}
+			output.selections.push({
+				projectSegment: selected.projectSegment,
+				sessionSegment: selected.sessionSegment,
+				selectedRelativePath: selected.relativePath,
+				selectedVersion: selected.version
+			});
+		}
+		if (input.capture() !== input.censusSha256) fail$1();
+		assertWindowsScratch(physicalTemp, true);
+		assertWindowsScratch(snapshot, true);
+		assertWindowsScratch(held, true);
+		output.generations.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+		output.selections.sort((a, b) => `${a.projectSegment}/${a.sessionSegment}`.localeCompare(`${b.projectSegment}/${b.sessionSegment}`));
+		return output;
+	} finally {
+		rmSync(temp, {
+			recursive: true,
+			force: true
+		});
+	}
+}
+
+//#endregion
+//#region src/domain/activation-catalog-qualification.ts
+const HASH = /^[0-9a-f]{64}$/u;
+function fail() {
+	throw new Error("activation_catalog_unreviewed");
+}
+function checkedFile(path$1) {
+	if (lstatSync(path$1, { bigint: true }).isSymbolicLink()) fail();
+	const physical$1 = realpathSync(path$1), before = lstatSync(physical$1, { bigint: true });
+	if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.nlink !== 1n) fail();
+	const fd = openSync(physical$1, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW));
+	try {
+		const opened = fstatSync(fd, { bigint: true });
+		if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.nlink !== 1n) fail();
+		const bytes$1 = readFileSync(fd), final = fstatSync(fd, { bigint: true }), after = lstatSync(physical$1, { bigint: true });
+		for (const stat of [final, after]) if (!stat.isFile() || stat.isSymbolicLink() || stat.dev !== before.dev || stat.ino !== before.ino || stat.size !== before.size || stat.mtimeNs !== before.mtimeNs || stat.ctimeNs !== before.ctimeNs || stat.mode !== before.mode || stat.nlink !== before.nlink) fail();
+		if (realpathSync(path$1) !== physical$1) fail();
+		return {
+			path: physical$1,
+			bytes: bytes$1
+		};
+	} finally {
+		closeSync(fd);
+	}
+}
+function within(root, path$1) {
+	const offset = relative(root, path$1);
+	return !!offset && !isAbsolute(offset) && offset !== ".." && !offset.startsWith(`..${sep}`);
+}
+function relativeModule(path$1) {
+	return !!path$1 && !isAbsolute(path$1) && !path$1.includes("\\") && path$1.split("/").every((part) => part && part !== "." && part !== "..");
+}
+/** Call before importing either the JSONL backend or this catalog on multi-gen
+* inventories. NODE_OPTIONS/custom loaders or conditions are not qualified; NODE_PATH cannot supply an ESM dependency. */
+function assertActivationCatalogQualification(backendFile, review) {
+	try {
+		if (process.env.NODE_OPTIONS || process.execArgv.some((arg) => /^(?:--conditions(?:=|$)|--experimental-loader(?:=|$)|--loader(?:=|$)|--import(?:=|$)|--require(?:=|$)|-r|--preserve-symlinks(?:-main)?(?:=|$))/u.test(arg))) fail();
+		if (!review || review.schema !== "dsh-activation-catalog-qualification/v1" || !Array.isArray(review.packages) || !Array.isArray(review.modules) || review.packages.length === 0 || review.modules.length === 0) fail();
+		const packages$5 = /* @__PURE__ */ new Map(), modules = /* @__PURE__ */ new Map();
+		for (const p of review.packages) {
+			if (!p || typeof p.name !== "string" || !/^@[^/]+\/[^/]+$/u.test(p.name) || !HASH.test(p.loaderShapeSha256) || packages$5.has(p.name)) fail();
+			packages$5.set(p.name, p);
+		}
+		for (const m of review.modules) {
+			if (!m || !packages$5.has(m.package) || !relativeModule(m.path) || m.key !== `${m.package}::${m.path}` || !HASH.test(m.sha256) || !Array.isArray(m.edges) || modules.has(m.key)) fail();
+			modules.set(m.key, m);
+		}
+		const entry = modules.get(review.entry);
+		if (!entry || entry.package !== "@deepseek-ai/dsh-session-format-catalog") fail();
+		const roots = /* @__PURE__ */ new Map(), manifestDigests = /* @__PURE__ */ new Map();
+		const packageRoot = (importer, name) => {
+			const reviewed = packages$5.get(name);
+			if (!reviewed) fail();
+			const manifestPath = createRequire(importer).resolve(`${name}/package.json`);
+			let ancestor = dirname(realpathSync(importer)), localManifest;
+			for (;;) {
+				if (basename(ancestor) !== "node_modules") {
+					const candidate = join(ancestor, "node_modules", name, "package.json");
+					try {
+						lstatSync(candidate);
+						localManifest = candidate;
+						break;
+					} catch (error) {
+						if (error.code !== "ENOENT") throw error;
+					}
+				}
+				const parent = dirname(ancestor);
+				if (parent === ancestor) break;
+				ancestor = parent;
+			}
+			if (!localManifest || realpathSync(localManifest) !== realpathSync(manifestPath)) fail();
+			const file = checkedFile(localManifest), root$1 = dirname(file.path);
+			const value = activationJson(new TextDecoder("utf-8", { fatal: true }).decode(file.bytes));
+			if (!value || typeof value !== "object" || Array.isArray(value) || value.name !== name || typeof value.version !== "string") fail();
+			const shape = {};
+			for (const key of [
+				"name",
+				"type",
+				"main",
+				"exports",
+				"imports"
+			]) if (Object.hasOwn(value, key)) shape[key] = value[key];
+			if (createHash("sha256").update(JSON.stringify(shape)).digest("hex") !== reviewed.loaderShapeSha256) fail();
+			const previous = roots.get(name);
+			if (previous && previous !== root$1) fail();
+			roots.set(name, root$1);
+			manifestDigests.set(name, createHash("sha256").update(file.bytes).digest("hex"));
+			return root$1;
+		};
+		const paths = /* @__PURE__ */ new Map(), pending = [];
+		const root = packageRoot(realpathSync(backendFile), entry.package);
+		pending.push({
+			node: entry,
+			root
+		});
+		while (pending.length) {
+			const { node, root: currentRoot } = pending.pop();
+			const requested = resolve(currentRoot, node.path), file = checkedFile(requested);
+			if (!within(currentRoot, file.path) || requested !== file.path || createHash("sha256").update(file.bytes).digest("hex") !== node.sha256) fail();
+			const previous = paths.get(node.key);
+			if (previous) {
+				if (previous !== file.path) fail();
+				continue;
+			}
+			paths.set(node.key, file.path);
+			for (const edge of node.edges) {
+				if (!edge || typeof edge.specifier !== "string" || typeof edge.target !== "string") fail();
+				const target = modules.get(edge.target);
+				if (!target) fail();
+				if (edge.specifier.startsWith(".")) {
+					const destination = realpathSync(resolve(dirname(file.path), edge.specifier));
+					if (target.package !== node.package || destination !== resolve(currentRoot, target.path)) fail();
+					pending.push({
+						node: target,
+						root: currentRoot
+					});
+				} else {
+					if (edge.specifier !== target.package && !edge.specifier.startsWith(`${target.package}/`)) fail();
+					pending.push({
+						node: target,
+						root: packageRoot(file.path, target.package)
+					});
+				}
+			}
+		}
+		if (paths.size !== modules.size || roots.size !== packages$5.size) fail();
+		const qualificationSha256 = activationDigest({
+			schema: review.schema,
+			modules: [...paths].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, path$1]) => ({
+				key,
+				path: path$1,
+				sha256: modules.get(key).sha256
+			})),
+			manifests: [...manifestDigests].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, sha256$1]) => ({
+				name,
+				root: roots.get(name),
+				sha256: sha256$1
+			})),
+			node: process.versions.node
+		});
+		return {
+			catalogFile: paths.get(review.entry),
+			qualificationSha256,
+			moduleCount: paths.size,
+			packageCount: roots.size
+		};
+	} catch {
+		return fail();
+	}
+}
+
+//#endregion
+export { PROTOCOL_V3_NOTICE as $, requestedIdentityKey as $a, memoizedAsarIndex as $i, confirmRebind as $n, isInformationalFragment as $r, CLEANUP_CONDITION_RULE_SHORT as $t, executeRevalidatedGitEffect as A, selectHostCohort as Aa, evaluateConfiguredHostLock as Ai, decisionBoundaryKey as An, readPrivateLedger as Ao, isInformationalMessage as Ar, PROOF_MANIFEST_DOMAIN_V2 as At, previewFirstStepInjection as B, ACTION_MANIFEST as Ba, prepareTargetHostTrust as Bi, hasCurrentCertificate as Bn, releasePreEffectDecision as Bo, clauseAsksOwnQuestion as Br, proofDigestV2 as Bt, RC020_RC2_HOST_PACKAGES as C, bindLiveGoalCapability as Ca, activeRendererModule as Ci, NO_PROGRESS_TURNS_BEFORE_STOP as Cn, validateActivationBinding as Co, captureClause as Cr, authorityCaptureCounts as Ct, commitIndexSnapshotDigest as D, evaluateHostLock as Da, auditedHostImplementation as Di, currentActionBases as Dn, initializePrivateLedger as Do, extractArtifactPaths as Dr, PROOF_CAPABILITY_MATRIX as Dt, GIT_COMMAND_TEMPLATES as E, evaluateHostCapability as Ea, auditedForegroundRenderers as Ei, classifyCompletionClaim as En, hasPrivateRestartIntent as Eo, environmentDefaultRepositoryTarget as Er, certifyCheckpoint as Et, FIRST_STEP_GUIDANCE as F, SUPPORTED_HOST_VERSIONS as Fa, inspectTargetHostGraph as Fi, observeAssistantOutcome as Fn, inFlightReservation as Fo, classifyUserInteraction as Fr, canonicalProjection as Ft, sourcedNamedTestRoot as G, SEMANTIC_ACTIONS as Ga, revalidateDesktopCoreLock as Gi, unitDescendantIds as Gn, sanitizeClauseText as Go, hasOrderedCoordination as Gr, requiredSubjectsOf as Gt, sessionCoreSnapshot as H, BOUNDED_ARTIFACT_TYPES as Ha, resolveActiveProfileHostLock as Hi, certifiableOpenItems as Hn, canonicalizePath as Ho, clauseIsProtected as Hr, proofHostSurfacesOf as Ht, claimedBatchHasRealRootInput as I, compareHostVersions as Ia, packageRowsFromActiveGraph as Ii, progressFingerprint as In, normalizeReleaseContract as Io, GRANTED_QUALIFICATION as Ir, createProofManifest as It, SessionApiError as J, STOP_PROTOCOL_VERSION_V2 as Ja, DESKTOP_PROFILE_PACKAGE_NAME as Ji, effectuateBoundary as Jn, stripUrlCredentials as Jo, interpretClause as Jr, sessionQueryV2 as Jt, SESSION_API_UNSUPPORTED as K, STATEFUL_ACTIONS as Ka, verifyComposedHostLockDump as Ki, BOUNDARY_RECORD_PREFIX as Kn, sanitizeUrl as Ko, hasQuestionScope as Kr, scopeCoverageDigest as Kt, firstStepGuidance as L, evaluateMinimumHostVersion as La, packageRowsFromPnpmLock as Li, testOutcomePredicate as Ln, readbackSettlesContract as Lo, LEGACY_QUALIFICATION as Lr, createProofManifestV2 as Lt, parseGitCommandManifest as M, LATEST_TESTED_HOST_VERSION as Ma, hostLockRowsFromComposedDump as Mi, isWholeTaskCompletionClaim as Mn, RELEASE_OPERATIONS as Mo, canonicalRegistryBase as Mr, PROOF_PROTOCOL_VERSION_V2 as Mt, revalidateGitPrestate as N, MIN_SUPPORTED_HOST_VERSION as Na, injectActiveProfileHostLock as Ni, latestAssistantText as Nn, RELEASE_OPERATION_SURFACES as No, npmEscapedPackageName as Nr, bindProofToProjection as Nt, commitTreeSnapshotDigest as O, evaluateToolSurfaceCapability as Oa, combineHostPolicy as Oi, decideTurnBoundary as On, privateLedgerContractDigest as Oo, extractMethod as Or, PROOF_KINDS as Ot, verifiedLinearCommitReadback as P, SUPPORTED_HOST_RANGE as Pa, inspectDesktopTargetGraph as Pi, latestRootInstruction as Pn, contractById as Po, classifyTaskIntent as Pr, bindProofV2ToProjection as Pt, DEFAULT_DELEGATION_TOOL_NAMES as Q, isStatefulAction as Qa, memoizedAsarFile as Qi, createProjection as Qn, isExplanationScope as Qr, CLEANUP_CONDITION_RULE_COMPACT as Qt, firstStepGuidanceV6 as R, parseHostVersion as Ra, prepareActiveHostTrust as Ri, v6TestPredicate as Rn, releaseContractFor as Ro, actionVerbMatches as Rr, proofCapabilityReport as Rt, RC021_RC2_HOST_PACKAGES as S, bindExecutableIdentity as Sa, HostProfileError as Si, NO_PROGRESS_RECORD_PREFIX as Sn, sessionBirthIdentity as So, removalIsPartiallyKnown as Sr, effectiveCwdAt as St, GIT_COMMAND_MANIFEST_IDS as T, evaluateGraphDerivedHostLock as Ta, auditedDefaultWorkdirProvider as Ti, assessmentOutcomePredicate as Tn, applyPrivateLedger as To, classifyClause as Tr, bindingIndividuallyAccepted as Tt, HOST_WORKDIR_PREFIX as U, CERTIFICATE_VERSION as Ua, resolveDesktopProfileHostLock as Ui, certificateClosure as Un, digestStrings as Uo, explanationHasActionResidue as Ur, proofOperationMatches as Ut, projectSessionCoreV2 as V, ACTION_MANIFEST_VERSION as Va, readActiveHostGraph as Vi, ancestorConstraintForBinding as Vn, reservationFor as Vo, clauseIsGoverned as Vr, proofEvidenceConstraints as Vt, captureHostWorkdir as W, CERTIFICATE_VERSION_V2 as Wa, resolveInstalledHostLock as Wi, needsReviewObligations as Wn, normalizeClause as Wo, governedClauseRestrictsExecution as Wr, proofV2Rejection as Wt, projectCoreV2 as X, actionCompatible as Xa, auditDesktopInstalledImplementation as Xi, qualifyBoundary as Xn, ownedJobLifecycle as Xo, introducesActionClause as Xr, validateProofManifestV2 as Xt, snapshotSessionEvents as Y, SUPPORTED_EVIDENCE_ADAPTERS as Ya, DESKTOP_RUNTIME_PACKAGE_NAME as Yi, isCurrentAcceptedBoundary as Yn, privateStorageToolDenial as Yo, interpretMessage as Yr, validateProofManifest as Yt, CAPTURE_V042_NOTICE as Z, boundedArtifactChoiceMatches as Za, hasDesktopImporterState as Zi, currentContractDigest as Zn, isExecutableItem as Zr, CLEANUP_CONDITION_RULE as Zt, validateActivationSelection as _, DEFAULT_HOST_LOCK as _a, splitTextFragments as _i, bindingSatisfies as _n, validateActivationMigrationReceipt as _o, admissibleForRemoval as _r, canonicalArgvFromCommand as _t, captureActivationPhysicalInventory as a, writeDesktopRuntimeReceipt as aa, legacyQuestionReadingIsInformational as ai, carriesCleanupCondition as an, validateActionTarget as ao, replayRebindResult as ar, legacyRecordsNeedingReview as at, prepareActivationMigration as b, HOST_CAPABILITY_PACKAGE_GROUPS as ba, COMMAND_SURFACE_MANIFEST as bi, isVerifyingCapability as bn, activationDigest as bo, partialFailureOf as br, parseShellCommand as bt, verifyActivationPhysicalInventory as c, hostTrustDigest as ca, namedActions as ci, openItems as cn, createHostAuditSession as co, parseConfirmationMessage as cr, NATIVE_GIT_ROOT_PARENT_OID as ct, createActivationSelection as d, registryArchiveFiles as da, presentExplanationHead as di, renderRecoveryPacket as dn, adoptActivationReceipt as do, evidenceAvailabilityReason as dr, extractToolSubject as dt, readAsarFile as ea, isOpenObligation as ei, DEFAULT_RECOVERY_CHAR_BUDGET as en, requestedTargetAuthorizesMutation as eo, proposeRebind as er, PROTOCOL_V4_NOTICE as et, isSelectedActivationReceipt as f, registryArchiveModules as fa, qualificationOfClause as fi, v6CurrentRootBoundaries as fn, createActivationMigrationReceipt as fo, itemDiagnosis as fr, isDeterministicCheck as ft, validateActivationInventorySnapshot as g, BASE_HOST_PACKAGES as ga, semanticActionOfScope as gi, sourceItemForCoreRequirement as gn, resolveSessionActivation as go, actionHasCertificationPath as gr, withDurability as gt, selectedActivationInventory as h, ACTIVE_HOST_LAUNCHER_VERSION as ha, restatedContentOf as hi, isV6PendingRootWait as hn, resolveActivationBindingsRoot as ho, DEPENDENCY_FREE_ONLY_CONDITION as hr, shellReadbackOutcome as ht, assertActivationPhysicalRows as i, readDesktopTargetGraph as ia, kindOfScope as ii, V6_ORDINARY_COMPLETION_RULE_SHORT as in, validateActionManifest as io, rebindResponse as ir, deriveProjection as it, gitCommandMatchesTarget as j, HOST_VALIDATED_VERSIONS as ja, hostLockContextFromComposedDump as ji, isRootPauseRequest as jn, resolvePrivateLedgerRoot as jo, segmentClauses as jr, PROOF_PROTOCOL_VERSION as jt, createGitPrestateEnvelope as k, hostVersionFromPackages as ka, evaluateActiveHostLock as ki, decideTurnStopping as kn, privateLedgerTargetDigest as ko, extractOperation as kr, PROOF_KINDS_V2 as kt, activationSelectionPending as l, parseHostTrust as la, opensConditionLead as li, recoveryDigest as ln, __activationBindingInternals as lo, capabilityRemedyPhrase as lr, evidenceFromPersistedToolResult as lt, scanActivationInventory as m, ACTIVE_HOST_COHORT_IDS as ma, reportingHeadGoverns as mi, currentV6Feedback as mn, readActivationMigrationReceipt as mo, relevantEvidence as mr, persistedToolResultStatus as mt, verifyActivationGenerations as n, readDesktopAppRuntime as na, isRestatement as ni, V6_ORDINARY_COMPLETION_RULE as nn, semanticActionFromCommand as no, proposeRebindV042 as nr, PROTOCOL_V6_NOTICE as nt, guardActivationInventory as o, HostTrustError as oa, maskCodeSpans as oi, cleanupConditionFor as on, RC021_RC5_HOST_PACKAGES as oo, CONFIRM_LINE_PATTERN as or, rootLocatorFlavor as ot, prepareSelectedActivationMigration as p, ACTIVE_HOST_COHORT_ID as pa, questionHeadsClause as pi, confirmedV6CoreDiagnostic as pn, readActivationBinding as po, nativeFileTwoRole as pr, nativeGitParentOidVerified as pt, SESSION_EVENT_ENVELOPE_INVALID as q, STOP_PROTOCOL_VERSION as qa, DESKTOP_IDENTITY_FACTS as qi, availableBoundaryQualifications as qn, sha256 as qo, hasWorkPredicate as qr, sessionQuery as qt, assertActivationBackendIdentity as r, readDesktopDependency as ra, itemHoldsExecutionAuthority as ri, V6_ORDINARY_COMPLETION_RULE_COMPACT as rn, semanticActionFromText as ro, rebindAttemptKey as rr, applyUpgradeEligibility as rt, resolveActivationPersistencePlugin as s, acquireHostTrust as sa, maskQuotedSpans as si, closingHint as sn, RC021_RC3_HOST_PACKAGES as so, isFrozenV042RebindResponse as sr, supersedeItem as st, assertActivationCatalogQualification as t, readAsarIndex as ta, isQuestionScopeNeedingReview as ti, MIN_RECOVERY_CHAR_BUDGET as tn, requestedTargetMatchesResolved as to, proposeRebindOutcome as tr, PROTOCOL_V5_NOTICE as tt, bindActivationInventoryPhysical as u, qualifyHostTrust as ua, opensWithDirective as ui, recoveryTitle as un, activationBindingPath as uo, deriveItemDiagnosis as ur, extractTextContent as ut, verifySelectedMigrationInventory as v, EXPECTED_HOST_PACKAGES as va, statefulActionsOfScope as vi, evidenceCoverage as vn, writeActivationBinding as vo, capabilityConsequence as vr, isRunExecutable as vt, RC020_RC1_HOST_PACKAGES as w, evaluateExternalWaitCapability as wa, auditedDefaultWorkdirHost as wi, assessmentAction as wn, appendPrivateLedger as wo, captureItem as wr, segmentAuthorityBlocks as wt, verifyMigrationInventory as x, HOST_COHORTS as xa, validateManifest as xi, CONTROL_RECORD_PREFIX as xn, activationJson as xo, removalIsComplete as xr, cwdEpochsFromEvents as xt, inspectActivationInventory as y, GOAL_HOST_PACKAGES as ya, verbIsNegated as yi, evidenceMatchesItem as yn, activationCanonical as yo, capabilityFactOf as yr, parsePwshCommand as yt, lifecyclePhase as z, satisfiesSupportedHostRange as za, prepareDesktopHostTrust as zi, goalCompletionDenial as zn, releaseCoverage as zo, clarifiedSpanOf as zr, proofDigest as zt };

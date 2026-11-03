@@ -91,7 +91,13 @@ mistakenly wrote the numeric id as a GHSA code — the real identifiers are:
 | [GHSA-2m5v-pch6-74hx](https://github.com/nodejs/undici/security/advisories/GHSA-2m5v-pch6-74hx) | 1243474 | undici@8.11.2 | high | Explicit temporary risk acceptance, 0.11.0 validation ONLY: application-specific TLS callbacks may be lost; the inspected factory lacks that callback, but other configurations are unknown. 明确临时接受 TLS callback 检查绕过风险，仅限 0.11.0 验收，其他配置仍未知。 | GreenLv | 2026-11-05 (inclusive) |
 | [GHSA-qrxm-fqhp-jwvm](https://github.com/nodejs/undici/security/advisories/GHSA-qrxm-fqhp-jwvm) | 1243477 | undici@8.11.2 | high | Explicit temporary risk acceptance, 0.11.0 validation ONLY: TLS 1.2 renegotiation can crash the client; reachability cannot be excluded and the signed host is unfixed. 明确临时接受可能可达的进程崩溃风险，仅限 0.11.0 验收，签名宿主未修复。 | GreenLv | 2026-11-05 (inclusive) |
 
-### Status for the 0.12.0 candidate / 0.12.0 候选的现状
+### 0.12.1 patch release / 0.12.1 修复版
+
+The registry audit still reports the same three high-severity Undici 8.11.2 advisories. The signed rc.5 host and the upstream default branch still pin the affected version. The maintainer separately accepted those three findings for Guard 0.12.1 through **2026-11-30 inclusive**. The machine-readable exception table limits this acceptance to Guard 0.12.0 and 0.12.1.
+
+本次 registry 扫描仍检出相同三条 Undici 8.11.2 高危通告。签名 rc.5 宿主和上游默认分支仍锁定受影响版本。维护者单独接受本次 Guard 0.12.1 的三项风险，截止 **2026-11-30（含）**。机器可读例外表将授权范围限定为 Guard 0.12.0 和 0.12.1。
+
+### 0.12.0 release history / 0.12.0 发布历史
 
 The reviewed rc.3 host also pins the same Undici and zod versions, so retaining rc.3 admission does not close the disclosed gaps.
 

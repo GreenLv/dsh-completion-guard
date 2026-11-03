@@ -1,10 +1,11 @@
 import { afterEach, expect, it } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, realpathSync, cpSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, realpathSync, cpSync, symlinkSync, lstatSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { zstdCompressSync } from 'node:zlib'
 import { activationDigest } from '../src/domain/session-activation.js'
 
 const dirs: string[] = []
@@ -13,17 +14,29 @@ afterEach(() => dirs.splice(0).forEach(p => rmSync(p, { recursive: true, force: 
 // sixteen sequential children, so its total budget covers their bounded limits.
 const CHILD_TIMEOUT_MS = 20_000
 const FULL_FLOW_TIMEOUT_MS = 350_000
-const entry = fileURLToPath(new URL('../bin/dsh-completion-guard-activation.mjs', import.meta.url))
-const anchor = join(process.cwd(), 'package.json')
-function fixture(compression: 'zstd' | 'none' = 'zstd') {
+const entry = process.env.DSH_TEST_ACTIVATION_ENTRY ?? fileURLToPath(new URL('../bin/dsh-completion-guard-activation.mjs', import.meta.url))
+const anchor = process.env.DSH_TEST_ACTIVATION_RUNTIME_ANCHOR ?? join(process.cwd(), 'package.json')
+function fixture(compression: 'zstd' | 'none' = 'zstd', multigeneration = false) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'guard-selection-cli-'))); dirs.push(root)
   const logs = join(root, 'logs'); mkdirSync(logs)
   const seed = `import {createRequire} from 'node:module';import{pathToFileURL}from'node:url';
+    import {mkdirSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {zstdCompressSync} from 'node:zlib';
     const r=createRequire(process.argv[1]);const {Context}=await import(pathToFileURL(r.resolve('@deepseek-ai/cordis')));
     const m=await import(pathToFileURL(r.resolve('@deepseek-ai/dsh-session-persistence-jsonl')));const c=new Context();
     const p=c.plugin(m.default??m,{root:process.argv[2],compression:process.argv[3]});await p.await();
-    for(const [i,id] of ['a','b'].entries()){const h=await c.sessionPersistence.create({version:4,id,createdAt:i+1,isSeeded:false,delegationDepth:0});await h.flush();await h.close()};await c.fiber.dispose();`
-  const seeded = spawnSync(process.execPath, ['--input-type=module', '-e', seed, anchor, logs, compression], { encoding: 'utf8', timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGTERM' })
+    if(process.argv[4]==='multi'){
+      const directory=join(process.argv[2],'_no-cwd','a');mkdirSync(directory,{recursive:true});
+      const header={type:'session',id:'a',createdAt:1,delegationDepth:0};
+      const suffix=process.argv[3]==='zstd'?'.zstd':'';
+      const seed=(name,value)=>{const plain=Buffer.from(JSON.stringify(value)+'\\n');writeFileSync(join(directory,name+suffix),suffix?zstdCompressSync(plain):plain)};
+      seed('session.v3.jsonl',{...header,version:3,isSeeded:false});
+      const h=await c.sessionPersistence.open('a','write');await h.flush();await h.close();
+      seed('session.jsonl',{...header,version:0});
+    }else{
+      const h=await c.sessionPersistence.create({version:4,id:'a',createdAt:1,isSeeded:false,delegationDepth:0});await h.flush();await h.close()
+    }
+    const h=await c.sessionPersistence.create({version:4,id:'b',createdAt:2,isSeeded:false,delegationDepth:0});await h.flush();await h.close();await c.fiber.dispose();`
+  const seeded = spawnSync(process.execPath, ['--input-type=module', '-e', seed, anchor, logs, compression, multigeneration ? 'multi' : 'single'], { encoding: 'utf8', timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGTERM' })
   if (seeded.status !== 0) throw new Error(seeded.stderr)
   const prior = join(root, 'prior.json'); writeFileSync(prior, JSON.stringify({ schema: 'dsh-activation-prior-modes/v1', previousPackage: { name: 'dsh-completion-guard', version: '0.11.0', sha256: '1'.repeat(64) }, sourceSha256: '2'.repeat(64), cohorts: [{ name: 'verified', mode: 'opt-in' }] }))
   const run = (operation: string, args: string[] = []) => spawnSync(process.execPath, [entry, operation,
@@ -36,6 +49,51 @@ function hidden(f: ReturnType<typeof fixture>, id = 'hidden', version = '4') {
   const file = join(path, `session.v${version}.jsonl${f.compression === 'zstd' ? '.zstd' : ''}`)
   writeFileSync(file, 'opaque corrupt fixture'); return file
 }
+function rawTree(root: string): unknown {
+  return readdirSync(root, { withFileTypes: true }).map(entry => {
+    const path = join(root, entry.name)
+    const stat = lstatSync(path, { bigint: true })
+    return [entry.name, String(stat.dev), String(stat.ino), String(stat.mtimeNs), String(stat.ctimeNs),
+      entry.isDirectory() ? rawTree(path) : readFileSync(path)]
+  })
+}
+it.each(['none', 'zstd'] as const)('verifies every generation of an official %s migration and preserves the source tree', compression => {
+  const f = fixture(compression, true), home = join(f.root, 'home')
+  const report = output(f.root, 'inventory'), receipt = output(f.root, 'receipt')
+  const before = rawTree(f.logs)
+  const inventory = f.run('inventory', ['--output', report])
+  expect(inventory.status, inventory.stderr).toBe(0)
+  expect(JSON.parse(inventory.stdout)).toMatchObject({ status: 'inventory_scanned', totalCount: 2, generationCount: 4, multiGenerationSessionCount: 1 })
+  const inspected = f.run('inspect', ['--prior-modes', f.prior, '--output', receipt])
+  expect(inspected.status, inspected.stderr).toBe(0)
+  const args = ['--receipt', receipt, '--dsh-home', home]
+  const adopted = f.run('adopt', args)
+  expect(adopted.status, adopted.stderr).toBe(0)
+  const repeated = f.run('adopt', args)
+  expect(repeated.status, repeated.stderr).toBe(0)
+  expect(JSON.parse(repeated.stdout).entries).toMatchObject([{ created: false }, { created: false }])
+  expect(f.run('verify', args).status).toBe(0)
+  expect(rawTree(f.logs)).toEqual(before)
+  const oldest = join(f.logs, '_no-cwd', 'a', `session.jsonl${compression === 'zstd' ? '.zstd' : ''}`)
+  const row = Buffer.from('{"type":"unrecognized-fixture-row"}\n')
+  writeFileSync(oldest, compression === 'zstd' ? zstdCompressSync(row) : row, { flag: 'a' })
+  const changed = rawTree(f.logs), other = join(f.root, 'unwritten-home')
+  expect(f.run('adopt', ['--receipt', receipt, '--dsh-home', other]).status).toBe(1)
+  expect(f.run('verify', args).status).toBe(1)
+  expect(f.run('inventory', ['--output', output(f.root, 'corrupt')]).status).toBe(1)
+  expect(existsSync(other)).toBe(false)
+  expect(existsSync(output(f.root, 'corrupt'))).toBe(false)
+  expect(rawTree(f.logs)).toEqual(changed)
+}, FULL_FLOW_TIMEOUT_MS)
+
+it('refuses to write an inventory report or binding tree into the source', () => {
+  const f = fixture('none'), receipt = output(f.root, 'receipt'), before = rawTree(f.logs)
+  expect(f.run('inventory', ['--output', output(f.logs, 'inventory')]).stderr).toContain('activation_inventory_output_overlap')
+  expect(f.run('inspect', ['--prior-modes', f.prior, '--output', receipt]).status).toBe(0)
+  expect(f.run('adopt', ['--receipt', receipt, '--dsh-home', f.logs]).stderr).toContain('activation_inventory_output_overlap')
+  expect(rawTree(f.logs)).toEqual(before)
+}, FULL_FLOW_TIMEOUT_MS)
+
 it.each(['zstd', 'none'] as const)('official %s CLI binds complete physical inventory for full and selected workflows', compression => {
   const f = fixture(compression), report = output(f.root, 'inventory'), select = output(f.root, 'selection'), ids = output(f.root, 'ids'), receipt = output(f.root, 'receipt'), home = join(f.root, 'home')
   let result = f.run('inventory', ['--output', report]); expect(result.status, result.stderr).toBe(0)
