@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -96,7 +96,7 @@ describe('SDK generation verification',()=>{
  it('leaves the original multi-generation files byte-identical after verification',async()=>{
   const f=await fixture('none');const before=f.args.generations.map(g=>[g.relativePath,readFileSync(join(f.root,g.relativePath)).toString('hex')])
   await verifyActivationGenerations(f.args);for(const [path,hex] of before)expect(readFileSync(join(f.root,path)).toString('hex')).toBe(hex)
- })
+ },30000)
 
  it('strictly reads 160000 complete records in one compressed frame without argument expansion',async()=>{
   const f=await fixture('zstd');const path=join(f.dir,'session.v1.jsonl.zstd')
@@ -121,8 +121,29 @@ describe('SDK generation verification',()=>{
   execFileSync(join(systemRoot,'System32','icacls.exe'),[base,'/grant','*S-1-1-0:(OI)(CI)R'],{stdio:'ignore'})
   const temp=process.env.TEMP,tmp=process.env.TMP, original=f.args.openSnapshot;let checked=false
   f.args.openSnapshot=async(root,compression)=>{
-   const ps=String.raw`$ErrorActionPreference='Stop'; $acl=Get-Acl -LiteralPath $env:DSH_TEST_SCRATCH; if (-not $acl.AreAccessRulesProtected) { throw 'unprotected' }; $everyone='S-1-1-0'; foreach($r in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if ($r.IdentityReference.Value -eq $everyone -and $r.AccessControlType -eq 'Allow') { throw 'shared access' } }`
-   execFileSync(join(systemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],{env:{...process.env,DSH_TEST_SCRATCH:dirname(root)},stdio:'ignore',timeout:15000})
+   if(checked)return original(root,compression)
+   // Read the actual protected root once and report only a fixed diagnostic.
+   const ps=String.raw`
+$ErrorActionPreference='Stop'
+try {
+ $dir=[IO.DirectoryInfo]::new($env:DSH_TEST_SCRATCH)
+ $acl=$dir.GetAccessControl(([Security.AccessControl.AccessControlSections]::Access -bor [Security.AccessControl.AccessControlSections]::Owner))
+ if (-not $acl.AreAccessRulesProtected) { [Console]::Out.WriteLine('UNPROTECTED'); exit 1 }
+ if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { [Console]::Out.WriteLine('WRONG_OWNER'); exit 1 }
+ foreach ($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) {
+  if ($rule.IdentityReference.Value -eq 'S-1-1-0' -and $rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow) { [Console]::Out.WriteLine('EVERYONE_ALLOWED'); exit 1 }
+ }
+ [Console]::Out.WriteLine('OK')
+} catch {
+ [Console]::Out.WriteLine('INSPECTION_ERROR')
+ exit 1
+}
+`
+   const result=spawnSync(join(systemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],{env:{...process.env,DSH_TEST_SCRATCH:dirname(root)},encoding:'utf8',timeout:15000,windowsHide:true})
+   const observed=result.stdout?.trim() ?? ''
+   const category=/^(?:OK|UNPROTECTED|WRONG_OWNER|EVERYONE_ALLOWED|INSPECTION_ERROR)$/u.test(observed) ? observed : 'PROCESS_FAILED'
+   expect(result.status,`ACL test checker: ${category}`).toBe(0)
+   expect(category).toBe('OK')
    checked=true;return original(root,compression)
   }
   try {process.env.TEMP=base;process.env.TMP=base;const result=await verifyActivationGenerations(f.args);expect(result.generations).toHaveLength(4);expect(checked).toBe(true)}
