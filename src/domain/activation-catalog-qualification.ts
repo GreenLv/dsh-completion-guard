@@ -27,15 +27,17 @@ export interface ActivationCatalogQualification {
 }
 const HASH = /^[0-9a-f]{64}$/u
 function fail(): never { throw new Error('activation_catalog_unreviewed') }
-function checkedFile(path: string): { path: string; bytes: Buffer } {
+type CatalogFileIdentity = { dev: string; ino: string; size: string; mtimeNs: string; ctimeNs: string; mode: string; nlink: string }
+function checkedFile(path: string): { path: string; bytes: Buffer; identity: CatalogFileIdentity } {
   const lexical = lstatSync(path, { bigint: true })
   if (lexical.isSymbolicLink()) fail()
   const physical = realpathSync(path), before = lstatSync(physical, { bigint: true })
-  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.nlink !== 1n) fail()
+  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.nlink < 1n) fail()
   const fd = openSync(physical, constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW))
   try {
     const opened = fstatSync(fd, { bigint: true })
-    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.nlink !== 1n) fail()
+    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size
+      || opened.mtimeNs !== before.mtimeNs || opened.ctimeNs !== before.ctimeNs || opened.mode !== before.mode || opened.nlink !== before.nlink) fail()
     const bytes = readFileSync(fd), final = fstatSync(fd, { bigint: true }), after = lstatSync(physical, { bigint: true })
     for (const stat of [final, after]) {
       if (!stat.isFile() || stat.isSymbolicLink() || stat.dev !== before.dev || stat.ino !== before.ino
@@ -43,7 +45,8 @@ function checkedFile(path: string): { path: string; bytes: Buffer } {
         || stat.mode !== before.mode || stat.nlink !== before.nlink) fail()
     }
     if (realpathSync(path) !== physical) fail()
-    return { path: physical, bytes }
+    return { path: physical, bytes, identity: { dev: String(before.dev), ino: String(before.ino), size: String(before.size),
+      mtimeNs: String(before.mtimeNs), ctimeNs: String(before.ctimeNs), mode: String(before.mode), nlink: String(before.nlink) } }
   } finally { closeSync(fd) }
 }
 function within(root: string, path: string): boolean {
@@ -73,7 +76,7 @@ export function assertActivationCatalogQualification(backendFile: string, review
     }
     const entry = modules.get(review.entry)
     if (!entry || entry.package !== '@deepseek-ai/dsh-session-format-catalog') fail()
-    const roots = new Map<string, string>(), manifestDigests = new Map<string, string>()
+    const roots = new Map<string, string>(), manifestDigests = new Map<string, { sha256: string; identity: CatalogFileIdentity }>()
     const packageRoot = (importer: string, name: string): string => {
       const reviewed = packages.get(name)
       if (!reviewed) fail()
@@ -101,10 +104,13 @@ export function assertActivationCatalogQualification(backendFile: string, review
       if (createHash('sha256').update(JSON.stringify(shape)).digest('hex') !== reviewed.loaderShapeSha256) fail()
       const previous = roots.get(name)
       if (previous && previous !== root) fail()
-      roots.set(name, root); manifestDigests.set(name, createHash('sha256').update(file.bytes).digest('hex'))
+      const proof = { sha256: createHash('sha256').update(file.bytes).digest('hex'), identity: file.identity }
+      const priorProof = manifestDigests.get(name)
+      if (priorProof && activationDigest(priorProof) !== activationDigest(proof)) fail()
+      roots.set(name, root); manifestDigests.set(name, proof)
       return root
     }
-    const paths = new Map<string, string>(), pending: Array<{ node: ReviewedModule; root: string }> = []
+    const paths = new Map<string, { path: string; identity: CatalogFileIdentity }>(), pending: Array<{ node: ReviewedModule; root: string }> = []
     const root = packageRoot(realpathSync(backendFile), entry.package)
     pending.push({ node: entry, root })
     while (pending.length) {
@@ -112,8 +118,8 @@ export function assertActivationCatalogQualification(backendFile: string, review
       const requested = resolve(currentRoot, node.path), file = checkedFile(requested)
       if (!within(currentRoot, file.path) || requested !== file.path || createHash('sha256').update(file.bytes).digest('hex') !== node.sha256) fail()
       const previous = paths.get(node.key)
-      if (previous) { if (previous !== file.path) fail(); continue }
-      paths.set(node.key, file.path)
+      if (previous) { if (previous.path !== file.path || activationDigest(previous.identity) !== activationDigest(file.identity)) fail(); continue }
+      paths.set(node.key, { path: file.path, identity: file.identity })
       for (const edge of node.edges) {
         if (!edge || typeof edge.specifier !== 'string' || typeof edge.target !== 'string') fail()
         const target = modules.get(edge.target)
@@ -130,10 +136,10 @@ export function assertActivationCatalogQualification(backendFile: string, review
     }
     if (paths.size !== modules.size || roots.size !== packages.size) fail()
     const qualificationSha256 = activationDigest({ schema: review.schema,
-      modules: [...paths].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, path]) => ({ key, path, sha256: modules.get(key)!.sha256 })),
-      manifests: [...manifestDigests].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, sha256]) => ({ name, root: roots.get(name), sha256 })),
+      modules: [...paths].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, file]) => ({ key, path: file.path, identity: file.identity, sha256: modules.get(key)!.sha256 })),
+      manifests: [...manifestDigests].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, proof]) => ({ name, root: roots.get(name), ...proof })),
       node: process.versions.node,
     })
-    return { catalogFile: paths.get(review.entry)!, qualificationSha256, moduleCount: paths.size, packageCount: roots.size }
+    return { catalogFile: paths.get(review.entry)!.path, qualificationSha256, moduleCount: paths.size, packageCount: roots.size }
   } catch { return fail() }
 }

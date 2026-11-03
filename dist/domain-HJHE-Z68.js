@@ -36023,7 +36023,7 @@ function strictPhysical(bytes$1, version$1, compression, catalogs) {
 	return result.header.id;
 }
 /** Reject shared or redirected Windows scratch paths before any private data is copied. */
-function assertWindowsScratch(path$1, requireCurrentOwner) {
+function assertWindowsScratch(path$1, requireCurrentOwner, requireProtected = false) {
 	if (process.platform !== "win32") return;
 	const systemRoot = process.env.SystemRoot;
 	if (!systemRoot || !isAbsolute(systemRoot)) fail$1();
@@ -36032,6 +36032,7 @@ function assertWindowsScratch(path$1, requireCurrentOwner) {
 $ErrorActionPreference = 'Stop'
 $path = [Environment]::GetEnvironmentVariable('DSH_GENERATION_SCRATCH_PATH', 'Process')
 $own = [Environment]::GetEnvironmentVariable('DSH_GENERATION_REQUIRE_OWNER', 'Process') -eq '1'
+$protected = [Environment]::GetEnvironmentVariable('DSH_GENERATION_REQUIRE_PROTECTED', 'Process') -eq '1'
 if (-not $path -or -not [IO.Path]::IsPathRooted($path) -or $path.StartsWith('\\')) { throw 'invalid scratch path' }
 $root = [IO.Path]::GetPathRoot($path)
 if (([IO.DriveInfo]::new($root)).DriveType -ne [IO.DriveType]::Fixed) { throw 'scratch drive not fixed' }
@@ -36045,8 +36046,9 @@ $depth = 0
 while ($null -ne $dir) {
   if (-not $dir.Exists -or (($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'redirected scratch' }
   $acl = $dir.GetAccessControl(([Security.AccessControl.AccessControlSections]::Access -bor [Security.AccessControl.AccessControlSections]::Owner))
+  if ($depth -eq 0 -and $protected -and -not $acl.AreAccessRulesProtected) { throw 'scratch inheritance enabled' }
   $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
-  if ($trusted -notcontains $owner -or ($depth -eq 0 -and $own -and $owner -ne $me)) { throw 'untrusted owner' }
+  if ($trusted -notcontains $owner -or ($depth -eq 0 -and $own -and $protected -and $owner -ne $me)) { throw 'untrusted owner' }
   foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
     if ($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
     $sid = $ace.IdentityReference.Value
@@ -36075,7 +36077,8 @@ while ($null -ne $dir) {
 			env: {
 				...process.env,
 				DSH_GENERATION_SCRATCH_PATH: path$1,
-				DSH_GENERATION_REQUIRE_OWNER: requireCurrentOwner ? "1" : "0"
+				DSH_GENERATION_REQUIRE_OWNER: requireCurrentOwner ? "1" : "0",
+				DSH_GENERATION_REQUIRE_PROTECTED: requireProtected ? "1" : "0"
 			},
 			stdio: "ignore",
 			timeout: 15e3,
@@ -36084,6 +36087,48 @@ while ($null -ne $dir) {
 	} catch {
 		fail$1();
 	}
+}
+/** Create a random empty directory with its private ACL atomically, before any data is copied. */
+function createWindowsScratch(base) {
+	const systemRoot = process.env.SystemRoot;
+	if (!systemRoot || !isAbsolute(systemRoot)) fail$1();
+	const executable = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+	const path$1 = join(base, `dsh-generation-check-${randomBytes(16).toString("hex")}`);
+	const source = String.raw`
+$ErrorActionPreference = 'Stop'
+$path = [Environment]::GetEnvironmentVariable('DSH_GENERATION_SCRATCH_PATH', 'Process')
+if ([IO.File]::Exists($path) -or [IO.Directory]::Exists($path)) { throw 'scratch already exists' }
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$security = [Security.AccessControl.DirectorySecurity]::new()
+$security.SetAccessRuleProtection($true, $false)
+$security.SetOwner($me)
+$inherit = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+foreach ($sid in @($me, [Security.Principal.SecurityIdentifier]::new('S-1-5-18'), [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))) {
+  $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, [Security.AccessControl.FileSystemRights]::FullControl, $inherit, [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)
+  $security.AddAccessRule($rule)
+}
+[void][IO.Directory]::CreateDirectory($path, $security)
+`;
+	try {
+		execFileSync(executable, [
+			"-NoLogo",
+			"-NoProfile",
+			"-NonInteractive",
+			"-EncodedCommand",
+			Buffer.from(source, "utf16le").toString("base64")
+		], {
+			env: {
+				...process.env,
+				DSH_GENERATION_SCRATCH_PATH: path$1
+			},
+			stdio: "ignore",
+			timeout: 15e3,
+			windowsHide: true
+		});
+	} catch {
+		fail$1();
+	}
+	return path$1;
 }
 async function verifyActivationGenerations(input) {
 	if (!["none", "zstd"].includes(input.compression) || !/^[a-f0-9]{64}$/u.test(input.censusSha256) || input.capture() !== input.censusSha256) fail$1();
@@ -36109,13 +36154,14 @@ async function verifyActivationGenerations(input) {
 		return r === "" || !isAbsolute(r) && r !== ".." && !r.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`);
 	};
 	if (isInside(scratchBase, sourceRoot)) fail$1();
-	const temp = mkdtempSync(join(scratchBase, "dsh-generation-check-"));
+	const temp = process.platform === "win32" ? createWindowsScratch(scratchBase) : mkdtempSync(join(scratchBase, "dsh-generation-check-"));
 	try {
+		assertWindowsScratch(temp, true, true);
 		const physicalTemp = realpathSync(temp), snapshot = join(physicalTemp, "snapshot"), held = join(physicalTemp, "held");
 		if (isInside(physicalTemp, sourceRoot) || isInside(sourceRoot, physicalTemp)) fail$1();
 		const tempStat = lstatSync(physicalTemp);
 		if (!tempStat.isDirectory() || tempStat.isSymbolicLink() || process.platform !== "win32" && ((tempStat.mode & 63) !== 0 || typeof process.getuid === "function" && tempStat.uid !== process.getuid())) fail$1();
-		assertWindowsScratch(physicalTemp, true);
+		assertWindowsScratch(physicalTemp, true, true);
 		mkdirSync(snapshot, { mode: 448 });
 		mkdirSync(held, { mode: 448 });
 		assertWindowsScratch(snapshot, true);
@@ -36141,7 +36187,7 @@ async function verifyActivationGenerations(input) {
 			groups.set(key, group);
 		}
 		if (input.capture() !== input.censusSha256) fail$1();
-		assertWindowsScratch(physicalTemp, true);
+		assertWindowsScratch(physicalTemp, true, true);
 		assertWindowsScratch(snapshot, true);
 		assertWindowsScratch(held, true);
 		const output = {
@@ -36234,13 +36280,18 @@ async function verifyActivationGenerations(input) {
 			});
 		}
 		if (input.capture() !== input.censusSha256) fail$1();
-		assertWindowsScratch(physicalTemp, true);
+		assertWindowsScratch(physicalTemp, true, true);
 		assertWindowsScratch(snapshot, true);
 		assertWindowsScratch(held, true);
 		output.generations.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 		output.selections.sort((a, b) => `${a.projectSegment}/${a.sessionSegment}`.localeCompare(`${b.projectSegment}/${b.sessionSegment}`));
 		return output;
 	} finally {
+		if (process.platform === "win32") try {
+			assertWindowsScratch(temp, true, true);
+		} catch {
+			fail$1();
+		}
 		rmSync(temp, {
 			recursive: true,
 			force: true
@@ -36257,17 +36308,26 @@ function fail() {
 function checkedFile(path$1) {
 	if (lstatSync(path$1, { bigint: true }).isSymbolicLink()) fail();
 	const physical$1 = realpathSync(path$1), before = lstatSync(physical$1, { bigint: true });
-	if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.nlink !== 1n) fail();
+	if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.nlink < 1n) fail();
 	const fd = openSync(physical$1, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW));
 	try {
 		const opened = fstatSync(fd, { bigint: true });
-		if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.nlink !== 1n) fail();
+		if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.mtimeNs !== before.mtimeNs || opened.ctimeNs !== before.ctimeNs || opened.mode !== before.mode || opened.nlink !== before.nlink) fail();
 		const bytes$1 = readFileSync(fd), final = fstatSync(fd, { bigint: true }), after = lstatSync(physical$1, { bigint: true });
 		for (const stat of [final, after]) if (!stat.isFile() || stat.isSymbolicLink() || stat.dev !== before.dev || stat.ino !== before.ino || stat.size !== before.size || stat.mtimeNs !== before.mtimeNs || stat.ctimeNs !== before.ctimeNs || stat.mode !== before.mode || stat.nlink !== before.nlink) fail();
 		if (realpathSync(path$1) !== physical$1) fail();
 		return {
 			path: physical$1,
-			bytes: bytes$1
+			bytes: bytes$1,
+			identity: {
+				dev: String(before.dev),
+				ino: String(before.ino),
+				size: String(before.size),
+				mtimeNs: String(before.mtimeNs),
+				ctimeNs: String(before.ctimeNs),
+				mode: String(before.mode),
+				nlink: String(before.nlink)
+			}
 		};
 	} finally {
 		closeSync(fd);
@@ -36333,8 +36393,14 @@ function assertActivationCatalogQualification(backendFile, review) {
 			if (createHash("sha256").update(JSON.stringify(shape)).digest("hex") !== reviewed.loaderShapeSha256) fail();
 			const previous = roots.get(name);
 			if (previous && previous !== root$1) fail();
+			const proof = {
+				sha256: createHash("sha256").update(file.bytes).digest("hex"),
+				identity: file.identity
+			};
+			const priorProof = manifestDigests.get(name);
+			if (priorProof && activationDigest(priorProof) !== activationDigest(proof)) fail();
 			roots.set(name, root$1);
-			manifestDigests.set(name, createHash("sha256").update(file.bytes).digest("hex"));
+			manifestDigests.set(name, proof);
 			return root$1;
 		};
 		const paths = /* @__PURE__ */ new Map(), pending = [];
@@ -36349,10 +36415,13 @@ function assertActivationCatalogQualification(backendFile, review) {
 			if (!within(currentRoot, file.path) || requested !== file.path || createHash("sha256").update(file.bytes).digest("hex") !== node.sha256) fail();
 			const previous = paths.get(node.key);
 			if (previous) {
-				if (previous !== file.path) fail();
+				if (previous.path !== file.path || activationDigest(previous.identity) !== activationDigest(file.identity)) fail();
 				continue;
 			}
-			paths.set(node.key, file.path);
+			paths.set(node.key, {
+				path: file.path,
+				identity: file.identity
+			});
 			for (const edge of node.edges) {
 				if (!edge || typeof edge.specifier !== "string" || typeof edge.target !== "string") fail();
 				const target = modules.get(edge.target);
@@ -36376,20 +36445,21 @@ function assertActivationCatalogQualification(backendFile, review) {
 		if (paths.size !== modules.size || roots.size !== packages$5.size) fail();
 		const qualificationSha256 = activationDigest({
 			schema: review.schema,
-			modules: [...paths].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, path$1]) => ({
+			modules: [...paths].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, file]) => ({
 				key,
-				path: path$1,
+				path: file.path,
+				identity: file.identity,
 				sha256: modules.get(key).sha256
 			})),
-			manifests: [...manifestDigests].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, sha256$1]) => ({
+			manifests: [...manifestDigests].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, proof]) => ({
 				name,
 				root: roots.get(name),
-				sha256: sha256$1
+				...proof
 			})),
 			node: process.versions.node
 		});
 		return {
-			catalogFile: paths.get(review.entry),
+			catalogFile: paths.get(review.entry).path,
 			qualificationSha256,
 			moduleCount: paths.size,
 			packageCount: roots.size

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -100,7 +100,7 @@ function strictPhysical(bytes: Buffer, version: number, compression: Compression
   return result.header.id
 }
 /** Reject shared or redirected Windows scratch paths before any private data is copied. */
-function assertWindowsScratch(path: string, requireCurrentOwner: boolean): void {
+function assertWindowsScratch(path: string, requireCurrentOwner: boolean, requireProtected = false): void {
   if (process.platform !== 'win32') return
   const systemRoot = process.env.SystemRoot
   if (!systemRoot || !isAbsolute(systemRoot)) fail()
@@ -109,6 +109,7 @@ function assertWindowsScratch(path: string, requireCurrentOwner: boolean): void 
 $ErrorActionPreference = 'Stop'
 $path = [Environment]::GetEnvironmentVariable('DSH_GENERATION_SCRATCH_PATH', 'Process')
 $own = [Environment]::GetEnvironmentVariable('DSH_GENERATION_REQUIRE_OWNER', 'Process') -eq '1'
+$protected = [Environment]::GetEnvironmentVariable('DSH_GENERATION_REQUIRE_PROTECTED', 'Process') -eq '1'
 if (-not $path -or -not [IO.Path]::IsPathRooted($path) -or $path.StartsWith('\\')) { throw 'invalid scratch path' }
 $root = [IO.Path]::GetPathRoot($path)
 if (([IO.DriveInfo]::new($root)).DriveType -ne [IO.DriveType]::Fixed) { throw 'scratch drive not fixed' }
@@ -122,8 +123,9 @@ $depth = 0
 while ($null -ne $dir) {
   if (-not $dir.Exists -or (($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'redirected scratch' }
   $acl = $dir.GetAccessControl(([Security.AccessControl.AccessControlSections]::Access -bor [Security.AccessControl.AccessControlSections]::Owner))
+  if ($depth -eq 0 -and $protected -and -not $acl.AreAccessRulesProtected) { throw 'scratch inheritance enabled' }
   $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
-  if ($trusted -notcontains $owner -or ($depth -eq 0 -and $own -and $owner -ne $me)) { throw 'untrusted owner' }
+  if ($trusted -notcontains $owner -or ($depth -eq 0 -and $own -and $protected -and $owner -ne $me)) { throw 'untrusted owner' }
   foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
     if ($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
     $sid = $ace.IdentityReference.Value
@@ -143,10 +145,38 @@ while ($null -ne $dir) {
   const encoded = Buffer.from(source, 'utf16le').toString('base64')
   try {
     execFileSync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
-      env: { ...process.env, DSH_GENERATION_SCRATCH_PATH: path, DSH_GENERATION_REQUIRE_OWNER: requireCurrentOwner ? '1' : '0' },
+      env: { ...process.env, DSH_GENERATION_SCRATCH_PATH: path, DSH_GENERATION_REQUIRE_OWNER: requireCurrentOwner ? '1' : '0', DSH_GENERATION_REQUIRE_PROTECTED: requireProtected ? '1' : '0' },
       stdio: 'ignore', timeout: 15_000, windowsHide: true,
     })
   } catch { fail() }
+}
+/** Create a random empty directory with its private ACL atomically, before any data is copied. */
+function createWindowsScratch(base: string): string {
+  const systemRoot = process.env.SystemRoot
+  if (!systemRoot || !isAbsolute(systemRoot)) fail()
+  const executable = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const path = join(base, `dsh-generation-check-${randomBytes(16).toString('hex')}`)
+  const source = String.raw`
+$ErrorActionPreference = 'Stop'
+$path = [Environment]::GetEnvironmentVariable('DSH_GENERATION_SCRATCH_PATH', 'Process')
+if ([IO.File]::Exists($path) -or [IO.Directory]::Exists($path)) { throw 'scratch already exists' }
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$security = [Security.AccessControl.DirectorySecurity]::new()
+$security.SetAccessRuleProtection($true, $false)
+$security.SetOwner($me)
+$inherit = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+foreach ($sid in @($me, [Security.Principal.SecurityIdentifier]::new('S-1-5-18'), [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))) {
+  $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, [Security.AccessControl.FileSystemRights]::FullControl, $inherit, [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)
+  $security.AddAccessRule($rule)
+}
+[void][IO.Directory]::CreateDirectory($path, $security)
+`
+  try {
+    execFileSync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], {
+      env: { ...process.env, DSH_GENERATION_SCRATCH_PATH: path }, stdio: 'ignore', timeout: 15_000, windowsHide: true,
+    })
+  } catch { fail() }
+  return path
 }
 export async function verifyActivationGenerations(input: ActivationGenerationVerificationInput): Promise<ActivationGenerationVerificationResult> {
   if (!['none','zstd'].includes(input.compression) || !/^[a-f0-9]{64}$/u.test(input.censusSha256) || input.capture() !== input.censusSha256) fail()
@@ -165,13 +195,14 @@ export async function verifyActivationGenerations(input: ActivationGenerationVer
   const isInside = (path: string, parent: string) => { const r = relative(parent, path); return r === '' || (!isAbsolute(r) && r !== '..' && !r.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)) }
   // Check before creating even the first scratch file inside a source tree.
   if (isInside(scratchBase, sourceRoot)) fail()
-  const temp = mkdtempSync(join(scratchBase, 'dsh-generation-check-'))
+  const temp = process.platform === 'win32' ? createWindowsScratch(scratchBase) : mkdtempSync(join(scratchBase, 'dsh-generation-check-'))
   try {
+    assertWindowsScratch(temp, true, true)
     const physicalTemp = realpathSync(temp), snapshot = join(physicalTemp, 'snapshot'), held = join(physicalTemp, 'held')
     if (isInside(physicalTemp, sourceRoot) || isInside(sourceRoot, physicalTemp)) fail()
     const tempStat = lstatSync(physicalTemp)
     if (!tempStat.isDirectory() || tempStat.isSymbolicLink() || (process.platform !== 'win32' && ((tempStat.mode & 0o077) !== 0 || (typeof process.getuid === 'function' && tempStat.uid !== process.getuid())))) fail()
-    assertWindowsScratch(physicalTemp, true)
+    assertWindowsScratch(physicalTemp, true, true)
     mkdirSync(snapshot, { mode: 0o700 }); mkdirSync(held, { mode: 0o700 })
     assertWindowsScratch(snapshot, true); assertWindowsScratch(held, true)
     const groups = new Map<string, ActivationGenerationDescriptor[]>(), seen = new Set<string>()
@@ -185,7 +216,7 @@ export async function verifyActivationGenerations(input: ActivationGenerationVer
       const key = `${row.projectSegment}/${row.sessionSegment}`; const group = groups.get(key) ?? []; group.push(row); groups.set(key, group)
     }
     if (input.capture() !== input.censusSha256) fail()
-    assertWindowsScratch(physicalTemp, true); assertWindowsScratch(snapshot, true); assertWindowsScratch(held, true)
+    assertWindowsScratch(physicalTemp, true, true); assertWindowsScratch(snapshot, true); assertWindowsScratch(held, true)
     const output: ActivationGenerationVerificationResult = { generations: [], selections: [] }
     for (const group of groups.values()) {
       if (group.length < 2) continue
@@ -240,8 +271,12 @@ export async function verifyActivationGenerations(input: ActivationGenerationVer
       output.selections.push({ projectSegment: selected.projectSegment, sessionSegment: selected.sessionSegment, selectedRelativePath: selected.relativePath, selectedVersion: selected.version })
     }
     if (input.capture() !== input.censusSha256) fail()
-    assertWindowsScratch(physicalTemp, true); assertWindowsScratch(snapshot, true); assertWindowsScratch(held, true)
+    assertWindowsScratch(physicalTemp, true, true); assertWindowsScratch(snapshot, true); assertWindowsScratch(held, true)
     output.generations.sort((a,b) => a.relativePath.localeCompare(b.relativePath)); output.selections.sort((a,b) => `${a.projectSegment}/${a.sessionSegment}`.localeCompare(`${b.projectSegment}/${b.sessionSegment}`))
     return output
-  } finally { rmSync(temp, { recursive: true, force: true }) }
+  } finally {
+    // Do not delete a Windows path if its owner, ACL or ancestry became ambiguous.
+    if (process.platform === 'win32') { try { assertWindowsScratch(temp, true, true) } catch { fail() } }
+    rmSync(temp, { recursive: true, force: true })
+  }
 }

@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import * as zlib from 'node:zlib'
 import { activationDigest } from '../src/domain/session-activation.js'
@@ -115,14 +115,39 @@ describe('SDK generation verification',()=>{
   await expect(verifyActivationGenerations(f.args)).rejects.toThrow('activation_generation_unverified')
  })
 
- it.skipIf(process.platform !== 'win32').each(['R','M'])('refuses inherited Everyone %s access before copying',async permission=>{
+ it.skipIf(process.platform !== 'win32')('allows a readable base only after the selected scratch has a protected private ACL',async()=>{
+  const f=await fixture('none'), base=realpathSync(mkdtempSync(join(tmpdir(),'dsh-readable-acl-')));roots.push(base)
+  const systemRoot=process.env.SystemRoot;if(!systemRoot)throw new Error('SystemRoot unavailable')
+  execFileSync(join(systemRoot,'System32','icacls.exe'),[base,'/grant','*S-1-1-0:(OI)(CI)R'],{stdio:'ignore'})
+  const temp=process.env.TEMP,tmp=process.env.TMP, original=f.args.openSnapshot;let checked=false
+  f.args.openSnapshot=async(root,compression)=>{
+   const ps=String.raw`$ErrorActionPreference='Stop'; $acl=Get-Acl -LiteralPath $env:DSH_TEST_SCRATCH; if (-not $acl.AreAccessRulesProtected) { throw 'unprotected' }; $everyone='S-1-1-0'; foreach($r in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if ($r.IdentityReference.Value -eq $everyone -and $r.AccessControlType -eq 'Allow') { throw 'shared access' } }`
+   execFileSync(join(systemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],{env:{...process.env,DSH_TEST_SCRATCH:dirname(root)},stdio:'ignore',timeout:15000})
+   checked=true;return original(root,compression)
+  }
+  try {process.env.TEMP=base;process.env.TMP=base;const result=await verifyActivationGenerations(f.args);expect(result.generations).toHaveLength(4);expect(checked).toBe(true)}
+  finally {if(temp===undefined)delete process.env.TEMP;else process.env.TEMP=temp;if(tmp===undefined)delete process.env.TMP;else process.env.TMP=tmp}
+  expect(readdirSync(base).filter(name=>name.startsWith('dsh-generation-check-'))).toEqual([])
+ },30000)
+
+ it.skipIf(process.platform !== 'win32')('refuses a shared writable base before copying or calling SDK',async()=>{
   const f=await fixture('none'), unsafe=realpathSync(mkdtempSync(join(tmpdir(),'dsh-unsafe-acl-')));roots.push(unsafe)
   const root=process.env.SystemRoot;if(!root)throw new Error('SystemRoot unavailable')
-  execFileSync(join(root,'System32','icacls.exe'),[unsafe,'/grant',`*S-1-1-0:(OI)(CI)${permission}`],{stdio:'ignore'})
-  const temp=process.env.TEMP,tmp=process.env.TMP
+  execFileSync(join(root,'System32','icacls.exe'),[unsafe,'/grant','*S-1-1-0:(OI)(CI)M'],{stdio:'ignore'})
+  const temp=process.env.TEMP,tmp=process.env.TMP;let called=false
+  f.args.openSnapshot=async()=>{called=true;throw new Error('unexpected SDK')}
   try { process.env.TEMP=unsafe;process.env.TMP=unsafe;await expect(verifyActivationGenerations(f.args)).rejects.toThrow() }
   finally { if(temp===undefined)delete process.env.TEMP;else process.env.TEMP=temp;if(tmp===undefined)delete process.env.TMP;else process.env.TMP=tmp }
-  expect(readdirSync(unsafe).filter(name=>name.startsWith('dsh-generation-check-'))).toEqual([])
- })
+  expect(called).toBe(false);expect(readdirSync(unsafe).filter(name=>name.startsWith('dsh-generation-check-'))).toEqual([])
+ },30000)
+
+ it.skipIf(process.platform !== 'win32').each(['R','M'])('refuses Everyone %s on the selected private scratch',async permission=>{
+  const f=await fixture('none'), base=realpathSync(mkdtempSync(join(tmpdir(),'dsh-private-acl-')));roots.push(base)
+  const systemRoot=process.env.SystemRoot;if(!systemRoot)throw new Error('SystemRoot unavailable')
+  const temp=process.env.TEMP,tmp=process.env.TMP;let captureCount=0,selected=''
+  f.args.capture=()=>{if(++captureCount===2){selected=join(base,readdirSync(base).find(name=>name.startsWith('dsh-generation-check-'))!);execFileSync(join(systemRoot,'System32','icacls.exe'),[selected,'/grant',`*S-1-1-0:(OI)(CI)${permission}`],{stdio:'ignore'})}return f.args.censusSha256}
+  try {process.env.TEMP=base;process.env.TMP=base;await expect(verifyActivationGenerations(f.args)).rejects.toThrow('activation_generation_unverified');expect(selected).not.toBe('');expect(lstatSync(selected).isDirectory()).toBe(true)}
+  finally {if(temp===undefined)delete process.env.TEMP;else process.env.TEMP=temp;if(tmp===undefined)delete process.env.TMP;else process.env.TMP=tmp;if(selected)execFileSync(join(systemRoot,'System32','icacls.exe'),[selected,'/remove:g','*S-1-1-0'],{stdio:'ignore'})}
+ },30000)
 
 })

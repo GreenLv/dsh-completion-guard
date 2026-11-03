@@ -31,6 +31,18 @@ class RunnerTests(unittest.TestCase):
             self.assertTrue(sri.startswith("sha512-"));unpacked=module.unpack_frozen(artifact,root/"extract")
             manifest=json.loads((unpacked/"package.json").read_text(encoding="utf8"))
             self.assertEqual(manifest["name"],module.FIXTURE_NAME);self.assertEqual(manifest["gitHead"],module.FIXTURE_HEAD)
+    def test_frozen_version_is_bound_to_package_identity(self):
+        with directory() as root:
+            manifest={"name":"dsh-completion-guard","version":"0.12.1","gitHead":"a"*40}
+            path=root/"package.json"
+            def write():path.write_text(json.dumps(manifest),encoding="utf8")
+            for version in ("0.12.1","0.13.0-rc.1"):
+                manifest["version"]=version;write()
+                self.assertEqual(module.frozen_guard_version(root,"a"*40),version)
+            for field,value in (("name","other"),("gitHead","b"*40),("version",""),("version",None)):
+                original=manifest[field];manifest[field]=value;write()
+                with self.assertRaises(ValueError):module.frozen_guard_version(root,"a"*40)
+                manifest[field]=original
     def test_rejects_tar_links_before_writing_link(self):
         with directory() as root:
             artifact=root/"bad.tgz"
@@ -62,7 +74,7 @@ class RunnerTests(unittest.TestCase):
             args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit="a"*40,artifact_sha256="b"*64,output=root/"result.json",web_cohort="x",headless_cohort="x")
             selected={name:{"id":"x","packages":[]} for name in ("web","headless")}
             def copy(_src,dest):dest.mkdir();return {"inventory_sha256":"e"*64}
-            def unpack(_artifact,dest):dest.mkdir();p=dest/"package";p.mkdir();return p
+            def unpack(_artifact,dest):dest.mkdir();p=dest/"package";p.mkdir();(p/"package.json").write_text(json.dumps({"name":"dsh-completion-guard","version":"0.12.1","gitHead":"a"*40}),encoding="utf8");return p
             def cmd(_work,_env,*args):
                 if "--version" in args:return "v24.18.0"
                 if "inspect-graph" in args:return json.dumps({"packages":[]})
@@ -81,7 +93,7 @@ class RunnerTests(unittest.TestCase):
                 args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit="a"*40,artifact_sha256="b"*64,output=root/"result.json",web_cohort="x",headless_cohort="x")
                 selected={name:{"id":"x","packages":[]} for name in ("web","headless")};current={}
                 def copy(_src,dest):dest.mkdir();return {"inventory_sha256":"e"*64}
-                def unpack(_artifact,dest):dest.mkdir();p=dest/"package";p.mkdir();return p
+                def unpack(_artifact,dest):dest.mkdir();p=dest/"package";p.mkdir();(p/"package.json").write_text(json.dumps({"name":"dsh-completion-guard","version":"0.12.1","gitHead":"a"*40}),encoding="utf8");return p
                 def cmd(_work,_env,*values):
                     if "--version" in values:return "v24.18.0"
                     if "inspect-graph" in values:return json.dumps({"packages":[]})
@@ -89,6 +101,8 @@ class RunnerTests(unittest.TestCase):
                     return ""
                 def popen(argv,**kwargs):
                     patch_path=Path(argv[argv.index("--patch")+1]);overlay=json.loads(patch_path.read_text(encoding="utf8"))
+                    wrapper=next(entry['insert'][0]['config'] for entry in overlay if 'insert' in entry and entry['insert'][0]['id']=='warm-guard-wrapper')
+                    self.assertEqual(wrapper['warm']['guardVersion'],'0.12.1')
                     config=next(entry['insert'][0]['config'] for entry in overlay if 'insert' in entry and entry['insert'][0]['id']=='native-guard-probe')
                     pid=101 if config['profile']=='web' else 201;current.update(config=config,pid=pid)
                     process=MagicMock();process.pid=pid;return process

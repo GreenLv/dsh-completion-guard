@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import Module, { createRequire } from 'node:module'
-import { linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -65,12 +65,31 @@ describe('activation catalog executable qualification', () => {
     }
     expect(assertActivationCatalogQualification(f.backend, f.review).moduleCount).toBe(19)
   })
-  it('rejects a symlink or hardlink at any executable leaf', () => {
+  it('rejects a symlink and accepts only stable reviewed hardlinked bytes', () => {
     const f = fixture(), file = f.paths[0]!, contents = readFileSync(file), alias = join(f.root, 'alias.js')
     unlinkSync(file); writeFileSync(alias, contents); symlinkSync(alias, file)
     expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
     unlinkSync(file); linkSync(alias, file)
+    const before = assertActivationCatalogQualification(f.backend, f.review)
+    expect(before.moduleCount).toBe(19)
+    writeFileSync(alias, Buffer.from('mutated through alias'))
     expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
+    writeFileSync(alias, contents); utimesSync(alias, 1, 1)
+    const after = assertActivationCatalogQualification(f.backend, f.review)
+    expect(after.qualificationSha256).not.toBe(before.qualificationSha256)
+  })
+  it('binds link identity of reviewed manifest and module across qualification checks', () => {
+    const f = fixture(), baseline = assertActivationCatalogQualification(f.backend, f.review)
+    const moduleAlias = join(f.root, 'module-alias.js'), manifestAlias = join(f.root, 'manifest-alias.json')
+    const manifest = join(f.root, 'node_modules', f.names[0]!, 'package.json')
+    linkSync(f.paths[0]!, moduleAlias); linkSync(manifest, manifestAlias)
+    const linked = assertActivationCatalogQualification(f.backend, f.review)
+    expect(linked.qualificationSha256).not.toBe(baseline.qualificationSha256)
+    expect(assertActivationCatalogQualification(f.backend, f.review).qualificationSha256).toBe(linked.qualificationSha256)
+    const original = readFileSync(manifestAlias); writeFileSync(manifestAlias, Buffer.from('{"name":"tampered"}'))
+    expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
+    writeFileSync(manifestAlias, original); utimesSync(manifestAlias, 1, 1)
+    expect(assertActivationCatalogQualification(f.backend, f.review).qualificationSha256).not.toBe(linked.qualificationSha256)
   })
   it('refuses loader-shape drift, shadowed dependency code and unreviewed startup hooks', () => {
     const f = fixture(), manifest = join(f.root, 'node_modules', f.names[0]!, 'package.json')

@@ -10,13 +10,13 @@ This guide covers upgrades to **0.12.1**, including upgrades from **0.11.0**, 0.
 
 Before `inventory`, `inspect`, `adopt` or `verify`, the CLI hashes the full physical inventory and checks it against the official JSONL reader. Reviewed rc.3 and rc.5 backends support `none` and `zstd` compression. For a directory with multiple generations, the tool makes a private temporary copy of the log corpus so the SDK can resolve forks and inherited cuts. It checks every physical generation in that directory and matches the SDK's chosen file to its physical identity. It leaves all source logs in place. Keep all session writers stopped and place reports, selections and receipts outside the session root.
 
-Hidden or corrupt logs, future generations, links and unknown layouts stop the operation. A single-generation session that the official reader lists but explicitly refuses to open can still be reported as pending. Multi-generation verification requires free temporary space for the corpus, up to 1 GiB. Each copied file and each decoded multi-generation log is limited to 256 MiB. On Windows the scratch path must be on a fixed local drive, with a private ACL and no reparse points. The tool removes its temporary copy on normal completion or a handled failure. After abrupt termination, any retained copy is private session data.
+Hidden or corrupt logs, future generations, links and unknown layouts stop the operation. A single-generation session that the official reader lists but explicitly refuses to open can still be reported as pending. Multi-generation verification requires free temporary space for the corpus, up to 1 GiB. Each copied file and each decoded multi-generation log is limited to 256 MiB. On Windows the tool creates the copy with a private ACL on a fixed local drive. If the configured temporary base is shared or redirected, set `TEMP` for this command to a local directory that other accounts cannot replace or write. The tool attempts to remove its temporary copy on completion or failure. If cleanup fails or the process stops abruptly, treat any retained copy as private session data.
 
 The proof binds the supplied physical root, compression, reviewed backend and file identities and contents. It does **not** establish that the supplied root is the active configuration: the operator or manager must verify that independently. An existing ordinary empty root can produce a zero-row inventory, but cannot produce a migration receipt. Missing roots fail. Backend, root, encoding or file changes require a fresh inventory and inspection. Receipts created before physical proofs existed are refused with `activation_inventory_proof_required`; preserve them and regenerate `inventory`, any selection, and `inspect` under the matching configuration.
 
 CLI 在 `inventory`、`inspect`、`adopt`、`verify` 前计算全库日志的摘要，并与官方 JSONL 读取器核对。已审查的 rc.3 和 rc.5 后端支持 `none` 与 `zstd`。遇到同目录保留多代日志时，工具在私有临时目录复制日志库，供 SDK 解析分支和继承切点。工具逐代核验该目录内的日志，并核对 SDK 实际选中的物理文件。所有源日志均保留在原路径。全程停止会话写者，将报告、选择清单和收据写到会话根目录之外。
 
-隐藏或损坏的日志、未来代际、链接和未知布局会中止操作。官方读取器列出但明确拒绝打开的单代会话仍可记录为待处理。多代核验需要可容纳日志库的临时空间，上限为 1 GiB。单个复制文件与单个解码后的多代日志上限均为 256 MiB。Windows 临时目录须位于固定本地磁盘、权限私有且路径没有重解析点。正常结束或处理失败后会清理临时副本。进程意外终止时，如有残留副本，应按私有会话数据处理。
+隐藏或损坏的日志、未来代际、链接和未知布局会中止操作。官方读取器列出但明确拒绝打开的单代会话仍可记录为待处理。多代核验需要可容纳日志库的临时空间，上限为 1 GiB。单个复制文件与单个解码后的多代日志上限均为 256 MiB。Windows 临时副本须位于固定本地磁盘，创建时即设置私有 ACL。若系统临时目录允许其他账号写入或被重定向，仅为此次命令将 `TEMP` 指向其他账号无法替换或写入的本地目录。工具在结束或失败时尝试清理临时副本。如果清理失败或进程意外终止，残留副本应按私有会话数据处理。
 
 证明绑定所传物理根、压缩方式、已审查后端以及文件身份和内容，**不证明所传目录就是当前配置**；操作者或管理器须独立核对。已存在的普通空根可产生零行库存，但不能生成迁移收据；缺失根拒绝。后端、根、编码或文件变化后须重新 inventory 和 inspect。没有物理证明的旧收据会以 `activation_inventory_proof_required` 拒绝；保留原记录，并在匹配配置下重新 inventory、按需选择和 inspect。
 
@@ -159,7 +159,7 @@ node /absolute/prepared-package/bin/dsh-completion-guard-activation.mjs verify \
 
 `inspect` creates a new owner-only receipt with exclusive creation, or reports exact unresolved session IDs and exits nonzero without creating an adoptable receipt. `adopt` first checks receipt identities against the current public inventory, then writes each binding separately; `verify` leaves source logs and mode bindings untouched. It uses a private temporary copy for multi-generation verification. A conflict leaves the other completed rows intact and reports `partial`. Repeating adoption is a byte-identical no-op for completed rows and continues missing rows. Claim completion only after all receipt rows verify. A newly appearing session is not silently included in an old receipt.
 
-inspect 排他创建仅所有者可访问的新收据，或报告未解决会话 ID 并非零退出，不生成可采纳收据。adopt 先用当前公开库存核对身份，再逐会话写绑定；verify 不写入。冲突保留其他已完成行并报告 partial，重复采纳对已完成行字节不变，继续缺失行。所有收据行核验通过后才可报告该收据迁移完成；新出现的会话不会被静默加入旧收据。
+inspect 排他创建仅所有者可访问的新收据，或报告未解决会话 ID 并非零退出，不生成可采纳收据。adopt 先用当前公开库存核对身份，再逐会话写绑定；verify 保留源日志和模式绑定原状，多代核验使用私有临时副本。冲突保留其他已完成行并报告 partial，重复采纳对已完成行字节不变，继续缺失行。所有收据行核验通过后才可报告该收据迁移完成；新出现的会话不会被静默加入旧收据。
 
 ## Restore, diagnosis and rollback / 恢复、诊断与回退
 

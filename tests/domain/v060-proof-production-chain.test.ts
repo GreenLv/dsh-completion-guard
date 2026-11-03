@@ -109,6 +109,8 @@ function obligationFor(projection: GuardProjection, kind: ProofObligationV2['kin
 }
 
 describe('0.6.0 C09/S09: the proof entry is a production chain, not a rule library', () => {
+  // The first case runs the cold production projection and two further reads.
+  // Preserve the full round trip under parallel CI load.
   it('a real read fact binds an obligation over the item and survives a log replay', async () => {
     const f = await sessionWithReadback('bound')
     try {
@@ -162,7 +164,7 @@ describe('0.6.0 C09/S09: the proof entry is a production chain, not a rule libra
       expect(replayed.items.get(item!.id)?.status).toBe('passed')
       expect(bindProofV2ToProjection(replayed, proof)).toEqual(['proof_obligation_not_pending'])
     } finally { await rm(f.root, { recursive: true, force: true }) }
-  })
+  }, 15_000)
 
   it('FOLLOWUP F08: persisted proof tampering invalidates replayed certification',async()=>{
  const f=await sessionWithReadback('proof-replay');

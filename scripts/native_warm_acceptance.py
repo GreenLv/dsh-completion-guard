@@ -49,6 +49,15 @@ def unpack_frozen(artifact: Path,destination: Path) -> Path:
                 shutil.copyfileobj(source,output)
     return destination/"package"
 
+def frozen_guard_version(package: Path, expected_commit: str) -> str:
+    manifest=json.loads((package/"package.json").read_text(encoding="utf-8"))
+    if not isinstance(manifest,dict) or manifest.get("name")!="dsh-completion-guard" or manifest.get("gitHead")!=expected_commit:
+        raise ValueError("frozen package identity mismatch")
+    version=manifest.get("version")
+    if not isinstance(version,str) or not version:
+        raise ValueError("frozen package version missing")
+    return version
+
 def inert_fixture(path: Path) -> str:
     manifest={"name":FIXTURE_NAME,"version":FIXTURE_VERSION,"files":["index.js"],"gitHead":FIXTURE_HEAD,
               "repository":{"type":"git","url":"https://github.com/GreenLv/dsh-completion-guard.git"}}
@@ -142,7 +151,7 @@ def execute(args, driver_sha: str, progress: Path) -> dict:
         cli=copied/"node_modules"/"@deepseek-ai"/"dsh"/"lib"/"bin.js"
         runtime_manifest,selected=host.preflight_host_inputs(root,copied,{"web":args.web_cohort,"headless":args.headless_cohort},"v070")
         result["host"]={"version":runtime_manifest["version"],"node_version":node_version,"runtime_sha256":copy["inventory_sha256"],"node_sha256":native.sha256(Path(node).resolve(strict=True))}
-        extracted=unpack_frozen(artifact,temporary/"extracted");artifact_tree=native.tree_digest(extracted)
+        extracted=unpack_frozen(artifact,temporary/"extracted");guard_version=frozen_guard_version(extracted,args.source_commit);artifact_tree=native.tree_digest(extracted)
         release=temporary/"inert-release.tgz";integrity=inert_fixture(release)
         wrapper=root/"scripts"/"native_warm_guard_plugin.mjs";probe=root/"scripts"/"native_warm_host_probe.mjs"
         for profile in ("web","headless"):
@@ -164,7 +173,7 @@ def execute(args, driver_sha: str, progress: Path) -> dict:
             overlays.append(overlay)
             guard={"activation":"always","policy":"release","hostLockPackages":selected[profile]["packages"],"hostLockPlatform":"windows" if os.name=="nt" else "posix",
                    "hostLockProfile":profile,"hostLockPolicy":"dsh-core/v1","hostLockRuntimeRoot":str(copied),"hostLockProfileRoot":str(profile_root)}
-            guard["warm"]={"nonce":nonce,"fixtureRoot":str(temporary),"guardVersion":"0.12.0","sourceCommit":args.source_commit,
+            guard["warm"]={"nonce":nonce,"fixtureRoot":str(temporary),"guardVersion":guard_version,"sourceCommit":args.source_commit,
                 "releaseTgz":str(release),"packageName":FIXTURE_NAME,"packageVersion":FIXTURE_VERSION,"integrity":integrity}
             config={"fixtureRoot":str(temporary),"runtimeRoot":str(copied),"profileRoot":str(profile_root),"workRoot":str(work),"nonce":nonce,"profile":profile,
                     "sourceCommit":args.source_commit,"artifactSha256":args.artifact_sha256,"driverSha256":driver_sha,"hostLockDigest":lock,
