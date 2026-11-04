@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-11-03T21:54:53.478Z",
-  "available_through": "2026-11-02",
-  "stable_through": "2026-11-01",
-  "chart_through": "2026-11-01",
+  "checked_at": "2026-11-04T12:26:57.547Z",
+  "available_through": "2026-11-03",
+  "stable_through": "2026-11-02",
+  "chart_through": "2026-11-02",
   "publish_mode": "generated",
   "waiting_for_stability": true
 }
