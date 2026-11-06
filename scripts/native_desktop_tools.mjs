@@ -18,7 +18,8 @@ if (mode !== 'host') {
   const require = createRequire(anchor)
   const boot = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')).href)
   if (mode === 'init') {
-    boot.initProfile(profile, boot.PROFILE_TEMPLATES.web.bundles)
+    const { PROFILE_TEMPLATES } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-official-bundles')).href)
+    await boot.initProfile(profile, PROFILE_TEMPLATES.web.bundles)
   } else if (mode === 'probe') {
     const patchFile = join(profile, 'cordis.patch.yml')
     const patches = boot.loadOverlayPatches('dsh', patchFile)
