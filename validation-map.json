@@ -152,6 +152,7 @@
         "src/domain/activation-physical-inventory.ts",
         "src/domain/activation-generation-verification.ts",
         "src/domain/activation-catalog-qualification.ts",
+        "scripts/generate-activation-catalog-cohort.mjs",
         "manifests/activation-catalog-cohort.v1.json",
         "src/domain/activation-selection.ts",
         "src/domain/activation-migration.ts",
@@ -159,6 +160,7 @@
         "tests/activation-physical-inventory.test.ts",
         "tests/activation-generation-verification.test.ts",
         "tests/activation-catalog-qualification.test.ts",
+        "tests/activation-catalog-generator.test.mjs",
         "tests/activation-selection-cli.test.ts",
         "tests/activation-canonical-parity.test.ts"
       ],

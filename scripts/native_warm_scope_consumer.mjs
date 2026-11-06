@@ -9,12 +9,10 @@ export function validateWarmResult(result,expected) {
   if(!HEX40.test(expected.source_commit)||!HEX64.test(expected.artifact_sha256)||!HEX64.test(expected.driver_sha256))return false
   if(!exact(result,['schema','status','source_commit','artifact_sha256','driver_sha256','platform','host','profiles','cleanup']))return false
   if(result.schema!=='dsh-native-warm-scope/v1'||result.status!=='passed'||!['windows','macos'].includes(result.platform)||result.source_commit!==expected.source_commit||result.artifact_sha256!==expected.artifact_sha256||result.driver_sha256!==expected.driver_sha256)return false
-  // The observed host must be ONE audited published state (mirrors
-  // audited-cohort-selection: rc.2/rc.3/rc.5 are historical evidence below the
-  // 0.13.0 floor but remain valid observed identities for runs against those
-  // pinned hosts; 0.2.2-rc.1 is the current cohort). A future version is not
-  // accepted here: this validator binds observed runs, not version admission.
-  if(!exact(result.host,['version','node_version','runtime_sha256','node_sha256'])||!/^(?:0\.2\.0-rc\.2|0\.2\.1-rc\.3|0\.2\.1-rc\.5|0\.2\.2-rc\.1)$/.test(result.host.version)||typeof result.host.node_version!=='string'||!HEX64.test(result.host.runtime_sha256)||!HEX64.test(result.host.node_sha256))return false
+  // This source's native run must name its selected reviewed host. Earlier
+  // receipts retain their original source/schema consumer; historical rows
+  // cannot qualify a current run on a host below the raised support floor.
+  if(!exact(result.host,['version','node_version','runtime_sha256','node_sha256'])||result.host.version!=='0.2.2-rc.1'||typeof result.host.node_version!=='string'||!HEX64.test(result.host.runtime_sha256)||!HEX64.test(result.host.node_sha256))return false
   if(!exact(result.cleanup,['status','remaining_ids'])||result.cleanup.status!=='passed'||!Array.isArray(result.cleanup.remaining_ids)||result.cleanup.remaining_ids.length)return false
   if(!exact(result.profiles,['web','headless']))return false
   for(const name of ['web','headless']) {
