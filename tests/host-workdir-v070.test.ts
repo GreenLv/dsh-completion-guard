@@ -15,6 +15,14 @@ import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-loc
 import { projectSessionCoreV2 } from '../src/core-v2/session.js'
 import { registerPassiveHostWorkdirObserver } from '../src/runtime.js'
 import { auditedDefaultWorkdirHost, auditedDefaultWorkdirProvider } from '../src/domain/host-resolver.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
+
+/** SDK 0.2.2-rc.1: ToolRuntime.execute is batch-only; these helpers keep the
+ * historical single-call shape for the workdir observations below. */
+const sole = (batch: { results: readonly { callId: unknown; result: unknown }[] }) => {
+  if (batch.results.length !== 1) throw new Error(`expected exactly one settled result, got ${batch.results.length}`)
+  return batch.results[0]!.result as { isError: boolean; value?: unknown; content?: Array<{ type: string; text?: string }> }
+}
 
 const host = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
   auditedForegroundRenderers: ['bash' as const], digest: 'a1'.repeat(32) }
@@ -309,6 +317,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       const ctx = new Context()
       new SystemPrompt(ctx, {})
       const runtime = new ToolRuntime(ctx)
+      runtime.setExecutor(new NativeToolExecutor(ctx))
       ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: Session }) =>
         ({ sessionId: session.id, workspaceRoot: s.physical }) } as never)
       ctx.provide('workingDirectory', { get: () => s.physical } as never)
@@ -322,9 +331,9 @@ describe('v0.7 call-time Host default-workdir observation', () => {
         render: () => [{ type: 'text', text: 'ok' }] },
         execute: async () => ({ status: 'ok' }),
       }))
-      const response = await runtime.execute({ agent, callId: 'test-1' as never,
-        name: 'bash', arguments: { command: 'npm test' }, signal: new AbortController().signal })
-      expect(response.isError).toBe(false)
+      const response = await runtime.execute({ agent, calls: [{ type: 'tool-call', id: 'test-1' as never,
+        name: 'bash', arguments: JSON.stringify({ command: 'npm test' }) }], signal: new AbortController().signal })
+      expect(sole(response).isError).toBe(false)
       expect(response.additionalContexts).toHaveLength(1)
       expect(s.session.snapshotEvents().filter((event) => event.type === 'user/message'
         && String((event.data as { content?: ReadonlyArray<{ text?: string }> }).content?.[0]?.text ?? '').startsWith(HOST_WORKDIR_PREFIX))).toHaveLength(0)
@@ -354,6 +363,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
     session.append('tool/call', { turn: 1, step: 1, callId: 'call-b' as never, name: 'bash', arguments: '{"command":"pnpm test"}' })
     try {
       const ctx = new Context(); new SystemPrompt(ctx, {}); const runtime = new ToolRuntime(ctx)
+ runtime.setExecutor(new NativeToolExecutor(ctx))
       ctx.provide('sandboxPolicy', { resolve: () => ({ sessionId: id, workspaceRoot: physical }) } as never)
       ctx.provide('workingDirectory', { get: () => physical } as never)
       const agent = { session, ctx } as never
@@ -366,18 +376,18 @@ describe('v0.7 call-time Host default-workdir observation', () => {
           render: () => [{ type: 'text', text: 'done' }] },
         execute: async ({ command }) => { if (command === 'npm test') { await waitA; throw new Error('fixture failure') }; return { status: 'ok' } },
       }))
-      const exec = (callId: string, command: string) => runtime.execute({ agent, callId: callId as never,
-        name: 'bash', arguments: { command }, signal: new AbortController().signal })
+      const exec = (callId: string, command: string) => runtime.execute({ agent, calls: [{ type: 'tool-call', id: callId as never,
+        name: 'bash', arguments: JSON.stringify({ command }) }], signal: new AbortController().signal })
       const pendingA = exec('call-a', 'npm test')
       const responseB = await exec('call-b', 'pnpm test')
       expect(session.snapshotEvents().some((event) => event.type === 'user/message'
         && JSON.stringify(event.data).includes(HOST_WORKDIR_PREFIX))).toBe(false)
       failA()
       const responseA = await pendingA
-      expect(responseA.isError).toBe(true); expect(responseB.isError).toBe(false)
+      expect(sole(responseA).isError).toBe(true); expect(sole(responseB).isError).toBe(false)
       for (const [callId, response] of [['call-a', responseA], ['call-b', responseB]] as const) session.append('tool/result', {
         turn: 1, step: 1, message: createToolResultMessage({ callId: callId as never,
-          content: [{ type: 'text', text: response.isError ? 'failed' : 'ok' }], isError: response.isError }),
+          content: [{ type: 'text', text: sole(response).isError ? 'failed' : 'ok' }], isError: sole(response).isError }),
       } as never, { surfaceOp: 'append' })
       for (const response of [responseA, responseB]) for (const context of response.additionalContexts ?? []) {
         session.append('user/message', context, { surfaceOp: 'append' })

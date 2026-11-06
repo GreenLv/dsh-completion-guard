@@ -10,9 +10,9 @@ DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，�
 
 ## 安装或升级
 
-需要 DSH `>=0.2.1-rc.3`、Cordis `>=4.0.4`、Node.js `>=22` 和 pnpm `>=11`。安装 Guard 0.12.1 前，低于下限的 DSH 须先升级。Web、Headless 和官方 Desktop 应用使用各自的配置目录。推荐的默认审查基线为 DSH `0.2.1-rc.5` 和 Cordis `4.0.5`；rc.3 使用自己的审查队列，所有宿主仍须通过兼容性核验。
+需要 DSH `>=0.2.2-rc.1`、Cordis `>=4.1.0`、Node.js `>=24.9.0` 和 pnpm `>=11`。安装 Guard 0.13.0 前，低于下限的 DSH 与 Node 须先升级——所有更旧的 DSH 宿主（包括 `0.2.1-rc.3`、`0.2.1-rc.5` 与 `0.2.1`）都会在版本门被拒绝。Web、Headless 和官方 Desktop 应用使用各自的配置目录。默认审查基线为 DSH `0.2.2-rc.1` 和 Cordis `4.1.0`；更旧的队列仅作为历史证据保留，所有宿主仍须通过兼容性核验。
 
-**上游已知风险：**官方 rc.3 和 rc.5 宿主仍包含受影响依赖——`@deepseek-ai/dsh-http-proxy` 精确锁定 `undici` 8.11.2，`@deepseek-ai/dsh-commands` 精确锁定 `zod` 4.4.3，此前披露的高危发现仍在签名宿主内。维护者单独接受本次 0.12.1 的三条已披露 Undici 高危剩余风险，截止 **2026-11-30（含）**。签名宿主未修复，不能证明整个宿主不可达，也不能排除进程崩溃风险。已记录的发现、范围与常设发布门槛见[依赖通告策略](docs/DEPENDENCY_SCAN.md)。
+**上游已知风险：**官方 0.2.2-rc.1 宿主仍包含受影响依赖——`@deepseek-ai/dsh-http-proxy` 精确锁定 `undici` 8.11.2，`@deepseek-ai/dsh-agent` 与 `@deepseek-ai/dsh-commands` 精确锁定 `zod` 4.4.3，此前披露的高危发现仍在签名宿主内。维护者接受本次 0.13.0 的三条已披露 Undici 高危剩余风险，截止 **2026-11-30（含）**（期限不变；自 2026-12-01 起未经重新论证的例外恢复阻断）。签名宿主未修复，不能证明整个宿主不可达，也不能排除进程崩溃风险。已记录的发现、范围与常设发布门槛见[依赖通告策略](docs/DEPENDENCY_SCAN.md)。
 
 先选好路径，再替换任何包：
 
@@ -22,7 +22,7 @@ DSH Completion Guard 是 DeepSeek Harness 插件，负责保存任务要求，�
 Web 在完成相应准备后安装：
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.12.1
+dsh plugin --profile web add dsh-completion-guard@0.13.0
 ```
 
 装好插件还需核验环境。**宿主锁**记录这个 profile 实际加载的包和目录：先用 `inspect` 检查，再用 `inject` 写入，最后以 `verify-dump` 核对组合配置；注入前备份 `cordis.patch.yml`。[安装与首次载入](docs/GETTING_STARTED.md)给出 Web 命令、Windows 和 Desktop 路径及启动前的最后核验。[旧会话迁移指南](docs/ACTIVATION_MIGRATION.md)提供升级准备、完整命令和可复制的 AI 提示词。

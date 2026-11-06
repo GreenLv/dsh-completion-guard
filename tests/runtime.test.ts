@@ -205,10 +205,13 @@ describe('runtime derivation', () => {
     const ctx = {
       systemPrompt: { section: () => undefined, getSectionOrder: () => 0 },
       tools: { register: (tool: typeof registered[number]) => { registered.push(tool) } },
-      agents: { get: (id: string) => id === agent.id ? agent : undefined, currentInitiator: () => agent, roots: () => [agent] },
-      // rc.1 goal tools resolve the open-turn cut through the session
-      // projection readback; turn 1 opens at the seq 1 `turn/start`.
-      sessionProjections: { stateOf: () => ({ openTurnStartSeq: 0, lastTurn: 0 }) },
+      // rc.1 goal tools read the open-turn cut through the agent registry:
+      // `turnBoundaryOf` reports the snapshot index where the open turn
+      // starts, so the `user/message` below (array slot 1) is inside it.
+      agents: {
+        get: (id: string) => id === agent.id ? agent : undefined, currentInitiator: () => agent, roots: () => [agent],
+        turnBoundaryOf: () => ({ openTurnStartSeq: 0 }),
+      },
       goals: {
         get: () => goal,
         complete: (_agent: unknown, ref: { id: string; revision: number }) => {

@@ -512,6 +512,11 @@ class NativeUtf8ContractTests(unittest.TestCase):
         # Execute the actual production manifest-read expressions. Simulate a
         # cp936 platform default at the filesystem boundary, not stdout only.
         original_open = Path.open
+        original_text_encoding = io.text_encoding
+        # UTF-8 mode otherwise resolves an omitted encoding to 'utf-8' before
+        # Path.open sees it, making it indistinguishable from an explicit one.
+        def simulated_text_encoding(encoding, *args, **kwargs):
+            return 'locale' if encoding is None else original_text_encoding(encoding, *args, **kwargs)
         def cp936_default(path, mode='r', buffering=-1, encoding=None, errors=None, newline=None):
             return original_open(path, mode, buffering, ('cp936' if encoding in {None, 'locale'} and 'b' not in mode else encoding), errors, newline)
         with tempfile.TemporaryDirectory() as temporary:
@@ -521,7 +526,8 @@ class NativeUtf8ContractTests(unittest.TestCase):
             payload = json.dumps({'name': 'dshmarket', 'description': '中文市场🚀'}, ensure_ascii=False).encode('utf-8')
             for path in [profile / 'package.json', market]:
                 path.write_bytes(payload)
-            with mock.patch.object(Path, 'open', cp936_default):
+            with mock.patch.object(io, 'text_encoding', simulated_text_encoding), \
+                    mock.patch.object(Path, 'open', cp936_default):
                 with self.assertRaises(UnicodeDecodeError):
                     market.read_text()
                 for name, expression in assignments.items():

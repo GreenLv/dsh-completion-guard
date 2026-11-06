@@ -10,6 +10,7 @@ import { createPrepareTool } from '../src/tools/prepare.js'
 import { createCheckpointTool } from '../src/tools/checkpoint.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 import { defaultV6OrdinaryFeedbackScope } from '../src/domain/v6-feedback.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
   auditedForegroundRenderers: ['bash' as const] }
@@ -57,16 +58,17 @@ describe('default v6 current feedback', () => {
     const ctx = new Context()
     new SystemPrompt(ctx, {})
     const runtime = new ToolRuntime(ctx)
+    runtime.setExecutor(new NativeToolExecutor(ctx))
     runtime.register(createCheckpointTool(() => projection, () => {}))
-    const response = await runtime.execute({ callId: 'native-root-test-checkpoint' as never,
-      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    const response = (await runtime.execute({ calls: [{ type: 'tool-call', id: 'native-root-test-checkpoint' as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) }], signal: new AbortController().signal })).results[0]!.result as { isError: boolean; value?: unknown }
     expect(response.isError).toBe(false)
     expect(response.value).toMatchObject({ status: 'incomplete', feedback_source: 'confirmed_core_v2',
       open_items: [expect.objectContaining({ id: 'R001', source_item_id: 'R001',
         semantic_action: 'test', reason_code: 'insufficient' })] })
     delete projection.items.get('R001')!.semanticAction
-    const unknown = await runtime.execute({ callId: 'unknown-root-test-checkpoint' as never,
-      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    const unknown = (await runtime.execute({ calls: [{ type: 'tool-call', id: 'unknown-root-test-checkpoint' as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) }], signal: new AbortController().signal })).results[0]!.result as { isError: boolean; value?: unknown }
     expect(unknown.isError).toBe(false)
     expect((unknown.value as { open_items: Array<Record<string, unknown>> }).open_items[0]).not.toHaveProperty('semantic_action')
   })
@@ -463,15 +465,18 @@ it('traverses real Session discovery and checkpoint pages after persisted read-o
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   runtime.register(createPrepareTool({ getProjection: derive }))
   runtime.register(createCheckpointTool(derive, () => {}))
   let step = 1
   const run = async (name: 'context_guard_prepare' | 'context_guard_checkpoint', args: Record<string, unknown>) => {
     const callId = `page-${step}` as never
-    const result = await runtime.execute({ callId, name, arguments: args, signal: new AbortController().signal })
+    // SDK 0.2.2-rc.1: batch execute returns per-call results; unwrap the sole call.
+    const batch = await runtime.execute({ calls: [{ type: 'tool-call', id: callId, name, arguments: JSON.stringify(args) }], signal: new AbortController().signal })
+    const result = batch.results[0]!.result as { isError: boolean; value?: unknown; content?: Array<{ type: string; text?: string }> }
     expect(result.isError).toBe(false)
     active.append('tool/call', { turn: 1, step, callId, name, arguments: JSON.stringify(args) })
-    active.append('tool/result', { turn: 1, step, message: createToolResultMessage({ callId, content: result.content, isError: result.isError }) }, { surfaceOp: 'append' })
+    active.append('tool/result', { turn: 1, step, message: createToolResultMessage({ callId, content: (result.content ?? []) as never, isError: result.isError }) }, { surfaceOp: 'append' })
     active = Session.fromRestore(active.id, structuredClone(active.snapshotEvents()) as never,
       structuredClone(active.header), SessionLogOffset(0), 'detached')
     step++

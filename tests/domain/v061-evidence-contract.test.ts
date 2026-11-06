@@ -131,3 +131,28 @@ describe('0.6.1 W060-04: read-only verifications follow the single-fact contract
     expect(result.status, JSON.stringify(result.rejectedBindings)).toBe('certified')
   })
 })
+
+describe('UX11: exact evidence removal must lead to a usable contract', () => {
+  it('rejects E1 + E2, names E1, then accepts the unchanged complete binding with E2 only', () => {
+    const p = projection()
+    p.items.set('R001', item({ id: 'R001', semanticAction: 'verify' }))
+    p.evidence.set('E1', fact({ id: 'E1', semanticAction: 'generic_run', evidenceRole: 'effect', capabilities: ['shell'] }))
+    p.evidence.set('E2', fact({ id: 'E2', semanticAction: 'verify', evidenceRole: 'effect', capabilities: ['verify'], operations: [{ op: 'verify' }] }))
+    const valid = {
+      itemId: 'R001', evidenceIds: ['E1', 'E2'], semanticAction: 'verify' as const,
+      requestedTarget: { scope: '/repo' }, resolvedTarget: { scope: '/repo' }, observedState: {}, effectEvidenceId: 'E2',
+      expectedTransition: { predicateId: 'pred.verify.outcome', version: 1, predParamsKind: 'inline' as const,
+        parameters: { expected_outcome: { k: 'e' as const, v: 'success' }, min_matches: 1 } },
+    }
+    const initial = certifyCheckpoint(p, [valid], 'C-ux11-1', true)
+    expect(initial.status).toBe('incomplete')
+    expect(initial.rejectedBindings[0]).toMatchObject({ reasonCode: 'evidence_matches_no_facet', offendingEvidenceIds: ['E1'] })
+    expect(initial.rejectedBindings[0].hint).toContain('E1')
+    const reverse = certifyCheckpoint(p, [{ ...valid, evidenceIds: ['E2', 'E1'] }], 'C-ux11-reverse', true)
+    expect(reverse.rejectedBindings[0]).toEqual(initial.rejectedBindings[0])
+    const following = certifyCheckpoint(p, [{ ...valid, evidenceIds: ['E2'] }], 'C-ux11-2', true)
+    expect(following.status, JSON.stringify(following.rejectedBindings)).toBe('certified')
+    const wrongOnly = certifyCheckpoint(p, [{ ...valid, evidenceIds: ['E1'], effectEvidenceId: 'E1' }], 'C-ux11-negative', true)
+    expect(wrongOnly.status).toBe('incomplete')
+  })
+})

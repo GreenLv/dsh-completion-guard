@@ -9,6 +9,7 @@ import { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { LocalJobRegistry } from '@deepseek-ai/dsh-jobs-local'
 import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
 import { apply, inject, readExternalOperation } from '../src/runtime.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 function host() {
   const ctx = new Context()
@@ -16,7 +17,8 @@ function host() {
   new SessionStore(ctx)
   new LocalFileSystem(ctx, { cwd: process.cwd(), diffBasisMaxBytes: 10485760 })
   new SystemPrompt(ctx, {} as never)
-  const tools = new ToolRuntime(ctx, {})
+  const tools = new ToolRuntime(ctx)
+  tools.setExecutor(new NativeToolExecutor(ctx))
   new CommandRuntime(ctx)
   const session = Session.create(SessionId('rc2-owner'))
   const rawAgent = { id: session.id, session, ctx, status: 'idle', steer: () => {} }

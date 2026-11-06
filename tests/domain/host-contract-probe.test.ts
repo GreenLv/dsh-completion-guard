@@ -31,7 +31,16 @@ function sdkArchives(targets: string[] = ['@deepseek-ai/dsh-session']): ProbeArc
     const resolver = createRequire(anchor)
     let entry: string
     try { entry = resolver.resolve(name) } catch {
-      try { entry = createRequire(join(process.cwd(), 'tests/fixtures/host-composition/package.json')).resolve(name) } catch { return }
+      try { entry = createRequire(join(process.cwd(), 'tests/fixtures/host-composition/package.json')).resolve(name) } catch {
+        // Not a direct dependency anywhere: resolve the highest published
+        // instance from the pnpm store so transitive SDK packages (for example
+        // @deepseek-ai/dsh-brand) stage correctly.
+        const storeDir = join(process.cwd(), 'node_modules/.pnpm')
+        if (!existsSync(storeDir)) return
+        const candidates = readdirSync(storeDir).filter((row) => row.startsWith(name.replace('/', '+') + '@')).sort().reverse()
+        if (!candidates.length) return
+        entry = join(storeDir, candidates[0]!, 'node_modules', name, 'package.json')
+      }
     }
     let root = dirname(entry)
     while (!existsSync(join(root, 'package.json'))) root = dirname(root)
@@ -52,6 +61,9 @@ function sdkArchives(targets: string[] = ['@deepseek-ai/dsh-session']): ProbeArc
     for (const dependency of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) collect(dependency, join(root, 'package.json'))
   }
   for (const target of targets) collect(target, join(process.cwd(), 'package.json'))
+  if (targets.some(target => ['@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-agent-loop'].includes(target))) {
+    collect('@deepseek-ai/dsh-tool-executor-native', join(process.cwd(), 'package.json'))
+  }
   return archives
 }
 const TARGET = '@deepseek-ai/dsh-session'
@@ -68,10 +80,10 @@ describe('stable host behavioral qualification in a confined new Node process', 
     expect(result.checks).toEqual(expect.arrayContaining(['session.api', 'session.envelope', 'session.immutable', 'session.stable', 'session.restore_gap', 'session.restore_unknown', 'session.fork_unknown']))
   })
   it.each([
-    ['API', (s: string) => s.replace('Session, SessionForkError, SessionId', 'SessionForkError, SessionId')],
+    ['API', (s: string) => s.replace('Session, SessionForkError, SessionId', 'SessionForkError, SessionId, SessionLogOffset')],
     ['sequence', (s: string) => s + '\nSession.fromRestore = (id, seed, header) => Session.create(id, undefined, header);\n'],
     ['unknown outcome', (s: string) => s.replace('ToolOutcomeUnknownError', 'KnownSuccess')],
-    ['event delivery', (s: string) => s.replace('if (callbacks !== void 0 && entry !== void 0) invokeContainedSessionObservers', 'if (false) invokeContainedSessionObservers')],
+    ['event delivery', (s: string) => s.replace('if (entry !== void 0 && callbacks !== void 0) invokeContainedSessionObservers', 'if (false) invokeContainedSessionObservers')],
     ['durability', (s: string) => s + '\nSessionStore.prototype.flush = async () => false;\n'],
     ['immutability', (s: string) => s.replace('this.log.push(mode === "snapshot" ? deepFreeze(snapshot) : snapshot)', 'this.log.push(snapshot)')],
   ])('rejects incompatible %s behavior', (_label, change) => {
@@ -154,8 +166,15 @@ it('preserves observable tagged-template raw text in the program fingerprint', (
 it('rejects a ToolRuntime that silently cancels monotonic guards', () => {
   const target = '@deepseek-ai/dsh-tools', archives = sdkArchives([target, TARGET])
   const archive = archives.find(row => row.name === target)!
-  archive.files['lib/index.js'] = Buffer.from(archive.files['lib/index.js'].toString() + '\nToolRuntime.prototype.guard = function () { return () => {}; };\n')
+  archive.files['lib/index.js'] = Buffer.from(archive.files['lib/index.js'].toString() + '\nToolsService.prototype.guard = function () { return () => {}; };\n')
   expect(runHostContractProbe(archives, [target]).failures).not.toEqual([])
+})
+
+it('rejects acquired native executor code that fabricates successful settlement', () => {
+  const target = '@deepseek-ai/dsh-tools', archives = sdkArchives([target, TARGET])
+  const archive = archives.find(row => row.name === '@deepseek-ai/dsh-tool-executor-native')!
+  archive.files['lib/index.js'] = Buffer.from(archive.files['lib/index.js'].toString() + '\nNativeToolExecutor.prototype.execute = async input => ({ results: input.calls.map(call => ({callId:call.id,result:{isError:false,value:null,content:[]}})), additionalContexts:[], concluded:false });\n')
+  expect(runHostContractProbe(archives, [target]).failures).toEqual(['host_contract_behavior_incompatible:' + target])
 })
 
 it('qualifies actual AgentLoop creation, resume and fork after a harmless program change', () => {
@@ -174,8 +193,10 @@ it.each(['create', 'resume', 'createAgent'])('rejects broken AgentLoop %s behavi
 })
 
 it.each([
-  ['prepare guard boundary', 'const originalPrepare = ToolRuntime.prototype.prepareExecution; ToolRuntime.prototype.prepareExecution = function(input, next) { const original = this.guardReason; this.guardReason = () => undefined; return originalPrepare.call(this, input, next).finally(() => { this.guardReason = original }); };'],
-  ['execution', 'ToolRuntime.prototype.execute = async () => ({ isError: false });'],
+  // SDK 0.2.2-rc.1: the guard boundary is read through checkGuards; cancelling
+  // it must break the guard_readback/guard_denial behavior checks.
+  ['guard boundary', 'const originalGuards = ToolsService.prototype.checkGuards; ToolsService.prototype.checkGuards = function() { return undefined; };'],
+  ['execution', 'ToolsService.prototype.execute = async () => ({ results: [{ callId: "x", result: { isError: false, value: null, content: [] } }], additionalContexts: [], concluded: false });'],
 ])('rejects broken ToolRuntime %s behavior', (_label, change) => {
   const target = '@deepseek-ai/dsh-tools', archives = sdkArchives([target, TARGET])
   const archive = archives.find(row => row.name === target)!
@@ -191,13 +212,19 @@ function redirectedTools(mode: string, broken: boolean): ProbeArchive[] {
   manifest.version = '0.2.1-rc.1'
   const entry = './lib/alternate.js'
   if (mode === 'exports') manifest.exports['.'] = entry
-  if (mode === 'main') { delete manifest.exports; manifest.main = entry }
+  if (mode === 'main') {
+    delete manifest.exports; manifest.main = entry
+    // A main-only package needs an extensionful ESM subpath. Adapt the
+    // acquired executor's import too, so this is a compatible whole graph.
+    const native = archives.find(row => row.name === '@deepseek-ai/dsh-tool-executor-native')!
+    native.files['lib/index.js'] = Buffer.from(native.files['lib/index.js'].toString().replace('@deepseek-ai/dsh-tools/pipeline', '@deepseek-ai/dsh-tools/lib/pipeline.js'))
+  }
   if (mode === 'active') manifest.exports['.'] = { node: entry, default: './lib/index.js' }
   if (mode === 'inactive') manifest.exports['.'] = { 'fixture-inactive-entry': entry, default: './lib/index.js' }
   if (mode === 'no-match') manifest.exports['.'] = { 'fixture-inactive-entry': entry }
   if (mode === 'different') manifest.exports['.'] = { import: entry, require: './lib/index.js' }
   target.files['package.json'] = Buffer.from(JSON.stringify(manifest))
-  target.files['lib/alternate.js'] = Buffer.from("export * from './index.js';\n" + (broken ? "import {ToolRuntime} from './index.js';ToolRuntime.prototype.guard=()=>()=>{};\n" : ''))
+  target.files['lib/alternate.js'] = Buffer.from("export * from './index.js';\n" + (broken ? "import {ToolsService} from './index.js';ToolsService.prototype.guard=()=>()=>{};\n" : ''))
   return archives
 }
 async function acquireToolsFixture(archives: ProbeArchive[], root: string) {
@@ -208,7 +235,7 @@ async function acquireToolsFixture(archives: ProbeArchive[], root: string) {
     const a = entries.find(r => url === 'https://registry.npmjs.org/fixture/' + encodeURIComponent(r.name) + '.tgz')
     return a ? new Response(new Uint8Array(a.bytes)) : new Response('', { status: 404 })
   }) as typeof fetch
-  return acquireHostTrust([entries.find(r => r.name === '@deepseek-ai/dsh-tools')!], fetcher, { profileRoot: root, dependencyIdentity: name => entries.find(r => r.name === name)! })
+  return acquireHostTrust(['@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-tool-executor-native'].map(name => entries.find(r => r.name === name)!), fetcher, { profileRoot: root, dependencyIdentity: name => entries.find(r => r.name === name)! })
 }
 function toolsEntryOracle(archives: ProbeArchive[], root: string) {
   for (const a of archives) for (const [file, bytes] of Object.entries(a.files)) {
@@ -217,7 +244,7 @@ function toolsEntryOracle(archives: ProbeArchive[], root: string) {
   const names = new Set(archives.map(a => a.name)), records: Record<string, unknown> = { '.': { url: '..', dependencies: Object.fromEntries([...names].map(name => [name, name])) } }
   for (const a of archives) { const m = JSON.parse(a.files['package.json'].toString()); records[a.name] = { url: './' + a.name, dependencies: Object.fromEntries(Object.keys({ ...m.dependencies, ...m.peerDependencies, ...m.optionalDependencies }).filter(n => names.has(n)).map(n => [n, n])) } }
   writeFileSync(join(root, 'package.json'), '{}'); writeFileSync(join(root, 'node_modules/.package-map.json'), JSON.stringify({ packages: records }))
-  writeFileSync(join(root, 'oracle.mjs'), `import{Context}from '@deepseek-ai/cordis';import{SystemPrompt}from '@deepseek-ai/dsh-system-prompt';import{ToolRuntime,defineTool}from '@deepseek-ai/dsh-tools';import{Session}from '@deepseek-ai/dsh-session';const c=new Context();new SystemPrompt(c,{});const rt=new ToolRuntime(c,{});let effects=0;rt.register(defineTool({name:'effect_probe',description:'fixture',parameters:{},output:{schema:{type:'object',properties:{status:{type:'string',required:true}},additionalProperties:false},render:()=>[{type:'text',text:'ok'}]},execute:async()=>{effects++;return{status:'ok'}}}));rt.guard(()=> 'deny');const result=await rt.execute({agent:{id:'fixture',session:Session.create('fixture'),ctx:c},callId:'fixture',name:'effect_probe',arguments:{},signal:new AbortController().signal});console.log(JSON.stringify({isError:result.isError,effects}));`)
+  writeFileSync(join(root, 'oracle.mjs'), `import{Context}from '@deepseek-ai/cordis';import{SystemPrompt}from '@deepseek-ai/dsh-system-prompt';import{ToolRuntime,defineTool}from '@deepseek-ai/dsh-tools';import{NativeToolExecutor}from '@deepseek-ai/dsh-tool-executor-native';import{Session}from '@deepseek-ai/dsh-session';const c=new Context();new SystemPrompt(c,{});const rt=new ToolRuntime(c);rt.setExecutor(new NativeToolExecutor(c));let effects=0;rt.register(defineTool({name:'effect_probe',description:'fixture',parameters:{},output:{schema:{type:'object',properties:{status:{type:'string',required:true}},additionalProperties:false},render:()=>[{type:'text',text:'ok'}]},execute:async()=>{effects++;return{status:'ok'}}}));rt.guard(()=> 'deny');const batch=await rt.execute({agent:{id:'fixture',session:Session.create('fixture'),ctx:c},calls:[{type:'tool-call',id:'fixture',name:'effect_probe',arguments:'{}'}],signal:new AbortController().signal});const result=batch.results[0].result;console.log(JSON.stringify({isError:result.isError,effects}));`)
   return JSON.parse(execFileSync(process.execPath, [join(root, 'oracle.mjs')], { cwd: root, encoding: 'utf8', env: process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}, timeout: 20_000 }))
 }
 describe('qualification of the actual active package entry', () => {

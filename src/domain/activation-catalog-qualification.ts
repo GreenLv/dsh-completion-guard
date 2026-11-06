@@ -1,12 +1,12 @@
 /**
  * Offline qualification of the exact catalog executable closure used as the
  * multi-generation strict-validation oracle. The shipped review manifest is
- * derived from registry-integrity-checked rc.3/rc.5 archives and actual ESM
- * resolution edges. This does not qualify the surrounding SDK or native code.
+ * derived from registry-integrity-checked 0.2.2-rc.1 SDK and third-party
+ * archives and actual import/require edges. This does not qualify the
+ * surrounding SDK or native code.
  */
 import { createHash } from 'node:crypto'
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { activationDigest, activationJson } from './session-activation.js'
 
@@ -65,7 +65,7 @@ export function assertActivationCatalogQualification(backendFile: string, review
       || !Array.isArray(review.modules) || review.packages.length === 0 || review.modules.length === 0) fail()
     const packages = new Map<string, ReviewedPackage>(), modules = new Map<string, ReviewedModule>()
     for (const p of review.packages) {
-      if (!p || typeof p.name !== 'string' || !/^@[^/]+\/[^/]+$/u.test(p.name) || !HASH.test(p.loaderShapeSha256)
+      if (!p || typeof p.name !== 'string' || !/^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/u.test(p.name) || !HASH.test(p.loaderShapeSha256)
         || packages.has(p.name)) fail()
       packages.set(p.name, p)
     }
@@ -80,22 +80,20 @@ export function assertActivationCatalogQualification(backendFile: string, review
     const packageRoot = (importer: string, name: string): string => {
       const reviewed = packages.get(name)
       if (!reviewed) fail()
-      const manifestPath = createRequire(importer).resolve(`${name}/package.json`)
-      // createRequire also searches NODE_PATH/global locations, while an ESM
-      // import does not. Bind the result to the first package manifest in the
-      // importer's ordinary node_modules ancestry, never a global fallback.
+      // Resolve the first package directory in the importer's ordinary
+      // node_modules ancestry. Its manifest may not be a public export.
       let ancestor = dirname(realpathSync(importer)), localManifest: string | undefined
       for (;;) {
         if (basename(ancestor) !== 'node_modules') {
-          const candidate = join(ancestor, 'node_modules', name, 'package.json')
-          try { lstatSync(candidate); localManifest = candidate; break }
+          const candidateRoot = join(ancestor, 'node_modules', name)
+          try { lstatSync(candidateRoot); localManifest = join(candidateRoot, 'package.json'); break }
           catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
         }
         const parent = dirname(ancestor)
         if (parent === ancestor) break
         ancestor = parent
       }
-      if (!localManifest || realpathSync(localManifest) !== realpathSync(manifestPath)) fail()
+      if (!localManifest) fail()
       const file = checkedFile(localManifest), root = dirname(file.path)
       const value = activationJson(new TextDecoder('utf-8', { fatal: true }).decode(file.bytes)) as Record<string, unknown>
       if (!value || typeof value !== 'object' || Array.isArray(value) || value.name !== name || typeof value.version !== 'string') fail()
@@ -129,7 +127,7 @@ export function assertActivationCatalogQualification(backendFile: string, review
           if (target.package !== node.package || destination !== resolve(currentRoot, target.path)) fail()
           pending.push({ node: target, root: currentRoot })
         } else {
-          if (edge.specifier !== target.package && !edge.specifier.startsWith(`${target.package}/`)) fail()
+          if (target.package === node.package || (edge.specifier !== target.package && !edge.specifier.startsWith(`${target.package}/`))) fail()
           pending.push({ node: target, root: packageRoot(file.path, target.package) })
         }
       }

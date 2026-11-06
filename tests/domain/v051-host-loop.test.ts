@@ -191,9 +191,18 @@ async function startLoopHost(
   const persistenceJsonl = await load('dsh-session-persistence-jsonl')
 
   const ctx = new (Context as new () => Record<string, unknown>)()
-  // Real services, each registered the way its own implementation does it.
-  void new (agentSdk.AgentRegistry as new (ctx: unknown) => unknown)(ctx)
+  // SDK 0.2.2-rc.1: the projection registry is an awaited resource and the
+  // services that consume it (AgentRegistry, GoalService) acquire their
+  // handles during their own awaited service init, so every service starts
+  // the way a host starts it — a plugin fiber driven to its active state.
+  const plugin = (p: unknown, c?: unknown) => (ctx as unknown as { plugin: (p: unknown, c?: unknown) => unknown }).plugin(p, c)
+  const waitForFiberState = async (fiber: unknown) => {
+    const state = () => (fiber as { fiber?: { state?: number } })?.fiber?.state ?? (fiber as { state?: number })?.state
+    const deadline = Date.now() + 5000
+    while (state() !== 2 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5))
+  }
   void new (projection.SessionProjectionRegistry as new (ctx: unknown) => unknown)(ctx)
+  await waitForFiberState(plugin(agentSdk.AgentRegistry))
   // `constructor(ctx, config)`, and the config is not optional — omitting it
   // fails later at `config.toolOrder`.
   void new (prompt.SystemPrompt as new (ctx: unknown, config: unknown) => unknown)(ctx, {
@@ -202,11 +211,15 @@ async function startLoopHost(
   })
   // Dependency order is the implementations' own: `ToolRuntime` reads
   // `ctx.systemPrompt` in its constructor, so the prompt service comes first.
-  void new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => unknown)(ctx)
+  const toolRuntime = new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => { setExecutor: (executor: unknown) => unknown })(ctx)
+  // SDK 0.2.2-rc.1: executor selection is a loaded plugin, not an implicit default.
+  const { NativeToolExecutor } = await import('@deepseek-ai/dsh-tool-executor-native')
+  toolRuntime.setExecutor(new NativeToolExecutor(ctx as never))
   void new (sessionSdk.SessionStore as new (ctx: unknown) => unknown)(ctx)
-  // The concrete backend, not the abstract base. `root` is required, and a
-  // throwaway directory keeps daily session data untouched.
-  void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(ctx, { root: sessionRoot, compression: undefined })
+  // SDK 0.2.2-rc.1: the JSONL backend is a Cordis plugin (`apply(ctx, config)`,
+  // root required, registration resolves asynchronously). The throwaway
+  // directory keeps daily session data untouched.
+  await (persistenceJsonl.apply as (ctx: unknown, config: unknown) => Promise<void>)(ctx, { root: sessionRoot, compression: undefined })
   const llmCalls = { prepare: 0, stream: 0 }
   ;(ctx as unknown as { provide: (name: string, value: unknown) => void }).provide('llm', deterministicLlm('recorded by the loop', llmCalls))
 
@@ -318,7 +331,12 @@ describe('a persisted Guard boundary stops the real host', () => {
     const llmAfterFirstTurn = host.llmCalls.prepare + host.llmCalls.stream
     // The goal is real and armed: it CAN continue, which is what makes the stop
     // meaningful rather than an artefact of nothing being runnable.
-    const goals = new GoalService(host.ctx as never, {})
+    // SDK 0.2.2-rc.1: the goal service acquires its projection handle during
+    // its awaited service init, so start it as a host does and use the
+    // registered instance.
+    void (host.ctx as unknown as { plugin: (p: unknown, c?: unknown) => unknown }).plugin(GoalService as never, {})
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const goals = (host.ctx as unknown as { goals: typeof GoalService.prototype }).goals
     const created = goals.create(host.agent as never, { objective: 'finish the guarded change' })
     console.log('GOAL', JSON.stringify({ activation: goals.get(host.agent as never)?.activation, phase: goals.get(host.agent as never)?.phase }))
 
@@ -417,7 +435,9 @@ describe('the boundary and the budget survive a disk reload', () => {
     // ---- host A: the production path establishes and persists the boundary ----
     const a = await startLoopHost(sessionRoot)
     await runTurn(a, '持续推进，直到迁移脚本全部跑完为止。')
-    const goalsA = new GoalService(a.ctx as never, {})
+    void (a.ctx as unknown as { plugin: (p: unknown, c?: unknown) => unknown }).plugin(GoalService as never, {})
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const goalsA = (a.ctx as unknown as { goals: typeof GoalService.prototype }).goals
     const goal = goalsA.create(a.agent as never, { objective: 'finish the guarded change' })
     const normalize = (view: { id: string; revision: number; phase: string; activation: string } | undefined) =>
       view ? {

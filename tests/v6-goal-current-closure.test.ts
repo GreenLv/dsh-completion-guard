@@ -9,6 +9,7 @@ import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-loc
 import { Context } from '@deepseek-ai/cordis'
 import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
   auditedForegroundRenderers: ['bash' as const] }
@@ -61,9 +62,10 @@ describe('v6 adopted Goal current closure', () => {
     const context = new Context()
     new SystemPrompt(context, {})
     const hostTools = new ToolRuntime(context)
+    hostTools.setExecutor(new NativeToolExecutor(context))
     hostTools.register(createCheckpointTool(() => projection, () => {}))
-    const materialized = await hostTools.execute({ callId: 'checkpoint-v4-host' as never,
-      name: 'context_guard_checkpoint', arguments: args, signal: new AbortController().signal })
+    const materialized = (await hostTools.execute({ calls: [{ type: 'tool-call', id: 'checkpoint-v4-host' as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify(args) }], signal: new AbortController().signal })).results[0]!.result as { isError: boolean; value?: unknown; error?: unknown }
     expect(materialized.isError, JSON.stringify(materialized.error)).toBe(false)
     expect((materialized.value as Record<string, unknown>).status).toBe('certified')
     call('checkpoint', 'context_guard_checkpoint', args, 2)

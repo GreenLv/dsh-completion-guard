@@ -1,19 +1,25 @@
 /** Version admission floor. The public DSH support range is
- * `>=0.2.1-rc.3` with NO implied upper bound: every host version at or above
+ * `>=0.2.2-rc.1` with NO implied upper bound: every host version at or above
  * this floor (including later RCs on any tuple, stable and future releases)
  * passes VERSION ADMISSION. The floor only rises when a future Guard release
  * actively adopts a newer DSH; the runtime never raises it from a remote
  * `latest`. Ordering is strict SemVer with prerelease comparison and build
  * metadata ignored. Version admission is one gate of several — it never
  * claims native validation of a not-yet-tested host, and the graph/byte/
- * contract audits below still run on every admission. */
-export const MIN_SUPPORTED_HOST_VERSION = '0.2.1-rc.3'
+ * contract audits below still run on every admission. The floor rose from
+ * `0.2.1-rc.3` to `0.2.2-rc.1` in Guard 0.13.0 because the 0.2.2-rc.1 host
+ * changed real consumed interfaces (batch tool execution, native/PTC
+ * executor split, awaited session-projection registration); no lower host
+ * keeps an admission channel, while old session DATA migration stays a
+ * separate retained path. */
+export const MIN_SUPPORTED_HOST_VERSION = '0.2.2-rc.1'
 export const SUPPORTED_HOST_RANGE: string = `>=${MIN_SUPPORTED_HOST_VERSION}`
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
  * ledger, NOT an admission whitelist: a missing row never refuses a
  * version-above-floor host. Each row records past evidence, not current
- * artifact acceptance. */
-export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5']
+ * artifact acceptance. Rows below the current floor are historical evidence
+ * only and never reopen admission. */
+export const HOST_VALIDATED_VERSIONS: readonly string[] = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1']
 /** Historical alias retained for evidence-list readers; the admission rule is
  * the floor above, never this list. */
 export const SUPPORTED_HOST_VERSIONS: readonly string[] = HOST_VALIDATED_VERSIONS

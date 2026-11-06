@@ -8,6 +8,7 @@ import { createPrepareTool } from '../../src/tools/prepare.js'
 import { createBoundaryTool } from '../../src/tools/boundary.js'
 import { authorizeMutationFromProjection } from '../../src/runtime.js'
 import type { DerivedEnvelope, GuardProjection } from '../../src/domain/types.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 /**
  * 0.6.3 T07: the obligation survives the REAL wiring, not just a direct call.
@@ -52,9 +53,16 @@ function hostTurn(text: string, answer: string): GuardProjection {
 function host(): { runtime: ToolRuntime; ctx: Context } {
   const ctx = new Context()
   new SystemPrompt(ctx, {})
-  return { runtime: new ToolRuntime(ctx), ctx }
+  return { runtime: (() => { const rt = new ToolRuntime(ctx); rt.setExecutor(new NativeToolExecutor(ctx)); return rt })(), ctx }
 }
 
+/** SDK 0.2.2-rc.1: batch execute — unwrap the sole call's settled result and
+ * keep the historical single-call shape for the assertions below. */
+const sole = (batch: { results: readonly { result: unknown }[] }): { isError: boolean; value?: unknown; content: Array<{ type: string; text?: string }> } => {
+  if (batch.results.length !== 1) throw new Error(`expected exactly one settled result, got ${batch.results.length}`)
+  const result = batch.results[0]!.result as { isError: boolean; value?: unknown; content?: Array<{ type: string; text?: string }> }
+  return { ...result, content: result.content ?? [] }
+}
 const textOf = (response: { content: Array<{ type: string; text?: string }> }): string =>
   response.content.filter((part) => part.type === 'text').map((part) => part.text ?? '').join('')
 
@@ -64,10 +72,7 @@ describe('0.6.3 T07: the corrections hold through the registered tool path', () 
     const { runtime } = host()
     runtime.register(createPrepareTool({ getProjection: () => projection }))
 
-    const discovery = await runtime.execute({
-      callId: 'discovery' as never, name: 'context_guard_prepare', arguments: {},
-      signal: new AbortController().signal,
-    })
+    const discovery = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: 'discovery' as never, name: 'context_guard_prepare', arguments: JSON.stringify({}) }], signal: new AbortController().signal }))
     expect(discovery.isError).toBe(false)
     const list = JSON.parse(textOf(discovery)) as { status: string; items: Array<{ id: string; text: string; reason_code: string }> }
     expect(list.status).toBe('prepared')
@@ -93,11 +98,7 @@ describe('0.6.3 T07: the corrections hold through the registered tool path', () 
     const commit = [...projection.items.values()].find((item) => item.semanticAction === 'commit')!
     const { runtime } = host()
     runtime.register(createPrepareTool({ getProjection: () => projection }))
-    const response = await runtime.execute({
-      callId: 'prepare' as never, name: 'context_guard_prepare',
-      arguments: { item_id: commit.id, item_revision: commit.revision, semantic_action: 'push' },
-      signal: new AbortController().signal,
-    })
+    const response = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: 'prepare' as never, name: 'context_guard_prepare', arguments: JSON.stringify({ item_id: commit.id, item_revision: commit.revision, semantic_action: 'push' }) }], signal: new AbortController().signal }))
     expect(response.isError).toBe(false)
     const value = JSON.parse(textOf(response)) as Record<string, unknown>
     expect(value.status).toBe('incompatible')
@@ -125,11 +126,7 @@ describe('0.6.3 T07: the corrections hold through the registered tool path', () 
     const projection = hostTurn('安装新主题。', '好。')
     const { runtime } = host()
     runtime.register(createBoundaryTool(() => projection, async () => true, () => {}))
-    const response = await runtime.execute({
-      callId: 'boundary' as never, name: 'context_guard_boundary',
-      arguments: { disposition: 'guard_bounded_stop', qualification_kind: 'guard_no_progress', qualification_ids: [] },
-      signal: new AbortController().signal,
-    })
+    const response = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: 'boundary' as never, name: 'context_guard_boundary', arguments: JSON.stringify({ disposition: 'guard_bounded_stop', qualification_kind: 'guard_no_progress', qualification_ids: [] }) }], signal: new AbortController().signal }))
     expect(response.isError).toBe(false)
     const value = JSON.parse(textOf(response)) as { status?: string; reason_code?: string }
     expect(value.status === 'rejected' || value.reason_code !== undefined).toBe(true)

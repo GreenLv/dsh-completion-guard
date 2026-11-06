@@ -86,7 +86,7 @@ import { fileURLToPath } from 'node:url'
 // seconds for fixture setup and assertions under loaded cross-platform CI.
 const ACTIVATION_CLI_CHILD_TIMEOUT_MS = 20_000
 const ACTIVATION_CLI_CASE_TIMEOUT_MS = 110_000
-it('RC3-CLI01 inventory and an explicitly sourced fixture-mode adoption use the real rc.3 namespace backend', async () => {
+it('RC3-CLI01 inventory and an explicitly sourced fixture-mode adoption use the real 0.2.2-rc.1 namespace backend', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'guard-rc3-cli-')))
   try {
     const home = join(root, 'home'), fixture = await createFixture({ home, output: join(root, 'fixture.json'), frontendUrl: 'http://127.0.0.1:43123/', sourceCommit: 'c'.repeat(40) })

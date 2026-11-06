@@ -251,7 +251,7 @@ def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--repo-root",type=Path,required=True);p.add_argument("--runtime-root",type=Path,required=True);p.add_argument("--artifact",type=Path,required=True)
     p.add_argument("--source-commit",required=True);p.add_argument("--artifact-sha256",required=True);p.add_argument("--driver-sha256",required=True)
-    p.add_argument("--web-cohort",default="dsh-0.2.1-rc.5-core-v1");p.add_argument("--headless-cohort",default="dsh-0.2.1-rc.5-core-v1")
+    p.add_argument("--web-cohort",default="dsh-0.2.2-rc.1-core-v1");p.add_argument("--headless-cohort",default="dsh-0.2.2-rc.1-core-v1")
     p.add_argument("--output",type=Path,required=True);p.add_argument("--preflight",action="store_true")
     args=p.parse_args(argv)
     # Preserve a valid started record if interrupted before terminal result.

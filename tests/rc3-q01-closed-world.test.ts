@@ -69,6 +69,7 @@ function sdkArchives(targets: string[]): ProbeArchive[] {
     for (const dependency of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) collect(dependency, join(root, 'package.json'))
   }
   for (const target of targets) collect(target, join(process.cwd(), 'package.json'))
+  collect('@deepseek-ai/dsh-tool-executor-native', join(process.cwd(), 'package.json'))
   return archives
 }
 
@@ -80,7 +81,7 @@ async function acquireToolsFixture(archives: ProbeArchive[], root: string) {
     const a = entries.find(r => url === 'https://registry.npmjs.org/fixture/' + encodeURIComponent(r.name) + '.tgz')
     return a ? new Response(new Uint8Array(a.bytes)) : new Response('', { status: 404 })
   }) as typeof fetch
-  return acquireHostTrust([entries.find(r => r.name === '@deepseek-ai/dsh-tools')!], fetcher, { profileRoot: root, dependencyIdentity: name => entries.find(r => r.name === name)! })
+  return acquireHostTrust(['@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-tool-executor-native'].map(name => entries.find(r => r.name === name)!), fetcher, { profileRoot: root, dependencyIdentity: name => entries.find(r => r.name === name)! })
 }
 
 import { existsSync } from 'node:fs'

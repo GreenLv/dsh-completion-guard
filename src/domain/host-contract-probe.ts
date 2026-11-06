@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 export const HOST_CONTRACT_SCHEMA: 'guard-host-contract/v2' = 'guard-host-contract/v2'
-export const HOST_CONTRACT_CONSUMERS = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session-persistence', '@deepseek-ai/dsh-session-persistence-jsonl', '@deepseek-ai/dsh-session-projection', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'] as const
+export const HOST_CONTRACT_CONSUMERS = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-tool-executor-native', '@deepseek-ai/dsh-commands', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session-persistence', '@deepseek-ai/dsh-session-persistence-jsonl', '@deepseek-ai/dsh-session-projection', '@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'] as const
 export interface ProbeArchive { name: string; files: Record<string, Buffer> }
 export interface HostContractProbeResult { schema: typeof HOST_CONTRACT_SCHEMA; checks: string[]; failures: string[] }
 /** The trusted driver is isolated from downloaded code. No host app, provider,
@@ -69,6 +69,7 @@ for(const name of spec.lane==='resolve'?[]:spec.targets){
     '@deepseek-ai/dsh-agent':['AgentRegistry'],
     '@deepseek-ai/dsh-agent-loop':['AgentLoop'],
     '@deepseek-ai/dsh-tools':['ToolRuntime','defineTool','validateArgs','validateJsonSchemaValue'],
+    '@deepseek-ai/dsh-tool-executor-native':['NativeToolExecutor','apply'],
     '@deepseek-ai/dsh-commands':['CommandRuntime'],
     '@deepseek-ai/dsh-llm':['createUserMessage','createToolResultMessage'],
     '@deepseek-ai/dsh-session-persistence':['SessionPersistence','validateStoredEvents'],
@@ -80,7 +81,7 @@ for(const name of spec.lane==='resolve'?[]:spec.targets){
    const methods={
     '@deepseek-ai/dsh-agent':{AgentRegistry:['create']},
     '@deepseek-ai/dsh-agent-loop':{AgentLoop:['create','resume','createAgent']},
-    '@deepseek-ai/dsh-tools':{ToolRuntime:['register','guard','schemas','prepareExecution','execute']},
+    '@deepseek-ai/dsh-tools':{ToolRuntime:['register','guard','schemas','setExecutor','execute','checkGuards']},
     '@deepseek-ai/dsh-commands':{CommandRuntime:['register']},
    };
    const required=roles[name];check(name+'.api',required?required.every(k=>typeof m[k]==='function'):typeof m.apply==='function'||typeof m.default==='function');
@@ -92,31 +93,57 @@ for(const name of spec.lane==='resolve'?[]:spec.targets){
     // event producer, registered resume/fork and recovery semantics are real.
     const logs=new Map();let effects=0;
     const handle=(data)=>({header:data.header,inheritedEventCount:data.inheritedEventCount,read:async()=>({events:data.events.slice(),eventState:'shared-frozen'}),append:async(events)=>{for(const e of events){if(e.seq!==data.events.length)throw new Error('fixture_noncontiguous');data.events.push(e)}},flush:async()=>{},close:async()=>{}});
-    const compose=(producer=false)=>{
-     const ctx=new cordis.Context();new agents.AgentRegistry(ctx);new projection.SessionProjectionRegistry(ctx);new prompt.SystemPrompt(ctx,{includeHarnessIdentity:false,includeRuntimeContext:false,personaPrefix:'',personaSuffix:''});new tools.ToolRuntime(ctx,{});new sessions.SessionStore(ctx);
+    const compose=async(producer=false)=>{
+     const ctx=new cordis.Context();new projection.SessionProjectionRegistry(ctx);
+     // SDK 0.2.2-rc.1: the AgentRegistry acquires its turn-boundary projection
+     // handle during its own awaited service init, so it starts as a plugin and
+     // the compose waits for the handle before any agent creation.
+     await ctx.plugin(agents.AgentRegistry);
+     new prompt.SystemPrompt(ctx,{includeHarnessIdentity:false,includeRuntimeContext:false,personaPrefix:'',personaSuffix:''});
+     const toolsRuntime=new tools.ToolRuntime(ctx);
+     // Exercise the acquired native executor and its public pipeline route,
+     // including guard denial, event commit and complete batch settlement.
+     const native=await load('@deepseek-ai/dsh-tool-executor-native');
+     toolsRuntime.setExecutor(new native.NativeToolExecutor(ctx,()=>1));
+     new sessions.SessionStore(ctx);
      ctx.provide('sessionPersistence',{create:async(header,options)=>{const data={header,inheritedEventCount:options.inheritedEventCount,events:[]};logs.set(header.id,data);return handle(data)},open:async(id)=>handle(logs.get(id))});
      ctx.on('session/event',(session,event)=>{const data=logs.get(session.id);if(data){if(event.seq!==data.events.length)throw new Error('fixture_noncontiguous');data.events.push(event)}});ctx.on('session/flush',async()=>{});
      let streams=0;ctx.provide('llm',{prepareCall:async(config)=>({config,retryPolicy:{maxAttempts:1},stream:()=>{if(!producer||++streams!==1)throw new Error('fixture_no_model');return(async function*(){yield{type:'text-delta',index:0,text:'probe'};yield{type:'tool-call-delta',index:1,id:'loop-effect',name:'loop_effect',argumentsDelta:'{}'};yield{type:'block-end',index:1,block:{type:'tool-call',id:'loop-effect',name:'loop_effect',arguments:'{}'}};yield{type:'finish',reason:'tool_calls'}})()}})});
      ctx.tools.register(tools.defineTool({name:'loop_effect',description:'bounded fixture effect',parameters:{},output:{schema:{type:'object',properties:{status:{type:'string',required:true}},additionalProperties:false},render:()=>[{type:'text',text:'ok'}]},execute:async()=>{effects++;return new Promise(()=>{})}}));
-     new m.AgentLoop(ctx,{agents:[],maxParallelToolCalls:{get:()=>1}});return ctx;
+     // SDK 0.2.2-rc.1: AgentLoop acquires its projection handles during its own
+     // awaited service init, so it starts as a plugin and compose waits for the
+     // handles before any agent creation.
+     await ctx.plugin(m.AgentLoop,{agents:[],maxParallelToolCalls:1});
+     return ctx;
     };
-    const first=compose(true);let initialized=false;first.on('agent/created',async()=>{await new Promise(resolve=>setTimeout(resolve,10));initialized=true});const agent=await first.agentLoop.create('loop-source',{provider:'fixture',model:'fixture-model'},{cwd:process.cwd()});check('loop.created',initialized&&agent?.id==='loop-source'&&first.agents.get(agent.id)===agent);
+    const first=await compose(true);let initialized=false;first.on('agent/created',async()=>{await new Promise(resolve=>setTimeout(resolve,10));initialized=true});const agent=await first.agentLoop.create('loop-source',{provider:'fixture',model:'fixture-model'},{cwd:process.cwd()});check('loop.created',initialized&&agent?.id==='loop-source'&&first.agents.get(agent.id)===agent);
     agent.followup(llm.createUserMessage({source:{kind:'user'},content:[{type:'text',text:'probe'}]}));agent.wakeDriver();
     for(let tries=0;tries<100&&(!agent.session.snapshotEvents().some(e=>e.type==='tool/call')||effects!==1);tries++)await new Promise(resolve=>setTimeout(resolve,5));
     const open=agent.session.snapshotEvents();const boundary=open.findLastIndex(e=>e.type==='tool/call');check('loop.open_effect',boundary>=0&&effects===1&&!open.some(e=>e.type==='tool/result'));
     const unknown=(events,kind)=>events.some(e=>e.type==='tool/result'&&e.data.error?.name==='ToolOutcomeUnknownError'&&e.data.message.isError===true&&e.data.message.content.some(c=>typeof c.text==='string'&&c.text.length>0))&&events.some(e=>e.type==='turn/end'&&e.data.reason?.kind===kind)&&events.every((e,i)=>e.seq===i);
-    const resumedCtx=compose();const resumed=await resumedCtx.agentLoop.resume(resumedCtx,{resumeSessionId:'loop-source',agentOptions:{provider:'fixture',model:'fixture-model'}});check('loop.resume_unknown',unknown(resumed?.agent.session.snapshotEvents()??[],'interrupted')&&effects===1);await resumed.dispose();
-    const forkCtx=compose();const seed=sessions.buildForkSeed(open,boundary);const fork=await forkCtx.agentLoop.createAgent(forkCtx,{sessionId:'loop-fork',seed,meta:{version:4,isSeeded:true,createdAt:2,cwd:process.cwd()},inheritedEventCount:boundary+1,agentOptions:{provider:'fixture',model:'fixture-model'}});check('loop.fork_unknown',unknown(fork?.agent.session.snapshotEvents()??[],'forked')&&effects===1);await fork.dispose();
+    const resumedCtx=await compose();const resumed=await resumedCtx.agentLoop.resume(resumedCtx,{resumeSessionId:'loop-source',agentOptions:{provider:'fixture',model:'fixture-model'}});check('loop.resume_unknown',unknown(resumed?.agent.session.snapshotEvents()??[],'interrupted')&&effects===1);await resumed.dispose();
+    const forkCtx=await compose();const seed=sessions.buildForkSeed(open,boundary);const fork=await forkCtx.agentLoop.createAgent(forkCtx,{sessionId:'loop-fork',seed,meta:{version:4,isSeeded:true,createdAt:2,cwd:process.cwd()},inheritedEventCount:boundary+1,agentOptions:{provider:'fixture',model:'fixture-model'}});check('loop.fork_unknown',unknown(fork?.agent.session.snapshotEvents()??[],'forked')&&effects===1);await fork.dispose();
    }
    if(name==='@deepseek-ai/dsh-agent'){
     const cordis=await load('@deepseek-ai/cordis'),sessions=await load('@deepseek-ai/dsh-session'),scope=await load('@deepseek-ai/dsh-scope');const ctx=new cordis.Context();const registry=new m.AgentRegistry(ctx);const store=new sessions.SessionStore(ctx);const session=store.create('contract-agent');const agent={id:session.id,session,ctx,status:'idle',steer:()=>{}};agent.ctx=scope.createScope(ctx,agent).ctx;let initialized=false;ctx.on('agent/created',async()=>{await new Promise(resolve=>setTimeout(resolve,10));initialized=true});const dispose=await registry.register(agent);check('agent.awaited_created',initialized&&registry.get(agent.id)===agent);dispose();check('agent.disposal',registry.get(agent.id)===undefined);
    }
    if(name==='@deepseek-ai/dsh-tools'){
-    const cordis=await load('@deepseek-ai/cordis'),prompt=await load('@deepseek-ai/dsh-system-prompt'),sessions=await load('@deepseek-ai/dsh-session');const ctx=new cordis.Context();new prompt.SystemPrompt(ctx,{});const runtime=new m.ToolRuntime(ctx,{});const agent={id:'contract-tools',session:sessions.Session.create('contract-tools'),ctx};let effects=0;const unregister=runtime.register(m.defineTool({name:'contract_effect',description:'confined effect counter',parameters:{},output:{schema:{type:'object',properties:{status:{type:'string',required:true}},additionalProperties:false},render:()=>[{type:'text',text:'ok'}]},execute:async()=>{effects++;return {status:'ok'}}}));
-    const input=(id)=>({agent,callId:id,name:'contract_effect',arguments:{},signal:new AbortController().signal});check('tools.normal_execution',(await runtime.execute(input('normal'))).isError===false&&effects===1);
+    const cordis=await load('@deepseek-ai/cordis'),prompt=await load('@deepseek-ai/dsh-system-prompt'),sessions=await load('@deepseek-ai/dsh-session');
+    const ctx=new cordis.Context();new prompt.SystemPrompt(ctx,{});const runtime=new m.ToolRuntime(ctx);
+    const native=await load('@deepseek-ai/dsh-tool-executor-native');
+    runtime.setExecutor(new native.NativeToolExecutor(ctx,()=>1));
+    const agent={id:'contract-tools',session:sessions.Session.create('contract-tools'),ctx};let effects=0;const unregister=runtime.register(m.defineTool({name:'contract_effect',description:'confined effect counter',parameters:{},output:{schema:{type:'object',properties:{status:{type:'string',required:true}},additionalProperties:false},render:()=>[{type:'text',text:'ok'}]},execute:async()=>{effects++;return {status:'ok'}}}));
+    const sole=(batch)=>{if(batch.results.length!==1)throw new Error('probe_batch_shape');return batch.results[0].result};
+    const input=(id)=>({agent,calls:[{type:'tool-call',id,name:'contract_effect',arguments:'{}'}],signal:new AbortController().signal});
+    check('tools.normal_execution',sole(await runtime.execute(input('normal'))).isError===false&&effects===1);
     const dispose=runtime.guard(()=> 'contract-denied');const harmless=runtime.guard(()=>undefined);const off=ctx.on('tools/pre-execute',async()=>{await Promise.resolve();return {kind:'allow'}});
-    const prepared=await runtime.prepareExecution(input('prepared-denial'),value=>value);check('tools.prepare_denial',prepared.kind!=='dispatch'&&prepared.result?.isError===true&&effects===1);check('tools.guard_denial',(await runtime.execute(input('denied'))).isError===true&&effects===1);off();harmless();dispose();
-    check('tools.guard_disposal',(await runtime.execute(input('after-dispose'))).isError===false&&effects===2);unregister();check('tools.registration_disposal',(await runtime.execute(input('unregistered'))).isError===true&&effects===2);
+    // SDK 0.2.2-rc.1: prepareExecution is gone; the guard boundary is read
+    // through checkGuards (the same denial the dispatch path consults) and
+    // then through an actual denied execution.
+    const deniedExec={name:'contract_effect',arguments:{},agent,session:agent.session};
+    check('tools.guard_readback',runtime.checkGuards(deniedExec)==='contract-denied'&&effects===1);
+    check('tools.guard_denial',sole(await runtime.execute(input('denied'))).isError===true&&effects===1);off();harmless();dispose();
+    check('tools.guard_disposal',runtime.checkGuards(deniedExec)===undefined&&sole(await runtime.execute(input('after-dispose'))).isError===false&&effects===2);unregister();check('tools.registration_disposal',sole(await runtime.execute(input('unregistered'))).isError===true&&effects===2);
     check('tools.valid_schema_value',m.validateJsonSchemaValue({type:'string'},'probe').length===0);check('tools.invalid_schema_value',m.validateJsonSchemaValue({type:'string'},12).length>0);
    }
    if(name==='@deepseek-ai/cordis'){

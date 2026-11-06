@@ -19,6 +19,16 @@ vi.mock('../../src/domain/rc3-byte-audit-manifest.js', async (original) => {
     'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
   } })) } }
 })
+vi.mock('../../src/domain/rc022-rc1-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map(row => ({ ...row, modules: {
+    'package.json': createHash('sha256').update(JSON.stringify({ name: row.name, version: row.version, main: 'lib/index.js',
+      ...(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'].includes(row.name) ? { dsh: { bundle: { patch: './cordis.patch.yml' } } } : {}),
+    })).digest('hex'),
+    'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
+  } })) } }
+})
 vi.mock('../../src/domain/rc5-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const source = await original<{ default: { packages: Array<{ name: string; version: string }> } }>()
@@ -29,7 +39,7 @@ vi.mock('../../src/domain/rc5-byte-audit-manifest.js', async (original) => {
     'lib/index.js': createHash('sha256').update('audited fixture bytes\n').digest('hex'),
   } })) } }
 })
-import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
+import { RC022_RC1_HOST_PACKAGES } from '../../src/domain/rc022-rc1-host.js'
 import { evaluateHostLock } from '../../src/domain/host-lock.js'
 import { activeRendererModule, inspectTargetHostGraph, readActiveHostGraph, resolveActiveProfileHostLock } from '../../src/domain/host-resolver.js'
 import { revalidateCoreLock } from '../../src/runtime.js'
@@ -39,11 +49,14 @@ import { revalidateCoreLock } from '../../src/runtime.js'
 
 const roots: string[] = []
 const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']
-const version = RC021_RC5_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh')!.version!
+const version = RC022_RC1_HOST_PACKAGES.find(row => row.name === '@deepseek-ai/dsh')!.version!
 // The active core cohort already excludes dshmarket (market identity is not a
 // core lock input), so the fixture is the exact active graph plus the two
-// installation-owned Headless bundles.
-const core = RC021_RC5_HOST_PACKAGES
+// installation-owned Headless bundles. Graph readback iterates CRITICAL_NAMES,
+// which the resolver keeps sorted by name (the 0.2.2-rc.1 manifest publishes
+// its four new closure members after the reviewed rc.5 set), so the compared
+// expectation uses the same name order.
+const core = [...RC022_RC1_HOST_PACKAGES].sort((a, b) => a.name.localeCompare(b.name))
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 function json(path: string, value: unknown) {
@@ -101,13 +114,13 @@ function installGuard(f: ReturnType<typeof fixture>) {
 
 describe('dependency-free Headless target inspection', () => {
   it('reads the reachable official hoisted renderer layout without accepting aliases, duplicates or drift', () => {
-    const f = fixture('bare', RC021_RC5_HOST_PACKAGES)
+    const f = fixture('bare', core)
     const name = '@deepseek-ai/dsh-tool-pwsh'
     const module = join(f.modules, name)
     mkdirSync(join(module, 'lib'), { recursive: true })
     writeFileSync(join(module, 'lib', 'index.js'), 'audited fixture bytes\n')
     const expected = createHash('sha256').update('audited fixture bytes\n').digest('hex')
-    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC021_RC5_HOST_PACKAGES)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(core)
     expect(activeRendererModule(f.modules, name)?.bytes).toBe(expected)
 
     // A changed file is read afresh; the caller's pinned-byte comparison
@@ -140,23 +153,23 @@ describe('dependency-free Headless target inspection', () => {
   })
 
   it('retains a single versioned pnpm mapping and rejects its manifest version drift', () => {
-    const f = fixture('versioned', RC021_RC5_HOST_PACKAGES)
+    const f = fixture('versioned', core)
     const name = '@deepseek-ai/dsh-shell'
-    const id = `${name}@0.2.1-rc.5`
+    const id = `${name}@0.2.2-rc.1`
     const url = './.pnpm/dsh-shell/node_modules/@deepseek-ai/dsh-shell'
     f.records[id].url = url
     json(f.mapPath, { packages: f.records })
     const module = join(f.modules, url)
-    json(join(module, 'package.json'), { name, version: '0.2.1-rc.5' })
+    json(join(module, 'package.json'), { name, version: '0.2.2-rc.1' })
     mkdirSync(join(module, 'lib'), { recursive: true })
     writeFileSync(join(module, 'lib', 'index.js'), 'versioned bytes\n')
     expect(activeRendererModule(f.modules, name)?.bytes).toBe(createHash('sha256').update('versioned bytes\n').digest('hex'))
     json(join(module, 'package.json'), { name, version: '0.2.0-rc.1' })
     expect(activeRendererModule(f.modules, name)).toBeUndefined()
   })
-  it.each(['versioned', 'bare'] as const)('accepts the exact rc.021 graph with %s mapping and binds its launcher', (mapKey) => {
-    const f = fixture(mapKey, RC021_RC5_HOST_PACKAGES)
-    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(RC021_RC5_HOST_PACKAGES)
+  it.each(['versioned', 'bare'] as const)('accepts the exact rc.022 graph with %s mapping and binds its launcher', (mapKey) => {
+    const f = fixture(mapKey, core)
+    expect(inspectTargetHostGraph(f.runtime, f.profile).packages).toEqual(core)
     json(join(f.modules, '@deepseek-ai/dsh', 'package.json'), { name: '@deepseek-ai/dsh', version: '0.2.0-rc.1' })
     expect(() => inspectTargetHostGraph(f.runtime, f.profile)).toThrow()
   })

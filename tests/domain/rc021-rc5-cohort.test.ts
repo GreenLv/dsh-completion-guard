@@ -15,10 +15,14 @@ import rc5Manifest from '../../src/domain/rc5-byte-audit-manifest.js'
  */
 
 describe('rc.5 cohort qualification', () => {
-  it('uses rc.5 as the default with rc.3 also admitted', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
-    expect(HOST_COHORTS[0]!.packages).toEqual(RC021_RC5_HOST_PACKAGES)
-    expect(EXPECTED_HOST_PACKAGES).toEqual(RC021_RC5_HOST_PACKAGES)
+  it('keeps the rc.5/rc.3 rows as historical evidence below the 0.13.0 floor', () => {
+    // Since Guard 0.13.0 the ACTIVE cohort is the 0.2.2-rc.1 graph only; the
+    // reviewed rc.5/rc.3 cohorts stay in the historical evidence set and no
+    // longer admit (their exact graphs refuse at the version gate).
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.1-core-v1'])
+    expect(EXPECTED_HOST_PACKAGES).not.toEqual(RC021_RC5_HOST_PACKAGES)
+    const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
+    expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.5-core-v1')
   })
 
   it('binds 46 rc.5 rows plus the shared cordis 4.0.5 release', () => {
@@ -56,28 +60,29 @@ describe('rc.5 cohort qualification', () => {
     expect(rc5Manifest.hostVersion).toBe('0.2.1-rc.5')
   })
 
-  it('evaluates rc.5 and rc.3 under their distinct locks', () => {
-    const rc5Lock = evaluateHostLock(RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc5Lock.status, JSON.stringify(rc5Lock.reasonCode)).toBe('supported')
-    expect(rc5Lock.cohortId).toBe('dsh-0.2.1-rc.5-core-v1')
-    const rc3Lock = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc3Lock.status).toBe('supported')
-    expect(rc3Lock.cohortId).toBe('dsh-0.2.1-rc.3-core-v1')
-    expect(rc3Lock.hostVersion).toMatchObject({ status: 'supported', minimum: '0.2.1-rc.3' })
-    // Graph identity is per cohort: an rc.5 row swapped into the rc.3 set is
-    // not the rc.3 lock.
-    const mixed = [...RC021_RC3_HOST_PACKAGES.map((row) => row.name === '@deepseek-ai/dsh-session' ? { ...row, version: '0.2.1-rc.5' } : row)]
-    const mixedLock = evaluateHostLock(mixed, { platform: 'posix', profileKind: 'headless' })
-    expect(mixedLock.status !== 'supported' || mixedLock.cohortId !== 'dsh-0.2.1-rc.3-core-v1').toBe(true)
+  it('refuses the retired rc.5/rc.3 graphs at the raised version gate', () => {
+    // The graph identity of each retired cohort is still recorded, but the
+    // floor decides: both exact graphs refuse below_minimum in the configured
+    // entry (version gate precedes graph identity there).
+    for (const rows of [RC021_RC5_HOST_PACKAGES, RC021_RC3_HOST_PACKAGES]) {
+      const lock = evaluateHostLock(rows, { platform: 'posix', profileKind: 'headless' })
+      expect(lock.status).toBe('unsupported')
+    }
   })
 
-  it('enforces the rc.3 floor while preserving rc.5 as default', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
-    expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(true)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.4')).toBe(true)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(true)
+  it('enforces the 0.2.2-rc.1 floor; the 0.2.1 tuple stays below it', () => {
+    // Historical floor semantics of this release line, kept as an oracle:
+    // 0.2.1-rc.3 < 0.2.1-rc.5 < 0.2.2-rc.1 by strict SemVer precedence, and
+    // the current floor only admits the 0.2.2-rc.1 tuple and above.
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.1')
+    expect(satisfiesSupportedHostRange('0.2.2-rc.1')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.2')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(false)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.4')).toBe(false)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
     expect(compareHostVersions('0.2.1-rc.5', '0.2.1-rc.3')).toBeGreaterThan(0)
+    expect(compareHostVersions('0.2.2-rc.1', '0.2.1-rc.5')).toBeGreaterThan(0)
   })
 
   it('keeps the rc.3 lib bytes as the rc.5 lib bytes (study invariant)', () => {

@@ -110,3 +110,38 @@ describe('activation catalog executable qualification', () => {
     expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
   })
 })
+
+it('accepts unscoped packages whose package.json is not exported and rejects incomplete nearer shadows', () => {
+  const f = fixture(), old = f.names[1]!, replacement = 'rrule'
+  const oldRoot = join(f.root, 'node_modules', old), newRoot = join(f.root, 'node_modules', replacement)
+  renameSync(oldRoot, newRoot)
+  const manifestPath = join(newRoot, 'package.json'), manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  manifest.name = replacement; delete manifest.exports['./package.json']; writeFileSync(manifestPath, JSON.stringify(manifest))
+  const shape = { name: replacement, type: manifest.type, main: manifest.main, exports: manifest.exports }
+  const pkg = f.review.packages.find(p => p.name === old)!; pkg.name = replacement; pkg.loaderShapeSha256 = hash(JSON.stringify(shape))
+  const mod = f.review.modules.find(m => m.package === old)!; mod.package = replacement; mod.key = `${replacement}::${mod.path}`
+  const edge = f.review.modules[0]!.edges[0]!; edge.specifier = replacement; edge.target = mod.key
+  expect(assertActivationCatalogQualification(f.backend, f.review).moduleCount).toBe(19)
+  const moduleFile = join(newRoot, 'lib/index.js'), original = readFileSync(moduleFile)
+  writeFileSync(moduleFile, Buffer.concat([original, Buffer.from('// altered')]))
+  expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
+  writeFileSync(moduleFile, original)
+  const shadow = join(f.root, 'node_modules', f.names[0]!, 'node_modules', replacement)
+  mkdirSync(shadow, { recursive: true })
+  expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
+})
+
+it('qualifies the exact real expanded catalog closure', () => {
+  const req = createRequire(import.meta.url)
+  const backend = realpathSync(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl'))
+  const review = JSON.parse(readFileSync(new URL('../manifests/activation-catalog-cohort.v1.json', import.meta.url), 'utf8')) as ActivationCatalogReview
+  const result = assertActivationCatalogQualification(backend, review)
+  expect(result.packageCount).toBe(22); expect(result.moduleCount).toBe(23)
+})
+
+
+it.each(['..', '@a/..', '.hidden', '/absolute', '@a/.'])('refuses invalid package path %s', name => {
+  const f = fixture()
+  f.review.packages[1]!.name = name
+  expect(() => assertActivationCatalogQualification(f.backend, f.review)).toThrow('activation_catalog_unreviewed')
+})

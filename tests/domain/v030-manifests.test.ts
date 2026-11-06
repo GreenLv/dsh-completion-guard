@@ -17,7 +17,6 @@ import {
   evaluateExternalWaitCapability,
   evaluateHostLock,
 } from '../../src/domain/host-lock.js'
-import { MIN_SUPPORTED_HOST_VERSION } from '../../src/domain/host-version.js'
 import { packageRowsFromPnpmLock, resolveInstalledHostLock } from '../../src/domain/host-resolver.js'
 
 describe('v0.3 versioned manifests', () => {
@@ -32,12 +31,14 @@ describe('v0.3 versioned manifests', () => {
       '@deepseek-ai/dsh-fs',
       '@deepseek-ai/dsh-fs-local',
       '@deepseek-ai/dsh-fs-observation-policy',
+      '@deepseek-ai/dsh-fs-patch',
       '@deepseek-ai/dsh-fs-sandbox',
       '@deepseek-ai/dsh-goal',
       '@deepseek-ai/dsh-goal-round-driver',
       '@deepseek-ai/dsh-jobs',
       '@deepseek-ai/dsh-jobs-local',
       '@deepseek-ai/dsh-llm',
+      '@deepseek-ai/dsh-official-bundles',
       '@deepseek-ai/dsh-ptc-runtime',
       '@deepseek-ai/dsh-sandbox',
       '@deepseek-ai/dsh-sandbox-policy',
@@ -50,13 +51,18 @@ describe('v0.3 versioned manifests', () => {
       '@deepseek-ai/dsh-shell-env',
       '@deepseek-ai/dsh-system-prompt',
       '@deepseek-ai/dsh-tool-bash',
+      '@deepseek-ai/dsh-tool-executor-native',
+      '@deepseek-ai/dsh-tool-executor-ptc',
       '@deepseek-ai/dsh-tool-fs',
       '@deepseek-ai/dsh-tool-goal',
       '@deepseek-ai/dsh-tool-pwsh',
       '@deepseek-ai/dsh-tools',
       '@deepseek-ai/dsh-user-approval',
       '@deepseek-ai/dsh-util-values',
-      '@deepseek-ai/dsh-working-directory'
+      '@deepseek-ai/dsh-working-directory',
+
+
+
     ])
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
     // CG-DSH-001: the dev lockfile is not the complete audited host graph, so
@@ -92,9 +98,9 @@ describe('v0.3 versioned manifests', () => {
       expect(entry.auditProvenance).toBe(cohort.auditProvenance)
       expect(entry.packages).toEqual(cohort.packages)
     }
-    expect(HOST_COHORTS).toHaveLength(2)
+    expect(HOST_COHORTS).toHaveLength(1)
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
-      name: 'host_cohort', value: { k: 's', v: 'dsh-0.2.1-rc.5-core-v1' },
+      name: 'host_cohort', value: { k: 's', v: 'dsh-0.2.2-rc.1-core-v1' },
     })
     expect(HOST_COHORTS[0].capabilities).toContainEqual({
       name: 'external_wait_jobs_readback', value: { k: 's', v: 'dsh.jobs.v1' },
@@ -160,7 +166,7 @@ describe('v0.3 versioned manifests', () => {
     const withGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES)
     expect(withGoal.status).toBe('supported')
     expect(withGoal.goalAvailable).toBe(true)
-    expect(withGoal.cohortId).toBe('dsh-0.2.1-rc.5-core-v1')
+    expect(withGoal.cohortId).toBe('dsh-0.2.2-rc.1-core-v1')
     // CG-DSH-001: the audited cohort is one indivisible whole-graph contract;
     // a graph missing audited rows (Goal rows included) fails closed.
     const withoutGoal = evaluateHostLock(EXPECTED_HOST_PACKAGES.filter((row) => !['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'].includes(row.name)))
@@ -168,8 +174,7 @@ describe('v0.3 versioned manifests', () => {
     expect(withoutGoal.reasonCode).toBe('host_lock_missing')
     expect(withoutGoal.missingPackages).toEqual(['@deepseek-ai/dsh-goal', '@deepseek-ai/dsh-tool-goal'])
     expect(withoutGoal.digest).not.toBe(withGoal.digest)
-    expect(HOST_COHORTS[0].supportedGoalVersions).toEqual(['0.2.1-rc.5'])
-    expect(HOST_COHORTS[1].supportedGoalVersions).toEqual([MIN_SUPPORTED_HOST_VERSION])
+    expect(HOST_COHORTS[0].supportedGoalVersions).toEqual(['0.2.2-rc.1'])
   })
 
   it('fails closed for unknown versions, missing critical packages, and integrity drift', () => {

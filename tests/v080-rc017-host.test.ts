@@ -12,10 +12,16 @@ import { evaluateHostLock } from '../src/domain/host-lock.js'
 
 describe('rc.2 (0.2.1) published identity and executable-byte audit', () => {
   it('keeps the public registry exactly equal to its single audited input source', () => {
-    expect(manifest.cohorts).toHaveLength(2)
-    expect(manifest.historicalCohorts).toHaveLength(1)
-    expect(manifest.historicalCohorts[0].packages).toEqual(RC021_RC2_HOST_PACKAGES)
-    expect(manifest.historicalCohorts[0].auditedPlatforms).toEqual([])
+    // Since Guard 0.13.0 the active cohort is the 0.2.2-rc.1 core only; the
+    // rc.5/rc.3/rc.2 rows moved to the historical evidence list below the
+    // raised floor, and the rc.2 entry keeps its exact audited identities.
+    expect(manifest.cohorts).toHaveLength(1)
+    expect(manifest.cohorts[0].id).toBe('dsh-0.2.2-rc.1-core-v1')
+    expect(manifest.historicalCohorts.map((cohort: { id: string }) => cohort.id))
+      .toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1', 'dsh-0.2.1-rc.2-core-v1'])
+    const rc2Historical = manifest.historicalCohorts.find((cohort: { id: string }) => cohort.id === 'dsh-0.2.1-rc.2-core-v1')!
+    expect(rc2Historical.packages).toEqual(RC021_RC2_HOST_PACKAGES)
+    expect(rc2Historical.auditedPlatforms).toEqual([])
     expect(audit.packages.every(p=>Object.keys(p.modules).length>0)).toBe(true)
     expect(audit.packages.every(p=>/^[a-f0-9]{64}$/.test(p.sha256))).toBe(true)
   })

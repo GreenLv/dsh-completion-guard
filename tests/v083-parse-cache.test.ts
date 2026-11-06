@@ -54,13 +54,15 @@ it('nondefault, nonenumerable and getter options retain uncached semantics', () 
 })
 
 it('crosses old 64/4096 cliffs without whole-cache clearing or semantic drift', () => {
+  // This is a 4200-input semantic comparison, not a latency threshold. Allow
+  // hosted workers to contend without reducing the corpus or its assertions.
   for (let i = 0; i < 4200; i++) {
     const text = `Run test ${i}. Do not push "tag ${i}" or \`commit ${i}\`.`
     expect(maskCodeSpans(text).length).toBe(text.length)
     expect(maskQuotedSpans(text).length).toBe(text.length)
     expect(segmentClauses(text)).toEqual(oracleSegments(text))
   }
-})
+}, 30_000)
 
 it('protects reused parses through an over-capacity scan of one-use fragments', () => {
   const cache = new ParseCache<string>(1600, 10)

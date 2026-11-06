@@ -10,9 +10,9 @@ DSH Completion Guard is a DeepSeek Harness plugin that keeps your task requireme
 
 ## Install or upgrade
 
-Requires DSH `>=0.2.1-rc.3`, Cordis `>=4.0.4`, Node.js `>=22` and pnpm `>=11`. Upgrade DSH if it is below the minimum before installing Guard 0.12.1. Web, Headless and the official Desktop app have separate profiles. DSH `0.2.1-rc.5` with Cordis `4.0.5` is the recommended default reviewed baseline; rc.3 uses its own reviewed cohort, and all hosts require compatibility checks.
+Requires DSH `>=0.2.2-rc.1`, Cordis `>=4.1.0`, Node.js `>=24.9.0` and pnpm `>=11`. Upgrade DSH and Node if they are below the minimum before installing Guard 0.13.0 — every older DSH host (including `0.2.1-rc.3`, `0.2.1-rc.5` and `0.2.1`) is refused at the version gate. Web, Headless and the official Desktop app have separate profiles. DSH `0.2.2-rc.1` with Cordis `4.1.0` is the default reviewed baseline; older cohorts remain historical evidence only, and all hosts require compatibility checks.
 
-**Known upstream risk:** the official rc.3 and rc.5 hosts still contain affected dependencies — `@deepseek-ai/dsh-http-proxy` exact-pins `undici` 8.11.2 and `@deepseek-ai/dsh-commands` exact-pins `zod` 4.4.3, so the previously disclosed high-risk findings remain present in the signed host. The maintainer accepted the three disclosed high-risk Undici findings for 0.12.1 through **2026-11-30 inclusive**. The signed host remains unfixed; whole-host unreachability is not established and the process-crash risk cannot be excluded. See the [dependency advisory policy](docs/DEPENDENCY_SCAN.md) for the recorded findings, their scope and the standing publication gate.
+**Known upstream risk:** the official 0.2.2-rc.1 host still contains affected dependencies — `@deepseek-ai/dsh-http-proxy` exact-pins `undici` 8.11.2 and `@deepseek-ai/dsh-agent`/`@deepseek-ai/dsh-commands` exact-pin `zod` 4.4.3, so the previously disclosed high-risk findings remain present in the signed host. The maintainer accepted the three disclosed high-risk Undici findings for 0.13.0 through **2026-11-30 inclusive** (expiry unchanged; from 2026-12-01 the gate blocks again unless re-justified). The signed host remains unfixed; whole-host unreachability is not established and the process-crash risk cannot be excluded. See the [dependency advisory policy](docs/DEPENDENCY_SCAN.md) for the recorded findings, their scope and the standing publication gate.
 
 Choose your path before replacing any package:
 
@@ -22,7 +22,7 @@ Choose your path before replacing any package:
 For Web, after the applicable preparation:
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.12.1
+dsh plugin --profile web add dsh-completion-guard@0.13.0
 ```
 
 Installation alone is not enough. The **host lock** records the actual packages and directories this profile loads; check it with `inspect`, write it with `inject`, then check the composed configuration with `verify-dump`. Back up `cordis.patch.yml` before injection. [Installation and first load](docs/GETTING_STARTED.md) provides the Web commands, Windows and Desktop routes, and the final checks before startup. [Old-session migration](docs/ACTIVATION_MIGRATION.md) provides the preparation, commands and copyable AI prompts for an upgrade.

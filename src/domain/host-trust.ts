@@ -3,6 +3,8 @@ import { gunzipSync } from 'node:zlib'
 import rc2Baseline from './byte-audit-manifest.js'
 import rc3Baseline from './rc3-byte-audit-manifest.js'
 import rc5Baseline from './rc5-byte-audit-manifest.js'
+import rc022rc1Baseline from './rc022-rc1-byte-audit-manifest.js'
+import type { ByteAuditManifest } from './byte-audit-manifest.js'
 import type { PackageRow } from './digest.js'
 import { mkdirSync, readFileSync, writeFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
@@ -71,21 +73,29 @@ function readReceipt(profileRoot: string | undefined, trust: HostRebindTrust): C
  * and rc.5 cohorts' lib bytes are byte-identical to rc.2 but their package
  * manifests carry rewritten version/dependency fields, so the baseline must
  * match the ACQUIRED versions or every loading digest would spuriously
- * drift. All baselines come from the same audited-manifest schema. */
-function baselineFor(rows: readonly { name?: string; version?: string }[]): typeof rc2Baseline {
-  // Default future graphs start from rc.5. Exact rc.2 and rc.3 retain their
-  // own references; no receipt can bypass the separate current floor.
+ * drift. All baselines come from the same audited-manifest schema. The
+ * 0.2.2-rc.1 graph changed real bytes (executor split, batch tool execution,
+ * official-bundle constants move), so it is its own reference and the
+ * default for graphs acquired at or above the current floor; the pre-floor
+ * rows stay as historical evidence sources. */
+function baselineFor(rows: readonly { name?: string; version?: string }[]): ByteAuditManifest {
+  // Exact pre-floor graphs retain their own references; no receipt can
+  // bypass the separate current floor. Everything else — including future
+  // versions above the floor — starts from the 0.2.2-rc.1 baseline and must
+  // qualify against it or fail closed on the byte mismatch.
   switch (rows.find((row) => row.name === '@deepseek-ai/dsh')?.version) {
     case '0.2.1-rc.2': return rc2Baseline
     case '0.2.1-rc.3': return rc3Baseline
-    default: return rc5Baseline
+    case '0.2.1-rc.5': return rc5Baseline
+    default: return rc022rc1Baseline
   }
 }
 /** Every reviewed published state, for equivalence checks: a graph whose lib
  * bytes match ANY audited baseline while carrying another baseline's loading
  * digest is still one reviewed published state, so equivalence is accepted
- * only when loading AND modules come from the SAME reference row. */
-const AUDITED_BASELINES: readonly (typeof rc2Baseline)[] = [rc2Baseline, rc3Baseline, rc5Baseline]
+ * only when loading AND modules come from the SAME reference row. The
+ * 0.2.2-rc.1 state is byte-distinct from the pre-floor trio. */
+const AUDITED_BASELINES: readonly ByteAuditManifest[] = [rc2Baseline, rc3Baseline, rc5Baseline, rc022rc1Baseline]
 
 /** Validate generator-issued operator-owned authority. The descriptor cannot
  * assert compatibility: changed bytes require the independently issued cache

@@ -26,6 +26,25 @@ vi.mock('../src/domain/rc3-byte-audit-manifest.js', async (original) => {
     },
   })) } }
 })
+vi.mock('../src/domain/rc022-rc1-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
+  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // The published audit hashes package.json too: the manifest the JSON
+    // parsers read and the bytes the digest check reads are the same file.
+    loadingDigest: hostManifestLoadingDigest(canonicalManifest(p.name as string, p.version as string)),
+    programs: { 'lib/index.js': hostProgramDigest(AUDITED_MODULE_TEXT) },
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
+  })) } }
+})
+// The 0.2.2-rc.1 manifest is the DEFAULT audited baseline since Guard 0.13.0;
+// synthetic graphs in this file must cover it alongside the historical rows.
 vi.mock('../src/domain/rc5-byte-audit-manifest.js', async (original) => {
   const { createHash } = await import('node:crypto')
   const { hostProgramDigest, hostManifestLoadingDigest } = await import('../src/domain/host-contract-program.js')
@@ -78,7 +97,12 @@ function makeHost(hoisted = true, profileHoisted = false) {
     const relative = hoisted ? `./${row.name}` : `./active/package-${index}`
     packages['.'].dependencies[row.name] = id
     packages[id] = { url: relative, dependencies: hoisted ? { [row.name]: id } : {} }
-    if (!hoisted && row.name === '@deepseek-ai/dsh') packages[id].dependencies['@deepseek-ai/cordis'] = '@deepseek-ai/cordis@4.0.5'
+    if (!hoisted && row.name === '@deepseek-ai/dsh') {
+      // The declared sibling edge must reference the exact installed record of
+      // the active cohort (cordis 4.1.0 for the 0.2.2-rc.1 graph).
+      const cordisVersion = EXPECTED_HOST_PACKAGES.find((entry) => entry.name === '@deepseek-ai/cordis')!.version!
+      packages[id].dependencies['@deepseek-ai/cordis'] = `@deepseek-ai/cordis@${cordisVersion}`
+    }
     const packageRoot = join(modulesRoot, relative)
     mkdirSync(packageRoot, { recursive: true })
     writeFileSync(join(packageRoot, 'package.json'), canonicalManifest(row.name, row.version!))
@@ -218,7 +242,8 @@ describe('full host admission for standard hoisted package maps', () => {
   it('preserves a complete isolated map and rejects its missing declared edge', () => {
     const h = makeHost(false)
     expect(audit(h)).toBe('supported')
-    delete h.packages[`${app}@0.2.1-rc.5`].dependencies[dep]
+    const appVersion = EXPECTED_HOST_PACKAGES.find((row) => row.name === app)!.version!
+    delete h.packages[`${app}@${appVersion}`].dependencies[dep]
     saveMap(h)
     expect(['unsupported', 'unavailable']).toContain(audit(h))
   })

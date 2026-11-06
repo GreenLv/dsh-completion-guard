@@ -97,6 +97,12 @@ The registry audit still reports the same three high-severity Undici 8.11.2 advi
 
 本次 registry 扫描仍检出相同三条 Undici 8.11.2 高危通告。签名 rc.5 宿主和上游默认分支仍锁定受影响版本。维护者单独接受本次 Guard 0.12.1 的三项风险，截止 **2026-11-30（含）**。机器可读例外表将授权范围限定为 Guard 0.12.0 和 0.12.1。
 
+### 0.13.0 development candidate / 0.13.0 开发候选
+
+The 0.2.2-rc.1 host cohort bump does not lift any gap: the target registry manifests still exact-pin `undici@8.11.2` (via `@deepseek-ai/dsh-http-proxy`) and `zod@4.4.3` (via `@deepseek-ai/dsh-agent` and `@deepseek-ai/dsh-commands`). On **2026-11-06** the maintainer decided that the already disclosed upstream gaps remain non-blocking for this release and extended the three existing temporary Undici accepts (scanner IDs 1243472, 1243474, 1243477 with their recorded GHSA identities) to the 0.13.0 candidate **with the expiry unchanged: 2026-11-30 inclusive**. The machine-readable exception table now lists Guard 0.12.0, 0.12.1 and 0.13.0 for those three entries only; the zod entry and the other long-term Undici entry keep their existing **2027-01-31** scope unchanged. No new advisory is accepted, no expiry is extended, signed-host bytes remain unfixed, and a development override does not repair them. From **2026-12-01** the three entries block again unless re-justified. New Guard regressions, new unaccepted advisories, identity gates, required historical source regressions and network/parse failures stay blocking.
+
+0.2.2-rc.1 宿主队列升级未关闭任何缺口：目标 registry manifest 仍精确锁定 `undici@8.11.2`（经 `@deepseek-ai/dsh-http-proxy`）与 `zod@4.4.3`（经 `@deepseek-ai/dsh-agent` 与 `@deepseek-ai/dsh-commands`）。维护者于 **2026-11-06** 决定：已披露的上游缺口继续不阻塞本次发版，并将既有三条临时 Undici 接受（scanner ID 1243472、1243474、1243477 及其登记的 GHSA 身份）扩展到 0.13.0 候选，**期限不变：2026-11-30（含）**。机器可读例外表仅在这三条目上列入 Guard 0.12.0、0.12.1 与 0.13.0；zod 条目与另一条长期 Undici 例外保持原 **2027-01-31** 范围不变。未接受任何新通告，未延长任何期限，签名宿主字节未修复，开发 override 不修复它们。自 **2026-12-01** 起三条目恢复阻断，除非重新论证。Guard 新增回归、未接受的新通告、身份门、必需的历史库源码回归及网络/解析失败仍按现行门禁阻断。
+
 ### 0.12.0 release history / 0.12.0 发布历史
 
 The reviewed rc.3 host also pins the same Undici and zod versions, so retaining rc.3 admission does not close the disclosed gaps.

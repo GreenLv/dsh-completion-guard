@@ -2,6 +2,20 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
+
+// rc.1 split tool executors into explicit plugins: the agent loop refuses to
+// run any tool until the composition loads one. The fixture composition does
+// not carry the executor package, so the loop host loads the native executor
+// from the repository's own pinned 0.2.2-rc.1 install (the same published
+// package identity the cohort audits).
+const loadNativeToolExecutor = async () => {
+  const require = createRequire(import.meta.url)
+  return import(pathToFileURL(require.resolve('@deepseek-ai/dsh-tool-executor-native')).href)
+}
+const applyPlugin = (ctx: unknown, plugin: unknown, config?: unknown) =>
+  (ctx as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } }).plugin(plugin, config).await()
 
 /**
  * Real new-host (rc.020) recovery entries. The host event production chain is
@@ -24,7 +38,9 @@ interface Host {
 }
 
 const liveHosts: Host[] = []
+const recoveryOwners: Array<{ fiber: { dispose: () => Promise<unknown> } }> = []
 afterEach(async () => {
+  while (recoveryOwners.length > 0) await recoveryOwners.pop()!.fiber.dispose()
   while (liveHosts.length > 0) {
     const host = liveHosts.pop()!
     try { await host.fiber.dispose?.() } catch { /* best effort */ }
@@ -41,14 +57,23 @@ async function startRecoveryHost(sessionRoot = mkdtempSync(join(tmpdir(), 'cg-rc
   const sessionSdk = await load('dsh-session')
   const persistenceJsonl = await load('dsh-session-persistence-jsonl')
   const ctx = new (Context as new () => Record<string, unknown>)()
-  void new (agentSdk.AgentRegistry as new (ctx: unknown) => unknown)(ctx)
+  // SDK 0.2.2-rc.1: services with an async [Service.init] (the agent registry
+  // acquires its turn-boundary projection there) must start through the plugin
+  // lifecycle; bare construction never runs it.
+  await (ctx as unknown as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } })
+    .plugin(agentSdk.AgentRegistry as never).await()
   void new (projection.SessionProjectionRegistry as new (ctx: unknown) => unknown)(ctx)
   void new (prompt.SystemPrompt as new (ctx: unknown, config: unknown) => unknown)(ctx, {
     includeHarnessIdentity: false, includeRuntimeContext: false, personaPrefix: '', personaSuffix: '', toolOrder: undefined,
   })
   void new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => unknown)(ctx)
+  await applyPlugin(ctx, await loadNativeToolExecutor())
   void new (sessionSdk.SessionStore as new (ctx: unknown) => unknown)(ctx)
-  void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(ctx, { root: sessionRoot, compression: undefined })
+  // rc.1 exports the JSONL backend as a Cordis plugin module (`apply`), not a
+  // default constructor; the awaited plugin application is the readiness path.
+  await (ctx as unknown as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } })
+    .plugin((persistenceJsonl as { default?: unknown }).default ?? persistenceJsonl,
+      { root: sessionRoot, compression: undefined }).await()
   const effects = { count: 0 }
   const runtime = (ctx as unknown as { get: (n: string) => { register: (d: unknown) => unknown } }).get('tools')
   runtime.register({
@@ -90,12 +115,13 @@ async function startRecoveryHost(sessionRoot = mkdtempSync(join(tmpdir(), 'cg-rc
     stream: () => { throw new Error('fixture: legacy stream entrypoint must not be used') },
   })
   const fiber = (ctx as unknown as { plugin: (p: unknown) => unknown }).plugin(loop.AgentLoop as never)
-  await Promise.resolve(fiber)
+  // rc.1: the loop acquires its projection handles in the async [Service.init].
+  await (fiber as { await: () => Promise<unknown> }).await()
   const agent = options.createAgent === false
     ? undefined
     : await (ctx as unknown as { get: (n: string) => { create: (id: string, o?: unknown, m?: unknown) => Promise<unknown> } })
       .get('agentLoop').create('rc020-recovery-agent', { provider: 'fixture', model: 'fixture-model' }, { cwd: '/work' })
-  const host: Host = { ctx, effects, sessionRoot, fiber: fiber as Host['fiber'], agent: agent as Host['agent'] }
+  const host: Host = { ctx, effects, sessionRoot, fiber: (ctx as unknown as { fiber: Host['fiber'] }).fiber, agent: agent as Host['agent'] }
   liveHosts.push(host)
   return host
 }
@@ -197,15 +223,31 @@ describe('rc.020 real recovery entries keep unknown outcomes from authorizing si
     const sessionSdk = await load('dsh-session')
     const persistenceJsonl = await load('dsh-session-persistence-jsonl')
     const ctx = new (Context as new () => Record<string, unknown>)()
-    void new (agentSdk.AgentRegistry as new (ctx: unknown) => unknown)(ctx)
+    recoveryOwners.push(ctx as unknown as typeof recoveryOwners[number])
+    // rc.1: the agent registry's async [Service.init] needs the plugin lifecycle.
+    await (ctx as unknown as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } })
+      .plugin(agentSdk.AgentRegistry as never).await()
     void new (projectionSdk.SessionProjectionRegistry as new (ctx: unknown) => unknown)(ctx)
     void new (prompt.SystemPrompt as new (ctx: unknown, config: unknown) => unknown)(ctx, {
       includeHarnessIdentity: false, includeRuntimeContext: false, personaPrefix: '', personaSuffix: '', toolOrder: undefined,
     })
     void new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => unknown)(ctx)
     void new (sessionSdk.SessionStore as new (ctx: unknown) => unknown)(ctx)
-    void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(ctx, { root: sessionRoot, compression: undefined })
-    void new (loop.AgentLoop as unknown as new (ctx: unknown, config: unknown) => unknown)(ctx, { agents: [] })
+    await (ctx as unknown as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } })
+      .plugin((persistenceJsonl as { default?: unknown }).default ?? persistenceJsonl,
+        { root: sessionRoot, compression: undefined }).await()
+    // rc.1: the agent loop acquires its model/inbox projection handles in the
+    // async [Service.init]; the plugin lifecycle must complete before resume.
+    // rc.1: the loop plugin declares every upstream service as Cordis inject
+    // dependencies, so the composition must present an llm binding before the
+    // plugin lifecycle starts it. The resumed host re-derives the recorded
+    // refusal without any model call, and the stub below fails loudly if one
+    // is ever attempted.
+    ;(ctx as unknown as { provide: (n: string, v: unknown) => void }).provide('llm', {
+      prepareCall: async () => { throw new Error('fixture: the resumed host must not call the model') },
+      stream: () => { throw new Error('fixture: the resumed host must not call the model') },
+    })
+    await applyPlugin(ctx, loop.AgentLoop, { agents: [] })
     const persistenceB = (ctx as unknown as { get: (n: string) => unknown }).get('sessionPersistence')
     void persistenceB
     const resumedHandle = await (ctx as unknown as { get: (n: string) => { resume: (owner: unknown, o: { resumeSessionId: string }) => Promise<unknown> } })
@@ -259,15 +301,29 @@ describe('rc.020 real recovery entries keep unknown outcomes from authorizing si
     expect(seedResults[0]!.text).toContain('inherited by this branch')
     const { Context, agentSdk, projectionSdk, prompt, toolsSdk, sessionSdk, persistenceJsonl, loop } = await loadBase()
     const forkCtx = new (Context as new () => Record<string, unknown>)()
-    void new (agentSdk.AgentRegistry as new (ctx: unknown) => unknown)(forkCtx)
+    recoveryOwners.push(forkCtx as unknown as typeof recoveryOwners[number])
+    // rc.1: the agent registry's async [Service.init] needs the plugin lifecycle.
+    await (forkCtx as unknown as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } })
+      .plugin(agentSdk.AgentRegistry as never).await()
     void new (projectionSdk.SessionProjectionRegistry as new (ctx: unknown) => unknown)(forkCtx)
     void new (prompt.SystemPrompt as new (ctx: unknown, config: unknown) => unknown)(forkCtx, {
       includeHarnessIdentity: false, includeRuntimeContext: false, personaPrefix: '', personaSuffix: '', toolOrder: undefined,
     })
     void new (toolsSdk.ToolRuntime as new (ctx: unknown, config?: unknown) => unknown)(forkCtx)
     void new (sessionSdk.SessionStore as new (ctx: unknown) => unknown)(forkCtx)
-    void new (persistenceJsonl.default as new (ctx: unknown, config: unknown) => unknown)(forkCtx, { root: mkdtempSync(join(tmpdir(), 'cg-rc020-fork-seed-')), compression: undefined })
-    void new (loop.AgentLoop as unknown as new (ctx: unknown, config: unknown) => unknown)(forkCtx, { agents: [] })
+    await (forkCtx as unknown as { plugin: (p: unknown, c?: unknown) => { await: () => Promise<unknown> } })
+      .plugin((persistenceJsonl as { default?: unknown }).default ?? persistenceJsonl,
+        { root: mkdtempSync(join(tmpdir(), 'cg-rc020-fork-seed-')), compression: undefined }).await()
+    // rc.1: the loop plugin's Cordis inject dependencies include an llm
+    // binding; the forked host closes the seeded turn without any model call,
+    // and the stub below fails loudly if one is ever attempted.
+    ;(forkCtx as unknown as { provide: (n: string, v: unknown) => void }).provide('llm', {
+      prepareCall: async () => { throw new Error('fixture: the forked host must not call the model') },
+      stream: () => { throw new Error('fixture: the forked host must not call the model') },
+    })
+    // rc.1: the agent loop acquires its model/inbox projection handles in the
+    // async [Service.init]; the plugin lifecycle must complete before forking.
+    await applyPlugin(forkCtx, loop.AgentLoop, { agents: [] })
     // createAgent is the registered lifecycle entry that accepts the fork
     // seed; the published handle is { agent, dispose }.
     const loopService = (forkCtx as unknown as { get: (n: string) => { createAgent: (owner: unknown, o: unknown) => Promise<unknown> } }).get('agentLoop')

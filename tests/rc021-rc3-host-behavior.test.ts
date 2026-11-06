@@ -8,6 +8,8 @@ import { applyWithFixtureActivation as apply } from './activation-fixture.js'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
 import { ACTIVE_HOST_COHORT_IDS } from '../src/domain/host-lock.js'
+import { RC021_RC3_HOST_PACKAGES } from '../src/domain/rc021-rc3-host.js'
+import { RC021_RC5_HOST_PACKAGES } from '../src/domain/rc021-rc5-host.js'
 
 /**
  * rc.3 host behavior controls, exercised through the real rc.3 SDK with no
@@ -156,7 +158,11 @@ describe('rc.3 Guard tool surface survives host updates', () => {
 })
 
 describe('rc.3 cohort advertisement', () => {
-  it('the runtime advertises rc.5 as default and rc.3 as an admitted cohort', () => {
-    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.1-rc.5', 'dsh-0.2.1-rc.3'])
+  it('the runtime advertises only the 0.2.2-rc.1 cohort; rc.5/rc.3 refuse below the floor', () => {
+    // Guard 0.13.0 raised the floor to 0.2.2-rc.1: the rc.5/rc.3 graphs are
+    // historical evidence and no longer advertised or admitted.
+    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.2-rc.1'])
+    expect(evaluateHostLock(RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).status).toBe('unsupported')
+    expect(evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).status).toBe('unsupported')
   })
 })

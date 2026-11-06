@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
-import GoalService, { GoalId } from '@deepseek-ai/dsh-goal'
+import GoalService, { GoalId, goalProjectionDefinition } from '@deepseek-ai/dsh-goal'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type { GoalView } from '@deepseek-ai/dsh-goal'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -42,11 +43,12 @@ interface Composed {
   goals: GoalService
   session: Session
   agent: Agent
+  goalState: () => Promise<{ current?: { roundsStarted?: number; goal?: { id?: string } }; failure?: unknown } | undefined>
 }
 
 /** The single host fixture: the installed services plus a live agent identity. */
-function compose(): Composed {
-  return driveHost() as unknown as Composed
+async function compose(): Promise<Composed> {
+  return (await driveHost()) as unknown as Composed
 }
 
 const root = (seq: number, text: string): DerivedEnvelope =>
@@ -74,6 +76,7 @@ interface DriveHost {
   session: Session
   agent: Agent
   goals: GoalService
+  goalState: () => Promise<{ current?: { roundsStarted?: number; goal?: { id?: string } }; failure?: unknown } | undefined>
   fiber?: unknown
   queued: Array<{ source?: { kind?: string; goalId?: string; revision?: number; round?: number } }>
   beforeInit?: string
@@ -82,7 +85,7 @@ interface DriveHost {
   inbox: { nextTurn: Array<{ id: string }> }
 }
 
-function driveHost(): DriveHost {
+async function driveHost(): Promise<DriveHost> {
   const ctx = new Context()
   const registry = new SessionProjectionRegistry(ctx)
   const session = Session.create(SessionId('drive-host'), undefined, {
@@ -104,8 +107,22 @@ function driveHost(): DriveHost {
     withoutInitiator: async (fn: () => unknown) => await fn(),
   } as never)
   ctx.provide('sessions', { flush: async () => true } as never)
-  const goals = new GoalService(ctx, {})
-  return { ctx, registry, session, agent: agent as unknown as Agent, goals, queued, inbox: agent.inbox }
+  // SDK 0.2.2-rc.1: the goal service acquires its projection handle during its
+  // awaited service init, so the fixture starts it the way a host does (plugin
+  // fiber) and waits for readiness before any goal access.
+  const goalsFiber = (ctx as unknown as { plugin: (p: unknown, c?: unknown) => unknown }).plugin(GoalService, {})
+  await waitForFiber(goalsFiber)
+  const goals = ctx.goals
+  // SDK 0.2.2-rc.1: the registry-level `stateOf(session, key)` read is
+  // deprecated; verification holds its own awaited shared-key registration
+  // handle of the goal projection definition and reads through it. The goal
+  // service registers the same key, so this shares one unit and adds a count.
+  let goalHandle: ProjectionHandle<{ current?: { roundsStarted?: number; goal?: { id?: string } }; failure?: unknown }> | undefined
+  const goalState = async () => {
+    goalHandle ??= await ctx.sessionProjections.register(goalProjectionDefinition as never)
+    return goalHandle.stateOf(session)
+  }
+  return { ctx, registry, session, agent: agent as unknown as Agent, goals, queued, inbox: agent.inbox, goalState }
 }
 
 /**
@@ -118,7 +135,7 @@ function driveHost(): DriveHost {
  * scaffolding, and the fiber's completion is awaited rather than slept on.
  */
 async function startDriveHost(): Promise<DriveHost> {
-  const host = driveHost()
+  const host = await driveHost()
   hosts.push(host)
   host.beforeInit = host.goals.get(host.agent as unknown as Agent)?.activation
   const fiber = (host.ctx as unknown as { plugin: (p: unknown, c?: unknown) => unknown }).plugin(goalRoundDriver as never)
@@ -240,7 +257,7 @@ describe('composed wait and Goal lifecycle', () => {
     const recorded = host.goals.get(host.agent as unknown as Agent)!
     expect(recorded.roundsStarted).toBe(1)
     // The registry's own durable projection agrees, and the durable event exists.
-    expect(host.registry.stateOf(host.session, 'goal')?.current?.roundsStarted).toBe(1)
+    expect((await host.goalState())?.current?.roundsStarted).toBe(1)
     const rounds = (host.session.snapshotEvents() as unknown as Array<{ type: string; data?: { source?: { kind?: string; round?: number } } }>)
       .filter((event) => event.type === 'user/message' && event.data?.source?.kind === 'goal')
     expect(rounds).toHaveLength(1)
@@ -257,7 +274,7 @@ describe('composed wait and Goal lifecycle', () => {
       .emit('agent/inbox/claimed', { agent: host.agent, message: scheduled })
     // The host rejects the step: no durable round event is written.
     expect(host.goals.get(host.agent as unknown as Agent)?.roundsStarted).toBe(0)
-    expect(host.registry.stateOf(host.session, 'goal')?.current?.roundsStarted).toBe(0)
+    expect((await host.goalState())?.current?.roundsStarted).toBe(0)
     const rounds = (host.session.snapshotEvents() as unknown as Array<{ type: string; data?: { source?: { kind?: string } } }>)
       .filter((event) => event.type === 'user/message' && event.data?.source?.kind === 'goal')
     expect(rounds).toHaveLength(0)
@@ -281,17 +298,17 @@ describe('composed wait and Goal lifecycle', () => {
     expect(host.goals.get(host.agent as unknown as Agent)?.activation).toBe('disarmed')
   })
 
-  it('drives the real GoalService through armed -> disarmed -> resumed', () => {
-    const built = compose()
+  it('drives the real GoalService through armed -> disarmed -> resumed', async () => {
+    const built = await compose()
     // CREATE arms the goal: the projection registry folds goal/change itself.
     const created = built.goals.create(built.agent, { objective: 'ship the guarded change' })
     expect(created.phase).toBe('active')
     expect(created.activation).toBe('armed')
     expect(created.roundsStarted).toBe(0)
     // The durable projection is the registry's, not a local re-implementation.
-    const state = built.registry.stateOf(built.session, 'goal')
+    const state = await built.goalState()
     expect(state?.failure).toBeNull()
-    expect(state?.current?.goal.id).toBe(created.id)
+    expect(state?.current?.goal?.id).toBe(created.id)
 
     // DISARM is the lifecycle transition the boundary effectuation performs.
     const disarmed = built.goals.disarm(built.agent)!
@@ -306,8 +323,8 @@ describe('composed wait and Goal lifecycle', () => {
     expect(resumed.activation).toBe('armed')
   })
 
-  it('refuses a stale Goal ref and a non-live agent through the real service', () => {
-    const built = compose()
+  it('refuses a stale Goal ref and a non-live agent through the real service', async () => {
+    const built = await compose()
     const created = built.goals.create(built.agent, { objective: 'ship the guarded change' })
     // A stale revision is rejected by the service's compare-and-set.
     expect(() => built.goals.resume(built.agent, { id: created.id, revision: created.revision + 9 }))
@@ -318,7 +335,7 @@ describe('composed wait and Goal lifecycle', () => {
   })
 
   it('effectuates the boundary against the real service and reads back a disarmed goal', async () => {
-    const built = compose()
+    const built = await compose()
     const created = built.goals.create(built.agent, { objective: 'ship the guarded change' })
     const envelopes: DerivedEnvelope[] = [
       { seq: 0, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
@@ -347,8 +364,8 @@ describe('composed wait and Goal lifecycle', () => {
     expect(after.revision).toBe(created.revision)
   })
 
-  it('never fabricates a certificate while the wait is outstanding', () => {
-    const built = compose()
+  it('never fabricates a certificate while the wait is outstanding', async () => {
+    const built = await compose()
     built.goals.create(built.agent, { objective: 'ship the guarded change' })
     const projection = project(built, [
       { seq: 0, type: 'command/run', data: { name: 'context-guard', args: 'on', source: { kind: 'user' } } },
@@ -393,8 +410,8 @@ describe('composed wait and Goal lifecycle', () => {
    * goal admits none. This test pins the service-side state that gate reads; it
    * does not run the scheduler.
    */
-  it('pins the state the round driver gates on', () => {
-    const built = compose()
+  it('pins the state the round driver gates on', async () => {
+    const built = await compose()
     const created = built.goals.create(built.agent, { objective: 'ship the guarded change' })
     const armed = built.goals.get(built.agent)!
     expect({ phase: armed.phase, activation: armed.activation }).toEqual({ phase: 'active', activation: 'armed' })

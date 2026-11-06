@@ -19,6 +19,7 @@ import { PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
 const { hasLoadedGuardTool, readLiveProtectionSessions } = await import('../scripts/ui-session-host-fixture.mjs')
 import * as observerDomain from '../src/domain/index.js'
 import { EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 /**
  * RC3-M01: the OFFICIAL rc.3 model-listing path under Guard protection, with
@@ -98,11 +99,13 @@ describe('RC3-M01: official model listing cache under Guard protection', () => {
     transport.push(LISTING_BODY)
     let clock = 1_000_000
     const cache = new ModelListingCache({
+      settings: () => undefined,
       credential: async () => 'test-credential',
       load: transport.load,
       now: () => clock,
       info: () => {},
       warn: () => {},
+      changed: () => {},
     })
     // First access waits for the load and publishes the view.
     const first = await cache.view({ url: `${BASE}/models`, timeoutMs: 5_000, maxAgeMs: 60_000 })
@@ -128,11 +131,13 @@ describe('RC3-M01: official model listing cache under Guard protection', () => {
     transport.push(LISTING_BODY)
     let clock = 2_000_000
     const cache = new ModelListingCache({
+      settings: () => undefined,
       credential: async () => 'test-credential',
       load: transport.load,
       now: () => clock,
       info: () => {},
       warn: () => {},
+      changed: () => {},
     })
     // A failed first load does NOT fake a view: the failing-streak access
     // resolves authenticated with no listing.
@@ -151,11 +156,13 @@ describe('RC3-M01: official model listing cache under Guard protection', () => {
     let releaseLoad: (listing: ModelListing) => void = () => {}
     const gated = new Promise<ModelListing>((resolve) => { releaseLoad = resolve })
     const cache = new ModelListingCache({
+      settings: () => undefined,
       credential: async () => 'test-credential',
       load: async () => await gated,
       now: () => 3_000_000,
       info: () => {},
       warn: () => {},
+      changed: () => {},
     })
     const settings = { url: `${BASE}/models`, timeoutMs: 5_000, maxAgeMs: 60_000 }
     const controller = new AbortController()
@@ -206,7 +213,7 @@ describe('RC3-M01: official adapter and Guard share one real Cordis request pipe
       ctx.provide('commands' as never, { register: () => () => {} } as never)
       ctx.provide('sessions' as never, { flush: async () => true } as never)
       new SystemPrompt(ctx, { includeHarnessIdentity: false, includeRuntimeContext: false } as never)
-      new ToolRuntime(ctx)
+      new ToolRuntime(ctx).setExecutor(new NativeToolExecutor(ctx))
       applyApiKey(ctx, ApiKeyConfig({}))
       apply(ctx, { activation: 'always', hostLockPackages: EXPECTED_HOST_PACKAGES, hostLockPlatform: 'posix', hostLockProfile: 'web' }, { privateLedgerRoot: root })
       const session = Session.create(SessionId('official-listing-shared'), undefined, {

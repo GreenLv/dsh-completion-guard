@@ -521,19 +521,18 @@ class HostBoundEntrypointTests(unittest.TestCase):
         manifest = json.loads(
             (Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
         cohorts = manifest["cohorts"]
-        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.1-rc.5-core-v1", "dsh-0.2.1-rc.3-core-v1"])
-        for cohort, version in zip(cohorts, ["0.2.1-rc.5", "0.2.1-rc.3"]):
+        # Since Guard 0.13.0 the shipped manifest has ONE active cohort
+        # (0.2.2-rc.1); the rc.5/rc.3 rows moved to historicalCohorts.
+        self.assertEqual([cohort["id"] for cohort in cohorts], ["dsh-0.2.2-rc.1-core-v1"])
+        for cohort, version in zip(cohorts, ["0.2.2-rc.1"]):
             targets = {"web": cohort["id"], "headless": cohort["id"]}
             chosen = self.host.select_target_cohorts(cohorts, version, targets)
             self.assertEqual(chosen["web"]["id"], cohort["id"])
             self.assertEqual(chosen["headless"]["id"], cohort["id"])
-            other = "0.2.1-rc.3" if version == "0.2.1-rc.5" else "0.2.1-rc.5"
-            with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
-                self.host.select_target_cohorts(cohorts, other, targets)
         active = cohorts[0]
         launcher = [row for row in active["packages"] if row["name"] == "@deepseek-ai/dsh"]
         self.assertEqual(len(launcher), 1, "the launcher row must be unique for version lookup")
-        self.assertEqual(launcher[0]["version"], "0.2.1-rc.5")
+        self.assertEqual(launcher[0]["version"], "0.2.2-rc.1")
 
         targets = {"web": active["id"], "headless": active["id"]}
         chosen = self.host.select_target_cohorts(cohorts, launcher[0]["version"], targets)
@@ -548,15 +547,13 @@ class HostBoundEntrypointTests(unittest.TestCase):
 
     def test_shipped_rc2_history_is_not_a_current_runtime_selector(self):
         manifest = json.loads((Path(__file__).parents[1] / "manifests" / "supported-host.v1.json").read_text(encoding="utf-8"))
-        targets = {"web": "dsh-0.2.1-rc.2-core-v1", "headless": "dsh-0.2.1-rc.2-core-v1"}
+        # The historical set now carries the retired rc.5/rc.3 cohorts beside
+        # the rc.2 row; none of them is a current runtime selector.
         self.assertEqual([row["id"] for row in manifest["historicalCohorts"]],
-                         [targets["web"]])
-        rc3 = {"web": "dsh-0.2.1-rc.3-core-v1", "headless": "dsh-0.2.1-rc.3-core-v1"}
-        chosen = self.host.select_target_cohorts(manifest["cohorts"], "0.2.1-rc.3", rc3)
-        self.assertEqual(chosen["web"]["id"], rc3["web"])
-        with self.assertRaisesRegex(RuntimeError, "runtime version mismatch"):
-            self.host.select_target_cohorts(manifest["cohorts"], "0.2.1-rc.5", rc3)
-        for version in ["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.4"]:
+                         ["dsh-0.2.1-rc.5-core-v1", "dsh-0.2.1-rc.3-core-v1", "dsh-0.2.1-rc.2-core-v1"])
+        targets = {"web": "dsh-0.2.1-rc.2-core-v1", "headless": "dsh-0.2.1-rc.2-core-v1"}
+        for version in ["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.4", "0.2.1-rc.5"]:
+            # Retired cohorts are not selectable from the ACTIVE cohort set.
             with self.assertRaisesRegex(RuntimeError, "unknown or ambiguous"):
                 self.host.select_target_cohorts(manifest["cohorts"], version, targets)
 

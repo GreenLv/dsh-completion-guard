@@ -1,5 +1,6 @@
 import { RC021_RC3_HOST_PACKAGES } from './rc021-rc3-host.js'
 import { RC021_RC5_HOST_PACKAGES } from './rc021-rc5-host.js'
+import { RC022_RC1_HOST_PACKAGES } from './rc022-rc1-host.js'
 import { createHash } from 'node:crypto'
 import { hostLockDigest, type CapabilityRow, type PackageRow } from './digest.js'
 import { SEMANTIC_ACTIONS, type SemanticAction } from './protocol-manifest.js'
@@ -108,18 +109,23 @@ function defineCohort(
   }
 }
 
-/** Current baseline for new installations and default fixtures. */
-export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.1-rc.5'
-/** rc.5 remains the default; rc.3 is also an admitted exact audited cohort. */
-export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID, 'dsh-0.2.1-rc.3']
+/** Current baseline for new installations and default fixtures. Since Guard
+ * 0.13.0 the active cohort set contains ONLY the 0.2.2-rc.1 graph: the rc.5
+ * and rc.3 cohorts are historical evidence below the raised floor and no
+ * longer admit through the active set. */
+export const ACTIVE_HOST_COHORT_ID = 'dsh-0.2.2-rc.1'
+export const ACTIVE_HOST_COHORT_IDS: readonly string[] = [ACTIVE_HOST_COHORT_ID]
 
-/** Core-lock/v1 separates optional market identity from the rc.5 critical
- * graph. The rc.3 core is also admitted under its own audited identity. Version ordering cannot
- * authorize an unregistered graph, and graph identity is separate from native
- * acceptance of a Guard artifact.
+/** Core-lock/v1 separates optional market identity from the 0.2.2-rc.1
+ * critical graph. Version ordering cannot authorize an unregistered graph,
+ * and graph identity is separate from native acceptance of a Guard artifact.
  */
 export const HOST_COHORTS: readonly HostCohort[] = [
-  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.1-rc.5'], [], RC021_RC5_HOST_PACKAGES,
+  defineCohort(ACTIVE_HOST_COHORT_ID, ['0.2.2-rc.1'], [], RC022_RC1_HOST_PACKAGES,
+    'registry-derived-pending-native-audit', ['posix', 'windows']),
+  // Historical evidence rows below the current floor; filtered out of the
+  // active set and retained for the recorded rc.3/rc.5 evidence paths.
+  defineCohort('dsh-0.2.1-rc.5', ['0.2.1-rc.5'], [], RC021_RC5_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
   defineCohort('dsh-0.2.1-rc.3', ['0.2.1-rc.3'], [], RC021_RC3_HOST_PACKAGES,
     'registry-derived-pending-native-audit', ['posix', 'windows']),
@@ -139,7 +145,7 @@ export const HOST_COHORTS: readonly HostCohort[] = [
   }))
 
 /**
- * Baseline fixture package identities (DSH 0.2.1-rc.5). The cohort
+ * Baseline fixture package identities (DSH 0.2.2-rc.1). The cohort
  * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
  * unknown-version, unbound, OR MISSING row fails the whole lock closed
  * (`host_lock_missing`); no capability inherits independence from a partially

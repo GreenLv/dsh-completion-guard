@@ -1,10 +1,13 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 const roots: string[] = []
+// These functional cases start multiple real Node carriers and deliberately
+// backpressure large pipes. This budget is not a host latency assertion.
+vi.setConfig({ testTimeout: 30_000 })
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'guard-cli-stdout-')); roots.push(root)

@@ -2,6 +2,20 @@
 
 Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
 
+## 0.13.0: DSH >=0.2.2-rc.1
+
+Upgrade DSH to `0.2.2-rc.1` or later before installing Guard 0.13.0. Node.js must be `>=24.9.0` and Cordis `>=4.1.0`. All package declarations and runtime admission use the same DSH floor, without an upper version bound. Every `0.2.1` host is below the floor, including previously reviewed rc.3 and rc.5 hosts. Later versions still require package, byte, dependency-route and behavioral qualification.
+
+The default reviewed graph is `dsh-0.2.2-rc.1-core-v1`: 51 packages verified from registry tarballs against upstream `dsh-v0.2.2-rc.1` (`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`). This release adapts to batch tool execution, separate native/PTC executors, asynchronous session-projection acquisition, the official-bundles package and fs-patch. Unlike the earlier rc.3-to-rc.5 update, executable bytes changed and were reviewed anew. The [0.13.0 consumer matrix](../benchmarks/incidents/acceptance/semver-matrix-v130.json) records the real app-boot prerelease decisions.
+
+Old sessions and Guard data retain their migration paths; admitting old data does not admit an old host. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [session migration](ACTIVATION_MIGRATION.md) instructions. The registered macOS arm64 and Windows x64 rc.1 Desktop distributions establish carrier identities only. Native installation, lifecycle, migration and Desktop v2 no-op acceptance must use the final frozen Guard artifact on each platform.
+
+Known upstream gaps remain open. The existing three temporary Undici exceptions include Guard 0.13.0 through **2026-11-30 inclusive**, with their existing scope and residual risk; this adaptation does not fix the signed host. See [dependency findings and expiry](DEPENDENCY_SCAN.md). The versioned sections below describe earlier releases and do not reopen their host admission paths.
+
+安装 Guard 0.13.0 前，先把 DSH 升级到 `0.2.2-rc.1` 或更高版本；Node.js 要求 `>=24.9.0`，Cordis 要求 `>=4.1.0`。包声明和运行时使用同一下限，没有版本上限。所有 `0.2.1` 宿主都拒绝准入；更高版本仍须核验包、字节、依赖路由及实际接口行为。默认审查图为新的 51 包 `dsh-0.2.2-rc.1-core-v1`，工具批量执行、执行器拆分和会话投影等真实接口变更已重新审查，不能沿用旧版“字节未变”的结论。
+
+旧会话与 Guard 数据继续按迁移流程保留，宿主锁则须重新核验。两端官方 Desktop 分发行的身份登记不等于本次 Guard 制品原生验收通过。已披露的上游缺口继续保留；现有三项 Undici 临时例外适用于 0.13.0，截止日仍为 **2026-11-30（含）**，不是上游修复证明。以下旧版本记录保留历史含义。
+
 ## 0.12.1 and the 0.12.0 host cohort
 
 Guard 0.12.1 retains the same DSH and Cordis admission ranges and the reviewed host cohorts below. The patch changes the activation migration toolkit to verify retained generations of a session before adopting its previous mode. New acceptance records must identify the 0.12.1 artifact.
@@ -12,13 +26,13 @@ Guard 0.12.1 沿用下文的 DSH、Cordis 准入范围和宿主审查队列。�
 
 Before installing Guard 0.12.0, upgrade DSH if it is older than `0.2.1-rc.3`. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.
 
-The current reviewed baseline and default cohort are DSH `0.2.1-rc.5` / Cordis `4.0.5` (`dsh-0.2.1-rc.5-core-v1`). An rc.3 runtime uses its own reviewed `dsh-0.2.1-rc.3-core-v1` cohort; rc.2 is below the floor. Earlier acceptance records retain their original subjects and do not establish acceptance of this package. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v120.json`](../benchmarks/incidents/acceptance/semver-matrix-v120.json) bind the declared floor; the 0.11.0 matrix remains unchanged for that release.
+For Guard 0.12.0, the reviewed baseline and default cohort were DSH `0.2.1-rc.5` / Cordis `4.0.5` (`dsh-0.2.1-rc.5-core-v1`). An rc.3 runtime uses its own reviewed `dsh-0.2.1-rc.3-core-v1` cohort; rc.2 is below the floor. Earlier acceptance records retain their original subjects and do not establish acceptance of this package. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v120.json`](../benchmarks/incidents/acceptance/semver-matrix-v120.json) bind the declared floor; the 0.11.0 matrix remains unchanged for that release.
 
 The rc.5 registry and Desktop implementation records below describe their own source qualification. A new Guard package still needs its own CI, exact-artifact native, model and UI/performance evidence; the version floor does not transfer an earlier package's acceptance.
 
 安装 Guard 0.12.0 前，低于 `0.2.1-rc.3` 的 DSH 须先升级。包顶层、嵌套 DSH 声明和 DSH peer 范围使用同一下限，Guard 运行时也独立核对；没有版本上限，后续宿主仍须逐项核验包身份、实现字节、依赖路由和接口。Cordis 继续单独要求 `>=4.0.4`。
 
-当前已审查基线及默认 cohort 为 DSH `0.2.1-rc.5` / Cordis `4.0.5`。rc.3 宿主使用自己的 `dsh-0.2.1-rc.3-core-v1` 审查队列；rc.2 仍低于下限。旧验收记录保留原有对象，不能代替本包的验收。旧会话及 Guard 数据协议保持兼容，宿主锁变化后仍须重新核验；新包的 CI、精确制品原生验收、模型及 UI/性能结果分别记录，不从旧包继承。
+Guard 0.12.0 当时的已审查基线及默认 cohort 为 DSH `0.2.1-rc.5` / Cordis `4.0.5`。rc.3 宿主使用自己的 `dsh-0.2.1-rc.3-core-v1` 审查队列；rc.2 仍低于下限。旧验收记录保留原有对象，不能代替本包的验收。旧会话及 Guard 数据协议保持兼容，宿主锁变化后仍须重新核验；新包的 CI、精确制品原生验收、模型及 UI/性能结果分别记录，不从旧包继承。
 
 ### The rc.3→rc.5 cumulative study
 
@@ -288,7 +302,7 @@ managers therefore see the same two exact host releases as the host-lock
 registry; neither an unregistered stable release nor a future version is
 implicitly admitted.
 
-That historical artifact retained exact `0.1.5-rc.1` development pins. The current 0.9.0 build pins DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
+That historical artifact retained exact `0.1.5-rc.1` development pins. The 0.9.0 build pinned DSH `0.2.0-rc.2` while public DSH peers declare the floor range. Historical peer declarations belong to their own release sections
 above and are not part of the 0.5.2 contract.
 
 ## Terminal outcome contract

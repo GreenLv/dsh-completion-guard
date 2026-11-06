@@ -8,14 +8,16 @@ import rc3Manifest from '../../src/domain/rc3-byte-audit-manifest.js'
 
 /**
  * The rc.3 cohort retains its exact published identities, bound by the
- * rc.2→rc.3 SRI and SHA-256 study. It is admitted at the release floor
- * under its own graph while rc.5 remains the default baseline.
+ * rc.2→rc.3 SRI and SHA-256 study. Since Guard 0.13.0 it is historical
+ * evidence below the raised 0.2.2-rc.1 floor and no longer admits; the
+ * recorded identities and byte invariants stay bound.
  */
 
-describe('rc.3 cohort qualification at the current floor', () => {
-  it('admits rc.3 rows while rc.5 remains the default cohort', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.1-rc.5-core-v1', 'dsh-0.2.1-rc.3-core-v1'])
-    expect(HOST_COHORTS[1]!.packages).toEqual(RC021_RC3_HOST_PACKAGES)
+describe('rc.3 cohort qualification as historical evidence', () => {
+  it('retires the rc.3 cohort to the historical evidence set', () => {
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.1-core-v1'])
+    const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
+    expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.3-core-v1')
   })
 
   it('binds 46 rc.3 rows plus the shared cordis 4.0.5 release', () => {
@@ -53,17 +55,16 @@ describe('rc.3 cohort qualification at the current floor', () => {
     expect(rc3Manifest.hostVersion).toBe('0.2.1-rc.3')
   })
 
-  it('accepts the exact rc.3 graph under its own cohort', () => {
+  it('refuses the retired rc.3 graph at the raised version gate', () => {
     const rc3Lock = evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' })
-    expect(rc3Lock.status, JSON.stringify(rc3Lock.reasonCode)).toBe('supported')
-    expect(rc3Lock.cohortId).toBe('dsh-0.2.1-rc.3-core-v1')
-    expect(rc3Lock.hostVersion).toMatchObject({ status: 'supported', minimum: '0.2.1-rc.3' })
+    expect(rc3Lock.status).toBe('unsupported')
   })
 
-  it('enforces the rc.3 floor and rejects rc.2', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
-    expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(true)
-    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(true)
+  it('enforces the 0.2.2-rc.1 floor; the whole 0.2.1 tuple stays below it', () => {
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.1')
+    expect(satisfiesSupportedHostRange('0.2.2-rc.1')).toBe(true)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(false)
+    expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)
     expect(compareHostVersions('0.2.1-rc.5', '0.2.1-rc.3')).toBeGreaterThan(0)
     expect(compareHostVersions('0.2.1-rc.3', '0.2.1-rc.2')).toBeGreaterThan(0)

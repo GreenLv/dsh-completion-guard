@@ -73,37 +73,43 @@ describe('shipped artifact entries', () => {
     const rows = domain.RC021_RC5_HOST_PACKAGES as Array<{ name: string; version?: string; integrity?: string }>
     expect(rows).toHaveLength(47)
     expect(rows.every((row) => row.version && row.integrity?.startsWith('sha512-'))).toBe(true)
-    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.1-rc.5')
-    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.1-rc.3')
+    expect(domain.ACTIVE_HOST_COHORT_ID).toBe('dsh-0.2.2-rc.1')
+    expect(domain.MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.1')
     // The floor-based admission model: the public range is >=, and the
     // validated-versions list is evidence, not an admission whitelist.
-    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.1-rc.3')
-    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'])
-    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.1-rc.5')
+    expect(domain.SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.1')
+    expect(domain.HOST_VALIDATED_VERSIONS).toEqual(['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1'])
+    expect(domain.LATEST_TESTED_HOST_VERSION).toBe('0.2.2-rc.1')
   })
 
   it('evaluates the active cohort from the shipped bytes, provenance included', async () => {
     const domain = await import(distDomain.href) as {
+      EXPECTED_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
       RC021_RC5_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
       RC021_RC3_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
       RC021_RC2_HOST_PACKAGES: Array<{ name: string; version?: string; integrity?: string }>
-      evaluateHostLock: (rows: unknown[], context: unknown) => { status: string; cohortId?: string; auditProvenance?: string }
+      evaluateHostLock: (rows: unknown[], context: unknown) => { status: string; cohortId?: string; auditProvenance?: string; reasonCode?: string }
       selectHostCohort: (rows: unknown[], platform?: string) => { consistent: boolean }
     }
-    const evaluation = domain.evaluateHostLock(domain.RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
+    // The shipped active cohort is the exact 0.2.2-rc.1 core, accepted on both
+    // platforms with its registry-derived provenance.
+    const evaluation = domain.evaluateHostLock(domain.EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })
     expect(evaluation).toMatchObject({
       status: 'supported',
-      cohortId: 'dsh-0.2.1-rc.5-core-v1',
+      cohortId: 'dsh-0.2.2-rc.1-core-v1',
       auditProvenance: 'registry-derived-pending-native-audit',
     })
-    expect(domain.evaluateHostLock(domain.RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' }))
-      .toMatchObject({ status: 'supported', cohortId: 'dsh-0.2.1-rc.3-core-v1' })
+    // The rc.5/rc.3/rc.2 graphs are historical evidence below the raised
+    // floor: the shipped bytes refuse them closed, not supported.
+    expect(domain.evaluateHostLock(domain.RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }))
+      .toMatchObject({ status: 'unsupported', reasonCode: 'host_lock_version_mismatch' })
+    expect(domain.evaluateHostLock(domain.RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' }).status).toBe('unsupported')
     expect(domain.evaluateHostLock(domain.RC021_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'headless' }).status).toBe('unsupported')
     // Drift fails closed in the shipped path too, not only in source.
     const drifted = domain.RC021_RC5_HOST_PACKAGES.map((row) =>
       row.name === '@deepseek-ai/dsh-session' ? { ...row, integrity: 'sha512-drift' } : row)
     expect(domain.evaluateHostLock(drifted, { platform: 'posix', profileKind: 'web' }).status).toBe('unsupported')
-    expect(domain.selectHostCohort(domain.RC021_RC5_HOST_PACKAGES, 'posix')).toMatchObject({ consistent: true })
+    expect(domain.selectHostCohort(domain.RC021_RC5_HOST_PACKAGES, 'posix')).toMatchObject({ consistent: false })
   })
 
   it('runs the shipped apply() against a minimal host context without throwing', async () => {
@@ -126,7 +132,7 @@ describe('shipped artifact entries', () => {
   })
 
   it('advertises only entry points that exist in the built tree', () => {
-    expect(manifest.version).toBe('0.12.1')
+    expect(manifest.version).toBe('0.13.0')
     expect(manifest.main).toBe('dist/index.js')
     for (const [subpath, target] of Object.entries(manifest.exports)) {
       for (const field of ['types', 'default'] as const) {

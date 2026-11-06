@@ -22,6 +22,7 @@ import { createPrepareTool } from '../src/tools/prepare.js'
 import { projectSessionCoreV2 } from '../src/core-v2/session.js'
 import { requestedTargetMatchesResolved } from '../src/domain/protocol-manifest.js'
 import { authorizeMutationFromProjection } from '../src/runtime.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 const HOST = { ...evaluateHostLock(EXPECTED_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }),
   auditedForegroundRenderers: ['bash' as const] }
@@ -340,9 +341,15 @@ it('offers the certifiable native edit and foreground test bindings to an adopte
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   runtime.register(createCheckpointTool(() => projection, () => {}))
-  const response = await runtime.execute({ callId: 'feedback' as never, name: 'context_guard_checkpoint',
-    arguments: { bindings: [] }, signal: new AbortController().signal })
+/** SDK 0.2.2-rc.1: batch execute — unwrap the sole call's settled result. */
+const sole = (batch: { results: readonly { result: unknown }[] }): { isError: boolean; value?: unknown; error?: unknown } => {
+  if (batch.results.length !== 1) throw new Error(`expected exactly one settled result, got ${batch.results.length}`)
+  return batch.results[0]!.result as { isError: boolean; value?: unknown; error?: unknown }
+}
+  const response = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: 'feedback' as never, name: 'context_guard_checkpoint',
+    arguments: JSON.stringify({ bindings: [] }) }], signal: new AbortController().signal }))
   expect(response.isError).toBe(false)
   const page = response.value as { open_items: Array<{ id: string; reason_code: string; binding_template?: Record<string, unknown> }> }
   const edit = page.open_items.find(row => row.id === editItem.id)!
@@ -363,21 +370,21 @@ it('offers the certifiable native edit and foreground test bindings to an adopte
     { ...stateFact, outcome: 'failure' as const },
   ]) {
     projection.evidence.set(stateFact.id, altered)
-    const refused = await runtime.execute({ callId: `bad-state-${String(altered.causedByCallId ?? 'other')}` as never,
-      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    const refused = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: `bad-state-${String(altered.causedByCallId ?? 'other')}` as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) }], signal: new AbortController().signal }))
     const row = (refused.value as typeof page).open_items.find(value => value.id === editItem.id)!
     expect(row.binding_template).toBeUndefined()
   }
   projection.evidence.set(stateFact.id, stateFact)
   projection.evidence.set(testFact.id, { ...testFact, outcome: 'failure' })
-  const failedTest = await runtime.execute({ callId: 'failed-test-feedback' as never,
-    name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+  const failedTest = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: 'failed-test-feedback' as never,
+    name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) }], signal: new AbortController().signal }))
   expect((failedTest.value as typeof page).open_items.find(row => row.id === testItem.id)!.binding_template).toBeUndefined()
   projection.evidence.set(testFact.id, testFact)
   const bindings = [edit.binding_template!, test.binding_template!]
   projection.currentGoalRef = { id: 'goal-native', revision: 1 }
-  const certified = await runtime.execute({ callId: 'certify' as never, name: 'context_guard_checkpoint',
-    arguments: { bindings }, signal: new AbortController().signal })
+  const certified = sole(await runtime.execute({ calls: [{ type: 'tool-call', id: 'certify' as never, name: 'context_guard_checkpoint',
+    arguments: JSON.stringify({ bindings }) }], signal: new AbortController().signal }))
   expect(certified.isError).toBe(false)
   expect(certified.value).toMatchObject({ status: 'certified' })
   const domainBindings = bindings.map(row => ({ itemId: row.item_id, evidenceIds: row.evidence_ids,

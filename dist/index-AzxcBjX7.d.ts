@@ -1796,20 +1796,26 @@ declare function currentContractDigest(projection: GuardProjection): string;
 //#endregion
 //#region src/domain/host-version.d.ts
 /** Version admission floor. The public DSH support range is
-* `>=0.2.1-rc.3` with NO implied upper bound: every host version at or above
+* `>=0.2.2-rc.1` with NO implied upper bound: every host version at or above
 * this floor (including later RCs on any tuple, stable and future releases)
 * passes VERSION ADMISSION. The floor only rises when a future Guard release
 * actively adopts a newer DSH; the runtime never raises it from a remote
 * `latest`. Ordering is strict SemVer with prerelease comparison and build
 * metadata ignored. Version admission is one gate of several — it never
 * claims native validation of a not-yet-tested host, and the graph/byte/
-* contract audits below still run on every admission. */
-declare const MIN_SUPPORTED_HOST_VERSION = "0.2.1-rc.3";
+* contract audits below still run on every admission. The floor rose from
+* `0.2.1-rc.3` to `0.2.2-rc.1` in Guard 0.13.0 because the 0.2.2-rc.1 host
+* changed real consumed interfaces (batch tool execution, native/PTC
+* executor split, awaited session-projection registration); no lower host
+* keeps an admission channel, while old session DATA migration stays a
+* separate retained path. */
+declare const MIN_SUPPORTED_HOST_VERSION = "0.2.2-rc.1";
 declare const SUPPORTED_HOST_RANGE: string;
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
 * ledger, NOT an admission whitelist: a missing row never refuses a
 * version-above-floor host. Each row records past evidence, not current
-* artifact acceptance. */
+* artifact acceptance. Rows below the current floor are historical evidence
+* only and never reopen admission. */
 declare const HOST_VALIDATED_VERSIONS: readonly string[];
 /** Historical alias retained for evidence-list readers; the admission rule is
 * the floor above, never this list. */
@@ -1886,18 +1892,19 @@ interface HostCohort {
   packages: PackageRow[];
   capabilities: CapabilityRow[];
 }
-/** Current baseline for new installations and default fixtures. */
-declare const ACTIVE_HOST_COHORT_ID = "dsh-0.2.1-rc.5";
-/** rc.5 remains the default; rc.3 is also an admitted exact audited cohort. */
+/** Current baseline for new installations and default fixtures. Since Guard
+* 0.13.0 the active cohort set contains ONLY the 0.2.2-rc.1 graph: the rc.5
+* and rc.3 cohorts are historical evidence below the raised floor and no
+* longer admit through the active set. */
+declare const ACTIVE_HOST_COHORT_ID = "dsh-0.2.2-rc.1";
 declare const ACTIVE_HOST_COHORT_IDS: readonly string[];
-/** Core-lock/v1 separates optional market identity from the rc.5 critical
-* graph. The rc.3 core is also admitted under its own audited identity. Version ordering cannot
-* authorize an unregistered graph, and graph identity is separate from native
-* acceptance of a Guard artifact.
+/** Core-lock/v1 separates optional market identity from the 0.2.2-rc.1
+* critical graph. Version ordering cannot authorize an unregistered graph,
+* and graph identity is separate from native acceptance of a Guard artifact.
 */
 declare const HOST_COHORTS: readonly HostCohort[];
 /**
-* Baseline fixture package identities (DSH 0.2.1-rc.5). The cohort
+* Baseline fixture package identities (DSH 0.2.2-rc.1). The cohort
 * is an atomic whole-graph contract (CG-DSH-001): any drifted, duplicated,
 * unknown-version, unbound, OR MISSING row fails the whole lock closed
 * (`host_lock_missing`); no capability inherits independence from a partially

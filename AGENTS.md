@@ -37,8 +37,9 @@ change the installed plugin runtime or grant release authority.
   or execution environment differ. Cross-cutting changes and unknown coverage
   retain the broader checks; use focused reproductions during repair.
 - Use the required PR validation summary for mapped fast checks. Candidate CI
-  runs the full suite on Ubuntu/Node 22 and the platform smoke group on all
-  remaining Ubuntu/macOS/Windows and Node 22/24 combinations. The selector
+  runs the full suite on Ubuntu/Node 24.9.0 (the exact minimum supported
+  runtime) and the platform smoke group on all remaining Ubuntu/macOS/Windows
+  and Node 24.9.0/24.x combinations. The selector
   expands all six lanes to the full suite for sensitive or unknown inputs;
   manual dispatch always requests the full matrix. Static, package, build and
   documentation contracts run once outside those lanes. Each selected lane is

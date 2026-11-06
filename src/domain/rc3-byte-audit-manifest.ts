@@ -1,4 +1,5 @@
 import audit from '../../manifests/rc021-rc3-byte-audit.json' with { type: 'json' }
+import type { ByteAuditManifest } from './byte-audit-manifest.js'
 
 /**
  * Module wrapper for the frozen rc.3 byte-audit manifest (same vitest-4 mock
@@ -7,4 +8,4 @@ import audit from '../../manifests/rc021-rc3-byte-audit.json' with { type: 'json
  * rc.2 wrapper so a suite narrowing the rc.2 manifest never widens the rc.3
  * cohort.
  */
-export default audit
+export default audit as unknown as ByteAuditManifest

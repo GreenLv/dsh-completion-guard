@@ -6,11 +6,13 @@ import { createCheckpointTool } from '../../src/tools/checkpoint.js'
 import { createRebindTool } from '../../src/tools/rebind.js'
 import { createProjection } from '../../src/domain/types.js'
 import { captureClause } from '../../src/domain/capture.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 it('T11 materializes bounded checkpoint and proposal JSON through the real DSH ToolRuntime output contract', async () => {
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   const p = createProjection()
   p.enabled = true
   p.items.set('R1', captureClause('更新演示包', 'm1', 'R1', 1))
@@ -18,21 +20,23 @@ it('T11 materializes bounded checkpoint and proposal JSON through the real DSH T
     outcome: 'success', capabilities: [], subjects: ['长'.repeat(9000)], surfaces: [], boundedSummarySha256: 'a'.repeat(64) })
   runtime.register(createCheckpointTool(() => p, () => {}))
   runtime.register(createRebindTool(() => p, async () => true))
-  const response = await runtime.execute({ callId: 'query' as never, name: 'context_guard_checkpoint', arguments: { bindings: [], evidence_scope: 'history' }, signal: new AbortController().signal })
-  expect(response.error).toBeUndefined()
-  expect(response.isError).toBe(false)
-  const text = response.content.filter(row => row.type === 'text').map(row => row.type === 'text' ? row.text : '').join('')
+  const response = await runtime.execute({ calls: [{ type: 'tool-call', id: 'query' as never, name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [], evidence_scope: 'history' }) }], signal: new AbortController().signal })
+  const first = response.results[0]!.result
+  expect(first.isError).toBe(false)
+  const text = first.content.filter(row => row.type === 'text').map(row => row.type === 'text' ? row.text : '').join('')
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(12288)
   expect(JSON.parse(text)).toMatchObject({ status: 'incomplete', available_evidence: [{ omitted: true, adapter_disposition: 'unavailable' }] })
-  const proposal = await runtime.execute({ callId: 'propose' as never, name: 'context_guard_rebind', arguments: { operation: 'propose', item_id: 'R1', clauses: ['更新演示包'] }, signal: new AbortController().signal })
-  expect(proposal.isError).toBe(false)
+  const proposal = await runtime.execute({ calls: [{ type: 'tool-call', id: 'propose' as never, name: 'context_guard_rebind', arguments: JSON.stringify({ operation: 'propose', item_id: 'R1', clauses: ['更新演示包'] }) }], signal: new AbortController().signal })
+  const proposalResult = proposal.results[0]!.result
+  expect(proposalResult.isError).toBe(false)
   // A same-generic whole-text split buys no certification and must not cost
   // a confirmation; the response stays within the bounded output contract.
-  expect(proposal.value).toMatchObject({ status: 'rejected', reason_code: 'no_certification_gain' })
-  expect(Buffer.byteLength(JSON.stringify(proposal.value))).toBeLessThanOrEqual(12288)
+  expect(proposalResult.value).toMatchObject({ status: 'rejected', reason_code: 'no_certification_gain' })
+  expect(Buffer.byteLength(JSON.stringify(proposalResult.value))).toBeLessThanOrEqual(12288)
   // A partition that would carry a supported action still proposes.
   p.items.get('R1')!.semanticAction = 'install'
-  const gainful = await runtime.execute({ callId: 'propose2' as never, name: 'context_guard_rebind', arguments: { operation: 'propose', item_id: 'R1', clauses: ['更新演示包'] }, signal: new AbortController().signal })
-  expect(gainful.isError).toBe(false)
-  expect(gainful.value).toMatchObject({ status: 'proposed' })
+  const gainful = await runtime.execute({ calls: [{ type: 'tool-call', id: 'propose2' as never, name: 'context_guard_rebind', arguments: JSON.stringify({ operation: 'propose', item_id: 'R1', clauses: ['更新演示包'] }) }], signal: new AbortController().signal })
+  const gainfulResult = gainful.results[0]!.result
+  expect(gainfulResult.isError).toBe(false)
+  expect(gainfulResult.value).toMatchObject({ status: 'proposed' })
 })

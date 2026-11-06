@@ -28,6 +28,15 @@
       "asarHeaderSha256": "77ad6299a3dcf5adc320ca215e1ee604eabd76e8d71bfc88fe264fc88bb17f65",
       "invariantCompanions": "none present in the rc.5 distribution ASAR; `files` remains the rc.2-only supplement set and is consumed only by the rc.2 rows",
       "windows": "Windows installed carrier and retained official installer Authenticode Valid; signed ElectronAsar/Integrity equals measured header; root/runtime manifests and metadata match signed header integrity; retained installer size 289408544 and SHA-512 equal the independently retained official win-x64 download (2026-11-02). Runtime win32/x64, Node 24.21.0, pnpm 11.28.5; no invariant companions observed in actual ASAR/runtime index scans. Native Guard install/no-op/lifecycle acceptance remains separate."
+    },
+    "rc022Acquisition": {
+      "observedDate": "2026-11-07",
+      "method": "official update feed ZIP (app-update.yml nightly feed https://download.deepseek.com/dsh-desk/feeds/mac-arm64/nightly-mac.yml) verified by the coordinator: SHA-512/size equal the retained ZIP; codesign --verify --deep --strict passed (TeamIdentifier NAN929V4UM, identifier com.deepseek.dsh); Info.plist signed ASAR header = measured header = ASAR header inside the retained ZIP; root manifest, dsh/package.json and desktop-runtime.json member SHA-256 all match the signed header; platform darwin/arm64, pnpm 11.28.5",
+      "zipSha512Base64": "mHn+lwXZd7I3ZvakFhRg0lxrGe0pNSmWhMU65AQiyrjy/yfa0C8Rq6nQ6tLcxnqdFYl+j5BN4ghOToTLiT2qGA==",
+      "asarHeaderSha256": "ac3bfba72a39093050d3b4f678c5982dc9b4a267b8f4019f40546de03474f294",
+      "buildIdentity": "c59d10aff167ad7eefead4b3a9082fb57c8fbfe8 is the opaque signed build identity of the distribution; the public source pin for this release remains 66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db and the two are never equated",
+      "windows": "Windows official tuple (installed carrier + installer + retained official feed) verified natively by the Windows owner: Authenticode Valid, signed ElectronAsar/Integrity equals the measured header, root/runtime manifests and metadata match the signed header; installer SHA-512 equals the official win-x64 nightly updater metadata re-read independently by the coordinator (https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml returns 0.2.2-rc.1, exact URL/SHA-512 match). The signature-verifier follow-up (WIN-SIG-IMPORT-01) closed as no_product_defect_reproduced: the earlier exit 1 came from a diagnostic process inheriting its parent environment, not from the production four-variable wrapper, which correctly accepts the genuine carrier and rejects a bad header and a wrong-vendor Microsoft-signed carrier. Optional explicit Import-Module hardening stays deferred and is NOT a release gate.",
+      "acceptanceBoundary": "This row records the official distribution IDENTITY only. Complete key-package closure against the current Guard implementation, native install, strict no-op, lifecycle acceptance and host-lock readback remain separate pending facts owned by the later native phase."
     }
   },
   "files": [
@@ -196,6 +205,37 @@
       "buildDirty": false,
       "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.5-win-x64.exe",
       "releaseSha512": "gu2dH+aTr678c0P8DGAH/h4B1GaWfQIjpsPrLjl/ukLrQIh6DLVq/MhX4FZvJ8o1GCMocOhix6XbLa6KmtjXXg==",
+      "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
+    },
+    {
+      "id": "desktop-0.2.2-rc.1-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "version": "0.2.2-rc.1",
+      "runtimeVersion": "0.2.2-rc.1",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "ac3bfba72a39093050d3b4f678c5982dc9b4a267b8f4019f40546de03474f294",
+      "desktopManifestSha256": "cbf5dc8ff3e6318cc61d966010e427aefa2042a1371155596de7f5af53bd3c64",
+      "buildCommit": "c59d10aff167ad7eefead4b3a9082fb57c8fbfe8",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.2-rc.1-mac-arm64.zip",
+      "releaseSha512": "mHn+lwXZd7I3ZvakFhRg0lxrGe0pNSmWhMU65AQiyrjy/yfa0C8Rq6nQ6tLcxnqdFYl+j5BN4ghOToTLiT2qGA==",
+      "vendorTeam": "NAN929V4UM",
+      "vendorIdentifier": "com.deepseek.dsh"
+    },
+    {
+      "id": "desktop-0.2.2-rc.1-win32-x64",
+      "platform": "win32",
+      "arch": "x64",
+      "version": "0.2.2-rc.1",
+      "runtimeVersion": "0.2.2-rc.1",
+      "pnpmVersion": "11.28.5",
+      "asarHeaderSha256": "ea371c0a1f7a938f26fb37f0850801a4623a758e9a074553ed41eb3acf7207b1",
+      "desktopManifestSha256": "cbf5dc8ff3e6318cc61d966010e427aefa2042a1371155596de7f5af53bd3c64",
+      "buildCommit": "c59d10aff167ad7eefead4b3a9082fb57c8fbfe8",
+      "buildDirty": false,
+      "releaseUrl": "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.2-rc.1-win-x64.exe",
+      "releaseSha512": "swcK0J6ofGkaAWLRpOes2ca7CWO8vuM5Vp0FRnQ/DG3q+Z+OhvsgLz3hIiSYpRUETY+fEz+Ww86fNa0jiVIifw==",
       "vendorPublisher": "Hangzhou DeepSeek Artificial Intelligence Co., Ltd."
     }
   ]

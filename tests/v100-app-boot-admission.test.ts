@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 
 // CG021-07: the version-admission VECTOR is judged by the OFFICIAL production
-// consumer (`evaluatePluginCompatibility` from the pinned 0.2.1-rc.5
+// consumer (`evaluatePluginCompatibility` from the pinned 0.2.2-rc.1
 // dsh-app-boot in this repository's own dependency closure), not only by
 // Guard's own floor helper. This is the same function the market/plugin
 // carrier runs; the native market card remains a separate Codex acceptance.
@@ -16,14 +16,17 @@ function loadAppBoot(): { evaluatePluginCompatibility: (manifest: unknown, exemp
   const shellEnv = createRequire(producer.resolve('@deepseek-ai/dsh-shell-env'))
   const entry = shellEnv.resolve('@deepseek-ai/dsh-app-boot')
   const actual = JSON.parse(readFileSync(shellEnv.resolve('@deepseek-ai/dsh-app-boot/package.json'), 'utf8'))
-  // The installed build baseline moved to rc.5; all audited cohorts are
-  // legitimate, so pin against the manifest matching the resolved version.
+  // The installed build baseline moved to 0.2.2-rc.1; every audited cohort
+  // stays a legitimate pin source, so select the manifest matching the
+  // resolved version (rc.5/rc.3/rc.2 rows remain historical evidence).
   const rc2Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc2-byte-audit.json', import.meta.url), 'utf8')) as {
     packages: Array<{ name: string; version: string; modules: Record<string, string> }>
   }
   const rc3Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc3-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
   const rc5Audit = JSON.parse(readFileSync(new URL('../manifests/rc021-rc5-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
-  const audit = actual.version === '0.2.1-rc.5' ? rc5Audit : actual.version === '0.2.1-rc.3' ? rc3Audit : rc2Audit
+  const rc022Audit = JSON.parse(readFileSync(new URL('../manifests/rc022-rc1-byte-audit.json', import.meta.url), 'utf8')) as typeof rc2Audit
+  const audit = actual.version === '0.2.2-rc.1' ? rc022Audit
+    : actual.version === '0.2.1-rc.5' ? rc5Audit : actual.version === '0.2.1-rc.3' ? rc3Audit : rc2Audit
   const pinned = audit.packages.find(row => row.name === '@deepseek-ai/dsh-app-boot')
   if (!pinned || actual.name !== pinned.name || actual.version !== pinned.version
     || !readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8').includes(`'${pinned.name}@${pinned.version}':`)
@@ -40,28 +43,28 @@ const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.
   peerDependencies: Record<string, string>
 }
 
-describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () => {
+describe('CG021-07: official app-boot admission over the 0.2.2-rc.1 floor', () => {
   const { evaluatePluginCompatibility } = loadAppBoot()
 
   it('keeps the shipped dual-layer declaration consistent', () => {
-    expect(manifest.engines.dsh).toBe('>=0.2.1-rc.3')
-    expect(manifest.dsh.engines.dsh).toBe('>=0.2.1-rc.3')
+    expect(manifest.engines.dsh).toBe('>=0.2.2-rc.1')
+    expect(manifest.dsh.engines.dsh).toBe('>=0.2.2-rc.1')
     for (const [name, range] of Object.entries(manifest.peerDependencies)) {
       if (name === '@deepseek-ai/cordis') continue
-      expect(range, name).toBe('>=0.2.1-rc.3')
+      expect(range, name).toBe('>=0.2.2-rc.1')
     }
   })
 
   it('admits the floor, later RCs, stable and future versions through the REAL consumer', () => {
-    for (const version of ['0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.1', '0.2.1-rc.6', '0.2.2-rc.1', '0.2.2', '0.3.0', '1.0.0', '0.2.1-rc.5+build.7']) {
+    for (const version of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '0.2.2-rc.10', '0.2.2', '0.2.3-rc.1', '0.2.3', '0.3.0', '1.0.0', '0.2.2-rc.1+build.7']) {
       expect(evaluatePluginCompatibility(manifest, {}, version), version).toBeUndefined()
     }
   })
 
-  it('refuses 0.2.0-rc.2 and 0.2.1-rc.1/rc.2 with the declared engines range', () => {
-    for (const version of ['0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.2+build.7']) {
+  it('refuses the whole 0.2.1 line and earlier with the declared engines range', () => {
+    for (const version of ['0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.2+build.7', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-alpha.3', '0.2.2-beta.1']) {
       const issue = evaluatePluginCompatibility(manifest, {}, version)
-      expect(issue, version).toMatchObject({ requirements: { 'engines.dsh': '>=0.2.1-rc.3' }, exempted: false })
+      expect(issue, version).toMatchObject({ requirements: { 'engines.dsh': '>=0.2.2-rc.1' }, exempted: false })
     }
   })
 
@@ -72,7 +75,7 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () =
     const boot = createRequire(shellEnv.resolve('@deepseek-ai/dsh-app-boot'))
     const semver = boot('semver') as { satisfies: (version: string, range: string, options?: { includePrerelease: boolean }) => boolean }
     const semverPackage = boot('semver/package.json') as { version: string }
-    const matrix = JSON.parse(readFileSync(new URL('../benchmarks/incidents/acceptance/semver-matrix-v120.json', import.meta.url), 'utf8')) as {
+    const matrix = JSON.parse(readFileSync(new URL('../benchmarks/incidents/acceptance/semver-matrix-v130.json', import.meta.url), 'utf8')) as {
       range: string; semver_version: string; cases: Array<{ version: string; plain_satisfies: boolean; includePrerelease_true: boolean }>
     }
     expect(matrix.range).toBe(manifest.engines.dsh)
@@ -91,9 +94,9 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () =
 
   it('without top-level engines the dsh peers decide; workspace peer ranges refer to the running runtime', () => {
     const { engines: _engines, ...peersOnly } = manifest
-    expect(evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.5')).toBeUndefined()
+    expect(evaluatePluginCompatibility(peersOnly, {}, '0.2.2-rc.1')).toBeUndefined()
     const below = evaluatePluginCompatibility(peersOnly, {}, '0.2.1-rc.1')
-    expect(below?.requirements).toMatchObject({ '@deepseek-ai/dsh-session': '>=0.2.1-rc.3' })
+    expect(below?.requirements).toMatchObject({ '@deepseek-ai/dsh-session': '>=0.2.2-rc.1' })
     // The peers-only surface accepts workspace ranges the way production
     // carriers emit them: they resolve against the CURRENT runtime — i.e. a
     // workspace peer always satisfies whatever runtime is running, which is
@@ -103,7 +106,7 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () =
       peerDependencies: Object.fromEntries(Object.entries(peersOnly.peerDependencies)
         .map(([name, range]) => [name, name === '@deepseek-ai/cordis' ? range : 'workspace:^'])),
     }
-    expect(evaluatePluginCompatibility(workspacePeers, {}, '0.2.1-rc.5')).toBeUndefined()
+    expect(evaluatePluginCompatibility(workspacePeers, {}, '0.2.2-rc.1')).toBeUndefined()
     expect(evaluatePluginCompatibility(workspacePeers, {}, '0.2.0-rc.2')).toBeUndefined()
   })
 
@@ -112,16 +115,16 @@ describe('CG021-07: official app-boot admission over the 0.2.1-rc.3 floor', () =
     // manifest: a consumer that only reads the top-level field must not be
     // silently stricter or looser than one reading the nested one.
     const strictNested = { ...manifest, dsh: { ...manifest.dsh, engines: { dsh: '>=9.9.9' } } }
-    expect(evaluatePluginCompatibility(strictNested, {}, '0.2.1-rc.5')).toBeUndefined()
+    expect(evaluatePluginCompatibility(strictNested, {}, '0.2.2-rc.1')).toBeUndefined()
     const strictTop = { ...manifest, engines: { ...manifest.engines, dsh: '>=9.9.9' } }
-    expect(evaluatePluginCompatibility(strictTop, {}, '0.2.1-rc.5')?.requirements['engines.dsh']).toBe('>=9.9.9')
+    expect(evaluatePluginCompatibility(strictTop, {}, '0.2.2-rc.1')?.requirements['engines.dsh']).toBe('>=9.9.9')
   })
 
   it('a nested-only declaration still admits through the peers at the floor', () => {
     const nestedOnly = { ...manifest, engines: { node: manifest.engines.node } }
     delete (nestedOnly as Record<string, unknown>).engines
     ;(nestedOnly as Record<string, unknown>).dsh = manifest.dsh
-    expect(evaluatePluginCompatibility(nestedOnly, {}, '0.2.1-rc.5')).toBeUndefined()
+    expect(evaluatePluginCompatibility(nestedOnly, {}, '0.2.2-rc.1')).toBeUndefined()
     expect(evaluatePluginCompatibility(nestedOnly, {}, '0.2.1-rc.1')).toBeDefined()
   })
 })

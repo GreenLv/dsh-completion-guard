@@ -28,7 +28,14 @@ describe('F-CG0100-01 official cwd producer recovery', () => {
     const ctx = new Context()
     new SessionProjectionRegistry(ctx); new SystemPrompt(ctx, {})
     new LocalFileSystem(ctx, { cwd: root, diffBasisMaxBytes: 10485760 })
-    const service = new workingDirectory.WorkingDirectoryService(ctx, { defaultDirectory: root })
+    // SDK 0.2.2-rc.1: session projection registration became an awaited
+    // resource acquisition, so the service must start through the plugin
+    // lifecycle; bare construction never runs [Service.init] and every
+    // get/set/ensure call would dereference the missing projection handle.
+    const servicePlugin = ctx.plugin(workingDirectory.WorkingDirectoryService, { defaultDirectory: root })
+    await servicePlugin.await()
+    const service = (ctx as unknown as { workingDirectory: InstanceType<typeof workingDirectory.WorkingDirectoryService> }).workingDirectory
+    expect(service.workingDirectoryProjectionHandle).toBeDefined()
     const id = SessionId('cwd-recovery')
     const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, id, isSeeded: false, createdAt: 1, cwd: root })
     const agent = { id, session, ctx, inject: () => {} }

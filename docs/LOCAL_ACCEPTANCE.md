@@ -1,5 +1,15 @@
 # Local Acceptance
 
+## 0.13.0 / DSH 0.2.2-rc.1 candidate contract
+
+This candidate requires DSH `>=0.2.2-rc.1`, Node.js `>=24.9.0` and Cordis `>=4.1.0`. Its default reviewed host graph is `dsh-0.2.2-rc.1-core-v1`; earlier host identities remain historical records. Run all six candidate CI lanes on the exact commit: Ubuntu, macOS and Windows, each on Node `24.9.0` and `24.x`.
+
+Freeze one package from the clean accepted commit with `scripts/release-pack.mjs`. Both native platforms must use that same tgz and its digest. Run the versioned acceptance entrypoint with `--preflight` before each intended native command. Web/Headless installation, strict second no-op, package parity, host-lock readback, lifecycle, shell shims, old-session migration and cleanup remain required. For Desktop use `--desktop-cohort 0.2.2-rc.1` and the v2 two-stage no-op contract described below. Official distribution registration alone does not pass these gates. Revalidate each platform's original session library before changing daily profiles, as required by the retained migration contract.
+
+The historical incident gate must bind case-level assertions and applicability decisions to this source. Preserve source, CI, exact-artifact, native, credentialed model, rendered UI and performance evidence separately. Select model/UI/performance checks from changed risk and retained mandatory contracts; this host adaptation does not by itself require a new 32-cell performance study. Known upstream gaps remain disclosed and non-blocking within their accepted scope. Check the temporary Undici exceptions again before publication; their expiry remains 2026-11-30 inclusive.
+
+本候选最低要求 DSH `0.2.2-rc.1`、Node.js `24.9.0`、Cordis `4.1.0`。精确提交的三系统 × 两 Node 版本共六条 CI 泳道须全跑。只从干净的已接受提交冻结一份 tgz，两端使用同一摘要的包，分别通过 Web/Headless、旧会话迁移、清理和 Desktop v2 两段 no-op 门禁；Desktop 参数为 `--desktop-cohort 0.2.2-rc.1`。原有会话库须先复验，再升级日常 profile。历史错误库逐案绑定断言和适用范围，源码通过不代替原生、真实模型或渲染后的界面行为。下文旧版本的命令和结果保留原有对象；可复用的验收机制须以上述新宿主、源码和制品身份执行。
+
 ## 0.12.1 session migration acceptance
 
 Run the historical incident gate and both native migration workflows against the same frozen package. On each platform, use the reviewed rc.5 runtime to verify plain JSONL and zstd fixtures with more than one generation. Exercise inventory, inspection, adoption, repeated adoption and verification. Compare the paths, identities and bytes of all original fixture logs before and after the workflow. Check that a corrupt or inconsistent older generation blocks migration even if the newest generation is readable. The historical and native receipts belong to the release artifact.
@@ -12,11 +22,11 @@ Before adopting the release in daily Web and Headless, revalidate each platform'
 
 ## 0.12.0 / DSH 0.2.1-rc.5 candidate contract
 
-The current source requires DSH `>=0.2.1-rc.3`, with rc.5 as its default audited host graph; rc.3 uses its own reviewed cohort. The task, certificate and data protocols and the existing Web/Headless and Desktop gate sets remain in force. Use `--desktop-cohort 0.2.1-rc.5` for this candidate's Desktop entry. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [old-session migration](ACTIVATION_MIGRATION.md) instructions before replacing an installation.
+That 0.12.0 candidate required DSH `>=0.2.1-rc.3`, with rc.5 as its default audited host graph; rc.3 uses its own reviewed cohort. The task, certificate and data protocols and the existing Web/Headless and Desktop gate sets remain in force. Use `--desktop-cohort 0.2.1-rc.5` for this candidate's Desktop entry. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [old-session migration](ACTIVATION_MIGRATION.md) instructions before replacing an installation.
 
 The rc.5 qualification and packaged metadata updates create a new package identity. Source, CI, exact tgz identity, each platform's native installation/lifecycle, real-model and GUI/performance results must name that new subject; earlier rc.2 observations remain attached to their original source and artifact. This section states the contract, not a passing execution or publication. The versioned sections below retain their historical scope, including 0.10.0's rc.2 floor and original command examples.
 
-当前源码的 DSH 下限为 `0.2.1-rc.3`，默认审查基线为 rc.5；rc.3 使用自己的审查队列。旧会话及数据协议保持兼容，Web/Headless 与 Desktop 原有门禁不变；本候选的 Desktop 入口使用 `--desktop-cohort 0.2.1-rc.5`。候选变更产生新的包字节，源码、CI、制品、双平台原生、模型及 UI/性能证据必须分别绑定新身份。下文旧版本记录保留原范围，不改标为本候选通过。
+该 0.12.0 候选当时的 DSH 下限为 `0.2.1-rc.3`，默认审查基线为 rc.5；rc.3 使用自己的审查队列。旧会话及数据协议保持兼容，Web/Headless 与 Desktop 原有门禁不变；本候选的 Desktop 入口使用 `--desktop-cohort 0.2.1-rc.5`。候选变更产生新的包字节，源码、CI、制品、双平台原生、模型及 UI/性能证据必须分别绑定新身份。下文旧版本记录保留原范围，不改标为本候选通过。
 
 ## 0.10.0 / DSH 0.2.1-rc.2 acceptance contract
 

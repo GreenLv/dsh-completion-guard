@@ -12,6 +12,7 @@ import { createPrepareTool } from '../../src/tools/prepare.js'
 import { createBoundaryTool } from '../../src/tools/boundary.js'
 import { authorizeMutationFromProjection } from '../../src/runtime.js'
 import type { DerivedEnvelope, GuardProjection } from '../../src/domain/types.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 /**
  * 0.6.3 T07: the whole local lifecycle over ONE durable log.
@@ -86,14 +87,20 @@ class DurableLog {
 function host() {
   const ctx = new Context()
   new SystemPrompt(ctx, {})
-  return new ToolRuntime(ctx)
+  const __rt = new ToolRuntime(ctx); __rt.setExecutor(new NativeToolExecutor(ctx)); return __rt
 }
 
+/** SDK 0.2.2-rc.1: batch execute — unwrap the sole call's settled result. */
+const sole = (batch: { results: readonly { result: unknown }[] }): { isError: boolean; value?: unknown; content: Array<{ type: string; text?: string }> } => {
+  if (batch.results.length !== 1) throw new Error(`expected exactly one settled result, got ${batch.results.length}`)
+  const result = batch.results[0]!.result as { isError: boolean; value?: unknown; content?: Array<{ type: string; text?: string }> }
+  return { ...result, content: result.content ?? [] }
+}
 const textOf = (response: { content: Array<{ type: string; text?: string }> }): string =>
   response.content.filter((part) => part.type === 'text').map((part) => part.text ?? '').join('')
 
-const call = (runtime: ToolRuntime, name: string, argumentsValue: unknown, callId: string) =>
-  runtime.execute({ callId: callId as never, name, arguments: argumentsValue, signal: new AbortController().signal })
+const call = async (runtime: ToolRuntime, name: string, argumentsValue: unknown, callId: string) =>
+  sole(await runtime.execute({ calls: [{ type: 'tool-call', id: callId as never, name, arguments: JSON.stringify(argumentsValue) }], signal: new AbortController().signal }))
 
 const snapshot = (projection: GuardProjection) => [...projection.items.values()]
   .map((item) => `${item.id}:${item.status}:${item.authorityDisposition ?? '-'}:${item.semanticAction ?? '-'}:${item.needsReview?.reason ?? '-'}`)

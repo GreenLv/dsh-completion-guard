@@ -12,6 +12,7 @@ import { createNativeFileObserver, createNativeGitObserver, createTestReadinessO
 import { createProjection } from '../../src/domain/types.js'
 import { captureClause } from '../../src/domain/capture.js'
 import { GIT_COMMAND_TEMPLATES } from '../../src/domain/git-adapter.js'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 
 /**
  * Every Guard tool through the REAL host registry.
@@ -44,6 +45,17 @@ import { GIT_COMMAND_TEMPLATES } from '../../src/domain/git-adapter.js'
  * fields in only when defined.
  */
 
+
+/** SDK 0.2.2-rc.1: ToolRuntime.execute is batch-only (ToolBatchResult). Every
+ * case in this file issues exactly one call per batch, so unwrap the sole
+ * settled result; a missing result would be a batch-contract violation. */
+function soleResult(batch: { results: readonly { result: unknown }[] }): {
+  isError: boolean; value?: unknown; error?: { info?: { code?: string } }
+} {
+  if (batch.results.length !== 1) throw new Error(`expected exactly one settled result, got ${batch.results.length}`)
+  return batch.results[0]!.result as { isError: boolean; value?: unknown; error?: { info?: { code?: string } } }
+}
+
 function guardProjection(options: { withAction?: boolean } = {}) {
   const projection = createProjection()
   projection.enabled = true
@@ -63,6 +75,7 @@ function registry(options: { withAction?: boolean } = {}) {
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   const projection = guardProjection(options)
   runtime.register(createCheckpointTool(() => projection, () => {}))
   runtime.register(createRebindTool(() => projection, async () => true))
@@ -87,6 +100,7 @@ it('detects an output-contract violation, so the assertions above can bite', asy
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   runtime.register(defineTool({
     name: 'guard_negative_control',
     description: 'returns a field its declared output schema forbids',
@@ -97,13 +111,11 @@ it('detects an output-contract violation, so the assertions above can bite', asy
     },
     execute: async () => ({ status: 'ok', unexpected: 'this field is not in the schema' }) as never,
   }))
-  const response = await runtime.execute({
-    callId: 'negative-control' as never,
-    name: 'guard_negative_control',
-    arguments: {},
+  const response = soleResult(await runtime.execute({
+    calls: [{ type: 'tool-call', id: 'negative-control' as never, name: 'guard_negative_control', arguments: JSON.stringify({}) }],
     signal: new AbortController().signal,
-  })
-  expect((response as { error?: { info?: { code?: string } } }).error?.info?.code).toBe('INVALID_TOOL_OUTPUT')
+  }))
+  expect(response.error?.info?.code).toBe('INVALID_TOOL_OUTPUT')
 })
 
 it.each([['incomplete', false], ['observed', true]] as const)(
@@ -111,6 +123,7 @@ it.each([['incomplete', false], ['observed', true]] as const)(
     const ctx = new Context()
     new SystemPrompt(ctx, {})
     const runtime = new ToolRuntime(ctx)
+    runtime.setExecutor(new NativeToolExecutor(ctx))
     const projection = guardProjection()
     projection.boundaryProtocol = 6
     projection.hostStatus = 'supported'
@@ -120,18 +133,18 @@ it.each([['incomplete', false], ['observed', true]] as const)(
       predicates: { R001: certifiable ? 'satisfied' : 'insufficient' },
       unmet_requirements: certifiable ? [] : ['R001'], current_actions: [] } as never
     runtime.register(createCheckpointTool(() => projection, () => {}))
-    const response = await runtime.execute({ callId: `v6-${status}` as never,
-      name: 'context_guard_checkpoint', arguments: { bindings: [] }, signal: new AbortController().signal })
+    const response = soleResult(await runtime.execute({ calls: [{ type: 'tool-call', id: `v6-${status}` as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [] }) }], signal: new AbortController().signal }))
     expect(response.isError).toBe(false)
     expect(response.value).toMatchObject({ status, feedback_source: 'confirmed_core_v2',
       certificate_status: 'not_requested' })
     expect(response.value).not.toHaveProperty('certificate')
-    const detail = await runtime.execute({ callId: `v6-detail-${status}` as never,
-      name: 'context_guard_checkpoint', arguments: { bindings: [], detail_id: 'R001' }, signal: new AbortController().signal })
+    const detail = soleResult(await runtime.execute({ calls: [{ type: 'tool-call', id: `v6-detail-${status}` as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [], detail_id: 'R001' }) }], signal: new AbortController().signal }))
     expect(detail.isError).toBe(false)
     expect(detail.value).toMatchObject({ status, detail_id: 'R001', detail_chunk: expect.any(String) })
-    const invalid = await runtime.execute({ callId: `v6-invalid-${status}` as never,
-      name: 'context_guard_checkpoint', arguments: { bindings: [], cursor: 'not-a-cursor' }, signal: new AbortController().signal })
+    const invalid = soleResult(await runtime.execute({ calls: [{ type: 'tool-call', id: `v6-invalid-${status}` as never,
+      name: 'context_guard_checkpoint', arguments: JSON.stringify({ bindings: [], cursor: 'not-a-cursor' }) }], signal: new AbortController().signal }))
     expect(invalid.isError).toBe(false)
     expect(invalid.value).toMatchObject({ status: 'unknown', reason_code: 'malformed_cursor' })
   },
@@ -141,13 +154,14 @@ it('reproduces the old checkpoint schema rejection for a default v6 answer', asy
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   runtime.register(defineTool({ name: 'old_checkpoint_output_contract', description: 'historical schema repro',
     parameters: {}, output: { schema: { type: 'object', additionalProperties: false,
       properties: { status: { type: 'string', enum: ['certified', 'incomplete', 'unknown'] } } },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     execute: async () => ({ status: 'observed', feedback_source: 'confirmed_core_v2' }) as never }))
-  const response = await runtime.execute({ callId: 'old-v6-schema' as never,
-    name: 'old_checkpoint_output_contract', arguments: {}, signal: new AbortController().signal })
+  const response = soleResult(await runtime.execute({ calls: [{ type: 'tool-call', id: 'old-v6-schema' as never,
+    name: 'old_checkpoint_output_contract', arguments: JSON.stringify({}) }], signal: new AbortController().signal }))
   expect(response.isError).toBe(true)
   expect(response.error?.info?.code).toBe('INVALID_TOOL_OUTPUT')
 })
@@ -172,19 +186,17 @@ const CASES: Array<{ tool: string; arguments: Record<string, unknown>; withActio
 
 it.each(CASES)('$tool materializes through the real DSH ToolRuntime output contract', async ({ tool, arguments: args, withAction }) => {
   const { runtime } = registry({ withAction })
-  const response = await runtime.execute({
-    callId: `call-${tool}` as never,
-    name: tool,
-    arguments: args,
+  const response = soleResult(await runtime.execute({
+    calls: [{ type: 'tool-call', id: `call-${tool}` as never, name: tool, arguments: JSON.stringify(args) }],
     signal: new AbortController().signal,
-  })
+  }) as never)
   // The host's exact codes and their exact LOCATION, both read from the
   // installed registry rather than guessed: the failure envelope is
   // `{ isError: true, error: { message, info: { name, code } } }`, so the code
   // lives at `error.info.code`. The first draft of this test asserted invented
   // code names at the wrong path and could never have failed; the negative
   // control below is what exposed that.
-  const code = (response as { error?: { info?: { code?: string } } }).error?.info?.code
+  const code = response.error?.info?.code
   expect(code, `${tool} rejected the arguments this case supplies`).not.toBe('INVALID_ARGS')
   expect(code, `${tool} returned a value its own output schema rejects`).not.toBe('INVALID_TOOL_OUTPUT')
   expect(code, `${tool} is not registered in the runtime`).not.toBe('UNKNOWN_TOOL')
@@ -192,16 +204,15 @@ it.each(CASES)('$tool materializes through the real DSH ToolRuntime output contr
 
 it.each(['resolution', 'effect', 'state'])('retires ordinary %s producer inputs through the host registry', async (evidence_role) => {
   const { runtime } = registry()
-  const response = await runtime.execute({
-    callId: `missing-${evidence_role}` as never,
-    name: 'context_guard_evidence',
-    arguments: { semantic_action: 'commit', evidence_role },
+  const response = soleResult(await runtime.execute({
+    calls: [{ type: 'tool-call', id: `missing-${evidence_role}` as never, name: 'context_guard_evidence',
+      arguments: JSON.stringify({ semantic_action: 'commit', evidence_role }) }],
     // Missing-input paths must not touch a live resource or session API.
     agent: { session: {} } as never,
     signal: new AbortController().signal,
-  })
+  }))
   expect(response.isError).toBe(false)
-  const value = (response as unknown as { value: Record<string, unknown> }).value
+  const value = response.value as Record<string, unknown>
   expect(value).toMatchObject({ status: 'unavailable',
     reason_code: 'ordinary_evidence_migrated_to_host_facts', next_step: expect.any(String),
   })
@@ -211,6 +222,7 @@ it('materializes prepare discovery through the real host registry output contrac
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   runtime.register(createPrepareTool({
     getProjection: () => guardProjection({ withAction: false }),
     hostCapability: () => ({ status: 'supported' }),
@@ -218,14 +230,12 @@ it('materializes prepare discovery through the real host registry output contrac
     // ctx.sessions.flush outcome.
     refreshProjection: async () => true,
   }))
-  const response = await runtime.execute({
-    callId: 'prepare-discovery' as never,
-    name: 'context_guard_prepare',
-    arguments: {},
+  const response = soleResult(await runtime.execute({
+    calls: [{ type: 'tool-call', id: 'prepare-discovery' as never, name: 'context_guard_prepare', arguments: JSON.stringify({}) }],
     signal: new AbortController().signal,
-  })
+  }))
   expect(response.isError).toBe(false)
-  const value = (response as unknown as { value: Record<string, unknown> }).value
+  const value = response.value as Record<string, unknown>
   expect(value).toMatchObject({ status: 'prepared', mode: 'discovery', total_open: 1 })
   expect((value.items as Array<{ id: string }>)[0]?.id).toBe('R001')
 })
@@ -234,17 +244,16 @@ it('surfaces a failed refresh as projection_durability_unavailable through the r
   const ctx = new Context()
   new SystemPrompt(ctx, {})
   const runtime = new ToolRuntime(ctx)
+  runtime.setExecutor(new NativeToolExecutor(ctx))
   runtime.register(createPrepareTool({
     getProjection: () => guardProjection(),
     refreshProjection: async () => false,
   }))
-  const response = await runtime.execute({
-    callId: 'prepare-stale' as never,
-    name: 'context_guard_prepare',
-    arguments: { item_id: 'R001' },
+  const response = soleResult(await runtime.execute({
+    calls: [{ type: 'tool-call', id: 'prepare-stale' as never, name: 'context_guard_prepare', arguments: JSON.stringify({ item_id: 'R001' }) }],
     signal: new AbortController().signal,
-  })
+  }))
   expect(response.isError).toBe(false)
-  const value = (response as unknown as { value: Record<string, unknown> }).value
+  const value = response.value as Record<string, unknown>
   expect(value).toEqual({ status: 'unknown', reason_code: 'projection_durability_unavailable' })
 })

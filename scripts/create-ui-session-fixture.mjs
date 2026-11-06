@@ -54,7 +54,7 @@ export async function seedSessions(persistence, { nonce, cwd, preludeTurns = 0, 
 }
 export async function createFixture({ home, frontendUrl, sourceCommit, artifactSha256, output, preludeTurns = 0, deferHostSeeding = false, hostVersion = '0.2.1-rc.3', distribution = 'roots', outputBytes = 4096, surface = 'web' }) {
   if (!['web', 'desktop'].includes(surface)) throw new DriverError(2, 'unsupported fixture surface')
-  if (!['0.2.1-rc.2', '0.2.1-rc.3'].includes(hostVersion) || !Number.isSafeInteger(preludeTurns) || preludeTurns < 0 || preludeTurns > 10000) throw new DriverError(2, 'unsupported fixture host or history scale')
+  if (!['0.2.1-rc.2', '0.2.1-rc.3', '0.2.2-rc.1'].includes(hostVersion) || !Number.isSafeInteger(preludeTurns) || preludeTurns < 0 || preludeTurns > 10000) throw new DriverError(2, 'unsupported fixture host or history scale')
   if (!/^[a-f0-9]{40}$/.test(sourceCommit ?? '') || (artifactSha256 !== undefined && !/^[a-f0-9]{64}$/.test(artifactSha256))) throw new DriverError(2, 'exact source/artifact identity required')
   if (!['roots', 'tool'].includes(distribution) || !Number.isSafeInteger(outputBytes) || outputBytes < 0 || outputBytes > 1048576) throw new DriverError(2, 'invalid history distribution/output byte budget')
   home = resolve(home)

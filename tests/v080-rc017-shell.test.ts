@@ -33,7 +33,10 @@ for (const [name, apply] of [['bash', bash], ['pwsh', pwsh]] as const) describe(
   it('never treats promoted partial stdout as terminal, including trailing explanation', () => {
     for (const output of ['PASS', 'PASS\n[exit code: 0]', '[exit code: 0]\n']) {
       const text = render({kind: 'promoted', jobId: `${name}-1`, timeoutMs: 10, output})
-      expect(text).toContain('The command keeps running')
+      // SDK 0.2.2-rc.1: the promoted-render trailing explanation is
+      // `[still running after <ms>; moved to background job <id>]` — same
+      // non-terminal purpose, new wording.
+      expect(text).toContain('still running after')
       expect(evidence(name, text)).toMatchObject({ outcome: 'unknown', processFacts: {outcome: 'unknown', outcomeReason: 'backgrounded'} })
     }
     expect(evidence(name, render({kind:'background',jobId:`${name}-1`})).outcome).toBe('unknown')

@@ -22,7 +22,7 @@ const refuse = (ok, code, reason, details) => { if (!ok) throw new DriverError(c
 export const DOM = Object.freeze({ row: '[data-row-key][role="treeitem"]', flow: '[data-chat-flow]', input: '[data-composer-input][role="textbox"]', loading: '.EvIC1a_hint', error: '.EvIC1a_openError' })
 export function validateFixture(fixture, requireProtection = false) {
   refuse(fixture?.schema === 'dsh-ui-fixture/v1' && fixture.ownership === 'task-owned', 2, 'task-owned fixture manifest required')
-  refuse(['0.2.1-rc.2', '0.2.1-rc.3'].includes(fixture.hostVersion), 3, 'unreviewed frontend version')
+  refuse(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.2-rc.1'].includes(fixture.hostVersion), 3, 'unreviewed frontend version')
   refuse(typeof fixture.profileRoot === 'string' && existsSync(fixture.profileRoot), 2, 'fixture profile missing')
   refuse(typeof fixture.home === 'string' && /^[a-f0-9-]{36}$/.test(fixture.nonce ?? '') && /^[a-f0-9]{40}$/.test(fixture.sourceCommit ?? ''), 2, 'fixture ownership/subject unbound')
   const owner = readJsonFile(join(fixture.home, '.guard-ui-fixture-owner.json'))
