@@ -48,7 +48,7 @@ export function startProbeTurn(session) {
   return position.nextTurn
 }
 
-export function appendProbeToolCall(session, createAssistantMessage, callId, name, args) {
+export function appendProbeToolStep(session, createAssistantMessage, callId, name, args) {
   let position = probePosition(session)
   if (position.turn === null) { startProbeTurn(session); position = probePosition(session) }
   const coordinates = { turn: position.turn, step: position.nextStep }
@@ -57,8 +57,29 @@ export function appendProbeToolCall(session, createAssistantMessage, callId, nam
     source: {provider:'native-probe',model:'deterministic-injection'},
     content: [{type:'tool-call',id:callId,name,arguments:JSON.stringify(args)}],
   }) }, {surfaceOp:'append'})
+  return coordinates
+}
+
+// The synthetic release fixture still owns its deliberately hand-built call.
+export function appendProbeToolCall(session, createAssistantMessage, callId, name, args) {
+  const coordinates = appendProbeToolStep(session, createAssistantMessage, callId, name, args)
   session.append('tool/call', {...coordinates,callId,name,arguments:JSON.stringify(args)})
   return coordinates
+}
+
+/** Use the host executor's real single-call batch and its event producer. */
+export async function executeProbeTool(agent, coordinates, callId, name, args, signal) {
+  const argsJson = JSON.stringify(args)
+  assert.equal(typeof argsJson, 'string', 'probe arguments must be JSON')
+  const batch = await agent.ctx.tools.execute({ agent, signal, log: coordinates,
+    calls: [{ type: 'tool-call', id: callId, name, arguments: argsJson }] })
+  assert.ok(Array.isArray(batch?.results) && batch.results.length === 1, 'expected exactly one tool settlement')
+  const settled = batch.results[0]
+  assert.equal(settled?.callId, callId, 'tool settlement identity mismatch')
+  assert.ok(settled.result && typeof settled.result.isError === 'boolean' && Array.isArray(settled.result.content), 'invalid tool settlement')
+  assert.ok(Array.isArray(batch.additionalContexts) && batch.additionalContexts.length === 0 && batch.concluded === false,
+    'probe cannot discard additional contexts or turn conclusion')
+  return settled.result
 }
 
 export function finishProbeToolCall(session, coordinates) {
@@ -135,7 +156,7 @@ export function apply(ctx, config) {
     let operation = 'initialize'
     let lastTool = null
     let mode = 'initial'
-    let createUserMessage, createToolResultMessage, createAssistantMessage, sessionId
+    let createUserMessage, createAssistantMessage, sessionId
     let clarifiedItemId
     const driverDigest = createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex')
     const check = async (id, fn) => {
@@ -161,9 +182,9 @@ export function apply(ctx, config) {
     const call = async (name, args) => {
       const agent = handle.agent
       const callId = `native-${process.pid}-${agent.session.seq}-${++ordinal}`
-      const coordinates = appendProbeToolCall(agent.session, createAssistantMessage, callId, name, args)
+      const coordinates = appendProbeToolStep(agent.session, createAssistantMessage, callId, name, args)
       operation = `tool_${name}`
-      const result = await agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) })
+      const result = await executeProbeTool(agent, coordinates, callId, name, args, AbortSignal.timeout(30000))
       const code = value => typeof value === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(value) ? value : null
       lastTool = { name, is_error: result.isError, status: code(result.value?.status), reason_code: code(result.value?.reason_code), error_code: code(result.error?.info?.code),
         ...(['pwsh', 'bash'].includes(name) ? { terminal: shellTerminalFacts(result.value) } : {}),
@@ -171,11 +192,6 @@ export function apply(ctx, config) {
         rejections: result.value?.rejected_bindings?.map(row => code(row.reason_code ?? row.reason)).filter(Boolean).slice(0, 8) ?? [],
         item_shapes: result.value?.open_items?.slice(0, 8).map(row => ({ omitted: row.omitted === true, has_detail: typeof row.detail_id === 'string', has_template: !!row.binding_template, action: code(row.semantic_action) })) ?? [],
         evidence_shapes: result.value?.available_evidence?.slice(0, 10).map(row => ({ parse: code(row.parse_status), disposition: code(row.adapter_disposition), reason: code(row.reason_code), action: code(row.semantic_action) })) ?? [] }
-      agent.session.append('tool/result', {
-        ...coordinates,
-        message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
-        ...(result.error ? { error: result.error } : {}), ...(result.meta ? { meta: result.meta } : {}),
-      }, { surfaceOp: 'append' })
       finishProbeToolCall(agent.session, coordinates)
       operation = 'tool_result_flush'
       assert.equal(await ctx.sessions.flush(agent.session), true)
@@ -186,7 +202,7 @@ export function apply(ctx, config) {
     }
     try {
       const runtime = runtimeRequire(config.runtimeRoot)
-      ;({ createUserMessage, createToolResultMessage, createAssistantMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
+      ;({ createUserMessage, createAssistantMessage } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
       const { SessionId } = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href)
       sessionId = SessionId(`guard-native-${config.nonce}`)
       if (existsSync(`${config.output}.complete`)) {

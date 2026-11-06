@@ -208,6 +208,15 @@ class ValidationSelectionTests(unittest.TestCase):
             self.assertIn("native_artifact", plan["invalidates"])
             self.assertTrue(plan["full_required"])
 
+    def test_native_tool_batch_producers_and_test_invalidate_native_runtime(self) -> None:
+        for path in ("scripts/native_host_probe.mjs", "scripts/native_host_probe_v070.mjs",
+                     "scripts/native_warm_host_probe.mjs", "tests/native-tool-batch.test.mjs"):
+            plan = self.classify(path)
+            self.assertEqual(plan["unknown_paths"], [])
+            self.assertIn("native_artifact", plan["invalidates"])
+            self.assertIn("native_runtime", plan["invalidates"])
+            self.assertTrue(plan["full_required"])
+
     def test_overlapping_rules_are_additive(self) -> None:
         plan = self.classify("cordis.patch.yml")
         self.assertIn("host_lock_tests", plan["gates"])

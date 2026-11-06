@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, appendFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolCall, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
+import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolStep, executeProbeTool, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
 import { runNativeReleaseFixture } from './native_release_fixture_v070.mjs'
 
 export const name = 'completion-guard-native-probe-v070'
@@ -187,7 +187,7 @@ export function apply(ctx, config) {
       progress = createProbeProgress(config, digest)
       progress.record('initialize', 'started')
     const runtime = runtimeRequire(config.runtimeRoot)
-    const { createUserMessage, createToolResultMessage, createAssistantMessage } = await progress.timed('import_llm', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
+    const { createUserMessage, createAssistantMessage } = await progress.timed('import_llm', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-llm')).href))
     const { SessionId, SESSION_FORMAT_VERSION } = await progress.timed('import_session', () => import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-session')).href))
     const domain = await progress.timed('import_domain', () => import(pathToFileURL(join(config.profileRoot, 'node_modules', 'dsh-completion-guard', 'dist', 'domain', 'index.js')).href))
     progress.record('initialize', 'passed')
@@ -242,18 +242,13 @@ export function apply(ctx, config) {
     const tool = async (name, args, expectSuccess = true) => {
       const agent = handle.agent
       const callId = `native-v070-${process.pid}-${agent.session.seq}-${++ordinal}`
-      const coordinates = appendProbeToolCall(agent.session, createAssistantMessage, callId, name, args)
+      const coordinates = appendProbeToolStep(agent.session, createAssistantMessage, callId, name, args)
       operation = `tool_${name}`
-      const result = await progress.timed('tool_' + name, () => agent.ctx.tools.execute({ callId, name, arguments: args, agent, signal: AbortSignal.timeout(30000) }))
+      const result = await progress.timed('tool_' + name, () => executeProbeTool(agent, coordinates, callId, name, args, AbortSignal.timeout(30000)))
       lastTool = { name, registered: Boolean(agent.ctx.tools.get(name, agent)),
         is_error: result.isError, status: typeof result.value?.status === 'string' ? result.value.status : null,
         error_code: typeof result.error?.info?.code === 'string' ? result.error.info.code : null,
         ...(['bash', 'pwsh'].includes(name) ? { terminal: shellTerminalFacts(result.value) } : {}) }
-      agent.session.append('tool/result', {
-        ...coordinates,
-        message: createToolResultMessage({ callId, content: result.content, isError: result.isError }),
-        ...(result.error ? { error: result.error } : {}), ...(result.meta ? { meta: result.meta } : {}),
-      }, { surfaceOp: 'append' })
       finishProbeToolCall(agent.session, coordinates)
       operation = 'tool_result_flush'
       await flush()

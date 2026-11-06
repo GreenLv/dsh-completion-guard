@@ -440,6 +440,7 @@
         "scripts/native_cleanup_probe.py",
         "tests/native_cleanup_probe_test.py",
         "tests/rc017-native-shell.node.mjs",
+        "tests/native-tool-batch.test.mjs",
         "scripts/verify_rc017_host_audit.py",
         "tests/rc017_host_audit_test.py"
       ],
@@ -447,7 +448,8 @@
         "full_candidate"
       ],
       "invalidates": [
-        "native_artifact"
+        "native_artifact",
+        "native_runtime"
       ],
       "contracts": [],
       "peer_gates": {}

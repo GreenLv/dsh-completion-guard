@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createProbeAgent, runtimeRequire, startProbeTurn, appendProbeToolCall, finishProbeToolCall } from './native_host_probe.mjs'
+import { createProbeAgent, runtimeRequire, startProbeTurn, appendProbeToolStep, executeProbeTool, finishProbeToolCall } from './native_host_probe.mjs'
 import { warmGuardState } from './native_warm_guard_plugin.mjs'
 import { runWarmScope } from './native_warm_scope_core.mjs'
 export const name='completion-guard-native-warm-scope'
@@ -17,7 +17,7 @@ export function apply(ctx,config) {
       const state=warmGuardState(config.nonce); assert.ok(state,'wrapper is not loaded')
       const require=runtimeRequire(config.runtimeRoot)
       const {SessionId}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session')).href)
-      const {createUserMessage,createToolResultMessage,createAssistantMessage}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
+      const {createUserMessage,createAssistantMessage}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
       const domain=await import(pathToFileURL(join(config.profileRoot,'node_modules','dsh-completion-guard','dist','domain','index.js')).href)
       const digest=sha(readFileSync(config.releaseTgz)); let ordinal=0
       const expectedSri='sha512-'+createHash('sha512').update(readFileSync(config.releaseTgz)).digest('base64')
@@ -38,10 +38,8 @@ export function apply(ctx,config) {
         assert.equal(await ctx.sessions.flush(session),true)
         const call=async(name,args)=>{
           const callId=`warm-${id}-${++ordinal}`
-          const coordinates=appendProbeToolCall(session,createAssistantMessage,callId,name,args)
-          const response=await agent.ctx.tools.execute({callId,name,arguments:args,agent,signal:AbortSignal.timeout(120000)})
-          append('tool/result',{...coordinates,message:createToolResultMessage({callId,content:response.content,isError:response.isError}),
-            ...(response.error?{error:response.error}:{}),...(response.meta?{meta:response.meta}:{})},{surfaceOp:'append'})
+          const coordinates=appendProbeToolStep(session,createAssistantMessage,callId,name,args)
+          const response=await executeProbeTool(agent,coordinates,callId,name,args,AbortSignal.timeout(120000))
           finishProbeToolCall(session,coordinates); assert.equal(await ctx.sessions.flush(session),true)
           assert.equal(response.isError,false,`${name} transport`)
           return {callId,value:response.value}
