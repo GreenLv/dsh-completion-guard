@@ -210,7 +210,7 @@ class ValidationSelectionTests(unittest.TestCase):
 
     def test_native_tool_batch_producers_and_test_invalidate_native_runtime(self) -> None:
         for path in ("scripts/native_host_probe.mjs", "scripts/native_host_probe_v070.mjs",
-                     "scripts/native_warm_host_probe.mjs", "tests/native-tool-batch.test.mjs"):
+                     "scripts/native_warm_host_probe.mjs", "tests/native-tool-batch.test.mjs", "tests/native-headless-composition.node.mjs"):
             plan = self.classify(path)
             self.assertEqual(plan["unknown_paths"], [])
             self.assertIn("native_artifact", plan["invalidates"])
@@ -222,6 +222,15 @@ class ValidationSelectionTests(unittest.TestCase):
             plan = self.classify(path)
             self.assertEqual(plan["unknown_paths"], [])
             self.assertIn("host_lock_tests", plan["gates"])
+
+    def test_t06_extension_contracts_are_native_infrastructure(self) -> None:
+        for path in ("schemas/native-desktop-bound-v2-t06.schema.json", "schemas/native-host-bound-v4-t06.schema.json",
+                     "tests/t06_native_contract_test.py"):
+            plan = self.classify(path)
+            self.assertEqual(plan["unknown_paths"], [])
+            self.assertIn("native_artifact", plan["invalidates"])
+            self.assertIn("native_runtime", plan["invalidates"])
+            self.assertTrue(plan["full_required"])
 
     def test_overlapping_rules_are_additive(self) -> None:
         plan = self.classify("cordis.patch.yml")

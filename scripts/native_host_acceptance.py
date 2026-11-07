@@ -649,12 +649,27 @@ def cleanup_owned_processes(processes: list[subprocess.Popen]) -> list[str]:
     return remaining
 
 
+def native_probe_profile_options(profile: str) -> tuple[list[dict[str, object]], list[str]]:
+    """Keep Headless's real startup service while disabling only the task runner.
+
+    An inert task lets the official startup parse in both TTY and non-TTY
+    processes. The disabled runner never sends it to a model.
+    """
+    if profile == "headless":
+        return [{"id": "headless-runner", "disabled": True}], ["Context Guard isolated acceptance probe"]
+    if profile == "web":
+        return [], []
+    raise ValueError("unsupported native probe profile")
+
+
 def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: Path,
                     result: dict[str, Any], targets: dict[str, str] | None = None,
                     target_profiles: dict[str, Path] | None = None,
                     web_market_version: str | None = None, protocol: str = "legacy",
-                    diagnostics_output: Path | None = None) -> dict[str, Any]:
-    result["gate_profile"] = "dsh-host-bound/v4" if protocol == "v070" else "host_bound_core"
+                    diagnostics_output: Path | None = None, t06: bool = False) -> dict[str, Any]:
+    if t06 and protocol != "v070":
+        raise ValueError("T06 host extension requires the v070 profile")
+    result["gate_profile"] = ("dsh-host-bound/v4-t06" if t06 else "dsh-host-bound/v4") if protocol == "v070" else "host_bound_core"
     result["host_lock_policy"] = "dsh-core/v1"
     result["market_interface"] = {"status": "not_requested" if web_market_version is None else "unavailable",
                                   "target_version": web_market_version, "api_schema": None, "api_version": None,
@@ -777,15 +792,15 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                          "hostLockProfile": profile, "hostLockPolicy": "dsh-core/v1",
                          "hostLockRuntimeRoot": str(runtime_root), "hostLockProfileRoot": str(profile_root)}},
                        native_probe_patch(probe, config), {"id": "goal-round-driver", "disabled": True}]
-            if profile == "headless":
-                patches.extend([{"id": "headless-runner", "disabled": True}, {"id": "headless-startup", "disabled": True}])
+            profile_patches, profile_args = native_probe_profile_options(profile)
+            patches.extend(profile_patches)
             overlay.write_text(json.dumps(patches), encoding="utf-8")
             stage = f"{profile}_probe_composition"
             # DSH overlays replace config objects; validate the effective probe
             # composition too, not only the base profile that was injected above.
             composed.write_text(command("node", str(cli), "--profile", profile, "--patch", str(overlay), "--dump-config"), encoding="utf-8")
             command("node", str(locker), "verify-dump", *lock_args, "--dump-config", str(composed))
-            argv = ["node", str(cli), "--profile", profile, "--patch", str(overlay)]
+            argv = ["node", str(cli), "--profile", profile, "--patch", str(overlay), *profile_args]
             port = None
             if profile == "web":
                 port = free_loopback_port()

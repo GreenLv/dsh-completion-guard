@@ -17,6 +17,8 @@ from typing import Any
 
 from native_host_acceptance import probe_driver_digest
 
+from native_cleanup_probe import valid_t06_gate
+
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 BASE_GATES = {
@@ -49,7 +51,7 @@ def digest(path: Path) -> str:
 
 
 def valid_v070_annex(value: Any, artifact: Path, source_commit: str, driver_digest: str,
-                      expected_platform: str, expected_locks: dict[str, str]) -> bool:
+                      expected_platform: str, expected_locks: dict[str, str], *, t06: bool = False) -> bool:
     if not isinstance(value, dict) or not artifact.is_file() or artifact.is_symlink():
         return False
     if (not HEX40.fullmatch(source_commit) or not HEX64.fullmatch(driver_digest)
@@ -57,7 +59,7 @@ def valid_v070_annex(value: Any, artifact: Path, source_commit: str, driver_dige
             or set(expected_locks) != {"web", "headless"}
             or not all(isinstance(row, str) and HEX64.fullmatch(row) for row in expected_locks.values())):
         return False
-    if value.get("schema") != "native-acceptance/v2" or value.get("gate_profile") != "dsh-host-bound/v4":
+    if value.get("schema") != "native-acceptance/v2" or value.get("gate_profile") != ("dsh-host-bound/v4-t06" if t06 else "dsh-host-bound/v4"):
         return False
     if value.get("status") != "passed" or value.get("product") != "dsh_completion_guard":
         return False
@@ -97,16 +99,19 @@ def valid_v070_annex(value: Any, artifact: Path, source_commit: str, driver_dige
     if not isinstance(cleanup, dict) or cleanup.get("status") != "passed" or cleanup.get("remaining_ids") != []:
         return False
     gates = value.get("gates")
-    if not isinstance(gates, list) or len(gates) != len(EXPECTED_GATES) or any(not isinstance(row, dict) for row in gates):
+    expected_gates = EXPECTED_GATES | ({"t06_owned_handle_cleanup"} if t06 else set())
+    if not isinstance(gates, list) or len(gates) != len(expected_gates) or any(not isinstance(row, dict) for row in gates):
         return False
-    if {row.get("id") for row in gates} != EXPECTED_GATES:
+    if any(not isinstance(row.get("id"), str) for row in gates) or {row.get("id") for row in gates} != expected_gates:
         return False
     for row in gates:
         subject, evidence = row.get("subject"), row.get("evidence")
-        if (row.get("required") is not True or row.get("status") != "passed" or row.get("exit_code") != 0
+        if (row.get("required") is not True or row.get("status") != "passed" or type(row.get("exit_code")) is not int or row.get("exit_code") != 0
                 or not isinstance(subject, dict) or subject != {"kind": "artifact", "id": package["sha256"]}
                 or not isinstance(evidence, dict) or evidence.get("mode") != "executed"):
             return False
+    if t06 and not valid_t06_gate(next(row for row in gates if row["id"] == "t06_owned_handle_cleanup"), package["sha256"], expected_platform):
+        return False
     if not isinstance(value.get("market_interface"), dict) or not isinstance(value.get("run"), dict):
         return False
     if not isinstance(value["run"].get("started_at"), str) or not isinstance(value["run"].get("finished_at"), str):
@@ -126,6 +131,7 @@ def main() -> int:
     parser.add_argument("--expected-platform", choices=("macos", "windows", "linux"), required=True)
     parser.add_argument("--web-host-lock-digest", required=True)
     parser.add_argument("--headless-host-lock-digest", required=True)
+    parser.add_argument("--t06", action="store_true", help="require the distinct exact T06 extension profile")
     args = parser.parse_args()
     try:
         commit = subprocess.check_output(["git", "-C", str(args.repo_root), "rev-parse", "HEAD"], text=True, encoding="utf-8").strip()
@@ -133,7 +139,7 @@ def main() -> int:
         driver = probe_driver_digest(args.repo_root, "v070")
         value = json.loads(args.annex.read_text(encoding="utf-8"))
         valid = not dirty and valid_v070_annex(value, args.artifact, commit, driver,
-            args.expected_platform, {"web": args.web_host_lock_digest, "headless": args.headless_host_lock_digest})
+            args.expected_platform, {"web": args.web_host_lock_digest, "headless": args.headless_host_lock_digest}, t06=args.t06)
     except (OSError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError):
         valid = False
     print("dsh_native_v070=valid" if valid else "dsh_native_v070=invalid")

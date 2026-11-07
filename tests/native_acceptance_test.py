@@ -1049,6 +1049,14 @@ class HostBoundEntrypointTests(unittest.TestCase):
         self.assertEqual(output, [{"id": "v070_ordinary_test_and_checkpoint", "status": "failed",
                                    "error_code": "PROBE_ASSERTION_FAILED", "tool": "bash"}])
 
+    def test_native_headless_probe_keeps_official_startup_and_disables_only_runner(self):
+        patches, argv = self.host.native_probe_profile_options("headless")
+        self.assertEqual(patches, [{"id": "headless-runner", "disabled": True}])
+        self.assertEqual(argv, ["Context Guard isolated acceptance probe"])
+        self.assertEqual(self.host.native_probe_profile_options("web"), ([], []))
+        with self.assertRaises(ValueError):
+            self.host.native_probe_profile_options("other")
+
     def test_probe_resolves_dependencies_from_real_pnpm_package_location(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

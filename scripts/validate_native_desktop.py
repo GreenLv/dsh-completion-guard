@@ -17,6 +17,8 @@ from typing import Any
 
 from native_desktop_acceptance import desktop_driver_digest
 
+from native_cleanup_probe import valid_t06_gate
+
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 BASE_GATES = {
@@ -46,7 +48,7 @@ def digest(path: Path) -> str:
 
 
 def valid_desktop_v2_annex(value: Any, artifact: Path, source_commit: str, driver_digest: str,
-                      expected_platform: str, expected_locks: dict[str, str]) -> bool:
+                      expected_platform: str, expected_locks: dict[str, str], *, t06: bool = False) -> bool:
     if not isinstance(value, dict) or not artifact.is_file() or artifact.is_symlink():
         return False
     if (not HEX40.fullmatch(source_commit) or not HEX64.fullmatch(driver_digest)
@@ -54,7 +56,7 @@ def valid_desktop_v2_annex(value: Any, artifact: Path, source_commit: str, drive
             or set(expected_locks) != {"desktop"}
             or not all(isinstance(row, str) and HEX64.fullmatch(row) for row in expected_locks.values())):
         return False
-    if value.get("schema") != "native-acceptance/v2" or value.get("gate_profile") != "dsh-desktop-bound/v2":
+    if value.get("schema") != "native-acceptance/v2" or value.get("gate_profile") != ("dsh-desktop-bound/v2-t06" if t06 else "dsh-desktop-bound/v2"):
         return False
     if value.get("status") != "passed" or value.get("product") != "dsh_completion_guard":
         return False
@@ -95,9 +97,10 @@ def valid_desktop_v2_annex(value: Any, artifact: Path, source_commit: str, drive
     if not isinstance(cleanup, dict) or cleanup.get("status") != "passed" or cleanup.get("remaining_ids") != []:
         return False
     gates = value.get("gates")
-    if not isinstance(gates, list) or len(gates) != len(EXPECTED_GATES) or any(not isinstance(row, dict) for row in gates):
+    expected_gates = EXPECTED_GATES | ({"t06_owned_handle_cleanup"} if t06 else set())
+    if not isinstance(gates, list) or len(gates) != len(expected_gates) or any(not isinstance(row, dict) for row in gates):
         return False
-    if any(not isinstance(row.get("id"), str) for row in gates) or {row.get("id") for row in gates} != EXPECTED_GATES:
+    if any(not isinstance(row.get("id"), str) for row in gates) or {row.get("id") for row in gates} != expected_gates:
         return False
     for row in gates:
         subject, evidence = row.get("subject"), row.get("evidence")
@@ -115,6 +118,8 @@ def valid_desktop_v2_annex(value: Any, artifact: Path, source_commit: str, drive
     if (not isinstance(runtime.get("host_version"), str) or not runtime["host_version"]
             or not isinstance(runtime.get("desktop_version"), str) or not runtime["desktop_version"]
             or type(runtime.get("payload_file_count")) is not int or runtime["payload_file_count"] < 1):
+        return False
+    if t06 and not valid_t06_gate(next(row for row in gates if row["id"] == "t06_owned_handle_cleanup"), package["sha256"], expected_platform):
         return False
     if not isinstance(value.get("run"), dict):
         return False
@@ -134,6 +139,7 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--expected-platform", choices=("macos", "windows"), required=True)
     parser.add_argument("--desktop-host-lock-digest", required=True)
+    parser.add_argument("--t06", action="store_true", help="require the distinct exact T06 extension profile")
     args = parser.parse_args()
     try:
         commit = subprocess.check_output(["git", "-C", str(args.repo_root), "rev-parse", "HEAD"], text=True, encoding="utf-8").strip()
@@ -141,7 +147,7 @@ def main() -> int:
         driver = desktop_driver_digest(args.repo_root)
         value = json.loads(args.annex.read_text(encoding="utf-8"))
         valid = not dirty and valid_desktop_v2_annex(value, args.artifact, commit, driver,
-            args.expected_platform, {"desktop": args.desktop_host_lock_digest})
+            args.expected_platform, {"desktop": args.desktop_host_lock_digest}, t06=args.t06)
     except (OSError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError):
         valid = False
     print("dsh_native_desktop_v2=valid" if valid else "dsh_native_desktop_v2=invalid")

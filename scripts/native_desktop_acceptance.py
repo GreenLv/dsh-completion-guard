@@ -280,8 +280,8 @@ def preflight_desktop_inputs(root: Path, archive: Path, version: str) -> None:
 
 def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
                        archive: Path, result: dict[str, Any], version: str,
-                       diagnostics_output: Path) -> dict[str, Any]:
-    result["gate_profile"] = "dsh-desktop-bound/v2"
+                       diagnostics_output: Path, t06: bool = False) -> dict[str, Any]:
+    result["gate_profile"] = "dsh-desktop-bound/v2-t06" if t06 else "dsh-desktop-bound/v2"
     result["desktop_noop_contract"] = {"schema": "dsh-desktop-noop/v2",
         "single_package": "all_tracked_bytes_and_package_tree",
         "multi_package": "only_modules_json_object_key_order",

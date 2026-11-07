@@ -503,7 +503,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         api = SimpleNamespace(gate=gate, sha256=sha256, tree_digest=tree_digest, timestamp=timestamp)
         result = module.desktop_acceptance(api, args.repo_root.resolve(), args.artifact.resolve(),
                                            args.artifact_sha256, args.runtime_root.resolve(), result,
-                                           args.desktop_cohort, diagnostics_output)
+                                           args.desktop_cohort, diagnostics_output,
+                                           **({"t06": True} if args.t06 else {}))
     elif args.gate_profile != "portable_artifact":
         # Pass this module's checked artifact helpers without relying on the
         # caller's sys.path or loading an arbitrary external runner.
@@ -517,7 +518,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                         if args.target_web_profile else None,
                                         None if args.web_market_version == "none" else args.web_market_version,
                                         "v070" if args.gate_profile == "host_bound_v070" else "legacy",
-                                        diagnostics_output=diagnostics_output)
+                                        diagnostics_output=diagnostics_output,
+                                        **({"t06": True} if args.t06 and args.gate_profile == "host_bound_v070" else {}))
     if args.t06 and result["status"] == "passed":
         probe_path = Path(__file__).with_name("native_cleanup_probe.py")
         spec = importlib.util.spec_from_file_location("dsh_native_cleanup_probe", probe_path)

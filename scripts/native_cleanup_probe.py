@@ -83,3 +83,48 @@ def run_probe() -> dict:
         # The owned handle closes normally before temporary fixture cleanup.
     result["cleanup"] = "passed"
     return result
+
+
+def valid_t06_gate(row: object, artifact_sha256: str, expected_platform: str) -> bool:
+    """Check the bounded producer observation, preserving OS-specific outcomes.
+
+    This validates a saved executed-gate claim; it does not rerun the fixture
+    or turn a transfer receipt into native-execution evidence.
+    """
+    import json
+    if not isinstance(row, dict) or expected_platform not in {"macos", "windows", "linux"}:
+        return False
+    if (row.get("id") != "t06_owned_handle_cleanup" or row.get("required") is not True
+            or row.get("status") != "passed" or type(row.get("exit_code")) is not int
+            or row["exit_code"] != 0 or row.get("subject") != {"kind": "artifact", "id": artifact_sha256}
+            or row.get("evidence") != {"mode": "executed", "source_result_sha256": None,
+                                       "source_gate_id": None, "invalidation_reason": "artifact_changed"}
+            or not isinstance(row.get("note"), str) or len(row["note"]) > 4096):
+        return False
+    def unique_pairs(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate T06 observation field")
+            value[key] = item
+        return value
+    try:
+        note = json.loads(row["note"], object_pairs_hook=unique_pairs)
+    except (ValueError, TypeError, RecursionError):
+        return False
+    if not isinstance(note, dict) or set(note) != {
+        "removalAttempts", "dependencyStatus", "unknownCandidateRetained", "metadataRemoved",
+        "contentRemoved", "directoryRemoved", "commandSucceeded", "certificate", "scope", "cleanup",
+    }:
+        return False
+    if (type(note["removalAttempts"]) is not int or note["removalAttempts"] != 1
+            or note["dependencyStatus"] != "in_use" or note["unknownCandidateRetained"] is not True
+            or note["certificate"] is not None or note["cleanup"] != "passed"
+            or note["scope"] != "owned disposable OS fixture; not an automatic removal policy"
+            or not isinstance(note["metadataRemoved"], str) or note["metadataRemoved"] not in {"yes", "no"}):
+        return False
+    if expected_platform == "windows":
+        return (note["commandSucceeded"] is False and note["contentRemoved"] == "partial"
+                and note["directoryRemoved"] == "no")
+    return (note["commandSucceeded"] is True and note["contentRemoved"] == "yes"
+            and note["directoryRemoved"] == "yes")

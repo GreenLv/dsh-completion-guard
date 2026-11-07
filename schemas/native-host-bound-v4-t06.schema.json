@@ -1,0 +1,802 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GreenLv/dsh-completion-guard/schemas/native-host-bound-v4-t06.schema.json",
+  "title": "DSH Completion Guard 0.7 host-bound native annex with T06 owned-handle extension",
+  "type": "object",
+  "required": [
+    "schema",
+    "status",
+    "product",
+    "gate_profile",
+    "repository",
+    "runtime_tree_sha256",
+    "artifact",
+    "platform",
+    "gates",
+    "cleanup",
+    "run",
+    "unperformed_actions",
+    "capability_skips",
+    "host_lock_policy",
+    "host_driver_sha256",
+    "host_lock_digests",
+    "market_interface"
+  ],
+  "properties": {
+    "schema": {
+      "const": "native-acceptance/v2"
+    },
+    "status": {
+      "const": "passed"
+    },
+    "product": {
+      "const": "dsh_completion_guard"
+    },
+    "gate_profile": {
+      "const": "dsh-host-bound/v4-t06"
+    },
+    "repository": {
+      "type": "object",
+      "required": [
+        "url",
+        "commit"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "runtime_tree_sha256": {
+      "type": "null"
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "filename",
+        "sha256",
+        "size_bytes",
+        "file_count",
+        "git_head"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "git_head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "required": [
+        "os",
+        "shell",
+        "toolchain"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "macos",
+            "windows",
+            "linux"
+          ]
+        },
+        "shell": {
+          "const": "python-subprocess"
+        },
+        "toolchain": {
+          "type": "object"
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 37,
+      "maxItems": 37,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "required",
+          "status",
+          "subject",
+          "exit_code",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "headless_host_lock_readback",
+              "headless_missing_credential_boundary",
+              "headless_package_parity",
+              "headless_shell_shim",
+              "headless_strict_second_noop",
+              "headless_v070_explicit_release_minimum",
+              "headless_v070_future_vs_current_stop",
+              "headless_v070_goal_adoption_current_closure",
+              "headless_v070_history_compaction_restart",
+              "headless_v070_legacy_migration",
+              "headless_v070_ordinary_file_edit_readback",
+              "headless_v070_ordinary_test_and_checkpoint",
+              "headless_v070_root_v6_delivery",
+              "headless_v070_short_resume_and_persistence",
+              "headless_v090_activation_birth_restore_adoption",
+              "installed_syntax",
+              "isolated_install",
+              "manifest_identity",
+              "package_inventory",
+              "package_parity",
+              "strict_second_noop",
+              "t06_owned_handle_cleanup",
+              "web_host_lock_readback",
+              "web_owned_restart_and_persisted_resume",
+              "web_package_parity",
+              "web_shell_shim",
+              "web_strict_second_noop",
+              "web_v070_explicit_release_minimum",
+              "web_v070_future_vs_current_stop",
+              "web_v070_goal_adoption_current_closure",
+              "web_v070_history_compaction_restart",
+              "web_v070_legacy_migration",
+              "web_v070_ordinary_file_edit_readback",
+              "web_v070_ordinary_test_and_checkpoint",
+              "web_v070_root_v6_delivery",
+              "web_v070_short_resume_and_persistence",
+              "web_v090_activation_birth_restore_adoption"
+            ]
+          },
+          "required": {
+            "const": true
+          },
+          "status": {
+            "const": "passed"
+          },
+          "exit_code": {
+            "const": 0
+          },
+          "subject": {
+            "type": "object"
+          },
+          "evidence": {
+            "type": "object"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_host_lock_readback"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_missing_credential_boundary"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_package_parity"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_shell_shim"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_strict_second_noop"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_explicit_release_minimum"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_future_vs_current_stop"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_goal_adoption_current_closure"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_history_compaction_restart"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_legacy_migration"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_ordinary_file_edit_readback"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_ordinary_test_and_checkpoint"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_root_v6_delivery"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_short_resume_and_persistence"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v090_activation_birth_restore_adoption"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "installed_syntax"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "isolated_install"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "manifest_identity"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "package_inventory"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "package_parity"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "strict_second_noop"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "t06_owned_handle_cleanup"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_host_lock_readback"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_owned_restart_and_persisted_resume"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_package_parity"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_shell_shim"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_strict_second_noop"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_explicit_release_minimum"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_future_vs_current_stop"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_goal_adoption_current_closure"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_history_compaction_restart"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_legacy_migration"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_ordinary_file_edit_readback"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_ordinary_test_and_checkpoint"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_root_v6_delivery"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_short_resume_and_persistence"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v090_activation_birth_restore_adoption"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    },
+    "cleanup": {
+      "type": "object",
+      "required": [
+        "status",
+        "remaining_ids"
+      ],
+      "properties": {
+        "status": {
+          "const": "passed"
+        },
+        "remaining_ids": {
+          "const": []
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "started_at",
+        "finished_at"
+      ]
+    },
+    "unperformed_actions": {
+      "type": "array",
+      "uniqueItems": true
+    },
+    "capability_skips": {
+      "const": [
+        "real_model_request"
+      ]
+    },
+    "host_lock_policy": {
+      "const": "dsh-core/v1"
+    },
+    "host_driver_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "host_lock_digests": {
+      "type": "object",
+      "required": [
+        "web",
+        "headless"
+      ],
+      "properties": {
+        "web": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "headless": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "market_interface": {
+      "type": "object"
+    }
+  }
+}

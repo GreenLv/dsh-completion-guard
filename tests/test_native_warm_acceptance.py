@@ -104,6 +104,12 @@ class RunnerTests(unittest.TestCase):
                     wrapper=next(entry['insert'][0]['config'] for entry in overlay if 'insert' in entry and entry['insert'][0]['id']=='warm-guard-wrapper')
                     self.assertEqual(wrapper['warm']['guardVersion'],'0.12.1')
                     config=next(entry['insert'][0]['config'] for entry in overlay if 'insert' in entry and entry['insert'][0]['id']=='native-guard-probe')
+                    if config['profile']=='headless':
+                        self.assertIn({'id':'headless-runner','disabled':True}, overlay)
+                        self.assertFalse(any(row.get('id')=='headless-startup' and row.get('disabled') is True for row in overlay))
+                        self.assertIn('Context Guard isolated acceptance probe', argv)
+                    else:
+                        self.assertNotIn('Context Guard isolated acceptance probe', argv)
                     pid=101 if config['profile']=='web' else 201;current.update(config=config,pid=pid)
                     process=MagicMock();process.pid=pid;return process
                 def wait(_callback,timeout):

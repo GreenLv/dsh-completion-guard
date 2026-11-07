@@ -180,14 +180,14 @@ def execute(args, driver_sha: str, progress: Path) -> dict:
                     "releaseTgz":str(release),"packageName":FIXTURE_NAME,"packageVersion":FIXTURE_VERSION,"fixtureGitHead":FIXTURE_HEAD,"integrity":integrity,
                     "importer":str(copied/"node_modules"/"@deepseek-ai"/"dsh-session"/"lib"/"index.js"),"output":str(receipt),"progress":str(progress)}
             patches=[{"id":"context-guard","disabled":True},{"insert":[{"id":"warm-guard-wrapper","name":wrapper.as_uri(),"config":guard}]},host.native_probe_patch(probe,config),{"id":"goal-round-driver","disabled":True}]
-            if profile=="headless":patches.extend([{"id":"headless-runner","disabled":True},{"id":"headless-startup","disabled":True}])
+            profile_patches,profile_args=host.native_probe_profile_options(profile);patches.extend(profile_patches)
             overlay.write_text(json.dumps(patches),encoding="utf-8",newline="\n")
             stage=profile+"_composition"
             dump=host.run_host_command(work,environment,node,str(cli),"--profile",profile,"--patch",str(overlay),"--dump-config")
             view=validate_composition(dump,wrapper)
             composed=temporary/(profile+"-active-wrapper-view.yml");composed.write_text(view,encoding="utf-8",newline="\n")
             host.run_host_command(work,environment,node,str(locker),"verify-dump",*lock_args,"--dump-config",str(composed))
-            argv=[node,str(cli),"--profile",profile,"--patch",str(overlay)];port=None
+            argv=[node,str(cli),"--profile",profile,"--patch",str(overlay),*profile_args];port=None
             if profile=="web":port=host.free_loopback_port();ports.append(port);argv.extend(["--host","127.0.0.1","--port",str(port),"--no-open"])
             log=(temporary/(profile+"-host.log")).open("wb");logs.append(log);stage=profile+"_probe"
             proc=subprocess.Popen(argv,cwd=work,env=environment,stdout=log,stderr=log,start_new_session=os.name!="nt");processes.append(proc)
