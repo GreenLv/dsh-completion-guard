@@ -67,14 +67,14 @@ function scenario(options: { workdir?: string; policyRoot?: string; headerCwd?: 
 }
 
 describe('v0.7 call-time Host default-workdir observation', () => {
-  it.runIf(Boolean(process.env.DSH_RUNTIME_ROOT))('attests the active rc.2 producer, policy and local executor bytes', async () => {
+  it.runIf(Boolean(process.env.DSH_RUNTIME_ROOT))('attests the active 0.2.2-rc.1 producer, policy and local executor bytes', async () => {
     const runtimeRoot = process.env.DSH_RUNTIME_ROOT!
     expect(auditedDefaultWorkdirHost(runtimeRoot, runtimeRoot, 'bash')).toBe(true)
     expect(auditedDefaultWorkdirHost(runtimeRoot, runtimeRoot, 'pwsh')).toBe(true)
     expect(auditedDefaultWorkdirHost('/no-such-runtime', '/no-such-profile', 'bash')).toBe(false)
     const provider = async (name: string, exported: string) => {
       const store = join(runtimeRoot, 'node_modules', '.pnpm')
-      const entry = readdirSync(store).find((value) => value.startsWith(`@deepseek-ai+${name}@0.2.1-rc.2_`))!
+      const entry = readdirSync(store).find((value) => value.startsWith(`@deepseek-ai+${name}@0.2.2-rc.1_`))!
       const path = join(store, entry, 'node_modules', '@deepseek-ai', name, 'lib', 'index.js')
       const module = await import(pathToFileURL(path).href) as Record<string, { prototype: object }>
       return Object.create(module[exported]!.prototype) as object
@@ -113,13 +113,13 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       }
       const sourceStore = join(runtimeRoot, 'node_modules', '.pnpm')
       for (const name of names) {
-        const slug = readdirSync(sourceStore).find((value) => value.startsWith(`@deepseek-ai+${name}@0.2.1-rc.2_`))!
+        const slug = readdirSync(sourceStore).find((value) => value.startsWith(`@deepseek-ai+${name}@0.2.2-rc.1_`))!
         const source = join(sourceStore, slug, 'node_modules', '@deepseek-ai', name)
         const destination = join(other, 'node_modules', '.pnpm', slug, 'node_modules', '@deepseek-ai', name)
         mkdirSync(join(destination, 'lib'), { recursive: true })
         copyFileSync(join(source, 'package.json'), join(destination, 'package.json'))
         copyFileSync(join(source, 'lib', 'index.js'), join(destination, 'lib', 'index.js'))
-        const id = `@deepseek-ai/${name}@0.2.1-rc.2(test)`
+        const id = `@deepseek-ai/${name}@0.2.2-rc.1(test)`
         dependencies[`@deepseek-ai/${name}`] = id
         packages[id] = { url: `./.pnpm/${slug}/node_modules/@deepseek-ai/${name}`, dependencies: {} }
       }
@@ -127,7 +127,7 @@ describe('v0.7 call-time Host default-workdir observation', () => {
       expect(auditedDefaultWorkdirHost(runtimeRoot, other, 'bash')).toBe(true)
       expect(await auditedDefaultWorkdirProvider(runtimeRoot, other, 'bash', bash, policyProvider, undefined, directoryProvider)).toBe(false)
       const policy = join(other, 'node_modules', '.pnpm',
-        readdirSync(sourceStore).find((value) => value.startsWith('@deepseek-ai+dsh-sandbox-policy@0.2.1-rc.2_'))!,
+        readdirSync(sourceStore).find((value) => value.startsWith('@deepseek-ai+dsh-sandbox-policy@0.2.2-rc.1_'))!,
         'node_modules', '@deepseek-ai', 'dsh-sandbox-policy', 'lib', 'index.js')
       writeFileSync(policy, `${readFileSync(policy, 'utf8')}\n// changed installed policy bytes`)
       expect(auditedDefaultWorkdirHost(runtimeRoot, other, 'bash')).toBe(false)

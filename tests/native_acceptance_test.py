@@ -1024,6 +1024,22 @@ class HostBoundEntrypointTests(unittest.TestCase):
                                            text=True)
         self.assertEqual(observed, self.host.probe_driver_digest(root, "v070"))
 
+    def test_observed_checkpoint_diagnostics_allow_only_fixed_labels(self):
+        for label in self.host.TEST_OBSERVED_DIAGNOSTICS:
+            row = {"id": "v070_ordinary_test_and_checkpoint", "status": "failed",
+                   "operation": label, "last_tool": {"name": "context_guard_checkpoint", "secret": "private"}}
+            self.assertEqual(self.host.HostProbeFailure({"cases": [row]}).details[0]["operation"], label)
+            # Keep the portable annex shape stable; fixed labels belong to
+            # the external private diagnostic and bound stage sidecar.
+            self.assertNotIn("operation", self.host.safe_probe_failures({"cases": [row]})[0])
+        for label in ("private credential", "test_observed_status_extra", None, [], {}):
+            row = {"id": "v070_ordinary_test_and_checkpoint", "status": "failed", "operation": label}
+            self.assertNotIn("operation", self.host.HostProbeFailure({"cases": [row]}).details[0])
+            self.assertNotIn("operation", self.host.safe_probe_failures({"cases": [row]})[0])
+        row = {"id": "v070_root_v6_delivery", "status": "failed", "operation": "test_observed_status"}
+        self.assertNotIn("operation", self.host.HostProbeFailure({"cases": [row]}).details[0])
+        self.assertNotIn("operation", self.host.safe_probe_failures({"cases": [row]})[0])
+
     def test_v070_failed_probe_diagnostic_drops_raw_tool_text(self):
         output = self.host.safe_probe_failures({"cases": [{
             "id": "v070_ordinary_test_and_checkpoint", "status": "failed",

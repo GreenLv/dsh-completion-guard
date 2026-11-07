@@ -45,6 +45,22 @@ it('requires default ordinary feedback without a certificate or binding template
  ]) expect(() => assertOrdinaryCheckpoint(invalid, invalid.status)).toThrow()
 })
 
+it('identifies the first failed observed-checkpoint assertion using fixed labels', async () => {
+ const { assertOrdinaryCheckpoint } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
+ const valid = { status: 'observed', feedback_source: 'confirmed_core_v2', certificate_status: 'not_requested', open_items: [] }
+ const rows: Array<[Record<string, unknown>, string]> = [
+  [{ ...valid, status: 'incomplete' }, 'status'], [{ ...valid, feedback_source: 'wrong' }, 'feedback_source'],
+  [{ ...valid, certificate_status: 'wrong' }, 'certificate_status'], [{ ...valid, certificate: {} }, 'certificate'],
+  [{ ...valid, proof_state: {} }, 'proof_state'], [{ ...valid, open_items: null }, 'open_items_type'],
+  [{ ...valid, open_items: [{ binding_template: {} }] }, 'binding_templates'],
+ ]
+ for (const [value, expected] of rows) {
+  const labels: string[] = []
+  expect(() => assertOrdinaryCheckpoint(value, 'observed', (label: string) => labels.push(label))).toThrow()
+  expect(labels.at(-1)).toBe(expected)
+ }
+})
+
 it('executes the native npm fixture with the intended exit status on the platform shell', async () => {
  const { nativeTestFixturePackage } = await import(new URL('../../scripts/native_host_probe_v070.mjs', import.meta.url).href)
  const cwd = mkdtempSync(join(tmpdir(), 'dsh-native-script-'))

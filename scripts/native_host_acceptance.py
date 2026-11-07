@@ -313,6 +313,13 @@ def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = F
                     for row in value["cases"]))
 
 
+# Fixed labels only; no checkpoint text, arguments or user-owned values.
+TEST_OBSERVED_DIAGNOSTICS = frozenset({
+    "test_observed_status", "test_observed_feedback_source", "test_observed_certificate_status",
+    "test_observed_certificate", "test_observed_proof_state", "test_observed_open_items_type",
+    "test_observed_binding_templates", "test_observed_open_items_empty", "test_observed_tool_result_identity",
+})
+
 def safe_probe_failures(value: dict[str, Any]) -> list[dict[str, str | None]]:
     """Never copy raw model, host, or tool text into the public annex."""
     allowed = {"bash", "pwsh", "read", "write", "edit", "context_guard_checkpoint",
@@ -326,9 +333,10 @@ def safe_probe_failures(value: dict[str, Any]) -> list[dict[str, str | None]]:
         name = tool.get("name") if isinstance(tool, dict) else None
         code = row.get("error_code")
         identifier = row.get("id")
-        output.append({"id": identifier if isinstance(identifier, str) and identifier in PROBE_V070_CASES else None,
-                       "status": "failed", "error_code": code if isinstance(code, str) and code.isupper() and len(code) <= 60 else None,
-                       "tool": name if isinstance(name, str) and name in allowed else None})
+        safe = {"id": identifier if isinstance(identifier, str) and identifier in PROBE_V070_CASES else None,
+                "status": "failed", "error_code": code if isinstance(code, str) and code.isupper() and len(code) <= 60 else None,
+                "tool": name if isinstance(name, str) and name in allowed else None}
+        output.append(safe)
     return output
 
 
@@ -343,6 +351,8 @@ class HostProbeFailure(RuntimeError):
             if not isinstance(identifier, str) or identifier not in PROBE_V070_CASES | {"initialize_runtime", "v070_persisted_restart_resume"}:
                 continue
             detail = {"id": identifier}
+            if identifier == "v070_ordinary_test_and_checkpoint" and isinstance(row.get("operation"), str) and row["operation"] in TEST_OBSERVED_DIAGNOSTICS:
+                detail["operation"] = row["operation"]
             if isinstance(row.get("activation_assertion"), str) and row["activation_assertion"] in ACTIVATION_ASSERTIONS:
                 detail["activation_assertion"] = row["activation_assertion"]
             if row.get("error_code") == "PROBE_PRECONDITION_FAILED" and isinstance(row.get("precondition"), str) and row.get("precondition") in {

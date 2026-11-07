@@ -217,6 +217,12 @@ class ValidationSelectionTests(unittest.TestCase):
             self.assertIn("native_runtime", plan["invalidates"])
             self.assertTrue(plan["full_required"])
 
+    def test_rc022_renderer_contract_tests_select_host_lock_gate(self) -> None:
+        for path in ("tests/rc022-renderer-attestation.test.mjs", "tests/rc022-policy-cwd.test.mjs"):
+            plan = self.classify(path)
+            self.assertEqual(plan["unknown_paths"], [])
+            self.assertIn("host_lock_tests", plan["gates"])
+
     def test_overlapping_rules_are_additive(self) -> None:
         plan = self.classify("cordis.patch.yml")
         self.assertIn("host_lock_tests", plan["gates"])

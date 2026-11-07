@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as domain from '../dist/domain/index.js'
 
-test('rc.2 actual local bash terminal, cancellation and Jobs promotion', {timeout:15000,skip: !process.env.DSH_RUNTIME_ROOT || process.platform === 'win32'}, async () => {
+test('actual local bash terminal, cancellation and Jobs promotion', {timeout:15000,skip: !process.env.DSH_RUNTIME_ROOT || process.platform === 'win32'}, async () => {
   const require = createRequire(realpathSync(join(process.env.DSH_RUNTIME_ROOT, 'node_modules/@deepseek-ai/dsh/package.json')))
   const load = name => import(pathToFileURL(require.resolve('@deepseek-ai/'+name)).href)
   const [{Context},{LocalSubprocessRuntime},{LocalBashExecutor},{LocalJobRegistry},bash,{Session,SessionId},{createToolResultMessage},{AgentRegistry}] = await Promise.all([
@@ -27,7 +27,7 @@ test('rc.2 actual local bash terminal, cancellation and Jobs promotion', {timeou
   const detach=await agents.register(agent)
   let tool
   // Actual published tool producer/executor; only the registry/prompt seam is controlled.
-  const toolCtx={shell, shellEnv:{collect:()=>({})},get:()=>jobs,logger:{warn:message=>{throw new Error(message)}},
+  const toolCtx={shell, workingDirectory:{ensure:async()=>root}, shellEnv:{collect:()=>({})},get:()=>jobs,logger:{warn:message=>{throw new Error(message)}},
     systemPrompt:{section:()=>{},getSectionOrder:()=>0},tools:{register:value=>{tool=value;return ()=>{}}},
     inject:(_names,callback)=>callback({jobs,effect:()=>{}})}
   const outcome=text=>{
@@ -65,7 +65,7 @@ test('rc.2 actual local bash terminal, cancellation and Jobs promotion', {timeou
   } finally {await detach();controller();await ctx.fiber.dispose();rmSync(root,{recursive:true,force:true})}
 })
 
-test('native probe framing survives the actual rc.2 V4 relationship reader', {skip:!process.env.DSH_RUNTIME_ROOT}, async () => {
+test('native probe framing survives the actual V4 relationship reader', {skip:!process.env.DSH_RUNTIME_ROOT}, async () => {
   const require=createRequire(realpathSync(join(process.env.DSH_RUNTIME_ROOT,'node_modules/@deepseek-ai/dsh/package.json')))
   const load=name=>import(pathToFileURL(require.resolve('@deepseek-ai/'+name)).href)
   const [{Session,SessionId,KNOWN_SESSION_EVENT_TYPES},{createAssistantMessage,createUserMessage,createToolResultMessage},format,probe]=await Promise.all([

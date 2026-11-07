@@ -287,7 +287,9 @@
       "id": "host_lock_tests",
       "paths": [
         "tests/domain/v030-host-lock.test.ts",
-        "tests/domain/v032-host-cohort.test.ts"
+        "tests/domain/v032-host-cohort.test.ts",
+        "tests/rc022-renderer-attestation.test.mjs",
+        "tests/rc022-policy-cwd.test.mjs"
       ],
       "gates": [
         "contract_tests",

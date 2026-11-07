@@ -48,7 +48,13 @@ describe('native SDK batch probe',()=>{
   const events=f.session.snapshotEvents(), calls=events.filter(e=>e.type==='tool/call'), results=events.filter(e=>e.type==='tool/result')
   expect(calls).toHaveLength(1);expect(results).toHaveLength(1)
   expect(calls[0].data).toMatchObject({callId:'real-call',name:'write',arguments:JSON.stringify(args)})
-  expect(results[0].data.message).toMatchObject({source:{callId:'real-call'},isError:false})
+  expect(results[0].data.message).toMatchObject({source:{kind:'tool',callId:'real-call'},toolCallId:'real-call',isError:false})
+  const oldPredicate = (event, id) => event.type === 'tool/result' && event.data?.message?.source?.callId === id
+  const newPredicate = (event, id) => event.type === 'tool/result' && event.data?.message?.toolCallId === id
+  expect(oldPredicate(results[0], 'real-call')).toBe(true)
+  expect(newPredicate(results[0], 'real-call')).toBe(true)
+  expect(oldPredicate(results[0], 'wrong-call')).toBe(false)
+  expect(newPredicate(results[0], 'wrong-call')).toBe(false)
   expect(results[0].sourceEventSeqs).toEqual([calls[0].seq])
   expect(()=>restoreReleasedV4Artifact({header:f.session.header,inheritedEventCount:0,events},KNOWN_SESSION_EVENT_TYPES)).not.toThrow()
  })

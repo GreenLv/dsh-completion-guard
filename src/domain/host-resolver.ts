@@ -497,28 +497,26 @@ function walkLibFiles(session: HostAuditSession, root: string): string[] {
   return found
 }
 
-// The reviewed 0.2.1-rc.2 foreground tools have these exact published bytes
-// (the shell renderer bytes are unchanged from the 0.2.0 line — that package
-// is not in the 0.2.1-rc.2 JS-change set, re-verified against the published
-// 0.2.1-rc.2 tarballs; the bash/pwsh tool descriptions changed, so their
-// bytes moved). This is a separate check from npm SRI: a modified installed
+// The reviewed 0.2.2-rc.1 foreground tools have these exact published bytes.
+// Both shell tool changes affect promotion guidance; foreground render paths
+// remain the audited contracts. A modified installed
 // lib/index.js must not inherit the graph's markerless-terminal
 // interpretation.
 const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-tool-bash': 'a1215d7bcaf82c0755be48321ef6bb45075f1cb33296d6263009e9d10fd596f6',
-  '@deepseek-ai/dsh-tool-pwsh': '94c7f68c425e62c8006907b3f4fea771935321581fd2327b7ee1f0ba8d15eec1',
+  '@deepseek-ai/dsh-tool-bash': 'ae6be2d8b287b5e410d026acd2fdfc553ebb95565f7b361029c7fb5bcda5fd27',
+  '@deepseek-ai/dsh-tool-pwsh': '157aa3964db76e64d3013e63daed72a61d7fc5f86b247b0103753290d7dd6ed9',
   '@deepseek-ai/dsh-shell': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
 }
 
 // The default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
-// The original five bytes are unchanged from the 0.2.0 line (re-verified against the
-// published 0.2.1-rc.2 tarballs).
+// The exact 0.2.2-rc.1 packages are bound to their published module bytes;
+// the sandbox and directory changes have been reviewed for this route.
 const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-working-directory': 'af5bb7f33c52efe018da19c39c54e07b5a3ac804fff83f8a68e341f411ecf703',
-  '@deepseek-ai/dsh-sandbox-policy': '772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924',
-  '@deepseek-ai/dsh-sandbox': 'b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743',
+  '@deepseek-ai/dsh-working-directory': '76b2f53517bc3312084bc062ce8bbc4111f3b723d96da080157046c2b6d4766a',
+  '@deepseek-ai/dsh-sandbox-policy': '8eb1674f9c3c2e336efae7ecc734d5197dc8b80bc29f1f1d61bfe0b5a1472188',
+  '@deepseek-ai/dsh-sandbox': '9ece3e7b04d5526441e2439431d769acf67abc46fa49de000dd9c792893eb5e7',
   '@deepseek-ai/dsh-bash-sandbox': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
   '@deepseek-ai/dsh-bash-local': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
   '@deepseek-ai/dsh-pwsh-local': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',

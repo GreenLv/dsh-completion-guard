@@ -78,14 +78,14 @@ export function probeHostLock(domain, config, platform) {
 
 /** The ordinary v6 read surface cannot issue a certificate or an old binding.
  * Keep this check independent of the caller's desired completion state. */
-export function assertOrdinaryCheckpoint(value, status) {
-  assert.equal(value?.status, status)
-  assert.equal(value?.feedback_source, 'confirmed_core_v2')
-  assert.equal(value?.certificate_status, 'not_requested')
-  assert.equal(value?.certificate, undefined)
-  assert.equal(value?.proof_state, undefined)
-  assert.ok(Array.isArray(value?.open_items))
-  assert.ok(value.open_items.every(row => row.binding_template === undefined))
+export function assertOrdinaryCheckpoint(value, status, trace = () => {}) {
+  trace('status'); assert.equal(value?.status, status)
+  trace('feedback_source'); assert.equal(value?.feedback_source, 'confirmed_core_v2')
+  trace('certificate_status'); assert.equal(value?.certificate_status, 'not_requested')
+  trace('certificate'); assert.equal(value?.certificate, undefined)
+  trace('proof_state'); assert.equal(value?.proof_state, undefined)
+  trace('open_items_type'); assert.ok(Array.isArray(value?.open_items))
+  trace('binding_templates'); assert.ok(value.open_items.every(row => row.binding_template === undefined))
 }
 
 /** Only fixed probe labels and identity fields enter the external sidecar. */
@@ -377,9 +377,10 @@ export function apply(ctx, config) {
             ...(fields.description ? { description: 'Run isolated native acceptance fixture' } : {}) })
           assertShellTerminal(executed.value, { kind: 'foreground', exit_code: 0, timed_out: false, aborted: false })
           const observed = (await tool('context_guard_checkpoint', { bindings: [] })).value
-          assertOrdinaryCheckpoint(observed, 'observed')
-          assert.equal(observed.open_items.length, 0)
-          assert.ok(events().some(event => event.type === 'tool/result' && event.data?.message?.source?.callId === executed.callId))
+          const traceObserved = label => { operation = `test_observed_${label}`; progress.record(operation, 'started') }
+          assertOrdinaryCheckpoint(observed, 'observed', traceObserved)
+          traceObserved('open_items_empty'); assert.equal(observed.open_items.length, 0)
+          traceObserved('tool_result_identity'); assert.ok(events().some(event => event.type === 'tool/result' && event.data?.message?.source?.callId === executed.callId))
           const noOrdinaryExecutor = await tool('context_guard_action', { semantic_action: 'install',
             resolution_call_id: 'absent-ordinary', target_digest: '0'.repeat(64),
             contract_item_id: item.id, contract_item_revision: 1 })
