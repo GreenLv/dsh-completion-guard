@@ -18,8 +18,8 @@ Context Guard does not own Goal, Todo, Compaction, or continuation. It intervene
 For an ordinary named `npm test` or `pnpm test` Host call that omits `workdir`,
 Guard observes the proposed default directory before execution. The observation
 binds the original Session header, committed cwd epoch, scoped policy and
-`WorkingDirectoryService`, active shell service, and audited DSH `0.2.1-rc.2`
-implementation bytes and dependency routes. Its provider-visible context is
+`WorkingDirectoryService`, active shell service, and the audited implementation bytes and dependency
+routes for that DSH host. Its provider-visible context is
 deferred until the host has persisted the complete tool-result batch. It is
 not a directory returned by the executed process.
 
@@ -87,7 +87,7 @@ A log-derived retry ledger keys each rejected rebind attempt by its stable input
 
 The runtime rebuilds the projection from the log before each step. Before evidence is produced, the runtime awaits `ctx.sessions.flush(session)`; if no durability listener participated, evidence is marked `durability-unknown`, which fails closed.
 
-The host lock uses `dsh-core/v1`: one exact 33-package DSH core, independent of optional market versions. The resolver walks all reachable runtime/profile dependencies, including those introduced by plugins, and checks installed manifests against lock identities. Missing, duplicated, mixed or changed core rows fail closed. Every replay rechecks the configured graph sources against the injected core identity before deriving certificate authority.
+The `dsh-core/v1` host lock checks the exact core package set in the applicable [host manifest](../manifests/supported-host.v1.json), independently of optional market versions. The resolver walks all reachable runtime/profile dependencies, including those introduced by plugins, and checks installed manifests against lock identities. Missing, duplicated, mixed or changed core rows fail closed. Every replay rechecks the configured graph sources against the injected core identity before deriving certificate authority.
 
 Core manifest version 2 and its policy/cohort values change the digest without changing the shared digest-v3 encoder. Legacy injected configuration requires explicit inspection and migration; historical records are never relabelled. Action capabilities are evaluated only after this core contract succeeds. Market restart additionally requires a trusted loaded-instance verifier. Current DSH supplies none, so restart is unavailable while unrelated guarded work remains supported. A requested restart stays pending. The version-2 service adapter distinguishes ordinary provider/instance drift from a persisted, target-bound restart handoff.
 
@@ -178,6 +178,8 @@ external-operation reference; and a cohort with no producer reports
 demand the proof the user explicitly asked for.
 
 ### Explicit release
+
+Guard routes the controlled npm publication operation. Git tags and GitHub Releases have no Guard-owned execution route. Check `/context-guard release` before relying on a contract for a specific operation.
 
 Release adoption remains a root `command/run`. Reservations, settlements, and
 restart intents use an owner-only append-only private ledger beneath the DSH

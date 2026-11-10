@@ -15,7 +15,7 @@ fixtures and an explicit delta ledger.
 | portable protocol and digest fixtures | Mirror exact upstream bytes and verify their hashes |
 | product-specific or newer Codex behavior | Record explicitly in the delta ledger before porting |
 
-## Current host boundary (0.8.0)
+## Historical host boundary (0.8.0)
 
 Version 0.8.0 supports only DSH `0.1.7-rc.2`, Cordis `4.0.4` and the exact 46-package core graph. It reads Session V4 and flat ToolMessage results, awaits scoped Agent creation and checks Jobs against the same SessionId. Mapped package bytes and actual critical dependency paths must agree. The [compatibility guide](COMPATIBILITY.md) defines the current contract.
 

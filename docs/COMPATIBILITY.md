@@ -1,12 +1,12 @@
 # Compatibility
 
-Guard binds each accepted installation to its exact package identities, implementation bytes and dependency routes. Version admission and implementation qualification are separate checks; a matching version alone does not establish compatibility.
+Start with the requirements for your Guard version. The host lock then checks the packages and code the profile actually loads. A version number can meet the minimum while the installation still fails these checks. Follow the [setup guide](GETTING_STARTED.md) for the current install steps.
 
 ## 0.13.0: DSH >=0.2.2-rc.1
 
 Upgrade DSH to `0.2.2-rc.1` or later before installing Guard 0.13.0. Node.js must be `>=24.9.0` and Cordis `>=4.1.0`. All package declarations and runtime admission use the same DSH floor, without an upper version bound. Every `0.2.1` host is below the floor, including previously reviewed rc.3 and rc.5 hosts. Later versions still require package, byte, dependency-route and behavioral qualification.
 
-The default reviewed graph is `dsh-0.2.2-rc.1-core-v1`: 51 packages verified from registry tarballs against upstream `dsh-v0.2.2-rc.1` (`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`). This release adapts to batch tool execution, separate native/PTC executors, asynchronous session-projection acquisition, the official-bundles package and fs-patch. Unlike the earlier rc.3-to-rc.5 update, executable bytes changed and were reviewed anew. The [0.13.0 consumer matrix](../benchmarks/incidents/acceptance/semver-matrix-v130.json) records the real app-boot prerelease decisions.
+The default reviewed graph is `dsh-0.2.2-rc.1-core-v1`: 51 packages verified from registry tarballs against upstream `dsh-v0.2.2-rc.1` (`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`). This release adapts to batch tool execution, separate native/PTC executors, asynchronous session-projection acquisition, the official-bundles package and fs-patch. Unlike the earlier rc.3-to-rc.5 update, executable bytes changed and were reviewed anew. The [0.13.0 consumer matrix](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/benchmarks/incidents/acceptance/semver-matrix-v130.json) records the real app-boot prerelease decisions.
 
 Old sessions and Guard data retain their migration paths; admitting old data does not admit an old host. Follow the [host-lock upgrade](HOST_LOCK_UPGRADE.md) and [session migration](ACTIVATION_MIGRATION.md) instructions. The registered macOS arm64 and Windows x64 rc.1 Desktop distributions establish carrier identities only. Native installation, lifecycle, migration and Desktop v2 no-op acceptance must use the final frozen Guard artifact on each platform.
 
@@ -26,7 +26,7 @@ Guard 0.12.1 沿用下文的 DSH、Cordis 准入范围和宿主审查队列。�
 
 Before installing Guard 0.12.0, upgrade DSH if it is older than `0.2.1-rc.3`. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.
 
-For Guard 0.12.0, the reviewed baseline and default cohort were DSH `0.2.1-rc.5` / Cordis `4.0.5` (`dsh-0.2.1-rc.5-core-v1`). An rc.3 runtime uses its own reviewed `dsh-0.2.1-rc.3-core-v1` cohort; rc.2 is below the floor. Earlier acceptance records retain their original subjects and do not establish acceptance of this package. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v120.json`](../benchmarks/incidents/acceptance/semver-matrix-v120.json) bind the declared floor; the 0.11.0 matrix remains unchanged for that release.
+For Guard 0.12.0, the reviewed baseline and default cohort were DSH `0.2.1-rc.5` / Cordis `4.0.5` (`dsh-0.2.1-rc.5-core-v1`). An rc.3 runtime uses its own reviewed `dsh-0.2.1-rc.3-core-v1` cohort; rc.2 is below the floor. Earlier acceptance records retain their original subjects and do not establish acceptance of this package. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v120.json`](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/benchmarks/incidents/acceptance/semver-matrix-v120.json) bind the declared floor; the 0.11.0 matrix remains unchanged for that release.
 
 The rc.5 registry and Desktop implementation records below describe their own source qualification. A new Guard package still needs its own CI, exact-artifact native, model and UI/performance evidence; the version floor does not transfer an earlier package's acceptance.
 
@@ -50,13 +50,13 @@ The official `0.2.1-rc.5` Desktop distributions have separately registered `darw
 
 Upgrade DSH to `0.2.1-rc.3` or later before installing Guard 0.11.0. The package declares the same minimum in `engines.dsh`, `dsh.engines.dsh` and its DSH peers; Guard enforces that floor independently at runtime. There is no upper version bound, but every later graph must still pass package, byte, route and contract qualification. Cordis keeps its separate `>=4.0.4` range.
 
-The current reviewed baseline and default cohort are DSH `0.2.1-rc.3` / Cordis `4.0.5` (`dsh-0.2.1-rc.3-core-v1`). The rc.2 audit files, distribution pins and prior acceptance records remain historical evidence; they do not admit an rc.2 runtime into this release. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v110.json`](../benchmarks/incidents/acceptance/semver-matrix-v110.json) bind the new floor; the older matrix remains unchanged for 0.10.0.
+For Guard 0.11.0, the reviewed baseline and default cohort were DSH `0.2.1-rc.3` / Cordis `4.0.5` (`dsh-0.2.1-rc.3-core-v1`). The rc.2 audit files, distribution pins and prior acceptance records remain historical evidence; they do not admit an rc.2 runtime into this release. Existing session and Guard data protocols are preserved, while changed host locks require fresh checks. The official app-boot admission tests and [`semver-matrix-v110.json`](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/benchmarks/incidents/acceptance/semver-matrix-v110.json) bind the new floor; the older matrix remains unchanged for 0.10.0.
 
 The rc.3 registry and Desktop implementation records below describe their own source qualification. A new Guard package still needs its own CI, exact-artifact native, model and UI/performance evidence; raising this floor does not transfer an earlier package's acceptance.
 
 安装 Guard 0.11.0 前，请先将 DSH 升级到 `0.2.1-rc.3` 或更高版本。包顶层、嵌套 DSH 声明和 DSH peer 范围使用同一下限，Guard 运行时也独立核对；没有版本上限，后续宿主仍须逐项核验包身份、实现字节、依赖路由和接口。Cordis 继续单独要求 `>=4.0.4`。
 
-当前已审查基线及默认 cohort 为 DSH `0.2.1-rc.3` / Cordis `4.0.5`。rc.2 的审计文件、分发行身份与旧验收记录原样保留，但不再作为本版运行准入。旧会话及 Guard 数据协议保持兼容，宿主锁变化后仍须重新核验；新包的 CI、精确制品原生验收、模型及 UI/性能结果分别记录，不从旧包继承。
+Guard 0.11.0 当时的默认审查环境为 DSH `0.2.1-rc.3` / Cordis `4.0.5`。rc.2 的审计文件、分发行身份与旧验收记录原样保留，但不再作为本版运行准入。旧会话及 Guard 数据协议保持兼容，宿主锁变化后仍须重新核验；新包的 CI、精确制品原生验收、模型及 UI/性能结果分别记录，不从旧包继承。
 
 ## 0.10.0: DSH >=0.2.1-rc.2
 
@@ -218,7 +218,7 @@ Version 0.5.2 advertises only DSH `0.1.5-rc.2` and `0.1.5-rc.1`, with rc.1 retai
 
 ## Platform and release evidence
 
-- **Source and CI:** the release commit must pass the repository matrix and the Ubuntu, macOS, and Windows Node.js 22/24 CI jobs.
+- **Source and CI:** 0.13.0 requires six CI lanes on the exact commit across Ubuntu, macOS and Windows, each with Node.js `24.9.0` and `24.x`. See the [candidate contract](LOCAL_ACCEPTANCE.md#0130--dsh-022-rc1-candidate-contract) for test coverage and the native gates.
 - **Exact package:** the repository packer emits one deterministic tgz with the declared package inventory with its full source commit in `gitHead`. That same SHA-256 must be used on both native platforms and published to npm without repacking.
 - **Native scope:** macOS and Windows acceptance separately cover isolated Web and Headless installation, complete host-lock readback, repeated injection, Web restart and recovery, intentional Headless credential failure, daily-profile preservation, and scoped cleanup.
 - **Public identity:** the annotated tag, npm manifest and downloaded tgz, GitHub Release target, checksum, and platform annexes must all resolve to the same release commit and package bytes.
@@ -289,6 +289,7 @@ The ordinary runtime packages are host-provided peers:
 - `@deepseek-ai/cordis`;
 - `@deepseek-ai/dsh-agent`;
 - `@deepseek-ai/dsh-commands`;
+- `@deepseek-ai/dsh-jobs`;
 - `@deepseek-ai/dsh-llm`;
 - `@deepseek-ai/dsh-session`; and
 - `@deepseek-ai/dsh-tools`.
@@ -394,6 +395,8 @@ relevant evidence, or a new contract revision triggers reevaluation. In 0.4.2, u
 
 ## v0.3 semantic action and binding contract
 
+The examples in this section describe v0.3. Since 0.7.0, ordinary `context_guard_action` and `context_guard_evidence` calls return migration guidance. Use DSH tools for ordinary edits, tests and Git operations. See the [0.7.0 changes](../CHANGELOG.md#070---2026-09-21) and [current setup](GETTING_STARTED.md).
+
 [`../manifests/action-manifest.v1.json`](../manifests/action-manifest.v1.json) freezes the action vocabulary, compatibility matrix, required target/state keys, expected-transition predicates, and accepted structured evidence adapter versions. `generic_run` is not a wildcard and cannot certify another semantic action.
 
 The full `STATEFUL_ACTIONS` set is `install | apply | create | modify | restart | commit | push | publish | pull | fetch`. Each requires distinct resolution/effect/state evidence IDs, exact same-target closure, independent state readback, and a versioned expected-transition payload. An effect-only success is incomplete. Old v0.2 scope-run certificates are retained as `legacy_generic_run` audit facts and do not become current v0.3 authority; unprovable legacy authority is also non-certifiable.
@@ -457,6 +460,8 @@ Every stateful resolution freezes its expected transition before the effect and 
 After the action, independent state readback must match the frozen transition. A successful effect with different state remains incomplete.
 
 ## Legacy v0.2 command parsing subset
+
+This is a reference for interpreting v0.2 records and certificates. For current completion checks, see [diagnosis and preparation](ARCHITECTURE.md#unified-diagnosis-and-preparation).
 
 Context Guard v0.2 is **not** a general Bash or PowerShell static analyzer. Only
 the small, auditable grammar below can produce `executable`, `operation` and

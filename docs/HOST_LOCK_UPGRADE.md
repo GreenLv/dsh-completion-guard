@@ -189,7 +189,7 @@ Rebinding writes only its qualification receipt and, for `inject`, the managed l
 
 ## 0.9.0 session modes / 会话模式
 
-The default-mode change introduced in 0.9.0 applies only to new root sessions and remains in 0.10.0. Preserve old effective modes before replacing Guard, then use [activation inspect/adopt/verify](ACTIVATION_MIGRATION.md). Host-lock rebinding does not migrate modes or re-sign certificates. Existing bindings override defaults; explicit conflicts refuse. `standard` and persisted off/on retain their contracts. Missing modes remain unknown. Rollback and the current Windows storage capability gap are described in that guide.
+The automatic default introduced in 0.9.0 applies when a new root session has no explicit activation setting. Preserve old effective modes before replacing Guard, then use [activation inspect/adopt/verify](ACTIVATION_MIGRATION.md). Host-lock rebinding does not migrate modes or re-sign certificates. Existing bindings override defaults; explicit conflicts refuse. `standard` and persisted off/on retain their contracts. Missing modes remain unknown. Rollback and the current Windows storage capability gap are described in that guide.
 
 0.9.0 引入的默认模式变化只适用于新建根会话，0.10.0 继续保留该规则。更换 Guard 前保存旧有效模式，再按迁移说明清点、采纳及核验。重绑宿主锁不迁移模式、不重签证书；已有绑定覆盖缺省，显式冲突拒绝。standard 及持久化 off/on 合同不变，缺失模式保持 unknown，回退及 Windows 存储能力缺口见该说明。
 

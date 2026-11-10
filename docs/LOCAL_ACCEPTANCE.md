@@ -1,16 +1,24 @@
-# Local Acceptance
+# Acceptance contracts and records
+
+The first section defines the checks for the 0.13.0 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
 
 ## 0.13.0 / DSH 0.2.2-rc.1 candidate contract
 
-This candidate requires DSH `>=0.2.2-rc.1`, Node.js `>=24.9.0` and Cordis `>=4.1.0`. Its default reviewed host graph is `dsh-0.2.2-rc.1-core-v1`; earlier host identities remain historical records. Run all six candidate CI lanes on the exact commit: Ubuntu, macOS and Windows, each on Node `24.9.0` and `24.x`.
+This candidate requires DSH `>=0.2.2-rc.1`, Node.js `>=24.9.0` and Cordis `>=4.1.0`. Its default reviewed host graph is `dsh-0.2.2-rc.1-core-v1`; earlier host identities remain historical records. Run all six candidate CI lanes on the exact commit across Ubuntu, macOS and Windows, each on Node `24.9.0` and `24.x`. Ubuntu with Node `24.9.0` runs the full suite. The other lanes usually run smoke tests and expand to the full suite for sensitive or unknown changes or a manual dispatch.
 
 Freeze one package from the clean accepted commit with `scripts/release-pack.mjs`. Both native platforms must use that same tgz and its digest. Run the versioned acceptance entrypoint with `--preflight` before each intended native command. Web/Headless installation, strict second no-op, package parity, host-lock readback, lifecycle, shell shims, old-session migration and cleanup remain required. For Desktop use `--desktop-cohort 0.2.2-rc.1` and the v2 two-stage no-op contract described below. Official distribution registration alone does not pass these gates. Revalidate each platform's original session library before changing daily profiles, as required by the retained migration contract.
 
+When the acceptance scope includes the held-file-handle cleanup check, pass `--t06` to the native entrypoint and to the matching validator. That check has its own `dsh-host-bound/v4-t06` or `dsh-desktop-bound/v2-t06` annex profile. An earlier annex without this check cannot establish it.
+
 The historical incident gate must bind case-level assertions and applicability decisions to this source. Preserve source, CI, exact-artifact, native, credentialed model, rendered UI and performance evidence separately. Select model/UI/performance checks from changed risk and retained mandatory contracts; this host adaptation does not by itself require a new 32-cell performance study. Known upstream gaps remain disclosed and non-blocking within their accepted scope. Check the temporary Undici exceptions again before publication; their expiry remains 2026-11-30 inclusive.
 
-本候选最低要求 DSH `0.2.2-rc.1`、Node.js `24.9.0`、Cordis `4.1.0`。精确提交的三系统 × 两 Node 版本共六条 CI 泳道须全跑。只从干净的已接受提交冻结一份 tgz，两端使用同一摘要的包，分别通过 Web/Headless、旧会话迁移、清理和 Desktop v2 两段 no-op 门禁；Desktop 参数为 `--desktop-cohort 0.2.2-rc.1`。原有会话库须先复验，再升级日常 profile。历史错误库逐案绑定断言和适用范围，源码通过不代替原生、真实模型或渲染后的界面行为。下文旧版本的命令和结果保留原有对象；可复用的验收机制须以上述新宿主、源码和制品身份执行。
+本候选最低要求 DSH `0.2.2-rc.1`、Node.js `24.9.0`、Cordis `4.1.0`。精确提交须通过 Ubuntu、macOS、Windows 上 Node `24.9.0` 和 `24.x` 的六组 CI 检查。Ubuntu + Node `24.9.0` 跑全量。其余组合通常跑基础检查，敏感或未知改动以及手动触发时扩展为全量。只从干净的已接受提交冻结一份 tgz，两端使用同一摘要的包，分别通过 Web/Headless、旧会话迁移、清理和 Desktop v2 两段 no-op 门禁；Desktop 参数为 `--desktop-cohort 0.2.2-rc.1`。原有会话库须先复验，再升级日常 profile。历史错误库逐案绑定断言和适用范围，源码通过不代替原生、真实模型或渲染后的界面行为。验收范围包含文件句柄仍被占用时的清理检查时，原生入口及对应校验器都要加 `--t06`，使用单独的验收报告格式。下文旧版本的命令和结果保留原有对象；可复用的验收机制须以上述新宿主、源码和制品身份执行。
 
 ## 0.12.1 session migration acceptance
+
+This historical contract applies to the 0.12.1 artifact and its reviewed rc.5 host. For a current upgrade, follow the [migration guide](ACTIVATION_MIGRATION.md).
+
+以下是 0.12.1 制品和 rc.5 宿主当时的验收要求。当前升级步骤见[迁移指南](ACTIVATION_MIGRATION.md)。
 
 Run the historical incident gate and both native migration workflows against the same frozen package. On each platform, use the reviewed rc.5 runtime to verify plain JSONL and zstd fixtures with more than one generation. Exercise inventory, inspection, adoption, repeated adoption and verification. Compare the paths, identities and bytes of all original fixture logs before and after the workflow. Check that a corrupt or inconsistent older generation blocks migration even if the newest generation is readable. The historical and native receipts belong to the release artifact.
 
@@ -30,7 +38,7 @@ The rc.5 qualification and packaged metadata updates create a new package identi
 
 ## 0.10.0 / DSH 0.2.1-rc.2 acceptance contract
 
-Guard 0.10.0 retains the existing task, certificate and data protocols. This section defines the current acceptance contract; it does not report a passing native, model or GUI run. Its host floor is DSH `0.2.1-rc.2`; use the [upgrade guide](HOST_LOCK_UPGRADE.md) before establishing a new lock. The historical [RC.2/Desktop development plan](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md) records the original adaptation scope; the current source, portability, exact-package, native, model and reader gates are defined below and in the repository instructions.
+Guard 0.10.0 retains the existing task, certificate and data protocols. This historical section defines the checks for the 0.10.0 candidate. Its commands and required GUI/model checks apply to that candidate. Passing results belong to the matching artifact receipts. Its host floor is DSH `0.2.1-rc.2`; use the [upgrade guide](HOST_LOCK_UPGRADE.md) before establishing a new lock. The historical [RC.2/Desktop development plan](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md) records the original adaptation scope; the checks below describe the 0.10.0 candidate.
 
 Run the repository entrypoint twice for each native platform, always with the same frozen tgz and source commit. `host_bound_v070` covers Web/Headless. `desktop_bound` takes the physical app archive as `--runtime-root` and the exact DSH version as `--desktop-cohort`; it creates an isolated profile and uses the signed app's bundled CLI and actual Electron Node backend. Pass `--preflight` to each intended command before execution, with distinct unused external output and transfer-receipt paths.
 
@@ -40,7 +48,7 @@ pnpm 11.7.0 builds hoisted-location mappings asynchronously and writes their ins
 
 The backend annex also covers carrier/graph authentication, installation parity, injection and real composed readback, loaded Guard behavior, graceful stop, uninstall and cleanup. It expressly skips `graphical_shell` and `real_model_request`. Those skips require separate GUI/model evidence before the complete Desktop release gate closes. Portable tests, source composition against a real archive and a backend annex cannot substitute for those observations.
 
-每个平台分别运行 Web/Headless 与 Desktop 原生入口，绑定同一份最终 tgz、源码提交及摘要。Desktop 使用 `--gate-profile desktop_bound --runtime-root <app.asar> --desktop-cohort 0.2.1-rc.2`，先加 `--preflight` 做同一次调用环境的能力预检，再去掉该参数执行。该入口在隔离 profile 中验证官方载体、安装字节、单包严格字节 no-op、多包 JSON 值等价、组合配置、实际加载与卸载，并输出独立 annex；它不启动图形界面、不请求真实模型，二者须单独补齐。具体结果留在对应制品的外部回执和 Release 附件，避免文档自引用造成制品身份变化。
+0.10.0 当时要求每个平台分别运行 Web/Headless 与 Desktop 原生入口，绑定同一份最终 tgz、源码提交及摘要。Desktop 使用 `--gate-profile desktop_bound --runtime-root <app.asar> --desktop-cohort 0.2.1-rc.2`，先加 `--preflight` 做同一次调用环境的能力预检，再去掉该参数执行。该入口在隔离 profile 中验证官方载体、安装字节、单包严格字节 no-op、多包 JSON 值等价、组合配置、实际加载与卸载，并输出独立 annex；它不启动图形界面、不请求真实模型，二者须单独补齐。具体结果留在对应制品的外部回执和 Release 附件，避免文档自引用造成制品身份变化。
 
 ## 0.8.0 rc.2 source-stage snapshot
 

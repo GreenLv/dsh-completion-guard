@@ -1,103 +1,21 @@
-# Distribution status
+# Package sources and community listings
 
-This page records where `dsh-completion-guard` is published and independently
-read back. Only verified, publicly live destinations are listed here; the
-private submission pipeline and in-review entries are tracked outside the
-repository and are intentionally not disclosed.
+- [npm package](https://www.npmjs.com/package/dsh-completion-guard) shows the version offered by each npm distribution tag.
+- [GitHub Releases](https://github.com/GreenLv/dsh-completion-guard/releases) lists the release notes and available assets.
+- [Installation and first load](GETTING_STARTED.md) explains how to check the host version and verify the installed profile.
 
-## Rename note (2026-08-29)
+The project moved from `dsh-context-guard` to `dsh-completion-guard` on 2026-08-29 to avoid a name collision. The old npm package was deprecated. The internal plugin ID stayed `context-guard`. For existing sessions, follow the [migration guide](ACTIVATION_MIGRATION.md) before replacing an installation.
 
-The project was renamed from `dsh-context-guard` to `dsh-completion-guard` to
-avoid a name collision with an unrelated DeepSeek Harness plugin
-(`kpl0111/dsh-context-guard`, a token-efficient tool-result pruning plugin
-created 2026-08-16). The internal Cordis bundle id stays `context-guard`, so
-installed profiles keep their runtime identity. The previous npm package
-`dsh-context-guard` is deprecated across all published versions (0.1.0 –
-0.2.1) with a pointer to this package.
+## Community listings
 
-## Incomplete v0.3.0 identity
+These entries were read back in September 2026. Each directory refreshes its own version and description, so its card can lag behind npm.
 
-`dsh-completion-guard@0.3.0` is publicly readable from npm and its tarball
-passed same-byte native macOS and Windows validation. The registry metadata
-omits the release contract's required `gitHead`, however, so `v0.3.0` is not
-listed as a completed destination and has no GitHub Release. The immutable npm
-version and annotated tag are retained for audit history; the npm version is
-deprecated with `Release metadata incomplete; use dsh-completion-guard@0.3.1.`
-Version 0.3.1 repairs the provenance-bearing frozen-package workflow.
+- [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) lists Guard under security.
+- [dsh-market](https://dsh-market.com/) lists Guard under development workflow tools.
+- [Awesome DeepSeek Harness](https://github.com/Dominic789654/awesome-deepseek-harness#security--permissions) lists Guard under security and permissions.
 
-## Published v0.5.2 destinations (2026-09-11)
+## Historical release identity
 
-1. [GitHub Release `v0.5.2`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.5.2) is a non-draft, non-prerelease release named `DSH Completion Guard 0.5.2`. Its annotated tag identifies commit `e8b21b3d0bb5b3864c856cc9ea6bd19d5ab066ef`.
-2. [`dsh-completion-guard@0.5.2` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.5.2) is published and `latest` resolves to `0.5.2`. Its `gitHead` equals that release commit. The registry download and Release tgz match SHA-256 `d975f17dc3bfed999cbe6c0e638b226c3dcf8651f288ea7ab83faa5ba7903d31`. The public package exposes `0.1.5-rc.2 || 0.1.5-rc.1` in both DSH engine fields and all seven DSH peer dependencies.
-3. All seven Release attachments were downloaded and matched the accepted files. The separate macOS and Windows annexes each record 28 required gates passed on DSH `0.1.5-rc.2`, with real-model requests skipped. See [acceptance details](LOCAL_ACCEPTANCE.md).
+The npm package for `0.3.0` lacked the required `gitHead` field. The version was deprecated, and `0.3.1` repaired the workflow that records the source commit in the package.
 
-Version 0.5.1 remains available as an immutable historical release.
-
-## Historical v0.4.0 destinations
-
-1. [GitHub Release `v0.4.0`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.4.0)
-   remains a historical non-draft, non-prerelease release. Its annotated tag peels to
-   release commit `d5cd0ca17833d05bfdf41457ae203864bde8056b`. The Release
-   carries the frozen tgz, checksum, artifact manifest, and separate macOS and
-   Windows native-acceptance annexes. The tgz has SHA-256
-   `71ce205dedeffe72566ad399e001f0b337d057cede297e1d2249acec67cde1f2`.
-2. [`dsh-completion-guard@0.4.0` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.4.0)
-   remains published. The registry `gitHead`
-   equals the release commit, and a fresh registry download is byte-identical
-   to the frozen Release tgz.
-3. Source commit, candidate/main/tag CI, native macOS and Windows acceptance,
-   npm metadata and bytes, and all five GitHub assets are reconciled in
-   [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
-
-## Earlier v0.3.2 destinations
-
-1. [GitHub Release `v0.3.2`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.2)
-   remains a non-draft, non-prerelease historical release. Its annotated tag peels to
-   release commit `22cde6106cdca511265bb4103375a263a0762b9c`. The attached
-   frozen tgz has SHA-256
-   `feb7fc29799820e08dfe6d2bdb94823e745df9b5aa7c34d46262e5df30dabac4`;
-   the separate `SHA256SUMS.txt` asset binds the same bytes.
-2. [`dsh-completion-guard@0.3.2` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.2)
-   remains published. The registry `gitHead` equals the release commit, and a
-   registry download is byte-identical to the frozen release tgz.
-3. Source commit, tag, CI, native macOS and Windows acceptance, npm metadata
-   and bytes, and both GitHub assets are reconciled in
-   [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
-
-## Earlier v0.3.1 destinations
-
-1. [GitHub Release `v0.3.1`](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.3.1)
-   is published as a non-draft, non-prerelease release. Its annotated tag
-   peels to release commit `00ed5c6456e15f0859c1ef7731157d07a3903af9`.
-   The attached frozen tgz has SHA-256
-   `df3c0cae29fdfa0014d5cfdb6ade72c42386555779f9f4d8b59e37a2557c5d7e`;
-   the separate `SHA256SUMS.txt` asset binds the same bytes.
-2. [`dsh-completion-guard@0.3.1` on npm](https://www.npmjs.com/package/dsh-completion-guard/v/0.3.1)
-   remains published. The registry packument `gitHead` equals the release
-   commit above, and a registry download is byte-identical to the frozen
-   release tgz.
-3. Source commit, tag, CI, native macOS and Windows acceptance, npm metadata
-   and bytes, and both GitHub assets are reconciled in
-   [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
-
-## Earlier v0.2.1 destinations
-
-The [v0.2.1 GitHub Release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.2.1)
-and [`dsh-completion-guard@0.2.1`](https://www.npmjs.com/package/dsh-completion-guard/v/0.2.1)
-remain publicly readable as historical identities. They are not the current
-install target.
-
-## Community indexes
-
-| Channel | Entry | Status | Evidence |
-|---|---|---|---|
-| [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) | `GreenLv/dsh-completion-guard` (category `security`) | Listed | Added via [PR #3693](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3693) (merge commit `299f0b5c`, 2026-08-29). The shorter plain-language English and Chinese descriptions merged via [PR #3977](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/3977) (merge commit `bdf5145`, 2026-09-01) and were read back from the current generated READMEs, source YAML, and public [`plugins.json`](https://awesome-dsh-plugin.com/plugins.json). On 2026-09-11, the detail page showed the updated bilingual description and npm install command. Its embedded README still described 0.4.0 and the public index version remained 0.4.3; those generated caches await the directory publisher's refresh. Screenshots are declared in this repository's [`screenshots.json`](../screenshots.json); image changes do not need a listing PR. |
-| [dsh-market](https://dsh-market.com/) | `dsh-completion-guard` (Tools / Development workflow) | Listed | Added via [PR #1285](https://github.com/zhu1090093659/dsh-web/pull/1285) (merge commit `be426da`, 2026-08-31); read back on 2026-09-01 from the public [`manifest/plugins.json`](https://dsh-market.com/manifest/plugins.json) at rank 51. A browser readback on 2026-09-11 confirmed the Completion Guard detail page, matching bilingual description, repository identity and unversioned npm install command. The market reads the listing text from its community index; npm download counts and likes are updated separately by the site. |
-| [Awesome DeepSeek Harness](https://github.com/Dominic789654/awesome-deepseek-harness#security--permissions) | `GreenLv/dsh-completion-guard` | Listed | Rows merged via [PR #332](https://github.com/Dominic789654/awesome-deepseek-harness/pull/332) (merge commit `ba414c4`, 2026-08-29) and read back live the same day from both generated READMEs (`README.md` line 940, `README.zh-CN.md` line 946), under **Security & Permissions** alongside the other fail-closed gates and verifier plugins. The English source README still contained the matching version-independent entry on 2026-09-11. |
-
-## Update route
-
-Directory entries resolve the npm `latest` tag or link the repository, so
-routine releases refresh automatically. Row wording changes go through a pull
-request against the listing repository. Historical acceptance evidence for
-each release is kept in [`docs/LOCAL_ACCEPTANCE.md`](LOCAL_ACCEPTANCE.md).
+The [original distribution readbacks](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/docs/distribution.md) record the older package versions, hashes, and listing observations as of their check dates. The [acceptance records](LOCAL_ACCEPTANCE.md) distinguish public package identity from tests in an installed host.

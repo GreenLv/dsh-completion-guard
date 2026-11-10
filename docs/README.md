@@ -1,27 +1,40 @@
-# Documentation map
+# Documentation / 文档索引
 
-For installation and upgrades, start with [host-lock upgrades](HOST_LOCK_UPGRADE.md) and [compatibility](COMPATIBILITY.md). [Distribution](distribution.md) lists package channels. [Local acceptance](LOCAL_ACCEPTANCE.md) distinguishes source checks, installed-artifact results and their limits.
+## Install and use Guard / 安装与使用
 
-For maintenance, use [architecture](ARCHITECTURE.md), [privacy](PRIVACY.md), the [writer-lock protocol](WRITER_LOCK_PROTOCOL.md), [historical incident coverage](HISTORICAL_INCIDENT_COVERAGE.md), and the [dependency advisory gate](DEPENDENCY_SCAN.md). The [core alignment contract](CORE_ALIGNMENT_CONTRACT_V2.md), [semantic compatibility](SEMANTIC_COMPATIBILITY.md), [upstream base](UPSTREAM_BASE.md), and [porting notes](PORTING_NOTES.md) explain shared semantics and product boundaries. [Third-party licenses](THIRD_PARTY_LICENSES.md) records attribution.
+- [Installation and first load / 安装与首次载入](GETTING_STARTED.md) covers Web, Headless and Desktop, what to expect after startup, and how to change the default mode.
+- [Session migration and rollback / 旧会话迁移与回退](ACTIVATION_MIGRATION.md) explains what to save before replacing DSH or Guard.
+- [Host-lock setup and upgrades](HOST_LOCK_UPGRADE.md) covers the actual package and profile checks. [Compatibility](COMPATIBILITY.md) records the supported versions and platform limits.
+- [Changelog](../CHANGELOG.md) · [中文更新日志](../CHANGELOG.zh-CN.md) · [Package sources and community listings](distribution.md)
+- [Privacy and stored data](PRIVACY.md) · [Third-party licenses](THIRD_PARTY_LICENSES.md)
 
-## Historical development material
+## Maintain and validate Guard / 维护与验证
 
-Completed development plans, one-time planning evidence and previous release-note drafts are retained at immutable Git revisions rather than shipped in the current package. Their original bytes remain available below; their pending statuses and instructions describe those historical candidates, not the current release.
+- [Architecture](ARCHITECTURE.md) explains how Guard follows a session and checks completion. The [writer-lock protocol](WRITER_LOCK_PROTOCOL.md) covers private record writes and downgrade precautions.
+- [Acceptance records](LOCAL_ACCEPTANCE.md) distinguish source checks, CI, runs on the exact package, and public release readback. See also [historical incident coverage](HISTORICAL_INCIDENT_COVERAGE.md), [UI performance checks](UI_PERFORMANCE.md), and the [dependency advisory gate](DEPENDENCY_SCAN.md).
+- [Semantic compatibility](SEMANTIC_COMPATIBILITY.md) compares Guard with Codex Context Guard. See the [core alignment contract](CORE_ALIGNMENT_CONTRACT_V2.md), [upstream starting point](UPSTREAM_BASE.md), and [porting notes](PORTING_NOTES.md) for the shared files and host-specific behavior.
 
-- [DEVELOPMENT_PLAN_0_7_0.md](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_0_7_0.md)
-- [CORE_ALIGNMENT_PLAN_REVIEW.json](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/CORE_ALIGNMENT_PLAN_REVIEW.json)
-- [DEVELOPMENT_PLAN_DSH_0_1_7_RC2.md](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_1_7_RC2.md)
-- [dsh-0.1.7-rc.2-planning-evidence.json](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/dsh-0.1.7-rc.2-planning-evidence.json)
-- [DSH_0_1_7_RC2_ACCEPTANCE.md](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md)
-- [DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DEVELOPMENT_PLAN_DSH_0_2_0_RC2_DESKTOP.md)
-- [RELEASE_NOTES_0_7_1.md](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/RELEASE_NOTES_0_7_1.md)
-- [RELEASE_NOTES_0_8_2.md](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/RELEASE_NOTES_0_8_2.md)
+### Local development
 
-- [DEVELOPMENT_PLAN_0_6_2.md](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/DEVELOPMENT_PLAN_0_6_2.md)
-- [RELEASE_PLAN_0_6_2.md](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/RELEASE_PLAN_0_6_2.md)
-- [DEVELOPMENT_PLAN_0_6_3.md](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/DEVELOPMENT_PLAN_0_6_3.md)
-- [REVIEW_0_6_2_CORE_ALIGNMENT.md](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/REVIEW_0_6_2_CORE_ALIGNMENT.md)
-- [EXECUTE_0_6_3_PROMPT.md](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/EXECUTE_0_6_3_PROMPT.md)
-- [DEVELOPMENT_HANDOFF_0_6_3.json](https://github.com/GreenLv/dsh-completion-guard/blob/784b5452b0da366a351dff6490fa46eeed2839a9/docs/DEVELOPMENT_HANDOFF_0_6_3.json)
+Use the Node.js minimum in `package.json`. Install the main dependencies and the isolated host fixture, then check the source and package.
 
-The [0.6.3 contract revision](CONTRACT_REVISION_0_6_3.md), [cross-end result contract](CROSS_END_RESULT_CONTRACT.md), and versioned acceptance history remain because current compatibility references still depend on their definitions. Older acceptance does not certify new package bytes.
+```sh
+pnpm install --frozen-lockfile
+pnpm --dir tests/fixtures/host-composition install --frozen-lockfile
+pnpm run typecheck
+pnpm run lint
+pnpm test
+pnpm run test:release-pack
+pnpm run test:stats
+pnpm run build
+pnpm run pack:check
+```
+
+The repository's `AGENTS.md` describes the documentation and generated-runtime checks for a candidate. Local checks do not establish that an installed app loaded the plugin.
+
+## Historical records / 历史记录
+
+- [Development plans and release-note drafts at their original revisions](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/docs/README.md#historical-development-material)
+- [0.8.3 performance development report](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/IMPLEMENTATION_RESULT_0_8_3_RUNTIME_PERFORMANCE.md). The handoff JSON mentioned there was not tracked in this repository.
+- [Historical push-prohibition defect and regression](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CONTEXT_GUARD_FINDING_negative-instruction-as-push.md)
+- [0.6.3 contract revision](CONTRACT_REVISION_0_6_3.md) and [cross-end result contract](CROSS_END_RESULT_CONTRACT.md) define terms used by the compatibility and regression records.

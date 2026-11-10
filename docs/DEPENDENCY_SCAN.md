@@ -23,18 +23,14 @@ required CI job `dependency-scan`). This page is the maintenance contract for th
 
 ## Classification and reachability / 分类与可达性
 
-`pnpm audit` reports scanner severity, not product severity. This package ships no
-runtime dependencies beyond the audited DSH host cohort; advisories historically land in
-the development chain (vitest/vite/tinypool/source-map-js and their transitive graphs).
+`pnpm audit` reports scanner severity, not product severity. Some findings came from the development chain, including vitest and its dependencies. Others also affect the packages shipped with DSH, as described below.
 Before acting on a finding, check where the module sits (`pnpm why <module>`) and whether
 the advisory's precondition is reachable in this repository's usage — for example, the
 tinypool advisories require attacker-controlled worker options, and the vitest mocker
 advisories require untrusted mock inputs. Reachability decides priority; it never
 converts a blocking advisory into a silent pass.
 
-`pnpm audit` 报告的是扫描器严重性，不是产品严重性。本包除受审计的 DSH 宿主队列外
-没有运行时依赖；历史告警均落在开发链（vitest/vite/tinypool/source-map-js 及其传递
-依赖）。处理发现前先确认模块位置（`pnpm why <module>`）及其前置条件在本仓库用法中
+`pnpm audit` 报告的是扫描器严重性，不是产品严重性。有些公告来自 vitest 等开发依赖，有些也影响 DSH 自带的包，见下文。处理发现前先确认模块位置（`pnpm why <module>`）及其前置条件在本仓库用法中
 是否可达——例如 tinypool 公告需要攻击者可控的 worker 选项，vitest mocker 公告需要
 不可信的 mock 输入。可达性决定优先级，但绝不把阻断级公告变成静默通过。
 
@@ -75,7 +71,7 @@ For the three Undici 8.11.2 findings added below, the maintainer explicitly acce
 
 这次 0.11.0 验收新增的三条 Undici 8.11.2 例外，由维护者明确接受已披露的剩余风险，并对通常要求“前置条件不可达”的例外准入作一次特批。这不是“整个宿主不可达”或“已经安全”的结论。签名宿主仍未修复，TLS 1.2 导致进程崩溃的拒绝服务风险不能排除；cache 和 TLS callback 的静态检查只缩小部分路径，不能证明整个宿主隔离。修改开发依赖 override 也不会修复签名宿主中的代码。
 
-The original 0.11.0 acceptance covered only scanner IDs 1243472, 1243474 and 1243477 with the exact advisory IDs and Undici version below. Its expiry was **2026-11-05 inclusive**: the exception table shipped in that release would block from **2026-11-06** if left unchanged. The separate current 0.12.0 acceptance and expiry are recorded below. Other findings, versions and release checks are not waived. The two older exceptions retain their original scope and expiry. Expiry blocks CI qualification and subsequent acceptance checks; it does not fix upstream code, disable an installed 0.11.0 instance, or withdraw a published package.
+The original 0.11.0 acceptance covered only scanner IDs 1243472, 1243474 and 1243477 with the exact advisory IDs and Undici version below. Its expiry was **2026-11-05 inclusive**: the exception table shipped in that release would block from **2026-11-06** if left unchanged. The later 0.12.0 decision and expiry are recorded below. Other findings, versions and release checks are not waived. The two older exceptions retain their original scope and expiry. Expiry blocks CI qualification and subsequent acceptance checks; it does not fix upstream code, disable an installed 0.11.0 instance, or withdraw a published package.
 
 原 0.11.0 接受范围仅限 scanner ID 1243472、1243474、1243477 与下列精确公告 ID、Undici 版本的组合。原有效期**包含 2026-11-05 当日**；该发布所带的例外表若保持不变，将从 **2026-11-06** 起恢复阻断。下节单独登记本次 0.12.0 的新授权和期限。其他发现、版本及发布检查不在豁免范围内；原有两条例外的范围和到期日保持不变。到期阻断的是 CI 资格和后续验收，不会自动修复上游、禁用已安装的 0.11.0 实例或撤回已发布的包。
 
@@ -93,9 +89,9 @@ mistakenly wrote the numeric id as a GHSA code — the real identifiers are:
 
 ### 0.12.1 patch release / 0.12.1 修复版
 
-The registry audit still reports the same three high-severity Undici 8.11.2 advisories. The signed rc.5 host and the upstream default branch still pin the affected version. The maintainer separately accepted those three findings for Guard 0.12.1 through **2026-11-30 inclusive**. The machine-readable exception table limits this acceptance to Guard 0.12.0 and 0.12.1.
+The registry audit still reports the same three high-severity Undici 8.11.2 advisories. The signed rc.5 host and the upstream default branch still pin the affected version. The maintainer separately accepted those three findings for Guard 0.12.1 through **2026-11-30 inclusive**. At the time, the exception table covered Guard 0.12.0 and 0.12.1. The later decision for 0.13.0 appears below.
 
-本次 registry 扫描仍检出相同三条 Undici 8.11.2 高危通告。签名 rc.5 宿主和上游默认分支仍锁定受影响版本。维护者单独接受本次 Guard 0.12.1 的三项风险，截止 **2026-11-30（含）**。机器可读例外表将授权范围限定为 Guard 0.12.0 和 0.12.1。
+本次 registry 扫描仍检出相同三条 Undici 8.11.2 高危通告。签名 rc.5 宿主和上游默认分支仍锁定受影响版本。维护者单独接受本次 Guard 0.12.1 的三项风险，截止 **2026-11-30（含）**。当时的例外表覆盖 Guard 0.12.0 和 0.12.1。0.13.0 的后续决定见下文。
 
 ### 0.13.0 development candidate / 0.13.0 开发候选
 
@@ -113,7 +109,7 @@ The rc.5 cohort bump does not change this picture. The verified `0.2.1-rc.5` reg
 
 rc.5 队列升级不改变上述结论：已核验的 `0.2.1-rc.5` registry manifest 与再生的 0.12.0 lockfile 仍精确锁定 `undici` 8.11.2（经 `@deepseek-ai/dsh-http-proxy`）与 `zod` 4.4.3（经 `@deepseek-ai/dsh-commands`），上游默认分支同样保留旧 Undici，因此本版没有关闭任何缺口。维护者于 2026-11-02 明确、单独接受本次 0.12.0 验收中相同三条 Undici 8.11.2 发现的已披露剩余风险，并特批通常要求前置条件不可达的例外资格，期限延至 **2026-11-30（含）**。仅覆盖 scanner ID 1243472、1243474、1243477 及其已登记 GHSA 身份。自 **2026-12-01** 起，未经重新论证的例外恢复阻断。签名宿主未修复，不能证明整个宿主不可达，也不能排除 TLS 1.2 进程崩溃风险。上表保留首次 0.11.0 授权历史，下表及机器可读 rationale 记录单独授权的当前 0.12.0 范围；其他发现、版本和发布核验不在豁免范围内。到期影响后续资格核验，不会自动禁用已安装实例或撤回已发布的包。原有两条例外保持原范围与到期日，仅将依据更新为 rc.5 队列口径。
 
-| Current accepted advisory / 当前接受公告 | Scanner id | Module@version | Owner | Expires (inclusive) |
+| Advisory accepted for 0.12.0 / 0.12.0 接受的公告 | Scanner id | Module@version | Owner | Expires (inclusive) |
 | --- | --- | --- | --- | --- |
 | GHSA-4w7w-5xrc-9h26 | 1243472 | undici@8.11.2 | GreenLv | 2026-11-30 |
 | GHSA-2m5v-pch6-74hx | 1243474 | undici@8.11.2 | GreenLv | 2026-11-30 |
@@ -126,21 +122,20 @@ rc.5 队列升级不改变上述结论：已核验的 `0.2.1-rc.5` registry mani
 ## Recorded upgrades / 已记录的升级
 
 The advisory state is whatever the gate prints for the lockfile under review; the
-exception table above is the only durable record of accepted findings. Upgrades this
+gate applies the scope and expiry in `scripts/dependency-scan-exceptions.json`. The tables above record the version-specific decisions. Upgrades this
 gate has already carried: the vitest 3.2.7 mocker path-traversal and tinypool 1.1.1
 prototype-pollution/RCE chains were closed by moving to vitest 4.1.12 (which drops the
 vulnerable tinypool 1.x pool) with `vite >=7.3.7 <8` and `source-map-js ^1.2.2` floors
 inside the dependents' declared ranges. The vitest 4 migration seams for this repository
 (manifest wrapper modules, the clean-startup test setup file, mock placement) are
-described in the 0.11.0 change log.
+described in the [original 0.11.0 changelog entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#0110).
 
-门禁打印的告警状态始终针对被检查的 lockfile；上表是已接受发现的唯一持久记录。该
+门禁按被检查的 lockfile 报告公告，并以 `scripts/dependency-scan-exceptions.json` 的范围和期限为准。上表保留各版本的决定。该
 门禁已承载的升级：vitest 3.2.7 mocker 路径穿越与 tinypool 1.1.1 原型污染/RCE 链
 通过迁移到 vitest 4.1.12（随之移除带漏洞的 tinypool 1.x pool）并设定
 `vite >=7.3.7 <8`、`source-map-js ^1.2.2` 范围内下限关闭。本仓库 vitest 4 迁移的
 接缝（manifest 包装模块、清空启动参数的测试 setup 文件、mock 摆放位置）见
-0.11.0 变更日志。本仓库的 vitest 4 迁移注意事项（manifest 包装
-模块、清空启动参数的测试 setup 文件、mock 摆放位置）见 0.11.0 变更日志。
+0.11.0 的原版详细记录。
 
 ## Upstream references and follow-up / 上游参考与后续更新
 

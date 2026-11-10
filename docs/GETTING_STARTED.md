@@ -64,15 +64,11 @@ If the official persistence reader refuses old formats, preserve those logs and 
 
 When you open or restore a session that already has history, DSH loads that history and Guard reconstructs its saved state. You may see “载入历史” (loading history); wait for loading to finish before continuing. A later visit can still wait.
 
-0.9.0 reuses completed history checks only when it can verify that the history is unchanged and the results are safe to reuse. Each operation still checks the current mode and performs the required fresh checks of Goal state, private records and the host environment. It does not modify the official host's history-view lifecycle or decode cache and does not guarantee an instant first opening or subsequent visit.
-
 Once loading finishes, run `/context-guard status`. With the default configuration, a new empty root session reports `armed`, waiting for the first real input; Guard has written no session events yet. DSH may have written its own initialization events. Images and attachments count as real input, blank messages do not. An explicit `activation: opt-in` instead requires `/context-guard on`. In an old session, check the retained mode and any binding diagnosis. Protection does not grant new authority; the default policy remains `standard`.
 
 ## 首次载入与状态
 
 打开或恢复已有历史的会话时，DSH 载入历史，Guard 重建已保存的状态。界面可能显示“载入历史”，等加载结束后再继续；再次进入也可能需要等待。
-
-0.9.0 只在确认历史未变、检查结果可安全复用时，复用已经通过的历史检查。每次操作仍核对当前模式，并按需要重新核验 Goal 状态、私有记录和宿主环境。它没有修改官方宿主的历史视图生命周期或解码缓存，不能保证首次或后续打开立即完成。
 
 加载结束后执行 `/context-guard status`。使用默认配置的新建空根会话显示 `armed`，等待首条真实输入，此前 Guard 没有写入会话事件；DSH 可能已记录自身的初始化事件。图片、附件算真实输入，纯空白不算。显式配置的 `activation: opt-in` 则需要执行 `/context-guard on`。旧会话查看保留模式和可能的绑定诊断。保护不增加权限，默认策略仍为 `standard`。
 
@@ -108,3 +104,40 @@ Copyable configuration prompt / 可复制配置提示词：
 > Use dsh-completion-guard 0.13.0's default always mode for future new root sessions while preserving old modes. Find the cordis.patch.yml for the Web, Headless or Desktop profile I actually use. First verify that old-session mode migration is complete for the authorized scope; keep exclusions and unknown sources pending. Back up the file, then remove only the activation field from the existing context-guard config, or leave it absent. Preserve bindings, all other settings and host-lock fields. Do not rewrite bindings or restart DSH. Show the path and exact diff, and report any lock or migration checks remaining before restart.
 
 > 让后续新根会话使用 dsh-completion-guard 0.13.0 的默认 always，保留旧模式。找到我实际使用的 Web、Headless 或 Desktop profile 的 cordis.patch.yml；先确认授权范围内的旧会话模式迁移已通过，排除项和来源未知项继续待处理。备份配置后，仅删除原 context-guard config 下的 activation 字段；原本没有该字段则保留不填。保留绑定、其他配置和宿主锁字段，不重写绑定，不重启 DSH。报告文件路径、精确差异，以及重启前尚缺的锁或迁移核验。
+
+## Completion policies
+
+Activation (`always` or `opt-in`) determines when Guard starts tracking a session. The policy determines what Guard checks before it certifies completion.
+
+| Policy | What Guard checks |
+| --- | --- |
+| `standard` (default) | Requires saved evidence that matches the requested work. |
+| `strict` | Also requires direct observations for explicit visual or whole-scope checks. |
+| `release` | Checks an explicitly adopted release contract against the exact candidate and the covered operation. |
+
+To use `strict`, back up `cordis.patch.yml` and set only `policy: strict` in the existing `context-guard` entry's `config`. Keep the other fields, including the host lock and activation setting. DSH still controls tool permissions. For a release contract, use `/context-guard release adopt <json contract>` only after the user authorizes the covered release work. Use `/context-guard release` to see what is covered. See [release operation coverage](ARCHITECTURE.md#explicit-release).
+
+启用模式（`always` 或 `opt-in`）决定 Guard 什么时候开始记录。完成策略决定它在认证前检查什么。
+
+| 策略 | 检查内容 |
+| --- | --- |
+| `standard`（默认） | 检查保存的证据是否与任务要求相符。 |
+| `strict` | 对明确要求的视觉检查或全范围核验，还须有实际观测结果。 |
+| `release` | 在明确采用发布合同后，核对合同覆盖的操作及其候选版本身份。 |
+
+如需使用 `strict`，备份 `cordis.patch.yml`，然后仅在现有 `context-guard` 条目的 `config` 中设置 `policy: strict`。保留宿主锁、启用模式等其他字段。工具权限仍由 DSH 管理。采用发布合同前须先获得用户对相应发布操作的授权，再调用 `/context-guard release adopt <JSON 合同>`。通过 `/context-guard release` 查看覆盖范围。详见[发布操作的覆盖范围](ARCHITECTURE.md#explicit-release)。
+
+## Session commands
+
+| Command | Result / 作用 |
+| --- | --- |
+| `/context-guard status` | Shows activation and open checks. 查看启用状态和待完成的检查。 |
+| `/context-guard diagnose` | Explains why completion passed or remains open. 查看完成检查的结论及原因。 |
+| `/context-guard on` or `/context-guard off` | Changes protection for this session and keeps its history. 开启或关闭当前会话的保护，保留会话历史。 |
+| `/context-guard clear` | Supersedes the current checklist while keeping prohibitions. 撤下当前检查表，保留禁止事项。 |
+| `/context-guard migration` | Shows the session's rules and migration status. 查看会话规则及迁移状态。 |
+| `/context-guard release` | Shows any adopted release contract and its operation coverage. 查看明确采用的发布合同及操作范围。 |
+
+For a missing result, complete the named check and save the result with the host tools. [Diagnosis and preparation](ARCHITECTURE.md#unified-diagnosis-and-preparation) explains the detailed tool output. See [rebinding](ARCHITECTURE.md#042-capture-and-rebinding) when a requirement itself needs to be split.
+
+如果缺少结果，用宿主工具完成对应检查并保存结果。[诊断与准备](ARCHITECTURE.md#unified-diagnosis-and-preparation)说明如何读懂工具的详细输出。要求本身需要拆分时，再查看[重绑定说明](ARCHITECTURE.md#042-capture-and-rebinding)。

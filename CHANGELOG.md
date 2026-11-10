@@ -1,8 +1,8 @@
 # Changelog
 
-All notable changes to this project are documented here. The project is pre-1.0; release versions track the plugin lifecycle, not stabilised API promises.
+[简体中文](CHANGELOG.zh-CN.md)
 
-Each entry describes that version. Historical host ranges, defaults, plans and candidate validation results are not current setup instructions or proof that a later release passed. Use [installation and first load](docs/GETTING_STARTED.md) for the current setup and [acceptance records](docs/LOCAL_ACCEPTANCE.md) for version-specific evidence.
+Each entry describes what changed in that version and what users needed to do when upgrading. See [installation and first load](docs/GETTING_STARTED.md) for current instructions and [acceptance records](docs/LOCAL_ACCEPTANCE.md) for version-specific checks.
 
 <details>
 <summary>Version index</summary>
@@ -13,130 +13,114 @@ Each entry describes that version. Historical host ranges, defaults, plans and c
 
 ## 0.13.0
 
-- **Guard 0.13.0 requires DSH `0.2.2-rc.1` or later, and Node.js `>=24.9.0`.** Package declarations and runtime admission use the raised floor with no upper bound; every lower host — including the formerly supported `0.2.1-rc.3`, `0.2.1-rc.5` and `0.2.1` — refuses at the version gate and keeps no admission channel. Higher versions still pass the complete graph, byte, route and interface qualification before any protected operation. For an existing installation, stop writers, preserve the old package and mode sources, and freeze the session inventory and migration receipt before replacing DSH or Guard. Then satisfy the host requirements, install Guard, rebuild and verify the host lock, complete mode adopt/verify, and only then restart and read back the loaded version. See the [migration guide](docs/ACTIVATION_MIGRATION.md); a fresh installation without old sessions skips adoption.
-- **The 0.2.2-rc.1 host is a real interface migration.** The tools service moved to batch execution (`ToolBatchInput`/`ToolBatchResult`) with per-step admission; executors split into native/PTC plugin packages (`dsh-tool-executor-native`, `dsh-tool-executor-ptc`); session projection registration became an awaited resource acquisition consumed through held handles; official-bundle constants moved to `@deepseek-ai/dsh-official-bundles`; and the fs core gained `dsh-fs-patch`. Guard's host qualification and real-SDK composition fixtures use these interfaces — no "bytes unchanged" conclusion was reused.
-- **The audited host cohort is `dsh-0.2.2-rc.1-core-v1` (51 packages).** The new `manifests/rc022-rc1-byte-audit.json` re-verified every cohort tarball against the registry (SRI + SHA-256) after real interface changes. The rc.5, rc.3 and rc.2 cohorts and their audit files remain historical evidence below the floor; host-trust equivalence now spans four reviewed published states with the rc.1 bytes as their own reference. The version gate is pinned against the official app-boot consumer's real admission decisions (`semver-matrix-v130.json`).
-- **Candidate CI runs the six required lanes on Node `24.9.0` and `24.x`** across Ubuntu, macOS and Windows; the exact minimum runtime has its own lane and the Ubuntu/24.9.0 lane runs the full suite. Static, package, build and documentation contracts still run once outside the lanes.
-- **Known upstream risk, unchanged and still time-limited:** the 0.2.2-rc.1 registry manifests still exact-pin `undici` 8.11.2 (`dsh-http-proxy`) and `zod` 4.4.3 (`dsh-agent`, `dsh-commands`). On 2026-11-06 the maintainer decided the already disclosed upstream gaps remain non-blocking for this release and extended the three existing temporary Undici accepts to the 0.13.0 candidate with the expiry unchanged (**2026-11-30 inclusive**). From 2026-12-01 those entries block again unless re-justified. This acceptance does not repair the signed host or establish whole-host unreachability; the two longer-term exceptions keep their 2027-01-31 scope. New Guard regressions, new unaccepted advisories, identity gates and required historical source regressions stay blocking. See [the dependency advisory gate](docs/DEPENDENCY_SCAN.md).
-- **Official 0.2.2-rc.1 Desktop distribution identities are registered for macOS arm64 and Windows x64** from the coordinator/owner-verified official update feeds, signatures and signed ASAR headers. These identities do not establish Guard installation, strict no-op, lifecycle or exact-artifact acceptance; those remain separate pending facts.
+Guard works with DSH's new tool execution and session interfaces in `0.2.2-rc.1`. It checks each tool step in a batch and waits for the host to finish recording the results before using them as evidence.
 
-- **Old-session upgrades include verified 0.12.x predecessors.** The activation toolkit preserves prior modes and now qualifies the catalog’s full 22-package, 23-module static dependency graph, including its three third-party modules. Changed or redirected modules fail before migration.
+- **Upgrade DSH and Node.js first.** The minimum versions are DSH `0.2.2-rc.1`, Node.js `24.9.0` and Cordis `4.1.0`. Earlier DSH versions, including `0.2.1`, are below the minimum. Later versions still need to pass the host checks. [Compatibility](docs/COMPATIBILITY.md#0130-dsh-022-rc1) explains which host and Desktop packages were reviewed.
+- **Keep existing session modes.** The migration tool now accepts verified `0.12.x` installations as a source. Stop the processes writing session data and save the old package, mode sources and session inventory before replacing DSH or Guard. Rebuild and verify the host lock, then adopt and verify the old modes before restarting. Follow the [installation guide](docs/GETTING_STARTED.md) and [migration guide](docs/ACTIVATION_MIGRATION.md).
+- **Known dependency risks.** DSH still ships Undici 8.11.2 and Zod 4.4.3. The three temporary Undici exceptions for 0.13.0 expire after **2026-11-30**. The affected host code still carries the disclosed risks, including a possible TLS 1.2 process crash. See the [dependency advisories](docs/DEPENDENCY_SCAN.md).
+
+The [acceptance record](docs/LOCAL_ACCEPTANCE.md) separates the reviewed host identities and CI from platform runs on the exact package.
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#0130).
 
 ## 0.12.1
 
-- **Verify every retained generation during session migration.** The activation toolkit checks the physical logs in each multi-generation JSONL session before preparing or using a migration receipt. It checks the session identity and inherited cut through the official read-only SDK, and preserves the original files and their paths. Both plain JSONL and zstd are supported on reviewed backends. Hidden corruption, inconsistent identity and changes during inspection stop migration.
-- **Host compatibility stays at DSH `>=0.2.1-rc.3`.** DSH rc.5 and Cordis 4.0.5 remain the default reviewed baseline. The three disclosed Undici findings remain present in the signed host. The maintainer accepted their residual risk for this release through **2026-11-30 inclusive**. See the [migration guide](docs/ACTIVATION_MIGRATION.md) and [dependency advisory policy](docs/DEPENDENCY_SCAN.md).
+When an old session has several saved log files, migration now verifies every retained generation. A damaged older log blocks migration even if the newest one opens.
+
+- The migration tool uses DSH's read-only reader to check session identity and where a fork inherits its history. It preserves the original paths and files. The reviewed backends support both plain JSONL and zstd.
+- This release kept DSH `0.2.1-rc.3` as the minimum, with rc.5 and Cordis 4.0.5 as the reviewed defaults. The three disclosed Undici risks stayed present and were accepted for this release through **2026-11-30**. See the [migration guide](docs/ACTIVATION_MIGRATION.md) and [dependency advisories](docs/DEPENDENCY_SCAN.md).
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#0121).
 
 ## 0.12.0
 
-- **Complete, unambiguous locator names no longer create verification actions by themselves.** Complete, unambiguous filenames, paths and link destinations are excluded from classification; adjacent instructions and link labels remain visible. Original text, source hashes and spans are preserved, and these names do not grant execution authority.
-- **Guard 0.12.0 requires DSH `0.2.1-rc.3` or later.** Package declarations and runtime admission retain the rc.3 floor. The default reviewed baseline is rc.5 (`dsh-0.2.1-rc.5-core-v1`); an rc.3 host uses its own reviewed cohort, while rc.2 remains below the floor. Existing session and Guard data protocols remain compatible; changed host locks require fresh checks. Migration receipts now bind a physical inventory proof, so older receipts without it must be regenerated.
-- **The rc.3→rc.5 cumulative study found no Guard-consumed interface change.** All 13 upstream commits and 388 changed files between `dsh-v0.2.1-rc.3` and `dsh-v0.2.1-rc.5` were reviewed: the non-manifest changes are client-UI thinking-block rendering and two ACP stdout diagnostics reroutes, none Guard-consumed. All 47 core-cohort packages were re-verified against the registry (SRI + SHA-256): zero executable-byte changes across the cohort, dependency routing structurally unchanged, Cordis shared at 4.0.5. The new `manifests/rc021-rc5-byte-audit.json` binds those verified identities.
-- **Host trust equivalence now spans three reviewed baselines** (rc.2, rc.3, rc.5), selected by the acquired graph's launcher version; a graph qualifies only when its loading digest AND module bytes match ONE reviewed published state.
-- **Activation inventory detects hidden physical sessions.** JSONL backends with reviewed-equivalent executable bytes and loader shape are checked against a read-only physical census and streaming file digests. Hidden, corrupt, future or unknown layouts fail closed; prior proofless receipts require new inventory and inspection. The proof covers the supplied root, not whether it is the active configuration. See [migration limits](docs/ACTIVATION_MIGRATION.md).
-- **Activation migration accepts Guard `0.11.x` as trusted predecessors.** The prior-mode toolkit previously stopped at `0.10.x`, so an upgrade from 0.11.0 had no documented migration path; `0.0.x`–`0.11.x` are now accepted and the current/future versions still refuse to impersonate a predecessor. unknown/off/conflict/pending boundaries are unchanged.
-- **Official rc.5 Desktop distributions are registered separately for macOS arm64 and Windows x64.** Both use the official distribution digest and an independently verified installed carrier. macOS codesign and Windows Authenticode passed; each signed ASAR header matches its measured header, with desktop/runtime metadata and dependency bytes checked separately. These identities do not establish Guard installation or lifecycle acceptance; rc.3/rc.2 pins are not reused.
-- **Known upstream risk, unchanged:** the rc.3 and rc.5 hosts still exact-pin `undici` 8.11.2 (`dsh-http-proxy`) and `zod` 4.4.3 (`dsh-commands`), and the upstream default branch still pins the same Undici — no disclosed gap is closed by this adaptation. On 2026-11-02 the maintainer separately accepted the same three Undici 8.11.2 high-risk findings for this 0.12.0 validation, including their residual risk and exception-eligibility waiver, and extended the expiry to **2026-11-30 inclusive**. From 2026-12-01 the gate blocks those findings again unless re-justified. This acceptance does not repair the signed host or establish whole-host unreachability. The two longer-term exceptions keep their scope and expiry. Four new moderate Undici findings and four fast-uri moderate/low findings on the 0.12.0 dev-chain lockfile are recorded, non-blocking. See [the dependency advisory gate](docs/DEPENDENCY_SCAN.md).
-- **Acceptance-receipt recovery is available without re-running acceptance.** A missing transfer receipt can be recovered from the original transfer intent plus the already-saved acceptance result; recovery never re-executes the run and never turns a failed result into a passing one.
-- **Failed, interrupted and timed-out acceptance initializations keep their evidence.** Init failures, interruptions and timeouts now preserve the owned fixture and record an explicit failed-cleanup state with process-group and child cleanup; an unknown liveness state retains the fixture for ownership diagnosis instead of disposing of it.
-- **Candidate CI selects its coverage by changed risk.** Static, package and documentation contracts run once; the Ubuntu/Node 22 lane runs the full deterministic suite; other platform/Node lanes usually run the smoke set; sensitive or unknown inputs expand all six lanes to the full suite, and manual dispatch always requests the full matrix.
-- **Warm-host route checks have a versioned native supplement.** The same frozen tgz is exercised in real isolated Web and Headless processes: redirect and deny must refuse without a new mock publish effect, and restoring the route must allow the same unconsumed resolution. Results bind source, artifact, driver and platform; this validation tool does not establish a GUI or real-model pass.
-- Development dependencies run on the pinned `0.2.1-rc.5` host cohort, and the shipped floor is pinned against the official app-boot consumer's real admission decisions (`semver-matrix-v120.json`).
+A filename such as `verify.pdf` no longer creates a verification task on its own. Guard still reads instructions next to complete filenames, paths and link destinations.
+
+- **Migration checks the files on disk.** The tool compares the official session list with the physical logs in the supplied directory, so hidden sessions and unreadable layouts can stop the upgrade. Check that this is the directory DSH actually uses. Regenerate older receipts that lack the inventory proof. The tool now accepts verified `0.11.x` installations. See the [migration guide](docs/ACTIVATION_MIGRATION.md).
+- **DSH rc.5 became the reviewed default.** This release still accepts qualified hosts from `0.2.1-rc.3`. The rc.5 audit found the same executable bytes across the 47 packages Guard uses. The official Desktop distributions were checked separately on macOS arm64 and Windows x64. [Compatibility](docs/COMPATIBILITY.md#0120-dsh-021-rc3) describes the scope of those checks.
+- **Known dependency risks.** The reviewed DSH hosts still ship the affected Undici and Zod versions. The three temporary Undici exceptions for this release ran through **2026-11-30**. See the [dependency advisories](docs/DEPENDENCY_SCAN.md).
+
+Maintainers can recover a missing transfer receipt from a saved run. Failed or interrupted setup preserves the test environment for cleanup diagnosis. CI selects platform test depth from the files changed, and the native Web and Headless checks can exercise a route change while the host is running.
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#0120).
 
 ## 0.11.0
 
-- **Upgrade DSH to `0.2.1-rc.3` or later before installing Guard 0.11.0.** Package declarations, runtime admission and the default audited cohort now use rc.3 as the minimum. Existing session and Guard data protocols remain compatible; rc.2 identities are retained as historical evidence.
+Guard tightened checks around package publication and file access. It also fixed several errors in how it reads a session's current directory, configuration and instructions.
 
-- **Host-lock injection preserves JSON-shaped patch sequences.** The managed entry stays inside the sequence, with user entries retained. Existing block YAML, inline flow values, activation and disabled-only overrides remain supported. Invalid syntax, duplicate keys, ambiguous Guard fields and malformed managed markers refuse before profile mutation; the bundled YAML reader does not evaluate `!!js` expressions. Full composition and native loading remain separate checks.
+- **Publication checks use the same package identity throughout.** Guard rejects tarballs with ambiguous manifests or unsupported entries and checks the complete file before authorizing publication. It also limits how long it will wait and how much it will read when checking npm afterward. An uncertain readback leaves the original attempt open for reconciliation.
+- **Relative paths use the directory of the original call.** Guard protects its private storage even when Bash or PowerShell uses an explicit working directory. Later directory changes cannot move an earlier file check to a different file. URL credentials and documented GitHub token formats are redacted before storage.
+- **Session and configuration fixes.** “请分别执行” no longer becomes a false prohibition. Ordinary forks are treated as independent sessions. An interrupted write to one session's index entry leaves completed entries readable. Host-lock injection preserves existing entries in JSON-shaped patch files, and long configuration dumps reach pipes in full.
+- **Upgrade to DSH `0.2.1-rc.3` or later for this release.** The migration tool understands rc.3's persistence interface and accepts verified `0.10.x` installations. See [host compatibility](docs/COMPATIBILITY.md#0110-dsh-021-rc3-historical-for-this-release) and the [migration guide](docs/ACTIVATION_MIGRATION.md).
+- **Dependency advisory checks became required in CI.** Unaccepted high or critical advisories block the gate. A scan failure also blocks it. This release had three temporary Undici exceptions through **2026-11-05**. See the [dependency advisories](docs/DEPENDENCY_SCAN.md).
 
-- **Known upstream risk:** for this 0.11.0 release, the maintainer explicitly accepted three Undici 8.11.2 high-risk findings through **2026-11-05 inclusive**. The signed host remains unfixed; see the [risk scope and expiry](docs/DEPENDENCY_SCAN.md). We will update after the upstream fixed chain is verified.
-
-- Default host audits check declared files and dependency routes without scanning unrelated directories. Audits backed by a qualification receipt continue to check the complete file inventory.
-
-- **Reviewed Chinese instruction forms such as 请分别执行 no longer create false bans.** Words such as 分别 stay intact in those forms; genuine bans such as 这个别推送 and 完成前别 remain in force.
-
-- **Long host-lock configuration exports now reach pipes in full.** `verify-dump` explicitly reports that it checks only Guard lock fields; complete configuration parsing and host loading remain separate checks.
-
-- **The activation CLI supports official rc.3 persistence exports.** Inventory and explicit mode adoption accept both the default-plugin and namespace-plugin module shapes, and reject invalid modules before persistence access.
-
-- **Release tgz identity is now read through one auditable tar subset.** Guard, npm and every release stage agree on which `package.json` the bytes encode: resolution, the final pre-effect check and post-publish readback all use one strict reader that validates header checksums, models ustar prefixes and npm's path normalization, and refuses links, PAX/GNU extensions, duplicate normalized names and paths outside `package/`. A crafted archive whose two manifests disagree (prefix shadowing plus `./` aliasing) is rejected before any authorization, so a publish can no longer be bound to one package name while npm installs another. Reading is bounded on every axis — compressed bytes actually read, decompressed output, member size, member count and manifest size — so a high-ratio archive can no longer stall the host before authorization completes.
-- **The registry readback owns its deadline and body budget.** Post-publish reconciliation reads the exact-version registry document under a plugin-owned total deadline combined with the caller's cancellation, streams the response under a hard byte budget, and releases the reader on every exit. A slow, hanging or oversized registry ends within the recorded budget with a stable refusal; the attempt stays in flight, no settlement is written from a refused readback, and a publish is never re-sent.
-- **Private storage protection follows the official working directory.** The Bash/Pwsh guard now reads the official `workdir` parameter (absolute, relative or symlink-aliased) instead of a field no host sends, resolves relative file targets against the caller's trusted effective directory — the last committed working-directory epoch — and fails closed when a relative target has no provable base. The same matrix is enforced through the registered production guard, not just the helper.
-- **File readback binds to the directory that governed the call.** After a committed `working-directory/change`, the independent file observer reads a relative edit target against the cwd epoch of the call's own sequence, not the immutable header directory and not the current end-of-log directory. A later directory change can no longer rebind a completed effect to a different same-named file; an unreadable timeline refuses relative targets while absolute targets stay observable.
-- **Sanitization now strips URL credentials and the documented token families.** `user:password@` is removed from URLs by structure, and the bounded GitHub token spellings (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`/`github_pat_`) are redacted before normalized text, URL subjects or recovery packets are stored. The [privacy note](docs/PRIVACY.md) states the exact pattern set and its limits; capture→replay digests stay deterministic and historical digests are never silently recomputed.
-- **One interrupted anchor write no longer damages other sessions.** A torn final line in the shared session-anchors file is treated as an uncommitted append: every complete line stays authoritative for its session, the next lock holder repairs the tail before appending, and invalid middle lines or conflicting anchors still refuse for every session.
-- **A qualified first creation survives a brief writer-lock race.** When a new startup session's activation write loses a short lock race, the runtime retries the same creation while its intent is still provable — within a bounded budget — and then reports the explicit `activation_writer_unavailable` status. The retry is same-value and idempotent, and never applies to resume, late attach or a deleted binding.
-- **Plain forks are root conversations again.** `parentSession` is fork lineage, not delegation: first-step boundary and guidance, work units and confirmation semantics now apply to ordinary and resumed forks, while the host's explicit subagent markers (`origin=subagent`, positive `delegationDepth`) keep the delegated restrictions. Contradictory markers stay delegated.
-- The rc.3 core graph has registry-verified package identities and implementation digests. Its official macOS arm64 and Windows x64 Desktop distributions have separately registered vendor signatures and signed archive identities. Installation, lifecycle, real-model and UI performance acceptance remain separate gates.
-- **The release tgz identity survives file growth.** The audited tar reader now reads to a confirmed end of file in bounded chunks and binds the identity to the complete bytes actually read, so an artifact that grows after the metadata check can no longer be accepted on its old prefix digest. Private-storage protection refuses a shell or file call whose default directory cannot be proven (no trusted working directory), and URL credential stripping follows URL authority semantics for any scheme, case-insensitively, without treating a legal authority quote as a terminator. Observing an activation binding from any writer permanently retires the new-session first-creation retry, so a later deletion can never recreate the file. Registry reconciliation releases every response body — including error responses and bodies that stall — under the combined deadline. The dependency advisory gate now honors the scanner's exit protocol (a failed scan never reads as clean), matches exceptions against every installed finding version, and records real GitHub advisory identifiers. Anchor writes inject real boundary faults (partial write, failed fsync, failed tail repair) in the regression suite: committed peers stay readable and the next writer repairs an uncommitted tail.
-- **Migration inventories accept `0.10.x` as the previous package version**, so upgrading from 0.10.0 keeps the documented activation-migration path; earlier-version rules are unchanged.
-- **A fail-closed dependency advisory gate is now part of required CI.** The new `dependency-scan` job blocks on any unaccepted high/critical advisory and fails when the scan itself cannot complete; accepted exceptions live in a validated, expiring table documented in [the dependency advisory gate](docs/DEPENDENCY_SCAN.md). The development chain moved to vitest 4.1.12 (dropping the vulnerable tinypool 1.x pool) with compatible vite and source-map-js floors.
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#0110).
 
 ## 0.10.0
 
-- **Upgrade DSH before installing Guard 0.10.0.** The minimum host is `0.2.1-rc.2`, with no implied upper limit. Preserve old-session modes and configuration, upgrade the host, install Guard, then rebuild and read back each profile's host lock before re-enabling it. Old locks and completion certificates do not transfer to a changed graph. See [compatibility and upgrade boundaries](docs/COMPATIBILITY.md#0100-dsh-021-rc2) for the reviewed host identities and the separate market, load and admission checks.
-- **Job lifecycle events refine external waits without ever completing work.** A validated `job/registered`/`job/settled` pair owned by the current session can end its pending external wait; a healthy orphan settlement remains audit-only: a `completed` settlement counts as finished only when the producer itself reported fulfilment; killed and failed settlements are explicit failures, and an unreported completion stays unconfirmed. A settlement never certifies resource cleanup, file readback or a user obligation — the model still owes the verification. The recorded owner never transfers to a forked or resumed copy of the history.
-- **Working-directory changes no longer re-interpret captured evidence.** Each committed `working-directory/change` opens a new cwd epoch: targets, paths and receipts keep the meaning of the epoch they were captured in, and the session's original project directory stays immutable in the header. Shell workdir receipts bind the audited cwd provider and an epoch-bound v2 shape. A directory change while a call is in flight leaves its cwd-dependent execution unconfirmed; replay cannot reassign it to the new directory. Historical logs without cwd-change events preserve the 0.9.0 frozen projection under the same host binding, and preserve its evidence fields and digests, including explicit relative workdirs; later events cannot rewrite completed legacy facts.
-- **Experimental `plugin:` records are retained-and-skipped.** They never trigger capture, never authorize anything and never break tool pairing; Guard's own private ledger is not migrated onto them. Guard never imported the removed upstream invariant companions, and synchronous `snapshotEvents()` reads remain valid on the pinned host.
-- **Qualify retained official Desktop distribution files separately.** Exact release/header and independently reproduced source-byte pins cover eight retained invariant companions without adding them to the registry inventory. Vendor signatures, ordinary module bytes and active routes remain mandatory. Physical pnpm `11.7.0` and `11.28.5` profiles must agree with the carrier; both v2 no-op gates remain strict. Native fixtures bind newly allocated temporary roots to physical paths before deriving evidence targets, preserving exact readback assertions. See [Desktop distribution qualification](docs/COMPATIBILITY.md#official-desktop-distribution-bytes).
-- **Subagent, Team inbox and Goal-waiting semantics carry over unchanged.** A `subagent` tool result stays bounded evidence that cannot close a parent obligation; direct inbox delivery records reception, not execution; waiting for a subtask, a plan-review end turn or a paused Goal neither fabricates nor consumes a completion.
-- **Migration inventories now accept `0.9.x` as the previous package version**, so upgrading from 0.9.0 keeps the documented activation-migration path; earlier-version rules are unchanged. Development dependencies pin DSH `0.2.1-rc.2`, and the shipped floor is pinned against the official app-boot consumer's real admission decisions.
+Switching working directories no longer changes which file or test an earlier result refers to. If the directory changes while a command is running and its result depends on that directory, Guard leaves the result unconfirmed.
+
+- DSH can signal that a background job is done, failed or was stopped. Guard uses matching records for jobs owned by this session to resolve a wait. A job's status alone cannot verify cleanup or the result the user requested.
+- Guard preserves experimental DSH `plugin:` records while ignoring them for task tracking. Receiving a Team inbox message or a subagent result does not complete the parent's task.
+- **Upgrade to DSH `0.2.1-rc.2` or later for this release.** Preserve the old modes and settings, rebuild and verify each profile's host lock, and verify migrated modes before restarting. Migration now accepts verified `0.9.x` installations. The [compatibility record](docs/COMPATIBILITY.md#0100-dsh-021-rc2) also covers separate checks for files bundled with Desktop.
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#0100).
 
 ## 0.9.0
 
-- **New root sessions now default to `always` when `activation` is omitted.** Explicit `opt-in` remains supported. Protection begins with the first real input; Guard adds no session events before it. Existing sessions, including empty ones, keep their verified pre-upgrade mode. Saved `off`/`on` remains effective. Explicit settings that contradict a bound mode are refused; [omit the override after migration](docs/GETTING_STARTED.md#choose-the-default-for-new-sessions) to use the new default while preserving old modes. The default policy stays `standard`: activation grants no execution or publication authority and does not automatically certify completion.
-- **Upgrade existing installations before reopening sessions.** Stop the relevant writers, preserve the old package and effective mode sources, and freeze the old-session inventory before replacement. After installation, rebuild the host lock, adopt the preserved modes and verify them before startup. Missing, conflicting or damaged bindings remain uncertified. History and valid old certificates are retained without rewriting or re-signing. See [migration and rollback](docs/ACTIVATION_MIGRATION.md).
-- **Expect a history-loading wait.** First opening or restoring a session with history loads it and rebuilds Guard state; “载入历史” may appear, and later visits can still wait. The cache reuses completed history checks only when it can verify that the history is unchanged and the results are safe to reuse; a single Desktop installation check also reuses application files already read and verified. Each operation still checks the current mode and performs the required fresh checks of Goal state, private records and the host environment. The official host's history-view lifecycle and decode cache are unchanged; this is not a promise to eliminate UI waits. A read-only measurement script separates local read, decompression, JSON parsing and pure Guard replay timings from runtime migration, IPC and rendering.
-- **Migrate an explicitly chosen readable subset when the official host refuses old formats.** `inventory` reports the full scope; `select` freezes chosen IDs. Use the same `--selection` throughout inspect/adopt/verify. Exclusions retain their original logs and mode sources and remain pending; `selected_complete` does not mean the whole inventory completed. Other errors still abort. The [guide](docs/ACTIVATION_MIGRATION.md) includes commands, recovery and copyable AI prompts.
+New sessions start protection automatically with the first message or attachment when `activation` is left out. To keep manual activation, set `activation: opt-in`.
+
+- **Keep old sessions on their original modes.** Stop session writers before upgrading and follow the [migration guide](docs/ACTIVATION_MIGRATION.md). It explains how to save the old modes, rebuild the host lock and verify the migration before startup. History and valid old certificates are preserved.
+- **History can still take time to load.** Guard can reuse a completed check once it establishes that the history is unchanged and the result is safe to reuse. DSH still loads the history, so “载入历史” can appear even on a later visit.
+- If the official reader refuses an old format, you can [migrate an explicitly selected set of readable sessions](docs/ACTIVATION_MIGRATION.md). Excluded sessions keep their original logs and stay pending. `selected_complete` covers only the selected sessions.
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#090).
 
 ## 0.8.4
 
-- The official Desktop app can now coexist with the official plugin market (`dshmarket`). Earlier versions refused any Desktop profile whose bundle list carried the market — the pre-install check rejected it as a bundle conflict and the installed/runtime check misreported it as an unbound plugin. The market is now treated like any other third-party profile plugin on Desktop. Official profile identity, Guard binding, the Headless bundle conflict, implementation byte and route audits, and host-lock digests are unchanged and keep failing closed.
-- Installing or removing the market changes the Desktop profile's importer, so an existing Desktop lock no longer matches and Guard refuses the stale digest. After any market change, rebuild the machine's lock with `inspect` and `inject`, generate a new composed configuration with `dump-desktop`, then verify that new output with `verify-dump`. Web keeps using the market bundle as a Web identity marker; the market restart adapter remains unavailable, and Desktop restart remains unsupported.
-- Adds a versioned native acceptance entrypoint for real-market Desktop coexistence (`desktop-market-coexistence/v1`) with its schema and validator. It installs the declared market cohort through the official plugin CLI into an owned isolated Desktop profile, verifies lock drift on install and removal, and probes the loaded backend in the final coexistence state. It complements, and does not replace, the existing Desktop layered no-op gate; graphical-shell and real-model observations remain separate gates.
+The official Desktop app can now load Guard alongside the official plugin market (`dshmarket`). Earlier versions could reject that profile as a conflict.
+
+Installing or removing the market changes the Desktop profile. Rebuild its host lock with `inspect` and `inject`, generate a fresh configuration with `dump-desktop`, and check it with `verify-dump`. Guard's market and Desktop restart limits still apply. See [Desktop setup](docs/HOST_LOCK_UPGRADE.md#official-desktop-profile).
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#084).
 
 ## 0.8.3
 
-- Rejects invalid checkpoint predicate parameters as structured binding errors during live calls and persisted replay, while retaining the whole-contract signing gate. Filtered feedback exposes target/transition errors and provides exact predicate parameters instead of sending callers back to a successful test.
-- Desktop acceptance now checks Guard alone for byte-identical second installation, then checks the multi-package fixture separately. Only JSON object-key order in `.modules.yaml` may differ in the latter check; values, array order, types, other files and Guard bytes remain strict. This versioned contract records pnpm 11.7.0’s ordering limit and preserves historical strict failures.
-- A checkpoint with a correctly matched binding now explains that certification is still pending and reports remaining work across the whole contract, even when the request filters the item list. It no longer asks for the same evidence again; completion still requires the full signing checks. Dots inside filenames stay inside prohibition clauses instead of creating false requirements.
-- Failed Desktop second-install checks now retain bounded field and byte-offset differences, with redacted file snapshots stored only in a private local diagnostic directory. The two no-op checks follow the versioned layered contract above.
-- Avoids repeated full-table scans when capturing new requirements and checking coverage. Pure parsing uses bounded storage that retains reused entries and returns independent results to callers. Shorter tool descriptions and first-step guidance reduce repeated context text while preserving authority checks, recovery reminders and existing tool result fields.
-- Preserves an explicitly named absolute test directory instead of silently using the session's working directory. Unresolved location clauses require clarification; passing tests in the parent directory cannot satisfy the child-directory requirement.
-- Reduces repeated work when mounting and updating a session. Unchanged, provably immutable event snapshots reuse the existing projection; mutable or accessor-backed inputs rebuild it. Per-derivation indexes speed up long histories. Regression fixtures compare event prefixes with an independently frozen 0.8.2 implementation; this does not promise a fixed loading time for every history or host.
-- Shares archive and module reads within each Desktop host validation. Each new validation still checks the current installed bytes. Ordinary shell calls that cannot produce a trusted workdir receipt avoid the full host audit; eligible root test obligations retain it.
-- Reads private-ledger anchors and records once per append. Writer admission publishes a complete owner record atomically, and a provably dead same-host writer can be recovered without deleting another writer's lock. Unknown and live owners are refused. An adopted stale barrier continues to block older writers; downgrading requires the controlled maintenance procedure in the [writer-lock reference](docs/WRITER_LOCK_PROTOCOL.md).
-- Makes Git observation agree with the evidence layer's terminal verdict. Failed, backgrounded, truncated or unclassifiable results cannot establish an observed commit or push. Parent and tree identities come from the original commit object, including first commits, shallow repositories and replacement refs. Git readback supports cancellation and an overall deadline.
-- Adds independent baseline comparisons, session disposal checks and process-tree memory measurements. Performance fixtures separate long-history distributions and distinguish a first mount in a warm process from a cold process start. Native Web/Desktop behavior and exact-artifact platform acceptance are recorded separately.
+When a completion check has enough evidence for one item but the task still has work open, Guard now shows what remains. Invalid check parameters return a useful error instead of interrupting the turn.
+
+- Guard reduces repeated parsing and host checks when processing a long session. It can reuse the saved view when the host's event history is provably unchanged. Loading time still depends on the history and host.
+- A test must run in the directory the user asked for. A pass in its parent directory does not count. Failed, backgrounded or truncated Git results also leave commit or push unconfirmed.
+- An interrupted private record write is easier to recover from. [Writer-lock instructions](docs/WRITER_LOCK_PROTOCOL.md) describe the controlled downgrade procedure.
+- Desktop acceptance checks repeated installation in two steps. Installing Guard again by itself must leave the files byte-identical. With the multi-package test, only JSON object-key order may change in `.modules.yaml`. See the [acceptance record](docs/LOCAL_ACCEPTANCE.md).
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#083).
 
 ## 0.8.2
 
-- Adds a separate host lock for the official Desktop app. Guard reads the application archive in place, checks its vendor signature and signed archive header, and verifies installed modules and dependency routes. Web and Headless keep their existing paths; Desktop application restart remains unavailable through Guard.
-- Requires DSH `>=0.2.0-rc.2`. The current 46-package baseline and development dependencies now bind RC.2. Upgrade DSH first, install Guard, then rebuild the lock for each profile; old locks and completion certificates cannot transfer to the new installation.
-- Refuses to certify a shell result when its terminal exit marker is obscured by later prose or a malformed marker. Clean success and failure tails retain their existing meaning. Scheduled reminders and late answers to timed questions remain outside root instruction authority.
-- Fixes Desktop command selection, archive identity drift, locally modified critical peers, and receipt-directory symlink escape. The `inspect`, `inject` and `verify-dump` commands accept explicit `--profile desktop`; the archive, carrier and installed profile are bound to the same freshly checked identity.
-- Adds `dump-desktop` for boot-free configuration readback through the app's bundled APIs, and stores the full Desktop identity for runtime comparison. The versioned native entrypoint now has a separate Desktop backend profile; graphical-shell and real-model acceptance remain separate.
-- Supports the physical hoisted plugin tree produced by Desktop's bundled pnpm 11.7, which has no package map. Guard cross-checks its installation index against disk, authenticates selected critical peers and routes, and binds the index into fresh runtime validation. After installation, `inspect` audits that active tree; partial importer state cannot fall back to pre-install inspection.
-- Uses Electron's original filesystem for physical host-identity reads, so Desktop revalidation reads the same archive bytes as the system-Node CLI while normal application archive loading stays enabled.
-- Adds measurements for 0/100/1000/10000-event projections and short/long private ledgers. The observed full-log cost is recorded without adding a persistent trust cache. See [compatibility and evidence scope](docs/COMPATIBILITY.md) for native-platform and model acceptance limits.
+The official Desktop app gets its own host lock. Guard verifies the signed app archive and the profile it actually loads. Desktop setup adds `dump-desktop` to check the composed configuration before booting. Web and Headless keep their own setup paths.
+
+- **Upgrade to DSH `0.2.0-rc.2` or later for this release.** Rebuild and verify each profile's lock after upgrading. See [compatibility](docs/COMPATIBILITY.md#082090-dsh-020-rc2-and-official-desktop).
+- If later output obscures a shell exit marker, or the marker is malformed, Guard leaves the result unconfirmed.
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#082).
 
 ## 0.8.1
 
-- DSH version admission now starts at `0.2.0-rc.1`, with no upper limit; Cordis uses an independent qualified `>=4.0.4` range. Upgrade DSH, install Guard, explicitly run `inspect`/`inject`/`verify-dump`, then restart each protected profile. Compatible later package versions can bind a registry-verified lock with `--rebind-registry`; changed consumed programs pass a versioned API/Session probe with an exact-byte receipt. Old certificates remain historical. The tested baseline is `0.2.0-rc.1` / Cordis `4.0.4`; final-artifact and future-version native acceptance are separate.
-- A session mount performs one complete host audit. Ordinary replay reuses that result; checkpoint and Goal/Stop decisions each validate freshly. Actual production mock-publish entries observe two full audits without a ref and three with a ref, including the final veto after the last await. Concurrent entries remain isolated and the synchronous decision segment shares one audit.
-- Fresh CJS and ESM export interpretation now authenticate both routes, including nested conditions and nearer package scopes. A changed route or module refuses the effect. Crash recovery uses the registered resume and fork entries; unknown outcomes never become success evidence.
-- Release packaging normalizes Git-index file modes, so identical clean source commits produce identical archives across hosts. Source entry measurements on a real installed graph are kept separate from native application and exact-artifact acceptance.
+Guard reduces repeat host audits during session startup and replay. Checks that certify completion or allow publication still inspect the current host.
+
+**Upgrade to DSH `0.2.0-rc.1` or later for this release.** Cordis must meet its separate `4.0.4` minimum and pass qualification. Rebuild and verify the host lock before restarting. This release adds a way to rebuild the lock for later compatible packages after checking the official archives and changed interfaces. See the [host-lock guide](docs/HOST_LOCK_UPGRADE.md).
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#081).
 
 ## 0.8.0
 
-- Target only DSH `0.1.7-rc.2` / Cordis `4.0.4`. Check all 46 critical package identities, published implementation bytes and actual dependency resolution paths; older hosts are removed from production selection.
-- Install and dispose tools, guards and listeners through awaited `agent/created`, including existing Agents on enablement. Use Session V4 and Jobs SessionId ownership.
-- Keep shell promotion and incomplete output uncertified. Persist Stop boundaries as Guard notices instead of fabricating tool events outside a turn.
-- Read-only prepare discovery and checkpoint pagination now continue after their own persisted observations; changed contract items or business state still invalidate old cursors.
-- Goal feedback now offers only individually certifiable native edit/readback and foreground test bindings, and guides native edits to their readback without demanding a historical resolution chain.
-- Preserve 0.7.1 recovery feedback and independent proof, Goal and release gates. Upgrade requires a new host lock and restart; old certificates are not re-signed.
+Guard adapts to DSH `0.1.7-rc.2` and Cordis `4.0.4`. Upgrade DSH before installing this release and regenerate each profile's host lock before restarting.
 
-Upgrade DSH before installing 0.8.0, then regenerate the host lock for each profile. Follow the [upgrade guide](docs/HOST_LOCK_UPGRADE.md). The [source-stage evidence snapshot](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md) records development checks and their limits; exact-artifact acceptance is recorded separately in Release attachments.
+- Completion guidance for Goals now points to specific file readbacks or foreground test results the plugin can verify.
+- Incomplete shell output stays uncertified. Read-only discovery and completion queries can continue across pages when their own observations have left the task unchanged.
+- The [source-stage record](https://github.com/GreenLv/dsh-completion-guard/blob/563f144bf8568793da5017b9ff71395a33dcd265/docs/DSH_0_1_7_RC2_ACCEPTANCE.md) covers development checks. Native checks belong to the corresponding release artifact.
+
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#080).
 
 ## 0.7.1 - 2026-09-22
 
@@ -177,10 +161,7 @@ Candidate `583035bd90b8ee589d01b12487a057b655d43e41` passed the complete local d
 
 ## 0.6.3 - 2026-09-18
 
-Repairs execution authority, target identity, preparation consistency and legacy
-record eligibility. For publication status and same-artifact native evidence, use
-[the versioned release](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.6.3).
-[Local acceptance](docs/LOCAL_ACCEPTANCE.md) records the source checks.
+Guard checks which operation the user authorized and which target it applies to. Preparation and execution now agree on the required inputs and on which older records can still be used. See the [release and native reports](https://github.com/GreenLv/dsh-completion-guard/releases/tag/v0.6.3) and the [source checks](docs/LOCAL_ACCEPTANCE.md).
 
 ### Changes
 
@@ -284,396 +265,46 @@ The new interpretation records and reasons are additive. Attachment capture text
 
 ## 0.6.0 - 2026-09-14
 
-Brings ordinary DSH tasks through entry, execution, delivery and recovery under one rule set, adding selected shared Context Guard behaviors. Cross-language parity and a formal v2 mirror were not yet established in this version. Everything before the new protocol boundary keeps its original meaning; nothing is reinterpreted or relabelled.
+Guard started tracking answers, delegated work and resumed tasks as separate parts of a conversation. A delivered answer closes its answer item. A delegated result can support the parent's checklist, and the parent still has to close its own work.
 
-The repair rounds below belong to this same version, not additional releases. They retain the original findings, scope decisions and test evidence; read the initial candidate behavior together with these corrections.
+- A saved result needs to match the requested action and target. Requests to check an image, file, URL or external state need evidence from the corresponding source. When the host cannot supply it, Guard reports the gap.
+- Earlier prohibitions still apply to the affected work. Resume uses recorded requirements and results, including open work from required subtasks.
+- An explicitly adopted release contract binds each covered operation to the exact candidate. Guard records the attempt before the effect and checks the result afterward.
+- This release adopted selected shared Context Guard behavior and kept the earlier history readable. The linked original entry records the repair rounds for this version and the limits of each check.
 
-### Added
-
-- **Answer delivery is tracked separately from execution certification.** A
-  question or explanation is closed only by the host's own evidence: an
-  `assistant/message` in the turn's final step, with no interrupted marker,
-  followed by `turn/end` with `reason.kind: "completed"`. A status summary, a
-  draft, an intermediate reply, another turn's answer, a subagent's answer, or
-  an aborted turn never closes anything. `answered` means "the answer was
-  handed over" — never that it was right, complete, or executed.
-- **Work units with a required-descendant closure.** Tasks are grouped into
-  derived units. A delegation-marked instruction opens a child unit whose open
-  work is required by the parent's closure, so delegating a sub-task can never
-  drop the parent's own work; an ordinary task switch opens a sibling that does
-  not block the newer task. A subagent's result is bounded evidence: it is
-  recorded and visible, and it never closes a parent obligation.
-- **Ancestor constraints stay in force.** A prohibition or an unsatisfied
-  condition the root declared in an earlier unit continues to govern the same
-  action and target in a later one, and the certifier refuses those bindings
-  before examining evidence.
-- **Proof v2 with a real capability matrix.** Five new proof kinds — input
-  asset check, output visual readback, object/URL readback, execution fact, and
-  external fact — each bind a current subject, a declared source, and a real
-  operation. A successful tool call is only ever an execution fact: a browser
-  call that merely returned cannot prove an image was looked at, an input asset
-  check must be a prior-state fact, and a delegated subagent result is never a
-  proof source. When the installed host exposes no producer, the result is
-  `unavailable`, never a silent pass. The old three-kind manifest and its digest
-  domain are unchanged and remain readable.
-- **Explicit release tickets.** A release contract is adopted only by an
-  explicit root command. Once adopted, each operation spends one reservation,
-  written before the effect and settled afterwards from a trusted readback.
-  Wrong candidate SHA, ref, artifact digest or version, an expired or
-  unevaluable ticket, a consumed ticket, a replay, an operation that is already
-  in flight, an unresolved target, and an opaque runner are all refused before
-  any effect. A "release" keyword, a loaded Skill, or an installation never
-  adopts a contract.
-- **A strict proof tier.** On top of the default `standard` tier, a visual or
-  complete-scope verification the user explicitly asked for must be discharged
-  by a real readback fact. Strict adds no approval step to ordinary actions, and
-  installing never enters the `release` tier.
-- **One diagnosis language.** Every incomplete item now reports one of seven
-  classes — parameter missing, source insufficient, condition unmet, producer
-  capability unavailable, historical gap, integrity failure, policy boundary —
-  next to its exact reason code. `/context-guard migration` reports which rule
-  set is in force, which obligations keep their pre-0.6.0 rules, and what a
-  rollback requires.
-- **A host-neutral v2 conformance fixture** covering S01–S12 through the real
-  derive/delivery/closure/Goal chains. Every expectation is compared against a
-  value computed from the events and the production projection alone; the runner
-  never reads an expectation to decide an actual result.
-
-### Changed
-
-- A document "update" or "modify" is decided by the object, not by the verb:
-  a recognized document noun becomes a bounded `modify` the assistant may
-  resolve to an exact file inside the captured scope and type, while an
-  unrecognized object keeps its honest unresolved reading instead of being
-  forced into an action.
-- A trusted answer from the host's own question tool now narrows where a
-  bounded file choice may land, and is recorded separately from sandbox
-  approvals. Pasted or restated answer text forms nothing.
-- A later root instruction that contains a pending generic obligation verbatim
-  supersedes it atomically, keeping both revisions. Explanations, prohibitions
-  and waits never delete an obligation by similar wording.
-- `/context-guard status` reports the active policy tier, the reason-class
-  histogram, the migration facts, and the release state.
-
-### Fixed
-
-- The first step of a session now sees the input persisted in that same step,
-  and a failed durability flush reports an explicit unavailability instead of
-  serving a stale projection.
-- The v2 conformance runner computes `interpreted`, `closure`, `delivery`,
-  `turn_bound` and the correction decision from production state instead of from
-  the fixture's own expectations.
-- A malformed release record is reported as a bounded diagnostic and never
-  marks the whole session corrupt, so damaged release state cannot block
-  unrelated ordinary work.
-
-### Migration and rollback
-
-- The 0.6.0 semantics start at the new `Context Guard protocol boundary:
-  v5.0.0` notice, written at the first real root-input step of a new session.
-  An older binary ignores that notice, so a rollback fails closed instead of
-  misreading new records.
-- A session that never wrote the boundary keeps the previous whole-session
-  contract, version-1 certificates, and its old digest domains.
-- A session that wrote it keeps pre-boundary obligations under their birth
-  rules while new work uses units, delivery and version-2 certificates.
-- Rolling back to 0.5.x requires restoring a 0.5.x state snapshot. Replaying a
-  0.6.0 log with 0.5.x fails closed with `certificate_replay_mismatch`; never
-  migrate new-schema data down by hand.
-
-### Not yet established
-
-- **Cross-language parity and the canonical mirror are not done.** The
-  upstream `codex-context-guard` repository has not landed a frozen v2 fixture,
-  so the v2 file here is explicitly a DSH-authored *candidate*
-  (`2.0.0-candidate.1`, `status: "dsh-candidate"`). `UPSTREAM_PIN.json` still
-  pins the unchanged v1 mirrors and is not refreshed by this release.
-- The `release` tier protects only surfaces Guard itself routes. Publishing an
-  npm artifact through the Guard-owned action tool is protected; `git tag`, the
-  GitHub Release operations, and any composite runner have no interception
-  point in this host and are refused before effect rather than pretended to be
-  covered. A trusted in-process caller that bypasses Guard entirely is a host
-  trust boundary, documented rather than denied.
-- After a publish, the settlement stays `unconfirmed` unless the registry
-  readback producer answers; an unconfirmed operation is never re-sent.
-- Deterministic tests, CI, native macOS/Windows acceptance, publication and
-  installation are separate evidence scopes. This release records source and
-  deterministic evidence; native acceptance and publication follow separately.
-
-<details>
-<summary>Pre-release review and repair details for 0.6.0</summary>
-
-### 0.6.0 third repair round after targeted review (2026-09-14)
-
-Two findings from the targeted review of `fcc3813`, both fixed.
-
-- **A certificate minted after adoption can no longer ratify the adoption.** The
-  closure check compared the certificate's revision with the revision frozen at
-  adoption, which a later log entry could satisfy: adopting a contract that
-  named a certificate that did not exist yet, then producing that certificate
-  afterwards, was granted. The adoption now resolves and freezes the closure
-  certificate's IDENTITY (its certification digest, epoch and revision) at the
-  adoption watermark, and the gate requires exactly that certificate. An
-  unresolvable reference is recorded as unresolved rather than left open for a
-  future entry to satisfy. A later release obligation still does not invalidate
-  the frozen candidate closure. The frozen certificate must also match the
-  candidate revision at adoption; a certificate already stale before adoption
-  is refused.
-- **Invalid adoption input no longer poisons a valid contract.** A root
-  `/context-guard release adopt` with a malformed payload was treated as damaged
-  persisted state, so one typo permanently blocked every later publication. A
-  root command the user typed badly is a usage diagnostic; only an unreadable
-  persisted reservation, settlement or contract record marks the release state
-  damaged. A malformed plugin-notice record still fails closed.
-
-New regression cases: a certificate minted after adoption is refused (with the
-projection still valid), a certificate that existed at adoption is frozen by
-identity and survives a later obligation,
-and invalid/mistyped adopt input leaves a valid contract usable.
-
-### 0.6.0 second repair round after follow-up review (2026-09-14)
-
-A follow-up review of the repair commit found five remaining defects in the new
-wiring. All five reproduced and are fixed. The reviewer's counterexamples are
-kept as permanent regression cases in the suites they belong to.
-
-The changes below also include a new recovery entrypoint supporting those fixes; the list is not a one-to-one count of the five findings.
-
-#### Fixed
-
-- **Adding the v5 boundary no longer answers a pre-v5 question.** Deliveries were
-  only gated by the watermark of their own turn; appending the boundary at the
-  end of a v4 log therefore made an old turn's answer retroactively close an
-  obligation the old rules had left open. A delivery now counts only when its
-  turn ended AFTER the boundary, and only obligations captured after the
-  boundary can be closed by one.
-- **The real publish producer now observes everything the contract names.** The
-  trusted reader fills the registry from the canonicalized resolution (it was
-  simply missing, so any contract naming a registry could never be granted), and
-  the ref is resolved by the runtime from the ADOPTED CONTRACT with the audited
-  git executable — a closed, reachable path, instead of a command-manifest field
-  the publish manifest schema rejects. A ref that resolves to a commit different
-  from the artifact's embedded `gitHead` is refused.
-- **A new release instruction no longer invalidates the certificate it needs.**
-  The closure check demanded the CURRENT contract revision, so capturing the
-  publish obligation invalidated the very certificate the release was about to
-  use, and certifying afterwards required the publish to be complete first. The
-  contract now freezes the candidate scope's revision at adoption and requires
-  the closure certificate to be the one that certified exactly that revision.
-  A later obligation does not re-validate a moved candidate, and a certificate
-  minted after adoption is still refused.
-- **Read-only release queries no longer poison the release state.** `release
-  status` (and an omitted verb) is a read-only command; an unknown verb is a
-  usage diagnostic. Only an unreadable persisted record marks the release state
-  damaged, so a plain query can no longer block every future publication
-  irreversibly.
-- **There is now a callable trusted recovery entry.** `context_guard_release`
-  reads the release state and, for `reconcile`, reads the external identity
-  through the same audited registry adapter the publish path uses and settles
-  the reservation only when the readback names the bytes the contract — or the
-  reservation's recorded SRI — froze. It never re-sends a release, and it works
-  after a restart and for a revoked-but-in-flight attempt, because revocation
-  withdraws future authority rather than the duty to reconcile an effect that
-  may already have happened. A contract that froze only the byte SHA-256 stays
-  reconcilable and can still DETECT a mismatched readback.
-- **A presented proof is now part of the persisted contract.** The checkpoint
-  call records its `proof` manifest, and the replay re-binds it at that call's
-  own watermark and requires the recorded proof state to match what the log
-  implies. A tampered or omitted proof — with a result that still claims it was
-  bound — now fails closed with `proof_replay_mismatch` instead of restoring a
-  valid certificate. Signing, persistence and replay use the same call argument,
-  and the Goal gate consumes only a certificate whose proof still binds.
-
-#### Verification
-
-- The reviewer's five follow-up counterexamples pass and remain as regression
-  cases: pre-v5 delivery, read-only status, the frozen candidate closure, the
-  observed registry, and persisted proof tampering.
-- New: `tests/tools/v060-release-chain.test.ts` — the acceptance the review asked
-  for. One test drives a real root publish instruction, a real certified
-  preparation closure, a real contract adoption, a real tgz and resolution
-  through the registered evidence tool, and then the registered action tool
-  consulting the RUNTIME's own release gate: it reserves, executes once, leaves
-  the attempt in flight, reconciles it through the registered recovery tool, and
-  refuses the replay as a consumed ticket. Only the npm executor and the
-  registry HTTP client are replaced; the authorization gate, records, producers
-  and replay are production code. Two further cases cover the revoked-but-in-
-  flight restart recovery and a mismatching readback.
-- The proof suite gained the missing-proof, Goal-consumption and
-  accurate-evidence-boundary cases.
-
-#### Evidence boundary
-
-The release chain test pins the audited host cohort through an explicit
-`RuntimeExecutorSeams.hostLock` acceptance seam, because the host-lock
-migration revalidation reads real filesystem roots. That replaces ONLY the
-host-lock evaluation; the release gate, the reservation and settlement records,
-the evidence producers and the replay are the production ones, and the host lock
-keeps its own suites and native acceptance.
-
-### 0.6.0 repairs after concentrated review (2026-09-14)
-
-A concentrated review of the `0dce898` candidate produced fifteen targeted
-counterexamples; all fifteen reproduced a real defect. This section records the
-repair. The stable finding numbers (`F01`–`F08`, `R1`–`R15`) are the reviewer's.
-
-#### Fixed
-
-- **F01 certificate replay was timing-dependent.** Deliveries were applied after
-  the whole log was replayed, so a checkpoint recorded in a later turn was
-  re-verified while the delivered answer still looked open, and the v5 rule set
-  was applied to the whole log rather than from the boundary onwards. Delivery
-  is now applied at the watermark of the turn that produced it and the rule mode
-  switches at the boundary event, which makes a projection equal to the
-  projection of its own prefix. Certificate comparison is also field-semantic
-  now: identical certificates replay identically regardless of JSON property
-  order, while an extra, missing, or tampered field still fails.
-- **F02 delivery accepted late and non-final answers.** The final answer must
-  appear before the turn's own `turn/end`, must sit in the highest step the host
-  actually entered, and the turn must have exactly one completed end and a
-  recorded start. Late text, an intermediate step, a repeated or abnormal end,
-  and an aborted turn all deliver nothing.
-- **F03 the switch test ignored descendants, and an item reference crashed.**
-  The handover test now uses the same closure as the certificate, so a parent
-  with a pending delegated child is not treated as finished, and the item-ID
-  pattern is a global capture that distinguishes live lineage references from
-  unknown or historical IDs.
-- **F04 release identity was not really bound.** A candidate now has separate,
-  named identities — commit, ref, repository, package, version, artifact
-  SHA-256, npm SRI, registry — and each is compared with its own observed value
-  read from a trusted producer (the exact tgz bytes and the local repository),
-  never with a model-supplied string. Readiness and closure references must
-  resolve to real certified facts, the resolved target must be the artifact the
-  contract names, and a contract that names no artifact digest is refused
-  outright so omitting one cannot be a bypass. A registry readback that names
-  different bytes is not a settlement.
-- **F05 an unknown effect could be re-sent, and a late readback was discarded.**
-  Outcomes are distinguished: `not_effected` is a proven pre-effect refusal and
-  releases the one-shot lock, while `failed`/`unknown`/`unconfirmed` keep it and
-  refuse a re-send. Settlements are reconciled rather than de-duplicated, so a
-  trusted readback settles an earlier unconfirmed attempt, and a settled release
-  is never downgraded. Damaged release state now blocks release operations
-  (`release_state_damaged`) without touching ordinary work.
-- **F06 adoption reported an error and revocation did not exist.** The public
-  command validates and reports exactly what the durable root command adopts,
-  and `/context-guard release revoke <contract_id>` records a durable revocation
-  that keeps the audit trail, denies the next effect, and still shows an
-  in-flight reservation whose readback is owed.
-- **F07 proof could be satisfied about the wrong subject.** Binding now runs the
-  whole chain: the item's own frozen subject and scope, the fact's qualification
-  under the ordinary evidence rules, the declared source, the declared operation
-  for every kind, the order of an input check before the effect, and the real
-  coverage set behind a declared scope digest. A manifest and a fact that agree
-  with each other but not with the user's obligation are rejected.
-- **F08 the proof entry was not reachable from production.** The v2 binder is now
-  wired into `context_guard_checkpoint` (an optional `proof` manifest is bound
-  before any certificate and its state is reported), the v2 fixture evaluates
-  each release probe at its own point in the log, mints real closure
-  certificates, and carries a real read fact for S09, and a dedicated
-  production-chain suite drives producer → persisted log → derive → checkpoint →
-  replay.
-
-#### Scope rulings (coordinator, 2026-09-14)
-
-Two scope facts were decided once, and both are recorded as fact rather than as
-a general parity claim:
-
-1. **The v2 shared fixture stays a DSH-authored candidate and cross-language
-   parity stays open.** The upstream repository has not frozen a v2
-   specification, so there is nothing to mirror. The plan's shared gate is
-   therefore recorded as a cross-repository pending item owned by the upstream.
-2. **The release profile's protectable surface is `npm_publish` only.** The
-   `git_tag` and GitHub Release routes are NOT claimed to be blocked by the
-   host: the plugin reports them as `release_operation_unrouted` with
-   `attribution: scope_reduction`, because building the Guard-owned route is the
-   work that would make them protectable. Only a composite runner is reported as
-   an opaque host boundary. The coverage table is machine-readable so this
-   distinction cannot be lost in prose.
-
-The plugin therefore does not claim "C01–C12 core alignment" with Codex Context
-Guard, and it does not claim a complete release coverage surface.
-
-#### Verification
-
-The reviewer's fifteen counterexamples are kept as
-`tests/domain/review-counterexamples.test.ts` and now pass; the expectations
-that the repair deliberately changed are marked in place with the reason. New
-coverage: `tests/domain/v060-proof-production-chain.test.ts` (the proof entry
-through real tool registration), the rewritten release/migration suite (26
-cases, including a real certified closure and every identity refusal), and the
-extended v2 fixture (S09 proof binding, per-timeline release probes, and the
-scope-attribution table).
-
-</details>
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#060---2026-09-14).
 
 ## 0.5.3 - 2026-09-14
 
-### Fixed
+Preparation now works when the host reports a capability without an explanation code. For Git actions it lists the inputs and their order, distinguishing details Guard reads from targets you need to provide.
 
-- Preparation succeeds when the host capability check has no reason code. Real tool-registry regressions cover the previously invalid nested optional field.
-- Git preparation lists the required inputs and call sequence. Missing evidence inputs identify their exact fields; producer-computed Git identities are no longer presented as missing user targets. Execution and certification checks remain unchanged.
-
-### Planned
-
-- Track answer delivery separately from execution certification. The design and remaining semantic coverage are recorded in [next-version repair notes](https://github.com/GreenLv/dsh-completion-guard/blob/d11009d8f755ecee7d288cff18250c7b372cfd2a/docs/NEXT_VERSION_REPAIR_NOTES.md); question closure is not changed by this patch.
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#053---2026-09-14).
 
 ## 0.5.2 - 2026-09-11
 
-### Changed
+The package now declares support only for DSH `0.1.5-rc.1` and `0.1.5-rc.2`, the two host versions this release recognizes. Guard still checks the full host package set. Task tracking and completion checks are unchanged from 0.5.1.
 
-- Publish the exact DSH support union `0.1.5-rc.2 || 0.1.5-rc.1` in top-level `engines.dsh`, nested `dsh.engines.dsh`, and all seven DSH peer dependencies. These are the latest registered host and the verified minimum; older, stable `0.1.5`, and future versions are no longer advertised by npm or plugin markets.
-- Export the same newest-first support set and range from the domain entry. The minimum-version comparison remains diagnostic, while actual support still requires one complete registered 33-package host graph.
-- Package version is `0.5.2`; the version was confirmed unused on npm before preparation.
-
-### Unchanged
-
-- Runtime task capture, evidence, certification, host graphs, Cordis range, and the rc.1 development baseline are unchanged from 0.5.1.
-
-### Evidence boundary
-
-- The metadata and source-policy regressions are part of this candidate. CI, exact-artifact native acceptance, publication, and live market refresh remain separate evidence.
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#052---2026-09-11).
 
 ## 0.5.1 - 2026-09-10
 
-### Changed
+Guard switches to DSH's version 3 session format. If you are upgrading from DSH `0.1.2-rc.1`, start a new session. Keep the old logs, proposals and certificates for reference.
 
-- **Support DSH >= 0.1.5-rc.1, with no backward compatibility.** The DSH Session V2 API, the V2 event vocabulary, and every older host package set were removed rather than kept behind a fallback. A session object that does not expose the V3 `snapshotEvents()` API is refused loudly instead of being projected as an empty log, and a header that is not session format 3 is refused instead of being hashed as a guessed identity. `0.1.5-rc.1` is the version this release was built and tested against; it is the baseline, not a ceiling. Upgrading from DSH `0.1.2-rc.1` means starting a **new session**; old logs, proposals and certificates are never migrated, promoted, or deleted.
-- **The support policy is a range, and the host check is still an exact graph.** `peerDependencies` publish `>=0.1.5-rc.1` (Cordis `^4.0.2`), so `0.1.4`, `0.1.5-alpha.9` and anything older are refused. Because npm resolves a prerelease from a range only when its `major.minor.patch` tuple matches the bound, `0.1.5-rc.2` and `0.1.5` resolve while `0.1.6-rc.1` and `0.2.0-rc.1` do not; that limitation is documented and tested rather than hidden behind a wildcard. A newer host that is not a registered cohort is still reported as unverified, so the range never substitutes for the graph lock.
-- **Register separate exact host sets for DSH 0.1.5-rc.1 and 0.1.5-rc.2.** Each set contains 33 core packages bound to their published npm identities; mixing rows from different versions is refused. The registry-derived provenance stays in the host-lock digest, while native acceptance is recorded separately for each exact artifact and platform. Older host sets remain historical and unsupported. `dshmarket` is checked independently by the action adapter.
-- **Guard never restarts a Goal the user stopped.** When a current Goal is paused, blocked, completed, or its phase has not been read back, turn stopping yields with `goal_paused_by_user_safe_yield` / `goal_not_continuable_safe_yield` instead of spending the one allowed correction steer. Guard's Goal access surface has no resume entry point at all: it can only disarm at an accepted boundary, and only a human `resume` re-arms a goal.
-- **Terminal marker classification was re-verified against the shipped 0.1.5-rc.1 renderers.** The two session renderers registered by `@deepseek-ai/dsh-base` append markers only for negative facts and non-zero exits — unchanged between host versions — so an unmarked completed foreground result remains a clean success for those two names under a supported host lock. The out-of-bundle persistent renderer added `[Command finished with exit code N]` and `[Command timed out or OOM]`; both are now classified explicitly, so such a result is read by its own marker instead of falling through to the unmarked rule.
-- **The renamed PTC dispatch events are the only dispatch vocabulary.** `tool/ptc-dispatch-start` and `tool/ptc-dispatch` replaced `tool/code-dispatch-start` and `tool/code-dispatch`; the retired names are ignored and produce no evidence.
-- Package version is `0.5.1`, verified unused on npm before it was written.
-- Pending root confirmations remain explicit after checkpoint and recovery: the saved resume condition is shown before target or evidence-collection advice, and the reserved action stays blocked.
+- The package requires DSH `0.1.5-rc.1` or later. The runtime checks the exact registered package sets for rc.1 and rc.2. A version that satisfies npm can still fail the runtime check.
+- Guard reads the new tool-dispatch events and recognizes the persistent shell's exit, timeout and out-of-memory markers.
+- When a user has paused a Goal, Guard leaves it paused. Pending user confirmations still appear on recovery before advice about gathering evidence.
 
-### Unchanged
-
-- The 29 byte-mirrored digest-v3 cross-language vectors are byte-identical: the V3 session identity feeds the inherited-prefix length into the existing `seedLength` digest token, and V3's `isSeeded` marker was deliberately left out of the shared digest domain so a host upgrade cannot silently change another repository's parity contract.
-- The 0.5.0 confirmation, prepare, diagnosis and no-certification-gain behaviours, the first-message protection boundary, and durable-evidence-only certification.
-
-### Not yet established
-
-- At candidate preparation, deterministic tests cover a real host loop with a simulated model, including stopping and disk recovery. Cross-platform CI, native application acceptance, real-model behaviour and publication still require separate evidence.
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#051---2026-09-10).
 
 ## 0.5.0 - 2026-09-10
 
-### Changed
+In `always` mode, Guard starts with the first real message or attachment. You can choose the DSH preset while the new session is still empty, and Guard covers work from the first step.
 
-- **`always` mode now protects from your first message instead of writing into brand-new sessions.** A freshly created session stays completely empty: the Guard no longer appends context messages when the session starts, so the session still looks new and a DSH session mode (standard, minimal, or a custom preset) can be chosen before anything is sent. Protection begins in the same step as the first real user message, ahead of that message — the first task, including its first file changes, is covered. A first message that only carries an image or an attachment also starts protection; a blank message starts nothing and creates no empty contract.
-- **A confirmation can carry follow-up text in the same reply.** The confirmation line `确认重绑定 <proposal ID>` may stand alone as the first line; an explanation request or a new task after a blank line keeps its own meaning, and a new task is captured like any other instruction. A confirmation buried inside a sentence, inside quotes, inside a code block, or followed by a reversal such as "先不要确认", does nothing — a reply either confirms cleanly or stays pending, never partially.
-- **Useless rebind confirmations are refused up front.** Splitting one uncertifiable requirement into clauses that are all equally uncertifiable returns "no certification gain" instead of producing a proposal that would spend a user confirmation without improving certification.
-- **Diagnosis names what is possible before what is missing.** Checkpoint, recovery, rebind, and status share one diagnosis per item: what kind of work it is, whether the current adapters can certify it, which target fields or evidence facets are missing, and one concrete next action. Questions such as "是否有更新" stay recorded with their source but report honestly that they cannot be machine-certified — finish them and report the answer — instead of being pushed into a rebind loop. Repeating an identical rejected attempt returns the same stable "unchanged" answer instead of a fresh rejection each time.
+- `context_guard_prepare` shows what a supported action needs before it runs. It can point out evidence missing from a past action without asking you to repeat the action.
+- A rebind confirmation can be followed by a new request after a blank line. Guard declines a proposed split when none of the new parts would be easier to certify.
+- This release targets DSH `0.1.2-rc.1` and Cordis `4.0.2`. It can inspect hoisted package installs in Headless. Old records keep the rules they were written under.
 
-### Added
-
-- **`context_guard_prepare` (read-only).** Before a stateful action it reports the supported command shape (from the same audited parser the executor uses), the required resolution/effect/state evidence order, reusable evidence references, the host capability verdict, and the exact missing target fields. It performs no action, and a guessed or default target is never treated as user authority.
-- **An action that already happened without its prestate evidence is reported as a historical gap**: the observed state can be read back, and repeating the action to mint missing evidence is explicitly not suggested.
-
-### Compatibility
-
-- Recognize pnpm hoisted installations when checking a dependency-free Headless profile. Bare package-name entries now work alongside versioned entries; installed versions, lockfile integrity, unique identities, and actual package locations remain mandatory.
-- The supported DSH target is exactly `0.1.2-rc.1` (with Cordis `4.0.2`). The active host allowlist contains that one audited core graph; alpha and older RC package sets are recorded as historical identities only, and an installed graph from those sets fails closed instead of certifying. npm peer dependencies accept only `0.1.2-rc.1`.
-- Sessions created before this version keep their stored messages, proposals, and certificates under their historical rules. The first message this version writes into such a session carries an explicit protocol boundary marking the cut; duties and certificates from before the cut are never reinterpreted. Upgrading does not remove previously injected messages.
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#050---2026-09-10).
 
 ## 0.4.3 - 2026-09-08
 
@@ -701,21 +332,11 @@ scope-attribution table).
 
 ## 0.4.0 - 2026-09-02
 
-### Added
+Guard checks that proof belongs to the unfinished work you actually requested. Results from another session, action or target leave the item open. A changed file or damaged record can invalidate proof you already supplied.
 
-- **DSH alpha.3 is the 0.4.0 implementation baseline.** Version 0.4.0 targets DSH `0.1.2-alpha.3` with dshmarket `1.39.0` and Cordis `4.0.2`.
-- **Evidence must prove the unfinished work the user actually requested.** Reading or checking another target cannot close the item. Evidence from another session, evidence for the wrong action or target, and evidence that does not show the required result are rejected.
-- **Changed or damaged proof records cannot be reused.** If the recorded files, task scope, or saved state no longer match, the proof becomes invalid and the work stays open. The Guard keeps only the bounded facts needed for this check, not raw private logs or file contents.
-- **Stage disposition.** The stopped 0.3.3 compatibility candidate is recorded as `superseded_before_candidate`; no 0.3.3 source, artifact, installation, native acceptance, commit, tag, or release existed.
+This version targets DSH `0.1.2-alpha.3`, dshmarket `1.39.0` and Cordis `4.0.2`. The release used the same frozen package for native macOS and Windows checks and npm publication. See the [acceptance records](docs/LOCAL_ACCEPTANCE.md).
 
-### Changed
-
-- **Compatibility adaptation pauses after alpha.3.** Version 0.4.0 stays frozen on the DSH alpha.3 setup. Alpha.4 and later alpha releases are not new adaptation targets; work resumes with the first upstream RC published after alpha.3. Upstream milestones are listed on the [DeepSeek Harness tags page](https://github.com/deepseek-ai/deepseek-harness/tags).
-
-### Validation
-
-- The release commit passes the repository matrix and CI on Ubuntu, macOS, and Windows with Node.js 22 and 24. One frozen 26-file tgz is used for native macOS and Windows acceptance and npm publication; the GitHub Release carries its checksum and platform annexes.
-- Earlier 0.4.0 candidate packages remain historical evidence only. Results never transfer to changed package bytes; see [`docs/LOCAL_ACCEPTANCE.md`](docs/LOCAL_ACCEPTANCE.md).
+[Original detailed entry](https://github.com/GreenLv/dsh-completion-guard/blob/650a952a7d44d4be2b9019dadc2f11e5104ff06e/CHANGELOG.md#040---2026-09-02).
 
 ## 0.3.2 - 2026-09-01
 
