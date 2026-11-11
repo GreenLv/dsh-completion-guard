@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="chart-title chart-desc" data-renderer-version="4" data-tick-step-days="7">
   <title id="chart-title">dsh-completion-guard npm 下载增长</title>
-  <desc id="chart-desc">dsh-completion-guard npm 下载增长. 全量每日历史 · 2026-08-26 → 2026-11-09. 检查于 2026-11-11 12:04 UTC · 等待数据稳定复查. 下载次数不代表独立用户数或已确认安装。</desc>
+  <desc id="chart-desc">dsh-completion-guard npm 下载增长. 全量每日历史 · 2026-08-26 → 2026-11-09. 检查于 2026-11-11 22:56 UTC · 等待数据稳定复查. 下载次数不代表独立用户数或已确认安装。</desc>
   <defs>
     <linearGradient id="growth-fill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#14b8a6" stop-opacity="0.24"/>
@@ -36,7 +36,7 @@
   <text x="900" y="38" text-anchor="end" class="metric-label">累计下载量</text>
   <text x="900" y="70" text-anchor="end" class="metric-value">9,892</text>
   <g transform="translate(84,102)"><circle cx="5" cy="-4" r="5" fill="#f59e0b"/><text x="18" y="0" class="package-role">旧包</text><text x="18" y="23" class="package-name">dsh-context-guard</text><text x="244" y="23" text-anchor="end" class="package-total">1,220</text></g><g transform="translate(356,102)"><circle cx="5" cy="-4" r="5" fill="#2563eb"/><text x="18" y="0" class="package-role">当前包</text><text x="18" y="23" class="package-name">dsh-completion-guard</text><text x="244" y="23" text-anchor="end" class="package-total">8,672</text></g>
-  <text x="900" y="160" text-anchor="end" class="subtitle refresh-status">检查于 2026-11-11 12:04 UTC · 等待数据稳定复查</text>
+  <text x="900" y="160" text-anchor="end" class="subtitle refresh-status">检查于 2026-11-11 22:56 UTC · 等待数据稳定复查</text>
   <text x="84" y="160" class="axis-title">累计下载量</text>
   <line x1="84" y1="436" x2="900" y2="436" class="grid"/><text x="70" y="440" text-anchor="end" class="axis">0</text><line x1="84" y1="306" x2="900" y2="306" class="grid"/><text x="70" y="310" text-anchor="end" class="axis">5,000</text><line x1="84" y1="176" x2="900" y2="176" class="grid"/><text x="70" y="180" text-anchor="end" class="axis">10,000</text>
   <polygon points="84.00,436 84.00,433.53 94.88,423.00 105.76,417.67 116.64,412.08 127.52,411.12 138.40,401.45 149.28,396.25 160.16,391.31 171.04,389.75 181.92,385.48 192.80,384.08 203.68,383.17 214.56,383.17 225.44,383.17 236.32,382.08 247.20,376.95 258.08,367.83 268.96,366.48 279.84,365.15 290.72,356.49 301.60,356.49 312.48,351.73 323.36,349.60 334.24,343.39 345.12,342.22 356.00,341.02 366.88,340.29 377.76,331.66 388.64,328.85 399.52,328.02 410.40,327.40 421.28,325.55 432.16,319.29 443.04,317.41 453.92,311.07 464.80,308.00 475.68,301.01 486.56,294.59 497.44,287.44 508.32,284.50 519.20,281.30 530.08,281.30 540.96,278.57 551.84,275.71 562.72,268.59 573.60,265.36 584.48,262.76 595.36,259.98 606.24,257.33 617.12,257.33 628.00,257.33 638.88,255.69 649.76,253.66 660.64,246.62 671.52,246.62 682.40,246.62 693.28,242.98 704.16,239.91 715.04,237.67 725.92,235.41 736.80,233.36 747.68,230.94 758.56,228.81 769.44,226.39 780.32,224.62 791.20,222.64 802.08,215.75 812.96,213.10 823.84,211.26 834.72,200.13 845.60,196.59 856.48,194.17 867.36,191.29 878.24,184.16 889.12,180.97 900.00,178.81 900.00,436" fill="url(#growth-fill)"/>
