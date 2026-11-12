@@ -61,6 +61,14 @@ export async function runPredecessorActivationFixture({ ctx, config, domain, Ses
       const handle = await timed('open_predecessor_upgrade', () => createProbeAgent(ctx, id, config.workRoot, true))
       try {
         const session = handle.agent.session
+        const commands = handle.agent.ctx?.commands ?? ctx.commands
+        assert.equal(typeof commands?.execute, 'function', 'loaded Agent command runtime required')
+        const settled = await timed('upgrade_live_status', () => commands.execute(handle.agent,
+          '/context-guard status', [], AbortSignal.timeout(30_000)))
+        assert.equal(settled?.result?.kind, 'success', 'loaded Guard status required')
+        const live = JSON.parse(settled.result.text)
+        assert.equal(live.enabled, row.mode === 'always', 'effective loaded Guard enablement follows predecessor mode')
+        assert.equal(live.lifecycle, row.mode === 'always' ? 'active' : 'disabled')
         assert.deepEqual(session.snapshotEvents().slice(0, prefix.length), prefix)
         assert.deepEqual(domain.sessionBirthIdentity(session.header, session.inheritedEventCount), identity)
         assert.equal(domain.readActivationBinding(modeRoot, identity).mode, row.mode)

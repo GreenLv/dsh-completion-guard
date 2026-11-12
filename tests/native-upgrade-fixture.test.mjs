@@ -2,12 +2,14 @@ import { afterEach, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { CommandRuntime } from '@deepseek-ai/dsh-commands'
 import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import * as domain from '../src/domain/index.js'
+import { createContextGuardCommand } from '../src/commands/context-guard.js'
 import { predecessorActivationFixture, runPredecessorActivationFixture } from '../scripts/native_upgrade_fixture_v131.mjs'
 
 const dirs = []
@@ -22,7 +24,8 @@ it('binds both modes on every native profile to the executed 0.13.0 writer and i
   }
 })
 
-it.each(['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(compression => [profile, compression])))('preserves old binding bytes and a nonempty official %s/%s log on two restores', async (profile, compression) => {
+it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(compression => [profile, compression, false])),
+  ['web', 'none', true]])('checks predecessor bytes and live state on %s/%s restores (misreport=%s)', async (profile, compression, misreport) => {
   const root = mkdtempSync(join(tmpdir(), 'guard-native-upgrade-')); dirs.push(root)
   const require = createRequire(join(process.cwd(), 'package.json'))
   const persistence = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href)
@@ -44,13 +47,27 @@ it.each(['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].map(c
     const h = await ctx.sessionPersistence.open(id, 'write')
     handles.set(id, h)
     const session = Session.create(id, (await h.read()).events, h.header, h.inheritedEventCount)
-    return { agent: { session }, dispose: async () => { try { await save(session) } finally { await h.close(); handles.delete(id) } } }
+    const binding = domain.readActivationBinding(domain.resolveActivationBindingsRoot(root), domain.sessionBirthIdentity(h.header, h.inheritedEventCount))
+    const projection = domain.deriveProjection(session.snapshotEvents(), { activation: binding.mode }, { cwd: root }, true).projection
+    if (misreport) projection.enabled = !projection.enabled
+    const commandContext = new Context()
+    const commands = new CommandRuntime(commandContext)
+    commands.register(createContextGuardCommand(() => projection, () => {}, () => {}))
+    return { agent: { session, ctx: { commands } }, dispose: async () => {
+      try { await save(session) } finally { await h.close(); handles.delete(id); await commandContext.fiber.dispose() }
+    } }
   }
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = root
   try {
-    expect(await runPredecessorActivationFixture({ ctx: adapter, config: { profile, workRoot: root }, domain,
-      SessionId, createUserMessage, createProbeAgent })).toEqual({ positive: true, negative: true })
+    const run = () => runPredecessorActivationFixture({ ctx: adapter, config: { profile, workRoot: root }, domain,
+      SessionId, createUserMessage, createProbeAgent })
+    if (misreport) {
+      await expect(run()).rejects.toThrow('effective loaded Guard enablement')
+      expect(handles.size).toBe(0)
+      return
+    }
+    expect(await run()).toEqual({ positive: true, negative: true })
     expect(handles.size).toBe(0)
     for (const row of predecessorActivationFixture().rows.filter(row => row.profile === profile)) {
       const binding = domain.activationBindingPath(domain.resolveActivationBindingsRoot(root), row.header.id)
