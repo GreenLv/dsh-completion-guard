@@ -1,0 +1,255 @@
+{
+  "schema": "dsh-predecessor-activation-fixture/v1",
+  "predecessorVersion": "0.13.0",
+  "sourceCommit": "650a952a7d44d4be2b9019dadc2f11e5104ff06e",
+  "writerEntry": "dist/domain/index.js",
+  "moduleHashes": {
+    "dist/domain/index.d.ts": "7ea7132c887f9e45bc4c34b23035a88c63b1ae16a5533063a328f158d0ff130e",
+    "dist/domain/index.js": "65f98a6ea30c1a93ebe7442e756310a8af45290f47376920e4573e54950e9789",
+    "dist/domain-1ZXx0Un2.js": "e67a46e22c69eef56fa4d5ad0e283454529c4236104a381af672c5221d5a97a8",
+    "dist/index-AzxcBjX7.d.ts": "36c05f9458d75981895a730d47c008ac4ae109955b3c6d1373c00327d50ca076",
+    "dist/index.d.ts": "312d7ba179c4658914aae2c3bdf0f919477cc34424fe205d8656d972ba558520",
+    "dist/index.js": "e743839ff1e5fe8bc4229ce2727cb3ae7001ee2e17741c0b3e46e23ef8c92428"
+  },
+  "sdkModules": {
+    "@deepseek-ai/dsh-session": {
+      "version": "0.2.2-rc.1",
+      "integrity": "sha512-e0zx9HFNn8EyqrymGQS85SjKOyr61//ChTgIVDlCBSZvBB723fuXyi9LiHIIuPTlkgmWJl3gm5J51ebEXew7PQ==",
+      "modules": {
+        "lib/index.js": "6fad466aa1f7aa64bfa038681ead5721f66c88e9891e25d357d2b8edbccd5494",
+        "lib/types/fork.js": "72ca7ae2cce506eb607e565f2e6b15fc6e3c2663de8403f79e37fc3a469e34cf",
+        "lib/types/index.js": "c5495c724adf558e5cba6d504d8ee03b1fe78657d056cbb4238f4af20b21418c",
+        "lib/types/known-event-types.js": "f2adf39f26ecf7cc84bceaef1dcf8210395a13aa02e16828df1038a27a404edd",
+        "lib/types/preparation.js": "78dea29f5e11a4d220945a572b3eb26cb66460e6a368a423bf597c3ef05a5faa",
+        "lib/types/repair.js": "ee2e02d4e924bf01af621c38c27e030b89eaa8e0abfdf801a6220eca95aa2038",
+        "lib/types/request-header.js": "3f73ee59af794df50df159a9c45c606f0fbce364c482b371831d1e8f26b87aea",
+        "lib/types/seq-ranges.js": "68a127c76affa98edeeb50e302eb43f154f4d24f7d04cb95ba8b323e88f3d09e",
+        "lib/types/surface.js": "ebe8920a22fca8d987cbacab94c9db92f71df44863f58370a1be559155be734e",
+        "lib/types/tool-history.js": "2d2c4f4cbb6717aa2f487af52ce6a81e2002ce2c768cb5a4210c867ec49a0e95",
+        "lib/types/types.js": "91723a2522999e2c8b6c455796ad699794a6f0abfcb44d9cb883edb13142ff9b",
+        "locale/de.json": "8187d4ef073ba7f2cdcfb47c31225e943489db53f1c07da9621731f3948dcb42",
+        "locale/en.json": "b201655c72e1dc61d393b46dae7bf5cb45463b8f94b2db390c98dc6f78210e28",
+        "locale/es.json": "5c5372f5b30af2ded8523a6c62bb4035cae6ad8f3a77d3df4c4f710329e2890f",
+        "locale/fr.json": "83dc8e3c8757bda2871b46cabca57393b8c8f337bda956616faccd1f811b7cef",
+        "locale/ja.json": "6ac8a9e9d326b0f15fe9be991bf9de332fc1d2da9e94d1956569ea15a9048eae",
+        "locale/pt.json": "fa9bbd95c41f757f027db0832bd8e4b5af36aec30f667fc6e46fafe185168273",
+        "locale/ru.json": "6d5c34bdd25f5d18058639924977c55b4091a59b1a99d139ee3a0ec169de0930",
+        "locale/zh.json": "705afb5363274b498b805fb013311970793f9fc355dc1ad13995e69dc5a31ecf",
+        "package.json": "18ebb957b762d7e2423f6650f629ad7b67daa233384e58d4c1a5576b5d919f52"
+      }
+    },
+    "@deepseek-ai/dsh-session-persistence-jsonl": {
+      "version": "0.2.2-rc.1",
+      "integrity": "sha512-HZTI2tikM6osoH+b6OlDppQYMDy6UVn0/s/XRX3TnvbOgO27FmXMlKy93Ma5GgiqWWugzsqyzruB7t1Y3SPS3Q==",
+      "modules": {
+        "lib/index.js": "69efef5f84dddf947032bc1425067878fa610416c8885acde2ded9b01230c9b7",
+        "lib/worker.cjs": "c5c8ccb7a661ef343e9d0c792d8d5cba376ed783ea48c6489fe90eab264ae321",
+        "locale/de.json": "513f194372a1a4d1197ff36c073e5be275c73da0381dba30444fc00a1cff4426",
+        "locale/en.json": "42954c226713cf426aad6999000f1e92c03c766e78dfb266931dd84bfae94a8b",
+        "locale/es.json": "e4c251120fdbcdb2f14dacee79587a81a9a664eeeadb7d0610a2fd181ef8ca08",
+        "locale/fr.json": "218a88172c9602a5e4fb7cb9ee0f99967da551f65c8c64eb7c64f6c2156a62f8",
+        "locale/ja.json": "04a12ccf50280430a84b19c9dbb0815741503f127ea01e5ae9e3e0b734da9647",
+        "locale/pt.json": "81c25f5b97f0fa918fea6c2c37ae36a33399d2aa59161b8d130844df0e6924c3",
+        "locale/ru.json": "7b6a32cc346dda2397f93182b32a1f620830db54243255736fcfac14369ab4cf",
+        "locale/zh.json": "35bc0cb94928be56b65e04758ab21b240160385d9046698f54c84dba3f4f51e5",
+        "package.json": "166cea8d3e9a014c70b07f22197a06ef31cce1ec10177053f58c444c6b68808f"
+      }
+    },
+    "@deepseek-ai/dsh-llm": {
+      "version": "0.2.2-rc.1",
+      "integrity": "sha512-XeEvH+6bpkjx0E2P1B5ZE+WWa+VHp4DimQaJDKNUZEFouqHMuN1B61TIz6IzUquRxa/6X4yJy+qXQ9WwAeMw5w==",
+      "modules": {
+        "lib/index.js": "8e541fc98a11897706a122fde1db42f8b2a41b3b354ba3fcb932e9a16929ac6a",
+        "lib/typert.host.js": "f7ad1bf944fb7083c84a0626cf8e77d0ef037e12603ea6c2284794e6f20240de",
+        "lib/typert.remote-client.js": "fea6401fe00567f6f25bd58057e30167bb38a7c09f00dcd626116e1bc6c1fde6",
+        "lib/types/adapter-failure.js": "f1213f11f11e0f20aae26c09a5e0cf3d72512c1f1519e1b3f107edf64af43c28",
+        "lib/types/api-key.js": "254b774234c0bd38dd759765c0fd1e60788651a22106f5559ec2760a39935f2d",
+        "lib/types/assembler.js": "35a4754ab854055942b9142934c595c3e6358a717947daa2d8d89847aef988f7",
+        "lib/types/assistant-stream.js": "7e0cc96a4d60aed34381b552f9cb4549d70df36dbd28c0630da4cd93fa44b7a1",
+        "lib/types/attribution.js": "62f546a0434b4ab70860db3d7c768f515b5f4895f41b3b1399afc9d0d02c7add",
+        "lib/types/brand.js": "6b70219e0478d3307d865309523e7e7be3f169b06c04f4eef0d49b54aaef72a2",
+        "lib/types/call-config.js": "170f3ce7c7136b93087e2f5d50faa8b69815894ec3ebdf26c36d57e4c7a17a03",
+        "lib/types/content.js": "79802e2e6bece64114c8f6857943c2cd23742bd2c20b067cd06298d397f9b85e",
+        "lib/types/error.js": "103b72873eafc3512d717593f802bbf09230c52b7fcd31aa6ec10b5fd147e1cb",
+        "lib/types/index.js": "1058c07851a1cf39bc6fdbe02756861f3d79b3a670b1e52c1d36bf8b0e68af15",
+        "lib/types/message.js": "c87812f77a2afd284f271af071575edcadfde3daa7b6554d77b96810ce4688e0",
+        "lib/types/retry-policy.js": "f0a8fe075ac24c56ed2aa5d5e359a85539f5ffa237af54b68d3f4fc5124b5d83",
+        "lib/types/types.js": "14106d660103de2db746964fbb5be90c5eb2a7ff736779e2501e9faff956cbf5",
+        "locale/de.json": "ef8d484fa753c0a9031c03d217f297ed5e7ddbd0c84442b80a4c8b5636c00abf",
+        "locale/en.json": "e791c79da2f5f24d98e39f118b76a26be6b3114e588acb58ad5bfe9d8dfcbd2f",
+        "locale/es.json": "c6c365e71cb4807f130cfc358ca9446f3b2523592d4097c00b9a04679d5b4d3a",
+        "locale/fr.json": "13914d9e4e3c99454a411b94845bad70450b54724e44152a8e38dc764b65e905",
+        "locale/ja.json": "bf36db57094dce13479e80803ef82a7d264bffb0b7185c85a1759b4e062ac1c6",
+        "locale/pt.json": "100db590b784d53deef4a0b829af69a1fb60eda61aa18ad6ac59e2e1ec016b40",
+        "locale/ru.json": "0479e8a1c2cfddbe7f60a05021d3bbb56ef84be3f03a4005a9e9485a0a2be157",
+        "locale/zh.json": "84b323d718b48a1d8350c9bf85c58de9b407c421a574d4e778a96f5681fdf113",
+        "package.json": "d7ca17b59abc24e2d7ecd7f3db64fd2dbb1eac183c62a6004ae70333d62d8df3"
+      }
+    }
+  },
+  "boundary": "Bindings emitted by Guard 0.13.0; physical none/zstd logs emitted and reopened by the audited DSH rc.1 backend. Messages are synthetic upgrade inputs, not captured user history.",
+  "rows": [
+    {
+      "profile": "web",
+      "mode": "opt-in",
+      "header": {
+        "version": 4,
+        "id": "guard-v131-predecessor-web-opt-in",
+        "createdAt": 1,
+        "isSeeded": false,
+        "delegationDepth": 0
+      },
+      "binding": "{\"identity\":{\"createdAt\":1,\"delegationDepth\":0,\"id\":\"guard-v131-predecessor-web-opt-in\",\"inheritedEventCount\":0,\"isSeeded\":false},\"initialMode\":\"opt-in\",\"provenanceSha256\":\"00d260710bea3ca566856487df90b7cf668a206b984e69fbf4cf1844f8673abb\",\"schema\":\"dsh-session-activation/v1\",\"sha256\":\"73b162499f2c171a9372f12e6d3204775da4eb625c85e872986cd1bbff18c611\",\"source\":\"legacy_adoption\"}\n",
+      "bindingSha256": "82e6e3ed30e474d73bbafafc42d6b351168c24105013dd948e3515ea4388a21f",
+      "messages": [
+        "Keep the first synthetic upgrade task pending.",
+        "Keep the second synthetic upgrade task pending."
+      ],
+      "logs": {
+        "none": {
+          "bytes": "eyJ0eXBlIjoic2Vzc2lvbiIsInZlcnNpb24iOjQsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci13ZWItb3B0LWluIiwiY3JlYXRlZEF0IjoxLCJpc1NlZWRlZCI6ZmFsc2UsImRlbGVnYXRpb25EZXB0aCI6MH0KeyJzZXEiOjAsInRpbWUiOjEsInR5cGUiOiJ1c2VyL21lc3NhZ2UiLCJzdXJmYWNlT3AiOiJhcHBlbmQiLCJkYXRhIjp7InNvdXJjZSI6eyJraW5kIjoidXNlciJ9LCJjb250ZW50IjpbeyJ0eXBlIjoidGV4dCIsInRleHQiOiJLZWVwIHRoZSBmaXJzdCBzeW50aGV0aWMgdXBncmFkZSB0YXNrIHBlbmRpbmcuIn1dLCJyb2xlIjoidXNlciIsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci13ZWItb3B0LWluLW1lc3NhZ2UtMCJ9fQp7InNlcSI6MSwidGltZSI6MiwidHlwZSI6InVzZXIvbWVzc2FnZSIsInN1cmZhY2VPcCI6ImFwcGVuZCIsImRhdGEiOnsic291cmNlIjp7ImtpbmQiOiJ1c2VyIn0sImNvbnRlbnQiOlt7InR5cGUiOiJ0ZXh0IiwidGV4dCI6IktlZXAgdGhlIHNlY29uZCBzeW50aGV0aWMgdXBncmFkZSB0YXNrIHBlbmRpbmcuIn1dLCJyb2xlIjoidXNlciIsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci13ZWItb3B0LWluLW1lc3NhZ2UtMSJ9fQo=",
+          "sha256": "1e7fa3dfddf78f4c6171472634b0d38c82004f3ba8c369956e09381f8a215953"
+        },
+        "zstd": {
+          "bytes": "KLUv/QRYNQMAYocXGpCpOfiM9sXGbsAE7SfpFqu9Lve1KTTXswIXRwOARiw7Qa20KLny9F0VdEDn8y9o8h30DvKL3hCfVTLLljFcYdpSPfJ8Y+YEzmKyoURidCafANsXn9VKqlejzxZrRgEAKpQm3nxoCSi1L/0EWBUGAOINKR9Qa6oDxkdHK2KUhvAbLbI1wnAwGRRv0VMPno0ZnOEJhxiNVnPqKoAOMRpxTmNnnzsIZzjQqV59Hb6DBtDCWTAhh9OL2TjBQZuDaICjsdX+ykLTlq8Ej4cUxfaKbQ0tq5AlyhVb3k/gNN6Gb2KQ3vZtTtlEr8YWTtJXEHHqJJ02LRuv9veS06/gKiUgojb+kVTPCIBXxOm/xtqg9BlsbRBphauTCQCfN1NVkA4ew5uDYprTODJvqzC8BakUkIUop0VlHw==",
+          "sha256": "a794bd82ee1b505c868e2afc86a3a053a2b1136f62755dcccde8dfa1c78d2be9"
+        }
+      }
+    },
+    {
+      "profile": "web",
+      "mode": "always",
+      "header": {
+        "version": 4,
+        "id": "guard-v131-predecessor-web-always",
+        "createdAt": 1,
+        "isSeeded": false,
+        "delegationDepth": 0
+      },
+      "binding": "{\"identity\":{\"createdAt\":1,\"delegationDepth\":0,\"id\":\"guard-v131-predecessor-web-always\",\"inheritedEventCount\":0,\"isSeeded\":false},\"initialMode\":\"always\",\"provenanceSha256\":\"0ef72352080889be4c85bdc877fb5705aece339dc02aad4a3fe6e47093343e98\",\"schema\":\"dsh-session-activation/v1\",\"sha256\":\"cd6a3c8a09ad37e12b11d623eee125d5c009496c982b3cb12f6cf58769595e33\",\"source\":\"fresh_creation\"}\n",
+      "bindingSha256": "8479f5eebf6c0860e1c271e8adecdd0b53b80b5f1d8596ddf59703abb39ec237",
+      "messages": [
+        "Keep the first synthetic upgrade task pending.",
+        "Keep the second synthetic upgrade task pending."
+      ],
+      "logs": {
+        "none": {
+          "bytes": "eyJ0eXBlIjoic2Vzc2lvbiIsInZlcnNpb24iOjQsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci13ZWItYWx3YXlzIiwiY3JlYXRlZEF0IjoxLCJpc1NlZWRlZCI6ZmFsc2UsImRlbGVnYXRpb25EZXB0aCI6MH0KeyJzZXEiOjAsInRpbWUiOjEsInR5cGUiOiJ1c2VyL21lc3NhZ2UiLCJzdXJmYWNlT3AiOiJhcHBlbmQiLCJkYXRhIjp7InNvdXJjZSI6eyJraW5kIjoidXNlciJ9LCJjb250ZW50IjpbeyJ0eXBlIjoidGV4dCIsInRleHQiOiJLZWVwIHRoZSBmaXJzdCBzeW50aGV0aWMgdXBncmFkZSB0YXNrIHBlbmRpbmcuIn1dLCJyb2xlIjoidXNlciIsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci13ZWItYWx3YXlzLW1lc3NhZ2UtMCJ9fQp7InNlcSI6MSwidGltZSI6MiwidHlwZSI6InVzZXIvbWVzc2FnZSIsInN1cmZhY2VPcCI6ImFwcGVuZCIsImRhdGEiOnsic291cmNlIjp7ImtpbmQiOiJ1c2VyIn0sImNvbnRlbnQiOlt7InR5cGUiOiJ0ZXh0IiwidGV4dCI6IktlZXAgdGhlIHNlY29uZCBzeW50aGV0aWMgdXBncmFkZSB0YXNrIHBlbmRpbmcuIn1dLCJyb2xlIjoidXNlciIsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci13ZWItYWx3YXlzLW1lc3NhZ2UtMSJ9fQo=",
+          "sha256": "e91c61a27b4dfc83667a0e3d477ecee55de32dd0c00acc7cd0aa655352e52610"
+        },
+        "zstd": {
+          "bytes": "KLUv/QRYPQMAYscXGpCpOfi5/QkFaQAE7SdpWkRHHWzTptBczwcngEYAnWjrhUShlsjT1fdNiUDr9Tcs8h10I+hbnh0+7yKXlObwxTC1++N6tswRHMUoSwVitCLfANkVnxOFdr9Gfy2aGQEBACqUJjsXqKMotS/9BFglBgDijSkgYGmqAxZsP1oRjtr+f4IW2a2DICuCpxNDhA4Y04HH4gGGGJ2YQ9ZVIBli9AEhVbKxSITwBoKI6tfZ4UNpICkgBjM5rMyajxcI9DmIBjhcY+7PKDTXnCU8XmJW2yfWKWpWYUOYJ9a8n8DqeBe+i4Hyuq9Dlk80c03hRfkLJoh6Uc5N5mPm/l5a+RV8JQIm6uMfqXpGALwmVv5T1icpn9HW56CccPUSCQCfN1NVkA4ew5uDYprTODJvqzC8BakUkIUofb1Xvw==",
+          "sha256": "ea5c313c98ec6e2f93f6520fde28a5cc9a2bf90bd8fda32ac19dad857a449eb9"
+        }
+      }
+    },
+    {
+      "profile": "headless",
+      "mode": "opt-in",
+      "header": {
+        "version": 4,
+        "id": "guard-v131-predecessor-headless-opt-in",
+        "createdAt": 1,
+        "isSeeded": false,
+        "delegationDepth": 0
+      },
+      "binding": "{\"identity\":{\"createdAt\":1,\"delegationDepth\":0,\"id\":\"guard-v131-predecessor-headless-opt-in\",\"inheritedEventCount\":0,\"isSeeded\":false},\"initialMode\":\"opt-in\",\"provenanceSha256\":\"d977fc411e4c63f47f73ff8fd362330604b9ffd3ccf9046a2efe112801d6efa5\",\"schema\":\"dsh-session-activation/v1\",\"sha256\":\"56d065a233d00d01e481cab2ba739b1fc9a6ca425e9ecfa3d4d10f39e338fff0\",\"source\":\"legacy_adoption\"}\n",
+      "bindingSha256": "38f1b872a7acf0c6443d8971040f8bc4a77b68554f31d857e454df9a3f77ce5c",
+      "messages": [
+        "Keep the first synthetic upgrade task pending.",
+        "Keep the second synthetic upgrade task pending."
+      ],
+      "logs": {
+        "none": {
+          "bytes": "eyJ0eXBlIjoic2Vzc2lvbiIsInZlcnNpb24iOjQsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci1oZWFkbGVzcy1vcHQtaW4iLCJjcmVhdGVkQXQiOjEsImlzU2VlZGVkIjpmYWxzZSwiZGVsZWdhdGlvbkRlcHRoIjowfQp7InNlcSI6MCwidGltZSI6MSwidHlwZSI6InVzZXIvbWVzc2FnZSIsInN1cmZhY2VPcCI6ImFwcGVuZCIsImRhdGEiOnsic291cmNlIjp7ImtpbmQiOiJ1c2VyIn0sImNvbnRlbnQiOlt7InR5cGUiOiJ0ZXh0IiwidGV4dCI6IktlZXAgdGhlIGZpcnN0IHN5bnRoZXRpYyB1cGdyYWRlIHRhc2sgcGVuZGluZy4ifV0sInJvbGUiOiJ1c2VyIiwiaWQiOiJndWFyZC12MTMxLXByZWRlY2Vzc29yLWhlYWRsZXNzLW9wdC1pbi1tZXNzYWdlLTAifX0KeyJzZXEiOjEsInRpbWUiOjIsInR5cGUiOiJ1c2VyL21lc3NhZ2UiLCJzdXJmYWNlT3AiOiJhcHBlbmQiLCJkYXRhIjp7InNvdXJjZSI6eyJraW5kIjoidXNlciJ9LCJjb250ZW50IjpbeyJ0eXBlIjoidGV4dCIsInRleHQiOiJLZWVwIHRoZSBzZWNvbmQgc3ludGhldGljIHVwZ3JhZGUgdGFzayBwZW5kaW5nLiJ9XSwicm9sZSI6InVzZXIiLCJpZCI6Imd1YXJkLXYxMzEtcHJlZGVjZXNzb3ItaGVhZGxlc3Mtb3B0LWluLW1lc3NhZ2UtMSJ9fQo=",
+          "sha256": "eaef26b921b974f49b527b66a5d0b6a8caeb6ce97bb43a7756d95f62d380789f"
+        },
+        "zstd": {
+          "bytes": "KLUv/QRYPQMAsscXGZCpOZjVvtjYFQxp+0lzOON1ua9NobmeD06ARQCNLHtBLbTneHr6rukc0Pn8DYp8Br2E/J43w2eFyrJVVJ/yHCltqd54vrFiBCYp2Q7iMDqRb4Dtic9qIdWr0WeJtSIBACqUJsYbdisotS/9BFgdBgAyTikeYGmqAwar0Ypw7cV42+yPfReDMgREWPR1K8d04LF4hhiNsrl1FUCGGH04p7Gzzx3VK1L9ONCpfj0P30EDKOEkVIjh5GQ2VjhocxANYDSW7a8kVG15Kmg8pCy2P7YtaFmFDFF+bHk/gZPxKnwTg+Rt3+aWTXQ2lnCS/AURp06S1aq0cba/p5z8Cr4UAiJq4xtK9YsAeEWc/LewNij5C7Y2h2SEq5MJAMRv0qogHTzWNwcfNadxZN5WYXgLUikgC1FqprBN",
+          "sha256": "241fe23123d0482e63750b9a588b50f1dcd1240698ad5708e767422d473a6fcd"
+        }
+      }
+    },
+    {
+      "profile": "headless",
+      "mode": "always",
+      "header": {
+        "version": 4,
+        "id": "guard-v131-predecessor-headless-always",
+        "createdAt": 1,
+        "isSeeded": false,
+        "delegationDepth": 0
+      },
+      "binding": "{\"identity\":{\"createdAt\":1,\"delegationDepth\":0,\"id\":\"guard-v131-predecessor-headless-always\",\"inheritedEventCount\":0,\"isSeeded\":false},\"initialMode\":\"always\",\"provenanceSha256\":\"8296d0315d8b61c5d31f30f55e39f99f75ccbdc7afdbf60701687f4c9585876a\",\"schema\":\"dsh-session-activation/v1\",\"sha256\":\"775b9c98799bb1f595d26a86047c669d7cd1fdcdf200adda7ca080c67e12d4fc\",\"source\":\"fresh_creation\"}\n",
+      "bindingSha256": "895ddc1ec3415c65a4db8e9a6e983c334fc6c95ef354932225527e1897dd4563",
+      "messages": [
+        "Keep the first synthetic upgrade task pending.",
+        "Keep the second synthetic upgrade task pending."
+      ],
+      "logs": {
+        "none": {
+          "bytes": "eyJ0eXBlIjoic2Vzc2lvbiIsInZlcnNpb24iOjQsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci1oZWFkbGVzcy1hbHdheXMiLCJjcmVhdGVkQXQiOjEsImlzU2VlZGVkIjpmYWxzZSwiZGVsZWdhdGlvbkRlcHRoIjowfQp7InNlcSI6MCwidGltZSI6MSwidHlwZSI6InVzZXIvbWVzc2FnZSIsInN1cmZhY2VPcCI6ImFwcGVuZCIsImRhdGEiOnsic291cmNlIjp7ImtpbmQiOiJ1c2VyIn0sImNvbnRlbnQiOlt7InR5cGUiOiJ0ZXh0IiwidGV4dCI6IktlZXAgdGhlIGZpcnN0IHN5bnRoZXRpYyB1cGdyYWRlIHRhc2sgcGVuZGluZy4ifV0sInJvbGUiOiJ1c2VyIiwiaWQiOiJndWFyZC12MTMxLXByZWRlY2Vzc29yLWhlYWRsZXNzLWFsd2F5cy1tZXNzYWdlLTAifX0KeyJzZXEiOjEsInRpbWUiOjIsInR5cGUiOiJ1c2VyL21lc3NhZ2UiLCJzdXJmYWNlT3AiOiJhcHBlbmQiLCJkYXRhIjp7InNvdXJjZSI6eyJraW5kIjoidXNlciJ9LCJjb250ZW50IjpbeyJ0eXBlIjoidGV4dCIsInRleHQiOiJLZWVwIHRoZSBzZWNvbmQgc3ludGhldGljIHVwZ3JhZGUgdGFzayBwZW5kaW5nLiJ9XSwicm9sZSI6InVzZXIiLCJpZCI6Imd1YXJkLXYxMzEtcHJlZGVjZXNzb3ItaGVhZGxlc3MtYWx3YXlzLW1lc3NhZ2UtMSJ9fQo=",
+          "sha256": "174a22add4eb1e00d7f3c6b19c725c6d975ca5907a0a28de3546e4c6eafe9463"
+        },
+        "zstd": {
+          "bytes": "KLUv/QRYRQMAsgcYGoC5Odh+Q2tlbTlq+6l5Gjqh84x9y9mGNM4JgEUAjbT1QqJQy+Pp6vumPKD1+hsW+Q66EfQtzwyfd8lESrP7pHnEMLV743q2zBEcxShLxGG0It8A2RWfE4V2v0Z/Lc2KAQAqlCZUM/A1KLUv/QRYLQYAMs4pH1BpqwNGsWFWhFPbGENvIzsnhiNdoarjQnVwOZnB6T2GGJ2YS9ZVIBli9AEhXaQCkkj1CMsfCCaqX2eHD6WBlIAYTMWwMms+RhLocxANYLjG3J9JaK45S2g8xay2P9Yt1KzChjA/1ryfwOp4F76LgfK6r0uWTzRzLeFF+QsqiXpRzk3mY+b+Xlr5FXwlAirq4xupekUAvCpW/lusT1K+oq3PQRnh6iUJAMRv0qogHTzWNwcfNadxZN5WYXgLUikgC1En6zjA",
+          "sha256": "6af19a3511a5f02544c0a9d988bf2f8604d8754dc020d5b17ae7d55ff2b8bd7f"
+        }
+      }
+    },
+    {
+      "profile": "desktop",
+      "mode": "opt-in",
+      "header": {
+        "version": 4,
+        "id": "guard-v131-predecessor-desktop-opt-in",
+        "createdAt": 1,
+        "isSeeded": false,
+        "delegationDepth": 0
+      },
+      "binding": "{\"identity\":{\"createdAt\":1,\"delegationDepth\":0,\"id\":\"guard-v131-predecessor-desktop-opt-in\",\"inheritedEventCount\":0,\"isSeeded\":false},\"initialMode\":\"opt-in\",\"provenanceSha256\":\"875f7379954bf0095eaa9d81160b2c55959036f2f0521052bbee0d951e51ad0a\",\"schema\":\"dsh-session-activation/v1\",\"sha256\":\"7059434b3926350f4e8c670c0e56eda5ee8eaa6609754595dbefbaf5b6227937\",\"source\":\"legacy_adoption\"}\n",
+      "bindingSha256": "5de429abc8dbd379543fc7006618bbf0c3f706bd074f227cfe38f35036f6eb23",
+      "messages": [
+        "Keep the first synthetic upgrade task pending.",
+        "Keep the second synthetic upgrade task pending."
+      ],
+      "logs": {
+        "none": {
+          "bytes": "eyJ0eXBlIjoic2Vzc2lvbiIsInZlcnNpb24iOjQsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci1kZXNrdG9wLW9wdC1pbiIsImNyZWF0ZWRBdCI6MSwiaXNTZWVkZWQiOmZhbHNlLCJkZWxlZ2F0aW9uRGVwdGgiOjB9Cnsic2VxIjowLCJ0aW1lIjoxLCJ0eXBlIjoidXNlci9tZXNzYWdlIiwic3VyZmFjZU9wIjoiYXBwZW5kIiwiZGF0YSI6eyJzb3VyY2UiOnsia2luZCI6InVzZXIifSwiY29udGVudCI6W3sidHlwZSI6InRleHQiLCJ0ZXh0IjoiS2VlcCB0aGUgZmlyc3Qgc3ludGhldGljIHVwZ3JhZGUgdGFzayBwZW5kaW5nLiJ9XSwicm9sZSI6InVzZXIiLCJpZCI6Imd1YXJkLXYxMzEtcHJlZGVjZXNzb3ItZGVza3RvcC1vcHQtaW4tbWVzc2FnZS0wIn19Cnsic2VxIjoxLCJ0aW1lIjoyLCJ0eXBlIjoidXNlci9tZXNzYWdlIiwic3VyZmFjZU9wIjoiYXBwZW5kIiwiZGF0YSI6eyJzb3VyY2UiOnsia2luZCI6InVzZXIifSwiY29udGVudCI6W3sidHlwZSI6InRleHQiLCJ0ZXh0IjoiS2VlcCB0aGUgc2Vjb25kIHN5bnRoZXRpYyB1cGdyYWRlIHRhc2sgcGVuZGluZy4ifV0sInJvbGUiOiJ1c2VyIiwiaWQiOiJndWFyZC12MTMxLXByZWRlY2Vzc29yLWRlc2t0b3Atb3B0LWluLW1lc3NhZ2UtMSJ9fQo=",
+          "sha256": "9b7c4029bed32ef665340073d06cb1116402fd5a194b9c877db901af8d496777"
+        },
+        "zstd": {
+          "bytes": "KLUv/QRYRQMAogcYGoCpbdhnv/uIHVgSFhNLPtpHPz06PqqyBHACgEYAjVj1gpLQHuTJ03ZNzgGdz9+gyGbQS8jv+TpsVtCtSqfSJvR5K6n+eH6pMwKzXK6jQIxOZBvg+mKzkpDq1eirxZoRAQAqlCbOoaHTKLUv/QRYHQYAIk4pHmBpqgMG96IV4dqLrMjbH/suBmUIiLDo61aO6cBj8YYYjbK5dRVAhhh9OKexs8+d5/bQ54FO9et5+A4aQAonoUIMJyezMYKDNgfRAEZj2f7KoWrLU0HjIWWxfWLbQssqZIjyxJb3EzgZ78I3MUje9m1u2URnY4eT5C+IOHWSrFaljbP9PeXkV/ClEBBRG99QqlcEwCvi5L/F2qDkK9jaHJITrk4CCQCjb9KqIB08xjcHDTWncWTeVmF4C1IpIAtRCEbHDQ==",
+          "sha256": "4ec4ac853d9fda58e0c2240462068848f3127c233394c2f2fa5b3160e244f85e"
+        }
+      }
+    },
+    {
+      "profile": "desktop",
+      "mode": "always",
+      "header": {
+        "version": 4,
+        "id": "guard-v131-predecessor-desktop-always",
+        "createdAt": 1,
+        "isSeeded": false,
+        "delegationDepth": 0
+      },
+      "binding": "{\"identity\":{\"createdAt\":1,\"delegationDepth\":0,\"id\":\"guard-v131-predecessor-desktop-always\",\"inheritedEventCount\":0,\"isSeeded\":false},\"initialMode\":\"always\",\"provenanceSha256\":\"3c5c651bedfa4720f07bbd8db0343f1b5c0a042819de491f45c91c4ac0ebf847\",\"schema\":\"dsh-session-activation/v1\",\"sha256\":\"b1e33df7a9fd9fb1163a58d013f7e6bb65514bc1ed6b22959ed4c45eb613243e\",\"source\":\"fresh_creation\"}\n",
+      "bindingSha256": "b88e40c778d11afd7455226d9dd0d834759b6bc76458d5610258ebc15e5e7f93",
+      "messages": [
+        "Keep the first synthetic upgrade task pending.",
+        "Keep the second synthetic upgrade task pending."
+      ],
+      "logs": {
+        "none": {
+          "bytes": "eyJ0eXBlIjoic2Vzc2lvbiIsInZlcnNpb24iOjQsImlkIjoiZ3VhcmQtdjEzMS1wcmVkZWNlc3Nvci1kZXNrdG9wLWFsd2F5cyIsImNyZWF0ZWRBdCI6MSwiaXNTZWVkZWQiOmZhbHNlLCJkZWxlZ2F0aW9uRGVwdGgiOjB9Cnsic2VxIjowLCJ0aW1lIjoxLCJ0eXBlIjoidXNlci9tZXNzYWdlIiwic3VyZmFjZU9wIjoiYXBwZW5kIiwiZGF0YSI6eyJzb3VyY2UiOnsia2luZCI6InVzZXIifSwiY29udGVudCI6W3sidHlwZSI6InRleHQiLCJ0ZXh0IjoiS2VlcCB0aGUgZmlyc3Qgc3ludGhldGljIHVwZ3JhZGUgdGFzayBwZW5kaW5nLiJ9XSwicm9sZSI6InVzZXIiLCJpZCI6Imd1YXJkLXYxMzEtcHJlZGVjZXNzb3ItZGVza3RvcC1hbHdheXMtbWVzc2FnZS0wIn19Cnsic2VxIjoxLCJ0aW1lIjoyLCJ0eXBlIjoidXNlci9tZXNzYWdlIiwic3VyZmFjZU9wIjoiYXBwZW5kIiwiZGF0YSI6eyJzb3VyY2UiOnsia2luZCI6InVzZXIifSwiY29udGVudCI6W3sidHlwZSI6InRleHQiLCJ0ZXh0IjoiS2VlcCB0aGUgc2Vjb25kIHN5bnRoZXRpYyB1cGdyYWRlIHRhc2sgcGVuZGluZy4ifV0sInJvbGUiOiJ1c2VyIiwiaWQiOiJndWFyZC12MTMxLXByZWRlY2Vzc29yLWRlc2t0b3AtYWx3YXlzLW1lc3NhZ2UtMSJ9fQo=",
+          "sha256": "28bcd3dafb4bee13f7f748c961f54e4e75268fd323870f197beecf97a49d06e9"
+        },
+        "zstd": {
+          "bytes": "KLUv/QRYRQMAogcYGpCpOaj5GxIbuwGBoP2k4RATdbBNmzJfzwcngEbgjFj2QrLSInL1tLkqPJzz+Rs02aDzEvKLb4eNdcGFwsPWJvR52lL98XxjBwmQcrKhAvE5k83g2hUbJyupXn0+W9aMAQAqlCbWL7/9KLUv/QRYLQYAIs4pH1BpqwNGv2FWhGsvNiO0yN2R0Sg33tqoxfaHcVRhE3qGGG2s5tRVwDDE6ANCqqSCItFzi+gXgk716uvwIWPASEALZnI4eTEfKxz0OYgGOBpb7c8gmmu+Eh4vMYrtE9sUNauQIcwTa95P4HS8C9/FIHnbtznlE70aQ7wkX8HEqZfk3Fw+Xu3vpZNfwVUiYKI+/pGqXwTAa+LkP2V9jOQv2PockhGuXgIJAKNv0qogHTzGNwcNNadxZN5WYXgLUikgC1F3+fH2",
+          "sha256": "2ade9090429a1069c41189fa99e29d1f63a1dfada093e7f2ee5d5e2d4b81499a"
+        }
+      }
+    }
+  ]
+}
