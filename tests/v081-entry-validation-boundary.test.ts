@@ -53,6 +53,21 @@ vi.mock('../src/domain/rc022-rc1-byte-audit-manifest.js', async (original) => {
     },
   })) } }
 })
+vi.mock('../src/domain/rc022-rc2-byte-audit-manifest.js', async (original) => {
+  const { createHash } = await import('node:crypto')
+  const auditedModuleDigest = createHash('sha256').update(AUDITED_MODULE_TEXT).digest('hex')
+  const source = await original<{ default: { packages: Array<Record<string, unknown>> } }>()
+  return { default: { ...source.default, packages: source.default.packages.map((p) => ({
+    ...p, sha256: '0'.repeat(64), tarball: '',
+    // Same synthetic-byte contract as the rc.3/rc.5 mocks above; since Guard
+    // 0.13.0 this manifest is the DEFAULT baseline, so the fixture must cover
+    // it for the synthetic graph to qualify.
+    modules: {
+      'package.json': createHash('sha256').update(canonicalManifest(p.name as string, p.version as string)).digest('hex'),
+      'lib/index.js': auditedModuleDigest,
+    },
+  })) } }
+})
 import { createHash } from 'node:crypto'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -233,7 +248,7 @@ describe('one attach performs exactly one full host-lock validation', () => {
     // A resume-sourced attach goes through the same single validation; the
     // resume replay itself adds none.
     const { registry: registry2, agent: agent2 } = pluginHost({ ...host.config }, host.rows, () => { validations += 1 })
-    registry2.enter(agent2, undefined)
+    registry2.enter(agent2)
     await registry2.announce(agent2, 'resume')
     expect(validations).toBe(2)
   })

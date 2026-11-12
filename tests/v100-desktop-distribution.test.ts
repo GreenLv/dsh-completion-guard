@@ -32,7 +32,11 @@ describe('Desktop distribution qualification identity', () => {
       const selected = desktopDistributionSupplement(identity(row))!
       expect(hasDesktopDistributionHeader(row.asarHeaderSha256, row.platform)).toBe(true)
       expect(selected.digest).toMatch(/^[a-f0-9]{64}$/)
-      expect(selected.files).toEqual(qualification.files)
+      // Supplement sets are per distribution row: rows without their own
+      // `files` consume the shared historical rc.2(0.2.1) list, while a row
+      // with an explicit set binds exactly what its acquisition derived
+      // (the 0.2.2-rc.2 bundle ships none).
+      expect(selected.files).toEqual(row.files ?? qualification.files)
       expect(row.buildCommit).not.toBe(qualification.provenance.sourceCommit)
       expect(row.releaseUrl).toMatch(/^https:\/\/download\.deepseek\.com\/dsh-desk\/bin\//)
     })

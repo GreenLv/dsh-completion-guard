@@ -7,9 +7,20 @@ Each entry describes what changed in that version and what users needed to do wh
 <details>
 <summary>Version index</summary>
 
-[0.13.0](#0130) · [0.12.1](#0121) · [0.12.0](#0120) · [0.11.0](#0110) · [0.10.0](#0100) · [0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
+[0.13.1](#0131) · [0.13.0](#0130) · [0.12.1](#0121) · [0.12.0](#0120) · [0.11.0](#0110) · [0.10.0](#0100) · [0.9.0](#090) · [0.8.4](#084) · [0.8.3](#083) · [0.8.2](#082) · [0.8.1](#081) · [0.8.0](#080) · [0.7.1](#071---2026-09-22) · [0.7.0](#070---2026-09-21) · [0.6.3](#063---2026-09-18) · [0.6.2](#062---2026-09-16) · [0.6.1](#061-2026-09-15) · [0.6.0](#060---2026-09-14) · [0.5.3](#053---2026-09-14) · [0.5.2](#052---2026-09-11) · [0.5.1](#051---2026-09-10) · [0.5.0](#050---2026-09-10) · [0.4.3](#043---2026-09-08) · [0.4.2](#042---2026-09-07) · [0.4.1-rc.1](#041-rc1---2026-09-04) · [0.4.0](#040---2026-09-02) · [0.3.2](#032---2026-09-01) · [0.3.1](#031---2026-08-31) · [0.3.0](#030---2026-08-31) · [0.2.1](#021---2026-08-28) · [0.2.0](#020---2026-08-28) · [0.1.2](#012---2026-08-27) · [0.1.1](#011---2026-08-27) · [0.1.0](#010---2026-08-27)
 
 </details>
+
+## 0.13.1
+
+Guard adapts to DSH `0.2.2-rc.2` and raises the minimum DSH version to `0.2.2-rc.2`. The `0.2.2-rc.1` host is now below the admission floor: upgrade DSH first, then install this Guard version. Sessions, modes and evidence recorded by earlier Guard versions remain migratable under the existing contract.
+
+- **Upgrade DSH first.** The minimum versions are DSH `0.2.2-rc.2`, Node.js `24.9.0` and Cordis `4.1.0`. Every `0.2.2-rc.1` and `0.2.1` host refuses at the version gate. Later versions still need to pass the host checks. [Compatibility](docs/COMPATIBILITY.md#0131-dsh-022-rc2) explains which host and Desktop packages were reviewed.
+- **Interfaces this adaptation covers.** The rc.2 host changed real consumed interfaces, and each is covered by named regressions against the installed SDK: session events can be appended as a batch (Guard reads the complete committed batch and requires a full durability flush before evidence counts); tool-guard denials carry a structured error identity next to the model-facing reason; the working-directory service gained an access waterfall and machine-routable error codes; background-job refusals carry job error codes. Guard keeps its fail-closed rules unchanged on every one of these paths.
+- **Reviewed host graph.** The default audited cohort is `dsh-0.2.2-rc.2-core-v1`: the same 51 audited packages at rc.2 versions (Cordis stays at 4.1.0), with every tarball re-verified against the registry. The rc.2 macOS arm64 Desktop build was verified against the official update feed (vendor signature and signed ASAR header match); the Windows rc.2 Desktop distribution identity row is registered from the acquired official installer and signed carrier (the official feed itself still served the previous build at acquisition time), so its native acceptance remains an explicit pending item.
+- **Known dependency risks.** The rc.2 host packages carry Zod 4.6.6; Undici stays at 8.11.2. The three temporary Undici exceptions include this version by direct maintainer authorization (2026-11-13) with the expiry unchanged: **2026-11-30**. No other risk is accepted, and the affected host code still carries the disclosed risks, including a possible TLS 1.2 process crash. See the [dependency advisories](docs/DEPENDENCY_SCAN.md).
+
+The [acceptance record](docs/LOCAL_ACCEPTANCE.md) separates the reviewed host identities and CI from platform runs on the exact package.
 
 ## 0.13.0
 

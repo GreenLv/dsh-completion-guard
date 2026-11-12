@@ -6,11 +6,15 @@ import { RC020_RC2_HOST_PACKAGES } from '../../src/domain/rc020-rc2-host.js'
 import { RC021_RC3_HOST_PACKAGES } from '../../src/domain/rc021-rc3-host.js'
 import { RC021_RC5_HOST_PACKAGES } from '../../src/domain/rc021-rc5-host.js'
 import { RC022_RC1_HOST_PACKAGES } from '../../src/domain/rc022-rc1-host.js'
+import { RC022_RC2_HOST_PACKAGES } from '../../src/domain/rc022-rc2-host.js'
 import { HOST_COHORTS, evaluateHostLock } from '../../src/domain/host-lock.js'
 
-describe('current 0.2.2-rc.1 cohort with historical-host refusal', () => {
+describe('current 0.2.2-rc.2 cohort with historical-host refusal', () => {
   for (const platform of ['posix', 'windows'] as const) it(`rejects historical, mixed and incomplete graphs on ${platform}`, () => {
-    expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES, { platform })).toMatchObject({status: 'supported', cohortId: 'dsh-0.2.2-rc.1-core-v1', auditProvenance: 'registry-derived-pending-native-audit'})
+    expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform })).toMatchObject({status: 'supported', cohortId: 'dsh-0.2.2-rc.2-core-v1', auditProvenance: 'registry-derived-pending-native-audit'})
+    // The retained 0.2.2-rc.1 graph is the documented upgrade source below
+    // the raised floor: it matches no active cohort and refuses.
+    expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES, { platform })).toMatchObject({status: 'unsupported', reasonCode: 'host_lock_version_mismatch'})
     // The superseded graphs keep their exact published identities but no
     // longer select any cohort: the graph verdict is reported on its own (the
     // version floor and the graph audit are independent facts; a graph that
@@ -24,15 +28,15 @@ describe('current 0.2.2-rc.1 cohort with historical-host refusal', () => {
     for (const old of [RC015_HOST_PACKAGES, RC015_RC2_HOST_PACKAGES]) {
       expect(evaluateHostLock(old, { platform }).status).toBe('unsupported')
       for (const row of old.filter(r => r.name.startsWith('@deepseek-ai/dsh'))) {
-        const mixed = RC022_RC1_HOST_PACKAGES.map(r => r.name === row.name ? row : r)
+        const mixed = RC022_RC2_HOST_PACKAGES.map(r => r.name === row.name ? row : r)
         expect(evaluateHostLock(mixed, { platform }).status).not.toBe('supported')
       }
     }
-    for (const row of RC022_RC1_HOST_PACKAGES) expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES.filter(r => r !== row), { platform }).status).not.toBe('supported')
+    for (const row of RC022_RC2_HOST_PACKAGES) expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES.filter(r => r !== row), { platform }).status).not.toBe('supported')
   })
-  it('rejects rewritten rc.1 identities and forged integrity', () => {
-    for (const version of ['0.2.2-rc.0', '0.2.2-alpha.1', '0.2.1-rc.5', '0.2.1']) expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES.map(r => r.version === '0.2.2-rc.1' ? {...r, version} : r)).status).toBe('unsupported')
-    expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES.map(r => ({...r, integrity: 'sha512-forged'}))).status).toBe('unsupported')
-    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.2-rc.1-core-v1'])
+  it('rejects rewritten rc.2 identities and forged integrity', () => {
+    for (const version of ['0.2.2-rc.0', '0.2.2-alpha.1', '0.2.1-rc.5', '0.2.1']) expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES.map(r => r.version === '0.2.2-rc.2' ? {...r, version} : r)).status).toBe('unsupported')
+    expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES.map(r => ({...r, integrity: 'sha512-forged'}))).status).toBe('unsupported')
+    expect(HOST_COHORTS.map(c => c.id)).toEqual(['dsh-0.2.2-rc.2-core-v1'])
   })
 })

@@ -161,8 +161,8 @@ describe('F-CG0100-02/04: lifecycle field and transition matrix', () => {
     let failures = 0
     session.append = ((type: string, ...args: unknown[]) => {
       if (type === 'job/registered') { failures++; throw new Error('controlled registration persistence failure') }
-      return (append as (...args: unknown[]) => unknown)(type, ...args)
-    }) as typeof session.append
+      return (append as unknown as (...args: unknown[]) => unknown)(type, ...args)
+    }) as unknown as typeof session.append
     try {
       let finish!: (result: { status: 'completed'; detail: string }) => void
       const done = new Promise<{ status: 'completed'; detail: string }>((resolve) => { finish = resolve })

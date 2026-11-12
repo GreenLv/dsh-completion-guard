@@ -1,429 +1,881 @@
 {
   "schema": "dsh-activation-catalog-qualification/v1",
-  "entry": "@deepseek-ai/dsh-session-format-catalog::lib/index.js",
-  "packages": [
+  "description": "Per-version catalog executable-closure reviews. The 0.2.2-rc.1 row was derived from the registry-integrity-checked rc.1 install; the 0.2.2-rc.2 row from the rc.2 install (dsh-llm, dsh-session and dsh-session-format-v3-to-v4 bytes changed and the dsh-error package joined the closure). The activation CLI selects the row matching the installed backend version and fails closed otherwise.",
+  "cohorts": [
     {
-      "name": "@deepseek-ai/cordis",
-      "loaderShapeSha256": "c8f6aa16a09274086d341c5f1f162bea780c7675b828ea4d47b86ab8223ffa12"
-    },
-    {
-      "name": "@deepseek-ai/cosmokit",
-      "loaderShapeSha256": "43eb5d81f7993cab147fd4d54fb4846ca44a325dea226a0a1734e6f9ba2e59fc"
-    },
-    {
-      "name": "@deepseek-ai/dsh-brand",
-      "loaderShapeSha256": "fa07f8d1efd9ce7331454432b599e264773ad7a086e0e6df14755bfecf2ca8c9"
-    },
-    {
-      "name": "@deepseek-ai/dsh-compaction-image-offload",
-      "loaderShapeSha256": "5a20999b37c98c4ef3a6dedbd0e684f972f998e34795dc217dd18333df5a4a9c"
-    },
-    {
-      "name": "@deepseek-ai/dsh-llm",
-      "loaderShapeSha256": "3a6a8c97895ec351be2f0cb25cc027327d0b07451ae73bdd4045dfa5f92e6f71"
-    },
-    {
-      "name": "@deepseek-ai/dsh-scope",
-      "loaderShapeSha256": "1bde69aaaa67f8f930b32e853fd3e967be2f8da8e247a14677a8455c53f77fff"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session",
-      "loaderShapeSha256": "ccfe612ec1b13263039dbcfc60ea6250a8539ee19ed0323485fbf2254499bcb1"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session-format",
-      "loaderShapeSha256": "c0b387fe43b4ab21165516dc6bdc7a60680456afd4496e65c4cb655ba8704cdd"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session-format-catalog",
-      "loaderShapeSha256": "576156eed637fbeb7fe5c111ca8d20eb9874ef09e9c4d2d117e4db99fa554e8a"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session-format-v0-to-v1",
-      "loaderShapeSha256": "b216de4a6f4e58c113f5752a6d899ddb5de2aefed37a6575454824bfe9cc6fcb"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session-format-v1-to-v2",
-      "loaderShapeSha256": "68e98e6cf6e7a00b8e77e1962fe1afce112a447f1d7f7d619cdb27cb4e330ed7"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session-format-v2-to-v3",
-      "loaderShapeSha256": "e94b7b50a0568d4935fbf727a79788e6c13e807ef7be1ad15782c7b3b1e6803a"
-    },
-    {
-      "name": "@deepseek-ai/dsh-session-format-v3-to-v4",
-      "loaderShapeSha256": "7153a466e78399638e27358901c274db88d092e06ce78ee79241127617e0e980"
-    },
-    {
-      "name": "@deepseek-ai/dsh-timeout",
-      "loaderShapeSha256": "40971328f9d55edc8ccbb5b1dbc560f3bd173647db815fc8dd56a6eef51b2936"
-    },
-    {
-      "name": "@deepseek-ai/dsh-typert-protocol",
-      "loaderShapeSha256": "4f9f21f3e09a86702f49acd4539047bea1516de8c49e8134d1f106ab60456279"
-    },
-    {
-      "name": "@deepseek-ai/dsh-util-crypto",
-      "loaderShapeSha256": "7d44b440539ab252d735418e96b72d92c2a3367bead5e669936e4be84cd5fed5"
-    },
-    {
-      "name": "@deepseek-ai/dsh-util-time",
-      "loaderShapeSha256": "326c00ef779657faadc168b581a2de5454c15aa36b468cbb032e82e570638d0f"
-    },
-    {
-      "name": "@deepseek-ai/dsh-util-values",
-      "loaderShapeSha256": "1550eaba19a1935638f9aba173d25f02a74dad26dda270e701fac22ccd1749d9"
-    },
-    {
-      "name": "@deepseek-ai/schemastery",
-      "loaderShapeSha256": "3483dee89663a58fe3a79ea5307948cae2f93986543b3a22ec0407741a6ae335"
-    },
-    {
-      "name": "@js-temporal/polyfill",
-      "loaderShapeSha256": "402c04d27d87f1c57ca3a1e879135613845c945c7281bd2947162267762a025e"
-    },
-    {
-      "name": "jsbi",
-      "loaderShapeSha256": "dcb3dfdfdeca05594739f4f846bfcd82b8e63223af29bc4a4dc820af2f3ac6d9"
-    },
-    {
-      "name": "rrule",
-      "loaderShapeSha256": "52b8ae423c646784cfd2eed2c3f4637f5916f01b99009f5aa409ee7f0db6ba5d"
-    }
-  ],
-  "modules": [
-    {
-      "key": "@deepseek-ai/cordis::lib/index.js",
-      "package": "@deepseek-ai/cordis",
-      "path": "lib/index.js",
-      "sha256": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f",
-      "edges": [
+      "backendVersion": "0.2.2-rc.1",
+      "entry": "@deepseek-ai/dsh-session-format-catalog::lib/index.js",
+      "packages": [
         {
-          "specifier": "@deepseek-ai/cosmokit",
-          "target": "@deepseek-ai/cosmokit::lib/index.js"
+          "name": "@deepseek-ai/cordis",
+          "loaderShapeSha256": "c8f6aa16a09274086d341c5f1f162bea780c7675b828ea4d47b86ab8223ffa12"
+        },
+        {
+          "name": "@deepseek-ai/cosmokit",
+          "loaderShapeSha256": "43eb5d81f7993cab147fd4d54fb4846ca44a325dea226a0a1734e6f9ba2e59fc"
+        },
+        {
+          "name": "@deepseek-ai/dsh-brand",
+          "loaderShapeSha256": "fa07f8d1efd9ce7331454432b599e264773ad7a086e0e6df14755bfecf2ca8c9"
+        },
+        {
+          "name": "@deepseek-ai/dsh-compaction-image-offload",
+          "loaderShapeSha256": "5a20999b37c98c4ef3a6dedbd0e684f972f998e34795dc217dd18333df5a4a9c"
+        },
+        {
+          "name": "@deepseek-ai/dsh-llm",
+          "loaderShapeSha256": "3a6a8c97895ec351be2f0cb25cc027327d0b07451ae73bdd4045dfa5f92e6f71"
+        },
+        {
+          "name": "@deepseek-ai/dsh-scope",
+          "loaderShapeSha256": "1bde69aaaa67f8f930b32e853fd3e967be2f8da8e247a14677a8455c53f77fff"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session",
+          "loaderShapeSha256": "ccfe612ec1b13263039dbcfc60ea6250a8539ee19ed0323485fbf2254499bcb1"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format",
+          "loaderShapeSha256": "c0b387fe43b4ab21165516dc6bdc7a60680456afd4496e65c4cb655ba8704cdd"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-catalog",
+          "loaderShapeSha256": "576156eed637fbeb7fe5c111ca8d20eb9874ef09e9c4d2d117e4db99fa554e8a"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v0-to-v1",
+          "loaderShapeSha256": "b216de4a6f4e58c113f5752a6d899ddb5de2aefed37a6575454824bfe9cc6fcb"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v1-to-v2",
+          "loaderShapeSha256": "68e98e6cf6e7a00b8e77e1962fe1afce112a447f1d7f7d619cdb27cb4e330ed7"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v2-to-v3",
+          "loaderShapeSha256": "e94b7b50a0568d4935fbf727a79788e6c13e807ef7be1ad15782c7b3b1e6803a"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v3-to-v4",
+          "loaderShapeSha256": "7153a466e78399638e27358901c274db88d092e06ce78ee79241127617e0e980"
+        },
+        {
+          "name": "@deepseek-ai/dsh-timeout",
+          "loaderShapeSha256": "40971328f9d55edc8ccbb5b1dbc560f3bd173647db815fc8dd56a6eef51b2936"
+        },
+        {
+          "name": "@deepseek-ai/dsh-typert-protocol",
+          "loaderShapeSha256": "4f9f21f3e09a86702f49acd4539047bea1516de8c49e8134d1f106ab60456279"
+        },
+        {
+          "name": "@deepseek-ai/dsh-util-crypto",
+          "loaderShapeSha256": "7d44b440539ab252d735418e96b72d92c2a3367bead5e669936e4be84cd5fed5"
+        },
+        {
+          "name": "@deepseek-ai/dsh-util-time",
+          "loaderShapeSha256": "326c00ef779657faadc168b581a2de5454c15aa36b468cbb032e82e570638d0f"
+        },
+        {
+          "name": "@deepseek-ai/dsh-util-values",
+          "loaderShapeSha256": "1550eaba19a1935638f9aba173d25f02a74dad26dda270e701fac22ccd1749d9"
+        },
+        {
+          "name": "@deepseek-ai/schemastery",
+          "loaderShapeSha256": "3483dee89663a58fe3a79ea5307948cae2f93986543b3a22ec0407741a6ae335"
+        },
+        {
+          "name": "@js-temporal/polyfill",
+          "loaderShapeSha256": "402c04d27d87f1c57ca3a1e879135613845c945c7281bd2947162267762a025e"
+        },
+        {
+          "name": "jsbi",
+          "loaderShapeSha256": "dcb3dfdfdeca05594739f4f846bfcd82b8e63223af29bc4a4dc820af2f3ac6d9"
+        },
+        {
+          "name": "rrule",
+          "loaderShapeSha256": "52b8ae423c646784cfd2eed2c3f4637f5916f01b99009f5aa409ee7f0db6ba5d"
         }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/cosmokit::lib/index.js",
-      "package": "@deepseek-ai/cosmokit",
-      "path": "lib/index.js",
-      "sha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
-      "edges": []
-    },
-    {
-      "key": "@deepseek-ai/dsh-brand::lib/index.js",
-      "package": "@deepseek-ai/dsh-brand",
-      "path": "lib/index.js",
-      "sha256": "14feb59256b891982b2017d73ed03ee65e2a7365f48e4902a856acb0e52d5eb0",
-      "edges": []
-    },
-    {
-      "key": "@deepseek-ai/dsh-compaction-image-offload::lib/types/project-message.js",
-      "package": "@deepseek-ai/dsh-compaction-image-offload",
-      "path": "lib/types/project-message.js",
-      "sha256": "8f8341afd28e967df5aa57f5f4d3d7c9a386fee39c91f4899f779c470ae3198b",
-      "edges": [
+      ],
+      "modules": [
         {
-          "specifier": "@deepseek-ai/dsh-util-values",
-          "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+          "key": "@deepseek-ai/cordis::lib/index.js",
+          "package": "@deepseek-ai/cordis",
+          "path": "lib/index.js",
+          "sha256": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cosmokit",
+              "target": "@deepseek-ai/cosmokit::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/cosmokit::lib/index.js",
+          "package": "@deepseek-ai/cosmokit",
+          "path": "lib/index.js",
+          "sha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-brand::lib/index.js",
+          "package": "@deepseek-ai/dsh-brand",
+          "path": "lib/index.js",
+          "sha256": "14feb59256b891982b2017d73ed03ee65e2a7365f48e4902a856acb0e52d5eb0",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-compaction-image-offload::lib/types/project-message.js",
+          "package": "@deepseek-ai/dsh-compaction-image-offload",
+          "path": "lib/types/project-message.js",
+          "sha256": "8f8341afd28e967df5aa57f5f4d3d7c9a386fee39c91f4899f779c470ae3198b",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-compaction-image-offload::lib/types/projection.js",
+          "package": "@deepseek-ai/dsh-compaction-image-offload",
+          "path": "lib/types/projection.js",
+          "sha256": "205b873f17bd73e96f474e9f2bae3dd92375b6e29d706f34bee24e869507e113",
+          "edges": [
+            {
+              "specifier": "./project-message.js",
+              "target": "@deepseek-ai/dsh-compaction-image-offload::lib/types/project-message.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-llm::lib/index.js",
+          "package": "@deepseek-ai/dsh-llm",
+          "path": "lib/index.js",
+          "sha256": "8e541fc98a11897706a122fde1db42f8b2a41b3b354ba3fcb932e9a16929ac6a",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-typert-protocol",
+              "target": "@deepseek-ai/dsh-typert-protocol::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-crypto",
+              "target": "@deepseek-ai/dsh-util-crypto::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-brand",
+              "target": "@deepseek-ai/dsh-brand::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/schemastery",
+              "target": "@deepseek-ai/schemastery::lib/index.mjs"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-timeout",
+              "target": "@deepseek-ai/dsh-timeout::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-scope::lib/index.js",
+          "package": "@deepseek-ai/dsh-scope",
+          "path": "lib/index.js",
+          "sha256": "2829df71d76e08941457d4dd173eac60783e55354921137c8b75e8b5c0d2ecca",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cordis",
+              "target": "@deepseek-ai/cordis::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-catalog::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-catalog",
+          "path": "lib/index.js",
+          "sha256": "836bbb772ab505c299f1a4a246164c50c7c08b67ab0d17f1251d7ea2cd8c1818",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session",
+              "target": "@deepseek-ai/dsh-session::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-compaction-image-offload/projection",
+              "target": "@deepseek-ai/dsh-compaction-image-offload::lib/types/projection.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
+              "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v1-to-v2",
+              "target": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v2-to-v3",
+              "target": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v3-to-v4",
+              "target": "@deepseek-ai/dsh-session-format-v3-to-v4::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v0-to-v1",
+          "path": "lib/index.js",
+          "sha256": "130bd453ae418537f423ecc9419d1184ac9d66d501101eedbc7f721b0bdabd91",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-time",
+              "target": "@deepseek-ai/dsh-util-time::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v1-to-v2",
+          "path": "lib/index.js",
+          "sha256": "b2b401d880bb000017ba8663c4448b501427b23a1cd2f9fdb04cb7ec9d763eff",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
+              "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-llm",
+              "target": "@deepseek-ai/dsh-llm::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v2-to-v3",
+          "path": "lib/index.js",
+          "sha256": "0dc56fb447e9046fc25995bcd08dbac26e832eba6e9eb583ef49d26467c27cd7",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v1-to-v2",
+              "target": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
+              "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v3-to-v4::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v3-to-v4",
+          "path": "lib/index.js",
+          "sha256": "2f7ba42e79072b2674be9f28d051665e006732fa6cc5de474f783b823bdfb0a9",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v2-to-v3",
+              "target": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format",
+          "path": "lib/index.js",
+          "sha256": "6c7417ec2cd555e2781197d91c4566c88ffcf2728f362d7a2937859be57226ec",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session::lib/index.js",
+          "package": "@deepseek-ai/dsh-session",
+          "path": "lib/index.js",
+          "sha256": "6fad466aa1f7aa64bfa038681ead5721f66c88e9891e25d357d2b8edbccd5494",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cordis",
+              "target": "@deepseek-ai/cordis::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-brand",
+              "target": "@deepseek-ai/dsh-brand::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-scope",
+              "target": "@deepseek-ai/dsh-scope::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-llm",
+              "target": "@deepseek-ai/dsh-llm::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-timeout::lib/index.js",
+          "package": "@deepseek-ai/dsh-timeout",
+          "path": "lib/index.js",
+          "sha256": "f9a79fd5194bb4d6321e6d2d5b5eb72f99c683452e1defbb75fad52f76aed667",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-typert-protocol::lib/index.js",
+          "package": "@deepseek-ai/dsh-typert-protocol",
+          "path": "lib/index.js",
+          "sha256": "8d48ddbb4bbc62585ce5a4d3a7f53b39f55581b5320c1cae681766edd15ff8af",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cordis",
+              "target": "@deepseek-ai/cordis::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-util-crypto::lib/index.js",
+          "package": "@deepseek-ai/dsh-util-crypto",
+          "path": "lib/index.js",
+          "sha256": "640b26c8e5a1156c6c8e8749a22f805c9c0e34444778eb4ee9529be3e88ec862",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-util-time::lib/index.js",
+          "package": "@deepseek-ai/dsh-util-time",
+          "path": "lib/index.js",
+          "sha256": "01a46863c3857b09172e80be271f61ad27d269bf1b933e20d852f46581fd9562",
+          "edges": [
+            {
+              "specifier": "@js-temporal/polyfill",
+              "target": "@js-temporal/polyfill::dist/index.esm.js"
+            },
+            {
+              "specifier": "rrule",
+              "target": "rrule::dist/es5/rrule.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-util-values::lib/index.js",
+          "package": "@deepseek-ai/dsh-util-values",
+          "path": "lib/index.js",
+          "sha256": "8b4ffdf40126d48bd22017b4671f7e90612d01833fc865f7a0b60d3de4183e8b",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/schemastery::lib/index.mjs",
+          "package": "@deepseek-ai/schemastery",
+          "path": "lib/index.mjs",
+          "sha256": "cfcbe46c7416bdb35ce891c252152bbf519e08199bede5930dd7cb880c65f1ef",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cosmokit",
+              "target": "@deepseek-ai/cosmokit::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@js-temporal/polyfill::dist/index.esm.js",
+          "package": "@js-temporal/polyfill",
+          "path": "dist/index.esm.js",
+          "sha256": "21f067c54fa5f532f20a8e85e3d2401a3ae1cf60d85fafea6502f621dc93b167",
+          "edges": [
+            {
+              "specifier": "jsbi",
+              "target": "jsbi::dist/jsbi-cjs.js"
+            }
+          ]
+        },
+        {
+          "key": "jsbi::dist/jsbi-cjs.js",
+          "package": "jsbi",
+          "path": "dist/jsbi-cjs.js",
+          "sha256": "b952fc88337eae5d90b397da4251e207d816056ea4c574df576f17e68626dd94",
+          "edges": []
+        },
+        {
+          "key": "rrule::dist/es5/rrule.js",
+          "package": "rrule",
+          "path": "dist/es5/rrule.js",
+          "sha256": "653c3065b3fa57aa510852ea943f4a359ebdfb3d962340f648a37f744f237204",
+          "edges": []
         }
-      ]
+      ],
+      "schema": "dsh-activation-catalog-qualification/v1"
     },
     {
-      "key": "@deepseek-ai/dsh-compaction-image-offload::lib/types/projection.js",
-      "package": "@deepseek-ai/dsh-compaction-image-offload",
-      "path": "lib/types/projection.js",
-      "sha256": "205b873f17bd73e96f474e9f2bae3dd92375b6e29d706f34bee24e869507e113",
-      "edges": [
+      "backendVersion": "0.2.2-rc.2",
+      "entry": "@deepseek-ai/dsh-session-format-catalog::lib/index.js",
+      "packages": [
         {
-          "specifier": "./project-message.js",
-          "target": "@deepseek-ai/dsh-compaction-image-offload::lib/types/project-message.js"
+          "name": "@deepseek-ai/cordis",
+          "loaderShapeSha256": "c8f6aa16a09274086d341c5f1f162bea780c7675b828ea4d47b86ab8223ffa12"
+        },
+        {
+          "name": "@deepseek-ai/cosmokit",
+          "loaderShapeSha256": "43eb5d81f7993cab147fd4d54fb4846ca44a325dea226a0a1734e6f9ba2e59fc"
+        },
+        {
+          "name": "@deepseek-ai/dsh-brand",
+          "loaderShapeSha256": "fa07f8d1efd9ce7331454432b599e264773ad7a086e0e6df14755bfecf2ca8c9"
+        },
+        {
+          "name": "@deepseek-ai/dsh-compaction-image-offload",
+          "loaderShapeSha256": "5a20999b37c98c4ef3a6dedbd0e684f972f998e34795dc217dd18333df5a4a9c"
+        },
+        {
+          "name": "@deepseek-ai/dsh-error",
+          "loaderShapeSha256": "67a4cff28b610299756da711a27ddf7d68397c767201fecb69342e7220a45988"
+        },
+        {
+          "name": "@deepseek-ai/dsh-llm",
+          "loaderShapeSha256": "3a6a8c97895ec351be2f0cb25cc027327d0b07451ae73bdd4045dfa5f92e6f71"
+        },
+        {
+          "name": "@deepseek-ai/dsh-scope",
+          "loaderShapeSha256": "1bde69aaaa67f8f930b32e853fd3e967be2f8da8e247a14677a8455c53f77fff"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session",
+          "loaderShapeSha256": "ccfe612ec1b13263039dbcfc60ea6250a8539ee19ed0323485fbf2254499bcb1"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format",
+          "loaderShapeSha256": "c0b387fe43b4ab21165516dc6bdc7a60680456afd4496e65c4cb655ba8704cdd"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-catalog",
+          "loaderShapeSha256": "576156eed637fbeb7fe5c111ca8d20eb9874ef09e9c4d2d117e4db99fa554e8a"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v0-to-v1",
+          "loaderShapeSha256": "b216de4a6f4e58c113f5752a6d899ddb5de2aefed37a6575454824bfe9cc6fcb"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v1-to-v2",
+          "loaderShapeSha256": "68e98e6cf6e7a00b8e77e1962fe1afce112a447f1d7f7d619cdb27cb4e330ed7"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v2-to-v3",
+          "loaderShapeSha256": "e94b7b50a0568d4935fbf727a79788e6c13e807ef7be1ad15782c7b3b1e6803a"
+        },
+        {
+          "name": "@deepseek-ai/dsh-session-format-v3-to-v4",
+          "loaderShapeSha256": "7153a466e78399638e27358901c274db88d092e06ce78ee79241127617e0e980"
+        },
+        {
+          "name": "@deepseek-ai/dsh-timeout",
+          "loaderShapeSha256": "40971328f9d55edc8ccbb5b1dbc560f3bd173647db815fc8dd56a6eef51b2936"
+        },
+        {
+          "name": "@deepseek-ai/dsh-typert-protocol",
+          "loaderShapeSha256": "4f9f21f3e09a86702f49acd4539047bea1516de8c49e8134d1f106ab60456279"
+        },
+        {
+          "name": "@deepseek-ai/dsh-util-crypto",
+          "loaderShapeSha256": "7d44b440539ab252d735418e96b72d92c2a3367bead5e669936e4be84cd5fed5"
+        },
+        {
+          "name": "@deepseek-ai/dsh-util-time",
+          "loaderShapeSha256": "326c00ef779657faadc168b581a2de5454c15aa36b468cbb032e82e570638d0f"
+        },
+        {
+          "name": "@deepseek-ai/dsh-util-values",
+          "loaderShapeSha256": "1550eaba19a1935638f9aba173d25f02a74dad26dda270e701fac22ccd1749d9"
+        },
+        {
+          "name": "@deepseek-ai/schemastery",
+          "loaderShapeSha256": "3483dee89663a58fe3a79ea5307948cae2f93986543b3a22ec0407741a6ae335"
+        },
+        {
+          "name": "@js-temporal/polyfill",
+          "loaderShapeSha256": "402c04d27d87f1c57ca3a1e879135613845c945c7281bd2947162267762a025e"
+        },
+        {
+          "name": "jsbi",
+          "loaderShapeSha256": "dcb3dfdfdeca05594739f4f846bfcd82b8e63223af29bc4a4dc820af2f3ac6d9"
+        },
+        {
+          "name": "rrule",
+          "loaderShapeSha256": "52b8ae423c646784cfd2eed2c3f4637f5916f01b99009f5aa409ee7f0db6ba5d"
         }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-llm::lib/index.js",
-      "package": "@deepseek-ai/dsh-llm",
-      "path": "lib/index.js",
-      "sha256": "8e541fc98a11897706a122fde1db42f8b2a41b3b354ba3fcb932e9a16929ac6a",
-      "edges": [
+      ],
+      "modules": [
         {
-          "specifier": "@deepseek-ai/dsh-typert-protocol",
-          "target": "@deepseek-ai/dsh-typert-protocol::lib/index.js"
+          "key": "@deepseek-ai/cordis::lib/index.js",
+          "package": "@deepseek-ai/cordis",
+          "path": "lib/index.js",
+          "sha256": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cosmokit",
+              "target": "@deepseek-ai/cosmokit::lib/index.js"
+            }
+          ]
         },
         {
-          "specifier": "@deepseek-ai/dsh-util-values",
-          "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+          "key": "@deepseek-ai/cosmokit::lib/index.js",
+          "package": "@deepseek-ai/cosmokit",
+          "path": "lib/index.js",
+          "sha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
+          "edges": []
         },
         {
-          "specifier": "@deepseek-ai/dsh-util-crypto",
-          "target": "@deepseek-ai/dsh-util-crypto::lib/index.js"
+          "key": "@deepseek-ai/dsh-brand::lib/index.js",
+          "package": "@deepseek-ai/dsh-brand",
+          "path": "lib/index.js",
+          "sha256": "14feb59256b891982b2017d73ed03ee65e2a7365f48e4902a856acb0e52d5eb0",
+          "edges": []
         },
         {
-          "specifier": "@deepseek-ai/dsh-brand",
-          "target": "@deepseek-ai/dsh-brand::lib/index.js"
+          "key": "@deepseek-ai/dsh-compaction-image-offload::lib/types/project-message.js",
+          "package": "@deepseek-ai/dsh-compaction-image-offload",
+          "path": "lib/types/project-message.js",
+          "sha256": "8f8341afd28e967df5aa57f5f4d3d7c9a386fee39c91f4899f779c470ae3198b",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            }
+          ]
         },
         {
-          "specifier": "@deepseek-ai/schemastery",
-          "target": "@deepseek-ai/schemastery::lib/index.mjs"
+          "key": "@deepseek-ai/dsh-compaction-image-offload::lib/types/projection.js",
+          "package": "@deepseek-ai/dsh-compaction-image-offload",
+          "path": "lib/types/projection.js",
+          "sha256": "205b873f17bd73e96f474e9f2bae3dd92375b6e29d706f34bee24e869507e113",
+          "edges": [
+            {
+              "specifier": "./project-message.js",
+              "target": "@deepseek-ai/dsh-compaction-image-offload::lib/types/project-message.js"
+            }
+          ]
         },
         {
-          "specifier": "@deepseek-ai/dsh-timeout",
-          "target": "@deepseek-ai/dsh-timeout::lib/index.js"
+          "key": "@deepseek-ai/dsh-error::lib/index.js",
+          "package": "@deepseek-ai/dsh-error",
+          "path": "lib/index.js",
+          "sha256": "89d44f80c41d7e4da586ab76b0faa9747270f3947963d17a534df8404ab9d631",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-llm::lib/index.js",
+          "package": "@deepseek-ai/dsh-llm",
+          "path": "lib/index.js",
+          "sha256": "6384b5f1e21404e997a41a31a22a079c9533f2ddc1ffd9148e684884ff62eb74",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-typert-protocol",
+              "target": "@deepseek-ai/dsh-typert-protocol::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-crypto",
+              "target": "@deepseek-ai/dsh-util-crypto::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-brand",
+              "target": "@deepseek-ai/dsh-brand::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/schemastery",
+              "target": "@deepseek-ai/schemastery::lib/index.mjs"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-timeout",
+              "target": "@deepseek-ai/dsh-timeout::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-error",
+              "target": "@deepseek-ai/dsh-error::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-scope::lib/index.js",
+          "package": "@deepseek-ai/dsh-scope",
+          "path": "lib/index.js",
+          "sha256": "2829df71d76e08941457d4dd173eac60783e55354921137c8b75e8b5c0d2ecca",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cordis",
+              "target": "@deepseek-ai/cordis::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-catalog::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-catalog",
+          "path": "lib/index.js",
+          "sha256": "836bbb772ab505c299f1a4a246164c50c7c08b67ab0d17f1251d7ea2cd8c1818",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session",
+              "target": "@deepseek-ai/dsh-session::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-compaction-image-offload/projection",
+              "target": "@deepseek-ai/dsh-compaction-image-offload::lib/types/projection.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
+              "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v1-to-v2",
+              "target": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v2-to-v3",
+              "target": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v3-to-v4",
+              "target": "@deepseek-ai/dsh-session-format-v3-to-v4::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v0-to-v1",
+          "path": "lib/index.js",
+          "sha256": "130bd453ae418537f423ecc9419d1184ac9d66d501101eedbc7f721b0bdabd91",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-time",
+              "target": "@deepseek-ai/dsh-util-time::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v1-to-v2",
+          "path": "lib/index.js",
+          "sha256": "b2b401d880bb000017ba8663c4448b501427b23a1cd2f9fdb04cb7ec9d763eff",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
+              "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-llm",
+              "target": "@deepseek-ai/dsh-llm::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v2-to-v3",
+          "path": "lib/index.js",
+          "sha256": "0dc56fb447e9046fc25995bcd08dbac26e832eba6e9eb583ef49d26467c27cd7",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v1-to-v2",
+              "target": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
+              "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format-v3-to-v4::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format-v3-to-v4",
+          "path": "lib/index.js",
+          "sha256": "da0b0c2e1460316e659f48f4222730962046b3634d1fb634683bb7243a7bba80",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-session-format-v2-to-v3",
+              "target": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-session-format",
+              "target": "@deepseek-ai/dsh-session-format::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session-format::lib/index.js",
+          "package": "@deepseek-ai/dsh-session-format",
+          "path": "lib/index.js",
+          "sha256": "6c7417ec2cd555e2781197d91c4566c88ffcf2728f362d7a2937859be57226ec",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-session::lib/index.js",
+          "package": "@deepseek-ai/dsh-session",
+          "path": "lib/index.js",
+          "sha256": "d9911b5e1585bcb142d03ce46eb2990b3fc7c254de5a76d3ffb124bd2469216c",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cordis",
+              "target": "@deepseek-ai/cordis::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-brand",
+              "target": "@deepseek-ai/dsh-brand::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-util-values",
+              "target": "@deepseek-ai/dsh-util-values::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-scope",
+              "target": "@deepseek-ai/dsh-scope::lib/index.js"
+            },
+            {
+              "specifier": "@deepseek-ai/dsh-llm",
+              "target": "@deepseek-ai/dsh-llm::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-timeout::lib/index.js",
+          "package": "@deepseek-ai/dsh-timeout",
+          "path": "lib/index.js",
+          "sha256": "f9a79fd5194bb4d6321e6d2d5b5eb72f99c683452e1defbb75fad52f76aed667",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-typert-protocol::lib/index.js",
+          "package": "@deepseek-ai/dsh-typert-protocol",
+          "path": "lib/index.js",
+          "sha256": "8d48ddbb4bbc62585ce5a4d3a7f53b39f55581b5320c1cae681766edd15ff8af",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cordis",
+              "target": "@deepseek-ai/cordis::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-util-crypto::lib/index.js",
+          "package": "@deepseek-ai/dsh-util-crypto",
+          "path": "lib/index.js",
+          "sha256": "640b26c8e5a1156c6c8e8749a22f805c9c0e34444778eb4ee9529be3e88ec862",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/dsh-util-time::lib/index.js",
+          "package": "@deepseek-ai/dsh-util-time",
+          "path": "lib/index.js",
+          "sha256": "01a46863c3857b09172e80be271f61ad27d269bf1b933e20d852f46581fd9562",
+          "edges": [
+            {
+              "specifier": "@js-temporal/polyfill",
+              "target": "@js-temporal/polyfill::dist/index.esm.js"
+            },
+            {
+              "specifier": "rrule",
+              "target": "rrule::dist/es5/rrule.js"
+            }
+          ]
+        },
+        {
+          "key": "@deepseek-ai/dsh-util-values::lib/index.js",
+          "package": "@deepseek-ai/dsh-util-values",
+          "path": "lib/index.js",
+          "sha256": "8b4ffdf40126d48bd22017b4671f7e90612d01833fc865f7a0b60d3de4183e8b",
+          "edges": []
+        },
+        {
+          "key": "@deepseek-ai/schemastery::lib/index.mjs",
+          "package": "@deepseek-ai/schemastery",
+          "path": "lib/index.mjs",
+          "sha256": "cfcbe46c7416bdb35ce891c252152bbf519e08199bede5930dd7cb880c65f1ef",
+          "edges": [
+            {
+              "specifier": "@deepseek-ai/cosmokit",
+              "target": "@deepseek-ai/cosmokit::lib/index.js"
+            }
+          ]
+        },
+        {
+          "key": "@js-temporal/polyfill::dist/index.esm.js",
+          "package": "@js-temporal/polyfill",
+          "path": "dist/index.esm.js",
+          "sha256": "21f067c54fa5f532f20a8e85e3d2401a3ae1cf60d85fafea6502f621dc93b167",
+          "edges": [
+            {
+              "specifier": "jsbi",
+              "target": "jsbi::dist/jsbi-cjs.js"
+            }
+          ]
+        },
+        {
+          "key": "jsbi::dist/jsbi-cjs.js",
+          "package": "jsbi",
+          "path": "dist/jsbi-cjs.js",
+          "sha256": "b952fc88337eae5d90b397da4251e207d816056ea4c574df576f17e68626dd94",
+          "edges": []
+        },
+        {
+          "key": "rrule::dist/es5/rrule.js",
+          "package": "rrule",
+          "path": "dist/es5/rrule.js",
+          "sha256": "653c3065b3fa57aa510852ea943f4a359ebdfb3d962340f648a37f744f237204",
+          "edges": []
         }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-scope::lib/index.js",
-      "package": "@deepseek-ai/dsh-scope",
-      "path": "lib/index.js",
-      "sha256": "2829df71d76e08941457d4dd173eac60783e55354921137c8b75e8b5c0d2ecca",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/cordis",
-          "target": "@deepseek-ai/cordis::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session-format-catalog::lib/index.js",
-      "package": "@deepseek-ai/dsh-session-format-catalog",
-      "path": "lib/index.js",
-      "sha256": "836bbb772ab505c299f1a4a246164c50c7c08b67ab0d17f1251d7ea2cd8c1818",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/dsh-session",
-          "target": "@deepseek-ai/dsh-session::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format",
-          "target": "@deepseek-ai/dsh-session-format::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-compaction-image-offload/projection",
-          "target": "@deepseek-ai/dsh-compaction-image-offload::lib/types/projection.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
-          "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v1-to-v2",
-          "target": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v2-to-v3",
-          "target": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v3-to-v4",
-          "target": "@deepseek-ai/dsh-session-format-v3-to-v4::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js",
-      "package": "@deepseek-ai/dsh-session-format-v0-to-v1",
-      "path": "lib/index.js",
-      "sha256": "130bd453ae418537f423ecc9419d1184ac9d66d501101eedbc7f721b0bdabd91",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/dsh-session-format",
-          "target": "@deepseek-ai/dsh-session-format::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-util-values",
-          "target": "@deepseek-ai/dsh-util-values::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-util-time",
-          "target": "@deepseek-ai/dsh-util-time::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js",
-      "package": "@deepseek-ai/dsh-session-format-v1-to-v2",
-      "path": "lib/index.js",
-      "sha256": "b2b401d880bb000017ba8663c4448b501427b23a1cd2f9fdb04cb7ec9d763eff",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
-          "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format",
-          "target": "@deepseek-ai/dsh-session-format::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-llm",
-          "target": "@deepseek-ai/dsh-llm::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js",
-      "package": "@deepseek-ai/dsh-session-format-v2-to-v3",
-      "path": "lib/index.js",
-      "sha256": "0dc56fb447e9046fc25995bcd08dbac26e832eba6e9eb583ef49d26467c27cd7",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v1-to-v2",
-          "target": "@deepseek-ai/dsh-session-format-v1-to-v2::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format",
-          "target": "@deepseek-ai/dsh-session-format::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v0-to-v1",
-          "target": "@deepseek-ai/dsh-session-format-v0-to-v1::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session-format-v3-to-v4::lib/index.js",
-      "package": "@deepseek-ai/dsh-session-format-v3-to-v4",
-      "path": "lib/index.js",
-      "sha256": "2f7ba42e79072b2674be9f28d051665e006732fa6cc5de474f783b823bdfb0a9",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/dsh-session-format-v2-to-v3",
-          "target": "@deepseek-ai/dsh-session-format-v2-to-v3::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-session-format",
-          "target": "@deepseek-ai/dsh-session-format::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session-format::lib/index.js",
-      "package": "@deepseek-ai/dsh-session-format",
-      "path": "lib/index.js",
-      "sha256": "6c7417ec2cd555e2781197d91c4566c88ffcf2728f362d7a2937859be57226ec",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/dsh-util-values",
-          "target": "@deepseek-ai/dsh-util-values::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-session::lib/index.js",
-      "package": "@deepseek-ai/dsh-session",
-      "path": "lib/index.js",
-      "sha256": "6fad466aa1f7aa64bfa038681ead5721f66c88e9891e25d357d2b8edbccd5494",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/cordis",
-          "target": "@deepseek-ai/cordis::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-brand",
-          "target": "@deepseek-ai/dsh-brand::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-util-values",
-          "target": "@deepseek-ai/dsh-util-values::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-scope",
-          "target": "@deepseek-ai/dsh-scope::lib/index.js"
-        },
-        {
-          "specifier": "@deepseek-ai/dsh-llm",
-          "target": "@deepseek-ai/dsh-llm::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-timeout::lib/index.js",
-      "package": "@deepseek-ai/dsh-timeout",
-      "path": "lib/index.js",
-      "sha256": "f9a79fd5194bb4d6321e6d2d5b5eb72f99c683452e1defbb75fad52f76aed667",
-      "edges": []
-    },
-    {
-      "key": "@deepseek-ai/dsh-typert-protocol::lib/index.js",
-      "package": "@deepseek-ai/dsh-typert-protocol",
-      "path": "lib/index.js",
-      "sha256": "8d48ddbb4bbc62585ce5a4d3a7f53b39f55581b5320c1cae681766edd15ff8af",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/cordis",
-          "target": "@deepseek-ai/cordis::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-util-crypto::lib/index.js",
-      "package": "@deepseek-ai/dsh-util-crypto",
-      "path": "lib/index.js",
-      "sha256": "640b26c8e5a1156c6c8e8749a22f805c9c0e34444778eb4ee9529be3e88ec862",
-      "edges": []
-    },
-    {
-      "key": "@deepseek-ai/dsh-util-time::lib/index.js",
-      "package": "@deepseek-ai/dsh-util-time",
-      "path": "lib/index.js",
-      "sha256": "01a46863c3857b09172e80be271f61ad27d269bf1b933e20d852f46581fd9562",
-      "edges": [
-        {
-          "specifier": "@js-temporal/polyfill",
-          "target": "@js-temporal/polyfill::dist/index.esm.js"
-        },
-        {
-          "specifier": "rrule",
-          "target": "rrule::dist/es5/rrule.js"
-        }
-      ]
-    },
-    {
-      "key": "@deepseek-ai/dsh-util-values::lib/index.js",
-      "package": "@deepseek-ai/dsh-util-values",
-      "path": "lib/index.js",
-      "sha256": "8b4ffdf40126d48bd22017b4671f7e90612d01833fc865f7a0b60d3de4183e8b",
-      "edges": []
-    },
-    {
-      "key": "@deepseek-ai/schemastery::lib/index.mjs",
-      "package": "@deepseek-ai/schemastery",
-      "path": "lib/index.mjs",
-      "sha256": "cfcbe46c7416bdb35ce891c252152bbf519e08199bede5930dd7cb880c65f1ef",
-      "edges": [
-        {
-          "specifier": "@deepseek-ai/cosmokit",
-          "target": "@deepseek-ai/cosmokit::lib/index.js"
-        }
-      ]
-    },
-    {
-      "key": "@js-temporal/polyfill::dist/index.esm.js",
-      "package": "@js-temporal/polyfill",
-      "path": "dist/index.esm.js",
-      "sha256": "21f067c54fa5f532f20a8e85e3d2401a3ae1cf60d85fafea6502f621dc93b167",
-      "edges": [
-        {
-          "specifier": "jsbi",
-          "target": "jsbi::dist/jsbi-cjs.js"
-        }
-      ]
-    },
-    {
-      "key": "jsbi::dist/jsbi-cjs.js",
-      "package": "jsbi",
-      "path": "dist/jsbi-cjs.js",
-      "sha256": "b952fc88337eae5d90b397da4251e207d816056ea4c574df576f17e68626dd94",
-      "edges": []
-    },
-    {
-      "key": "rrule::dist/es5/rrule.js",
-      "package": "rrule",
-      "path": "dist/es5/rrule.js",
-      "sha256": "653c3065b3fa57aa510852ea943f4a359ebdfb3d962340f648a37f744f237204",
-      "edges": []
+      ],
+      "schema": "dsh-activation-catalog-qualification/v1"
     }
   ]
 }

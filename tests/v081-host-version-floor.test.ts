@@ -11,6 +11,7 @@ import {
   SUPPORTED_HOST_RANGE,
 } from '../src/domain/host-version.js'
 import { RC022_RC1_HOST_PACKAGES } from '../src/domain/rc022-rc1-host.js'
+import { RC022_RC2_HOST_PACKAGES } from '../src/domain/rc022-rc2-host.js'
 import { RC021_RC5_HOST_PACKAGES } from '../src/domain/rc021-rc5-host.js'
 import { RC020_RC2_HOST_PACKAGES } from '../src/domain/rc020-rc2-host.js'
 
@@ -20,7 +21,7 @@ describe('0.13.0 floor-admission host version policy', () => {
   // same SRI (production must additionally acquire registry metadata and archive bytes).
   const lockYaml = [
     "lockfileVersion: '9.0'", '', 'packages:',
-    ...RC022_RC1_HOST_PACKAGES.map((row) => [
+    ...RC022_RC2_HOST_PACKAGES.map((row) => [
       `  '${row.name}@0.2.3-rc.1':`,
       `    resolution: {integrity: ${row.integrity}}`,
       '',
@@ -31,12 +32,12 @@ describe('0.13.0 floor-admission host version policy', () => {
     row.integrity !== undefined && lockYaml.includes(`'${row.name}@${row.version}':`)
     && lockYaml.includes(row.integrity!)
   it('version admission: floor, later same-tuple RC, stable, patch/minor RC and higher major admit; below-floor refuses', () => {
-    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.1')
-    for (const version of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.1+build.7', '0.2.2-rc.10', '0.2.2', '0.2.2-rc.3', '0.2.3-rc.1', '0.2.3', '0.3.0-rc.1', '0.3.0', '1.0.0', '0.2.2-rc.1+build.7']) {
+    expect(SUPPORTED_HOST_RANGE).toBe('>=0.2.2-rc.2')
+    for (const version of ['0.2.2-rc.2', '0.2.2-rc.2+build.7', '0.2.2-rc.10', '0.2.2', '0.2.2-rc.3', '0.2.3-rc.1', '0.2.3', '0.3.0-rc.1', '0.3.0', '1.0.0', '0.2.2-rc.2+build.7']) {
       expect(satisfiesSupportedHostRange(version), version).toBe(true)
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'supported', reasonCode: 'host_version_supported' })
     }
-    for (const version of ['0.1.7-rc.2', '0.1.8', '0.2.0-alpha.9', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-alpha.3', '0.2.2-beta.1', '0.2.2-rc.0']) {
+    for (const version of ['0.1.7-rc.2', '0.1.8', '0.2.0-alpha.9', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-rc.0', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-alpha.3', '0.2.2-beta.1', '0.2.2-rc.0', '0.2.2-rc.1']) {
       expect(satisfiesSupportedHostRange(version), version).toBe(false)
       expect(evaluateMinimumHostVersion(version)).toMatchObject({ status: 'below_minimum', reasonCode: 'host_version_below_minimum' })
     }
@@ -53,21 +54,28 @@ describe('0.13.0 floor-admission host version policy', () => {
     // pre-floor rows keep their historical standing below the current floor.
     expect(HOST_VALIDATED_VERSIONS).toContain('0.2.0-rc.2')
     expect(HOST_VALIDATED_VERSIONS).toContain('0.2.1-rc.5')
-    expect(HOST_VALIDATED_VERSIONS.length).toBeLessThan(7)
+    expect(HOST_VALIDATED_VERSIONS.length).toBeLessThan(8)
   })
 
   it('the pure evaluator binds a verified future graph rebinds to a graph-derived cohort', () => {
     // Future manifests: same audited package names, version 0.2.3-rc.1, real
     // byte digests in the lockfile (install-time evidence).
-    const rows = RC022_RC1_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.3-rc.1' }))
+    const rows = RC022_RC2_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.3-rc.1' }))
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, verifyFromLock)
     expect(rebound.status).toBe('supported')
     expect(rebound.auditProvenance).toBe('graph-derived-rebind-pending-native-audit')
     expect(rebound.cohortId).toMatch(/^graph-derived-/)
     expect(rebound.packages.every((row) => row.version === '0.2.3-rc.1')).toBe(true)
     expect(rebound.hostVersion).toMatchObject({ status: 'supported', version: '0.2.3-rc.1' })
-    // The exact 0.2.2-rc.1 rows are the audited baseline and stay supported.
-    expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).status).toBe('supported')
+    // The exact rc.2 rows are the audited baseline and stay supported; the
+    // retained 0.2.2-rc.1 rows refuse at the raised version gate.
+    expect(evaluateHostLock(RC022_RC2_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).status).toBe('supported')
+    // The retained rc.1 graph matches no active cohort: the graph verdict is
+    // reported on its own (the version floor decides last in the production
+    // combination, as for every retired cohort row).
+    expect(evaluateHostLock(RC022_RC1_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' })).toMatchObject({
+      status: 'unsupported', reasonCode: 'host_lock_version_mismatch',
+    })
     // The formerly audited 0.2.1-rc.5 cohort is historical evidence below the
     // raised floor and refuses at the version gate (the configured-lock entry
     // checks the version gate before the graph identity).
@@ -87,7 +95,7 @@ describe('0.13.0 floor-admission host version policy', () => {
   it('a future graph whose lockfile lacks the claimed SRI never rebinds', () => {
     // Integrity self-reported by rows but ABSENT from the install lockfile:
     // self-report is not install-time evidence.
-    const rows = RC022_RC1_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.3-rc.1' }))
+    const rows = RC022_RC2_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.3-rc.1' }))
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, () => false)
     expect(rebound.status).toBe('unsupported')
     expect(rebound.reasonCode).toBe('host_lock_integrity_mismatch')
@@ -95,7 +103,7 @@ describe('0.13.0 floor-admission host version policy', () => {
     // verifier (production wiring reads the install lockfile) does not find
     // the forged digest, so self-report never proves identity.
     const forged = evaluateGraphDerivedHostLock(
-      RC022_RC1_HOST_PACKAGES.map((row) => ({ ...row, integrity: 'sha512-forged' })),
+      RC022_RC2_HOST_PACKAGES.map((row) => ({ ...row, integrity: 'sha512-forged' })),
       { platform: 'posix', profileKind: 'web' }, verifyFromLock,
     )
     expect(forged.status).toBe('unsupported')
@@ -103,11 +111,11 @@ describe('0.13.0 floor-admission host version policy', () => {
   })
 
   it('below-floor future-shaped graphs refuse at the version gate inside the rebind', () => {
-    const rows = RC022_RC1_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.2-rc.0' }))
+    const rows = RC022_RC2_HOST_PACKAGES.map((row) => ({ ...row, version: '0.2.2-rc.0' }))
     const rebound = evaluateGraphDerivedHostLock(rows, { platform: 'posix', profileKind: 'web' }, () => true)
     expect(rebound.status).toBe('unsupported')
     expect(rebound.reasonCode).toBe('host_lock_version_below_minimum')
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.1-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.2-core-v1'])
   })
 
   it('the floor SemVer matrix matches the recorded consumer evidence', () => {
@@ -126,7 +134,19 @@ describe('0.13.0 floor-admission host version policy', () => {
     }
     const v130 = JSON.parse(readFileSync(new URL('../benchmarks/incidents/acceptance/semver-matrix-v130.json', import.meta.url), 'utf8'))
     expect(v130.range).toBe('>=0.2.2-rc.1')
+    // The v130 row is FROZEN 0.13.0 consumer evidence: it records the floor
+    // as it was, so its 0.2.2-rc.1 admissions are historical facts, not
+    // current runtime verdicts. Its internal plain/includePrerelease split
+    // stays the recorded limitation; the runtime comparison runs on v131.
     for (const c of v130.cases as Array<{ version: string; plain_satisfies: boolean; includePrerelease_true: boolean }>) {
+      if (c.version === '0.2.3-rc.1' || c.version === '0.3.0-rc.1') {
+        expect(c.plain_satisfies, `${c.version} plain`).toBe(false)
+        expect(c.includePrerelease_true, `${c.version} includePrerelease`).toBe(true)
+      }
+    }
+    const v131 = JSON.parse(readFileSync(new URL('../benchmarks/incidents/acceptance/semver-matrix-v131.json', import.meta.url), 'utf8'))
+    expect(v131.range).toBe('>=0.2.2-rc.2')
+    for (const c of v131.cases as Array<{ version: string; plain_satisfies: boolean; includePrerelease_true: boolean }>) {
       expect(evaluateMinimumHostVersion(c.version).status === 'supported', `${c.version} runtime floor`).toBe(c.includePrerelease_true)
     }
   })

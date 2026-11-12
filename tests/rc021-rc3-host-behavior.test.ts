@@ -161,7 +161,7 @@ describe('rc.3 cohort advertisement', () => {
   it('the runtime advertises only the 0.2.2-rc.1 cohort; rc.5/rc.3 refuse below the floor', () => {
     // Guard 0.13.0 raised the floor to 0.2.2-rc.1: the rc.5/rc.3 graphs are
     // historical evidence and no longer advertised or admitted.
-    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.2-rc.1'])
+    expect(ACTIVE_HOST_COHORT_IDS).toEqual(['dsh-0.2.2-rc.2'])
     expect(evaluateHostLock(RC021_RC5_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).status).toBe('unsupported')
     expect(evaluateHostLock(RC021_RC3_HOST_PACKAGES, { platform: 'posix', profileKind: 'web' }).status).toBe('unsupported')
   })

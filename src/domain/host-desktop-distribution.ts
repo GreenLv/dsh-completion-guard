@@ -36,7 +36,13 @@ export function desktopDistributionSupplement(identity: DesktopDistributionIdent
     && identity.manifest.name === '@deepseek-ai/dsh-desktop' && identity.manifest.version === row.version
     && identity.manifest.dshBuildCommit === row.buildCommit && identity.manifest.dshBuildDirty === row.buildDirty)
   if (!row) return undefined
+  // Supplement sets are per distribution row: the historical rows keep
+  // consuming the shared rc.2(0.2.1)-era Desktop-only list, while a row with
+  // its own `files` binds exactly the set its acquisition derived (the
+  // 0.2.2-rc.2 bundle needs no extra supplement files beyond the reviewed
+  // registry inventories; signed manifest handling is checked separately).
+  const files = row.files ?? qualification.files
   return { digest: createHash('sha256').update('dsh.desktop-distribution/v1\0')
-    .update(JSON.stringify({ provenance: qualification.provenance, files: qualification.files, distribution: row })).digest('hex'),
-  files: qualification.files }
+    .update(JSON.stringify({ provenance: qualification.provenance, files, distribution: row })).digest('hex'),
+  files }
 }

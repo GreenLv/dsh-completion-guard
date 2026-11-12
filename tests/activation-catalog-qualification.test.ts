@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import Module, { createRequire } from 'node:module'
 import { linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { assertActivationCatalogQualification, type ActivationCatalogReview } from '../src/domain/activation-catalog-qualification.js'
@@ -134,9 +134,13 @@ it('accepts unscoped packages whose package.json is not exported and rejects inc
 it('qualifies the exact real expanded catalog closure', () => {
   const req = createRequire(import.meta.url)
   const backend = realpathSync(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl'))
-  const review = JSON.parse(readFileSync(new URL('../manifests/activation-catalog-cohort.v1.json', import.meta.url), 'utf8')) as ActivationCatalogReview
+  const shipped = JSON.parse(readFileSync(new URL('../manifests/activation-catalog-cohort.v1.json', import.meta.url), 'utf8')) as { cohorts?: Array<ActivationCatalogReview & { backendVersion: string }> }
+  // The shipped manifest carries per-backend-version rows; the qualification
+  // runs against the row of the actually installed backend version.
+  const backendVersion = JSON.parse(readFileSync(join(dirname(dirname(backend)), 'package.json'), 'utf8')).version as string
+  const review = (shipped.cohorts?.find(row => row.backendVersion === backendVersion) ?? shipped) as ActivationCatalogReview
   const result = assertActivationCatalogQualification(backend, review)
-  expect(result.packageCount).toBe(22); expect(result.moduleCount).toBe(23)
+  expect(result.packageCount).toBe(23); expect(result.moduleCount).toBe(24)
 })
 
 

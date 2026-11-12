@@ -139,9 +139,14 @@ for(const name of spec.lane==='resolve'?[]:spec.targets){
     const dispose=runtime.guard(()=> 'contract-denied');const harmless=runtime.guard(()=>undefined);const off=ctx.on('tools/pre-execute',async()=>{await Promise.resolve();return {kind:'allow'}});
     // SDK 0.2.2-rc.1: prepareExecution is gone; the guard boundary is read
     // through checkGuards (the same denial the dispatch path consults) and
-    // then through an actual denied execution.
+    // then through an actual denied execution. SDK 0.2.2-rc.2 keeps the same
+    // boundary but checkGuards wraps the reason as {reason, info?}; the
+    // string form stays accepted, so the readback normalizes both shapes to
+    // the reason the model-facing denial carries.
     const deniedExec={name:'contract_effect',arguments:{},agent,session:agent.session};
-    check('tools.guard_readback',runtime.checkGuards(deniedExec)==='contract-denied'&&effects===1);
+    const guardDenial=runtime.checkGuards(deniedExec);
+    const guardReason=typeof guardDenial==='string'?guardDenial:guardDenial?.reason;
+    check('tools.guard_readback',guardReason==='contract-denied'&&effects===1);
     check('tools.guard_denial',sole(await runtime.execute(input('denied'))).isError===true&&effects===1);off();harmless();dispose();
     check('tools.guard_disposal',runtime.checkGuards(deniedExec)===undefined&&sole(await runtime.execute(input('after-dispose'))).isError===false&&effects===2);unregister();check('tools.registration_disposal',sole(await runtime.execute(input('unregistered'))).isError===true&&effects===2);
     check('tools.valid_schema_value',m.validateJsonSchemaValue({type:'string'},'probe').length===0);check('tools.invalid_schema_value',m.validateJsonSchemaValue({type:'string'},12).length>0);

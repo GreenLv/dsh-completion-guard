@@ -15,7 +15,7 @@ import rc3Manifest from '../../src/domain/rc3-byte-audit-manifest.js'
 
 describe('rc.3 cohort qualification as historical evidence', () => {
   it('retires the rc.3 cohort to the historical evidence set', () => {
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.1-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.2-core-v1'])
     const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
     expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.3-core-v1')
   })
@@ -60,9 +60,9 @@ describe('rc.3 cohort qualification as historical evidence', () => {
     expect(rc3Lock.status).toBe('unsupported')
   })
 
-  it('enforces the 0.2.2-rc.1 floor; the whole 0.2.1 tuple stays below it', () => {
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.1')
-    expect(satisfiesSupportedHostRange('0.2.2-rc.1')).toBe(true)
+  it('enforces the 0.2.2-rc.2 floor; the whole 0.2.1 tuple stays below it', () => {
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.2')
+    expect(satisfiesSupportedHostRange('0.2.2-rc.2')).toBe(true)
     expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.3')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.2')).toBe(false)

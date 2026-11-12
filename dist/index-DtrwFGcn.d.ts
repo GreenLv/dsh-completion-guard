@@ -1796,7 +1796,7 @@ declare function currentContractDigest(projection: GuardProjection): string;
 //#endregion
 //#region src/domain/host-version.d.ts
 /** Version admission floor. The public DSH support range is
-* `>=0.2.2-rc.1` with NO implied upper bound: every host version at or above
+* `>=0.2.2-rc.2` with NO implied upper bound: every host version at or above
 * this floor (including later RCs on any tuple, stable and future releases)
 * passes VERSION ADMISSION. The floor only rises when a future Guard release
 * actively adopts a newer DSH; the runtime never raises it from a remote
@@ -1804,12 +1804,14 @@ declare function currentContractDigest(projection: GuardProjection): string;
 * metadata ignored. Version admission is one gate of several — it never
 * claims native validation of a not-yet-tested host, and the graph/byte/
 * contract audits below still run on every admission. The floor rose from
-* `0.2.1-rc.3` to `0.2.2-rc.1` in Guard 0.13.0 because the 0.2.2-rc.1 host
-* changed real consumed interfaces (batch tool execution, native/PTC
-* executor split, awaited session-projection registration); no lower host
-* keeps an admission channel, while old session DATA migration stays a
-* separate retained path. */
-declare const MIN_SUPPORTED_HOST_VERSION = "0.2.2-rc.1";
+* `0.2.1-rc.3` to `0.2.2-rc.1` in Guard 0.13.0 (batch tool execution,
+* native/PTC executor split, awaited session-projection registration) and
+* from `0.2.2-rc.1` to `0.2.2-rc.2` in Guard 0.13.1 (session batch event
+* append, tool error identity, working-directory access waterfall,
+* sandbox-policy session grants, jobs error codes); no lower host keeps an
+* admission channel, while old session DATA migration stays a separate
+* retained path. */
+declare const MIN_SUPPORTED_HOST_VERSION = "0.2.2-rc.2";
 declare const SUPPORTED_HOST_RANGE: string;
 /** Versions with recorded first-hand host evidence. This is an EVIDENCE
 * ledger, NOT an admission whitelist: a missing row never refuses a
@@ -1845,9 +1847,9 @@ interface HostVersionDecision {
 /** Decide the version-policy half of host support. Never a substitute for the graph lock. */
 declare function evaluateMinimumHostVersion(version: string, minimum?: string): HostVersionDecision;
 /** Version admission: at or above the floor by strict SemVer precedence
-* (prerelease-aware; build metadata ignored). `0.2.1-rc.2` and earlier
-* stay below the floor; `0.2.1-rc.3`, `0.2.1`, later patch/minor RCs and
-* releases all admit. */
+* (prerelease-aware; build metadata ignored). `0.2.2-rc.1` and every
+* earlier version stay below the floor; `0.2.2-rc.2`, later patch/minor
+* RCs and releases all admit. */
 declare function satisfiesSupportedHostRange(version: string): boolean;
 //#endregion
 //#region src/domain/host-lock.d.ts
@@ -1893,14 +1895,17 @@ interface HostCohort {
   capabilities: CapabilityRow[];
 }
 /** Current baseline for new installations and default fixtures. Since Guard
-* 0.13.0 the active cohort set contains ONLY the 0.2.2-rc.1 graph: the rc.5
-* and rc.3 cohorts are historical evidence below the raised floor and no
-* longer admit through the active set. */
-declare const ACTIVE_HOST_COHORT_ID = "dsh-0.2.2-rc.1";
+* 0.13.1 the active cohort set contains ONLY the 0.2.2-rc.2 graph: the
+* admission floor rose to >=0.2.2-rc.2 and the 0.2.2-rc.1 graph is a
+* historical upgrade source below the raised floor — its audited manifest
+* (`rc022-rc1-host.ts` rows) keeps the recorded historical identity but no
+* longer admits through the active set. The rc.5 and rc.3 cohorts remain
+* historical evidence below the floor. */
+declare const ACTIVE_HOST_COHORT_ID = "dsh-0.2.2-rc.2";
 declare const ACTIVE_HOST_COHORT_IDS: readonly string[];
-/** Core-lock/v1 separates optional market identity from the 0.2.2-rc.1
-* critical graph. Version ordering cannot authorize an unregistered graph,
-* and graph identity is separate from native acceptance of a Guard artifact.
+/** Core-lock/v1 separates optional market identity from the audited critical
+* graphs. Version ordering cannot authorize an unregistered graph, and graph
+* identity is separate from native acceptance of a Guard artifact.
 */
 declare const HOST_COHORTS: readonly HostCohort[];
 /**

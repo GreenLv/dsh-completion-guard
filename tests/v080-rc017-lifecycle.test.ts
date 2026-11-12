@@ -63,7 +63,7 @@ describe('rc.2 real registry initialization and plugin ownership', () => {
   it('refuses an already-cancelled creation signal before registering anything', async () => {
     const h=host()
     const guard=await h.ctx.plugin(plugin)
-    const detach=h.agents.enter(h.agent, undefined)
+    const detach=h.agents.enter(h.agent)
     const cancellation=new AbortController()
     cancellation.abort(new Error('creation cancelled'))
     await expect(h.agents.announce(h.agent,'startup',cancellation.signal)).rejects.toThrow('creation cancelled')

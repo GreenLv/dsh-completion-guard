@@ -274,7 +274,7 @@ describe('CG021-06: cwd epochs bind evidence identity to the committed timeline'
     try {
       const id = SessionId('rc021-workdir')
       const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, isSeeded: false, id, createdAt: 1, cwd: headerDir })
-      const appendRaw = session.append.bind(session) as (type: string, data: unknown, options?: unknown) => unknown
+      const appendRaw = session.append.bind(session) as unknown as (type: string, data: unknown, options?: unknown) => unknown
       const append = (type: string, data: unknown, surface = false): void => {
         appendRaw(type, data, surface ? { surfaceOp: 'append' } : undefined)
       }

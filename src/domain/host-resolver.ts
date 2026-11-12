@@ -497,29 +497,73 @@ function walkLibFiles(session: HostAuditSession, root: string): string[] {
   return found
 }
 
-// The reviewed 0.2.2-rc.1 foreground tools have these exact published bytes.
-// Both shell tool changes affect promotion guidance; foreground render paths
-// remain the audited contracts. A modified installed
+// Reviewed foreground-tool published bytes, keyed by package and audited host
+// version. Each row is the exact lib/index.js SHA-256 of one registered
+// cohort's published tarball: rc.2 re-published real byte changes (tool error
+// identity, launch-failure classification), while `dsh-shell` and the local
+// executors stayed byte-identical across rc.1 and rc.2 — every row is bound
+// from its study's verified tarballs, never inferred. A modified installed
 // lib/index.js must not inherit the graph's markerless-terminal
 // interpretation.
-const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-tool-bash': 'ae6be2d8b287b5e410d026acd2fdfc553ebb95565f7b361029c7fb5bcda5fd27',
-  '@deepseek-ai/dsh-tool-pwsh': '157aa3964db76e64d3013e63daed72a61d7fc5f86b247b0103753290d7dd6ed9',
-  '@deepseek-ai/dsh-shell': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
+const AUDITED_FOREGROUND_BYTES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  '@deepseek-ai/dsh-tool-bash': {
+    '0.2.2-rc.1': 'ae6be2d8b287b5e410d026acd2fdfc553ebb95565f7b361029c7fb5bcda5fd27',
+    '0.2.2-rc.2': '8fb836a65eb633f85aa8b1b079fb306866e597fe8f4987c2205b5c4482df57de',
+  },
+  '@deepseek-ai/dsh-tool-pwsh': {
+    '0.2.2-rc.1': '157aa3964db76e64d3013e63daed72a61d7fc5f86b247b0103753290d7dd6ed9',
+    '0.2.2-rc.2': '03a29fb9cff987662c14ab925a37ff4ae8b1ec3cce21f8af9c44eec7dd4c66eb',
+  },
+  '@deepseek-ai/dsh-shell': {
+    '0.2.2-rc.1': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
+    '0.2.2-rc.2': '6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1',
+  },
 }
 
 // The default-workdir route is a separate, narrower attestation than
 // foreground-result rendering. It covers the policy's physical root choice
 // and the local executor that receives the tool's explicit workdir DTO.
-// The exact 0.2.2-rc.1 packages are bound to their published module bytes;
-// the sandbox and directory changes have been reviewed for this route.
-const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, string>> = {
-  '@deepseek-ai/dsh-working-directory': '76b2f53517bc3312084bc062ce8bbc4111f3b723d96da080157046c2b6d4766a',
-  '@deepseek-ai/dsh-sandbox-policy': '8eb1674f9c3c2e336efae7ecc734d5197dc8b80bc29f1f1d61bfe0b5a1472188',
-  '@deepseek-ai/dsh-sandbox': '9ece3e7b04d5526441e2439431d769acf67abc46fa49de000dd9c792893eb5e7',
-  '@deepseek-ai/dsh-bash-sandbox': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
-  '@deepseek-ai/dsh-bash-local': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
-  '@deepseek-ai/dsh-pwsh-local': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
+// Rows are bound per audited host version: the working-directory service
+// gained the `working-directory/access` waterfall and sandbox-policy gained
+// per-session writable-root grants in rc.2, so those two changed bytes and
+// were re-reviewed for this route; the local executors are unchanged.
+const AUDITED_DEFAULT_WORKDIR_BYTES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  '@deepseek-ai/dsh-working-directory': {
+    '0.2.2-rc.1': '76b2f53517bc3312084bc062ce8bbc4111f3b723d96da080157046c2b6d4766a',
+    '0.2.2-rc.2': '03cb7ebdaa8b97cfc3170320d04446b99ce939349696289b49549d1e96cea59b',
+  },
+  '@deepseek-ai/dsh-sandbox-policy': {
+    '0.2.2-rc.1': '8eb1674f9c3c2e336efae7ecc734d5197dc8b80bc29f1f1d61bfe0b5a1472188',
+    '0.2.2-rc.2': '6c229f24f4b9ad67790ab5c8d1695e1ed538c0354955494bedd0dbe836debec4',
+  },
+  '@deepseek-ai/dsh-sandbox': {
+    '0.2.2-rc.1': '9ece3e7b04d5526441e2439431d769acf67abc46fa49de000dd9c792893eb5e7',
+    '0.2.2-rc.2': 'dcf74e4cea1a0dbd8bfeaa1b454619b55aab83f3b3b761f0534165f0ac05f138',
+  },
+  '@deepseek-ai/dsh-bash-sandbox': {
+    '0.2.2-rc.1': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
+    '0.2.2-rc.2': '0f788f99113ba7411eb33af71cdafabd07b73cf012c1715c819e03f3f77f342d',
+  },
+  '@deepseek-ai/dsh-bash-local': {
+    '0.2.2-rc.1': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
+    '0.2.2-rc.2': '6d9b4426b8455198b79de398f57c0f5693e7292411059b66d5ac5eba608b59cb',
+  },
+  '@deepseek-ai/dsh-pwsh-local': {
+    '0.2.2-rc.1': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
+    '0.2.2-rc.2': '8b7b57eb7f6c597caa5ee72e4dfd88cec7b5ac51e450ed3521b6b6b29306b88e',
+  },
+}
+
+/** One attested published state for a package: the audited byte rows this
+ * package may present. Attestation requires ALL observed graph roots to carry
+ * the SAME digest and that digest to be one reviewed row, so an install can
+ * never attest rc.1 bytes in one half and rc.2 bytes in the other. The
+ * whole-graph cohort lock separately binds each package's version+integrity
+ * to one registered graph, so "some audited row" here never widens an
+ * unregistered graph. */
+function auditedRows(bytes: Readonly<Record<string, Readonly<Record<string, string>>>>, name: string): ReadonlySet<string> | undefined {
+  const rows = bytes[name]
+  return rows ? new Set(Object.values(rows)) : undefined
 }
 
 // The audited byte maps bind to the audited cohort's exact host version, so
@@ -575,7 +619,7 @@ export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: str
   providedSession?: HostAuditSession): Array<'bash' | 'pwsh'> {
   const session = providedSession ?? createHostAuditSession()
   const roots = [join(runtimeRoot, 'node_modules'), join(profileRoot, 'node_modules')]
-  const checked = (name: string): boolean => {
+  const checked = (name: string, audited: ReadonlySet<string> | undefined): boolean => {
     const found: string[] = []
     for (const root of roots) {
       try {
@@ -583,12 +627,14 @@ export function auditedForegroundRenderers(runtimeRoot: string, profileRoot: str
         if (value) found.push(value)
       } catch { /* package absent in this half of the active graph */ }
     }
-    return found.length > 0 && found.every((value) => value === AUDITED_FOREGROUND_BYTES[name])
+    // One reviewed published state across every observed graph half: all
+    // found digests identical AND equal to one audited version row.
+    return audited !== undefined && found.length > 0 && found.every((value) => value === found[0] && audited.has(value))
   }
-  if (!checked('@deepseek-ai/dsh-shell')) return []
+  if (!checked('@deepseek-ai/dsh-shell', auditedRows(AUDITED_FOREGROUND_BYTES, '@deepseek-ai/dsh-shell'))) return []
   return [
-    ...(checked('@deepseek-ai/dsh-tool-bash') ? ['bash' as const] : []),
-    ...(checked('@deepseek-ai/dsh-tool-pwsh') ? ['pwsh' as const] : []),
+    ...(checked('@deepseek-ai/dsh-tool-bash', auditedRows(AUDITED_FOREGROUND_BYTES, '@deepseek-ai/dsh-tool-bash')) ? ['bash' as const] : []),
+    ...(checked('@deepseek-ai/dsh-tool-pwsh', auditedRows(AUDITED_FOREGROUND_BYTES, '@deepseek-ai/dsh-tool-pwsh')) ? ['pwsh' as const] : []),
   ]
 }
 
@@ -609,7 +655,8 @@ export function auditedDefaultWorkdirHost(runtimeRoot: string, profileRoot: stri
         if (digest) found.push(digest)
       } catch { /* package absent in this half of the graph */ }
     }
-    if (!found.length || !found.every((digest) => digest === AUDITED_DEFAULT_WORKDIR_BYTES[name])) return false
+    const audited = auditedRows(AUDITED_DEFAULT_WORKDIR_BYTES, name)
+    if (!found.length || !audited || !found.every((digest) => digest === found[0] && audited.has(digest))) return false
   }
   return true
 }
@@ -631,7 +678,7 @@ export async function auditedDefaultWorkdirProvider(runtimeRoot: string, profile
     for (const root of [runtimeRoot, profileRoot]) {
       try {
         const module = root === runtimeRoot ? selectedRuntimeRenderer(runtimeRoot, name, session) : activeRendererModule(join(root, 'node_modules'), name, session)
-        if (module?.bytes === AUDITED_DEFAULT_WORKDIR_BYTES[name]) paths.add(module.path)
+        if (module && auditedRows(AUDITED_DEFAULT_WORKDIR_BYTES, name)?.has(module.bytes)) paths.add(module.path)
       } catch { /* absent active package in this graph half */ }
     }
     // Two distinct active modules are ambiguous even when their files match.

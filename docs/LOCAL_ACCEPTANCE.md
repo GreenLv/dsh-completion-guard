@@ -1,6 +1,12 @@
 # Acceptance contracts and records
 
-The first section defines the checks for the 0.13.0 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
+The first section defines the checks for the 0.13.1 host update. Later sections describe older versions and their evidence. Use the instructions and results for the exact source and package under review.
+
+## 0.13.1 / DSH 0.2.2-rc.2 candidate contract
+
+This candidate requires DSH `>=0.2.2-rc.2`, Node.js `>=24.9.0` and Cordis `>=4.1.0`; the retired `0.2.2-rc.1` hosts refuse at the version gate and are documented upgrade sources with old-data migration paths, not admission targets. Its default reviewed host graph is `dsh-0.2.2-rc.2-core-v1` (51 audited packages at rc.2 versions against upstream `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`). The exact-commit CI requirement is unchanged from the 0.13.0 contract below; the native matrix covers rc.2 Web, Headless and official Desktop on macOS arm64 and Windows x64 with the same frozen Guard tgz, plus explicit rc.1 refusal controls and Guard 0.13.0→0.13.1 / DSH rc.1→rc.2 upgrade-recovery fixtures on the upgraded rc.2 host. The rc.2 macOS arm64 Desktop identity was verified from the official update feed; the Windows rc.2 Desktop distribution identity row is registered from the acquired official installer and signed carrier (the official feed itself still served the previous build at acquisition time); its native acceptance remains an explicit pending gate.
+
+本候选最低要求 DSH `0.2.2-rc.2`、Node.js `24.9.0`、Cordis `4.1.0`；已退役的 `0.2.2-rc.1` 宿主在版本门被拒绝，仅作为升级来源并保留旧数据迁移路径，不是验收目标。默认审查宿主图为 `dsh-0.2.2-rc.2-core-v1`。精确提交 CI 要求与下文 0.13.0 合同一致；原生矩阵覆盖 macOS arm64 / Windows x64 的 rc.2 Web、Headless、官方 Desktop（同一冻结 Guard tgz），另加 rc.1 明确拒绝控制，以及在升级后的 rc.2 宿主上执行 Guard 0.13.0→0.13.1、DSH rc.1→rc.2 的升级恢复夹具。rc.2 的 macOS arm64 Desktop 身份已对照官方更新源核验；Windows rc.2 Desktop 分发身份行已按实际采集登记（采集时官方 feed 仍为上一版本）；其原生验收保持为明确待办门。
 
 ## 0.13.0 / DSH 0.2.2-rc.1 candidate contract
 
@@ -10,7 +16,7 @@ Freeze one package from the clean accepted commit with `scripts/release-pack.mjs
 
 When the acceptance scope includes the held-file-handle cleanup check, pass `--t06` to the native entrypoint and to the matching validator. That check has its own `dsh-host-bound/v4-t06` or `dsh-desktop-bound/v2-t06` annex profile. An earlier annex without this check cannot establish it.
 
-The historical incident gate must bind case-level assertions and applicability decisions to this source. Preserve source, CI, exact-artifact, native, credentialed model, rendered UI and performance evidence separately. Select model/UI/performance checks from changed risk and retained mandatory contracts; this host adaptation does not by itself require a new 32-cell performance study. Known upstream gaps remain disclosed and non-blocking within their accepted scope. Check the temporary Undici exceptions again before publication; their expiry remains 2026-11-30 inclusive.
+The historical incident gate must bind case-level assertions and applicability decisions to this source. Preserve source, CI, exact-artifact, native, credentialed model, rendered UI and performance evidence separately. Select model/UI/performance checks from changed risk and retained mandatory contracts; this host adaptation does not by itself require a new 32-cell performance study. Known upstream gaps remain disclosed and non-blocking within their accepted scope. The temporary Undici exceptions cover this candidate by direct maintainer authorization (2026-11-13); their expiry remains **2026-11-30 inclusive** and the signed-host bytes remain unfixed.
 
 本候选最低要求 DSH `0.2.2-rc.1`、Node.js `24.9.0`、Cordis `4.1.0`。精确提交须通过 Ubuntu、macOS、Windows 上 Node `24.9.0` 和 `24.x` 的六组 CI 检查。Ubuntu + Node `24.9.0` 跑全量。其余组合通常跑基础检查，敏感或未知改动以及手动触发时扩展为全量。只从干净的已接受提交冻结一份 tgz，两端使用同一摘要的包，分别通过 Web/Headless、旧会话迁移、清理和 Desktop v2 两段 no-op 门禁；Desktop 参数为 `--desktop-cohort 0.2.2-rc.1`。原有会话库须先复验，再升级日常 profile。历史错误库逐案绑定断言和适用范围，源码通过不代替原生、真实模型或渲染后的界面行为。验收范围包含文件句柄仍被占用时的清理检查时，原生入口及对应校验器都要加 `--t06`，使用单独的验收报告格式。下文旧版本的命令和结果保留原有对象；可复用的验收机制须以上述新宿主、源码和制品身份执行。
 

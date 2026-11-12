@@ -80,6 +80,56 @@ describe('session mode write-once store', () => {
     expect(() => birth('one', { createdAt: -1 })).toThrow('activation_identity_unavailable')
   })
 })
+describe('0.13.0 → 0.13.1 upgrade state/entry matrix', () => {
+  it('an existing valid 0.13.0-era binding is retained by the 0.13.1 readback with NO re-adopt', () => {
+    const dir = root(), identity = birth('upgrade-kept')
+    // A binding written under the previous package (provenance records the
+    // 0.13.0-era adopt) stays authoritative: the durable write-once record
+    // is keyed by session birth identity, not by the Guard package version,
+    // so the upgraded runtime reads it as bound with the SAME mode,
+    // provenance and bytes — never re-selecting or re-adopting.
+    const priorPackageSha = 'a'.repeat(64)
+    expect(writeActivationBinding(dir, identity, 'opt-in', 'legacy_adoption', priorPackageSha)).toMatchObject({ status: 'bound', created: true })
+    const path = activationBindingPath(dir, identity.id), bytesBefore = readFileSync(path)
+    // Upgraded 0.13.1 runtime: a startup read with the new config returns
+    // the retained mode; even an explicit opt-in configuration cannot
+    // rewrite it, and a read-only recheck is a no-op on the bytes.
+    expect(readActivationBinding(dir, identity, undefined)).toMatchObject({ status: 'bound', mode: 'opt-in' })
+    expect(resolveSessionActivation(dir, identity, { activation: 'opt-in', activationSource: 'explicit' }, 'resume', true)).toMatchObject({ status: 'bound', mode: 'opt-in' })
+    expect(resolveSessionActivation(dir, identity, { activation: 'always', activationSource: 'default' }, 'resume', true)).toMatchObject({ status: 'bound', mode: 'opt-in' })
+    expect(readFileSync(path)).toEqual(bytesBefore)
+  })
+
+  it('a missing, damaged or pending binding is never forged into repair by the upgrade', () => {
+    const dir = root()
+    // Missing: reads stay unavailable and a startup read cannot recreate a
+    // record that was never written (only controlled first-creation writes).
+    expect(resolveSessionActivation(dir, birth('upgrade-missing'), { activation: 'always' }, 'resume', true)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+    // Damaged: reads refuse exactly as before the upgrade — the upgrade
+    // adds no read-side repair. Recovery stays the EXPLICIT controlled
+    // write the store always supported (same identity/key rules), never an
+    // upgrade-time rewrite or a fabricated restore.
+    const damaged = birth('upgrade-damaged')
+    expect(writeActivationBinding(dir, damaged, 'opt-in', 'fresh_creation', digest)).toMatchObject({ status: 'bound' })
+    const damagedPath = activationBindingPath(dir, damaged.id)
+    const original = readFileSync(damagedPath)
+    writeFileSync(damagedPath, Buffer.from(original.toString('utf8').replace('"initialMode":"opt-in"', '"initialMode":"always"')))
+    expect(readActivationBinding(dir, damaged, undefined)).toMatchObject({ status: 'unavailable', reasonCode: 'activation_binding_digest_invalid' })
+    // Recovery is an EXPLICIT operator action (delete the damaged record,
+    // then the ordinary controlled rebind) — identical rules before and
+    // after the upgrade. The write path itself refuses to overwrite a
+    // damaged record: no upgrade-time rewrite, no forged restore.
+    expect(writeActivationBinding(dir, damaged, 'opt-in', 'fresh_creation', digest)).toMatchObject({ status: 'unavailable', reasonCode: 'activation_binding_digest_invalid' })
+    unlinkSync(damagedPath)
+    expect(writeActivationBinding(dir, damaged, 'opt-in', 'fresh_creation', digest)).toMatchObject({ status: 'bound', created: true })
+    expect(readActivationBinding(dir, damaged, undefined)).toMatchObject({ status: 'bound', mode: 'opt-in' })
+    // The read-only upgrade path itself never creates a binding for a
+    // session that has none: resolution without a controlled write stays
+    // unavailable.
+    expect(resolveSessionActivation(root(), birth('upgrade-never-written'), { activation: 'always', activationSource: 'explicit' }, 'resume', true)).toMatchObject({ reasonCode: 'activation_mode_unknown' })
+  })
+})
+
 describe('legacy migration inventory and receipt', () => {
   it('recovers per row, reports partial conflicts, and verifies missing bindings without creating them', () => {
     const dir = root(), entries = [birth('a'), birth('b')].map(identity => ({ identity, mode: 'opt-in' as const, cohort: 'old' }))
@@ -99,18 +149,20 @@ describe('legacy migration inventory and receipt', () => {
     expect(prepareActivationMigration(inventory, prior)).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, cohorts: [prior.cohorts[0]] })).toMatchObject({ status: 'ready', receipt: { entries: [{ mode: 'opt-in' }, { mode: 'opt-in' }] } })
     expect(prepareActivationMigration(inventory, { ...prior, cohorts: prior.cohorts.map((c, i) => ({ ...c, sessionIds: [inventory[i].id] })) }).status).toBe('ready')
-    // 0.13.0 accepts 0.0.x-0.12.x predecessors; the current and future lines
-    // are never priors.
+    // 0.13.1 accepts 0.0.x-0.12.x predecessors plus the explicitly reviewed
+    // 0.13.0 predecessor; the current (0.13.1) and future lines are never
+    // priors — a later release must consciously extend the reviewed set.
     expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.10.0' } })).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.11.0' } })).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
     expect(prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.11.2-beta.1' } })).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
-    for (const version of ['0.12.0', '0.12.1', '0.12.2-beta.1']) {
+    for (const version of ['0.12.0', '0.12.1', '0.12.2-beta.1', '0.13.0', '0.13.0-rc.1']) {
       const input = { ...prior, previousPackage: { ...prior.previousPackage, version } }
       expect(prepareActivationMigration(inventory, input)).toMatchObject({ status: 'pending', missing: ['a', 'b'] })
       expect(prepareActivationMigration(inventory, { ...input, cohorts: [prior.cohorts[0]] })).toMatchObject({ status: 'ready', receipt: { entries: [{ mode: 'opt-in' }, { mode: 'opt-in' }] } })
     }
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.0' } })).toThrow('activation_prior_modes_invalid')
-    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.0-rc.1' } })).toThrow('activation_prior_modes_invalid')
+    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.1' } })).toThrow('activation_prior_modes_invalid')
+    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.1-rc.1' } })).toThrow('activation_prior_modes_invalid')
+    expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '0.13.2' } })).toThrow('activation_prior_modes_invalid')
     expect(() => prepareActivationMigration(inventory, { ...prior, previousPackage: { ...prior.previousPackage, version: '1.0.0' } })).toThrow('activation_prior_modes_invalid')
   })
   it('uses read handles for exact inherited cut, emits no bodies and detects identity/revision changes', async () => {

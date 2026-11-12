@@ -197,7 +197,9 @@ describe('runtime derivation', () => {
     }
     const agent = {
       id: 'agent-pinned', status: 'running',
-      session: { snapshotEvents: () => [
+      // SDK 0.2.2-rc.2: the goal authority reads `session.header.origin` to
+      // exclude subagent sessions (absent header/origin stays a root session).
+      session: { header: {}, snapshotEvents: () => [
         { seq: 1, type: 'turn/start', data: { turn: 1 } },
         { seq: 2, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'finish it' }] } },
       ] },

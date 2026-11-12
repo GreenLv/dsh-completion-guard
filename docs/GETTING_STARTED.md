@@ -4,15 +4,15 @@
 
 ## Before installation
 
-Use the profile you actually run: Web, Headless or Desktop. Stop the relevant host/session writers first. If this installation has old Guard sessions, preserve the old package and effective mode sources, then prepare a frozen inventory and migration receipt using [the migration guide](ACTIVATION_MIGRATION.md) **before replacing DSH or Guard**. Empty old sessions count too. The 0.13.0 migration toolkit can run from a separately prepared package directory while the old package stays installed.
+Use the profile you actually run: Web, Headless or Desktop. Stop the relevant host/session writers first. If this installation has old Guard sessions, preserve the old package and effective mode sources, then check retained bindings and prepare any needed inventory and migration receipt using [the migration guide](ACTIVATION_MIGRATION.md) **before replacing DSH or Guard**. Empty old sessions count too. The 0.13.1 migration toolkit can run from a separately prepared package directory while the old package stays installed.
 
-With no old Guard sessions, there is no old-mode adoption step. Upgrade the host to DSH `>=0.2.2-rc.1` if necessary, install Guard, and complete the installation checks before startup. Requires Node.js `>=24.9.0`, pnpm `>=11` and a qualified Cordis `>=4.1.0` installation. Do not load both `dsh-context-guard` and `dsh-completion-guard` in one profile; the internal entry ID remains `context-guard`.
+With no old Guard sessions, there is no old-mode adoption step. Upgrade the host to DSH `>=0.2.2-rc.2` (the retired `0.2.2-rc.1` hosts are below this floor), install Guard, and complete the installation checks before startup. Requires Node.js `>=24.9.0`, pnpm `>=11` and a qualified Cordis `>=4.1.0` installation. Do not load both `dsh-context-guard` and `dsh-completion-guard` in one profile; the internal entry ID remains `context-guard`.
 
 ## 安装前
 
-先确认实际使用的 Web、Headless 或 Desktop profile，并停止相应宿主与会话写者。如果已有旧 Guard 会话，替换 DSH 或 Guard **之前**，按[迁移指南](ACTIVATION_MIGRATION.md)保留旧包、核验有效模式来源，冻结会话库存并准备迁移收据。旧空会话也需要清点。0.13.0 迁移工具可以从另行准备的包目录运行，旧包此时仍留在原安装位置。
+先确认实际使用的 Web、Headless 或 Desktop profile，并停止相应宿主与会话写者。如果已有旧 Guard 会话，替换 DSH 或 Guard **之前**，按[迁移指南](ACTIVATION_MIGRATION.md)保留旧包、核验有效模式来源，核对保留的绑定，并按需冻结会话库存、准备迁移收据。旧空会话也需要清点。0.13.1 迁移工具可以从另行准备的包目录运行，旧包此时仍留在原安装位置。
 
-没有旧 Guard 会话时，不需要旧模式 adoption。先按需将 DSH 升级到 `>=0.2.2-rc.1`，再安装 Guard，完成安装核验后启动。需要 Node.js `>=24.9.0`、pnpm `>=11` 及通过资格验证的 Cordis `>=4.1.0`。同一 profile 不要同时加载 `dsh-context-guard` 和 `dsh-completion-guard`，内部条目 ID 仍是 `context-guard`。
+没有旧 Guard 会话时，不需要旧模式 adoption。先将 DSH 升级到 `>=0.2.2-rc.2`（已退役的 `0.2.2-rc.1` 宿主低于该下限），再安装 Guard，完成安装核验后启动。需要 Node.js `>=24.9.0`、pnpm `>=11` 及通过资格验证的 Cordis `>=4.1.0`。同一 profile 不要同时加载 `dsh-context-guard` 和 `dsh-completion-guard`，内部条目 ID 仍是 `context-guard`。
 
 ## Web installation / Web 安装
 
@@ -21,7 +21,7 @@ Keep the host stopped through these steps. Substitute the actual absolute runtim
 以下步骤期间保持宿主停止，将目录替换为实际绝对路径。`inject` 会把锁写入 profile 的 `cordis.patch.yml`，执行前先备份。`inspect`、`inject` 和 `verify-dump` 三条宿主锁检查都须返回 `status: "supported"`；非零退出或其他状态都不能继续启动。该状态要求不适用于 `dsh plugin add`。
 
 ```sh
-dsh plugin --profile web add dsh-completion-guard@0.13.0
+dsh plugin --profile web add dsh-completion-guard@0.13.1
 
 DSH_RUNTIME_ROOT=/absolute/path/to/.dsh-runtime
 DSH_PROFILE_ROOT=/absolute/path/to/.dsh/profiles/web
@@ -32,9 +32,9 @@ GUARD_HOST_LOCK="$DSH_PROFILE_ROOT/node_modules/.bin/dsh-completion-guard-host-l
 dsh --profile web --dump-config | "$GUARD_HOST_LOCK" verify-dump --runtime-root "$DSH_RUNTIME_ROOT" --profile-root "$DSH_PROFILE_ROOT" --dump-config -
 ```
 
-The default reviewed baseline is DSH `0.2.2-rc.1` / Cordis `4.1.0`; older host cohorts are historical only. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
+The default reviewed baseline is DSH `0.2.2-rc.2` / Cordis `4.1.0`; older host cohorts — including the retired `0.2.2-rc.1` — are historical only. A later compatible host requires `--rebind-registry` on the three lock commands; it checks official archives and qualifies changed programs before rebuilding the lock. See [compatible-version rebinding](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions). Changes to DSH, Guard or the profile location require fresh checks. An ordinary market-only update does not require reinjection; installing or removing the Desktop market does.
 
-默认审查基线为 DSH `0.2.2-rc.1` / Cordis `4.1.0`；旧宿主队列仅保留历史含义。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
+默认审查基线为 DSH `0.2.2-rc.2` / Cordis `4.1.0`；旧宿主队列（含已退役的 `0.2.2-rc.1`）仅保留历史含义。更新的兼容宿主需要在三条锁命令中添加 `--rebind-registry`，核对官方归档并验证变化的程序后重建锁，见[兼容版本重绑定](HOST_LOCK_UPGRADE.md#rebinding-compatible-package-versions)。DSH、Guard 或 profile 路径变化后需要重新检查。仅 market 的普通更新不需重新注入，Desktop 市场的安装或移除则需要。
 
 ### Windows, Headless and Desktop / 其他入口
 
@@ -101,9 +101,9 @@ Use a custom `DSH_HOME` instead of the default `.dsh` directory when configured.
 
 Copyable configuration prompt / 可复制配置提示词：
 
-> Use dsh-completion-guard 0.13.0's default always mode for future new root sessions while preserving old modes. Find the cordis.patch.yml for the Web, Headless or Desktop profile I actually use. First verify that old-session mode migration is complete for the authorized scope; keep exclusions and unknown sources pending. Back up the file, then remove only the activation field from the existing context-guard config, or leave it absent. Preserve bindings, all other settings and host-lock fields. Do not rewrite bindings or restart DSH. Show the path and exact diff, and report any lock or migration checks remaining before restart.
+> Use dsh-completion-guard 0.13.1's default always mode for future new root sessions while preserving old modes. Find the cordis.patch.yml for the Web, Headless or Desktop profile I actually use. First verify that old-session mode migration is complete for the authorized scope; keep exclusions and unknown sources pending. Back up the file, then remove only the activation field from the existing context-guard config, or leave it absent. Preserve bindings, all other settings and host-lock fields. Do not rewrite bindings or restart DSH. Show the path and exact diff, and report any lock or migration checks remaining before restart.
 
-> 让后续新根会话使用 dsh-completion-guard 0.13.0 的默认 always，保留旧模式。找到我实际使用的 Web、Headless 或 Desktop profile 的 cordis.patch.yml；先确认授权范围内的旧会话模式迁移已通过，排除项和来源未知项继续待处理。备份配置后，仅删除原 context-guard config 下的 activation 字段；原本没有该字段则保留不填。保留绑定、其他配置和宿主锁字段，不重写绑定，不重启 DSH。报告文件路径、精确差异，以及重启前尚缺的锁或迁移核验。
+> 让后续新根会话使用 dsh-completion-guard 0.13.1 的默认 always，保留旧模式。找到我实际使用的 Web、Headless 或 Desktop profile 的 cordis.patch.yml；先确认授权范围内的旧会话模式迁移已通过，排除项和来源未知项继续待处理。备份配置后，仅删除原 context-guard config 下的 activation 字段；原本没有该字段则保留不填。保留绑定、其他配置和宿主锁字段，不重写绑定，不重启 DSH。报告文件路径、精确差异，以及重启前尚缺的锁或迁移核验。
 
 ## Completion policies
 

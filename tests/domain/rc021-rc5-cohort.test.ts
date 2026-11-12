@@ -19,7 +19,7 @@ describe('rc.5 cohort qualification', () => {
     // Since Guard 0.13.0 the ACTIVE cohort is the 0.2.2-rc.1 graph only; the
     // reviewed rc.5/rc.3 cohorts stay in the historical evidence set and no
     // longer admit (their exact graphs refuse at the version gate).
-    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.1-core-v1'])
+    expect(HOST_COHORTS.map((cohort) => cohort.id)).toEqual(['dsh-0.2.2-rc.2-core-v1'])
     expect(EXPECTED_HOST_PACKAGES).not.toEqual(RC021_RC5_HOST_PACKAGES)
     const manifest = JSON.parse(readFileSync('manifests/supported-host.v1.json', 'utf8'))
     expect(manifest.historicalCohorts.map((row: { id: string }) => row.id)).toContain('dsh-0.2.1-rc.5-core-v1')
@@ -70,12 +70,12 @@ describe('rc.5 cohort qualification', () => {
     }
   })
 
-  it('enforces the 0.2.2-rc.1 floor; the 0.2.1 tuple stays below it', () => {
+  it('enforces the 0.2.2-rc.2 floor; the 0.2.1 tuple stays below it', () => {
     // Historical floor semantics of this release line, kept as an oracle:
     // 0.2.1-rc.3 < 0.2.1-rc.5 < 0.2.2-rc.1 by strict SemVer precedence, and
     // the current floor only admits the 0.2.2-rc.1 tuple and above.
-    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.1')
-    expect(satisfiesSupportedHostRange('0.2.2-rc.1')).toBe(true)
+    expect(MIN_SUPPORTED_HOST_VERSION).toBe('0.2.2-rc.2')
+    expect(satisfiesSupportedHostRange('0.2.2-rc.2')).toBe(true)
     expect(satisfiesSupportedHostRange('0.2.2')).toBe(true)
     expect(satisfiesSupportedHostRange('0.2.1-rc.5')).toBe(false)
     expect(satisfiesSupportedHostRange('0.2.1-rc.4')).toBe(false)

@@ -82,16 +82,16 @@ async function main() {
   const digest = bytes => createHash('sha256').update(bytes).digest('hex')
   // Version-selected audited backend row (mirrors auditedManifestFor): the
   // audited release matching the backend version wins, any other version is
-  // judged against the current 0.2.2-rc.1 baseline bytes; the range gate and
+  // judged against the current 0.2.2-rc.2 baseline bytes; the range gate and
   // the module digest comparison below still fail closed on every mismatch.
-  const auditedBackendRows = ['rc021-rc2-byte-audit.json', 'rc021-rc3-byte-audit.json', 'rc021-rc5-byte-audit.json', 'rc022-rc1-byte-audit.json']
+  const auditedBackendRows = ['rc021-rc2-byte-audit.json', 'rc021-rc3-byte-audit.json', 'rc021-rc5-byte-audit.json', 'rc022-rc1-byte-audit.json', 'rc022-rc2-byte-audit.json']
     .flatMap(name => JSON.parse(readFileSync(join(packageRoot, 'manifests', name), 'utf8')).packages)
     .filter(row => row.name === '@deepseek-ai/dsh-session-persistence-jsonl')
   const checkedBackend = () => {
     const packageBytes = readFileSync(join(backendRoot, 'package.json'))
     const manifest = JSON.parse(packageBytes.toString('utf8'))
     const row = auditedBackendRows.find(candidate => candidate.version === manifest.version)
-      ?? auditedBackendRows.find(candidate => candidate.version === '0.2.2-rc.1')
+      ?? auditedBackendRows.find(candidate => candidate.version === '0.2.2-rc.2')
     if (!row || backendFile !== realpathSync(join(backendRoot, 'lib/index.js'))) throw new Error('activation_backend_unreviewed')
     const moduleTree = root => {
       const files = {}
@@ -135,8 +135,16 @@ async function main() {
   const cordisFile = realpathSync(backendRequire.resolve('@deepseek-ai/cordis'))
   if (realpathSync(require.resolve('@deepseek-ai/cordis')) !== cordisFile) throw new Error('activation_backend_unreviewed')
   const rawCensus = captureActivationPhysicalInventory(persistenceRoot, compression, backendSha256)
-  const catalogReview = rawCensus.multiGenerationSessionCount
-    ? readJson(join(packageRoot, 'manifests', 'activation-catalog-cohort.v1.json')) : undefined
+  // Per-version catalog cohort rows: the row matching the installed backend
+  // version qualifies this install; any other version (including a future
+  // one) fails closed on the catalog qualification below.
+  const catalogReviewRow = rawCensus.multiGenerationSessionCount
+    ? (() => {
+        const review = readJson(join(packageRoot, 'manifests', 'activation-catalog-cohort.v1.json'))
+        const backendVersion = readJson(join(backendRoot, 'package.json')).version
+        return review.cohorts?.find(row => row.backendVersion === backendVersion)
+      })() : undefined
+  const catalogReview = catalogReviewRow ?? undefined
   const qualifyCatalog = () => assertActivationCatalogQualification(backendFile, catalogReview)
   const catalog = catalogReview ? qualifyCatalog() : undefined
   if (catalog && realpathSync(backendRequire.resolve('@deepseek-ai/dsh-session-format-catalog')) !== catalog.catalogFile) {
