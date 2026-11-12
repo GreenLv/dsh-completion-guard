@@ -490,7 +490,7 @@ class HostBoundEntrypointTests(unittest.TestCase):
                     mock.patch.object(self.host, "isolated_environment", side_effect=OSError("init failed")), \
                     mock.patch.object(self.host, "cleanup_owned_processes", side_effect=lambda _: cleanup(processes)), \
                     mock.patch.object(self.host.platform, "system", return_value="Darwin"), \
-                    mock.patch.object(self.host.os, "killpg", side_effect=PermissionError("blocked")) as stop:
+                    mock.patch.object(self.host.os, "killpg", side_effect=PermissionError("blocked"), create=True) as stop:
                 actual = self.host.host_acceptance(api, Path(directory), Path("artifact"), "b" * 64,
                                                    Path("runtime"), result)
             self.assertEqual(stop.call_count, 2)
@@ -820,11 +820,12 @@ class HostBoundEntrypointTests(unittest.TestCase):
             row["stage"] = "/private/token"
             path.write_text(json.dumps(row))
             self.assertIsNone(self.host.safe_probe_progress(*args))
-        # The initial v0.7 probe has twelve serial create/resume operations.
+        # Original cases plus incident pairs and predecessor restore have
+        # 28 serial create/resume operations, with a separate cleanup margin.
         # The restart has host boot, one open and a tool/readback; legacy v3
         # retains its narrower restart deadline.
-        self.assertGreaterEqual(self.host.INITIAL_V070_TIMEOUT, 12 * 90 + 120)
-        self.assertEqual(self.host.INITIAL_V070_TIMEOUT, 1200)
+        self.assertGreaterEqual(self.host.INITIAL_V070_TIMEOUT, 28 * 90 + 360)
+        self.assertEqual(self.host.INITIAL_V070_TIMEOUT, 2880)
         self.assertGreaterEqual(self.host.RESTART_V070_TIMEOUT, 90 + 30 + 60)
         self.assertEqual(self.host.RESTART_V070_TIMEOUT, 180)
         self.assertEqual(self.host.RESTART_TIMEOUT, 90)
@@ -961,9 +962,11 @@ class HostBoundEntrypointTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "^install_proxy_unsupported$"):
                     self.host.isolated_environment(root)
                 self.assertFalse((root / "home").exists())
-        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(self.host.os.environ, {
+        # Exercise the parser's POSIX case-conflict input without asking
+        # Windows' case-insensitive os.environ to retain two distinct keys.
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(self.host.os, "environ", {
             "HTTPS_PROXY": "http://localhost:45999", "https_proxy": "http://localhost:45998",
-        }, clear=True), self.assertRaisesRegex(RuntimeError, "^install_proxy_ambiguous$"):
+        }), self.assertRaisesRegex(RuntimeError, "^install_proxy_ambiguous$"):
             self.host.isolated_environment(Path(directory))
 
     def test_probe_requires_all_nonempty_real_host_cases_and_driver_identity(self):
@@ -977,8 +980,13 @@ class HostBoundEntrypointTests(unittest.TestCase):
         self.assertFalse(self.host.validate_probe({**receipt, "cases": receipt["cases"][:-1]}, "nonce", "a" * 64))
 
     def test_v070_probe_requires_distinct_profile_complete_paired_cases_and_restart(self):
+        from tests.validate_native_v070_test import V070AnnexTests
         cases = [{"id": id, "status": "passed", "positive": True, "negative": True}
                  for id in self.host.PROBE_V070_CASES]
+        for row in cases:
+            for number in ("043", "044"):
+                if "archive" + number in row["id"]:
+                    row["incident"] = V070AnnexTests.incident("archive" + number)
         receipt = {"schema": "dsh-native-host-probe/v2", "nonce": "nonce", "driver_sha256": "a" * 64,
                    "mode": "initial", "status": "passed", "pid": 100, "real_model_request": False,
                    "cases": cases}
@@ -999,12 +1007,13 @@ class HostBoundEntrypointTests(unittest.TestCase):
         self.assertTrue(validate(restarted, restart=True))
         self.assertFalse(validate(restarted))
 
-    def test_v070_driver_identity_binds_all_three_source_files(self):
+    def test_v070_driver_identity_binds_all_source_and_fixture_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             scripts = root / "scripts"
             scripts.mkdir()
             for name in self.host.PROBE_V070_DRIVER_FILES:
+                (scripts / name).parent.mkdir(parents=True, exist_ok=True)
                 (scripts / name).write_text(name, encoding="utf-8")
             original = self.host.probe_driver_digest(root, "v070")
             for name in self.host.PROBE_V070_DRIVER_FILES:
@@ -1017,6 +1026,7 @@ class HostBoundEntrypointTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "dependency unavailable"):
                 self.host.probe_driver_digest(root, "v070")
 
+    def test_v070_real_driver_identity_matches_js(self):
         root = SCRIPT.parents[1]
         probe = (root / "scripts" / "native_host_probe_v070.mjs").resolve().as_uri()
         observed = subprocess.check_output(["node", "--input-type=module", "-e",

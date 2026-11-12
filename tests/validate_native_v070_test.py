@@ -24,6 +24,79 @@ SPEC.loader.exec_module(VALIDATOR)
 
 
 class V070AnnexTests(unittest.TestCase):
+    def test_incident_evidence_requires_external_output_before_fixture_creation(self):
+        import native_host_acceptance as host
+        with mock.patch.object(host, "host_temporary_root") as allocate:
+            with self.assertRaisesRegex(ValueError, "external diagnostics output"):
+                host.host_acceptance(None, Path('.'), Path('artifact.tgz'), 'a' * 64,
+                                     Path('runtime'), {}, protocol='v070')
+            allocate.assert_not_called()
+
+    @staticmethod
+    def incident(kind):
+        base = {"schema": "dsh-native-incident-summary/v1", "case": kind,
+                "input_boundary": "current_contract_analogue", "evidence_sha256": "f" * 64}
+        if kind == "archive043":
+            return {**base, "compound_reason": "native_git_command_unsupported", "commit_reason": "git_commit_observed",
+                    "push_reason": "git_push_observed", "ordinary_action_reason": "ordinary_action_migrated_to_host_tools",
+                    "missing_effect_reason": "native_effect_missing", "refs_verified": True, "persisted_reopen": True}
+        return {**base, "scenes": [{"name": name, "pending_before": 2 if name.startswith("old_") else 0,
+                 "preserved_pending": True, "no_new_selection": True, "persisted_reopen": True,
+                 "reason": "pending_without_action_basis"} for name in
+                ("old_unclarified", "old_clarified", "fresh_unclarified", "fresh_clarified")]}
+
+    def test_incident_consumer_requires_exact_reasons_scope_restore_and_matrix(self):
+        import native_host_acceptance as host
+        for kind in ("archive043", "archive044"):
+            value = self.incident(kind)
+            self.assertTrue(host.valid_incident_summary(value, kind))
+            for key in list(value):
+                changed = copy.deepcopy(value)
+                del changed[key]
+                self.assertFalse(host.valid_incident_summary(changed, kind), key)
+            self.assertFalse(host.valid_incident_summary({**value, "raw_tool_text": "private"}, kind))
+            self.assertFalse(host.valid_incident_summary({**value, "evidence_sha256": "not-bound"}, kind))
+            self.assertFalse(host.valid_incident_summary({**value, "input_boundary": "historical_exact_reproduction"}, kind))
+        for key, wrong in (("compound_reason", "native_effect_failed"), ("persisted_reopen", False), ("refs_verified", 1)):
+            value = self.incident("archive043")
+            value[key] = wrong
+            self.assertFalse(host.valid_incident_summary(value, "archive043"))
+        for change in (
+            lambda v: v["scenes"].pop(),
+            lambda v: v["scenes"].reverse(),
+            lambda v: v["scenes"][0].update(pending_before=1),
+            lambda v: v["scenes"][2].update(pending_before=2),
+            lambda v: v["scenes"][1].update(no_new_selection=False),
+            lambda v: v["scenes"][0].update(persisted_reopen=False),
+            lambda v: v["scenes"][0].update(reason="/private/path"),
+        ):
+            value = self.incident("archive044")
+            change(value)
+            self.assertFalse(host.valid_incident_summary(value, "archive044"))
+
+    def test_probe_cannot_pass_new_cases_without_consumed_incident_facts(self):
+        import native_host_acceptance as host
+        cases = [{"id": id, "status": "passed", "positive": True, "negative": True} for id in sorted(host.PROBE_V070_CASES)]
+        for row in cases:
+            if "archive043" in row["id"]:
+                row["incident"] = self.incident("archive043")
+            if "archive044" in row["id"]:
+                row["incident"] = self.incident("archive044")
+        value = {"schema": "dsh-native-host-probe/v2", "nonce": "unit", "pid": 12, "mode": "initial",
+                 "driver_sha256": "a" * 64, "status": "passed", "real_model_request": False, "cases": cases}
+        self.assertTrue(host.validate_probe(value, "unit", "a" * 64, protocol="v070"))
+        for row in cases:
+            if "incident" not in row:
+                continue
+            saved = row.pop("incident")
+            self.assertFalse(host.validate_probe(value, "unit", "a" * 64, protocol="v070"))
+            row["incident"] = saved
+        private = {"cases": [{"id": "v070_archive043_git_chain", "status": "failed", "operation": "/private/path",
+                              "incident": {"raw_text": "private credential"}, "error_code": "INCIDENT_ASSERTION_FAILED"}]}
+        safe = json.dumps(host.safe_probe_failures(private))
+        self.assertNotIn("private", safe)
+        self.assertIn("v070_archive043_git_chain", safe)
+
     def test_cli_rejects_dirty_source_even_with_matching_head(self):
         with tempfile.TemporaryDirectory() as directory:
             annex = Path(directory) / "annex.json"

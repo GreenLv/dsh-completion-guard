@@ -110,8 +110,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 28,
-      "maxItems": 28,
+      "minItems": 31,
+      "maxItems": 31,
       "items": {
         "type": "object",
         "required": [
@@ -153,7 +153,10 @@
               "package_inventory",
               "package_parity",
               "single_package_strict_noop",
-              "strict_second_noop"
+              "strict_second_noop",
+              "desktop_v070_archive043_git_chain",
+              "desktop_v070_archive044_pending_followup",
+              "desktop_v131_predecessor_activation_restore"
             ]
           },
           "required": {

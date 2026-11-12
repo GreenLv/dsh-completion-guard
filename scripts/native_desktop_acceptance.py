@@ -375,7 +375,8 @@ def desktop_acceptance(api: Any, root: Path, artifact: Path, digest: str,
         config = {"runtimeRoot": str(archive / "dsh"), "workRoot": str(work), "nonce": nonce,
                   "output": str(output) + ".probe", "profile": "desktop", "profileRoot": str(profile),
                   "hostPackages": graph["packages"], "fixtureTgz": str(fixture_new),
-                  "sourceCommit": result["repository"]["commit"], "artifactSha256": digest}
+                  "sourceCommit": result["repository"]["commit"], "artifactSha256": digest,
+                  "incidentOutput": str(diagnostics_output) + ".desktop.incidents"}
         # Guard roots use the physical archive, whereas runtimeRequire uses
         # the actual ASAR-contained dsh namespace. Bind both explicitly.
         config["desktopArchive"] = str(archive)

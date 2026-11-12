@@ -19,10 +19,11 @@
         "type": "object", "additionalProperties": false,
         "required": ["id", "status", "positive", "negative"],
         "properties": {
-          "id": { "type": "string", "pattern": "^(?:v070_[a-z0-9_]+|v090_activation_birth_restore_adoption|initialize_runtime)$" },
+          "id": { "type": "string", "pattern": "^(?:v070_[a-z0-9_]+|v090_activation_birth_restore_adoption|v131_predecessor_activation_restore|initialize_runtime)$" },
           "status": { "enum": ["passed", "failed"] },
           "positive": { "type": "boolean" },
           "negative": { "type": "boolean" },
+          "incident": { "$ref": "#/$defs/incident" },
           "activation_assertion": { "enum": ["birth_source", "birth_t0", "birth_bound", "birth_mode", "restore_source", "restore_t0", "restore_prefix", "restore_identity", "restore_binding", "restore_mode", "deleted_binding_unknown", "deleted_binding_absent", "old_inventory", "old_adopt", "old_noop", "old_binding", "old_source", "old_t0", "old_identity", "old_mode", "old_create", "old_flush", "old_close", "old_inventory_read", "old_resume", "corpus_read"] },
           "operation": { "type": "string" },
           "error_code": { "type": "string" },
@@ -35,7 +36,8 @@
               "actual": { "$ref": "#/$defs/terminal" }
             }
           }
-        }
+        },
+        "allOf": [{"if":{"properties":{"id":{"const":"v070_archive043_git_chain"},"status":{"const":"passed"}},"required":["id","status"]},"then":{"required":["incident"],"properties":{"incident":{"properties":{"case":{"const":"archive043"}}}}}},{"if":{"properties":{"id":{"const":"v070_archive044_pending_followup"},"status":{"const":"passed"}},"required":["id","status"]},"then":{"required":["incident"],"properties":{"incident":{"properties":{"case":{"const":"archive044"}}}}}}]
       }
     }
   },
@@ -49,6 +51,231 @@
         "timed_out": { "type": ["boolean", "null"] },
         "aborted": { "type": ["boolean", "null"] }
       }
+    },
+    "incident": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "input_boundary",
+            "evidence_sha256",
+            "case",
+            "compound_reason",
+            "commit_reason",
+            "push_reason",
+            "ordinary_action_reason",
+            "missing_effect_reason",
+            "refs_verified",
+            "persisted_reopen"
+          ],
+          "properties": {
+            "schema": {
+              "const": "dsh-native-incident-summary/v1"
+            },
+            "input_boundary": {
+              "const": "current_contract_analogue"
+            },
+            "evidence_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "case": {
+              "const": "archive043"
+            },
+            "compound_reason": {
+              "const": "native_git_command_unsupported"
+            },
+            "commit_reason": {
+              "const": "git_commit_observed"
+            },
+            "push_reason": {
+              "const": "git_push_observed"
+            },
+            "ordinary_action_reason": {
+              "const": "ordinary_action_migrated_to_host_tools"
+            },
+            "missing_effect_reason": {
+              "const": "native_effect_missing"
+            },
+            "refs_verified": {
+              "const": true
+            },
+            "persisted_reopen": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "input_boundary",
+            "evidence_sha256",
+            "case",
+            "scenes"
+          ],
+          "properties": {
+            "schema": {
+              "const": "dsh-native-incident-summary/v1"
+            },
+            "input_boundary": {
+              "const": "current_contract_analogue"
+            },
+            "evidence_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "case": {
+              "const": "archive044"
+            },
+            "scenes": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "prefixItems": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "pending_before",
+                    "preserved_pending",
+                    "no_new_selection",
+                    "persisted_reopen",
+                    "reason"
+                  ],
+                  "properties": {
+                    "name": {
+                      "const": "old_unclarified"
+                    },
+                    "pending_before": {
+                      "type": "integer",
+                      "minimum": 2
+                    },
+                    "preserved_pending": {
+                      "const": true
+                    },
+                    "no_new_selection": {
+                      "const": true
+                    },
+                    "persisted_reopen": {
+                      "const": true
+                    },
+                    "reason": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_]+$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "pending_before",
+                    "preserved_pending",
+                    "no_new_selection",
+                    "persisted_reopen",
+                    "reason"
+                  ],
+                  "properties": {
+                    "name": {
+                      "const": "old_clarified"
+                    },
+                    "pending_before": {
+                      "type": "integer",
+                      "minimum": 2
+                    },
+                    "preserved_pending": {
+                      "const": true
+                    },
+                    "no_new_selection": {
+                      "const": true
+                    },
+                    "persisted_reopen": {
+                      "const": true
+                    },
+                    "reason": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_]+$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "pending_before",
+                    "preserved_pending",
+                    "no_new_selection",
+                    "persisted_reopen",
+                    "reason"
+                  ],
+                  "properties": {
+                    "name": {
+                      "const": "fresh_unclarified"
+                    },
+                    "pending_before": {
+                      "const": 0
+                    },
+                    "preserved_pending": {
+                      "const": true
+                    },
+                    "no_new_selection": {
+                      "const": true
+                    },
+                    "persisted_reopen": {
+                      "const": true
+                    },
+                    "reason": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_]+$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "pending_before",
+                    "preserved_pending",
+                    "no_new_selection",
+                    "persisted_reopen",
+                    "reason"
+                  ],
+                  "properties": {
+                    "name": {
+                      "const": "fresh_clarified"
+                    },
+                    "pending_before": {
+                      "const": 0
+                    },
+                    "preserved_pending": {
+                      "const": true
+                    },
+                    "no_new_selection": {
+                      "const": true
+                    },
+                    "persisted_reopen": {
+                      "const": true
+                    },
+                    "reason": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_]+$"
+                    }
+                  }
+                }
+              ],
+              "items": false
+            }
+          }
+        }
+      ]
     }
   }
 }

@@ -8,10 +8,12 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createProbeAgent, readProbeItem, runtimeRequire, shellTerminalFacts, startProbeTurn, appendProbeToolStep, executeProbeTool, finishProbeToolCall, appendProbeCompaction } from './native_host_probe.mjs'
 import { runNativeReleaseFixture } from './native_release_fixture_v070.mjs'
+import { runGitIncident, runFollowupIncident, assertIncidentSummary } from './native_incident_fixture_v070.mjs'
 
 export const name = 'completion-guard-native-probe-v070'
 export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady']
-const DRIVER_FILES = ['native_host_probe.mjs', 'native_host_probe_v070.mjs', 'native_release_fixture_v070.mjs']
+const DRIVER_FILES = ['native_host_probe.mjs', 'native_host_probe_v070.mjs', 'native_release_fixture_v070.mjs', 'native_incident_fixture_v070.mjs',
+  'native_upgrade_fixture_v131.mjs', '../tests/fixtures/upgrade/legacy-0.13.0-activation.json']
 export function driverDigest() {
   const digest = createHash('sha256').update('dsh.native-probe.v070\n')
   for (const name of DRIVER_FILES) digest.update(name).update('\0')
@@ -25,6 +27,8 @@ const INITIAL_CASES = [
   'v070_short_resume_and_persistence', 'v070_legacy_migration',
   'v070_goal_adoption_current_closure', 'v070_explicit_release_minimum',
   'v070_history_compaction_restart', 'v090_activation_birth_restore_adoption',
+  'v070_archive043_git_chain', 'v070_archive044_pending_followup',
+  'v131_predecessor_activation_restore',
 ]
 const textOf = event => Array.isArray(event?.data?.content)
   ? event.data.content.filter(part => part?.type === 'text').map(part => part.text).join('') : ''
@@ -202,7 +206,7 @@ export function apply(ctx, config) {
       handle = await progress.timed('open_' + label.replaceAll('-', '_'), () => createProbeAgent(ctx, sessionFor(label), config.workRoot, resume))
       ordinal = 0
       assertProbePrecondition('guard_tools_registered',
-        ['context_guard_checkpoint', 'context_guard_observe_test_readiness'].every(name =>
+        ['context_guard_checkpoint', 'context_guard_observe_test_readiness', 'context_guard_observe_git', 'context_guard_action'].every(name =>
           Boolean(handle.agent.ctx.tools.get(name, handle.agent))))
       return handle.agent
     }
@@ -261,7 +265,8 @@ export function apply(ctx, config) {
       const pair = await progress.timed('case_' + id, fn, false)
       assert.equal(pair.positive, true, `${id} positive`)
       assert.equal(pair.negative, true, `${id} negative`)
-      rows.push({ id, status: 'passed', positive: true, negative: true })
+      rows.push({ id, status: 'passed', positive: true, negative: true,
+        ...(pair.incident ? { incident: pair.incident } : {}) })
       progress.record('result_' + id, 'passed')
     }
       if (existsSync(`${config.output}.complete`)) {
@@ -492,6 +497,41 @@ export function apply(ctx, config) {
         // never execute npm publish or contact a public registry.
         await check('v070_explicit_release_minimum', async () => {
           return runNativeReleaseFixture(config)
+        })
+        const incidentApi = {
+          open, root, tool, projection, shellFacts: shellTerminalFacts,
+          reopen: label => open(label, true),
+          boundary: (view, text) => domain.decideTurnBoundary(view, text),
+          shell: (command, workdir) => {
+            const name = process.platform === 'win32' ? 'pwsh' : 'bash'
+            const fields = handle.agent.ctx.tools.get(name, handle.agent)?.parameters?.properties ?? {}
+            return tool(name, { command, workdir,
+              ...(fields.description ? { description: 'Run isolated local Git incident analogue' } : {}) }, false)
+          },
+          legacyRoots: async texts => {
+            // Reconstruct recoverable pre-v6 input; do not claim an original
+            // archived transcript or an old installed runtime was replayed.
+            for (const text of texts) {
+              startProbeTurn(handle.agent.session)
+              handle.agent.session.append('user/message', createUserMessage({
+                content: [{ type: 'text', text }], source: { kind: 'user' },
+              }), { surfaceOp: 'append' })
+            }
+            await flush()
+          },
+        }
+        for (const [id, kind, run] of [
+          ['v070_archive043_git_chain', 'archive043', runGitIncident],
+          ['v070_archive044_pending_followup', 'archive044', runFollowupIncident],
+        ]) await check(id, async () => {
+          const incident = await run(incidentApi, config)
+          assertIncidentSummary(incident, kind)
+          return { positive: true, negative: true, incident }
+        })
+        await check('v131_predecessor_activation_restore', async () => {
+          const { runPredecessorActivationFixture } = await import('./native_upgrade_fixture_v131.mjs')
+          return runPredecessorActivationFixture({ ctx, config, domain, SessionId, createUserMessage, createProbeAgent,
+            timed: progress.timed })
         })
         await check('v070_history_compaction_restart', async () => {
           await open('history')

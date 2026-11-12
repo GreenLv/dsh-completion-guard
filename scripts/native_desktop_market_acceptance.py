@@ -364,6 +364,7 @@ def market_acceptance(api: Any, root: Path, artifact: Path, digest: str,
                   "output": str(output) + ".probe", "profile": "desktop", "profileRoot": str(profile),
                   "hostPackages": graph["packages"], "fixtureTgz": str(fixture_new),
                   "sourceCommit": result["repository"]["commit"], "artifactSha256": digest,
+                  "incidentOutput": str(diagnostics_output) + ".desktop-market.incidents",
                   "desktopArchive": str(archive)}
         probe_patch = temporary / "probe-patch.json"
         probe_patch.write_text(json.dumps(host.native_probe_patch(root / "scripts" / "native_host_probe_v070.mjs", config)), encoding="utf-8")

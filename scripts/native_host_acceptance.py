@@ -37,6 +37,8 @@ PROBE_V070_CASES = {
     "v070_short_resume_and_persistence", "v070_legacy_migration",
     "v070_goal_adoption_current_closure", "v070_explicit_release_minimum",
     "v070_history_compaction_restart", "v090_activation_birth_restore_adoption",
+    "v070_archive043_git_chain", "v070_archive044_pending_followup",
+    "v131_predecessor_activation_restore",
 }
 ACTIVATION_ASSERTIONS = frozenset({
     'birth_source', 'birth_t0', 'birth_bound', 'birth_mode',
@@ -48,6 +50,8 @@ ACTIVATION_ASSERTIONS = frozenset({
 })
 PROBE_V070_DRIVER_FILES = (
     "native_host_probe.mjs", "native_host_probe_v070.mjs", "native_release_fixture_v070.mjs",
+    "native_incident_fixture_v070.mjs", "native_upgrade_fixture_v131.mjs",
+    "../tests/fixtures/upgrade/legacy-0.13.0-activation.json",
 )
 
 
@@ -283,6 +287,35 @@ def package_fixture(root: Path, version: str) -> Path:
     return path
 
 
+def valid_incident_summary(value: Any, kind: str) -> bool:
+    """Consume fixed facts, never private journal text or command arguments."""
+    common = {"schema", "case", "input_boundary", "evidence_sha256"}
+    if (not isinstance(value, dict) or value.get("schema") != "dsh-native-incident-summary/v1"
+            or value.get("case") != kind or value.get("input_boundary") != "current_contract_analogue"
+            or not isinstance(value.get("evidence_sha256"), str)
+            or re.fullmatch(r"[a-f0-9]{64}", value["evidence_sha256"]) is None):
+        return False
+    if kind == "archive043":
+        facts = {"compound_reason": "native_git_command_unsupported", "commit_reason": "git_commit_observed",
+                 "push_reason": "git_push_observed", "ordinary_action_reason": "ordinary_action_migrated_to_host_tools",
+                 "missing_effect_reason": "native_effect_missing", "refs_verified": True, "persisted_reopen": True}
+        return set(value) == common | set(facts) and all(type(value.get(k)) is type(v) and value[k] == v for k, v in facts.items())
+    if kind != "archive044" or set(value) != common | {"scenes"} or not isinstance(value.get("scenes"), list):
+        return False
+    scenes = value["scenes"]
+    names = ["old_unclarified", "old_clarified", "fresh_unclarified", "fresh_clarified"]
+    if len(scenes) != len(names):
+        return False
+    for row, name in zip(scenes, names):
+        if (not isinstance(row, dict) or set(row) != {"name", "pending_before", "preserved_pending", "no_new_selection", "persisted_reopen", "reason"}
+                or row.get("name") != name or type(row.get("pending_before")) is not int
+                or not (row["pending_before"] >= 2 if name.startswith("old_") else row["pending_before"] == 0)
+                or any(row.get(key) is not True for key in ("preserved_pending", "no_new_selection", "persisted_reopen"))
+                or not isinstance(row.get("reason"), str) or re.fullmatch(r"[a-z0-9_]+", row["reason"]) is None):
+            return False
+    return True
+
+
 def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = False,
                    protocol: str = "legacy") -> bool:
     if protocol not in ("legacy", "v070"):
@@ -297,7 +330,12 @@ def validate_probe(value: Any, nonce: str, driver_digest: str, restart: bool = F
             return False
         for row in value.get("cases", []):
             if (not isinstance(row, dict) or not {"id", "status", "positive", "negative"}.issubset(row)
-                    or not set(row).issubset({"id", "status", "positive", "negative", "operation", "error_code", "last_tool", "precondition", "terminal_assertion"})):
+                    or not set(row).issubset({"id", "status", "positive", "negative", "operation", "error_code", "last_tool", "precondition", "terminal_assertion", "incident"})):
+                return False
+            kind = {"v070_archive043_git_chain": "archive043", "v070_archive044_pending_followup": "archive044"}.get(row.get("id"))
+            if kind and row.get("status") == "passed" and not valid_incident_summary(row.get("incident"), kind):
+                return False
+            if not kind and "incident" in row:
                 return False
     return (isinstance(value, dict) and value.get("schema") == schema
             and value.get("nonce") == nonce and value.get("driver_sha256") == driver_digest
@@ -412,10 +450,10 @@ def http_json(origin: str, path: str, method: str = "GET", request_origin: str |
         return exc.code, {}
 
 
-# Nine serial cases open or resume twelve Agents. On Windows, each creation
-# can take over 30s; the first six cases exhausted the former 600s aggregate
-# deadline. Keep a bounded allowance for all twelve opens plus case work.
-INITIAL_V070_TIMEOUT = 1200
+# Original cases: 12 opens/resumes; incident pairs: 12; predecessor restore: 4.
+# Keep each open's 90s bound plus 360s for storage, local Git and cleanup.
+# This is an aggregate budget, not permission to extend a tool timeout.
+INITIAL_V070_TIMEOUT = 28 * 90 + 360
 RESTART_TIMEOUT = 90
 RESTART_V070_TIMEOUT = 180
 
@@ -669,6 +707,8 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
                     diagnostics_output: Path | None = None, t06: bool = False) -> dict[str, Any]:
     if t06 and protocol != "v070":
         raise ValueError("T06 host extension requires the v070 profile")
+    if protocol == "v070" and diagnostics_output is None:
+        raise ValueError("v070 incident evidence requires an external diagnostics output")
     result["gate_profile"] = ("dsh-host-bound/v4-t06" if t06 else "dsh-host-bound/v4") if protocol == "v070" else "host_bound_core"
     result["host_lock_policy"] = "dsh-core/v1"
     result["market_interface"] = {"status": "not_requested" if web_market_version is None else "unavailable",
@@ -785,6 +825,7 @@ def host_acceptance(api, root: Path, artifact: Path, digest: str, runtime_root: 
             config = {"runtimeRoot": str(runtime_root), "workRoot": str(work), "nonce": nonce, "output": str(receipt), "profile": profile,
                       "profileRoot": str(profile_root), "hostPackages": packages, "fixtureTgz": str(fixture_new),
                       "sourceCommit": result["repository"]["commit"], "artifactSha256": digest,
+                      "incidentOutput": str(diagnostics_output) + f".{profile}.incidents",
                       **({"progressOutput": str(progress_path)} if progress_path else {})}
             # JSON is valid YAML. Isolated Headless loads its real base services
             # with the interactive task driver disabled; no model is requested.

@@ -110,8 +110,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 37,
-      "maxItems": 37,
+      "minItems": 43,
+      "maxItems": 43,
       "items": {
         "type": "object",
         "required": [
@@ -162,7 +162,13 @@
               "web_v070_ordinary_test_and_checkpoint",
               "web_v070_root_v6_delivery",
               "web_v070_short_resume_and_persistence",
-              "web_v090_activation_birth_restore_adoption"
+              "web_v090_activation_birth_restore_adoption",
+              "headless_v070_archive043_git_chain",
+              "headless_v070_archive044_pending_followup",
+              "web_v070_archive043_git_chain",
+              "web_v070_archive044_pending_followup",
+              "headless_v131_predecessor_activation_restore",
+              "web_v131_predecessor_activation_restore"
             ]
           },
           "required": {
@@ -732,6 +738,96 @@
             "properties": {
               "id": {
                 "const": "web_v090_activation_birth_restore_adoption"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_archive043_git_chain"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v070_archive044_pending_followup"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_archive043_git_chain"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v070_archive044_pending_followup"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "headless_v131_predecessor_activation_restore"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "web_v131_predecessor_activation_restore"
               }
             }
           },

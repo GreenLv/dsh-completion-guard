@@ -31,6 +31,8 @@ PROBE_V070_CASES = {
     "v070_short_resume_and_persistence", "v070_legacy_migration",
     "v070_goal_adoption_current_closure", "v070_explicit_release_minimum",
     "v070_history_compaction_restart", "v090_activation_birth_restore_adoption",
+    "v070_archive043_git_chain", "v070_archive044_pending_followup",
+    "v131_predecessor_activation_restore",
 }
 WEB_GATES = {
     "web_package_parity", "web_strict_second_noop", "web_host_lock_readback",
