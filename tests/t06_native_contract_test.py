@@ -99,7 +99,8 @@ class T06Contracts(unittest.TestCase):
                     result=desktop.desktop_acceptance(None,root,root/'x','a'*64,root/'x',{'status':'failed'},'0.2.2-rc.1',root/'diag',t06=selected)
                     self.assertEqual(result['gate_profile'],'dsh-desktop-bound/v2-t06' if selected else 'dsh-desktop-bound/v2')
             for selected in (False,True):
-                result=host.host_acceptance(None,root,root/'x','a'*64,root,{'status':'failed'},protocol='v070',t06=selected)
+                result=host.host_acceptance(None,root,root/'x','a'*64,root,{'status':'failed'},protocol='v070',
+                                            diagnostics_output=root/'host-diag',t06=selected)
                 self.assertEqual(result['gate_profile'],'dsh-host-bound/v4-t06' if selected else 'dsh-host-bound/v4')
             with self.assertRaises(ValueError):host.host_acceptance(None,root,root/'x','a'*64,root,{'status':'failed'},protocol='legacy',t06=True)
 

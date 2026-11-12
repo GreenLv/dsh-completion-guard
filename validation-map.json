@@ -416,6 +416,11 @@
         "scripts/native_host_probe.mjs",
         "scripts/native_host_probe_v070.mjs",
         "scripts/native_release_fixture_v070.mjs",
+        "scripts/native_incident_fixture_v070.mjs",
+        "scripts/native_upgrade_fixture_v131.mjs",
+        "tests/fixtures/upgrade/legacy-0.13.0-activation.json",
+        "tests/native-upgrade-fixture.test.mjs",
+        "tests/tools/native-incident-fixture.test.ts",
         "scripts/native_warm_acceptance.py",
         "scripts/native_warm_guard_adapter.mjs",
         "scripts/native_warm_guard_plugin.mjs",
@@ -514,6 +519,7 @@
       "id": "legacy_upgrade_recording",
       "paths": [
         "scripts/record_legacy_upgrade_fixture.mjs",
+        "scripts/record_activation_upgrade_fixture_v131.mjs",
         "tests/fixtures/upgrade/**",
         "tests/domain/v063-legacy-upgrade.test.ts"
       ],
