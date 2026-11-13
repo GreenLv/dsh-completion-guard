@@ -189,9 +189,12 @@ describe('rc.2 working-directory access waterfall', () => {
       accesses += 1
       return next()
     })
-    const target = realpathSync(mkdtempSync(join(tmpdir(), 'rc2-wd-target-')))
+    const requested = mkdtempSync(join(tmpdir(), 'rc2-wd-target-'))
+    // The host returns native realpath identity, including expansion of Windows
+    // 8.3 temp paths; the JS realpath fallback can preserve their short names.
+    const target = realpathSync.native(requested)
     try {
-      const committed = await service.set(agent, target)
+      const committed = await service.set(agent, requested)
       expect(committed).toBe(target)
       expect(accesses).toBe(1)
       expect(service.get(agent.session)).toBe(target)
