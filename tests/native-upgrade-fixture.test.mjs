@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url'
 import * as domain from '../src/domain/index.js'
 import { createContextGuardCommand } from '../src/commands/context-guard.js'
 import { predecessorActivationFixture, runPredecessorActivationFixture } from '../scripts/native_upgrade_fixture_v131.mjs'
+import { inject as nativeProbeInject } from '../scripts/native_host_probe_v070.mjs'
 
 const dirs = []
 afterEach(() => { for (const p of dirs.splice(0)) rmSync(p, { recursive: true, force: true }) })
@@ -32,6 +33,17 @@ it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].m
   const ctx = new Context()
   const plugin = ctx.plugin(persistence.default ?? persistence, { root: join(root, 'logs'), compression })
   await plugin.await()
+  const projections = new WeakMap()
+  const commands = new CommandRuntime(ctx)
+  commands.register(createContextGuardCommand(agent => projections.get(agent), () => {}, () => {}))
+  let probeContext
+  let agentContext
+  expect(nativeProbeInject).toContain('commands')
+  await ctx.plugin({ name: 'upgrade-probe', inject: nativeProbeInject.filter(name => name === 'commands'), apply: child => { probeContext = child } }).await()
+  await ctx.plugin({ name: 'upgrade-agent', apply: child => { agentContext = child.isolate('commands') } }).await()
+  // A separately scoped Agent need not have permission to read this root
+  // service. The native probe declares and uses its own injection instead.
+  expect(() => agentContext.commands).toThrow('without inject')
   const handles = new Map()
   const save = async session => {
     const handle = handles.get(session.id)
@@ -42,7 +54,8 @@ it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].m
   }
   // Real official storage and Session framing exercise the helper's public
   // API chain. Actual Agent/Guard loading remains a separate native gate.
-  const adapter = { sessionPersistence: ctx.sessionPersistence, sessions: { flush: save } }
+  const adapter = { sessionPersistence: ctx.sessionPersistence, sessions: { flush: save },
+    get commands() { return probeContext.commands } }
   const createProbeAgent = async (_ctx, id) => {
     const h = await ctx.sessionPersistence.open(id, 'write')
     handles.set(id, h)
@@ -50,24 +63,33 @@ it.each([...['web', 'headless', 'desktop'].flatMap(profile => ['none', 'zstd'].m
     const binding = domain.readActivationBinding(domain.resolveActivationBindingsRoot(root), domain.sessionBirthIdentity(h.header, h.inheritedEventCount))
     const projection = domain.deriveProjection(session.snapshotEvents(), { activation: binding.mode }, { cwd: root }, true).projection
     if (misreport) projection.enabled = !projection.enabled
-    const commandContext = new Context()
-    const commands = new CommandRuntime(commandContext)
-    commands.register(createContextGuardCommand(() => projection, () => {}, () => {}))
-    return { agent: { session, ctx: { commands } }, dispose: async () => {
-      try { await save(session) } finally { await h.close(); handles.delete(id); await commandContext.fiber.dispose() }
+    const agent = { session, ctx: agentContext }
+    projections.set(agent, projection)
+    return { agent, dispose: async () => {
+      try { await save(session) } finally { await h.close(); handles.delete(id) }
     } }
   }
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = root
+  const stages = []
+  const timed = async (label, fn) => {
+    try { const result = await fn(); stages.push({ label, status: 'passed' }); return result }
+    catch (error) { stages.push({ label, status: 'failed' }); throw error }
+  }
   try {
     const run = () => runPredecessorActivationFixture({ ctx: adapter, config: { profile, workRoot: root }, domain,
-      SessionId, createUserMessage, createProbeAgent })
+      SessionId, createUserMessage, createProbeAgent, timed })
     if (misreport) {
       await expect(run()).rejects.toThrow('effective loaded Guard enablement')
+      expect(stages).toContainEqual({ label: 'upgrade_verify_live_status', status: 'failed' })
       expect(handles.size).toBe(0)
       return
     }
     expect(await run()).toEqual({ positive: true, negative: true })
+    for (const label of ['upgrade_resolve_commands', 'upgrade_live_status', 'upgrade_verify_live_status',
+      'upgrade_verify_restored_binding', 'upgrade_flush_predecessor']) {
+      expect(stages.filter(stage => stage.label === label && stage.status === 'passed')).toHaveLength(4)
+    }
     expect(handles.size).toBe(0)
     for (const row of predecessorActivationFixture().rows.filter(row => row.profile === profile)) {
       const binding = domain.activationBindingPath(domain.resolveActivationBindingsRoot(root), row.header.id)

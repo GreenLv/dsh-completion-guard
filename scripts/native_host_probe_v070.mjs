@@ -11,7 +11,7 @@ import { runNativeReleaseFixture } from './native_release_fixture_v070.mjs'
 import { runGitIncident, runFollowupIncident, assertIncidentSummary } from './native_incident_fixture_v070.mjs'
 
 export const name = 'completion-guard-native-probe-v070'
-export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady']
+export const inject = ['agents', 'sessions', 'sessionPersistence', 'appReady', 'commands']
 const DRIVER_FILES = ['native_host_probe.mjs', 'native_host_probe_v070.mjs', 'native_release_fixture_v070.mjs', 'native_incident_fixture_v070.mjs',
   'native_upgrade_fixture_v131.mjs', '../tests/fixtures/upgrade/legacy-0.13.0-activation.json']
 export function driverDigest() {

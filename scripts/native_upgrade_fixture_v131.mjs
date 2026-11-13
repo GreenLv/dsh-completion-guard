@@ -61,24 +61,35 @@ export async function runPredecessorActivationFixture({ ctx, config, domain, Ses
       const handle = await timed('open_predecessor_upgrade', () => createProbeAgent(ctx, id, config.workRoot, true))
       try {
         const session = handle.agent.session
-        const commands = handle.agent.ctx?.commands ?? ctx.commands
-        assert.equal(typeof commands?.execute, 'function', 'loaded Agent command runtime required')
+        // The probe declares the root command service. The Agent's scoped
+        // context may not expose it, even though execution is Agent-routed.
+        const commands = await timed('upgrade_resolve_commands', () => {
+          const service = ctx.commands
+          assert.equal(typeof service?.execute, 'function', 'loaded Agent command runtime required')
+          return service
+        })
         const settled = await timed('upgrade_live_status', () => commands.execute(handle.agent,
           '/context-guard status', [], AbortSignal.timeout(30_000)))
-        assert.equal(settled?.result?.kind, 'success', 'loaded Guard status required')
-        const live = JSON.parse(settled.result.text)
-        assert.equal(live.enabled, row.mode === 'always', 'effective loaded Guard enablement follows predecessor mode')
-        assert.equal(live.lifecycle, row.mode === 'always' ? 'active' : 'disabled')
-        assert.deepEqual(session.snapshotEvents().slice(0, prefix.length), prefix)
-        assert.deepEqual(domain.sessionBirthIdentity(session.header, session.inheritedEventCount), identity)
-        assert.equal(domain.readActivationBinding(modeRoot, identity).mode, row.mode)
-        assert.equal(domain.resolveSessionActivation(modeRoot, identity,
-          { activation: row.mode === 'always' ? 'opt-in' : 'always', activationSource: 'default' }, 'resume', true).mode, row.mode)
-        assert.equal(domain.resolveSessionActivation(modeRoot, identity,
-          { activation: row.mode === 'always' ? 'opt-in' : 'always', activationSource: 'explicit' }, 'resume', true).reasonCode, 'activation_mode_conflict')
-        assert.equal(readFileSync(path, 'utf8'), row.binding, 'no re-adopt or byte rewrite')
-        assert.equal(await ctx.sessions.flush(session), true)
-        assert.deepEqual(readFileSync(location.path).subarray(0, physical.length), physical, 'old physical log prefix is immutable')
+        await timed('upgrade_verify_live_status', () => {
+          assert.equal(settled?.result?.kind, 'success', 'loaded Guard status required')
+          const live = JSON.parse(settled.result.text)
+          assert.equal(live.enabled, row.mode === 'always', 'effective loaded Guard enablement follows predecessor mode')
+          assert.equal(live.lifecycle, row.mode === 'always' ? 'active' : 'disabled')
+        })
+        await timed('upgrade_verify_restored_binding', () => {
+          assert.deepEqual(session.snapshotEvents().slice(0, prefix.length), prefix)
+          assert.deepEqual(domain.sessionBirthIdentity(session.header, session.inheritedEventCount), identity)
+          assert.equal(domain.readActivationBinding(modeRoot, identity).mode, row.mode)
+          assert.equal(domain.resolveSessionActivation(modeRoot, identity,
+            { activation: row.mode === 'always' ? 'opt-in' : 'always', activationSource: 'default' }, 'resume', true).mode, row.mode)
+          assert.equal(domain.resolveSessionActivation(modeRoot, identity,
+            { activation: row.mode === 'always' ? 'opt-in' : 'always', activationSource: 'explicit' }, 'resume', true).reasonCode, 'activation_mode_conflict')
+          assert.equal(readFileSync(path, 'utf8'), row.binding, 'no re-adopt or byte rewrite')
+        })
+        await timed('upgrade_flush_predecessor', async () => {
+          assert.equal(await ctx.sessions.flush(session), true)
+          assert.deepEqual(readFileSync(location.path).subarray(0, physical.length), physical, 'old physical log prefix is immutable')
+        })
       } finally { await timed('dispose_predecessor_upgrade', () => handle.dispose()) }
     }
     // This pending file is an injected negative-control input, never a real
