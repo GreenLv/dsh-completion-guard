@@ -1,4 +1,5 @@
 import importlib.util
+import ntpath
 import os
 import secrets
 import shutil
@@ -6,7 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -61,6 +62,134 @@ def unlink_directory_link(path):
 
 
 class CopyTests(unittest.TestCase):
+    def test_windows_trusted_root_alias_matrix_preserves_untrusted_suffix(self):
+        normal = PureWindowsPath(r'C:\Users\runneradmin\AppData\Local\Temp\Runtime Fixture Long\source')
+        short = PureWindowsPath(r'C:\Users\RUNNER~1\AppData\Local\Temp\RUNTIM~1\source')
+        targets = [
+            PureWindowsPath(r'C:\Users\runneradmin\AppData\Local\Temp\Runtime Fixture Long\source\node_modules\pkg'),
+            PureWindowsPath(r'C:\Users\RUNNER~1\AppData\Local\Temp\RUNTIM~1\source\node_modules\pkg'),
+            PureWindowsPath(r'C:\Users\RUNNER~1\AppData\Local\Temp\Runtime Fixture Long\source\NODE_M~1\pkg'),
+        ]
+        self.assertEqual(module._windows_relative_to_root(normal, short, targets[0]), ('node_modules', 'pkg'))
+        self.assertEqual(module._windows_relative_to_root(normal, short, targets[1]), ('node_modules', 'pkg'))
+        self.assertEqual(module._windows_relative_to_root(normal, short, targets[2]), ('NODE_M~1', 'pkg'))
+        self.assertEqual(module._windows_relative_to_root(normal, None, targets[0]), ('node_modules', 'pkg'))
+        self.assertIsNone(module._windows_relative_to_root(normal, None, targets[1]))
+        extended = module._native_target(r'\\?\C:\Users\RUNNER~1\AppData\Local\Temp\RUNTIM~1\source\pkg', windows=True)
+        self.assertEqual(module._windows_relative_to_root(normal, short, PureWindowsPath(extended)), ('pkg',))
+        relative = module._windows_relative_to_root(normal, short, targets[0] / '..' / 'outside')
+        self.assertEqual(relative, ('node_modules', 'pkg', '..', 'outside'))
+        for target in (PureWindowsPath(r'C:\Users\RUNNER~1-extra\AppData\Local\Temp\RUNTIM~1\source\pkg'),
+                       PureWindowsPath(r'D:\Users\RUNNER~1\AppData\Local\Temp\RUNTIM~1\source\pkg'),
+                       PureWindowsPath(r'C:\outside\junction\source\pkg')):
+            self.assertIsNone(module._windows_relative_to_root(normal, short, target))
+        wrong_drive = PureWindowsPath(r'D:\Users\RUNNER~1\AppData\Local\Temp\RUNTIM~1\source')
+        self.assertIsNone(module._windows_relative_to_root(normal, wrong_drive, wrong_drive / 'pkg'))
+        unc = module._native_target(r'\\?\UNC\server\share\root\pkg', windows=True)
+        self.assertEqual(module._windows_relative_to_root(PureWindowsPath(r'\\server\share\root'), None,
+                                                         PureWindowsPath(unc)), ('pkg',))
+
+    def test_windows_component_alias_must_resolve_to_the_scanned_entry(self):
+        with directory() as root:
+            long = root / 'Long Component Name'
+            alias = root / 'LONGCO~1'
+            long.write_bytes(b'x')
+            os.link(long, alias)
+            entries = {root: {ntpath.normcase(long.name): long.name}}
+            with patch.object(module, '_windows_entry_name', return_value=long.name):
+                self.assertEqual(module._windows_physical_component(root, alias.name, entries), long.name)
+            alias.unlink()
+            alias.write_bytes(b'different')
+            with patch.object(module, '_windows_entry_name', return_value=long.name):
+                with self.assertRaisesRegex(ValueError, 'directory entry changed'):
+                    module._windows_physical_component(root, alias.name, entries)
+            with patch.object(module, '_windows_entry_name', return_value='unknown'):
+                with self.assertRaisesRegex(ValueError, 'target unavailable'):
+                    module._windows_physical_component(root, alias.name, entries)
+            for bad in ('..\\outside', '*.json', 'C:evil'):
+                with self.assertRaisesRegex(ValueError, 'target unavailable'):
+                    module._windows_physical_component(root, bad, entries)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows 8.3 and junction acceptance')
+    def test_windows_actual_short_long_mixed_and_extended_junctions(self):
+        with directory() as root:
+            parent = root / 'Runtime Fixture Directory With Long Name'
+            parent.mkdir()
+            src = make_source(parent)
+            target = src / 'node_modules' / 'Package Directory With Long Name' / 'Nested Module Directory'
+            target.mkdir(parents=True)
+            (target / 'index.js').write_text('module.exports=7', encoding='utf8')
+            canonical_src = src.resolve(strict=True)
+            canonical_target = target.resolve(strict=True)
+            short_root = module._windows_short_root(canonical_src)
+            short_target = module._windows_short_root(canonical_target)
+            if short_root is None or short_target is None:
+                self.skipTest('Windows short-name API unavailable')
+            normal_root = PureWindowsPath(str(canonical_src))
+            normal_target = PureWindowsPath(str(canonical_target))
+            root_size = len(normal_root.parts)
+            if (ntpath.normcase(str(short_root)) == ntpath.normcase(str(normal_root)) or
+                    short_target.parts[root_size:] == normal_target.parts[root_size:]):
+                self.skipTest('8.3 names unavailable on this volume')
+            mixed_root = PureWindowsPath(*(short if i % 2 else long
+                                           for i, (long, short) in enumerate(zip(normal_root.parts, short_root.parts))))
+            normal_suffix = normal_target.parts[root_size:]
+            short_suffix = short_target.parts[root_size:]
+            link = src / 'node_modules' / 'matrix-junction'
+            index = 0
+            for source in (canonical_src, Path(str(short_root))):
+                for prefix in (normal_root, short_root, mixed_root):
+                    for suffix in (normal_suffix, short_suffix):
+                        with self.subTest(source=str(source), prefix=str(prefix), suffix=suffix):
+                            target_spelling = PureWindowsPath(*prefix.parts, *suffix)
+                            directory_link(self, Path(str(target_spelling)), link)
+                            raw = module._native_target(os.readlink(link))
+                            self.assertEqual(ntpath.normcase(raw), ntpath.normcase(str(target_spelling)))
+                            output = root / ('matrix-copy-' + str(index))
+                            index += 1
+                            result = module.copy_runtime(source, output)
+                            self.assertEqual(result['relocated_links'], 1)
+                            self.assertEqual((output / 'node_modules' / 'matrix-junction').resolve(strict=True),
+                                             output / 'node_modules' / 'Package Directory With Long Name' / 'Nested Module Directory')
+                            shutil.rmtree(output)
+                            unlink_directory_link(link)
+            extended = Path('\\\\?\\' + str(normal_target))
+            directory_link(self, extended, link)
+            output = root / 'extended-copy'
+            self.assertEqual(module.copy_runtime(canonical_src, output)['relocated_links'], 1)
+            self.assertEqual((output / 'node_modules' / 'matrix-junction').resolve(strict=True),
+                             output / 'node_modules' / 'Package Directory With Long Name' / 'Nested Module Directory')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory-entry no-follow acceptance')
+    def test_windows_find_entry_keeps_internal_and_external_junction_identity(self):
+        import ctypes
+        from ctypes import wintypes
+        with directory() as root:
+            src = make_source(root)
+            node = src / 'node_modules'
+            internal = node / 'inside-target'
+            external = root / 'outside-target'
+            internal.mkdir(); external.mkdir()
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            get_short = kernel.GetShortPathNameW
+            get_short.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+            get_short.restype = wintypes.DWORD
+            for name, target in [('Long Internal Junction Name', internal),
+                                 ('Long External Junction Name', external)]:
+                link = node / name
+                directory_link(self, target, link)
+                buffer = ctypes.create_unicode_buffer(32768)
+                if not get_short(str(link), buffer, len(buffer)):
+                    self.skipTest('Windows short-name API unavailable')
+                alias = Path(module._native_target(buffer.value))
+                if ntpath.normcase(alias.name) == ntpath.normcase(name):
+                    self.skipTest('8.3 names unavailable on this volume')
+                self.assertNotEqual(ntpath.normcase(alias.name), ntpath.normcase(target.name))
+                self.assertEqual(module._windows_entry_name(alias), name)
+                self.assertTrue(module.is_link(alias))
+                entries = {node: {ntpath.normcase(name): name}}
+                self.assertEqual(module._windows_physical_component(node, alias.name, entries), name)
+
     def test_copies_bytes_and_keeps_source_independent(self):
         with directory() as root:
             src = make_source(root)
@@ -218,6 +347,24 @@ class CopyTests(unittest.TestCase):
                 module.copy_runtime(src, root / "copy2")
             self.assertTrue((root / "copy1").exists())
             self.assertTrue((root / "copy2").exists())
+
+    def test_rejects_internal_to_external_to_internal_link_chain(self):
+        with directory() as root:
+            src = make_source(root)
+            node = src / 'node_modules'
+            target = node / 'target'
+            target.mkdir()
+            outside = root / 'outside'
+            outside.mkdir()
+            directory_link(self, target, outside / 'return')
+            directory_link(self, outside / 'return', node / 'z-indirect')
+            directory_link(self, node / 'z-indirect', node / 'a-outer')
+            if os.name == 'nt':
+                raw = module._native_target(os.readlink(node / 'a-outer'))
+                self.assertEqual(ntpath.normcase(PureWindowsPath(raw).name), ntpath.normcase('z-indirect'))
+            with self.assertRaisesRegex(ValueError, 'escapes source'):
+                module.copy_runtime(src, root / 'copy')
+            self.assertTrue((root / 'copy').is_dir())
 
     def test_rejects_directory_cycles_and_dangling_links(self):
         with directory() as root:

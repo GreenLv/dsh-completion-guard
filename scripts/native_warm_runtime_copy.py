@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ntpath
 import os
 import shutil
 import stat
 import subprocess
 import tempfile
 from collections import deque
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 BLOCK = 1024 * 1024
 SENSITIVE = {".npmrc", ".env", "auth.json", "credentials.json", "id_rsa", "id_ed25519"}
@@ -44,9 +45,11 @@ def sensitive(name: str) -> bool:
     return lowered in SENSITIVE or lowered.startswith(".env.")
 
 
-def _native_target(raw: str) -> str:
+def _native_target(raw: str, *, windows: bool | None = None) -> str:
     # readlink on Windows junctions can return a Windows extended-length path.
-    if os.name == "nt":
+    if windows is None:
+        windows = os.name == 'nt'
+    if windows:
         if raw.startswith("\\\\?\\UNC\\"):
             return "\\\\" + raw[8:]
         if raw.startswith("\\\\?\\"):
@@ -54,7 +57,100 @@ def _native_target(raw: str) -> str:
     return raw
 
 
-def _resolve_internal(root: Path, path: Path, steps: list[int], max_steps: int, max_hops: int) -> Path:
+def _windows_relative_to_root(root: PureWindowsPath, short_root: PureWindowsPath | None,
+                              target: PureWindowsPath) -> tuple[str, ...] | None:
+    """Match only known names for each component of the trusted root."""
+    if not root.is_absolute() or not target.is_absolute():
+        return None
+    normal, candidate = root.parts, target.parts
+    short = short_root.parts if short_root is not None else normal
+    if ((short_root is not None and not short_root.is_absolute()) or
+            len(short) != len(normal) or len(candidate) < len(normal) or
+            ntpath.normcase(short[0]) != ntpath.normcase(normal[0]) or
+            any(part in {'.', '..'} for part in short) or
+            any(ntpath.normcase(actual) not in {ntpath.normcase(long), ntpath.normcase(alias)}
+                for long, alias, actual in zip(normal, short, candidate))):
+        return None
+    return candidate[len(normal):]
+
+
+def _windows_short_root(root: Path) -> PureWindowsPath | None:
+    """Get aliases of the already-verified root, never of an untrusted target."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    get_short = kernel.GetShortPathNameW
+    get_short.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+    get_short.restype = wintypes.DWORD
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = get_short(str(root), buffer, len(buffer))
+    if length == 0:
+        # No trusted alternate spelling: retain exact long-root access only.
+        return None
+    if length >= len(buffer):
+        raise ValueError('trusted root alias exceeds path bound')
+    short = Path(_native_target(buffer.value))
+    normal = PureWindowsPath(_native_target(str(root)))
+    alias = PureWindowsPath(_native_target(str(short)))
+    if (not short.is_absolute() or len(alias.parts) != len(normal.parts) or
+            alias.anchor.lower() != normal.anchor.lower() or short.resolve(strict=True) != root):
+        raise ValueError('trusted root alias does not identify source')
+    return alias
+
+
+def _windows_entry_name(child: Path) -> str:
+    """Return the one directory entry's long name, without following a link."""
+    import ctypes
+    from ctypes import wintypes
+    class FindData(ctypes.Structure):
+        _fields_ = [('attributes', wintypes.DWORD), ('created', wintypes.FILETIME),
+                    ('accessed', wintypes.FILETIME), ('written', wintypes.FILETIME),
+                    ('size_high', wintypes.DWORD), ('size_low', wintypes.DWORD),
+                    ('reserved0', wintypes.DWORD), ('reserved1', wintypes.DWORD),
+                    ('filename', wintypes.WCHAR * 260), ('alternate', wintypes.WCHAR * 14)]
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    find = kernel.FindFirstFileW
+    find.argtypes = (wintypes.LPCWSTR, ctypes.POINTER(FindData))
+    find.restype = wintypes.HANDLE
+    close = kernel.FindClose
+    close.argtypes = (wintypes.HANDLE,)
+    close.restype = wintypes.BOOL
+    text = str(child)
+    if not text.startswith('\\\\?\\'):
+        text = ('\\\\?\\UNC\\' + text[2:]) if text.startswith('\\\\') else ('\\\\?\\' + text)
+    data = FindData()
+    handle = find(text, ctypes.byref(data))
+    if handle == ctypes.c_void_p(-1).value:
+        raise ValueError('runtime link target unavailable')
+    try:
+        return data.filename
+    finally:
+        close(handle)
+
+
+def _windows_physical_component(current: Path, part: str, entries: dict[Path, dict[str, str]]) -> str:
+    """Map a child alias only within a previously scanned physical directory."""
+    names = entries.get(current)
+    if names is None or not part or any(ch in part for ch in ':*?\\/'):
+        raise ValueError('runtime link target unavailable')
+    known = names.get(ntpath.normcase(part))
+    if known is not None:
+        return known
+    actual = _windows_entry_name(current / part)
+    known = names.get(ntpath.normcase(actual))
+    if known is None:
+        raise ValueError('runtime link target unavailable')
+    try:
+        if identity((current / part).lstat()) != identity((current / known).lstat()):
+            raise ValueError('runtime directory entry changed')
+    except OSError as error:
+        raise ValueError('runtime link target unavailable') from error
+    return known
+
+
+def _resolve_internal(root: Path, path: Path, steps: list[int], max_steps: int, max_hops: int,
+                      short_root: PureWindowsPath | None = None,
+                      windows_entries: dict[Path, dict[str, str]] | None = None) -> Path:
     """Resolve link components without entering an external path, with bounded work."""
     if not inside(root, path):
         raise ValueError("runtime link escapes source")
@@ -74,6 +170,12 @@ def _resolve_internal(root: Path, path: Path, steps: list[int], max_steps: int, 
             continue
         if sensitive(part):
             raise ValueError("sensitive runtime file name refused")
+        if os.name == 'nt':
+            if windows_entries is None:
+                raise ValueError('runtime directory inventory unavailable')
+            part = _windows_physical_component(current, part, windows_entries)
+            if sensitive(part):
+                raise ValueError("sensitive runtime file name refused")
         child = current / part
         try:
             info = child.lstat()
@@ -87,9 +189,17 @@ def _resolve_internal(root: Path, path: Path, steps: list[int], max_steps: int, 
             raw = _native_target(os.readlink(child))
             target = Path(raw)
             if target.is_absolute():
-                if not inside(root, target):
-                    raise ValueError("runtime link escapes source")
-                pending = deque((*target.relative_to(root).parts, *pending))
+                if os.name == 'nt':
+                    normal = PureWindowsPath(_native_target(str(root)))
+                    target_path = PureWindowsPath(_native_target(str(target)))
+                    relative = _windows_relative_to_root(normal, short_root, target_path)
+                    if relative is None:
+                        raise ValueError("runtime link escapes source")
+                else:
+                    if not inside(root, target):
+                        raise ValueError("runtime link escapes source")
+                    relative = target.relative_to(root).parts
+                pending = deque((*relative, *pending))
                 current = root
             else:
                 # Keep '..' until preceding link components have resolved;
@@ -128,8 +238,10 @@ def _check_no_directory_cycles(graph: dict[Path, list[Path]]) -> None:
                 stack.append((child, iter(graph[child])))
 
 
-def _checked_link_target(root: Path, link: Path, steps: list[int], max_steps: int, max_hops: int) -> Path:
-    resolved = _resolve_internal(root, link, steps, max_steps, max_hops)
+def _checked_link_target(root: Path, link: Path, steps: list[int], max_steps: int, max_hops: int,
+                         short_root: PureWindowsPath | None = None,
+                         windows_entries: dict[Path, dict[str, str]] | None = None) -> Path:
+    resolved = _resolve_internal(root, link, steps, max_steps, max_hops, short_root, windows_entries)
     try:
         observed = link.resolve(strict=True)
     except (OSError, RuntimeError) as error:
@@ -320,12 +432,25 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
             else:
                 raise ValueError("unsupported runtime entry")
 
+    short_root = _windows_short_root(src) if os.name == 'nt' and raw_links else None
+    windows_entries: dict[Path, dict[str, str]] | None = None
+    if os.name == 'nt':
+        windows_entries = {}
+        for directory, (_, children) in directories.items():
+            names: dict[str, str] = {}
+            for child in children:
+                key = ntpath.normcase(child)
+                if key in names and names[key] != child:
+                    raise ValueError('ambiguous runtime directory entries')
+                names[key] = child
+            windows_entries[directory] = names
     steps = [0]
     relocated: dict[Path, Path] = {}
     for link, (expected, raw) in sorted(raw_links.items()):
         if identity(link.lstat()) != expected or not is_link(link) or os.readlink(link) != raw:
             raise ValueError("source link changed during copy")
-        resolved = _checked_link_target(src, link, steps, max_resolution_steps, max_link_hops)
+        resolved = _checked_link_target(src, link, steps, max_resolution_steps, max_link_hops,
+                                        short_root, windows_entries)
         if resolved not in directories and resolved not in planned_files:
             raise ValueError("runtime link target unavailable")
         if resolved in directories:
@@ -365,7 +490,8 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
         expected, raw = raw_links[link]
         if identity(link.lstat()) != expected or not is_link(link) or os.readlink(link) != raw:
             raise ValueError("source link changed during copy")
-        if _checked_link_target(src, link, steps, max_resolution_steps, max_link_hops) != resolved:
+        if _checked_link_target(src, link, steps, max_resolution_steps, max_link_hops,
+                                short_root, windows_entries) != resolved:
             raise ValueError("source link changed during copy")
         if (not inside(dst, mapped) or is_link(mapped) or mapped.resolve(strict=True) != mapped or
                 out.parent.resolve(strict=True) != out.parent or not inside(dst, out.parent)):
@@ -401,7 +527,8 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
         out, mapped = dst / link.relative_to(src), dst / resolved.relative_to(src)
         if identity(link.lstat()) != expected or not is_link(link) or os.readlink(link) != raw:
             raise ValueError("source link changed during copy")
-        if _checked_link_target(src, link, steps, max_resolution_steps, max_link_hops) != resolved:
+        if _checked_link_target(src, link, steps, max_resolution_steps, max_link_hops,
+                                short_root, windows_entries) != resolved:
             raise ValueError("source link changed during copy")
         if not is_link(out) or out.resolve(strict=True) != mapped or not inside(dst, mapped):
             raise ValueError("relocated link escapes fixture")
