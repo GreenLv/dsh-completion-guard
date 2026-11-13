@@ -178,7 +178,7 @@ def execute(args, driver_sha: str, progress: Path) -> dict:
             config={"fixtureRoot":str(temporary),"runtimeRoot":str(copied),"profileRoot":str(profile_root),"workRoot":str(work),"nonce":nonce,"profile":profile,
                     "sourceCommit":args.source_commit,"artifactSha256":args.artifact_sha256,"driverSha256":driver_sha,"hostLockDigest":lock,
                     "releaseTgz":str(release),"packageName":FIXTURE_NAME,"packageVersion":FIXTURE_VERSION,"fixtureGitHead":FIXTURE_HEAD,"integrity":integrity,
-                    "importer":str(copied/"node_modules"/"@deepseek-ai"/"dsh-session"/"lib"/"index.js"),"output":str(receipt),"progress":str(progress)}
+                    "output":str(receipt),"progress":str(progress)}
             patches=[{"id":"context-guard","disabled":True},{"insert":[{"id":"warm-guard-wrapper","name":wrapper.as_uri(),"config":guard}]},host.native_probe_patch(probe,config),{"id":"goal-round-driver","disabled":True}]
             profile_patches,profile_args=host.native_probe_profile_options(profile);patches.extend(profile_patches)
             overlay.write_text(json.dumps(patches),encoding="utf-8",newline="\n")

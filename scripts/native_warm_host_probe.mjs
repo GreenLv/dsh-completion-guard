@@ -1,23 +1,56 @@
 /** Versioned no-model host probe. Loaded by an isolated real DSH host only. */
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
-import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { appendFileSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createProbeAgent, runtimeRequire, startProbeTurn, appendProbeToolStep, executeProbeTool, finishProbeToolCall } from './native_host_probe.mjs'
+import { createProbeAgent, startProbeTurn, appendProbeToolStep, executeProbeTool, finishProbeToolCall } from './native_host_probe.mjs'
 import { warmGuardState } from './native_warm_guard_plugin.mjs'
 import { runWarmScope } from './native_warm_scope_core.mjs'
 export const name='completion-guard-native-warm-scope'
 export const inject=['agents','sessions','sessionPersistence','appReady']
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
+
+function inside(root, path) {
+  const rel=relative(root,path)
+  return rel!=='' && rel!=='..' && !rel.startsWith('..'+sep) && !isAbsolute(rel)
+}
+
+/** Resolve the real installed SDK route, never a guessed top-level pnpm path. */
+export function resolveWarmRuntime({fixtureRoot,runtimeRoot}) {
+  if(typeof fixtureRoot!=='string' || typeof runtimeRoot!=='string' || !isAbsolute(fixtureRoot) || !isAbsolute(runtimeRoot)) throw Object.assign(new Error('invalid fixture roots'),{code:'INPUT_INVALID'})
+  const fixture=realpathSync(fixtureRoot), runtime=realpathSync(runtimeRoot)
+  if(!inside(fixture,runtime)) throw Object.assign(new Error('runtime outside fixture'),{code:'RUNTIME_ESCAPE'})
+  // Identical anchor semantics to runtimeRequire: resolve DSH's own package
+  // manifest first, then use Node's installation-owned require resolution.
+  const anchor=realpathSync(join(runtime,'node_modules','@deepseek-ai','dsh','package.json'))
+  if(!inside(runtime,anchor)) throw Object.assign(new Error('DSH anchor outside runtime'),{code:'ANCHOR_ESCAPE'})
+  const require=createRequire(anchor)
+  const importer=realpathSync(require.resolve('@deepseek-ai/dsh-session'))
+  const dependency=realpathSync(require.resolve('@deepseek-ai/dsh-llm'))
+  if(!inside(runtime,importer) || !inside(runtime,dependency)) throw Object.assign(new Error('SDK target outside runtime'),{code:'SDK_ESCAPE'})
+  if(!statSync(importer).isFile() || !statSync(dependency).isFile()) throw Object.assign(new Error('SDK entry is not a file'),{code:'SDK_INVALID'})
+  let scopeExists=true
+  try { lstatSync(join(dirname(importer),'package.json')) } catch(error) {
+    if(error?.code==='ENOENT') scopeExists=false
+    else throw error
+  }
+  if(scopeExists) throw Object.assign(new Error('scope already exists'),{code:'SCOPE_EXISTS'})
+  const fromImporter=realpathSync(createRequire(importer).resolve('@deepseek-ai/dsh-llm'))
+  if(!inside(runtime,fromImporter)) throw Object.assign(new Error('dependency outside runtime'),{code:'SDK_ESCAPE'})
+  if(fromImporter!==dependency) throw Object.assign(new Error('SDK route differs from DSH anchor'),{code:'SDK_ROUTE_MISMATCH'})
+  return {importer,dependency}
+}
+
 export function apply(ctx,config) {
   ctx.effect(()=>ctx.appReady.onReady(async()=>{
     const handles=[]; let current='initialize'; let result
     try {
       const state=warmGuardState(config.nonce); assert.ok(state,'wrapper is not loaded')
-      const require=runtimeRequire(config.runtimeRoot)
-      const {SessionId}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-session')).href)
-      const {createUserMessage,createAssistantMessage}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href)
+      const sdk=resolveWarmRuntime(config)
+      const {SessionId}=await import(pathToFileURL(sdk.importer).href)
+      const {createUserMessage,createAssistantMessage}=await import(pathToFileURL(sdk.dependency).href)
       const domain=await import(pathToFileURL(join(config.profileRoot,'node_modules','dsh-completion-guard','dist','domain','index.js')).href)
       const digest=sha(readFileSync(config.releaseTgz)); let ordinal=0
       const expectedSri='sha512-'+createHash('sha512').update(readFileSync(config.releaseTgz)).digest('base64')
@@ -85,7 +118,7 @@ export function apply(ctx,config) {
           ticketId:t.id,auditBefore,auditAfter,lockStatus:lock.status,lockReason:lock.reasonCode??null}
       }
       const stages=[]
-      result=await runWarmScope({fixtureRoot:config.fixtureRoot,importer:config.importer,dependency:'@deepseek-ai/dsh-llm',
+      result=await runWarmScope({fixtureRoot:config.fixtureRoot,importer:sdk.importer,dependency:'@deepseek-ai/dsh-llm',
         prepare:makeTicket,perform,onStage:row=>{stages.push(row);appendFileSync(config.progress,JSON.stringify({nonce:config.nonce,profile:config.profile,...row})+'\n')}})
       if(result.status!=='passed'){current='scope_run';throw Object.assign(new Error('scope run failed'),{scopeResult:result})}
       current='dispose_agents'

@@ -25,13 +25,17 @@ class SchemaTests(unittest.TestCase):
         schema=json.loads((ROOT/'schemas'/'native-warm-scope-v1.schema.json').read_text(encoding='utf8'))
         jsonschema.Draft202012Validator.check_schema(schema)
         expected={'source_commit':'a'*40,'artifact_sha256':'b'*64,'driver_sha256':'c'*64}
-        result={'schema':'dsh-native-warm-scope/v1','status':'passed',**expected,'platform':'windows','host':{'version':'0.2.2-rc.1','node_version':'v24.18.0','runtime_sha256':'e'*64,'node_sha256':'f'*64},'profiles':{'web':profile(101),'headless':profile(201)},'cleanup':{'status':'passed','remaining_ids':[]}}
+        result={'schema':'dsh-native-warm-scope/v1','status':'passed',**expected,'platform':'windows','host':{'version':'0.2.2-rc.2','node_version':'v24.18.0','runtime_sha256':'e'*64,'node_sha256':'f'*64},'profiles':{'web':profile(101),'headless':profile(201)},'cleanup':{'status':'passed','remaining_ids':[]}}
         jsonschema.validate(result,schema);self.assertTrue(runner.validate_result(result,expected))
-        for version in ('0.2.0-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.2'):
+        for version in ('0.2.0-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0', '0.2.2-rc.1', '0.2.2-rc.3', '0.2.2'):
             result['host']['version']=version
             with self.assertRaises(jsonschema.ValidationError):jsonschema.validate(result,schema)
             self.assertFalse(runner.validate_result(result,expected))
-        result['host']['version']='0.2.2-rc.1'
+        result['host']['version']='0.2.2-rc.2'
+        result['host']['node_version']=''
+        with self.assertRaises(jsonschema.ValidationError):jsonschema.validate(result,schema)
+        self.assertFalse(runner.validate_result(result,expected))
+        result['host']['node_version']='v24.18.0'
         result['profiles']['web']['steps'].pop()
         with self.assertRaises(jsonschema.ValidationError):jsonschema.validate(result,schema)
         self.assertFalse(runner.validate_result(result,expected))
