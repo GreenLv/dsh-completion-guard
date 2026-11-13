@@ -725,11 +725,11 @@ def remove_owned_host_temporary(root: Path, unsafe: bool = False) -> None:
                         if (not kind(structural.st_mode) or getattr(structural, 'st_file_attributes', 0)
                                 & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0)):
                             raise ValueError('invalid Git directory structure')
-                    head = (path / 'HEAD').read_text(encoding='utf8').strip()
+                    head = (path / 'HEAD').read_text(encoding='utf-8').strip()
                     if not re.fullmatch(r'(?:ref: refs/[^\r\n]+|[0-9a-fA-F]{40,64})', head):
                         raise ValueError('invalid Git HEAD')
                     git_config = configparser.RawConfigParser()
-                    with (path / 'config').open(encoding='utf8') as stream:
+                    with (path / 'config').open(encoding='utf-8') as stream:
                         git_config.read_file(stream)
                     if git_config.getboolean('core', 'bare') != (path.name == 'remote.git'):
                         raise ValueError('wrong Git directory type')

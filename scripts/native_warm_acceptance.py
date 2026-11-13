@@ -84,7 +84,7 @@ def safe_remove_fixture(path: Path) -> None:
                     if target!=resolved and not target.is_relative_to(resolved):raise ValueError("fixture link escapes root")
                 elif entry.is_dir(follow_symlinks=False):stack.append(child)
     if path.resolve(strict=True)!=resolved:raise ValueError("fixture identity changed")
-    shutil.rmtree(resolved)
+    host.remove_owned_host_temporary(resolved)
 
 def validate_composition(text: str, wrapper: Path) -> str:
     # rc.5 patches cannot change an entry name. Keep the original disabled,
