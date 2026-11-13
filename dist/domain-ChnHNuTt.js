@@ -35426,6 +35426,8 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const root = rootBySeq.get(sourceSeq(item) ?? -1);
 		if (!root) continue;
 		const itemRevision = revisionFor(root.seq);
+		const supersession = supersessionOf(item);
+		const withinRootDuty = (resultSeq) => item.status !== "superseded" || supersession !== void 0 && resultSeq < supersession.seq;
 		const info = rootInfo(root);
 		const text = info.text, digest$1 = info.digest;
 		const span = (start, end) => ({
@@ -35450,7 +35452,8 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 				const target$1 = targetOf(related);
 				if (!target$1) continue;
 				const requirementId = `${item.id}:observer:${index$1 + 1}`;
-				const fact = observerMethodEvidence(projection, events, item, index$1);
+				const observed = observerMethodEvidence(projection, events, item, index$1);
+				const fact = observed && withinRootDuty(observed.toolResultSeq) ? observed : void 0;
 				const pair = fact ? sourceByCall.get(fact.callId) : void 0;
 				const subjectKind$1 = tool === "context_guard_observe_file" ? "filesystem" : "opaque";
 				const relatedSpan = related.spans?.[0];
@@ -35624,11 +35627,11 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const selectedReadiness = needsReadiness && !guarded ? evidenceReadyFor(item.id).find((fact) => {
 			const pair = sourceByCall.get(fact.callId);
 			const assessmentEffect = item.semanticAction !== "verify" || !fact.readinessEffectCallId && fact.readinessInputSha256 === fact.readinessManifestSha256 || evidenceByCall(fact.readinessEffectCallId ?? "").some((effect) => effect.toolResultSeq < fact.toolResultSeq && effect.epoch === fact.epoch && effect.outcome === "success" && effect.parseStatus === "supported" && effect.semanticAction === "modify" && effect.evidenceRole === "effect" && effect.operations?.some((operation) => operation.op === "modify" && operation.path === fact.readinessSelectedPath));
-			return fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect && fact.toolName === "context_guard_observe_test_readiness" && fact.outcome === "success" && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === "string" && fact.subjects.includes(item.requestedTarget.scope);
+			return withinRootDuty(fact.toolResultSeq) && fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect && fact.toolName === "context_guard_observe_test_readiness" && fact.outcome === "success" && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === "string" && fact.subjects.includes(item.requestedTarget.scope);
 		}) : void 0;
 		const namedTest = item.semanticAction === "test" ? /\b((?:npm|pnpm))\s+test\b/iu.exec(item.normalizedText) : null;
 		const isDirectTestFact = (fact) => {
-			if (!namedTest || guarded) return false;
+			if (!namedTest || guarded || !withinRootDuty(fact.toolResultSeq)) return false;
 			if (fact.semanticAction !== "test" || fact.evidenceRole !== "effect" || fact.parseStatus !== "supported" || fact.epoch !== projection.epoch || !["bash", "pwsh"].includes(fact.toolName) || !projection.auditedForegroundRenderers?.includes(fact.toolName) || fact.processFacts?.operationAttribution !== "single_operation") return false;
 			const pair = sourceByCall.get(fact.callId);
 			if (!pair || pair.call.seq <= root.seq || pair.result.seq !== fact.toolResultSeq || persistedToolResultStatus(pair.result.data, fact.callId) === "unknown") return false;
@@ -35691,7 +35694,6 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 			operation_id: null,
 			fact_ids: []
 		});
-		const supersession = supersessionOf(item);
 		const relation = item.rootDependency;
 		const parent = relation ? projection.items.get(relation.parentItemId) : void 0;
 		const parentSpan = parent?.spans?.[0];
@@ -35799,7 +35801,7 @@ function sessionCoreSnapshot(events, projection, displayOrigins) {
 		const evidenceCandidates = guarded ? [] : candidatesForSubjects([target, needsReadiness && typeof item.requestedTarget?.scope === "string" ? item.requestedTarget.scope : void 0]);
 		for (const evidence of evidenceCandidates) {
 			const inTestScope = needsReadiness && typeof item.requestedTarget?.scope === "string" && evidence.subjects.includes(item.requestedTarget.scope);
-			if (evidence.epoch !== projection.epoch || !evidence.subjects.includes(target) && !inTestScope || evidence.toolResultSeq <= root.seq || attached.has(evidence.id) && !fileReadback) continue;
+			if (!withinRootDuty(evidence.toolResultSeq) || evidence.epoch !== projection.epoch || !evidence.subjects.includes(target) && !inTestScope || evidence.toolResultSeq <= root.seq || attached.has(evidence.id) && !fileReadback) continue;
 			if (kind === "constraint" && (!forbiddenFile || evidence.evidenceRole !== "effect" || ![
 				"write",
 				"write_file",

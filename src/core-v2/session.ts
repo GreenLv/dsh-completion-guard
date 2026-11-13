@@ -416,6 +416,11 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     const root = rootBySeq.get(sourceSeq(item) ?? -1)
     if (!root) continue
     const itemRevision = revisionFor(root.seq)
+    const supersession = supersessionOf(item)
+    // Preserve the historical row for controls, but do not let it claim a
+    // Host exchange completed after its own sourced successor took over.
+    const withinRootDuty = (resultSeq: number): boolean => item.status !== 'superseded'
+      || (supersession !== undefined && resultSeq < supersession.seq)
     const info = rootInfo(root)
     const text = info.text, digest = info.digest
     const span = (start: number, end: number) => ({ source_id: `root:${root.seq}`, start, end, sha256: digest })
@@ -434,7 +439,8 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         const target = targetOf(related)
         if (!target) continue
         const requirementId = `${item.id}:observer:${index + 1}`
-        const fact = observerMethodEvidence(projection, events, item, index)
+        const observed = observerMethodEvidence(projection, events, item, index)
+        const fact = observed && withinRootDuty(observed.toolResultSeq) ? observed : undefined
         const pair = fact ? sourceByCall.get(fact.callId) : undefined
         const subjectKind = tool === 'context_guard_observe_file' ? 'filesystem' : 'opaque'
         const relatedSpan = related.spans?.[0]
@@ -566,7 +572,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
         && effect.epoch === fact.epoch && effect.outcome === 'success' && effect.parseStatus === 'supported'
         && effect.semanticAction === 'modify' && effect.evidenceRole === 'effect'
         && effect.operations?.some((operation) => operation.op === 'modify' && operation.path === fact.readinessSelectedPath))
-      return fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect
+      return withinRootDuty(fact.toolResultSeq) && fact.readinessForItemId === item.id && fact.readinessPredicate === readinessPredicate && assessmentEffect
         && fact.toolName === 'context_guard_observe_test_readiness' && fact.outcome === 'success'
         && fact.epoch === projection.epoch && pair?.result.seq === fact.toolResultSeq
         && pair.call.seq > root.seq && typeof item.requestedTarget?.scope === 'string'
@@ -578,7 +584,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     // renderer byte identity and a matched terminal result.
     const namedTest = item.semanticAction === 'test' ? /\b((?:npm|pnpm))\s+test\b/iu.exec(item.normalizedText) : null
     const isDirectTestFact = (fact: typeof projection.evidence extends Map<string, infer T> ? T : never): boolean => {
-      if (!namedTest || guarded) return false
+      if (!namedTest || guarded || !withinRootDuty(fact.toolResultSeq)) return false
       if (fact.semanticAction !== 'test' || fact.evidenceRole !== 'effect' || fact.parseStatus !== 'supported'
         || fact.epoch !== projection.epoch || !['bash','pwsh'].includes(fact.toolName)
         || !projection.auditedForegroundRenderers?.includes(fact.toolName as 'bash' | 'pwsh')
@@ -647,7 +653,6 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     if (conditionId) conditions.push({ id: conditionId, requirement_id: item.id, source: requirementSource,
       kind: item.waitAuthorization || /(?:确认|审批|批准|许可|approval|confirmation|permission)/iu.test(item.condition ?? '') ? 'user_input' : 'predicate',
       status: 'pending', operation_id: null, fact_ids: [] })
-    const supersession = supersessionOf(item)
     const relation = item.rootDependency
     const parent = relation ? projection.items.get(relation.parentItemId) : undefined
     const parentSpan = parent?.spans?.[0]
@@ -751,7 +756,7 @@ export function sessionCoreSnapshot(events: DerivedEnvelope[], projection: Guard
     for (const evidence of evidenceCandidates) {
       const inTestScope = needsReadiness && typeof item.requestedTarget?.scope === 'string'
         && evidence.subjects.includes(item.requestedTarget.scope)
-      if (evidence.epoch !== projection.epoch || (!evidence.subjects.includes(target) && !inTestScope)
+      if (!withinRootDuty(evidence.toolResultSeq) || evidence.epoch !== projection.epoch || (!evidence.subjects.includes(target) && !inTestScope)
         || evidence.toolResultSeq <= root.seq || (attached.has(evidence.id) && !fileReadback)) continue
       if (kind === 'constraint' && (!forbiddenFile || evidence.evidenceRole !== 'effect'
         || !['write', 'write_file', 'edit', 'edit_file'].includes(evidence.toolName)

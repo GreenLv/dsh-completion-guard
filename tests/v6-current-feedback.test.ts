@@ -5,7 +5,7 @@ import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { Session, SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { deriveProjection, PROTOCOL_V6_NOTICE } from '../src/domain/derive.js'
-import { projectSessionCoreV2 } from '../src/core-v2/session.js'
+import { projectSessionCoreV2, sessionCoreSnapshot } from '../src/core-v2/session.js'
 import { createPrepareTool } from '../src/tools/prepare.js'
 import { createCheckpointTool } from '../src/tools/checkpoint.js'
 import { evaluateHostLock, EXPECTED_HOST_PACKAGES } from '../src/domain/host-lock.js'
@@ -43,6 +43,127 @@ function appendTest(session: Session, id: string, failed = false, command = 'pnp
 }
 
 describe('default v6 current feedback', () => {
+  it('attributes a later named test to its active restated root, independent of item iteration order', () => {
+    const root = 'Run pnpm test in /work/child.'
+    const { session, derive } = fixture(root)
+    appendTest(session, 'aborted-before-resume', true, 'pnpm test', '/work/child')
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    appendTest(session, 'success-after-resume', false, 'pnpm test', '/work/child')
+    const projection = derive()
+    expect(projection.items.get('R001')).toMatchObject({ status: 'superseded', supersededBy: 'R002' })
+    expect(projection.coreV2?.predicates).toMatchObject({ R002: 'satisfied' })
+    projection.items = new Map([...projection.items].reverse())
+    expect(projectSessionCoreV2(session.snapshotEvents() as never, projection)?.predicates).toMatchObject({ R002: 'satisfied' })
+  })
+  it('retains each superseded root and only its own interval of named test evidence', () => {
+    const root = 'Run pnpm test in /work/child.'
+    const { session, derive } = fixture(root)
+    appendTest(session, 'historical-success', false, 'pnpm test', '/work/child')
+    for (let i = 0; i < 2; i++) {
+      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    }
+    expect(derive().coreV2?.predicates).toMatchObject({ R003: 'insufficient' })
+    appendTest(session, 'current-success', false, 'pnpm test', '/work/child')
+    const projection = derive()
+    expect(projection.coreV2?.predicates).toMatchObject({ R003: 'satisfied' })
+    const snapshot = sessionCoreSnapshot(session.snapshotEvents() as never, projection) as {
+      requirements: Array<{ id: string; status: string }>
+      facts: Array<{ requirement_id: string; call_source_id: string }>
+    }
+    expect(snapshot.requirements.filter(row => row.id.startsWith('R'))).toMatchObject([
+      { id: 'R001', status: 'superseded' }, { id: 'R002', status: 'superseded' }, { id: 'R003', status: 'pending' },
+    ])
+    expect(snapshot.facts.filter(row => row.call_source_id === 'call:historical-success').map(row => row.requirement_id)).toEqual(['R001'])
+    expect(snapshot.facts.filter(row => row.call_source_id === 'call:current-success').map(row => row.requirement_id)).toEqual(['R003'])
+  })
+  it('keeps later failure authoritative after a successful test in a restated root', () => {
+    const root = 'Run pnpm test in /work/child.'
+    const { session, derive } = fixture(root)
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    appendTest(session, 'current-success', false, 'pnpm test', '/work/child')
+    expect(derive().coreV2?.predicates).toMatchObject({ R002: 'satisfied' })
+    appendTest(session, 'later-failure', true, 'pnpm test', '/work/child')
+    expect(derive().coreV2?.predicates).toMatchObject({ R002: 'insufficient' })
+  })
+  it('does not transfer an in-flight test across a restatement', () => {
+    const root = 'Run pnpm test in /work/child.'
+    const { session, derive } = fixture(root)
+    session.append('tool/call', { turn: 1, step: 1, callId: 'crossing' as never, name: 'bash',
+      arguments: JSON.stringify({ command: 'pnpm test', workdir: '/work/child' }) })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    session.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({ callId: 'crossing' as never,
+      content: [{ type: 'text', text: '10 tests passed' }], isError: false }) } as never, { surfaceOp: 'append' })
+    const projection = derive()
+    expect(projection.coreV2?.predicates).toMatchObject({ R002: 'insufficient' })
+    const snapshot = sessionCoreSnapshot(session.snapshotEvents() as never, projection) as {
+      facts: Array<{ call_source_id: string }>
+    }
+    expect(snapshot.facts.some(row => row.call_source_id === 'call:crossing')).toBe(false)
+  })
+  it('does not use an ungrounded supersession link to claim a later test fact', () => {
+    const root = 'Run pnpm test in /work/child.'
+    const { session, derive } = fixture(root)
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    appendTest(session, 'later-test', false, 'pnpm test', '/work/child')
+    const projection = derive()
+    projection.items.get('R001')!.supersededBy = 'unknown-successor'
+    const snapshot = sessionCoreSnapshot(session.snapshotEvents() as never, projection) as {
+      facts: Array<{ requirement_id: string; call_source_id: string }>
+    }
+    expect(snapshot.facts.filter(row => row.call_source_id === 'call:later-test').map(row => row.requirement_id)).toEqual(['R002'])
+    expect(projectSessionCoreV2(session.snapshotEvents() as never, projection)?.certifiable).toBe(false)
+  })
+  it('does not transfer test evidence between different targets or distinct requirements', () => {
+    const { session, derive } = fixture('Run pnpm test in /work/one. Run pnpm test in /work/two.')
+    appendTest(session, 'one-only', false, 'pnpm test', '/work/one')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied', R002: 'insufficient' })
+    appendTest(session, 'two', false, 'pnpm test', '/work/two')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied', R002: 'satisfied' })
+  })
+  it('keeps different named commands in the same root and directory separate', () => {
+    const { session, derive } = fixture('Run pnpm test in /work/child. Run npm test in /work/child.')
+    appendTest(session, 'pnpm-only', false, 'pnpm test', '/work/child')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied', R002: 'insufficient' })
+    appendTest(session, 'npm-also', false, 'npm test', '/work/child')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied', R002: 'satisfied' })
+  })
+  it('retains valid existing test evidence after a bare continue without restating the duty', () => {
+    const { session, derive } = fixture('Run pnpm test in /work/child.')
+    appendTest(session, 'before-continue', false, 'pnpm test', '/work/child')
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Continue.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    expect(derive().coreV2?.predicates).toMatchObject({ R001: 'satisfied' })
+  })
+  it('keeps old test evidence in history after an explicit cancellation', () => {
+    const { session, derive } = fixture('Run pnpm test in /work/child.')
+    appendTest(session, 'before-cancel', false, 'pnpm test', '/work/child')
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: '取消这项测试。' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    const projection = derive()
+    expect([...projection.evidence.values()].find(row => row.callId === 'before-cancel')).toMatchObject({ outcome: 'success' })
+    expect(projection.coreV2?.root_control_states).toMatchObject({ R001: 'cancelled' })
+    expect(projection.coreV2?.unmet_requirements).toEqual([])
+  })
+  it('binds a later native edit and readback to the current restated file duty', () => {
+    const path = '/work/alpha.txt'
+    const root = `Modify ${path} to after.`
+    const { session, derive } = fixture(root)
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: root }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 1, callId: 'current-edit' as never, name: 'edit',
+      arguments: JSON.stringify({ file_path: path, old_string: 'before', new_string: 'after' }) })
+    session.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({ callId: 'current-edit' as never,
+      content: [{ type: 'text', text: 'edited' }], isError: false }) }, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 2, callId: 'current-observe' as never, name: 'context_guard_observe_file',
+      arguments: JSON.stringify({ effect_call_id: 'current-edit' }) })
+    const digest = 'a'.repeat(64)
+    session.append('tool/result', { turn: 1, step: 2, message: createToolResultMessage({ callId: 'current-observe' as never,
+      content: [{ type: 'text', text: JSON.stringify({ status: 'observed', path, sha256: digest, action: 'modify', effect_call_id: 'current-edit' }) }], isError: false }),
+      meta: { contextGuardNativeFile: { effectCallId: 'current-edit', path, sha256: digest, action: 'modify' } } } as never, { surfaceOp: 'append' })
+    const projection = derive()
+    expect(projection.coreV2?.predicates).toMatchObject({ R002: 'satisfied' })
+    const snapshot = sessionCoreSnapshot(session.snapshotEvents() as never, projection) as { facts: Array<{ requirement_id: string; call_source_id: string }> }
+    expect(snapshot.facts.filter(row => ['call:current-edit', 'call:current-observe'].includes(row.call_source_id))
+      .map(row => row.requirement_id)).toEqual(['R002', 'R002'])
+  })
   it('accepts only successful evidence from the explicitly requested child directory', () => {
     const { session, derive } = fixture('Run pnpm test in /work/child.')
     appendTest(session, 'wrong-parent')
