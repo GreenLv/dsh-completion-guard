@@ -220,6 +220,8 @@ def execute(args, driver_sha: str, progress: Path) -> dict:
     except (Exception,KeyboardInterrupt) as error:
         uncertain=uncertain or host.unknown_child_state(error) or stage.endswith("_probe")
         result["status"]="failed";result["failure"]={"stage":stage,"type":type(error).__name__}
+        if isinstance(error, copier.LinkBatchError):
+            result["failure"]["link_batch"]={"reason":error.reason,"completed":error.completed,"planned":error.planned}
     finally:
         remaining=["child_state_unknown"] if uncertain else []
         if result["status"]!="passed":remaining.append("failed_fixture_retained")
@@ -251,7 +253,7 @@ def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--repo-root",type=Path,required=True);p.add_argument("--runtime-root",type=Path,required=True);p.add_argument("--artifact",type=Path,required=True)
     p.add_argument("--source-commit",required=True);p.add_argument("--artifact-sha256",required=True);p.add_argument("--driver-sha256",required=True)
-    p.add_argument("--web-cohort",default="dsh-0.2.2-rc.1-core-v1");p.add_argument("--headless-cohort",default="dsh-0.2.2-rc.1-core-v1")
+    p.add_argument("--web-cohort",default="dsh-0.2.2-rc.2-core-v1");p.add_argument("--headless-cohort",default="dsh-0.2.2-rc.2-core-v1")
     p.add_argument("--output",type=Path,required=True);p.add_argument("--preflight",action="store_true")
     args=p.parse_args(argv)
     # Preserve a valid started record if interrupted before terminal result.

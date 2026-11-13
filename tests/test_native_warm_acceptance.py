@@ -10,6 +10,10 @@ import unittest
 from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None
 SCRIPTS=Path(__file__).resolve().parents[1]/"scripts";sys.path.insert(0,str(SCRIPTS))
 spec=importlib.util.spec_from_file_location("warm_runner",SCRIPTS/"native_warm_acceptance.py")
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -68,6 +72,39 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(result["status"],"failed");self.assertEqual(result["failure"]["stage"],"runtime_copy")
             self.assertEqual(result["cleanup"]["status"],"failed");self.assertTrue((fixture/"runtime").exists());self.assertTrue(Path(str(args.output)+".recovery.json").exists())
             self.assertNotIn("private",json.dumps(result))
+    def test_partial_junction_batch_retains_safe_count_and_fixture(self):
+        with directory() as root:
+            repo=root/"repo";repo.mkdir();runtime=root/"runtime";runtime.mkdir();artifact=root/"guard.tgz";artifact.write_bytes(b"x");fixture=root/"fixture";fixture.mkdir()
+            args=module.argparse.Namespace(repo_root=repo,runtime_root=runtime,artifact=artifact,source_commit="a"*40,artifact_sha256="b"*64,output=root/"result.json",web_cohort="x",headless_cohort="x")
+            def fail_copy(source,dest):
+                dest.mkdir()
+                raise module.copier.LinkBatchError("creation_failed",1,3)
+            with patch.object(module.host,"host_temporary_root",return_value=fixture),patch.object(module.tempfile,"gettempdir",return_value=str(root)),patch.object(module.native,"sha256",return_value="b"*64),patch.object(module.copier,"copy_runtime",side_effect=fail_copy):
+                result=module.execute(args,"c"*64,root/"progress")
+            self.assertEqual(result["failure"],{"stage":"runtime_copy","type":"LinkBatchError","link_batch":{"reason":"creation_failed","completed":1,"planned":3}})
+            self.assertEqual(result["cleanup"]["status"],"failed")
+            self.assertTrue((fixture/"runtime").exists())
+            self.assertTrue(Path(str(args.output)+".recovery.json").exists())
+            if jsonschema is not None:
+                schema=json.loads((SCRIPTS.parent/"schemas"/"native-warm-scope-v1.schema.json").read_text(encoding="utf8"))
+                jsonschema.validate(result,schema)
+            self.assertFalse(module.validate_result(result,{"source_commit":"a"*40,"artifact_sha256":"b"*64,"driver_sha256":"c"*64}))
+    def test_cleanup_removes_relocated_links_without_touching_source(self):
+        with directory() as root:
+            src=root/"source";src.mkdir();node=src/"node_modules";node.mkdir()
+            (src/"package.json").write_text("{}",encoding="utf8")
+            (src/"pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n",encoding="utf8")
+            target=node/"target";target.mkdir();(target/"sentinel").write_bytes(b"untouched")
+            try:
+                module.copier._create_relocated_link(node/"alias",target,True)
+            except OSError:
+                self.skipTest("directory link capability unavailable")
+            fixture=root/"fixture";fixture.mkdir()
+            module.copier.copy_runtime(src,fixture/"runtime")
+            with patch.object(module.tempfile,"gettempdir",return_value=str(root)):
+                module.safe_remove_fixture(fixture)
+            self.assertFalse(fixture.exists())
+            self.assertEqual((target/"sentinel").read_bytes(),b"untouched")
     def test_timed_out_host_preserves_fixture_and_marks_unknown(self):
         with directory() as root:
             repo=root/"repo";repo.mkdir();runtime=root/"runtime";runtime.mkdir();artifact=root/"guard.tgz";artifact.write_bytes(b"x");fixture=root/"fixture";fixture.mkdir()
