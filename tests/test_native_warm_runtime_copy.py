@@ -92,7 +92,8 @@ class CopyTests(unittest.TestCase):
     def test_windows_component_alias_must_resolve_to_the_scanned_entry(self):
         with directory() as root:
             long = root / 'Long Component Name'
-            alias = root / 'LONGCO~1'
+            # Deliberately distinct from this entry's real Windows 8.3 alias.
+            alias = root / 'FAKEAL~9'
             long.write_bytes(b'x')
             os.link(long, alias)
             entries = {root: {ntpath.normcase(long.name): long.name}}
