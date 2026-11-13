@@ -64,6 +64,227 @@ def unlink_directory_link(path):
 
 
 class CopyTests(unittest.TestCase):
+    def test_directory_identity_is_scoped_to_windows_nonreparse_directories(self):
+        base = {'st_dev': 11, 'st_ino': 22, 'st_mode': stat.S_IFDIR | 0o755,
+                'st_size': 4096, 'st_mtime_ns': 123, 'st_nlink': 1, 'st_file_attributes': 16}
+        before = SimpleNamespace(**base)
+        resized = SimpleNamespace(**{**base, 'st_size': 0})
+        self.assertTrue(module._same_directory_identity(before, resized, windows=True))
+        self.assertFalse(module._same_directory_identity(before, resized, windows=False))
+        for field, value in [('st_dev', 12), ('st_ino', 23), ('st_mode', stat.S_IFDIR | 0o700),
+                             ('st_mode', stat.S_IFREG | 0o755),
+                             ('st_mtime_ns', 124), ('st_nlink', 2), ('st_file_attributes', 17),
+                             ('st_file_attributes', 16 | 0x400)]:
+            with self.subTest(field=field, value=value):
+                other = SimpleNamespace(**{**base, 'st_size': 0, field: value})
+                self.assertFalse(module._same_directory_identity(before, other, windows=True))
+        for mode, attrs in [(stat.S_IFREG | 0o755, 0), (stat.S_IFLNK | 0o777, 0x400),
+                            (stat.S_IFDIR | 0o755, 16 | 0x400)]:
+            first = SimpleNamespace(**{**base, 'st_mode': mode, 'st_file_attributes': attrs})
+            second = SimpleNamespace(**{**base, 'st_mode': mode, 'st_file_attributes': attrs, 'st_size': 0})
+            self.assertFalse(module._same_directory_identity(first, second, windows=True))
+        no_attrs = {key: value for key, value in base.items() if key != 'st_file_attributes'}
+        self.assertFalse(module._same_directory_identity(SimpleNamespace(**no_attrs),
+            SimpleNamespace(**{**no_attrs, 'st_size': 0}), windows=True))
+        inconsistent = {**base, 'st_file_attributes': 0}
+        self.assertFalse(module._same_directory_identity(SimpleNamespace(**inconsistent),
+            SimpleNamespace(**{**inconsistent, 'st_size': 0}), windows=True))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory identity behavior')
+    def test_copy_accepts_simulated_directory_size_change_at_queue_and_final(self):
+        with directory() as root:
+            src = make_source(root)
+            node = src / 'node_modules'
+            target = node / 'target'
+            target.mkdir()
+            (node / 'payload').write_bytes(b'fixture')
+            tracked = {src, target}
+            seen = {path: 0 for path in tracked}
+            sizes = {path: set() for path in tracked}
+            original = Path.lstat
+            def changed(path, *args, **kwargs):
+                value = original(path, *args, **kwargs)
+                if path in tracked:
+                    seen[path] += 1
+                    fields = {key: getattr(value, key) for key in
+                              ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_nlink', 'st_file_attributes')}
+                    if seen[path] % 2:
+                        fields['st_size'] ^= 4096
+                    sizes[path].add(fields['st_size'])
+                    return SimpleNamespace(**fields)
+                return value
+            with patch.object(Path, 'lstat', autospec=True, side_effect=changed):
+                result = module.copy_runtime(src, root / 'copy')
+            self.assertEqual(result['files'], 3)
+            self.assertTrue(all(count >= 2 for count in seen.values()))
+            self.assertTrue(all(len(values) == 2 for values in sizes.values()))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory identity behavior')
+    def test_changed_children_between_queue_and_pop_are_refused(self):
+        with directory() as root:
+            src = make_source(root)
+            node = src / 'node_modules'
+            target = node / 'target'
+            target.mkdir()
+            baseline = target.lstat()
+            original = os.scandir
+            changed = False
+            scan_counts = []
+            class ChangeAfterScan:
+                def __init__(self, iterator):
+                    self.iterator = iterator
+                def __enter__(self):
+                    self.index = len(scan_counts)
+                    scan_counts.append(0)
+                    entries = self.iterator.__enter__()
+                    def counted():
+                        for entry in entries:
+                            scan_counts[self.index] += 1
+                            yield entry
+                    return counted()
+                def __exit__(self, *args):
+                    nonlocal changed
+                    result = self.iterator.__exit__(*args)
+                    if not changed and args[0] is None:
+                        changed = True
+                        for index in range(10):
+                            (target / ('unexpected-' + str(index))).write_bytes(b'new')
+                        os.utime(target, ns=(baseline.st_atime_ns, baseline.st_mtime_ns))
+                        self.assert_same_identity()
+                    return result
+                def assert_same_identity(self):
+                    if not module._same_directory_identity(baseline, target.lstat()):
+                        raise AssertionError('test did not restore directory identity')
+            def intercept(path):
+                iterator = original(path)
+                return ChangeAfterScan(iterator) if Path(path) == target else iterator
+            with patch.object(module.os, 'scandir', side_effect=intercept):
+                with self.assertRaisesRegex(ValueError, 'source directory changed'):
+                    module.copy_runtime(src, root / 'copy')
+            self.assertTrue(changed)
+            self.assertEqual(scan_counts, [0, 1])  # empty snapshot, then limit + 1
+            self.assertTrue((root / 'copy').exists())
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory identity behavior')
+    def test_initial_queue_scan_stops_at_budget_plus_one(self):
+        with directory() as root:
+            target = root / 'target'
+            target.mkdir()
+            for index in range(10):
+                (target / ('entry-' + str(index))).write_bytes(b'x')
+            expected = target.lstat()
+            original = os.scandir
+            count = 0
+            class CountScan:
+                def __init__(self, iterator):
+                    self.iterator = iterator
+                def __enter__(self):
+                    entries = self.iterator.__enter__()
+                    def counted():
+                        nonlocal count
+                        for entry in entries:
+                            count += 1
+                            yield entry
+                    return counted()
+                def __exit__(self, *args):
+                    return self.iterator.__exit__(*args)
+            def intercept(path):
+                iterator = original(path)
+                return CountScan(iterator) if Path(path) == target else iterator
+            with patch.object(module.os, 'scandir', side_effect=intercept):
+                with self.assertRaisesRegex(ValueError, 'copy budget exceeded'):
+                    module._queued_windows_children(target, expected, 2)
+            self.assertEqual(count, 3)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory identity behavior')
+    def test_windows_short_alias_directory_size_change_keeps_identity_checks(self):
+        with directory() as root:
+            current = root / 'parent'
+            current.mkdir()
+            target = current / 'LongDirectory'
+            target.mkdir()
+            info = target.lstat()
+            fields = {key: getattr(info, key) for key in
+                      ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_nlink', 'st_file_attributes')}
+            other = SimpleNamespace(**{**fields, 'st_size': info.st_size ^ 4096})
+            names = {current: {ntpath.normcase('LongDirectory'): 'LongDirectory'}, target: {}}
+            with patch.object(module, '_windows_entry_name', return_value='LongDirectory'), \
+                    patch.object(Path, 'lstat', side_effect=[info, other]):
+                self.assertEqual(module._windows_physical_component(current, 'LONGDI~1', names), 'LongDirectory')
+            reparse = SimpleNamespace(**{**fields, 'st_size': info.st_size ^ 4096,
+                                        'st_file_attributes': fields['st_file_attributes'] | 0x400})
+            with patch.object(module, '_windows_entry_name', return_value='LongDirectory'), \
+                    patch.object(Path, 'lstat', side_effect=[info, reparse]):
+                with self.assertRaisesRegex(ValueError, 'entry changed'):
+                    module._windows_physical_component(current, 'LONGDI~1', names)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory identity behavior')
+    def test_directory_replacement_during_copy_is_refused(self):
+        with directory() as root:
+            src = make_source(root)
+            node = src / 'node_modules'
+            target, replacement = node / 'target', root / 'replacement'
+            target.mkdir(); replacement.mkdir()
+            self.assertNotEqual(target.lstat().st_ino, replacement.lstat().st_ino)
+            (node / 'payload').write_bytes(b'fixture')
+            original, calls = module._stream_digest, 0
+            def replace(stream):
+                nonlocal calls
+                digest = original(stream)
+                calls += 1
+                if calls == 1:
+                    target.rmdir()
+                    replacement.rename(target)
+                return digest
+            with patch.object(module, '_stream_digest', side_effect=replace):
+                with self.assertRaisesRegex(ValueError, 'source directory changed'):
+                    module.copy_runtime(src, root / 'copy')
+            self.assertTrue((root / 'copy').exists())
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory identity behavior')
+    def test_changed_children_are_refused_even_when_directory_mtime_is_restored(self):
+        with directory() as root:
+            src = make_source(root)
+            node = src / 'node_modules'
+            (node / 'payload').write_bytes(b'fixture')
+            baseline = node.lstat()
+            original, calls = module._stream_digest, 0
+            original_scandir = os.scandir
+            scan_counts = []
+            class CountScan:
+                def __init__(self, iterator):
+                    self.iterator = iterator
+                def __enter__(self):
+                    self.index = len(scan_counts)
+                    scan_counts.append(0)
+                    entries = self.iterator.__enter__()
+                    def counted():
+                        for entry in entries:
+                            scan_counts[self.index] += 1
+                            yield entry
+                    return counted()
+                def __exit__(self, *args):
+                    return self.iterator.__exit__(*args)
+            def intercept(path):
+                iterator = original_scandir(path)
+                return CountScan(iterator) if Path(path) == node else iterator
+            def add_child(stream):
+                nonlocal calls
+                digest = original(stream)
+                calls += 1
+                if calls == 1:
+                    for index in range(10):
+                        (node / ('unexpected-' + str(index))).write_bytes(b'new')
+                    os.utime(node, ns=(baseline.st_atime_ns, baseline.st_mtime_ns))
+                    self.assertTrue(module._same_directory_identity(baseline, node.lstat()))
+                return digest
+            with patch.object(module, '_stream_digest', side_effect=add_child), \
+                    patch.object(module.os, 'scandir', side_effect=intercept):
+                with self.assertRaisesRegex(ValueError, 'source directory changed'):
+                    module.copy_runtime(src, root / 'copy')
+            self.assertTrue((root / 'copy').exists())
+            self.assertEqual(scan_counts[-1], 2)  # one captured child, then limit + 1
+
     @unittest.skipUnless(os.name == 'nt', 'Windows executable-suffix stat behavior')
     def test_windows_real_path_and_fd_modes_copy_executable_and_plain_files(self):
         with directory() as root:

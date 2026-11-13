@@ -40,6 +40,58 @@ def identity(info: os.stat_result) -> tuple:
     return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns)
 
 
+def _same_directory_identity(before: os.stat_result, after: os.stat_result, *, windows: bool | None = None) -> bool:
+    """Compare Windows physical directories without treating their size as stable.
+
+    Keep the raw stat snapshots and the full identity for every other entry.
+    Directory contents and physical-path checks are validated separately.
+    """
+    if windows is None:
+        windows = os.name == 'nt'
+    before_attrs = getattr(before, 'st_file_attributes', None)
+    after_attrs = getattr(after, 'st_file_attributes', None)
+    reparse = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
+    directory = getattr(stat, 'FILE_ATTRIBUTE_DIRECTORY', 0x10)
+    if (windows and stat.S_ISDIR(before.st_mode) and stat.S_ISDIR(after.st_mode)
+            and isinstance(before_attrs, int) and isinstance(after_attrs, int)
+            and before_attrs & directory and after_attrs & directory
+            and not before_attrs & reparse and not after_attrs & reparse):
+        return ((before.st_dev, before.st_ino, before.st_mode, before.st_mtime_ns, before.st_nlink, before_attrs)
+                == (after.st_dev, after.st_ino, after.st_mode, after.st_mtime_ns, after.st_nlink, after_attrs))
+    return identity(before) == identity(after)
+
+
+def _ordinary_windows_directory(info: os.stat_result) -> bool:
+    attrs = getattr(info, 'st_file_attributes', None)
+    return (stat.S_ISDIR(info.st_mode) and isinstance(attrs, int)
+            and bool(attrs & getattr(stat, 'FILE_ATTRIBUTE_DIRECTORY', 0x10))
+            and not attrs & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400))
+
+
+def _bounded_directory_children(path: Path, limit: int, reason: str) -> tuple[str, ...]:
+    children = []
+    with os.scandir(path) as entries:
+        for entry in entries:
+            if len(children) >= limit:
+                raise ValueError(reason)
+            children.append(entry.name)
+    return tuple(sorted(children))
+
+
+def _queued_windows_children(path: Path, expected: os.stat_result, limit: int) -> tuple[str, ...]:
+    """Snapshot bounded children only after verifying a physical source path."""
+    before = path.lstat()
+    if (not _ordinary_windows_directory(before) or not _same_directory_identity(expected, before)
+            or is_link(path) or path.resolve(strict=True) != path):
+        raise ValueError('source directory changed during copy')
+    children = _bounded_directory_children(path, limit, 'copy budget exceeded')
+    after = path.lstat()
+    if (not _ordinary_windows_directory(after) or not _same_directory_identity(before, after)
+            or is_link(path) or path.resolve(strict=True) != path):
+        raise ValueError('source directory changed during copy')
+    return children
+
+
 def sensitive(name: str) -> bool:
     lowered = name.lower()
     return lowered in SENSITIVE or lowered.startswith(".env.")
@@ -141,7 +193,7 @@ def _windows_physical_component(current: Path, part: str, entries: dict[Path, di
     if known is None:
         raise ValueError('runtime link target unavailable')
     try:
-        if identity((current / part).lstat()) != identity((current / known).lstat()):
+        if not _same_directory_identity((current / part).lstat(), (current / known).lstat()):
             raise ValueError('runtime directory entry changed')
     except OSError as error:
         raise ValueError('runtime link target unavailable') from error
@@ -410,26 +462,41 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
     destination.mkdir()
     if destination.resolve(strict=True) != dst:
         raise ValueError("fixture identity changed")
-    directories: dict[Path, tuple[tuple, tuple[str, ...]]] = {}
+    directories: dict[Path, tuple[os.stat_result, tuple[str, ...]]] = {}
     planned_files: dict[Path, tuple] = {}
     raw_links: dict[Path, tuple[tuple, str]] = {}
     graph: dict[Path, list[Path]] = {}
     total = 0
-    queued = {src: identity(src.lstat())}
+    queued = {src: src.lstat()}
+    queued_children: dict[Path, tuple[str, ...]] = {}
+    snapshot_entries = 0
+    snapshot_limit = max_files + max_directories + max_links
     if len(queued) > max_directories:
         raise ValueError("directory copy budget exceeded")
+    if os.name == 'nt' and _ordinary_windows_directory(queued[src]):
+        names = _queued_windows_children(src, queued[src], snapshot_limit)
+        if names != tuple(sorted(root_names)):
+            raise ValueError('source directory changed during copy')
+        queued_children[src] = names
+        snapshot_entries += len(names)
     pending = [src]
     # Plan using metadata only. Reject unsafe graphs and missing link
     # capability before copying any file contents into the owned fixture.
     while pending:
         origin = pending.pop()
         info = origin.lstat()
-        if (identity(info) != queued[origin] or is_link(origin) or
+        if (not _same_directory_identity(queued[origin], info) or is_link(origin) or
                 not stat.S_ISDIR(info.st_mode) or origin.resolve(strict=True) != origin):
             raise ValueError("source directory changed during copy")
-        with os.scandir(origin) as iterator:
-            children = sorted(entry.name for entry in iterator)
-        directories[origin] = (identity(info), tuple(children))
+        if origin in queued_children:
+            previous_children = queued_children.pop(origin)
+            children = _bounded_directory_children(origin, len(previous_children), 'source directory changed during copy')
+            if children != previous_children:
+                raise ValueError('source directory changed during copy')
+        else:
+            with os.scandir(origin) as iterator:
+                children = tuple(sorted(entry.name for entry in iterator))
+        directories[origin] = (info, tuple(children))
         graph[origin] = []
         for name in children:
             if sensitive(name):
@@ -443,7 +510,11 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
             elif stat.S_ISDIR(info.st_mode):
                 if len(queued) >= max_directories:
                     raise ValueError("directory copy budget exceeded")
-                queued[child] = identity(info)
+                queued[child] = info
+                if os.name == 'nt' and _ordinary_windows_directory(info):
+                    names = _queued_windows_children(child, info, snapshot_limit - snapshot_entries)
+                    queued_children[child] = names
+                    snapshot_entries += len(names)
                 graph[origin].append(child)
                 pending.append(child)
             elif stat.S_ISREG(info.st_mode):
@@ -531,11 +602,15 @@ def copy_runtime(source: Path, destination: Path, *, max_files=250_000, max_byte
     # Bind a stable source inventory and ensure no output link resolves back
     # into the source, including after all links have been created.
     for directory, (expected, children) in directories.items():
-        if identity(directory.lstat()) != expected or is_link(directory) or directory.resolve(strict=True) != directory:
+        if not _same_directory_identity(expected, directory.lstat()) or is_link(directory) or directory.resolve(strict=True) != directory:
             raise ValueError("source directory changed during copy")
-        with os.scandir(directory) as iterator:
-            if tuple(sorted(entry.name for entry in iterator)) != children:
-                raise ValueError("source directory changed during copy")
+        if os.name == 'nt' and _ordinary_windows_directory(expected):
+            observed_children = _bounded_directory_children(directory, len(children), 'source directory changed during copy')
+        else:
+            with os.scandir(directory) as iterator:
+                observed_children = tuple(sorted(entry.name for entry in iterator))
+        if observed_children != children:
+            raise ValueError("source directory changed during copy")
     for path, (expected, output_identity, digest) in files.items():
         with _open_source_file(path, expected, src) as stream:
             if _stream_digest(stream) != digest or not _fd_matches_path(path, expected, os.fstat(stream.fileno())):
